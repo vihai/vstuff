@@ -27,18 +27,18 @@ static inline void lapd_handle_socket_uframe_sabme(struct sock *sk,
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (lo->status == LINK_CONNECTION_RELEASED) {
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
 		lapd_multiframe_established(sk);
 
 		lapd_send_uframe(sk, 0, UA, NULL, 0);
 	}
-	else if (lo->status == LINK_CONNECTION_ESTABLISHED) {
+	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 	
 	}
-	else if (lo->status == AWAITING_ESTABLISH) {
+	else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
 		lapd_send_uframe(sk, 0, UA, NULL, 0);
 	}
-	else if (lo->status == AWAITING_RELEASE) {
+	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
 		lapd_send_uframe(sk, 0, DM, NULL, 0);
 	}
 	else {
@@ -84,18 +84,18 @@ static inline void lapd_handle_socket_uframe_disc(struct sock *sk,
 	struct lapd_opt *lo = lapd_sk(sk);
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
 
-	if (lo->status == LINK_CONNECTION_RELEASED) {
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
 		lapd_send_uframe(sk, 0, DM, NULL, hdr->u.p_f);
 	}
-	else if (lo->status == LINK_CONNECTION_ESTABLISHED) {
+	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		lapd_multiframe_released(sk);
 
 		lapd_send_uframe(sk, 0, UA, NULL, hdr->u.p_f);
 	}
-	else if (lo->status == AWAITING_ESTABLISH) {
+	else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
 		lapd_send_uframe(sk, 0, DM, NULL, 0);
 	}
-	else if (lo->status == AWAITING_RELEASE) {
+	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
 		lapd_send_uframe(sk, 0, UA, NULL, 0);
 	}
 	else {
@@ -112,13 +112,13 @@ static inline void lapd_handle_socket_uframe_ua(struct sock *sk,
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (lo->status == AWAITING_ESTABLISH) {
+	if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
 		lapd_multiframe_established(sk);
 	}
-	else if (lo->status == AWAITING_RELEASE) {
+	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
 		lapd_multiframe_released(sk);
 	}
-	else if (lo->status == LINK_CONNECTION_RELEASED) {
+	else if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
 		// Possible multiple-tei-assignment, tei check?
 		return;
 	}
@@ -338,6 +338,10 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 		read_unlock_bh(&lapd_hash_lock);
 	}
 
+frame_handled:
+
+//	if (!skb->list) kfree_skb(skb);
+
 	return 0;
 
 err_small_frame:
@@ -345,10 +349,6 @@ err_improper_ea:
 err_pskb_may_pull:
 
 	kfree_skb(skb);
-
-frame_handled:
-
-	if (!skb->list) kfree_skb(skb);
 
 	return 0;
 }

@@ -58,7 +58,7 @@ int lapd_prepare_uframe(struct sock *sk,
 		case XID: printk(KERN_ERR "lapd: unsupported XID\n"); break;
 	}
 
-	hdr->addr.c_r = ((cr == RESPONSE) == !(skb->dev->flags & IFF_ALLMULTI))?1:0;
+	hdr->addr.c_r = ((cr == RESPONSE) == !lo->nt_mode)?1:0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 	hdr->addr.tei = lapd_get_tei(lo);

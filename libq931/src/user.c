@@ -10,169 +10,86 @@
 
 #include <lapd_user.h>
 
+#include <signal.h>
+
 #include "q931.h"
 #include "q931_mt.h"
 #include "q931_ie.h"
 
+static int shutting_down = FALSE;
+static int shutdown_acked;
+
+void sighandler(int signal)
+{
+	shutting_down = TRUE;
+	shutdown_acked = FALSE;
+}
 
 int main()
 {
- q931_init();
- struct q931_interface *interface = q931_open_interface("fakeisdn0d");
- if (!interface)
-  {
-   printf("q931_open_interface error: %s\n",strerror(errno));
-   exit(1);
-  }
+	signal(SIGINT, sighandler);
 
- struct q931_datalink *dlc = q931_user_datalink(interface);
- struct q931_call *call;
+	q931_init();
 
- call = q931_alloc_call(Q931_CALL_DIRECTION_OUTBOUND);
+	struct q931_interface *interface = q931_open_interface("fakeisdn0d");
+	if (!interface) {
+		printf("q931_open_interface error: %s\n",strerror(errno));
+		exit(1);
+	}
 
- printf("Interface opened\n");
+	struct q931_dlc *dlc = &interface->te_dlc;
+	struct q931_call *call;
 
- printf("Sleeping...");
- sleep(3);
- printf("OK\n");
+	call = q931_alloc_call();
 
- printf("Making call...\n");
- q931_make_call(interface, call);
+	printf("Interface opened\n");
 
- while(1)
-  {
-   fd_set read_fds;
-   struct timeval tv;
-   int retval;
+	printf("Sleeping...");
+	sleep(1);
+	printf("OK\n");
 
-   FD_ZERO(&read_fds);
-   FD_SET(interface->socket, &read_fds);
+	printf("Making call...\n");
+	q931_make_call(interface, call);
 
-   tv.tv_sec = 0;
-   tv.tv_usec = 0;
+	int active_calls_cnt = 0;
+	do {
+		fd_set read_fds;
+		struct timeval tv;
+		int retval;
 
-   if((retval = select(interface->socket+1, &read_fds, NULL, NULL, &tv))<0)
-    {
-     printf("select error: %s\n",strerror(errno));
-     exit(1);
-    }
-   else if(retval)
-    {
-     if (FD_ISSET(interface->socket, &read_fds)) q931_receive(dlc);
-    }
-  }
+		FD_ZERO(&read_fds);
+		FD_SET(dlc->socket, &read_fds);
 
- q931_free_call(call);
- q931_close_interface(interface);
+		tv.tv_sec = 0;
+		tv.tv_usec = 0;
 
-/*
- if(ioctl(s, TIOCOUTQ, &size)<0)
-  {
-   printf("ioctl error: %s\n",strerror(errno));
-   exit(1);
-  }
- printf("ioctl(TIOCOUTQ) success: %d\n",size);
+		if((retval = select(dlc->socket+1, &read_fds, NULL, NULL, &tv))<0) {
+			printf("select error: %s\n",strerror(errno));
+			exit(1);
+		} else if(retval) {
+			if (FD_ISSET(interface->te_dlc.socket, &read_fds))
+				q931_receive(dlc);
+		}
 
- if(ioctl(s, TIOCINQ, &size)<0)
-  {
-   printf("ioctl error: %d %s\n",errno,strerror(errno));
-   exit(1);
-  }
- printf("ioctl(TIOCINQ) success: %d\n",size);
+		if (shutting_down && !shutdown_acked) {
+	 		struct q931_call *call;
+			list_for_each_entry(call, &interface->calls, node)
+				q931_hangup_call(call);
 
+			shutdown_acked = TRUE;
 
- printf("shutdown... ");
- if(shutdown(s, 0) < 0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- printf("ok\n");
+			continue;
+		}
 
- close(s);
-*/
+ 		struct q931_call *call;
+		active_calls_cnt = 0;
+		list_for_each_entry(call, &interface->calls, node)
+			active_calls_cnt++;
 
-/*
- printf("getsockopt(SO_BINDTODEVICE)... ");
- socklen_t devnamesize = sizeof(devname);
- if(getsockopt(s, SOL_LAPD, SO_BINDTODEVICE, devname, &devnamesize)<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- printf("%s\n",devname);
+	} while(active_calls_cnt > 0);
 
- int optval,optlen;
+	q931_free_call(call);
+	q931_close_interface(interface);
 
- printf("getsockopt(LAPD_ROLE)... ");
- optlen=sizeof(optval);
- if(getsockopt(s, SOL_LAPD, LAPD_ROLE, &optval, &optlen)<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- if(optlen != sizeof(int)) { printf("uh?\n"); exit(1); }
- printf("%d\n", optval);
-
- printf("getsockopt(LAPD_TE_STATUS)... ");
- optlen=sizeof(optval);
- if(getsockopt(s, SOL_LAPD, LAPD_TE_STATUS, &optval, &optlen)<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- if(optlen != sizeof(int)) { printf("uh?\n"); exit(1); }
- printf("%d\n", optval);
-
- printf("getsockopt(LAPD_TE_TEI)... ");
- optlen=sizeof(optval);
- if(getsockopt(s, SOL_LAPD, LAPD_TE_TEI, &optval, &optlen)<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- if(optlen != sizeof(int)) { printf("uh?\n"); exit(1); }
- printf("%d\n", optval);
-
- printf("ioctl(TIOCOUTQ)... ");
- int size;
- if(ioctl(s, TIOCOUTQ, &size)<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- printf("%d\n",size);
-
- printf("ioctl(TIOCINQ)... ");
- if(ioctl(s, TIOCINQ, &size)<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- printf("%d\n",size);
-
- printf("connect... ");
- if (connect(s, NULL, 0) < 0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- printf("ok\n");
-
- int len;
- __u8 frame[] = { 0x08, 0x01, 0x03, 0x05, 0x04, 0x03, 0x80, 0x90, 0xa3, 0x18,
-		  0x01, 0x83, 0x6c, 0x0b, 0x21, 0x81, 0x33, 0x36, 0x32, 0x35,
-		  0x31, 0x36, 0x31, 0x33, 0x38, 0x70, 0x05, 0x80, 0x35, 0x30,
-		  0x30, 0x31, 0xa1 };
-
- printf("send... ");
- if((len=send(s, frame, sizeof(frame), 0))<0)
-  {
-   printf("%s\n",strerror(errno));
-   exit(1);
-  }
- printf("ok (%d)\n",len);
-*/
-
- return 0;
+	return 0;
 }

@@ -7,6 +7,15 @@
 
 #include "q931.h"
 
+struct q931_ie_info;
+
+struct q931_ie
+{
+ const struct q931_ie_info *info;
+ int size;
+ void *data;
+};
+
 struct q931_ie_onwire
 {
 	__u8 id;

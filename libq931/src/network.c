@@ -26,14 +26,14 @@ int main()
    exit(1);
   }
 
- listen(interface->socket, 100);
+ listen(interface->nt_socket, 100);
 
  int npolls = 1;
  struct pollfd polls[100];
- polls[0].fd = interface->socket;
+ polls[0].fd = interface->nt_socket;
  polls[0].events = POLLIN|POLLERR;
 
- struct q931_datalink dlcs[100];
+ struct q931_dlc dlcs[100];
 
  while(1)
   {
@@ -44,12 +44,15 @@ int main()
     {
      printf("New DLC accepted...\n");
      polls[npolls].fd = accept(polls[0].fd, NULL, 0);
+     polls[npolls].events = POLLIN|POLLERR;
      dlcs[npolls].socket = polls[npolls].fd;
      dlcs[npolls].interface = interface;
 
      npolls++;
+
+     continue;
     }
-/*
+
    int i;
    for (i=1; i<npolls; i++)
     {
@@ -59,7 +62,6 @@ int main()
        q931_receive(&dlcs[i]);
       }
     }
-*/
   }
 
  q931_close_interface(interface);

@@ -100,26 +100,39 @@ typedef signed long q931_callref;
 union q931_callref_onwire
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
-  unsigned long longval;
-  __u8 octets[4];
-  int direction:1;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
-  unsigned long longval;
   __u8 octets[4];
 
   struct
    {
-    int :7;
     int direction:1;
-    int :24;
+    unsigned long longval:31;
+   };
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+  __u8 octets[4];
+
+  struct
+   {
+    unsigned long longval:31;
+    int direction:1;
    };
 #endif
 };
 
 
-struct q931_interface
+struct q931_interface;
+struct q931_dlc
 {
 	int socket;
+	struct q931_interface *interface;
+};
+
+struct q931_interface
+{
+	// NT mode, socket is the master socket
+	int nt_socket;
+
+	// TE mode, use DLC
+	struct q931_dlc te_dlc;
 
 	enum lapd_role role;
 
@@ -129,23 +142,27 @@ struct q931_interface
 	struct list_head calls;
 };
 
-struct q931_datalink
-{
-	int socket;
-	struct q931_interface *interface;
-};
-
 enum q931_call_direction
 {
 	Q931_CALL_DIRECTION_OUTBOUND	= 0x0,
 	Q931_CALL_DIRECTION_INBOUND	= 0x1,
 };
 
+enum q931_callref_flag
+{
+	Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE = 0x0,
+	Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE = 0x1,
+};
+
+// q931_call.interface is used when the call doesn't yet have an associated DLC
+// This happens when the call
 struct q931_call
 {
 	struct list_head node;
 
+	const struct q931_dlc *dlc;
 	struct q931_interface *interface;
+
 	enum q931_call_direction direction;
 	q931_callref call_reference;
 
@@ -161,13 +178,13 @@ static inline int q931_intcmp(int a, int b)
 }
 
 void q931_init();
-void q931_receive(struct q931_datalink *dlc);
+void q931_receive(const struct q931_dlc *dlc);
 struct q931_interface *q931_open_interface(const char *name);
 void q931_close_interface(struct q931_interface *interface);
-struct q931_call *q931_alloc_call(enum q931_call_direction direction);
+struct q931_call *q931_alloc_call();
 int q931_make_call(struct q931_interface *interface, struct q931_call *call);
 void q931_free_call(struct q931_call *call);
-struct q931_datalink *q931_user_datalink(struct q931_interface *interface);
+void q931_hangup_call(struct q931_call *call);
 
 
 #endif

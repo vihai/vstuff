@@ -24,6 +24,7 @@
 #include <linux/if_arp.h>
 #include <linux/random.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <net/datalink.h>
 #include <net/sock.h>
 
@@ -38,75 +39,171 @@
 struct hlist_head lapd_hash = HLIST_HEAD_INIT;
 rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
 
-static struct proc_dir_entry *lapd_proc_entry;
-
 static kmem_cache_t *lapd_sk_cachep;
 
-static int lapd_proc_read(char *page, char **start,
-		off_t off, int count, 
-		int *eof, void *data)
+
+
+
+
+#ifdef CONFIG_PROC_FS
+struct lapd_iter_state {
+	int bucket;
+};
+
+#define lapd_seq_private(seq) ((struct lapd_iter_state *)(seq)->private)
+
+static struct sock *lapd_get_first(struct seq_file *seq)
 {
-	int len = 0;
 	struct sock *sk;
+
 	struct hlist_node *node;
 
-	len += snprintf(page + len, PAGE_SIZE - len, "LAPD data:\n");
-
-	{
-	struct lapd_ntme *tme;
-	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
-		len += snprintf(page + len, PAGE_SIZE - len,
-			"ntme entry: %p %d\n",
-			tme, tme->refcnt);
-	}
-	}
-
-	{
-	struct lapd_utme *tme;
-	hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
-		len += snprintf(page + len, PAGE_SIZE - len,
-			"utme entry: %p %d\n",
-			tme, tme->refcnt);
-	}
-	}
-
-
-	read_lock_bh(&lapd_hash_lock);
 	sk_for_each(sk, node, &lapd_hash) {
-		struct lapd_opt *lo = lapd_sk(sk);
-
-//		len += snprintf(page + len, PAGE_SIZE - len,
-//			"interface: %s\n",
-//			lo->dev->name);
-
-		if (lo->nt_mode) {
-			len += snprintf(page + len, PAGE_SIZE - len,
-				"role      : NT\n"
-				"TEs\n");
-
-/*			read_lock_bh(&lo->nt.tes);
-			struct lapd_te *te;
-			list_for_each_entry(te, &lo->nt.tes, hash_list) {
-				len += snprintf(page + len, PAGE_SIZE - len,
-					"TEI : %u\n",
-					te->tei);
-			}
-
-			read_unlock_bh(&lo->nt.tes);*/
-
-		} else {
-/*			len += snprintf(page + len, PAGE_SIZE - len,
-				"role      : TE\n"
-				"TEI       : %u\n"
-				"TEI status: %d\n",
-				lo->te.tei,
-				lo->te.status);*/
-		}
+		if (sk->sk_family == PF_LAPD)
+			goto found;
 	}
-	read_unlock_bh(&lapd_hash_lock);
 
-	return len;
+	sk = NULL;
+
+found:
+	return sk;
 }
+
+static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
+{
+	sk = sk_next(sk);
+
+	return sk;
+}
+
+static struct sock *lapd_get_idx(struct seq_file *seq, loff_t pos)
+{
+	struct sock *sk = lapd_get_first(seq);
+
+	if (sk)
+		while (pos && (sk = lapd_get_next(seq, sk)) != NULL)
+			--pos;
+	return pos ? NULL : sk;
+}
+
+static void *lapd_seq_start(struct seq_file *seq, loff_t *pos)
+{
+	read_lock(&lapd_hash_lock);
+	return *pos ? lapd_get_idx(seq, *pos - 1) : SEQ_START_TOKEN;
+}
+
+static void *lapd_seq_next(struct seq_file *seq, void *v, loff_t *pos)
+{
+	struct sock *sk;
+
+	if (v == SEQ_START_TOKEN)
+		sk = lapd_get_first(seq);
+	else
+		sk = lapd_get_next(seq, v);
+	++*pos;
+	return sk;
+}
+
+static void lapd_seq_stop(struct seq_file *seq, void *v)
+{
+	read_unlock(&lapd_hash_lock);
+}
+
+static __inline__ char *get_lapd_sock(struct sock *sp, char *tmpbuf, int i)
+{
+	struct lapd_opt *lo = lapd_sk(sp);
+
+	sprintf(tmpbuf, "%4d: %02X %02X:%02X"
+		" %02X %02X %02X %c%c%c%c%c %08X:%08X %5d %5lu %3d %p",
+		i,
+		lo->status,
+		lo->sapi,
+		lo->tei,
+		lo->v_s,
+		lo->v_a,
+		lo->v_r,
+		lo->peer_busy?'B':' ',
+		lo->me_busy?'M':' ',
+		lo->peer_waiting_for_ack?'A':' ',
+		lo->rejection_exception?'R':' ',
+		lo->in_timer_recovery?'T':' ',
+		atomic_read(&sp->sk_wmem_alloc),
+		atomic_read(&sp->sk_rmem_alloc),
+		sock_i_uid(sp), sock_i_ino(sp),
+		atomic_read(&sp->sk_refcnt), sp);
+	return tmpbuf;
+}
+
+
+static int lapd_seq_show(struct seq_file *seq, void *v)
+{
+	char tmpbuf[129];
+
+	if (v == SEQ_START_TOKEN) {
+		seq_printf(seq, "%-127s\n",
+			"  sl  st sa:te vs va vr ecxpt"
+			" tx_queue rx_queue   uid inode ref"
+			);
+	} else {
+		struct lapd_iter_state *state = lapd_seq_private(seq);
+
+		seq_printf(seq, "%-127s\n",
+			get_lapd_sock(v, tmpbuf, state->bucket));
+	}
+
+	return 0;
+}
+
+static struct seq_operations lapd_seq_ops = {
+	.start = lapd_seq_start,
+	.next  = lapd_seq_next,
+	.stop  = lapd_seq_stop,
+	.show  = lapd_seq_show,
+};
+
+static int lapd_seq_open(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq;
+	int rc = -ENOMEM;
+	struct lapd_iter_state *s = kmalloc(sizeof(*s), GFP_KERNEL);
+
+	if (!s)
+		goto out;
+	rc = seq_open(file, &lapd_seq_ops);
+	if (rc)
+		goto out_kfree;
+
+	seq = file->private_data;
+	seq->private = s;
+	memset(s, 0, sizeof(*s));
+out:
+	return rc;
+out_kfree:
+	kfree(s);
+	goto out;
+}
+
+static struct file_operations lapd_seq_fops = {
+	.owner	 = THIS_MODULE,
+	.open	 = lapd_seq_open,
+	.read	 = seq_read,
+	.llseek	 = seq_lseek,
+	.release = seq_release_private,
+};
+
+int __init lapd_proc_init(void)
+{
+	if (!proc_net_fops_create("lapd", S_IRUGO, &lapd_seq_fops))
+		return -ENOMEM;
+	return 0;
+}
+
+void __exit lapd_proc_exit(void)
+{
+	proc_net_remove("lapd");
+}
+
+#endif
 
 static int lapd_change_mtu(struct net_device *dev, int mtu)
 {
@@ -223,7 +320,7 @@ printk(KERN_INFO "lapd: release\n");
 
 	sock_orphan(sk);
 
-	if (lo->status == LINK_CONNECTION_ESTABLISHED) {
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		// Request disconnection, unhash will be delayed
 		// until multiframe has been released
 
@@ -378,7 +475,9 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		if (!skb)
 			goto err_sock_alloc_send_skb;
 
-		if (lo->status != LINK_CONNECTION_ESTABLISHED) {
+		printk(KERN_INFO "lapd: %s: ###### lo->status = %d\n", lo->dev->name, lo->status);
+
+		if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 			err = -ENOTCONN;
 			goto err_notconn;
 		}
@@ -553,8 +652,13 @@ unsigned int lapd_poll(struct file *file,
 	 */
 
 	mask = 0;
-	if (sk->sk_err)
-		mask = POLLERR;
+	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))
+		mask |= POLLERR;
+
+	/* readable? */
+	if (!skb_queue_empty(&sk->sk_receive_queue) ||
+	    (sk->sk_shutdown & RCV_SHUTDOWN))
+		mask |= POLLIN | POLLRDNORM;
 
 	if (sk->sk_shutdown == SHUTDOWN_MASK)
 		mask |= POLLHUP;
@@ -1015,7 +1119,7 @@ static int lapd_create(struct socket *sock, int protocol)
 	lo->T203_timer.function = lapd_T203_timer;
 	lo->T203_timer.data = (unsigned long)sk;
 
-	lo->status = LINK_CONNECTION_RELEASED;
+	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
 
 	lo->peer_busy = FALSE;
 	lo->me_busy = FALSE;
@@ -1078,7 +1182,7 @@ struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
 	lo->rejection_exception = FALSE;
 	lo->in_timer_recovery = FALSE;
 
-	lo->status = LINK_CONNECTION_RELEASED;
+	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
 
 	INIT_HLIST_HEAD(&lo->new_dlcs);
 
@@ -1111,26 +1215,26 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 	lock_sock(sk);
 
 	struct lapd_opt *lo = lapd_sk(sk);
-	if (lo->status == LINK_CONNECTION_ESTABLISHED &&
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED &&
 	    sock->state == SS_CONNECTING) {
 		 /* Connect completed during a ERESTARTSYS event */
 		sock->state = SS_CONNECTED;
 		goto established;
 	}
 
-	if (lo->status == LINK_CONNECTION_RELEASED &&
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED &&
 		 sock->state == SS_CONNECTING) {
 		sock->state = SS_UNCONNECTED;
 		err = -ECONNREFUSED;
 		goto err_refused;
 	}
 
-	if (lo->status == LINK_CONNECTION_ESTABLISHED) {
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		err = -EISCONN;
 		goto err_already_connected;
 	}
 
-	if (lo->status == AWAITING_ESTABLISH && (flags & O_NONBLOCK)) {
+	if (lo->status == LAPD_DLS_AWAITING_ESTABLISH && (flags & O_NONBLOCK)) {
 		err = -EINPROGRESS;
 		goto err_inprogress;
 	}
@@ -1233,12 +1337,15 @@ err_notlistening:
 static int lapd_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
+	struct lapd_opt *lo = lapd_sk(sk);
 
 	if (sk->sk_state == TCP_LISTEN)
 		return -EOPNOTSUPP;
 
 	sk->sk_max_ack_backlog = backlog;
 	sk->sk_state = TCP_LISTEN;
+
+	lo->status = LAPD_DLS_LISTENING;
 
 	return 0;
 }
@@ -1326,21 +1433,11 @@ static int __init lapd_init(void)
 
 	register_netdevice_notifier(&lapd_notifier);
 
-	lapd_proc_entry = create_proc_read_entry(
-				"lapd", 0444, proc_net,
-				lapd_proc_read, NULL);
-	if (!lapd_proc_entry) {
-		printk(KERN_CRIT "lapd: Cannot create proc entry\n");
-		err = -ENOMEM;
-		goto err_create_proc_read_entry;
-	}
-
-	lapd_proc_entry->owner = THIS_MODULE;
+	lapd_proc_init();
 
 	return 0;
 
-err_create_proc_read_entry:
-	kmem_cache_destroy(lapd_sk_cachep);
+//	kmem_cache_destroy(lapd_sk_cachep);
 err_kmem_cache_create:
 
 	return err;
@@ -1349,9 +1446,9 @@ module_init(lapd_init);
 
 static void __exit lapd_exit(void)
 {
-	remove_proc_entry("lapd", proc_net);
-
 	// Free device structures
+
+	lapd_proc_exit();
 
 	BUG_TRAP(hlist_empty(&lapd_ntme_hash));
 	BUG_TRAP(hlist_empty(&lapd_utme_hash));
