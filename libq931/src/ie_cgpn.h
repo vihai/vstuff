@@ -1,8 +1,8 @@
 
-#ifndef _Q931_IE_CGPN_H
-#define _Q931_IE_CGPN_H
+#ifndef _IE_CGPN_H
+#define _IE_CGPN_H
 
-#include "q931_ie.h"
+#include "ie.h"
 
 /*********************** Calling Party Number *************************/
 

@@ -1,8 +1,8 @@
 
-#ifndef _Q931_IE_PROGIND_H
-#define _Q931_IE_PROGIND_H
+#ifndef _IE_PROGIND_H
+#define _IE_PROGIND_H
 
-#include "q931_ie.h"
+#include "ie.h"
 
 /************************* Progress Indicator ***************************/
 

@@ -1,6 +1,6 @@
 #include <string.h>
 
-#include "q931_ie_chanid.h"
+#include "ie_chanid.h"
 
 int q931_append_ie_channel_identification(void *buf,
 	enum q931_ie_channel_identification_info_channel_selection_bri chan_id)

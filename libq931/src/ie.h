@@ -1,6 +1,6 @@
 
-#ifndef _Q931_IE_H
-#define _Q931_IE_H
+#ifndef _IE_H
+#define _IE_H
 
 #include <linux/types.h>
 #include <endian.h>
@@ -133,13 +133,13 @@ static inline int q931_get_so_ie_type2_value(__u8 ie_id)
 void q931_ie_infos_init();
 const struct q931_ie_info *q931_get_ie_info(int id);
 
-#include <q931_ie_sending_complete.h>
-#include <q931_ie_bearercap.h>
-#include <q931_ie_cdpn.h>
-#include <q931_ie_cgpn.h>
-#include <q931_ie_chanid.h>
-#include <q931_ie_progind.h>
-#include <q931_ie_cause.h>
-#include <q931_ie_call_state.h>
+#include "ie_sending_complete.h"
+#include "ie_bearercap.h"
+#include "ie_cdpn.h"
+#include "ie_cgpn.h"
+#include "ie_chanid.h"
+#include "ie_progind.h"
+#include "ie_cause.h"
+#include "ie_call_state.h"
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef Q931_LOG_H
-#define Q931_LOG_H
+#ifndef _LOGGING_H
+#define _LOGGING_H
 
 #define LOG_DEBUG	Q931_LOG_DEBUG
 #define LOG_INFO	Q931_LOG_INFO

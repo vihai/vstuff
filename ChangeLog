@@ -2,6 +2,139 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-03-30 17:41:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-21
+
+    Summary:
+      libq931 compiles again with full NT mode support
+    Revision:
+      isdn--devel--0.1--patch-21
+
+    
+    
+
+    new files:
+     libq931/src/.arch-ids/call.c.id
+     libq931/src/.arch-ids/call.h.id libq931/src/call.c
+     libq931/src/call.h
+
+    modified files:
+     ChangeLog libq931/src/Makefile.am libq931/src/ces.c
+     libq931/src/ces.h libq931/src/ie.c libq931/src/ie.h
+     libq931/src/ie_bearercap.c libq931/src/ie_bearercap.h
+     libq931/src/ie_call_state.h libq931/src/ie_cause.c
+     libq931/src/ie_cause.h libq931/src/ie_cdpn.c
+     libq931/src/ie_cdpn.h libq931/src/ie_cgpn.c
+     libq931/src/ie_cgpn.h libq931/src/ie_chanid.c
+     libq931/src/ie_chanid.h libq931/src/ie_progind.c
+     libq931/src/ie_progind.h libq931/src/ie_sending_complete.h
+     libq931/src/logging.h libq931/src/msgtype.c
+     libq931/src/msgtype.h libq931/src/out.c libq931/src/out.h
+     libq931/src/q931.c libq931/src/q931.h libq931/src/timer.c
+     libq931/src/timer.h libq931/src/user.c
+
+    renamed files:
+     libq931/src/.arch-ids/q931_ces.c.id
+       ==> libq931/src/.arch-ids/ces.c.id
+     libq931/src/.arch-ids/q931_ces.h.id
+       ==> libq931/src/.arch-ids/ces.h.id
+     libq931/src/.arch-ids/q931_ie.c.id
+       ==> libq931/src/.arch-ids/ie.c.id
+     libq931/src/.arch-ids/q931_ie.h.id
+       ==> libq931/src/.arch-ids/ie.h.id
+     libq931/src/.arch-ids/q931_ie_bearercap.c.id
+       ==> libq931/src/.arch-ids/ie_bearercap.c.id
+     libq931/src/.arch-ids/q931_ie_bearercap.h.id
+       ==> libq931/src/.arch-ids/ie_bearercap.h.id
+     libq931/src/.arch-ids/q931_ie_call_state.h.id
+       ==> libq931/src/.arch-ids/ie_call_state.h.id
+     libq931/src/.arch-ids/q931_ie_cause.c.id
+       ==> libq931/src/.arch-ids/ie_cause.c.id
+     libq931/src/.arch-ids/q931_ie_cause.h.id
+       ==> libq931/src/.arch-ids/ie_cause.h.id
+     libq931/src/.arch-ids/q931_ie_cdpn.c.id
+       ==> libq931/src/.arch-ids/ie_cdpn.c.id
+     libq931/src/.arch-ids/q931_ie_cdpn.h.id
+       ==> libq931/src/.arch-ids/ie_cdpn.h.id
+     libq931/src/.arch-ids/q931_ie_cgpn.c.id
+       ==> libq931/src/.arch-ids/ie_cgpn.c.id
+     libq931/src/.arch-ids/q931_ie_cgpn.h.id
+       ==> libq931/src/.arch-ids/ie_cgpn.h.id
+     libq931/src/.arch-ids/q931_ie_chanid.c.id
+       ==> libq931/src/.arch-ids/ie_chanid.c.id
+     libq931/src/.arch-ids/q931_ie_chanid.h.id
+       ==> libq931/src/.arch-ids/ie_chanid.h.id
+     libq931/src/.arch-ids/q931_ie_progind.c.id
+       ==> libq931/src/.arch-ids/ie_progind.c.id
+     libq931/src/.arch-ids/q931_ie_progind.h.id
+       ==> libq931/src/.arch-ids/ie_progind.h.id
+     libq931/src/.arch-ids/q931_ie_sending_complete.h.id
+       ==> libq931/src/.arch-ids/ie_sending_complete.h.id
+     libq931/src/.arch-ids/q931_log.h.id
+       ==> libq931/src/.arch-ids/logging.h.id
+     libq931/src/.arch-ids/q931_mt.c.id
+       ==> libq931/src/.arch-ids/msgtype.c.id
+     libq931/src/.arch-ids/q931_mt.h.id
+       ==> libq931/src/.arch-ids/msgtype.h.id
+     libq931/src/.arch-ids/q931_out.c.id
+       ==> libq931/src/.arch-ids/out.c.id
+     libq931/src/.arch-ids/q931_out.h.id
+       ==> libq931/src/.arch-ids/out.h.id
+     libq931/src/.arch-ids/q931_timer.c.id
+       ==> libq931/src/.arch-ids/timer.c.id
+     libq931/src/.arch-ids/q931_timer.h.id
+       ==> libq931/src/.arch-ids/timer.h.id
+     libq931/src/q931_ces.c
+       ==> libq931/src/ces.c
+     libq931/src/q931_ces.h
+       ==> libq931/src/ces.h
+     libq931/src/q931_ie.c
+       ==> libq931/src/ie.c
+     libq931/src/q931_ie.h
+       ==> libq931/src/ie.h
+     libq931/src/q931_ie_bearercap.c
+       ==> libq931/src/ie_bearercap.c
+     libq931/src/q931_ie_bearercap.h
+       ==> libq931/src/ie_bearercap.h
+     libq931/src/q931_ie_call_state.h
+       ==> libq931/src/ie_call_state.h
+     libq931/src/q931_ie_cause.c
+       ==> libq931/src/ie_cause.c
+     libq931/src/q931_ie_cause.h
+       ==> libq931/src/ie_cause.h
+     libq931/src/q931_ie_cdpn.c
+       ==> libq931/src/ie_cdpn.c
+     libq931/src/q931_ie_cdpn.h
+       ==> libq931/src/ie_cdpn.h
+     libq931/src/q931_ie_cgpn.c
+       ==> libq931/src/ie_cgpn.c
+     libq931/src/q931_ie_cgpn.h
+       ==> libq931/src/ie_cgpn.h
+     libq931/src/q931_ie_chanid.c
+       ==> libq931/src/ie_chanid.c
+     libq931/src/q931_ie_chanid.h
+       ==> libq931/src/ie_chanid.h
+     libq931/src/q931_ie_progind.c
+       ==> libq931/src/ie_progind.c
+     libq931/src/q931_ie_progind.h
+       ==> libq931/src/ie_progind.h
+     libq931/src/q931_ie_sending_complete.h
+       ==> libq931/src/ie_sending_complete.h
+     libq931/src/q931_log.h
+       ==> libq931/src/logging.h
+     libq931/src/q931_mt.c
+       ==> libq931/src/msgtype.c
+     libq931/src/q931_mt.h
+       ==> libq931/src/msgtype.h
+     libq931/src/q931_out.c
+       ==> libq931/src/out.c
+     libq931/src/q931_out.h
+       ==> libq931/src/out.h
+     libq931/src/q931_timer.c
+       ==> libq931/src/timer.c
+     libq931/src/q931_timer.h
+       ==> libq931/src/timer.h
+
+
 2005-03-30 01:06:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-20
 
     Summary:

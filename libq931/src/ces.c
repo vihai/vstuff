@@ -16,20 +16,25 @@
 #include "list.h"
 
 #include "q931.h"
-#include "q931_log.h"
-#include "q931_mt.h"
-#include "q931_ie.h"
+#include "logging.h"
+#include "msgtype.h"
+#include "ie.h"
+#include "ces.h"
+#include "out.h"
+#include "call.h"
 
 struct q931_ces *q931_ces_alloc(struct q931_call *call)
 {
 	struct q931_ces *ces;
 
-	ces = malloc(sizeof(struct q931_ces));
+	ces = malloc(sizeof(*ces));
 	if (!ces)
 		return NULL;
 
 	ces->call = call;
-	ces->state = N0_NULL_STATE;
+	ces->state = I0_NULL_STATE;
+
+	return ces;
 }
 
 void q931_ces_free(struct q931_ces *ces)
@@ -37,51 +42,69 @@ void q931_ces_free(struct q931_ces *ces)
 	free(ces);
 }
 
+static const char *q931_ces_state_to_text(enum q931_call_state state)
+{
+	switch (state) {
+	case U0_NULL_STATE:
+	case I7_CALL_RECEIVED:
+		return "I7_CALL_RECEIVED";
+	case I8_CONNECT_REQUEST:
+		return "I8_CONNECT_REQUEST";
+	case I9_INCOMING_CALL_PROCEEDING:
+		return "I9_INCOMING_CALL_PROCEEDING";
+	case I19_RELEASE_REQUEST:
+		return "I19_RELEASE_REQUEST";
+	case I25_OVERLAP_RECEIVING:
+		return "I25_OVERLAP_RECEIVING";
+	default: return "*UNKNOWN*";
+	}
+}
+
 void q931_ces_dl_establish_indication(struct q931_ces *ces)
 {
-	if (ces->state == N25_OVERLAP_RECEIVING) {
+	if (ces->state == I25_OVERLAP_RECEIVING) {
 		// Stop T304 if implemented
 
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	}
 }
 
 void q931_ces_dl_release_indication(struct q931_ces *ces)
 {
-	if (ces->state != N0_NULL_STATE) {
+	if (ces->state != I0_NULL_STATE) {
 		// Stop any timer
 
-		q931_int_release_indication(ces);
-		q931_int_release_complete_indication(ces);
+		q931_int_release_indication(ces->call, ces);
+		q931_int_release_complete_indication(ces->call, ces);
 	}
 }
 
 void q931_ces_alerting_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
-	case N0_NULL_STATE:
-		ces->state = N7_CALL_RECEIVED;
+	case I0_NULL_STATE:
+		ces->state = I7_CALL_RECEIVED;
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -89,23 +112,23 @@ void q931_ces_alerting_request(struct q931_ces *ces)
 void q931_ces_connect_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
-	case N0_NULL_STATE:
-		ces->state = N8_CONNECT_REQUEST;
+	case I0_NULL_STATE:
+		ces->state = I8_CONNECT_REQUEST;
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -113,24 +136,24 @@ void q931_ces_connect_request(struct q931_ces *ces)
 void q931_ces_call_proceeding_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 		// Start T310
-		ces->state = N25_OVERLAP_RECEIVING;
+		ces->state = I25_OVERLAP_RECEIVING;
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -138,79 +161,77 @@ void q931_ces_call_proceeding_request(struct q931_ces *ces)
 void q931_ces_setup_ack_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 		// Start T304
 
-		ces->state = N25_OVERLAP_RECEIVING;
+		ces->state = I25_OVERLAP_RECEIVING;
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
-}
-
 }
 
 void q931_ces_release_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 		// Start T304
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-		q931_send_release(ces->dlc);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces_state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 		// Stop T310 if running
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces_state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -218,26 +239,26 @@ void q931_ces_release_request(struct q931_ces *ces)
 void q931_ces_info_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-		q931_send_info(ces->dlc);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+		q931_send_info(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
-		q931_send_info(ces->dlc);
+		q931_send_info(ces->call, ces->dlc);
 
 		// Start T304
 	break;
 
-	case N0_NULL_STATE:
-	case N19_RELEASE_REQUEST:
+	case I0_NULL_STATE:
+	case I19_RELEASE_REQUEST:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -248,33 +269,33 @@ inline static void q931_ces_handle_alerting(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 		// Stop T310 if running
 
-		q931_int_alert_indication(ces->call, ces);
+		q931_int_alerting_indication(ces->call, ces);
 
-		ces->state = N7_CALL_RECEIVED;
+		ces->state = I7_CALL_RECEIVED;
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
-		q931_int_alert_indication(ces->call, ces);
+		q931_int_alerting_indication(ces->call, ces);
 
-		ces->state = N7_CALL_RECEIVED;
+		ces->state = I7_CALL_RECEIVED;
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -285,70 +306,69 @@ inline static void q931_ces_handle_call_proceeding(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 		q931_int_call_proceeding_indication(ces->call, ces);
 
 		// Start T310
 
-		ces->state = N9_INCOMING_CALL_PROCEEDING;
+		ces->state = I9_INCOMING_CALL_PROCEEDING;
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
 
 inline static void q931_ces_handle_connect(
-	const struct q931_dlc *dlc,
 	struct q931_ces *ces,
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
+	case I7_CALL_RECEIVED:
 		q931_int_connect_indication(ces->call, ces);
 
-		ces->state = N8_CONNECT_REQUEST;
+		ces->state = I8_CONNECT_REQUEST;
 	break;
 
-	case N8_CONNECT_REQUEST:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I8_CONNECT_REQUEST:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 		// Stop T310 if running
 
 		q931_int_connect_indication(ces->call, ces);
 
-		ces->state = N8_CONNECT_REQUEST;
+		ces->state = I8_CONNECT_REQUEST;
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
 		q931_int_connect_indication(ces->call, ces);
 
-		ces->state = N8_CONNECT_REQUEST;
+		ces->state = I8_CONNECT_REQUEST;
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -359,21 +379,21 @@ inline static void q931_ces_handle_connect_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -384,32 +404,32 @@ inline static void q931_ces_handle_progress(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
+	case I7_CALL_RECEIVED:
 		q931_int_progress_indication(ces->call, ces);
 	break;
 
-	case N8_CONNECT_REQUEST:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I8_CONNECT_REQUEST:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 		// Stop T310 if running
 
 		q931_int_progress_indication(ces->call, ces);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
 		q931_int_progress_indication(ces->call, ces);
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -420,21 +440,21 @@ inline static void q931_ces_handle_setup(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -445,21 +465,21 @@ inline static void q931_ces_handle_setup_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -470,51 +490,51 @@ inline static void q931_ces_handle_disconnect(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 
 		// Stop T310 if running
 
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 		// Do nothing
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release(ces->dlc);
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -525,46 +545,46 @@ inline static void q931_ces_handle_release(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release_complete(ces->dlc);
+		q931_send_release_complete(ces->call, ces->dlc);
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 		// Stop T310 if running
 
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release_complete(ces->dlc);
+		q931_send_release_complete(ces->call, ces->dlc);
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 		// Stop T308
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
 		q931_int_release_indication(ces->call, ces);
 
-		q931_send_release_complete(ces->dlc);
+		q931_send_release_complete(ces->call, ces->dlc);
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -575,14 +595,14 @@ inline static void q931_ces_handle_release_complete(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
 		q931_int_release_indication(ces->call, ces);
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I9_INCOMING_CALL_PROCEEDING:
 		// Stop T310 if running
 
 		q931_int_release_indication(ces->call, ces);
@@ -590,13 +610,13 @@ inline static void q931_ces_handle_release_complete(
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 		// Stop T308
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 		// Stop T304
 
 		q931_int_release_indication(ces->call, ces);
@@ -614,11 +634,11 @@ inline static void q931_ces_handle_release_complete(
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -629,21 +649,21 @@ inline static void q931_ces_handle_restart(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -654,21 +674,21 @@ inline static void q931_ces_handle_restart_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -679,19 +699,19 @@ inline static void q931_ces_handle_status(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-	case N25_OVERLAP_RECEIVING:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+	case I25_OVERLAP_RECEIVING:
 		// Log error?
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -702,21 +722,21 @@ inline static void q931_ces_handle_status_enquiry(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -727,21 +747,21 @@ inline static void q931_ces_handle_user_information(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 	
@@ -753,21 +773,21 @@ inline static void q931_ces_handle_segment(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -778,21 +798,21 @@ inline static void q931_ces_handle_congestion_control(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -803,13 +823,13 @@ inline static void q931_ces_handle_info(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
 		q931_int_info_indication(ces->call, ces);
 	break;
 
-	case N19_RELEASE_REQUEST:
+	case I19_RELEASE_REQUEST:
 		// Do nothing
 		// NOTE 1. THE INDIVIDUAL PROCESS MAY PASS AN INT. INFO
 		//         INDICATION TO THE GLOBAL PROCESS AT THIS POINT.
@@ -817,14 +837,14 @@ inline static void q931_ces_handle_info(
 
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -835,21 +855,21 @@ inline static void q931_ces_handle_facility(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -860,21 +880,21 @@ inline static void q931_ces_handle_notify(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -885,21 +905,21 @@ inline static void q931_ces_handle_hold(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -910,21 +930,21 @@ inline static void q931_ces_handle_hold_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -935,21 +955,21 @@ inline static void q931_ces_handle_hold_reject(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -960,21 +980,21 @@ inline static void q931_ces_handle_retrieve(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -985,21 +1005,21 @@ inline static void q931_ces_handle_retrieve_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1010,21 +1030,21 @@ inline static void q931_ces_handle_retrieve_reject(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1035,21 +1055,21 @@ inline static void q931_ces_handle_resume(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1060,21 +1080,21 @@ inline static void q931_ces_handle_resume_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1085,21 +1105,21 @@ inline static void q931_ces_handle_resume_reject(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1110,21 +1130,21 @@ inline static void q931_ces_handle_suspend(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1135,21 +1155,21 @@ inline static void q931_ces_handle_suspend_acknowledge(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
@@ -1160,28 +1180,28 @@ inline static void q931_ces_handle_suspend_reject(
 	int ies_cnt)
 {
 	switch (ces->state) {
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces);
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
+		q931_send_status(ces->call, ces->dlc);
 	break;
 
-	case N25_OVERLAP_RECEIVING:
+	case I25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
+	case I0_NULL_STATE:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
 
 
 void q931_ces_dispatch_message(
-	struct q931_call *call,
+	struct q931_ces *ces,
 	__u8 message_type,
 	const struct q931_ie *ies,
 	int ies_cnt)
@@ -1196,7 +1216,7 @@ void q931_ces_dispatch_message(
 	break;
 
 	case Q931_MT_CONNECT:
-		q931_ces_handle_connect(dlc, call, ies, ies_cnt);
+		q931_ces_handle_connect(ces, ies, ies_cnt);
 	break;
 
 	case Q931_MT_CONNECT_ACKNOWLEDGE:
@@ -1220,11 +1240,11 @@ void q931_ces_dispatch_message(
 	break;
 
 	case Q931_MT_RELEASE:
-		q931_ces_handle_release(dlc, call, ies, ies_cnt);
+		q931_ces_handle_release(ces, ies, ies_cnt);
 	break;
 
 	case Q931_MT_RELEASE_COMPLETE:
-		q931_ces_handle_release_complete(dlc, call, ies, ies_cnt);
+		q931_ces_handle_release_complete(ces, ies, ies_cnt);
 	break;
 
 	case Q931_MT_RESTART:
@@ -1318,46 +1338,59 @@ void q931_ces_dispatch_message(
 	break;
 
 	default:
-		report_dlc(dlc, LOG_WARNING,
+		report_ces(ces, LOG_WARNING,
 			"Unkwnon/unhandled message type %d\n",
 			message_type);
 	break;
 	}
 }
 
-void q931_ces_timer_T304()
+static void q931_ces_timer_T304(void *data)
 {
-	switch (ces->state) {
-	case N25_OVERLAP_RECEIVING:
-		q931_int_release_indication(ces);
+	struct q931_ces *ces = data;
 
-		q931_send_release(ces->dlc);
+	switch (ces->state) {
+	case I25_OVERLAP_RECEIVING:
+		q931_int_release_indication(ces->call, ces);
+
+		q931_send_release(ces->call, ces->dlc);
 
 		// Start T308
 
-		ces->state = N19_RELEASE_REQUEST;
+		ces->state = I19_RELEASE_REQUEST;
 	break;
 
-	case N0_NULL_STATE:
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N19_RELEASE_REQUEST:
+	case I0_NULL_STATE:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+	case I19_RELEASE_REQUEST:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }
 
-void q931_ces_timer_T310()
+static void q931_ces_timer_T310(void *data)
 {
+	struct q931_ces *ces = data;
+
 	switch (ces->state) {
-	case N19_RELEASE_REQUEST:
+	case I9_INCOMING_CALL_PROCEEDING:
+		q931_int_release_indication(ces->call, ces);
+
+		q931_send_release(ces->call, ces->dlc);
+
+		// Start T308
+
+		ces->state = I19_RELEASE_REQUEST;
+	break;
+	case I19_RELEASE_REQUEST:
 		// First expiry?
 		if (1) {
-			q931_send_release(ces->dlc);
+			q931_send_release(ces->call, ces->dlc);
 
 			// Start T308
 		} else {
@@ -1365,45 +1398,14 @@ void q931_ces_timer_T310()
 		}
 	break;
 
-	case N25_OVERLAP_RECEIVING:
-	break;
-
-	case N0_NULL_STATE:
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
+	case I0_NULL_STATE:
+	case I7_CALL_RECEIVED:
+	case I8_CONNECT_REQUEST:
+	case I25_OVERLAP_RECEIVING:
 	default:
-		call->interface->report(LOG_ERROR,
+		report_ces(ces, LOG_ERR,
 			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
-	break;
-	}
-}
-
-void q931_ces_timer_T310()
-{
-	switch (ces->state) {
-	case N9_INCOMING_CALL_PROCEEDING:
-		q931_int_release_indication(ces->call, ces);
-
-		q931_send_release(ces->dlc);
-
-		// Start T308
-
-		ces->state = N19_RELEASE_REQUEST;
-	break;
-
-	case N25_OVERLAP_RECEIVING:
-	break;
-
-	case N0_NULL_STATE:
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N19_RELEASE_REQUEST:
-	default:
-		call->interface->report(LOG_ERROR,
-			"Unexpected  in state %s\n",
-			q931_state_to_text(call->state));
+			q931_ces_state_to_text(ces->state));
 	break;
 	}
 }

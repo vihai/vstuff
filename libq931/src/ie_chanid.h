@@ -1,8 +1,8 @@
 
-#ifndef _Q931_IE_CHANID_H
-#define _Q931_IE_CHANID_H
+#ifndef _IE_CHANID_H
+#define _IE_CHANID_H
 
-#include "q931_ie.h"
+#include "ie.h"
 
 /*********************** Channel Identification *************************/
 

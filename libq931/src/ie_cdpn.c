@@ -1,7 +1,7 @@
 
 #include <string.h>
 
-#include "q931_ie_cdpn.h"
+#include "ie_cdpn.h"
 
 int q931_append_ie_called_party_number(void *buf, const char *called_number)
 {

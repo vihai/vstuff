@@ -13,8 +13,8 @@
 #include <signal.h>
 
 #include "q931.h"
-#include "q931_mt.h"
-#include "q931_ie.h"
+#include "msgtype.h"
+#include "ie.h"
 
 static int shutting_down = FALSE;
 static int shutdown_acked;

@@ -5,7 +5,7 @@
 #include <linux/types.h>
 
 #include "q931.h"
-#include "q931_mt.h"
+#include "msgtype.h"
 
 static struct q931_message_type_name q931_message_type_names[] =
 {

@@ -1,8 +1,8 @@
 
-#ifndef _Q931_IE_BEARERCAP_H
-#define _Q931_IE_BEARERCAP_H
+#ifndef _IE_BEARERCAP_H
+#define _IE_BEARERCAP_H
 
-#include "q931_ie.h"
+#include "ie.h"
 
 enum q931_ie_bearer_capability_coding_standard
 {

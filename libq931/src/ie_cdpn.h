@@ -1,9 +1,9 @@
 /*********************** Called Party Number *************************/
 
-#ifndef _Q931_IE_CDPN_H
-#define _Q931_IE_CDPN_H
+#ifndef _IE_CDPN_H
+#define _IE_CDPN_H
 
-#include "q931_ie.h"
+#include "ie.h"
 
 enum q931_ie_called_party_number_type_of_number
 {

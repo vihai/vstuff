@@ -5,7 +5,7 @@
 #include <linux/types.h>
 
 #include "q931.h"
-#include "q931_ie.h"
+#include "ie.h"
 
 static struct q931_ie_info q931_ie_infos[] =
  {
