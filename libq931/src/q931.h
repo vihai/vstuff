@@ -1,6 +1,9 @@
 #ifndef _Q931_H
 #define _Q931_H
 
+#include <sys/socket.h>
+#include <lapd_user.h>
+
 #include "list.h"
 
 #ifndef FALSE
@@ -117,6 +120,9 @@ union q931_callref_onwire
 struct q931_interface
 {
 	int socket;
+
+	enum lapd_role role;
+
 	q931_callref next_call_reference;
 	int call_reference_size;
 

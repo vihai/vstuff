@@ -296,8 +296,8 @@ static void hfc_check_l1_up(struct hfc_port *port)
 {
 	struct hfc_card *card = port->card;
 
-	if ((!port->nt_mode && port->l1_state!=7) ||
-		(port->nt_mode && port->l1_state!=3)) {
+	if ((!port->nt_mode && port->l1_state != 7) ||
+		(port->nt_mode && port->l1_state != 3)) {
 #ifdef DEBUG
 		if(debug_level >= 1) {
 			printk(KERN_DEBUG hfc_DRIVER_PREFIX
@@ -570,6 +570,9 @@ static int hfc_open(struct net_device *netdev)
 			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
+		hfc_outb(card, hfc_A_SUBCH_CFG,
+			hfc_A_SUBCH_CFG_V_BIT_CNT_2);
+
 		hfc_outb(card, hfc_A_IRQ_MSK,
 			hfc_A_IRQ_MSK_V_IRQ);
 
@@ -714,6 +717,10 @@ static int hfc_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 
 	hfc_check_l1_up(chan->port);
 
+	printk(KERN_DEBUG "-----------__> xmitting on chan %s\n", chan->name);
+
+	hfc_fifo_select(card, chan->tx.fifo_id);
+
 	hfc_fifo_put_frame(&chan->tx, skb->data, skb->len);
 
 	dev_kfree_skb(skb);
@@ -743,7 +750,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 			printk(KERN_INFO hfc_DRIVER_PREFIX
 				"card %d: "
 				"port %d: "
-				"is in NT mode, not going promiscuous\n",
+				"is in NT mode. Promiscuity is useless\n",
 				card->id,
 				port->id);
 
@@ -943,12 +950,14 @@ static inline void hfc_handle_state_interrupt(struct hfc_port *port)
 
 		if (new_state == 2) {
 			// Allows transition from G2 to G3
-/*			hfc_outb(card, hfc_STATES, hfc_STATES_ACTIVATE |
-					hfc_STATES_DO_ACTION |
-					hfc_STATES_NT_G2_G3);*/
+			hfc_outb(card, hfc_A_ST_WR_STA,
+				hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
+				hfc_A_ST_WR_STA_V_SET_G2_G3);
 		} else if (new_state == 3) {
-			// fix to G3 state (see specs)
-//			hfc_outb(card, hfc_STATES, hfc_STATES_LOAD_STATE | 3);
+			// fix to G3 state (see specs) ? Why? TODO FIXME
+			hfc_outb(card, hfc_A_ST_WR_STA,
+				hfc_A_ST_WR_STA_V_ST_SET_STA(3)|
+				hfc_A_ST_WR_STA_V_ST_LD_STA);
 		}
 
 		if (new_state == 3 && port->l1_state != 3) {

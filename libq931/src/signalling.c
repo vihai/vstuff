@@ -19,6 +19,11 @@ int main()
 {
  q931_init();
  struct q931_interface *interface = q931_open_interface("isdn0d");
+ if (!interface)
+  {
+   printf("q931_open_interface error: %s\n",strerror(errno));
+   exit(1);
+  }
 
  struct q931_call *call;
 

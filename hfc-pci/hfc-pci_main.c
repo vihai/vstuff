@@ -33,7 +33,7 @@
 #include <lapd_user.h>
 #include <lapd.h>
 
-#include "hfc.h"
+#include "hfc-pci.h"
 #include "fifo.h"
 
 #if CONFIG_PCI

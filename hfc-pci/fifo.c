@@ -29,7 +29,7 @@
 #include <linux/proc_fs.h>
 */
 
-#include "hfc.h"
+#include "hfc-pci.h"
 #include "fifo.h"
 
 void hfc_fifo_clear_rx(struct hfc_chan_simplex *chan)

@@ -32,7 +32,7 @@
 #endif
 
 #ifndef PCI_DEVICE_ID_SITECOM_3069
-#ifndef PCI_DEVICE_ID_SITECOM_3069 0x3069
+#define PCI_DEVICE_ID_SITECOM_3069 0x3069
 #endif
 
 #define hfc_RESET_DELAY 20

@@ -46,12 +46,18 @@ struct q931_interface *q931_open_interface(const char *name)
                 name, strlen(name)+1) < 0)
    goto err_setsockopt;
 
- if (connect(interface->socket, NULL, 0) < 0)
-   goto err_connect;
+ int optlen=sizeof(interface->role);
+ if (getsockopt(interface->socket, SOL_LAPD, LAPD_ROLE,
+		&interface->role, &optlen)<0)
+   goto err_getsockopt;
+
+// if (connect(interface->socket, NULL, 0) < 0)
+//   goto err_connect;
 
  return interface;
 
 err_connect:
+err_getsockopt:
 err_setsockopt:
  close(interface->socket);
 err_socket:
@@ -209,8 +215,43 @@ static int q931_send_frame(struct q931_interface *interface, void *frame, int si
  iov.iov_base = frame;
  iov.iov_len = size;
 
+ printf("q931_send_frame\n");
+
  if (sendmsg(interface->socket, &msg, 0) < 0)
+  {
+   printf("sendmsg error: %s\n",strerror(errno));
    return errno;
+  }
+
+ return 0;
+}
+
+static int q931_send_uframe(struct q931_interface *interface, void *frame, int size)
+{
+ struct msghdr msg;
+ struct iovec iov;
+ struct sockaddr_lapd sal;
+
+ msg.msg_name = &sal;
+ msg.msg_namelen = sizeof(sal);
+ msg.msg_iov = &iov;
+ msg.msg_iovlen = 1;
+ msg.msg_control = NULL;
+ msg.msg_controllen = 0;
+ msg.msg_flags = 0;
+
+ sal.sal_tei = 127;
+
+ iov.iov_base = frame;
+ iov.iov_len = size;
+
+ printf("q931_send_uframe\n");
+
+ if (sendmsg(interface->socket, &msg, MSG_OOB) < 0)
+  {
+   printf("sendmsg error: %s\n",strerror(errno));
+   return errno;
+  }
 
  return 0;
 }
@@ -291,7 +332,10 @@ static int q931_send_setup(struct q931_call *call)
  size += q931_append_ie_called_party_number(frame + size, "5001");
  size += q931_append_ie_sending_complete(frame + size);
 
- return q931_send_frame(call->interface, frame, size);
+// if (call->interface->role == LAPD_ROLE_TE)
+//   return q931_send_frame(call->interface, frame, size);
+// else
+   return q931_send_uframe(call->interface, frame, size);
 }
 
 int q931_make_call(struct q931_interface *interface, struct q931_call *call)

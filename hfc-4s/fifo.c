@@ -44,6 +44,18 @@ static int hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
 static void hfc_fifo_mem_write(struct hfc_chan_simplex *chan,
 	void *data, int size)
 {
+	int i;
+	for (i=0; i<size; i++) {
+		hfc_outb(chan->chan->port->card,
+			hfc_A_FIFO_DATA0,
+			((u8 *)data)[i]);
+#ifdef DEBUG
+		if(debug_level >= 3)
+			printk("%02x", ((u8 *)data)[i]);
+#endif
+	}
+
+/*
 	int offset = 0;
 
 	// Ensure alignment with u16
@@ -89,7 +101,7 @@ static void hfc_fifo_mem_write(struct hfc_chan_simplex *chan,
 			*((u8 *)(data + offset)));
 
 		offset += sizeof(u8);
-	}
+	}*/
 }
 
 int hfc_fifo_get(struct hfc_chan_simplex *chan,
@@ -321,15 +333,17 @@ void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
 			chan->chan->name,
 			size);
 	} else if (debug_level >= 4) {
+		hfc_fifo_refresh_fz_cache(chan);
+
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX
 			"card %d: "
 			"port %d: "
 			"chan %s: "
-			"TX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
+			"TX (f1=%02x, f2=%02x, z1=N/A, z2=%04x) len %2d: ",
 			chan->chan->port->card->id,
 			chan->chan->port->id,
 			chan->chan->name,
-			chan->f1, chan->f2, chan->z1, chan->z2,
+			chan->f1, chan->f2, chan->z2,
 			size);
 	}
 

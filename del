@@ -1,2 +1,3 @@
-rmmod hfc
+rmmod hfc-pci
+rmmod hfc-4s
 rmmod lapd

@@ -13,6 +13,8 @@
 #ifndef _LAPD_USER_H
 #define _LAPD_USER_H
 
+#include <linux/socket.h>
+
 #ifndef ARPHRD_ISDN_DCHAN
 #define ARPHRD_ISDN_DCHAN 1000
 #endif
@@ -37,6 +39,8 @@
 #define SOL_LAPD 300
 #endif
 
+#ifdef __KERNEL__
+
 enum
 {
 	LAPD_ROLE		= 0,
@@ -51,6 +55,11 @@ enum
 	LAPD_Q931_T203		= 9,
 	LAPD_Q931_N201		= 10,
 	LAPD_Q931_K		= 11,
+};
+
+enum lapd_role {
+	LAPD_ROLE_TE		= 0,
+	LAPD_ROLE_NT		= 1
 };
 
 enum {
@@ -76,10 +85,6 @@ enum lapd_datalink_status
 	AWAITING_RELEASE,
 };
 
-enum lapd_tei_status
-{
-	TEI_UNASSIGNED,
-	TEI_ASSIGNED,
-};
+#endif /* __KERNEL__ */
 
 #endif

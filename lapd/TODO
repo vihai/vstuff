@@ -2,3 +2,9 @@
 FIX debugging
 Add interface to each line
 
+Check what happens when 64 sockets are open
+
+Notes:
+In NT mode there is only one TEI management entity per interface
+
+In TE mode there can be at most one TEI management per socket

@@ -13,6 +13,16 @@
 #ifndef _LAPD_TEI_MGMT_H
 #define _LAPD_TEI_MGMT_H
 
+#include "lapd_proto.h"
+
+#ifdef __KERNEL__
+
+enum lapd_tei_status
+{
+	TEI_UNASSIGNED,
+	TEI_ASSIGNED,
+};
+
 #define LAPD_SAPI_TEI_MGMT	0x3f
 
 #define LAPD_TEI_ENTITY		0x0f
@@ -60,4 +70,5 @@ void lapd_tei_mgmt_T201_timer(unsigned long data);
 void lapd_tei_mgmt_T202_timer(unsigned long data);
 int lapd_handle_tei_mgmt(struct sk_buff *skb);
 
+#endif /* __KERNEL__ */
 #endif
