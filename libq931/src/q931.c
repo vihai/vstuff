@@ -42,10 +42,8 @@ struct q931_lib *q931_init()
 	struct q931_lib *lib;
 
 	lib = malloc(sizeof(*lib));
-	if (!lib) {
-		//FIXME
-		exit(1);
-	}
+	if (!lib)
+		return NULL;
 
 	lib->report = q931_default_report;
 
@@ -63,6 +61,111 @@ void q931_leave(struct q931_lib *lib)
 {
 	free(lib);
 }
+
+void q931_dl_establish_indication(struct q931_dlc *dlc)
+{
+	dlc->status = DLC_CONNECTED;
+
+	struct q931_call *call, *callt;
+	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+		struct q931_ces *ces, *cest;
+		list_for_each_entry_safe(ces, cest, &call->ces, node) {
+
+			if (ces->dlc == dlc) {
+				if (ces == call->selected_ces) {
+					q931_ces_dl_release_indication(ces);
+
+					break;
+				} else {
+					q931_ces_dl_release_indication(ces);
+
+					return;
+				}
+			}
+		}
+
+		q931_call_dl_establish_indication(call);
+	}
+}
+
+void q931_dl_establish_confirm(struct q931_dlc *dlc)
+{
+	dlc->status = DLC_CONNECTED;
+
+	struct q931_call *call, *callt;
+	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+		struct q931_ces *ces, *cest;
+		list_for_each_entry_safe(ces, cest, &call->ces, node) {
+
+			if (ces->dlc == dlc) {
+				if (ces == call->selected_ces) {
+					q931_ces_dl_establish_confirm(ces);
+
+					break;
+				} else {
+					q931_ces_dl_establish_confirm(ces);
+
+					return;
+				}
+			}
+		}
+
+		q931_call_dl_establish_confirm(call);
+	}
+}
+
+void q931_dl_release_indication(struct q931_dlc *dlc)
+{
+	dlc->status = DLC_DISCONNECTED;
+
+	struct q931_call *call, *callt;
+	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+		struct q931_ces *ces, *cest;
+		list_for_each_entry_safe(ces, cest, &call->ces, node) {
+
+			if (ces->dlc == dlc) {
+				if (ces == call->selected_ces) {
+					q931_ces_dl_release_indication(ces);
+
+					break;
+				} else {
+					q931_ces_dl_release_indication(ces);
+
+					return;
+				}
+			}
+		}
+
+		q931_call_dl_release_indication(call);
+	}
+}
+
+void q931_dl_release_confirmation(struct q931_dlc *dlc)
+{
+	dlc->status = DLC_DISCONNECTED;
+
+	struct q931_call *call, *callt;
+	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+		struct q931_ces *ces, *cest;
+		list_for_each_entry_safe(ces, cest, &call->ces, node) {
+
+			if (ces->dlc == dlc) {
+				if (ces == call->selected_ces) {
+					q931_ces_dl_release_confirm(ces);
+
+					break;
+				} else {
+					q931_ces_dl_release_confirm(ces);
+
+					return;
+				}
+			}
+		}
+
+		q931_call_dl_release_confirm(call);
+	}
+}
+
 
 void q931_receive(struct q931_dlc *dlc)
 {
@@ -141,7 +244,7 @@ void q931_receive(struct q931_dlc *dlc)
 		hdr->call_reference_size);
 
 	report_dlc(dlc, LOG_INFO, "  message_type = %s (%u)\n",
-		q931_get_message_type_name(message_type),
+		q931_message_type_to_text(message_type),
 			message_type);
 
 	struct q931_call *call =
@@ -154,39 +257,16 @@ void q931_receive(struct q931_dlc *dlc)
 			callref);
 
 	if (!call) {
-		call = q931_alloc_call(dlc->interface);
+		call = q931_alloc_call_in(
+			dlc->interface, dlc,
+			callref,
+			msg.msg_flags & MSG_OOB);
 		if (!call) {
 			report_dlc(dlc, LOG_ERR,
 				"Error allocating call\n");
 
 			return;
 		}
-
-		if (msg.msg_flags & MSG_OOB) {
-			call->dlc = NULL;
-			call->broadcast_setup = TRUE;
-		} else {
-			call->dlc = dlc;
-			call->broadcast_setup = FALSE;
-		}
-
-		call->interface = dlc->interface;
-
-		call->direction = Q931_CALL_DIRECTION_INBOUND;
-		call->call_reference =
-			q931_alloc_call_reference(call->interface);
-
-		if (call->call_reference < 0) {
-			report_call(call, LOG_ERR,
-				"All call references are used!!!\n");
-			return;
-		}
-
-		report_call(call, LOG_INFO,
-			"Call reference allocated (%ld)\n",
-			call->call_reference);
-
-		q931_add_call(dlc->interface, call);
 
 		// Shortcut for "Other Messages"
 		if (message_type != Q931_MT_SETUP &&
@@ -309,17 +389,23 @@ void q931_receive(struct q931_dlc *dlc)
 		i++;
 	}
 
-	struct q931_ces *ces;
-	list_for_each_entry(ces, &call->ces, node) {
+	struct q931_ces *ces, *tces;
+	list_for_each_entry_safe(ces, tces, &call->ces, node) {
+		report_dlc(dlc, LOG_INFO, "=====================> %p == %p\n", dlc, ces->dlc);
+
 		if (ces->dlc == dlc) {
+			// selected_ces may change after "dispatch_message"
+			if (ces == call->selected_ces) {
+				q931_ces_dispatch_message(ces,
+					message_type, ies, ies_cnt);
 
-			q931_ces_dispatch_message(ces,
-				message_type, ies, ies_cnt);
-
-			if (ces == call->selected_ces)
 				break;
-			else
+			} else {
+				q931_ces_dispatch_message(ces,
+					message_type, ies, ies_cnt);
+
 				return;
+			}
 		}
 	}
 

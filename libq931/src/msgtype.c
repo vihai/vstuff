@@ -49,7 +49,7 @@ static int q931_message_type_id_compare(const void *a, const void *b)
                     ((struct q931_message_type_name *)b)->id);
 }
 
-const char *q931_get_message_type_name(int id)
+const char *q931_message_type_to_text(int id)
 {
  struct q931_message_type_name key, *res;
 

@@ -15,7 +15,7 @@ enum q931_ie_channel_identification_interface_id_present
 enum q931_ie_channel_identification_interface_type
 {
 	Q931_IE_CI_IT_BASIC	= 0x0,
-	Q931_IE_CI_IT_OTHER	= 0x1
+	Q931_IE_CI_IT_PRIMARY	= 0x1
 };
 
 enum q931_ie_channel_identification_preferred_exclusive
@@ -30,20 +30,42 @@ enum q931_ie_channel_identification_d_channel_indicator
 	Q931_IE_CI_DCI_IS_D_CHAN	= 0x1
 };
 
-enum q931_ie_channel_identification_info_channel_selection_bri
+enum q931_ie_channel_identification_info_channel_selection_bra
 {
-	Q931_IE_CI_ICS_BRI_NO_CHANNEL	= 0x00,
-	Q931_IE_CI_ICS_BRI_B1		= 0x01,
-	Q931_IE_CI_ICS_BRI_B2		= 0x02,
-	Q931_IE_CI_ICS_BRI_ANY		= 0x03
+	Q931_IE_CI_ICS_BRA_NO_CHANNEL	= 0x0,
+	Q931_IE_CI_ICS_BRA_B1		= 0x1,
+	Q931_IE_CI_ICS_BRA_B2		= 0x2,
+	Q931_IE_CI_ICS_BRA_ANY		= 0x3
 };
 
-enum q931_ie_channel_identification_info_channel_selection_pri
+enum q931_ie_channel_identification_info_channel_selection_pra
 {
-	Q931_IE_CI_ICS_PRI_NO_CHANNEL	= 0x00,
-	Q931_IE_CI_ICS_PRI_INDICATED	= 0x01,
-	Q931_IE_CI_ICS_PRI_RESERVED	= 0x02,
-	Q931_IE_CI_ICS_PRI_ANY		= 0x03
+	Q931_IE_CI_ICS_PRA_NO_CHANNEL	= 0x0,
+	Q931_IE_CI_ICS_PRA_INDICATED	= 0x1,
+	Q931_IE_CI_ICS_PRA_RESERVED	= 0x2,
+	Q931_IE_CI_ICS_PRA_ANY		= 0x3
+};
+
+enum q931_ie_channel_identification_coding_standard
+{
+	Q931_IE_CI_CS_CCITT		= 0x0,
+	Q931_IE_CI_CS_RESERVED		= 0x1,
+	Q931_IE_CI_CS_NATIONAL		= 0x2,
+	Q931_IE_CI_CS_NETWORK		= 0x3
+};
+
+enum q931_ie_channel_identification_number_map
+{
+	Q931_IE_CI_NM_NUMBER		= 0x0,
+	Q931_IE_CI_NM_MAP		= 0x1
+};
+
+enum q931_ie_channel_identification_element_type
+{
+	Q931_IE_CI_ET_B			= 0x3,
+	Q931_IE_CI_ET_H0		= 0x6,
+	Q931_IE_CI_ET_H11		= 0x8,
+	Q931_IE_CI_ET_H12		= 0x9
 };
 
 struct q931_ie_channel_identification_onwire_3
@@ -113,9 +135,11 @@ struct q931_ie_channel_identification_onwire_3d
 	__u8 slot_map;
   };
 } __attribute__ ((__packed__));
-
-int q931_append_ie_channel_identification_any(void *buf);
-int q931_append_ie_channel_identification(void *buf,
-        enum q931_ie_channel_identification_info_channel_selection_bri chan_id);
-
 #endif
+
+int q931_append_ie_channel_identification_any_bra(void *buf);
+int q931_append_ie_channel_identification_any_pra(void *buf);
+int q931_append_ie_channel_identification_bra(void *buf,
+	enum q931_ie_channel_identification_info_channel_selection_bra chan_id);
+int q931_append_ie_channel_identification_pra(void *buf,
+	int chan_id);

@@ -3,7 +3,7 @@
 
 #include "dlc.h"
 #include "list.h"
-
+#include "logging.h"
 #include "call.h"
 #include "intf.h"
 
@@ -39,7 +39,12 @@ static inline void q931_set_logger_func(
 
 struct q931_lib *q931_init();
 void q931_leave(struct q931_lib *lib);
-
 void q931_receive(struct q931_dlc *dlc);
+
+#ifdef Q931_PRIVATE
+
+void q931_dl_establish_confirm(struct q931_dlc *dlc);
+
+#endif
 
 #endif

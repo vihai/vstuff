@@ -89,36 +89,73 @@ struct q931_interface *q931_open_interface(
 		goto err_getsockopt;
 
 	if (interface->role == LAPD_ROLE_TE) {
-		interface->nt_socket = -1;
+		interface->master_socket = -1;
 
-		q931_init_dlc(&interface->te_dlc,
-			interface, s);
+		q931_init_dlc(&interface->dlc, interface, s);
 			
-		interface->te_dlc.status = DLC_DISCONNECTED;
-	} else {
-		q931_init_dlc(&interface->te_dlc,
-			NULL, -1);
+		interface->dlc.status = DLC_DISCONNECTED;
 
-		interface->nt_socket = s;
+		interface->T301 = 180 * 1000000LL;
+		interface->T302 =  15 * 1000000LL;
+		interface->T303 =   4 * 1000000LL;
+		interface->T304 =  30 * 1000000LL;
+		interface->T305 =  30 * 1000000LL;
+		interface->T308 =   4 * 1000000LL;
+		interface->T309 =  90 * 1000000LL;
+		interface->T310 =  45 * 1000000LL;
+		interface->T314 =   4 * 1000000LL;
+		interface->T316 = 120 * 1000000LL;
+		interface->T317 =  60 * 1000000LL;
+		interface->T318 =   4 * 1000000LL;
+		interface->T319 =   4 * 1000000LL;
+		interface->T321 =  30 * 1000000LL;
+		interface->T322 =   4 * 1000000LL;
+	} else {
+		interface->master_socket = s;
+
+		q931_init_dlc(&interface->bc_dlc, interface, s);
+		q931_init_dlc(&interface->dlc, NULL, -1);
+
+		interface->T301 = 180 * 1000000LL;
+		interface->T302 =  12 * 1000000LL;
+		interface->T303 =   4 * 1000000LL;
+		interface->T304 =  20 * 1000000LL;
+		interface->T305 =  30 * 1000000LL;
+		interface->T306 =  30 * 1000000LL;
+		interface->T307 = 180 * 1000000LL;
+		interface->T308 =   4 * 1000000LL;
+		interface->T309 =  90 * 1000000LL;
+		interface->T310 =  35 * 1000000LL;
+		interface->T312 = interface->T303 + 2 * 1000000LL;
+		interface->T314 =   4 * 1000000LL;
+		interface->T316 = 120 * 1000000LL;
+		interface->T317 =  60 * 1000000LL;
+		interface->T320 =  30 * 1000000LL;
+		interface->T321 =  30 * 1000000LL;
+		interface->T322 =   4 * 1000000LL;
 	}
 
-	interface->T301 = 180 * 1000000LL;
-	interface->T302 =  12 * 1000000LL;
-	interface->T303 =   4 * 1000000LL;
-	interface->T304 =  20 * 1000000LL;
-	interface->T305 =  30 * 1000000LL;
-	interface->T306 =  30 * 1000000LL;
-	interface->T307 = 180 * 1000000LL;
-	interface->T308 =   4 * 1000000LL;
-	interface->T309 =  90 * 1000000LL;
-	interface->T310 =  35 * 1000000LL;
-	interface->T312 = interface->T303 + 2 * 1000000LL;
-	interface->T314 =   4 * 1000000LL;
-	interface->T316 = 120 * 1000000LL;
-	interface->T317 =  60 * 1000000LL;
-	interface->T320 =  30 * 1000000LL;
-	interface->T321 =  30 * 1000000LL;
-	interface->T322 =   4 * 1000000LL;
+	interface->type = Q931_INTF_TYPE_BRA_MULTIPOINT;
+
+	switch (interface->type) {
+	case Q931_INTF_TYPE_BRA_POINT_TO_POINT:
+		interface->n_channels = 2;
+	break;
+	case Q931_INTF_TYPE_BRA_MULTIPOINT:
+		interface->n_channels = 2;
+	break;
+	case Q931_INTF_TYPE_PRA:
+		interface->n_channels = 30;
+	break;
+	}
+
+	int i;
+	for (i=0; i<interface->n_channels; i++) {
+		interface->channels[i].id = i;
+		interface->channels[i].intf = interface;
+		interface->channels[i].state = Q931_CHANSTATE_AVAILABLE;
+		interface->channels[i].call = NULL;
+	}
 
 	list_add(&interface->node, &lib->intfs);
 
@@ -140,12 +177,14 @@ void q931_close_interface(struct q931_interface *interface)
 	list_del(&interface->node);
 
 	if (interface->role == LAPD_ROLE_TE) {
-		shutdown(interface->te_dlc.socket, 0);
-		close(interface->te_dlc.socket);
+		shutdown(interface->dlc.socket, 0);
+		close(interface->dlc.socket);
 	} else {
 // FIXME: for each dlc, shutdown and close?
 
-		close(interface->nt_socket);
+		// Broadcast socket == master socket but only we know it :)
+
+		close(interface->master_socket);
 	}
 
 	if (interface->name)

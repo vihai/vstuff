@@ -343,7 +343,7 @@ void main_loop(struct switch_state *state)
 						break;
 					}
 
-					printf("Accepted socket %d\n",
+					printf("Accepted socket TEI=%d\n",
 						state->dlcs[state->ndlcs].tei);
 
 					state->dlcs[state->ndlcs].socket = s;

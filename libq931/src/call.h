@@ -32,6 +32,9 @@
 			#timer);			\
 	} while(0)
 
+#define q931_call_timer_running(call, timer)		\
+		q931_timer_pending(&(call)->timer)	\
+
 enum q931_call_direction
 {
 	Q931_CALL_DIRECTION_OUTBOUND	= 0x0,
@@ -82,6 +85,14 @@ enum q931_setup_mode
 	Q931_SETUP_BROADCAST,
 };
 
+enum q931_tone_type
+{
+	Q931_TONE_DIAL,
+	Q931_TONE_BUSY,
+	Q931_TONE_HANGUP,
+	Q931_TONE_FAILURE,
+};
+
 #define Q931_MAX_DIGITS 20
 
 struct q931_call
@@ -92,7 +103,8 @@ struct q931_call
 
 	// TODO: Use a HASH for improved scalability
 	struct list_head ces;
-	const struct q931_ces *selected_ces;
+	struct q931_ces *preselected_ces;
+	struct q931_ces *selected_ces;
 	struct q931_dlc *dlc;
 
 	enum q931_call_direction direction;
@@ -104,8 +116,12 @@ struct q931_call
 	char called_number[Q931_MAX_DIGITS + 1];
 	int sending_complete;
 	int broadcast_setup;
-
 	int tones_option;
+	int T303_fired;
+	int T308_fired;
+	enum q931_ie_cause_value disconnect_cause;
+
+	struct q931_channel *channel; // Maybe we should have a channel mask, instead
 
 	void *pvt;
 
@@ -120,9 +136,12 @@ struct q931_call
 	struct q931_timer T309;
 	struct q931_timer T310;
 	struct q931_timer T312;
+	struct q931_timer T313;
 	struct q931_timer T314;
 	struct q931_timer T316;
 	struct q931_timer T317;
+	struct q931_timer T318;
+	struct q931_timer T319;
 	struct q931_timer T320;
 	struct q931_timer T321;
 	struct q931_timer T322;
@@ -150,30 +169,45 @@ struct q931_call
 	void (*timeout_indication)(struct q931_call *call);
 };
 
-struct q931_call *q931_alloc_call();
+struct q931_call *q931_alloc_call_in(
+	struct q931_interface *interface,
+	struct q931_dlc *dlc,
+	int call_reference,
+	int broadcast_setup);
+
+struct q931_call *q931_alloc_call_out(
+	struct q931_interface *interface);
+
 void q931_free_call(struct q931_call *call);
 
-void q931_dl_establish_indication(struct q931_dlc *dlc);
-void q931_dl_establish_confirm(struct q931_dlc *dlc);
-void q931_dl_release_indication(struct q931_dlc *dlc);
-void q931_dl_release_confirmation(struct q931_dlc *dlc);
+void q931_call_dl_establish_indication(struct q931_call *call);
+void q931_call_dl_establish_confirm(struct q931_call *call);
+void q931_call_dl_release_indication(struct q931_call *call);
+void q931_call_dl_release_confirm(struct q931_call *call);
 
 void q931_alerting_request(struct q931_call *call);
-void q931_disconnect_request(struct q931_call *call);
+void q931_disconnect_request(struct q931_call *call,
+	enum q931_ie_cause_value cause);
 void q931_info_request(struct q931_call *call);
 void q931_more_info_request(struct q931_call *call);
 void q931_notify_request(struct q931_call *call);
 void q931_proceeding_request(struct q931_call *call);
 void q931_progress_request(struct q931_call *call);
-void q931_reject_request(struct q931_call *call);
+void q931_reject_request(struct q931_call *call,
+	enum q931_ie_cause_value cause);
 void q931_release_request(struct q931_call *call);
-void q931_resume_reject_request(struct q931_call *call);
+void q931_resume_request(struct q931_call *call);
+void q931_resume_reject_request(struct q931_call *call,
+	enum q931_ie_cause_value cause);
+
 void q931_resume_response(struct q931_call *call);
 void q931_setup_complete_request(struct q931_call *call);
 void q931_setup_request(struct q931_call *call);
 void q931_setup_response(struct q931_call *call);
 void q931_status_enquiry_request(struct q931_call *call);
-void q931_suspend_reject_request(struct q931_call *call);
+void q931_suspend_reject_request(struct q931_call *call,
+	enum q931_ie_cause_value cause);
+
 void q931_suspend_response(struct q931_call *call);
 void q931_suspend_request(struct q931_call *call);
 

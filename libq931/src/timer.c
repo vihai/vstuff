@@ -1,15 +1,5 @@
-#include <stdio.h>
+#include <string.h>
 #include <sys/time.h>
-//#include <unistd.h>
-//#include <stdlib.h>
-//#include <errno.h>
-//#include <string.h>
-//#include <sys/socket.h>
-//#include <sys/ioctl.h>
-//#include <linux/types.h>
-//#include <assert.h>
-//#include <stdarg.h>
-//#include <fcntl.h>
 
 #include "list.h"
 #include "q931.h"

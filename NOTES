@@ -48,9 +48,6 @@ TODO
   same device (and thus going to the same socket). Currently netif_rx spreads the
   load on per-CPU queues and frames may get analyzed concurrently.
 
-FIX debugging
-Add interface to each line
-
 Check what happens when 64 sockets are open (every dynamic TEIs)
 
 Should we add incoming interface, interface role and packet_type to ethereal's
@@ -59,6 +56,10 @@ Frame?
 Notes:
 In NT mode there is only one TEI management entity per interface
 In TE mode there can be at most one TEI management per socket
+
+---------------------------libq931:
+
+Implement: 5.9 User notification procedure
 
 Missing:
 ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)

@@ -141,5 +141,6 @@ const struct q931_ie_info *q931_get_ie_info(int id);
 #include "ie_progind.h"
 #include "ie_cause.h"
 #include "ie_call_state.h"
+#include "ie_hlc.h"
 
 #endif

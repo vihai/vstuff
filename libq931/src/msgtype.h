@@ -50,6 +50,6 @@ struct q931_message_type_name
 };
 
 void q931_message_types_init();
-const char *q931_get_message_type_name(int id);
+const char *q931_message_type_to_text(int id);
 
 #endif

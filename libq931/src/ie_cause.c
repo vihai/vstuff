@@ -225,59 +225,61 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 
 static int q931_ie_cause_value_compare(const void *a, const void *b)
 {
- return q931_intcmp(((struct q931_ie_cause_value_info *)a)->id,
-                    ((struct q931_ie_cause_value_info *)b)->id);
+	return q931_intcmp(((struct q931_ie_cause_value_info *)a)->id,
+	                   ((struct q931_ie_cause_value_info *)b)->id);
 }
 
 const struct q931_ie_cause_value_info *q931_get_ie_cause_value_info(int id)
 {
- struct q931_ie_cause_value_info key, *res;
+	struct q931_ie_cause_value_info key, *res;
 
- key.id = id;
- key.name = NULL;
+	key.id = id;
+	key.name = NULL;
 
- res = (struct q931_ie_cause_value_info *)
-       bsearch(&key,
-         q931_ie_cause_value_infos,
-         sizeof(q931_ie_cause_value_infos)/
-           sizeof(struct q931_ie_cause_value_info),
-         sizeof(struct q931_ie_cause_value_info),
-         q931_ie_cause_value_compare);
+	res = (struct q931_ie_cause_value_info *)
+	      bsearch(&key,
+	        q931_ie_cause_value_infos,
+	        sizeof(q931_ie_cause_value_infos)/
+	          sizeof(struct q931_ie_cause_value_info),
+	        sizeof(struct q931_ie_cause_value_info),
+	        q931_ie_cause_value_compare);
 
- return res;
+	return res;
 }
 
 void q931_ie_cause_value_infos_init()
 {
- qsort(q931_ie_cause_value_infos,
-       sizeof(q931_ie_cause_value_infos)/
-         sizeof(struct q931_ie_cause_value_info),
-       sizeof(struct q931_ie_cause_value_info),
-       q931_ie_cause_value_compare);
+	qsort(q931_ie_cause_value_infos,
+	      sizeof(q931_ie_cause_value_infos)/
+	        sizeof(struct q931_ie_cause_value_info),
+	      sizeof(struct q931_ie_cause_value_info),
+	      q931_ie_cause_value_compare);
 }
 
 int q931_append_ie_cause(void *buf,
 	enum q931_ie_cause_location location,
 	enum q931_ie_cause_value value)
 {
- struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
 
- ie->id = Q931_IE_CAUSE;
- ie->size = 0;
+	ie->id = Q931_IE_CAUSE;
+	ie->size = 0;
 
- struct q931_ie_cause_onwire_3 *oct_3 =
-   (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->size]);
- oct_3->ext = 1;
- oct_3->coding_standard = Q931_IE_C_CS_CCITT;
- oct_3->location = location;
- ie->size += 1;
+	ie->data[ie->size] = 0x00;
+	struct q931_ie_cause_onwire_3 *oct_3 =
+	  (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->size]);
+	oct_3->ext = 1;
+	oct_3->coding_standard = Q931_IE_C_CS_CCITT;
+	oct_3->location = location;
+	ie->size += 1;
 
- struct q931_ie_cause_onwire_4 *oct_4 =
-   (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->size]);
- oct_4->ext = 1;
- oct_4->cause_value = value;
- ie->size += 1;
+	ie->data[ie->size] = 0x00;
+	struct q931_ie_cause_onwire_4 *oct_4 =
+	  (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->size]);
+	oct_4->ext = 1;
+	oct_4->cause_value = value;
+	ie->size += 1;
 
- return ie->size + sizeof(struct q931_ie_onwire);
+	return ie->size + sizeof(struct q931_ie_onwire);
 }
 

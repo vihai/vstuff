@@ -65,20 +65,21 @@ struct q931_ie_call_state_onwire_3
 } __attribute__ ((__packed__));
 
 static inline int q931_append_ie_call_state(void *buf,
-        int value)
+	       int value)
 {
- struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
 
- ie->id = Q931_IE_CALL_STATE;
- ie->size = 0;
+	ie->id = Q931_IE_CALL_STATE;
+	ie->size = 0;
 
- struct q931_ie_call_state_onwire_3 *oct_3 =
-   (struct q931_ie_call_state_onwire_3 *)(&ie->data[ie->size]);
- oct_3->coding_standard = Q931_IE_CS_CS_CCITT;
- oct_3->value = value;
- ie->size += 1;
+	ie->data[ie->size] = 0x00;
+	struct q931_ie_call_state_onwire_3 *oct_3 =
+	  (struct q931_ie_call_state_onwire_3 *)(&ie->data[ie->size]);
+	oct_3->coding_standard = Q931_IE_CS_CS_CCITT;
+	oct_3->value = value;
+	ie->size += 1;
 
- return ie->size + sizeof(struct q931_ie_onwire);
+	return ie->size + sizeof(struct q931_ie_onwire);
 }
 
 #endif

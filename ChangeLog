@@ -2,6 +2,39 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-04-06 14:34:09 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-23
+
+    Summary:
+      Commit for backup purposes
+    Revision:
+      isdn--devel--0.1--patch-23
+
+    
+    
+
+    new files:
+     libq931/src/.arch-ids/channel.c.id
+     libq931/src/.arch-ids/channel.h.id
+     libq931/src/.arch-ids/ie_hlc.c.id
+     libq931/src/.arch-ids/ie_hlc.h.id libq931/src/channel.c
+     libq931/src/channel.h libq931/src/ie_hlc.c
+     libq931/src/ie_hlc.h
+
+    modified files:
+     ChangeLog NOTES chan_visdn/chan_visdn.c
+     demoswitch/demoswitch.c libq931/src/Makefile.am
+     libq931/src/call.c libq931/src/call.h libq931/src/ces.c
+     libq931/src/ces.h libq931/src/ie.h libq931/src/ie_bearercap.c
+     libq931/src/ie_call_state.h libq931/src/ie_cause.c
+     libq931/src/ie_cdpn.c libq931/src/ie_cgpn.c
+     libq931/src/ie_chanid.c libq931/src/ie_chanid.h
+     libq931/src/ie_progind.c libq931/src/ie_progind.h
+     libq931/src/intf.c libq931/src/intf.h libq931/src/msgtype.c
+     libq931/src/msgtype.h libq931/src/out.c libq931/src/out.h
+     libq931/src/q931.c libq931/src/q931.h libq931/src/timer.c
+     libq931/src/timer.h
+
+
 2005-04-01 03:43:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-22
 
     Summary:

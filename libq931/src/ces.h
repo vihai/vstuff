@@ -24,6 +24,8 @@ struct q931_ces
 	struct q931_call *call;
 	struct q931_dlc *dlc;
 	enum q931_ces_state state;
+
+	struct q931_timer T304;
 };
 
 void q931_ces_dispatch_message(
@@ -32,18 +34,24 @@ void q931_ces_dispatch_message(
 	const struct q931_ie *ies,
 	int ies_cnt);
 
-struct q931_ces *q931_ces_alloc(struct q931_call *call);
+struct q931_ces *q931_ces_alloc(
+	struct q931_call *call,
+	struct q931_dlc *dlc);
+
 void q931_ces_del(struct q931_ces *ces);
 void q931_ces_free(struct q931_ces *ces);
 
 void q931_ces_dl_establish_indication(struct q931_ces *ces);
 void q931_ces_dl_release_indication(struct q931_ces *ces);
+void q931_ces_dl_establish_confirm(struct q931_ces *ces);
+void q931_ces_dl_release_confirm(struct q931_ces *ces);
 
 void q931_ces_alerting_request(struct q931_ces *ces);
 void q931_ces_connect_request(struct q931_ces *ces);
 void q931_ces_call_proceeding_request(struct q931_ces *ces);
 void q931_ces_setup_ack_request(struct q931_ces *ces);
-void q931_ces_release_request(struct q931_ces *ces);
+void q931_ces_release_request(struct q931_ces *ces,
+	enum q931_ie_cause_value cause);
 void q931_ces_info_request(struct q931_ces *ces);
 
 #endif

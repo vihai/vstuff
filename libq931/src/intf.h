@@ -5,9 +5,17 @@
 #include <lapd.h>
 
 #include "list.h"
+#include "channel.h"
 
 #define report_if(intf, lvl, format, arg...)				\
 	(intf)->lib->report((lvl), format, ## arg)
+
+enum q931_interface_type
+{
+	Q931_INTF_TYPE_BRA_POINT_TO_POINT,
+	Q931_INTF_TYPE_BRA_MULTIPOINT,
+	Q931_INTF_TYPE_PRA,
+};
 
 struct q931_call;
 struct q931_interface
@@ -18,14 +26,12 @@ struct q931_interface
 
 	char *name;
 
-	// NT mode, socket is the master socket
-	int nt_socket;
-	int nt_poll_id;
-
-	// TE mode, use DLC
-	struct q931_dlc te_dlc;
-
+	enum q931_interface_type type;
 	enum lapd_role role;
+
+	int master_socket;	// Multipoint master_socket
+	struct q931_dlc bc_dlc;	// Broadcast DLC for multipoint interfaces
+	struct q931_dlc dlc; 
 
 	q931_callref next_call_reference;
 	int call_reference_size;
@@ -33,6 +39,9 @@ struct q931_interface
 	int ncalls;
 	// TODO: Use a HASH for improved scalability
 	struct list_head calls;
+
+	struct q931_channel channels[32];
+	int n_channels;
 
 	longtime_t T301;
 	longtime_t T302;
@@ -45,9 +54,12 @@ struct q931_interface
 	longtime_t T309;
 	longtime_t T310;
 	longtime_t T312;
+	longtime_t T313;
 	longtime_t T314;
 	longtime_t T316;
 	longtime_t T317;
+	longtime_t T318;
+	longtime_t T319;
 	longtime_t T320;
 	longtime_t T321;
 	longtime_t T322;
@@ -73,9 +85,15 @@ struct q931_interface
 	void (*suspend_confirm)(struct q931_call *call);//TE
 	void (*suspend_indication)(struct q931_call *call);
 	void (*timeout_indication)(struct q931_call *call);
+
+	void (*connect_channel)(struct q931_channel *chan);
+	void (*disconnect_channel)(struct q931_channel *chan);
+	void (*start_tone)(struct q931_channel *chan,
+		enum q931_tone_type tone);
+	void (*stop_tone)(struct q931_channel *chan);
 };
 
-inline static void q931_add_call(
+inline static void q931_intf_add_call(
 	struct q931_interface *interface,
 	struct q931_call *call)
 {
@@ -83,13 +101,12 @@ inline static void q931_add_call(
 	interface->ncalls++;
 }
 
-inline static void q931_del_call(
+inline static void q931_intf_del_call(
 	struct q931_call *call)
 {
 	list_del(&call->calls_node);
 	
 	call->interface->ncalls--;
-
 }
 
 struct q931_interface *q931_open_interface(
