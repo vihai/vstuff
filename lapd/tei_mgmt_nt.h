@@ -7,6 +7,8 @@
 
 #include "tei_mgmt.h"
 
+extern struct hlist_head lapd_ntme_hash;
+
 struct lapd_ntme
 {
 	struct hlist_node node;
@@ -37,13 +39,8 @@ struct lapd_ntme
 	void (*destroy)(struct lapd_ntme *tme);
 };
 
-struct lapd_ntme *lapd_ntme_alloc(void);
+struct lapd_ntme *lapd_ntme_alloc(struct net_device *net);
 
-static inline void lapd_ntme_free(
-	struct lapd_ntme *tme)
-{
-	kfree(tme);
-}
 
 static inline void lapd_ntme_hold(
 	struct lapd_ntme *tme)
@@ -54,8 +51,11 @@ static inline void lapd_ntme_hold(
 static inline void lapd_ntme_put(
 	struct lapd_ntme *tme)
 {
-	if (atomic_dec_and_test(&tme->refcnt))
-		lapd_ntme_free(tme);
+	if (atomic_dec_and_test(&tme->refcnt)) {
+		if (tme->destroy) tme->destroy(tme);
+
+		kfree(tme);
+	}
 }
 
 extern void lapd_ntme_set_static_tei(

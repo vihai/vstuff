@@ -9,12 +9,12 @@
  *
  */
 
-#ifndef _FAKEDEV_H
-#define _FAKEDEV_H
+#ifndef _FAKE_ISDN_H
+#define _FAKE_ISDN_H
 
-#define hfc_DRIVER_NAME "fake-isdn"
-#define hfc_DRIVER_PREFIX hfc_DRIVER_NAME ": "
-#define hfc_DRIVER_DESCR "Fake ISDN driver"
+#define fake_DRIVER_NAME "fake-isdn"
+#define fake_DRIVER_PREFIX fake_DRIVER_NAME ": "
+#define fake_DRIVER_DESCR "Fake ISDN driver"
 
 #ifndef intptr_t
 #define intptr_t unsigned long
@@ -32,33 +32,21 @@
 #define FALSE 0
 #endif
 
-struct fake_card {
-	int id;
+struct fake_card;
+
+struct fake_chan
+{
+	struct fake_card *card;
+
+	struct net_device *netdev;
+	struct net_device_stats net_device_stats;
+};
+
+struct fake_card
+{
 	spinlock_t lock;
 
-	int ticks;
-
-	struct pci_dev *pcidev;
-
-	struct proc_dir_entry *proc_dir;
-	char proc_dir_name[32];
-
-	struct proc_dir_entry *proc_info;
-	struct proc_dir_entry *proc_fifos;
-
-	enum hfc_chip_type chip_type;
-	int num_ports;
-	struct hfc_port ports[8];
-
-	unsigned long io_bus_mem;
-	void *io_mem;
-
-	int sync_loss_reported;
-	int late_irqs;
-
-	int ignore_first_timer_interrupt;
-
-	int open_ports;
+	struct fake_chan chans[2];
 };
 
 #endif

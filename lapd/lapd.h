@@ -49,11 +49,11 @@ struct lapd_device
 	struct lapd_sap x25;
 };
 
-/*struct lapd_connect_request
+struct lapd_new_dlc
 {
-	struct list_head hash_list;
-	u8 tei;
-};*/
+	struct hlist_node node;
+	struct sock *sk;
+};
 
 static inline struct lapd_sap *lapd_sap_alloc(void)
 {
@@ -105,6 +105,8 @@ struct lapd_opt
 
 	int tei; // Only valid in NT mode
 	int sapi;
+
+	struct hlist_head new_dlcs;
 };
 
 /* WARNING: don't change the layout of the members in lapd_sock! */
@@ -152,6 +154,8 @@ static inline int lapd_is_valid_nr(struct lapd_opt *lo, int n_r)
 		(lo->v_s - lo->v_a) % 128;
 }
 
+int lapd_device_event(struct notifier_block *this, unsigned long event,
+			    void *ptr);
 
 #endif
 #endif

@@ -129,6 +129,12 @@ struct q931_interface
 	struct list_head calls;
 };
 
+struct q931_datalink
+{
+	int socket;
+	struct q931_interface *interface;
+};
+
 enum q931_call_direction
 {
 	Q931_CALL_DIRECTION_OUTBOUND	= 0x0,
@@ -155,12 +161,13 @@ static inline int q931_intcmp(int a, int b)
 }
 
 void q931_init();
-void q931_receive(struct q931_interface *interface);
+void q931_receive(struct q931_datalink *dlc);
 struct q931_interface *q931_open_interface(const char *name);
 void q931_close_interface(struct q931_interface *interface);
 struct q931_call *q931_alloc_call(enum q931_call_direction direction);
 int q931_make_call(struct q931_interface *interface, struct q931_call *call);
 void q931_free_call(struct q931_call *call);
+struct q931_datalink *q931_user_datalink(struct q931_interface *interface);
 
 
 #endif

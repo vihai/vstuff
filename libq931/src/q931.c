@@ -51,8 +51,10 @@ struct q931_interface *q931_open_interface(const char *name)
 		&interface->role, &optlen)<0)
    goto err_getsockopt;
 
-// if (connect(interface->socket, NULL, 0) < 0)
-//   goto err_connect;
+ if (interface->role == LAPD_ROLE_TE) {
+	 if (connect(interface->socket, NULL, 0) < 0)
+	   goto err_connect;
+ }
 
  return interface;
 
@@ -240,7 +242,7 @@ static int q931_send_uframe(struct q931_interface *interface, void *frame, int s
  msg.msg_controllen = 0;
  msg.msg_flags = 0;
 
- sal.sal_tei = 127;
+ sal.sal_bcast = 1;
 
  iov.iov_base = frame;
  iov.iov_len = size;
@@ -333,9 +335,9 @@ static int q931_send_setup(struct q931_call *call)
  size += q931_append_ie_sending_complete(frame + size);
 
 // if (call->interface->role == LAPD_ROLE_TE)
-//   return q931_send_frame(call->interface, frame, size);
+   return q931_send_frame(call->interface, frame, size);
 // else
-   return q931_send_uframe(call->interface, frame, size);
+//   return q931_send_uframe(call->interface, frame, size);
 }
 
 int q931_make_call(struct q931_interface *interface, struct q931_call *call)
@@ -366,7 +368,7 @@ int q931_make_call(struct q931_interface *interface, struct q931_call *call)
  return 0;
 }
 
-void q931_receive(struct q931_interface *interface)
+void q931_receive(struct q931_datalink *dlc)
 {
  struct msghdr msg;
  struct sockaddr_lapd sal;
@@ -389,7 +391,7 @@ void q931_receive(struct q931_interface *interface)
  msg.msg_flags = 0;
 
  int len;
- len = recvmsg(interface->socket, &msg, 0);
+ len = recvmsg(dlc->socket, &msg, 0);
  if(len < 0)
   {
    printf("recvmsg: %d %s\n",errno,strerror(errno));
@@ -437,7 +439,7 @@ void q931_receive(struct q931_interface *interface)
 
  struct q931_call *call =
    q931_find_call_by_reference(
-     interface,
+     dlc->interface,
      call_reference.direction,
      call_reference.longval);
 
@@ -671,4 +673,15 @@ void q931_receive(struct q931_interface *interface)
    break;
 
   }
+}
+
+struct q931_datalink *q931_user_datalink(struct q931_interface *interface)
+{
+	struct q931_datalink *dlc;
+	dlc = malloc(sizeof(*dlc));
+
+	dlc->interface = interface;
+	dlc->socket = interface->socket;
+
+	return dlc;
 }

@@ -18,16 +18,23 @@
 int main()
 {
  q931_init();
- struct q931_interface *interface = q931_open_interface("isdn0d");
+ struct q931_interface *interface = q931_open_interface("fakeisdn0d");
  if (!interface)
   {
    printf("q931_open_interface error: %s\n",strerror(errno));
    exit(1);
   }
 
+//shutdown(interface->socket, 0);
+
+//sleep(10);
+//exit(0);
+
+ struct q931_datalink *dlc = q931_user_datalink(interface);
  struct q931_call *call;
 
  call = q931_alloc_call(Q931_CALL_DIRECTION_OUTBOUND);
+
  q931_make_call(interface, call);
 
  while(1)
@@ -42,25 +49,6 @@ int main()
    tv.tv_sec = 0;
    tv.tv_usec = 0;
 
-/*   tv.tv_sec = 0;
-   tv.tv_usec = 500000;
-
-   printf("queue =");
-
-   if(ioctl(s, TIOCINQ, &size)<0)
-    {
-     printf("%s\n",strerror(errno));
-     exit(1);
-    }
-   printf(" %d",size);
-
-   if(ioctl(s, TIOCOUTQ, &size)<0)
-    {
-     printf("%s\n",strerror(errno));
-     exit(1);
-    }
-   printf(" %d\n",size);*/
-
    if((retval = select(interface->socket+1, &read_fds, NULL, NULL, &tv))<0)
     {
      printf("select error: %s\n",strerror(errno));
@@ -68,7 +56,7 @@ int main()
     }
    else if(retval)
     {
-     if (FD_ISSET(interface->socket, &read_fds)) q931_receive(interface);
+     if (FD_ISSET(interface->socket, &read_fds)) q931_receive(dlc);
     }
   }
 

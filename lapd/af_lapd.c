@@ -47,13 +47,34 @@ static int lapd_proc_read(char *page, char **start,
 	struct sock *sk;
 	struct hlist_node *node;
 
+	len += snprintf(page + len, PAGE_SIZE - len, "LAPD data:\n");
+
+	{
+	struct lapd_ntme *tme;
+	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
+		len += snprintf(page + len, PAGE_SIZE - len,
+			"ntme entry: %p %d\n",
+			tme, tme->refcnt);
+	}
+	}
+
+	{
+	struct lapd_utme *tme;
+	hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
+		len += snprintf(page + len, PAGE_SIZE - len,
+			"utme entry: %p %d\n",
+			tme, tme->refcnt);
+	}
+	}
+
+
 	read_lock_bh(&lapd_hash_lock);
 	sk_for_each(sk, node, &lapd_hash) {
 		struct lapd_opt *lo = lapd_sk(sk);
 
-		len += snprintf(page + len, PAGE_SIZE - len,
-			"interface: %s\n",
-			lo->dev->name);
+//		len += snprintf(page + len, PAGE_SIZE - len,
+//			"interface: %s\n",
+//			lo->dev->name);
 
 		if (lo->nt_mode) {
 			len += snprintf(page + len, PAGE_SIZE - len,
@@ -117,18 +138,6 @@ void setup_lapd(struct net_device *netdev)
 }
 EXPORT_SYMBOL(setup_lapd);
 
-static int lapd_device_event(struct notifier_block *this, unsigned long event,
-			    void *ptr)
-{
-//	if (event == NETDEV_DOWN)
-		/* Discard any use of this */
-//		lapd_dev_down(ptr);
-
-	printk(KERN_INFO "lapd: notification: %lu\n",event);
-
-	return NOTIFY_DONE;
-}
-
 static void lapd_sock_destruct(struct sock *sk)
 {
 
@@ -143,11 +152,36 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (lo->dev) {
-		dev_put(lo->dev);
+	if (!hlist_empty(&lo->new_dlcs)) {
+		struct hlist_node *node, *t;
+
+		hlist_for_each_safe(node, t, &lo->new_dlcs) {
+			hlist_del(node);
+			kfree(node);
+		}
 	}
 
-	sk_stream_kill_queues(sk);
+	if (lo->usr_tme) {
+		hlist_del(&lo->usr_tme->node);
+		lapd_utme_put(lo->usr_tme);
+
+		lapd_utme_put(lo->usr_tme);
+		lo->usr_tme = NULL;
+	}
+
+	if (lo->dev) {
+		dev_put(lo->dev);
+		lo->dev = NULL;
+	}
+
+	__skb_queue_purge(&sk->sk_receive_queue);
+	__skb_queue_purge(&sk->sk_error_queue);
+
+	BUG_TRAP(skb_queue_empty(&sk->sk_write_queue));
+	BUG_TRAP(!sk->sk_wmem_queued);
+	BUG_TRAP(!sk->sk_forward_alloc);
+	BUG_TRAP(!atomic_read(&sk->sk_rmem_alloc));
+	BUG_TRAP(!atomic_read(&sk->sk_wmem_alloc));
 
 /*	{
 	struct lapd_te *te, *n;
@@ -164,11 +198,6 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 	write_unlock_bh(&lo->nt.tes_lock);
 	}
 */
-
-	BUG_TRAP(!atomic_read(&sk->sk_rmem_alloc));
-	BUG_TRAP(!atomic_read(&sk->sk_wmem_alloc));
-	BUG_TRAP(!sk->sk_wmem_queued);
-	BUG_TRAP(!sk->sk_forward_alloc);
 }
 
 void lapd_unhash(struct sock *sk)
@@ -313,9 +342,15 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 				tei = LAPD_TEI_UNASSIGNED;
 			spin_unlock_bh(&lo->usr_tme->lock);
 
-			err = lapd_utme_wait_for_tei_assignment(lo->usr_tme);
-			if (err < 0) goto err_wait_for_tei_assignment;
-		} while(tei != LAPD_TEI_UNASSIGNED);
+			if (tei == LAPD_TEI_UNASSIGNED) {
+				err = lapd_utme_wait_for_tei_assignment(
+					lo->usr_tme);
+				if (err < 0)
+					goto err_wait_for_tei_assignment;
+
+				continue;
+			} else break;
+		} while(TRUE);
 	}
 
 	struct sk_buff *skb;
@@ -431,6 +466,21 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 	if (dev->flags & IFF_ALLMULTI) {
 		lo->nt_mode = TRUE;
+
+		struct sock *sk;
+		struct hlist_node *node;
+		// Do not allow binding more than one socket to the
+		// same interface.
+		read_lock_bh(&lapd_hash_lock);
+		sk_for_each(sk, node, &lapd_hash) {
+			struct lapd_opt *lo = lapd_sk(sk);
+			if (lo->nt_mode && lo->dev == dev) {
+				read_unlock_bh(&lapd_hash_lock);
+				err = -ENODEV;
+				goto err_socket_already_present;
+			}
+		}
+		read_unlock_bh(&lapd_hash_lock);
 	} else {
 		lo->nt_mode = FALSE;
 
@@ -443,6 +493,15 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_invalid_socket_type;
 	}
 
+	if (!lo->nt_mode) {
+		lo->usr_tme = lapd_utme_alloc(dev);
+
+		lapd_utme_hold(lo->usr_tme);
+		hlist_add_head(&lo->usr_tme->node, &lapd_utme_hash);
+	}
+
+	// No need to dev_hold() since we already held dev by calling
+	// dev_get_by_name()
 	sk->sk_bound_dev_if = dev->ifindex;
 	lo->dev = dev;
 	lo->lapd_dev = (struct lapd_device *)dev->atalk_ptr;
@@ -450,6 +509,8 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	// TODO: We may need to postpone tei request when L2 transfers
 	// are needed, cfr. ETSI 300 125
 	if (!lo->nt_mode) {
+		lo->usr_tme->dev = dev;
+
 		if (lo->usr_tme->status != TEI_ASSIGNED)
 			lapd_utme_start_tei_request(lo->usr_tme);
 	}
@@ -458,6 +519,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 	return 0;
 
+err_socket_already_present:
 err_invalid_socket_type:
 err_dev_not_up:
 err_invalid_type:
@@ -465,6 +527,39 @@ err_invalid_type:
 err_nodev:
 
 	return err;
+}
+
+unsigned int lapd_poll(struct file *file,
+	struct socket *sock, poll_table *wait)
+{
+	unsigned int mask;
+	struct sock *sk = sock->sk;
+
+	poll_wait(file, sk->sk_sleep, wait);
+
+	if (sk->sk_state == TCP_LISTEN) {
+		struct lapd_opt *lo = lapd_sk(sk);
+
+		return !hlist_empty(&lo->new_dlcs) ?
+			(POLLIN | POLLRDNORM) : 0;
+	}
+
+	/* Socket is not locked. We are protected from async events
+	   by poll logic and correct handling of state changes
+	   made by another threads is impossible in any case.
+	 */
+
+	mask = 0;
+	if (sk->sk_err)
+		mask = POLLERR;
+
+	if (sk->sk_shutdown == SHUTDOWN_MASK)
+		mask |= POLLHUP;
+
+	if (sk->sk_shutdown & RCV_SHUTDOWN)
+		mask |= POLLIN | POLLRDNORM;
+
+	return mask;
 }
 
 static int lapd_setsockopt(struct socket *sock, int level, int optname,
@@ -908,8 +1003,7 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	lo->nt_mode = FALSE;
 
-	// FIXME: This should be moved to SO_BINDTODEVICE
-	lo->usr_tme = lapd_utme_alloc();
+	lo->usr_tme = NULL;
 
 	init_timer(&lo->T200_timer);
 	lo->T200_timer.function = lapd_T200_timer;
@@ -926,6 +1020,8 @@ static int lapd_create(struct socket *sock, int protocol)
 	lo->peer_waiting_for_ack = FALSE;
 	lo->rejection_exception = FALSE;
 	lo->in_timer_recovery = FALSE;
+
+	INIT_HLIST_HEAD(&lo->new_dlcs);
 
 	write_lock_bh(&lapd_hash_lock);
 	sk_add_node(sk, &lapd_hash);
@@ -956,7 +1052,7 @@ static int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (!pskb_may_pull(skb, sizeof(struct lapd_hdr)))
 		goto err_pskb_may_pull;
 
-	BUG_TRAP(skb->dev);
+	BUG_ON(!skb->dev);
 
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
 	if (hdr->addr.ea1 || !hdr->addr.ea2) {
@@ -967,36 +1063,153 @@ static int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 		goto err_improper_ea;
 	}
 
-	if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
-		if (skb->dev->flags & IFF_ALLMULTI)
+	if (skb->dev->flags & IFF_ALLMULTI) {
+		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
 			lapd_ntme_handle_frame(skb);
-		else
-			lapd_utme_handle_frame(skb);
-
-		goto frame_handled;
-	}
-
-	// in NT mode -> search the socket by dev
-	// in TE mode -> search the socket by (dev, TE)
-	struct sock *sk;
-	struct hlist_node *node;
-
-	read_lock_bh(&lapd_hash_lock);
-	sk_for_each(sk, node, &lapd_hash) {
-		struct lapd_opt *lo = lapd_sk(sk);
-		if (lo->dev == dev &&
-		    (hdr->addr.tei == LAPD_BROADCAST_TEI ||
-		      (!lo->nt_mode &&
-		       lo->usr_tme->tei == hdr->addr.tei) ||
-		    lo->nt_mode)) {
-
-			skb->sk = sk;
-
-			lapd_handle_socket_frame(sk, skb);
+			goto frame_handled;
 		}
+
+		{
+		struct sock *listening_sk = NULL;
+
+		{
+		struct sock *sk = NULL;
+		struct hlist_node *node;
+
+		read_lock_bh(&lapd_hash_lock);
+		sk_for_each(sk, node, &lapd_hash) {
+			struct lapd_opt *lo = lapd_sk(sk);
+
+printk(KERN_DEBUG "lapd: comparing (%p,%d,%d) to (%p,%d,%d)\n", lo->dev, lo->sapi, lo->tei, skb->dev, hdr->addr.sapi, hdr->addr.tei);
+			if (lo->dev == dev) {
+				if (sk->sk_state == TCP_LISTEN) {
+					listening_sk = sk;
+					continue;
+				}
+
+				if (lo->sapi == hdr->addr.sapi &&
+			 	    lo->tei == hdr->addr.tei) {
+					read_unlock_bh(&lapd_hash_lock);
+
+					skb->sk = sk;
+
+					lapd_handle_socket_frame(sk, skb);
+
+					goto frame_handled;
+				}
+			}
+		}
+		read_unlock_bh(&lapd_hash_lock);
+		}
+
+		// A socket has not been found
+		printk(KERN_DEBUG "lapd: a socket has not been found"
+			", creating new socket for (%d,%d)\n", hdr->addr.sapi, hdr->addr.tei);
+
+		if (listening_sk) {
+			struct sock *newsk;
+			newsk = sk_alloc(PF_LAPD, GFP_ATOMIC,
+				sizeof(struct lapd_sock),
+				listening_sk->sk_slab);
+			if (!newsk)
+				return 0;
+			memcpy(newsk, listening_sk, sizeof(struct lapd_sock));
+
+			sock_lock_init(newsk);
+			newsk->sk_state = TCP_ESTABLISHED;
+
+			newsk->sk_err = 0;
+			newsk->sk_priority = 0;
+			atomic_set(&newsk->sk_refcnt, 2);
+
+			newsk->sk_socket = NULL;
+			newsk->sk_sleep = NULL;
+			newsk->sk_owner = NULL;
+
+			newsk->sk_dst_lock = RW_LOCK_UNLOCKED;
+			atomic_set(&newsk->sk_rmem_alloc, 0);
+			skb_queue_head_init(&newsk->sk_receive_queue);
+			atomic_set(&newsk->sk_wmem_alloc, 0);
+			skb_queue_head_init(&newsk->sk_write_queue);
+			atomic_set(&newsk->sk_omem_alloc, 0);
+			newsk->sk_wmem_queued = 0;
+			newsk->sk_forward_alloc = 0;
+
+			sock_reset_flag(newsk, SOCK_DONE);
+			newsk->sk_userlocks = listening_sk->sk_userlocks & ~SOCK_BINDPORT_LOCK;
+			newsk->sk_backlog.head = newsk->sk_backlog.tail = NULL;
+			newsk->sk_send_head = NULL;
+			newsk->sk_callback_lock = RW_LOCK_UNLOCKED;
+
+			skb_queue_head_init(&newsk->sk_error_queue);
+			newsk->sk_write_space = sk_stream_write_space;
+
+//			sk_set_owner(newsk, THIS_MODULE);
+
+			struct lapd_opt *lo = lapd_sk(newsk);
+			struct lapd_opt *listening_lo = lapd_sk(listening_sk);
+
+			lo->dev = listening_lo->dev;
+			dev_hold(lo->dev);
+
+			lo->usr_tme = NULL;
+			lo->peer_busy = FALSE;
+			lo->me_busy = FALSE;
+			lo->peer_waiting_for_ack = FALSE;
+			lo->rejection_exception = FALSE;
+			lo->in_timer_recovery = FALSE;
+
+			struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+			
+			lo->tei = hdr->addr.tei;
+			lo->sapi = hdr->addr.sapi;
+
+			write_lock_bh(&lapd_hash_lock);
+			sk_add_node(newsk, &lapd_hash);
+			write_unlock_bh(&lapd_hash_lock);
+
+			skb->sk = newsk;
+
+			struct lapd_new_dlc *new_dlc;
+			new_dlc = kmalloc(sizeof(struct lapd_new_dlc), GFP_ATOMIC);
+			if (!new_dlc) return 0;
+
+			new_dlc->sk = newsk;
+
+			hlist_add_head(&new_dlc->node, &listening_lo->new_dlcs);
+
+			lapd_handle_socket_frame(newsk, skb);
+
+			if (!sock_flag(listening_sk, SOCK_DEAD))
+				listening_sk->sk_data_ready(
+					listening_sk, skb->len);
+		}
+		}
+	} else {
+		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
+			lapd_utme_handle_frame(skb);
+			goto frame_handled;
+		}
+
+		struct sock *sk;
+		struct hlist_node *node;
+
+		read_lock_bh(&lapd_hash_lock);
+		sk_for_each(sk, node, &lapd_hash) {
+			struct lapd_opt *lo = lapd_sk(sk);
+
+			if (lo->dev == dev &&
+			    (hdr->addr.tei == LAPD_BROADCAST_TEI ||
+			       lo->usr_tme->tei == hdr->addr.tei)) {
+
+				skb->sk = sk;
+
+				lapd_handle_socket_frame(sk, skb);
+			}
+		}
+		read_unlock_bh(&lapd_hash_lock);
 	}
 
-	read_unlock_bh(&lapd_hash_lock);
 
 	return 0;
 
@@ -1034,6 +1247,11 @@ static int lapd_multiframe_wait_for_establishment(struct sock *sk)
 
 		if (lo->status == LINK_CONNECTION_ESTABLISHED)
 			break;
+
+		if (lo->status == LINK_CONNECTION_RELEASED) {
+			err = -ECONNREFUSED;
+			break;
+		}
 
 		if (signal_pending(current)) {
 			err = sock_intr_errno(timeout);
@@ -1137,7 +1355,7 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
         sock->state = SS_CONNECTING;
 	lapd_start_multiframe_establishment(sk);
 
-	if (sk->sk_state != TCP_ESTABLISHED && (flags & O_NONBLOCK)) {
+	if (lo->status != LINK_CONNECTION_ESTABLISHED && (flags & O_NONBLOCK)) {
 		err = -EINPROGRESS;
 		goto err_inprogress;
 	}
@@ -1157,6 +1375,81 @@ err_refused:
 established:
 
 	release_sock(sk);
+
+	return err;
+}
+
+static int lapd_wait_for_new_dlc(struct sock *sk)
+{
+	int err = 0;
+	DEFINE_WAIT(wait);
+	int timeout = 10 * HZ;
+
+	for (;;) {
+		prepare_to_wait_exclusive(sk->sk_sleep, &wait,
+					  TASK_INTERRUPTIBLE);
+		release_sock(sk);
+
+		timeout = schedule_timeout(timeout);
+
+		lock_sock(sk);
+
+		struct lapd_opt *lo = lapd_sk(sk);
+		if (!hlist_empty(&lo->new_dlcs))
+			break;
+
+		if (signal_pending(current)) {
+			err = sock_intr_errno(timeout);
+			break;
+		}
+
+		if (!timeout) {
+			err = -EAGAIN;
+			break;
+		}
+	}
+	finish_wait(sk->sk_sleep, &wait);
+
+	return err;
+}
+
+static int lapd_accept(struct socket *sock,
+	struct socket *newsock, int flags)
+{
+	struct sock *sk = sock->sk;
+	int err = 0;
+
+	BUG_ON(!sk);
+
+	if (sk->sk_state != TCP_LISTEN) {
+		err = -EINVAL;
+		goto err_notlistening;
+	}
+
+	lock_sock(sk);
+
+printk(KERN_DEBUG "lapd: ACCEPT CALLED\n");
+
+	struct lapd_opt *lo = lapd_sk(sk);
+	if (hlist_empty(&lo->new_dlcs)) {
+		printk(KERN_DEBUG "lapd: no new DLC pending... waiting\n");
+		err = lapd_wait_for_new_dlc(sk);
+		if (err < 0) goto err_wait_for_new_dlc;
+	}
+
+	struct lapd_new_dlc *new_dlc;
+
+printk(KERN_DEBUG "lapd: GRAFTING SOCKET\n");
+	new_dlc = hlist_entry(lo->new_dlcs.first, struct lapd_new_dlc, node);
+
+	sock_graft(new_dlc->sk, newsock);
+
+	hlist_del(&new_dlc->node);
+	kfree(new_dlc);
+
+err_wait_for_new_dlc:
+	release_sock(sk);
+err_notlistening:
 
 	return err;
 }
@@ -1204,9 +1497,9 @@ static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops) = {
 	.bind		= sock_no_bind,
 	.connect	= lapd_connect,
 	.socketpair	= sock_no_socketpair,
-	.accept		= sock_no_accept,
+	.accept		= lapd_accept,
 	.getname	= sock_no_getname,
-	.poll		= datagram_poll,
+	.poll		= lapd_poll,
 	.ioctl		= lapd_ioctl,
 	.listen		= lapd_listen,
 	.shutdown	= lapd_shutdown,
@@ -1283,6 +1576,9 @@ static void __exit lapd_exit(void)
 	remove_proc_entry("lapd", proc_net);
 
 	// Free device structures
+
+	BUG_TRAP(hlist_empty(&lapd_ntme_hash));
+	BUG_TRAP(hlist_empty(&lapd_utme_hash));
 
 	unregister_netdevice_notifier(&lapd_notifier);
 	dev_remove_pack(&lapd_packet_type);

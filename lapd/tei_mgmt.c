@@ -16,10 +16,12 @@ inline int lapd_tm_send(
 	struct net_device *dev,
 	u8 message_type, u16 ri, u8 ai)
 {
+	BUG_ON(!dev);
+
 	struct sk_buff *skb;
 	skb = alloc_skb(sizeof(struct lapd_hdr) +
 		sizeof(struct lapd_tei_mgmt_body),
-		0);
+		GFP_ATOMIC);
 
 	skb->dev = dev;
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
@@ -30,7 +32,7 @@ inline int lapd_tm_send(
 
 	hdr->addr.sapi = LAPD_SAPI_TEI_MGMT;
 
-	hdr->addr.c_r = (skb->dev->flags & IFF_ALLMULTI)?1:0;
+	hdr->addr.c_r = (dev->flags & IFF_ALLMULTI)?1:0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 	hdr->addr.tei = LAPD_BROADCAST_TEI;

@@ -39,8 +39,6 @@
 #define SOL_LAPD 300
 #endif
 
-#ifdef __KERNEL__
-
 enum
 {
 	LAPD_ROLE		= 0,
@@ -63,19 +61,17 @@ enum lapd_role {
 	LAPD_ROLE_NT		= 1
 };
 
+struct sockaddr_lapd {
+	sa_family_t	sal_family;
+	__u8            sal_bcast;
+	char		sal_zero[8];
+};
+
+#ifdef __KERNEL__
+
 enum {
 	LAPD_PROTO_UFRAME = 0,
 	LAPD_PROTO_IFRAME = 1,
-};
-
-struct sockaddr_lapd {
-	sa_family_t	sal_family;
-	__u8		sal_sapi;
-
- // TEI is valid only in NT mode, in TE mode it is assigned by net and
- // ignored here
-	__u8		sal_tei;
-	char		sal_zero[8];
 };
 
 enum lapd_datalink_status

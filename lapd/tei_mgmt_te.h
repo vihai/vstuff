@@ -6,6 +6,8 @@
 
 #include "tei_mgmt.h"
 
+extern struct hlist_head lapd_utme_hash;
+
 struct lapd_utme
 {
 	struct hlist_node node;
@@ -34,7 +36,7 @@ struct lapd_utme
 	void (*destroy)(struct lapd_utme *tme);
 };
 
-struct lapd_utme *lapd_utme_alloc(void);
+struct lapd_utme *lapd_utme_alloc(struct net_device *dev);
 
 static inline void lapd_utme_hold(
 	struct lapd_utme *tme)
@@ -45,6 +47,8 @@ static inline void lapd_utme_hold(
 static inline void lapd_utme_put(
 	struct lapd_utme *tme)
 {
+	printk(KERN_DEBUG "lapd: utme_put\n");
+
 	if (atomic_dec_and_test(&tme->refcnt)) {
 		if (tme->destroy) tme->destroy(tme);
 

@@ -146,15 +146,17 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 
 	read_lock_bh(&lapd_ntme_hash_lock);
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
+		printk(KERN_DEBUG "lapd: ---------- %s %s\n",tme->dev->name,skb->dev->name);
+
 		if (tme->dev != skb->dev) continue;
 
 		if (/*tm->body.ai >= LAPD_MIN_STA_TEI && // always true */
 		    tm->body.ai <= LAPD_MAX_STA_TEI) {
-			break;
+			goto found;
 		} else if (tm->body.ai >= LAPD_MIN_DYN_TEI &&
 		           tm->body.ai <= LAPD_MAX_DYN_TEI) {
 			lapd_ntme_send_tei_denied(tme, tm->body.ri, tm->body.ai);
-			break;
+			goto found;
 		}
 
 		lapd_tei_t tei = lapd_ntme_find_available_tei(tme);
@@ -164,7 +166,9 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 		goto found;
 	}
 
-//	lapd_start_tei_check(tme, tm->body.ai);
+	printk(KERN_INFO "lapd: "
+		"Missing TEI management entity on interface %s\n",
+		skb->dev->name);
 
 	found:
 
@@ -315,10 +319,15 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 
 void lapd_ntme_destroy(struct lapd_ntme *tme)
 {
+	printk(KERN_DEBUG "lapd: ntme_destroy\n");
+
 	lapd_ntme_stop_timer(tme, &tme->T201_timer);
+
+	dev_put(tme->dev);
+	tme->dev = NULL;
 }
 
-struct lapd_ntme *lapd_ntme_alloc()
+struct lapd_ntme *lapd_ntme_alloc(struct net_device *dev)
 {
 	struct lapd_ntme *tme;
 	tme = kmalloc(sizeof(struct lapd_ntme), GFP_ATOMIC);
@@ -331,6 +340,9 @@ struct lapd_ntme *lapd_ntme_alloc()
 	atomic_set(&tme->refcnt, 1);
 
 	spin_lock_init(&tme->lock);
+
+	dev_hold(dev);
+	tme->dev = dev;
 
 	tme->cur_dyn_tei = LAPD_MIN_DYN_TEI;
 	tme->tei_check_outstanding = FALSE;

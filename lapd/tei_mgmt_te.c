@@ -6,7 +6,6 @@
 #include <linux/random.h>
 #include <linux/proc_fs.h>
 #include <net/datalink.h>
-#include <net/sock.h>
 
 #include "lapd_user.h"
 #include "lapd.h"
@@ -331,27 +330,32 @@ int lapd_utme_wait_for_tei_assignment(struct lapd_utme *tme)
         int err = 0;
 	int timeout = 10 * HZ;
 
-	BUG_ON(!tme->tei_request_pending);
-
 	for (;;) {
+printk(KERN_DEBUG "lapd: Preparing to sleep\n");
 		prepare_to_wait_exclusive(&tme->waitq, &wait,
 			TASK_INTERRUPTIBLE);
 
 		//lapd_utme_unlock(tme);
+
+printk(KERN_DEBUG "lapd: Going to sleep...\n");
 
 		// Timeout is used only to detect abnormal cases
 		timeout = schedule_timeout(timeout);
 
 		//lapd_utme_lock(tme);
 
+printk(KERN_DEBUG "lapd: Wakeup! %d\n", tme->status);
+
 		if (tme->status == TEI_ASSIGNED)
 			break;
+printk(KERN_DEBUG "lapd: Uhm... still not assigned\n");
 
 		if (signal_pending(current)) {
-			err = sock_intr_errno(timeout);
+			err = -EINTR;
 			break;
 		}
 
+printk(KERN_DEBUG "lapd: No pending signal\n");
 		if (!timeout) {
 			printk(KERN_ERR "lapd: Failure in assigning TEI\n");
 
@@ -376,10 +380,15 @@ void lapd_utme_set_static_tei(
 
 void lapd_utme_destroy(struct lapd_utme *tme)
 {
+	printk(KERN_DEBUG "lapd: utme destroy!\n");
+
 	lapd_utme_stop_timer(tme, &tme->T202_timer);
+
+	dev_put(tme->dev);
+	tme->dev = NULL;
 }
 
-struct lapd_utme *lapd_utme_alloc()
+struct lapd_utme *lapd_utme_alloc(struct net_device *dev)
 {
 	struct lapd_utme *tme;
 	tme = kmalloc(sizeof(struct lapd_utme), GFP_ATOMIC);
@@ -392,6 +401,11 @@ struct lapd_utme *lapd_utme_alloc()
 	tme->destroy = lapd_utme_destroy;
 
 	atomic_set(&tme->refcnt, 1);
+
+	init_waitqueue_head(&tme->waitq);
+
+	dev_hold(dev);
+	tme->dev = dev;
 
 	tme->tei = -1;
 	tme->tei_request_pending = FALSE;

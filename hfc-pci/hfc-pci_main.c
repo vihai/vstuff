@@ -1080,9 +1080,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
 	if (!card) {
 		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"unable to kmalloc!\n",
-			card->cardnum);
+			"unable to kmalloc!\n");
 		err = -ENOMEM;
 		goto err_alloc_hfccard;
 	}

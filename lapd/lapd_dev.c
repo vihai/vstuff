@@ -14,7 +14,7 @@
 
 #include "lapd_user.h"
 #include "lapd.h"
-#include "tei_mgmt.h"
+#include "tei_mgmt_nt.h"
 
 static void lapd_device_up(struct net_device *dev)
 {
@@ -35,7 +35,14 @@ static void lapd_device_up(struct net_device *dev)
 	lapd_device->dev = dev;
 	dev_hold(dev);
 
-	lapd_device->net_tme = lapd_ntme_alloc();
+	if (dev->flags & IFF_ALLMULTI) {
+		lapd_device->net_tme = lapd_ntme_alloc(dev);
+
+		hlist_add_head(&lapd_device->net_tme->node, &lapd_ntme_hash);
+		lapd_ntme_hold(lapd_device->net_tme);
+	} else {
+		lapd_device->net_tme = NULL;
+	}
 
 	// q.931 SAP
 
@@ -62,12 +69,26 @@ static void lapd_device_down(struct net_device *dev)
 	printk(KERN_DEBUG "lapd: device %s down\n", dev->name);
 
 	if (lapd_device) {
-		lapd_ntme_put(lapd_device->net_tme);
-		lapd_device->net_tme = NULL;
+
+		if (lapd_device->net_tme) {
+			hlist_del(&lapd_device->net_tme->node);
+			lapd_ntme_put(lapd_device->net_tme);
+
+			lapd_ntme_put(lapd_device->net_tme);
+			lapd_device->net_tme = NULL;
+		}
 
 		dev_put(dev);
 		kfree(lapd_device);
 		dev->atalk_ptr = NULL;
+	}
+
+	struct sock *sk;
+	struct hlist_node *node, *t;
+	sk_for_each_safe(sk, node, t, &lapd_hash) {
+		sock_hold(sk);
+		sk_del_node_init(sk);
+		release_sock(sk);
 	}
 }
 

@@ -59,9 +59,10 @@ int lapd_prepare_uframe(struct sock *sk,
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	BUG_ON(!skb->dev);
+	BUG_ON(!lo->dev);
 
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+	skb->dev = lo->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 
 	struct lapd_hdr *hdr =
@@ -753,31 +754,24 @@ static inline void lapd_handle_socket_uframe_sabme(struct sock *sk,
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (lo->nt_mode) {
-		if (sk->sk_state == TCP_LISTEN)
-			lapd_send_uframe(sk, 0, UA, NULL, 0);
-		else
-			lapd_send_uframe(sk, 0, DM, NULL, 0);
-	} else {
-		if (lo->status == LINK_CONNECTION_RELEASED) {
-			lapd_multiframe_established(sk);
+	if (lo->status == LINK_CONNECTION_RELEASED) {
+		lapd_multiframe_established(sk);
 
-			lapd_send_uframe(sk, 0, UA, NULL, 0);
-		}
-		else if (lo->status == LINK_CONNECTION_ESTABLISHED) {
-		
-		}
-		else if (lo->status == AWAITING_ESTABLISH) {
-			lapd_send_uframe(sk, 0, UA, NULL, 0);
-		}
-		else if (lo->status == AWAITING_RELEASE) {
-			lapd_send_uframe(sk, 0, DM, NULL, 0);
-		}
-		else {
-			printk(KERN_ERR
-				"lapd: Unexpected UA in wrong state %d\n",
-				lo->status);
-		}
+		lapd_send_uframe(sk, 0, UA, NULL, 0);
+	}
+	else if (lo->status == LINK_CONNECTION_ESTABLISHED) {
+	
+	}
+	else if (lo->status == AWAITING_ESTABLISH) {
+		lapd_send_uframe(sk, 0, UA, NULL, 0);
+	}
+	else if (lo->status == AWAITING_RELEASE) {
+		lapd_send_uframe(sk, 0, DM, NULL, 0);
+	}
+	else {
+		printk(KERN_ERR
+			"lapd: Unexpected UA in wrong state %d\n",
+			lo->status);
 	}
 }
 
@@ -791,7 +785,9 @@ static inline void lapd_handle_socket_uframe_dm(struct sock *sk,
 	// establishment procedures by the transmission of an SABME 
 	// (see § 5.5.1.2). Otherwise, the DM shall be ignored;
 
-	lapd_start_multiframe_establishment(sk);
+	lapd_multiframe_released(sk);
+
+//	lapd_start_multiframe_establishment(sk);
 }
 
 static inline void lapd_handle_socket_uframe_ui(struct sock *sk,

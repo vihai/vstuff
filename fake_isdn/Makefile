@@ -6,8 +6,7 @@ endif
 
 EXTRA_CFLAGS = -I $(src)/../lapd/
 
-obj-m	:= fake_isdn_main.o
-fake_isdn-y	:= fake_isdn_main.o
+obj-m	:= fake_isdn.o
 
 all:
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`
