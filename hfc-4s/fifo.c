@@ -32,10 +32,6 @@ static int hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
 	for (i=0; i<size; i++) {
 		((u8 *)data)[i] = hfc_inb(chan->chan->port->card,
 			hfc_A_FIFO_DATA0);
-#ifdef DEBUG
-		if(debug_level >= 3)
-			printk("%02x", ((u8 *)data)[i]);
-#endif
 	}
 
 	return size;
@@ -49,10 +45,6 @@ static void hfc_fifo_mem_write(struct hfc_chan_simplex *chan,
 		hfc_outb(chan->chan->port->card,
 			hfc_A_FIFO_DATA0,
 			((u8 *)data)[i]);
-#ifdef DEBUG
-		if(debug_level >= 3)
-			printk("%02x", ((u8 *)data)[i]);
-#endif
 	}
 
 /*
@@ -113,14 +105,8 @@ int hfc_fifo_get(struct hfc_chan_simplex *chan,
 	int available_bytes = hfc_fifo_used_rx(chan);
 
 	if (available_bytes < size) {
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
+		hfc_msg_schan(KERN_WARNING, chan,
 			"RX FIFO not enough (%d) bytes to receive!\n",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name,
 			available_bytes);
 
 		return -1;
@@ -139,14 +125,8 @@ void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size)
 {
 	int available_bytes = hfc_fifo_used_rx(chan);
 	if (available_bytes + 1 < size) {
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
+		hfc_msg_schan(KERN_WARNING, chan,
 			"RX FIFO not enough (%d) bytes to drop!\n",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name,
 			available_bytes);
 
 		return;
@@ -158,22 +138,6 @@ void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size)
 void hfc_fifo_put(struct hfc_chan_simplex *chan,
 			void *data, int size)
 {
-	int free_bytes = hfc_fifo_free_tx(chan);
-	if (free_bytes < size) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
-			"TX FIFO full!\n",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name);
-
-		chan->fifo_full++;
-
-		hfc_fifo_reset(chan->chan->port->card);
-	}
-
 	hfc_fifo_mem_write(chan, data, size);
 
 	chan->bytes += size;
@@ -184,14 +148,8 @@ int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
 
 	if (chan->f1 == chan->f2) {
 		// nothing received, strange uh?
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
-			"get_frame called with no frame in FIFO.\n",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name);
+		hfc_msg_schan(KERN_WARNING, chan,
+			"get_frame called with no frame in FIFO.\n");
 
 		return -1;
 	}
@@ -200,18 +158,7 @@ int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
 	int frame_size = hfc_fifo_get_frame_size(chan);
 
 	if (frame_size <= 0) {
-#ifdef DEBUG
-		if (debug_level >= 2) {
-			printk(KERN_DEBUG hfc_DRIVER_PREFIX
-				"card %d: "
-				"port %d: "
-				"chan %s: "
-				"invalid (empty) frame received.\n",
-				chan->chan->port->card->id,
-				chan->chan->port->id,
-				chan->chan->name);
-		}
-#endif
+		hfc_debug_schan(2, chan, "invalid (empty) frame received.\n");
 
 		hfc_fifo_drop_frame(chan);
 		return -1;
@@ -222,24 +169,10 @@ int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
 
 #ifdef DEBUG
 	if(debug_level == 3) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
-			"RX len %2d: ",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name,
-			frame_size);
+		hfc_debug_schan(3, chan, "RX len %2d: ", frame_size);
 	} else if(debug_level >= 4) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
+		hfc_debug_schan(4, chan,
 			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name,
 			chan->f1, chan->f2, chan->z1, chan->z2,
 			frame_size);
 	}
@@ -265,35 +198,14 @@ int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
 
 	if (stat == 0xff) {
 		// Frame abort detected
-#ifdef DEBUG
-		if(debug_level >= 2) {
-			printk(KERN_WARNING hfc_DRIVER_PREFIX
-				"card %d: "
-				"port %d: "
-				"chan %s: "
-				"Frame abort detected\n",
-				chan->chan->port->card->id,
-				chan->chan->port->id,
-				chan->chan->name);
-		}
-#endif
+
+		hfc_debug_schan(3, chan, "Frame abort detected\n");
 
 		hfc_fifo_drop_frame(chan);
 		return -1;
 	} else if (stat != 0x00) {
 		// CRC not ok, frame broken, skipping
-#ifdef DEBUG
-		if(debug_level >= 2) {
-			printk(KERN_WARNING hfc_DRIVER_PREFIX
-				"card %d: "
-				"port %d: "
-				"chan %s: "
-				"Received frame with wrong CRC\n",
-				chan->chan->port->card->id,
-				chan->chan->port->id,
-				chan->chan->name);
-		}
-#endif
+		hfc_debug_schan(2, chan, "Received frame with wrong CRC\n");
 
 		chan->crc++;
 		chan->chan->net_device_stats.rx_errors++;
@@ -322,27 +234,12 @@ void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
 #ifdef DEBUG
 	if (debug_level == 3) {
 		hfc_fifo_refresh_fz_cache(chan);
+		hfc_debug_schan(3, chan, "TX len %2d: ", size);
 
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
-			"TX len %2d: ",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name,
-			size);
 	} else if (debug_level >= 4) {
 		hfc_fifo_refresh_fz_cache(chan);
-
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
+		hfc_debug_schan(4, chan,
 			"TX (f1=%02x, f2=%02x, z1=N/A, z2=%04x) len %2d: ",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name,
 			chan->f1, chan->f2, chan->z2,
 			size);
 	}
@@ -355,25 +252,6 @@ void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
 		printk("\n");
 	}
 #endif
-
-	int available_frames = hfc_fifo_free_frames(chan);
-
-	if (available_frames >= chan->f_num) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
-			"TX FIFO total number of frames exceeded!\n",
-			chan->chan->port->card->id,
-			chan->chan->port->id,
-			chan->chan->name);
-
-		chan->fifo_full++;
-
-		hfc_fifo_reset(chan->chan->port->card);
-
-		return;
-	}
 
 	hfc_fifo_put(chan, data, size);
 

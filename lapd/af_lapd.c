@@ -1,19 +1,5 @@
 /*
 
-  Add AF_LAPD to linux/include/linux/socket.h
-  Add PF_LAPD to linux/include/linux/socket.h
-  Add SOL_LAPD to linux/inclode/linx/socket.h ????
-
-  Add ARPHRD_ISDN_DCHAN to linux/include/linux/if_arp.h
-  Add ETH_P_LAPD to linux/include/linux/if_ether.h
-
-  TODO: Determine where the information "I am a NT" or "I am a TE" should
-  reside (lowlevel driver, socket layer) and how each layer can pass it
-  to other layers.
-  BRI chipsets must know if they act as NT or TE since it influences how
-  the phisycal layer work. PRI cards do not need to know their role since
-  they are perfectly symmetrical g.703 endpoints.
-  IMHO it should be a card configuration parameter.
 
 */
 
@@ -226,10 +212,10 @@ void setup_lapd(struct net_device *netdev)
 	netdev->hard_header_cache  = NULL;
 	netdev->header_cache_update= NULL;
 
-	netdev->type               = ARPHRD_ISDN_DCHAN;
+	netdev->type               = ARPHRD_LAPD;
 	netdev->hard_header_len    = 0;
 	netdev->mtu                = 512;
-	netdev->addr_len           = 0;
+	netdev->addr_len           = 1;
 	netdev->tx_queue_len       = 10;
 
 	memset(netdev->broadcast, 0x00, sizeof(netdev->broadcast));
@@ -253,11 +239,21 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 	struct lapd_opt *lo = lapd_sk(sk);
 
 	if (!hlist_empty(&lo->new_dlcs)) {
-		struct hlist_node *node, *t;
+		struct lapd_new_dlc *new_dlc;
+		struct hlist_node *pos, *t;
 
-		hlist_for_each_safe(node, t, &lo->new_dlcs) {
-			hlist_del(node);
-			kfree(node);
+		hlist_for_each_entry_safe(new_dlc, pos, t, &lo->new_dlcs, node) {
+			WARN_ON(sk_unhashed(new_dlc->sk));
+
+			sk_del_node_init(new_dlc->sk);
+
+			sock_orphan(new_dlc->sk);
+
+			sock_put(new_dlc->sk);
+			new_dlc->sk = NULL;
+
+			hlist_del(&new_dlc->node);
+			kfree(new_dlc);
 		}
 	}
 
@@ -272,6 +268,11 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 	if (lo->dev) {
 		dev_put(lo->dev);
 		lo->dev = NULL;
+	}
+
+	if (lo->ppp_master_dev) {
+		dev_put(lo->ppp_master_dev);
+		lo->ppp_master_dev = NULL;
 	}
 
 	__skb_queue_purge(&sk->sk_receive_queue);
@@ -343,6 +344,9 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	int rc = -EINVAL;
 	struct sock *sk = sock->sk;
 	void __user *argp = (void __user *)arg;
+	struct lapd_opt *lo = lapd_sk(sk);
+
+printk(KERN_DEBUG "lapd: IOCTL\n");
 
 	switch (cmd) {
 		/* Protocol layer */
@@ -404,7 +408,33 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGIFINDEX:
 		case SIOCGIFNAME:
 			rc = dev_ioctl(cmd, argp);
-			break;
+		break;
+
+		case 12345678;
+			{
+			struct net_device *dev = __dev_get_by_name(ifr->ifr_name);
+
+			if (!dev)
+				return -ENODEV;
+
+			lo->ppp_master_dev = dev;
+
+			rc = dev_ioctl(VISDN_SET_BEARER_PPP, argp);
+			}
+		break;
+
+		case PPPIOCGCHAN:
+			return put_user(ppp_channel_index(&b1_chan->ppp_chan),
+				ifr->ifru_data)
+				? -EFAULT : 0;
+		break;
+
+		case PPPIOCGUNIT:
+			return put_user(ppp_unit_number(&b1_chan->ppp_chan),
+				ifr->ifru_data)
+				? -EFAULT : 0;
+		break;
+*/
 	}
 
 	return rc;
@@ -556,7 +586,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_nodev;
 	}
 
-	if (dev->type != ARPHRD_ISDN_DCHAN) {
+	if (dev->type != ARPHRD_LAPD) {
 		err = -ENOPROTOOPT;
 		goto err_invalid_type;
 	}

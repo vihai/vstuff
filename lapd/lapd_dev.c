@@ -112,7 +112,7 @@ int lapd_device_event(struct notifier_block *this, unsigned long event,
 {
 	struct net_device *dev = (struct net_device *)ptr;
 
-	if (dev->type != ARPHRD_ISDN_DCHAN)
+	if (dev->type != ARPHRD_LAPD)
 		return NOTIFY_DONE;
 
 	switch (event) {
@@ -125,7 +125,6 @@ int lapd_device_event(struct notifier_block *this, unsigned long event,
 	break;
 
 	case NETDEV_UNREGISTER:
-		printk(KERN_DEBUG "lapd: %s: NETDEV UNREGISTER <---------\n", dev->name);
 	break;
 	}
 

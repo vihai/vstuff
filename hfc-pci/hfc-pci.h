@@ -248,6 +248,16 @@
 #define FALSE 0
 #endif
 
+#define D 0
+#define B1 1
+#define B2 2
+#define E 3
+
+#define D_FIFO_OFF 2
+#define B1_FIFO_OFF 0
+#define B2_FIFO_OFF 1
+#define E_FIFO_OFF 3
+
 /* NOTE: FIFO pointers are not declared volatile because accesses to the
  *       FIFOs are inherently safe.
  */
@@ -287,14 +297,11 @@ struct hfc_chan_duplex {
 	struct hfc_card *card;
 
 	char *name;
-	int number;
+	int id;
 
 	enum hfc_chan_status status;
-	int open_by_netdev;
 
 	unsigned short protocol;
-
-	spinlock_t lock;
 
 	struct hfc_chan_simplex rx;
 	struct hfc_chan_simplex tx;

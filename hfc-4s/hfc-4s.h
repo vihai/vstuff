@@ -14,6 +14,7 @@
 #define _HFC_4S_H
 
 #include <linux/delay.h>
+#include <linux/ppp_channel.h>
 
 #include "regs.h"
 
@@ -22,6 +23,95 @@
 #define hfc_DRIVER_DESCR "HFC-4S HFC-8S Driver"
 
 #define hfc_MAX_BOARDS 32
+
+#ifdef DEBUG
+#define hfc_debug(dbglevel, format, arg...)	\
+	if (debug_level >= dbglevel)		\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX format, ## arg)
+
+#define hfc_debug_card(dbglevel, card, format, arg...)	\
+	if (debug_level >= dbglevel)			\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
+			"card: %d "			\
+			format, card->id, ## arg)
+
+#define hfc_debug_port(dbglevel, port, format, arg...)	\
+	if (debug_level >= dbglevel)			\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
+			"card: %d "			\
+			"port: %d "			\
+			format,				\
+			port->card->id, port->id, ## arg)
+
+#define hfc_debug_chan(dbglevel, chan, format, arg...)	\
+	if (debug_level >= dbglevel)			\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
+			"card: %d "			\
+			"port: %d "			\
+			"chan: %s "			\
+			format,				\
+			chan->port->card->id,		\
+			chan->port->id,			\
+			chan->name,			\
+			## arg)
+
+#define hfc_debug_schan(dbglevel, chan, format, arg...)	\
+	if (debug_level >= dbglevel)			\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
+			"card: %d "			\
+			"port: %d "			\
+			"chan: %s "			\
+			format,				\
+			chan->chan->port->card->id,	\
+			chan->chan->port->id,		\
+			chan->chan->name,		\
+			## arg)
+#else
+#define hfc_debug(dbglevel, format, arg...) do {} while (0)
+#define hfc_debug_card(dbglevel, card, format, arg...) do {} while (0)
+#define hfc_debug_port(dbglevel, port, format, arg...) do {} while (0)
+#define hfc_debug_chan(dbglevel, chan, format, arg...) do {} while (0)
+#define hfc_debug_schan(dbglevel, schan, format, arg...) do {} while (0)
+#endif
+
+
+#define hfc_msg(level, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		format, ## arg)
+
+#define hfc_msg_card(level, card, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		"card: %d "				\
+		format, card->id, ## arg)
+
+#define hfc_msg_port(level, port, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		"card: %d "				\
+		"port: %d "				\
+		format,					\
+		port->card->id, port->id, ## arg)
+
+#define hfc_msg_chan(level, chan, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		"card: %d "				\
+		"port: %d "				\
+		"chan: %s "				\
+		format,					\
+		chan->port->card->id,			\
+		chan->port->id,				\
+		chan->name,				\
+		## arg)
+
+#define hfc_msg_schan(level, chan, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		"card: %d "				\
+		"port: %d "				\
+		"chan: %s "				\
+		format,					\
+		chan->chan->port->card->id,		\
+		chan->chan->port->id,			\
+		chan->chan->name,			\
+		## arg)
 
 #ifndef intptr_t
 #define intptr_t unsigned long
@@ -55,6 +145,16 @@
 #ifndef FALSE
 #define FALSE 0
 #endif
+
+#define D 0
+#define B1 1
+#define B2 2
+#define E 3
+
+#define D_FIFO_OFF 2
+#define B1_FIFO_OFF 0
+#define B2_FIFO_OFF 1
+#define E_FIFO_OFF 3
 
 struct hfc_chan;
 
@@ -102,7 +202,8 @@ struct hfc_chan_simplex {
 
 enum hfc_chan_status {
 	free,
-	open_framed,
+	open_lapd,
+	open_ppp,
 	open_voice,
 	sniff_aux,
 	loopback,
@@ -119,13 +220,13 @@ struct hfc_chan_duplex {
 
 	unsigned short protocol;
 
-//	spinlock_t lock;
-
 	struct hfc_chan_simplex rx;
 	struct hfc_chan_simplex tx;
 
 	struct net_device *netdev;
 	struct net_device_stats net_device_stats;
+
+	struct ppp_channel ppp_chan;
 };
 
 struct hfc_port
@@ -138,6 +239,12 @@ struct hfc_port
 	int echo_enabled;
 	int nt_mode;
 	u8 l1_state;
+
+	struct
+	{
+		u8 st_ctrl_0;
+		u8 st_ctrl_2;
+	} regs;
 };
 
 enum hfc_chip_type

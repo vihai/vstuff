@@ -42,8 +42,6 @@
 #define B1 1
 #define B2 2
 
-static int nt_modes[hfc_MAX_BOARDS];
-static int nt_modes_count;
 static int force_l1_up = 0;
 static struct proc_dir_entry *hfc_proc_hfc_dir;
 
@@ -127,13 +125,13 @@ static void hfc_softreset(struct hfc_card *card)
 	schedule_timeout((hfc_RESET_DELAY * HZ) / 1000);	// wait 20 ms
 }
 
-void hfc_resetCard(struct hfc_card *card)
+void hfc_reset_card(struct hfc_card *card)
 {
 	card->regs.m1 = 0;
-	hfc_outb(card, hfc_INT_M1, card->regs.m1);	// no ints
+	hfc_outb(card, hfc_INT_M1, card->regs.m1);
 
 	card->regs.m2 = 0;
-	hfc_outb(card, hfc_INT_M2, card->regs.m2);	// not at all
+	hfc_outb(card, hfc_INT_M2, card->regs.m2);
 
 	hfc_softreset(card);
 
@@ -142,20 +140,6 @@ void hfc_resetCard(struct hfc_card *card)
 
 	// Select the non-capacitive line mode for the S/T interface */
 	card->regs.sctrl = hfc_SCTRL_NONE_CAP;
-
-	if (card->nt_mode) {
-		// ST-Bit delay for NT-Mode
-		hfc_outb(card, hfc_CLKDEL, hfc_CLKDEL_NT);
-
-		card->regs.sctrl |= hfc_SCTRL_MODE_NT;
-	} else {
-		// ST-Bit delay for TE-Mode
-		hfc_outb(card, hfc_CLKDEL, hfc_CLKDEL_TE);
-
-		card->regs.sctrl |= hfc_SCTRL_MODE_TE;
-	}
-
-	hfc_outb(card, hfc_SCTRL, card->regs.sctrl);
 
 	// S/T Auto awake
 	card->regs.sctrl_e = hfc_SCTRL_E_AUTO_AWAKE;
@@ -196,17 +180,14 @@ void hfc_resetCard(struct hfc_card *card)
 	hfc_inb(card, hfc_INT_S2);
 
 	// Enable IRQ output
-	card->regs.m1 = hfc_INTS_DREC | hfc_INTS_L1STATE | hfc_INTS_TIMER;
+	card->regs.m1 = 0;
 	hfc_outb(card, hfc_INT_M1, card->regs.m1);
 
-	card->regs.m2 = hfc_M2_IRQ_ENABLE;
+	card->regs.m2 = 0;
 	hfc_outb(card, hfc_INT_M2, card->regs.m2);
 
 	// Unlocks the states machine
 	hfc_outb(card, hfc_STATES, 0);
-
-	// There's no need to explicitly activate L1 now.
-	// Activation is managed inside the interrupt routine.
 }
 
 static void hfc_update_fifo_state(struct hfc_card *card)
@@ -216,7 +197,7 @@ static void hfc_update_fifo_state(struct hfc_card *card)
 	// both the IRQ handler and the *_(open|close) functions
 
 	unsigned long flags;
-	spin_lock_irqsave(&card->chans[B1].lock, flags);
+	spin_lock_irqsave(&card->lock, flags);
 	if (!card->fifo_suspended &&
 		(card->chans[B1].status == open_framed ||
 		card->chans[B1].status == open_voice)) {
@@ -236,9 +217,7 @@ static void hfc_update_fifo_state(struct hfc_card *card)
  	 	if(card->regs.fifo_en & hfc_FIFOEN_B1TX)
 			card->regs.fifo_en &= ~hfc_FIFOEN_B1TX;
 	}
-	spin_unlock_irqrestore(&card->chans[B1].lock, flags);
 
-	spin_lock_irqsave(&card->chans[B2].lock, flags);
 	if (!card->fifo_suspended &&
 		(card->chans[B2].status == open_framed ||
 		card->chans[B2].status == open_voice ||
@@ -259,9 +238,7 @@ static void hfc_update_fifo_state(struct hfc_card *card)
  	 	if(card->regs.fifo_en & hfc_FIFOEN_B2TX)
 			card->regs.fifo_en &= ~hfc_FIFOEN_B2TX;
 	}
-	spin_unlock_irqrestore(&card->chans[B2].lock, flags);
 
-	spin_lock_irqsave(&card->chans[D].lock, flags);
 	if (!card->fifo_suspended &&
 		card->chans[D].status == open_framed) {
 
@@ -274,7 +251,7 @@ static void hfc_update_fifo_state(struct hfc_card *card)
  	 	if(card->regs.fifo_en & hfc_FIFOEN_DTX)
 			card->regs.fifo_en &= ~hfc_FIFOEN_DTX;
 	}
-	spin_unlock_irqrestore(&card->chans[D].lock, flags);
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	hfc_outb(card, hfc_FIFO_EN, card->regs.fifo_en);
 }
@@ -411,9 +388,9 @@ static int hfc_proc_read_info(char *page, char **start,
 		"Late IRQs : %d\n"
 		"FIFO susp : %s\n"
 		"\nChannel     %12s %12s %12s %12s %4s %4s %4s\n"
-		"D         : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %c %s\n"
-		"B1        : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %c %s\n"
-		"B2        : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %c %s\n"
+		"D         : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %s\n"
+		"B1        : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %s\n"
+		"B2        : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %s\n"
 		,card->cardnum
 		,card->pcidev->irq
 		,card->io_bus_mem, card->io_mem
@@ -434,7 +411,6 @@ static int hfc_proc_read_info(char *page, char **start,
 		,card->chans[D].rx.fifo_full
 		,card->chans[D].tx.fifo_full
 		,card->chans[D].rx.crc
-		,card->chans[D].open_by_netdev ? 'N' : ' '
 		,hfc_status_to_name(card->chans[D].status)
 
 		,card->chans[B1].rx.frames
@@ -444,7 +420,6 @@ static int hfc_proc_read_info(char *page, char **start,
 		,card->chans[B1].rx.fifo_full
 		,card->chans[B1].tx.fifo_full
 		,card->chans[B1].rx.crc
-		,card->chans[B1].open_by_netdev ? 'N' : ' '
 		,hfc_status_to_name(card->chans[B1].status)
 
 		,card->chans[B2].rx.frames
@@ -454,7 +429,6 @@ static int hfc_proc_read_info(char *page, char **start,
 		,card->chans[B2].rx.fifo_full
 		,card->chans[B2].tx.fifo_full
 		,card->chans[B2].rx.crc
-		,card->chans[B2].open_by_netdev ? 'N' : ' '
 		,hfc_status_to_name(card->chans[B2].status)
 		);
 
@@ -520,18 +494,60 @@ static int hfc_open(struct net_device *netdev)
 	struct hfc_chan_duplex *chan = netdev->priv;
 	struct hfc_card *card = chan->card;
 
-	spin_lock(&chan->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&card->lock, flags);
 
 	if (chan->status != free &&
-		(chan->number != D || chan->status != open_framed)) {
-		spin_unlock(&chan->lock);
+		(chan->id != D || chan->status != open_framed)) {
+		spin_unlock_irqrestore(&card->lock, flags);
 		return -EBUSY;
 	}
 
 	chan->status = open_framed;
-	chan->open_by_netdev = TRUE;
 
-	spin_unlock(&chan->lock);
+	switch (chan->id) {
+	case D:
+		if (netdev->flags & IFF_ALLMULTI) {
+			card->nt_mode = TRUE;
+
+			chan->netdev->dev_addr[0] = 0x01;
+
+			// ST-Bit delay for NT-Mode
+			hfc_outb(card, hfc_CLKDEL, hfc_CLKDEL_NT);
+
+			card->regs.sctrl |= hfc_SCTRL_MODE_NT;
+		} else {
+			card->nt_mode = FALSE;
+
+			chan->netdev->dev_addr[0] = 0x00;
+
+			// ST-Bit delay for TE-Mode
+			hfc_outb(card, hfc_CLKDEL, hfc_CLKDEL_TE);
+
+			card->regs.sctrl |= hfc_SCTRL_MODE_TE;
+		}
+
+		hfc_outb(card, hfc_SCTRL, card->regs.sctrl);
+
+		// Enable IRQ output
+		card->regs.m1 = hfc_INTS_DREC | hfc_INTS_L1STATE | hfc_INTS_TIMER;
+		hfc_outb(card, hfc_INT_M1, card->regs.m1);
+
+		card->regs.m2 = hfc_M2_IRQ_ENABLE;
+		hfc_outb(card, hfc_INT_M2, card->regs.m2);
+
+		// Unlocks the states machine
+		hfc_outb(card, hfc_STATES, 0);
+	break;
+
+	case B1:
+	break;
+
+	case B2:
+	break;
+	}
+
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
 		"card %d: "
@@ -547,17 +563,31 @@ static int hfc_close(struct net_device *netdev)
 	struct hfc_chan_duplex *chan = netdev->priv;
 	struct hfc_card *card = chan->card;
 
-	spin_lock(&chan->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&card->lock, flags);
 
 	if (chan->status != open_framed) {
-		spin_unlock(&chan->lock);
+		spin_unlock_irqrestore(&card->lock, flags);
 		return -EINVAL;
 	}
 
 	chan->status = free;
-	chan->open_by_netdev = FALSE;
 
-	spin_unlock(&chan->lock);
+	switch (chan->id) {
+	case D:
+		
+
+		hfc_update_fifo_state(card);
+	break;
+
+	case B1:
+	break;
+
+	case B2:
+	break;
+	}
+
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
 		"card %d: "
@@ -1019,7 +1049,7 @@ static void hfc_frame_arrived(struct hfc_chan_duplex *chan)
 
 		// Oh... this is the echo channel... redirect to D
 		// channel's netdev
-		if (card->echo_enabled && chan->number == B2) {
+		if (card->echo_enabled && chan->id == B2) {
 			skb->protocol = htons(card->chans[D].protocol);
 			skb->dev = card->chans[D].netdev;
 			skb->pkt_type = PACKET_OTHERHOST;
@@ -1171,14 +1201,6 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 		goto err_request_irq;
 	}
 
-	card->nt_mode = FALSE;
-
-	int i;
-	for (i=0; i<nt_modes_count; i++) {
-		if (nt_modes[i] == card->cardnum)
-			card->nt_mode=TRUE;
-	}
-
 	struct hfc_chan_duplex *chan;
 
 //---------------------------------- D
@@ -1187,9 +1209,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	chan->card = card;
 	chan->name = "D";
 	chan->status = free;
-	chan->number = D;
+	chan->id = D;
 	chan->protocol = ETH_P_LAPD;
-	spin_lock_init(&chan->lock);
 
 	chan->rx.chan      = chan;
 	chan->rx.fifo_base = card->fifos + 0x4000;
@@ -1229,6 +1250,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	hfc_setup_lapd(chan);
 
+	SET_NETDEV_DEV(chan->netdev, &pci_dev->dev);
+
 	chan->netdev->irq = card->pcidev->irq;
 	chan->netdev->base_addr = card->io_bus_mem;
 	chan->netdev->mem_start = card->fifo_bus_mem + 0x0000;
@@ -1249,9 +1272,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	chan->card = card;
 	chan->name = "B1";
 	chan->status = free;
-	chan->number = B1;
+	chan->id = B1;
 	chan->protocol = 0;
-	spin_lock_init(&chan->lock);
 
 	chan->rx.chan      = chan;
 	chan->rx.fifo_base = card->fifos + 0x4200;
@@ -1281,42 +1303,14 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
 	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
 
-/*	if(!(chan->netdev = alloc_netdev(0, "isdn%db1", setup_bearer))) {
-		printk(KERN_ERR hfc_DRIVER_PREFIX
-			"net_device alloc failed, abort.\n");
-		err = -ENOMEM;
-		goto err_alloc_netdev_b1;
-	}
-
-	hfc_setup_bearer(chan);
-
-	chan->netdev->irq = card->pcidev->irq;
-	chan->netdev->base_addr = card->io_bus_mem;
-	chan->netdev->mem_start = card->fifo_bus_mem + 0x0200;
-	chan->netdev->mem_end = card->fifo_bus_mem + 0x0200 +
-		chan->tx.fifo_size - 1;
-*/
-
-/*	We probably need to know the protocol that will be spoken on
-	the channel, before registering the netdev
-
-	if((err = register_netdev(chan->netdev))) {
-		printk(KERN_INFO hfc_DRIVER_PREFIX
-			"card %d: "
-			"Cannot register net device, aborting.\n",
-			card->cardnum);
-		goto err_register_netdev_b1;
-	}*/
-
 //---------------------------------- B2
 	chan = &card->chans[B2];
 
 	chan->card = card;
 	chan->name = "B2";
 	chan->status = free;
-	chan->number = B2;
+	chan->id = B2;
 	chan->protocol = 0;
-	spin_lock_init(&chan->lock);
 
 	chan->rx.chan      = chan;
 	chan->rx.fifo_base = card->fifos + 0x6200,
@@ -1346,34 +1340,6 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
 	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
 
-/*	if(!(chan->netdev = alloc_netdev(0, "isdn%db2", setup_bearer))) {
-		printk(KERN_ERR hfc_DRIVER_PREFIX
-			"net_device alloc failed, abort.\n");
-		err = -ENOMEM;
-		goto err_alloc_netdev_b2;
-	}
-
-	hfc_setup_bearer(chan);
-
-	chan->netdev->irq = card->pcidev->irq;
-	chan->netdev->base_addr = card->io_bus_mem;
-	chan->netdev->mem_start = card->fifo_bus_mem + 0x2200;
-	chan->netdev->mem_end = card->fifo_bus_mem + 0x2200 +
-		chan->tx.fifo_size - 1;
-*/
-
-/*	We probably need to know the protocol that will be spoken on
-	the channel, before registering the netdev
-
-	if((err = register_netdev(chan->netdev))) {
-		printk(KERN_INFO hfc_DRIVER_PREFIX
-			"card %d: "
-			"Cannot register net device, aborting.\n",
-			card->cardnum);
-		goto err_register_netdev_b2;
-	}
-*/
-
 // -------------------------------------------------------
 
 	snprintf(card->proc_dir_name,
@@ -1392,7 +1358,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 			hfc_proc_read_fifos, card);
 	card->proc_fifos->owner = THIS_MODULE;
 
-	hfc_resetCard(card);
+	hfc_reset_card(card);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
 		"card %d configured for %s mode at mem %#lx (0x%p) IRQ %u\n",
@@ -1406,14 +1372,6 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	return 0;
 
-//	unregister_netdev(card->chans[B2].netdev);
-//err_register_netdev_b2:
-//	free_netdev(card->chans[B2].netdev);
-err_alloc_netdev_b2:
-//	unregister_netdev(card->chans[B1].netdev);
-//err_register_netdev_b1:
-//	free_netdev(card->chans[B1].netdev);
-err_alloc_netdev_b1:
 //	unregister_netdev(card->chans[D].netdev);
 err_register_netdev_d:
 	free_netdev(card->chans[D].netdev);
@@ -1522,7 +1480,6 @@ MODULE_LICENSE("GPL");
 
 #ifdef LINUX26
 
-module_param_array(nt_modes, int, nt_modes_count, 0444);
 module_param(force_l1_up, int, 0444);
 #ifdef DEBUG
 module_param(debug_level, int, 0444);
@@ -1537,7 +1494,6 @@ MODULE_PARM(debug_level,"i");
 
 #endif // LINUX26
 
-MODULE_PARM_DESC(nt_mode, "Comma-separated list of card IDs to configure in NT mode");
 MODULE_PARM_DESC(force_l1_up, "Don't allow L1 to go down");
 
 #ifdef DEBUG

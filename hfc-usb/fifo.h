@@ -5,6 +5,7 @@
 #ifndef _HFC_FIFO_H
 #define _HFC_FIFO_H
 
+/*
 static inline u16 Z_inc(struct hfc_chan_simplex *chan, u16 z, u16 inc)
 {
 	// declared as u32 in order to manage overflows
@@ -40,12 +41,6 @@ static inline u16 hfc_fifo_get_frame_size(struct hfc_chan_simplex *chan)
 	return hfc_fifo_used_rx(chan) + 1;
 }
 
-/*
-static inline u8 hfc_fifo_u8(struct hfc_chan_simplex *chan, u16 z)
-{
-	return *((u8 *)(chan->z_base + z));
-}
-*/
 static inline u16 hfc_fifo_used_tx(struct hfc_chan_simplex *chan)
 {
 	return (chan->z1 - chan->z2 + chan->fifo_size) % chan->fifo_size;
@@ -130,5 +125,6 @@ void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size);
 int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size);
 void hfc_fifo_drop_frame(struct hfc_chan_simplex *chan);
 void hfc_fifo_put_frame(struct hfc_chan_simplex *chan, void *data, int size);
+*/
 
 #endif

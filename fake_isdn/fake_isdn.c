@@ -33,6 +33,11 @@ static int fake_open(struct net_device *netdev)
 		"chan %s opened.\n",
 		netdev->name);
 
+	if (netdev->flags & IFF_ALLMULTI)
+		netdev->dev_addr[0] = 0x01;
+	else
+		netdev->dev_addr[0] = 0x00;
+
 	return 0;
 }
 

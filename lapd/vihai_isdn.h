@@ -13,8 +13,8 @@
 #ifndef _VIHAI_ISDN_H
 #define _VIHAI_ISDN_H
 
-#ifndef ARPHRD_ISDN_DCHAN
-#define ARPHRD_ISDN_DCHAN 1000
+#ifndef ARPHRD_LAPD
+#define ARPHRD_LAPD 1000
 #endif
 
 #endif

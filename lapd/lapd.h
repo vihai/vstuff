@@ -1,5 +1,5 @@
-#ifndef LAPD_H
-#define LAPD_H
+#ifndef _LAPD_H
+#define _LAPD_H
 
 #include <net/sock.h>
 #include <asm/atomic.h>
@@ -112,6 +112,8 @@ struct lapd_opt
 	int sapi;
 
 	struct hlist_head new_dlcs;
+
+	struct net_device *ppp_master_dev;
 };
 
 /* WARNING: don't change the layout of the members in lapd_sock! */
@@ -133,7 +135,10 @@ void lapd_T203_timer(unsigned long data);
 static inline u8 lapd_get_tei(struct lapd_opt *lo)
 {
 	if (lo->nt_mode)
-		return lo->tei;
+		if (lo->status == LAPD_DLS_LISTENING)
+			return LAPD_BROADCAST_TEI;
+		else
+			return lo->tei;
 	else
 		return lo->usr_tme->tei;
 }

@@ -103,13 +103,17 @@ struct q931_interface;
 struct q931_dlc
 {
 	int socket;
+	int poll_id;
 	struct q931_interface *interface;
 };
 
 struct q931_interface
 {
+	char *name;
+
 	// NT mode, socket is the master socket
 	int nt_socket;
+	int nt_poll_id;
 
 	// TE mode, use DLC
 	struct q931_dlc te_dlc;
@@ -119,6 +123,7 @@ struct q931_interface
 	q931_callref next_call_reference;
 	int call_reference_size;
 
+	int ncalls;
 	struct list_head calls;
 };
 
@@ -151,6 +156,12 @@ struct q931_call
 
 	char calling_number[Q931_MAX_DIGITS + 1];
 	char called_number[Q931_MAX_DIGITS + 1];
+
+	void *pvt;
+
+	void (*alerting_callback)(struct q931_call *call);
+	void (*release_callback)(struct q931_call *call);
+	void (*connect_callback)(struct q931_call *call);
 };
 
 static inline int q931_intcmp(int a, int b)
@@ -164,8 +175,26 @@ void q931_init();
 void q931_receive(const struct q931_dlc *dlc);
 struct q931_interface *q931_open_interface(const char *name);
 void q931_close_interface(struct q931_interface *interface);
+
 struct q931_call *q931_alloc_call();
 int q931_make_call(struct q931_interface *interface, struct q931_call *call);
+
+static inline void q931_call_set_calling_number(
+	struct q931_call *call,
+	const char *calling_number)
+{
+	strncpy(call->calling_number, calling_number,
+		sizeof(call->calling_number));
+}
+
+static inline void q931_call_set_called_number(
+	struct q931_call *call,
+	const char *called_number)
+{
+	strncpy(call->called_number, called_number,
+		sizeof(call->called_number));
+}
+
 void q931_free_call(struct q931_call *call);
 void q931_hangup_call(struct q931_call *call);
 

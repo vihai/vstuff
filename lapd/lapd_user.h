@@ -1,5 +1,5 @@
 /*
- * lapd.c - net_device LAPD link layer support functionss
+ * lapd.h
  *
  * Copyright (C) 2004 Daniele Orlandi
  *
@@ -13,10 +13,11 @@
 #ifndef _LAPD_USER_H
 #define _LAPD_USER_H
 
+#include <linux/types.h>
 #include <linux/socket.h>
 
-#ifndef ARPHRD_ISDN_DCHAN
-#define ARPHRD_ISDN_DCHAN 1000
+#ifndef ARPHRD_LAPD
+#define ARPHRD_LAPD 1000
 #endif
 
 #ifndef ETH_P_LAPD

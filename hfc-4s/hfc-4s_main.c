@@ -25,6 +25,9 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 
+#include <linux/ppp_defs.h>
+#include <linux/if_ppp.h>
+
 #include <vihai_isdn.h>
 #include <lapd_user.h>
 #include <lapd.h>
@@ -33,16 +36,6 @@
 #include "fifo.h"
 
 #if CONFIG_PCI
-
-#define D 0
-#define B1 1
-#define B2 2
-#define E 3
-
-#define D_FIFO_OFF 2
-#define B1_FIFO_OFF 0
-#define B2_FIFO_OFF 1
-#define E_FIFO_OFF 3
 
 static int force_l1_up = 0;
 static struct proc_dir_entry *hfc_proc_hfc_dir;
@@ -86,10 +79,7 @@ static inline void hfc_select_port(struct hfc_card *card, u8 id)
 
 static void hfc_softreset(struct hfc_card *card)
 {
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		"card %d: "
-		"resetting\n",
-		card->id);
+	hfc_msg_card(KERN_INFO, card, "resetting\n");
 
 	hfc_outb(card, hfc_R_CIRM, hfc_R_CIRM_V_SRES);
 	hfc_outb(card, hfc_R_CIRM, 0);
@@ -101,10 +91,10 @@ static void hfc_config_chan_as_b_voice(struct hfc_chan_duplex *chan)
 {
 	struct hfc_card *card = chan->port->card;
 
-	printk(KERN_DEBUG "initializin chan %s\n", chan->name);
+	hfc_debug_chan(0, chan, "initializing\n");
 
 	// RX
-	hfc_fifo_select(card, chan->rx.fifo_id);
+	hfc_fifo_select(&chan->rx);
 
 	hfc_fifo_reset(card);
 
@@ -119,7 +109,7 @@ static void hfc_config_chan_as_b_voice(struct hfc_chan_duplex *chan)
 		hfc_A_IRQ_MSK_V_IRQ);
 
 	// TX
-	hfc_fifo_select(card, chan->tx.fifo_id);
+	hfc_fifo_select(&chan->tx);
 
 	hfc_fifo_reset(card);
 
@@ -266,14 +256,7 @@ static inline void hfc_suspend_fifo(struct hfc_card *card)
 	udelay(250);
 //	hfc_fifo_reset(&card->chans[D].rx);
 
-#ifdef DEBUG
-	if (debug_level >= 3) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"FIFOs suspended\n",
-			card->id);
-	}
-#endif
+	hfc_debug_card(3, card, "FIFOs suspended\n");
 }
 
 static inline void hfc_resume_fifo(struct hfc_card *card)
@@ -282,14 +265,7 @@ static inline void hfc_resume_fifo(struct hfc_card *card)
 
 	hfc_update_fifo_state(card);
 
-#ifdef DEBUG
-	if (debug_level >= 3) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"FIFOs resumed\n",
-			card->id);
-	}
-#endif
+	hfc_debug_card(3, card, "FIFOs resumed\n");
 }
 
 static void hfc_check_l1_up(struct hfc_port *port)
@@ -298,16 +274,13 @@ static void hfc_check_l1_up(struct hfc_port *port)
 
 	if ((!port->nt_mode && port->l1_state != 7) ||
 		(port->nt_mode && port->l1_state != 3)) {
-#ifdef DEBUG
-		if(debug_level >= 1) {
-			printk(KERN_DEBUG hfc_DRIVER_PREFIX
-				"card %d: "
-				"port %d: "
-				"L1 is down, bringing up L1.\n",
-				port->id,
-				card->id);
-		}
-#endif
+
+		hfc_debug(1,
+			"card %d: "
+			"port %d: "
+			"L1 is down, bringing up L1.\n",
+			card->id,
+			port->id);
 
 		hfc_outb(card, hfc_A_ST_WR_STA,
 			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
@@ -329,7 +302,8 @@ static char *hfc_status_to_name(int status)
 {
 	struct hfc_status_to_name_names names[] = {
 		{ free, "free" },
-		{ open_framed, "framed" },
+		{ open_lapd, "lapd" },
+		{ open_ppp, "ppp" },
 		{ open_voice, "voice" },
 		{ sniff_aux, "sniff aux" },
 		{ loopback, "loopback" },
@@ -362,7 +336,7 @@ static int hfc_proc_read_info(char *page, char **start,
 		off_t off, int count, 
 		int *eof, void *data)
 {
-	struct hfc_card *card = data;
+//	struct hfc_card *card = data;
 
 	u8 chip_id;
 //	chip_id = hfc_inb(card, hfc_CHIP_ID);
@@ -448,14 +422,14 @@ static int hfc_proc_read_fifos(char *page, char **start,
 		unsigned long flags;
 		spin_lock_irqsave(&card->lock, flags);
 
-		hfc_fifo_select(card, card->ports[i].chans[j].rx.fifo_id);
+		hfc_fifo_select(&card->ports[i].chans[j].rx);
 
 		union hfc_fgroup frx;
 		union hfc_zgroup zrx;
 		frx.f1f2 = hfc_inw(card, hfc_A_F12);
 		zrx.z1z2 = hfc_inl(card, hfc_A_Z12);
 
-		hfc_fifo_select(card, card->ports[i].chans[j].tx.fifo_id);
+		hfc_fifo_select(&card->ports[i].chans[j].tx);
 
 		union hfc_fgroup ftx;
 		union hfc_zgroup ztx;
@@ -477,6 +451,59 @@ static int hfc_proc_read_fifos(char *page, char **start,
 }
 
 /******************************************
+ * ppp interface functions
+ ******************************************/
+
+static int hfc_ppp_start_xmit(
+	struct ppp_channel *ppp_chan,
+	struct sk_buff *skb)
+{
+	struct hfc_chan_duplex *chan = ppp_chan->private;
+
+hfc_debug_chan(0, chan, "ppp frame out\n");
+
+	hfc_fifo_select(&chan->tx);
+	// hfc_fifo_select() updates F/Z cache, so,
+	// size calculations are allowed
+
+	if (!hfc_fifo_free_frames(&chan->tx)) {
+		hfc_debug_chan(3, chan, "TX FIFO frames full, throttling\n");
+
+		return 0;
+	}
+
+	if (hfc_fifo_free_tx(&chan->tx) < skb->len) {
+		hfc_debug_chan(3, chan, "TX FIFO full, throttling\n");
+
+		return 0;
+	}
+
+	hfc_fifo_put_frame(&chan->tx, skb->data, skb->len);
+
+	dev_kfree_skb(skb);
+
+	return 1;
+}
+
+static int hfc_ppp_ioctl(
+	struct ppp_channel *ppp_chan,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct hfc_chan_duplex *chan = ppp_chan->private;
+
+hfc_debug_chan(0, chan, "ioctl(%d,%ld)", cmd, arg);
+
+	return -EINVAL;
+}
+
+static struct ppp_channel_ops hfc_ppp_ops =
+{
+	start_xmit: hfc_ppp_start_xmit,
+	ioctl: hfc_ppp_ioctl,
+};
+
+/******************************************
  * net_device interface functions
  ******************************************/
 
@@ -486,20 +513,20 @@ static int hfc_open(struct net_device *netdev)
 	struct hfc_card *card = chan->port->card;
 
 	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
-	if (chan->status != free &&
-		(chan->id != D || chan->status != open_framed)) {
-		spin_unlock_irqrestore(&card->lock, flags);
-		return -EBUSY;
-	}
-
-	chan->status = open_framed;
 
 	// Ok, now the chanel is ours we need to configure it
 
 	switch (chan->id) {
 	case D:
+		spin_lock_irqsave(&card->lock, flags);
+
+		if (chan->status != free) {
+			spin_lock_irqsave(&card->lock, flags);
+			return -EBUSY;
+		}
+
+		chan->status = open_ppp;
+
 		// This is the D channel so let's configure the port first
 
 		hfc_select_port(card, chan->port->id);
@@ -507,17 +534,23 @@ static int hfc_open(struct net_device *netdev)
 		hfc_outb(card, hfc_A_ST_CTRL1,
 			0);
 
-		hfc_outb(card, hfc_A_ST_CTRL2, 0);
+		chan->port->regs.st_ctrl_2 = 0;
 //			hfc_A_ST_CTRL2_V_B1_RX_EN|
 //			hfc_A_ST_CTRL2_V_B2_RX_EN);
+		hfc_outb(card, hfc_A_ST_CTRL2,
+			chan->port->regs.st_ctrl_2);
 
 		if (netdev->flags & IFF_ALLMULTI) {
 			chan->port->nt_mode = TRUE;
 
+			chan->netdev->dev_addr[0] = 0x01;
+
+			chan->port->regs.st_ctrl_0 =
+//				hfc_A_ST_CTRL0_V_B1_EN |
+//				hfc_A_ST_CTRL0_V_B2_EN |
+				hfc_A_ST_CTRL0_V_ST_MD_NT;
 			hfc_outb(card, hfc_A_ST_CTRL0,
-//				hfc_A_ST_CTRL0_V_B1_EN|
-//				hfc_A_ST_CTRL0_V_B2_EN|
-				hfc_A_ST_CTRL0_V_ST_MD_NT);
+				chan->port->regs.st_ctrl_0);
 
 			hfc_outb(card, hfc_A_ST_CLK_DLY,
 				hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(hfc_CLKDEL_NT)|
@@ -529,10 +562,14 @@ static int hfc_open(struct net_device *netdev)
 		} else {
 			chan->port->nt_mode = FALSE;
 
+			chan->netdev->dev_addr[0] = 0x00;
+
+			chan->port->regs.st_ctrl_0 =
+//				hfc_A_ST_CTRL0_V_B1_EN |
+//				hfc_A_ST_CTRL0_V_B2_EN |
+				hfc_A_ST_CTRL0_V_ST_MD_TE;
 			hfc_outb(card, hfc_A_ST_CTRL0,
-//				hfc_A_ST_CTRL0_V_B1_EN|
-//				hfc_A_ST_CTRL0_V_B2_EN|
-				hfc_A_ST_CTRL0_V_ST_MD_TE);
+				chan->port->regs.st_ctrl_0);
 
 			hfc_outb(card, hfc_A_ST_CLK_DLY,
 				hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(hfc_CLKDEL_TE)|
@@ -543,7 +580,7 @@ static int hfc_open(struct net_device *netdev)
 		}
 
 		// RX
-		hfc_fifo_select(card, chan->rx.fifo_id);
+		hfc_fifo_select(&chan->rx);
 
 		hfc_fifo_reset(card);
 
@@ -560,7 +597,7 @@ static int hfc_open(struct net_device *netdev)
 			hfc_A_IRQ_MSK_V_IRQ);
 
 		// TX
-		hfc_fifo_select(card, chan->tx.fifo_id);
+		hfc_fifo_select(&chan->tx);
 
 		hfc_fifo_reset(card);
 
@@ -577,6 +614,8 @@ static int hfc_open(struct net_device *netdev)
 			hfc_A_IRQ_MSK_V_IRQ);
 
 		card->open_ports++;
+
+		spin_unlock_irqrestore(&card->lock, flags);
 	break;
 
 	case B1:
@@ -602,15 +641,7 @@ static int hfc_open(struct net_device *netdev)
 			hfc_R_V_IRQ_POL_LOW);
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
-
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		"card %d: "
-		"port %d: "
-		"chan %s opened.\n",
-		card->id,
-		chan->port->id,
-		chan->name);
+	hfc_msg_chan(KERN_INFO, chan, "channel opened.\n");
 
 	return 0;
 }
@@ -620,18 +651,18 @@ static int hfc_close(struct net_device *netdev)
 	struct hfc_chan_duplex *chan = netdev->priv;
 	struct hfc_card *card = chan->port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
-	if (chan->status != open_framed) {
-		spin_unlock_irqrestore(&card->lock, flags);
-		return -EINVAL;
-	}
-
-	chan->status = free;
+	unsigned long flags = 0;
 
 	switch (chan->id) {
 	case D:
+		spin_lock_irqsave(&card->lock, flags);
+
+		if (chan->status != open_ppp) {
+			spin_unlock_irqrestore(&card->lock, flags);
+			return -EINVAL;
+		}
+		chan->status = free;
+
 		hfc_select_port(card, chan->port->id);
 
 		hfc_outb(card, hfc_A_ST_CTRL1, 0);
@@ -647,7 +678,7 @@ static int hfc_close(struct net_device *netdev)
 			0);
 
 		// RX
-		hfc_fifo_select(card, chan->rx.fifo_id);
+		hfc_fifo_select(&chan->rx);
 
 		hfc_fifo_reset(card);
 
@@ -660,7 +691,7 @@ static int hfc_close(struct net_device *netdev)
 		hfc_outb(card, hfc_A_IRQ_MSK, 0);
 
 		// TX
-		hfc_fifo_select(card, chan->tx.fifo_id);
+		hfc_fifo_select(&chan->tx);
 
 		hfc_fifo_reset(card);
 
@@ -697,13 +728,7 @@ static int hfc_close(struct net_device *netdev)
 
 	spin_unlock_irqrestore(&card->lock, flags);
 
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		"card %d: "
-		"port %d: "
-		"chan %s closed.\n",
-		card->id,
-		chan->port->id,
-		chan->name);
+	hfc_msg_chan(KERN_INFO, chan, "channel closed.\n");
 
 	return 0;
 }
@@ -711,13 +736,31 @@ static int hfc_close(struct net_device *netdev)
 static int hfc_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct hfc_chan_duplex *chan = netdev->priv;
-	struct hfc_card *card = chan->port->card;
+//	struct hfc_card *card = chan->port->card;
 
 	netdev->trans_start = jiffies;
 
 	hfc_check_l1_up(chan->port);
 
-	hfc_fifo_select(card, chan->tx.fifo_id);
+	hfc_fifo_select(&chan->tx);
+	// hfc_fifo_select() updates F/Z cache, so,
+	// size calculations are allowed
+
+	if (!hfc_fifo_free_frames(&chan->tx)) {
+		hfc_debug_chan(3, chan, "TX FIFO frames full, throttling\n");
+
+		netif_stop_queue(netdev);
+
+		return 0;
+	}
+
+	if (hfc_fifo_free_tx(&chan->tx) < skb->len) {
+		hfc_debug_chan(3, chan, "TX FIFO full, throttling\n");
+
+		netif_stop_queue(netdev);
+
+		return 0;
+	}
 
 	hfc_fifo_put_frame(&chan->tx, skb->data, skb->len);
 
@@ -745,19 +788,15 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 
         if(netdev->flags & IFF_PROMISC && !port->echo_enabled) {
 		if (port->nt_mode) {
-			printk(KERN_INFO hfc_DRIVER_PREFIX
-				"card %d: "
-				"port %d: "
-				"is in NT mode. Promiscuity is useless\n",
-				card->id,
-				port->id);
+			hfc_msg_port(KERN_INFO, port,
+				"is in NT mode. Promiscuity is useless\n");
 
 			spin_unlock_irqrestore(&card->lock, flags);
 			return;
 		}
 
 		// Only RX FIFO is needed for E channel
-		hfc_fifo_select(card, port->chans[E].rx.fifo_id);
+		hfc_fifo_select(&port->chans[E].rx);
 
 		hfc_fifo_reset(card);
 
@@ -774,19 +813,16 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 
 		port->echo_enabled = TRUE;
 
-		printk(KERN_INFO hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"entered in promiscuous mode\n",
-			card->id,
-			port->id);
+		hfc_msg_port(KERN_INFO, port,
+			"entered in promiscuous mode\n");
+
         } else if(!(netdev->flags & IFF_PROMISC) && port->echo_enabled) {
 		if (!port->echo_enabled) {
 			spin_unlock_irqrestore(&card->lock, flags);
 			return;
 		}
 
-		hfc_fifo_select(card, port->chans[E].rx.fifo_id);
+		hfc_fifo_select(&port->chans[E].rx);
 
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
@@ -798,12 +834,8 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 
 		port->echo_enabled = FALSE;
 
-		printk(KERN_INFO hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %d: "
-			"left promiscuous mode.\n",
-			card->id,
-			port->id);
+		hfc_msg_port(KERN_INFO, port,
+			"left promiscuous mode.\n");
 	}
 
 	spin_unlock_irqrestore(&card->lock, flags);
@@ -874,10 +906,12 @@ static inline void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_chan_simplex *chan)
 {
-	printk(KERN_DEBUG hfc_DRIVER_PREFIX
-		"Received TX interrupt on chan %s\n",chan->chan->name);
+	hfc_debug_schan(3, chan, "Received TX interrupt\n");
 
-	// dev_queue_start if needed
+	if (chan->chan->status == open_lapd)
+		netif_wake_queue(chan->chan->netdev);
+	else if (chan->chan->status == open_ppp)
+		ppp_output_wakeup(&chan->chan->ppp_chan);
 }
 
 static inline void hfc_handle_port_fifo_interrupt(struct hfc_port *port)
@@ -930,18 +964,10 @@ static inline void hfc_handle_state_interrupt(struct hfc_port *port)
 
 	u8 new_state = hfc_A_ST_RD_STA_V_ST_STA(hfc_inb(card, hfc_A_ST_RD_STA));
 
-#ifdef DEBUG
-	if (debug_level >= 1) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"layer 1 state = %c%d\n",
-			card->id,
-			port->id,
-			port->nt_mode?'G':'F',
-			new_state);
-	}
-#endif
+	hfc_debug_port(1, port,
+		"layer 1 state = %c%d\n",
+		port->nt_mode?'G':'F',
+		new_state);
 
 	if (port->nt_mode) {
 		// NT mode
@@ -1012,17 +1038,11 @@ static inline void hfc_handle_processing_interrupt(struct hfc_card *card)
 		if (available_bytes > CHUNKSIZE + hfc_RX_FIFO_PRELOAD) {
 			card->late_irqs++;
 
-#if DEBUG
-			if (debug_level >= 4) {
-				printk(KERN_DEBUG hfc_DRIVER_PREFIX
-					"card %d: "
-					"late IRQ, %d bytes late\n",
-					card->id,
-					available_bytes -
-						(CHUNKSIZE +
-						 hfc_RX_FIFO_PRELOAD));
-			}
-#endif
+			hfc_debug_card(4, 
+				"late IRQ, %d bytes late\n",
+				available_bytes -
+					(CHUNKSIZE +
+					 hfc_RX_FIFO_PRELOAD));
 		}
 
 		hfc_handle_voice(card);
@@ -1046,7 +1066,6 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 {
 	struct hfc_chan_duplex *fdchan = chan->chan;
 	struct hfc_port *port = fdchan->port;
-	struct hfc_card *card = port->card;
 
 	int antiloop = 16; // Copy no more than 16 frames
 
@@ -1055,7 +1074,7 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 	while(--antiloop) {
 		// FIFO selection has to be done for each frame to clear
 		// internal buffer (see specs 4.4.4).
-		hfc_fifo_select(card, chan->fifo_id);
+		hfc_fifo_select(chan);
 
 		hfc_fifo_refresh_fz_cache(chan);
 
@@ -1064,18 +1083,9 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 		int frame_size = hfc_fifo_get_frame_size(chan);
 
 		if (frame_size < 3) {
-#ifdef DEBUG
-			if (debug_level>=2)
-				printk(KERN_DEBUG hfc_DRIVER_PREFIX
-					"card %d: "
-					"port %d: "
-					"chan %s: "
-					"invalid frame received, just %d bytes\n",
-					card->id,
-					port->id,
-					fdchan->name,
-					frame_size);
-#endif
+			hfc_debug_schan(2, chan,
+				"invalid frame received, just %d bytes\n",
+				frame_size);
 
 			hfc_fifo_drop_frame(chan);
 
@@ -1083,17 +1093,8 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 
 			continue;
 		} else if(frame_size == 3) {
-#ifdef DEBUG
-			if (debug_level>=2)
-				printk(KERN_DEBUG hfc_DRIVER_PREFIX
-					"card %d: "
-					"port %d: "
-					"chan %s: "
-					"empty frame received\n",
-					card->id,
-					port->id,
-					fdchan->name);
-#endif
+			hfc_debug_schan(2, chan,
+				"empty frame received\n");
 
 			hfc_fifo_drop_frame(chan);
 
@@ -1106,14 +1107,8 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 			dev_alloc_skb(frame_size - 3);
 
 		if (!skb) {
-			printk(KERN_ERR hfc_DRIVER_PREFIX
-				"card %d: "
-				"port %d: "
-				"chan %s: "
-				"cannot allocate skb: frame dropped\n",
-				card->id,
-				port->id,
-				fdchan->name);
+			hfc_msg_schan(KERN_ERR, chan,
+				"cannot allocate skb: frame dropped\n");
 
 			hfc_fifo_drop_frame(chan);
 
@@ -1150,19 +1145,94 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 	}
 
 	if (!antiloop) 
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"port %d: "
-			"chan %s: "
-			"Infinite loop detected\n",
-			card->id,
-			port->id,
-			chan->chan->name);
+		hfc_msg_schan(KERN_CRIT, chan, "Infinite loop detected\n");
 }
 
 /******************************************
  * Module initialization and cleanup
  ******************************************/
+
+#define VISDN_SET_BEARER_PPP  SIOCDEVPRIVATE
+
+static int hfc_do_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
+{
+	struct hfc_chan_duplex *chan = netdev->priv;
+	struct hfc_card *card = chan->port->card;
+	struct hfc_chan_duplex *b1_chan = &chan->port->chans[B1];
+
+hfc_msg_chan(KERN_INFO, chan, "Netdev IOCTL\n");
+
+	unsigned long flags;
+
+	switch (cmd) {
+	case VISDN_SET_BEARER_PPP:
+///////////////////////7
+////////////////////////////777
+		spin_lock_irqsave(&card->lock, flags);
+
+		hfc_select_port(card, b1_chan->port->id);
+
+		b1_chan->port->regs.st_ctrl_2 |= 
+			hfc_A_ST_CTRL2_V_B1_RX_EN;
+		hfc_outb(card, hfc_A_ST_CTRL2,
+			b1_chan->port->regs.st_ctrl_2);
+
+		b1_chan->port->regs.st_ctrl_0 |=
+			hfc_A_ST_CTRL0_V_B1_EN;
+		hfc_outb(card, hfc_A_ST_CTRL0,
+			b1_chan->port->regs.st_ctrl_0);
+
+		// RX
+		hfc_fifo_select(&b1_chan->rx);
+
+		hfc_fifo_reset(card);
+
+		hfc_outb(card, hfc_A_CON_HDLC,
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
+			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+
+		hfc_outb(card, hfc_A_IRQ_MSK,
+			hfc_A_IRQ_MSK_V_IRQ);
+
+		// TX
+		hfc_fifo_select(&b1_chan->tx);
+
+		hfc_fifo_reset(card);
+
+		hfc_outb(card, hfc_A_CON_HDLC,
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
+			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
+
+		hfc_outb(card, hfc_A_IRQ_MSK,
+			hfc_A_IRQ_MSK_V_IRQ);
+
+		spin_unlock_irqrestore(&card->lock, flags);
+
+////////////////////////////
+		b1_chan->ppp_chan.private = b1_chan;
+		b1_chan->ppp_chan.ops = &hfc_ppp_ops;
+		b1_chan->ppp_chan.mtu = 1000; //FIXME
+		b1_chan->ppp_chan.hdrlen = 2;
+
+		ppp_register_channel(&b1_chan->ppp_chan);
+////////////////////////
+
+hfc_msg_chan(KERN_INFO, chan,
+	"PPPPPPPPPPPP: int %d unit %d\n",
+	ppp_channel_index(&b1_chan->ppp_chan),
+	ppp_unit_number(&b1_chan->ppp_chan));
+
+WARN_ON(1);
+
+	break;
+	default:
+		return -ENOIOCTLCMD;
+	}
+
+	return 0;
+}
 
 static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 {
@@ -1172,6 +1242,7 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 	chan->netdev->hard_start_xmit = hfc_xmit_frame;
 	chan->netdev->get_stats = hfc_get_stats;
 	chan->netdev->set_multicast_list = hfc_set_multicast_list;
+	chan->netdev->do_ioctl = hfc_do_ioctl;
 	chan->netdev->features = NETIF_F_NO_CSUM;
 
 	memset(chan->netdev->dev_addr, 0x00, sizeof(chan->netdev->dev_addr));
@@ -1179,17 +1250,35 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 	SET_MODULE_OWNER(chan->netdev);
 }
 
+#define to_net_dev(class) container_of(class, struct net_device, class_dev)
+static inline int dev_isalive(const struct net_device *dev)
+{
+	return dev->reg_state == NETREG_REGISTERED;
+}
+
+static ssize_t show_port_id(struct class_device *dev, char *buf)
+{
+	struct net_device *netdev = to_net_dev(dev);
+	struct hfc_chan_duplex *chan = netdev->priv;
+
+	if (dev_isalive(netdev))
+	        return sprintf(buf, "%d\n", chan->port->id);
+
+	return -EINVAL;
+}
+
+static CLASS_DEVICE_ATTR(port_id, S_IRUGO, show_port_id, NULL);
+
 static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	const struct pci_device_id *ent)
 {
 	static int card_ids_counter = 0;
-	int err;
+	int err = 0;
 
 	struct hfc_card *card = NULL;
 	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
 	if (!card) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"unable to kmalloc!\n");
+		hfc_msg(KERN_CRIT, "unable to kmalloc!\n");
 		err = -ENOMEM;
 		goto err_alloc_hfccard;
 	}
@@ -1213,49 +1302,37 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	pci_write_config_word(pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
 
 	if((err = pci_request_regions(pci_dev, hfc_DRIVER_NAME))) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"cannot request I/O memory region\n",
-			card->id);
+		hfc_msg_card(KERN_CRIT, card,
+			"cannot request I/O memory region\n");
 		goto err_pci_request_regions;
 	}
 
 	pci_set_master(pci_dev);
 
 	if (!pci_dev->irq) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"no irq!\n",
-			card->id);
+		hfc_msg_card(KERN_CRIT, card,
+			"PCI device does not have an assigned IRQ!\n");
 		err = -ENODEV;
 		goto err_noirq;
 	}
 
 	card->io_bus_mem = pci_resource_start(pci_dev,1);
 	if (!card->io_bus_mem) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"no iomem!\n",
-			card->id);
+		hfc_msg_card(KERN_CRIT, card,
+			"PCI device does not have an assigned IO memory area!\n");
 		err = -ENODEV;
 		goto err_noiobase;
 	}
 
 	if(!(card->io_mem = ioremap(card->io_bus_mem, hfc_PCI_MEM_SIZE))) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"cannot ioremap I/O memory\n",
-			card->id);
+		hfc_msg_card(KERN_CRIT, card, "cannot ioremap I/O memory\n");
 		err = -ENODEV;
 		goto err_ioremap;
 	}
 
 	if ((err = request_irq(card->pcidev->irq, &hfc_interrupt,
 		SA_SHIRQ, hfc_DRIVER_NAME, card))) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"unable to register irq\n",
-			card->id);
+		hfc_msg_card(KERN_CRIT, card, "unable to register irq\n");
 		goto err_request_irq;
 	}
 
@@ -1301,7 +1378,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 		chan->netdev = alloc_netdev(0, "isdn%dd", setup_lapd);
 		if(!chan->netdev) {
-			printk(KERN_ERR hfc_DRIVER_PREFIX
+			hfc_msg_card(KERN_CRIT, card,
 				"net_device alloc failed, abort.\n");
 			err = -ENOMEM;
 			goto err_alloc_netdev_d;
@@ -1309,16 +1386,24 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 		hfc_setup_lapd(chan);
 
+		SET_NETDEV_DEV(chan->netdev, &pci_dev->dev);
+
 		chan->netdev->irq = card->pcidev->irq;
 		chan->netdev->base_addr = card->io_bus_mem;
 
-		if((err = register_netdev(chan->netdev))) {
-			printk(KERN_INFO hfc_DRIVER_PREFIX
-				"card %d: "
+		err = register_netdev(chan->netdev);
+		if(err) {
+			hfc_msg_card(KERN_CRIT, card,
 				"Cannot register net device %s, aborting.\n",
-				card->id,
 				chan->netdev->name);
 			goto err_register_netdev_d;
+		}
+
+		err = class_device_create_file(&chan->netdev->class_dev,
+			&class_device_attr_port_id);
+		if (err) {
+			hfc_msg_card(KERN_WARNING, card,
+				"Cannot create sysfs file 'port_id'.\n");
 		}
 
 //---------------------------------- B1
@@ -1439,9 +1524,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	hfc_reset_card(card);
 
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		"card %d configured at mem %#lx (0x%p) IRQ %u\n",
-		card->id,
+	hfc_msg_card(KERN_INFO, card,
+		"configured at mem %#lx (0x%p) IRQ %u\n",
 		card->io_bus_mem,
 		card->io_mem,
 		card->pcidev->irq); 
@@ -1481,10 +1565,8 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 		unregister_netdev(card->ports[i].chans[D].netdev);
 	}
 
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		"card %d: "
+	hfc_msg_card(KERN_INFO, card,
 		"shutting down card at %p.\n",
-		card->id,
 		card->io_mem);
 
 	unsigned long flags;
@@ -1526,8 +1608,7 @@ static int __init hfc_init_module(void)
 {
 	int ret;
 
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		hfc_DRIVER_DESCR " loading\n");
+	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " loading\n");
 
 	hfc_proc_hfc_dir = proc_mkdir(hfc_DRIVER_NAME, proc_root_driver);
 
@@ -1543,8 +1624,7 @@ static void __exit hfc_module_exit(void)
 
 	remove_proc_entry(hfc_DRIVER_NAME, proc_root_driver);
 
-	printk(KERN_INFO hfc_DRIVER_PREFIX
-		hfc_DRIVER_DESCR " unloaded\n");
+	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " unloaded\n");
 }
 
 module_exit(hfc_module_exit);
@@ -1573,7 +1653,6 @@ MODULE_PARM(debug_level,"i");
 
 #endif // LINUX26
 
-MODULE_PARM_DESC(nt_mode, "Comma-separated list of card IDs to configure in NT mode");
 MODULE_PARM_DESC(force_l1_up, "Don't allow L1 to go down");
 
 #ifdef DEBUG

@@ -19,7 +19,6 @@ when Layer 2 is idle for a specified timeout
 
 There is no MAC address and network address, 
 
-Il mapping corretto sarebbe di creare una socket per ogni DLC (Data Link Connection).
 Un DLC è identificato da:
 
 (Interfaccia, TEI, SAPI)

@@ -308,6 +308,7 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 			if (!new_dlc) return 0;
 
 			new_dlc->sk = newsk;
+			// sock_hold(new_dlc->sk);
 
 			struct lapd_opt *listening_lo = lapd_sk(listening_sk);
 			hlist_add_head(&new_dlc->node, &listening_lo->new_dlcs);
@@ -317,6 +318,8 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 			if (!sock_flag(listening_sk, SOCK_DEAD))
 				listening_sk->sk_data_ready(
 					listening_sk, skb->len);
+
+			// sock_put(newsk);
 		}
 		}
 	} else {

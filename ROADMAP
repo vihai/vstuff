@@ -1,0 +1,97 @@
+
+FEATURES/NOTES
+
+- This works on 2.6 kernel only
+  (uses sysfs, and other 2.6 specific stuff; it may be backported quite easilly
+   but it's not in my plans.)
+
+- The socket MUST be bound to an interface to function properly.
+
+- The socket layer supports multiple sockets on TE interfaces. A TEI is assigned
+  to each socket for complete transparency between different q.931 speakers.
+
+TODO
+
+- Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
+  safe, since ISDN interfaces will never run AppleTalk, however it is an ugly
+  hack and should be fixed.
+
+- Add AF_LAPD to linux/include/linux/socket.h
+- Add PF_LAPD to linux/include/linux/socket.h
+- Add SOL_LAPD to linux/inclode/linx/socket.h ????
+
+- Add ARPHRD_LAPD to linux/include/linux/if_arp.h
+- Add ETH_P_LAPD to linux/include/linux/if_ether.h
+
+- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
+  - A specific flag would be better.
+
+  - Why putting the role in the device driver?
+
+  With PRI interfaces the device driver can ignore it's role in the network since
+  g.703 is symmetrical.
+
+  On the other hand, the physical layer in BRI interfaces works differently when
+  acting as the network or the user and the chipsets must be configured accordingly.
+  The direct consequence is that the driver must know his role.
+
+  My choice has been to move the role as an interface parameter, the sockets
+  inherits the role from the interface on which they are bound.
+
+- SuSE 9.2 initscripts:
+	Interfaces are named isdn0d and renamed visdnX to not clash with I4L
+	we need to coordinate with SuSE to find a good naming
+
+	Add /etc/udev/rules.d/60-isdn.rules:
+	KERNEL="isdn*d", BUS="pci", ID="0000:00:09.0", SYSFS{port_id}="0", NAME="visdn1.0"
+	KERNEL="isdn*d", BUS="pci", ID="0000:00:09.0", SYSFS{port_id}="1", NAME="visdn1.1"
+	KERNEL="isdn*d", BUS="pci", ID="0000:00:09.0", SYSFS{port_id}="2", NAME="visdn1.2"
+	KERNEL="isdn*d", BUS="pci", ID="0000:00:09.0", SYSFS{port_id}="3", NAME="visdn1.3"
+	.....
+
+	/etc/dev.d/net/50-ifup.dev
+	ip link set up + ip link set down break balls, possible fix:
+
+--- 50-ifup.dev	2005-02-16 17:38:02.474165409 +0100
++++ /etc/dev.d/net/50-ifup.dev	2005-02-16 17:33:48.348231500 +0100
+@@ -33,6 +33,11 @@
+                 ;;
+             # interfaces that are registered then brought up
+ 
++	    visdn*)
++                debug_mesg invoke ifup $INTERFACE -o hotplug
++                exec /sbin/ifup $INTERFACE -o hotplug
++		;;
++
+             *)
+                 # There are some NICs which set their MAC address when loading
+                 # their firmware and unfortunately load the firmware not until
+	
+ 
+- Fix all copyright notices and file headers
+
+- Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
+
+- Use Automake/Autoconf for chan_isdn
+
+- Implement SOCK_RAW sockets (?)
+
+- Use SOCK_SEQPACKET instead of SOCK_DGRAM? (we must remain in TCP_CONNECTED state)
+
+FIX debugging
+Add interface to each line
+
+Check what happens when 64 sockets are open (every dynamic TEIs)
+
+Notes:
+In NT mode there is only one TEI management entity per interface
+
+In TE mode there can be at most one TEI management per socket
+
+
+HISTORY:
+
+
+18/2/2005 2:05
+First call made throught the public network... no voice however :)
+

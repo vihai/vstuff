@@ -83,20 +83,11 @@ static inline u8 hfc_fifo_used_frames(struct hfc_chan_simplex *chan)
 
 static inline u8 hfc_fifo_free_frames(struct hfc_chan_simplex *chan)
 {
-	return (chan->f2 - chan->f1 + chan->f_num) % chan->f_num;
-}
-
-// This function and all subsequent accesses to the selected FIFO must be done
-// in interrupt handler or inside a spin_lock_irq* protected section
-static inline void hfc_fifo_select(struct hfc_card *card, u8 id)
-{
-//	WARN_ON(!irqs_disabled() || !in_interrupt());
-
-	hfc_outb(card, hfc_R_FIFO,
-		hfc_R_FIFO_V_FIFO_ID(id));
-//		hfc_R_FIFO_V_REV);
-
-	hfc_wait_busy(card);
+	u8 free_frames = chan->f2 - chan->f1;
+	if (free_frames > 0)
+		return free_frames;
+	else
+		return free_frames + chan->f_num;
 }
 
 static inline void hfc_fifo_reset(struct hfc_card *card)
@@ -121,6 +112,19 @@ static inline void hfc_fifo_refresh_fz_cache(struct hfc_chan_simplex *chan)
 	chan->z1z2 = hfc_inl(card, hfc_A_Z12);
 }
 
+// This function and all subsequent accesses to the selected FIFO must be done
+// in interrupt handler or inside a spin_lock_irq* protected section
+static inline void hfc_fifo_select(struct hfc_chan_simplex *chan)
+{
+//	WARN_ON(!irqs_disabled() || !in_interrupt());
+
+	hfc_outb(chan->chan->port->card, hfc_R_FIFO,
+		hfc_R_FIFO_V_FIFO_ID(chan->fifo_id));
+//		hfc_R_FIFO_V_REV);
+
+	hfc_wait_busy(chan->chan->port->card);
+	hfc_fifo_refresh_fz_cache(chan);
+}
 
 void hfc_fifo_clear_rx(struct hfc_chan_simplex *chan);
 void hfc_fifo_clear_tx(struct hfc_chan_simplex *chan);
