@@ -47,8 +47,6 @@ static inline void lapd_utme_hold(
 static inline void lapd_utme_put(
 	struct lapd_utme *tme)
 {
-	printk(KERN_DEBUG "lapd: utme_put\n");
-
 	if (atomic_dec_and_test(&tme->refcnt)) {
 		if (tme->destroy) tme->destroy(tme);
 

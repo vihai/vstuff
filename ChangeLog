@@ -2,6 +2,26 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-03-18 13:46:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-15
+
+    Summary:
+      Lapd working quite nicely
+    Revision:
+      isdn--devel--0.1--patch-15
+
+    
+    
+
+    modified files:
+     ChangeLog ROADMAP chan_isdn/chan_isdn.c fake_isdn/fake_isdn.c
+     lapd/Makefile lapd/af_lapd.c lapd/lapd.h lapd/lapd_dev.c
+     lapd/lapd_in.c lapd/lapd_out.c lapd/lapd_out.h
+     lapd/lapd_proto.h lapd/multiframe.c lapd/multiframe.h
+     lapd/tei_mgmt.c lapd/tei_mgmt.h lapd/tei_mgmt_nt.c
+     lapd/tei_mgmt_te.c lapd/tei_mgmt_te.h libq931/src/q931.c
+     tests/test.c
+
+
 2005-03-01 02:14:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-14
 
     Summary:

@@ -12,9 +12,15 @@ inline int lapd_send_frame(struct sk_buff *skb)
 {
 	int err;
 
+	BUG_ON(!skb->dev);
+
 	if((err = dev_queue_xmit(skb)) < 0) {
-		printk(KERN_ERR "lapd: dev_queue_xmit: %d\n", err);
+
+		lapd_printk_dev(KERN_ERR, skb->dev,
+			"dev_queue_xmit: %d\n", err);
+
 		kfree_skb(skb);
+
 		return err;
 	}
 
@@ -39,18 +45,22 @@ int lapd_prepare_uframe(struct sock *sk,
 
 	hdr->addr.sapi = lo->sapi;
 
-	enum lapd_cr cr = COMMAND;
+	enum lapd_cr cr = LAPD_COMMAND;
 	switch (function) {
-		case SABME: cr = COMMAND; break;
-		case DM:    cr = RESPONSE; break;
-		case UI:    cr = COMMAND; break;
-		case DISC:  cr = COMMAND; break;
-		case UA:    cr = RESPONSE; break;
-		case FRMR:  cr = RESPONSE; break;
-		case XID: printk(KERN_ERR "lapd: unsupported XID\n"); break;
+		case LAPD_UFRAME_FUNC_SABME: cr = LAPD_COMMAND; break;
+		case LAPD_UFRAME_FUNC_DM:    cr = LAPD_RESPONSE; break;
+		case LAPD_UFRAME_FUNC_UI:    cr = LAPD_COMMAND; break;
+		case LAPD_UFRAME_FUNC_DISC:  cr = LAPD_COMMAND; break;
+		case LAPD_UFRAME_FUNC_UA:    cr = LAPD_RESPONSE; break;
+		case LAPD_UFRAME_FUNC_FRMR:  cr = LAPD_RESPONSE; break;
+		case LAPD_UFRAME_FUNC_XID:
+			lapd_printk_sk(KERN_ERR, sk,
+				"XID unsupported\n");
+		break;
+		case LAPD_UFRAME_FUNC_INVALID: BUG(); break;
 	}
 
-	hdr->addr.c_r = ((cr == RESPONSE) == !lo->nt_mode)?1:0;
+	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lo->nt_mode)?1:0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 	hdr->addr.tei = lapd_get_tei(lo);
@@ -68,20 +78,26 @@ int lapd_send_uframe(struct sock *sk,
 	int err;
 
 	struct sk_buff *skb;
-		skb = sock_alloc_send_skb(sk,
-			sizeof(struct lapd_hdr_e),
-			0, &err);
-// FIXME		(msg->msg_flags & MSG_DONTWAIT), &err);
-	if (!skb) return err;
+	skb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
+	if (!skb) {
+		err = -ENOMEM;
+		goto err_alloc_skb;
+	}
 
 	err = lapd_prepare_uframe(sk, skb, function, p_f);
 	if (err < 0)
-		return err;
+		goto err_prepare_uframe;
 
 	if (data && datalen)
 		memcpy(skb_put(skb, datalen), data, datalen);
 
 	return lapd_send_frame(skb);
+
+err_prepare_uframe:
+	kfree_skb(skb);
+err_alloc_skb:
+
+	return err;
 }
 
 int lapd_send_completed_uframe(struct sk_buff *skb)

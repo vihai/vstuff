@@ -12,13 +12,10 @@
 
 static void lapd_device_up(struct net_device *dev)
 {
-	printk(KERN_DEBUG "lapd: device %s up\n", dev->name);
-
 	struct lapd_device *lapd_device;
 	lapd_device = kmalloc(sizeof(*lapd_device), GFP_ATOMIC);
-	if (!lapd_device) {
+	if (!lapd_device)
 		return;
-	}
 
 	memset(lapd_device, 0x00, sizeof(*lapd_device));
 
@@ -39,7 +36,7 @@ static void lapd_device_up(struct net_device *dev)
 
 	// q.931 SAP
 
-	lapd_device->q931.k = 1;
+	lapd_device->q931.k = 7;
 	lapd_device->q931.N200 = 3;
 	lapd_device->q931.N201 = 260;
 	lapd_device->q931.T200 = 1 * HZ;
@@ -47,7 +44,7 @@ static void lapd_device_up(struct net_device *dev)
 
 	// x.25 SAP
 
-	lapd_device->x25.k = 1;
+	lapd_device->x25.k = 7;
 	lapd_device->x25.N200 = 3;
 	lapd_device->x25.N201 = 260;
 	lapd_device->x25.T200 = 1 * HZ;
@@ -64,7 +61,7 @@ static void lapd_kill_by_device(struct net_device *dev)
 		struct lapd_opt *lo = lapd_sk(sk);
 
 		if (lo->dev == dev) {
-			sk->sk_state = TCP_CLOSE;
+			sk->sk_state = TCP_CLOSING;
 			sk->sk_err = ENODEV;
 
 			if (!sock_flag(sk, SOCK_DEAD)) {
@@ -80,8 +77,6 @@ static void lapd_device_down(struct net_device *dev)
 {
 	struct lapd_device *lapd_device =
 		lapd_dev(dev);
-
-	printk(KERN_DEBUG "lapd: device %s down\n", dev->name);
 
 	lapd_kill_by_device(dev);
 

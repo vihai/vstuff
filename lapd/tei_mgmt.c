@@ -29,7 +29,7 @@ inline int lapd_tm_send(
 	hdr->addr.ea2 = 1;
 	hdr->addr.tei = LAPD_BROADCAST_TEI;
 
-	hdr->control = lapd_uframe_make_control(UI, 0/* p_f*/);
+	hdr->control = lapd_uframe_make_control(LAPD_UFRAME_FUNC_UI, 0/* p_f*/);
 
 	struct lapd_tei_mgmt_body *tm =
 		 (struct lapd_tei_mgmt_body *)skb_put(skb,

@@ -16,7 +16,7 @@ clean:
 	$(MAKE) -C $(KSOURCE) clean SUBDIRS=`pwd`
 
 debug:
-	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd` EXTRA_CFLAGS="$(EXTRA_CFLAGS) -DDEBUG" CONFIG_DEBUG_INFO=1
+	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd` EXTRA_CFLAGS="$(EXTRA_CFLAGS) -DDEBUG" CONFIG_DEBUG_INFO=1 CONFIG_DEBUG_SPINLOCK=1
 
 install:
 	echo "Install not yet implemented!!!"

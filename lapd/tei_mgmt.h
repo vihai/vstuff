@@ -19,6 +19,13 @@
 
 #ifdef __KERNEL__
 
+#define lapd_printk_tme(lvl, dev, format, arg...)	\
+	printk(lvl "lapd: tei_mgmt: "			\
+		"%s "					\
+		format,					\
+		(dev)->name,				\
+		## arg)
+
 typedef u8 lapd_tei_t;
 
 enum lapd_tei_status

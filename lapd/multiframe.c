@@ -3,6 +3,7 @@
 */
 
 #include <linux/skbuff.h>
+#include <linux/tcp.h>
 
 #include "lapd.h"
 #include "lapd_in.h"
@@ -13,14 +14,14 @@
 
 void lapd_dump_queue(struct sock *sk)
 {
-	printk(KERN_DEBUG "lapd: vvvvvvvvvvvvvvvvvvvvvvv\n");
+	lapd_debug_multiframe(sk, "vvvvvvvvvvvvvvvvvvvvvvv\n");
 
 	struct sk_buff *skb;
 	for (skb = sk->sk_write_queue.next;
 	     (skb != (struct sk_buff *)&sk->sk_write_queue);
 	     skb = skb->next) {
 
-		printk(KERN_DEBUG "lapd: ");
+		lapd_debug_multiframe(sk, "");
 
 		if (sk->sk_send_head)
 		printk("HEAD ");
@@ -29,10 +30,10 @@ void lapd_dump_queue(struct sock *sk)
 		printk("V(S) = %d\n", hdr->i.n_s);
 	}
 
-	printk(KERN_DEBUG "lapd: ^^^^^^^^^^^^^^^^^^^^^^^\n");
+	lapd_debug_multiframe(sk, "^^^^^^^^^^^^^^^^^^^^^^^\n");
 }
 
-void lapd_receive_ack(struct sock *sk, int n_r)
+void lapd_ack_frames(struct sock *sk, int n_r)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
@@ -41,27 +42,46 @@ void lapd_receive_ack(struct sock *sk, int n_r)
 		return;
 
 	// The sender is acking some frame
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
+	lapd_debug_multiframe(sk,
 		"received ack for frames from %d to %d-1\n",
-		lo->dev->name,
 		lo->v_a,
 		n_r);
 
 //	lapd_dump_queue(sk);
 
 	struct sk_buff *skb;
-	sk_stream_for_retrans_queue(skb, sk) {
+	for (skb = (sk)->sk_write_queue.next;
+	    (skb != (struct sk_buff *)&(sk)->sk_write_queue);) {
 		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
 
-		__skb_unlink(skb, skb->list);
-		sk_stream_free_skb(sk, skb);
+		if (hdr->i.n_s == n_r) break;
 
-		printk(KERN_INFO "lapd: acking frame %d\n",
+		lapd_debug_multiframe(sk,
+			"peer acked frame %d\n",
 			hdr->i.n_s);
+
+		struct sk_buff *old_skb = skb;
+
+		skb = skb->next;
+
+		__skb_unlink(old_skb, old_skb->list);
+		__kfree_skb(old_skb);
 	}
 
 //	lapd_dump_queue(sk);
+	if (n_r == lo->v_s) {
+		lapd_debug_multiframe(sk,
+			"All frames acked, stopping T200\n");
+
+		lapd_stop_t200(sk);
+		lapd_start_t203(sk);
+	} else {
+		lapd_debug_multiframe(sk,
+			"Not all outstanding frames acked, restarting T200\n");
+
+		lapd_start_t200(sk);
+	}
+
 
 	lo->v_a = n_r;
 }
@@ -70,14 +90,12 @@ void lapd_multiframe_established(struct sock *sk)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"Multiple frame mode established\n",
-		lo->dev->name);
+	lapd_debug_multiframe(sk,
+		"Multiple frame mode established\n");
 
 	// If we're called at the arrival of
 	// SABME, T200 is already stopped anyway
-	sk_stop_timer(sk, &lo->T200_timer);
+	lapd_stop_t200(sk);
 
 	lo->status = LAPD_DLS_LINK_CONNECTION_ESTABLISHED;
 
@@ -87,13 +105,11 @@ void lapd_multiframe_established(struct sock *sk)
 
 	lo->peer_busy = FALSE;
 	lo->me_busy = FALSE;
-	lo->peer_waiting_for_ack = FALSE;
 	lo->rejection_exception = FALSE;
 	lo->in_timer_recovery = FALSE;
 
 	// Start idle timer
-	sk_reset_timer(sk, &lo->T203_timer,
-		jiffies + lo->sap->T203);
+	lapd_start_t203(sk);
 
 	// Notify the socket status changed
 	if (!sock_flag(sk, SOCK_DEAD)) {
@@ -105,23 +121,21 @@ void lapd_multiframe_released(struct sock *sk)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"Multiple frame mode released\n",
-		lo->dev->name);
+	lapd_debug_multiframe(sk,
+		"Multiple frame mode released\n");
 
 	skb_queue_purge(&sk->sk_write_queue);
 
 	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
 
-	sk_stop_timer(sk, &lo->T200_timer);
+	lapd_stop_t200(sk);
 
-	if (sock_flag(sk, SOCK_DEAD)) {
-		// We're waiting for disconnection, unhash and let socket die
-		sock_hold(sk);
-		lapd_unhash(sk);
-		sock_put(sk);
-	} else {
+	if (sk->sk_state == TCP_CLOSING) {
+		// Defers unhash
+		sk_reset_timer(sk, &sk->sk_timer, jiffies + HZ);
+	}
+
+	if (!sock_flag(sk, SOCK_DEAD)) {
 		// Notify the socket status changed
 		sk->sk_state_change(sk);
 	}
@@ -131,13 +145,10 @@ void lapd_start_multiframe_establishment(struct sock *sk)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"Starting multiframe establishment\n",
-		lo->dev->name);
+	lapd_debug_multiframe(sk,
+		"Starting multiframe establishment\n");
 
-	sk_reset_timer(sk, &lo->T200_timer,
-		jiffies + lo->sap->T200);
+	lapd_start_t200(sk);
 	lo->N200_cnt = 0;
 
 	// Other checks
@@ -146,17 +157,15 @@ void lapd_start_multiframe_establishment(struct sock *sk)
 
 	lo->status = LAPD_DLS_AWAITING_ESTABLISH;
 
-	lapd_send_uframe(sk, SABME, 0, NULL, 0);
+	lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
 }
 
 void lapd_start_multiframe_release(struct sock *sk)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"Starting multiframe release\n",
-		lo->dev->name);
+	lapd_debug_multiframe(sk,
+		"Starting multiframe release\n");
 
 	skb_queue_purge(&sk->sk_write_queue);
 
@@ -164,46 +173,9 @@ void lapd_start_multiframe_release(struct sock *sk)
 
 	lo->N200_cnt = 0;
 
-	sk_reset_timer(sk, &lo->T200_timer,
-		jiffies + lo->sap->T200);
+	lapd_start_t200(sk);
 
-	lapd_send_uframe(sk, DISC, 0, NULL, 0);
-}
-
-void lapd_send_enquiry_response(struct sock *sk)
-{
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	lo->peer_waiting_for_ack = FALSE;
-
-	if (lo->me_busy) {
-		lapd_send_sframe(sk, RESPONSE, RNR, 1);
-	} else {
-		lapd_send_sframe(sk, RESPONSE, RR, 1);
-	}
-}
-
-void lapd_transmit_enquiry(struct sock *sk)
-{
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	lo->peer_waiting_for_ack = TRUE;
-
-	sk_reset_timer(sk, &lo->T200_timer,
-		jiffies + lo->sap->T200);
-
-	if (lo->me_busy) {
-		lapd_send_sframe(sk, COMMAND, RNR, 1);
-	} else {
-		lapd_send_sframe(sk, COMMAND, RR, 1);
-	}
-}
-
-void lapd_start_invalid_nr_recovery(struct sock *sk)
-{
-	// Signal error to user TODO
-
-	lapd_start_multiframe_establishment(sk);
+	lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DISC, 1, NULL, 0);
 }
 
 void lapd_T200_timer(unsigned long data)
@@ -211,10 +183,9 @@ void lapd_T200_timer(unsigned long data)
 	struct sock *sk = (struct sock *)data;
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"T200\n",
-		lo->dev->name);
+	bh_lock_sock(sk);
+
+	lapd_debug_multiframe(sk, "T200\n");
 
 	if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
 		if (lo->N200_cnt > lo->sap->N200) {
@@ -227,7 +198,7 @@ void lapd_T200_timer(unsigned long data)
 
 		lo->N200_cnt++;
 
-		lapd_send_uframe(sk, SABME, 0, NULL, 0);
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
 		if (lo->N200_cnt > lo->sap->N200) {
@@ -238,7 +209,7 @@ void lapd_T200_timer(unsigned long data)
 
 		lo->N200_cnt++;
 
-		lapd_send_uframe(sk, DISC, 0, NULL, 0);
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DISC, 1, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		if (!lo->in_timer_recovery) {
@@ -246,27 +217,53 @@ void lapd_T200_timer(unsigned long data)
 
 			lo->N200_cnt = 0;
 		} else {
+			if (lo->N200_cnt == lo->sap->N200) {
+				// MDL-ERR-IND(I)
+				lapd_start_multiframe_establishment(sk);
+				goto max_count;
+			}
+
 			lo->N200_cnt++;
 		}
 
-		// Here I'd prefer to implement point a) 3 of 5.6.7
+		lapd_start_t200(sk);
 
-		lapd_transmit_enquiry(sk);
+		if (lo->peer_busy) {
+			if (lo->me_busy) {
+				lapd_send_sframe(sk,
+					LAPD_COMMAND,
+					LAPD_SFRAME_FUNC_RNR, 1);
+			} else {
+				lapd_send_sframe(sk,
+					LAPD_COMMAND,
+					LAPD_SFRAME_FUNC_RR, 1);
+			}
+		} else {
+			// TODO: Retransmit last I-frame with N(S)=V(S)-1
+			if (lo->me_busy) {
+				lapd_send_sframe(sk,
+					LAPD_COMMAND,
+					LAPD_SFRAME_FUNC_RNR, 1);
+			} else {
+				lapd_send_sframe(sk,
+					LAPD_COMMAND,
+					LAPD_SFRAME_FUNC_RR, 1);
+			}
+		}
 	} else {
-		printk(KERN_ERR "lapd: "
-			"%s: "
+		lapd_printk_multiframe(KERN_ERR, sk,
 			"Unexpected T200 in state %d\n",
-			lo->dev->name,
 			lo->status);
 
 		goto err_unexpected_t200;
 	}
 
-	sk_reset_timer(sk, &lo->T200_timer,
-		jiffies + lo->sap->T200);
+	lapd_start_t200(sk);
 
 err_unexpected_t200:
 max_count:
+
+	bh_unlock_sock(sk);
 
 	sock_put(sk);
 }
@@ -312,7 +309,8 @@ int lapd_multiframe_wait_for_establishment(struct sock *sk)
 		}
 
 		if (!timeout) {
-			printk(KERN_ERR "lapd: Connect timed out?!?\n");
+			lapd_printk_sk(KERN_ERR, sk,
+				"Connect timed out?!?\n");
 
 			err = -EAGAIN;
 			break;
@@ -362,7 +360,8 @@ int lapd_multiframe_wait_for_release(struct sock *sk)
 		}
 
 		if (!timeout) {
-			printk(KERN_ERR "lapd: Connect timed out?!?\n");
+			lapd_printk_sk(KERN_ERR, sk,
+				"Connect timed out?!?\n");
 
 			err = -EAGAIN;
 			break;
@@ -389,7 +388,6 @@ int lapd_prepare_iframe(struct sock *sk,
 	}
 
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
-	skb->dev = lo->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 
 	struct lapd_hdr_e *hdr =
@@ -408,62 +406,75 @@ int lapd_prepare_iframe(struct sock *sk,
 	return 0;
 }
 
-static void lapd_iframe_queue(struct sock *sk, struct sk_buff *skb)
+static void lapd_set_retransmission(struct sock *sk)
 {
-	struct lapd_opt *lo = lapd_sk(sk);
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
-
-	hdr->i.n_s = lo->v_s;
-	hdr->i.n_r = lo->v_r;
-
-	lo->v_s = (lo->v_s + 1) % 128;
-
-	skb_queue_tail(&sk->sk_write_queue, skb);
-	sk_charge_skb(sk, skb);
-
-	/* Queue it, remembering where we must start sending. */
-	if (!sk->sk_send_head)
-		sk->sk_send_head = skb;
-
+	if (!skb_queue_empty(&sk->sk_write_queue)) {
+		sk->sk_send_head = sk->sk_write_queue.next;
+	}
 }
 
-void lapd_flush_queue(struct sock *sk)
+static void lapd_run_output_queue(struct sock *sk)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
+	int n_out_frames = 0;
+
+	if (lo->in_timer_recovery)
+		return;
 
 //	lapd_dump_queue(sk);
 
 	struct sk_buff *skb;
-	while ((skb = sk->sk_send_head)) {
+	for (skb = sk->sk_send_head;
+	     skb &&
+	       skb != (struct sk_buff *)&sk->sk_write_queue &&
+	       n_out_frames < lo->sap->k;
+	     skb = skb->next, sk->sk_send_head = skb, n_out_frames++) {
 
 		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
-		printk(KERN_DEBUG "lapd: "
-			"%s: "
-			"transmitting frame %d, send_head=%p\n",
-			lo->dev->name,
-			hdr->i.n_s, sk->sk_send_head);
 
-		// Update send_head before transmitting or else we may receive
-		// the ack immediately, so, being unable to actually ack frames
-		// The fake driver always triggered this
-		sk->sk_send_head = skb->next;
+		hdr->i.n_s = lo->v_s;
+		hdr->i.n_r = lo->v_r;
 
-		if (sk->sk_send_head == (struct sk_buff *)&sk->sk_write_queue)
-		        sk->sk_send_head = NULL;
+/* Domani, creare una sola funzione che faccia il flush della coda
 
-		sk_reset_timer(sk, &lo->T200_timer,
-			jiffies + lo->sap->T200);
+lapd_queue aggiunge in fondo e chiama lapd_flush se può
+lapd_flush parte da send_head e butta fuori max k frames
+lapd_retransmit imposta send_head e chiama lapd_flush
+*/
 
-		dev_queue_xmit(skb_clone(skb, GFP_ATOMIC));
+		lapd_debug_multiframe(sk,
+			"Transmitting i-frame N(S)=%d\n",
+			hdr->i.n_s);
+
+		lapd_start_t200(sk);
+
+		dev_queue_xmit(skb_copy(skb, GFP_ATOMIC));
+
+		lo->v_s = (lo->v_s + 1) % 128;
 	}
 	
+	if (sk->sk_send_head ==
+	    (struct sk_buff *)&sk->sk_write_queue)
+		sk->sk_send_head = NULL;
+
 //	lapd_dump_queue(sk);
 }
 
-int lapd_send_completed_iframe(struct sk_buff *skb)
+int lapd_queue_completed_iframe(struct sock *sk, struct sk_buff *skb)
 {
-	lapd_iframe_queue(skb->sk, skb);
-	lapd_flush_queue(skb->sk);
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	lapd_debug_multiframe(sk,
+		"Queueing i-frame\n");
+
+	skb->dev = lo->dev;
+
+	skb_queue_tail(&sk->sk_write_queue, skb);
+
+	if (!sk->sk_send_head)
+		sk->sk_send_head = skb;
+
+	lapd_run_output_queue(sk);
 
 	return 0;
 }
@@ -503,292 +514,388 @@ int lapd_send_sframe(struct sock *sk,
 	int err = 0;
 
 	struct sk_buff *skb;
-		skb = sock_alloc_send_skb(sk,
-			sizeof(struct lapd_hdr_e),
-			0, &err);
-// FIXME		(msg->msg_flags & MSG_DONTWAIT), &err);
-	if (!skb) return err;
+	skb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
+	if (!skb) {
+		err = -ENOMEM;
+		goto err_alloc_skb;
+	}
 
 	err = lapd_prepare_sframe(sk, skb,
 			c_r, function, p_f);
 	if (err < 0) {
-		kfree_skb(skb);
-		return err;
+		goto err_prepare_sframe;
 	}
+
+	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
+	struct lapd_opt *lo = lapd_sk(sk);
+	lapd_debug_multiframe(sk,
+		"Transmitting s-frame %s N(R)=%d\n",
+		lapd_sframe_function_name(lapd_sframe_function(hdr->control)),
+		lo->v_r);
 
 	return lapd_send_frame(skb);
+
+err_prepare_sframe:
+	kfree_skb(skb);
+err_alloc_skb:
+	return err;
 }
 
-void lapd_retransmit_from(struct sock *sk, int n_s)
-{
-	struct sk_buff *skb;
-	struct lapd_opt *lo = lapd_sk(sk);
-
-        sk_stream_for_retrans_queue(skb, sk) {
-                struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
-
-		printk(KERN_DEBUG "lapd: "
-			"%s: "
-			"Retransmitting frame N(S)=%d\n",
-			lo->dev->name,
-			hdr->i.n_s);
-
-		dev_queue_xmit(skb_clone(skb, GFP_ATOMIC));
-
-		if (hdr->i.n_s == n_s)
-			break;
-	}
-}
-
-void lapd_handle_socket_iframe(struct sock *sk,
+int lapd_socket_handle_iframe(struct sock *sk,
 	struct sk_buff *skb)
 {
 	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"received i-frame\n",
-		lo->dev->name);
+	if (atomic_read(&sk->sk_rmem_alloc) <
+		(unsigned)sk->sk_rcvbuf &&
+	    lo->me_busy) {
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"V(S)=%u V(R)=%u V(A)=%u: received N(S)=%d N(R)=%d\n",
-		lo->dev->name,
-		lo->v_s,
-		lo->v_r,
-		lo->v_a,
+		lapd_debug_multiframe(sk,
+			"Input queue not full anymore,"
+			" exiting busy condition\n");
+
+		lo->me_busy = FALSE;
+	}
+
+	lapd_debug_multiframe(sk,
+		"Received i-frame N(S)=%d N(R)=%d\n",
 		hdr->i.n_s,
 		hdr->i.n_r);
 
 	if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		printk(KERN_WARNING "lapd: "
-			"%s: "
+		lapd_printk_sk(KERN_WARNING, sk,
 			"received i-frame while link not established"
 			" (status=%d)\n",
-			lo->dev->name,
 			lo->status);
-		return;
+		return FALSE;
 	}
+
+	if (skb->len > lo->dev->mtu) {
+		lapd_printk_sk(KERN_WARNING, sk,
+			"received i-frame longer than mtu (%d > %d),"
+			" rejecting\n",
+			skb->len,
+			lo->dev->mtu);
+
+		lapd_frame_reject(sk, skb, 0, 0, 1, 0);
+
+		return FALSE;
+	}
+
+	if (!lapd_is_valid_nr(lo, hdr->i.n_r)) {
+		lapd_printk_multiframe(KERN_WARNING, sk,
+			"invalid N(R)=%d\n",
+			hdr->i.n_r);
+
+		lapd_frame_reject(sk, skb, 0, 0, 0, 1);
+
+		return FALSE;
+	}
+
+	lapd_ack_frames(sk, hdr->i.n_r);
 
 	if (lo->me_busy) {
-		if (hdr->i.p) lapd_send_enquiry_response(sk);
+		if (hdr->i.p) {
+			lapd_send_sframe(sk, LAPD_RESPONSE,
+				LAPD_SFRAME_FUNC_RNR, 1);
+		}
 
 		// Discard frame
-		return;
+		return FALSE;
 	}
 
-	lapd_receive_ack(sk, hdr->i.n_r);
+	if (hdr->i.n_s != lo->v_r) {
+		// uhuh... the frame is not in sequence, we have to recover
 
-	if (hdr->i.n_s == lo->v_r) {
-		// N(S) == V(R), the frame is the one we're expecting
+		lapd_debug_multiframe(sk,
+			"Not in-sequence frame received, dropping\n");
 
-		// Do we ever enter busy condition?
-		// If yes, we should set me_busy here
+		if (lo->rejection_exception) {
+			if (hdr->i.p) {
+				if (lo->me_busy) {
+					lapd_send_sframe(sk, LAPD_RESPONSE,
+						LAPD_SFRAME_FUNC_RNR, 1);
+				} else {
+					lapd_send_sframe(sk, LAPD_RESPONSE,
+						LAPD_SFRAME_FUNC_RR, 1);
+				}
+			}
+		} else {
+			// Not in REJ exception, enter rej exception
+
+			lapd_debug_multiframe(sk,
+				"Not in-sequence frame received,"
+				" entering rejection exception\n");
+
+			lapd_send_sframe(sk, LAPD_RESPONSE,
+				LAPD_SFRAME_FUNC_REJ, hdr->i.p);
+
+			lo->rejection_exception = TRUE;
+		}
+
+		return FALSE;
+	}
+
+	// N(S) == V(R), the frame is the one we're expecting
+
+	if (lo->rejection_exception) {
+		lapd_debug_multiframe(sk,
+			"In sequence frame received,"
+			" exiting rejection exception\n");
+
+		lo->rejection_exception = FALSE;
+	}
+
+	// The receive queue is full 
+	if (atomic_read(&sk->sk_rmem_alloc) >= (unsigned)sk->sk_rcvbuf) {
+
+		lapd_debug_multiframe(sk,
+			"Incoming queue full, entering busy condition\n");
+
+		lo->me_busy = TRUE;
+
+		lapd_send_sframe(sk, LAPD_RESPONSE,
+			LAPD_SFRAME_FUNC_RNR, hdr->i.p);
+	} else {
+		// pass it to the user.
+
+		skb_pull(skb, sizeof(struct lapd_hdr_e));
+
+		// Remember those values, after sock_queue_rcv_skb, skb may
+		// not be valid anymore
+		int p = hdr->i.p;
+		int n_s = hdr->i.n_s;
+
+		skb->dev = NULL;
+		skb_set_owner_r(skb, sk);
+
+		int skb_len = skb->len;
+		skb_queue_tail(&sk->sk_receive_queue, skb);
+
+		if (!sock_flag(sk, SOCK_DEAD))
+			sk->sk_data_ready(sk, skb_len);
+
+		lapd_debug_multiframe(sk,
+			"Acking frame N(S)=%d\n", n_s);
 
 		// Ok, we're going to expect the next one (oooh!)
 		lo->v_r = (lo->v_r + 1) % 128;
 
-		lo->rejection_exception = FALSE;
+		// If we have an outgoing I frame and P=0 we may send it
+		// instead
+		lapd_send_sframe(sk, LAPD_RESPONSE,
+			LAPD_SFRAME_FUNC_RR, p);
 
-		// The sender is polling us
-		if (hdr->i.p)
-			lapd_send_enquiry_response(sk);
-		else
-			lo->peer_waiting_for_ack = TRUE;
-
-		skb_pull(skb, sizeof(struct lapd_hdr_e));
-
-		// pass it to the user.
-		int err = sock_queue_rcv_skb(sk, skb);
-		if (err == -ENOMEM) {
-		} else {
-			printk(KERN_ERR "lapd: sock_queue_rcv_skb err: %d\n",
-				err);
-
-			send_rej();
-		}
-	} else {
-		// uhuh... the frame is not in sequence, we have to recover
-
-		if (lo->rejection_exception) {
-			if (hdr->i.p)
-				lapd_send_enquiry_response(sk);
-		} else {
-			lapd_send_sframe(sk, RESPONSE, REJ, hdr->i.p);
-			lo->rejection_exception = TRUE;
-			lo->peer_waiting_for_ack = FALSE;
-		}
+		return TRUE;
 	}
 
-	if (!lapd_is_valid_nr(lo, hdr->i.n_r)) {
-		printk(KERN_WARNING "lapd: "
-			"%s: "
-			"invalid N(R)=%d (V(s)=%d, V(a)=%d)\n",
-			lo->dev->name,
-			hdr->i.n_r,
-			lo->v_s,
-			lo->v_a);
-
-		lapd_start_invalid_nr_recovery(sk);
-
-		return;
-	}
-
-	if (!lo->peer_busy) {
-		if (hdr->i.n_r == lo->v_s) {
-			sk_stop_timer(sk, &lo->T200_timer);
-
-			sk_reset_timer(sk, &lo->T203_timer,
-				jiffies + lo->sap->T203);
-
-		} else if (hdr->i.n_r != lo->v_a) {
-			sk_reset_timer(sk, &lo->T200_timer,
-				jiffies + lo->sap->T200);
-		}
-	}
-
-	if (lo->peer_waiting_for_ack) {
-		lo->peer_waiting_for_ack = FALSE;
-		lapd_send_sframe(sk, RESPONSE, RR, 0);
-	}
-		
+	return FALSE;
 }
 
-static inline void lapd_handle_socket_sframe_rr(struct sock *sk,
+static inline int lapd_socket_handle_sframe_rr(struct sock *sk,
 	struct sk_buff *skb)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"received s-frame RR\n",
-		lo->dev->name);
-
 	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
 
-	// Always clear peer busy condition
-	lo->peer_busy = FALSE;
+	if (lo->peer_busy) {
+		lapd_debug_multiframe(sk,
+			"Leaving peer busy condition\n");
 
-	if (hdr->s.n_r == lo->v_s) {
-		printk(KERN_DEBUG
-			"lapd: "
-			"%s: "
-			"All frames acked, stopping T200\n",
-			lo->dev->name);
-
-		sk_stop_timer(sk, &lo->T200_timer);
-
-		sk_reset_timer(sk, &lo->T203_timer,
-			jiffies + lo->sap->T203);
-	} else if (hdr->s.n_r != lo->v_a) {
-		sk_reset_timer(sk, &lo->T200_timer,
-			jiffies + lo->sap->T200);
-	}
-}
-
-static inline void lapd_handle_socket_sframe_rnr(struct sock *sk,
-	struct sk_buff *skb)
-{
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"received s-frame REJ\n",
-		lo->dev->name);
-
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
-
-	// Always set peer busy condition
-	lo->peer_busy = TRUE;
-
-	if (lo->v_a != hdr->s.n_r) {
-	}
-
-	sk_stop_timer(sk, &lo->T203_timer);
-
-	sk_reset_timer(sk, &lo->T200_timer,
-		jiffies + lo->sap->T200);
-}
-
-static inline void lapd_handle_socket_sframe_rej(struct sock *sk,
-	struct sk_buff *skb)
-{
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"received s-frame REJ\n",
-		lo->dev->name);
-
-	// Always clear peer busy condition
-	lo->peer_busy = FALSE;
-
-	lapd_retransmit_from(sk, hdr->s.n_r);
-
-	lapd_flush_queue(sk);
-
-	sk_stop_timer(sk, &lo->T200_timer);
-
-	sk_reset_timer(sk, &lo->T203_timer,
-		jiffies + lo->sap->T203);
-}
-
-void lapd_handle_socket_sframe(struct sock *sk,
-	struct sk_buff *skb)
-{
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		printk(KERN_WARNING "lapd: "
-			"%s: "
-			"received s-frame while link not established"
-			" (status=%d)\n",
-			lo->dev->name,
-			lo->status);
-		return;
-	}
-
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"s-Frame: V(S)=%u V(R)=%u V(A)=%u: received N(R)=%d\n",
-		lo->dev->name,
-		lo->v_s,
-		lo->v_r,
-		lo->v_a,
-		hdr->s.n_r);
-
-	lapd_receive_ack(sk, hdr->s.n_r);
-
-	if (lapd_rx_is_command(lo->nt_mode, hdr->addr.c_r) && hdr->s.p_f)
-		lapd_send_enquiry_response(sk);
-
-	if (!lapd_is_valid_nr(lo, hdr->s.n_r)) {
-		printk(KERN_WARNING "lapd: "
-			"%s: "
-			"invalid N(R)=%d (V(s)=%d, V(a)=%d)\n",
-			lo->dev->name,
-			hdr->s.n_r,
-			lo->v_s,
-			lo->v_a);
-
-		lapd_start_invalid_nr_recovery(sk);
-
-		return;
+		lo->peer_busy = FALSE;
 	}
 
 	if (lo->in_timer_recovery) {
-		if (!lapd_rx_is_command(lo->nt_mode,hdr->addr.c_r) && hdr->s.p_f) {
-			lapd_retransmit_from(sk, hdr->s.n_r);
+		if (!lapd_rx_is_command(lo->nt_mode, hdr->addr.c_r) &&
+		    hdr->s.p_f) {
+
+			lapd_stop_t200(sk);
+			lapd_start_t203(sk);
+
+			lo->v_s = hdr->s.n_r;
+
 			lapd_leave_timer_recovery(sk);
+
+			lapd_set_retransmission(sk);
+			lapd_run_output_queue(sk);
+		}
+	} else {
+		if (!lapd_rx_is_command(lo->nt_mode, hdr->addr.c_r) &&
+		    hdr->s.p_f) {
+			// MDL-ERR-IND(A)
 		}
 	}
 
-	switch (lapd_sframe_function(hdr->control)) {
-	case RR: lapd_handle_socket_sframe_rr(sk, skb); break;
-	case RNR: lapd_handle_socket_sframe_rnr(sk, skb); break;
-	case REJ: lapd_handle_socket_sframe_rej(sk, skb); break;
+	return FALSE;
+}
+
+static inline int lapd_socket_handle_sframe_rnr(struct sock *sk,
+	struct sk_buff *skb)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
+
+	if (!lo->peer_busy) {
+		lapd_debug_multiframe(sk,
+			"Entering peer busy condition\n");
+
+		lo->peer_busy = TRUE;
 	}
+
+	if (lo->in_timer_recovery) {
+		if (lapd_rx_is_response(lo->nt_mode, hdr->addr.c_r) &&
+		    hdr->s.p_f) {
+			lapd_start_t200(sk);
+
+			lo->v_s = hdr->s.n_r;
+
+			lapd_leave_timer_recovery(sk);
+		}
+	} else {
+		if (lapd_rx_is_command(lo->nt_mode, hdr->addr.c_r)) {
+			if (hdr->s.n_r == lo->v_s) {
+				lapd_start_t200(sk);
+
+				if (!lo->peer_busy)
+					lapd_stop_t203(sk);
+			} else {
+				lapd_start_t200(sk);
+			}
+		} else {
+			if (hdr->s.p_f) {
+				// MDL-ERR-IND(A)
+			}
+		}
+	}
+
+	return FALSE;
+}
+
+static inline int lapd_socket_handle_sframe_rej(struct sock *sk,
+	struct sk_buff *skb)
+{
+	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	if (lo->peer_busy) {
+		lapd_debug_multiframe(sk,
+			"Leaving peer busy condition\n");
+
+		lo->peer_busy = FALSE;
+	}
+
+	if (lo->in_timer_recovery) {
+		if (lapd_rx_is_response(lo->nt_mode, hdr->addr.c_r) &&
+		    hdr->s.p_f) {
+			lo->v_s = hdr->s.n_r;
+
+			lapd_stop_t200(sk);
+			lapd_start_t203(sk);
+
+			lapd_leave_timer_recovery(sk);
+
+			lapd_set_retransmission(sk);
+			lapd_run_output_queue(sk);
+		}
+	} else {
+		lapd_stop_t200(sk);
+		lapd_start_t203(sk);
+
+		lo->v_s = hdr->s.n_r;
+
+		lapd_set_retransmission(sk);
+		lapd_run_output_queue(sk);
+	}
+
+	return FALSE;
+}
+
+int lapd_socket_handle_sframe(struct sock *sk,
+	struct sk_buff *skb)
+{
+	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	if (atomic_read(&sk->sk_rmem_alloc) <
+		(unsigned)sk->sk_rcvbuf &&
+	    lo->me_busy) {
+
+		lapd_debug_multiframe(sk,
+			"Input queue not full anymore,"
+			" exiting busy condition\n");
+
+		lo->me_busy = FALSE;
+	}
+
+	lapd_debug_multiframe(sk,
+		"Received s-frame %s N(R)=%d\n",
+		lapd_sframe_function_name(lapd_sframe_function(hdr->control)),
+		hdr->s.n_r);
+
+	if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
+		lapd_printk_sk(KERN_WARNING, sk,
+			"received s-frame while link not established"
+			" (status=%d)\n",
+			lo->status);
+		return FALSE;
+	}
+
+	if (skb->len != 4) {
+		lapd_debug_multiframe(sk,
+			"received s-frame with wrong size (%d), rejecting\n",
+			skb->len);
+
+		lapd_frame_reject(sk, skb, 1, 1, 0, 0);
+
+		return FALSE;
+	}
+
+	if (lapd_rx_is_command(lo->nt_mode, hdr->addr.c_r) &&
+	    hdr->s.p_f) {
+		if (lo->me_busy) {
+			lapd_send_sframe(sk, LAPD_RESPONSE,
+				LAPD_SFRAME_FUNC_RNR, 1);
+		} else {
+			lapd_send_sframe(sk, LAPD_RESPONSE,
+				LAPD_SFRAME_FUNC_RR, 1);
+		}
+	}
+
+	if (!lapd_is_valid_nr(lo, hdr->s.n_r)) {
+		lapd_printk_multiframe(KERN_WARNING, sk,
+			"invalid N(R)=%d\n",
+			hdr->s.n_r);
+
+		// MDL-ERR-IND(J)
+		// if F=1 MDL-ERR-IND(A)
+		lapd_frame_reject(sk, skb, 0, 0, 0, 1);
+
+		return FALSE;
+	}
+
+	lapd_ack_frames(sk, hdr->s.n_r);
+
+	int queued = FALSE;
+	switch (lapd_sframe_function(hdr->control)) {
+	case LAPD_SFRAME_FUNC_RR:
+		queued = lapd_socket_handle_sframe_rr(sk, skb);
+	break;
+
+	case LAPD_SFRAME_FUNC_RNR:
+		queued = lapd_socket_handle_sframe_rnr(sk, skb);
+	break;
+
+	case LAPD_SFRAME_FUNC_REJ:
+		queued = lapd_socket_handle_sframe_rej(sk, skb);
+	break;
+
+	case LAPD_SFRAME_FUNC_INVALID:
+		lapd_frame_reject(sk, skb, 1, 0, 0, 0);
+		queued = FALSE;
+	break;
+	}
+
+	return queued;
 }
 

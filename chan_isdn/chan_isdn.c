@@ -140,7 +140,7 @@ static int isdn_call(struct ast_channel *ast_chan, char *orig_dest, int timeout)
 
 
 	char dest[256];
-	strlcpy(dest, orig_dest, sizeof(dest));
+	strncpy(dest, orig_dest, sizeof(dest));
 
 	if ((ast_chan->_state != AST_STATE_DOWN) &&
 	    (ast_chan->_state != AST_STATE_RESERVED)) {
@@ -208,7 +208,7 @@ static int isdn_call(struct ast_channel *ast_chan, char *orig_dest, int timeout)
 		char callerid[255];
 		const char *name, *number;
 
-		strlcpy(callerid, ast_chan->callerid, sizeof(callerid));
+		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
 		ast_callerid_parse(callerid, &name, &number);
 
 		if (number)
@@ -353,8 +353,8 @@ static struct ast_channel *isdn_new(struct isdn_chan *isdn_chan, int state)
 		ast_chan->pvt->read = isdn_read;
 		ast_chan->pvt->write = isdn_write;
 
-		strlcpy(ast_chan->context, context, sizeof(ast_chan->context)-1);
-		strlcpy(ast_chan->exten, "s",  sizeof(ast_chan->exten) - 1);
+		strncpy(ast_chan->context, context, sizeof(ast_chan->context)-1);
+		strncpy(ast_chan->exten, "s",  sizeof(ast_chan->exten) - 1);
 
 		ast_chan->language[0] = '\0';
 
@@ -548,7 +548,7 @@ int load_module()
 	}
 
 	int fd;
-	fd = socket(PF_LAPD, SOCK_DGRAM, htons(ETH_P_ALL));
+	fd = socket(PF_LAPD, SOCK_SEQPACKET, 0);
 	if (fd < 0) {
 		ast_log(LOG_ERROR, "socket: %s\n", strerror(errno));
 		return -1;
@@ -557,7 +557,7 @@ int load_module()
 	for (ifaddr = ifaddrs ; ifaddr; ifaddr = ifaddr->ifa_next) {
 		struct ifreq ifreq;
 		memset(&ifreq, 0x00, sizeof(ifreq));
-		strlcpy(ifreq.ifr_name, ifaddr->ifa_name, sizeof(ifreq.ifr_name));
+		strncpy(ifreq.ifr_name, ifaddr->ifa_name, sizeof(ifreq.ifr_name));
 
 		if (ioctl(fd, SIOCGIFHWADDR, &ifreq) < 0) {
 			ast_log(LOG_ERROR, "ioctl (%s): %s\n", ifaddr->ifa_name, strerror(errno));

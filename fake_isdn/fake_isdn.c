@@ -279,8 +279,8 @@ module_param(ba_drops, int, 0444);
 module_param(ab_dups, int, 0444);
 module_param(ba_dups, int, 0444);
 
-MODULE_PARM_DESC(ab_drops, "Drops probabilty [0-100] a => b");
-MODULE_PARM_DESC(ba_drops, "Drops probabilty [0-100] b => a");
-MODULE_PARM_DESC(ab_dups, "Dups probabilty [0-100] a => b");
-MODULE_PARM_DESC(ba_dups, "Dups probabilty [0-100] b => a");
+MODULE_PARM_DESC(ab_drops, "Drops probabilty [0-255] a => b");
+MODULE_PARM_DESC(ba_drops, "Drops probabilty [0-255] b => a");
+MODULE_PARM_DESC(ab_dups, "Dups probabilty [0-255] a => b");
+MODULE_PARM_DESC(ba_dups, "Dups probabilty [0-255] b => a");
 

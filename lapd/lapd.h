@@ -91,6 +91,38 @@ struct sockaddr_lapd {
 
 #define LAPD_BROADCAST_TEI	127
 
+#ifdef SOCK_DEBUGGING
+#define lapd_debug_sk(sk, format, arg...)		\
+	if ((sk)->sk_debug)				\
+		printk(KERN_DEBUG "lapd: "		\
+			"%s "				\
+			format,				\
+			lapd_sk(sk)->dev?lapd_sk(sk)->dev->name:"",	\
+			## arg)
+#else
+#define lapd_debug_sk(sk, format, arg...)		\
+		do { } while (0)
+#endif
+
+#define lapd_printk(lvl, format, arg...)		\
+	printk(lvl "lapd: "				\
+		format,					\
+		## arg)
+
+#define lapd_printk_sk(lvl, sk, format, arg...)		\
+	printk(lvl "lapd: "				\
+		"%s "					\
+		format,					\
+		lapd_sk(sk)->dev?lapd_sk(sk)->dev->name:"",	\
+		## arg)
+
+#define lapd_printk_dev(lvl, dev, format, arg...)	\
+	printk(lvl "lapd: "				\
+		"%s "					\
+		format,					\
+		(dev)->name,				\
+		## arg)
+
 extern struct hlist_head lapd_hash;
 extern rwlock_t lapd_hash_lock;
 
@@ -227,8 +259,10 @@ static inline u8 lapd_get_tei(struct lapd_opt *lo)
 
 struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi);
 
-int lapd_device_event(struct notifier_block *this, unsigned long event,
-			    void *ptr);
+int lapd_device_event(struct notifier_block *this,
+			unsigned long event, void *ptr);
+void lapd_frame_reject(struct sock *sk, struct sk_buff *skb, int w, int x, int y, int z);
+int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 
 #endif
 #endif

@@ -204,6 +204,15 @@ static int lapd_mac_addr(struct net_device *dev, void *addr)
 	return -EINVAL;
 }
 
+static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
+{
+	if(!skb->dev) return 0;
+
+	haddr[0]=skb->dev->dev_addr[0];
+
+	return 1;
+}
+
 void setup_lapd(struct net_device *netdev)
 {
 	/* Fill in the fields of the device structure with localtalk-generic values. */
@@ -214,6 +223,7 @@ void setup_lapd(struct net_device *netdev)
 	netdev->set_mac_address    = lapd_mac_addr;
 	netdev->hard_header_cache  = NULL;
 	netdev->header_cache_update= NULL;
+        netdev->hard_header_parse  = lapd_hard_header_parse;
 
 	netdev->type               = ARPHRD_LAPD;
 	netdev->hard_header_len    = 0;
@@ -228,15 +238,13 @@ EXPORT_SYMBOL(setup_lapd);
 
 static void lapd_sock_destruct(struct sock *sk)
 {
-
-printk(KERN_INFO "lapd: sock_destruct\n");
-
 	if (!sock_flag(sk, SOCK_DEAD)) {
-		printk("Attempt to release alive inet socket %p\n", sk);
+		lapd_printk_sk(KERN_CRIT, sk,
+			"Attempt to release alive socket %p\n", sk);
 		return;
 	}
 
-	BUG_TRAP(sk_unhashed(sk));
+	WARN_ON(!sk_unhashed(sk));
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
@@ -277,14 +285,15 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 		lo->ppp_master_dev = NULL;
 	}
 
+	__skb_queue_purge(&sk->sk_write_queue);
 	__skb_queue_purge(&sk->sk_receive_queue);
 	__skb_queue_purge(&sk->sk_error_queue);
 
-	BUG_TRAP(skb_queue_empty(&sk->sk_write_queue));
-	BUG_TRAP(!sk->sk_wmem_queued);
-	BUG_TRAP(!sk->sk_forward_alloc);
-	BUG_TRAP(!atomic_read(&sk->sk_rmem_alloc));
-	BUG_TRAP(!atomic_read(&sk->sk_wmem_alloc));
+	WARN_ON(!skb_queue_empty(&sk->sk_write_queue));
+	WARN_ON(!skb_queue_empty(&sk->sk_receive_queue));
+	WARN_ON(!skb_queue_empty(&sk->sk_error_queue));
+	WARN_ON(atomic_read(&sk->sk_rmem_alloc));
+	WARN_ON(atomic_read(&sk->sk_wmem_alloc));
 
 /*	{
 	struct lapd_te *te, *n;
@@ -292,7 +301,7 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 
 	list_for_each_entry_safe(te, n, &lo->nt.tes, hash_list) {
 
-		printk(KERN_ERR "List del %p\n", &te->hash_list);
+		lapd_printk_sk(KERN_ERR, sk, "List del %p\n", &te->hash_list);
 
 		list_del(&te->hash_list);
 		kfree(te);
@@ -303,13 +312,6 @@ printk(KERN_INFO "lapd: sock_destruct\n");
 */
 }
 
-void lapd_unhash(struct sock *sk)
-{
-	write_lock_bh(&lapd_hash_lock);
-	sk_del_node_init(sk);
-	write_unlock_bh(&lapd_hash_lock);
-}
-
 static int lapd_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
@@ -317,26 +319,26 @@ static int lapd_release(struct socket *sock)
 
 	if (!sk) return 0;
 
-printk(KERN_INFO "lapd: release\n");
-
-	BUG_TRAP(!sock_owned_by_user(sk));
+	WARN_ON(sock_owned_by_user(sk));
 
 	sock_orphan(sk);
 
 	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		// Request disconnection, unhash will be delayed
 		// until multiframe has been released
+		sk->sk_state = TCP_CLOSING;
 
 		lapd_start_multiframe_release(sk);
-	} else lapd_unhash(sk);
+	} else {
+		sk->sk_state = TCP_CLOSE;
+
+		write_lock_bh(&lapd_hash_lock);
+		sk_del_node_init(sk);
+		write_unlock_bh(&lapd_hash_lock);
+	}
 
 	sock_put(sk);
 	sock->sk = NULL;
-
-	if (atomic_read(&sk->sk_refcnt) != 0) {
-		printk(KERN_ERR "lapd: sk refcount=%d\n",
-			atomic_read(&sk->sk_refcnt));
-	}
 
 	return 0;
 }
@@ -437,7 +439,7 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(&ifreq, argp, sizeof(ifreq)))
 			return -EFAULT;
 
-printk(KERN_DEBUG "lapd: IOCTL 12345678 %s\n", ifreq.ifr_name);
+lapd_printk_sk(KERN_DEBUG, sk, "IOCTL 12345678 %s\n", ifreq.ifr_name);
 
 			struct net_device *dev = dev_get_by_name(ifreq.ifr_name);
 
@@ -452,7 +454,7 @@ printk(KERN_DEBUG "lapd: IOCTL 12345678 %s\n", ifreq.ifr_name);
 
 	case PPPIOCGCHAN:
 		{
-printk(KERN_DEBUG "lapd: IOCTL PPPIOCGCHAN\n");
+lapd_printk_sk(KERN_DEBUG, sk, "IOCTL PPPIOCGCHAN\n");
 
 		if (!lo->ppp_master_dev)
 			return -ENODEV;
@@ -472,7 +474,7 @@ printk(KERN_DEBUG "lapd: IOCTL PPPIOCGCHAN\n");
 
 	case PPPIOCGUNIT:
 		{
-printk(KERN_DEBUG "lapd: IOCTL PPPIOCGUNIT\n");
+lapd_printk_sk(KERN_DEBUG, sk, "IOCTL PPPIOCGUNIT\n");
 
 		if (!lo->ppp_master_dev)
 			return -ENODEV;
@@ -501,6 +503,14 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 	struct lapd_opt *lo = lapd_sk(sk);
 	int err;
 
+	lock_sock(sk);
+
+	if (sk->sk_state != TCP_ESTABLISHED &&
+	    sk->sk_state != TCP_LISTEN) {
+		err = -EIO;
+		goto err_not_established;
+	}
+
 	if (!lo->dev) {
 		err = -ENODEV;
 		goto err_no_dev;
@@ -523,8 +533,11 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		// return from wait_for_tei_assignment and have TEI removed
 		// in the meantime, that's the reason for the while
 		do {
+			release_sock(sk);
 			err = lapd_utme_wait_for_tei_assignment(
 				lo->usr_tme);
+			lock_sock(sk);
+
 			if (err < 0)
 				goto err_wait_for_tei_assignment;
 
@@ -540,23 +553,32 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 
 	struct sk_buff *skb;
 	if (msg->msg_flags & MSG_OOB) {
-		skb = sock_alloc_send_skb(sk,
-        		sizeof(struct lapd_hdr_e) + len,
-			(msg->msg_flags & MSG_DONTWAIT), &err);
-		if (!skb)
+		skb = alloc_skb(sizeof(struct lapd_hdr) + len,
+			(msg->msg_flags & MSG_DONTWAIT) ? GFP_ATOMIC : GFP_KERNEL);
+		if (!skb) {
+			err = -ENOMEM;
 			goto err_sock_alloc_send_skb;
+		}
 
-		err = lapd_prepare_uframe(sk, skb, UI, 0);
-		if(err < 0) goto err_prepare_frame;
+		err = lapd_prepare_uframe(sk, skb, LAPD_UFRAME_FUNC_UI, 0);
+		if(err < 0)
+			goto err_prepare_frame;
 
 		err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
-		if (err) goto err_memcpy_fromiovec;
+		if (err)
+			goto err_memcpy_fromiovec;
 
 		lapd_send_completed_uframe(skb);
 	} else {
+		// FIXME TODO
+		// sock_alloc_send_skb may sleep, sleeping with sk lock
+		// no new frames may be received, including acks that may
+		// free the output queue
+		release_sock(sk);
 		skb = sock_alloc_send_skb(sk,
-        		sizeof(struct lapd_hdr) + len,
+        		sizeof(struct lapd_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
+		lock_sock(sk);
 		if (!skb)
 			goto err_sock_alloc_send_skb;
 
@@ -566,25 +588,32 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		}
 
 		err = lapd_prepare_iframe(sk, skb);
-		if(err < 0) goto err_prepare_frame;
+		if(err < 0)
+			goto err_prepare_frame;
 
 		err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
-		if (err) goto err_memcpy_fromiovec;
+		if (err)
+			goto err_memcpy_fromiovec;
 
-		lapd_send_completed_iframe(skb);
+		lapd_queue_completed_iframe(sk, skb);
 	}
+
+	release_sock(sk);
 
 	return len;
 
 err_memcpy_fromiovec:
+err_prepare_frame:
+err_notconn:
 	kfree_skb(skb);
 err_sock_alloc_send_skb:
-err_notconn:
-err_prepare_frame:
 err_wait_for_tei_assignment:
 err_tei_unassigned:
 err_over_mtu:
 err_no_dev:
+err_not_established:
+
+	release_sock(sk);
 
 	return err;
 }
@@ -600,14 +629,22 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	lock_sock(sk);
 
+	if (sk->sk_state != TCP_ESTABLISHED) {
+		err = -EIO;
+		goto err_not_established;
+	}
+
 	if (!lo->dev) {
 		err = -ENODEV;
 		goto err_no_dev;
 	}
 
-	struct sk_buff *skb = skb_recv_datagram(sk, flags,
-						flags & MSG_DONTWAIT, &err);
-	if (!skb) goto err_recv_datagram;
+	release_sock(sk);
+
+	struct sk_buff *skb;
+	skb = skb_recv_datagram(sk, flags, flags & MSG_DONTWAIT, &err);
+	if (!skb)
+		goto err_recv_datagram;
 
 	skb->h.raw = skb->data;
 	copied     = skb->len;
@@ -624,7 +661,7 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 err_recv_datagram:
 err_no_dev:
-	release_sock(sk);
+err_not_established:
 
 	return err;
 }
@@ -645,7 +682,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_invalid_type;
 	}
 
-	if (sk->sk_type != SOCK_DGRAM) {
+	if (sk->sk_type != SOCK_SEQPACKET) {
 		err = -EINVAL;
 		goto err_invalid_socket_type;
 	}
@@ -678,6 +715,8 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 		if (dev->flags & IFF_POINTOPOINT)
 			lapd_utme_set_static_tei(lo->usr_tme, 0);
+
+		sk->sk_state = TCP_ESTABLISHED;
 	}
 
 	if (!lo->nt_mode) {
@@ -832,7 +871,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lo->net_tme->T201 = intoptval;
+		lo->net_tme->T201 = intoptval * HZ / 1000;
 	break;
 
 	case LAPD_TEI_MGMT_N202:
@@ -870,7 +909,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lo->usr_tme->N202 = intoptval;
+		lo->usr_tme->N202 = intoptval * HZ / 1000;
 	break;
 
 	case LAPD_T200:
@@ -884,7 +923,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lo->sap->T200 = intoptval;
+		lo->sap->T200 = intoptval * HZ / 1000;
 	break;
 
 	case LAPD_N200:
@@ -912,7 +951,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lo->sap->T203 = intoptval;
+		lo->sap->T203 = intoptval * HZ / 1000;
 	break;
 
 	case LAPD_N201:
@@ -1156,89 +1195,17 @@ err_get_user:
 	return err;
 }
 
-static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops);
-
-static int lapd_create(struct socket *sock, int protocol)
+static void lapd_unhash_timer(unsigned long data)
 {
-	struct sock *sk;
-	int err;
+	struct sock *sk = (struct sock *)data;
 
-	// LAPD is a privileged socket
-	if (!capable(CAP_NET_BIND_SERVICE)) {
-		err = -EPERM;
-		goto err_no_cap;
-	}
-
-	if (sock->type != SOCK_DGRAM) {
-		err = -ESOCKTNOSUPPORT;
-		goto err_no_type;
-	}
-
-	if (protocol != LAPD_SAPI_Q931 &&
-	    protocol != LAPD_SAPI_X25) {
-		err = -EINVAL;
-		goto err_invalid_protocol;
-	}
-
-	sk = sk_alloc(PF_LAPD, GFP_KERNEL, sizeof(struct lapd_sock),
-			lapd_sk_cachep);
-	if (!sk) {
-		err = -ENOMEM;
-		goto err_sk_alloc;
-	}
-
-	sock->ops = &lapd_dgram_ops;
-	sock->state = SS_UNCONNECTED;
-
-	sock_init_data(sock, sk);
-	sk_set_owner(sk, THIS_MODULE);
-
-	sk->sk_destruct = lapd_sock_destruct;
-	sk->sk_zapped = 0;
-	sk->sk_protocol = protocol;
-
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	// We use ->sapi as a temporary until SO_BINDTODEVICE
-	lo->sapi = protocol;
- 
-	// TE mode section
-
-	lo->nt_mode = FALSE;
-
-	lo->usr_tme = NULL;
-
-	init_timer(&lo->T200_timer);
-	lo->T200_timer.function = lapd_T200_timer;
-	lo->T200_timer.data = (unsigned long)sk;
-
-	init_timer(&lo->T203_timer);
-	lo->T203_timer.function = lapd_T203_timer;
-	lo->T203_timer.data = (unsigned long)sk;
-
-	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
-
-	lo->peer_busy = FALSE;
-	lo->me_busy = FALSE;
-	lo->peer_waiting_for_ack = FALSE;
-	lo->rejection_exception = FALSE;
-	lo->in_timer_recovery = FALSE;
-
-	INIT_HLIST_HEAD(&lo->new_dlcs);
+	BUG_ON(sk->sk_state != TCP_CLOSING);
 
 	write_lock_bh(&lapd_hash_lock);
-	sk_add_node(sk, &lapd_hash);
+	sk_del_node_init(sk);
 	write_unlock_bh(&lapd_hash_lock);
 
-	return 0;
-
-//	sk_free(sk);
-err_sk_alloc:
-err_invalid_protocol:
-err_no_type:
-err_no_cap:
-
-	return err;
+	sock_put(sk);
 }
 
 struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
@@ -1254,6 +1221,7 @@ struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
 	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_destruct = lapd_sock_destruct;
+	sk->sk_backlog_rcv = lapd_backlog_rcv;
 	sk->sk_zapped = parent_sk->sk_zapped;
 	sk->sk_type = parent_sk->sk_type;
 	sk->sk_priority = parent_sk->sk_priority;
@@ -1263,6 +1231,10 @@ struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
 	sk->sk_debug = parent_sk->sk_debug;
 	sk->sk_state = TCP_ESTABLISHED;
 	sk->sk_sleep = parent_sk->sk_sleep;
+
+	init_timer(&sk->sk_timer);
+	sk->sk_timer.function = &lapd_unhash_timer;
+	sk->sk_timer.data = (unsigned long)sk;
 
 	struct lapd_opt *lo = lapd_sk(sk);
 	struct lapd_opt *parent_lo = lapd_sk(parent_sk);
@@ -1312,6 +1284,11 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	lock_sock(sk);
 
+	if (sk->sk_state != TCP_ESTABLISHED) {
+		err = -EIO;
+		goto err_not_listening;
+	}
+
 	struct lapd_opt *lo = lapd_sk(sk);
 
 	if (!lo->nt_mode && lo->usr_tme->status != TEI_ASSIGNED) {
@@ -1320,7 +1297,9 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 			goto err_tei_unassigned;
 		}
 
+		release_sock(sk);
 		lapd_utme_wait_for_tei_assignment(lo->usr_tme);
+		lock_sock(sk);
 	}
 
 	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED &&
@@ -1364,6 +1343,7 @@ err_already_connected:
 err_refused:
 established:
 err_tei_unassigned:
+err_not_listening:
 
 	release_sock(sk);
 
@@ -1410,19 +1390,18 @@ static int lapd_accept(struct socket *sock,
 	struct sock *sk = sock->sk;
 	int err = 0;
 
-	BUG_ON(!sk);
+	lock_sock(sk);
 
 	if (sk->sk_state != TCP_LISTEN) {
 		err = -EINVAL;
 		goto err_notlistening;
 	}
 
-	lock_sock(sk);
-
 	struct lapd_opt *lo = lapd_sk(sk);
 	if (hlist_empty(&lo->new_dlcs)) {
 		err = lapd_wait_for_new_dlc(sk);
-		if (err < 0) goto err_wait_for_new_dlc;
+		if (err < 0)
+			goto err_wait_for_new_dlc;
 	}
 
 	struct lapd_new_dlc *new_dlc;
@@ -1435,8 +1414,8 @@ static int lapd_accept(struct socket *sock,
 	kfree(new_dlc);
 
 err_wait_for_new_dlc:
-	release_sock(sk);
 err_notlistening:
+	release_sock(sk);
 
 	return err;
 }
@@ -1445,16 +1424,43 @@ static int lapd_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
 	struct lapd_opt *lo = lapd_sk(sk);
+	int err = 0;
 
-	if (sk->sk_state == TCP_LISTEN)
-		return -EOPNOTSUPP;
+	lock_sock(sk);
+
+	if (!lo->dev) {
+		err = -ENODEV;
+		goto err_no_dev;
+	}
+
+	if (!lo->nt_mode) {
+		err = -EOPNOTSUPP;
+		goto err_no_nt_mode;
+	}
+
+	if (sk->sk_state == TCP_CLOSING) {
+		err = -EIO;
+		goto err_closing;
+	}
+
+	if (sk->sk_state == TCP_LISTEN) {
+		err = -EOPNOTSUPP;
+		goto err_already_listening;
+	}
 
 	sk->sk_max_ack_backlog = backlog;
 	sk->sk_state = TCP_LISTEN;
 
 	lo->status = LAPD_DLS_LISTENING;
 
-	return 0;
+err_already_listening:
+err_closing:
+err_no_nt_mode:
+err_no_dev:
+
+	release_sock(sk);
+
+	return err;
 }
 
 static int lapd_shutdown(struct socket *sock, int how)
@@ -1465,8 +1471,10 @@ static int lapd_shutdown(struct socket *sock, int how)
 
 	lock_sock(sk);
 
-	if (lo->nt_mode)
-		return -EINVAL;
+	if (lo->status == LAPD_DLS_LISTENING) {
+		err = -ENOTSUPP;
+		goto err_sock_listening;
+	}
 
 	lapd_start_multiframe_release(sk);
 
@@ -1474,6 +1482,7 @@ static int lapd_shutdown(struct socket *sock, int how)
 	if (err) goto err_multiframe_wait_for_release;
 
 err_multiframe_wait_for_release:
+err_sock_listening:
 
 	release_sock(sk);
 
@@ -1504,6 +1513,99 @@ static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops) = {
 #include <linux/smp_lock.h>
 SOCKOPS_WRAP(lapd_dgram, PF_LAPD);
 
+
+
+static int lapd_create(struct socket *sock, int protocol)
+{
+	struct sock *sk;
+	int err;
+
+	// LAPD is a privileged socket
+	if (!capable(CAP_NET_BIND_SERVICE)) {
+		err = -EPERM;
+		goto err_no_cap;
+	}
+
+	if (sock->type != SOCK_SEQPACKET) {
+		err = -ESOCKTNOSUPPORT;
+		goto err_no_type;
+	}
+
+	if (protocol != LAPD_SAPI_Q931 &&
+	    protocol != LAPD_SAPI_X25) {
+		err = -EINVAL;
+		goto err_invalid_protocol;
+	}
+
+	sk = sk_alloc(PF_LAPD, GFP_KERNEL, sizeof(struct lapd_sock),
+			lapd_sk_cachep);
+	if (!sk) {
+		err = -ENOMEM;
+		goto err_sk_alloc;
+	}
+
+	sock->ops = &lapd_dgram_ops;
+	sock->state = SS_UNCONNECTED;
+
+	sock_init_data(sock, sk);
+	sk_set_owner(sk, THIS_MODULE);
+
+	sk->sk_destruct = lapd_sock_destruct;
+	sk->sk_backlog_rcv = lapd_backlog_rcv;
+	sk->sk_zapped = 0;
+	sk->sk_protocol = protocol;
+	sk->sk_state = TCP_CLOSE;
+
+	init_timer(&sk->sk_timer);
+	sk->sk_timer.function = &lapd_unhash_timer;
+	sk->sk_timer.data = (unsigned long)sk;
+
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	// We use ->sapi as a temporary until SO_BINDTODEVICE
+	lo->sapi = protocol;
+ 
+	// TE mode section
+
+	lo->nt_mode = FALSE;
+
+	lo->usr_tme = NULL;
+
+	init_timer(&lo->T200_timer);
+	lo->T200_timer.function = lapd_T200_timer;
+	lo->T200_timer.data = (unsigned long)sk;
+
+	init_timer(&lo->T203_timer);
+	lo->T203_timer.function = lapd_T203_timer;
+	lo->T203_timer.data = (unsigned long)sk;
+
+	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
+
+	lo->peer_busy = FALSE;
+	lo->me_busy = FALSE;
+	lo->peer_waiting_for_ack = FALSE;
+	lo->rejection_exception = FALSE;
+	lo->in_timer_recovery = FALSE;
+
+	INIT_HLIST_HEAD(&lo->new_dlcs);
+
+	write_lock_bh(&lapd_hash_lock);
+	sk_add_node(sk, &lapd_hash);
+	write_unlock_bh(&lapd_hash_lock);
+
+	return 0;
+
+//	sk_free(sk);
+err_sk_alloc:
+err_invalid_protocol:
+err_no_type:
+err_no_cap:
+
+	return err;
+}
+
+
+
 static struct notifier_block lapd_notifier = {
 	.notifier_call	= lapd_device_event,
 };
@@ -1528,8 +1630,8 @@ static int __init lapd_init(void)
 				sizeof(struct lapd_sock), 0,
 				SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if (!lapd_sk_cachep) {
-		printk(KERN_CRIT
-			"lapd: Can't create protocol sock SLAB caches!\n");
+		lapd_printk(KERN_CRIT,
+			"Can't create protocol sock SLAB caches!\n");
 
 		err = -ENOMEM;
 		goto err_kmem_cache_create;

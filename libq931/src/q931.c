@@ -598,7 +598,7 @@ struct q931_interface *q931_open_interface(const char *name)
 	interface->next_call_reference = 1;
 	interface->call_reference_size = 1; // FIXME should be 1 for BRI, 2 for PRI
 
-	int s = socket(PF_LAPD, SOCK_DGRAM, 0);
+	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
 	if (socket < 0)
 		goto err_socket;
 

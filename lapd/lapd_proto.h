@@ -121,66 +121,132 @@ struct lapd_hdr_e
 	u8 data[0];
 } __attribute__ ((__packed__));
 
+struct lapd_frmr
+{
+	u8 control;
+	u8 control2;
+	
+#if defined(__BIG_ENDIAN_BITFIELD)
+	u8 v_s:7;
+	u8 :1;
+
+	u8 v_r:7;
+	u8 c_r:1;
+
+	u8 :4;
+	u8 z:1;
+	u8 y:1;
+	u8 x:1;
+	u8 w:1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	u8 :1;
+	u8 v_s:7;
+
+	u8 c_r:1;
+	u8 v_r:7;
+
+	u8 w:1;
+	u8 x:1;
+	u8 y:1;
+	u8 z:1;
+	u8 :4;
+#endif
+} __attribute__ ((__packed__));
+
 enum lapd_cr
 {
-	COMMAND = 0,
-	RESPONSE = 1,
+	LAPD_COMMAND = 0,
+	LAPD_RESPONSE = 1,
 };
 
 enum lapd_frame_type
 {
-	IFRAME,
-	SFRAME,
-	UFRAME,
+	LAPD_FRAME_TYPE_IFRAME,
+	LAPD_FRAME_TYPE_SFRAME,
+	LAPD_FRAME_TYPE_UFRAME,
 };
 
 enum lapd_sframe_function
 {
-	RR	= 0x00,
-	RNR	= 0x04,
-	REJ	= 0x08,
+	LAPD_SFRAME_FUNC_INVALID = -1,
+	LAPD_SFRAME_FUNC_RR	= 0x00,
+	LAPD_SFRAME_FUNC_RNR	= 0x04,
+	LAPD_SFRAME_FUNC_REJ	= 0x08,
 };
 
 enum lapd_uframe_function
 {
-	SABME	= 0x6C,
-	DM	= 0x0C,
-	UI	= 0x00,
-	DISC	= 0x40,
-	UA	= 0x60,
-	FRMR	= 0x84,
-	XID	= 0xAC,
+	LAPD_UFRAME_FUNC_INVALID = -1,
+	LAPD_UFRAME_FUNC_SABME	= 0x6C,
+	LAPD_UFRAME_FUNC_DM	= 0x0C,
+	LAPD_UFRAME_FUNC_UI	= 0x00,
+	LAPD_UFRAME_FUNC_DISC	= 0x40,
+	LAPD_UFRAME_FUNC_UA	= 0x60,
+	LAPD_UFRAME_FUNC_FRMR	= 0x84,
+	LAPD_UFRAME_FUNC_XID	= 0xAC,
 };
 
 #define LAPD_UFRAME_FUNCTIONS_MASK 0xEC
 #define LAPD_SFRAME_FUNCTIONS_MASK 0xFE
 
-// These two functions apply only to RECEIVED frames
 static inline int lapd_rx_is_command(int nt_mode, int c_r)
 {
 	return !nt_mode != !c_r;
 }
 
+static inline int lapd_rx_is_response(int nt_mode, int c_r)
+{
+	return !nt_mode == !c_r;
+}
+
 static inline u8 lapd_make_cr(int nt_mode, int c_r)
 {
-	return (!nt_mode == !(c_r == COMMAND)) ? 1 : 0;
+	return (!nt_mode == !(c_r == LAPD_COMMAND)) ? 1 : 0;
 }
 
 static inline enum lapd_frame_type lapd_frame_type(u8 control)
 { 
-	if (!(control & 0x01)) return IFRAME;
-	else if(!(control & 0x02)) return SFRAME;
-	else return UFRAME;
+	if (!(control & 0x01))
+		return LAPD_FRAME_TYPE_IFRAME;
+	else if(!(control & 0x02))
+		return LAPD_FRAME_TYPE_SFRAME;
+	else
+		return LAPD_FRAME_TYPE_UFRAME;
 }
 
 static inline enum lapd_uframe_function lapd_uframe_function(u8 control)
 {
-	return control & LAPD_UFRAME_FUNCTIONS_MASK;
+	switch (control & LAPD_UFRAME_FUNCTIONS_MASK) {
+	case LAPD_UFRAME_FUNC_SABME: return LAPD_UFRAME_FUNC_SABME;
+	case LAPD_UFRAME_FUNC_DM:    return LAPD_UFRAME_FUNC_DM;
+	case LAPD_UFRAME_FUNC_UI:    return LAPD_UFRAME_FUNC_UI;
+	case LAPD_UFRAME_FUNC_DISC:  return LAPD_UFRAME_FUNC_DISC;
+	case LAPD_UFRAME_FUNC_UA:    return LAPD_UFRAME_FUNC_UA;
+	case LAPD_UFRAME_FUNC_FRMR:  return LAPD_UFRAME_FUNC_FRMR;
+	case LAPD_UFRAME_FUNC_XID:   return LAPD_UFRAME_FUNC_XID;
+	default: return LAPD_UFRAME_FUNC_INVALID;
+	}
 }
 
 static inline enum lapd_sframe_function lapd_sframe_function(u8 control)
 {
-	return control & LAPD_SFRAME_FUNCTIONS_MASK;
+	switch (control & LAPD_SFRAME_FUNCTIONS_MASK) {
+	case LAPD_SFRAME_FUNC_RR:  return LAPD_SFRAME_FUNC_RR;
+	case LAPD_SFRAME_FUNC_RNR: return LAPD_SFRAME_FUNC_RNR;
+	case LAPD_SFRAME_FUNC_REJ: return LAPD_SFRAME_FUNC_REJ;
+	default: return LAPD_SFRAME_FUNC_INVALID;
+	}
+}
+
+static inline const char *lapd_sframe_function_name(
+	enum lapd_sframe_function func)
+{
+	switch (func) {
+	case LAPD_SFRAME_FUNC_RR:      return "RR";
+	case LAPD_SFRAME_FUNC_RNR:     return "RNR";
+	case LAPD_SFRAME_FUNC_REJ:     return "REJ";
+	case LAPD_SFRAME_FUNC_INVALID: return "INVALID";
+	}
 }
 
 static inline u8 lapd_uframe_make_control(

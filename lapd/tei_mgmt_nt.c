@@ -59,7 +59,7 @@ void lapd_ntme_T201_timer(unsigned long data)
 	struct lapd_ntme *tme =
 		(struct lapd_ntme *)data;
 
-	printk(KERN_DEBUG "lapd: tei_mgmt T201\n");
+	lapd_printk(KERN_DEBUG, "tei_mgmt T201\n");
 
 	BUG_TRAP(tme->tei_check_outstanding);
 
@@ -124,13 +124,12 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->h.raw;
 
-	printk(KERN_INFO
-		"lapd: tei_mgmt: TEI request\n");
+	lapd_printk_tme(KERN_INFO, skb->dev,
+		"TEI request\n");
 
 	if (tm->hdr.addr.c_r) {
-		printk(KERN_WARNING
-			"lapd: tei_mgmt: int %s: TEI request with C/R=1 ?\n",
-			skb->dev->name);
+		lapd_printk_tme(KERN_WARNING, skb->dev,
+			"TEI request with C/R=1 ?\n");
 	}
 
 	struct lapd_ntme *tme;
@@ -157,9 +156,8 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 		goto found;
 	}
 
-	printk(KERN_INFO "lapd: "
-		"Missing TEI management entity on interface %s\n",
-		skb->dev->name);
+	lapd_printk_tme(KERN_WARNING, skb->dev,
+		"Missing TEI management entity\n");
 
 	found:
 
@@ -171,14 +169,12 @@ static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->h.raw;
 
-	printk(KERN_INFO
-		"lapd: tei_mgmt: int %s: TEI check response\n",
-		skb->dev->name);
+	lapd_printk_dev(KERN_INFO, skb->dev,
+		"TEI check response\n");
 
 	if (tm->hdr.addr.c_r) {
-		printk(KERN_WARNING
-			"lapd: tei_mgmt: int %s: TEI request with C/R=0 ?\n",
-			skb->dev->name);
+		lapd_printk_dev(KERN_WARNING, skb->dev,
+			"TEI request with C/R=0 ?\n");
 	}
 
 	struct hlist_node *node;
@@ -188,8 +184,7 @@ static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 		if (tme->dev != skb->dev) continue;
 
 		if (!tme->tei_check_outstanding) {
-			printk(KERN_WARNING
-				"lapd: tei_mgmt: "
+			lapd_printk_dev(KERN_WARNING, skb->dev,
 				"unexpected/late check response\n");
 			break;
 		}
@@ -205,20 +200,18 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->h.raw;
 
-	printk(KERN_INFO
-		"lapd: tei_mgmt: int %s: TEI verify received: tei=%d\n",
-		skb->dev->name,
+	lapd_printk_tme(KERN_INFO, skb->dev,
+		"TEI verify received: tei=%d\n",
 		tm->body.ai);
 
 	if (tm->hdr.addr.c_r) {
-		printk(KERN_WARNING
-			"lapd: tei_mgmt: int %s: TEI verify with C/R=1 ?\n",
-			skb->dev->name);
+		lapd_printk_dev(KERN_WARNING, skb->dev,
+			"TEI verify with C/R=1 ?\n");
 	}
 
 	if (tm->body.ai == LAPD_BROADCAST_TEI) {
-		printk(KERN_INFO
-			"lapd: tei_mgmt: received invalid verify"
+		lapd_printk_dev(KERN_INFO, skb->dev,
+			"received invalid verify"
 			" request with tei=127\n");
 		return;
 	}
@@ -229,8 +222,8 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
 		if (tme->dev == skb->dev) continue;
 
-		printk(KERN_INFO
-			"lapd: tei_mgmt: starting TEI check\n");
+		lapd_printk_dev(KERN_INFO, skb->dev,
+			"starting TEI check\n");
 
 		lapd_ntme_start_tei_check(tme, tm->body.ai);
 		break;
@@ -245,25 +238,25 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 		(struct lapd_tei_mgmt_frame *)skb->h.raw;
 
 	if (skb->len < sizeof(struct lapd_tei_mgmt_frame)) {
-		printk(KERN_ERR
-			"lapd: tei management: frame too small (%d bytes)\n",
+		lapd_printk_dev(KERN_ERR, skb->dev,
+			"frame too small (%d bytes)\n",
 			skb->len);
 
 		return 0;
 	}
 
-	if (lapd_frame_type(tm->hdr.control) != UFRAME) {
-		printk(KERN_ERR
-			"lapd: tei management: not an U-Frame (%u%u)\n",
+	if (lapd_frame_type(tm->hdr.control) != LAPD_FRAME_TYPE_UFRAME) {
+		lapd_printk_dev(KERN_ERR, skb->dev,
+			"not an U-Frame (%u%u)\n",
 			tm->hdr.ft2,
 			tm->hdr.ft1);
 
 		return 0;
 	}
 
-	if (lapd_uframe_function(tm->hdr.control) != UI) {
-		printk(KERN_ERR
-			"lapd: tei management: not an Unnumbered Information"
+	if (lapd_uframe_function(tm->hdr.control) != LAPD_UFRAME_FUNC_UI) {
+		lapd_printk_dev(KERN_ERR, skb->dev,
+			"not an Unnumbered Information"
 			" (%u%u)\n",
 			tm->hdr.u.m3,
 			tm->hdr.u.m2);
@@ -275,8 +268,8 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 // FIXME answer with F bit! :)
 
 	if (tm->body.entity != 0x0f) {
-		printk(KERN_ERR
-			"lapd: tei management: invalid entity %u\n",
+		lapd_printk_dev(KERN_ERR, skb->dev,
+			"invalid entity %u\n",
 			tm->body.entity);
 
 		return 0;
@@ -300,8 +293,8 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_DENIED:
 	case LAPD_TEI_MT_CHK_REQ:
 	default:
-		printk(KERN_INFO
-			"lapd: tei_mgmt: unknown/unimplemented message_type %u\n",
+		lapd_printk_dev(KERN_INFO, skb->dev,
+			"unknown/unimplemented message_type %u\n",
 			tm->body.message_type);
 	}
 
