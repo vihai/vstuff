@@ -1,0 +1,2 @@
+Evaluate if spinlock-protected critical sections are too big;
+kernel-locking.pdf suggests 5 lines of code as max size
