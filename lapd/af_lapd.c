@@ -609,7 +609,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 			struct lapd_opt *lo = lapd_sk(sk);
 			if (lo->nt_mode && lo->dev == dev) {
 				read_unlock_bh(&lapd_hash_lock);
-				err = -ENODEV;
+				err = -EBUSY;
 				goto err_socket_already_present;
 			}
 		}
