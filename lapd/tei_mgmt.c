@@ -252,7 +252,7 @@ static void lapd_recv_tei_request(struct sk_buff *skb,
 		if (!lo->nt_mode) continue;
 		if (lo->dev != skb->dev) continue;
 
-		if (/*tm->body.ai >= LAPD_MIN_STA_TEI && always true */
+		if (/*tm->body.ai >= LAPD_MIN_STA_TEI && // always true */
 		    tm->body.ai <= LAPD_MAX_STA_TEI) {
 			break;
 		} else if (tm->body.ai >= LAPD_MIN_DYN_TEI &&
@@ -270,6 +270,7 @@ static void lapd_recv_tei_request(struct sk_buff *skb,
 		struct lapd_te *new_te =
 			kmalloc(sizeof(struct lapd_te), GFP_KERNEL);
 
+		// FIXME could this be a deadlock?
 		write_lock_bh(&lo->nt.tes_lock);
 		list_add(&new_te->hash_list, &lo->nt.tes);
 		write_unlock_bh(&lo->nt.tes_lock);
@@ -279,7 +280,7 @@ static void lapd_recv_tei_request(struct sk_buff *skb,
 		goto found;
 	}
 
-	lapd_start_tei_check(sk, tm->body.ai);
+//	lapd_start_tei_check(sk, tm->body.ai);
 
 	found:
 
@@ -525,6 +526,8 @@ static void lapd_recv_tei_verify(struct sk_buff *skb,
 
 		lapd_start_tei_check(sk, tm->body.ai);
 	}
+
+	read_unlock_bh(&lapd_hash_lock);
 }
 
 int lapd_handle_tei_mgmt(struct sk_buff *skb)

@@ -579,8 +579,6 @@ static int hfc_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 
 	hfc_fifo_put_frame(&chan->tx, skb->data, skb->len);
 
-	// We're not called from IRQ handler, otherwise we'd need
-	// dev_kfree_skb
 	dev_kfree_skb(skb);
 
 	return 0;

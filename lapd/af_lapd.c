@@ -453,7 +453,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_dev_not_up;
 	}
 
-	if (dev->flags & IFF_BROADCAST) {
+	if (dev->flags & IFF_ALLMULTI) {
 		lo->nt_mode = TRUE;
 	}
 	else {

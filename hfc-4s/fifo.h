@@ -1,41 +1,9 @@
 /*
- * zaphfc.c - Zaptel driver for HFC-S PCI A based ISDN BRI cards
- *
- * Copyright (C) 2004 Daniele Orlandi
- * Copyright (C) 2002, 2003, 2004, Junghanns.NET GmbH
- *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
- *
- * Major rewrite of the driver made by
- * Klaus-Peter Junghanns <kpj@junghanns.net>
- *
- * This program is free software and may be modified and
- * distributed under the terms of the GNU Public License.
- *
+ * FIXME
  */
 
 #ifndef _HFC_FIFO_H
 #define _HFC_FIFO_H
-/*
-static inline u16 *Z1_F1(struct hfc_chan_simplex *chan)
-{
-	return chan->z1_base + (*chan->f1 * 4);
-}
-
-static inline u16 *Z2_F1(struct hfc_chan_simplex *chan)
-{
-	return chan->z2_base + (*chan->f1 * 4);
-}
-
-static inline u16 *Z1_F2(struct hfc_chan_simplex *chan)
-{
-	return chan->z1_base + (*chan->f2 * 4);
-}
-
-static inline u16 *Z2_F2(struct hfc_chan_simplex *chan)
-{
-	return chan->z2_base + (*chan->f2 * 4);
-}
 
 static inline u16 Z_inc(struct hfc_chan_simplex *chan, u16 z, u16 inc)
 {
@@ -59,7 +27,7 @@ static inline u8 F_inc(struct hfc_chan_simplex *chan, u8 f, u8 inc)
 
 static inline u16 hfc_fifo_used_rx(struct hfc_chan_simplex *chan)
 {
-	return (*Z1_F2(chan) - *Z2_F2(chan) + chan->fifo_size) % chan->fifo_size;
+	return (chan->z1 - chan->z2 + chan->fifo_size) % chan->fifo_size;
 }
 
 static inline u16 hfc_fifo_get_frame_size(struct hfc_chan_simplex *chan)
@@ -72,19 +40,20 @@ static inline u16 hfc_fifo_get_frame_size(struct hfc_chan_simplex *chan)
 	return hfc_fifo_used_rx(chan) + 1;
 }
 
+/*
 static inline u8 hfc_fifo_u8(struct hfc_chan_simplex *chan, u16 z)
 {
 	return *((u8 *)(chan->z_base + z));
 }
-
+*/
 static inline u16 hfc_fifo_used_tx(struct hfc_chan_simplex *chan)
 {
-	return (*Z1_F1(chan) - *Z2_F1(chan) + chan->fifo_size) % chan->fifo_size;
+	return (chan->z1 - chan->z2 + chan->fifo_size) % chan->fifo_size;
 }
 
 static inline u16 hfc_fifo_free_rx(struct hfc_chan_simplex *chan)
 {
-	u16 free_bytes=*Z2_F1(chan) - *Z1_F1(chan);
+	u16 free_bytes=chan->z2 - chan->z1;
 
 	if (free_bytes > 0)
 		return free_bytes;
@@ -94,7 +63,7 @@ static inline u16 hfc_fifo_free_rx(struct hfc_chan_simplex *chan)
 
 static inline u16 hfc_fifo_free_tx(struct hfc_chan_simplex *chan)
 {
-	u16 free_bytes=*Z2_F1(chan) - *Z1_F1(chan);
+	u16 free_bytes=chan->z2 - chan->z1;
 
 	if (free_bytes > 0)
 		return free_bytes;
@@ -104,18 +73,54 @@ static inline u16 hfc_fifo_free_tx(struct hfc_chan_simplex *chan)
 
 static inline int hfc_fifo_has_frames(struct hfc_chan_simplex *chan)
 {
-	return *chan->f1 != *chan->f2;
+	return chan->f1 != chan->f2;
 }
 
 static inline u8 hfc_fifo_used_frames(struct hfc_chan_simplex *chan)
 {
-	return (*chan->f1 - *chan->f2 + chan->f_num) % chan->f_num;
+	return (chan->f1 - chan->f2 + chan->f_num) % chan->f_num;
 }
 
 static inline u8 hfc_fifo_free_frames(struct hfc_chan_simplex *chan)
 {
-	return (*chan->f2 - *chan->f1 + chan->f_num) % chan->f_num;
+	return (chan->f2 - chan->f1 + chan->f_num) % chan->f_num;
 }
+
+// This function and all subsequent accesses to the selected FIFO must be done
+// in interrupt handler or inside a spin_lock_irq* protected section
+static inline void hfc_fifo_select(struct hfc_card *card, u8 id)
+{
+//	WARN_ON(!irqs_disabled() || !in_interrupt());
+
+	hfc_outb(card, hfc_R_FIFO,
+		hfc_R_FIFO_V_FIFO_ID(id));
+//		hfc_R_FIFO_V_REV);
+
+	hfc_wait_busy(card);
+}
+
+static inline void hfc_fifo_reset(struct hfc_card *card)
+{
+	hfc_outb(card, hfc_A_INC_RES_FIFO,
+		hfc_A_INC_RES_FIFO_V_RES_F);
+
+	hfc_wait_busy(card);
+}
+
+
+static inline void hfc_fifo_refresh_fz_cache(struct hfc_chan_simplex *chan)
+{
+	struct hfc_card *card = chan->chan->port->card;
+
+	// Se hfc-8s-4s.pdf par 4.4.7 for an explanation of this:
+	u16 prev_f1f2 = hfc_inw(card, hfc_A_F12);;
+	do {
+		chan->f1f2 = hfc_inw(card, hfc_A_F12);
+	} while(chan->f1f2 != prev_f1f2);
+
+	chan->z1z2 = hfc_inl(card, hfc_A_Z12);
+}
+
 
 void hfc_fifo_clear_rx(struct hfc_chan_simplex *chan);
 void hfc_fifo_clear_tx(struct hfc_chan_simplex *chan);
@@ -125,5 +130,5 @@ void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size);
 int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size);
 void hfc_fifo_drop_frame(struct hfc_chan_simplex *chan);
 void hfc_fifo_put_frame(struct hfc_chan_simplex *chan, void *data, int size);
-*/
+
 #endif

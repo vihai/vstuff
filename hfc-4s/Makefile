@@ -7,7 +7,7 @@ endif
 EXTRA_CFLAGS = -I $(src)/../lapd/
 
 obj-m	:= hfc-4s.o
-hfc-4s-y	:= hfc-4s_main.o
+hfc-4s-y	:= hfc-4s_main.o fifo.o
 
 all:
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`
