@@ -57,7 +57,7 @@ void lapd_receive_ack(struct sock *sk, int n_r)
 		lo->v_a,
 		n_r);
 
-	lapd_dump_queue(sk);
+//	lapd_dump_queue(sk);
 
 	struct sk_buff *skb;
 	sk_stream_for_retrans_queue(skb, sk) {
@@ -70,7 +70,7 @@ void lapd_receive_ack(struct sock *sk, int n_r)
 			hdr->i.n_s);
 	}
 
-	lapd_dump_queue(sk);
+//	lapd_dump_queue(sk);
 
 	lo->v_a = n_r;
 }
@@ -86,10 +86,6 @@ void lapd_multiframe_established(struct sock *sk)
 
 	// If we're called at the arrival of
 	// SABME, T200 is already stopped anyway
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STOPPING T200 %s %d/n",
-		lo->dev->name,__FILE__,__LINE__);
 	sk_stop_timer(sk, &lo->T200_timer);
 
 	lo->status = LAPD_DLS_LINK_CONNECTION_ESTABLISHED;
@@ -127,10 +123,6 @@ void lapd_multiframe_released(struct sock *sk)
 
 	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STOPPING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
 	sk_stop_timer(sk, &lo->T200_timer);
 
 	if (sock_flag(sk, SOCK_DEAD)) {
@@ -153,11 +145,6 @@ void lapd_start_multiframe_establishment(struct sock *sk)
 		"Starting multiframe establishment\n",
 		lo->dev->name);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 	sk_reset_timer(sk, &lo->T200_timer,
 		jiffies + lo->sap->T200);
 	lo->N200_cnt = 0;
@@ -168,7 +155,7 @@ void lapd_start_multiframe_establishment(struct sock *sk)
 
 	lo->status = LAPD_DLS_AWAITING_ESTABLISH;
 
-	lapd_send_uframe(sk, 0, SABME, NULL, 0);
+	lapd_send_uframe(sk, SABME, 0, NULL, 0);
 }
 
 void lapd_start_multiframe_release(struct sock *sk)
@@ -186,15 +173,10 @@ void lapd_start_multiframe_release(struct sock *sk)
 
 	lo->N200_cnt = 0;
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 	sk_reset_timer(sk, &lo->T200_timer,
 		jiffies + lo->sap->T200);
 
-	lapd_send_uframe(sk, 0, DISC, NULL, 0);
+	lapd_send_uframe(sk, DISC, 0, NULL, 0);
 }
 
 void lapd_send_enquiry_response(struct sock *sk)
@@ -215,11 +197,6 @@ void lapd_transmit_enquiry(struct sock *sk)
 	struct lapd_opt *lo = lapd_sk(sk);
 
 	lo->peer_waiting_for_ack = TRUE;
-
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
 
 	sk_reset_timer(sk, &lo->T200_timer,
 		jiffies + lo->sap->T200);
@@ -257,7 +234,9 @@ void lapd_T200_timer(unsigned long data)
 			goto max_count;
 		}
 
-		lapd_send_uframe(sk, 0, SABME, NULL, 0);
+		lo->N200_cnt++;
+
+		lapd_send_uframe(sk, SABME, 0, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
 		if (lo->N200_cnt > lo->sap->N200) {
@@ -266,22 +245,23 @@ void lapd_T200_timer(unsigned long data)
 			goto max_count;
 		};
 
-		lapd_send_uframe(sk, 0, DISC, NULL, 0);
+		lo->N200_cnt++;
+
+		lapd_send_uframe(sk, DISC, 0, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		if (lo->N200_cnt == lo->sap->N200) {
-			lapd_start_multiframe_establishment(sk);
-		} else {
-			if (!lo->in_timer_recovery)
-				lapd_enter_timer_recovery(sk);
-			else
-				lo->N200_cnt++;
-			// Here I'd prefer to implement point a) 3 of 5.6.7
+		if (!lo->in_timer_recovery) {
+			lapd_enter_timer_recovery(sk);
 
-			lapd_transmit_enquiry(sk);
+			lo->N200_cnt = 0;
+		} else {
+			lo->N200_cnt++;
 		}
-	}
-	else {
+
+		// Here I'd prefer to implement point a) 3 of 5.6.7
+
+		lapd_transmit_enquiry(sk);
+	} else {
 		printk(KERN_ERR "lapd: "
 			"%s: "
 			"Unexpected T200 in state %d\n",
@@ -290,13 +270,6 @@ void lapd_T200_timer(unsigned long data)
 
 		goto err_unexpected_t200;
 	}
-
-	lo->N200_cnt++;
-
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
 
 	sk_reset_timer(sk, &lo->T200_timer,
 		jiffies + lo->sap->T200);
@@ -467,13 +440,10 @@ void lapd_flush_queue(struct sock *sk)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	lapd_dump_queue(sk);
+//	lapd_dump_queue(sk);
 
 	struct sk_buff *skb;
 	while ((skb = sk->sk_send_head)) {
-
-		u8 drop_simul;
-		get_random_bytes(&drop_simul, sizeof(drop_simul));
 
 		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
 		printk(KERN_DEBUG "lapd: "
@@ -490,25 +460,13 @@ void lapd_flush_queue(struct sock *sk)
 		if (sk->sk_send_head == (struct sk_buff *)&sk->sk_write_queue)
 		        sk->sk_send_head = NULL;
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 		sk_reset_timer(sk, &lo->T200_timer,
 			jiffies + lo->sap->T200);
 
-		if (1)
-//		if (drop_simul > 250)
-			dev_queue_xmit(skb_clone(skb, GFP_ATOMIC));
-		else
-			printk(KERN_DEBUG "lapd: "
-				"%s: "
-				"Simulating frame drop\n",
-				lo->dev->name);
+		dev_queue_xmit(skb_clone(skb, GFP_ATOMIC));
 	}
 	
-	lapd_dump_queue(sk);
+//	lapd_dump_queue(sk);
 }
 
 int lapd_send_completed_iframe(struct sk_buff *skb)
@@ -688,21 +646,12 @@ void lapd_handle_socket_iframe(struct sock *sk,
 
 	if (!lo->peer_busy) {
 		if (hdr->i.n_r == lo->v_s) {
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STOPPING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
 			sk_stop_timer(sk, &lo->T200_timer);
 
 			sk_reset_timer(sk, &lo->T203_timer,
 				jiffies + lo->sap->T203);
 
 		} else if (hdr->i.n_r != lo->v_a) {
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 			sk_reset_timer(sk, &lo->T200_timer,
 				jiffies + lo->sap->T200);
 		}
@@ -736,21 +685,11 @@ static inline void lapd_handle_socket_sframe_rr(struct sock *sk,
 			"All frames acked, stopping T200\n",
 			lo->dev->name);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STOPPING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 		sk_stop_timer(sk, &lo->T200_timer);
 
 		sk_reset_timer(sk, &lo->T203_timer,
 			jiffies + lo->sap->T203);
 	} else if (hdr->s.n_r != lo->v_a) {
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 		sk_reset_timer(sk, &lo->T200_timer,
 			jiffies + lo->sap->T200);
 	}
@@ -776,11 +715,6 @@ static inline void lapd_handle_socket_sframe_rnr(struct sock *sk,
 
 	sk_stop_timer(sk, &lo->T203_timer);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STARTING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 	sk_reset_timer(sk, &lo->T200_timer,
 		jiffies + lo->sap->T200);
 }
@@ -803,11 +737,6 @@ static inline void lapd_handle_socket_sframe_rej(struct sock *sk,
 
 	lapd_flush_queue(sk);
 
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"STOPPING T200 %s %d\n",
-		lo->dev->name,__FILE__,__LINE__);
-
 	sk_stop_timer(sk, &lo->T200_timer);
 
 	sk_reset_timer(sk, &lo->T203_timer,
@@ -819,11 +748,6 @@ void lapd_handle_socket_sframe(struct sock *sk,
 {
 	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->h.raw;
 	struct lapd_opt *lo = lapd_sk(sk);
-
-	printk(KERN_DEBUG "lapd: "
-		"%s: "
-		"received s-frame\n",
-		lo->dev->name);
 
 	if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		printk(KERN_WARNING "lapd: "
@@ -837,7 +761,7 @@ void lapd_handle_socket_sframe(struct sock *sk,
 
 	printk(KERN_DEBUG "lapd: "
 		"%s: "
-		"V(S)=%u V(R)=%u V(A)=%u: received N(R)=%d\n",
+		"s-Frame: V(S)=%u V(R)=%u V(A)=%u: received N(R)=%d\n",
 		lo->dev->name,
 		lo->v_s,
 		lo->v_r,
@@ -846,7 +770,7 @@ void lapd_handle_socket_sframe(struct sock *sk,
 
 	lapd_receive_ack(sk, hdr->s.n_r);
 
-	if (lapd_is_command(lo->nt_mode,hdr->addr.c_r) && hdr->s.p_f)
+	if (lapd_rx_is_command(lo->nt_mode, hdr->addr.c_r) && hdr->s.p_f)
 		lapd_send_enquiry_response(sk);
 
 	if (!lapd_is_valid_nr(lo, hdr->s.n_r)) {
@@ -864,7 +788,7 @@ void lapd_handle_socket_sframe(struct sock *sk,
 	}
 
 	if (lo->in_timer_recovery) {
-		if (!lapd_is_command(lo->nt_mode,hdr->addr.c_r) && hdr->s.p_f) {
+		if (!lapd_rx_is_command(lo->nt_mode,hdr->addr.c_r) && hdr->s.p_f) {
 			lapd_retransmit_from(sk, hdr->s.n_r);
 			lapd_leave_timer_recovery(sk);
 		}

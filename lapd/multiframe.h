@@ -8,7 +8,10 @@ static inline void lapd_enter_timer_recovery(struct sock *sk)
 
 	lo->in_timer_recovery = TRUE;
 
-	printk(KERN_DEBUG "lapd: Entering timer recovery condition\n");
+	printk(KERN_DEBUG "lapd: "
+		"%s: "
+		"Entering timer recovery condition\n",
+		lo->dev->name);
 }
 
 static inline void lapd_leave_timer_recovery(struct sock *sk)
@@ -17,7 +20,10 @@ static inline void lapd_leave_timer_recovery(struct sock *sk)
 
 	lo->in_timer_recovery = FALSE;
 
-	printk(KERN_DEBUG "lapd: Leaving timer recovery condition\n");
+	printk(KERN_DEBUG "lapd: "
+		"%s: "
+		"Leaving timer recovery condition\n",
+		lo->dev->name);
 }
 
 static inline int lapd_is_valid_nr(struct lapd_opt *lo, int n_r)

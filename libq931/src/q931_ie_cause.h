@@ -130,28 +130,9 @@ struct q931_ie_cause_onwire_4
 #endif
 } __attribute__ ((__packed__));
 
-static inline int q931_append_ie_cause(void *buf, __u8 cause_value)
-{
- struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
-
- ie->id = Q931_IE_CAUSE;
- ie->size = 0;
-
- struct q931_ie_cause_onwire_3 *oct_3 =
-   (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->size]);
- oct_3->ext = 1;
- oct_3->coding_standard = Q931_IE_C_CS_CCITT;
- oct_3->location = Q931_IE_C_L_USER; //FIXME: shoud depend in NT mode
- ie->size += 1;
-
- struct q931_ie_cause_onwire_4 *oct_4 =
-   (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->size]);
- oct_4->ext = 1;
- oct_4->cause_value = cause_value;
- ie->size += 1;
-
- return ie->size + sizeof(struct q931_ie_onwire);
-}
+int q931_append_ie_cause(void *buf,
+        enum q931_ie_cause_location location,
+        enum q931_ie_cause_value value);
 
 void q931_ie_cause_value_infos_init();
 

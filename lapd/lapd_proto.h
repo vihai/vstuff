@@ -156,14 +156,14 @@ enum lapd_uframe_function
 #define LAPD_SFRAME_FUNCTIONS_MASK 0xFE
 
 // These two functions apply only to RECEIVED frames
-static inline int lapd_is_command(int nt_mode, int c_r)
+static inline int lapd_rx_is_command(int nt_mode, int c_r)
 {
 	return !nt_mode != !c_r;
 }
 
 static inline u8 lapd_make_cr(int nt_mode, int c_r)
 {
-	return (!nt_mode == !c_r) ? 1 : 0;
+	return (!nt_mode == !(c_r == COMMAND)) ? 1 : 0;
 }
 
 static inline enum lapd_frame_type lapd_frame_type(u8 control)
@@ -186,7 +186,7 @@ static inline enum lapd_sframe_function lapd_sframe_function(u8 control)
 static inline u8 lapd_uframe_make_control(
 	enum lapd_uframe_function function, int p_f)
 {
-	return 0x03 | function | (p_f?0x08:0);
+	return 0x03 | function | (p_f?0x10:0);
 }
 
 static inline u8 lapd_sframe_make_control(

@@ -32,7 +32,8 @@ inline int lapd_send_frame(struct sk_buff *skb)
 
 int lapd_prepare_uframe(struct sock *sk,
 	struct sk_buff *skb,
-	enum lapd_uframe_function function)
+	enum lapd_uframe_function function,
+	int p_f)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
@@ -63,13 +64,15 @@ int lapd_prepare_uframe(struct sock *sk,
 	hdr->addr.ea2 = 1;
 	hdr->addr.tei = lapd_get_tei(lo);
 
-	hdr->control = lapd_uframe_make_control(function, 0/* p_f*/);
+	hdr->control = lapd_uframe_make_control(function, p_f);
 
 	return 0;
 }
 
-int lapd_send_uframe(struct sock *sk, u8 sapi,
-	enum lapd_uframe_function function, void *data, int datalen)
+int lapd_send_uframe(struct sock *sk,
+	enum lapd_uframe_function function,
+	int p_f,
+	void *data, int datalen)
 {
 	int err;
 
@@ -80,7 +83,7 @@ int lapd_send_uframe(struct sock *sk, u8 sapi,
 // FIXME		(msg->msg_flags & MSG_DONTWAIT), &err);
 	if (!skb) return err;
 
-	err = lapd_prepare_uframe(sk, skb, function);
+	err = lapd_prepare_uframe(sk, skb, function, p_f);
 	if (err < 0)
 		return err;
 

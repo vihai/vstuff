@@ -59,7 +59,7 @@ static int fake_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 		dst_chan = &card->chans[0];
 
 	struct sk_buff *dst_skb =
-		skb_copy(skb, GFP_ATOMIC);
+		skb_clone(skb, GFP_ATOMIC);
 
 	dst_skb->dev = dst_chan->netdev;
 	dst_skb->pkt_type = PACKET_HOST;
@@ -189,11 +189,18 @@ module_init(fake_init_module);
 
 static void __exit fake_module_exit(void)
 {
+	printk(KERN_INFO fake_DRIVER_PREFIX
+		fake_DRIVER_DESCR " beginning unload\n");
+
 	unregister_netdev(card->chans[0].netdev);
+printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step1\n");
 	unregister_netdev(card->chans[1].netdev);
+printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step2\n");
 
 	free_netdev(card->chans[0].netdev);
+printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step3\n");
 	free_netdev(card->chans[1].netdev);
+printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step4\n");
 
 	kfree(card);
 

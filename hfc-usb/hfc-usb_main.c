@@ -1,6 +1,4 @@
 /*
- * hfc.c - Salcazzo driver for HFC-4S based cards
- *
  * Copyright (C) 2004 Daniele Orlandi
  *
  * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
@@ -8,18 +6,17 @@
  * This program is free software and may be modified and
  * distributed under the terms of the GNU Public License.
  *
- * Please read the README file for important infos.
  */
 
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/init.h>
 #include <linux/config.h>
-#include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/version.h>
+#include <linux/usb.h>
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
@@ -29,10 +26,8 @@
 #include <lapd_user.h>
 #include <lapd.h>
 
-#include "hfc-4s.h"
+#include "hfc-usb.h"
 #include "fifo.h"
-
-#if CONFIG_PCI
 
 #define D 0
 #define B1 1
@@ -44,32 +39,24 @@
 #define B2_FIFO_OFF 1
 #define E_FIFO_OFF 3
 
-static int force_l1_up = 0;
+static int nt_mode = 0;
 static struct proc_dir_entry *hfc_proc_hfc_dir;
 
 #ifdef DEBUG
 int debug_level = 0;
 #endif
 
-static struct pci_device_id hfc_pci_ids[] = {
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_08B4,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0, HFC_CHIPTYPE_4S},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_16B8,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0, HFC_CHIPTYPE_8S},
-	{0,}
-};
+static int __devinit hfc_probe(struct usb_device *dev,
+	unsigned int interface,
+	const struct usb_device_id *id_table);
+static void __devexit hfc_disconnect(struct usb_device *dev,
+	void *drv_context);
 
-MODULE_DEVICE_TABLE(pci, hfc_pci_ids);
-
-static int __devinit hfc_probe(struct pci_dev *dev
-			, const struct pci_device_id *ent);
-static void __devexit hfc_remove(struct pci_dev *dev);
-
-struct pci_driver hfc_driver = {
-	.name     = hfc_DRIVER_NAME,
-	.id_table = hfc_pci_ids,
-	.probe    = hfc_probe,
-	.remove   = hfc_remove,
+static struct usb_driver hfc_usb_driver =
+{
+	name:		hfc_DRIVER_NAME,
+	probe:		hfc_probe,
+	disconnect:	hfc_disconnect,
 };
 
 /******************************************
@@ -1179,11 +1166,19 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 	SET_MODULE_OWNER(chan->netdev);
 }
 
-static int __devinit hfc_probe(struct pci_dev *pci_dev,
-	const struct pci_device_id *ent)
+static int __devinit hfc_probe(struct usb_device *dev,
+	unsigned int interface,
+	const struct usb_device_id *id_table);
 {
 	static int card_ids_counter = 0;
 	int err;
+
+	if (!(
+	    (dev->descriptor.idVendor == 0x0959 &&
+		dev->descriptor.idProduct == 0x2bd0) ||
+	    (dev->descriptor.idVendor == 0x07b0 &&
+		dev->descriptor.idProduct == 0x0006)))
+		return NULL;
 
 	struct hfc_card *card = NULL;
 	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
@@ -1197,227 +1192,154 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	memset(card, 0x00, sizeof(struct hfc_card));
 	spin_lock_init(&card->lock);
 	card->id = card_ids_counter;
-	card->pcidev = pci_dev;
-	card->chip_type = ent->driver_data;
+	card->usbdev = dev;
 
-	if (card->chip_type == HFC_CHIPTYPE_4S) card->num_ports = 4;
-	else if (card->chip_type == HFC_CHIPTYPE_8S) card->num_ports = 8;
-	else BUG();
-
-	pci_set_drvdata(pci_dev, card);
-
-	if ((err = pci_enable_device(pci_dev))) {
-		goto err_pci_enable_device;
-	}
-
-	pci_write_config_word(pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
-
-	if((err = pci_request_regions(pci_dev, hfc_DRIVER_NAME))) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"cannot request I/O memory region\n",
-			card->id);
-		goto err_pci_request_regions;
-	}
-
-	pci_set_master(pci_dev);
-
-	if (!pci_dev->irq) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"no irq!\n",
-			card->id);
-		err = -ENODEV;
-		goto err_noirq;
-	}
-
-	card->io_bus_mem = pci_resource_start(pci_dev,1);
-	if (!card->io_bus_mem) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"no iomem!\n",
-			card->id);
-		err = -ENODEV;
-		goto err_noiobase;
-	}
-
-	if(!(card->io_mem = ioremap(card->io_bus_mem, hfc_PCI_MEM_SIZE))) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"cannot ioremap I/O memory\n",
-			card->id);
-		err = -ENODEV;
-		goto err_ioremap;
-	}
-
-	if ((err = request_irq(card->pcidev->irq, &hfc_interrupt,
-		SA_SHIRQ, hfc_DRIVER_NAME, card))) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"unable to register irq\n",
-			card->id);
-		goto err_request_irq;
-	}
-
-	int i;
-	for (i=0; i<card->num_ports; i++) {
-		card->ports[i].card = card;
-		card->ports[i].nt_mode = FALSE;
-		card->ports[i].id = i;
-
-		struct hfc_chan_duplex *chan;
+	struct hfc_chan_duplex *chan;
 //---------------------------------- D
 
-		chan = &card->ports[i].chans[D];
+	chan = &card->chans[D];
 
-		chan->port = &card->ports[i];
-		chan->name = "D";
-		chan->status = free;
-		chan->id = D;
-		chan->protocol = ETH_P_LAPD;
-//		spin_lock_init(&chan->lock);
+	chan->card = card;
+	chan->name = "D";
+	chan->status = free;
+	chan->id = D;
+	chan->protocol = ETH_P_LAPD;
 
-		chan->rx.chan      = chan;
-		chan->rx.z_min     = 0x0080;
-		chan->rx.z_max     = 0x01FF;
-		chan->rx.f_min     = 0x00;
-		chan->rx.f_max     = 0x0F;
-		chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
-		chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
-		chan->rx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + D_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_RX;
+	chan->rx.chan      = chan;
+	chan->rx.z_min     = 0x0080;
+	chan->rx.z_max     = 0x01FF;
+	chan->rx.f_min     = 0x00;
+	chan->rx.f_max     = 0x0F;
+	chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
+	chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
+	chan->rx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + D_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_RX;
 
-		chan->tx.chan      = chan;
-		chan->tx.z_min     = 0x0080;
-		chan->tx.z_max     = 0x01FF;
-		chan->tx.f_min     = 0x00;
-		chan->tx.f_max     = 0x0F;
-		chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
-		chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
-		chan->tx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + D_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_TX;
+	chan->tx.chan      = chan;
+	chan->tx.z_min     = 0x0080;
+	chan->tx.z_max     = 0x01FF;
+	chan->tx.f_min     = 0x00;
+	chan->tx.f_max     = 0x0F;
+	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
+	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
+	chan->tx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + D_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_TX;
 
-		chan->netdev = alloc_netdev(0, "isdn%dd", setup_lapd);
-		if(!chan->netdev) {
-			printk(KERN_ERR hfc_DRIVER_PREFIX
-				"net_device alloc failed, abort.\n");
-			err = -ENOMEM;
-			goto err_alloc_netdev_d;
-		}
-
-		hfc_setup_lapd(chan);
-
-		chan->netdev->irq = card->pcidev->irq;
-		chan->netdev->base_addr = card->io_bus_mem;
-
-		if((err = register_netdev(chan->netdev))) {
-			printk(KERN_INFO hfc_DRIVER_PREFIX
-				"card %d: "
-				"Cannot register net device %s, aborting.\n",
-				card->id,
-				chan->netdev->name);
-			goto err_register_netdev_d;
-		}
-
-//---------------------------------- B1
-		chan = &card->ports[i].chans[B1];
-
-		chan->port = &card->ports[i];
-		chan->name = "B1";
-		chan->status = free;
-		chan->id = B1;
-		chan->protocol = 0;
-//		spin_lock_init(&chan->lock);
-
-		chan->rx.chan      = chan;
-		chan->rx.z_min     = 0x0080;
-		chan->rx.z_max     = 0x01FF;
-		chan->rx.f_min     = 0x00;
-		chan->rx.f_max     = 0x0F;
-		chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
-		chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
-		chan->rx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + B1_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_RX;
-
-		chan->tx.chan      = chan;
-		chan->tx.z_min     = 0x0080;
-		chan->tx.z_max     = 0x01FF;
-		chan->tx.f_min     = 0x00;
-		chan->tx.f_max     = 0x0F;
-		chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
-		chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
-		chan->tx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + B1_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_TX;
-
-//---------------------------------- B2
-		chan = &card->ports[i].chans[B2];
-
-		chan->port = &card->ports[i];
-		chan->name = "B2";
-		chan->status = free;
-		chan->id = B2;
-		chan->protocol = 0;
-//		spin_lock_init(&chan->lock);
-
-		chan->rx.chan      = chan;
-		chan->rx.z_min     = 0x0080;
-		chan->rx.z_max     = 0x01FF;
-		chan->rx.f_min     = 0x00;
-		chan->rx.f_max     = 0x0F;
-		chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
-		chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
-		chan->rx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + B2_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_RX;
-
-		chan->tx.chan      = chan;
-		chan->tx.z_min     = 0x0080;
-		chan->tx.z_max     = 0x01FF;
-		chan->tx.f_min     = 0x00;
-		chan->tx.f_max     = 0x0F;
-		chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
-		chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
-		chan->tx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + B2_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_TX;
-
-//---------------------------------- E
-		chan = &card->ports[i].chans[E];
-
-		chan->port = &card->ports[i];
-		chan->name = "E";
-		chan->status = free;
-		chan->id = E;
-		chan->protocol = 0;
-//		spin_lock_init(&chan->lock);
-
-		chan->rx.chan      = chan;
-		chan->rx.z_min     = 0x0080;
-		chan->rx.z_max     = 0x01FF;
-		chan->rx.f_min     = 0x00;
-		chan->rx.f_max     = 0x0F;
-		chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
-		chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
-		chan->rx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + E_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_RX;
-
-		chan->tx.chan      = chan;
-		chan->tx.z_min     = 0x0080;
-		chan->tx.z_max     = 0x01FF;
-		chan->tx.f_min     = 0x00;
-		chan->tx.f_max     = 0x0F;
-		chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
-		chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
-		chan->tx.fifo_id   =
-			hfc_R_FIFO_V_FIFO_NUM((i * 4) + E_FIFO_OFF)|
-			hfc_R_FIFO_V_FIFO_DIR_TX;
+	chan->netdev = alloc_netdev(0, "isdn%dd", setup_lapd);
+	if(!chan->netdev) {
+		printk(KERN_ERR hfc_DRIVER_PREFIX
+			"net_device alloc failed, abort.\n");
+		err = -ENOMEM;
+		goto err_alloc_netdev_d;
 	}
 
+	hfc_setup_lapd(chan);
+
+
+	if((err = register_netdev(chan->netdev))) {
+		printk(KERN_INFO hfc_DRIVER_PREFIX
+			"card %d: "
+			"Cannot register net device %s, aborting.\n",
+			card->id,
+			chan->netdev->name);
+		goto err_register_netdev_d;
+	}
+
+//---------------------------------- B1
+	chan = &card->chans[B1];
+
+	chan->card = card;
+	chan->name = "B1";
+	chan->status = free;
+	chan->id = B1;
+	chan->protocol = 0;
+
+	chan->rx.chan      = chan;
+	chan->rx.z_min     = 0x0080;
+	chan->rx.z_max     = 0x01FF;
+	chan->rx.f_min     = 0x00;
+	chan->rx.f_max     = 0x0F;
+	chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
+	chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
+	chan->rx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + B1_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_RX;
+
+	chan->tx.chan      = chan;
+	chan->tx.z_min     = 0x0080;
+	chan->tx.z_max     = 0x01FF;
+	chan->tx.f_min     = 0x00;
+	chan->tx.f_max     = 0x0F;
+	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
+	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
+	chan->tx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + B1_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_TX;
+
+//---------------------------------- B2
+	chan = &card->chans[B2];
+
+	chan->card = card;
+	chan->name = "B2";
+	chan->status = free;
+	chan->id = B2;
+	chan->protocol = 0;
+	spin_lock_init(&chan->lock);
+
+	chan->rx.chan      = chan;
+	chan->rx.z_min     = 0x0080;
+	chan->rx.z_max     = 0x01FF;
+	chan->rx.f_min     = 0x00;
+	chan->rx.f_max     = 0x0F;
+	chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
+	chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
+	chan->rx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + B2_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_RX;
+
+	chan->tx.chan      = chan;
+	chan->tx.z_min     = 0x0080;
+	chan->tx.z_max     = 0x01FF;
+	chan->tx.f_min     = 0x00;
+	chan->tx.f_max     = 0x0F;
+	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
+	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
+	chan->tx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + B2_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_TX;
+
+//---------------------------------- E
+	chan = &card->chans[E];
+
+	chan->port = &card->ports[i];
+	chan->name = "E";
+	chan->status = free;
+	chan->id = E;
+	chan->protocol = 0;
+
+	chan->rx.chan      = chan;
+	chan->rx.z_min     = 0x0080;
+	chan->rx.z_max     = 0x01FF;
+	chan->rx.f_min     = 0x00;
+	chan->rx.f_max     = 0x0F;
+	chan->rx.fifo_size = chan->rx.z_max - chan->rx.z_min + 1;
+	chan->rx.f_num     = chan->rx.f_max - chan->rx.f_min + 1;
+	chan->rx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + E_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_RX;
+
+	chan->tx.chan      = chan;
+	chan->tx.z_min     = 0x0080;
+	chan->tx.z_max     = 0x01FF;
+	chan->tx.f_min     = 0x00;
+	chan->tx.f_max     = 0x0F;
+	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
+	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
+	chan->tx.fifo_id   =
+		hfc_R_FIFO_V_FIFO_NUM((i * 4) + E_FIFO_OFF)|
+		hfc_R_FIFO_V_FIFO_DIR_TX;
 
 // -------------------------------------------------------
 
@@ -1440,11 +1362,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	hfc_reset_card(card);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
-		"card %d configured at mem %#lx (0x%p) IRQ %u\n",
-		card->id,
-		card->io_bus_mem,
-		card->io_mem,
-		card->pcidev->irq); 
+		"device %d configured\n",
+		card->id);
 
 	card_ids_counter++;
 
@@ -1453,39 +1372,24 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	//FIXME  (all ports)
 //	unregister_netdev(card->chans[D].netdev);
 err_register_netdev_d:
-//	free_netdev(card->chans[D].netdev);
+	free_netdev(card->chans[D].netdev);
 err_alloc_netdev_d:
-	free_irq(pci_dev->irq, card);
-err_request_irq:
-	iounmap(card->io_mem);
-err_ioremap:
-err_noiobase:
-err_noirq:
-	pci_release_regions(pci_dev);
-err_pci_request_regions:
-err_pci_enable_device:
 	kfree(card);
 err_alloc_hfccard:
 	return err;
 }
 
-static void __devexit hfc_remove(struct pci_dev *pci_dev)
+static void __devexit hfc_disconnect(struct usb_device *dev,
+	void *drv_context)
 {
-	struct hfc_card *card = pci_get_drvdata(pci_dev);
+	struct hfc_card *card = dev->drv_context;
 
-//	unregister_netdev(card->chans[B2].netdev);
-//	unregister_netdev(card->chans[B1].netdev);
-
-	int i;
-	for (i=0; i<card->num_ports; i++) {
-		unregister_netdev(card->ports[i].chans[D].netdev);
-	}
+	unregister_netdev(card->chans[D].netdev);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
 		"card %d: "
-		"shutting down card at %p.\n",
-		card->id,
-		card->io_mem);
+		"shutting down.\n",
+		card->id);
 
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock,flags);
@@ -1495,25 +1399,11 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 
 	spin_unlock_irqrestore(&card->lock,flags);
 
-	// There should be no interrupt from here on
-
-	pci_write_config_word(pci_dev, PCI_COMMAND, 0);
-
 	remove_proc_entry("fifos", card->proc_dir);
 	remove_proc_entry("info", card->proc_dir);
 	remove_proc_entry(card->proc_dir_name, hfc_proc_hfc_dir);
 
-	free_irq(pci_dev->irq, card);
-
-	iounmap(card->io_mem);
-
-	pci_release_regions(pci_dev);
-
-	pci_disable_device(pci_dev);
-
-	for (i=0; i<card->num_ports; i++) {
-		free_netdev(card->ports[i].chans[D].netdev);
-	}
+	free_netdev(card->chans[D].netdev);
 
 	kfree(card);
 }
@@ -1531,7 +1421,8 @@ static int __init hfc_init_module(void)
 
 	hfc_proc_hfc_dir = proc_mkdir(hfc_DRIVER_NAME, proc_root_driver);
 
-	ret = pci_module_init(&hfc_driver);
+	ret = usb_register(&hfc_driver);
+
 	return ret;
 }
 
@@ -1539,7 +1430,7 @@ module_init(hfc_init_module);
 
 static void __exit hfc_module_exit(void)
 {
-	pci_unregister_driver(&hfc_driver);
+	usb_deregister(&hfc_driver);
 
 	remove_proc_entry(hfc_DRIVER_NAME, proc_root_driver);
 
@@ -1558,26 +1449,18 @@ MODULE_LICENSE("GPL");
 #endif
 
 #ifdef LINUX26
-
-module_param(force_l1_up, int, 0444);
+module_param(nt_mode, int, 0444);
 #ifdef DEBUG
 module_param(debug_level, int, 0444);
 #endif
 
 #else
 
-MODULE_PARM(force_l1_up,"i");
+MODULE_PARM(nt_mode,"i");
 #ifdef DEBUG
 MODULE_PARM(debug_level,"i");
 #endif
 
 #endif // LINUX26
 
-MODULE_PARM_DESC(nt_mode, "Comma-separated list of card IDs to configure in NT mode");
-MODULE_PARM_DESC(force_l1_up, "Don't allow L1 to go down");
-
-#ifdef DEBUG
-MODULE_PARM_DESC(debug_level, "List of card IDs to configure in NT mode");
-#endif
-
-
+MODULE_PARM_DESC(nt_mode, "Don't allow L1 to go down");

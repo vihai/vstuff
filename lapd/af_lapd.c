@@ -427,14 +427,23 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		goto err_over_mtu;
 	}
 
-	// if this is an u-frame
-	// if staus != TEI_ASSIGNED ?
-
 	lapd_tei_t tei;
-	if (!lo->nt_mode) {
-		BUG_TRAP(lo->usr_tme);
 
+	if (!lo->nt_mode && lo->usr_tme->status != TEI_ASSIGNED) {
+		if (msg->msg_flags & O_NONBLOCK) {
+			err = -EWOULDBLOCK;
+			goto err_tei_unassigned;
+		}
+
+		// Ok, this is quite racy. We could wait for TEI assignment
+		// return from wait_for_tei_assignment and have TEI removed
+		// in the meantime, that's the reason for the while
 		do {
+			err = lapd_utme_wait_for_tei_assignment(
+				lo->usr_tme);
+			if (err < 0)
+				goto err_wait_for_tei_assignment;
+
 			spin_lock_bh(&lo->usr_tme->lock);
 			if (lo->usr_tme->status == TEI_ASSIGNED)
 				tei = lo->usr_tme->tei;
@@ -442,15 +451,7 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 				tei = LAPD_TEI_UNASSIGNED;
 			spin_unlock_bh(&lo->usr_tme->lock);
 
-			if (tei == LAPD_TEI_UNASSIGNED) {
-				err = lapd_utme_wait_for_tei_assignment(
-					lo->usr_tme);
-				if (err < 0)
-					goto err_wait_for_tei_assignment;
-
-				continue;
-			} else break;
-		} while(TRUE);
+		} while (tei == LAPD_TEI_UNASSIGNED);
 	}
 
 	struct sk_buff *skb;
@@ -461,7 +462,7 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		if (!skb)
 			goto err_sock_alloc_send_skb;
 
-		err = lapd_prepare_uframe(sk, skb, UI);
+		err = lapd_prepare_uframe(sk, skb, UI, 0);
 		if(err < 0) goto err_prepare_frame;
 
 		err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
@@ -474,8 +475,6 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
 		if (!skb)
 			goto err_sock_alloc_send_skb;
-
-		printk(KERN_INFO "lapd: %s: ###### lo->status = %d\n", lo->dev->name, lo->status);
 
 		if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 			err = -ENOTCONN;
@@ -499,6 +498,7 @@ err_sock_alloc_send_skb:
 err_notconn:
 err_prepare_frame:
 err_wait_for_tei_assignment:
+err_tei_unassigned:
 err_over_mtu:
 err_no_dev:
 
@@ -1215,6 +1215,16 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 	lock_sock(sk);
 
 	struct lapd_opt *lo = lapd_sk(sk);
+
+	if (!lo->nt_mode && lo->usr_tme->status != TEI_ASSIGNED) {
+		if (flags & O_NONBLOCK) {
+			err = -EWOULDBLOCK;
+			goto err_tei_unassigned;
+		}
+
+		lapd_utme_wait_for_tei_assignment(lo->usr_tme);
+	}
+
 	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED &&
 	    sock->state == SS_CONNECTING) {
 		 /* Connect completed during a ERESTARTSYS event */
@@ -1239,8 +1249,6 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 		goto err_inprogress;
 	}
 
-	// Wait for TEI assignment???? TODO FIXME
-
         sock->state = SS_CONNECTING;
 	lapd_start_multiframe_establishment(sk);
 
@@ -1257,6 +1265,7 @@ err_inprogress:
 err_already_connected:
 err_refused:
 established:
+err_tei_unassigned:
 
 	release_sock(sk);
 

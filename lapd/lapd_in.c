@@ -26,20 +26,19 @@ static inline void lapd_handle_socket_uframe_sabme(struct sock *sk,
 	printk(KERN_DEBUG "lapd: received u-frame SABME\n");
 
 	struct lapd_opt *lo = lapd_sk(sk);
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
+	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED ||
+	    lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		lapd_multiframe_established(sk);
 
-		lapd_send_uframe(sk, 0, UA, NULL, 0);
-	}
-	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-	
+		lapd_send_uframe(sk, UA, hdr->u.p_f, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
-		lapd_send_uframe(sk, 0, UA, NULL, 0);
+		lapd_send_uframe(sk, UA, hdr->u.p_f, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
-		lapd_send_uframe(sk, 0, DM, NULL, 0);
+		lapd_send_uframe(sk, DM, hdr->u.p_f, NULL, 0);
 	}
 	else {
 		printk(KERN_ERR
@@ -85,18 +84,18 @@ static inline void lapd_handle_socket_uframe_disc(struct sock *sk,
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
 
 	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
-		lapd_send_uframe(sk, 0, DM, NULL, hdr->u.p_f);
+		lapd_send_uframe(sk, DM, hdr->u.p_f, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 		lapd_multiframe_released(sk);
 
-		lapd_send_uframe(sk, 0, UA, NULL, hdr->u.p_f);
+		lapd_send_uframe(sk, UA, hdr->u.p_f, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
-		lapd_send_uframe(sk, 0, DM, NULL, 0);
+		lapd_send_uframe(sk, DM, hdr->u.p_f, NULL, 0);
 	}
 	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
-		lapd_send_uframe(sk, 0, UA, NULL, 0);
+		lapd_send_uframe(sk, UA, hdr->u.p_f, NULL, 0);
 	}
 	else {
 		printk(KERN_ERR
@@ -208,9 +207,21 @@ inline int lapd_handle_socket_frame(struct sock *sk, struct sk_buff *skb)
 int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 		     struct packet_type *pt)
 {
-/*	// Don't mangle buffer if shared
+	// Don't mangle buffer if shared
 	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
-		goto err_share_check;*/
+		goto err_share_check;
+
+	u8 drop_simul;
+	get_random_bytes(&drop_simul, sizeof(drop_simul));
+
+	if (drop_simul > 200) {
+		printk(KERN_DEBUG "lapd: "
+			"%s: "
+			"Simulating frame drop\n",
+			skb->dev->name);
+
+		goto err_drop_simul;
+	}
 
 	// Minimum frame is header + 2 CRC <- not sent yet by driver
 	if (skb->len < sizeof(struct lapd_hdr)) // + 2)
@@ -234,7 +245,6 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (skb->dev->flags & IFF_ALLMULTI) {
 		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
 			lapd_ntme_handle_frame(skb);
-			kfree_skb(skb);
 			goto frame_handled;
 		}
 
@@ -312,7 +322,6 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 	} else {
 		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
 			lapd_utme_handle_frame(skb);
-			kfree_skb(skb);
 			goto frame_handled;
 		}
 
@@ -340,13 +349,16 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 
 frame_handled:
 
-//	if (!skb->list) kfree_skb(skb);
+	if (!skb->list)
+		kfree_skb(skb);
 
 	return 0;
 
 err_small_frame:
 err_improper_ea:
 err_pskb_may_pull:
+err_drop_simul:
+err_share_check:
 
 	kfree_skb(skb);
 

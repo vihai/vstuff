@@ -130,8 +130,6 @@ static inline int q931_get_so_ie_type2_value(__u8 ie_id)
  return ie_id & Q931_SINGLE_OCTET_VALUE_MASK;
 }
 
-#define Q931_MAX_DIGITS 20
-
 void q931_ie_infos_init();
 const struct q931_ie_info *q931_get_ie_info(int id);
 
@@ -142,5 +140,6 @@ const struct q931_ie_info *q931_get_ie_info(int id);
 #include <q931_ie_chanid.h>
 #include <q931_ie_progind.h>
 #include <q931_ie_cause.h>
+#include <q931_ie_call_state.h>
 
 #endif

@@ -60,12 +60,36 @@ static void lapd_device_up(struct net_device *dev)
 	lapd_device->x25.T203 = 10 * HZ;
 }
 
+static void lapd_kill_by_device(struct net_device *dev)
+{
+	struct sock *sk;
+	struct hlist_node *node;
+
+	write_lock_bh(&lapd_hash_lock);
+	sk_for_each(sk, node, &lapd_hash) {
+		struct lapd_opt *lo = lapd_sk(sk);
+
+		if (lo->dev == dev) {
+			sk->sk_state = TCP_CLOSE;
+			sk->sk_err = ENODEV;
+
+			if (!sock_flag(sk, SOCK_DEAD)) {
+				sk->sk_state_change(sk);
+				sock_set_flag(sk, SOCK_DEAD);
+			}
+		}
+	}
+	write_unlock_bh(&lapd_hash_lock);
+}
+
 static void lapd_device_down(struct net_device *dev)
 {
 	struct lapd_device *lapd_device =
 		lapd_dev(dev);
 
 	printk(KERN_DEBUG "lapd: device %s down\n", dev->name);
+
+	lapd_kill_by_device(dev);
 
 	if (lapd_device) {
 
@@ -80,14 +104,6 @@ static void lapd_device_down(struct net_device *dev)
 		dev_put(dev);
 		kfree(lapd_device);
 		dev->atalk_ptr = NULL;
-	}
-
-	struct sock *sk;
-	struct hlist_node *node, *t;
-	sk_for_each_safe(sk, node, t, &lapd_hash) {
-		sock_hold(sk);
-		sk_del_node_init(sk);
-		release_sock(sk);
 	}
 }
 
@@ -106,6 +122,10 @@ int lapd_device_event(struct notifier_block *this, unsigned long event,
 
 	case NETDEV_DOWN:
 		lapd_device_down(dev);
+	break;
+
+	case NETDEV_UNREGISTER:
+		printk(KERN_DEBUG "lapd: %s: NETDEV UNREGISTER <---------\n", dev->name);
 	break;
 	}
 

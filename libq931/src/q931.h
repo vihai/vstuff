@@ -14,6 +14,8 @@
 #define TRUE 1
 #endif
 
+#define Q931_MAX_DIGITS 20
+
 enum q931_user_state {
 	U0_NULL_STATE,
 	U1_CALL_INITIATED,
@@ -97,28 +99,6 @@ enum q931_protocol_discriminators
 
 typedef signed long q931_callref;
 
-union q931_callref_onwire
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-  __u8 octets[4];
-
-  struct
-   {
-    int direction:1;
-    unsigned long longval:31;
-   };
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
-  __u8 octets[4];
-
-  struct
-   {
-    unsigned long longval:31;
-    int direction:1;
-   };
-#endif
-};
-
-
 struct q931_interface;
 struct q931_dlc
 {
@@ -166,8 +146,11 @@ struct q931_call
 	enum q931_call_direction direction;
 	q931_callref call_reference;
 
-	enum q931_user_state user_status;
-	enum q931_network_state network_status;
+	enum q931_user_state user_state;
+	enum q931_network_state net_state;
+
+	char calling_number[Q931_MAX_DIGITS + 1];
+	char called_number[Q931_MAX_DIGITS + 1];
 };
 
 static inline int q931_intcmp(int a, int b)
