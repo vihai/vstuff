@@ -10,6 +10,7 @@
 
 #include "lapd_user.h"
 #include "lapd.h"
+#include "lapd_out.h"
 #include "tei_mgmt_nt.h"
 
 struct hlist_head lapd_ntme_hash = HLIST_HEAD_INIT;
@@ -146,7 +147,6 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 
 	read_lock_bh(&lapd_ntme_hash_lock);
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
-		printk(KERN_DEBUG "lapd: ---------- %s %s\n",tme->dev->name,skb->dev->name);
 
 		if (tme->dev != skb->dev) continue;
 
@@ -319,8 +319,6 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 
 void lapd_ntme_destroy(struct lapd_ntme *tme)
 {
-	printk(KERN_DEBUG "lapd: ntme_destroy\n");
-
 	lapd_ntme_stop_timer(tme, &tme->T201_timer);
 
 	dev_put(tme->dev);

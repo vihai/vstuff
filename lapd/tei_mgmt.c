@@ -10,6 +10,7 @@
 
 #include "lapd_user.h"
 #include "lapd.h"
+#include "lapd_out.h"
 #include "tei_mgmt.h"
 
 inline int lapd_tm_send(

@@ -52,8 +52,13 @@ struct q931_interface *q931_open_interface(const char *name)
    goto err_getsockopt;
 
  if (interface->role == LAPD_ROLE_TE) {
+	printf("connecting...");
+	sleep(3);
+
 	 if (connect(interface->socket, NULL, 0) < 0)
 	   goto err_connect;
+
+	printf("OK\n");
  }
 
  return interface;

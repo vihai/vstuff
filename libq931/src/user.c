@@ -25,16 +25,18 @@ int main()
    exit(1);
   }
 
-//shutdown(interface->socket, 0);
-
-//sleep(10);
-//exit(0);
-
  struct q931_datalink *dlc = q931_user_datalink(interface);
  struct q931_call *call;
 
  call = q931_alloc_call(Q931_CALL_DIRECTION_OUTBOUND);
 
+ printf("Interface opened\n");
+
+ printf("Sleeping...");
+ sleep(3);
+ printf("OK\n");
+
+ printf("Making call...\n");
  q931_make_call(interface, call);
 
  while(1)

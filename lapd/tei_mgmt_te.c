@@ -331,34 +331,27 @@ int lapd_utme_wait_for_tei_assignment(struct lapd_utme *tme)
 	int timeout = 10 * HZ;
 
 	for (;;) {
-printk(KERN_DEBUG "lapd: Preparing to sleep\n");
 		prepare_to_wait_exclusive(&tme->waitq, &wait,
 			TASK_INTERRUPTIBLE);
 
+		if (tme->status == TEI_ASSIGNED)
+			break;
 		//lapd_utme_unlock(tme);
-
-printk(KERN_DEBUG "lapd: Going to sleep...\n");
 
 		// Timeout is used only to detect abnormal cases
 		timeout = schedule_timeout(timeout);
 
 		//lapd_utme_lock(tme);
 
-printk(KERN_DEBUG "lapd: Wakeup! %d\n", tme->status);
-
 		if (tme->status == TEI_ASSIGNED)
 			break;
-printk(KERN_DEBUG "lapd: Uhm... still not assigned\n");
 
 		if (signal_pending(current)) {
 			err = -EINTR;
 			break;
 		}
 
-printk(KERN_DEBUG "lapd: No pending signal\n");
 		if (!timeout) {
-			printk(KERN_ERR "lapd: Failure in assigning TEI\n");
-
 			err = -EAGAIN;
 			break;
 		}
@@ -380,8 +373,6 @@ void lapd_utme_set_static_tei(
 
 void lapd_utme_destroy(struct lapd_utme *tme)
 {
-	printk(KERN_DEBUG "lapd: utme destroy!\n");
-
 	lapd_utme_stop_timer(tme, &tme->T202_timer);
 
 	dev_put(tme->dev);

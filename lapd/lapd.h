@@ -6,6 +6,7 @@
 
 #include "lapd_proto.h"
 #include "tei_mgmt_nt.h"
+#include "tei_mgmt_te.h"
 
 #ifdef __KERNEL__
 
@@ -49,6 +50,11 @@ struct lapd_device
 	struct lapd_sap x25;
 };
 
+static inline struct lapd_device *lapd_dev(struct net_device *dev)
+{
+	return (struct lapd_device *)dev->atalk_ptr;
+}
+
 struct lapd_new_dlc
 {
 	struct hlist_node node;
@@ -76,7 +82,6 @@ static inline void lapd_sap_put(
 struct lapd_opt
 {
 	struct net_device *dev;
-	struct lapd_device *lapd_dev;
 
 	int nt_mode;
 
@@ -122,37 +127,18 @@ static inline struct lapd_opt *lapd_sk(const struct sock *__sk)
 
 extern void setup_lapd(struct net_device *netdev);
 
-// INOUT
-
 void lapd_unhash(struct sock *sk);
-void lapd_start_multiframe_establishment(struct sock *sk);
-void lapd_start_multiframe_release(struct sock *sk);
-void lapd_T200_timer(unsigned long data);
-inline int lapd_handle_socket_frame(struct sock *sk, struct sk_buff *skb);
 void lapd_T203_timer(unsigned long data);
 
-int lapd_send_iframe(struct sock *sk, u8 sapi, u8 tei,
-	void *data, int datalen);
-int lapd_prepare_iframe(struct sock *sk,
-	struct sk_buff *skb);
-int lapd_send_completed_iframe(struct sk_buff *skb);
-
-int lapd_prepare_uframe(struct sock *sk, struct sk_buff *skb,
-	enum lapd_uframe_function function);
-int lapd_send_completed_uframe(struct sk_buff *skb);
-
-int lapd_send_uframe(struct sock *sk, u8 sapi,
-	enum lapd_uframe_function function, void *data, int datalen);
-
-inline int lapd_send_frame(struct sk_buff *skb);
-
-static inline int lapd_is_valid_nr(struct lapd_opt *lo, int n_r)
+static inline u8 lapd_get_tei(struct lapd_opt *lo)
 {
-	// V(A) <= N(R) <= V(S)
-
-	return (n_r - lo->v_a) % 128 <=
-		(lo->v_s - lo->v_a) % 128;
+	if (lo->nt_mode)
+		return lo->tei;
+	else
+		return lo->usr_tme->tei;
 }
+
+struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi);
 
 int lapd_device_event(struct notifier_block *this, unsigned long event,
 			    void *ptr);

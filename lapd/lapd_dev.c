@@ -18,10 +18,9 @@
 
 static void lapd_device_up(struct net_device *dev)
 {
-	struct lapd_device *lapd_device;
-
 	printk(KERN_DEBUG "lapd: device %s up\n", dev->name);
 
+	struct lapd_device *lapd_device;
 	lapd_device = kmalloc(sizeof(*lapd_device), GFP_ATOMIC);
 	if (!lapd_device) {
 		return;
@@ -64,7 +63,7 @@ static void lapd_device_up(struct net_device *dev)
 static void lapd_device_down(struct net_device *dev)
 {
 	struct lapd_device *lapd_device =
-		(struct lapd_device *)dev->atalk_ptr;
+		lapd_dev(dev);
 
 	printk(KERN_DEBUG "lapd: device %s down\n", dev->name);
 

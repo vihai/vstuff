@@ -6,7 +6,8 @@ endif
 
 obj-m	:= lapd.o
 
-lapd-y	:= af_lapd.o lapd_inout.o lapd_dev.o tei_mgmt.o tei_mgmt_nt.o tei_mgmt_te.o
+lapd-y	:= af_lapd.o lapd_in.o lapd_out.o lapd_dev.o \
+	multiframe.o tei_mgmt.o tei_mgmt_nt.o tei_mgmt_te.o
 
 all:	
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`
