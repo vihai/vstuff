@@ -2,6 +2,32 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-03-25 01:27:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-16
+
+    Summary:
+      Lapd finished
+    Revision:
+      isdn--devel--0.1--patch-16
+
+
+    modified files:
+     ChangeLog NOTES fake_isdn/fake_isdn.c lapd/af_lapd.c
+     lapd/lapd.h lapd/lapd_dev.c lapd/lapd_in.c lapd/lapd_out.c
+     lapd/lapd_out.h lapd/multiframe.c lapd/multiframe.h
+     lapd/tei_mgmt.c lapd/tei_mgmt_nt.c lapd/tei_mgmt_te.c
+     lapd/tei_mgmt_te.h tests/Makefile.am tests/traffic.c
+
+    renamed files:
+     .arch-ids/ROADMAP.id
+       ==> .arch-ids/NOTES.id
+     ROADMAP
+       ==> NOTES
+     tests/.arch-ids/test.c.id
+       ==> tests/.arch-ids/traffic.c.id
+     tests/test.c
+       ==> tests/traffic.c
+
+
 2005-03-18 13:46:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-15
 
     Summary:

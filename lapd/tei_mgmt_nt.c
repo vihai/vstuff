@@ -7,11 +7,19 @@
 struct hlist_head lapd_ntme_hash = HLIST_HEAD_INIT;
 rwlock_t lapd_ntme_hash_lock = RW_LOCK_UNLOCKED;
 
+/*
+ * Must be called holding tme->lock
+ */
+
 static inline int lapd_ntme_send_tei_assigned(
 	struct lapd_ntme *tme, u16 ri, int tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_ASSIGNED, ri, tei);
 }
+
+/*
+ * Must be called holding tme->lock
+ */
 
 static inline int lapd_ntme_send_tei_denied(
 	struct lapd_ntme *tme, u16 ri, int tei)
@@ -19,11 +27,19 @@ static inline int lapd_ntme_send_tei_denied(
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_DENIED, ri, tei);
 }
 
+/*
+ * Must be called holding tme->lock
+ */
+
 static inline int lapd_ntme_send_tei_check_request(
 	struct lapd_ntme *tme, int tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_CHK_REQ, 0, tei);
 }
+
+/*
+ * Must be called holding tme->lock
+ */
 
 static inline int lapd_ntme_send_tei_remove(
 	struct lapd_ntme *tme, int tei)
@@ -31,15 +47,29 @@ static inline int lapd_ntme_send_tei_remove(
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_REMOVE, 0, tei);
 }
 
+/*
+ * Must be called holding tme->lock
+ */
+
 static inline int lapd_ntme_send_tei_verify(
 	struct lapd_ntme *tme, int tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_VERIFY, 0, tei);
 }
 
+/*
+ *
+ * DEADLOCK WARNING:
+ * This function acquires tme->lock
+ * Don't call it with bh_sock_lock held (in BH context) otherwise it will
+ * deadlock when passing messages to the socket (timer/rcv softirq context).
+ */
+
 static void lapd_ntme_start_tei_check(
 	struct lapd_ntme *tme, int tei)
 {
+	spin_lock(&tme->lock);
+
 	BUG_TRAP(tme->T201 > 0);
 
 	lapd_ntme_reset_timer(tme, &tme->T201_timer,
@@ -52,6 +82,8 @@ static void lapd_ntme_start_tei_check(
 	tme->tei_check_tei = tei;
 
 	lapd_ntme_send_tei_check_request(tme, tei);
+
+	spin_unlock(&tme->lock);
 }
 
 void lapd_ntme_T201_timer(unsigned long data)
@@ -60,6 +92,8 @@ void lapd_ntme_T201_timer(unsigned long data)
 		(struct lapd_ntme *)data;
 
 	lapd_printk(KERN_DEBUG, "tei_mgmt T201\n");
+
+	spin_lock(&tme->lock);
 
 	BUG_TRAP(tme->tei_check_outstanding);
 
@@ -98,8 +132,14 @@ void lapd_ntme_T201_timer(unsigned long data)
 		}
 	}
 
+	spin_lock(&tme->lock);
+
 	lapd_ntme_put(tme);
 }
+
+/*
+ * Must be called holding tme->lock
+ */
 
 static u8 lapd_ntme_find_available_tei(
 	struct lapd_ntme *tme)
@@ -122,7 +162,7 @@ static u8 lapd_ntme_find_available_tei(
 static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 {
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->h.raw;
+		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	lapd_printk_tme(KERN_INFO, skb->dev,
 		"TEI request\n");
@@ -138,14 +178,21 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 	read_lock_bh(&lapd_ntme_hash_lock);
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
 
-		if (tme->dev != skb->dev) continue;
+		spin_lock(&tme->lock);
+
+		if (tme->dev != skb->dev) {
+			spin_unlock(&tme->lock);
+			continue;
+		}
 
 		if (/*tm->body.ai >= LAPD_MIN_STA_TEI && // always true */
 		    tm->body.ai <= LAPD_MAX_STA_TEI) {
+			spin_unlock(&tme->lock);
 			goto found;
 		} else if (tm->body.ai >= LAPD_MIN_DYN_TEI &&
 		           tm->body.ai <= LAPD_MAX_DYN_TEI) {
 			lapd_ntme_send_tei_denied(tme, tm->body.ri, tm->body.ai);
+			spin_unlock(&tme->lock);
 			goto found;
 		}
 
@@ -153,6 +200,7 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 
 		lapd_ntme_send_tei_assigned(tme, tm->body.ri, tei);
 
+		spin_unlock(&tme->lock);
 		goto found;
 	}
 
@@ -167,7 +215,7 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 {
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->h.raw;
+		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	lapd_printk_dev(KERN_INFO, skb->dev,
 		"TEI check response\n");
@@ -181,15 +229,24 @@ static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 	struct lapd_ntme *tme;
 	read_lock_bh(&lapd_ntme_hash_lock);
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
-		if (tme->dev != skb->dev) continue;
+
+		spin_lock(&tme->lock);
+
+		if (tme->dev != skb->dev) {
+			spin_unlock(&tme->lock);
+			continue;
+		}
 
 		if (!tme->tei_check_outstanding) {
 			lapd_printk_dev(KERN_WARNING, skb->dev,
 				"unexpected/late check response\n");
+			spin_unlock(&tme->lock);
 			break;
 		}
 
 		tme->tei_check_responses[tme->tei_check_count]++;
+
+		spin_unlock(&tme->lock);
 	}
 
 	read_unlock_bh(&lapd_ntme_hash_lock);
@@ -198,7 +255,7 @@ static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 {
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->h.raw;
+		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	lapd_printk_tme(KERN_INFO, skb->dev,
 		"TEI verify received: tei=%d\n",
@@ -220,22 +277,32 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 	struct lapd_ntme *tme;
 	read_lock_bh(&lapd_ntme_hash_lock);
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
-		if (tme->dev == skb->dev) continue;
+
+		spin_lock(&tme->lock);
+
+		if (tme->dev == skb->dev) {
+			spin_unlock(&tme->lock);
+			continue;
+		}
 
 		lapd_printk_dev(KERN_INFO, skb->dev,
 			"starting TEI check\n");
 
+		// We're not going any futher in the list
+		read_unlock_bh(&lapd_ntme_hash_lock);
+
 		lapd_ntme_start_tei_check(tme, tm->body.ai);
+
+		spin_unlock(&tme->lock);
+
 		break;
 	}
-
-	read_unlock_bh(&lapd_ntme_hash_lock);
 }
 
 int lapd_ntme_handle_frame(struct sk_buff *skb)
 {
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->h.raw;
+		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	if (skb->len < sizeof(struct lapd_tei_mgmt_frame)) {
 		lapd_printk_dev(KERN_ERR, skb->dev,

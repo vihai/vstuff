@@ -1,7 +1,7 @@
 
-bin_PROGRAMS = test
+bin_PROGRAMS = traffic
 
-test_SOURCES = test.c
+traffic_SOURCES = traffic.c
 
 INCLUDES = -I$(srcdir)/../lapd/
 

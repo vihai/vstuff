@@ -52,7 +52,7 @@ enum
 	LAPD_TEI_MGMT_T201	= 4,
 	LAPD_TEI_MGMT_N202	= 5,
 	LAPD_TEI_MGMT_T202	= 6,
-	LAPD_DLC_STATUS		= 7,
+	LAPD_DLC_STATE		= 7,
 	LAPD_T200		= 8,
 	LAPD_N200		= 9,
 	LAPD_T203		= 10,
@@ -131,13 +131,28 @@ enum {
 	LAPD_PROTO_IFRAME = 1,
 };
 
-enum lapd_datalink_status
+// Do not changes these values, user mode binary compatibility needs them
+enum lapd_datalink_state
 {
-	LAPD_DLS_LISTENING,
-	LAPD_DLS_LINK_CONNECTION_RELEASED,
-	LAPD_DLS_LINK_CONNECTION_ESTABLISHED,
-	LAPD_DLS_AWAITING_ESTABLISH,
-	LAPD_DLS_AWAITING_RELEASE,
+	LAPD_DLS_NULL					= 0,
+	LAPD_DLS_TEI_UNASSIGNED				= 1,
+	LAPD_DLS_AWAITING_TEI				= 2,
+	LAPD_DLS_ESTABLISH_AWAITING_TEI			= 3,
+	LAPD_DLS_TEI_ASSIGNED				= 4,
+	LAPD_DLS_AWAITING_ESTABLISH			= 50,
+	LAPD_DLS_AWAITING_REESTABLISH			= 51,
+	LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE	= 52,
+	LAPD_DLS_AWAITING_RELEASE			= 6,
+	LAPD_DLS_LINK_CONNECTION_ESTABLISHED		= 7,
+	LAPD_DLS_LISTENING				= 100,
+};
+
+enum lapd_format_errors
+{
+	LAPD_FE_LENGTH,
+	LAPD_FE_N201,
+	LAPD_FE_UNDEFINED_COMMAND,
+	LAPD_FE_I_FIELD_NOT_PERMITTED,
 };
 
 struct lapd_sap
@@ -199,8 +214,9 @@ struct lapd_opt
 
 	int nt_mode;
 
-	// Datalink status
-	int N200_cnt;
+	struct sk_buff_head u_queue;
+
+	int retrans_cnt;
 
 	struct timer_list T200_timer;
 	struct timer_list T203_timer;
@@ -209,11 +225,10 @@ struct lapd_opt
 	u8 v_r;
 	u8 v_a;
 
-	enum lapd_datalink_status status;
+	enum lapd_datalink_state state;
 
 	int peer_busy;
 	int me_busy;
-	int peer_waiting_for_ack;
 	int rejection_exception;
 	int in_timer_recovery;
 	// ------------------
@@ -236,6 +251,19 @@ struct lapd_sock {
 	struct lapd_opt lapd;
 };
 
+enum lapd_int_msg_type
+{
+	LAPD_INT_MDL_ASSIGN_REQUEST,
+	LAPD_INT_MDL_REMOVE_REQUEST,
+	LAPD_INT_MDL_ERROR_RESPONSE,
+};
+
+struct lapd_internal_msg
+{
+	enum lapd_int_msg_type type;
+	int param;
+};
+
 static inline struct lapd_opt *lapd_sk(const struct sock *__sk)
 {
 	return &((struct lapd_sock *)__sk)->lapd;
@@ -243,26 +271,22 @@ static inline struct lapd_opt *lapd_sk(const struct sock *__sk)
 
 extern void setup_lapd(struct net_device *netdev);
 
-void lapd_unhash(struct sock *sk);
-void lapd_T203_timer(unsigned long data);
-
-static inline u8 lapd_get_tei(struct lapd_opt *lo)
-{
-	if (lo->nt_mode)
-		if (lo->status == LAPD_DLS_LISTENING)
-			return LAPD_BROADCAST_TEI;
-		else
-			return lo->tei;
-	else
-		return lo->usr_tme->tei;
-}
-
 struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi);
 
 int lapd_device_event(struct notifier_block *this,
 			unsigned long event, void *ptr);
-void lapd_frame_reject(struct sock *sk, struct sk_buff *skb, int w, int x, int y, int z);
+void lapd_frame_reject(struct sock *sk, struct sk_buff *skb,
+	enum lapd_format_errors error);
 int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
+void lapd_change_state(struct sock *sk, enum lapd_datalink_state newstate);
+void lapd_mdl_error_response(struct sock *sk);
+void lapd_mdl_assign_request(struct sock *sk, int tei);
+void lapd_mdl_remove_request(struct sock *sk);
+const char *lapd_state_to_text(enum lapd_datalink_state state);
+void lapd_deliver_internal_message(
+	struct sock *sk,
+	enum lapd_int_msg_type type,
+	int param);
 
 #endif
 #endif

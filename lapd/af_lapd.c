@@ -30,10 +30,6 @@ rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
 
 static kmem_cache_t *lapd_sk_cachep;
 
-
-
-
-
 #ifdef CONFIG_PROC_FS
 struct lapd_iter_state {
 	int bucket;
@@ -103,9 +99,9 @@ static __inline__ char *get_lapd_sock(struct sock *sp, char *tmpbuf, int i)
 	struct lapd_opt *lo = lapd_sk(sp);
 
 	sprintf(tmpbuf, "%4d: %02X %02X:%02X"
-		" %02X %02X %02X %c%c%c%c%c %08X:%08X %5d %5lu %3d %p",
+		" %02X %02X %02X %c%c%c%c  %08X:%08X %5d %5lu %3d %p",
 		i,
-		lo->status,
+		lo->state,
 		lo->sapi,
 		lo->tei,
 		lo->v_s,
@@ -113,7 +109,6 @@ static __inline__ char *get_lapd_sock(struct sock *sp, char *tmpbuf, int i)
 		lo->v_r,
 		lo->peer_busy?'B':' ',
 		lo->me_busy?'M':' ',
-		lo->peer_waiting_for_ack?'A':' ',
 		lo->rejection_exception?'R':' ',
 		lo->in_timer_recovery?'T':' ',
 		atomic_read(&sp->sk_wmem_alloc),
@@ -238,6 +233,8 @@ EXPORT_SYMBOL(setup_lapd);
 
 static void lapd_sock_destruct(struct sock *sk)
 {
+	lapd_debug_sk(sk, "Socket destruct\n");
+
 	if (!sock_flag(sk, SOCK_DEAD)) {
 		lapd_printk_sk(KERN_CRIT, sk,
 			"Attempt to release alive socket %p\n", sk);
@@ -288,10 +285,13 @@ static void lapd_sock_destruct(struct sock *sk)
 	__skb_queue_purge(&sk->sk_write_queue);
 	__skb_queue_purge(&sk->sk_receive_queue);
 	__skb_queue_purge(&sk->sk_error_queue);
+	__skb_queue_purge(&lo->u_queue);
 
 	WARN_ON(!skb_queue_empty(&sk->sk_write_queue));
 	WARN_ON(!skb_queue_empty(&sk->sk_receive_queue));
 	WARN_ON(!skb_queue_empty(&sk->sk_error_queue));
+	WARN_ON(!skb_queue_empty(&lo->u_queue));
+
 	WARN_ON(atomic_read(&sk->sk_rmem_alloc));
 	WARN_ON(atomic_read(&sk->sk_wmem_alloc));
 
@@ -317,28 +317,61 @@ static int lapd_release(struct socket *sock)
 	struct sock *sk = sock->sk;
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (!sk) return 0;
+	if (!sk)
+		return 0;
 
-	WARN_ON(sock_owned_by_user(sk));
+	lapd_debug_sk(sk, "Socket release\n");
 
-	sock_orphan(sk);
+	lock_sock(sk);
+	sk->sk_shutdown = SHUTDOWN_MASK;
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		// Request disconnection, unhash will be delayed
-		// until multiframe has been released
-		sk->sk_state = TCP_CLOSING;
-
-		lapd_start_multiframe_release(sk);
-	} else {
+	if (sk->sk_state == TCP_LISTEN) {
 		sk->sk_state = TCP_CLOSE;
 
 		write_lock_bh(&lapd_hash_lock);
 		sk_del_node_init(sk);
 		write_unlock_bh(&lapd_hash_lock);
+	} else {
+		switch (lo->state) {
+		case LAPD_DLS_AWAITING_REESTABLISH:
+			lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE);
+			sk->sk_state = TCP_CLOSING;
+		break;
+
+		case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+			lapd_discard_iqueue(sk);
+			lo->retrans_cnt = 0;
+			lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DISC, 1, NULL, 0);
+			lapd_start_t200(sk);
+
+			if (!lo->in_timer_recovery)
+				lapd_stop_t203(sk);
+
+			lapd_change_state(sk, LAPD_DLS_AWAITING_RELEASE);
+			sk->sk_state = TCP_CLOSING;
+		break;
+
+		default:
+			sk->sk_state = TCP_CLOSE;
+
+			write_lock_bh(&lapd_hash_lock);
+			sk_del_node_init(sk);
+			write_unlock_bh(&lapd_hash_lock);
+		break;
+		}
 	}
 
-	sock_put(sk);
+	release_sock(sk);
+
+        bh_lock_sock(sk);
+        WARN_ON(sock_owned_by_user(sk));
+
+        sock_orphan(sk);
+
 	sock->sk = NULL;
+
+	bh_unlock_sock(sk);
+	sock_put(sk);
 
 	return 0;
 }
@@ -372,24 +405,13 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		int size = 0;
 
 		if (skb) {
-			size = skb->len;
-/*
-			struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+			struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 
-			switch (lapd_frame_type(hdr->control)) {
-			case IFRAME:
-				size = skb->len - sizeof(struct lapd_hdr_e);
-			break;
-
-			case SFRAME:
-				size = skb->len - sizeof(struct lapd_hdr_e);
-			break;
-
-			case UFRAME:
+		        if (lapd_frame_type(hdr->control) ==
+				LAPD_FRAME_TYPE_UFRAME)
 				size = skb->len - sizeof(struct lapd_hdr);
-			break;
-			};
-*/
+			else
+				size = skb->len - sizeof(struct lapd_hdr_e);
 		}
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
@@ -496,7 +518,8 @@ lapd_printk_sk(KERN_DEBUG, sk, "IOCTL PPPIOCGUNIT\n");
 	return rc;
 }
 
-static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
+static int lapd_sendmsg(
+	struct kiocb *iocb, struct socket *sock,
 	struct msghdr *msg, size_t len)
 {
 	struct sock *sk = sock->sk;
@@ -505,9 +528,18 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 
 	lock_sock(sk);
 
+	err = sock_error(sk);
+	if (err)
+		goto err_socket_error;
+
+	if(sk->sk_shutdown & SEND_SHUTDOWN) {
+		err = -EPIPE;
+		goto err_shutting_down;
+	}
+
 	if (sk->sk_state != TCP_ESTABLISHED &&
 	    sk->sk_state != TCP_LISTEN) {
-		err = -EIO;
+		err = -EPIPE;
 		goto err_not_established;
 	}
 
@@ -521,40 +553,18 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		goto err_over_mtu;
 	}
 
-	lapd_tei_t tei;
-
-	if (!lo->nt_mode && lo->usr_tme->status != TEI_ASSIGNED) {
-		if (msg->msg_flags & O_NONBLOCK) {
-			err = -EWOULDBLOCK;
-			goto err_tei_unassigned;
-		}
-
-		// Ok, this is quite racy. We could wait for TEI assignment
-		// return from wait_for_tei_assignment and have TEI removed
-		// in the meantime, that's the reason for the while
-		do {
-			release_sock(sk);
-			err = lapd_utme_wait_for_tei_assignment(
-				lo->usr_tme);
-			lock_sock(sk);
-
-			if (err < 0)
-				goto err_wait_for_tei_assignment;
-
-			spin_lock_bh(&lo->usr_tme->lock);
-			if (lo->usr_tme->status == TEI_ASSIGNED)
-				tei = lo->usr_tme->tei;
-			else
-				tei = LAPD_TEI_UNASSIGNED;
-			spin_unlock_bh(&lo->usr_tme->lock);
-
-		} while (tei == LAPD_TEI_UNASSIGNED);
-	}
+	// TODO, finish async operation
+	/* This should be in poll */
+	clear_bit(SOCK_ASYNC_NOSPACE, &sk->sk_socket->flags);
 
 	struct sk_buff *skb;
 	if (msg->msg_flags & MSG_OOB) {
-		skb = alloc_skb(sizeof(struct lapd_hdr) + len,
-			(msg->msg_flags & MSG_DONTWAIT) ? GFP_ATOMIC : GFP_KERNEL);
+
+		release_sock(sk);
+		skb = sock_alloc_send_skb(sk,
+        		sizeof(struct lapd_hdr_e) + len,
+			(msg->msg_flags & MSG_DONTWAIT), &err);
+		lock_sock(sk);
 		if (!skb) {
 			err = -ENOMEM;
 			goto err_sock_alloc_send_skb;
@@ -568,7 +578,28 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		if (err)
 			goto err_memcpy_fromiovec;
 
-		lapd_send_completed_uframe(skb);
+		switch (lo->state) {
+		case LAPD_DLS_TEI_UNASSIGNED:
+			lapd_change_state(sk, LAPD_DLS_AWAITING_TEI);
+
+			// Cannot be in this state in NT mode
+			lapd_utme_start_tei_request(lo->usr_tme);
+
+		case LAPD_DLS_AWAITING_TEI:
+		case LAPD_DLS_ESTABLISH_AWAITING_TEI:
+			lapd_queue_completed_uframe(sk, skb);
+		break;
+
+		case LAPD_DLS_NULL:
+		case LAPD_DLS_LISTENING:
+		case LAPD_DLS_TEI_ASSIGNED:
+		case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+		case LAPD_DLS_AWAITING_ESTABLISH:
+		case LAPD_DLS_AWAITING_REESTABLISH:
+		case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+		case LAPD_DLS_AWAITING_RELEASE:
+				lapd_send_completed_uframe(skb);
+		}
 	} else {
 		// FIXME TODO
 		// sock_alloc_send_skb may sleep, sleeping with sk lock
@@ -582,7 +613,8 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
 		if (!skb)
 			goto err_sock_alloc_send_skb;
 
-		if (lo->status != LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
+		if (lo->state != LAPD_DLS_LINK_CONNECTION_ESTABLISHED &&
+		    lo->state != LAPD_DLS_AWAITING_REESTABLISH) {
 			err = -ENOTCONN;
 			goto err_notconn;
 		}
@@ -607,11 +639,11 @@ err_prepare_frame:
 err_notconn:
 	kfree_skb(skb);
 err_sock_alloc_send_skb:
-err_wait_for_tei_assignment:
-err_tei_unassigned:
 err_over_mtu:
 err_no_dev:
 err_not_established:
+err_socket_error:
+err_shutting_down:
 
 	release_sock(sk);
 
@@ -630,8 +662,13 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	lock_sock(sk);
 
 	if (sk->sk_state != TCP_ESTABLISHED) {
-		err = -EIO;
+		err = -ENOTCONN;
 		goto err_not_established;
+	}
+
+	if (sk->sk_shutdown & RCV_SHUTDOWN) {
+		err = -EPIPE;
+		goto err_shutting_down;
 	}
 
 	if (!lo->dev) {
@@ -646,21 +683,30 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (!skb)
 		goto err_recv_datagram;
 
-	skb->h.raw = skb->data;
-	copied     = skb->len;
+        struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	int hdrsize;
 
+        if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
+		msg->msg_flags |= MSG_OOB;
+		hdrsize = sizeof(struct lapd_hdr);
+	} else {
+		hdrsize = sizeof(struct lapd_hdr_e);
+	}
+
+	copied = skb->len - hdrsize;
 	if (copied > size) {
 		copied = size;
 		msg->msg_flags |= MSG_TRUNC;
 	}
 
-	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
+	skb_copy_datagram_iovec(skb, hdrsize, msg->msg_iov, copied);
 
 	skb_free_datagram(sk, skb);
 	err = copied;
 
 err_recv_datagram:
 err_no_dev:
+err_shutting_down:
 err_not_established:
 
 	return err;
@@ -695,7 +741,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	if (dev->flags & IFF_ALLMULTI) {
 		lo->nt_mode = TRUE;
 
-		struct sock *sk;
+		struct sock *sk = NULL;
 		struct hlist_node *node;
 		// Do not allow binding more than one socket to the
 		// same interface.
@@ -710,6 +756,8 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 			}
 		}
 		read_unlock_bh(&lapd_hash_lock);
+
+		sk->sk_state = TCP_CLOSE;
 	} else {
 		lo->nt_mode = FALSE;
 
@@ -719,7 +767,11 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		sk->sk_state = TCP_ESTABLISHED;
 	}
 
-	if (!lo->nt_mode) {
+	if (lo->nt_mode) {
+		lo->state = LAPD_DLS_TEI_ASSIGNED;
+	} else {
+		lo->state = LAPD_DLS_TEI_UNASSIGNED;
+
 		lo->usr_tme = lapd_utme_alloc(dev);
 
 		lapd_utme_hold(lo->usr_tme);
@@ -735,15 +787,6 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		lo->sap = &lapd_dev(lo->dev)->q931;
 	} else if(lo->sapi == LAPD_SAPI_X25) {
 		lo->sap = &lapd_dev(lo->dev)->x25;
-	}
-
-	// TODO: We may need to postpone tei request when L2 transfers
-	// are needed, cfr. ETSI 300 125
-	if (!lo->nt_mode) {
-		lo->usr_tme->dev = dev;
-
-		if (lo->usr_tme->status != TEI_ASSIGNED)
-			lapd_utme_start_tei_request(lo->usr_tme);
 	}
 
 	return 0;
@@ -779,19 +822,26 @@ unsigned int lapd_poll(struct file *file,
 	 */
 
 	mask = 0;
+
+	/* exceptional events? */
 	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))
 		mask |= POLLERR;
+	if (sk->sk_shutdown == SHUTDOWN_MASK)
+		mask |= POLLHUP;
 
 	/* readable? */
 	if (!skb_queue_empty(&sk->sk_receive_queue) ||
 	    (sk->sk_shutdown & RCV_SHUTDOWN))
 		mask |= POLLIN | POLLRDNORM;
 
-	if (sk->sk_shutdown == SHUTDOWN_MASK)
+	if (sk->sk_state == TCP_CLOSE || sk->sk_state == TCP_CLOSING)
 		mask |= POLLHUP;
 
-	if (sk->sk_shutdown & RCV_SHUTDOWN)
-		mask |= POLLIN | POLLRDNORM;
+	/* writable? */
+	if (sock_writeable(sk))
+		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+	else
+		set_bit(SOCK_ASYNC_NOSPACE, &sk->sk_socket->flags);
 
 	return mask;
 }
@@ -1161,13 +1211,13 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 		val = lo->sap->k;
 	break;
 
-	case LAPD_DLC_STATUS:
+	case LAPD_DLC_STATE:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		val = lo->status;
+		val = lo->state;
 	break;
 
 	default:
@@ -1198,6 +1248,8 @@ err_get_user:
 static void lapd_unhash_timer(unsigned long data)
 {
 	struct sock *sk = (struct sock *)data;
+
+	lapd_debug_sk(sk, "Unhash timer\n");
 
 	BUG_ON(sk->sk_state != TCP_CLOSING);
 
@@ -1245,14 +1297,15 @@ struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
 
 	lo->nt_mode = parent_lo->nt_mode;
 
+	skb_queue_head_init(&lo->u_queue);
+
 	lo->usr_tme = NULL;
 	lo->peer_busy = FALSE;
 	lo->me_busy = FALSE;
-	lo->peer_waiting_for_ack = FALSE;
 	lo->rejection_exception = FALSE;
 	lo->in_timer_recovery = FALSE;
 
-	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
+	lo->state = LAPD_DLS_TEI_ASSIGNED;
 
 	INIT_HLIST_HEAD(&lo->new_dlcs);
 
@@ -1276,6 +1329,277 @@ struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
 	return sk;
 }
 
+const char *lapd_state_to_text(enum lapd_datalink_state state)
+{
+	switch (state) {
+	case LAPD_DLS_NULL:
+		return "NULL";
+	case LAPD_DLS_LISTENING:
+		return "LISTENING";
+	case LAPD_DLS_TEI_UNASSIGNED:
+		return "TEI_UNASSIGNED";
+	case LAPD_DLS_AWAITING_TEI:
+		return "AWAITING_TEI";
+	case LAPD_DLS_ESTABLISH_AWAITING_TEI:
+		return "ESTABLISH_AWAITING_TEI";
+	case LAPD_DLS_TEI_ASSIGNED:
+		return "TEI_ASSIGNED";
+	case LAPD_DLS_AWAITING_ESTABLISH:
+		return "AWAITING_ESTABLISH";
+	case LAPD_DLS_AWAITING_REESTABLISH:
+		return "AWAITING_REESTABLISH";
+	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+		return "ESTABLISH_PENDING_RELEASE";
+	case LAPD_DLS_AWAITING_RELEASE:
+		return "AWAITING_RELEASE";
+	case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+		return "LINK_CONNECTION_ESTABLISHED";
+	}
+
+	return NULL;
+}
+
+void lapd_change_state(struct sock *sk, enum lapd_datalink_state newstate)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+	const char *oldstate;
+	oldstate = lapd_state_to_text(lapd_sk(sk)->state);
+
+	lo->state = newstate;
+
+	if (!sock_flag(sk, SOCK_DEAD))
+		sk->sk_state_change(sk);
+
+	lapd_debug_sk(sk, "Changed state from %s to %s\n",
+		oldstate, lapd_state_to_text(lo->state));
+}
+
+// This must be called holding socket lock
+void lapd_mdl_assign_request(struct sock *sk, int tei)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	lapd_debug_sk(sk, "MDL-ASSIGN-REQUEST %d\n", sk->sk_state);
+
+	switch (lo->state) {
+	case LAPD_DLS_TEI_UNASSIGNED:
+	case LAPD_DLS_AWAITING_TEI:
+		lo->tei = tei;
+
+		lapd_change_state(sk, LAPD_DLS_TEI_ASSIGNED);
+		lapd_flush_uqueue(sk);
+	break;
+
+	case LAPD_DLS_ESTABLISH_AWAITING_TEI:
+		lo->tei = tei;
+
+		lo->retrans_cnt = 0;
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
+		lapd_start_t200(sk);
+
+		lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH);
+
+		lapd_flush_uqueue(sk);
+	break;
+
+	case LAPD_DLS_NULL:
+	case LAPD_DLS_LISTENING:
+	case LAPD_DLS_TEI_ASSIGNED:
+	case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+	case LAPD_DLS_AWAITING_ESTABLISH:
+	case LAPD_DLS_AWAITING_REESTABLISH:
+	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+	case LAPD_DLS_AWAITING_RELEASE:
+		lapd_printk(KERN_ERR,
+			"Unexpected MDL-ASSIGN-REQUEST in state %d\n",
+			lo->state);
+	break;
+	}
+}
+
+// This must be called holding socket lock
+void lapd_mdl_remove_request(struct sock *sk)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	lapd_debug_sk(sk, "MDL-REMOVE-REQUEST");
+
+	switch (lo->state) {
+	case LAPD_DLS_TEI_ASSIGNED:
+		lapd_discard_uqueue(sk);
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_AWAITING_ESTABLISH:
+		lapd_dl_release_indication(sk);
+		lapd_discard_uqueue(sk);
+		lapd_stop_t200(sk);
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_AWAITING_REESTABLISH:
+		lapd_dl_release_indication(sk);
+		lapd_discard_uqueue(sk);
+		lapd_discard_iqueue(sk);
+		lapd_stop_t200(sk);
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+		lapd_dl_release_confirm(sk);
+		lapd_discard_uqueue(sk);
+		lapd_discard_iqueue(sk);
+		lapd_stop_t200(sk);
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_AWAITING_RELEASE:
+		lapd_dl_release_confirm(sk);
+		lapd_discard_uqueue(sk);
+		lapd_stop_t200(sk);
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+	break;
+
+	case LAPD_DLS_NULL:
+	case LAPD_DLS_LISTENING:
+	case LAPD_DLS_TEI_UNASSIGNED:
+	case LAPD_DLS_AWAITING_TEI:
+	case LAPD_DLS_ESTABLISH_AWAITING_TEI:
+		lapd_printk(KERN_ERR,
+			"Unexpected MDL-REMOVE-REQUEST in state %d\n",
+			lo->state);
+	break;
+	}
+}
+
+// This must be called holding socket lock
+void lapd_mdl_error_response(struct sock *sk)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+
+	lapd_debug_sk(sk, "MDL-ERROR-RESPONSE\n");
+
+	switch(lo->state) {
+	case LAPD_DLS_AWAITING_TEI:
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_ESTABLISH_AWAITING_TEI:
+		lapd_dl_release_indication(sk);
+		sk->sk_err = EIO;
+
+		lapd_change_state(sk, LAPD_DLS_TEI_UNASSIGNED);
+	break;
+
+	case LAPD_DLS_NULL:
+	case LAPD_DLS_LISTENING:
+	case LAPD_DLS_TEI_UNASSIGNED:
+	case LAPD_DLS_TEI_ASSIGNED:
+	case LAPD_DLS_AWAITING_ESTABLISH:
+	case LAPD_DLS_AWAITING_REESTABLISH:
+	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+	case LAPD_DLS_AWAITING_RELEASE:
+	case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+		lapd_printk(KERN_ERR,
+			"Unexpected MDL-ERROR-RESPONSE in state %s\n",
+			lapd_state_to_text(lo->state));
+	break;
+	}
+}
+
+int lapd_multiframe_wait_for_establishment(struct sock *sk)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+	DEFINE_WAIT(wait);
+        int err = 0;
+	int timeout = 60 * HZ;
+
+	for (;;) {
+		prepare_to_wait_exclusive(sk->sk_sleep, &wait,
+			TASK_INTERRUPTIBLE);
+
+	printk(KERN_ERR "C######################################## %d\n", sk->sk_state);
+		release_sock(sk);
+		// Timeout is used only to detect abnormal cases
+		timeout = schedule_timeout(timeout);
+		lock_sock(sk);
+	printk(KERN_ERR "D######################################## %d\n", sk->sk_state);
+
+		err = sock_error(sk);
+		if (err)
+			break;
+
+		if (sk->sk_state != TCP_ESTABLISHED)
+			break;
+
+		if (lo->state == LAPD_DLS_LINK_CONNECTION_ESTABLISHED)
+			break;
+
+		if (signal_pending(current)) {
+			err = sock_intr_errno(timeout);
+			break;
+		}
+
+		if (!timeout) {
+			lapd_printk_sk(KERN_ERR, sk,
+				"Connect timed out?!?\n");
+
+			err = -EAGAIN;
+			break;
+		}
+	}
+
+	finish_wait(sk->sk_sleep, &wait);
+
+	return err;
+}
+
+int lapd_multiframe_wait_for_release(struct sock *sk)
+{
+	struct lapd_opt *lo = lapd_sk(sk);
+	DEFINE_WAIT(wait);
+        int err = 0;
+	int timeout = 60 * HZ;
+
+	for (;;) {
+		prepare_to_wait_exclusive(sk->sk_sleep, &wait,
+			TASK_INTERRUPTIBLE);
+
+		release_sock(sk);
+		// Timeout is used only to detect abnormal cases
+		timeout = schedule_timeout(timeout);
+		lock_sock(sk);
+
+		if (sk->sk_err) {
+			err = -sk->sk_err;
+			break;
+		}
+
+		if (lo->state == LAPD_DLS_TEI_ASSIGNED)
+			break;
+
+		if (signal_pending(current)) {
+			err = sock_intr_errno(timeout);
+			break;
+		}
+
+		if (!timeout) {
+			lapd_printk_sk(KERN_ERR, sk,
+				"Connect timed out?!?\n");
+
+			err = -EAGAIN;
+			break;
+		}
+	}
+
+	finish_wait(sk->sk_sleep, &wait);
+
+	return err;
+}
+
 static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
@@ -1286,64 +1610,103 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	if (sk->sk_state != TCP_ESTABLISHED) {
 		err = -EIO;
-		goto err_not_listening;
+		goto err_listening;
 	}
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (!lo->nt_mode && lo->usr_tme->status != TEI_ASSIGNED) {
+	switch(lo->state) {
+	case LAPD_DLS_TEI_UNASSIGNED:
+		lapd_change_state(sk, LAPD_DLS_ESTABLISH_AWAITING_TEI);
+
+		lapd_utme_start_tei_request(lo->usr_tme);
+
 		if (flags & O_NONBLOCK) {
 			err = -EWOULDBLOCK;
 			goto err_tei_unassigned;
 		}
 
-		release_sock(sk);
-		lapd_utme_wait_for_tei_assignment(lo->usr_tme);
-		lock_sock(sk);
-	}
+		err = lapd_multiframe_wait_for_establishment(sk);
+		if (err) {
+			if (err == -ECONNRESET)
+				err = -ETIMEDOUT;
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED &&
-	    sock->state == SS_CONNECTING) {
-		 /* Connect completed during a ERESTARTSYS event */
-		sock->state = SS_CONNECTED;
-		goto established;
-	}
+			goto err_multiframe_wait_for_establishment;
+		}
+	break;
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED &&
-		 sock->state == SS_CONNECTING) {
-		sock->state = SS_UNCONNECTED;
-		err = -ECONNREFUSED;
-		goto err_refused;
-	}
+	case LAPD_DLS_AWAITING_TEI:
+		lapd_change_state(sk, LAPD_DLS_ESTABLISH_AWAITING_TEI);
+	break;
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		err = -EISCONN;
-		goto err_already_connected;
-	}
-
-	if (lo->status == LAPD_DLS_AWAITING_ESTABLISH && (flags & O_NONBLOCK)) {
+	case LAPD_DLS_ESTABLISH_AWAITING_TEI:
 		err = -EINPROGRESS;
-		goto err_inprogress;
+	break;
+
+	case LAPD_DLS_TEI_ASSIGNED:
+		lo->retrans_cnt = 0;
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
+		lapd_start_t200(sk);
+		lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH);
+
+		if (flags & O_NONBLOCK) {
+			err = -EWOULDBLOCK;
+			goto wouldblock;
+		}
+
+		err = lapd_multiframe_wait_for_establishment(sk);
+		if (err) {
+			if (err == -ECONNRESET)
+				err = -ETIMEDOUT;
+
+			goto err_multiframe_wait_for_establishment;
+		}
+	break;
+
+	case LAPD_DLS_AWAITING_ESTABLISH:
+		err = -EINPROGRESS;
+		goto err_already_establishing;
+	break;
+
+	case LAPD_DLS_AWAITING_REESTABLISH:
+		lapd_discard_iqueue(sk);
+
+		lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH);
+	break;
+
+	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+		err = -ECONNABORTED;
+	break;
+
+	case LAPD_DLS_AWAITING_RELEASE:
+		err = -ECONNABORTED;
+	break;
+
+	case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+		lapd_discard_iqueue(sk);
+		lo->retrans_cnt = 0;
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
+		lapd_start_t200(sk);
+
+		if (!lo->in_timer_recovery)
+			lapd_stop_t203(sk);
+
+		lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH);
+	break;
+
+	case LAPD_DLS_NULL:
+	case LAPD_DLS_LISTENING:
+		lapd_printk(KERN_ERR,
+			"Unexpected MDL-ERROR-RESPONSE in state %d\n",
+			lo->state);
+	break;
 	}
 
-        sock->state = SS_CONNECTING;
-	lapd_start_multiframe_establishment(sk);
-
-	err = lapd_multiframe_wait_for_establishment(sk);
-	if (err) {
-	        sock->state = SS_UNCONNECTED;
-		goto err_multiframe_wait_for_establishment;
-	}
-
-	sock->state = SS_CONNECTED;
-
+wouldblock:
 err_multiframe_wait_for_establishment:
-err_inprogress:
-err_already_connected:
-err_refused:
-established:
+err_already_establishing:
 err_tei_unassigned:
-err_not_listening:
+err_listening:
 
 	release_sock(sk);
 
@@ -1451,7 +1814,7 @@ static int lapd_listen(struct socket *sock, int backlog)
 	sk->sk_max_ack_backlog = backlog;
 	sk->sk_state = TCP_LISTEN;
 
-	lo->status = LAPD_DLS_LISTENING;
+	lo->state = LAPD_DLS_LISTENING;
 
 err_already_listening:
 err_closing:
@@ -1469,20 +1832,51 @@ static int lapd_shutdown(struct socket *sock, int how)
 	struct lapd_opt *lo = lapd_sk(sk);
 	int err = 0;
 
+	lapd_debug_multiframe(sk,
+		"Starting multiframe release\n");
+
 	lock_sock(sk);
 
-	if (lo->status == LAPD_DLS_LISTENING) {
+	switch (lo->state) {
+	case LAPD_DLS_TEI_ASSIGNED:
+		lapd_dl_release_confirm(sk);
+	break;
+
+	case LAPD_DLS_AWAITING_REESTABLISH:
+		lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE);
+	break;
+
+	case LAPD_DLS_LINK_CONNECTION_ESTABLISHED:
+		lapd_discard_iqueue(sk);
+		lo->retrans_cnt = 0;
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DISC, 1, NULL, 0);
+		lapd_start_t200(sk);
+
+		if (!lo->in_timer_recovery)
+			lapd_stop_t203(sk);
+
+		lapd_change_state(sk, LAPD_DLS_AWAITING_RELEASE);
+	break;
+
+	case LAPD_DLS_NULL:
+	case LAPD_DLS_LISTENING:
+	case LAPD_DLS_TEI_UNASSIGNED:
+	case LAPD_DLS_AWAITING_TEI:
+	case LAPD_DLS_ESTABLISH_AWAITING_TEI:
+	case LAPD_DLS_AWAITING_ESTABLISH:
+	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
+	case LAPD_DLS_AWAITING_RELEASE:
 		err = -ENOTSUPP;
-		goto err_sock_listening;
+		goto err_not_supported;
+	break;
 	}
 
-	lapd_start_multiframe_release(sk);
-
 	err = lapd_multiframe_wait_for_release(sk);
-	if (err) goto err_multiframe_wait_for_release;
+	if (err)
+		goto err_multiframe_wait_for_release;
 
 err_multiframe_wait_for_release:
-err_sock_listening:
+err_not_supported:
 
 	release_sock(sk);
 
@@ -1562,6 +1956,8 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
+	skb_queue_head_init(&lo->u_queue);
+
 	// We use ->sapi as a temporary until SO_BINDTODEVICE
 	lo->sapi = protocol;
  
@@ -1579,11 +1975,10 @@ static int lapd_create(struct socket *sock, int protocol)
 	lo->T203_timer.function = lapd_T203_timer;
 	lo->T203_timer.data = (unsigned long)sk;
 
-	lo->status = LAPD_DLS_LINK_CONNECTION_RELEASED;
+	lo->state = LAPD_DLS_NULL;
 
 	lo->peer_busy = FALSE;
 	lo->me_busy = FALSE;
-	lo->peer_waiting_for_ack = FALSE;
 	lo->rejection_exception = FALSE;
 	lo->in_timer_recovery = FALSE;
 

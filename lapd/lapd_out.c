@@ -36,9 +36,9 @@ int lapd_prepare_uframe(struct sock *sk,
 
 	BUG_ON(!lo->dev);
 
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 	skb->dev = lo->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 	struct lapd_hdr *hdr =
 		(struct lapd_hdr *)skb_put(skb, sizeof(struct lapd_hdr));
@@ -63,7 +63,10 @@ int lapd_prepare_uframe(struct sock *sk,
 	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lo->nt_mode)?1:0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
-	hdr->addr.tei = lapd_get_tei(lo);
+
+	hdr->addr.tei = lo->state == LAPD_DLS_LISTENING ?
+			LAPD_BROADCAST_TEI :
+			lo->tei;
 
 	hdr->control = lapd_uframe_make_control(function, p_f);
 
@@ -100,16 +103,25 @@ err_alloc_skb:
 	return err;
 }
 
+void lapd_queue_completed_uframe(
+	struct sock *sk,
+	struct sk_buff *skb)
+{
+	skb->sk = sk;
+	skb_queue_tail(&lapd_sk(sk)->u_queue, skb);
+}
+
+void lapd_flush_uqueue(struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(&lapd_sk(sk)->u_queue))) {
+		lapd_send_frame(skb);
+	}
+}
+
 int lapd_send_completed_uframe(struct sk_buff *skb)
 {
 	return lapd_send_frame(skb);
-}
-
-void lapd_T203_timer(unsigned long data)
-{
-	struct sock *sk = (struct sock *)data;
-//	struct lapd_opt *lo = lapd_sk(sk);
-
-	sock_put(sk);
 }
 

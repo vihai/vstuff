@@ -16,8 +16,8 @@ inline int lapd_tm_send(
 		GFP_ATOMIC);
 
 	skb->dev = dev;
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 	struct lapd_hdr *hdr =
 		(struct lapd_hdr *)skb_put(skb, sizeof(struct lapd_hdr));

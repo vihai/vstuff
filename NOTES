@@ -1,0 +1,193 @@
+
+FEATURES/NOTES
+
+- The socket MUST be bound to an interface to function properly.
+
+- The socket layer supports multiple sockets on TE interfaces. A TEI is assigned
+  to each socket for complete transparency between different q.931 speakers.
+
+TODO
+
+- Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
+  safe, since ISDN interfaces will never run AppleTalk, however it is an ugly
+  hack and should be fixed.
+
+- Add AF_LAPD to linux/include/linux/socket.h
+- Add PF_LAPD to linux/include/linux/socket.h
+- Add SOL_LAPD to linux/inclode/linx/socket.h ????
+
+- Add ARPHRD_LAPD to linux/include/linux/if_arp.h
+- Add ETH_P_LAPD to linux/include/linux/if_ether.h
+
+- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
+  - A specific flag would be better.
+
+- Fix all copyright notices and file headers
+
+- Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
+
+- Use Automake/Autoconf for chan_isdn
+
+- Implement SOCK_RAW sockets (?)
+
+- DL_DATA-REQUEST in AWAITING shoud put the frame in queue
+
+- Lock accesses to TME and make tei atomic_t  (?)
+
+- Check all input data in ioctls/setsockopt for security bugs
+
+- Implement socket closure after timeout and T203
+
+- Implement listen backlog maximum size
+- Implement frame acknowledging throught outgoing i-frames instead of specific RR
+
+- Indagate whether it is possiblle to strictly serialize frames coming from the
+  same device (and thus going to the same socket). Currently netif_rx spreads the
+  load on per-CPU queues and frames may get analyzed concurrently.
+
+FIX debugging
+Add interface to each line
+
+Check what happens when 64 sockets are open (every dynamic TEIs)
+
+Should we add incoming interface, interface role and packet_type to ethereal's
+Frame?
+
+Notes:
+In NT mode there is only one TEI management entity per interface
+In TE mode there can be at most one TEI management per socket
+
+Missing:
+ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
+
+
+HISTORY:
+
+
+18/2/2005 2:05
+First call made throught the public network... no voice however :)
+
+22/2/2005 01:23
+First PPP connecion
+
+18/3/2005 14:30
+LAPD with full features
+
+
+DL-UNIT DATA-REQUEST
+sendmsg(2) with MSG_OOB flag
+
+DL-UNIT DATA-INDICATION
+recvmsg(2) with MSG_OOB flag
+
+DL-DATA-REQUEST
+sendmsg(2)
+
+DL-DATA-INDICATION
+recvmsg(2)
+
+DL-ESTABLISH-REQUEST
+connect(2)
+
+DL-ESTABLISH-INDICATION
+Error from recvmsg
+EISCONN
+
+DL-ESTABLISH-CONFIRM
+Successful return from connect(2) in synchronous operation
+
+DL-RELEASE-REQUEST
+shutdown(2)
+
+DL-RELEASE-INDICATION
+Error from connect(2)
+EIO = Too many retries assigning TEI
+ETIMEDOUT = Too many retries establishing connection
+Error from recvmsg
+ECONNRESET 
+
+DL-RELEASE-CONFIRM
+Successful return from shutdown(2) in synchronous operation
+
+Tei Management:
+-----------------------------------------------
+MDL-ASSIGN-REQUEST
+lapd_mdl_assign_request
+
+MDL-ASSIGN-INDICATION
+lapd_utme_start_tei_request
+
+MDL-REMOVE-REQUEST
+lapd_mdl_remove_request
+
+MDL-ERROR-INDICATION
+
+MDL-ERROR-RESPONSE
+lapd_mdl_error_response
+
+Physical
+-----------------------------------------------
+PH-DATA-REQUEST
+dev_queue_xmit
+
+PH-DATA-INDICATION
+lapd_rcv
+
+PH-ACTIVATE-REQUEST
+PH-ACTIVATE-INDICATION
+netif_carrier_on
+
+PH-DEACTIVATE-REQUEST
+PH-DEACTIVATE-INDICATION
+netif_carrier_off -> lapd_device_event/state & 
+
+MPH-ACTIVATE-INDICATION
+MPH-DEACTIVATE-REQUEST
+MPH-DEACTIVATE-INDICATION
+MPH-INFORMATION-INDICATION
+
+
+
+q.931 procedures:
+-------------------------------
+
+L3		
+
+DL-ESTABLISH-REQUEST
+
+		MDL-ASSIGN-REQUEST
+				PH-ACTIVATE-REQ
+				wait
+				PH-ACTIVATE-IND
+		wait
+		MDL-ASSIGN-INDICATION
+wait
+DL-ESTABLISH-CONFIRM
+
+
+
+
+Locking critical functions:
+lapd_utme_T202_timer
+	Acquires:
+	spin_lock(&tme->lock);
+	read_lock_bh(&lapd_hash_lock);
+	bh_sock_lock(sk);
+
+lapd_utme_start_tei_request
+	Acquires:
+	spin_lock(&tme->lock);
+	
+
+
+lapd_utme_recv_tei_remove
+	Acquires:
+	read_lock_bh(&lapd_utme_hash_lock);
+	read_lock_bh(&lapd_hash_lock);
+	bh_sock_lock(sk);
+
+lapd_pass_frame_to_socket_te
+	Acquires:
+	read_lock_bh(&lapd_hash_lock);
+	bh_lock_sock(sk); (in lapd_pass_frame_to_socket())
+

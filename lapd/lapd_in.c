@@ -16,20 +16,40 @@
 void lapd_frame_reject(
 	struct sock *sk,
 	struct sk_buff *rskb,
-	int w, int x, int y, int z)
+	enum lapd_format_errors error)
 {
 	struct lapd_opt *lo = lapd_sk(sk);
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
 
-		// issue an MDL-ERROR-INDICATION primitive
+	switch (error == LAPD_FE_LENGTH) {
+	case LAPD_FE_LENGTH:
+		// MDL-ERROR-INDICATION(N)
+		// w=1, x=1, y=0, z=0
+	break;
 
-		lapd_start_multiframe_establishment(sk);
+	case LAPD_FE_N201:
+		// MDL-ERROR-INDICATION(O)
+		// 0, 0, 1, 0
+	break;
 
-	} else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH ||
-	         lo->status == LAPD_DLS_AWAITING_RELEASE) {
+	case LAPD_FE_UNDEFINED_COMMAND:
+		// MDL-ERROR-INDICATION(L)
+	break;
 
-		// issue an MDL-ERROR-INDICATION primitive
+	case LAPD_FE_I_FIELD_NOT_PERMITTED:
+		// MDL-ERROR-INDICATION(M)
+	break;
+	}
+
+	if (lo->state == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
+		lo->retrans_cnt = 0;
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
+		lapd_start_t200(sk);
+
+		if (!lo->in_timer_recovery)
+			lapd_stop_t203(sk);
+
+		lapd_change_state(sk, LAPD_DLS_AWAITING_REESTABLISH);
 	}
 
 /*
@@ -52,8 +72,8 @@ of this ETS shall be taken.
 		(struct lapd_frmr *)skb_put(skb, sizeof(struct lapd_frmr));
 	memset(frmr, 0x00, sizeof(struct lapd_frmr));
 
-	struct lapd_hdr *rhdr = (struct lapd_hdr *)rskb->h.raw;
-	struct lapd_hdr_e *rhdr_e = (struct lapd_hdr_e *)rskb->h.raw;
+	struct lapd_hdr *rhdr = (struct lapd_hdr *)rskb->mac.raw;
+	struct lapd_hdr_e *rhdr_e = (struct lapd_hdr_e *)rskb->mac.raw;
 
 	switch (lapd_frame_type(rhdr->control)) {
 	case LAPD_FRAME_TYPE_IFRAME:
@@ -80,63 +100,11 @@ of this ETS shall be taken.
 */
 }
 
-static inline int lapd_socket_handle_uframe_sabme(struct sock *sk,
-	struct sk_buff *skb)
-{
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	lapd_debug_sk(sk, "received u-frame SABME\n");
-
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
-
-	if (sk->sk_state == TCP_CLOSING) {
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DM, hdr->u.p_f, NULL, 0);
-	} else if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED ||
-	           lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		lapd_multiframe_established(sk);
-
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_UA, hdr->u.p_f, NULL, 0);
-	}
-	else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_UA, hdr->u.p_f, NULL, 0);
-	}
-	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DM, hdr->u.p_f, NULL, 0);
-	}
-	else {
-		lapd_printk_sk(KERN_ERR, sk,
-			"Unexpected UA in wrong state %d\n",
-			lo->status);
-	}
-
-	return FALSE;
-}
-
-static inline int lapd_socket_handle_uframe_dm(struct sock *sk,
-	struct sk_buff *skb)
-{
-	lapd_debug_sk(sk, "received u-frame DM\n");
-
-	// on receipt of an unsolicited DM response with the F bit set to 0,
-	// the data link layer entity shall, if it is able to, initiate the
-	// establishment procedures by the transmission of an SABME 
-	// (see § 5.5.1.2). Otherwise, the DM shall be ignored;
-
-	lapd_multiframe_released(sk);
-
-//	lapd_start_multiframe_establishment(sk);
-
-	return FALSE;
-}
-
-static inline int lapd_socket_handle_uframe_ui(struct sock *sk,
+static inline int lapd_socket_handle_uframe_ui(
+	struct sock *sk,
 	struct sk_buff *skb)
 {
 	lapd_debug_sk(sk, "received u-frame UI\n");
-
-	// Unlike other protocols, I put the skb in the socket without
-	// LAPD header. Is this correct?
-	skb_pull(skb, sizeof(struct lapd_hdr));
 
 	skb->dev = NULL;
 	skb_set_owner_r(skb, sk);
@@ -144,95 +112,64 @@ static inline int lapd_socket_handle_uframe_ui(struct sock *sk,
 	int skb_len = skb->len;
 	skb_queue_tail(&sk->sk_receive_queue, skb);
 
+// Should we put this frame at the head, intead?
+//	skb_queue_head(&sk->sk_receive_queue, skb);
+
 	if (!sock_flag(sk, SOCK_DEAD))
 		sk->sk_data_ready(sk, skb_len);
 
 	return TRUE;
 }
 
-static inline int lapd_socket_handle_uframe_disc(struct sock *sk,
-	struct sk_buff *skb)
-{
-	lapd_debug_sk(sk, "received u-frame DISC\n");
-
-	struct lapd_opt *lo = lapd_sk(sk);
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
-
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DM, hdr->u.p_f, NULL, 0);
-	}
-	else if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED) {
-		lapd_multiframe_released(sk);
-
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_UA, hdr->u.p_f, NULL, 0);
-	}
-	else if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_DM, hdr->u.p_f, NULL, 0);
-	}
-	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
-		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_UA, hdr->u.p_f, NULL, 0);
-	}
-	else {
-		lapd_printk_sk(KERN_ERR, sk,
-			"Unexpected UA in wrong state %d\n",
-			lo->status);
-	}
-
-	return FALSE;
-}
-
-static inline int lapd_socket_handle_uframe_ua(struct sock *sk,
-	struct sk_buff *skb)
-{
-	lapd_debug_sk(sk, "received u-frame UA\n");
-
-	struct lapd_opt *lo = lapd_sk(sk);
-
-	if (lo->status == LAPD_DLS_AWAITING_ESTABLISH) {
-		lapd_multiframe_established(sk);
-	}
-	else if (lo->status == LAPD_DLS_AWAITING_RELEASE) {
-		lapd_multiframe_released(sk);
-	}
-	else if (lo->status == LAPD_DLS_LINK_CONNECTION_RELEASED) {
-		// Possible multiple-tei-assignment, tei check?
-	}
-	else {
-		lapd_printk_sk(KERN_ERR, sk,
-			"Unexpected UA in wrong state %d\n",
-			lo->status);
-	}
-
-	return FALSE;
-}
-
-static inline int lapd_socket_handle_uframe_frmr(struct sock *sk,
+static inline int lapd_socket_handle_uframe_frmr(
+	struct sock *sk,
 	struct sk_buff *skb)
 {
 	lapd_debug_sk(sk, "received u-frame FRMR\n");
 
 	struct lapd_opt *lo = lapd_sk(sk);
+	struct lapd_frmr *frmr =
+		(struct lapd_frmr *)(skb->mac.raw + sizeof(struct lapd_hdr));
 
-	if (lo->status == LAPD_DLS_LINK_CONNECTION_ESTABLISHED)
-		lapd_start_multiframe_establishment(sk);
+	if ((frmr->control == 0 &&
+	     lapd_uframe_function(frmr->control2) == LAPD_UFRAME_FUNC_UA) ||
+	    (frmr->control != 0 &&
+  	      (lapd_frame_type(frmr->control) == LAPD_FRAME_TYPE_IFRAME ||
+	       lapd_frame_type(frmr->control) == LAPD_FRAME_TYPE_SFRAME))) {
+		// MDL-ERROR-INDICATION(K)
 
-	// MDL-ERROR-INDICATION(K)
+		lo->retrans_cnt = 0;
+		lapd_send_uframe(sk, LAPD_UFRAME_FUNC_SABME, 1, NULL, 0);
+
+		if(lo->peer_busy || lo->in_timer_recovery) {
+			lapd_start_t200(sk);
+		} else {
+			lapd_stop_t200(sk);
+			lapd_start_t203(sk);
+		}
+
+		lapd_change_state(sk, LAPD_DLS_AWAITING_REESTABLISH);
+	}
 
 	return FALSE;
 }
 
-static inline int lapd_socket_handle_uframe_xid(struct sock *sk,
+static inline int lapd_socket_handle_uframe_xid(
+	struct sock *sk,
 	struct sk_buff *skb)
 {
 	lapd_debug_sk(sk, "received u-frame XID\n");
 
+	// Should we reject it?
+
 	return FALSE;
 }
 
-static inline int lapd_socket_handle_uframe(struct sock *sk,
+static inline int lapd_socket_handle_uframe(
+	struct sock *sk,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 
 	lapd_debug_sk(sk, "received u-frame\n");
 
@@ -242,7 +179,7 @@ static inline int lapd_socket_handle_uframe(struct sock *sk,
 			"received u-frame with wrong size (%d), rejecting\n",
 			skb->len);
 
-		lapd_frame_reject(sk, skb, 1, 1, 0, 0);
+		lapd_frame_reject(sk, skb, LAPD_FE_LENGTH);
 
 		return FALSE;
 	}
@@ -283,18 +220,46 @@ static inline int lapd_socket_handle_uframe(struct sock *sk,
 			" rejecting frame\n",
 			hdr->control);
 
-		lapd_frame_reject(sk, skb, 1, 0, 0, 0);
-		queued = 0;
+		lapd_frame_reject(sk, skb, LAPD_FE_UNDEFINED_COMMAND);
+		queued = FALSE;
 	}
 
 	return queued;
 }
 
-int lapd_process_frame(struct sock *sk, struct sk_buff *skb)
+void lapd_deliver_internal_message(
+	struct sock *sk,
+	enum lapd_int_msg_type type,
+	int param)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+	if (type == LAPD_INT_MDL_ASSIGN_REQUEST)
+		lapd_mdl_assign_request(sk, param);
+	else if (type == LAPD_INT_MDL_ERROR_RESPONSE)
+		lapd_mdl_error_response(sk);
+	else if (type == LAPD_INT_MDL_REMOVE_REQUEST)
+		lapd_mdl_remove_request(sk);
+	else
+		BUG();
+}
+
+int lapd_process_frame(
+	struct sock *sk,
+	struct sk_buff *skb)
+{
 	int queued = 0;
 
+lapd_debug_sk(sk, "========================================= %d\n", sk->sk_state);
+
+	if (!skb->dev) {
+		struct lapd_internal_msg *msg =
+			(struct lapd_internal_msg *)skb->data;
+
+		lapd_deliver_internal_message(sk, msg->type, msg->param);
+
+		return TRUE;
+	}
+
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 	switch (lapd_frame_type(hdr->control)) {
 	case LAPD_FRAME_TYPE_IFRAME:
 		queued = lapd_socket_handle_iframe(sk, skb);
@@ -319,7 +284,9 @@ int lapd_process_frame(struct sock *sk, struct sk_buff *skb)
  *
  */
 
-int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb)
+int lapd_backlog_rcv(
+	struct sock *sk,
+	struct sk_buff *skb)
 {
 	if (!lapd_process_frame(sk, skb))
 		kfree_skb(skb);
@@ -327,7 +294,9 @@ int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
-static int lapd_pass_frame_to_socket(struct sock *sk, struct sk_buff *skb)
+static int lapd_pass_frame_to_socket(
+	struct sock *sk,
+	struct sk_buff *skb)
 {
 	int queued;
 
@@ -360,7 +329,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 	struct sock *listening_sk = NULL;
 	struct sock *sk = NULL;
 	struct hlist_node *node;
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 	int queued = 0;
 
 	write_lock_bh(&lapd_hash_lock);
@@ -389,7 +358,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 
 	if (listening_sk) {
 		// A socket has not been found
-		struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+		struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 		
 		if (hdr->addr.sapi != LAPD_SAPI_Q931 &&
 		    hdr->addr.sapi != LAPD_SAPI_X25) {
@@ -469,7 +438,7 @@ static inline int lapd_pass_frame_to_socket_te(
 
 	struct sock *sk;
 	struct hlist_node *node, *tmp;
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 	int queued = 0;
 
 	read_lock_bh(&lapd_hash_lock);
@@ -525,7 +494,9 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	BUG_ON(!skb->dev);
 
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 	if (hdr->addr.ea1 || !hdr->addr.ea2) {
 		lapd_printk_dev(KERN_WARNING, skb->dev,
 			"improper ea bits in received frame\n");

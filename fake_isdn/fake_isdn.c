@@ -42,6 +42,9 @@ static int fake_open(struct net_device *netdev)
 	else
 		netdev->dev_addr[0] = 0x00;
 
+	netif_carrier_off(netdev);
+	netif_carrier_on(netdev);
+
 	return 0;
 }
 

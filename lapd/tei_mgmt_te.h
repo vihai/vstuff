@@ -15,7 +15,6 @@ struct lapd_utme
 	atomic_t refcnt;
 
 	struct net_device *dev;
-	wait_queue_head_t waitq;
 
 	spinlock_t lock;
 
@@ -25,7 +24,7 @@ struct lapd_utme
 	//---------
 
 	struct timer_list T202_timer;
-	int N202_cnt;
+	int retrans_cnt;
 
 	enum lapd_tei_status status;
 
@@ -77,12 +76,9 @@ static inline void lapd_utme_stop_timer(
 static inline void lapd_utme_state_changed(
 	struct lapd_utme *tme)
 {
-	if (waitqueue_active(&tme->waitq))
-		wake_up_interruptible_all(&tme->waitq);
 }
 
 int lapd_utme_handle_frame(struct sk_buff *skb);
 void lapd_utme_start_tei_request(struct lapd_utme *tme);
-int lapd_utme_wait_for_tei_assignment(struct lapd_utme *tme);
 
 #endif
