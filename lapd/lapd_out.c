@@ -65,8 +65,8 @@ int lapd_prepare_uframe(struct sock *sk,
 	hdr->addr.ea2 = 1;
 
 	hdr->addr.tei = lo->state == LAPD_DLS_LISTENING ?
-			LAPD_BROADCAST_TEI :
-			lo->tei;
+				LAPD_BROADCAST_TEI :
+				lo->tei;
 
 	hdr->control = lapd_uframe_make_control(function, p_f);
 

@@ -106,7 +106,7 @@ void lapd_dl_release_indication(struct sock *sk)
 	if (sk->sk_state == TCP_CLOSING) {
 		lapd_debug_multiframe(sk, "Scheduling unhash\n");
 		// Defers unhash
-		sk_reset_timer(sk, &sk->sk_timer, jiffies + HZ);
+		sk_reset_timer(sk, &sk->sk_timer, jiffies + 10 * HZ);
 	}
 }
 
@@ -118,7 +118,7 @@ void lapd_dl_release_confirm(struct sock *sk)
 	if (sk->sk_state == TCP_CLOSING) {
 		lapd_debug_multiframe(sk, "Scheduling unhash\n");
 		// Defers unhash
-		sk_reset_timer(sk, &sk->sk_timer, jiffies + HZ);
+		sk_reset_timer(sk, &sk->sk_timer, jiffies + 10 * HZ);
 	}
 }
 

@@ -1,6 +1,8 @@
 #ifndef _OUT_H
 #define _OUT_H
 
+#include "call.h"
+
 int q931_send_alerting(
 	struct q931_call *call,
 	struct q931_dlc *dlc);

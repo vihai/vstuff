@@ -29,6 +29,7 @@ enum frame_type
 {
 	FRAME_TYPE_IFRAME,
 	FRAME_TYPE_UFRAME,
+	FRAME_TYPE_UFRAME_BROADCAST,
 };
 
 struct opts
@@ -44,6 +45,63 @@ struct opts
 
 	int tei;
 };
+
+void send_broadcast(int s, const char *prefix, struct opts *opts)
+{
+	struct msghdr msg;
+	struct cmsghdr cmsg;
+	struct sockaddr_lapd sal;
+	struct iovec iov;
+
+	__u8 frame[65536];
+
+	iov.iov_base = frame;
+	iov.iov_len = opts->frame_size;
+
+	msg.msg_name = &sal;
+	msg.msg_namelen = sizeof(sal);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = &cmsg;
+	msg.msg_controllen = sizeof(cmsg);
+	msg.msg_flags = 0;
+
+	memset(frame, 0x5a, sizeof(frame));
+
+	static int frame_seq = 0;
+
+	*(__u32 *)frame = htonl(frame_seq);
+
+	int len;
+	len = sendmsg(s, &msg, MSG_OOB);
+	if(len < 0) {
+		if (errno == ECONNRESET) {
+			printf("%sDL-RELEASE-INDICATION\n", prefix);
+		} else if (errno == EISCONN) {
+			printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+		} else {
+			printf("%ssendmsg: %s\n", prefix, strerror(errno));
+		}
+
+		return;
+	}
+
+	int in_size;
+	if(ioctl(s, SIOCINQ, &in_size) < 0) {
+		printf("%sioctl: %s\n", prefix, strerror(errno));
+		exit(1);
+	}
+
+	int out_size;
+	if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
+		printf("%sioctl: %s\n", prefix, strerror(errno));
+		exit(1);
+	}
+
+	printf("%sO R%7d W:%7d - Broadcast %d\n", prefix, in_size, out_size, len);
+
+	frame_seq++;
+}
 
 void start_loopback(int s, const char *prefix, struct opts *opts)
 {
@@ -92,7 +150,7 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 				printf("%sDL-ESTABLISH-INDICATION\n", prefix);
 				continue;
 			} else {
-				printf("%srecvmsg: %s\n", prefix, strerror(errno));
+				printf("%ssendmsg: %s\n", prefix, strerror(errno));
 				break;
 			}
 		}
@@ -188,15 +246,15 @@ void start_source(int s, const char *prefix, struct opts *opts)
 
 	memset(out_frame, 0x5a, sizeof(out_frame));
 
-	if (opts->frame_type == FRAME_TYPE_UFRAME) {
-		out_flags |= MSG_OOB;
-	} else {
+	if (opts->frame_type == FRAME_TYPE_IFRAME) {
 		printf("%sConnecting...", prefix);
 		if (connect(s, NULL, 0) < 0) {
 			printf("%sconnect: %s\n", prefix, strerror(errno));
 			exit(1);
 		}
 		printf("OK\n");
+	} else {
+		out_flags |= MSG_OOB;
 	}
 
 	struct pollfd polls;
@@ -213,7 +271,11 @@ void start_source(int s, const char *prefix, struct opts *opts)
 		long long now = now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
 		long long time_to_wait = opts->interval*1000 - (now - last_tx);
 
-		polls.events = POLLIN|POLLERR;
+		polls.events = POLLERR;
+
+		if (opts->frame_type != FRAME_TYPE_UFRAME_BROADCAST)
+			polls.events |= POLLIN;
+
 		if (time_to_wait < 0) {
 			polls.events |= POLLOUT;
 			time_to_wait = 0;
@@ -423,8 +485,17 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 	polls.fd = accept_socket;
 	polls.events = POLLIN|POLLERR;
 
+	int time_to_wait;
+
 	for (;;) {
-		if (poll(&polls, 1, -1) < 0) {
+		if (opts->frame_type == FRAME_TYPE_UFRAME_BROADCAST) {
+			time_to_wait = opts->interval;
+			send_broadcast(accept_socket, "", opts);
+		} else {
+			time_to_wait = -1;
+		}
+
+		if (poll(&polls, 1, time_to_wait) < 0) {
 			printf("poll: %s\n", strerror(errno));
 			exit(1);
 		}
@@ -491,6 +562,7 @@ int main(int argc, char *argv[])
 		{ "interval", required_argument, 0, 0 },
 		{ "mode", required_argument, 0, 0 },
 		{ "uframe", no_argument, 0, 0 },
+		{ "bcast", no_argument, 0, 0 },
 		{ "debug", no_argument, 0, 0 },
 		{ }
 	};
@@ -531,6 +603,9 @@ int main(int argc, char *argv[])
 		} else if (c == 'u' || (c == 0 &&
 		    !strcmp(options[optidx].name, "uframe"))) {
 			opts.frame_type = FRAME_TYPE_UFRAME;
+		} else if (c == 0 &&
+		    !strcmp(options[optidx].name, "bcast")) {
+			opts.frame_type = FRAME_TYPE_UFRAME_BROADCAST;
 		} else {
 			fprintf(stderr,"Unknow option %s\n", options[optidx].name);
 			print_usage(argv[0]);

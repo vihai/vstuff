@@ -19,8 +19,6 @@
 #include <lapd.h>
 
 #include "q931.h"
-#include "q931_mt.h"
-#include "q931_ie.h"
 
 enum poll_info_type
 {
@@ -41,6 +39,8 @@ struct poll_info
 
 struct switch_state
 {
+	struct q931_lib *libq931;
+
 	int have_to_exit;
 
 	struct q931_interface *ifs[100];
@@ -49,6 +49,124 @@ struct switch_state
 	struct q931_dlc dlcs[100];
 	int ndlcs;
 };
+
+static void alerting_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void connect_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+
+	q931_setup_complete_request(call);
+}
+
+static void disconnect_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+
+	q931_release_request(call);
+}
+
+static void error_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void info_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+
+	if (strlen(call->called_number) > 4) {
+		q931_proceeding_request(call);
+		q931_alerting_request(call);
+		q931_setup_response(call);
+	}
+}
+
+static void more_info_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void notify_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void proceeding_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void progress_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void reject_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void release_confirm(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void release_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void resume_confirm(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void resume_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void setup_complete_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void setup_confirm(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void setup_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+
+	q931_more_info_request(call);
+}
+
+static void status_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void suspend_confirm(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void suspend_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void timeout_indication(struct q931_call *call)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
 
 void handle_command(struct switch_state *state, const char *s)
 {
@@ -63,8 +181,8 @@ void handle_command(struct switch_state *state, const char *s)
 
 		for (i=0; i<state->nifs; i++) {
 			struct q931_call *call;
-			list_for_each_entry(call, &state->ifs[i]->calls, calls_node)
-				q931_hangup_call(call);
+			list_for_each_entry(call, &state->ifs[i]->calls, calls_node) {}
+//				q931_hangup_call(call);
 		}
 
 	} else if (!strncasecmp(s, "dial", 4)) {
@@ -91,8 +209,12 @@ void handle_command(struct switch_state *state, const char *s)
 
 		if (intf) {
 			struct q931_call *call;
-			call = q931_alloc_call();
-			q931_make_call(intf, call);
+			call = q931_alloc_call(intf);
+
+			q931_call_set_calling_number(call, "12345678");
+			q931_call_set_called_number(call, "87654321");
+
+			q931_setup_request(call);
 		}
 
 		free(s2);
@@ -161,7 +283,17 @@ void main_loop(struct switch_state *state)
 	int i;
 	int active_calls_cnt = 0;
 	do {
-		if (poll(polls, npolls, 1000000) < 0) {
+		longtime_t usec_to_wait = q931_run_timers(state->libq931);
+		int msec_to_wait;
+
+		if (usec_to_wait < 0)
+			msec_to_wait = -1;
+		else
+			msec_to_wait = usec_to_wait / 1000 + 1;
+
+		printf("TimeToWait = %lld\n", usec_to_wait);
+
+		if (poll(polls, npolls, msec_to_wait) < 0) {
 			printf("poll error: %s\n",strerror(errno));
 			exit(1);
 		}
@@ -196,10 +328,28 @@ void main_loop(struct switch_state *state)
 				if (polls[i].revents & POLLIN) {
 					printf("New DLC accepted...\n");
 
-					state->dlcs[state->ndlcs].socket =
-						accept(polls[i].fd, NULL, 0);
+					int s;
+
+					s = accept(polls[i].fd, NULL, 0);
+					if (s < 0) {
+						printf("accept: %s\n", strerror(errno));
+						break;
+					}
+
+					int optlen=sizeof(state->dlcs[state->ndlcs].tei);
+					if (getsockopt(s, SOL_LAPD, LAPD_TEI,
+					    &state->dlcs[state->ndlcs].tei, &optlen)<0) {
+						printf("getsockopt: %s\n", strerror(errno));
+						break;
+					}
+
+					printf("Accepted socket %d\n",
+						state->dlcs[state->ndlcs].tei);
+
+					state->dlcs[state->ndlcs].socket = s;
 					state->dlcs[state->ndlcs].interface =
 						poll_infos[i].interface;
+
 					state->ndlcs++;
 
 					refresh_polls_list(state,
@@ -229,14 +379,14 @@ void main_loop(struct switch_state *state)
 
 int main()
 {
-//	setvbuf(stdout, (char *)NULL, _IONBF, 0);
+	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
 	struct switch_state state;
 	memset(&state, 0x00, sizeof(state));
 
 	global_switch_state = &state;
 
-	q931_init();
+	state.libq931 = q931_init();
 
 	signal(SIGINT, sighandler);
 
@@ -279,13 +429,49 @@ printf("> ");
 			continue;
 
 		printf("OK\n");
-		state.ifs[state.nifs] = q931_open_interface(ifaddr->ifa_name);
+		state.ifs[state.nifs] = q931_open_interface(state.libq931,
+							 ifaddr->ifa_name);
 		if (!state.ifs[state.nifs]) {
 			printf("q931_open_interface error: %s\n",strerror(errno));
 			exit(1);
 		}
 
-		listen(state.ifs[state.nifs]->nt_socket, 100);
+		state.ifs[state.nifs]->alerting_indication = alerting_indication;
+		state.ifs[state.nifs]->connect_indication = connect_indication;
+		state.ifs[state.nifs]->disconnect_indication = disconnect_indication;
+		state.ifs[state.nifs]->error_indication = error_indication;
+		state.ifs[state.nifs]->info_indication = info_indication;
+		state.ifs[state.nifs]->more_info_indication = more_info_indication;
+		state.ifs[state.nifs]->notify_indication = notify_indication;
+		state.ifs[state.nifs]->proceeding_indication = proceeding_indication;
+		state.ifs[state.nifs]->progress_indication = progress_indication;
+		state.ifs[state.nifs]->reject_indication = reject_indication;
+		state.ifs[state.nifs]->release_confirm = release_confirm;
+		state.ifs[state.nifs]->release_indication = release_indication;
+		state.ifs[state.nifs]->resume_confirm = resume_confirm;
+		state.ifs[state.nifs]->resume_indication = resume_indication;
+		state.ifs[state.nifs]->setup_complete_indication = setup_complete_indication;
+		state.ifs[state.nifs]->setup_confirm = setup_confirm;
+		state.ifs[state.nifs]->setup_indication = setup_indication;
+		state.ifs[state.nifs]->status_indication = status_indication;
+		state.ifs[state.nifs]->suspend_confirm = suspend_confirm;
+		state.ifs[state.nifs]->suspend_indication = suspend_indication;
+		state.ifs[state.nifs]->timeout_indication = timeout_indication;
+
+		if (state.ifs[state.nifs]->role == LAPD_ROLE_NT) {
+			int on = 1;
+			if (setsockopt(state.ifs[state.nifs]->nt_socket,
+					SOL_SOCKET, SO_DEBUG,
+					&on, sizeof(on)) < 0) {
+				printf("setsockopt(SO_DEBUG): %s\n", strerror(errno));
+				exit(1);
+			}
+
+			if (listen(state.ifs[state.nifs]->nt_socket, 100) < 0) {
+				printf("listen: %s\n", strerror(errno));
+				exit(1);
+			}
+		}
 
 		state.nifs++;
 	}

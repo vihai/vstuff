@@ -5,7 +5,7 @@
 #include <linux/types.h>
 #include <endian.h>
 
-#include "q931.h"
+#include "util.h"
 
 struct q931_ie_info;
 

@@ -363,6 +363,7 @@ static int lapd_release(struct socket *sock)
 
 	release_sock(sk);
 
+	local_bh_disable();
         bh_lock_sock(sk);
         WARN_ON(sock_owned_by_user(sk));
 
@@ -371,6 +372,8 @@ static int lapd_release(struct socket *sock)
 	sock->sk = NULL;
 
 	bh_unlock_sock(sk);
+	local_bh_enable();
+
 	sock_put(sk);
 
 	return 0;
@@ -598,7 +601,7 @@ static int lapd_sendmsg(
 		case LAPD_DLS_AWAITING_REESTABLISH:
 		case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:
 		case LAPD_DLS_AWAITING_RELEASE:
-				lapd_send_completed_uframe(skb);
+			lapd_send_completed_uframe(skb);
 		}
 	} else {
 		// FIXME TODO

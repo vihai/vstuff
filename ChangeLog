@@ -2,6 +2,35 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-04-01 03:43:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-22
+
+    Summary:
+      libq931 in NT mode somewhat working
+    Revision:
+      isdn--devel--0.1--patch-22
+
+    
+    
+
+    new files:
+     libq931/src/.arch-ids/callref.h.id
+     libq931/src/.arch-ids/dlc.h.id libq931/src/.arch-ids/intf.c.id
+     libq931/src/.arch-ids/intf.h.id
+     libq931/src/.arch-ids/proto.h.id
+     libq931/src/.arch-ids/util.h.id libq931/src/callref.h
+     libq931/src/dlc.h libq931/src/intf.c libq931/src/intf.h
+     libq931/src/proto.h libq931/src/util.h
+
+    modified files:
+     ChangeLog demoswitch/demoswitch.c lapd/af_lapd.c
+     lapd/lapd_in.c lapd/lapd_out.c lapd/multiframe.c
+     lapd/tei_mgmt_nt.c libq931/src/Makefile.am libq931/src/call.c
+     libq931/src/call.h libq931/src/ces.c libq931/src/ces.h
+     libq931/src/ie.h libq931/src/logging.h libq931/src/out.c
+     libq931/src/out.h libq931/src/q931.c libq931/src/q931.h
+     libq931/src/timer.c libq931/src/timer.h traffic/traffic.c
+
+
 2005-03-30 17:41:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-21
 
     Summary:

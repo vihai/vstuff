@@ -65,12 +65,11 @@ static inline int lapd_ntme_send_tei_verify(
  * deadlock when passing messages to the socket (timer/rcv softirq context).
  */
 
-static void lapd_ntme_start_tei_check(
+static void _lapd_ntme_start_tei_check(
 	struct lapd_ntme *tme, int tei)
 {
-	spin_lock_bh(&tme->lock);
-
-	BUG_TRAP(tme->T201 > 0);
+	WARN_ON(tme->T201 == 0);
+	WARN_ON(tme->tei_check_outstanding);
 
 	lapd_ntme_reset_timer(tme, &tme->T201_timer,
 		jiffies + tme->T201);
@@ -82,6 +81,14 @@ static void lapd_ntme_start_tei_check(
 	tme->tei_check_tei = tei;
 
 	lapd_ntme_send_tei_check_request(tme, tei);
+}
+
+void lapd_ntme_start_tei_check(
+	struct lapd_ntme *tme, int tei)
+{
+	spin_lock_bh(&tme->lock);
+
+	_lapd_ntme_start_tei_check(tme, tei);
 
 	spin_unlock_bh(&tme->lock);
 }
@@ -99,7 +106,7 @@ void lapd_ntme_T201_timer(unsigned long data)
 
 	if (tme->tei_check_count == 0) {
 		// End of first T201 window
-		if (tme->tei_check_responses[0] < 2) {
+		if (tme->tei_check_responses[0] > 1) {
 			// Multiple TEIs assigned
 
 			tme->tei_check_outstanding = FALSE;
@@ -132,7 +139,7 @@ void lapd_ntme_T201_timer(unsigned long data)
 		}
 	}
 
-	spin_lock(&tme->lock);
+	spin_unlock(&tme->lock);
 
 	lapd_ntme_put(tme);
 }
@@ -280,7 +287,7 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 
 		spin_lock(&tme->lock);
 
-		if (tme->dev == skb->dev) {
+		if (tme->dev != skb->dev) {
 			spin_unlock(&tme->lock);
 			continue;
 		}
@@ -291,7 +298,7 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 		// We're not going any futher in the list
 		read_unlock_bh(&lapd_ntme_hash_lock);
 
-		lapd_ntme_start_tei_check(tme, tm->body.ai);
+		_lapd_ntme_start_tei_check(tme, tm->body.ai);
 
 		spin_unlock(&tme->lock);
 

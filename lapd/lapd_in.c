@@ -313,6 +313,50 @@ static int lapd_pass_frame_to_socket(
 	return queued;
 }
 
+static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
+{
+	struct sk_buff *rskb;
+	rskb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
+	if (!rskb)
+		return;
+
+	rskb->dev = skb->dev;
+	rskb->protocol = __constant_htons(ETH_P_LAPD);
+	rskb->h.raw = rskb->nh.raw = rskb->mac.raw = rskb->data;
+
+	struct lapd_hdr *rhdr =
+		(struct lapd_hdr *)skb_put(rskb,
+					sizeof(struct lapd_hdr));
+
+	rhdr->addr.sapi = hdr->addr.sapi;
+	rhdr->addr.c_r = skb->dev->flags & IFF_ALLMULTI ? 0 : 1;
+	rhdr->addr.ea1 = 0;
+	rhdr->addr.ea2 = 1;
+	rhdr->addr.tei = hdr->addr.tei;
+	rhdr->control = lapd_uframe_make_control(
+				LAPD_UFRAME_FUNC_DM,
+				hdr->u.p_f);
+
+	lapd_send_frame(rskb);
+}
+
+/*
+ * When we are the network and we cannot associate or create a socket for the
+ * incoming frame, we at least reply with a DM. This is expecially useful when
+ * the application crashes and the TEs try to re-establsh multiple-frame mode.
+ */
+
+static inline void lapd_handle_socketless_frame(struct sk_buff *skb)
+{
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+
+	if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME &&
+	    (lapd_uframe_function(hdr->control) == LAPD_UFRAME_FUNC_SABME ||
+	     lapd_uframe_function(hdr->control) == LAPD_UFRAME_FUNC_DISC)) {
+		lapd_socketless_reply_dm(skb);
+	}
+}
+
 /*************************
  * lapd_pass_frame_to_socket_nt() handles an incoming frame, searches
  * the appropriate socket and creates a new socket if not found.
@@ -397,6 +441,8 @@ static inline int lapd_pass_frame_to_socket_nt(
 
 		// sock_put(newsk);
 	} else {
+		lapd_handle_socketless_frame(skb);
+
 		write_unlock_bh(&lapd_hash_lock);
 	}
 

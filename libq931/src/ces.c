@@ -11,9 +11,7 @@
 #include <stdarg.h>
 #include <fcntl.h>
 
-#include <lapd.h>
-
-#include "list.h"
+#define Q931_PRIVATE
 
 #include "q931.h"
 #include "logging.h"
@@ -22,25 +20,7 @@
 #include "ces.h"
 #include "out.h"
 #include "call.h"
-
-struct q931_ces *q931_ces_alloc(struct q931_call *call)
-{
-	struct q931_ces *ces;
-
-	ces = malloc(sizeof(*ces));
-	if (!ces)
-		return NULL;
-
-	ces->call = call;
-	ces->state = I0_NULL_STATE;
-
-	return ces;
-}
-
-void q931_ces_free(struct q931_ces *ces)
-{
-	free(ces);
-}
+#include "intf.h"
 
 static const char *q931_ces_state_to_text(enum q931_call_state state)
 {
@@ -60,25 +40,72 @@ static const char *q931_ces_state_to_text(enum q931_call_state state)
 	}
 }
 
+static void q931_ces_set_state(
+	struct q931_ces *ces,
+	enum q931_ces_state state)
+{
+	report_ces(ces, LOG_DEBUG,
+		"CES changed state from %s to %s\n",
+		q931_ces_state_to_text(ces->state),
+		q931_ces_state_to_text(state));
+
+	ces->state = state;
+}
+
+struct q931_ces *q931_ces_alloc(struct q931_call *call)
+{
+	struct q931_ces *ces;
+
+	ces = malloc(sizeof(*ces));
+	if (!ces)
+		return NULL;
+
+	ces->call = call;
+	q931_ces_set_state(ces, I0_NULL_STATE);
+
+	report_ces(ces, LOG_DEBUG, "CES allocated for call %d\n",
+		call->call_reference);
+
+	return ces;
+}
+
+void q931_ces_del(struct q931_ces *ces)
+{
+	list_del(&ces->node);
+
+	report_ces(ces, LOG_DEBUG, "CES detached from call %d\n",
+		ces->call->call_reference);
+}
+
+void q931_ces_free(struct q931_ces *ces)
+{
+	report_ces(ces, LOG_DEBUG, "CES freed for call %d\n",
+		ces->call->call_reference);
+
+	free(ces);
+}
+
 void q931_ces_dl_establish_indication(struct q931_ces *ces)
 {
 	if (ces->state == I25_OVERLAP_RECEIVING) {
-		// Stop T304 if implemented
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_release_indication(ces->call, ces);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T304);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	}
 }
 
 void q931_ces_dl_release_indication(struct q931_ces *ces)
 {
 	if (ces->state != I0_NULL_STATE) {
-		// Stop any timer
+		q931_call_stop_timer(ces->call, T304);
+		q931_call_stop_timer(ces->call, T308);
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_release_indication(ces->call, ces);
 		q931_int_release_complete_indication(ces->call, ces);
@@ -89,7 +116,7 @@ void q931_ces_alerting_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
 	case I0_NULL_STATE:
-		ces->state = I7_CALL_RECEIVED;
+		q931_ces_set_state(ces, I7_CALL_RECEIVED);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -113,7 +140,7 @@ void q931_ces_connect_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
 	case I0_NULL_STATE:
-		ces->state = I8_CONNECT_REQUEST;
+		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -137,8 +164,8 @@ void q931_ces_call_proceeding_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
 	case I0_NULL_STATE:
-		// Start T310
-		ces->state = I25_OVERLAP_RECEIVING;
+		q931_call_start_timer(ces->call, T310);
+		q931_ces_set_state(ces, I25_OVERLAP_RECEIVING);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -162,9 +189,9 @@ void q931_ces_setup_ack_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
 	case I0_NULL_STATE:
-		// Start T304
+		q931_call_start_timer(ces->call, T304);
 
-		ces->state = I25_OVERLAP_RECEIVING;
+		q931_ces_set_state(ces, I25_OVERLAP_RECEIVING);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -188,30 +215,30 @@ void q931_ces_release_request(struct q931_ces *ces)
 {
 	switch (ces->state) {
 	case I0_NULL_STATE:
-		// Start T304
+		q931_call_start_timer(ces->call, T304);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -219,13 +246,13 @@ void q931_ces_release_request(struct q931_ces *ces)
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	default:
@@ -246,11 +273,11 @@ void q931_ces_info_request(struct q931_ces *ces)
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_send_info(ces->call, ces->dlc);
 
-		// Start T304
+		q931_call_start_timer(ces->call, T304);
 	break;
 
 	case I0_NULL_STATE:
@@ -276,19 +303,19 @@ inline static void q931_ces_handle_alerting(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_alerting_indication(ces->call, ces);
 
-		ces->state = I7_CALL_RECEIVED;
+		q931_ces_set_state(ces, I7_CALL_RECEIVED);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_alerting_indication(ces->call, ces);
 
-		ces->state = I7_CALL_RECEIVED;
+		q931_ces_set_state(ces, I7_CALL_RECEIVED);
 	break;
 
 	case I0_NULL_STATE:
@@ -314,12 +341,13 @@ inline static void q931_ces_handle_call_proceeding(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
+
 		q931_int_call_proceeding_indication(ces->call, ces);
 
-		// Start T310
+		q931_call_start_timer(ces->call, T310);
 
-		ces->state = I9_INCOMING_CALL_PROCEEDING;
+		q931_ces_set_state(ces, I9_INCOMING_CALL_PROCEEDING);
 	break;
 
 	case I0_NULL_STATE:
@@ -340,7 +368,7 @@ inline static void q931_ces_handle_connect(
 	case I7_CALL_RECEIVED:
 		q931_int_connect_indication(ces->call, ces);
 
-		ces->state = I8_CONNECT_REQUEST;
+		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
 	break;
 
 	case I8_CONNECT_REQUEST:
@@ -349,19 +377,19 @@ inline static void q931_ces_handle_connect(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_connect_indication(ces->call, ces);
 
-		ces->state = I8_CONNECT_REQUEST;
+		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_connect_indication(ces->call, ces);
 
-		ces->state = I8_CONNECT_REQUEST;
+		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
 	break;
 
 	case I0_NULL_STATE:
@@ -414,13 +442,13 @@ inline static void q931_ces_handle_progress(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_progress_indication(ces->call, ces);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_progress_indication(ces->call, ces);
 	break;
@@ -496,22 +524,22 @@ inline static void q931_ces_handle_disconnect(
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
 
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_release_indication(ces->call, ces);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -519,15 +547,15 @@ inline static void q931_ces_handle_disconnect(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_release_indication(ces->call, ces);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I0_NULL_STATE:
@@ -555,7 +583,7 @@ inline static void q931_ces_handle_release(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_release_indication(ces->call, ces);
 
@@ -565,13 +593,13 @@ inline static void q931_ces_handle_release(
 	break;
 
 	case I19_RELEASE_REQUEST:
-		// Stop T308
+		q931_call_stop_timer(ces->call, T308);
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_release_indication(ces->call, ces);
 
@@ -603,7 +631,7 @@ inline static void q931_ces_handle_release_complete(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		// Stop T310 if running
+		q931_call_stop_timer(ces->call, T310);
 
 		q931_int_release_indication(ces->call, ces);
 
@@ -611,24 +639,24 @@ inline static void q931_ces_handle_release_complete(
 	break;
 
 	case I19_RELEASE_REQUEST:
-		// Stop T308
+		q931_call_stop_timer(ces->call, T308);
 
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		// Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 		q931_int_release_indication(ces->call, ces);
 
 		// Implementation dependend
 		/*
-		Stop T304
+		q931_call_stop_timer(ces->call, T304);
 
 
 		q931_send_release(ces->dlc);
 
-		Start T308
+		q931_call_start_timer(ces->call, T308);
 		*/
 
 		q931_int_release_complete_indication(ces->call, ces);
@@ -1345,19 +1373,17 @@ void q931_ces_dispatch_message(
 	}
 }
 
-static void q931_ces_timer_T304(void *data)
+void q931_ces_timer_T304(struct q931_ces *ces)
 {
-	struct q931_ces *ces = data;
-
 	switch (ces->state) {
 	case I25_OVERLAP_RECEIVING:
 		q931_int_release_indication(ces->call, ces);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I0_NULL_STATE:
@@ -1373,26 +1399,24 @@ static void q931_ces_timer_T304(void *data)
 	}
 }
 
-static void q931_ces_timer_T310(void *data)
+void q931_ces_timer_T310(struct q931_ces *ces)
 {
-	struct q931_ces *ces = data;
-
 	switch (ces->state) {
 	case I9_INCOMING_CALL_PROCEEDING:
 		q931_int_release_indication(ces->call, ces);
 
 		q931_send_release(ces->call, ces->dlc);
 
-		// Start T308
+		q931_call_start_timer(ces->call, T308);
 
-		ces->state = I19_RELEASE_REQUEST;
+		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 	case I19_RELEASE_REQUEST:
 		// First expiry?
 		if (1) {
 			q931_send_release(ces->call, ces->dlc);
 
-			// Start T308
+			q931_call_start_timer(ces->call, T308);
 		} else {
 			q931_int_release_complete_indication(ces->call, ces);
 		}

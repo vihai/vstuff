@@ -13,7 +13,7 @@
 
 #include <lapd.h>
 
-#include "list.h"
+#define Q931_PRIVATE
 
 #include "q931.h"
 #include "logging.h"
@@ -21,6 +21,8 @@
 #include "ie.h"
 #include "out.h"
 #include "call.h"
+#include "intf.h"
+#include "proto.h"
 
 static void q931_make_callref(
 	void *void_buf,

@@ -1,6 +1,8 @@
 #ifndef _CES_H
 #define _CES_H
 
+#include "timer.h"
+
 #define report_ces(ces, lvl, format, arg...)	\
 	(ces)->call->interface->lib->report((lvl), format, ## arg)
 
@@ -22,9 +24,6 @@ struct q931_ces
 	struct q931_call *call;
 	struct q931_dlc *dlc;
 	enum q931_ces_state state;
-
-	struct q931_timer T304;
-	struct q931_timer T310;
 };
 
 void q931_ces_dispatch_message(
@@ -34,6 +33,7 @@ void q931_ces_dispatch_message(
 	int ies_cnt);
 
 struct q931_ces *q931_ces_alloc(struct q931_call *call);
+void q931_ces_del(struct q931_ces *ces);
 void q931_ces_free(struct q931_ces *ces);
 
 void q931_ces_dl_establish_indication(struct q931_ces *ces);

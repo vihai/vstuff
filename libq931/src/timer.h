@@ -20,9 +20,14 @@ struct q931_timer
 	void (*func)(void *data);
 };
 
+extern longtime_t q931_run_timers(struct q931_lib *lib);
+
+#ifdef Q931_PRIVATE
 
 extern void q931_init_timer(
-	struct q931_timer *timer);
+	struct q931_timer *timer,
+	void (*func)(void *data),
+	void *data);
 extern void q931_start_timer(
 	struct q931_lib *lib,
 	struct q931_timer *timer,
@@ -33,7 +38,12 @@ extern void q931_start_timer_delta(
 	struct q931_timer *timer,
 	longtime_t delta);
 extern void q931_stop_timer(struct q931_timer *timer);
-extern int q931_timer_pending(struct q931_timer *timer);
-extern longtime_t q931_run_timers(struct q931_lib *lib);
+
+static inline int q931_timer_pending(struct q931_timer *timer)
+{
+	return timer->pending;
+}
+
+#endif
 
 #endif
