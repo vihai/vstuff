@@ -2,6 +2,29 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-03-30 01:06:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-20
+
+    Summary:
+      Network states finished, added timers implementation
+    Revision:
+      isdn--devel--0.1--patch-20
+
+    
+    
+
+    new files:
+     libq931/src/.arch-ids/q931_out.c.id
+     libq931/src/.arch-ids/q931_out.h.id
+     libq931/src/.arch-ids/q931_timer.c.id
+     libq931/src/.arch-ids/q931_timer.h.id libq931/src/q931_out.c
+     libq931/src/q931_out.h libq931/src/q931_timer.c
+     libq931/src/q931_timer.h
+
+    modified files:
+     ChangeLog libq931/src/Makefile.am libq931/src/q931.c
+     libq931/src/q931.h libq931/src/q931_ces.c
+
+
 2005-03-29 04:29:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-19
 
     Summary:

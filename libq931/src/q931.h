@@ -22,6 +22,15 @@
 #define report_if(intf, lvl, format, arg...)		\
 	(intf)->libstate->report((lvl), format, ## arg)
 
+#define q931_call_start_timer(call, timer)			\
+	q931_start_timer_delta(					\
+		(call)->interface->lib,				\
+		&(call)->timer,					\
+		(call)->interface->timer)
+
+#define q931_call_stop_timer(call, timer)			\
+	q931_stop_timer(&(call)->timer)
+
 enum q931_log_level
 {
 	Q931_LOG_DEBUG,
@@ -133,15 +142,17 @@ enum q931_dlc_status
 	DLC_CONNECTED,
 };
 
-struct q931_libstate
+struct q931_lib
 {
+	struct list_head timers;
+
 	void (*report)(int level, const char *format, ...);
 };
 
 struct q931_interface;
 struct q931_dlc
 {
-	struct q931_libstate *libstate;
+	struct q931_lib *libstate;
 
 	int socket;
 	int poll_id;
@@ -152,7 +163,7 @@ struct q931_dlc
 struct q931_call;
 struct q931_interface
 {
-	struct q931_libstate *libstate;
+	struct q931_lib *libstate;
 
 	char *name;
 
@@ -230,6 +241,24 @@ struct q931_call
 
 	void *pvt;
 
+	struct q931_timer T301;
+	struct q931_timer T302;
+	struct q931_timer T303;
+	struct q931_timer T304;
+	struct q931_timer T305;
+	struct q931_timer T306;
+	struct q931_timer T307;
+	struct q931_timer T308;
+	struct q931_timer T309;
+	struct q931_timer T310;
+	struct q931_timer T312;
+	struct q931_timer T314;
+	struct q931_timer T316;
+	struct q931_timer T317;
+	struct q931_timer T320;
+	struct q931_timer T321;
+	struct q931_timer T322;
+
 	void (*alerting_indication)(struct q931_call *call);
 	void (*disconnect_indication)(struct q931_call *call);
 	void (*error_indication)(struct q931_call *call); // TE
@@ -269,17 +298,17 @@ static inline void q931_init_dlc(
 }
 
 static inline void q931_set_logger_func(
-	struct q931_libstate *libstate,
+	struct q931_lib *libstate,
 	void (*report)(int level, const char *format, ...))
 {
 	libstate->report = report;
 }
 
-struct q931_libstate *q931_init();
-void q931_leave(struct q931_libstate *libstate);
+struct q931_lib *q931_init();
+void q931_leave(struct q931_lib *libstate);
 void q931_receive(struct q931_dlc *dlc);
 struct q931_interface *q931_open_interface(
-	struct q931_libstate *libstate,
+	struct q931_lib *libstate,
 	const char *name);
 void q931_close_interface(struct q931_interface *interface);
 
