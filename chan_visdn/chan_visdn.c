@@ -113,22 +113,6 @@ static inline struct ast_channel *callpvt_to_astchan(
 	return (struct ast_channel *)call->pvt;
 }
 
-static void visdn_event_setup(struct q931_call *call);
-static void visdn_event_alerting(struct q931_call *call);
-static void visdn_event_release(struct q931_call *call);
-static void visdn_event_connect(struct q931_call *call);
-static void visdn_event_disconnect(struct q931_call *call);
-static void visdn_event_information(struct q931_call *call);
-
-static void visdn_init_call_callbacks(struct q931_call *call)
-{
-	call->alerting_callback = visdn_event_alerting;
-	call->release_callback = visdn_event_release;
-	call->connect_callback = visdn_event_connect;
-	call->information_callback = visdn_event_information;
-	call->disconnect_callback = visdn_event_disconnect;
-}
-
 static int visdn_call(struct ast_channel *ast_chan, char *orig_dest, int timeout)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -578,23 +562,25 @@ static void *q931_thread_main(void *data)
 	return NULL;
 }
 
-static void visdn_event_setup(struct q931_call *call)
+static void visdn_q931_setup_indication(struct q931_call *call)
 {
-	visdn_init_call_callbacks(call);
-
-
 	if (call->sending_complete) {
-		// FIXME
-
-	} else {
-		if (ast_canmatch_extension(NULL, "visdn", call->called_number,
-			1, call->calling_number) ||
-		    ast_exists_extension(NULL, "visdn", call->called_number,
+		if (ast_exists_extension(NULL, "visdn", call->called_number,
 			1, call->calling_number)) {
 
-			ast_log(LOG_EVENT, "Estension matches!!!!!!!!!!\n");
+			q931_proceeding_request(call);
+		} else {
+			q931_reject_request(call);
 		}
 
+	} else {
+		if (ast_exists_extension(NULL, "visdn", call->called_number,
+			1, call->calling_number)) {
+
+			q931_proceeding_request(call);
+		} else {
+			q931_more_info_request(call);
+		}
 	}
 }
 
@@ -792,7 +778,47 @@ int load_module()
 			continue;
 		}
 
-		manager.ifs[manager.nifs]->setup_callback = visdn_event_setup;
+		// Setup all callbacks for libq931 primitives
+		manager.ifs[manager.nifs]->alerting_indication =
+			visdn_q931_alerting_indication;
+		manager.ifs[manager.nifs]->disconnect_indication =
+			visdn_q931_disconnect_indication;
+		manager.ifs[manager.nifs]->error_indication =
+			visdn_q931_error_indication;
+		manager.ifs[manager.nifs]->info_indication =
+			visdn_q931_info_indication;
+		manager.ifs[manager.nifs]->more_info_indication =
+			visdn_q931_more_info_indication;
+		manager.ifs[manager.nifs]->notify_indication =
+			visdn_q931_notify_indication;
+		manager.ifs[manager.nifs]->proceeding_indication =
+			visdn_q931_proceeding_indication;
+		manager.ifs[manager.nifs]->progress_indication =
+			visdn_q931_progress_indication;
+		manager.ifs[manager.nifs]->reject_indication =
+			visdn_q931_reject_indication;
+		manager.ifs[manager.nifs]->release_confirm =
+			visdn_q931_release_confirm;
+		manager.ifs[manager.nifs]->release_indication =
+			visdn_q931_release_indication;
+		manager.ifs[manager.nifs]->resume_confirm =
+			visdn_q931_resume_confirm;
+		manager.ifs[manager.nifs]->resume_indication =
+			visdn_q931_resume_indication;
+		manager.ifs[manager.nifs]->setup_complete_indication =
+			visdn_q931_setup_complete_indication;
+		manager.ifs[manager.nifs]->setup_confirm =
+			visdn_q931_setup_confirm;
+		manager.ifs[manager.nifs]->setup_indication =
+			visdn_q931_setup_indication;
+		manager.ifs[manager.nifs]->status_indication =
+			visdn_q931_status_indication;
+		manager.ifs[manager.nifs]->suspend_confirm =
+			visdn_q931_suspend_confirm;
+		manager.ifs[manager.nifs]->suspend_indication =
+			visdn_q931_suspend_indication;
+		manager.ifs[manager.nifs]->timeout_indication =
+			visdn_q931_timeout_indication;
 
 		if (!manager.ifs[manager.nifs]) {
 			ast_log(LOG_ERROR,
