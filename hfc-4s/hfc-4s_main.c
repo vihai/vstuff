@@ -460,8 +460,6 @@ static int hfc_ppp_start_xmit(
 {
 	struct hfc_chan_duplex *chan = ppp_chan->private;
 
-hfc_debug_chan(0, chan, "ppp frame out\n");
-
 	hfc_fifo_select(&chan->tx);
 	// hfc_fifo_select() updates F/Z cache, so,
 	// size calculations are allowed
@@ -525,7 +523,7 @@ static int hfc_open(struct net_device *netdev)
 			return -EBUSY;
 		}
 
-		chan->status = open_ppp;
+		chan->status = open_lapd;
 
 		// This is the D channel so let's configure the port first
 
@@ -657,7 +655,7 @@ static int hfc_close(struct net_device *netdev)
 	case D:
 		spin_lock_irqsave(&card->lock, flags);
 
-		if (chan->status != open_ppp) {
+		if (chan->status != open_lapd) {
 			spin_unlock_irqrestore(&card->lock, flags);
 			return -EINVAL;
 		}
@@ -849,7 +847,8 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 
 static inline void hfc_handle_timer_interrupt(struct hfc_card *card);
 static inline void hfc_handle_state_interrupt(struct hfc_port *port);
-static void hfc_frame_arrived(struct hfc_chan_simplex *chan);
+static inline void hfc_netdev_frame_arrived(struct hfc_chan_simplex *chan);
+static inline void hfc_ppp_frame_arrived(struct hfc_chan_simplex *chan);
 static inline void hfc_handle_voice(struct hfc_card *card);
 static inline void hfc_handle_port_fifo_interrupt(struct hfc_port *port);
 
@@ -901,7 +900,14 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
 {
-	hfc_frame_arrived(chan);
+	if (chan->chan->status == open_lapd)
+		hfc_netdev_frame_arrived(chan);
+	else if (chan->chan->status == open_ppp)
+		hfc_ppp_frame_arrived(chan);
+	else {
+		hfc_fifo_drop_frame(chan);
+		hfc_msg_schan(KERN_ERR, chan, "Frame arrived on unopened chan?\n");
+	}
 }
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_chan_simplex *chan)
@@ -1062,7 +1068,7 @@ static inline void hfc_handle_voice(struct hfc_card *card)
 }
 
 // This must be called from interrupt handler, no locking is made on FIFOs
-static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
+static inline void hfc_netdev_frame_arrived(struct hfc_chan_simplex *chan)
 {
 	struct hfc_chan_duplex *fdchan = chan->chan;
 	struct hfc_port *port = fdchan->port;
@@ -1148,11 +1154,83 @@ static void hfc_frame_arrived(struct hfc_chan_simplex *chan)
 		hfc_msg_schan(KERN_CRIT, chan, "Infinite loop detected\n");
 }
 
+// This must be called from interrupt handler, no locking is made on FIFOs
+static inline void hfc_ppp_frame_arrived(struct hfc_chan_simplex *chan)
+{
+	struct hfc_chan_duplex *fdchan = chan->chan;
+	struct hfc_port *port = fdchan->port;
+
+	int antiloop = 16; // Copy no more than 16 frames
+
+	WARN_ON(!in_interrupt());
+
+	while(--antiloop) {
+		// FIFO selection has to be done for each frame to clear
+		// internal buffer (see specs 4.4.4).
+		hfc_fifo_select(chan);
+
+		hfc_fifo_refresh_fz_cache(chan);
+
+		if (!hfc_fifo_has_frames(chan)) break;
+
+		int frame_size = hfc_fifo_get_frame_size(chan);
+
+		if (frame_size < 3) {
+			hfc_debug_schan(2, chan,
+				"invalid frame received, just %d bytes\n",
+				frame_size);
+
+			hfc_fifo_drop_frame(chan);
+
+			ppp_input_error(&fdchan->ppp_chan, 0);
+
+			continue;
+		} else if(frame_size == 3) {
+			hfc_debug_schan(2, chan,
+				"empty frame received\n");
+
+			hfc_fifo_drop_frame(chan);
+
+			ppp_input_error(&fdchan->ppp_chan, 0);
+
+			continue;
+		}
+
+		struct sk_buff *skb =
+			dev_alloc_skb(frame_size - 3);
+
+		if (!skb) {
+			hfc_msg_schan(KERN_ERR, chan,
+				"cannot allocate skb: frame dropped\n");
+
+			hfc_fifo_drop_frame(chan);
+
+			ppp_input_error(&fdchan->ppp_chan, 0);
+
+			continue;
+		}
+
+		if (hfc_fifo_get_frame(chan,
+			skb_put(skb, frame_size - 3),
+			frame_size - 3) == -1) {
+			dev_kfree_skb(skb);
+			continue;
+		}
+
+		ppp_input(&fdchan->ppp_chan, skb);
+	}
+
+	if (!antiloop) 
+		hfc_msg_schan(KERN_CRIT, chan, "Infinite loop detected\n");
+}
+
 /******************************************
  * Module initialization and cleanup
  ******************************************/
 
 #define VISDN_SET_BEARER_PPP  SIOCDEVPRIVATE
+#define VISDN_PPP_GET_CHAN  (SIOCDEVPRIVATE+1)
+#define VISDN_PPP_GET_UNIT  (SIOCDEVPRIVATE+2)
 
 static int hfc_do_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
@@ -1160,14 +1238,14 @@ static int hfc_do_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 	struct hfc_card *card = chan->port->card;
 	struct hfc_chan_duplex *b1_chan = &chan->port->chans[B1];
 
-hfc_msg_chan(KERN_INFO, chan, "Netdev IOCTL\n");
-
 	unsigned long flags;
 
 	switch (cmd) {
 	case VISDN_SET_BEARER_PPP:
 ///////////////////////7
 ////////////////////////////777
+hfc_msg_chan(KERN_INFO, chan, "VISDN_SET_BEARER_PPP\n");
+
 		spin_lock_irqsave(&card->lock, flags);
 
 		hfc_select_port(card, b1_chan->port->id);
@@ -1202,11 +1280,14 @@ hfc_msg_chan(KERN_INFO, chan, "Netdev IOCTL\n");
 
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_IFF|
 			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
 		hfc_outb(card, hfc_A_IRQ_MSK,
 			hfc_A_IRQ_MSK_V_IRQ);
+
+		b1_chan->status = open_ppp;
 
 		spin_unlock_irqrestore(&card->lock, flags);
 
@@ -1224,9 +1305,22 @@ hfc_msg_chan(KERN_INFO, chan,
 	ppp_channel_index(&b1_chan->ppp_chan),
 	ppp_unit_number(&b1_chan->ppp_chan));
 
-WARN_ON(1);
-
 	break;
+
+	case VISDN_PPP_GET_CHAN:
+hfc_msg_chan(KERN_INFO, chan, "VISDN_PPP_GET_CHAN:\n");
+
+		put_user(ppp_channel_index(&b1_chan->ppp_chan),
+			(int __user *)ifr->ifr_data);
+	break;
+
+	case VISDN_PPP_GET_UNIT:
+hfc_msg_chan(KERN_INFO, chan, "VISDN_PPP_GET_UNIT:\n");
+
+		put_user(ppp_unit_number(&b1_chan->ppp_chan),
+			(int __user *)ifr->ifr_data);
+	break;
+
 	default:
 		return -ENOIOCTLCMD;
 	}

@@ -183,7 +183,7 @@ static inline void q931_call_set_calling_number(
 	struct q931_call *call,
 	const char *calling_number)
 {
-	strncpy(call->calling_number, calling_number,
+	strlcpy(call->calling_number, calling_number,
 		sizeof(call->calling_number));
 }
 
@@ -191,7 +191,7 @@ static inline void q931_call_set_called_number(
 	struct q931_call *call,
 	const char *called_number)
 {
-	strncpy(call->called_number, called_number,
+	strlcpy(call->called_number, called_number,
 		sizeof(call->called_number));
 }
 

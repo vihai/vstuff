@@ -11,8 +11,12 @@
 #include <linux/random.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/if.h>
 #include <net/datalink.h>
 #include <net/sock.h>
+
+#include <linux/ppp_defs.h>
+#include <linux/if_ppp.h>
 
 #include "lapd_user.h"
 #include "lapd.h"
@@ -339,6 +343,10 @@ printk(KERN_INFO "lapd: release\n");
 	return 0;
 }
 
+#define VISDN_SET_BEARER_PPP  SIOCDEVPRIVATE
+#define VISDN_PPP_GET_CHAN  (SIOCDEVPRIVATE+1)
+#define VISDN_PPP_GET_UNIT  (SIOCDEVPRIVATE+2)
+
 static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	int rc = -EINVAL;
@@ -410,9 +418,16 @@ printk(KERN_DEBUG "lapd: IOCTL\n");
 			rc = dev_ioctl(cmd, argp);
 		break;
 
-		case 12345678;
+		case 12345678:
 			{
-			struct net_device *dev = __dev_get_by_name(ifr->ifr_name);
+			struct ifreq ifreq;
+
+			if (copy_from_user(&ifreq, argp, sizeof(ifreq)))
+				return -EFAULT;
+
+printk(KERN_DEBUG "lapd: IOCTL 12345678 %s\n", ifreq.ifr_name);
+
+			struct net_device *dev = dev_get_by_name(ifreq.ifr_name);
 
 			if (!dev)
 				return -ENODEV;
@@ -424,17 +439,44 @@ printk(KERN_DEBUG "lapd: IOCTL\n");
 		break;
 
 		case PPPIOCGCHAN:
-			return put_user(ppp_channel_index(&b1_chan->ppp_chan),
-				ifr->ifru_data)
-				? -EFAULT : 0;
+			{
+printk(KERN_DEBUG "lapd: IOCTL PPPIOCGCHAN\n");
+
+			if (!lo->ppp_master_dev)
+				return -ENODEV;
+
+			struct ifreq ifreq;
+			strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
+				sizeof(ifreq.ifr_name));
+
+			ifreq.ifr_data = argp;
+
+			return lo->ppp_master_dev->do_ioctl(
+				lo->ppp_master_dev,
+				&ifreq,
+				VISDN_PPP_GET_CHAN);
+			}
 		break;
 
 		case PPPIOCGUNIT:
-			return put_user(ppp_unit_number(&b1_chan->ppp_chan),
-				ifr->ifru_data)
-				? -EFAULT : 0;
+			{
+printk(KERN_DEBUG "lapd: IOCTL PPPIOCGUNIT\n");
+
+			if (!lo->ppp_master_dev)
+				return -ENODEV;
+
+			struct ifreq ifreq;
+			strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
+				sizeof(ifreq.ifr_name));
+
+			ifreq.ifr_data = argp;
+
+			return lo->ppp_master_dev->do_ioctl(
+				lo->ppp_master_dev,
+				&ifreq,
+				VISDN_PPP_GET_UNIT);
+			}
 		break;
-*/
 	}
 
 	return rc;
