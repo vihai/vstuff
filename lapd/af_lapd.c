@@ -192,14 +192,11 @@ printk(KERN_INFO "lapd: release\n");
 	sock_orphan(sk);
 	sock->sk = NULL;
 
-//	sk_stop_timer(sk, &lo->tei_mgmt.T201_timer);
-//	sk_stop_timer(sk, &lo->tei_mgmt.T202_timer);
-
 	if (lo->status == LINK_CONNECTION_ESTABLISHED) {
 		// Request disconnection, unhash will be delayed
 		// until multiframe has been released
 
-		lapd_start_multiframe_release(lo);
+		lapd_start_multiframe_release(sk);
 	} else lapd_unhash(sk);
 
 	sock_put(sk);
@@ -284,15 +281,15 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return rc;
 }
 
-static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
-			size_t len)
+static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock,
+	struct msghdr *msg, size_t len)
 {
 	struct sock *sk = sock->sk;
 	struct lapd_opt *lo = lapd_sk(sk);
 	int err;
 
 	if (!lo->dev) {
-		err = -ENETUNREACH;
+		err = -ENODEV;
 		goto err_no_dev;
 	}
 
@@ -304,25 +301,21 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *
 	// if this is an u-frame
 	// if staus != TEI_ASSIGNED ?
 
-	u8 tei;
-	if (lo->nt_mode) {
-		if (!msg->msg_name ||
-		     msg->msg_namelen != sizeof(struct sockaddr_lapd)) {
-			err = -EINVAL;
-			goto err_no_msg_name;
-		}
-
-		tei = ((struct sockaddr_lapd *)msg->msg_name)->sal_tei;
-	}
-	else {
+	lapd_tei_t tei;
+	if (!lo->nt_mode) {
 		BUG_TRAP(lo->usr_tme);
 
-		if (lo->usr_tme->status == TEI_UNASSIGNED) {
-//			err = lapd_wait_for_tei_assignment(sk);
-			if (err < 0) goto err_wait_for_tei_assignment;
-		}
+		do {
+			spin_lock_bh(&lo->usr_tme->lock);
+			if (lo->usr_tme->status == TEI_ASSIGNED)
+				tei = lo->usr_tme->tei;
+			else
+				tei = LAPD_TEI_UNASSIGNED;
+			spin_unlock_bh(&lo->usr_tme->lock);
 
-		tei = lo->usr_tme->tei;
+			err = lapd_utme_wait_for_tei_assignment(lo->usr_tme);
+			if (err < 0) goto err_wait_for_tei_assignment;
+		} while(tei != LAPD_TEI_UNASSIGNED);
 	}
 
 	struct sk_buff *skb;
@@ -333,7 +326,7 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *
 		if (!skb)
 			goto err_sock_alloc_send_skb;
 
-		err = lapd_prepare_uframe(skb, 0, tei, UI);
+		err = lapd_prepare_uframe(sk, skb, UI);
 		if(err < 0) goto err_prepare_frame;
 
 		err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
@@ -352,7 +345,7 @@ static int lapd_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *
 			goto err_notconn;
 		}
 
-		err = lapd_prepare_iframe(skb, 0, tei);
+		err = lapd_prepare_iframe(sk, skb);
 		if(err < 0) goto err_prepare_frame;
 
 		err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
@@ -368,7 +361,6 @@ err_memcpy_fromiovec:
 err_sock_alloc_send_skb:
 err_notconn:
 err_prepare_frame:
-err_no_msg_name:
 err_wait_for_tei_assignment:
 err_over_mtu:
 err_no_dev:
@@ -377,8 +369,8 @@ err_no_dev:
 }
 
 
-static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
-			size_t size, int flags)
+static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
+	struct msghdr *msg, size_t size, int flags)
 {
 	struct sock *sk = sock->sk;
 	struct lapd_opt *lo = lapd_sk(sk);
@@ -388,7 +380,7 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *
 	lock_sock(sk);
 
 	if (!lo->dev) {
-		err = -ENETUNREACH;
+		err = -ENODEV;
 		goto err_no_dev;
 	}
 
@@ -439,12 +431,11 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 	if (dev->flags & IFF_ALLMULTI) {
 		lo->nt_mode = TRUE;
-	}
-	else {
+	} else {
 		lo->nt_mode = FALSE;
 
 		if (dev->flags & IFF_POINTOPOINT)
-			lapd_usr_tme_set_static_tei(lo->usr_tme, 0);
+			lapd_utme_set_static_tei(lo->usr_tme, 0);
 	}
 
 	if (sk->sk_type != SOCK_DGRAM) {
@@ -454,15 +445,16 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 	sk->sk_bound_dev_if = dev->ifindex;
 	lo->dev = dev;
+	lo->lapd_dev = (struct lapd_device *)dev->atalk_ptr;
 
-	// TODO: We mey need to postpone tei request when L2 transfers
+	// TODO: We may need to postpone tei request when L2 transfers
 	// are needed, cfr. ETSI 300 125
 	if (!lo->nt_mode) {
 		if (lo->usr_tme->status != TEI_ASSIGNED)
-			lapd_start_tei_request(sk);
-		else
-			lo->usr_tme->status = TEI_ASSIGNED;
+			lapd_utme_start_tei_request(lo->usr_tme);
 	}
+
+	lo->sap = &lo->lapd_dev->q931;
 
 	return 0;
 
@@ -516,7 +508,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 	}
 	break;
 
-	case LAPD_TE_TEI:
+	case LAPD_TEI:
 		// release TEI?
 		// check static TEI?
 
@@ -531,7 +523,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optval;
 		}
 
-		lapd_usr_tme_set_static_tei(lo->usr_tme, intoptval);
+		lapd_utme_set_static_tei(lo->usr_tme, intoptval);
 	break;
 
 	case LAPD_TEI_MGMT_T201:
@@ -545,8 +537,12 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		// FIXME
-//		lo->usr_tme->T201 = intoptval;
+		if (!lo->nt_mode) {
+			err = -EINVAL;
+			break;
+		}
+
+		lo->net_tme->T201 = intoptval;
 	break;
 
 	case LAPD_TEI_MGMT_N202:
@@ -560,7 +556,12 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-//		lo->usr_tme->N202 = intoptval;
+		if (lo->nt_mode) {
+			err = -EINVAL;
+			break;
+		}
+
+		lo->usr_tme->N202 = intoptval;
 	break;
 
 	case LAPD_TEI_MGMT_T202:
@@ -574,7 +575,12 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-//		lo->usr_tme->N202 = intoptval;
+		if (lo->nt_mode) {
+			err = -EINVAL;
+			break;
+		}
+
+		lo->usr_tme->N202 = intoptval;
 	break;
 
 	case LAPD_Q931_T200:
@@ -588,8 +594,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-// FIXME
-//		lo->q931.T200 = intoptval;
+		lo->lapd_dev->q931.T200 = intoptval;
 	break;
 
 	case LAPD_Q931_N200:
@@ -602,8 +607,8 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			err = -EINVAL;
 			break;
 		}
-//FIXME
-//		lo->q931.N200 = intoptval;
+
+		lo->lapd_dev->q931.N200 = intoptval;
 	break;
 
 	case LAPD_Q931_T203:
@@ -616,8 +621,8 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			err = -EINVAL;
 			break;
 		}
-//FIXME
-//		lo->q931.T203 = intoptval;
+
+		lo->lapd_dev->q931.T203 = intoptval;
 	break;
 
 	case LAPD_Q931_N201:
@@ -630,8 +635,8 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			err = -EINVAL;
 			break;
 		}
-// FIXME
-//		lo->q931.N201 = intoptval;
+
+		lo->lapd_dev->q931.N201 = intoptval;
 	break;
 
 	case LAPD_Q931_K:
@@ -645,8 +650,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-// FIXME
-//		lo->q931.k = intoptval;
+		lo->lapd_dev->q931.k = intoptval;
 	break;
 
 	default:
@@ -714,24 +718,30 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 		val = lo->nt_mode;
 	break;
 
-	case LAPD_TE_TEI:
+	case LAPD_TEI:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->te.tei;
+		if (lo->nt_mode)
+			val = lo->tei;
+		else
+			val = lo->usr_tme->tei;
 	break;
 
-	case LAPD_TE_STATUS:
+	case LAPD_TEI_MGMT_STATUS:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->te.status?LAPD_ROLE_NT:LAPD_ROLE_TE;
+		if (lo->nt_mode) {
+			err = -EINVAL;
+			goto err_invalid_request;
+		}
+
+		val = lo->usr_tme->status;
 	break;
 
 	case LAPD_TEI_MGMT_T201:
@@ -740,8 +750,13 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->tei_mgmt.T201;
+		if (!lo->nt_mode) {
+			err = -EINVAL;
+			goto err_invalid_request;
+		}
+
+		// Locking?
+		val = lo->net_tme->T201;
 	break;
 
 	case LAPD_TEI_MGMT_N202:
@@ -750,8 +765,12 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->tei_mgmt.N202;
+		if (lo->nt_mode) {
+			err = -EINVAL;
+			goto err_invalid_request;
+		}
+
+		val = lo->usr_tme->N202;
 	break;
 
 	case LAPD_TEI_MGMT_T202:
@@ -760,8 +779,12 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->tei_mgmt.T202;
+		if (lo->nt_mode) {
+			err = -EINVAL;
+			goto err_invalid_request;
+		}
+
+		val = lo->usr_tme->T202;
 	break;
 
 	case LAPD_Q931_T200:
@@ -770,8 +793,7 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->q931.T200;
+		val = lo->lapd_dev->q931.T200;
 	break;
 
 	case LAPD_Q931_N200:
@@ -780,8 +802,7 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->q931.N200;
+		val = lo->lapd_dev->q931.N200;
 	break;
 
 	case LAPD_Q931_T203:
@@ -790,8 +811,7 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->q931.T203;
+		val = lo->lapd_dev->q931.T203;
 	break;
 
 	case LAPD_Q931_N201:
@@ -800,8 +820,7 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->q931.N201;
+		val = lo->lapd_dev->q931.N201;
 	break;
 
 	case LAPD_Q931_K:
@@ -810,8 +829,7 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
-// FIXME
-//		val = lo->q931.k;
+		val = lo->lapd_dev->q931.k;
 	break;
 
 	case LAPD_DLC_STATUS:
@@ -841,6 +859,7 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 
 err_put_user:
 err_invalid_optlen:
+err_invalid_request:
 	release_sock(sk);
 err_get_user:
 
@@ -890,7 +909,7 @@ static int lapd_create(struct socket *sock, int protocol)
 	lo->nt_mode = FALSE;
 
 	// FIXME: This should be moved to SO_BINDTODEVICE
-	lo->usr_tme = lapd_usr_tei_mgmt_entity_alloc();
+	lo->usr_tme = lapd_utme_alloc();
 
 	init_timer(&lo->T200_timer);
 	lo->T200_timer.function = lapd_T200_timer;
@@ -949,7 +968,11 @@ static int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
-		lapd_handle_tei_mgmt(skb);
+		if (skb->dev->flags & IFF_ALLMULTI)
+			lapd_ntme_handle_frame(skb);
+		else
+			lapd_utme_handle_frame(skb);
+
 		goto frame_handled;
 	}
 
@@ -963,8 +986,9 @@ static int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 		struct lapd_opt *lo = lapd_sk(sk);
 		if (lo->dev == dev &&
 		    (hdr->addr.tei == LAPD_BROADCAST_TEI ||
-		      (!lo->nt_mode && lo->usr_tme->tei == hdr->addr.tei) ||
-		       lo->nt_mode)) {
+		      (!lo->nt_mode &&
+		       lo->usr_tme->tei == hdr->addr.tei) ||
+		    lo->nt_mode)) {
 
 			skb->sk = sk;
 
@@ -998,7 +1022,8 @@ static int lapd_multiframe_wait_for_establishment(struct sock *sk)
 	int timeout = 10 * HZ;
 
 	for (;;) {
-		prepare_to_wait_exclusive(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
+		prepare_to_wait_exclusive(sk->sk_sleep, &wait,
+			TASK_INTERRUPTIBLE);
 
 		release_sock(sk);
 
@@ -1042,7 +1067,8 @@ static int lapd_multiframe_wait_for_release(struct sock *sk)
 	int timeout = 10 * HZ;
 
 	for (;;) {
-		prepare_to_wait_exclusive(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
+		prepare_to_wait_exclusive(sk->sk_sleep, &wait,
+			TASK_INTERRUPTIBLE);
 
 		release_sock(sk);
 
@@ -1106,11 +1132,7 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 		goto err_already_connected;
 	}
 
-/*	if (lo->usr_tme->status == TEI_UNASSIGNED) {
-		err = lapd_wait_for_tei_assignment(sk);
-		if (err < 0) goto err_wait_for_tei_assignment;
-	}
-FIXME*/
+	// Wait for TEI assignment???? TODO FIXME
 
         sock->state = SS_CONNECTING;
 	lapd_start_multiframe_establishment(sk);
@@ -1130,7 +1152,6 @@ FIXME*/
 
 err_multiframe_wait_for_establishment:
 err_inprogress:
-err_wait_for_tei_assignment:
 err_already_connected:
 err_refused:
 established:
@@ -1164,7 +1185,7 @@ static int lapd_shutdown(struct socket *sock, int how)
 	if (lo->nt_mode)
 		return -EINVAL;
 
-	lapd_start_multiframe_release(lo);
+	lapd_start_multiframe_release(sk);
 
 	err = lapd_multiframe_wait_for_release(sk);
 	if (err) goto err_multiframe_wait_for_release;
@@ -1221,8 +1242,8 @@ static int __init lapd_init(void)
 	int err;
 
 	lapd_sk_cachep = kmem_cache_create("lapd_sock",
-					sizeof(struct lapd_sock), 0,
-					SLAB_HWCACHE_ALIGN, NULL, NULL);
+				sizeof(struct lapd_sock), 0,
+				SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if (!lapd_sk_cachep) {
 		printk(KERN_CRIT
 			"lapd: Can't create protocol sock SLAB caches!\n");

@@ -1,18 +1,21 @@
 #ifndef _TEI_MGMT_TE_H
 #define _TEI_MGMT_TE_H
 
+#include <linux/spinlock.h>
 #include <asm/atomic.h>
 
 #include "tei_mgmt.h"
 
-struct lapd_usr_tei_mgmt_entity
+struct lapd_utme
 {
-	struct hlist_node *node;
+	struct hlist_node node;
 
 	atomic_t refcnt;
 
 	struct net_device *dev;
 	wait_queue_head_t waitq;
+
+	spinlock_t lock;
 
 	// TEI Management SAP Parameters
 	int T202;
@@ -24,34 +27,60 @@ struct lapd_usr_tei_mgmt_entity
 
 	enum lapd_tei_status status;
 
-	u8 tei;
+	lapd_tei_t tei;
 	u16 tei_request_ri;
 	int tei_request_pending;
+
+	void (*destroy)(struct lapd_utme *tme);
 };
 
-extern struct lapd_usr_tei_mgmt_entity *lapd_usr_tei_mgmt_entity_alloc();
+struct lapd_utme *lapd_utme_alloc(void);
 
-static inline void lapd_usr_tei_mgmt_entity_free(
-	struct lapd_usr_tei_mgmt_entity *tme)
-{
-	kfree(tme);
-}
-
-static inline void lapd_usr_tei_mgmt_entity_hold(
-	struct lapd_usr_tei_mgmt_entity *tme)
+static inline void lapd_utme_hold(
+	struct lapd_utme *tme)
 {
 	atomic_inc(&tme->refcnt);
 }
 
-static inline void lapd_usr_tei_mgmt_entity_put(
-	struct lapd_usr_tei_mgmt_entity *tme)
+static inline void lapd_utme_put(
+	struct lapd_utme *tme)
 {
-	if (atomic_dec_and_test(&tme->refcnt))
-		lapd_usr_tei_mgmt_entity_free(tme);
+	if (atomic_dec_and_test(&tme->refcnt)) {
+		if (tme->destroy) tme->destroy(tme);
+
+		kfree(tme);
+	}
 }
 
-extern void lapd_usr_tme_set_static_tei(
-	struct lapd_usr_tei_mgmt_entity *tme, int tei);
+extern void lapd_utme_set_static_tei(
+	struct lapd_utme *tme, lapd_tei_t tei);
 
+static inline void lapd_utme_reset_timer(
+	struct lapd_utme *tme,
+	struct timer_list *timer,
+	unsigned long expires)
+{
+	if (!mod_timer(timer, expires))
+		lapd_utme_hold(tme);
+}
+
+static inline void lapd_utme_stop_timer(
+	struct lapd_utme *tme,
+	struct timer_list *timer)
+{
+	if (timer_pending(timer) && del_timer(timer))
+		lapd_utme_put(tme);
+}
+
+static inline void lapd_utme_state_changed(
+	struct lapd_utme *tme)
+{
+	if (waitqueue_active(&tme->waitq))
+		wake_up_interruptible_all(&tme->waitq);
+}
+
+int lapd_utme_handle_frame(struct sk_buff *skb);
+void lapd_utme_start_tei_request(struct lapd_utme *tme);
+int lapd_utme_wait_for_tei_assignment(struct lapd_utme *tme);
 
 #endif

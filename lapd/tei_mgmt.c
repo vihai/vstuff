@@ -12,25 +12,30 @@
 #include "lapd.h"
 #include "tei_mgmt.h"
 
-static inline int lapd_tm_send(
-	struct lapd_tei_mgmt_entity *tme,
+inline int lapd_tm_send(
+	struct net_device *dev,
 	u8 message_type, u16 ri, u8 ai)
 {
-	int err;
+	struct sk_buff *skb;
+	skb = alloc_skb(sizeof(struct lapd_hdr) +
+		sizeof(struct lapd_tei_mgmt_body),
+		0);
 
-	struct sk_buff *skb = alloc_skb(sizeof(struct lapd_hdr) +
-					sizeof(struct lapd_tei_mgmt_body),
-					0);
+	skb->dev = dev;
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+	skb->protocol = __constant_htons(ETH_P_LAPD);
 
-	err = lapd_prepare_uframe(
-		skb,
-		LAPD_SAPI_TEI_MGMT,
-		LAPD_BROADCAST_TEI,
-		UI);
-	if (err < 0) {
-		kfree_skb(skb);
-		return err;
-	}
+	struct lapd_hdr *hdr =
+		(struct lapd_hdr *)skb_put(skb, sizeof(struct lapd_hdr));
+
+	hdr->addr.sapi = LAPD_SAPI_TEI_MGMT;
+
+	hdr->addr.c_r = (skb->dev->flags & IFF_ALLMULTI)?1:0;
+	hdr->addr.ea1 = 0;
+	hdr->addr.ea2 = 1;
+	hdr->addr.tei = LAPD_BROADCAST_TEI;
+
+	hdr->control = lapd_uframe_make_control(UI, 0/* p_f*/);
 
 	struct lapd_tei_mgmt_body *tm =
 		 (struct lapd_tei_mgmt_body *)skb_put(skb,

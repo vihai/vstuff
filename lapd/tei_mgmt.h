@@ -17,6 +17,8 @@
 
 #ifdef __KERNEL__
 
+typedef u8 lapd_tei_t;
+
 enum lapd_tei_status
 {
 	TEI_UNASSIGNED,
@@ -42,6 +44,8 @@ enum lapd_tei_status
 #define LAPD_MIN_DYN_TEI	64
 #define LAPD_MAX_DYN_TEI	126
 #define LAPD_NUM_DYN_TEIS	(LAPD_MAX_DYN_TEI - LAPD_MIN_DYN_TEI + 1)
+
+#define LAPD_TEI_UNASSIGNED	255
 
 struct lapd_tei_mgmt_body
 {
@@ -69,6 +73,10 @@ void lapd_start_tei_request(struct sock *sk);
 void lapd_tei_mgmt_T201_timer(unsigned long data);
 void lapd_tei_mgmt_T202_timer(unsigned long data);
 int lapd_handle_tei_mgmt(struct sk_buff *skb);
+
+inline int lapd_tm_send(
+	struct net_device *dev,
+	u8 message_type, u16 ri, u8 ai);
 
 #endif /* __KERNEL__ */
 #endif
