@@ -29,8 +29,6 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 
-#include <vihai_isdn.h>
-#include <lapd_user.h>
 #include <lapd.h>
 
 #include "hfc-pci.h"
@@ -1094,6 +1092,8 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 	chan->netdev->get_stats = hfc_get_stats;
 	chan->netdev->set_multicast_list = hfc_set_multicast_list;
 	chan->netdev->features = NETIF_F_NO_CSUM;
+
+	chan->netdev->mtu = chan->tx.fifo_size;
 
 	memset(chan->netdev->dev_addr, 0x00, sizeof(chan->netdev->dev_addr));
 

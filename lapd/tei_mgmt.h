@@ -13,6 +13,8 @@
 #ifndef _LAPD_TEI_MGMT_H
 #define _LAPD_TEI_MGMT_H
 
+#include <net/sock.h>
+
 #include "lapd_proto.h"
 
 #ifdef __KERNEL__

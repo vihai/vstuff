@@ -35,7 +35,7 @@
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
 
-#include <lapd_user.h>
+#include <lapd.h>
 
 #include <q931.h>
 #include <q931_mt.h>

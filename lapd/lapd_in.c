@@ -4,15 +4,8 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/termios.h> 
 #include <linux/tcp.h>
-#include <linux/if_arp.h>
-#include <linux/random.h>
-#include <linux/proc_fs.h>
-#include <net/datalink.h>
-#include <net/sock.h>
 
-#include "lapd_user.h"
 #include "lapd.h"
 #include "lapd_in.h"
 #include "lapd_out.h"
@@ -67,6 +60,8 @@ static inline void lapd_handle_socket_uframe_ui(struct sock *sk,
 {
 	printk(KERN_DEBUG "lapd: received u-frame UI\n");
 
+	// Unlike other protocols, I put the skb in the socket without
+	// LAPD header. Is this correct?
 	skb_pull(skb, sizeof(struct lapd_hdr));
 
 	if (sock_queue_rcv_skb(sk, skb) < 0) {
@@ -183,9 +178,19 @@ static inline void lapd_handle_socket_uframe(struct sock *sk,
 	}
 }
 
+/*****************+
+ * WARNING: this function may be called under lapd_hash_lock and acquires
+ * bh_lock_sock. To avoid deadlocks, nothing inside this functions should
+ * acquire lapd_hash_lock again
+ *
+ */
+
 inline int lapd_handle_socket_frame(struct sock *sk, struct sk_buff *skb)
 {
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+
+	// Ensure serialization within a socket
+	bh_lock_sock(sk);
 
 	switch (lapd_frame_type(hdr->control)) {
 	case IFRAME:
@@ -201,7 +206,127 @@ inline int lapd_handle_socket_frame(struct sock *sk, struct sk_buff *skb)
 	break;
 	};
 
+	bh_unlock_sock(sk);
+
 	return 0;
+}
+
+/*************************
+ * lapd_pass_frame_to_socket_nt() handles an incoming frame, searches
+ * the appropriate socket and creates a new socket if not found.
+ *
+ * Frames are serialized when relative to the same socket
+ */
+
+static inline void lapd_pass_frame_to_socket_nt(struct sk_buff *skb)
+{
+	struct sock *listening_sk = NULL;
+	struct sock *sk = NULL;
+	struct hlist_node *node;
+
+	write_unlock_bh(&lapd_hash_lock);
+	sk_for_each(sk, node, &lapd_hash) {
+		struct lapd_opt *lo = lapd_sk(sk);
+
+		if (lo->dev == dev) {
+			if (sk->sk_state == TCP_LISTEN) {
+				listening_sk = sk;
+				continue;
+			}
+
+			if (lo->sapi == hdr->addr.sapi &&
+		 	    lo->tei == hdr->addr.tei) {
+				read_unlock_bh(&lapd_hash_lock);
+
+				skb->sk = sk;
+
+				lapd_handle_socket_frame(sk, skb);
+
+				goto frame_handled;
+			}
+		}
+	}
+
+	if (!listening_sk) {
+		write_unlock_bh(&lapd_hash_lock);
+	} else {
+		// A socket has not been found
+		struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+		
+		if (hdr->addr.sapi != LAPD_SAPI_Q931 &&
+		    hdr->addr.sapi != LAPD_SAPI_X25) {
+			printk(KERN_WARNING
+				"lapd: SAPI %d not supported\n",
+				hdr->addr.sapi);
+		}
+
+		struct sock *newsk;
+		newsk = lapd_new_sock(listening_sk, hdr->addr.tei,
+			hdr->addr.sapi);
+
+		if (!newsk) {
+			write_unlock_bh(&lapd_hash_lock);
+			return;
+		}
+
+		sk_add_node(newsk, &lapd_hash);
+		write_unlock_bh(&lapd_hash_lock);
+
+		skb->sk = newsk;
+
+		struct lapd_new_dlc *new_dlc;
+		new_dlc = kmalloc(sizeof(struct lapd_new_dlc), GFP_ATOMIC);
+		if (!new_dlc)
+			return;
+
+		new_dlc->sk = newsk;
+		// sock_hold(new_dlc->sk);
+
+		struct lapd_opt *listening_lo = lapd_sk(listening_sk);
+		hlist_add_head(&new_dlc->node, &listening_lo->new_dlcs);
+
+		lapd_handle_socket_frame(newsk, skb);
+
+		if (!sock_flag(listening_sk, SOCK_DEAD))
+			listening_sk->sk_data_ready(
+				listening_sk, skb->len);
+
+		// sock_put(newsk);
+	}
+
+}
+
+/*************************
+ * lapd_pass_frame_to_socket_te() handles an incoming frame, searches
+ * the appropriate socket and handles the frame.
+ *
+ * Frames are serialized when relative to the same socket
+ */
+
+
+static inline void lapd_pass_frame_to_socket_te(struct sk_buff *skb)
+{
+
+	struct sock *sk;
+	struct hlist_node *node;
+
+	read_lock_bh(&lapd_hash_lock);
+	sk_for_each(sk, node, &lapd_hash) {
+		struct lapd_opt *lo = lapd_sk(sk);
+
+		if (lo->dev == dev &&
+		    (hdr->addr.tei == LAPD_BROADCAST_TEI ||
+		       lo->usr_tme->tei == hdr->addr.tei)) {
+
+			if (skb->list)
+				skb = skb_clone(skb, GFP_ATOMIC);
+
+			skb->sk = sk;
+
+			lapd_handle_socket_frame(sk, skb);
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
 }
 
 int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
@@ -210,18 +335,6 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 	// Don't mangle buffer if shared
 	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
 		goto err_share_check;
-
-	u8 drop_simul;
-	get_random_bytes(&drop_simul, sizeof(drop_simul));
-
-	if (drop_simul > 200) {
-		printk(KERN_DEBUG "lapd: "
-			"%s: "
-			"Simulating frame drop\n",
-			skb->dev->name);
-
-		goto err_drop_simul;
-	}
 
 	// Minimum frame is header + 2 CRC <- not sent yet by driver
 	if (skb->len < sizeof(struct lapd_hdr)) // + 2)
@@ -243,111 +356,16 @@ int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 	}
 
 	if (skb->dev->flags & IFF_ALLMULTI) {
-		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
+		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT)
 			lapd_ntme_handle_frame(skb);
-			goto frame_handled;
-		}
-
-		{
-		struct sock *listening_sk = NULL;
-
-		{
-		struct sock *sk = NULL;
-		struct hlist_node *node;
-
-		read_lock_bh(&lapd_hash_lock);
-		sk_for_each(sk, node, &lapd_hash) {
-			struct lapd_opt *lo = lapd_sk(sk);
-
-			if (lo->dev == dev) {
-				if (sk->sk_state == TCP_LISTEN) {
-					listening_sk = sk;
-					continue;
-				}
-
-				if (lo->sapi == hdr->addr.sapi &&
-			 	    lo->tei == hdr->addr.tei) {
-					read_unlock_bh(&lapd_hash_lock);
-
-					skb->sk = sk;
-
-					lapd_handle_socket_frame(sk, skb);
-
-					goto frame_handled;
-				}
-			}
-		}
-		read_unlock_bh(&lapd_hash_lock);
-		}
-
-		// A socket has not been found
-		if (listening_sk) {
-			struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
-			
-			if (hdr->addr.sapi != LAPD_SAPI_Q931 &&
-			    hdr->addr.sapi != LAPD_SAPI_X25) {
-				printk(KERN_WARNING
-					"lapd: SAPI %d not supported\n",
-					hdr->addr.sapi);
-			}
-
-			struct sock *newsk;
-			newsk = lapd_new_sock(listening_sk, hdr->addr.tei,
-				hdr->addr.sapi);
-			if (!newsk)
-				return 0;
-
-			write_lock_bh(&lapd_hash_lock);
-			sk_add_node(newsk, &lapd_hash);
-			write_unlock_bh(&lapd_hash_lock);
-
-			skb->sk = newsk;
-
-			struct lapd_new_dlc *new_dlc;
-			new_dlc = kmalloc(sizeof(struct lapd_new_dlc), GFP_ATOMIC);
-			if (!new_dlc) return 0;
-
-			new_dlc->sk = newsk;
-			// sock_hold(new_dlc->sk);
-
-			struct lapd_opt *listening_lo = lapd_sk(listening_sk);
-			hlist_add_head(&new_dlc->node, &listening_lo->new_dlcs);
-
-			lapd_handle_socket_frame(newsk, skb);
-
-			if (!sock_flag(listening_sk, SOCK_DEAD))
-				listening_sk->sk_data_ready(
-					listening_sk, skb->len);
-
-			// sock_put(newsk);
-		}
-		}
+		else
+			lapd_pass_frame_to_socket_nt(skb);
 	} else {
-		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
+		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT)
 			lapd_utme_handle_frame(skb);
-			goto frame_handled;
-		}
+		else
+			lapd_pass_frame_to_socket_te(skb);
 
-		struct sock *sk;
-		struct hlist_node *node;
-
-		read_lock_bh(&lapd_hash_lock);
-		sk_for_each(sk, node, &lapd_hash) {
-			struct lapd_opt *lo = lapd_sk(sk);
-
-			if (lo->dev == dev &&
-			    (hdr->addr.tei == LAPD_BROADCAST_TEI ||
-			       lo->usr_tme->tei == hdr->addr.tei)) {
-
-				if (skb->list)
-					skb = skb_clone(skb, GFP_ATOMIC);
-
-				skb->sk = sk;
-
-				lapd_handle_socket_frame(sk, skb);
-			}
-		}
-		read_unlock_bh(&lapd_hash_lock);
 	}
 
 frame_handled:
@@ -360,7 +378,6 @@ frame_handled:
 err_small_frame:
 err_improper_ea:
 err_pskb_may_pull:
-err_drop_simul:
 err_share_check:
 
 	kfree_skb(skb);

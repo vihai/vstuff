@@ -2,17 +2,8 @@
 
 */
 
-#include <linux/config.h>
-#include <linux/module.h>
-#include <linux/termios.h> 
-#include <linux/tcp.h>
-#include <linux/if_arp.h>
-#include <linux/random.h>
-#include <linux/proc_fs.h>
-#include <net/datalink.h>
-#include <net/sock.h>
+#include <linux/skbuff.h>
 
-#include "lapd_user.h"
 #include "lapd.h"
 #include "tei_mgmt_nt.h"
 #include "tei_mgmt_te.h"

@@ -2,17 +2,8 @@
 
 */
 
-#include <linux/config.h>
-#include <linux/module.h>
-#include <linux/termios.h> 
-#include <linux/tcp.h>
-#include <linux/if_arp.h>
-#include <linux/random.h>
-#include <linux/proc_fs.h>
-#include <net/datalink.h>
-#include <net/sock.h>
+#include <linux/skbuff.h>
 
-#include "lapd_user.h"
 #include "lapd.h"
 #include "lapd_in.h"
 #include "lapd_out.h"
@@ -610,12 +601,12 @@ void lapd_handle_socket_iframe(struct sock *sk,
 
 		// pass it to the user.
 		int err = sock_queue_rcv_skb(sk, skb);
-		if (err < 0) {
+		if (err == -ENOMEM) {
+		} else {
 			printk(KERN_ERR "lapd: sock_queue_rcv_skb err: %d\n",
 				err);
 
-			// What shall we do now?
-			// TODO
+			send_rej();
 		}
 	} else {
 		// uhuh... the frame is not in sequence, we have to recover
@@ -799,11 +790,5 @@ void lapd_handle_socket_sframe(struct sock *sk,
 	case RNR: lapd_handle_socket_sframe_rnr(sk, skb); break;
 	case REJ: lapd_handle_socket_sframe_rej(sk, skb); break;
 	}
-
-/* UH? What does this do?
-                if (skb_queue_len(&st->l2.i_queue) && (typ == RR))
-                        st->l2.l2l1(st, PH_PULL | REQUEST, NULL);
-*/
-
 }
 

@@ -36,6 +36,13 @@ TODO
 
 - Implement socket closure after timeout and T203
 
+- Implement listen backlog maximum size
+- Implement frame acknowledging throught outgoing i-frames instead of specific RR
+
+- Indagate whether it is possiblle to strictly serialize frames coming from the
+  same device (and thus going to the same socket). Currently netif_rx spreads the
+  load on per-CPU queues and frames may get analyzed concurrently.
+
 FIX debugging
 Add interface to each line
 

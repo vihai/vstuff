@@ -2,7 +2,8 @@
 #define _Q931_H
 
 #include <sys/socket.h>
-#include <lapd_user.h>
+
+#include <lapd.h>
 
 #include "list.h"
 
@@ -183,16 +184,18 @@ static inline void q931_call_set_calling_number(
 	struct q931_call *call,
 	const char *calling_number)
 {
-	strlcpy(call->calling_number, calling_number,
+	strncpy(call->calling_number, calling_number,
 		sizeof(call->calling_number));
+	call->called_number[sizeof(call->calling_number)-1]='\0';
 }
 
 static inline void q931_call_set_called_number(
 	struct q931_call *call,
 	const char *called_number)
 {
-	strlcpy(call->called_number, called_number,
+	strncpy(call->called_number, called_number,
 		sizeof(call->called_number));
+	call->called_number[sizeof(call->called_number)-1]='\0';
 }
 
 void q931_free_call(struct q931_call *call);

@@ -9,7 +9,7 @@
 #include <linux/types.h>
 #include <assert.h>
 
-#include <lapd_user.h>
+#include <lapd.h>
 
 #include "list.h"
 
@@ -169,11 +169,10 @@ static int q931_send_frame(const struct q931_dlc *dlc, void *frame, int size)
 
 	printf("q931_send_frame\n");
 
-	if (sendmsg(dlc->socket, &msg, 0) < 0)
-	 {
-	  printf("sendmsg error: %s\n",strerror(errno));
-	  return errno;
-	 }
+	if (sendmsg(dlc->socket, &msg, 0) < 0) {
+		printf("sendmsg error: %s\n",strerror(errno));
+		return errno;
+	}
 
 	return 0;
 }
@@ -200,11 +199,10 @@ static int q931_send_bc_uframe(struct q931_interface *interface, void *frame, in
 
 	printf("q931_send_uframe\n");
 
-	if (sendmsg(interface->nt_socket, &msg, MSG_OOB) < 0)
-	 {
-	  printf("sendmsg error: %s\n",strerror(errno));
-	  return errno;
-	 }
+	if (sendmsg(interface->nt_socket, &msg, MSG_OOB) < 0) {
+		printf("sendmsg error: %s\n",strerror(errno));
+		return errno;
+	}
 
 	return 0;
 }
@@ -230,11 +228,10 @@ static int q931_send_uframe(const struct q931_dlc *dlc, void *frame, int size)
 
 	printf("q931_send_uframe\n");
 
-	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0)
-	 {
-	  printf("sendmsg error: %s\n",strerror(errno));
-	  return errno;
-	 }
+	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0) {
+		printf("sendmsg error: %s\n",strerror(errno));
+		return errno;
+	}
 
 	return 0;
 }
@@ -401,39 +398,39 @@ static enum q931_ie_call_state_call_state_net
 {
 	switch (state) {
 	case N0_NULL_STATE:
-	return Q931_IE_CS_N0_NULL_STATE;
+		return Q931_IE_CS_N0_NULL_STATE;
 	case N1_CALL_INITIATED:
-	return Q931_IE_CS_N1_CALL_INITIATED;
+		return Q931_IE_CS_N1_CALL_INITIATED;
 	case N2_OVERLAP_SENDING:
-	return Q931_IE_CS_N2_OVERLAP_SENDING;
+		return Q931_IE_CS_N2_OVERLAP_SENDING;
 	case N3_OUTGOING_CALL_PROCEEDING:
-	return Q931_IE_CS_N3_OUTGOING_CALL_PROCEEDING;
+		return Q931_IE_CS_N3_OUTGOING_CALL_PROCEEDING;
 	case N4_CALL_DELIVERED:
-	return Q931_IE_CS_N4_CALL_DELIVERED;
+		return Q931_IE_CS_N4_CALL_DELIVERED;
 	case N6_CALL_PRESENT:
-	return Q931_IE_CS_N6_CALL_PRESENT;
+		return Q931_IE_CS_N6_CALL_PRESENT;
 	case N7_CALL_RECEIVED:
-	return Q931_IE_CS_N7_CALL_RECEIVED;
+		return Q931_IE_CS_N7_CALL_RECEIVED;
 	case N8_CONNECT_REQUEST:
-	return Q931_IE_CS_N8_CONNECT_REQUEST;
+		return Q931_IE_CS_N8_CONNECT_REQUEST;
 	case N9_INCOMING_CALL_PROCEEDING:
-	return Q931_IE_CS_N9_INCOMING_CALL_PROCEEDING;
+		return Q931_IE_CS_N9_INCOMING_CALL_PROCEEDING;
 	case N10_ACTIVE:
-	return Q931_IE_CS_N10_ACTIVE;
+		return Q931_IE_CS_N10_ACTIVE;
 	case N11_DISCONNECT_REQUEST:
-	return Q931_IE_CS_N11_DISCONNECT_REQUEST;
+		return Q931_IE_CS_N11_DISCONNECT_REQUEST;
 	case N12_DISCONNECT_INDICATION:
-	return Q931_IE_CS_N12_DISCONNECT_INDICATION;
+		return Q931_IE_CS_N12_DISCONNECT_INDICATION;
 	case N15_SUSPEND_REQUEST:
-	return Q931_IE_CS_N15_SUSPEND_REQUEST;
+		return Q931_IE_CS_N15_SUSPEND_REQUEST;
 	case N17_RESUME_REQUEST:
-	return Q931_IE_CS_N17_RESUME_REQUEST;
+		return Q931_IE_CS_N17_RESUME_REQUEST;
 	case N19_RELEASE_REQUEST:
-	return Q931_IE_CS_N19_RELEASE_REQUEST;
+		return Q931_IE_CS_N19_RELEASE_REQUEST;
 	case N22_CALL_ABORT:
-	return Q931_IE_CS_N22_CALL_ABORT;
+		return Q931_IE_CS_N22_CALL_ABORT;
 	case N25_OVERLAP_RECEIVING:
-	return Q931_IE_CS_N25_OVERLAP_RECEIVING;
+		return Q931_IE_CS_N25_OVERLAP_RECEIVING;
 	}
 }
 
@@ -443,37 +440,37 @@ static enum q931_ie_call_state_call_state_user
 {
 	switch (state) {
 	case U0_NULL_STATE:
-	return Q931_IE_CS_U0_NULL_STATE;
+		return Q931_IE_CS_U0_NULL_STATE;
 	case U1_CALL_INITIATED:
-	return Q931_IE_CS_U1_CALL_INITIATED;
+		return Q931_IE_CS_U1_CALL_INITIATED;
 	case U2_OVERLAP_SENDING:
-	return Q931_IE_CS_U2_OVERLAP_SENDING;
+		return Q931_IE_CS_U2_OVERLAP_SENDING;
 	case U3_OUTGOING_CALL_PROCEEDING:
-	return Q931_IE_CS_U3_OUTGOING_CALL_PROCEEDING;
+		return Q931_IE_CS_U3_OUTGOING_CALL_PROCEEDING;
 	case U4_CALL_DELIVERED:
-	return Q931_IE_CS_U4_CALL_DELIVERED;
+		return Q931_IE_CS_U4_CALL_DELIVERED;
 	case U6_CALL_PRESENT:
-	return Q931_IE_CS_U6_CALL_PRESENT;
+		return Q931_IE_CS_U6_CALL_PRESENT;
 	case U7_CALL_RECEIVED:
-	return Q931_IE_CS_U7_CALL_RECEIVED;
+		return Q931_IE_CS_U7_CALL_RECEIVED;
 	case U8_CONNECT_REQUEST:
-	return Q931_IE_CS_U8_CONNECT_REQUEST;
+		return Q931_IE_CS_U8_CONNECT_REQUEST;
 	case U9_INCOMING_CALL_PROCEEDING:
-	return Q931_IE_CS_U9_INCOMING_CALL_PROCEEDING;
+		return Q931_IE_CS_U9_INCOMING_CALL_PROCEEDING;
 	case U10_ACTIVE:
-	return Q931_IE_CS_U10_ACTIVE;
+		return Q931_IE_CS_U10_ACTIVE;
 	case U11_DISCONNECT_REQUEST:
-	return Q931_IE_CS_U11_DISCONNECT_REQUEST;
+		return Q931_IE_CS_U11_DISCONNECT_REQUEST;
 	case U12_DISCONNECT_INDICATION:
-	return Q931_IE_CS_U12_DISCONNECT_INDICATION;
+		return Q931_IE_CS_U12_DISCONNECT_INDICATION;
 	case U15_SUSPEND_REQUEST:
-	return Q931_IE_CS_U15_SUSPEND_REQUEST;
+		return Q931_IE_CS_U15_SUSPEND_REQUEST;
 	case U17_RESUME_REQUEST:
-	return Q931_IE_CS_U17_RESUME_REQUEST;
+		return Q931_IE_CS_U17_RESUME_REQUEST;
 	case U19_RELEASE_REQUEST:
-	return Q931_IE_CS_U19_RELEASE_REQUEST;
+		return Q931_IE_CS_U19_RELEASE_REQUEST;
 	case U25_OVERLAP_RECEIVING:
-	return Q931_IE_CS_U25_OVERLAP_RECEIVING;
+		return Q931_IE_CS_U25_OVERLAP_RECEIVING;
 	}
 }
 
@@ -590,7 +587,9 @@ struct q931_interface *q931_open_interface(const char *name)
 	assert(name);
 
 	interface = malloc(sizeof(*interface));
-	if (!interface) abort();
+	if (!interface)
+		abort();
+
 	memset(interface, 0x00, sizeof(*interface));
 
 	INIT_LIST_HEAD(&interface->calls);
@@ -601,33 +600,33 @@ struct q931_interface *q931_open_interface(const char *name)
 
 	int s = socket(PF_LAPD, SOCK_DGRAM, 0);
 	if (socket < 0)
-	  goto err_socket;
+		goto err_socket;
 
 	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
-	               name, strlen(name)+1) < 0)
-	  goto err_setsockopt;
+			name, strlen(name)+1) < 0)
+		goto err_setsockopt;
 
 	int optlen=sizeof(interface->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
 		&interface->role, &optlen)<0)
-	  goto err_getsockopt;
+		goto err_getsockopt;
 
 	if (interface->role == LAPD_ROLE_TE) {
-	interface->nt_socket = -1;
-	interface->te_dlc.interface = interface;
-	interface->te_dlc.socket = s;
+		interface->nt_socket = -1;
+		interface->te_dlc.interface = interface;
+		interface->te_dlc.socket = s;
 
-	printf("connecting...");
+		printf("connecting...");
 
-	if (connect(s, NULL, 0) < 0)
-	   goto err_connect;
+		if (connect(s, NULL, 0) < 0)
+			goto err_connect;
 
-	printf("OK\n");
+			printf("OK\n");
 	} else {
-	interface->te_dlc.interface = NULL;
-	interface->te_dlc.socket = -1;
+		interface->te_dlc.interface = NULL;
+		interface->te_dlc.socket = -1;
 
-	interface->nt_socket = s;
+		interface->nt_socket = s;
 	}
 
 	return interface;
@@ -658,7 +657,9 @@ void q931_close_interface(struct q931_interface *interface)
 	  close(interface->nt_socket);
 	 }
 
-	if (interface->name) free(interface->name);
+	if (interface->name)
+		free(interface->name);
+
 	free(interface);
 }
 
@@ -775,11 +776,13 @@ inline static void q931_handle_connect(
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
-	if (call->interface->role == LAPD_ROLE_TE)
-	  call->user_state = U10_ACTIVE;
-	  // Stop T304
-	else
-	  call->net_state = N10_ACTIVE;
+	if (call->interface->role == LAPD_ROLE_TE) {
+		call->user_state = U10_ACTIVE;
+		// Stop T304
+	} else {
+		call->net_state = N10_ACTIVE;
+	}
+
 	q931_send_connect_acknowledge(call);
 
 	if (call->connect_callback)
@@ -881,9 +884,9 @@ inline static void q931_handle_setup_acknowledge(
 	int ies_cnt)
 {
 	if (call->dlc->interface->role == LAPD_ROLE_TE)
-	  call->user_state = U2_OVERLAP_SENDING;
+		call->user_state = U2_OVERLAP_SENDING;
 	else
-	  call->net_state = N2_OVERLAP_SENDING;
+		call->net_state = N2_OVERLAP_SENDING;
 }
 
 // T305
@@ -895,57 +898,52 @@ inline static void q931_handle_disconnect(
 	int ies_cnt)
 {
 	if (call->dlc->interface->role == LAPD_ROLE_TE)
-	  call->user_state = U11_DISCONNECT_REQUEST;
+		call->user_state = U11_DISCONNECT_REQUEST;
 	else
-	  call->net_state = N11_DISCONNECT_REQUEST;
+		call->net_state = N11_DISCONNECT_REQUEST;
 
 	int inband_info = FALSE;
 
 	{
-	 int i;
-	 int ie_count = 0;
+	int i;
+	int ie_count = 0;
 
-	 for(i=0; i<ies_cnt; i++)
-	  {
-	   if (ies[i].info->id == Q931_IE_PROGRESS_INDICATOR) 
-	    {
-	     struct q931_ie_progress_indicator_onwire_3_4 *ie =
-	       (struct q931_ie_progress_indicator_onwire_3_4 *)(ies[i].data);
+	for(i=0; i<ies_cnt; i++) {
+		if (ies[i].info->id == Q931_IE_PROGRESS_INDICATOR) {
+			struct q931_ie_progress_indicator_onwire_3_4 *ie =
+				(struct q931_ie_progress_indicator_onwire_3_4 *)(ies[i].data);
 
-	     if (ie->coding_standard == Q931_IE_PI_CS_CCITT &&
-	         ie->progress_description ==
-	           Q931_IE_PI_PD_IN_BAND_INFORMATION_OR_APPROPRIATE_PATTERN_AVAILABLE)
-	      {
-	       inband_info = TRUE;
-	       ie_count++;
+			if (ie->coding_standard == Q931_IE_PI_CS_CCITT &&
+			    ie->progress_description ==
+				Q931_IE_PI_PD_IN_BAND_INFORMATION_OR_APPROPRIATE_PATTERN_AVAILABLE) {
+				inband_info = TRUE;
+				ie_count++;
 
-	       if (ie_count == 2) break;
-	      }
-	    }
-	  }
+				if (ie_count == 2)
+					break;
+			}
+		}
+	}
 	}
 
-	if (inband_info)
-	 {
-	  // Connect B channel if not yet connected
+	if (inband_info) {
+		// Connect B channel if not yet connected
 
-	  if (call->dlc->interface->role == LAPD_ROLE_TE)
-	    call->user_state = U12_DISCONNECT_INDICATION;
-	  else
-	    call->net_state = N12_DISCONNECT_INDICATION;
-	 }
-	else
-	 {
-	  // Disconnect B channel
+		if (call->dlc->interface->role == LAPD_ROLE_TE)
+			call->user_state = U12_DISCONNECT_INDICATION;
+		else
+			call->net_state = N12_DISCONNECT_INDICATION;
+	} else {
+		// Disconnect B channel
 
-	  // Start T308
-	  if (call->dlc->interface->role == LAPD_ROLE_TE)
-	    call->user_state = U19_RELEASE_REQUEST;
-	  else
-	    call->net_state = N19_RELEASE_REQUEST;
+		// Start T308
+		if (call->dlc->interface->role == LAPD_ROLE_TE)
+			call->user_state = U19_RELEASE_REQUEST;
+		else
+			call->net_state = N19_RELEASE_REQUEST;
 
-	  q931_send_release(call);
-	 }
+		q931_send_release(call);
+	}
 }
 
 inline static void q931_handle_release(
@@ -961,9 +959,9 @@ inline static void q931_handle_release(
 	q931_send_release_complete(call);
 
 	if (call->dlc->interface->role == LAPD_ROLE_TE)
-	  call->user_state = U0_NULL_STATE;
+		call->user_state = U0_NULL_STATE;
 	else
-	  call->net_state = U0_NULL_STATE;
+		call->net_state = U0_NULL_STATE;
 }
 
 inline static void q931_handle_release_complete(
@@ -977,9 +975,9 @@ inline static void q931_handle_release_complete(
 	list_del(&call->node);
 
 	if (call->dlc->interface->role == LAPD_ROLE_TE)
-	  call->user_state = U0_NULL_STATE;
+		call->user_state = U0_NULL_STATE;
 	else
-	  call->net_state = U0_NULL_STATE;
+		call->net_state = U0_NULL_STATE;
 
 	if (call->release_callback)
 		call->release_callback(call);
@@ -1068,7 +1066,8 @@ inline static void q931_handle_information(
 				strncat(call->called_number, number,
 					ies[i].size - 2);
 			} else {
-				printf("strncat(%s,%c,%d)\n",call->called_number,*number,ies[i].size - 1);
+				printf("strncat(%s,%c,%d)\n",call->called_number,
+					*number,ies[i].size - 1);
 
 				strncat(call->called_number, number,
 					ies[i].size - 1);
@@ -1214,26 +1213,25 @@ void q931_receive(const struct q931_dlc *dlc)
 
 	int len;
 	len = recvmsg(dlc->socket, &msg, 0);
-	if(len < 0)
-	 {
-	  printf("recvmsg: %d %s\n",errno,strerror(errno));
-	  exit(1);
-	 }
+	if(len < 0) {
+		printf("recvmsg: %d %s\n",errno,strerror(errno));
+		exit(1);
+	}
 
 	printf("recv ok (len=%d): ", len);
 	int i;
 	for(i=0; i<len; i++)
-	  printf("%02x",frame[i]);
+		printf("%02x",frame[i]);
+
 	printf("\n");
 
 	struct q931_header *hdr = (struct q931_header *)frame;
 
-	if (hdr->call_reference_size>3)
-	 {
-	  // TODO error
-	  printf("Call reference length > 3 ????\n");
-	  return;
-	 }
+	if (hdr->call_reference_size>3) {
+		// TODO error
+		printf("Call reference length > 3 ????\n");
+		return;
+	}
 
 	q931_callref callref = 0;
 	int callref_direction = Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE;

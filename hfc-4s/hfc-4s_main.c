@@ -28,8 +28,6 @@
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 
-#include <vihai_isdn.h>
-#include <lapd_user.h>
 #include <lapd.h>
 
 #include "hfc-4s.h"
@@ -1338,6 +1336,8 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 	chan->netdev->set_multicast_list = hfc_set_multicast_list;
 	chan->netdev->do_ioctl = hfc_do_ioctl;
 	chan->netdev->features = NETIF_F_NO_CSUM;
+
+	chan->netdev->mtu = chan->tx.fifo_size;
 
 	memset(chan->netdev->dev_addr, 0x00, sizeof(chan->netdev->dev_addr));
 

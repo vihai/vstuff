@@ -8,7 +8,7 @@
 #include <sys/ioctl.h>
 #include <linux/types.h>
 
-#include <lapd_user.h>
+#include <lapd.h>
 
 #include <signal.h>
 

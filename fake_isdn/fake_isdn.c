@@ -18,12 +18,16 @@
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
+#include <linux/random.h>
 
-#include <vihai_isdn.h>
-#include <lapd_user.h>
 #include <lapd.h>
 
 #include "fake_isdn.h"
+
+static int ab_drops = 0;
+static int ba_drops = 0;
+static int ab_dups = 0;
+static int ba_dups = 0;
 
 static struct fake_card *card = NULL;
 
@@ -57,11 +61,36 @@ static int fake_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 
 	netdev->trans_start = jiffies;
 
+	u8 rnd;
+
 	struct fake_chan *dst_chan;
-	if (chan == &card->chans[0])
+	if (chan == &card->chans[0]) {
+		if (ab_drops) {
+			get_random_bytes(&rnd, sizeof(rnd));
+
+			if (rnd < ab_drops) {
+				printk(KERN_DEBUG fake_DRIVER_PREFIX
+					"Simulating frame drop a => b\n");
+
+				goto frame_drop;
+			}
+		}
+
 		dst_chan = &card->chans[1];
-	else
+	} else {
+		if (ba_drops) {
+			get_random_bytes(&rnd, sizeof(rnd));
+
+			if (rnd < ba_drops) {
+				printk(KERN_DEBUG fake_DRIVER_PREFIX
+					"Simulating frame drop b => a\n");
+
+				goto frame_drop;
+			}
+		}
+
 		dst_chan = &card->chans[0];
+	}
 
 	struct sk_buff *dst_skb =
 		skb_clone(skb, GFP_ATOMIC);
@@ -78,6 +107,32 @@ static int fake_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 	dst_chan->net_device_stats.rx_bytes += skb->len;
 
 	netif_rx(dst_skb);
+
+	if (chan == &card->chans[0]) {
+		if (ab_dups) {
+			get_random_bytes(&rnd, sizeof(rnd));
+
+			if (rnd < ab_dups) {
+				printk(KERN_DEBUG fake_DRIVER_PREFIX
+					"Simulating duplicate frame a => b\n");
+
+				netif_rx(skb_clone(dst_skb, GFP_ATOMIC));
+			}
+		}
+	} else {
+		if (ba_dups) {
+			get_random_bytes(&rnd, sizeof(rnd));
+
+			if (rnd < ba_dups) {
+				printk(KERN_DEBUG fake_DRIVER_PREFIX
+					"Simulating frame dupe b => a\n");
+
+				netif_rx(skb_clone(dst_skb, GFP_ATOMIC));
+			}
+		}
+	}
+
+frame_drop:
 
 	dev_kfree_skb(skb);
 
@@ -104,6 +159,8 @@ static void fake_setup_lapd(struct fake_chan *chan)
 	chan->netdev->get_stats = fake_get_stats;
 	chan->netdev->set_multicast_list = NULL;
 	chan->netdev->features = NETIF_F_NO_CSUM;
+
+	chan->netdev->mtu = 65536;
 
 	memset(chan->netdev->dev_addr, 0x00, sizeof(chan->netdev->dev_addr));
 
@@ -138,7 +195,7 @@ static int __init fake_init_module(void)
 
 	chan->card = card;
 
-	chan->netdev = alloc_netdev(0, "fakeisdn%dd", setup_lapd);
+	chan->netdev = alloc_netdev(0, "isdn%da", setup_lapd);
 	if(!chan->netdev) {
 		printk(KERN_ERR fake_DRIVER_PREFIX
 			"net_device alloc failed, abort.\n");
@@ -159,7 +216,7 @@ static int __init fake_init_module(void)
 
 	chan->card = card;
 
-	chan->netdev = alloc_netdev(0, "fakeisdn%dd", setup_lapd);
+	chan->netdev = alloc_netdev(0, "isdn%db", setup_lapd);
 	if(!chan->netdev) {
 		printk(KERN_ERR fake_DRIVER_PREFIX
 			"net_device alloc failed, abort.\n");
@@ -198,14 +255,10 @@ static void __exit fake_module_exit(void)
 		fake_DRIVER_DESCR " beginning unload\n");
 
 	unregister_netdev(card->chans[0].netdev);
-printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step1\n");
 	unregister_netdev(card->chans[1].netdev);
-printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step2\n");
 
 	free_netdev(card->chans[0].netdev);
-printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step3\n");
 	free_netdev(card->chans[1].netdev);
-printk(KERN_DEBUG fake_DRIVER_PREFIX fake_DRIVER_DESCR " step4\n");
 
 	kfree(card);
 
@@ -220,3 +273,14 @@ MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
 #endif
+
+module_param(ab_drops, int, 0444);
+module_param(ba_drops, int, 0444);
+module_param(ab_dups, int, 0444);
+module_param(ba_dups, int, 0444);
+
+MODULE_PARM_DESC(ab_drops, "Drops probabilty [0-100] a => b");
+MODULE_PARM_DESC(ba_drops, "Drops probabilty [0-100] b => a");
+MODULE_PARM_DESC(ab_dups, "Dups probabilty [0-100] a => b");
+MODULE_PARM_DESC(ba_dups, "Dups probabilty [0-100] b => a");
+

@@ -18,7 +18,6 @@
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 
-#include "lapd_user.h"
 #include "lapd.h"
 #include "lapd_in.h"
 #include "lapd_out.h"
@@ -218,7 +217,6 @@ void setup_lapd(struct net_device *netdev)
 
 	netdev->type               = ARPHRD_LAPD;
 	netdev->hard_header_len    = 0;
-	netdev->mtu                = 512;
 	netdev->addr_len           = 1;
 	netdev->tx_queue_len       = 10;
 
@@ -354,76 +352,90 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	void __user *argp = (void __user *)arg;
 	struct lapd_opt *lo = lapd_sk(sk);
 
-printk(KERN_DEBUG "lapd: IOCTL\n");
-
 	switch (cmd) {
-		/* Protocol layer */
-		case TIOCOUTQ: {
-			long amount = sk->sk_sndbuf -
-				      atomic_read(&sk->sk_wmem_alloc);
+	/* Protocol layer */
+	case SIOCOUTQ: {
+		long amount = sk->sk_sndbuf -
+			      atomic_read(&sk->sk_wmem_alloc);
 
-			if (amount < 0)
-				amount = 0;
-			rc = put_user(amount, (int __user *)argp);
-		break;
+		if (amount < 0)
+			amount = 0;
+		rc = put_user(amount, (int __user *)argp);
+	break;
+	}
+
+	case SIOCINQ: {
+		spin_lock_bh(&sk->sk_receive_queue.lock);
+		struct sk_buff *skb = skb_peek(&sk->sk_receive_queue);
+		int size = 0;
+
+		if (skb) {
+			size = skb->len;
+/*
+			struct lapd_hdr *hdr = (struct lapd_hdr *)skb->h.raw;
+
+			switch (lapd_frame_type(hdr->control)) {
+			case IFRAME:
+				size = skb->len - sizeof(struct lapd_hdr_e);
+			break;
+
+			case SFRAME:
+				size = skb->len - sizeof(struct lapd_hdr_e);
+			break;
+
+			case UFRAME:
+				size = skb->len - sizeof(struct lapd_hdr);
+			break;
+			};
+*/
 		}
+		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
-		case TIOCINQ: {
-			/*
-			 * These two are safe on a single CPU system as only
-			 * user tasks fiddle here
-			 */
-			struct sk_buff *skb = skb_peek(&sk->sk_receive_queue);
-			long amount = 0;
-
-			if (skb)
-//	FIXME			amount = skb->len - sizeof(struct ddpehdr);
-				amount = skb->len;
-			rc = put_user(amount, (int __user *)argp);
+		rc = put_user(size, (int __user *)argp);
+	break;
+	}
+	case SIOCGSTAMP:
+		rc = sock_get_timestamp(sk, argp);
 		break;
-		}
-		case SIOCGSTAMP:
-			rc = sock_get_timestamp(sk, argp);
-			break;
-		/* Routing */
-		case SIOCADDRT:
-		case SIOCDELRT:
-			rc = -ENOSYS;
-			break;
-		/* Interface */
-		case SIOCGIFADDR:
-		case SIOCSIFADDR:
-		case SIOCGIFBRDADDR:
-		case SIOCDIFADDR:
-		case SIOCSARP:		/* proxy AARP */
-		case SIOCDARP:		/* proxy AARP */
-//			rtnl_lock();
-// FIXME			rc = isdnif_ioctl(cmd, argp);
-//			rtnl_unlock();
-			rc = -ENOSYS;
-			break;
-		/* Physical layer ioctl calls */
-		case SIOCSIFLINK:
-		case SIOCGIFHWADDR:
-		case SIOCSIFHWADDR:
-		case SIOCGIFFLAGS:
-		case SIOCSIFFLAGS:
-		case SIOCGIFMTU:
-		case SIOCGIFCONF:
-		case SIOCADDMULTI:
-		case SIOCDELMULTI:
-		case SIOCGIFCOUNT:
-		case SIOCGIFINDEX:
-		case SIOCGIFNAME:
-			rc = dev_ioctl(cmd, argp);
+	/* Routing */
+	case SIOCADDRT:
+	case SIOCDELRT:
+		rc = -ENOSYS;
 		break;
+	/* Interface */
+	case SIOCGIFADDR:
+	case SIOCSIFADDR:
+	case SIOCGIFBRDADDR:
+	case SIOCDIFADDR:
+	case SIOCSARP:		/* proxy AARP */
+	case SIOCDARP:		/* proxy AARP */
+//		rtnl_lock();
+// FIXME		rc = isdnif_ioctl(cmd, argp);
+//		rtnl_unlock();
+		rc = -ENOSYS;
+		break;
+	/* Physical layer ioctl calls */
+	case SIOCSIFLINK:
+	case SIOCGIFHWADDR:
+	case SIOCSIFHWADDR:
+	case SIOCGIFFLAGS:
+	case SIOCSIFFLAGS:
+	case SIOCGIFMTU:
+	case SIOCGIFCONF:
+	case SIOCADDMULTI:
+	case SIOCDELMULTI:
+	case SIOCGIFCOUNT:
+	case SIOCGIFINDEX:
+	case SIOCGIFNAME:
+		rc = dev_ioctl(cmd, argp);
+	break;
 
-		case 12345678:
-			{
-			struct ifreq ifreq;
+	case 12345678:
+		{
+		struct ifreq ifreq;
 
-			if (copy_from_user(&ifreq, argp, sizeof(ifreq)))
-				return -EFAULT;
+		if (copy_from_user(&ifreq, argp, sizeof(ifreq)))
+			return -EFAULT;
 
 printk(KERN_DEBUG "lapd: IOCTL 12345678 %s\n", ifreq.ifr_name);
 
@@ -436,47 +448,47 @@ printk(KERN_DEBUG "lapd: IOCTL 12345678 %s\n", ifreq.ifr_name);
 
 			rc = dev_ioctl(VISDN_SET_BEARER_PPP, argp);
 			}
-		break;
+	break;
 
-		case PPPIOCGCHAN:
-			{
+	case PPPIOCGCHAN:
+		{
 printk(KERN_DEBUG "lapd: IOCTL PPPIOCGCHAN\n");
 
-			if (!lo->ppp_master_dev)
-				return -ENODEV;
+		if (!lo->ppp_master_dev)
+			return -ENODEV;
 
-			struct ifreq ifreq;
-			strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
-				sizeof(ifreq.ifr_name));
+		struct ifreq ifreq;
+		strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
+			sizeof(ifreq.ifr_name));
 
-			ifreq.ifr_data = argp;
+		ifreq.ifr_data = argp;
 
-			return lo->ppp_master_dev->do_ioctl(
-				lo->ppp_master_dev,
-				&ifreq,
-				VISDN_PPP_GET_CHAN);
-			}
-		break;
+		return lo->ppp_master_dev->do_ioctl(
+			lo->ppp_master_dev,
+			&ifreq,
+			VISDN_PPP_GET_CHAN);
+		}
+	break;
 
-		case PPPIOCGUNIT:
-			{
+	case PPPIOCGUNIT:
+		{
 printk(KERN_DEBUG "lapd: IOCTL PPPIOCGUNIT\n");
 
-			if (!lo->ppp_master_dev)
-				return -ENODEV;
+		if (!lo->ppp_master_dev)
+			return -ENODEV;
 
-			struct ifreq ifreq;
-			strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
-				sizeof(ifreq.ifr_name));
+		struct ifreq ifreq;
+		strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
+			sizeof(ifreq.ifr_name));
 
-			ifreq.ifr_data = argp;
+		ifreq.ifr_data = argp;
 
-			return lo->ppp_master_dev->do_ioctl(
-				lo->ppp_master_dev,
-				&ifreq,
-				VISDN_PPP_GET_UNIT);
-			}
-		break;
+		return lo->ppp_master_dev->do_ioctl(
+			lo->ppp_master_dev,
+			&ifreq,
+			VISDN_PPP_GET_UNIT);
+		}
+	break;
 	}
 
 	return rc;
@@ -633,6 +645,11 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_invalid_type;
 	}
 
+	if (sk->sk_type != SOCK_DGRAM) {
+		err = -EINVAL;
+		goto err_invalid_socket_type;
+	}
+
 	if (!(dev->flags & IFF_UP)) {
 		err = -ENETDOWN;
 		goto err_dev_not_up;
@@ -663,11 +680,6 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 			lapd_utme_set_static_tei(lo->usr_tme, 0);
 	}
 
-	if (sk->sk_type != SOCK_DGRAM) {
-		err = -EINVAL;
-		goto err_invalid_socket_type;
-	}
-
 	if (!lo->nt_mode) {
 		lo->usr_tme = lapd_utme_alloc(dev);
 
@@ -676,9 +688,15 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	}
 
 	// No need to dev_hold() since we already held dev by calling
-	// dev_get_by_name()
+	// dev_get_by_name() and "dev" is thrown away
 	sk->sk_bound_dev_if = dev->ifindex;
 	lo->dev = dev;
+
+	if (lo->sapi == LAPD_SAPI_Q931) {
+		lo->sap = &lapd_dev(lo->dev)->q931;
+	} else if(lo->sapi == LAPD_SAPI_X25) {
+		lo->sap = &lapd_dev(lo->dev)->x25;
+	}
 
 	// TODO: We may need to postpone tei request when L2 transfers
 	// are needed, cfr. ETSI 300 125
@@ -689,14 +707,12 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 			lapd_utme_start_tei_request(lo->usr_tme);
 	}
 
-	lo->sap = &lapd_dev(lo->dev)->q931;
-
 	return 0;
 
 err_socket_already_present:
-err_invalid_socket_type:
 err_dev_not_up:
 err_invalid_type:
+err_invalid_socket_type:
 	dev_put(dev);
 err_nodev:
 
@@ -857,7 +873,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 		lo->usr_tme->N202 = intoptval;
 	break;
 
-	case LAPD_Q931_T200:
+	case LAPD_T200:
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			break;
@@ -868,10 +884,10 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lapd_dev(lo->dev)->q931.T200 = intoptval;
+		lo->sap->T200 = intoptval;
 	break;
 
-	case LAPD_Q931_N200:
+	case LAPD_N200:
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			break;
@@ -882,10 +898,10 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lapd_dev(lo->dev)->q931.N200 = intoptval;
+		lo->sap->N200 = intoptval;
 	break;
 
-	case LAPD_Q931_T203:
+	case LAPD_T203:
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			break;
@@ -896,10 +912,10 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lapd_dev(lo->dev)->q931.T203 = intoptval;
+		lo->sap->T203 = intoptval;
 	break;
 
-	case LAPD_Q931_N201:
+	case LAPD_N201:
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			break;
@@ -910,10 +926,10 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lapd_dev(lo->dev)->q931.N201 = intoptval;
+		lo->sap->N201 = intoptval;
 	break;
 
-	case LAPD_Q931_K:
+	case LAPD_K:
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			break;
@@ -924,7 +940,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lapd_dev(lo->dev)->q931.k = intoptval;
+		lo->sap->k = intoptval;
 	break;
 
 	default:
@@ -1061,49 +1077,49 @@ static int lapd_getsockopt(struct socket *sock, int level, int optname,
 		val = lo->usr_tme->T202;
 	break;
 
-	case LAPD_Q931_T200:
+	case LAPD_T200:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		val = lapd_dev(lo->dev)->q931.T200;
+		val = lo->sap->T200;
 	break;
 
-	case LAPD_Q931_N200:
+	case LAPD_N200:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		val = lapd_dev(lo->dev)->q931.N200;
+		val = lo->sap->N200;
 	break;
 
-	case LAPD_Q931_T203:
+	case LAPD_T203:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		val = lapd_dev(lo->dev)->q931.T203;
+		val = lo->sap->T203;
 	break;
 
-	case LAPD_Q931_N201:
+	case LAPD_N201:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		val = lapd_dev(lo->dev)->q931.N201;
+		val = lo->sap->N201;
 	break;
 
-	case LAPD_Q931_K:
+	case LAPD_K:
 		if (optlen < sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		val = lapd_dev(lo->dev)->q931.k;
+		val = lo->sap->k;
 	break;
 
 	case LAPD_DLC_STATUS:
@@ -1158,6 +1174,12 @@ static int lapd_create(struct socket *sock, int protocol)
 		goto err_no_type;
 	}
 
+	if (protocol != LAPD_SAPI_Q931 &&
+	    protocol != LAPD_SAPI_X25) {
+		err = -EINVAL;
+		goto err_invalid_protocol;
+	}
+
 	sk = sk_alloc(PF_LAPD, GFP_KERNEL, sizeof(struct lapd_sock),
 			lapd_sk_cachep);
 	if (!sk) {
@@ -1177,6 +1199,9 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	struct lapd_opt *lo = lapd_sk(sk);
 
+	// We use ->sapi as a temporary until SO_BINDTODEVICE
+	lo->sapi = protocol;
+ 
 	// TE mode section
 
 	lo->nt_mode = FALSE;
@@ -1209,6 +1234,7 @@ static int lapd_create(struct socket *sock, int protocol)
 
 //	sk_free(sk);
 err_sk_alloc:
+err_invalid_protocol:
 err_no_type:
 err_no_cap:
 
