@@ -68,7 +68,7 @@ static inline int lapd_ntme_send_tei_verify(
 static void lapd_ntme_start_tei_check(
 	struct lapd_ntme *tme, int tei)
 {
-	spin_lock(&tme->lock);
+	spin_lock_bh(&tme->lock);
 
 	BUG_TRAP(tme->T201 > 0);
 
@@ -83,7 +83,7 @@ static void lapd_ntme_start_tei_check(
 
 	lapd_ntme_send_tei_check_request(tme, tei);
 
-	spin_unlock(&tme->lock);
+	spin_unlock_bh(&tme->lock);
 }
 
 void lapd_ntme_T201_timer(unsigned long data)

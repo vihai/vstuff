@@ -17,7 +17,20 @@
 
 #define Q931_MAX_DIGITS 20
 
-enum q931_user_state {
+enum q931_log_level
+{
+	Q931_LOG_DEBUG,
+	Q931_LOG_INFO,
+	Q931_LOG_NOTICE,
+	Q931_LOG_WARNING,
+	Q931_LOG_ERR,
+	Q931_LOG_CRIT,
+	Q931_LOG_ALERT,
+	Q931_LOG_EMERG,
+};
+
+enum q931_user_state
+{
 	U0_NULL_STATE,
 	U1_CALL_INITIATED,
 	U2_OVERLAP_SENDING,
@@ -36,7 +49,8 @@ enum q931_user_state {
 	U25_OVERLAP_RECEIVING,
 };
 
-enum q931_network_state {
+enum q931_network_state
+{
 	N0_NULL_STATE,
 	N1_CALL_INITIATED,
 	N2_OVERLAP_SENDING,
@@ -56,13 +70,15 @@ enum q931_network_state {
 	N25_OVERLAP_RECEIVING
 };
 
-enum q931_mode {
+enum q931_mode
+{
 	UNKNOWN_MODE,
 	CIRCUIT_MODE,
 	PACKET_MODE
 };
 
-struct q931_header {
+struct q931_header
+{
 	__u8 protocol_discriminator;
 
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -79,7 +95,8 @@ struct q931_header {
 
 } __attribute__ ((__packed__));
 
-struct q931_message_header {
+struct q931_message_header
+{
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 f:1;
 	__u8 msg:7;
@@ -100,16 +117,35 @@ enum q931_protocol_discriminators
 
 typedef signed long q931_callref;
 
+enum q931_dlc_status
+{
+	DLC_DISCONNECTED,
+	DLC_AWAITING_CONNECTION,
+	DLC_AWAITING_DISCONNECTION,
+	DLC_CONNECTED,
+};
+
+struct q931_libstate
+{
+	void (*report)(int level, const char *format, ...);
+};
+
 struct q931_interface;
 struct q931_dlc
 {
+	struct q931_libstate *libstate;
+
 	int socket;
 	int poll_id;
 	struct q931_interface *interface;
+	enum q931_dlc_status status;
 };
 
+struct q931_call;
 struct q931_interface
 {
+	struct q931_libstate *libstate;
+
 	char *name;
 
 	// NT mode, socket is the master socket
@@ -126,6 +162,8 @@ struct q931_interface
 
 	int ncalls;
 	struct list_head calls;
+
+	void (*setup_callback)(struct q931_call *call);
 };
 
 enum q931_call_direction
@@ -140,14 +178,19 @@ enum q931_callref_flag
 	Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE = 0x1,
 };
 
+#define Q931_MAX_TES_ON_BUS 16
+
 // q931_call.interface is used when the call doesn't yet have an associated DLC
 // This happens when the call
 struct q931_call
 {
-	struct list_head node;
+	struct list_head calls_node;
 
-	const struct q931_dlc *dlc;
 	struct q931_interface *interface;
+
+	const struct q931_dlc *dlcs[Q931_MAX_TES_ON_BUS];
+	int ndlcs;
+	const struct q931_dlc *selected_dlc;
 
 	enum q931_call_direction direction;
 	q931_callref call_reference;
@@ -157,12 +200,15 @@ struct q931_call
 
 	char calling_number[Q931_MAX_DIGITS + 1];
 	char called_number[Q931_MAX_DIGITS + 1];
+	int sending_complete;
 
 	void *pvt;
 
 	void (*alerting_callback)(struct q931_call *call);
 	void (*release_callback)(struct q931_call *call);
 	void (*connect_callback)(struct q931_call *call);
+	void (*disconnect_callback)(struct q931_call *call);
+	void (*information_callback)(struct q931_call *call);
 };
 
 static inline int q931_intcmp(int a, int b)
@@ -172,9 +218,28 @@ static inline int q931_intcmp(int a, int b)
  else return -1;
 }
 
-void q931_init();
-void q931_receive(const struct q931_dlc *dlc);
-struct q931_interface *q931_open_interface(const char *name);
+static inline void q931_init_dlc(
+	struct q931_dlc *dlc,
+	struct q931_interface *interface,
+	int socket)
+{
+	dlc->socket = socket;
+	dlc->interface = interface;
+}
+
+static inline void q931_set_logger_func(
+	struct q931_libstate *libstate,
+	void (*report)(int level, const char *format, ...))
+{
+	libstate->report = report;
+}
+
+struct q931_libstate *q931_init();
+void q931_leave(struct q931_libstate *libstate);
+void q931_receive(struct q931_dlc *dlc);
+struct q931_interface *q931_open_interface(
+	struct q931_libstate *libstate,
+	const char *name);
 void q931_close_interface(struct q931_interface *interface);
 
 struct q931_call *q931_alloc_call();
@@ -199,7 +264,10 @@ static inline void q931_call_set_called_number(
 }
 
 void q931_free_call(struct q931_call *call);
-void q931_hangup_call(struct q931_call *call);
+void q931_call_connect(struct q931_call *call);
+void q931_call_disconnect(struct q931_call *call);
+void q931_call_alerting(struct q931_call *call);
+void q931_call_proceeding(struct q931_call *call);
 
 
 #endif

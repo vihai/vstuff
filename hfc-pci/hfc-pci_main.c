@@ -1,13 +1,10 @@
 /*
- * hfc.c - Salcazzo driver for HFC-S PCI A based ISDN BRI cards
+ * hfc-pci_main.c - vISDN driver for HFC-S PCI A based ISDN BRI cards
  *
  * Copyright (C) 2004 Daniele Orlandi
  * Copyright (C) 2002, 2003, 2004, Junghanns.NET GmbH
  *
  * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
- *
- * Major rewrite of the driver made by
- * Klaus-Peter Junghanns <kpj@junghanns.net>
  *
  * This program is free software and may be modified and
  * distributed under the terms of the GNU Public License.
@@ -194,8 +191,6 @@ static void hfc_update_fifo_state(struct hfc_card *card)
 	// condition since hfc_update_fifo_state could be called from
 	// both the IRQ handler and the *_(open|close) functions
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
 	if (!card->fifo_suspended &&
 		(card->chans[B1].status == open_framed ||
 		card->chans[B1].status == open_voice)) {
@@ -249,7 +244,6 @@ static void hfc_update_fifo_state(struct hfc_card *card)
  	 	if(card->regs.fifo_en & hfc_FIFOEN_DTX)
 			card->regs.fifo_en &= ~hfc_FIFOEN_DTX;
 	}
-	spin_unlock_irqrestore(&card->lock, flags);
 
 	hfc_outb(card, hfc_FIFO_EN, card->regs.fifo_en);
 }
@@ -625,7 +619,8 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 	struct hfc_chan_duplex *chan = netdev->priv;
 	struct hfc_card *card = chan->card;
 
-	spin_lock(&card->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&card->lock, flags);
 
         if(netdev->flags & IFF_PROMISC && !card->echo_enabled) {
 		if (card->nt_mode) {
@@ -634,7 +629,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 				"is in NT mode, not going promiscuous\n",
 				card->cardnum);
 
-			spin_unlock(&card->lock);
+			spin_unlock_irqrestore(&card->lock, flags);
 			return;
 		}
 
@@ -645,7 +640,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 				card->cardnum,
 				card->chans[B2].name);
 
-			spin_unlock(&card->lock);
+			spin_unlock_irqrestore(&card->lock, flags);
 			return;
 		}
 
@@ -670,7 +665,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 
         } else if(!(netdev->flags & IFF_PROMISC) && card->echo_enabled) {
 		if (!card->echo_enabled) {
-			spin_unlock(&card->lock);
+			spin_unlock_irqrestore(&card->lock, flags);
 			return;
 		}
 
@@ -698,7 +693,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 			chan->name);
 	}
 
-	spin_unlock(&card->lock);
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	hfc_outb(card, hfc_TRM, card->regs.trm);
 	hfc_outb(card, hfc_CIRM, card->regs.cirm);
@@ -734,12 +729,9 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return IRQ_NONE;
 	}
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
 	u8 status = hfc_inb(card, hfc_STATUS);
 	if (!(status & hfc_STATUS_ANYINT)) {
 		// maybe we are sharing the irq
-		spin_unlock_irqrestore(&card->lock,flags);
 		return IRQ_NONE;
 	}
 
@@ -850,8 +842,6 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 
 	}
-
-	spin_unlock_irqrestore(&card->lock,flags);
 
 	return IRQ_HANDLED;
 }
@@ -1403,7 +1393,7 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	unregister_netdev(card->chans[D].netdev);
 
 	unsigned long flags;
-	spin_lock_irqsave(&card->lock,flags);
+	spin_lock_irqsave(&card->lock, flags);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
 		"card %d: "
@@ -1416,7 +1406,7 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	// disable memio and bustmaster
 	pci_write_config_word(pci_dev, PCI_COMMAND, 0);
 
-	spin_unlock_irqrestore(&card->lock,flags);
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	remove_proc_entry("fifos", card->proc_dir);
 	remove_proc_entry("info", card->proc_dir);

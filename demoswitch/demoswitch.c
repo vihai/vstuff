@@ -63,16 +63,39 @@ void handle_command(struct switch_state *state, const char *s)
 
 		for (i=0; i<state->nifs; i++) {
 			struct q931_call *call;
-			list_for_each_entry(call, &state->ifs[i]->calls, node)
+			list_for_each_entry(call, &state->ifs[i]->calls, calls_node)
 				q931_hangup_call(call);
 		}
 
 	} else if (!strncasecmp(s, "dial", 4)) {
 
-		struct q931_call *call;
+		char *s2 = strdup(s+4);
+		char *p = s2;
 
-		call = q931_alloc_call();
-		q931_make_call(state->ifs[0], call);
+		char *intname = strtok_r(s2, " ", &p);
+		if (!intname) {
+
+			free(s2);
+			return;
+		}
+
+		struct q931_interface *intf = NULL;
+		int i;
+		for (i=0; i<state->nifs; i++) {
+		printf("intname = '%s' '%s'\n", state->ifs[i]->name, intname);
+			if (!strcmp(intname, state->ifs[i]->name)) {
+				intf = state->ifs[i];
+				break;
+			}
+		}
+
+		if (intf) {
+			struct q931_call *call;
+			call = q931_alloc_call();
+			q931_make_call(intf, call);
+		}
+
+		free(s2);
 
 	} else if (strlen(s) == 1) {
 	} else {
@@ -151,12 +174,17 @@ void main_loop(struct switch_state *state)
 				}
 
 				if (polls[i].revents & POLLIN) {
-					char s[100];
-					fgets(s, sizeof(s), stdin);
+					char line_read[100];
+					fgets(line_read, sizeof(line_read), stdin);
 
-					handle_command(state, s);
+					if (line_read[strlen(line_read) - 1] == '\n')
+						line_read[strlen(line_read) - 1] = '\0';
+					if (line_read[strlen(line_read) - 1] == '\r')
+						line_read[strlen(line_read) - 1] = '\0';
+
+					handle_command(state, line_read);
+
 					printf("> ");
-					fflush(stdin);
 				}
 
 			} else if (poll_infos[i].type == POLL_INFO_TYPE_INTERFACE) {
@@ -179,11 +207,8 @@ void main_loop(struct switch_state *state)
 						poll_infos, &npolls);
 				}
 			} else if (poll_infos[i].type == POLL_INFO_TYPE_DLC) {
-				if (polls[i].revents & POLLERR) {
-					printf("Error on DLC %d\n", polls[i].fd);
-				}
-
-				if (polls[i].revents & POLLIN) {
+				if (polls[i].revents & POLLIN ||
+				    polls[i].revents & POLLERR) {
 					printf("receiving frame...\n");
 					q931_receive(poll_infos[i].dlc);
 				}
@@ -195,7 +220,7 @@ void main_loop(struct switch_state *state)
 
 			for (i=0; i<state->nifs; i++) {
 				struct q931_call *call;
-				list_for_each_entry(call, &state->ifs[i]->calls, node)
+				list_for_each_entry(call, &state->ifs[i]->calls, calls_node)
 					active_calls_cnt++;
 			}
 		}
@@ -204,6 +229,8 @@ void main_loop(struct switch_state *state)
 
 int main()
 {
+//	setvbuf(stdout, (char *)NULL, _IONBF, 0);
+
 	struct switch_state state;
 	memset(&state, 0x00, sizeof(state));
 

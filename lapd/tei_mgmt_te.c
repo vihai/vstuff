@@ -92,7 +92,9 @@ static inline int lapd_utme_send_tei_verify(
 void lapd_utme_start_tei_request(
 	struct lapd_utme *tme)
 {
-	spin_lock(&tme->lock);
+	// Disable BHs in order to avoid responses coming thru until we
+	// have finished
+	spin_lock_bh(&tme->lock);
 
 	BUG_TRAP(tme->T202 > 0);
 	BUG_TRAP(tme->N202 > 0);
@@ -107,7 +109,7 @@ void lapd_utme_start_tei_request(
 
 	lapd_utme_send_tei_request(tme);
 
-	spin_unlock(&tme->lock);
+	spin_unlock_bh(&tme->lock);
 }
 
 void lapd_utme_T202_timer(unsigned long data)

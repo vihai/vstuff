@@ -22,7 +22,7 @@ LIBS=-L../libq931/src -lq931
 CC=gcc
 INSTALL=install
 
-SHAREDOS=chan_isdn.so 
+SHAREDOS=chan_visdn.so 
 
 CFLAGS+=-Wno-missing-prototypes -Wno-missing-declarations
 
@@ -40,5 +40,5 @@ install: all
 	for x in $(SHAREDOS); do $(INSTALL) -m 755 $$x $(MODULES_DIR) ; done
 
 config: all
-	cp isdn.conf $(INSTALL_PREFIX)/etc/asterisk/
+	cp visdn.conf $(INSTALL_PREFIX)/etc/asterisk/
 

@@ -28,6 +28,9 @@ TODO
 
 - Use Automake/Autoconf for chan_isdn
 
+- Implement automatic TEI check for TEIs that are presumably unused and could
+- be released
+
 - Implement SOCK_RAW sockets (?)
 
 - DL_DATA-REQUEST in AWAITING shoud put the frame in queue

@@ -1,5 +1,5 @@
 /*
- * hfc.c - Salcazzo driver for HFC-4S based cards
+ * hfc-4s_main.c - vISDN driver for HFC-4S based cards
  *
  * Copyright (C) 2004 Daniele Orlandi
  *

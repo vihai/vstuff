@@ -741,15 +741,15 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	if (dev->flags & IFF_ALLMULTI) {
 		lo->nt_mode = TRUE;
 
-		struct sock *sk = NULL;
+		struct sock *othersk = NULL;
 		struct hlist_node *node;
 		// Do not allow binding more than one socket to the
 		// same interface.
 
 		read_lock_bh(&lapd_hash_lock);
-		sk_for_each(sk, node, &lapd_hash) {
-			struct lapd_opt *lo = lapd_sk(sk);
-			if (lo->nt_mode && lo->dev == dev) {
+		sk_for_each(othersk, node, &lapd_hash) {
+			if (lapd_sk(othersk)->nt_mode &&
+			    lapd_sk(othersk)->dev == dev) {
 				read_unlock_bh(&lapd_hash_lock);
 				err = -EBUSY;
 				goto err_socket_already_present;
@@ -757,7 +757,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		}
 		read_unlock_bh(&lapd_hash_lock);
 
-		sk->sk_state = TCP_CLOSE;
+		sk->sk_state = TCP_SYN_SENT;
 	} else {
 		lo->nt_mode = FALSE;
 
@@ -1521,12 +1521,10 @@ int lapd_multiframe_wait_for_establishment(struct sock *sk)
 		prepare_to_wait_exclusive(sk->sk_sleep, &wait,
 			TASK_INTERRUPTIBLE);
 
-	printk(KERN_ERR "C######################################## %d\n", sk->sk_state);
 		release_sock(sk);
 		// Timeout is used only to detect abnormal cases
 		timeout = schedule_timeout(timeout);
 		lock_sock(sk);
-	printk(KERN_ERR "D######################################## %d\n", sk->sk_state);
 
 		err = sock_error(sk);
 		if (err)

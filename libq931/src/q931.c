@@ -8,32 +8,40 @@
 #include <sys/ioctl.h>
 #include <linux/types.h>
 #include <assert.h>
+#include <stdarg.h>
+#include <fcntl.h>
 
 #include <lapd.h>
 
 #include "list.h"
 
 #include "q931.h"
+#include "q931_log.h"
 #include "q931_mt.h"
 #include "q931_ie.h"
+
+void q931_default_report(int level, const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	vprintf(format, ap);
+	va_end(ap);
+}
 
 inline static void q931_add_call(
 	struct q931_interface *interface,
 	struct q931_call *call)
 {
-	list_add_tail(&call->node, &interface->calls);
+	list_add_tail(&call->calls_node, &interface->calls);
 	interface->ncalls++;
 }
 
 inline static void q931_del_call(
 	struct q931_call *call)
 {
-	list_del(&call->node);
+	list_del(&call->calls_node);
 	
-	if (call->dlc)
-		call->dlc->interface->ncalls--;
-	else
-		call->interface->ncalls--;
+	call->interface->ncalls--;
 
 }
 
@@ -57,7 +65,7 @@ try_again:
 	  interface->next_call_reference = 1;
 
 	struct q931_call *call;
-	list_for_each_entry(call, &interface->calls, node)
+	list_for_each_entry(call, &interface->calls, calls_node)
 	 {
 	  if (call->direction == Q931_CALL_DIRECTION_OUTBOUND &&
 	      call->call_reference == call_reference)
@@ -78,9 +86,9 @@ static struct q931_call *q931_find_call_by_reference(
 	q931_callref call_reference)
 {
 	struct q931_call *call;
-	list_for_each_entry(call, &interface->calls, node)
+	list_for_each_entry(call, &interface->calls, calls_node)
 	 {
-printf("Searching ==========> %d=%d %lu=%lu\n",call->direction,direction,call->call_reference,call_reference);
+interface->libstate->report(LOG_DEBUG, "Searching ==========> %d=%d %lu=%lu\n",call->direction,direction,call->call_reference,call_reference);
 
 	  if (call->direction == direction &&
 	      call->call_reference == call_reference)
@@ -167,10 +175,34 @@ static int q931_send_frame(const struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	printf("q931_send_frame\n");
+	dlc->interface->libstate->report(LOG_DEBUG, "q931_send_frame\n");
+
+	if (dlc->status != DLC_CONNECTED) {
+		int oldflags;
+
+		if (fcntl(dlc->socket, F_GETFL, &oldflags) < 0) {
+			dlc->interface->libstate->report(LOG_ERR, "fcntl: %s\n", strerror(errno));
+			return errno;
+		}
+
+		if (fcntl(dlc->socket, F_SETFL, oldflags | O_NONBLOCK) < 0) {
+			dlc->interface->libstate->report(LOG_ERR, "fcntl: %s\n", strerror(errno));
+			return errno;
+		}
+
+		if (connect(dlc->socket, NULL, 0) < 0) {
+			return errno;
+		}
+
+		if (fcntl(dlc->socket, F_SETFL, oldflags) < 0) {
+			dlc->interface->libstate->report(LOG_ERR, "fcntl: %s\n", strerror(errno));
+			return errno;
+		}
+
+	}
 
 	if (sendmsg(dlc->socket, &msg, 0) < 0) {
-		printf("sendmsg error: %s\n",strerror(errno));
+		dlc->interface->libstate->report(LOG_ERR, "sendmsg error: %s\n",strerror(errno));
 		return errno;
 	}
 
@@ -197,16 +229,18 @@ static int q931_send_bc_uframe(struct q931_interface *interface, void *frame, in
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	printf("q931_send_uframe\n");
+	interface->libstate->report(LOG_DEBUG, "q931_send_uframe\n");
 
 	if (sendmsg(interface->nt_socket, &msg, MSG_OOB) < 0) {
-		printf("sendmsg error: %s\n",strerror(errno));
+		interface->libstate->report(LOG_ERR,
+			"sendmsg error: %s\n",strerror(errno));
 		return errno;
 	}
 
 	return 0;
 }
 
+/*
 static int q931_send_uframe(const struct q931_dlc *dlc, void *frame, int size)
 {
 	struct msghdr msg;
@@ -226,16 +260,16 @@ static int q931_send_uframe(const struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	printf("q931_send_uframe\n");
+	dlc->interface->libstate->report(LOG_DEBUG, "q931_send_uframe\n");
 
 	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0) {
-		printf("sendmsg error: %s\n",strerror(errno));
+		dlc->interface->libstate->report(LOG_ERR, "sendmsg error: %s\n",strerror(errno));
 		return errno;
 	}
 
 	return 0;
 }
-
+*/
 static int q931_send_connect_acknowledge(struct q931_call *call)
 {
 	int size = 0;
@@ -251,7 +285,9 @@ static int q931_send_connect_acknowledge(struct q931_call *call)
 	 *
 	 */
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
 static int q931_send_disconnect(struct q931_call *call)
@@ -276,10 +312,14 @@ static int q931_send_disconnect(struct q931_call *call)
 		Q931_IE_C_L_USER, // FIXME
 		Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
-static int q931_send_release(struct q931_call *call)
+static int q931_send_release(
+	struct q931_call *call,
+	const struct q931_dlc *dlc)
 {
 	int size = 0;
 	__u8 frame[260]; // FIXME
@@ -296,10 +336,40 @@ static int q931_send_release(struct q931_call *call)
 	 *
 	 */
 
-	return q931_send_frame(call->dlc, frame, size);
+	return q931_send_frame(dlc, frame, size);
 }
 
-static int q931_send_release_complete(struct q931_call *call)
+static int q931_send_release_cause(
+	struct q931_call *call,
+	const struct q931_dlc *dlc,
+	enum q931_ie_cause_value cause_value)
+{
+	int size = 0;
+	__u8 frame[260]; // FIXME
+
+	size += q931_prepare_header(call, frame, Q931_MT_RELEASE);
+
+	/* IEs:
+	 *
+	 * Information Element		Dir.	Type
+	 * Cause			both	O
+	 * Facility			both	O
+	 * Display			n->u	O
+	 * User-User			both	O
+	 *
+	 */
+
+	size += q931_append_ie_cause(frame + size,
+			call->interface->role == LAPD_ROLE_TE ?
+				Q931_IE_C_L_USER :
+				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
+			cause_value);
+
+	return q931_send_frame(dlc, frame, size);
+}
+
+static int q931_send_release_complete(
+	struct q931_call *call)
 {
 	int size = 0;
 	__u8 frame[260]; // FIXME
@@ -316,7 +386,7 @@ static int q931_send_release_complete(struct q931_call *call)
 	 *
 	 */
 
-	return q931_send_frame(call->dlc, frame, size);
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
 static int q931_send_setup(struct q931_call *call)
@@ -353,7 +423,7 @@ static int q931_send_setup(struct q931_call *call)
 	size += q931_append_ie_bearer_capability_alaw(frame + size);
 // size += q931_append_ie_channel_identification_any(frame + size);
 
-	if (!call->dlc && call->interface->role == LAPD_ROLE_NT) {
+	if (!call->selected_dlc && call->interface->role == LAPD_ROLE_NT) {
 		size += q931_append_ie_channel_identification(
 			frame + size, Q931_IE_CI_ICS_BRI_B1);
 	}
@@ -364,8 +434,8 @@ static int q931_send_setup(struct q931_call *call)
 	size += q931_append_ie_called_party_number(frame + size, call->called_number);
 	size += q931_append_ie_sending_complete(frame + size);
 
-	if (call->dlc)
-		return q931_send_frame(call->dlc, frame, size);
+	if (call->selected_dlc)
+		return q931_send_frame(call->selected_dlc, frame, size);
 	else
 		return q931_send_bc_uframe(call->interface, frame, size);
 }
@@ -389,7 +459,9 @@ static int q931_send_setup_acknowledge(struct q931_call *call)
 	size += q931_append_ie_channel_identification(
 		frame + size, Q931_IE_CI_ICS_BRI_B1);
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
 static enum q931_ie_call_state_call_state_net
@@ -502,7 +574,9 @@ static int q931_send_status(struct q931_call *call)
 			q931_net_state_to_ie_state(call->net_state));
 	}
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
 static int q931_send_alerting(struct q931_call *call)
@@ -525,7 +599,9 @@ static int q931_send_alerting(struct q931_call *call)
 
 // size += q931_append_ie_channel_identification_any(frame + size);
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
 static int q931_send_connect(struct q931_call *call)
@@ -550,7 +626,9 @@ static int q931_send_connect(struct q931_call *call)
 
 // size += q931_append_ie_channel_identification_any(frame + size);
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
 static int q931_send_call_proceeding(struct q931_call *call)
@@ -571,16 +649,38 @@ static int q931_send_call_proceeding(struct q931_call *call)
 
 // size += q931_append_ie_channel_identification_any(frame + size);
 
-	return q931_send_frame(call->dlc, frame, size);
+	assert(call->selected_dlc);
+
+	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
-void q931_init()
+struct q931_libstate *q931_init()
 {
+	struct q931_libstate *libstate;
+
+	libstate = malloc(sizeof(*libstate));
+	if (!libstate) {
+		//FIXME
+		exit(1);
+	}
+
+	libstate->report = q931_default_report;
+
+	// Non-reentrant, FIXME
 	q931_ie_infos_init();
 	q931_message_types_init();
+
+	return libstate;
 }
 
-struct q931_interface *q931_open_interface(const char *name)
+void q931_leave(struct q931_libstate *libstate)
+{
+	free(libstate);
+}
+
+struct q931_interface *q931_open_interface(
+	struct q931_libstate *libstate,
+	const char *name)
 {
 	struct q931_interface *interface;
 
@@ -594,6 +694,7 @@ struct q931_interface *q931_open_interface(const char *name)
 
 	INIT_LIST_HEAD(&interface->calls);
 
+	interface->libstate = libstate;
 	interface->name = strdup(name);
 	interface->next_call_reference = 1;
 	interface->call_reference_size = 1; // FIXME should be 1 for BRI, 2 for PRI
@@ -613,25 +714,20 @@ struct q931_interface *q931_open_interface(const char *name)
 
 	if (interface->role == LAPD_ROLE_TE) {
 		interface->nt_socket = -1;
-		interface->te_dlc.interface = interface;
-		interface->te_dlc.socket = s;
 
-		printf("connecting...");
-
-		if (connect(s, NULL, 0) < 0)
-			goto err_connect;
-
-			printf("OK\n");
+		q931_init_dlc(&interface->te_dlc,
+			interface, s);
+			
+		interface->te_dlc.status = DLC_DISCONNECTED;
 	} else {
-		interface->te_dlc.interface = NULL;
-		interface->te_dlc.socket = -1;
+		q931_init_dlc(&interface->te_dlc,
+			NULL, -1);
 
 		interface->nt_socket = s;
 	}
 
 	return interface;
 
-err_connect:
 err_getsockopt:
 err_setsockopt:
 	close(s);
@@ -671,19 +767,28 @@ struct q931_call *q931_alloc_call()
 	if (!call) abort();
 	memset(call, 0x00, sizeof(*call));
 
-	INIT_LIST_HEAD(&call->node);
-
 	strcpy(call->calling_number, "");
 	strcpy(call->called_number, "");
 
 	return call;
 }
 
-void q931_hangup_call(struct q931_call *call)
+void q931_call_connect(struct q931_call *call)
+{
+	q931_send_connect(call);
+}
+
+void q931_call_disconnect(struct q931_call *call)
 {
 	assert(call);
 
-	if (call->interface->role == LAPD_ROLE_TE) {
+	if (!call->selected_dlc) {
+		int i;
+		for (i=0; i<call->ndlcs; i++) {
+			q931_send_release_cause(call, call->dlcs[i],
+				Q931_IE_C_CV_NON_SELECTED_USER_CLEARING);
+		}
+	} else if (call->interface->role == LAPD_ROLE_TE) {
 		if (call->user_state != U0_NULL_STATE &&
 		    call->user_state != U11_DISCONNECT_REQUEST &&
 		    call->user_state != U12_DISCONNECT_INDICATION)
@@ -691,26 +796,33 @@ void q931_hangup_call(struct q931_call *call)
 
 		call->user_state = U11_DISCONNECT_REQUEST;
 	} else {
-		if (call->user_state != N0_NULL_STATE &&
-		    call->user_state != N11_DISCONNECT_REQUEST &&
-		    call->user_state != N12_DISCONNECT_INDICATION)
+		if (call->net_state != N0_NULL_STATE &&
+		    call->net_state != N11_DISCONNECT_REQUEST &&
+		    call->net_state != N12_DISCONNECT_INDICATION)
 			q931_send_disconnect(call);
 
 		call->net_state = N12_DISCONNECT_INDICATION;
 	}
 
-	q931_send_disconnect(call);
 	// Start T305
 	// Disconnect B channel
+}
 
+void q931_call_alerting(struct q931_call *call)
+{
+	q931_send_alerting(call);
+}
 
+void q931_call_proceeding(struct q931_call *call)
+{
+	q931_send_call_proceeding(call);
 }
 
 void q931_free_call(struct q931_call *call)
 {
 	assert(call);
-	assert(call->node.next == LIST_POISON1);
-	assert(call->node.prev == LIST_POISON2);
+	assert(call->calls_node.next == LIST_POISON1);
+	assert(call->calls_node.prev == LIST_POISON2);
 
 	free(call);
 }
@@ -718,25 +830,28 @@ void q931_free_call(struct q931_call *call)
 int q931_make_call(struct q931_interface *interface, struct q931_call *call)
 {
 	assert(!call->interface);
-	assert(!call->dlc);
+	assert(!call->selected_dlc);
 
 	call->interface = interface;
 
 	if (interface->role == LAPD_ROLE_TE)
-		call->dlc = &interface->te_dlc;
+		call->selected_dlc = &interface->te_dlc;
 	else
-		call->dlc = NULL;
+		call->selected_dlc = NULL;
 
 	call->direction = Q931_CALL_DIRECTION_OUTBOUND;
 
 	call->call_reference = q931_alloc_call_reference(interface);
 
 	if (call->call_reference < 0) {
-		printf("All call references are used!!!\n");
+		interface->libstate->report(LOG_ERR,
+			"All call references are used!!!\n");
 		return -1;
 	}
 
-	printf("Call reference allocated (%ld)\n", call->call_reference);
+	interface->libstate->report(LOG_INFO,
+		"Call reference allocated (%ld)\n",
+		call->call_reference);
 
 	q931_add_call(interface, call);
 
@@ -772,6 +887,7 @@ inline static void q931_handle_call_proceeding(
 }
 
 inline static void q931_handle_connect(
+	const struct q931_dlc *dlc,
 	struct q931_call *call,
 	const struct q931_ie *ies,
 	int ies_cnt)
@@ -783,7 +899,24 @@ inline static void q931_handle_connect(
 		call->net_state = N10_ACTIVE;
 	}
 
-	q931_send_connect_acknowledge(call);
+	if (call->selected_dlc && call->selected_dlc != dlc) {
+		call->interface->libstate->report(LOG_WARNING,
+			"Received CONNECT on an already selected call\n");
+
+		return;
+	}
+
+	call->selected_dlc = dlc;
+
+	int i;
+	for (i=0; i<call->ndlcs; i++) {
+		if (call->dlcs[i] == call->selected_dlc) {
+			q931_send_connect_acknowledge(call);
+		} else {
+			q931_send_release_cause(call, call->dlcs[i],
+				Q931_IE_C_CV_NON_SELECTED_USER_CLEARING);
+		}
+	}
 
 	if (call->connect_callback)
 		call->connect_callback(call);
@@ -810,15 +943,14 @@ inline static void q931_handle_setup(
 	int ies_cnt)
 {
 	struct q931_call *call;
-	int sending_complete = FALSE;
 
 	call = q931_alloc_call();
 	if (!call) {
-		printf("Error allocating call\n");
+		dlc->interface->libstate->report(LOG_ERR, "Error allocating call\n");
 		break;
 	}
 
-	call->dlc = dlc;
+	call->selected_dlc = dlc;
 	call->interface = dlc->interface;
 
 	call->direction = Q931_CALL_DIRECTION_INBOUND;
@@ -829,7 +961,8 @@ inline static void q931_handle_setup(
 	else
 		call->net_state = N6_CALL_PRESENT;
 
-	printf("New call (%lu) allocated\n", call->call_reference);
+	dlc->interface->libstate->report(LOG_INFO,
+		"New call (%lu) allocated\n", call->call_reference);
 
 	q931_add_call(dlc->interface, call);
 
@@ -838,16 +971,16 @@ inline static void q931_handle_setup(
 
 	for(i=0; i<ies_cnt; i++) {
 		if (ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
-			sending_complete = TRUE;
+			call->sending_complete = TRUE;
 		} else if (ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
 			if (ies[i].size < 2) {
-				printf("IE size < 2\n");
+				dlc->interface->libstate->report(LOG_ERR, "IE size < 2\n");
 				// Send status with cause code
 				return;
 			}
 
 			if (ies[i].size - 1 > Q931_MAX_DIGITS) {
-				printf("IE size > Q931_MAX_DIGITS + 1\n");
+				dlc->interface->libstate->report(LOG_ERR, "IE size > Q931_MAX_DIGITS + 1\n");
 				// Send status with cause code
 				return;
 			}
@@ -855,7 +988,7 @@ inline static void q931_handle_setup(
 			char *number = ies[i].data + 1;
 
 			if (number[ies[i].size - 1] == '#') {
-				sending_complete = TRUE;
+				call->sending_complete = TRUE;
 				strncat(call->called_number, number,
 					ies[i].size - 1);
 			} else {
@@ -866,7 +999,7 @@ inline static void q931_handle_setup(
 	}
 	}
 
-	if (sending_complete) {
+	if (call->sending_complete) {
 		// Start T302
 		q931_send_call_proceeding(call);
 		q931_send_alerting(call);
@@ -875,7 +1008,11 @@ inline static void q931_handle_setup(
 		q931_send_setup_acknowledge(call);
 	}
 
-	printf("Number: %s\n", call->called_number);
+	if (call->interface->setup_callback)
+		call->interface->setup_callback(call);
+
+	call->interface->libstate->report(LOG_INFO,
+		"Number: %s\n", call->called_number);
 }
 
 inline static void q931_handle_setup_acknowledge(
@@ -883,7 +1020,7 @@ inline static void q931_handle_setup_acknowledge(
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
-	if (call->dlc->interface->role == LAPD_ROLE_TE)
+	if (call->interface->role == LAPD_ROLE_TE)
 		call->user_state = U2_OVERLAP_SENDING;
 	else
 		call->net_state = N2_OVERLAP_SENDING;
@@ -897,7 +1034,7 @@ inline static void q931_handle_disconnect(
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
-	if (call->dlc->interface->role == LAPD_ROLE_TE)
+	if (call->interface->role == LAPD_ROLE_TE)
 		call->user_state = U11_DISCONNECT_REQUEST;
 	else
 		call->net_state = N11_DISCONNECT_REQUEST;
@@ -929,7 +1066,7 @@ inline static void q931_handle_disconnect(
 	if (inband_info) {
 		// Connect B channel if not yet connected
 
-		if (call->dlc->interface->role == LAPD_ROLE_TE)
+		if (call->interface->role == LAPD_ROLE_TE)
 			call->user_state = U12_DISCONNECT_INDICATION;
 		else
 			call->net_state = N12_DISCONNECT_INDICATION;
@@ -937,16 +1074,20 @@ inline static void q931_handle_disconnect(
 		// Disconnect B channel
 
 		// Start T308
-		if (call->dlc->interface->role == LAPD_ROLE_TE)
+		if (call->interface->role == LAPD_ROLE_TE)
 			call->user_state = U19_RELEASE_REQUEST;
 		else
 			call->net_state = N19_RELEASE_REQUEST;
 
-		q931_send_release(call);
+		q931_send_release(call, call->selected_dlc);
 	}
+
+	if (call->disconnect_callback)
+		call->disconnect_callback(call);
 }
 
 inline static void q931_handle_release(
+	const struct q931_dlc *dlc,
 	struct q931_call *call,
 	const struct q931_ie *ies,
 	int ies_cnt)
@@ -958,29 +1099,49 @@ inline static void q931_handle_release(
 
 	q931_send_release_complete(call);
 
-	if (call->dlc->interface->role == LAPD_ROLE_TE)
+	if (call->interface->role == LAPD_ROLE_TE)
 		call->user_state = U0_NULL_STATE;
 	else
 		call->net_state = U0_NULL_STATE;
 }
 
 inline static void q931_handle_release_complete(
+	const struct q931_dlc *dlc,
 	struct q931_call *call,
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
-	// Stop T308
-	// Release B channel
+printf("######### release complete, DLC=%p, sel_DLC=%p\n",dlc, call->selected_dlc);
 
-	list_del(&call->node);
+	if (dlc == call->selected_dlc) {
+		// Stop T308
+		// Release B channel
 
-	if (call->dlc->interface->role == LAPD_ROLE_TE)
-		call->user_state = U0_NULL_STATE;
-	else
-		call->net_state = U0_NULL_STATE;
+		list_del(&call->calls_node);
 
-	if (call->release_callback)
-		call->release_callback(call);
+		if (call->interface->role == LAPD_ROLE_TE)
+			call->user_state = U0_NULL_STATE;
+		else
+			call->net_state = U0_NULL_STATE;
+
+		if (call->release_callback)
+			call->release_callback(call);
+	} else {
+		// Non-selected user clearing
+
+		// Remove DLC from associated DLCs
+		int i,j;
+		for (i=0; i<call->ndlcs; i++) {
+			if (call->dlcs[i] == dlc) {
+				for (j = i; j<call->ndlcs-1; j++)
+					call->dlcs[j] = call->dlcs[j+1];
+
+				call->ndlcs--;
+
+				break;
+			}
+		}
+	}
 }
 
 inline static void q931_handle_restart(
@@ -1047,14 +1208,16 @@ inline static void q931_handle_information(
 			sending_complete = TRUE;
 		} else if (ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
 			if (ies[i].size < 2) {
-				printf("IE size < 2\n");
+				call->interface->libstate->report(LOG_ERR,
+					"IE size < 2\n");
 				// Send status with cause code
 				return;
 			}
 
 			if (strlen(call->called_number) + ies[i].size - 1
-				 > Q931_MAX_DIGITS) {
-				printf("Called number overflow\n");
+			    > Q931_MAX_DIGITS) {
+				call->interface->libstate->report(LOG_ERR,
+					"Called number overflow\n");
 				// Send status with cause code
 				return;
 			}
@@ -1066,7 +1229,8 @@ inline static void q931_handle_information(
 				strncat(call->called_number, number,
 					ies[i].size - 2);
 			} else {
-				printf("strncat(%s,%c,%d)\n",call->called_number,
+				call->interface->libstate->report(LOG_INFO,
+					"strncat(%s,%c,%d)\n",call->called_number,
 					*number,ies[i].size - 1);
 
 				strncat(call->called_number, number,
@@ -1081,7 +1245,10 @@ inline static void q931_handle_information(
 		q931_send_connect(call);
 	}
 
-	printf("Number: %s\n", call->called_number);
+	call->interface->libstate->report(LOG_INFO, "Number: %s\n", call->called_number);
+
+	if (call->information_callback)
+		call->information_callback(call);
 }
 
 inline static void q931_handle_facility(
@@ -1189,14 +1356,37 @@ inline static void q931_handle_(
 {
 }
 
-void q931_receive(const struct q931_dlc *dlc)
+void q931_mdl_establish_indication(struct q931_dlc *dlc)
+{
+/*
+a) For calls in the Overlap Sending and Overlap Receiving states, the entity
+   shall initiate clearing by sending a DISCONNECT message with cause #41
+   "temporary failure", and following the procedures of §5.3.
+b) For calls in the disestablishment phase (states N11, N12, N19, N22, U11,
+   U12, and U19) no action shall be taken.
+c) Calls in the establishment phase (states N1, N3, N4, N6, N7, N8, N9, U1,
+   U3, U4, U6, U7, U8, and U9) and in the Active, Suspend Request and Resume
+   Request states shall be maintained according to the procedures contained
+   in other parts of §5.
+*/	
+
+	
+	dlc->status = DLC_CONNECTED;
+}
+
+void q931_mdl_release_indication(struct q931_dlc *dlc)
+{
+	// Not fully implemented
+
+	dlc->status = DLC_DISCONNECTED;
+}
+
+void q931_receive(struct q931_dlc *dlc)
 {
 	struct msghdr msg;
 	struct sockaddr_lapd sal;
 	struct cmsghdr cmsg;
 	struct iovec iov;
-
-	q931_init();
 
 	__u8 frame[512];
 
@@ -1214,28 +1404,31 @@ void q931_receive(const struct q931_dlc *dlc)
 	int len;
 	len = recvmsg(dlc->socket, &msg, 0);
 	if(len < 0) {
-		printf("recvmsg: %d %s\n",errno,strerror(errno));
-		exit(1);
+		if (errno == ECONNRESET)
+			q931_mdl_release_indication(dlc);
+		else if (errno == EISCONN)
+			q931_mdl_establish_indication(dlc);
+		else {
+			dlc->interface->libstate->report(LOG_ERR, "recvmsg: %s\n", strerror(errno));
+		}
+
+		return;
 	}
 
-	printf("recv ok (len=%d): ", len);
-	int i;
-	for(i=0; i<len; i++)
-		printf("%02x",frame[i]);
-
-	printf("\n");
+	dlc->interface->libstate->report(LOG_INFO, "recv ok (len=%d): ", len);
 
 	struct q931_header *hdr = (struct q931_header *)frame;
 
 	if (hdr->call_reference_size>3) {
 		// TODO error
-		printf("Call reference length > 3 ????\n");
+		dlc->interface->libstate->report(LOG_ERR, "Call reference length > 3 ????\n");
 		return;
 	}
 
 	q931_callref callref = 0;
 	int callref_direction = Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE;
 
+	int i;
 	for(i=0; i<hdr->call_reference_size; i++) {
 
 		__u8 val = hdr->call_reference[i];
@@ -1251,8 +1444,9 @@ void q931_receive(const struct q931_dlc *dlc)
 		callref |= val << ((hdr->call_reference_size-i-1) * 8);
 	}
 
-	printf("  protocol descriptor = %u\n", hdr->protocol_discriminator);
-	printf("  call reference = %u %lu %c\n",
+	dlc->interface->libstate->report(LOG_INFO, "  protocol descriptor = %u\n",
+		hdr->protocol_discriminator);
+	dlc->interface->libstate->report(LOG_INFO, "  call reference = %u %lu %c\n",
 		hdr->call_reference_size,
 		callref,
 		callref_direction?'O':'I');
@@ -1260,7 +1454,7 @@ void q931_receive(const struct q931_dlc *dlc)
 	__u8 message_type = *(__u8 *)(frame + sizeof(struct q931_header) +
 		hdr->call_reference_size);
 
-	printf("  message_type = %s (%u)\n",
+	dlc->interface->libstate->report(LOG_INFO, "  message_type = %s (%u)\n",
 		q931_get_message_type_name(message_type),
 			message_type);
 
@@ -1274,17 +1468,36 @@ void q931_receive(const struct q931_dlc *dlc)
 			callref);
 
 	if (!call && message_type != Q931_MT_SETUP) {
-		printf("Received message for an unknown callref %lu\n",
+		dlc->interface->libstate->report(LOG_INFO, "Received message for an unknown callref %lu\n",
 			callref);
 
 		return;
 	}
 
-	if (call && !call->dlc) {
-		// The user responded to a broadcast SETUP, the call still
-		// doesn't have an associated DLC, let's assign one to it :)
+	if (call && dlc->interface->role == LAPD_ROLE_NT) {
+		// Check if the user sending the message is listed for this call
 
-		call->dlc = dlc;
+		int i;
+		for (i = 0; i < call->ndlcs; i++) {
+			if (call->dlcs[i] == dlc) break;
+		}
+
+		if (i == call->ndlcs) {
+			if (i == Q931_MAX_TES_ON_BUS) {
+				dlc->interface->libstate->report(LOG_ERR,
+					"Over maximum number of TEs on bus\n");
+				return;
+			}
+
+			// TODO Only ALERTING, SETUP_ACKNOWLEDGE,
+			// RELEASE, CALL PROCEEDING  allowed
+
+			dlc->interface->libstate->report(LOG_DEBUG, "Adding a new DLC to the call\n");
+
+			call->dlcs[call->ndlcs] = dlc;
+			call->ndlcs++;
+		} else {
+		}
 	}
 
 	struct q931_ie ies[260];
@@ -1306,7 +1519,8 @@ void q931_receive(const struct q931_dlc *dlc)
 				if (q931_get_so_ie_type2_value(first_octet) & 0x08) {
 					// Locking shift
 
-					printf("Locked Switch from codeset %u to codeset %u",
+					dlc->interface->libstate->report(LOG_INFO,
+						"Locked Switch from codeset %u to codeset %u",
 						codeset,
 						q931_get_so_ie_type2_value(first_octet) & 0x07);
 
@@ -1317,7 +1531,8 @@ void q931_receive(const struct q931_dlc *dlc)
 				} else {
 					// Non-Locking shift
 
-					printf("Non-Locked Switch from codeset %u to codeset %u",
+					dlc->interface->libstate->report(LOG_INFO,
+						"Non-Locked Switch from codeset %u to codeset %u",
 						codeset,
 						q931_get_so_ie_type2_value(first_octet));
 
@@ -1333,7 +1548,8 @@ void q931_receive(const struct q931_dlc *dlc)
 					q931_get_ie_info(first_octet);
 
 				if (ie_info) {
-					printf("SO IE %d ===> %u (%s)\n", i,
+					dlc->interface->libstate->report(LOG_INFO,
+						"SO IE %d ===> %u (%s)\n", i,
 						first_octet,
 						ie_info->name);
 
@@ -1342,7 +1558,8 @@ void q931_receive(const struct q931_dlc *dlc)
 					ies[ies_cnt].data = NULL;
 					ies_cnt++;
 				} else {
-					printf("SO IE %d ===> %u (unknown)\n", i,
+					dlc->interface->libstate->report(LOG_INFO,
+						"SO IE %d ===> %u (unknown)\n", i,
 						first_octet);
 				}
 			}
@@ -1357,13 +1574,15 @@ void q931_receive(const struct q931_dlc *dlc)
 					q931_get_ie_info(first_octet);
 
 				if (ie_info) {
-					printf("VS IE %d ===> %u (%s) -- length %u\n", i,
+					dlc->interface->libstate->report(LOG_INFO,
+						"VS IE %d ===> %u (%s) -- length %u\n", i,
 						first_octet,
 						ie_info->name,
 						ie_len);
 
 				} else {
-					printf("VS IE %d ===> %u (unknown) -- length %u\n", i,
+					dlc->interface->libstate->report(LOG_INFO,
+						"VS IE %d ===> %u (unknown) -- length %u\n", i,
 						first_octet,
 						ie_len);
 				}
@@ -1377,7 +1596,7 @@ void q931_receive(const struct q931_dlc *dlc)
 			curpos += ie_len;
 
 			if(curpos > len) {
-				printf("MALFORMED FRAME\n");
+				dlc->interface->libstate->report(LOG_ERR, "MALFORMED FRAME\n");
 				break;
 			}
 		}
@@ -1397,7 +1616,7 @@ void q931_receive(const struct q931_dlc *dlc)
 	break;
 
 	case Q931_MT_CONNECT:
-		q931_handle_connect(call, ies, ies_cnt);
+		q931_handle_connect(dlc, call, ies, ies_cnt);
 	break;
 
 	case Q931_MT_CONNECT_ACKNOWLEDGE:
@@ -1412,7 +1631,7 @@ void q931_receive(const struct q931_dlc *dlc)
 		if (call)
 		 {
 		  // FIXME
-		  printf("Setup on an existent call?!? What should we do?\n");
+		  dlc->interface->libstate->report(LOG_ERR, "Setup on an existent call?!? What should we do?\n");
 		  break;
 		 }
 
@@ -1428,11 +1647,11 @@ void q931_receive(const struct q931_dlc *dlc)
 	break;
 
 	case Q931_MT_RELEASE:
-		q931_handle_release(call, ies, ies_cnt);
+		q931_handle_release(dlc, call, ies, ies_cnt);
 	break;
 
 	case Q931_MT_RELEASE_COMPLETE:
-		q931_handle_release_complete(call, ies, ies_cnt);
+		q931_handle_release_complete(dlc, call, ies, ies_cnt);
 	break;
 
 	case Q931_MT_RESTART:
@@ -1526,7 +1745,9 @@ void q931_receive(const struct q931_dlc *dlc)
 	break;
 
 	default:
-		printf("Unkwnon/unhandled message type %d\n", message_type);
+		dlc->interface->libstate->report(LOG_WARNING,
+			"Unkwnon/unhandled message type %d\n",
+			message_type);
 	break;
 	}
 }

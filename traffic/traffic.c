@@ -109,7 +109,7 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 			exit(1);
 		}
 
-		printf("%sR%7d W:%7d - Echo %d\n", prefix, in_size, out_size, len);
+		printf("%sI R%7d W:%7d - Echo %d\n", prefix, in_size, out_size, len);
 	}
 
 }
@@ -202,8 +202,7 @@ void start_source(int s, const char *prefix, struct opts *opts)
 	struct pollfd polls;
 
 	struct timeval last_tx_tv;
-	gettimeofday(&last_tx_tv, NULL);
-	long long last_tx = last_tx_tv.tv_sec * 1000000 + last_tx_tv.tv_usec;
+	long long last_tx = 0;
 
 	polls.fd = s;
 
@@ -211,14 +210,14 @@ void start_source(int s, const char *prefix, struct opts *opts)
 	for (frame_seq=0;;) {
 		struct timeval now_tv;
 		gettimeofday(&now_tv, NULL);
-		long long now = now_tv.tv_sec * 1000000 + now_tv.tv_usec;
-
+		long long now = now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
 		long long time_to_wait = opts->interval*1000 - (now - last_tx);
-		printf("Timetowait=%lld\n", time_to_wait);
 
 		polls.events = POLLIN|POLLERR;
-		if (time_to_wait < 0)
+		if (time_to_wait < 0) {
 			polls.events |= POLLOUT;
+			time_to_wait = 0;
+		}
 
 		if (poll(&polls, 1, time_to_wait/1000 + 1) < 0) {
 			printf("%spoll: %s\n", prefix, strerror(errno));
@@ -258,7 +257,7 @@ void start_source(int s, const char *prefix, struct opts *opts)
 			}
 
 			gettimeofday(&now_tv, NULL);
-			now = now_tv.tv_sec * 1000000 + now_tv.tv_usec;
+			now = now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
 
 			printf("%sI R%7d W:%7d - Sink %d - #%d - %0.3fms",
 				prefix,
@@ -285,7 +284,7 @@ void start_source(int s, const char *prefix, struct opts *opts)
 			}
 
 			gettimeofday(&last_tx_tv, NULL);
-			last_tx = last_tx_tv.tv_sec * 1000000 + last_tx_tv.tv_usec;
+			last_tx = last_tx_tv.tv_sec * 1000000LL + last_tx_tv.tv_usec;
 		
 			int in_size;
 			if(ioctl(s, SIOCINQ, &in_size) < 0) {

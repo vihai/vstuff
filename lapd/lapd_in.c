@@ -248,8 +248,6 @@ int lapd_process_frame(
 {
 	int queued = 0;
 
-lapd_debug_sk(sk, "========================================= %d\n", sk->sk_state);
-
 	if (!skb->dev) {
 		struct lapd_internal_msg *msg =
 			(struct lapd_internal_msg *)skb->data;
