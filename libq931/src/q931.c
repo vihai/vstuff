@@ -39,7 +39,7 @@ inline static void q931_add_call(
 inline static void q931_del_call(
 	struct q931_call *call)
 {
-	list_del(&call->calls_node);
+	q931_del_call(call);
 	
 	call->interface->ncalls--;
 
@@ -88,7 +88,7 @@ static struct q931_call *q931_find_call_by_reference(
 	struct q931_call *call;
 	list_for_each_entry(call, &interface->calls, calls_node)
 	 {
-interface->libstate->report(LOG_DEBUG, "Searching ==========> %d=%d %lu=%lu\n",call->direction,direction,call->call_reference,call_reference);
+report_intf(LOG_DEBUG, "Searching ==========> %d=%d %lu=%lu\n",call->direction,direction,call->call_reference,call_reference);
 
 	  if (call->direction == direction &&
 	      call->call_reference == call_reference)
@@ -175,18 +175,18 @@ static int q931_send_frame(const struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	dlc->interface->libstate->report(LOG_DEBUG, "q931_send_frame\n");
+	report_dlc(dlc, LOG_DEBUG, "q931_send_frame\n");
 
 	if (dlc->status != DLC_CONNECTED) {
 		int oldflags;
 
 		if (fcntl(dlc->socket, F_GETFL, &oldflags) < 0) {
-			dlc->interface->libstate->report(LOG_ERR, "fcntl: %s\n", strerror(errno));
+			report_dlc(dlc, LOG_ERR, "fcntl: %s\n", strerror(errno));
 			return errno;
 		}
 
 		if (fcntl(dlc->socket, F_SETFL, oldflags | O_NONBLOCK) < 0) {
-			dlc->interface->libstate->report(LOG_ERR, "fcntl: %s\n", strerror(errno));
+			report_dlc(dlc, LOG_ERR, "fcntl: %s\n", strerror(errno));
 			return errno;
 		}
 
@@ -195,14 +195,14 @@ static int q931_send_frame(const struct q931_dlc *dlc, void *frame, int size)
 		}
 
 		if (fcntl(dlc->socket, F_SETFL, oldflags) < 0) {
-			dlc->interface->libstate->report(LOG_ERR, "fcntl: %s\n", strerror(errno));
+			report_dlc(dlc, LOG_ERR, "fcntl: %s\n", strerror(errno));
 			return errno;
 		}
 
 	}
 
 	if (sendmsg(dlc->socket, &msg, 0) < 0) {
-		dlc->interface->libstate->report(LOG_ERR, "sendmsg error: %s\n",strerror(errno));
+		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",strerror(errno));
 		return errno;
 	}
 
@@ -229,10 +229,10 @@ static int q931_send_bc_uframe(struct q931_interface *interface, void *frame, in
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	interface->libstate->report(LOG_DEBUG, "q931_send_uframe\n");
+	report_if(interface, LOG_DEBUG, "q931_send_uframe\n");
 
 	if (sendmsg(interface->nt_socket, &msg, MSG_OOB) < 0) {
-		interface->libstate->report(LOG_ERR,
+		report_if(interface, LOG_ERR,
 			"sendmsg error: %s\n",strerror(errno));
 		return errno;
 	}
@@ -260,10 +260,10 @@ static int q931_send_uframe(const struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	dlc->interface->libstate->report(LOG_DEBUG, "q931_send_uframe\n");
+	report_dlc(dlc, LOG_DEBUG, "q931_send_uframe\n");
 
 	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0) {
-		dlc->interface->libstate->report(LOG_ERR, "sendmsg error: %s\n",strerror(errno));
+		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",strerror(errno));
 		return errno;
 	}
 
@@ -389,7 +389,7 @@ static int q931_send_release_complete(
 	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
-static int q931_send_setup(struct q931_call *call)
+static int q931_send_setup(struct q931_call *call, enum q931_setup_mode setup_mode)
 {
 	int size = 0;
 	__u8 frame[260]; // FIXME
@@ -434,10 +434,12 @@ static int q931_send_setup(struct q931_call *call)
 	size += q931_append_ie_called_party_number(frame + size, call->called_number);
 	size += q931_append_ie_sending_complete(frame + size);
 
-	if (call->selected_dlc)
+	if (setup_mode == Q931_SETUP_POINT_TO_POINT)
 		return q931_send_frame(call->selected_dlc, frame, size);
-	else
+	else if (setup_mode == Q931_SETUP_BROADCAST)
 		return q931_send_bc_uframe(call->interface, frame, size);
+	else
+		assert(0);
 }
 
 static int q931_send_setup_acknowledge(struct q931_call *call)
@@ -464,9 +466,9 @@ static int q931_send_setup_acknowledge(struct q931_call *call)
 	return q931_send_frame(call->selected_dlc, frame, size);
 }
 
-static enum q931_ie_call_state_call_state_net
+static enum q931_ie_call_state_call_state
 	q931_net_state_to_ie_state(
-		enum q931_network_state state)
+		enum q931_state state)
 {
 	switch (state) {
 	case N0_NULL_STATE:
@@ -503,14 +505,6 @@ static enum q931_ie_call_state_call_state_net
 		return Q931_IE_CS_N22_CALL_ABORT;
 	case N25_OVERLAP_RECEIVING:
 		return Q931_IE_CS_N25_OVERLAP_RECEIVING;
-	}
-}
-
-static enum q931_ie_call_state_call_state_user
-	q931_user_state_to_ie_state(
-		enum q931_user_state state)
-{
-	switch (state) {
 	case U0_NULL_STATE:
 		return Q931_IE_CS_U0_NULL_STATE;
 	case U1_CALL_INITIATED:
@@ -566,13 +560,8 @@ static int q931_send_status(struct q931_call *call)
 			Q931_IE_C_L_USER,
 			Q931_IE_C_CV_NORMAL_UNSPECIFIED); // FIXME
 
-	if (call->interface->role == LAPD_ROLE_TE) {
-		size += q931_append_ie_call_state(frame + size,
-			q931_user_state_to_ie_state(call->user_state));
-	} else {
-		size += q931_append_ie_call_state(frame + size,
-			q931_net_state_to_ie_state(call->net_state));
-	}
+	size += q931_append_ie_call_state(frame + size,
+		q931_state_to_ie_state(call->user_state));
 
 	assert(call->selected_dlc);
 
@@ -796,6 +785,15 @@ struct q931_call *q931_alloc_call(struct q931_interface *interface)
 	return call;
 }
 
+void q931_free_call(struct q931_call *call)
+{
+	assert(call);
+	assert(call->calls_node.next == LIST_POISON1);
+	assert(call->calls_node.prev == LIST_POISON2);
+
+	free(call);
+}
+
 void q931_call_connect(struct q931_call *call)
 {
 	q931_send_connect(call);
@@ -840,53 +838,6 @@ void q931_call_proceeding(struct q931_call *call)
 {
 	q931_send_call_proceeding(call);
 }
-
-void q931_free_call(struct q931_call *call)
-{
-	assert(call);
-	assert(call->calls_node.next == LIST_POISON1);
-	assert(call->calls_node.prev == LIST_POISON2);
-
-	free(call);
-}
-
-int q931_make_call(struct q931_call *call)
-{
-	assert(!call->selected_dlc);
-
-	if (interface->role == LAPD_ROLE_TE)
-		call->selected_dlc = &interface->te_dlc;
-	else
-		call->selected_dlc = NULL;
-
-	call->direction = Q931_CALL_DIRECTION_OUTBOUND;
-
-	call->call_reference = q931_alloc_call_reference(interface);
-
-	if (call->call_reference < 0) {
-		interface->libstate->report(LOG_ERR,
-			"All call references are used!!!\n");
-		return -1;
-	}
-
-	interface->libstate->report(LOG_INFO,
-		"Call reference allocated (%ld)\n",
-		call->call_reference);
-
-	q931_add_call(interface, call);
-
-	q931_send_setup(call);
-	call->user_state = U1_CALL_INITIATED;
-
-	// If we know all channels are busy we should not send SETUP (5.1)
-
-	return 0;
-}
-
-
-
-
-
 
 void q931_alerting_request(struct q931_call *call)
 {
@@ -1074,7 +1025,10 @@ void q931_disconnect_request(struct q931_call *call)
 
 	case N7_CALL_RECEIVED:
 		if (call->broadcasted_setup) {
-			// Send release_request to all CES
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
 
 			if (call->release_indication)
 				call->release_indication(call);
@@ -1101,7 +1055,10 @@ void q931_disconnect_request(struct q931_call *call)
 
 	case N8_CONNECT_REQUEST:
 		if (call->broadcasted_setup) {
-			// q931_ces_release_request(ces); ALL CES
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
 
 			// Release B channel
 
@@ -1123,18 +1080,61 @@ void q931_disconnect_request(struct q931_call *call)
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		// Stop T310 if running
+
+		if (call->broadcasted_setup) {
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
+
+			// Release B channel
+
+			if (call->release_indication)
+				call->release_indication(call);
+
+			// T312 Running?
+			if (1)
+				call->state = N22_CALL_ABORT;
+			else
+				call->state = N0_NULL_STATE;
+		} else {
+			q931_send_disconnect(call);
+
+			// Release B channel
+
+			// Start T305
+
+			call->state = N12_DISCONNECT_INDICATION;
+		}
 	break;
 
 	case N10_ACTIVE:
-	break;
+		// Release B channel
 
-	case N11_DISCONNECT_REQUEST:
-	break;
+		q931_send_disconnect(call);
 
-	case N12_DISCONNECT_INDICATION:
+		// Start T305
+
+		call->state = N12_DISCONNECT_INDICATION;
 	break;
 
 	case N15_SUSPEND_REQUEST:
+		if (call->tone_option) {
+			q931_send_disconnect(call); // PI ?!?
+
+			// Start Tone
+
+			// Start T306
+		} else {
+			// Disconnect B channel
+
+			q931_send_disconnect(call);
+
+			// Start T305
+		}
+
+		call->state = N12_DISCONNECT_INDICATION;
 	break;
 
 	case N17_RESUME_REQUEST:
@@ -1198,6 +1198,8 @@ void q931_disconnect_request(struct q931_call *call)
 	case N0_NULL_STATE:
 	case U0_NULL_STATE:
 	case N1_CALL_INITIATED:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
 	default:
 		call->interface->report(LOG_ERROR,
 			"Unexpected  in state %s\n",
@@ -1210,47 +1212,26 @@ void q931_info_request(struct q931_call *call)
 {
 	switch (call->state) {
 	case N2_OVERLAP_SENDING:
-		// q931_send_info(call); ??
-	break;
-
 	case N3_OUTGOING_CALL_PROCEEDING:
-		// q931_send_info(call); ??
-	break;
-
 	case N4_CALL_DELIVERED:
-		// q931_send_info(call); ??
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+		q931_send_info(call); // ???!?
 	break;
 
 	case N6_CALL_PRESENT:
-		// Do nothing
+		// Save event until compialtion of a transition???
 	break;
 
 	case N7_CALL_RECEIVED:
-		if (call->broadcasted_setup) {
-			// q931_ces_info_request(ces); TO ALL RESPONDING TERMS
-		} else {
-			q931_send_info(call);
-		}
-	break;
-
 	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
 		if (call->broadcasted_setup) {
-			// q931_ces_info_request(ces); TO ALL RESPONDING TERMS
+			// q931_ces_info_request(ces); TO ALL RESPONDING TERMS (!?!)
 		} else {
 			q931_send_info(call);
 		}
-	break;
-
-	case N9_INCOMING_CALL_PROCEEDING:
-	break;
-
-	case N10_ACTIVE:
-	break;
-
-	case N11_DISCONNECT_REQUEST:
-	break;
-
-	case N12_DISCONNECT_INDICATION:
 	break;
 
 	case N15_SUSPEND_REQUEST:
@@ -1315,8 +1296,8 @@ void q931_info_request(struct q931_call *call)
 	break;
 
 	case N0_NULL_STATE:
-	case U0_NULL_STATE:
 	case N1_CALL_INITIATED:
+	case U0_NULL_STATE:
 	default:
 		call->interface->report(LOG_ERROR,
 			"Unexpected  in state %s\n",
@@ -1447,6 +1428,88 @@ void q931_more_info_request(struct q931_call *call)
 
 void q931_notify_request(struct q931_call *call)
 {
+	switch (call->state) {
+	case N10_ACTIVE:
+	case N15_SUSPEND_REQUEST:
+		q931_send_notify(call);
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 void q931_proceeding_request(struct q931_call *call)
@@ -1734,7 +1797,10 @@ void q931_release_request(struct q931_call *call)
 
 	case N7_CALL_RECEIVED:
 		if (call->broadcasted_setup) {
-			// Send release_request to all CES
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
 
 			if (call->release_indication)
 				call->release_indication(call);
@@ -1761,7 +1827,10 @@ void q931_release_request(struct q931_call *call)
 
 	case N8_CONNECT_REQUEST:
 		if (call->broadcasted_setup) {
-			// q931_ces_release_request(ces); ALL CES
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
 
 			// Release B channel
 
@@ -1783,18 +1852,59 @@ void q931_release_request(struct q931_call *call)
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		// Stop T310 if running
+
+		if (call->broadcasted_setup) {
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
+
+			// Release B channel
+
+			if (call->release_indication)
+				call->release_indication(call);
+
+			// T312 Running?
+			if (1)
+				call->state = N22_CALL_ABORT;
+			else
+				call->state = N0_NULL_STATE;
+		} else {
+			q931_send_release(call);
+
+			// Start T308
+
+			call->state = N19_RELEASE_REQUEST;
+		}
 	break;
 
 	case N10_ACTIVE:
+		q931_send_release(call);
+
+		// Release B channel
+
+		// Start T308
+
+		call->state = N19_RELEASE_REQUEST;
 	break;
 
 	case N11_DISCONNECT_REQUEST:
-	break;
+		q931_send_release(call);
 
-	case N12_DISCONNECT_INDICATION:
+		// Start T308
+
+		call->state = N19_RELEASE_REQUEST;
 	break;
 
 	case N15_SUSPEND_REQUEST:
+		q931_send_release(call);
+
+		// Release B channel if not released
+
+		// Start T308
+
+		call->state = N19_RELEASE_REQUEST;
 	break;
 
 	case N17_RESUME_REQUEST:
@@ -1858,6 +1968,7 @@ void q931_release_request(struct q931_call *call)
 	case N0_NULL_STATE:
 	case U0_NULL_STATE:
 	case N1_CALL_INITIATED:
+	case N12_DISCONNECT_INDICATION:
 	default:
 		call->interface->report(LOG_ERROR,
 			"Unexpected  in state %s\n",
@@ -1868,10 +1979,179 @@ void q931_release_request(struct q931_call *call)
 
 void q931_resume_reject_request(struct q931_call *call)
 {
+	switch (call->state) {
+	case N17_RESUME_REQUEST:
+		q931_send_resume_reject(call);
+
+		q931_del_call(call);
+
+		call->state = N0_NULL_STATE;
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case N15_SUSPEND_REQUEST:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 void q931_resume_response(struct q931_call *call)
 {
+	switch (call->state) {
+	case N17_RESUME_REQUEST:
+		if (call->resume_repsonse)
+			call->resume_response(call);
+
+		q931_send_resume_acknowledge(call);
+
+		call->state = N10_ACTIVE;
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case N15_SUSPEND_REQUEST:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 void q931_setup_complete_request(struct q931_call *call)
@@ -1981,6 +2261,145 @@ void q931_setup_complete_request(struct q931_call *call)
 
 void q931_setup_request(struct q931_call *call)
 {
+	switch (call->state) {
+	case N0_NULL_STATE:
+		// Select B channel
+		// Channel selection success?
+		if (1) {
+			call->direction = Q931_CALL_DIRECTION_OUTBOUND;
+			call->call_reference = q931_alloc_call_reference(interface);
+
+			if (call->call_reference < 0) {
+				interface->libstate->report(LOG_ERR,
+					"All call references are used!!!\n");
+				return;
+			}
+
+			interface->libstate->report(LOG_INFO,
+				"Call reference allocated (%ld)\n",
+				call->call_reference);
+
+			q931_add_call(interface, call);
+
+			// Start T303
+
+			// Is multipoint?
+			if (1) {
+				// Start T312
+
+				q931_send_setup(call, Q931_SETUP_BROADCAST);
+			} else {
+				q931_send_setup(call, Q931_SETUP_POINT_TO_POINT);
+			}
+
+			call->state = N6_CALL_PRESENT;
+		} else {
+			if (call->release_indication)
+				call->release_indication(call);
+		}
+	break;
+
+	case N1_CALL_INITIATED:
+	break;
+
+	case N2_OVERLAP_SENDING:
+	break;
+
+	case N3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case N4_CALL_DELIVERED:
+	break;
+
+	case N6_CALL_PRESENT:
+	break;
+
+	case N7_CALL_RECEIVED:
+	break;
+
+	case N8_CONNECT_REQUEST:
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 void q931_setup_response(struct q931_call *call)
@@ -2104,16 +2523,955 @@ void q931_status_enquiry_request(struct q931_call *call)
 
 void q931_suspend_reject_request(struct q931_call *call)
 {
+	switch (call->state) {
+	case N15_SUSPEND_REQUEST:
+		q931_send_suspend_reject(call);
+
+		call->state = N10_ACTIVE;
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 void q931_suspend_response(struct q931_call *call)
 {
+	switch (call->state) {
+	case N15_SUSPEND_REQUEST:
+		q931_send_suspend_acknowledge(call);
+
+		// NOTE: Timer T307 is running in the call control block
+
+		q931_del_call(call);
+
+		call->state = N0_NULL_STATE;
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 void q931_suspend_request(struct q931_call *call)
 {
 }
 
+void q931_int_alerting_indication(struct q931_call *call, struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N7_CALL_RECEIVED:
+		// Do nothing
+	break;
+
+	case N8_CONNECT_REQUEST:
+		// Do nothing
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+		// Stop T310 if running
+
+		if (call->alerting_indication)
+			call->alerting_indication(call);
+
+		// Start T301
+
+		call->state = N7_CALL_RECEIVED;
+
+		// NOTE 1
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_int_connect_indication(struct q931_call *call, struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N7_CALL_RECEIVED:
+		call->selected_ces = ces;
+
+		if (call->connect_indication)
+			call->connect_indication(call);
+
+		// Stop T301 if running
+
+		call->state = N8_CONNECT_REQUEST;
+	break;
+
+	case N8_CONNECT_REQUEST:
+		// Do nothing
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+		// Stop T310 if running
+
+		call->selected_ces = ces;
+
+		if (call->connect_indication)
+			call->connect_indication(call);
+
+		call->state = N8_CONNECT_REQUEST;
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+
+}
+
+void q931_int_call_proceeding_indication(struct q931_call *call, struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N7_CALL_RECEIVED:
+		// Do nothing
+	break;
+
+	case N8_CONNECT_REQUEST:
+		// Do nothing
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_int_release_complete_indication(struct q931_call *call, struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+		list_del(ces);
+
+		q931_free_ces(ces);
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_int_info_indication(struct q931_call *call, struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->info_indication)
+			call->info_indication(call);
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_int_progress_indication(struct q931_call *call, struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+		if (call->progress_indication)
+			call->progress_indication(call);
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+		// Stop T310 if running
+
+		if (call->progress_indication)
+			call->progress_indication(call);
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_int_release_indication(
+	struct q931_call *call,
+	struct q931_ces *ces)
+{
+	switch (call->state) {
+	case N7_CALL_RECEIVED:
+		// Are other CES able to proceed?
+		if (1) {
+			// Save cause
+		} else {
+			// Is T312 running (THIS MAY BE WRONG)
+			if (1) {
+				// Save cause
+			} else {
+				if (call->release_indication)
+					call->release_indication(call); //With cause
+
+				// Stop timer T301 if running
+
+				// Release B channel
+
+				q931_del_call(call);
+
+				call->state = N0_NULL_STATE;
+			}
+		}
+	break;
+
+	case N8_CONNECT_REQUEST:
+		if (call->selected_ces) {
+			if (call->release_indication)
+				call->release_indication(call);
+
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
+
+			// Release B-channel
+
+			// T312 Running
+			if (1)
+				call->state = N22_CALL_ABORT;
+			else
+				call->state = N0_NULL_STATE;
+		}
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+		// Other CESs able to proceed? (!??!)
+		if (1) {
+			// Save cause
+		} else {
+			// Is T312 running (THIS MAY BE WRONG)
+			if (1) {
+				// Save cause
+			} else {
+				if (call->release_indication)
+					call->release_indication(call); //With cause
+
+				// Stop timer T310 if running
+
+				// Release B channel
+
+				q931_del_call(call);
+
+				call->state = N0_NULL_STATE;
+			}
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
 
 void q931_timer_T301()
 {
@@ -2265,13 +3623,13 @@ void q931_timer_T303()
 
 					call->state = N22_CALL_ABORT;
 				} else {
-					q931_send_setup(call); // Broadcast
+					q931_send_setup(call, Q931_SETUP_BROADCAST);
 					// Start T303
 
 					// Restart T312
 				}
 			} else {
-				q931_send_setup(call); //Point-to-point
+				q931_send_setup(call, Q931_SETUP_POINT_TO_POINT);
 				// Start T303
 			}
 		} else {
@@ -2377,6 +3735,313 @@ void q931_timer_T303()
 	case N2_OVERLAP_SENDING:
 	case N3_OUTGOING_CALL_PROCEEDING:
 	case N4_CALL_DELIVERED:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_timer_T305()
+{
+	switch (call->state) {
+	case N12_DISCONNECT_INDICATION:
+		q931_send_release(call);
+		// NOTE 1: Cause sent is same as in original disconnect message
+
+		// Start T308
+
+		call->state = N19_RELEASE_REQUEST;
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_timer_T306()
+{
+	switch (call->state) {
+	case N12_DISCONNECT_INDICATION:
+		// Stop tones/announcements if applicable
+
+		q931_send_release(call);
+
+		// NOTE 1: Cause sent is same as in original disconnect message
+
+		// Start T308
+
+		call->state = N19_RELEASE_REQUEST;
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
+}
+
+void q931_timer_T310()
+{
+	switch (call->state) {
+	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			struct q931_ces *ces;
+			list_for_each_entry(ces, &call->ces, node) {
+				q931_ces_release_request(ces);
+			}
+
+			// Release B channel
+
+			if (call->release_indication)
+				call->release_indication(call);
+
+			// T312 Running?
+			if (1)
+				call->state = N22_CALL_ABORT;
+			else
+				call->state = N0_NULL_STATE;
+		} else {
+			q931_send_disconnect(call);
+
+			// Release B channel
+
+			// Start T305
+
+			call->state = N12_DISCONNECT_INDICATION;
+		}
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case U0_NULL_STATE:
 	default:
 		call->interface->report(LOG_ERROR,
 			"Unexpected  in state %s\n",
@@ -2512,15 +4177,18 @@ inline static void q931_handle_alerting(
 				if (call->alerting_indication)
 					call->alerting_indication(call);
 
-				// Create CES
-				// q931_ces_alerting_request(ces);
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+				q931_ces_alerting_request(ces);
 
 				// Start T301
 
 				call->state = N7_CALL_RECEIVED;
 			} else {
-				// Create CES
-				// q931_ces_release_request(ces);
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				q931_ces_release_request(ces);
 			}
 		} else {
 			// Stop T303
@@ -2550,12 +4218,15 @@ inline static void q931_handle_alerting(
 		if (call->broadcasted_setup) {
 			// Channel OK?
 			if (1) {
-				// Create CES
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
 
-				// q931_ces_alerting_request(ces);
+				q931_ces_alerting_request(ces);
 			} else {
-				// Create CES
-				// q931_ces_release_request(ces);
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				q931_ces_release_request(ces);
 			}
 		} else {
 			q931_send_status(call);
@@ -2564,15 +4235,48 @@ inline static void q931_handle_alerting(
 
 	case N8_CONNECT_REQUEST:
 		if (call->broadcasted_setup) {
-			// Create CES
+			struct q931_ces *ces;
+			ces = q931_ces_alloc(call);
 
-			// q931_ces_release_request(ces);
+			q931_ces_release_request(ces);
 		} else {
 			q931_send_status(call);
 		}
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			// Channel OK?
+			if (1) {
+				// Stop T310 if running
+
+				if (call->alerting_indication)
+					call->alerting_indication(call);
+
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				q931_ces_alerting_request(ces);
+
+				// Start T301
+
+				call->state = N7_CALL_RECEIVED;
+			} else {
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				q931_ces_release_request(ces);
+			}
+		} else {
+			// Stop T310 if running
+
+			if (call->alerting_indication)
+				call->alerting_indication(call);
+
+			// Start T301
+
+			call->state = N7_CALL_RECEIVED;
+		}
 	break;
 
 	case N10_ACTIVE:
@@ -2707,15 +4411,19 @@ inline static void q931_handle_call_proceeding(
 	break;
 
 	case N7_CALL_RECEIVED:
+	case N9_INCOMING_CALL_PROCEEDING:
 		if (call->broadcasted_setup) {
 			// Channel OK?
 			if (1) {
-				// Create CES
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
 
-				// q931_ces_call_proceeding_request(ces);
+				q931_ces_call_proceeding_request(ces);
 			} else {
-				// Create CES
-				// q931_ces_release_request(ces);
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				q931_ces_release_request(ces);
 			}
 		} else {
 			q931_send_status(call);
@@ -2724,15 +4432,13 @@ inline static void q931_handle_call_proceeding(
 
 	case N8_CONNECT_REQUEST:
 		if (call->broadcasted_setup) {
-			// Create CES
+			struct q931_ces *ces;
+			ces = q931_ces_alloc(call);
 
-			// q931_ces_release_request(ces);
+			q931_ces_release_request(ces);
 		} else {
 			q931_send_status(call);
 		}
-	break;
-
-	case N9_INCOMING_CALL_PROCEEDING:
 	break;
 
 	case N10_ACTIVE:
@@ -2911,6 +4617,35 @@ inline static void q931_handle_connect(
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			// Channel OK?
+			if (1) {
+				// Stop T310 if running
+
+				if (call->connect_indication)
+					call->connect_indication(call);
+
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				call->selected_ces = ces;
+				q931_ces_connect_request(ces);
+
+				call->state = N8_CONNECT_REQUEST;
+			} else {
+				struct q931_ces *ces;
+				ces = q931_ces_alloc(call);
+
+				q931_ces_release_request(ces);
+			}
+		} else {
+			// Stop T310 if running
+
+			if (call->connect_indication)
+				call->connect_indication(call);
+
+			call->state = N8_CONNECT_REQUEST;
+		}
 	break;
 
 	case N10_ACTIVE:
@@ -3034,6 +4769,94 @@ inline static void q931_handle_connect_acknowledge(
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
+	switch (call->state) {
+	case N10_ACTIVE:
+		// Do nothing
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 inline static void q931_handle_progress(
@@ -3055,6 +4878,14 @@ inline static void q931_handle_progress(
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			q931_send_status(call);
+		} else {
+			// Stop T310 if running
+
+			if (call->progress_indication)
+				call->progress_indication(call);
+		}
 	break;
 
 	case N10_ACTIVE:
@@ -3143,74 +4974,165 @@ inline static void q931_handle_progress(
 }
 
 inline static void q931_handle_setup(
-	const struct q931_dlc *dlc,
-	unsigned long call_reference,
+	const struct q931_call *call,
 	const struct q931_ie *ies,
-	int ies_cnt,
-	int broadcasted_setup)
+	int ies_cnt)
 {
-	struct q931_call *call;
+	switch (call->state) {
+	case N0_NULL_STATE:
+		if (0) { // Can't select a channel
+			q931_send_release_complete(call);
 
-	call = q931_alloc_call();
-	if (!call) {
-		dlc->interface->libstate->report(LOG_ERR,
-			"Error allocating call\n");
-		break;
-	}
+			q931_del_call(call);
 
-	call->selected_ces = ces;
-	call->interface = dlc->interface;
+			return;
+		}
 
-	call->broadcasted_setup = broadcasted_setup;
-	call->direction = Q931_CALL_DIRECTION_INBOUND;
-	call->call_reference = call_reference;
+		if (call->interface->role == LAPD_ROLE_TE)
+			call->state = U1_CALL_INITIATED;
+		else
+			call->state = N1_CALL_INITIATED;
 
-	if (0) { // Can't select a channel
-		q931_send_release_complete(call);
-	}
+		{
+		int i;
 
-	if (call->interface->role == LAPD_ROLE_TE)
-		call->state = U1_CALL_INITIATED;
-	else
-		call->state = N1_CALL_INITIATED;
-
-	q931_add_call(dlc->interface, call);
-
-	if (call->interface->setup_indication)
-		call->interface->setup_indication(call);
-
-	{
-	int i;
-
-	for(i=0; i<ies_cnt; i++) {
-		if (ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
-			call->sending_complete = TRUE;
-		} else if (ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
-			if (ies[i].size < 2) {
-				dlc->interface->libstate->report(LOG_ERR, "IE size < 2\n");
-				// Send status with cause code
-				return;
-			}
-
-			if (ies[i].size - 1 > Q931_MAX_DIGITS) {
-				dlc->interface->libstate->report(LOG_ERR, "IE size > Q931_MAX_DIGITS + 1\n");
-				// Send status with cause code
-				return;
-			}
-
-			char *number = ies[i].data + 1;
-
-			if (number[ies[i].size - 1] == '#') {
+		for(i=0; i<ies_cnt; i++) {
+			if (ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
 				call->sending_complete = TRUE;
-				strncat(call->called_number, number,
-					ies[i].size - 1);
-			} else {
-				strncat(call->called_number, number,
-					ies[i].size - 2);
+			} else if (ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
+				if (ies[i].size < 2) {
+					report_dlc(dlc, LOG_ERR, "IE size < 2\n");
+					// Send status with cause code
+					return;
+				}
+
+				if (ies[i].size - 1 > Q931_MAX_DIGITS) {
+					report_dlc(dlc, LOG_ERR, "IE size > Q931_MAX_DIGITS + 1\n");
+					// Send status with cause code
+					return;
+				}
+
+				char *number = ies[i].data + 1;
+
+				if (number[ies[i].size - 1] == '#') {
+					call->sending_complete = TRUE;
+					strncat(call->called_number, number,
+						ies[i].size - 1);
+				} else {
+					strncat(call->called_number, number,
+						ies[i].size - 2);
+				}
 			}
 		}
+		}
+
+		if (call->interface->setup_indication)
+			call->interface->setup_indication(call);
+	break;
+
+	case N1_CALL_INITIATED:
+	break;
+
+	case N2_OVERLAP_SENDING:
+	break;
+
+	case N3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case N4_CALL_DELIVERED:
+	break;
+
+	case N6_CALL_PRESENT:
+	break;
+
+	case N7_CALL_RECEIVED:
+	break;
+
+	case N8_CONNECT_REQUEST:
+	break;
+
+	case N9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case N10_ACTIVE:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
 	}
-	}
+
 
 /*
 	if (call->sending_complete) {
@@ -3277,15 +5199,16 @@ inline static void q931_handle_setup_acknowledge(
 	break;
 
 	case N7_CALL_RECEIVED:
+	case N9_INCOMING_CALL_PROCEEDING:
 		if (call->broadcasted_setup) {
 			// Channel OK?
 			if (1) {
 				// Create CES
 
-				// q931_ces_setup_ack_request(ces);
+				q931_ces_setup_ack_request(ces);
 			} else {
 				// Create CES
-				// q931_ces_release_request(ces);
+				q931_ces_release_request(ces);
 			}
 		} else {
 			q931_send_status(call);
@@ -3300,9 +5223,6 @@ inline static void q931_handle_setup_acknowledge(
 		} else {
 			q931_send_status(call);
 		}
-	break;
-
-	case N9_INCOMING_CALL_PROCEEDING:
 	break;
 
 	case N10_ACTIVE:
@@ -3473,21 +5393,51 @@ inline static void q931_handle_disconnect(
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			q931_send_status(call);
+
+			// NOTE 2
+		} else {
+			// Stop T310 if running
+
+			// Disconnect B channel if connected
+
+			if (call->disconnect_indication)
+				call->disconnect_indication(call);
+
+			call->state = N11_DISCONNECT_REQUEST;
+		}
 	break;
 
 	case N10_ACTIVE:
-	break;
+		// Disconnect B channel if connected
 
-	case N11_DISCONNECT_REQUEST:
+		if (call->disconnect_indication)
+			call->disconnect_indication(call);
+		
+		call->state = N11_DISCONNECT_REQUEST;
 	break;
 
 	case N12_DISCONNECT_INDICATION:
-	break;
+		// Stop T305
+		// Stop T306
 
-	case N15_SUSPEND_REQUEST:
+		// Stop tones/announcements (if applicable)
+
+		q931_send_release(call);
+
+		// Start T308
+
+		call->state = N19_RELEASE_REQUEST;
 	break;
 
 	case N17_RESUME_REQUEST:
+		// Disconnect B channel if connected
+
+		if (call->disconnect_indication)
+			call->disconnect_indication(call);
+
+		call->state = N11_DISCONNECT_REQUEST;
 	break;
 
 	case N19_RELEASE_REQUEST:
@@ -3548,6 +5498,8 @@ inline static void q931_handle_disconnect(
 	case N0_NULL_STATE:
 	case U0_NULL_STATE:
 	case N6_CALL_PRESENT:
+	case N11_DISCONNECT_REQUEST:
+	case N15_SUSPEND_REQUEST:
 	default:
 		call->interface->report(LOG_ERROR,
 			"Unexpected  in state %s\n",
@@ -3670,7 +5622,15 @@ inline static void q931_handle_release(
 {
 
 	switch (call->state) {
+	case N0_NULL_STATE:
+		q931_send_release_complete(call);
+
+		q931_del_call(call);
+	break; 
+
 	case N1_CALL_INITIATED:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
 		if (call->release_indication)
 			call->release_indication(call);
 
@@ -3686,32 +5646,6 @@ inline static void q931_handle_release(
 	case N2_OVERLAP_SENDING:
 		// Stop T302
 
-		if (call->release_indication)
-			call->release_indication(call);
-
-		// Release B channel if not released
-
-		q931_send_release_complete(call);
-
-		q931_del_call(call);
-	
-		call->state = N0_NULL_STATE;
-	break;
-
-	case N3_OUTGOING_CALL_PROCEEDING:
-		if (call->release_indication)
-			call->release_indication(call);
-
-		// Release B channel if not released
-
-		q931_send_release_complete(call);
-
-		q931_del_call(call);
-	
-		call->state = N0_NULL_STATE;
-	break;
-
-	case N4_CALL_DELIVERED:
 		if (call->release_indication)
 			call->release_indication(call);
 
@@ -3778,15 +5712,54 @@ inline static void q931_handle_release(
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			q931_send_release_complete(call);
+		} else {
+			// Stop T310 if running
+
+			if (call->release_indication)
+				call->release_indication(call);
+
+			// Release B channel if not released
+
+			q931_send_release_complete(call);
+
+			q931_del_call(call);
+
+			call->state = N0_NULL_STATE;
+		}
 	break;
 
 	case N10_ACTIVE:
-	break;
-
 	case N11_DISCONNECT_REQUEST:
+		if (call->release_indication)
+			call->release_indication(call);
+		
+		// Release B channel if not released
+
+		q931_send_release_complete(call);
+
+		q931_del_call(call);
+
+		call->state = N0_NULL_STATE;
 	break;
 
 	case N12_DISCONNECT_INDICATION:
+		if (call->release_indication)
+			call->release_indication(call);
+
+		// Stop T305
+		// Stop T306
+
+		// Stop Tones/Announcements (if applicable)
+
+		// Release B channel if not released
+
+		q931_send_release_complete(call);
+
+		q931_del_call(call);
+
+		call->state = N0_NULL_STATE;
 	break;
 
 	case N15_SUSPEND_REQUEST:
@@ -3850,7 +5823,6 @@ inline static void q931_handle_release(
 	case U25_OVERLAP_RECEIVING:
 	break;
 
-	case N0_NULL_STATE:
 	case U0_NULL_STATE:
 	default:
 		call->interface->report(LOG_ERROR,
@@ -3953,15 +5925,50 @@ inline static void q931_handle_release_complete(
 	break;
 
 	case N9_INCOMING_CALL_PROCEEDING:
+		if (call->broadcasted_setup) {
+			// NOTE 1
+
+			// Save cause
+		} else {
+			// Stop T310 if running
+
+			// Release B channel if not released
+
+			if (call->release_indication)
+				call->release_indication(call);
+
+			q931_del_call(call);
+
+			call->state = N0_NULL_STATE;
+		}
 	break;
 
 	case N10_ACTIVE:
-	break;
-
 	case N11_DISCONNECT_REQUEST:
+		// Release B-channel if not released
+
+		if (call->release_indication)
+			call->release_indication(call);
+
+		q931_del_call(call);
+
+		call->state = N0_NULL_STATE;
 	break;
 
 	case N12_DISCONNECT_INDICATION:
+		// Stop T305
+		// Stop T306
+
+		// Stop Tones/Announcements (if applicable)
+
+		// Release B-channel if not released
+
+		if (call->release_indication)
+			call->release_indication(call);
+
+		q931_del_call(call);
+
+		call->state = N0_NULL_STATE;
 	break;
 
 	case N15_SUSPEND_REQUEST:
@@ -4049,7 +6056,7 @@ inline static void q931_handle_release_complete(
 		// Stop T308
 		// Release B channel
 
-		list_del(&call->calls_node);
+		q931_del_call(call);
 
 		if (call->interface->role == LAPD_ROLE_TE)
 			call->user_state = U0_NULL_STATE;
@@ -4146,43 +6153,23 @@ inline static void q931_handle_info(
 	break;
 
 	case N3_OUTGOING_CALL_PROCEEDING:
-		if (call->info_indication)
-			call->info_indication(call);
-	break;
-
 	case N4_CALL_DELIVERED:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
 		if (call->info_indication)
 			call->info_indication(call);
 	break;
 
 	case N7_CALL_RECEIVED:
-		if (call->broadcasted_setup) {
-			q931_send_status(call);
-		} else {
-			if (call->info_indication)
-				call->info_indication(call);
-		}
-	break;
-
 	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
 		if (call->broadcasted_setup) {
-			q931_send_status(call);
+			q931_send_status(call); // NOTE 1
 		} else {
 			if (call->info_indication)
 				call->info_indication(call);
 		}
-	break;
-
-	case N9_INCOMING_CALL_PROCEEDING:
-	break;
-
-	case N10_ACTIVE:
-	break;
-
-	case N11_DISCONNECT_REQUEST:
-	break;
-
-	case N12_DISCONNECT_INDICATION:
 	break;
 
 	case N15_SUSPEND_REQUEST:
@@ -4333,6 +6320,95 @@ inline static void q931_handle_notify(
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
+	switch (call->state) {
+	case N10_ACTIVE:
+		if (call->notify_indication)
+			call->notify_indication(call);
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 inline static void q931_handle_hold(
@@ -4378,10 +6454,19 @@ inline static void q931_handle_retrieve_reject(
 }
 
 inline static void q931_handle_resume(
-	struct q931_call *call,
+	const struct q931_call *call,
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
+	// Only on BRIs
+
+	if (call->resume_indication)
+		call->resume_indication(call);
+
+	if (call->interface->role == LAPD_ROLE_TE)
+		call->state = N17_RESUME_REQUEST;
+	else
+		call->state = U17_RESUME_REQUEST;
 }
 
 inline static void q931_handle_resume_acknowledge(
@@ -4403,6 +6488,99 @@ inline static void q931_handle_suspend(
 	const struct q931_ie *ies,
 	int ies_cnt)
 {
+	// Only for BRI
+
+	switch (call->state) {
+	case N10_ACTIVE:
+		if (call->suspend_indication)
+			call->suspend_indication(call);
+
+		call->status = N15_SUSPEND_REQUEST:
+	break;
+
+	case N11_DISCONNECT_REQUEST:
+	break;
+
+	case N12_DISCONNECT_INDICATION:
+	break;
+
+	case N15_SUSPEND_REQUEST:
+	break;
+
+	case N17_RESUME_REQUEST:
+	break;
+
+	case N19_RELEASE_REQUEST:
+	break;
+
+	case N22_CALL_ABORT:
+	break;
+
+	case N25_OVERLAP_RECEIVING:
+	break;
+
+
+	case U1_CALL_INITIATED:
+	break;
+
+	case U2_OVERLAP_SENDING:
+	break;
+
+	case U3_OUTGOING_CALL_PROCEEDING:
+	break;
+
+	case U4_CALL_DELIVERED:
+	break;
+
+	case U6_CALL_PRESENT:
+	break;
+
+	case U7_CALL_RECEIVED:
+	break;
+
+	case U8_CONNECT_REQUEST:
+	break;
+
+	case U9_INCOMING_CALL_PROCEEDING:
+	break;
+
+	case U10_ACTIVE:
+	break;
+
+	case U11_DISCONNECT_REQUEST:
+	break;
+
+	case U12_DISCONNECT_INDICATION:
+	break;
+
+	case U15_SUSPEND_REQUEST:
+	break;
+
+	case U17_RESUME_REQUEST:
+	break;
+
+	case U19_RELEASE_REQUEST:
+	break;
+
+	case U25_OVERLAP_RECEIVING:
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case U0_NULL_STATE:
+	default:
+		call->interface->report(LOG_ERROR,
+			"Unexpected  in state %s\n",
+			q931_state_to_text(call->state));
+	break;
+	}
 }
 
 inline static void q931_handle_suspend_acknowledge(
@@ -4413,13 +6591,6 @@ inline static void q931_handle_suspend_acknowledge(
 }
 
 inline static void q931_handle_suspend_reject(
-	struct q931_call *call,
-	const struct q931_ie *ies,
-	int ies_cnt)
-{
-}
-
-inline static void q931_handle_(
 	struct q931_call *call,
 	const struct q931_ie *ies,
 	int ies_cnt)
@@ -4451,6 +6622,12 @@ void q931_mdl_release_indication(struct q931_dlc *dlc)
 	dlc->status = DLC_DISCONNECTED;
 }
 
+static void q931_dispatch_message(
+	struct q931_call *call,
+	__u8 message_type,
+	const struct q931_ie *ies,
+	int ies_cnt);
+
 void q931_receive(struct q931_dlc *dlc)
 {
 	struct msghdr msg;
@@ -4479,21 +6656,20 @@ void q931_receive(struct q931_dlc *dlc)
 		else if (errno == EISCONN)
 			q931_mdl_establish_indication(dlc);
 		else {
-			dlc->interface->libstate->report(LOG_ERR, "recvmsg: %s\n", strerror(errno));
+			report_dlc(dlc, LOG_ERR,
+				"recvmsg: %s\n", strerror(errno));
 		}
 
 		return;
 	}
 
-	dlc->interface->libstate->report(LOG_INFO,
-		"recv ok (len=%d): \n", len);
-
 	struct q931_header *hdr = (struct q931_header *)frame;
 
 	if (hdr->call_reference_size>3) {
 		// TODO error
-		dlc->interface->libstate->report(LOG_ERR,
+		report_dlc(dlc, LOG_ERR,
 			"Call reference length > 3 ????\n");
+
 		return;
 	}
 
@@ -4516,10 +6692,10 @@ void q931_receive(struct q931_dlc *dlc)
 		callref |= val << ((hdr->call_reference_size-i-1) * 8);
 	}
 
-	dlc->interface->libstate->report(LOG_INFO,
+	report_dlc(dlc, LOG_INFO,
 		"  protocol descriptor = %u\n",
 		hdr->protocol_discriminator);
-	dlc->interface->libstate->report(LOG_INFO,
+	report_dlc(dlc, LOG_INFO,
 		"  call reference = %u %lu %c\n",
 		hdr->call_reference_size,
 		callref,
@@ -4528,7 +6704,7 @@ void q931_receive(struct q931_dlc *dlc)
 	__u8 message_type = *(__u8 *)(frame + sizeof(struct q931_header) +
 		hdr->call_reference_size);
 
-	dlc->interface->libstate->report(LOG_INFO, "  message_type = %s (%u)\n",
+	report_dlc(dlc, LOG_INFO, "  message_type = %s (%u)\n",
 		q931_get_message_type_name(message_type),
 			message_type);
 
@@ -4541,40 +6717,39 @@ void q931_receive(struct q931_dlc *dlc)
 				: Q931_CALL_DIRECTION_OUTBOUND,
 			callref);
 
-	if (!call && message_type != Q931_MT_SETUP) {
-		dlc->interface->libstate->report(LOG_INFO,
-			"Received message for an unknown callref %lu\n",
-			callref);
-
-		return;
-	}
-
-	if (call && dlc->interface->role == LAPD_ROLE_NT) {
-		// Check if the user sending the message is listed for this call
-
-		int i;
-		for (i = 0; i < call->nces; i++) {
-			if (call->ces[i] == dlc) break;
+	if (!call) {
+		call = q931_alloc_call();
+		if (!call) {
+			report_dlc(dlc, LOG_ERR,
+				"Error allocating call\n");
+			break;
 		}
 
-		if (i == call->nces) {
-			if (i == Q931_MAX_TES_ON_BUS) {
-				dlc->interface->libstate->report(LOG_ERR,
-					"Over maximum number of TEs on bus\n");
-				return;
-			}
+		call->selected_ces = ces;
+		call->interface = dlc->interface;
 
-			// TODO Only ALERTING, SETUP_ACKNOWLEDGE,
-			// RELEASE, CALL PROCEEDING  allowed
+		call->broadcasted_setup = msg & MSG_OOB;
+		call->direction = Q931_CALL_DIRECTION_INBOUND;
+		call->call_reference = call_reference;
 
-			dlc->interface->libstate->report(LOG_DEBUG, "Adding a new DLC to the call\n");
+		q931_add_call(dlc->interface, call);
 
-			call->ces[call->nces] = dlc;
-			call->nces++;
-		} else {
+		// Shortcut for "Other Messages"
+		if (message_type != Q931_MT_SETUP &&
+		    message_type != Q931_MT_RESUME &&
+		    message_type != Q931_MT_RELEASE &&
+		    message_type != Q931_MT_STATUS &&
+		    message_type != Q931_MT_RELEASE_COMPLETE) {
+			q931_send_release(call);
+
+			// Start T308
+			call->state = U19_RELEASE_REQUEST;
+
+			return;
 		}
 	}
 
+	// Decode information elemnts
 	struct q931_ie ies[260];
 	int ies_cnt = 0;
 
@@ -4594,7 +6769,7 @@ void q931_receive(struct q931_dlc *dlc)
 				if (q931_get_so_ie_type2_value(first_octet) & 0x08) {
 					// Locking shift
 
-					dlc->interface->libstate->report(LOG_INFO,
+					report_dlc(dlc, LOG_INFO,
 						"Locked Switch from codeset %u to codeset %u",
 						codeset,
 						q931_get_so_ie_type2_value(first_octet) & 0x07);
@@ -4606,7 +6781,7 @@ void q931_receive(struct q931_dlc *dlc)
 				} else {
 					// Non-Locking shift
 
-					dlc->interface->libstate->report(LOG_INFO,
+					report_dlc(dlc, LOG_INFO,
 						"Non-Locked Switch from codeset %u to codeset %u",
 						codeset,
 						q931_get_so_ie_type2_value(first_octet));
@@ -4623,7 +6798,7 @@ void q931_receive(struct q931_dlc *dlc)
 					q931_get_ie_info(first_octet);
 
 				if (ie_info) {
-					dlc->interface->libstate->report(LOG_INFO,
+					report_dlc(dlc, LOG_INFO,
 						"SO IE %d ===> %u (%s)\n", i,
 						first_octet,
 						ie_info->name);
@@ -4633,7 +6808,7 @@ void q931_receive(struct q931_dlc *dlc)
 					ies[ies_cnt].data = NULL;
 					ies_cnt++;
 				} else {
-					dlc->interface->libstate->report(LOG_INFO,
+					report_dlc(dlc, LOG_INFO,
 						"SO IE %d ===> %u (unknown)\n", i,
 						first_octet);
 				}
@@ -4649,14 +6824,14 @@ void q931_receive(struct q931_dlc *dlc)
 					q931_get_ie_info(first_octet);
 
 				if (ie_info) {
-					dlc->interface->libstate->report(LOG_INFO,
+					report_dlc(dlc, LOG_INFO,
 						"VS IE %d ===> %u (%s) -- length %u\n", i,
 						first_octet,
 						ie_info->name,
 						ie_len);
 
 				} else {
-					dlc->interface->libstate->report(LOG_INFO,
+					report_dlc(dlc, LOG_INFO,
 						"VS IE %d ===> %u (unknown) -- length %u\n", i,
 						first_octet,
 						ie_len);
@@ -4671,7 +6846,7 @@ void q931_receive(struct q931_dlc *dlc)
 			curpos += ie_len;
 
 			if(curpos > len) {
-				dlc->interface->libstate->report(LOG_ERR, "MALFORMED FRAME\n");
+				report_dlc(dlc, LOG_ERR, "MALFORMED FRAME\n");
 				break;
 			}
 		}
@@ -4681,6 +6856,29 @@ void q931_receive(struct q931_dlc *dlc)
 		i++;
 	}
 
+	struct q931_ces *ces;
+	list_for_each_entry(ces, &call->ces, node) {
+		if (ces->dlc == dlc) {
+
+			q931_ces_dispatch_message(ces);
+
+			if (ces == call->selected_ces)
+				break;
+			else
+				return;
+		}
+	}
+
+
+
+}
+
+static void q931_dispatch_message(
+	struct q931_call *call,
+	__u8 message_type,
+	const struct q931_ie *ies,
+	int ies_cnt)
+{
 	switch (message_type) {
 	case Q931_MT_ALERTING:
 		q931_handle_alerting(call, ies, ies_cnt);
@@ -4703,15 +6901,7 @@ void q931_receive(struct q931_dlc *dlc)
 	break;
 
 	case Q931_MT_SETUP:
-		if (call)
-		 {
-		  // FIXME
-		  dlc->interface->libstate->report(LOG_ERR,
-			"Setup on an existent call?!? What should we do?\n");
-		  break;
-		 }
-
-		q931_handle_setup(dlc, callref, ies, ies_cnt, msg & MSG_OOB);
+		q931_handle_setup(call, ies, ies_cnt);
 	break;
 
 	case Q931_MT_SETUP_ACKNOWLEDGE:
@@ -4723,11 +6913,11 @@ void q931_receive(struct q931_dlc *dlc)
 	break;
 
 	case Q931_MT_RELEASE:
-		q931_handle_release(dlc, call, ies, ies_cnt);
+		q931_handle_release(call, ies, ies_cnt);
 	break;
 
 	case Q931_MT_RELEASE_COMPLETE:
-		q931_handle_release_complete(dlc, call, ies, ies_cnt);
+		q931_handle_release_complete(call, ies, ies_cnt);
 	break;
 
 	case Q931_MT_RESTART:
@@ -4821,7 +7011,7 @@ void q931_receive(struct q931_dlc *dlc)
 	break;
 
 	default:
-		dlc->interface->libstate->report(LOG_WARNING,
+		report_dlc(dlc, LOG_WARNING,
 			"Unkwnon/unhandled message type %d\n",
 			message_type);
 	break;

@@ -17,6 +17,11 @@
 
 #define Q931_MAX_DIGITS 20
 
+#define report_dlc(dlc, dlc, lvl, format, arg...)		\
+	(dlc)->interface->libstate->report((lvl), format, ## arg)
+#define report_if(intf, lvl, format, arg...)		\
+	(intf)->libstate->report((lvl), format, ## arg)
+
 enum q931_log_level
 {
 	Q931_LOG_DEBUG,
@@ -29,7 +34,7 @@ enum q931_log_level
 	Q931_LOG_EMERG,
 };
 
-enum q931_state
+enum q931_call_state
 {
 	U0_NULL_STATE,
 	U1_CALL_INITIATED,
@@ -72,6 +77,12 @@ enum q931_mode
 	UNKNOWN_MODE,
 	CIRCUIT_MODE,
 	PACKET_MODE
+};
+
+enum q931_setup_mode
+{
+	Q931_SETUP_POINT_TO_POINT,
+	Q931_SETUP_BROADCAST,
 };
 
 struct q931_header
@@ -158,6 +169,7 @@ struct q931_interface
 	int call_reference_size;
 
 	int ncalls;
+	// TODO: Use a HASH for improved scalability
 	struct list_head calls;
 
 	void (*alerting_indication)(struct q931_call *call);
@@ -194,29 +206,20 @@ enum q931_callref_flag
 	Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE = 0x1,
 };
 
-#define Q931_MAX_TES_ON_BUS 16
-
-// Connection endpoint suffix
-struct q931_ces
-{
-	struct q931_dlc *dlc;
-	enum q931_network_state state;
-};
-
 struct q931_call
 {
 	struct list_head calls_node;
 
 	struct q931_interface *interface;
 
-	const struct q931_ces *ces[Q931_MAX_TES_ON_BUS];
-	int nces;
+	// TODO: Use a HASH for improved scalability
+	struct list_head ces;
 	const struct q931_ces *selected_ces;
 
 	enum q931_call_direction direction;
 	q931_callref call_reference;
 
-	enum q931_state state;
+	enum q931_call_state state;
 
 	char calling_number[Q931_MAX_DIGITS + 1];
 	char called_number[Q931_MAX_DIGITS + 1];
@@ -321,6 +324,5 @@ void q931_status_enquiry_request(struct q931_call *call);
 void q931_suspend_reject_request(struct q931_call *call);
 void q931_suspend_response(struct q931_call *call); //NT
 void q931_suspend_request(struct q931_call *call); // TE
-
 
 #endif
