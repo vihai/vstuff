@@ -1,0 +1,43 @@
+
+This is an attempt at writing a new and improved ISDN layer for Linux
+
+Fundamently it is composed of three steps:
+
+- Implement q.921/LAPD thorught the netdev infrastructure
+- Implement some reference driver
+- Implement a TDM bus and voice API
+
+- Manages one TEI per socket meaning that more than one Layer 3 client may speak
+  indipendendently on the channel, e.g. a low level q.931 signalling adaptor for
+  voice applications, an high-level q.931 daemon and an X.25 endpoint daemon (?).
+
+The ISDN networking doesn't properly map with the socket layer or with the
+ISO/OSI layers.
+
+The Layer 1 (Physical layer) can (and will) be activated/deactivated on BRI ports
+when Layer 2 is idle for a specified timeout
+
+There is no MAC address and network address, 
+
+Il mapping corretto sarebbe di creare una socket per ogni DLC (Data Link Connection).
+Un DLC è identificato da:
+
+(Interfaccia, TEI, SAPI)
+
+
+There are two roles, the NT and the TE
+Data flows from a TE to the NT and from the NT to one or more TEs.
+Broadcasts are supported in one direction only (from NT to TE).
+
+Avrei potuto implementare anche il q.921 in user mode
+
+Una socket è un'entità che rappresenta l'endpoint di una comunicazione.
+
+Solo una socket può essere aperta con ruolo di NT mentre più di una socket può
+essere aperta in TE mode
+
+
+La trasmissione unacknowledged (simile a SOCK_DGRAM) e acknowledged
+(analoga a SOCK_SEQPACKET) sono MODALITA' di trasmissione all'interno della stessa
+Data Link Connection, quindi ho deciso di implementarle all'interno della stessa
+socket.

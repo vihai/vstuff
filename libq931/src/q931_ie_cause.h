@@ -1,0 +1,158 @@
+
+#ifndef _Q931_IE_CAUSE_H
+#define _Q931_IE_CAUSE_H
+
+#include "q931_ie.h"
+
+/************************* Progress Indicator ***************************/
+
+enum q931_ie_cause_coding_standard
+{
+	Q931_IE_C_CS_CCITT	= 0x0,
+	Q931_IE_C_CS_RESERVED	= 0x1,
+	Q931_IE_C_CS_NATIONAL	= 0x2,
+	Q931_IE_C_CS_SPECIFIC	= 0x3,
+};
+
+enum q931_ie_cause_location
+{
+	Q931_IE_C_L_USER					= 0x0,
+	Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER		= 0x1,
+	Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER		= 0x2,
+	Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER		= 0x4,
+	Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER		= 0x5,
+	Q931_IE_C_L_INTERNATIONAL_NETWORK			= 0x7,
+	Q931_IE_C_L_NETWORK_BEYOND_INTERNETWORKING_POINT	= 0xa,
+};
+
+enum q931_ie_cause_value
+{
+	Q931_IE_C_CV_UNALLOCATED				= 1,
+	Q931_IE_C_CV_NO_ROUTE_TO_SPECIFIED_TRANSIT_NETWORK	= 2,
+	Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION			= 3,
+	Q931_IE_C_CV_CHANNEL_UNACCEPTABLE			= 6,
+	Q931_IE_C_CV_CALL_BEING_DELIVERED			= 7,
+	Q931_IE_C_CV_NORMAL_CALL_CLEARING			= 16,
+	Q931_IE_C_CV_USER_BUSY					= 17,
+	Q931_IE_C_CV_NO_USER_RESPONDING				= 18,
+	Q931_IE_C_CV_NO_ANSWER_FROM_USER			= 19,
+	Q931_IE_C_CV_CALL_REJECTED				= 21,
+	Q931_IE_C_CV_NUMBER_CHANGED				= 22,
+	Q931_IE_C_CV_NON_SELECTED_USER_CLEARING			= 26,
+	Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER			= 27,
+	Q931_IE_C_CV_INVALID_NUMBER_FORMAT			= 28,
+	Q931_IE_C_CV_FACILITY_REJECTED				= 29,
+	Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY			= 30,
+	Q931_IE_C_CV_NORMAL_UNSPECIFIED				= 31,
+
+	Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE		= 34,
+	Q931_IE_C_CV_NETWORK_OUT_OF_ORDER			= 38,
+	Q931_IE_C_CV_TEMPORARY_FAILURE				= 41,
+	Q931_IE_C_CV_SWITCHING_EQUIPMENT_CONGESTION		= 42,
+	Q931_IE_C_CV_ACCESS_INFORMATION_DISCARDED		= 43,
+	Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE	= 44,
+	Q931_IE_C_CV_RESOURCES_UNAVAILABLE			= 47,
+
+	Q931_IE_C_CV_QUALITY_OF_SERVICE_UNAVAILABLE		= 49,
+	Q931_IE_C_CV_REQUESTED_FACILITY_NOT_SUBSCRIBED		= 50,
+	Q931_IE_C_CV_BEARER_CAPABILITY_NOT_AUTHORIZED		= 57,
+	Q931_IE_C_CV_BEARER_CAPABILITY_NOT_PRESENTLY_AVAILABLE	= 58,
+	Q931_IE_C_CV_SERVICE_OR_OPTION_NOT_AVAILABLE		= 63,
+
+	Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED		= 65,
+	Q931_IE_C_CV_CHANNEL_TYPE_NOT_IMPLEMENTED		= 66,
+	Q931_IE_C_CV_REQUESTED_FACILITY_NOT_IMPLEMENTED		= 69,
+	Q931_IE_C_CV_ONLY_RESTRICTED_DIGITAL_AVAILABLE		= 70,
+	Q931_IE_C_CV_SERVICE_OR_OPTION_NOT_IMPLEMENTED		= 79,
+
+	Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE		= 81,
+	Q931_IE_C_CV_IDENTIFIED_CHANNEL_DOES_NOT_EXIST		= 82,
+	Q931_IE_C_CV_SUSPENDED_CALL_EXISTS_BUT_NOT_THIS		= 83,
+	Q931_IE_C_CV_CALL_IDENITY_IN_USE			= 84,
+	Q931_IE_C_CV_NO_CALL_SUSPENDED				= 85,
+	Q931_IE_C_CV_CALL_IDENTIFIED_HAS_BEEN_CLEARED		= 86,
+	Q931_IE_C_CV_INCOMPATIBLE_DESTINATION			= 88,
+	Q931_IE_C_CV_INVALID_TRANSIT_NETWORK_SELECTION		= 91,
+	Q931_IE_C_CV_INVALID_MESSAGE_UNSPECIFIED		= 95,
+
+	Q931_IE_C_CV_MANDATORY_INFORMATION_ELEMENT_IS_MISSING	= 96,
+	Q931_IE_C_CV_MESSAGE_TYPE_NON_EXISTENT_OR_IMPLEMENTED	= 97,
+	Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE	= 98,
+	Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT		= 99,
+	Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS	= 100,
+	Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE	= 101,
+	Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY			= 102,
+	Q931_IE_C_CV_PROTOCOL_ERROR_UNSPECIFIED			= 111,
+
+	Q931_IE_C_CV_INTERWORKING_UNSPECIFIED			= 127,
+};
+
+struct q931_ie_cause_value_info
+{
+	__u8 id;
+	const char *name;
+};
+
+struct q931_ie_cause_onwire_3
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8 ext:1;
+	__u8 coding_standard:2;
+	__u8 :1;
+	__u8 location:4;
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+	__u8 location:4;
+	__u8 :1;
+	__u8 coding_standard:2;
+	__u8 ext:1;
+#endif
+} __attribute__ ((__packed__));
+
+struct q931_ie_cause_onwire_3a
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8 ext:1;
+	__u8 recommendation:7;
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+	__u8 recommendation:7;
+	__u8 ext:1;
+#endif
+} __attribute__ ((__packed__));
+
+struct q931_ie_cause_onwire_4
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8 ext:1;
+	__u8 cause_value:7;
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+	__u8 cause_value:7;
+	__u8 ext:1;
+#endif
+} __attribute__ ((__packed__));
+
+static inline int q931_append_ie_cause(void *buf, __u8 cause_value)
+{
+ struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+
+ ie->id = Q931_IE_CAUSE;
+ ie->size = 0;
+
+ struct q931_ie_cause_onwire_3 *oct_3 =
+   (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->size]);
+ oct_3->ext = 1;
+ oct_3->coding_standard = Q931_IE_C_CS_CCITT;
+ oct_3->location = Q931_IE_C_L_USER; //FIXME: shoud depend in NT mode
+ ie->size += 1;
+
+ struct q931_ie_cause_onwire_4 *oct_4 =
+   (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->size]);
+ oct_4->ext = 1;
+ oct_4->cause_value = cause_value;
+ ie->size += 1;
+
+ return ie->size + sizeof(struct q931_ie_onwire);
+}
+
+void q931_ie_cause_value_infos_init();
+
+#endif

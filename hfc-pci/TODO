@@ -1,0 +1,6 @@
+
+Move state machine activation to D channel open
+Deactivate L1 when all channels are closed
+
+
+Use dev_prink, netdev_printk and so (core/dev.c)
