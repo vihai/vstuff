@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define Q931_PRIVATE
+
 #include "ie_cause.h"
 
 struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =

@@ -2,6 +2,30 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-04-08 03:57:55 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-24
+
+    Summary:
+      Commit for backup purposes
+    Revision:
+      isdn--devel--0.1--patch-24
+
+    
+    
+
+    modified files:
+     ChangeLog NOTES lapd/lapd.h libq931/src/call.c
+     libq931/src/call.h libq931/src/ces.h libq931/src/channel.c
+     libq931/src/channel.h libq931/src/dlc.h libq931/src/ie.c
+     libq931/src/ie.h libq931/src/ie_bearercap.c
+     libq931/src/ie_cause.c libq931/src/ie_cdpn.c
+     libq931/src/ie_cgpn.c libq931/src/ie_chanid.c
+     libq931/src/ie_chanid.h libq931/src/ie_hlc.c
+     libq931/src/ie_progind.c libq931/src/intf.c libq931/src/intf.h
+     libq931/src/msgtype.c libq931/src/out.c libq931/src/out.h
+     libq931/src/proto.h libq931/src/q931.c libq931/src/timer.c
+     libq931/src/timer.h libq931/src/user.c
+
+
 2005-04-06 14:34:09 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-23
 
     Summary:

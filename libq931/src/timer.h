@@ -1,7 +1,6 @@
 #ifndef _TIMER_H
 #define _TIMER_H
 
-#include "q931.h"
 #include "list.h"
 
 typedef long long longtime_t;

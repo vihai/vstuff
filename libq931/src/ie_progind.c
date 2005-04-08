@@ -1,5 +1,7 @@
 #include <string.h>
 
+#define Q931_PRIVATE
+
 #include "ie_progind.h"
 
 int q931_append_ie_progress_indicator(void *buf,

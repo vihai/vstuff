@@ -61,6 +61,10 @@ In TE mode there can be at most one TEI management per socket
 
 Implement: 5.9 User notification procedure
 
+Implement Restart Procedure
+
+Reduce redundand code coming from FSM description
+
 Missing:
 ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 

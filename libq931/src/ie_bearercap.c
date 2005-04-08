@@ -1,5 +1,7 @@
 #include <string.h>
 
+#define Q931_PRIVATE
+
 #include "ie_bearercap.h"
 
 int q931_append_ie_bearer_capability_speech(void *buf, __u8 l1_proto)

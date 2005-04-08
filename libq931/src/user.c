@@ -7,10 +7,11 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
+#include <signal.h>
 
 #include <lapd.h>
 
-#include <signal.h>
+#define Q931_PRIVATE
 
 #include "q931.h"
 #include "msgtype.h"

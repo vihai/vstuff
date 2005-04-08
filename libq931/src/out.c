@@ -50,25 +50,25 @@ static int q931_prepare_header(const struct q931_call *call,
 
 	// Header
 
-	struct q931_header *hdr = (struct q931_header *)(frame + size);
+	struct q931_header *hdr = (struct q931_header *)(call->intf->sendbuf + size);
 	size += sizeof(struct q931_header);
 
 	memset(hdr, 0x00, sizeof(*hdr));
 
 	hdr->protocol_discriminator = Q931_PROTOCOL_DISCRIMINATOR_Q931;
 
-	assert(call->interface);
-	assert(call->interface->call_reference_size >=1 &&
-	       call->interface->call_reference_size <= 4);
+	assert(call->intf);
+	assert(call->intf->call_reference_size >=1 &&
+	       call->intf->call_reference_size <= 4);
 
 	hdr->call_reference_size =
-		call->interface->call_reference_size;
+		call->intf->call_reference_size;
 
 	// Call reference
 	assert(call->call_reference >= 0 &&
 	       call->call_reference < (1 << ((hdr->call_reference_size * 8) - 1)));
 
-	q931_make_callref(frame + size,
+	q931_make_callref(call->intf->sendbuf + size,
 		hdr->call_reference_size,
 		call->call_reference,
 		call->direction == Q931_CALL_DIRECTION_INBOUND ?
@@ -77,7 +77,7 @@ static int q931_prepare_header(const struct q931_call *call,
 
 	size += hdr->call_reference_size;
 	
-	__u8 *message_type_onwire = (__u8 *)(frame + size);
+	__u8 *message_type_onwire = (__u8 *)(call->intf->sendbuf + size);
 	size++;
 	*message_type_onwire = message_type;
 
@@ -245,29 +245,31 @@ static int q931_send_uframe(struct q931_dlc *dlc, void *frame, int size)
 	return 0;
 }
 
+/**************** ALERTING
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Channel Identification	both	O
+ * Facility			both	O
+ * Progress Indicator		both	O
+ * Display			n->u	O
+ * User-User			both	O
+ *
+ */
+
 int q931_send_alerting(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_ALERTING);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Channel Identification	both	O
-	 * Facility			both	O
-	 * Progress Indicator		both	O
-	 * Display			n->u	O
-	 * User-User			both	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_ALERTING);
 
-// size += q931_append_ie_channel_identification_any(frame + size);
-
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /*************** CALL PROCEEDING
@@ -286,11 +288,13 @@ int q931_send_call_proceeding(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260];
 
-	size += q931_prepare_header(call, frame, Q931_MT_CALL_PROCEEDING);
+	assert(call);
+	assert(dlc);
 
-	return q931_send_frame(dlc, frame, size);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 int q931_send_call_proceeding_channel(
@@ -299,77 +303,89 @@ int q931_send_call_proceeding_channel(
 	struct q931_channel *channel)
 {
 	int size = 0;
-	__u8 frame[260];
 
-	size += q931_prepare_header(call, frame, Q931_MT_CALL_PROCEEDING);
+	assert(call);
+	assert(dlc);
 
-	if (call->interface->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->interface->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
+
+	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
+	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
 		if (channel->id == 0) {
 			size += q931_append_ie_channel_identification_bra(
-				frame + size,
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
 				Q931_IE_CI_ICS_BRA_B1);
 		} else {
 			size += q931_append_ie_channel_identification_bra(
-				frame + size,
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
 				Q931_IE_CI_ICS_BRA_B2);
 		}
 	} else {
-		size += q931_append_ie_channel_identification_pra(frame + size,
+		size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
+				Q931_IE_CI_ICS_PRA_INDICATED,
+				Q931_IE_CI_PE_EXCLUSIVE,
 				channel->id);
 	}
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/*************** CONNECT
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Channel Identification	both	O
+ * Facility			both	O
+ * Progress Indicator		both	O
+ * Display			n->u	O
+ * Date/Time			n->u	O
+ * Low Layer Compatibility	both	O
+ * User-User			both	O
+ *
+ */
 
 int q931_send_connect(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_CONNECT);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Channel Identification	both	O
-	 * Facility			both	O
-	 * Progress Indicator		both	O
-	 * Display			n->u	O
-	 * Date/Time			n->u	O
-	 * Low Layer Compatibility	both	O
-	 * User-User			both	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT);
 
-// size += q931_append_ie_channel_identification_any(frame + size);
-
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/*************** CONNECT ACKNOWLEDGE
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Channel Identification	n->u	O
+ * Display			n->u	O
+ *
+ */
 
 int q931_send_connect_acknowledge(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_CONNECT_ACKNOWLEDGE);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Channel Identification	n->u	O
-	 * Display			n->u	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT_ACKNOWLEDGE);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
-/******************** DISCONNECT
+/**************** DISCONNECT
  *
  * IEs:
  *
@@ -388,17 +404,19 @@ int q931_send_disconnect(
 	enum q931_ie_cause_value cause)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_DISCONNECT);
+	assert(call);
+	assert(dlc);
 
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ? // FIXME
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_DISCONNECT);
+
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
 			cause);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 int q931_send_disconnect_pi(
@@ -407,23 +425,25 @@ int q931_send_disconnect_pi(
 	enum q931_ie_cause_value cause)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_DISCONNECT);
+	assert(call);
+	assert(dlc);
 
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ? // FIXME
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_DISCONNECT);
+
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
 			cause);
 
-	size += q931_append_ie_progress_indicator(frame + size,
-			call->interface->role == LAPD_ROLE_TE ? // FIXME
+	size += q931_append_ie_progress_indicator(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_PI_LOCATION_PRIVATE_NET_SERVING_LOCAL_USER,
 			Q931_IE_PI_PD_IN_BAND_INFORMATION_OR_APPROPRIATE_PATTERN_AVAILABLE);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /****************** INFORMATION
@@ -444,11 +464,13 @@ int q931_send_info(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_INFORMATION);
+	assert(call);
+	assert(dlc);
 
-	return q931_send_frame(dlc, frame, size);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_INFORMATION);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /******************* NOTIFY
@@ -466,37 +488,43 @@ int q931_send_notify(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_INFORMATION);
+	assert(call);
+	assert(dlc);
+
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_INFORMATION);
 
 	// FIXME add Notification indicator
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/*************** PROGRESS
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Cause			n->u	O
+ * Progress Indicator		both	M
+ * Display			n->u	O
+ * User-User			both	O
+ *
+ */
 
 int q931_send_progress(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_PROGRESS);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Cause			n->u	O
-	 * Progress Indicator		both	M
-	 * Display			n->u	O
-	 * User-User			both	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_PROGRESS);
 
 	// FIXME add Progress indicator
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /**************** RELEASE
@@ -516,11 +544,13 @@ int q931_send_release(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RELEASE);
+	assert(call);
+	assert(dlc);
 
-	return q931_send_frame(dlc, frame, size);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 int q931_send_release_cause(
@@ -529,16 +559,18 @@ int q931_send_release_cause(
 	enum q931_ie_cause_value cause_value)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RELEASE);
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ?
+	assert(call);
+	assert(dlc);
+
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE);
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ?
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
 			cause_value);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /**************** RELEASE COMPLETE
@@ -558,11 +590,13 @@ int q931_send_release_complete(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RELEASE_COMPLETE);
+	assert(call);
+	assert(dlc);
 
-	return q931_send_frame(dlc, frame, size);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE_COMPLETE);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 int q931_send_release_complete_cause(
@@ -571,61 +605,92 @@ int q931_send_release_complete_cause(
 	enum q931_ie_cause_value cause_value)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RELEASE_COMPLETE);
+	assert(call);
+	assert(dlc);
 
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ?
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE_COMPLETE);
+
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ?
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
 			cause_value);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/***************** RESUME
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Call Identity		u->n	O
+ *
+ */
 
 int q931_send_resume(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RESUME);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Call Identity		u->n	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/***************** RESUME ACKNOWLEDGE
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Channel Identification	n->u	M
+ * Display			n->u	O
+ *
+ */
 
 int q931_send_resume_acknowledge(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RESUME_ACKNOWLEDGE);
+	assert(call);
+	assert(dlc);
+	assert(call->channel);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Channel Identification	n->u	M
-	 * Display			n->u	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_ACKNOWLEDGE);
 
-	// Add channel identification FIXME
+	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
+	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
+		if (call->channel->id == 0) {
+			size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				Q931_IE_CI_ICS_BRA_B1);
+		} else {
+			size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				Q931_IE_CI_ICS_BRA_B2);
+		}
+	} else {
+		size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
+				Q931_IE_CI_ICS_PRA_INDICATED,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				call->channel->id);
+	}
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
-/* IEs:
+/******************* RESUME REJECT
+ *
+ * IEs:
  *
  * Information Element		Dir.	Type
  * Cause			n->u	M
@@ -639,16 +704,18 @@ int q931_send_resume_reject(
 	enum q931_ie_cause_value cause)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_RESUME_REJECT);
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ? // FIXME
+	assert(call);
+	assert(dlc);
+
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_REJECT);
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
 			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /****************** SETUP
@@ -681,26 +748,27 @@ int q931_send_setup(
 	enum q931_setup_mode setup_mode)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
+	assert(call);
+	assert(dlc);
 	assert(call->called_number);
 
-	size += q931_prepare_header(call, frame, Q931_MT_SETUP);
-	size += q931_append_ie_bearer_capability_alaw(frame + size);
-	size += q931_append_ie_called_party_number(frame + size, call->called_number);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP);
+	size += q931_append_ie_bearer_capability_alaw(call->intf->sendbuf + size);
+	size += q931_append_ie_called_party_number(call->intf->sendbuf + size, call->called_number);
 
 	if (strlen(call->calling_number))
-		size += q931_append_ie_calling_party_number(frame + size, call->calling_number);
+		size += q931_append_ie_calling_party_number(call->intf->sendbuf + size, call->calling_number);
 
-	size += q931_append_ie_high_layer_compatibility_telephony(frame + size);
+	size += q931_append_ie_high_layer_compatibility_telephony(call->intf->sendbuf + size);
 
 	if (call->sending_complete)
-		size += q931_append_ie_sending_complete(frame + size);
+		size += q931_append_ie_sending_complete(call->intf->sendbuf + size);
 
 	if (setup_mode == Q931_SETUP_POINT_TO_POINT)
-		return q931_send_frame(dlc, frame, size);
+		return q931_send_frame(dlc, call->intf->sendbuf, size);
 	else if (setup_mode == Q931_SETUP_BROADCAST)
-		return q931_send_uframe(&call->interface->bc_dlc, frame, size);
+		return q931_send_uframe(&call->intf->bc_dlc, call->intf->sendbuf, size);
 	else
 		assert(0);
 }
@@ -712,42 +780,62 @@ int q931_send_setup_channel(
 	struct q931_channel *channel)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
+	assert(call);
+	assert(dlc);
 	assert(call->called_number);
 
-	size += q931_prepare_header(call, frame, Q931_MT_SETUP);
-	size += q931_append_ie_bearer_capability_alaw(frame + size);
-	size += q931_append_ie_called_party_number(frame + size, call->called_number);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP);
+	size += q931_append_ie_bearer_capability_alaw(call->intf->sendbuf + size);
+	size += q931_append_ie_called_party_number(call->intf->sendbuf + size, call->called_number);
 
 	if (strlen(call->calling_number))
-		size += q931_append_ie_calling_party_number(frame + size, call->calling_number);
+		size += q931_append_ie_calling_party_number(call->intf->sendbuf + size, call->calling_number);
 
-	if (call->interface->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->interface->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
-		if (channel->id == 0) {
+	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
+	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
+		if (channel) {
+			if (channel->id == 0) {
+				size += q931_append_ie_channel_identification_bra(
+						call->intf->sendbuf + size,
+						Q931_IE_CI_PE_EXCLUSIVE,
+						Q931_IE_CI_ICS_BRA_B1);
+			} else {
+				size += q931_append_ie_channel_identification_bra(
+						call->intf->sendbuf + size,
+						Q931_IE_CI_PE_EXCLUSIVE,
+						Q931_IE_CI_ICS_BRA_B2);
+			}
+		} else {	
 			size += q931_append_ie_channel_identification_bra(
-				frame + size,
-				Q931_IE_CI_ICS_BRA_B1);
-		} else {
-			size += q931_append_ie_channel_identification_bra(
-				frame + size,
-				Q931_IE_CI_ICS_BRA_B2);
+					call->intf->sendbuf + size,
+					Q931_IE_CI_ICS_BRA_NO_CHANNEL,
+					Q931_IE_CI_PE_PREFERRED);
 		}
 	} else {
-		size += q931_append_ie_channel_identification_pra(frame + size,
-				channel->id);
+		if (channel) {
+			size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
+					Q931_IE_CI_ICS_PRA_INDICATED,
+					Q931_IE_CI_PE_EXCLUSIVE,
+					channel->id);
+		} else {
+			size += q931_append_ie_channel_identification_pra(
+					call->intf->sendbuf + size,
+					Q931_IE_CI_ICS_PRA_NO_CHANNEL,
+					Q931_IE_CI_PE_PREFERRED,
+					0);
+		}
 	}
 
-	size += q931_append_ie_high_layer_compatibility_telephony(frame + size);
+	size += q931_append_ie_high_layer_compatibility_telephony(call->intf->sendbuf + size);
 
 	if (call->sending_complete)
-		size += q931_append_ie_sending_complete(frame + size);
+		size += q931_append_ie_sending_complete(call->intf->sendbuf + size);
 
 	if (setup_mode == Q931_SETUP_POINT_TO_POINT)
-		return q931_send_frame(dlc, frame, size);
+		return q931_send_frame(dlc, call->intf->sendbuf, size);
 	else if (setup_mode == Q931_SETUP_BROADCAST)
-		return q931_send_uframe(&call->interface->bc_dlc, frame, size);
+		return q931_send_uframe(&call->intf->bc_dlc, call->intf->sendbuf, size);
 	else
 		assert(0);
 }
@@ -768,11 +856,13 @@ int q931_send_setup_acknowledge(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_SETUP_ACKNOWLEDGE);
+	assert(call);
+	assert(dlc);
 
-	return q931_send_frame(dlc, frame, size);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP_ACKNOWLEDGE);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 int q931_send_setup_acknowledge_channel(
@@ -781,27 +871,34 @@ int q931_send_setup_acknowledge_channel(
 	struct q931_channel *channel)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_SETUP_ACKNOWLEDGE);
+	assert(call);
+	assert(dlc);
+	assert(channel);
 
-	if (call->interface->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->interface->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP_ACKNOWLEDGE);
+
+	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
+	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
 		if (channel->id == 0) {
 			size += q931_append_ie_channel_identification_bra(
-				frame + size,
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
 				Q931_IE_CI_ICS_BRA_B1);
 		} else {
 			size += q931_append_ie_channel_identification_bra(
-				frame + size,
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
 				Q931_IE_CI_ICS_BRA_B2);
 		}
 	} else {
-		size += q931_append_ie_channel_identification_pra(frame + size,
+		size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
+				Q931_IE_CI_ICS_PRA_INDICATED,
+				Q931_IE_CI_PE_EXCLUSIVE,
 				channel->id);
 	}
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /***************** STATUS
@@ -818,80 +915,92 @@ int q931_send_setup_acknowledge_channel(
 int q931_send_status(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
+	enum q931_call_state state,
 	enum q931_ie_cause_value cause)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_STATUS);
+	assert(call);
+	assert(dlc);
 
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ? // FIXME
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS);
+
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
 			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 
-	size += q931_append_ie_call_state(frame + size,
-		q931_state_to_ie_state(call->state));
+	size += q931_append_ie_call_state(call->intf->sendbuf + size,
+		q931_state_to_ie_state(state));
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/*************** STATUS ENQUIRY
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Display			n->u	O
+ *
+ */
 
 int q931_send_status_enquiry(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_STATUS_ENQUIRY);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Display			n->u	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS_ENQUIRY);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/*********** SUSPEND
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Call Identity		u->n	O
+ *
+ */
 
 int q931_send_suspend(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_SUSPEND);
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Call Identity		u->n	O
-	 *
-	 */
-
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
+
+/************** SUSPEND ACKNOWLEDGE
+ *
+ * IEs:
+ *
+ * Information Element		Dir.	Type
+ * Display			n->u	O
+ *
+ */
 
 int q931_send_suspend_acknowledge(
 	struct q931_call *call,
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_SUSPEND_ACKNOWLEDGE);
+	assert(call);
+	assert(dlc);
 
-	/* IEs:
-	 *
-	 * Information Element		Dir.	Type
-	 * Display			n->u	O
-	 *
-	 */
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_ACKNOWLEDGE);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
 /**************** SUSPEND REJECT
@@ -910,14 +1019,16 @@ int q931_send_suspend_reject(
 	enum q931_ie_cause_value cause)
 {
 	int size = 0;
-	__u8 frame[260]; // FIXME
 
-	size += q931_prepare_header(call, frame, Q931_MT_SUSPEND_REJECT);
-	size += q931_append_ie_cause(frame + size,
-			call->interface->role == LAPD_ROLE_TE ? // FIXME
+	assert(call);
+	assert(dlc);
+
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_REJECT);
+	size += q931_append_ie_cause(call->intf->sendbuf + size,
+			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
 			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 
-	return q931_send_frame(dlc, frame, size);
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }

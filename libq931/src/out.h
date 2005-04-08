@@ -95,6 +95,7 @@ int q931_send_setup_acknowledge_channel(
 int q931_send_status(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
+	enum q931_call_state status,
 	enum q931_ie_cause_value cause);
 
 int q931_send_status_enquiry(

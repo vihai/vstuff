@@ -1,5 +1,7 @@
 #include <string.h>
 
+#define Q931_PRIVATE
+
 #include "ie_hlc.h"
 
 int q931_append_ie_high_layer_compatibility_telephony(void *buf)

@@ -6,14 +6,15 @@
 #include <endian.h>
 
 #include "util.h"
+#include "msgtype.h"
 
 struct q931_ie_info;
 
 struct q931_ie
 {
- const struct q931_ie_info *info;
- int size;
- void *data;
+	const struct q931_ie_info *info;
+	int size;
+	void *data;
 };
 
 struct q931_ie_onwire
@@ -93,6 +94,7 @@ enum q931_ie_id
 #define Q931_NT_UNKNOWN	0
 #define Q931_NT_ETSI	(1 << 0)
 
+struct q931_call;
 struct q931_ie_info
 {
 	int max_size;
@@ -100,6 +102,28 @@ struct q931_ie_info
 	int network_type;
 	enum q931_ie_id id;
 	const char *name;
+	int (*validity_check)(struct q931_call *call, struct q931_ie *ie);
+};
+
+enum q931_ie_direction
+{
+	Q931_IE_DIR_N_TO_U,
+	Q931_IE_DIR_U_TO_N,
+	Q931_IE_DIR_BOTH
+};
+
+enum q931_ie_presence
+{
+	Q931_IE_OPTIONAL,
+	Q931_IE_MANDATORY,
+};
+
+struct q931_ie_info_per_message_type
+{
+	enum q931_message_type message_type;
+	enum q931_ie_id ie;
+	enum q931_ie_direction direction;
+	enum q931_ie_presence presence;
 };
 
 static inline int q931_is_so_ie(__u8 ie_id)
@@ -128,6 +152,13 @@ static inline int q931_get_so_ie_id(__u8 ie_id)
 static inline int q931_get_so_ie_type2_value(__u8 ie_id)
 {
  return ie_id & Q931_SINGLE_OCTET_VALUE_MASK;
+}
+
+#define Q931_IE_COMPREHENSION_REQUIRED_MASK 0xF0
+
+static inline int q931_ie_comprehension_required(__u8 ie_id)
+{
+ return ie_id & Q931_IE_COMPREHENSION_REQUIRED_MASK;
 }
 
 void q931_ie_infos_init();

@@ -1,6 +1,8 @@
 #include <string.h>
 #include <sys/time.h>
 
+#define Q931_PRIVATE
+
 #include "list.h"
 #include "q931.h"
 #include "timer.h"

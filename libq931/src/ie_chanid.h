@@ -137,9 +137,13 @@ struct q931_ie_channel_identification_onwire_3d
 } __attribute__ ((__packed__));
 #endif
 
-int q931_append_ie_channel_identification_any_bra(void *buf);
-int q931_append_ie_channel_identification_any_pra(void *buf);
+int q931_ie_channel_identification_check(
+	struct q931_call *call,
+	struct q931_ie *ie);
 int q931_append_ie_channel_identification_bra(void *buf,
+	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
 	enum q931_ie_channel_identification_info_channel_selection_bra chan_id);
 int q931_append_ie_channel_identification_pra(void *buf,
+	enum q931_ie_channel_identification_info_channel_selection_pra selection,
+	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
 	int chan_id);

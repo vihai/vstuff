@@ -25,10 +25,6 @@
 #include "intf.h"
 #include "proto.h"
 
-//			q931_send_release_cause(call, call->ces[i],
-//				Q931_IE_C_CV_NON_SELECTED_USER_CLEARING);
-
-
 void q931_default_report(int level, const char *format, ...)
 {
 	va_list ap;
@@ -67,7 +63,7 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 	dlc->status = DLC_CONNECTED;
 
 	struct q931_call *call, *callt;
-	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -93,7 +89,7 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 	dlc->status = DLC_CONNECTED;
 
 	struct q931_call *call, *callt;
-	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -119,7 +115,7 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 	dlc->status = DLC_DISCONNECTED;
 
 	struct q931_call *call, *callt;
-	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -145,7 +141,7 @@ void q931_dl_release_confirmation(struct q931_dlc *dlc)
 	dlc->status = DLC_DISCONNECTED;
 
 	struct q931_call *call, *callt;
-	list_for_each_entry_safe(call, callt, &dlc->interface->calls, calls_node) {
+	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -164,6 +160,46 @@ void q931_dl_release_confirmation(struct q931_dlc *dlc)
 
 		q931_call_dl_release_confirm(call);
 	}
+}
+
+int ie_has_content_errors(struct q931_call *call, struct q931_ie *ie)
+{
+	assert(call);
+	assert(ie);
+
+	if (!ie->info) {
+		report_call(call, LOG_DEBUG,
+			"Ignoring unrecognized IE"
+			" (length %u)\n",
+			ie->size);
+
+		// What should we do here?
+
+		return FALSE;
+	}
+
+	if (ie->info->max_size >= 0 &&
+	    ie->size > ie->info->max_size) {
+
+		report_call(call, LOG_DEBUG,
+			"IE bigger than maximum "
+			" specified size (%d > %d)\n",
+			ie->size,
+			ie->info->max_size);
+
+		if (0) { // Access IE??! 5.8.7.2
+		} else if (0) { // Call identity???
+		} else {
+		}
+
+	}
+
+	if (ie->info->validity_check &&
+	     !ie->info->validity_check(call, ie)) {
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 
@@ -202,12 +238,46 @@ void q931_receive(struct q931_dlc *dlc)
 		return;
 	}
 
+	if (len < sizeof(struct q931_header)) {
+		report_dlc(dlc, LOG_DEBUG,
+			"Message to small (%d bytes), ignoring\n",
+			len);
+
+		return;
+	}
+
 	struct q931_header *hdr = (struct q931_header *)frame;
 
-	if (hdr->call_reference_size>3) {
-		// TODO error
-		report_dlc(dlc, LOG_ERR,
-			"Call reference length > 3 ????\n");
+	if (hdr->protocol_discriminator != Q931_PROTOCOL_DISCRIMINATOR_Q931) {
+		report_dlc(dlc, LOG_DEBUG,
+			"Protocol discriminator %u not supported,"
+			" ignoring message\n",
+			hdr->protocol_discriminator);
+
+		return;
+	}
+
+	if (hdr->spare1 != 0) {
+		report_dlc(dlc, LOG_DEBUG,
+			"Call reference size invalid, ignoring frame\n");
+
+		return;
+	}
+
+	if (hdr->call_reference_size > 4) {
+		report_dlc(dlc, LOG_DEBUG,
+			"Call reference length of %u bytes is too big"
+			" and not supported (max 4), ignoring frame\n",
+			hdr->call_reference_size);
+
+		return;
+	}
+
+	if (hdr->call_reference_size == 1 &&
+	    hdr->call_reference[9] == 0) {
+		report_dlc(dlc, LOG_DEBUG,
+			"The dummy call reference is not supported,"
+			" ignoring frame\n");
 
 		return;
 	}
@@ -231,9 +301,7 @@ void q931_receive(struct q931_dlc *dlc)
 		callref |= val << ((hdr->call_reference_size-i-1) * 8);
 	}
 
-	report_dlc(dlc, LOG_INFO,
-		"  protocol descriptor = %u\n",
-		hdr->protocol_discriminator);
+
 	report_dlc(dlc, LOG_INFO,
 		"  call reference = %u %lu %c\n",
 		hdr->call_reference_size,
@@ -249,7 +317,7 @@ void q931_receive(struct q931_dlc *dlc)
 
 	struct q931_call *call =
 		q931_find_call_by_reference(
-			dlc->interface,
+			dlc->intf,
 			callref_direction ==
 				Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE
 				? Q931_CALL_DIRECTION_INBOUND
@@ -258,7 +326,7 @@ void q931_receive(struct q931_dlc *dlc)
 
 	if (!call) {
 		call = q931_alloc_call_in(
-			dlc->interface, dlc,
+			dlc->intf, dlc,
 			callref,
 			msg.msg_flags & MSG_OOB);
 		if (!call) {
@@ -268,17 +336,54 @@ void q931_receive(struct q931_dlc *dlc)
 			return;
 		}
 
-		// Shortcut for "Other Messages"
-		if (message_type != Q931_MT_SETUP &&
-		    message_type != Q931_MT_RESUME &&
-		    message_type != Q931_MT_RELEASE &&
-		    message_type != Q931_MT_STATUS &&
-		    message_type != Q931_MT_RELEASE_COMPLETE) {
-			q931_send_release(call, call->dlc);
-			q931_call_start_timer(call, T308);
-			call->state = U19_RELEASE_REQUEST;
+		switch (message_type) {
+		case Q931_MT_RELEASE:
+			report_call(call, LOG_DEBUG,
+				"Received a RELEASE for an unknown callref\n");
+
+			q931_send_release_complete_cause(call, call->dlc,
+				Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
 
 			return;
+		break;
+
+		case Q931_MT_RELEASE_COMPLETE:
+			report_call(call, LOG_DEBUG,
+				"Received a RELEASE COMPLETE for an unknown"
+				" callref, ignoring frame\n");
+
+			return;
+		break;
+
+		case Q931_MT_SETUP:
+		case Q931_MT_RESUME:
+			if (callref_direction ==
+			      Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE) {
+
+				report_call(call, LOG_DEBUG,
+					"Received a SETUP/RESUME for an unknown"
+					" outbound callref, ignoring frame\n");
+
+				return;
+			}
+		break;
+
+		case Q931_MT_STATUS:
+			// Pass it to the handler
+		break;
+
+		default:
+			q931_send_release_cause(call, call->dlc,
+				Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+			q931_call_start_timer(call, T308);
+
+			if (call->state == N0_NULL_STATE)
+				q931_call_set_state(call, U19_RELEASE_REQUEST);
+			else
+				q931_call_set_state(call, N19_RELEASE_REQUEST);
+
+			return;
+		break;
 		}
 	}
 
@@ -289,6 +394,9 @@ void q931_receive(struct q931_dlc *dlc)
 	int curpos= sizeof(struct q931_header) + hdr->call_reference_size + 1;
 	int codeset = 0;
 	int codeset_locked = FALSE;
+	int invalid_mandatory_ie_present = FALSE;
+	int invalid_optional_ie_present = FALSE;
+	int unrecognized_optional_ie_present = FALSE;
 
 	i=0;
 	while(curpos < len) {
@@ -353,33 +461,45 @@ void q931_receive(struct q931_dlc *dlc)
 			curpos++;
 
 			if (codeset == 0) {
+				// Check out-of-sequence
+				// Check duplicated IEs
+				// Check missing mandatory IE
+
 				const struct q931_ie_info *ie_info =
 					q931_get_ie_info(first_octet);
 
-				if (ie_info) {
-					report_dlc(dlc, LOG_INFO,
-						"VS IE %d ===> %u (%s) -- length %u\n", i,
-						first_octet,
-						ie_info->name,
-						ie_len);
-
-				} else {
-					report_dlc(dlc, LOG_INFO,
-						"VS IE %d ===> %u (unknown) -- length %u\n", i,
-						first_octet,
-						ie_len);
-				}
+				if (!ie_info/*  && optional  && q931_ie_comprehension_required(first_octet) */)
+					unrecognized_optional_ie_present = TRUE;
 
 				ies[ies_cnt].info = ie_info;
 				ies[ies_cnt].size = ie_len;
 				ies[ies_cnt].data = frame + curpos;
-				ies_cnt++;
+
+				if (ie_has_content_errors(call, &ies[ies_cnt])) {
+					ies_cnt++;
+
+					report_dlc(dlc, LOG_DEBUG,
+						"VS IE %d ===> %u (%s) -- length %u\n", i,
+						first_octet,
+						ie_info->name,
+						ie_len);
+				} else {
+					// If mandatory or comprension required
+					if (0) {
+						invalid_mandatory_ie_present = TRUE;
+						call->release_diagnostics[0] = first_octet; // FIXME
+					} else {
+						invalid_optional_ie_present = TRUE;
+						call->release_diagnostics[0] = first_octet;
+					}
+				}
 			}
 
 			curpos += ie_len;
 
 			if(curpos > len) {
 				report_dlc(dlc, LOG_ERR, "MALFORMED FRAME\n");
+				// FIXME
 				break;
 			}
 		}
@@ -389,10 +509,92 @@ void q931_receive(struct q931_dlc *dlc)
 		i++;
 	}
 
+	if (invalid_mandatory_ie_present) {
+		switch(message_type) {
+		case Q931_MT_SETUP:
+		case Q931_MT_RELEASE:
+			q931_send_release_complete_cause(call, call->dlc,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
+
+			return;
+		break;
+
+		case Q931_MT_DISCONNECT:
+			call->release_with_cause =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+		break;
+
+		case Q931_MT_RELEASE_COMPLETE:
+			// Ignore content errors in RELEASE_COMPLETE
+		break;
+
+		default:
+			q931_send_status(call, call->dlc,
+				call->state,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS
+				/* ADD diagnostics here FIXME */);
+
+			return;
+		break;
+		}
+	} else if (unrecognized_optional_ie_present) {
+		switch(message_type) {
+		case Q931_MT_DISCONNECT:
+			call->release_with_cause =
+				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
+		break;
+
+		case Q931_MT_RELEASE:
+			q931_send_release_complete_cause(call, call->dlc,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
+
+			return;
+		break;
+
+		case Q931_MT_RELEASE_COMPLETE:
+			// Ignore content errors in RELEASE_COMPLETE
+		break;
+
+		default:
+			q931_send_status(call, call->dlc,
+				call->state,
+				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT
+				/* ADD diagnostics here FIXME */);
+
+			return;
+		break;
+		}
+	} else if (invalid_optional_ie_present) {
+		switch(message_type) {
+		case Q931_MT_DISCONNECT:
+			call->release_with_cause =
+				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
+		break;
+
+		case Q931_MT_RELEASE:
+			q931_send_release_complete_cause(call, call->dlc,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
+
+			return;
+		break;
+
+		case Q931_MT_RELEASE_COMPLETE:
+			// Ignore content errors in RELEASE_COMPLETE
+		break;
+
+		default:
+			q931_send_status(call, call->dlc,
+				call->state,
+				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT
+				/* ADD diagnostics here FIXME */);
+
+			return;
+		break;
+		}
+	}
+
 	struct q931_ces *ces, *tces;
 	list_for_each_entry_safe(ces, tces, &call->ces, node) {
-		report_dlc(dlc, LOG_INFO, "=====================> %p == %p\n", dlc, ces->dlc);
-
 		if (ces->dlc == dlc) {
 			// selected_ces may change after "dispatch_message"
 			if (ces == call->selected_ces) {

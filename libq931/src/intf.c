@@ -10,8 +10,9 @@
 
 #include <lapd.h>
 
-#include "list.h"
+#define Q931_PRIVATE
 
+#include "list.h"
 #include "q931.h"
 #include "logging.h"
 #include "msgtype.h"

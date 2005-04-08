@@ -2,7 +2,7 @@
 #define _DLC_H
 
 #define report_dlc(dlc, lvl, format, arg...)				\
-	(dlc)->interface->lib->report((lvl), format, ## arg)
+	(dlc)->intf->lib->report((lvl), format, ## arg)
 
 enum q931_dlc_status
 {
@@ -19,18 +19,18 @@ struct q931_dlc
 
 	int socket;
 	int poll_id;
-	struct q931_interface *interface;
+	struct q931_interface *intf;
 	enum q931_dlc_status status;
 	int tei;
 };
 
 static inline void q931_init_dlc(
 	struct q931_dlc *dlc,
-	struct q931_interface *interface,
+	struct q931_interface *intf,
 	int socket)
 {
 	dlc->socket = socket;
-	dlc->interface = interface;
+	dlc->intf = intf;
 }
 
 #endif

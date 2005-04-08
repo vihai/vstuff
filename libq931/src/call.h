@@ -9,14 +9,14 @@
 #include "ie.h"
 
 #define report_call(call, lvl, format, arg...)				\
-	(call)->interface->lib->report((lvl), format, ## arg)
+	(call)->intf->lib->report((lvl), format, ## arg)
 
 #define q931_call_start_timer(call, timer)		\
 	do {						\
 		q931_start_timer_delta(			\
-			(call)->interface->lib,		\
+			(call)->intf->lib,		\
 			&(call)->timer,			\
-			(call)->interface->timer);	\
+			(call)->intf->timer);	\
 		report_call(call, LOG_DEBUG,		\
 			"%s:%d Timer %s started\n",	\
 			__FILE__,__LINE__,		\
@@ -99,7 +99,7 @@ struct q931_call
 {
 	struct list_head calls_node;
 
-	struct q931_interface *interface;
+	struct q931_interface *intf;
 
 	// TODO: Use a HASH for improved scalability
 	struct list_head ces;
@@ -120,6 +120,8 @@ struct q931_call
 	int T303_fired;
 	int T308_fired;
 	enum q931_ie_cause_value disconnect_cause;
+	enum q931_ie_cause_value release_with_cause;
+	__u8 release_diagnostics[10]; // FIXME???
 
 	struct q931_channel *channel; // Maybe we should have a channel mask, instead
 
@@ -170,15 +172,19 @@ struct q931_call
 };
 
 struct q931_call *q931_alloc_call_in(
-	struct q931_interface *interface,
+	struct q931_interface *intf,
 	struct q931_dlc *dlc,
 	int call_reference,
 	int broadcast_setup);
 
 struct q931_call *q931_alloc_call_out(
-	struct q931_interface *interface);
+	struct q931_interface *intf);
 
 void q931_free_call(struct q931_call *call);
+
+void q931_call_set_state(
+	struct q931_call *call,
+	enum q931_call_state state);
 
 void q931_call_dl_establish_indication(struct q931_call *call);
 void q931_call_dl_establish_confirm(struct q931_call *call);
@@ -227,7 +233,7 @@ void q931_dispatch_message(
 	int ies_cnt);
 
 struct q931_call *q931_find_call_by_reference(
-	struct q931_interface *interface,
+	struct q931_interface *intf,
 	enum q931_call_direction direction,
 	q931_callref call_reference);
 

@@ -4,10 +4,13 @@
 #include <netinet/in.h>
 #include <lapd.h>
 
+#include "q931.h"
 #include "list.h"
 #include "channel.h"
+#include "timer.h"
+#include "dlc.h"
 
-#define report_if(intf, lvl, format, arg...)				\
+#define report_if(intf, lvl, format, arg...)		\
 	(intf)->lib->report((lvl), format, ## arg)
 
 enum q931_interface_type
@@ -42,6 +45,8 @@ struct q931_interface
 
 	struct q931_channel channels[32];
 	int n_channels;
+
+	__u8 sendbuf[260]; // FIXME (size should be N202-dependent)
 
 	longtime_t T301;
 	longtime_t T302;
@@ -94,11 +99,11 @@ struct q931_interface
 };
 
 inline static void q931_intf_add_call(
-	struct q931_interface *interface,
+	struct q931_interface *intf,
 	struct q931_call *call)
 {
-	list_add_tail(&call->calls_node, &interface->calls);
-	interface->ncalls++;
+	list_add_tail(&call->calls_node, &intf->calls);
+	intf->ncalls++;
 }
 
 inline static void q931_intf_del_call(
@@ -106,14 +111,14 @@ inline static void q931_intf_del_call(
 {
 	list_del(&call->calls_node);
 	
-	call->interface->ncalls--;
+	call->intf->ncalls--;
 }
 
 struct q931_interface *q931_open_interface(
 	struct q931_lib *lib,
 	const char *name);
-void q931_close_interface(struct q931_interface *interface);
+void q931_close_interface(struct q931_interface *intf);
 
-q931_callref q931_alloc_call_reference(struct q931_interface *interface);
+q931_callref q931_alloc_call_reference(struct q931_interface *intf);
 
 #endif

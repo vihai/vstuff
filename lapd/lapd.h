@@ -10,11 +10,11 @@
  *
  */
 
-#include <linux/types.h>
-#include <linux/socket.h>
-
 #ifndef _LAPD_H
 #define _LAPD_H
+
+#include <linux/types.h>
+#include <linux/socket.h>
 
 #ifndef ARPHRD_LAPD
 #define ARPHRD_LAPD 1000

@@ -4,7 +4,7 @@
 #include "timer.h"
 
 #define report_ces(ces, lvl, format, arg...)	\
-	(ces)->call->interface->lib->report((lvl), format, ## arg)
+	(ces)->call->intf->lib->report((lvl), format, ## arg)
 
 enum q931_ces_state
 {
