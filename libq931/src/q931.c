@@ -274,7 +274,7 @@ void q931_receive(struct q931_dlc *dlc)
 	}
 
 	if (hdr->call_reference_size == 1 &&
-	    hdr->call_reference[9] == 0) {
+	    hdr->call_reference[0] == 0) {
 		report_dlc(dlc, LOG_DEBUG,
 			"The dummy call reference is not supported,"
 			" ignoring frame\n");
@@ -396,7 +396,7 @@ void q931_receive(struct q931_dlc *dlc)
 	int codeset_locked = FALSE;
 	int invalid_mandatory_ie_present = FALSE;
 	int invalid_optional_ie_present = FALSE;
-	int unrecognized_optional_ie_present = FALSE;
+	int unrecognized_ie_present = FALSE;
 
 	i=0;
 	while(curpos < len) {
@@ -468,8 +468,30 @@ void q931_receive(struct q931_dlc *dlc)
 				const struct q931_ie_info *ie_info =
 					q931_get_ie_info(first_octet);
 
-				if (!ie_info/*  && optional  && q931_ie_comprehension_required(first_octet) */)
-					unrecognized_optional_ie_present = TRUE;
+				const struct q931_ie_info_per_mt *ie_info2 =
+					q931_get_ie_info_per_mt(message_type, first_octet);
+
+				if (!ie_info) {
+					if (q931_ie_comprehension_required(first_octet)) {
+						unrecognized_ie_present = TRUE;
+
+						report_call(call, LOG_DEBUG,
+							"Unrecognized IE %d in message"
+							" for which comprehension is required\n",
+							first_octet);
+					}
+
+					goto skip_this_ie;
+				}
+
+				if (!ie_info2) {
+					report_call(call, LOG_DEBUG,
+						"Unexpected IE %d in message type %s\n",
+						first_octet,
+						q931_message_type_to_text(message_type));
+
+					goto skip_this_ie;
+				}
 
 				ies[ies_cnt].info = ie_info;
 				ies[ies_cnt].size = ie_len;
@@ -495,6 +517,8 @@ void q931_receive(struct q931_dlc *dlc)
 				}
 			}
 
+skip_this_ie:
+
 			curpos += ie_len;
 
 			if(curpos > len) {
@@ -513,7 +537,7 @@ void q931_receive(struct q931_dlc *dlc)
 		switch(message_type) {
 		case Q931_MT_SETUP:
 		case Q931_MT_RELEASE:
-			q931_send_release_complete_cause(call, call->dlc,
+			q931_send_release_complete_cause(call, dlc,
 				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
 
 			return;
@@ -529,7 +553,7 @@ void q931_receive(struct q931_dlc *dlc)
 		break;
 
 		default:
-			q931_send_status(call, call->dlc,
+			q931_send_status(call, dlc,
 				call->state,
 				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS
 				/* ADD diagnostics here FIXME */);
@@ -537,7 +561,7 @@ void q931_receive(struct q931_dlc *dlc)
 			return;
 		break;
 		}
-	} else if (unrecognized_optional_ie_present) {
+	} else if (unrecognized_ie_present) {
 		switch(message_type) {
 		case Q931_MT_DISCONNECT:
 			call->release_with_cause =
@@ -545,7 +569,7 @@ void q931_receive(struct q931_dlc *dlc)
 		break;
 
 		case Q931_MT_RELEASE:
-			q931_send_release_complete_cause(call, call->dlc,
+			q931_send_release_complete_cause(call, dlc,
 				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
 
 			return;
@@ -556,7 +580,7 @@ void q931_receive(struct q931_dlc *dlc)
 		break;
 
 		default:
-			q931_send_status(call, call->dlc,
+			q931_send_status(call, dlc,
 				call->state,
 				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT
 				/* ADD diagnostics here FIXME */);
@@ -572,7 +596,7 @@ void q931_receive(struct q931_dlc *dlc)
 		break;
 
 		case Q931_MT_RELEASE:
-			q931_send_release_complete_cause(call, call->dlc,
+			q931_send_release_complete_cause(call, dlc,
 				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
 
 			return;
@@ -583,7 +607,7 @@ void q931_receive(struct q931_dlc *dlc)
 		break;
 
 		default:
-			q931_send_status(call, call->dlc,
+			q931_send_status(call, dlc,
 				call->state,
 				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT
 				/* ADD diagnostics here FIXME */);

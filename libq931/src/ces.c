@@ -131,6 +131,37 @@ void q931_ces_dl_release_confirm(struct q931_ces *ces)
 {
 }
 
+static __u8 q931_ces_state_to_ie_state(
+		enum q931_call_state state)
+{
+	switch (state) {
+	case I0_NULL_STATE:
+		return Q931_IE_CS_N0_NULL_STATE;
+	case I7_CALL_RECEIVED:
+		return Q931_IE_CS_N7_CALL_RECEIVED;
+	case I8_CONNECT_REQUEST:
+		return Q931_IE_CS_N8_CONNECT_REQUEST;
+	case I9_INCOMING_CALL_PROCEEDING:
+		return Q931_IE_CS_N9_INCOMING_CALL_PROCEEDING;
+	case I19_RELEASE_REQUEST:
+		return Q931_IE_CS_N19_RELEASE_REQUEST;
+	case I25_OVERLAP_RECEIVING:
+		return Q931_IE_CS_N25_OVERLAP_RECEIVING;
+	default:
+		assert(0);
+		return 0;
+	}
+}
+
+static inline void q931_ces_send_status(
+	struct q931_ces *ces,
+	enum q931_ie_cause_value cause)
+{
+	q931_send_status(ces->call, ces->dlc,
+		q931_ces_state_to_ie_state(ces->state),
+		cause);
+}
+
 #define q931_ces_unexpected_state(call)	\
 	_q931_ces_unexpected_state((call), __FUNCTION__)
 
@@ -138,14 +169,15 @@ static void _q931_ces_unexpected_state(
 	struct q931_ces *ces,
 	const char *event)
 {
-	q931_send_status(ces->call, ces->dlc,
-		Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+	q931_ces_send_status(ces,
+		Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 
 	report_ces(ces, LOG_ERR,
 		"Unexpected %s in state %s\n",
 		event,
 		q931_ces_state_to_text(ces->state));
 }
+
 
 void q931_ces_alerting_request(struct q931_ces *ces)
 {
@@ -254,8 +286,8 @@ void q931_ces_release_request(struct q931_ces *ces,
 	break;
 
 	case I19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces->dlc,
-			Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+		q931_ces_send_status(ces,
+			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
@@ -305,8 +337,8 @@ inline static void q931_ces_handle_alerting(
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces->dlc,
-			Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+		q931_ces_send_status(ces,
+			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
@@ -342,8 +374,8 @@ inline static void q931_ces_handle_call_proceeding(
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces->dlc,
-			Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+		q931_ces_send_status(ces,
+			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
@@ -378,8 +410,8 @@ inline static void q931_ces_handle_connect(
 
 	case I8_CONNECT_REQUEST:
 	case I19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces->dlc,
-			Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+		q931_ces_send_status(ces,
+			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
@@ -417,8 +449,8 @@ inline static void q931_ces_handle_progress(
 
 	case I8_CONNECT_REQUEST:
 	case I19_RELEASE_REQUEST:
-		q931_send_status(ces->call, ces->dlc,
-			Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+		q931_ces_send_status(ces,
+			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:

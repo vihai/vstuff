@@ -84,79 +84,6 @@ static int q931_prepare_header(const struct q931_call *call,
 	return size;
 }
 
-static __u8 q931_state_to_ie_state(
-		enum q931_call_state state)
-{
-	switch (state) {
-	case N0_NULL_STATE:
-		return Q931_IE_CS_N0_NULL_STATE;
-	case N1_CALL_INITIATED:
-		return Q931_IE_CS_N1_CALL_INITIATED;
-	case N2_OVERLAP_SENDING:
-		return Q931_IE_CS_N2_OVERLAP_SENDING;
-	case N3_OUTGOING_CALL_PROCEEDING:
-		return Q931_IE_CS_N3_OUTGOING_CALL_PROCEEDING;
-	case N4_CALL_DELIVERED:
-		return Q931_IE_CS_N4_CALL_DELIVERED;
-	case N6_CALL_PRESENT:
-		return Q931_IE_CS_N6_CALL_PRESENT;
-	case N7_CALL_RECEIVED:
-		return Q931_IE_CS_N7_CALL_RECEIVED;
-	case N8_CONNECT_REQUEST:
-		return Q931_IE_CS_N8_CONNECT_REQUEST;
-	case N9_INCOMING_CALL_PROCEEDING:
-		return Q931_IE_CS_N9_INCOMING_CALL_PROCEEDING;
-	case N10_ACTIVE:
-		return Q931_IE_CS_N10_ACTIVE;
-	case N11_DISCONNECT_REQUEST:
-		return Q931_IE_CS_N11_DISCONNECT_REQUEST;
-	case N12_DISCONNECT_INDICATION:
-		return Q931_IE_CS_N12_DISCONNECT_INDICATION;
-	case N15_SUSPEND_REQUEST:
-		return Q931_IE_CS_N15_SUSPEND_REQUEST;
-	case N17_RESUME_REQUEST:
-		return Q931_IE_CS_N17_RESUME_REQUEST;
-	case N19_RELEASE_REQUEST:
-		return Q931_IE_CS_N19_RELEASE_REQUEST;
-	case N22_CALL_ABORT:
-		return Q931_IE_CS_N22_CALL_ABORT;
-	case N25_OVERLAP_RECEIVING:
-		return Q931_IE_CS_N25_OVERLAP_RECEIVING;
-	case U0_NULL_STATE:
-		return Q931_IE_CS_U0_NULL_STATE;
-	case U1_CALL_INITIATED:
-		return Q931_IE_CS_U1_CALL_INITIATED;
-	case U2_OVERLAP_SENDING:
-		return Q931_IE_CS_U2_OVERLAP_SENDING;
-	case U3_OUTGOING_CALL_PROCEEDING:
-		return Q931_IE_CS_U3_OUTGOING_CALL_PROCEEDING;
-	case U4_CALL_DELIVERED:
-		return Q931_IE_CS_U4_CALL_DELIVERED;
-	case U6_CALL_PRESENT:
-		return Q931_IE_CS_U6_CALL_PRESENT;
-	case U7_CALL_RECEIVED:
-		return Q931_IE_CS_U7_CALL_RECEIVED;
-	case U8_CONNECT_REQUEST:
-		return Q931_IE_CS_U8_CONNECT_REQUEST;
-	case U9_INCOMING_CALL_PROCEEDING:
-		return Q931_IE_CS_U9_INCOMING_CALL_PROCEEDING;
-	case U10_ACTIVE:
-		return Q931_IE_CS_U10_ACTIVE;
-	case U11_DISCONNECT_REQUEST:
-		return Q931_IE_CS_U11_DISCONNECT_REQUEST;
-	case U12_DISCONNECT_INDICATION:
-		return Q931_IE_CS_U12_DISCONNECT_INDICATION;
-	case U15_SUSPEND_REQUEST:
-		return Q931_IE_CS_U15_SUSPEND_REQUEST;
-	case U17_RESUME_REQUEST:
-		return Q931_IE_CS_U17_RESUME_REQUEST;
-	case U19_RELEASE_REQUEST:
-		return Q931_IE_CS_U19_RELEASE_REQUEST;
-	case U25_OVERLAP_RECEIVING:
-		return Q931_IE_CS_U25_OVERLAP_RECEIVING;
-	}
-}
-
 static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 {
 	assert(dlc);
@@ -175,8 +102,6 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 
 	iov.iov_base = frame;
 	iov.iov_len = size;
-
-	report_dlc(dlc, LOG_DEBUG, "Send %d\n", dlc->socket);
 
 	if (dlc->status != DLC_CONNECTED) {
 /*		int oldflags;
@@ -267,6 +192,8 @@ int q931_send_alerting(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending ALERTING\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_ALERTING);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -292,6 +219,8 @@ int q931_send_call_proceeding(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending CALL_PROCEEDING\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -306,6 +235,8 @@ int q931_send_call_proceeding_channel(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending CALL_PROCEEDING\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
 
@@ -356,6 +287,8 @@ int q931_send_connect(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending CONNECT\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -379,6 +312,8 @@ int q931_send_connect_acknowledge(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending CONNECT_ACKNOWLEDGE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT_ACKNOWLEDGE);
 
@@ -408,6 +343,8 @@ int q931_send_disconnect(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending DISCONNECT\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_DISCONNECT);
 
 	size += q931_append_ie_cause(call->intf->sendbuf + size,
@@ -428,6 +365,8 @@ int q931_send_disconnect_pi(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending DISCONNECT\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_DISCONNECT);
 
@@ -468,6 +407,8 @@ int q931_send_info(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending INFORMATION\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_INFORMATION);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -491,6 +432,8 @@ int q931_send_notify(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending NOTIFY\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_INFORMATION);
 
@@ -520,6 +463,8 @@ int q931_send_progress(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending PROGRESS\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_PROGRESS);
 
 	// FIXME add Progress indicator
@@ -548,6 +493,8 @@ int q931_send_release(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending RELEASE\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -562,6 +509,8 @@ int q931_send_release_cause(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending RELEASE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE);
 	size += q931_append_ie_cause(call->intf->sendbuf + size,
@@ -594,6 +543,8 @@ int q931_send_release_complete(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending RELEASE_COMPLETE\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE_COMPLETE);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -608,6 +559,8 @@ int q931_send_release_complete_cause(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending RELEASE_COMPLETE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE_COMPLETE);
 
@@ -638,6 +591,8 @@ int q931_send_resume(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending RESUME\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -662,6 +617,8 @@ int q931_send_resume_acknowledge(
 	assert(call);
 	assert(dlc);
 	assert(call->channel);
+
+	report_call(call, LOG_DEBUG, "Sending RESUME_ACKNOWLEDGE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_ACKNOWLEDGE);
 
@@ -708,6 +665,8 @@ int q931_send_resume_reject(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending RESUME_REJECT\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_REJECT);
 	size += q931_append_ie_cause(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
@@ -753,14 +712,21 @@ int q931_send_setup(
 	assert(dlc);
 	assert(call->called_number);
 
+	report_call(call, LOG_DEBUG, "Sending SETUP\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP);
 	size += q931_append_ie_bearer_capability_alaw(call->intf->sendbuf + size);
-	size += q931_append_ie_called_party_number(call->intf->sendbuf + size, call->called_number);
+	size += q931_append_ie_called_party_number(
+			call->intf->sendbuf + size,
+			call->called_number);
 
 	if (strlen(call->calling_number))
-		size += q931_append_ie_calling_party_number(call->intf->sendbuf + size, call->calling_number);
+		size += q931_append_ie_calling_party_number(
+				call->intf->sendbuf + size,
+				call->calling_number);
 
-	size += q931_append_ie_high_layer_compatibility_telephony(call->intf->sendbuf + size);
+	size += q931_append_ie_high_layer_compatibility_telephony(
+			call->intf->sendbuf + size);
 
 	if (call->sending_complete)
 		size += q931_append_ie_sending_complete(call->intf->sendbuf + size);
@@ -785,12 +751,18 @@ int q931_send_setup_channel(
 	assert(dlc);
 	assert(call->called_number);
 
+	report_call(call, LOG_DEBUG, "Sending SETUP\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP);
 	size += q931_append_ie_bearer_capability_alaw(call->intf->sendbuf + size);
-	size += q931_append_ie_called_party_number(call->intf->sendbuf + size, call->called_number);
+	size += q931_append_ie_called_party_number(
+			call->intf->sendbuf + size,
+			call->called_number);
 
 	if (strlen(call->calling_number))
-		size += q931_append_ie_calling_party_number(call->intf->sendbuf + size, call->calling_number);
+		size += q931_append_ie_calling_party_number(
+				call->intf->sendbuf + size,
+				call->calling_number);
 
 	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
 	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
@@ -860,6 +832,8 @@ int q931_send_setup_acknowledge(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending SETUP_ACKNOWLEDGE\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP_ACKNOWLEDGE);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -875,6 +849,8 @@ int q931_send_setup_acknowledge_channel(
 	assert(call);
 	assert(dlc);
 	assert(channel);
+
+	report_call(call, LOG_DEBUG, "Sending SETUP_ACKNOWLEDGE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP_ACKNOWLEDGE);
 
@@ -915,13 +891,15 @@ int q931_send_setup_acknowledge_channel(
 int q931_send_status(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_call_state state,
+	__u8 state,
 	enum q931_ie_cause_value cause)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending STATUS\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS);
 
@@ -931,8 +909,7 @@ int q931_send_status(
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
 			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 
-	size += q931_append_ie_call_state(call->intf->sendbuf + size,
-		q931_state_to_ie_state(state));
+	size += q931_append_ie_call_state(call->intf->sendbuf + size, state);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -955,6 +932,8 @@ int q931_send_status_enquiry(
 	assert(call);
 	assert(dlc);
 
+	report_call(call, LOG_DEBUG, "Sending STATUS_ENQUIRY\n");
+
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS_ENQUIRY);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -974,6 +953,8 @@ int q931_send_suspend(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
+
+	report_call(call, LOG_DEBUG, "Sending SUSPEND\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND);
 
@@ -997,6 +978,8 @@ int q931_send_suspend_acknowledge(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending SUSPEND_ACKNOWLEDGE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_ACKNOWLEDGE);
 
@@ -1022,6 +1005,8 @@ int q931_send_suspend_reject(
 
 	assert(call);
 	assert(dlc);
+
+	report_call(call, LOG_DEBUG, "Sending SUSPEND_REJECT\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_REJECT);
 	size += q931_append_ie_cause(call->intf->sendbuf + size,

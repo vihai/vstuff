@@ -898,7 +898,7 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
 {
-	if (chan->chan->status == open_lapd)
+	if (chan->chan->status == open_lapd || chan->chan->id == E)
 		hfc_netdev_frame_arrived(chan);
 	else if (chan->chan->status == open_ppp)
 		hfc_ppp_frame_arrived(chan);

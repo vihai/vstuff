@@ -10,7 +10,7 @@
 #include "ie.h"
 
 static struct q931_ie_info q931_ie_infos[] =
- {
+{
 	{
 		0,
 		1,
@@ -445,7 +445,7 @@ static struct q931_ie_info q931_ie_infos[] =
 	},
 };
 
-static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
+static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 {
 	// ALERTING
 	{
@@ -474,7 +474,7 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_USER_TO_USER,
+		Q931_IE_USER_USER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -580,6 +580,12 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	// DISCONNECT
 	{
 		Q931_MT_DISCONNECT,
+		Q931_IE_CAUSE,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_MANDATORY,
+	},
+	{
+		Q931_MT_DISCONNECT,
 		Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
@@ -673,7 +679,7 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_USER_TO_USER,
+		Q931_IE_USER_USER,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -699,7 +705,7 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_USER_TO_USER,
+		Q931_IE_USER_USER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -725,7 +731,7 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_USER_TO_USER,
+		Q931_IE_USER_USER,
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
@@ -859,7 +865,7 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_USER_TO_USER,
+		Q931_IE_USER_USER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -951,43 +957,81 @@ static struct q931_ie_info_per_message_type q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_USER_INFORMATION,
-		Q931_IE_USER_TO_USER,
+		Q931_IE_USER_USER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
-}
+};
 
 static int q931_ie_id_compare(const void *a, const void *b)
 {
- return q931_intcmp(((struct q931_ie_info *)a)->id,
-                    ((struct q931_ie_info *)b)->id);
+	return q931_intcmp(((struct q931_ie_info *)a)->id,
+			   ((struct q931_ie_info *)b)->id);
 }
 
-const struct q931_ie_info *q931_get_ie_info(int id)
+static int q931_ie_mt_id_compare(const void *a, const void *b)
 {
- struct q931_ie_info key, *res;
+	if (((struct q931_ie_info_per_mt *)a)->message_type ==
+	     ((struct q931_ie_info_per_mt *)b)->message_type)
+		return q931_intcmp(((struct q931_ie_info_per_mt *)a)->ie_id,
+                	    ((struct q931_ie_info_per_mt *)b)->ie_id);
+	else
+		return q931_intcmp(((struct q931_ie_info_per_mt *)a)->message_type,
+				((struct q931_ie_info_per_mt *)b)->message_type);
+}
 
- key.id = id;
- key.name = NULL;
+const struct q931_ie_info *q931_get_ie_info(
+	enum q931_ie_id id)
+{
+	struct q931_ie_info key, *res;
 
- res = (struct q931_ie_info *)
-       bsearch(&key,
-         q931_ie_infos,
-         sizeof(q931_ie_infos)/
-           sizeof(struct q931_ie_info),
-         sizeof(struct q931_ie_info),
-         q931_ie_id_compare);
+	key.id = id;
+	key.name = NULL;
 
- return res;
+	res = (struct q931_ie_info *)
+		bsearch(&key,
+			q931_ie_infos,
+			sizeof(q931_ie_infos)/
+				sizeof(struct q931_ie_info),
+			sizeof(struct q931_ie_info),
+			q931_ie_id_compare);
+
+	return res;
+}
+
+const struct q931_ie_info_per_mt *q931_get_ie_info_per_mt(
+	enum q931_message_type message_type,
+	enum q931_ie_id ie_id)
+{
+	struct q931_ie_info_per_mt key, *res;
+
+	key.message_type = message_type;
+	key.ie_id = ie_id;
+
+	res = (struct q931_ie_info_per_mt *)
+		bsearch(&key,
+			q931_ie_infos_per_mt,
+			sizeof(q931_ie_infos_per_mt)/
+				sizeof(struct q931_ie_info_per_mt),
+			sizeof(struct q931_ie_info_per_mt),
+			q931_ie_mt_id_compare);
+
+	return res;
 }
 
 void q931_ie_infos_init()
 {
- qsort(q931_ie_infos,
-       sizeof(q931_ie_infos)/
-         sizeof(struct q931_ie_info),
-       sizeof(struct q931_ie_info),
-       q931_ie_id_compare);
-
- q931_ie_cause_value_infos_init();
+	qsort(q931_ie_infos,
+		sizeof(q931_ie_infos)/
+			sizeof(struct q931_ie_info),
+		sizeof(struct q931_ie_info),
+		q931_ie_id_compare);
+	
+	qsort(q931_ie_infos_per_mt,
+		sizeof(q931_ie_infos_per_mt)/
+			sizeof(struct q931_ie_info_per_mt),
+		sizeof(struct q931_ie_info_per_mt),
+		q931_ie_mt_id_compare);
+	
+	q931_ie_cause_value_infos_init();
 }

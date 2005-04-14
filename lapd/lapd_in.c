@@ -328,6 +328,8 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 		(struct lapd_hdr *)skb_put(rskb,
 					sizeof(struct lapd_hdr));
 
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+
 	rhdr->addr.sapi = hdr->addr.sapi;
 	rhdr->addr.c_r = skb->dev->flags & IFF_ALLMULTI ? 0 : 1;
 	rhdr->addr.ea1 = 0;
@@ -524,6 +526,10 @@ static inline int lapd_pass_frame_to_socket_te(
 int lapd_rcv(struct sk_buff *skb, struct net_device *dev,
 		     struct packet_type *pt)
 {
+	// Ignore frames not destined to us
+	if (skb->pkt_type != PACKET_HOST)
+		goto not_ours;
+
 	// Don't mangle buffer if shared
 	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
 		goto err_share_check;
@@ -570,8 +576,8 @@ err_small_frame:
 err_improper_ea:
 err_pskb_may_pull:
 err_share_check:
-
 	kfree_skb(skb);
+not_ours:
 
 	return 0;
 }

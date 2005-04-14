@@ -118,10 +118,10 @@ enum q931_ie_presence
 	Q931_IE_MANDATORY,
 };
 
-struct q931_ie_info_per_message_type
+struct q931_ie_info_per_mt
 {
 	enum q931_message_type message_type;
-	enum q931_ie_id ie;
+	enum q931_ie_id ie_id;
 	enum q931_ie_direction direction;
 	enum q931_ie_presence presence;
 };
@@ -162,7 +162,11 @@ static inline int q931_ie_comprehension_required(__u8 ie_id)
 }
 
 void q931_ie_infos_init();
-const struct q931_ie_info *q931_get_ie_info(int id);
+const struct q931_ie_info *q931_get_ie_info(
+	enum q931_ie_id id);
+const struct q931_ie_info_per_mt *q931_get_ie_info_per_mt(
+	enum q931_message_type message_type,
+	enum q931_ie_id ie_id);
 
 #include "ie_sending_complete.h"
 #include "ie_bearercap.h"

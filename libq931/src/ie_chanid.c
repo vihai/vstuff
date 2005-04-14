@@ -70,7 +70,7 @@ int q931_ie_channel_identification_check(
 	struct q931_call *call,
 	struct q931_ie *ie)
 {
-	if (ie->size < 2) {
+	if (ie->size < 1) {
 		report_call(call, LOG_ERR, "IE size < 2\n");
 
 		return FALSE;
@@ -88,17 +88,6 @@ int q931_ie_channel_identification_check(
 		return FALSE;
 	}
 
-	if ((oct_3->interface_type == Q931_IE_CI_IT_BASIC &&
-	     call->intf->type == Q931_INTF_TYPE_PRA) ||
-	   ((oct_3->interface_type == Q931_IE_CI_IT_PRIMARY &&
-	    (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	     call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT)))) {
-		report_call(call, LOG_ERR,
-			"IE specifies wrong interface type\n");
-
-		return FALSE;
-	}
-
 	if (oct_3->d_channel_indicator == Q931_IE_CI_DCI_IS_D_CHAN) {
 		report_call(call, LOG_ERR,
 			"IE specifies D channel which"
@@ -107,21 +96,43 @@ int q931_ie_channel_identification_check(
 		return FALSE;
 	}
 
-	struct q931_ie_channel_identification_onwire_3c *oct_3c =
-		(struct q931_ie_channel_identification_onwire_3c *)
-		(ie->data + 1);
-	if (oct_3c->number_map == Q931_IE_CI_NM_MAP) {
-		report_call(call, LOG_ERR,
-			"IE specifies channel map, which"
-			" is not supported by DSSS-1\n");
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (ie->size < 2) {
+			report_call(call, LOG_ERR, "IE size < 2\n");
 
-		return FALSE;
-	}
+			return FALSE;
+		}
 
-	if (oct_3->interface_type == Q931_IE_CI_IT_BASIC)
-		return q931_ie_channel_identification_check_bra(call, ie);
-	else
+		if (oct_3->interface_type == Q931_IE_CI_IT_BASIC) {
+			report_call(call, LOG_ERR,
+				"IE specifies BRI while interface is PRI\n");
+
+			return FALSE;
+		}
+
+		struct q931_ie_channel_identification_onwire_3c *oct_3c =
+			(struct q931_ie_channel_identification_onwire_3c *)
+			(ie->data + 1);
+		if (oct_3c->number_map == Q931_IE_CI_NM_MAP) {
+			report_call(call, LOG_ERR,
+				"IE specifies channel map, which"
+				" is not supported by DSSS-1\n");
+
+			return FALSE;
+		}
+
 		return q931_ie_channel_identification_check_pra(call, ie);
+
+	} else {
+		if (oct_3->interface_type == Q931_IE_CI_IT_PRIMARY) {
+			report_call(call, LOG_ERR,
+				"IE specifies BRI while interface is PRI\n");
+
+			return FALSE;
+		}
+
+		return q931_ie_channel_identification_check_bra(call, ie);
+	}
 }
 
 int q931_append_ie_channel_identification_bra(void *buf,

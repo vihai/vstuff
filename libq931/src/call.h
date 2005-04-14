@@ -9,7 +9,7 @@
 #include "ie.h"
 
 #define report_call(call, lvl, format, arg...)				\
-	(call)->intf->lib->report((lvl), format, ## arg)
+	(call)->intf->lib->report((lvl), "call '%u': " format, (call)->call_reference, ## arg)
 
 #define q931_call_start_timer(call, timer)		\
 	do {						\

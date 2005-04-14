@@ -62,6 +62,8 @@ struct visdn_chan {
 	char app[16];					/* Our app */
 	struct ast_frame fr;			/* "null" frame */
 
+	int inbound;
+
 	struct q931_call *q931_call;
 };
 
@@ -204,9 +206,10 @@ static int visdn_call(struct ast_channel *ast_chan, char *orig_dest, int timeout
 	q931_setup_request(q931_call);
 
 	visdn_chan->q931_call = q931_call;
+	visdn_chan->inbound = 0;
 
 	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/%s/%d",
-		q931_call->interface->name,
+		q931_call->intf->name,
 		1234); // FIXME
 
 //	if (0) {
@@ -261,7 +264,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		return 1;
 	}
 
-	ast_log(LOG_WARNING, "visdn_indicate %d\n", condition);
+	ast_log(LOG_NOTICE, "visdn_indicate %d\n", condition);
 
 	switch(condition) {
 	case AST_CONTROL_HANGUP:
@@ -277,11 +280,12 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_RINGING:
-		q931_alerting_request(visdn_chan->q931_call);
+		if (visdn_chan->inbound)
+			q931_alerting_request(visdn_chan->q931_call);
 	break;
 
 	case AST_CONTROL_ANSWER:
-		q931_setup_response(visdn_chan->q931_call);
+//		q931_setup_response(visdn_chan->q931_call);
 	break;
 
 	case AST_CONTROL_BUSY:
@@ -295,11 +299,13 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_PROGRESS:
-		q931_progress_request(visdn_chan->q931_call);
+		if (visdn_chan->inbound)
+			q931_progress_request(visdn_chan->q931_call);
 	break;
 
 	case AST_CONTROL_PROCEEDING:
-		q931_proceeding_request(visdn_chan->q931_call);
+		if (visdn_chan->inbound)
+			q931_proceeding_request(visdn_chan->q931_call);
 	break;
 	}
 
@@ -342,19 +348,27 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	ast_log(LOG_WARNING, "visdn_hangup\n");
+	ast_log(LOG_NOTICE, "visdn_hangup\n");
 
 	if (!visdn_chan) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
 
-	if (visdn_chan->q931_call->state != N1_CALL_INITIATED &&
+	if (visdn_chan->q931_call->state != N0_NULL_STATE &&
+	    visdn_chan->q931_call->state != N1_CALL_INITIATED &&
 	    visdn_chan->q931_call->state != N11_DISCONNECT_REQUEST &&
 	    visdn_chan->q931_call->state != N12_DISCONNECT_INDICATION &&
 	    visdn_chan->q931_call->state != N17_RESUME_REQUEST &&
 	    visdn_chan->q931_call->state != N19_RELEASE_REQUEST &&
-	    visdn_chan->q931_call->state != N22_CALL_ABORT)
+	    visdn_chan->q931_call->state != N22_CALL_ABORT &&
+	    visdn_chan->q931_call->state != U0_NULL_STATE &&
+	    visdn_chan->q931_call->state != U6_CALL_PRESENT &&
+	    visdn_chan->q931_call->state != U11_DISCONNECT_REQUEST &&
+	    visdn_chan->q931_call->state != U12_DISCONNECT_INDICATION &&
+	    visdn_chan->q931_call->state != U15_SUSPEND_REQUEST &&
+	    visdn_chan->q931_call->state != U17_RESUME_REQUEST &&
+	    visdn_chan->q931_call->state != U19_RELEASE_REQUEST)
 		q931_disconnect_request(visdn_chan->q931_call,
 			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 
@@ -420,7 +434,6 @@ static struct ast_channel *visdn_new(struct visdn_chan *visdn_chan)
 {
 	struct ast_channel *ast_chan;
 
-
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel");
@@ -439,6 +452,8 @@ static struct ast_channel *visdn_new(struct visdn_chan *visdn_chan)
 	ast_chan->writeformat = AST_FORMAT_ALAW;
 
 	ast_chan->language[0] = '\0';
+
+	ast_set_flag(ast_chan, AST_FLAG_DIGITAL);
 
 	if (ast_chan->pvt->pvt) {
 		ast_log(LOG_ERROR,
@@ -495,6 +510,8 @@ static struct ast_channel *visdn_request(char *type, int format, void *data)
 		ast_log(LOG_ERROR, "Cannot allocate visdn_chan\n");
 		return NULL;
 	}
+
+	visdn_chan->inbound = 0;
 
 	ast_log(LOG_NOTICE,
 		"DEST = '%s'\n",
@@ -571,7 +588,7 @@ static void *q931_thread_main(void *data)
 
 					manager.dlcs[manager.ndlcs].socket =
 						accept(polls[i].fd, NULL, 0);
-					manager.dlcs[manager.ndlcs].interface =
+					manager.dlcs[manager.ndlcs].intf =
 						poll_infos[i].interface;
 					manager.ndlcs++;
 
@@ -600,6 +617,49 @@ static void *q931_thread_main(void *data)
 	} while(!manager.have_to_exit || active_calls_cnt > 0);
 
 	return NULL;
+}
+
+static int visdn_accept_inbound_call(struct q931_call *q931_call)
+{
+	struct visdn_chan *visdn_chan;
+	visdn_chan = visdn_alloc();
+	if (!visdn_chan) {
+		ast_log(LOG_ERROR, "Cannot allocate visdn_chan\n");
+		return FALSE;
+	}
+
+	visdn_chan->inbound = 1;
+	visdn_chan->q931_call = q931_call;
+
+	struct ast_channel *ast_chan;
+	ast_chan = visdn_new(visdn_chan);
+	if (!ast_chan)
+		return FALSE;
+
+	q931_call->pvt = ast_chan;
+
+	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/%s/%d",
+		q931_call->intf->name,
+		1234); // FIXME
+
+	strncpy(ast_chan->exten,
+		q931_call->called_number,
+		sizeof(ast_chan->exten)-1);
+
+	strncpy(ast_chan->context,
+		"visdn",
+		sizeof(ast_chan->context)-1);
+
+	ast_chan->callerid = strdup(q931_call->calling_number);
+	ast_setstate(ast_chan, AST_STATE_RING);
+
+	if (ast_pbx_start(ast_chan)) {
+		ast_log(LOG_ERROR,
+			"Unable to start PBX on %s\n",
+			ast_chan->name);
+		ast_hangup(ast_chan);
+		return FALSE;
+	}
 }
 
 static void visdn_q931_alerting_indication(struct q931_call *q931_call)
@@ -670,47 +730,11 @@ static void visdn_q931_info_indication(struct q931_call *q931_call)
 
 	ast_log(LOG_NOTICE, "Extension matches!\n");
 
-	struct visdn_chan *visdn_chan;
-	visdn_chan = visdn_alloc();
-	if (!visdn_chan) {
-		ast_log(LOG_ERROR, "Cannot allocate visdn_chan\n");
-		return;
-	}
-
-	visdn_chan->q931_call = q931_call;
-
-	struct ast_channel *ast_chan;
-	ast_chan = visdn_new(visdn_chan);
-	if (!ast_chan) {
-		//FIXME
-	}
-
-	q931_call->pvt = ast_chan;
-
-	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/%s/%d",
-		q931_call->interface->name,
-		1234); // FIXME
-
-	strncpy(ast_chan->exten,
-		q931_call->called_number,
-		sizeof(ast_chan->exten)-1);
-
-	strncpy(ast_chan->context,
-		"visdn",
-		sizeof(ast_chan->context)-1);
-
-	ast_chan->callerid = strdup(q931_call->calling_number);
-	ast_setstate(ast_chan, AST_STATE_RING);
-
-	if (ast_pbx_start(ast_chan)) {
-		ast_log(LOG_ERROR,
-			"Unable to start PBX on %s\n",
-			ast_chan->name);
-		ast_hangup(ast_chan);
-		return;
-	}
-
-	q931_proceeding_request(q931_call);
+	if (!visdn_accept_inbound_call(q931_call))
+		q931_reject_request(q931_call,
+			Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+	else
+		q931_proceeding_request(q931_call);
 }
 
 static void visdn_q931_more_info_indication(struct q931_call *q931_call)
@@ -770,7 +794,9 @@ static void visdn_q931_release_indication(struct q931_call *q931_call)
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
 	if (ast_chan) {
-		// Destroy channel?
+		ast_mutex_lock(&ast_chan->lock);
+		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+		ast_mutex_unlock(&ast_chan->lock);
 	}
 }
 
@@ -796,23 +822,47 @@ static void visdn_q931_setup_confirm(struct q931_call *q931_call)
 
 static void visdn_q931_setup_indication(struct q931_call *q931_call)
 {
-	printf("*** %s\n", __FUNCTION__);
+	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
+
+	if (!ast_canmatch_extension(NULL, "visdn", q931_call->called_number,
+			1, q931_call->calling_number)) {
+		q931_reject_request(q931_call,
+			Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+
+		return;
+	}
 
 	if (q931_call->sending_complete) {
 		if (ast_exists_extension(NULL, "visdn",
-			q931_call->called_number, 1,
-			q931_call->calling_number)) {
+				q931_call->called_number, 1,
+				q931_call->calling_number)) {
 
-			q931_proceeding_request(q931_call);
+			if (!visdn_accept_inbound_call(q931_call))
+				q931_reject_request(q931_call,
+					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+			else
+				q931_proceeding_request(q931_call);
 		} else {
+			ast_log(LOG_NOTICE,
+				"No extension %s in context '%s',"
+				" ignoring call\n",
+				q931_call->called_number,
+				"visdn");
+
 			q931_reject_request(q931_call,
 				Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
 		}
 
 	} else {
 		if (ast_exists_extension(NULL, "visdn",
-			q931_call->called_number, 1,
-			q931_call->calling_number)) {
+				q931_call->called_number, 1,
+				q931_call->calling_number)) {
+
+			if (!visdn_accept_inbound_call(q931_call))
+				q931_reject_request(q931_call,
+					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+			else
+				q931_proceeding_request(q931_call);
 
 			q931_proceeding_request(q931_call);
 		} else {
@@ -873,14 +923,14 @@ static void visdn_logger(int level, const char *format, ...)
 	va_end(ap);
 
 	switch(level) {
-	case Q931_LOG_DEBUG: ast_log(LOG_NOTICE, "%s", msg); break;
-	case Q931_LOG_INFO: ast_log(LOG_NOTICE, "%s", msg); break;
-	case Q931_LOG_NOTICE: ast_log(LOG_NOTICE, "%s", msg); break;
-	case Q931_LOG_WARNING: ast_log(LOG_WARNING, "%s", msg); break;
+	case Q931_LOG_DEBUG: ast_log(__LOG_NOTICE, "libq931", 0, "", "%s", msg); break;
+	case Q931_LOG_INFO: ast_log(__LOG_NOTICE, "libq931", 0, "", "%s", msg); break;
+	case Q931_LOG_NOTICE: ast_log(__LOG_NOTICE, "libq931", 0, "", "%s", msg); break;
+	case Q931_LOG_WARNING: ast_log(__LOG_WARNING, "libq931", 0, "", "%s", msg); break;
 	case Q931_LOG_ERR:
 	case Q931_LOG_CRIT:
 	case Q931_LOG_ALERT:
-	case Q931_LOG_EMERG: ast_log(LOG_ERROR, "%s", msg); break;
+	case Q931_LOG_EMERG: ast_log(__LOG_ERROR, "libq931", 0, "", "%s", msg); break;
 	}
 }
 
