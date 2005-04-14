@@ -97,7 +97,7 @@ static struct q931_ie_info q931_ie_infos[] =
 		Q931_NT_ETSI,
 		Q931_IE_CAUSE,
 		"Cause",
-		NULL,
+		q931_ie_cause_check,
 	},
 	{
 		10,
@@ -113,7 +113,7 @@ static struct q931_ie_info q931_ie_infos[] =
 		Q931_NT_ETSI,
 		Q931_IE_CALL_STATE,
 		"Call State",
-		NULL,
+		q931_ie_call_state_check,
 	},
 	{
 		-1,

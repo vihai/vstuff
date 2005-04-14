@@ -4,6 +4,7 @@
 
 #define Q931_PRIVATE
 
+#include "q931.h"
 #include "ie_cause.h"
 
 struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
@@ -224,6 +225,54 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 	"Interworking, unspecified",
 	},
 };
+
+int q931_ie_cause_check(
+	struct q931_call *call,
+	struct q931_ie *ie)
+{
+	int nextoct = 0;
+
+	if (ie->size < 1) {
+		report_call(call, LOG_ERR, "IE size < 1\n");
+
+		return FALSE;
+	}
+
+	struct q931_ie_cause_onwire_3 *oct_3 =
+		(struct q931_ie_cause_onwire_3 *)
+		(ie->data + nextoct);
+
+	if (oct_3->coding_standard != Q931_IE_CS_CS_CCITT) {
+		report_call(call, LOG_ERR, "coding stanrdard != CCITT\n");
+
+		return FALSE;
+	}
+
+	if (oct_3->ext == 0) {
+		nextoct++;
+
+		struct q931_ie_cause_onwire_3a *oct_3a =
+			(struct q931_ie_cause_onwire_3a *)
+			(ie->data + nextoct);
+
+		if (oct_3a->ext != 1) {
+			report_call(call, LOG_ERR,
+				"Extension bit unexpectedly set to 0\n");
+
+			return FALSE;
+		}
+
+		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
+			report_call(call, LOG_ERR,
+				"Recommendation unexpectedly != Q.931\n");
+
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
 
 static int q931_ie_cause_value_compare(const void *a, const void *b)
 {

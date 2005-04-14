@@ -64,6 +64,9 @@ struct q931_ie_call_state_onwire_3
 #endif
 } __attribute__ ((__packed__));
 
+int q931_ie_call_state_check(
+	struct q931_call *call,
+	struct q931_ie *ie);
 int q931_append_ie_call_state(void *buf, __u8 value);
 
 #endif

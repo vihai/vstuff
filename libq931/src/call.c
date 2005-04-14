@@ -323,7 +323,7 @@ struct q931_call *q931_find_call_by_reference(
 	return NULL;
 }
 
-static void q931_call_stop_any_timer(struct q931_call *call)
+void q931_call_stop_any_timer(struct q931_call *call)
 {
 	assert(call);
 
@@ -348,12 +348,6 @@ static void q931_call_stop_any_timer(struct q931_call *call)
 	q931_call_stop_timer(call, T321);
 	q931_call_stop_timer(call, T322);
 }
-
-#define q931_call_primitive(call, primitive, ...)	\
-	do {						\
-		if ((call)->primitive)			\
-			(call)->primitive(call);	\
-	} while(0);
 
 static __u8 q931_call_state_to_ie_state(enum q931_call_state state)
 {
@@ -699,7 +693,7 @@ static inline int q931_channel_select_response_pra(
 	assert(call);
 	assert(ie);
 
-	struct q931_ie_channel_identification_onwire_3c *oct_3c =
+/*	struct q931_ie_channel_identification_onwire_3c *oct_3c =
 		(struct q931_ie_channel_identification_onwire_3c *)
 		(ie->data + 1);
 
@@ -709,6 +703,7 @@ static inline int q931_channel_select_response_pra(
 				(ie->data + 2);
 
 	} while (!oct_3d->ext);
+*/
 
 	return TRUE;
 }
@@ -848,6 +843,7 @@ static inline int q931_channel_select_setup_pra(
 	assert(call);
 	assert(ie);
 
+/*
 	struct q931_ie_channel_identification_onwire_3c *oct_3c =
 		(struct q931_ie_channel_identification_onwire_3c *)
 		(ie->data + 1);
@@ -858,7 +854,7 @@ static inline int q931_channel_select_setup_pra(
 				(ie->data + 2);
 
 	} while (!oct_3d->ext);
-
+*/
 	*cause = Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE;
 	return FALSE;
 }
@@ -1074,7 +1070,7 @@ void q931_disconnect_request(struct q931_call *call,
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -1100,7 +1096,7 @@ void q931_disconnect_request(struct q931_call *call,
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -1127,7 +1123,7 @@ void q931_disconnect_request(struct q931_call *call,
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -1189,7 +1185,7 @@ void q931_disconnect_request(struct q931_call *call,
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -1317,7 +1313,7 @@ void q931_info_request(struct q931_call *call)
 	case U2_OVERLAP_SENDING:
 		q931_send_info(call, call->dlc);
 
-		if (q931_timer_pending(&call->T304))
+		if (q931_call_timer_running(call, T304))
 			q931_call_start_timer(call, T304);
 	break;
 
@@ -1670,153 +1666,12 @@ void q931_release_request(struct q931_call *call)
 	assert(call);
 
 	switch (call->state) {
-	case N2_OVERLAP_SENDING:
-		q931_call_stop_timer(call, T302);
-		q931_release_request_send_release(call);
-		q931_call_release_channel(call->channel);
-		q931_call_start_timer(call, T308);
-		q931_call_set_state(call, N19_RELEASE_REQUEST);
-	break;
-
-	case N3_OUTGOING_CALL_PROCEEDING:
-	case N4_CALL_DELIVERED:
-		q931_release_request_send_release(call);
-		q931_call_release_channel(call->channel);
-		q931_call_start_timer(call, T308);
-		q931_call_set_state(call, N19_RELEASE_REQUEST);
-	break;
-
-	case N6_CALL_PRESENT:
-		q931_call_stop_timer(call, T303);
-
-		if (call->broadcast_setup) {
-			q931_call_release_channel(call->channel);
-			q931_call_set_state(call, N22_CALL_ABORT);
-			q931_call_primitive(call, release_indication);
-		} else {
-			q931_release_request_send_release(call);
-			q931_call_start_timer(call, T308);
-			q931_call_set_state(call, N19_RELEASE_REQUEST);
-		}
-	break;
-
-	case N7_CALL_RECEIVED:
-		if (call->broadcast_setup) {
-			struct q931_ces *ces;
-			list_for_each_entry(ces, &call->ces, node) {
-				q931_ces_release_request(ces,
-					Q931_IE_C_CV_NORMAL_CALL_CLEARING);
-			}
-
-			q931_call_stop_timer(call, T301);
-			q931_call_release_channel(call->channel);
-
-			if (q931_timer_pending(&call->T312))
-				q931_call_set_state(call, N22_CALL_ABORT);
-			else
-				q931_call_set_state(call, N0_NULL_STATE);
-
-			q931_call_primitive(call, release_indication);
-		} else {
-			q931_release_request_send_release(call);
-			q931_call_stop_timer(call, T301);
-			q931_call_start_timer(call, T308);
-			q931_call_set_state(call, N19_RELEASE_REQUEST);
-		}
-	break;
-
-	case N8_CONNECT_REQUEST:
-		if (call->broadcast_setup) {
-			struct q931_ces *ces;
-			list_for_each_entry(ces, &call->ces, node) {
-				q931_ces_release_request(ces,
-					Q931_IE_C_CV_NORMAL_CALL_CLEARING);
-			}
-
-			q931_call_release_channel(call->channel);
-
-			if (q931_timer_pending(&call->T312))
-				q931_call_set_state(call, N22_CALL_ABORT);
-			else
-				q931_call_set_state(call, N0_NULL_STATE);
-
-			q931_call_primitive(call, release_indication);
-		} else {
-			q931_release_request_send_release(call);
-			q931_call_start_timer(call, T308);
-			q931_call_set_state(call, N19_RELEASE_REQUEST);
-		}
-	break;
-
-	case N9_INCOMING_CALL_PROCEEDING:
-		q931_call_stop_timer(call, T310);
-
-		if (call->broadcast_setup) {
-			struct q931_ces *ces;
-			list_for_each_entry(ces, &call->ces, node) {
-				q931_ces_release_request(ces,
-					Q931_IE_C_CV_NORMAL_CALL_CLEARING);
-			}
-
-			q931_call_release_channel(call->channel);
-
-			if (q931_timer_pending(&call->T312))
-				q931_call_set_state(call, N22_CALL_ABORT);
-			else
-				q931_call_set_state(call, N0_NULL_STATE);
-
-			q931_call_primitive(call, release_indication);
-		} else {
-			q931_release_request_send_release(call);
-			q931_call_start_timer(call, T308);
-			q931_call_set_state(call, N19_RELEASE_REQUEST);
-		}
-	break;
-
-	case N10_ACTIVE:
-		q931_release_request_send_release(call);
-		q931_call_release_channel(call->channel);
-		q931_call_start_timer(call, T308);
-		q931_call_set_state(call, N19_RELEASE_REQUEST);
-	break;
 
 	case N11_DISCONNECT_REQUEST:
 		q931_send_release_cause(call, call->dlc,
 			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
 		q931_call_start_timer(call, T308);
 		q931_call_set_state(call, N19_RELEASE_REQUEST);
-	break;
-
-	case N15_SUSPEND_REQUEST:
-		q931_release_request_send_release(call);
-		q931_call_release_channel(call->channel);
-		q931_call_start_timer(call, T308);
-		q931_call_set_state(call, N19_RELEASE_REQUEST);
-	break;
-
-	case N25_OVERLAP_RECEIVING:
-		q931_call_stop_timer(call, T304);
-
-		if (call->broadcast_setup) {
-			struct q931_ces *ces;
-			list_for_each_entry(ces, &call->ces, node) {
-				q931_ces_release_request(ces,
-					Q931_IE_C_CV_NORMAL_CALL_CLEARING);
-			}
-
-			q931_call_release_channel(call->channel);
-
-			if (q931_timer_pending(&call->T312))
-				q931_call_set_state(call, N22_CALL_ABORT);
-			else
-				q931_call_set_state(call, N0_NULL_STATE);
-
-			q931_call_primitive(call, release_indication);
-		} else {
-			q931_release_request_send_release(call);
-			q931_call_start_timer(call, T308);
-			q931_call_set_state(call, N19_RELEASE_REQUEST);
-		}
 	break;
 
 	case U12_DISCONNECT_INDICATION:
@@ -1843,10 +1698,20 @@ void q931_release_request(struct q931_call *call)
 	case U25_OVERLAP_RECEIVING:
 	case N0_NULL_STATE:
 	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
 	case N12_DISCONNECT_INDICATION:
+	case N15_SUSPEND_REQUEST:
 	case N17_RESUME_REQUEST:
 	case N19_RELEASE_REQUEST:
 	case N22_CALL_ABORT:
+	case N25_OVERLAP_RECEIVING:
 //	default:
 		q931_call_unexpected_primitive(call);
 	break;
@@ -2229,10 +2094,50 @@ void q931_setup_response(struct q931_call *call)
 	}
 }
 
-void q931_status_enquiry_request(struct q931_call *call)
+void q931_status_enquiry_request(
+	struct q931_call *call,
+	struct q931_ces *ces)
 {
 	assert(call);
 
+	switch (call->state) {
+	case N0_NULL_STATE:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N19_RELEASE_REQUEST:
+	case N25_OVERLAP_RECEIVING:
+		if (call->broadcast_setup) {
+			if (call->state != N6_CALL_PRESENT) {
+				if (ces) {
+					q931_ces_status_enquiry_request(ces);
+				} else {
+					struct q931_ces *ces;
+					list_for_each_entry(ces, &call->ces, node) {
+						q931_ces_status_enquiry_request(ces);
+					}
+				}
+			}
+		} else {
+			if (!q931_call_timer_running(call, T322)) {
+				q931_send_status_enquiry(call, call->dlc);
+				call->senq_status_97_98_received = 0;
+				call->senq_cnt = 0;
+				q931_call_start_timer(call, T322);
+			}
+		}
+	break;
+
+	default:
+		if (!q931_call_timer_running(call, T322)) {
+			q931_send_status_enquiry(call, call->dlc);
+			call->senq_status_97_98_received = 0;
+			call->senq_cnt = 0;
+			q931_call_start_timer(call, T322);
+		}
+	break;
+	}
 }
 
 void q931_suspend_reject_request(struct q931_call *call,
@@ -2350,6 +2255,60 @@ void q931_suspend_request(struct q931_call *call)
 
 	default:
 		q931_call_unexpected_primitive(call);
+	break;
+	}
+}
+
+void q931_restart_request(struct q931_call *call)
+{
+	assert(call);
+
+	switch (call->state) {
+	case U0_NULL_STATE:
+	case U1_CALL_INITIATED:
+	case U2_OVERLAP_SENDING:
+	case U3_OUTGOING_CALL_PROCEEDING:
+	case U4_CALL_DELIVERED:
+	case U6_CALL_PRESENT:
+	case U7_CALL_RECEIVED:
+	case U8_CONNECT_REQUEST:
+	case U9_INCOMING_CALL_PROCEEDING:
+	case U10_ACTIVE:
+	case U11_DISCONNECT_REQUEST:
+	case U12_DISCONNECT_INDICATION:
+	case U15_SUSPEND_REQUEST:
+	case U17_RESUME_REQUEST:
+	case U19_RELEASE_REQUEST:
+	case U25_OVERLAP_RECEIVING:
+		q931_call_stop_any_timer(call);
+		q931_call_release_channel(call->channel);
+		q931_call_set_state(call, U0_NULL_STATE);
+		q931_intf_del_call(call);
+		q931_call_primitive(call, release_indication);
+	break;
+
+	case N0_NULL_STATE:
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N10_ACTIVE:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case N15_SUSPEND_REQUEST:
+	case N17_RESUME_REQUEST:
+	case N19_RELEASE_REQUEST:
+	case N22_CALL_ABORT:
+	case N25_OVERLAP_RECEIVING:
+		q931_call_stop_any_timer(call);
+		q931_call_release_channel(call->channel);
+		q931_call_set_state(call, N0_NULL_STATE);
+		q931_intf_del_call(call);
+		q931_call_primitive(call, release_indication);
 	break;
 	}
 }
@@ -2743,7 +2702,7 @@ void q931_int_release_indication(
 		if (able_to_proceed) {
 			// Save cause
 		} else {
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				// Save cause
 			} else {
 				q931_call_stop_timer(call, T310);
@@ -2766,7 +2725,7 @@ void q931_int_release_indication(
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -2799,7 +2758,7 @@ void q931_int_release_indication(
 			// Save cause
 		} else {
 			// Is T312 running (THIS MAY BE WRONG)
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				// Save cause
 			} else {
 				q931_call_stop_timer(call, T310);
@@ -2837,7 +2796,7 @@ void q931_int_release_indication(
 		if (able_to_proceed) {
 			// Save cause
 		} else {
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				// Save cause
 			} else {
 				q931_call_release_channel(call->channel);
@@ -2906,7 +2865,7 @@ static void q931_timer_T301(void *data)
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -3140,7 +3099,7 @@ static void q931_timer_T304(void *data)
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -3502,7 +3461,7 @@ static void q931_timer_T310(void *data)
 
 			q931_call_release_channel(call->channel);
 
-			if (q931_timer_pending(&call->T312)) {
+			if (q931_call_timer_running(call, T312)) {
 				q931_call_set_state(call, N22_CALL_ABORT);
 			} else {
 				q931_call_set_state(call, N0_NULL_STATE);
@@ -3897,17 +3856,19 @@ static void q931_timer_T322(void *data)
 	}
 
 	// Status received
-	if (0) {
+	if (call->senq_status_97_98_received) {
+		// Implementation dependent
 	} else {
-		// Max retrans exceeded
-		if (0) {
-			q931_send_release(call, call->dlc); // Cause #41
+		if (call->senq_cnt > 3) {
+			q931_send_release_cause(call, call->dlc,
+				Q931_IE_C_CV_TEMPORARY_FAILURE);
 			q931_call_start_timer(call, T308);
 			q931_call_set_state(call, N19_RELEASE_REQUEST);
-			q931_call_primitive(call, release_indication); // ERROR
+			q931_call_primitive(call, release_indication); // WITH ERROR
 		} else {
 			q931_send_status_enquiry(call, call->dlc);
 			q931_call_start_timer(call, T322);
+			call->senq_cnt++;
 		}
 	}
 }
@@ -3932,10 +3893,6 @@ static int q931_call_handle_called_number(
 		call->sending_complete = TRUE;
 		strncat(call->called_number, number, ie->size - 2);
 	} else {
-		report_call(call, LOG_INFO,
-			"strncat(%s,%c,%d)\n",call->called_number,
-			*number,ie->size - 1);
-
 		strncat(call->called_number, number, ie->size - 1);
 	}
 
@@ -4711,9 +4668,6 @@ inline static void q931_handle_setup(
 	case U17_RESUME_REQUEST:
 	case U19_RELEASE_REQUEST:
 	case U25_OVERLAP_RECEIVING:
-		// Do nothing
-	break;
-
 	case N1_CALL_INITIATED:
 	case N2_OVERLAP_SENDING:
 	case N3_OUTGOING_CALL_PROCEEDING:
@@ -5611,12 +5565,40 @@ inline static void q931_handle_status(
 	assert(dlc);
 	assert(ies);
 
-	// FIXME complete implementation pg. 95
+	__u8 onwire_state = 0;
+	enum q931_ie_cause_value cause_value = 0;
+
+	int i;
+	for (i=0; i<ies_cnt; i++) {
+		if (ies[i].info->id == Q931_IE_CALL_STATE) {
+			struct q931_ie_call_state_onwire_3 *oct_3 =
+				(struct q931_ie_call_state_onwire_3 *)
+				(ies[i].data + 0);
+
+			onwire_state = oct_3->value;
+		} else if (ies[i].info->id == Q931_IE_CAUSE) {
+			int nextoct = 0;
+
+			struct q931_ie_cause_onwire_3 *oct_3 =
+				(struct q931_ie_cause_onwire_3 *)
+				(ies[i].data + nextoct);
+
+			if (oct_3->ext == 0)
+				 nextoct++;
+
+			nextoct++;
+
+			struct q931_ie_cause_onwire_4 *oct_4 =
+				(struct q931_ie_cause_onwire_4 *)
+				(ies[i].data + nextoct);
+
+			cause_value = oct_4->cause_value;
+		}
+	}
 
 	switch (call->state) {
 	case N0_NULL_STATE:
-		// CS!=0?
-		if (1) {
+		if (onwire_state != q931_call_state_to_ie_state(N0_NULL_STATE)) {
 			q931_send_release_cause(call, call->dlc,
 				Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
 			q931_call_set_state(call, N19_RELEASE_REQUEST);
@@ -5625,8 +5607,7 @@ inline static void q931_handle_status(
 	break;
 
 	case N19_RELEASE_REQUEST:
-		// CS=0?
-		if (1) {
+		if (onwire_state == q931_call_state_to_ie_state(N0_NULL_STATE)) {
 			q931_call_stop_timer(call, T308);
 			q931_call_release_channel(call->channel);
 			q931_call_set_state(call, N0_NULL_STATE);
@@ -5650,41 +5631,41 @@ inline static void q931_handle_status(
 	case N17_RESUME_REQUEST:
 	case N22_CALL_ABORT:
 	case N25_OVERLAP_RECEIVING:
-/*
-		// Status CS=M ?
-		if (1) {
-			if (q931_timer_pending(&call->T322)) {
-				// Cause = #97 ?
-				if (1) {
-					// Save cause and call state (!?!?!?)
-				} else if(1) { // Cause == #30 ?
-					q931_call_stop_timer(call, T322);
-				}
-			}
-
-			// M=0 ?
-			if (1) {
-				q931_intf_del_call(call);
-				q931_call_set_state(call, N0_NULL_STATE);
-				q931_call_primitive(call, status_indication); // WITH ERROR
-			} else {
-				// Compatible state?
-				if (1) {
-					// NOTE 1. FURTHER ACTIONS ARE AN IMPLEMENTATION OPTION.
-				} else {
-					q931_send_release(call, call->dlc);
-					q931_call_start_timer(call, T308);
-					q931_call_set_state(call, N19_RELEASE_REQUEST);
-					q931_call_primitive(call, status_indication); // WITH ERROR
-				}
+		if (q931_call_timer_running(call, T322)) {
+			if (cause_value ==
+				Q931_IE_C_CV_MESSAGE_TYPE_NON_EXISTENT_OR_IMPLEMENTED ||
+			    cause_value ==
+				Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE) {
+				// Save cause and call state (!?!?!?)
+				return;
+			} else if(cause_value ==
+				Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY) {
+				q931_call_stop_timer(call, T322);
 			}
 		}
-*/
+
+		if (onwire_state == q931_call_state_to_ie_state(N0_NULL_STATE)) {
+			q931_call_stop_any_timer(call);
+			q931_call_release_channel(call->channel);
+			q931_call_set_state(call, N0_NULL_STATE);
+			q931_intf_del_call(call);
+			q931_call_primitive(call, status_indication); // WITH ERROR
+			q931_call_primitive(call, release_indication);
+		} else if (onwire_state == q931_call_state_to_ie_state(call->state)) {
+				// NOTE 1. FURTHER ACTIONS ARE AN IMPLEMENTATION OPTION.
+		} else {
+			q931_call_stop_any_timer(call);
+			q931_send_release_cause(call, call->dlc,
+				Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+			q931_call_start_timer(call, T308);
+			q931_call_set_state(call, N19_RELEASE_REQUEST);
+			q931_call_primitive(call, status_indication); // WITH ERROR
+			q931_call_primitive(call, release_indication);
+		}
 	break;
 
 	case U0_NULL_STATE:
-		// CS!=0?
-		if (1) {
+		if (onwire_state != q931_call_state_to_ie_state(U0_NULL_STATE)) {
 			q931_send_release_cause(call, call->dlc,
 				Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
 			q931_call_set_state(call, U19_RELEASE_REQUEST);
@@ -5693,21 +5674,12 @@ inline static void q931_handle_status(
 	break;
 
 	case U19_RELEASE_REQUEST:
-		// Status (CS) ?
-		if (1) {
-			// Cause value #30 ?
-			if (0) {
-				q931_call_stop_timer(call, T322);
-			}
-
-			// CS=0?
-			if (0) {
-				q931_call_stop_timer(call, T308);
-				q931_call_primitive(call, status_indication); //ERROR
-				q931_call_release_channel(call->channel);
-				q931_call_set_state(call, U0_NULL_STATE);
-				q931_intf_del_call(call);
-			}
+		if (onwire_state == q931_call_state_to_ie_state(U0_NULL_STATE)) {
+			q931_call_stop_timer(call, T308);
+			q931_call_release_channel(call->channel);
+			q931_call_set_state(call, U0_NULL_STATE);
+			q931_intf_del_call(call);
+			q931_call_primitive(call, status_indication); //ERROR
 		}
 	break;
 
@@ -5740,12 +5712,6 @@ inline static void q931_handle_status_enquiry(
 	assert(call);
 	assert(dlc);
 	assert(ies);
-
-	if (call->state == N0_NULL_STATE ||
-	    call->state == U0_NULL_STATE) {
-		q931_call_message_not_compatible_with_state(call);
-		return;
-	}
 
 	q931_call_send_status(call,
 		Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY);
@@ -5934,8 +5900,8 @@ inline static void q931_handle_notify(
 	case N19_RELEASE_REQUEST:
 	case N22_CALL_ABORT:
 	case N25_OVERLAP_RECEIVING:
-		// Telecom Italia sends NOTIFY
-	break;
+//		// Telecom Italia sends NOTIFY
+//	break;
 
 //	default:
 		q931_call_message_not_compatible_with_state(call);
@@ -6430,6 +6396,7 @@ void q931_call_dl_establish_indication(struct q931_call *call)
 
 	default:
 		// Do nothing
+	break;
 	}
 }
 
@@ -6453,6 +6420,48 @@ void q931_call_dl_release_indication(struct q931_call *call)
 	case N0_NULL_STATE:
 	case U0_NULL_STATE:
 		// Do nothing
+	break;
+
+	case N1_CALL_INITIATED:
+	case N2_OVERLAP_SENDING:
+	case N3_OUTGOING_CALL_PROCEEDING:
+	case N4_CALL_DELIVERED:
+	case N6_CALL_PRESENT:
+	case N7_CALL_RECEIVED:
+	case N8_CONNECT_REQUEST:
+	case N9_INCOMING_CALL_PROCEEDING:
+	case N11_DISCONNECT_REQUEST:
+	case N12_DISCONNECT_INDICATION:
+	case N15_SUSPEND_REQUEST:
+	case N17_RESUME_REQUEST:
+	case N19_RELEASE_REQUEST:
+	case N22_CALL_ABORT:
+	case N25_OVERLAP_RECEIVING:
+		if (!call->broadcast_setup || call->state == N6_CALL_PRESENT) {
+			q931_call_stop_any_timer(call);
+			q931_call_release_channel(call->channel);
+			q931_call_set_state(call, N0_NULL_STATE);
+			q931_intf_del_call(call);
+			q931_call_primitive(call, release_indication);
+		}
+	break;
+
+	case N10_ACTIVE:
+		if (q931_call_timer_running(call, T309)) {
+			q931_call_stop_timer(call, T309);
+			q931_call_release_channel(call->channel);
+			q931_call_set_state(call, N0_NULL_STATE);
+			q931_call_primitive(call, release_indication);
+		} else {
+			q931_call_start_timer(call, T309);
+
+			// FIXME
+			if (connect(call->dlc->socket, NULL, 0) < 0) {
+				return;
+			}
+
+			q931_dl_establish_confirm(call->dlc);
+		}
 	break;
 
 	case U1_CALL_INITIATED:
@@ -6482,24 +6491,6 @@ void q931_call_dl_release_indication(struct q931_call *call)
 		q931_call_primitive(call, setup_confirm); // ERROR
 	break;
 
-	case N10_ACTIVE:
-		if (q931_call_timer_running(call, T309)) {
-			q931_call_stop_timer(call, T309);
-			q931_call_release_channel(call->channel);
-			q931_call_set_state(call, N0_NULL_STATE);
-			q931_call_primitive(call, release_indication);
-		} else {
-			q931_call_start_timer(call, T309);
-
-			// FIXME
-			if (connect(call->dlc->socket, NULL, 0) < 0) {
-				return;
-			}
-
-			q931_dl_establish_confirm(call->dlc);
-		}
-	break;
-
 	case U10_ACTIVE:
 
 	break;
@@ -6511,47 +6502,12 @@ void q931_call_dl_release_indication(struct q931_call *call)
 		q931_intf_del_call(call);
 		q931_call_primitive(call, release_indication); // ERROR
 	break;
-
-	case N1_CALL_INITIATED:
-	case N2_OVERLAP_SENDING:
-	case N3_OUTGOING_CALL_PROCEEDING:
-	case N4_CALL_DELIVERED:
-	case N6_CALL_PRESENT:
-	case N7_CALL_RECEIVED:
-	case N8_CONNECT_REQUEST:
-	case N9_INCOMING_CALL_PROCEEDING:
-	case N11_DISCONNECT_REQUEST:
-	case N12_DISCONNECT_INDICATION:
-	case N15_SUSPEND_REQUEST:
-	case N17_RESUME_REQUEST:
-	case N19_RELEASE_REQUEST:
-	case N22_CALL_ABORT:
-	case N25_OVERLAP_RECEIVING:
-		if (!call->broadcast_setup || call->state == N6_CALL_PRESENT) {
-			q931_call_stop_any_timer(call);
-			q931_call_release_channel(call->channel);
-			q931_call_set_state(call, N0_NULL_STATE);
-			q931_intf_del_call(call);
-			q931_call_primitive(call, release_indication);
-		}
-	break;
 	}
 }
 
 void q931_call_dl_release_confirm(struct q931_call *call)
 {
 	assert(call);
-
-	q931_call_stop_timer(call, T309);
-
-	if (!q931_timer_pending(&call->T322)) {
-		q931_send_status_enquiry(call, call->dlc);
-
-		q931_call_start_timer(call, T322);
-
-		// NOTE 1: T322 MUST BE STOPPED ON RECEIPT OF A
-		//         CLEARING MESSAGE
-	}
 }
 
 void q931_dispatch_message(

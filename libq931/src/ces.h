@@ -3,6 +3,30 @@
 
 #include "timer.h"
 
+#define q931_ces_start_timer(ces, timer)		\
+	do {						\
+		q931_start_timer_delta(			\
+			(ces)->call->intf->lib,		\
+			&(ces)->timer,			\
+			(ces)->call->intf->timer);	\
+		report_ces(ces, LOG_DEBUG,		\
+			"%s:%d Timer %s started\n",	\
+			__FILE__,__LINE__,		\
+			#timer);			\
+	} while(0)
+
+#define q931_ces_stop_timer(ces, timer)		\
+	do {						\
+		q931_stop_timer(&(ces)->timer);	\
+		report_ces(ces, LOG_DEBUG,		\
+			"%s:%d Timer %s stopped\n",	\
+			__FILE__,__LINE__,		\
+			#timer);			\
+	} while(0)
+
+#define q931_ces_timer_running(ces, timer)		\
+		q931_timer_pending(&(ces)->timer)	\
+
 #define report_ces(ces, lvl, format, arg...)	\
 	(ces)->call->intf->lib->report((lvl), format, ## arg)
 
@@ -26,6 +50,13 @@ struct q931_ces
 	enum q931_ces_state state;
 
 	struct q931_timer T304;
+	struct q931_timer T308;
+	struct q931_timer T322;
+
+	int T308_fired;
+
+	int senq_cause_97_98_received;
+	int senq_cnt;
 };
 
 void q931_ces_dispatch_message(
@@ -53,5 +84,6 @@ void q931_ces_setup_ack_request(struct q931_ces *ces);
 void q931_ces_release_request(struct q931_ces *ces,
 	enum q931_ie_cause_value cause);
 void q931_ces_info_request(struct q931_ces *ces);
+void q931_ces_status_enquiry_request(struct q931_ces *ces);
 
 #endif

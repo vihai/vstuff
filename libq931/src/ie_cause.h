@@ -87,6 +87,13 @@ enum q931_ie_cause_value
 	Q931_IE_C_CV_INTERWORKING_UNSPECIFIED			= 127,
 };
 
+enum q931_ie_cause_value_recommendation
+{
+	Q931_IE_C_R_Q931	= 0x00,
+	Q931_IE_C_R_X21		= 0x03,
+	Q931_IE_C_R_X25		= 0x04,
+};
+
 struct q931_ie_cause_value_info
 {
 	__u8 id;
@@ -130,6 +137,9 @@ struct q931_ie_cause_onwire_4
 #endif
 } __attribute__ ((__packed__));
 
+int q931_ie_cause_check(
+	struct q931_call *call,
+	struct q931_ie *ie);
 int q931_append_ie_cause(void *buf,
         enum q931_ie_cause_location location,
         enum q931_ie_cause_value value);

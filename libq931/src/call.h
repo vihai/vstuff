@@ -35,6 +35,12 @@
 #define q931_call_timer_running(call, timer)		\
 		q931_timer_pending(&(call)->timer)	\
 
+#define q931_call_primitive(call, primitive, ...)	\
+	do {						\
+		if ((call)->primitive)			\
+			(call)->primitive(call);	\
+	} while(0);
+
 enum q931_call_direction
 {
 	Q931_CALL_DIRECTION_OUTBOUND	= 0x0,
@@ -117,8 +123,13 @@ struct q931_call
 	int sending_complete;
 	int broadcast_setup;
 	int tones_option;
+
 	int T303_fired;
 	int T308_fired;
+
+	int senq_status_97_98_received;
+	int senq_cnt;
+
 	enum q931_ie_cause_value disconnect_cause;
 	enum q931_ie_cause_value release_with_cause;
 	__u8 release_diagnostics[10]; // FIXME???
@@ -191,6 +202,8 @@ void q931_call_dl_establish_confirm(struct q931_call *call);
 void q931_call_dl_release_indication(struct q931_call *call);
 void q931_call_dl_release_confirm(struct q931_call *call);
 
+void q931_call_stop_any_timer(struct q931_call *call);
+
 void q931_alerting_request(struct q931_call *call);
 void q931_disconnect_request(struct q931_call *call,
 	enum q931_ie_cause_value cause);
@@ -210,12 +223,14 @@ void q931_resume_response(struct q931_call *call);
 void q931_setup_complete_request(struct q931_call *call);
 void q931_setup_request(struct q931_call *call);
 void q931_setup_response(struct q931_call *call);
-void q931_status_enquiry_request(struct q931_call *call);
+void q931_status_enquiry_request(struct q931_call *call,
+	struct q931_ces *ces);
 void q931_suspend_reject_request(struct q931_call *call,
 	enum q931_ie_cause_value cause);
 
 void q931_suspend_response(struct q931_call *call);
 void q931_suspend_request(struct q931_call *call);
+void q931_restart_request(struct q931_call *call);
 
 void q931_int_alerting_indication(struct q931_call *call, struct q931_ces *ces);
 void q931_int_connect_indication(struct q931_call *call, struct q931_ces *ces);
