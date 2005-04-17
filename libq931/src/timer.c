@@ -3,8 +3,9 @@
 
 #define Q931_PRIVATE
 
+#include "util.h"
+#include "lib.h"
 #include "list.h"
-#include "q931.h"
 #include "timer.h"
 
 void q931_init_timer(

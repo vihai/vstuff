@@ -61,7 +61,13 @@ In TE mode there can be at most one TEI management per socket
 
 Implement: 5.9 User notification procedure
 
-Implement Restart Procedure
+Restart Procedure is completely untested, test it.
+
+
+Primitive passing is implemented with function calls.
+Called functions may call back before the code ends.
+To overcome this, we must ensure that primitive functions
+are called after any other operation (state change, message sending, etc).
 
 Reduce redundand code coming from FSM description
 

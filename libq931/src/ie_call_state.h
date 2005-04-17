@@ -29,6 +29,7 @@ enum q931_ie_call_state_coding_standard
 #define Q931_IE_CS_N19_RELEASE_REQUEST		0x13
 #define Q931_IE_CS_N22_CALL_ABORT		0x16
 #define Q931_IE_CS_N25_OVERLAP_RECEIVING	0x19
+
 #define Q931_IE_CS_U0_NULL_STATE		0x00
 #define Q931_IE_CS_U1_CALL_INITIATED		0x01
 #define Q931_IE_CS_U2_OVERLAP_SENDING		0x02
@@ -46,12 +47,9 @@ enum q931_ie_call_state_coding_standard
 #define Q931_IE_CS_U19_RELEASE_REQUEST		0x13
 #define Q931_IE_CS_U25_OVERLAP_RECEIVING	0x19
 
-enum q931_ie_call_state_call_state_glob
-{
-	Q931_IE_GIS_REST_0			= 0x00,
-	Q931_IE_GIS_REST_1			= 0x3D,
-	Q931_IE_GIS_REST_2			= 0x3E,
-};
+#define Q931_IE_CS_REST0			0x00
+#define Q931_IE_CS_REST1			0x3d
+#define Q931_IE_CS_REST2			0x3e
 
 struct q931_ie_call_state_onwire_3
 {
@@ -65,7 +63,7 @@ struct q931_ie_call_state_onwire_3
 } __attribute__ ((__packed__));
 
 int q931_ie_call_state_check(
-	struct q931_call *call,
+	struct q931_message *msg,
 	struct q931_ie *ie);
 int q931_append_ie_call_state(void *buf, __u8 value);
 

@@ -6,8 +6,17 @@
 
 #define Q931_PRIVATE
 
-#include "q931.h"
 #include "ie.h"
+#include "ie_sending_complete.h"
+#include "ie_bearercap.h"
+#include "ie_cdpn.h"
+#include "ie_cgpn.h"
+#include "ie_chanid.h"
+#include "ie_progind.h"
+#include "ie_cause.h"
+#include "ie_call_state.h"
+#include "ie_hlc.h"
+#include "ie_restind.h"
 
 static struct q931_ie_info q931_ie_infos[] =
 {
@@ -401,7 +410,7 @@ static struct q931_ie_info q931_ie_infos[] =
 		Q931_NT_ETSI,
 		Q931_IE_RESTART_INDICATOR,
 		"Restart Indicator",
-		NULL,
+		q931_ie_restart_indicator_check,
 	},
 	{
 		-1,

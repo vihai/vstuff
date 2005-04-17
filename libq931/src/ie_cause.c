@@ -4,13 +4,16 @@
 
 #define Q931_PRIVATE
 
-#include "q931.h"
+#include "lib.h"
+#include "logging.h"
+#include "intf.h"
+#include "message.h"
 #include "ie_cause.h"
 
 struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 {
 	{
-	Q931_IE_C_CV_UNALLOCATED,
+	Q931_IE_C_CV_UNALLOCATED_NUMBER,
 	"Unallocated",
 	},
 	{
@@ -227,13 +230,13 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 };
 
 int q931_ie_cause_check(
-	struct q931_call *call,
+	struct q931_message *msg,
 	struct q931_ie *ie)
 {
 	int nextoct = 0;
 
-	if (ie->size < 1) {
-		report_call(call, LOG_ERR, "IE size < 1\n");
+	if (ie->len < 1) {
+		report_msg(msg, LOG_ERR, "IE size < 1\n");
 
 		return FALSE;
 	}
@@ -242,8 +245,8 @@ int q931_ie_cause_check(
 		(struct q931_ie_cause_onwire_3 *)
 		(ie->data + nextoct);
 
-	if (oct_3->coding_standard != Q931_IE_CS_CS_CCITT) {
-		report_call(call, LOG_ERR, "coding stanrdard != CCITT\n");
+	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
+		report_msg(msg, LOG_ERR, "coding stanrdard != CCITT\n");
 
 		return FALSE;
 	}
@@ -256,14 +259,14 @@ int q931_ie_cause_check(
 			(ie->data + nextoct);
 
 		if (oct_3a->ext != 1) {
-			report_call(call, LOG_ERR,
+			report_msg(msg, LOG_ERR,
 				"Extension bit unexpectedly set to 0\n");
 
 			return FALSE;
 		}
 
 		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
-			report_call(call, LOG_ERR,
+			report_msg(msg, LOG_ERR,
 				"Recommendation unexpectedly != Q.931\n");
 
 			return FALSE;
@@ -314,23 +317,23 @@ int q931_append_ie_cause(void *buf,
 	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
 
 	ie->id = Q931_IE_CAUSE;
-	ie->size = 0;
+	ie->len = 0;
 
-	ie->data[ie->size] = 0x00;
+	ie->data[ie->len] = 0x00;
 	struct q931_ie_cause_onwire_3 *oct_3 =
-	  (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->size]);
+	  (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->len]);
 	oct_3->ext = 1;
 	oct_3->coding_standard = Q931_IE_C_CS_CCITT;
 	oct_3->location = location;
-	ie->size += 1;
+	ie->len += 1;
 
-	ie->data[ie->size] = 0x00;
+	ie->data[ie->len] = 0x00;
 	struct q931_ie_cause_onwire_4 *oct_4 =
-	  (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->size]);
+	  (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->len]);
 	oct_4->ext = 1;
 	oct_4->cause_value = value;
-	ie->size += 1;
+	ie->len += 1;
 
-	return ie->size + sizeof(struct q931_ie_onwire);
+	return ie->len + sizeof(struct q931_ie_onwire);
 }
 

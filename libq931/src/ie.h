@@ -13,14 +13,14 @@ struct q931_ie_info;
 struct q931_ie
 {
 	const struct q931_ie_info *info;
-	int size;
+	int len;
 	void *data;
 };
 
 struct q931_ie_onwire
 {
 	__u8 id;
-	__u8 size;
+	__u8 len;
 	__u8 data[0];
 } __attribute__ ((__packed__));
 
@@ -95,14 +95,15 @@ enum q931_ie_id
 #define Q931_NT_ETSI	(1 << 0)
 
 struct q931_call;
+struct q931_message;
 struct q931_ie_info
 {
-	int max_size;
+	int max_len;
 	int max_occur;
 	int network_type;
 	enum q931_ie_id id;
 	const char *name;
-	int (*validity_check)(struct q931_call *call, struct q931_ie *ie);
+	int (*validity_check)(struct q931_message *msg, struct q931_ie *ie);
 };
 
 enum q931_ie_direction
@@ -167,15 +168,5 @@ const struct q931_ie_info *q931_get_ie_info(
 const struct q931_ie_info_per_mt *q931_get_ie_info_per_mt(
 	enum q931_message_type message_type,
 	enum q931_ie_id ie_id);
-
-#include "ie_sending_complete.h"
-#include "ie_bearercap.h"
-#include "ie_cdpn.h"
-#include "ie_cgpn.h"
-#include "ie_chanid.h"
-#include "ie_progind.h"
-#include "ie_cause.h"
-#include "ie_call_state.h"
-#include "ie_hlc.h"
 
 #endif

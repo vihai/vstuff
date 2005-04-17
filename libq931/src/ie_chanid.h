@@ -3,6 +3,7 @@
 #define _IE_CHANID_H
 
 #include "ie.h"
+#include "chanset.h"
 
 /*********************** Channel Identification *************************/
 
@@ -138,12 +139,18 @@ struct q931_ie_channel_identification_onwire_3d
 #endif
 
 int q931_ie_channel_identification_check(
-	struct q931_call *call,
+	struct q931_message *msg,
 	struct q931_ie *ie);
+
+void q931_ie_channel_identification_to_chanset(
+	struct q931_ie *ie,
+	struct q931_chanset *chanset);
+
 int q931_append_ie_channel_identification_bra(void *buf,
 	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	enum q931_ie_channel_identification_info_channel_selection_bra chan_id);
+	struct q931_chanset *chanset);
+
 int q931_append_ie_channel_identification_pra(void *buf,
 	enum q931_ie_channel_identification_info_channel_selection_pra selection,
 	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	int chan_id);
+	struct q931_chanset *chanset);

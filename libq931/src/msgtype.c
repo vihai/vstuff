@@ -6,7 +6,7 @@
 
 #define Q931_PRIVATE
 
-#include "q931.h"
+#include "util.h"
 #include "msgtype.h"
 
 static struct q931_message_type_name q931_message_type_names[] =

@@ -7,39 +7,9 @@
 #include "timer.h"
 #include "list.h"
 #include "ie.h"
+#include "message.h"
 
-#define report_call(call, lvl, format, arg...)				\
-	(call)->intf->lib->report((lvl), "call '%u': " format, (call)->call_reference, ## arg)
-
-#define q931_call_start_timer(call, timer)		\
-	do {						\
-		q931_start_timer_delta(			\
-			(call)->intf->lib,		\
-			&(call)->timer,			\
-			(call)->intf->timer);	\
-		report_call(call, LOG_DEBUG,		\
-			"%s:%d Timer %s started\n",	\
-			__FILE__,__LINE__,		\
-			#timer);			\
-	} while(0)
-
-#define q931_call_stop_timer(call, timer)		\
-	do {						\
-		q931_stop_timer(&(call)->timer);	\
-		report_call(call, LOG_DEBUG,		\
-			"%s:%d Timer %s stopped\n",	\
-			__FILE__,__LINE__,		\
-			#timer);			\
-	} while(0)
-
-#define q931_call_timer_running(call, timer)		\
-		q931_timer_pending(&(call)->timer)	\
-
-#define q931_call_primitive(call, primitive, ...)	\
-	do {						\
-		if ((call)->primitive)			\
-			(call)->primitive(call);	\
-	} while(0);
+#include "ie_cause.h"
 
 enum q931_call_direction
 {
@@ -152,7 +122,6 @@ struct q931_call
 	struct q931_timer T313;
 	struct q931_timer T314;
 	struct q931_timer T316;
-	struct q931_timer T317;
 	struct q931_timer T318;
 	struct q931_timer T319;
 	struct q931_timer T320;
@@ -193,17 +162,6 @@ struct q931_call *q931_alloc_call_out(
 
 void q931_free_call(struct q931_call *call);
 
-void q931_call_set_state(
-	struct q931_call *call,
-	enum q931_call_state state);
-
-void q931_call_dl_establish_indication(struct q931_call *call);
-void q931_call_dl_establish_confirm(struct q931_call *call);
-void q931_call_dl_release_indication(struct q931_call *call);
-void q931_call_dl_release_confirm(struct q931_call *call);
-
-void q931_call_stop_any_timer(struct q931_call *call);
-
 void q931_alerting_request(struct q931_call *call);
 void q931_disconnect_request(struct q931_call *call,
 	enum q931_ie_cause_value cause);
@@ -232,26 +190,6 @@ void q931_suspend_response(struct q931_call *call);
 void q931_suspend_request(struct q931_call *call);
 void q931_restart_request(struct q931_call *call);
 
-void q931_int_alerting_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_connect_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_call_proceeding_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_release_complete_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_info_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_progress_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_release_indication( struct q931_call *call, struct q931_ces *ces);
-
-void q931_dispatch_message(
-	struct q931_call *call,
-	struct q931_dlc *dlc,
-	__u8 message_type,
-	const struct q931_ie *ies,
-	int ies_cnt);
-
-struct q931_call *q931_find_call_by_reference(
-	struct q931_interface *intf,
-	enum q931_call_direction direction,
-	q931_callref call_reference);
-
 static inline void q931_call_set_calling_number(
 	struct q931_call *call,
 	const char *calling_number)
@@ -270,4 +208,71 @@ static inline void q931_call_set_called_number(
 	call->called_number[sizeof(call->called_number)-1]='\0';
 }
 
+
+#ifdef Q931_PRIVATE
+
+#define report_call(call, lvl, format, arg...)			\
+	(call)->intf->lib->report((lvl), "call '%u': " format,	\
+		(call)->call_reference, ## arg)
+
+#define q931_call_start_timer(call, timer)		\
+	do {						\
+		q931_start_timer_delta(			\
+			(call)->intf->lib,		\
+			&(call)->timer,			\
+			(call)->intf->timer);		\
+		report_call(call, LOG_DEBUG,		\
+			"%s:%d Timer %s started\n",	\
+			__FILE__,__LINE__,		\
+			#timer);			\
+	} while(0)
+
+#define q931_call_stop_timer(call, timer)		\
+	do {						\
+		q931_stop_timer(&(call)->timer);	\
+		report_call(call, LOG_DEBUG,		\
+			"%s:%d Timer %s stopped\n",	\
+			__FILE__,__LINE__,		\
+			#timer);			\
+	} while(0)
+
+#define q931_call_timer_running(call, timer)		\
+		q931_timer_pending(&(call)->timer)	\
+
+#define q931_call_primitive(call, primitive, ...)	\
+	do {						\
+		if ((call)->primitive)			\
+			(call)->primitive(call);	\
+	} while(0);
+
+
+void q931_dispatch_message(
+	struct q931_call *call,
+	struct q931_message *msg);
+
+struct q931_call *q931_find_call_by_reference(
+	struct q931_interface *intf,
+	enum q931_call_direction direction,
+	q931_callref call_reference);
+
+void q931_call_set_state(
+	struct q931_call *call,
+	enum q931_call_state state);
+
+void q931_call_dl_establish_indication(struct q931_call *call);
+void q931_call_dl_establish_confirm(struct q931_call *call);
+void q931_call_dl_release_indication(struct q931_call *call);
+void q931_call_dl_release_confirm(struct q931_call *call);
+
+void q931_call_stop_any_timer(struct q931_call *call);
+
+void q931_int_alerting_indication(struct q931_call *call, struct q931_ces *ces);
+void q931_int_connect_indication(struct q931_call *call, struct q931_ces *ces);
+void q931_int_call_proceeding_indication(struct q931_call *call, struct q931_ces *ces);
+void q931_int_release_complete_indication(struct q931_call *call, struct q931_ces *ces);
+void q931_int_info_indication(struct q931_call *call, struct q931_ces *ces);
+void q931_int_progress_indication(struct q931_call *call, struct q931_ces *ces);
+void q931_int_release_indication( struct q931_call *call, struct q931_ces *ces);
+
+#endif
 #endif

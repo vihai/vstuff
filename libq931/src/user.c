@@ -13,7 +13,6 @@
 
 #define Q931_PRIVATE
 
-#include "q931.h"
 #include "msgtype.h"
 #include "ie.h"
 

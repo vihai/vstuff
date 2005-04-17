@@ -53,7 +53,7 @@ AST_MUTEX_DEFINE_STATIC(manager_lock);
 
 /* This is the thread for the monitor which checks for input on the channels
    which are not currently in use.  */
-static pthread_t q931_thread = AST_PTHREADT_NULL;
+static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
 
 /* NBS creates private structures on demand */
    
@@ -66,19 +66,6 @@ struct visdn_chan {
 
 	struct q931_call *q931_call;
 };
-
-struct manager_state
-{
-	struct q931_lib *libq931;
-
-	int have_to_exit;
-
-	struct q931_interface *ifs[100];
-	int nifs;
-
-	struct q931_dlc dlcs[100];
-	int ndlcs;
-} manager;
 
 enum poll_info_type
 {
@@ -95,6 +82,23 @@ struct poll_info
 		struct q931_dlc *dlc;
 	};
 };
+
+struct manager_state
+{
+	struct q931_lib *libq931;
+
+	int have_to_exit;
+
+	struct q931_interface *ifs[100];
+	int nifs;
+
+	struct q931_dlc dlcs[100];
+	int ndlcs;
+
+	struct pollfd polls[100];
+	struct poll_info poll_infos[100];
+	int npolls;
+} manager;
 
 
 static int visdn_devicestate(void *data)
@@ -558,48 +562,67 @@ void refresh_polls_list(
 	}
 }
 
-static void *q931_thread_main(void *data)
+static void visdn_accept(struct manager_state *manager,
+	struct q931_interface *intf, int accept_socket)
 {
-	struct pollfd polls[100];
-	struct poll_info poll_infos[100];
-	int npolls = 0;
+	manager->dlcs[manager->ndlcs].socket =
+		accept(accept_socket, NULL, 0);
+	manager->dlcs[manager->ndlcs].intf =
+		intf;
 
-	npolls = sizeof(*polls)/sizeof(*polls);
-	refresh_polls_list(&manager, polls, poll_infos, &npolls);
+	int optlen=sizeof(manager->dlcs[manager->ndlcs].tei);
+	if (getsockopt(manager->dlcs[manager->ndlcs].socket, SOL_LAPD, LAPD_TEI,
+		&manager->dlcs[manager->ndlcs].tei, &optlen)<0) {
+			printf("getsockopt: %s\n", strerror(errno));
+			return;
+	}
+
+	ast_log(LOG_NOTICE,
+		"New DLC (TEI=%d) accepted...\n",
+		manager->dlcs[manager->ndlcs].tei);
+
+	manager->ndlcs++;
+
+	refresh_polls_list(manager,
+		manager->polls,
+		manager->poll_infos,
+		&manager->npolls);
+}
+
+static void *visdn_q931_thread_main(void *data)
+{
+
+	manager.npolls = 0;
+	refresh_polls_list(&manager,
+		manager.polls,
+		manager.poll_infos,
+		&manager.npolls);
 
 	manager.have_to_exit = 0;
 	int i;
 	int active_calls_cnt = 0;
 	do {
-		if (poll(polls, npolls, 1000000) < 0) {
+		if (poll(manager.polls, manager.npolls, 1000000) < 0) {
 			printf("poll error: %s\n",strerror(errno));
 			exit(1);
 		}
 
-		for(i = 0; i < npolls; i++) {
-			if (poll_infos[i].type == POLL_INFO_TYPE_INTERFACE) {
-				if (polls[i].revents & POLLERR) {
+		for(i = 0; i < manager.npolls; i++) {
+			if (manager.poll_infos[i].type == POLL_INFO_TYPE_INTERFACE) {
+				if (manager.polls[i].revents & POLLERR) {
 					printf("Error on interface %s poll\n",
-						poll_infos[i].interface->name);
+						manager.poll_infos[i].interface->name);
 				}
 
-				if (polls[i].revents & POLLIN) {
-					printf("New DLC accepted...\n");
-
-					manager.dlcs[manager.ndlcs].socket =
-						accept(polls[i].fd, NULL, 0);
-					manager.dlcs[manager.ndlcs].intf =
-						poll_infos[i].interface;
-					manager.ndlcs++;
-
-					refresh_polls_list(&manager,
-						polls,
-						poll_infos, &npolls);
+				if (manager.polls[i].revents & POLLIN) {
+					visdn_accept(&manager,
+						manager.poll_infos[i].interface,
+						manager.polls[i].fd);
 				}
-			} else if (poll_infos[i].type == POLL_INFO_TYPE_DLC) {
-				if (polls[i].revents & POLLERR ||
-				    polls[i].revents & POLLIN) {
-					q931_receive(poll_infos[i].dlc);
+			} else if (manager.poll_infos[i].type == POLL_INFO_TYPE_DLC) {
+				if (manager.polls[i].revents & POLLERR ||
+				    manager.polls[i].revents & POLLIN) {
+					q931_receive(manager.poll_infos[i].dlc);
 				}
 			}
 		}
@@ -660,6 +683,8 @@ static int visdn_accept_inbound_call(struct q931_call *q931_call)
 		ast_hangup(ast_chan);
 		return FALSE;
 	}
+
+	return TRUE;
 }
 
 static void visdn_q931_alerting_indication(struct q931_call *q931_call)
@@ -712,29 +737,42 @@ static void visdn_q931_error_indication(struct q931_call *q931_call)
 
 static void visdn_q931_info_indication(struct q931_call *q931_call)
 {
-	printf("*** %s\n", __FUNCTION__);
+	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
 
-	if (!ast_canmatch_extension(NULL, "visdn", q931_call->called_number,
-			1, q931_call->calling_number)) {
-		q931_reject_request(q931_call,
-			Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+	if (q931_call->sending_complete) {
+		if (ast_exists_extension(NULL, "visdn",
+				q931_call->called_number, 1,
+				q931_call->calling_number)) {
 
-		return;
+			if (!visdn_accept_inbound_call(q931_call))
+				q931_disconnect_request(q931_call,
+					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+			else
+				q931_proceeding_request(q931_call);
+		} else {
+			q931_disconnect_request(q931_call,
+				Q931_IE_C_CV_UNALLOCATED_NUMBER);
+		}
+	} else {
+		if (!ast_canmatch_extension(NULL, "visdn",
+				q931_call->called_number, 1,
+				q931_call->calling_number)) {
+			q931_disconnect_request(q931_call,
+				Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+
+			return;
+		}
+
+		if (ast_exists_extension(NULL, "visdn",
+				q931_call->called_number, 1,
+				q931_call->calling_number)) {
+			if (!visdn_accept_inbound_call(q931_call))
+				q931_disconnect_request(q931_call,
+					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+			else
+				q931_proceeding_request(q931_call);
+		}
 	}
-
-	if (!ast_exists_extension(NULL, "visdn", q931_call->called_number,
-			1, q931_call->calling_number)) {
-
-		return;
-	}
-
-	ast_log(LOG_NOTICE, "Extension matches!\n");
-
-	if (!visdn_accept_inbound_call(q931_call))
-		q931_reject_request(q931_call,
-			Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
-	else
-		q931_proceeding_request(q931_call);
 }
 
 static void visdn_q931_more_info_indication(struct q931_call *q931_call)
@@ -824,14 +862,6 @@ static void visdn_q931_setup_indication(struct q931_call *q931_call)
 {
 	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
 
-	if (!ast_canmatch_extension(NULL, "visdn", q931_call->called_number,
-			1, q931_call->calling_number)) {
-		q931_reject_request(q931_call,
-			Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
-
-		return;
-	}
-
 	if (q931_call->sending_complete) {
 		if (ast_exists_extension(NULL, "visdn",
 				q931_call->called_number, 1,
@@ -854,6 +884,14 @@ static void visdn_q931_setup_indication(struct q931_call *q931_call)
 		}
 
 	} else {
+		if (!ast_canmatch_extension(NULL, "visdn", q931_call->called_number,
+				1, q931_call->calling_number)) {
+			q931_reject_request(q931_call,
+				Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+
+			return;
+		}
+
 		if (ast_exists_extension(NULL, "visdn",
 				q931_call->called_number, 1,
 				q931_call->calling_number)) {
@@ -911,6 +949,25 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 static void visdn_q931_stop_tone(struct q931_channel *channel)
 {
 	printf("*** %s B%d\n", __FUNCTION__, channel->id+1);
+}
+
+static void visdn_q931_management_restart_confirm(
+	struct q931_global_call *gc,
+	struct q931_chanset *chanset)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void visdn_q931_timeout_management_indication(
+	struct q931_global_call *gc)
+{
+	printf("*** %s\n", __FUNCTION__);
+}
+
+static void visdn_q931_status_management_indication(
+	struct q931_global_call *gc)
+{
+	printf("*** %s\n", __FUNCTION__);
 }
 
 static void visdn_logger(int level, const char *format, ...)
@@ -1063,6 +1120,13 @@ int load_module()
 		manager.ifs[manager.nifs]->stop_tone =
 			visdn_q931_stop_tone;
 
+		manager.ifs[manager.nifs]->management_restart_confirm =
+			visdn_q931_management_restart_confirm;
+		manager.ifs[manager.nifs]->timeout_management_indication =
+			visdn_q931_timeout_management_indication;
+		manager.ifs[manager.nifs]->status_management_indication =
+			visdn_q931_status_management_indication;
+
 		if (manager.ifs[manager.nifs]->role == LAPD_ROLE_NT) {
 			if (listen(manager.ifs[manager.nifs]->master_socket, 100) < 0) {
 				ast_log(LOG_ERROR,
@@ -1082,8 +1146,8 @@ int load_module()
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	if (ast_pthread_create(&q931_thread, &attr,
-					q931_thread_main, NULL) < 0) {
+	if (ast_pthread_create(&visdn_q931_thread, &attr,
+					visdn_q931_thread_main, NULL) < 0) {
 		ast_log(LOG_ERROR, "Unable to start q931 thread.\n");
 		return -1;
 	}

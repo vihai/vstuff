@@ -4,9 +4,9 @@ struct q931_header
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 spare1:4;
-	__u8 call_reference_size:4;
+	__u8 call_reference_len:4;
 #elif __BYTE_ORDER == __LITTLE_ENDIAN
-	__u8 call_reference_size:4;
+	__u8 call_reference_len:4;
 	__u8 spare1:4;
 #else
 #error Unsupported byte order

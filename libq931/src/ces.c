@@ -13,7 +13,7 @@
 
 #define Q931_PRIVATE
 
-#include "q931.h"
+#include "lib.h"
 #include "logging.h"
 #include "msgtype.h"
 #include "ie.h"
@@ -21,6 +21,8 @@
 #include "out.h"
 #include "call.h"
 #include "intf.h"
+
+#include "ie_call_state.h"
 
 static const char *q931_ces_state_to_text(enum q931_call_state state)
 {
@@ -92,7 +94,8 @@ void q931_ces_free(struct q931_ces *ces)
 {
 	assert(ces);
 
-	report_ces(ces, LOG_DEBUG, "CES freed for call %d\n",
+	report_ces(ces, LOG_DEBUG, "CES %d freed for call %d\n",
+		ces->dlc->tei,
 		ces->call->call_reference);
 
 	list_del(&ces->node);
@@ -113,11 +116,11 @@ void q931_ces_dl_establish_indication(struct q931_ces *ces)
 
 	if (ces->state == I25_OVERLAP_RECEIVING) {
 		q931_ces_stop_timer(ces, T304);
-		q931_int_release_indication(ces->call, ces);
 		q931_send_release_cause(ces->call, ces->dlc,
 			Q931_IE_C_CV_TEMPORARY_FAILURE);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
+		q931_int_release_indication(ces->call, ces);
 	}
 }
 
@@ -183,8 +186,8 @@ static void _q931_ces_unexpected_timer(
 		event,
 		q931_ces_state_to_text(ces->state));
 }
-#define q931_ces_unexpected_timer(call)	\
-	_q931_ces_unexpected_timer((call), __FUNCTION__)
+#define q931_ces_unexpected_primitive(call)	\
+	_q931_ces_unexpected_primitive((call), __FUNCTION__)
 
 static void _q931_ces_unexpected_primitive(
 	struct q931_ces *ces,
@@ -238,9 +241,7 @@ void q931_ces_alerting_request(struct q931_ces *ces)
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
 	case I25_OVERLAP_RECEIVING:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_unexpected_primitive(ces);
 	break;
 	}
 }
@@ -259,9 +260,7 @@ void q931_ces_connect_request(struct q931_ces *ces)
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
 	case I25_OVERLAP_RECEIVING:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_unexpected_primitive(ces);
 	break;
 	}
 }
@@ -280,9 +279,7 @@ void q931_ces_call_proceeding_request(struct q931_ces *ces)
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
 	case I25_OVERLAP_RECEIVING:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_unexpected_primitive(ces);
 	break;
 	}
 }
@@ -302,9 +299,7 @@ void q931_ces_setup_ack_request(struct q931_ces *ces)
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
 	case I25_OVERLAP_RECEIVING:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_unexpected_primitive(ces);
 	break;
 	}
 }
@@ -363,9 +358,7 @@ void q931_ces_info_request(struct q931_ces *ces)
 	case I0_NULL_STATE:
 	case I19_RELEASE_REQUEST:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_unexpected_primitive(ces);
 	break;
 	}
 }
@@ -388,20 +381,17 @@ void q931_ces_status_enquiry_request(struct q931_ces *ces)
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_unexpected_primitive(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_alerting(
+static inline void q931_ces_handle_alerting(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
@@ -412,14 +402,14 @@ inline static void q931_ces_handle_alerting(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_int_alerting_indication(ces->call, ces);
 		q931_ces_set_state(ces, I7_CALL_RECEIVED);
+		q931_int_alerting_indication(ces->call, ces);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_int_alerting_indication(ces->call, ces);
 		q931_ces_set_state(ces, I7_CALL_RECEIVED);
+		q931_int_alerting_indication(ces->call, ces);
 	break;
 
 	case I0_NULL_STATE:
@@ -429,13 +419,12 @@ inline static void q931_ces_handle_alerting(
 	}
 }
 
-inline static void q931_ces_handle_call_proceeding(
+static inline void q931_ces_handle_call_proceeding(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
@@ -448,32 +437,28 @@ inline static void q931_ces_handle_call_proceeding(
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_int_call_proceeding_indication(ces->call, ces);
 		q931_ces_set_state(ces, I9_INCOMING_CALL_PROCEEDING);
+		q931_int_call_proceeding_indication(ces->call, ces);
 	break;
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_connect(
+static inline void q931_ces_handle_connect(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
-		q931_int_connect_indication(ces->call, ces);
-
 		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
+		q931_int_connect_indication(ces->call, ces);
 	break;
 
 	case I8_CONNECT_REQUEST:
@@ -483,32 +468,29 @@ inline static void q931_ces_handle_connect(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_int_connect_indication(ces->call, ces);
 		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
+		q931_int_connect_indication(ces->call, ces);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_int_connect_indication(ces->call, ces);
 		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
+		q931_int_connect_indication(ces->call, ces);
 	break;
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_progress(
+static inline void q931_ces_handle_progress(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
@@ -529,35 +511,32 @@ inline static void q931_ces_handle_progress(
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_disconnect(
+static inline void q931_ces_handle_disconnect(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
-		q931_int_release_indication(ces->call, ces);
 		q931_send_release(ces->call, ces->dlc);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
+		q931_int_release_indication(ces->call, ces);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_int_release_indication(ces->call, ces);
 		q931_send_release(ces->call, ces->dlc);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
+		q931_int_release_indication(ces->call, ces);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -566,35 +545,32 @@ inline static void q931_ces_handle_disconnect(
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_int_release_indication(ces->call, ces);
 		q931_send_release(ces->call, ces->dlc);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
+		q931_int_release_indication(ces->call, ces);
 	break;
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_release(
+static inline void q931_ces_handle_release(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_int_release_indication(ces->call, ces);
 		q931_send_release_complete(ces->call, ces->dlc);
+		q931_int_release_indication(ces->call, ces);
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
@@ -605,27 +581,24 @@ inline static void q931_ces_handle_release(
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_int_release_indication(ces->call, ces);
 		q931_send_release_complete(ces->call, ces->dlc);
+		q931_int_release_indication(ces->call, ces);
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_release_complete(
+static inline void q931_ces_handle_release_complete(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
@@ -657,38 +630,35 @@ inline static void q931_ces_handle_release_complete(
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_status(
+static inline void q931_ces_handle_status(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	__u8 onwire_state = 0;
 	enum q931_ie_cause_value cause_value = 0;
 
 	int i;
-	for (i=0; i<ies_cnt; i++) {
-		if (ies[i].info->id == Q931_IE_CALL_STATE) {
+	for (i=0; i<msg->ies_cnt; i++) {
+		if (msg->ies[i].info->id == Q931_IE_CALL_STATE) {
 			struct q931_ie_call_state_onwire_3 *oct_3 =
 				(struct q931_ie_call_state_onwire_3 *)
-				(ies[i].data + 0);
+				(msg->ies[i].data + 0);
 
 			onwire_state = oct_3->value;
-		} else if (ies[i].info->id == Q931_IE_CAUSE) {
+		} else if (msg->ies[i].info->id == Q931_IE_CAUSE) {
 			int nextoct = 0;
 
 			struct q931_ie_cause_onwire_3 *oct_3 =
 				(struct q931_ie_cause_onwire_3 *)
-				(ies[i].data + nextoct);
+				(msg->ies[i].data + nextoct);
 
 			if (oct_3->ext == 0)
 				 nextoct++;
@@ -697,7 +667,7 @@ inline static void q931_ces_handle_status(
 
 			struct q931_ie_cause_onwire_4 *oct_4 =
 				(struct q931_ie_cause_onwire_4 *)
-				(ies[i].data + nextoct);
+				(msg->ies[i].data + nextoct);
 
 			cause_value = oct_4->cause_value;
 		}
@@ -745,20 +715,17 @@ inline static void q931_ces_handle_status(
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_info(
+static inline void q931_ces_handle_info(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
@@ -780,20 +747,17 @@ inline static void q931_ces_handle_info(
 
 	case I0_NULL_STATE:
 	default:
-		report_ces(ces, LOG_ERR,
-			"Unexpected  in state %s\n",
-			q931_ces_state_to_text(ces->state));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 	}
 }
 
-inline static void q931_ces_handle_status_enquiry(
+static inline void q931_ces_handle_status_enquiry(
 	struct q931_ces *ces,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	assert(ces);
-	assert(ies);
+	assert(msg);
 
 	q931_ces_send_status(ces,
 		Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY);
@@ -809,11 +773,11 @@ void q931_ces_timer_T304(void *data)
 		return;
 	}
 
-	q931_int_release_indication(ces->call, ces);
 	q931_send_release_cause(ces->call, ces->dlc,
 		Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY);
 	q931_ces_start_timer(ces, T308);
 	q931_ces_set_state(ces, I19_RELEASE_REQUEST);
+	q931_int_release_indication(ces->call, ces);
 }
 
 void q931_ces_timer_T308(void *data)
@@ -831,8 +795,8 @@ void q931_ces_timer_T308(void *data)
 		q931_ces_start_timer(ces, T308);
 
 	} else {
-		q931_int_release_complete_indication(ces->call, ces);
 		ces->T308_fired = TRUE;
+		q931_int_release_complete_indication(ces->call, ces);
 	}
 }
 
@@ -853,8 +817,8 @@ void q931_ces_timer_T322(void *data)
 			if (ces->senq_cnt > 3) {
 				q931_send_release_cause(ces->call, ces->dlc,
 					Q931_IE_C_CV_TEMPORARY_FAILURE);
-				q931_int_release_indication(ces->call, ces);
 				q931_ces_start_timer(ces, T308);
+				q931_int_release_indication(ces->call, ces);
 			} else {
 				q931_send_status_enquiry(ces->call, ces->dlc);
 				q931_ces_start_timer(ces, T322);
@@ -871,53 +835,51 @@ void q931_ces_timer_T322(void *data)
 
 void q931_ces_dispatch_message(
 	struct q931_ces *ces,
-	__u8 message_type,
-	const struct q931_ie *ies,
-	int ies_cnt)
+	struct q931_message *msg)
 {
 	report_ces(ces, LOG_DEBUG, "%s dispatched to CES %d\n",
-		q931_message_type_to_text(message_type),
+		q931_message_type_to_text(msg->message_type),
 		ces->dlc->tei);
 
-	switch (message_type) {
+	switch (msg->message_type) {
 	case Q931_MT_ALERTING:
-		q931_ces_handle_alerting(ces, ies, ies_cnt);
+		q931_ces_handle_alerting(ces, msg);
 	break;
 
 	case Q931_MT_CALL_PROCEEDING:
-		q931_ces_handle_call_proceeding(ces, ies, ies_cnt);
+		q931_ces_handle_call_proceeding(ces, msg);
 	break;
 
 	case Q931_MT_CONNECT:
-		q931_ces_handle_connect(ces, ies, ies_cnt);
+		q931_ces_handle_connect(ces, msg);
 	break;
 
 	case Q931_MT_PROGRESS:
-		q931_ces_handle_progress(ces, ies, ies_cnt);
+		q931_ces_handle_progress(ces, msg);
 	break;
 
 	case Q931_MT_DISCONNECT:
-		q931_ces_handle_disconnect(ces, ies, ies_cnt);
+		q931_ces_handle_disconnect(ces, msg);
 	break;
 
 	case Q931_MT_RELEASE:
-		q931_ces_handle_release(ces, ies, ies_cnt);
+		q931_ces_handle_release(ces, msg);
 	break;
 
 	case Q931_MT_RELEASE_COMPLETE:
-		q931_ces_handle_release_complete(ces, ies, ies_cnt);
+		q931_ces_handle_release_complete(ces, msg);
 	break;
 
 	case Q931_MT_STATUS:
-		q931_ces_handle_status(ces, ies, ies_cnt);
+		q931_ces_handle_status(ces, msg);
 	break;
 
 	case Q931_MT_INFORMATION:
-		q931_ces_handle_info(ces, ies, ies_cnt);
+		q931_ces_handle_info(ces, msg);
 	break;
 
 	case Q931_MT_STATUS_ENQUIRY:
-		q931_ces_handle_status_enquiry(ces, ies, ies_cnt);
+		q931_ces_handle_status_enquiry(ces, msg);
 	break;
 
 	case Q931_MT_SETUP:
@@ -945,15 +907,13 @@ void q931_ces_dispatch_message(
 	case Q931_MT_SUSPEND:
 	case Q931_MT_SUSPEND_ACKNOWLEDGE:
 	case Q931_MT_SUSPEND_REJECT:
-		report_ces(ces, LOG_DEBUG,
-			"Unexpected message %s\n",
-			q931_message_type_to_text(message_type));
+		q931_ces_message_not_compatible_with_state(ces);
 	break;
 
 	default:
 		report_ces(ces, LOG_WARNING,
 			"Unkwnon/unhandled message type %d\n",
-			message_type);
+			msg->message_type);
 	break;
 	}
 }

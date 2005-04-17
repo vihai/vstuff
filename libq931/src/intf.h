@@ -4,13 +4,15 @@
 #include <netinet/in.h>
 #include <lapd.h>
 
-#include "q931.h"
 #include "list.h"
 #include "channel.h"
 #include "timer.h"
 #include "dlc.h"
+#include "callref.h"
+#include "call.h"
+#include "global.h"
 
-#define report_if(intf, lvl, format, arg...)		\
+#define report_intf(intf, lvl, format, arg...)		\
 	(intf)->lib->report((lvl), format, ## arg)
 
 enum q931_interface_type
@@ -37,7 +39,7 @@ struct q931_interface
 	struct q931_dlc dlc; 
 
 	q931_callref next_call_reference;
-	int call_reference_size;
+	int call_reference_len;
 
 	int ncalls;
 	// TODO: Use a HASH for improved scalability
@@ -45,6 +47,8 @@ struct q931_interface
 
 	struct q931_channel channels[32];
 	int n_channels;
+
+	struct q931_global_call global_call;
 
 	__u8 sendbuf[260]; // FIXME (size should be N202-dependent)
 
@@ -96,6 +100,11 @@ struct q931_interface
 	void (*start_tone)(struct q931_channel *chan,
 		enum q931_tone_type tone);
 	void (*stop_tone)(struct q931_channel *chan);
+
+	void (*timeout_management_indication)(struct q931_global_call *gc);
+	void (*status_management_indication)(struct q931_global_call *gc);
+	void (*management_restart_confirm)(struct q931_global_call *gc,
+		struct q931_chanset *chanset);
 };
 
 inline static void q931_intf_add_call(

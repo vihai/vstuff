@@ -12,8 +12,8 @@
 
 #define Q931_PRIVATE
 
+#include "lib.h"
 #include "list.h"
-#include "q931.h"
 #include "logging.h"
 #include "msgtype.h"
 #include "ie.h"
@@ -38,7 +38,7 @@ try_again:
 	interface->next_call_reference++;
 
 	if (interface->next_call_reference >=
-	    (1 << ((interface->call_reference_size * 8) - 1)))
+	    (1 << ((interface->call_reference_len * 8) - 1)))
 		interface->next_call_reference = 1;
 
 	struct q931_call *call;
@@ -59,22 +59,21 @@ struct q931_interface *q931_open_interface(
 	struct q931_lib *lib,
 	const char *name)
 {
-	struct q931_interface *interface;
+	struct q931_interface *intf;
 
 	assert(name);
 
-	interface = malloc(sizeof(*interface));
-	if (!interface)
+	intf = malloc(sizeof(*intf));
+	if (!intf)
 		abort();
 
-	memset(interface, 0x00, sizeof(*interface));
+	memset(intf, 0x00, sizeof(*intf));
 
-	INIT_LIST_HEAD(&interface->calls);
+	INIT_LIST_HEAD(&intf->calls);
 
-	interface->lib = lib;
-	interface->name = strdup(name);
-	interface->next_call_reference = 1;
-	interface->call_reference_size = 1; // FIXME should be 1 for BRI, 2 for PRI
+	intf->lib = lib;
+	intf->name = strdup(name);
+	intf->next_call_reference = 1;
 
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
 	if (socket < 0)
@@ -84,89 +83,94 @@ struct q931_interface *q931_open_interface(
 			name, strlen(name)+1) < 0)
 		goto err_setsockopt;
 
-	int optlen=sizeof(interface->role);
+	int optlen=sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
-		&interface->role, &optlen)<0)
+		&intf->role, &optlen)<0)
 		goto err_getsockopt;
 
-	if (interface->role == LAPD_ROLE_TE) {
-		interface->master_socket = -1;
+	if (intf->role == LAPD_ROLE_TE) {
+		intf->master_socket = -1;
 
-		q931_init_dlc(&interface->dlc, interface, s);
+		q931_init_dlc(&intf->dlc, intf, s);
 			
-		interface->dlc.status = DLC_DISCONNECTED;
+		intf->dlc.status = DLC_DISCONNECTED;
 
-		interface->T301 = 180 * 1000000LL;
-		interface->T302 =  15 * 1000000LL;
-		interface->T303 =   4 * 1000000LL;
-		interface->T304 =  30 * 1000000LL;
-		interface->T305 =  30 * 1000000LL;
-		interface->T308 =   4 * 1000000LL;
-		interface->T309 =  90 * 1000000LL;
-		interface->T310 =  45 * 1000000LL;
-		interface->T314 =   4 * 1000000LL;
-		interface->T316 = 120 * 1000000LL;
-		interface->T317 =  60 * 1000000LL;
-		interface->T318 =   4 * 1000000LL;
-		interface->T319 =   4 * 1000000LL;
-		interface->T321 =  30 * 1000000LL;
-		interface->T322 =   4 * 1000000LL;
+		intf->T301 = 180 * 1000000LL;
+		intf->T302 =  15 * 1000000LL;
+		intf->T303 =   4 * 1000000LL;
+		intf->T304 =  30 * 1000000LL;
+		intf->T305 =  30 * 1000000LL;
+		intf->T308 =   4 * 1000000LL;
+		intf->T309 =  90 * 1000000LL;
+		intf->T310 =  45 * 1000000LL;
+		intf->T314 =   4 * 1000000LL;
+		intf->T316 = 120 * 1000000LL;
+		intf->T317 =  60 * 1000000LL;
+		intf->T318 =   4 * 1000000LL;
+		intf->T319 =   4 * 1000000LL;
+		intf->T321 =  30 * 1000000LL;
+		intf->T322 =   4 * 1000000LL;
 	} else {
-		interface->master_socket = s;
+		intf->master_socket = s;
 
-		q931_init_dlc(&interface->bc_dlc, interface, s);
-		q931_init_dlc(&interface->dlc, NULL, -1);
+		q931_init_dlc(&intf->bc_dlc, intf, s);
+		q931_init_dlc(&intf->dlc, NULL, -1);
 
-		interface->T301 = 180 * 1000000LL;
-		interface->T302 =  12 * 1000000LL;
-		interface->T303 =   4 * 1000000LL;
-		interface->T304 =  20 * 1000000LL;
-		interface->T305 =  30 * 1000000LL;
-		interface->T306 =  30 * 1000000LL;
-		interface->T307 = 180 * 1000000LL;
-		interface->T308 =   4 * 1000000LL;
-		interface->T309 =  90 * 1000000LL;
-		interface->T310 =  35 * 1000000LL;
-		interface->T312 = interface->T303 + 2 * 1000000LL;
-		interface->T314 =   4 * 1000000LL;
-		interface->T316 = 120 * 1000000LL;
-		interface->T317 =  60 * 1000000LL;
-		interface->T320 =  30 * 1000000LL;
-		interface->T321 =  30 * 1000000LL;
-		interface->T322 =   4 * 1000000LL;
+		intf->T301 = 180 * 1000000LL;
+		intf->T302 =  12 * 1000000LL;
+		intf->T303 =   4 * 1000000LL;
+		intf->T304 =  20 * 1000000LL;
+		intf->T305 =  30 * 1000000LL;
+		intf->T306 =  30 * 1000000LL;
+		intf->T307 = 180 * 1000000LL;
+		intf->T308 =   4 * 1000000LL;
+		intf->T309 =  90 * 1000000LL;
+		intf->T310 =  35 * 1000000LL;
+		intf->T312 = intf->T303 + 2 * 1000000LL;
+		intf->T314 =   4 * 1000000LL;
+		intf->T316 = 120 * 1000000LL;
+		intf->T317 =  60 * 1000000LL;
+		intf->T320 =  30 * 1000000LL;
+		intf->T321 =  30 * 1000000LL;
+		intf->T322 =   4 * 1000000LL;
 	}
 
-	interface->type = Q931_INTF_TYPE_BRA_MULTIPOINT;
+	intf->type = Q931_INTF_TYPE_BRA_MULTIPOINT;
 
-	switch (interface->type) {
+	switch (intf->type) {
 	case Q931_INTF_TYPE_BRA_POINT_TO_POINT:
-		interface->n_channels = 2;
+		intf->n_channels = 2;
+		intf->call_reference_len = 1;
 	break;
 	case Q931_INTF_TYPE_BRA_MULTIPOINT:
-		interface->n_channels = 2;
+		intf->n_channels = 2;
+		intf->call_reference_len = 1;
 	break;
 	case Q931_INTF_TYPE_PRA:
-		interface->n_channels = 30;
+		intf->n_channels = 30;
+		intf->call_reference_len = 2;
 	break;
 	}
 
 	int i;
-	for (i=0; i<interface->n_channels; i++) {
-		interface->channels[i].id = i;
-		interface->channels[i].intf = interface;
-		interface->channels[i].state = Q931_CHANSTATE_AVAILABLE;
-		interface->channels[i].call = NULL;
+	for (i=0; i<intf->n_channels; i++) {
+		intf->channels[i].id = i;
+		intf->channels[i].intf = intf;
+		intf->channels[i].state = Q931_CHANSTATE_AVAILABLE;
+		intf->channels[i].call = NULL;
 	}
 
-	list_add(&interface->node, &lib->intfs);
+	intf->global_call.intf = intf;
 
-	return interface;
+	list_add(&intf->node, &lib->intfs);
+
+	return intf;
 
 err_getsockopt:
 err_setsockopt:
 	close(s);
 err_socket:
-	free(interface);
+	free(intf);
 
 	return NULL;
 }

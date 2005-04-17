@@ -97,6 +97,10 @@ int q931_send_status(
 	struct q931_dlc *dlc,
 	__u8 state,
 	enum q931_ie_cause_value cause);
+int q931_global_send_status(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	enum q931_ie_cause_value cause);
 
 int q931_send_status_enquiry(
 	struct q931_call *call,
@@ -114,6 +118,15 @@ int q931_send_suspend_reject(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
 	enum q931_ie_cause_value cause);
+
+int q931_send_restart(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	struct q931_chanset *chanset);
+int q931_send_restart_acknowledge(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	struct q931_chanset *chanset);
 
 
 #endif

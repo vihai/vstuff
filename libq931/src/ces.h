@@ -61,9 +61,7 @@ struct q931_ces
 
 void q931_ces_dispatch_message(
 	struct q931_ces *ces,
-	__u8 message_type,
-	const struct q931_ie *ies,
-	int ies_cnt);
+	struct q931_message *msg);
 
 struct q931_ces *q931_ces_alloc(
 	struct q931_call *call,

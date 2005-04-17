@@ -27,7 +27,7 @@ enum q931_ie_cause_location
 
 enum q931_ie_cause_value
 {
-	Q931_IE_C_CV_UNALLOCATED				= 1,
+	Q931_IE_C_CV_UNALLOCATED_NUMBER				= 1,
 	Q931_IE_C_CV_NO_ROUTE_TO_SPECIFIED_TRANSIT_NETWORK	= 2,
 	Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION			= 3,
 	Q931_IE_C_CV_CHANNEL_UNACCEPTABLE			= 6,
@@ -138,7 +138,7 @@ struct q931_ie_cause_onwire_4
 } __attribute__ ((__packed__));
 
 int q931_ie_cause_check(
-	struct q931_call *call,
+	struct q931_message *msg,
 	struct q931_ie *ie);
 int q931_append_ie_cause(void *buf,
         enum q931_ie_cause_location location,

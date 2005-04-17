@@ -6,7 +6,6 @@
 #define Q931_PRIVATE
 
 #include "list.h"
-#include "q931.h"
 #include "logging.h"
 #include "channel.h"
 #include "intf.h"

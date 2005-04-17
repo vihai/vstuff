@@ -15,7 +15,7 @@
 
 #define Q931_PRIVATE
 
-#include "q931.h"
+#include "lib.h"
 #include "logging.h"
 #include "msgtype.h"
 #include "ie.h"
@@ -23,24 +23,18 @@
 #include "call.h"
 #include "intf.h"
 #include "proto.h"
+#include "callref.h"
 
-static void q931_make_callref(
-	void *void_buf,
-	int size,
-	q931_callref callref,
-	int direction)
-{
-	int i;
-	__u8 *buf = void_buf;
-
-	for (i=0; i<size; i++) {
-		buf[i] = callref & (0xFF << ((size-i-1) * 8));
-
-		if (i == 0 &&
-		    direction == Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE)
-			buf[i] |= 0x80;
-	}
-}
+#include "ie_sending_complete.h"
+#include "ie_bearercap.h"
+#include "ie_cdpn.h"
+#include "ie_cgpn.h"
+#include "ie_chanid.h"
+#include "ie_progind.h"
+#include "ie_cause.h"
+#include "ie_call_state.h"
+#include "ie_hlc.h"
+#include "ie_restind.h"
 
 static int q931_prepare_header(const struct q931_call *call,
 	__u8 *frame,
@@ -50,7 +44,7 @@ static int q931_prepare_header(const struct q931_call *call,
 
 	// Header
 
-	struct q931_header *hdr = (struct q931_header *)(call->intf->sendbuf + size);
+	struct q931_header *hdr = (struct q931_header *)(frame + size);
 	size += sizeof(struct q931_header);
 
 	memset(hdr, 0x00, sizeof(*hdr));
@@ -58,26 +52,60 @@ static int q931_prepare_header(const struct q931_call *call,
 	hdr->protocol_discriminator = Q931_PROTOCOL_DISCRIMINATOR_Q931;
 
 	assert(call->intf);
-	assert(call->intf->call_reference_size >=1 &&
-	       call->intf->call_reference_size <= 4);
+	assert(call->intf->call_reference_len >=1 &&
+	       call->intf->call_reference_len <= 4);
 
-	hdr->call_reference_size =
-		call->intf->call_reference_size;
+	hdr->call_reference_len =
+		call->intf->call_reference_len;
 
 	// Call reference
 	assert(call->call_reference >= 0 &&
-	       call->call_reference < (1 << ((hdr->call_reference_size * 8) - 1)));
+	       call->call_reference < (1 << ((hdr->call_reference_len * 8) - 1)));
 
-	q931_make_callref(call->intf->sendbuf + size,
-		hdr->call_reference_size,
+	q931_make_callref(frame + size,
+		hdr->call_reference_len,
 		call->call_reference,
 		call->direction == Q931_CALL_DIRECTION_INBOUND ?
 		Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE :
 		Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE);
 
-	size += hdr->call_reference_size;
+	size += hdr->call_reference_len;
 	
-	__u8 *message_type_onwire = (__u8 *)(call->intf->sendbuf + size);
+	__u8 *message_type_onwire = (__u8 *)(frame + size);
+	size++;
+	*message_type_onwire = message_type;
+
+	return size;
+}
+
+static int q931_global_prepare_header(const struct q931_global_call *gc,
+	__u8 *frame,
+	__u8 message_type)
+{
+	int size = 0;
+
+	struct q931_header *hdr = (struct q931_header *)(frame + size);
+	size += sizeof(struct q931_header);
+
+	memset(hdr, 0x00, sizeof(*hdr));
+
+	hdr->protocol_discriminator = Q931_PROTOCOL_DISCRIMINATOR_Q931;
+
+	assert(gc->intf);
+	assert(gc->intf->call_reference_len >=1 &&
+	       gc->intf->call_reference_len <= 4);
+
+	hdr->call_reference_len =
+		gc->intf->call_reference_len;
+
+	q931_make_callref(frame + size,
+		hdr->call_reference_len,
+		0,
+		Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE);
+
+	size += hdr->call_reference_len;
+	
+	__u8 *message_type_onwire = (__u8 *)(frame + size);
 	size++;
 	*message_type_onwire = message_type;
 
@@ -240,24 +268,21 @@ int q931_send_call_proceeding_channel(
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
 
-	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
-		if (channel->id == 0) {
-			size += q931_append_ie_channel_identification_bra(
+	struct q931_chanset cs;
+	q931_chanset_init(&cs);
+	q931_chanset_add(&cs, channel->id);
+
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		size += q931_append_ie_channel_identification_pra(
 				call->intf->sendbuf + size,
-				Q931_IE_CI_PE_EXCLUSIVE,
-				Q931_IE_CI_ICS_BRA_B1);
-		} else {
-			size += q931_append_ie_channel_identification_bra(
-				call->intf->sendbuf + size,
-				Q931_IE_CI_PE_EXCLUSIVE,
-				Q931_IE_CI_ICS_BRA_B2);
-		}
-	} else {
-		size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
 				Q931_IE_CI_ICS_PRA_INDICATED,
 				Q931_IE_CI_PE_EXCLUSIVE,
-				channel->id);
+				&cs);
+	} else {
+		size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
 	}
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -622,24 +647,21 @@ int q931_send_resume_acknowledge(
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_ACKNOWLEDGE);
 
-	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
-		if (call->channel->id == 0) {
-			size += q931_append_ie_channel_identification_bra(
+	struct q931_chanset cs;
+	q931_chanset_init(&cs);
+	q931_chanset_add(&cs, call->channel->id);
+
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		size += q931_append_ie_channel_identification_pra(
 				call->intf->sendbuf + size,
-				Q931_IE_CI_PE_EXCLUSIVE,
-				Q931_IE_CI_ICS_BRA_B1);
-		} else {
-			size += q931_append_ie_channel_identification_bra(
-				call->intf->sendbuf + size,
-				Q931_IE_CI_PE_EXCLUSIVE,
-				Q931_IE_CI_ICS_BRA_B2);
-		}
-	} else {
-		size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
 				Q931_IE_CI_ICS_PRA_INDICATED,
 				Q931_IE_CI_PE_EXCLUSIVE,
-				call->channel->id);
+				&cs);
+	} else {
+		size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
 	}
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -764,38 +786,35 @@ int q931_send_setup_channel(
 				call->intf->sendbuf + size,
 				call->calling_number);
 
-	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
-		if (channel) {
-			if (channel->id == 0) {
-				size += q931_append_ie_channel_identification_bra(
-						call->intf->sendbuf + size,
-						Q931_IE_CI_PE_EXCLUSIVE,
-						Q931_IE_CI_ICS_BRA_B1);
-			} else {
-				size += q931_append_ie_channel_identification_bra(
-						call->intf->sendbuf + size,
-						Q931_IE_CI_PE_EXCLUSIVE,
-						Q931_IE_CI_ICS_BRA_B2);
-			}
-		} else {	
-			size += q931_append_ie_channel_identification_bra(
+	if (channel) {
+		struct q931_chanset cs;
+		q931_chanset_init(&cs);
+		q931_chanset_add(&cs, channel->id);
+
+		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+			size += q931_append_ie_channel_identification_pra(
 					call->intf->sendbuf + size,
-					Q931_IE_CI_ICS_BRA_NO_CHANNEL,
-					Q931_IE_CI_PE_PREFERRED);
-		}
-	} else {
-		if (channel) {
-			size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
 					Q931_IE_CI_ICS_PRA_INDICATED,
 					Q931_IE_CI_PE_EXCLUSIVE,
-					channel->id);
+					&cs);
 		} else {
+			size += q931_append_ie_channel_identification_bra(
+					call->intf->sendbuf + size,
+					Q931_IE_CI_PE_EXCLUSIVE,
+					&cs);
+		}
+	} else {
+		if (call->intf->type == Q931_INTF_TYPE_PRA) {
 			size += q931_append_ie_channel_identification_pra(
 					call->intf->sendbuf + size,
 					Q931_IE_CI_ICS_PRA_NO_CHANNEL,
 					Q931_IE_CI_PE_PREFERRED,
-					0);
+					NULL);
+		} else {
+			size += q931_append_ie_channel_identification_bra(
+					call->intf->sendbuf + size,
+					Q931_IE_CI_PE_PREFERRED,
+					NULL);
 		}
 	}
 
@@ -834,7 +853,8 @@ int q931_send_setup_acknowledge(
 
 	report_call(call, LOG_DEBUG, "Sending SETUP_ACKNOWLEDGE\n");
 
-	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP_ACKNOWLEDGE);
+	size += q931_prepare_header(call, call->intf->sendbuf,
+			Q931_MT_SETUP_ACKNOWLEDGE);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -852,26 +872,24 @@ int q931_send_setup_acknowledge_channel(
 
 	report_call(call, LOG_DEBUG, "Sending SETUP_ACKNOWLEDGE\n");
 
-	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP_ACKNOWLEDGE);
+	size += q931_prepare_header(call, call->intf->sendbuf,
+			Q931_MT_SETUP_ACKNOWLEDGE);
 
-	if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-	    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
-		if (channel->id == 0) {
-			size += q931_append_ie_channel_identification_bra(
+	struct q931_chanset cs;
+	q931_chanset_init(&cs);
+	q931_chanset_add(&cs, channel->id);
+
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		size += q931_append_ie_channel_identification_pra(
 				call->intf->sendbuf + size,
-				Q931_IE_CI_PE_EXCLUSIVE,
-				Q931_IE_CI_ICS_BRA_B1);
-		} else {
-			size += q931_append_ie_channel_identification_bra(
-				call->intf->sendbuf + size,
-				Q931_IE_CI_PE_EXCLUSIVE,
-				Q931_IE_CI_ICS_BRA_B2);
-		}
-	} else {
-		size += q931_append_ie_channel_identification_pra(call->intf->sendbuf + size,
 				Q931_IE_CI_ICS_PRA_INDICATED,
 				Q931_IE_CI_PE_EXCLUSIVE,
-				channel->id);
+				&cs);
+	} else {
+		size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
 	}
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -912,6 +930,108 @@ int q931_send_status(
 	size += q931_append_ie_call_state(call->intf->sendbuf + size, state);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
+}
+
+int q931_global_send_status(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	enum q931_ie_cause_value cause)
+{
+	int size = 0;
+
+	assert(gc);
+	assert(dlc);
+
+	report_dlc(dlc, LOG_DEBUG, "Sending STATUS\n");
+
+	size += q931_global_prepare_header(gc, gc->intf->sendbuf, Q931_MT_STATUS);
+	
+	size += q931_append_ie_cause(dlc->intf->sendbuf + size,
+			dlc->intf->role == LAPD_ROLE_TE ? // FIXME
+				Q931_IE_C_L_USER :
+				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
+			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+
+	size += q931_append_ie_call_state(dlc->intf->sendbuf + size, gc->state);
+
+	return q931_send_frame(dlc, dlc->intf->sendbuf, size);
+}
+
+int q931_send_restart(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	struct q931_chanset *chanset)
+{
+	int size = 0;
+
+	assert(gc);
+	assert(dlc);
+
+	report_dlc(dlc, LOG_DEBUG, "Sending RESTART\n");
+
+	size += q931_global_prepare_header(gc, gc->intf->sendbuf, Q931_MT_RESTART);
+	
+	if (chanset) {
+		if (gc->intf->type == Q931_INTF_TYPE_PRA) {
+			size += q931_append_ie_channel_identification_pra(
+					dlc->intf->sendbuf + size,
+					Q931_IE_CI_ICS_PRA_INDICATED,
+					Q931_IE_CI_PE_EXCLUSIVE,
+					chanset);
+		} else {
+			size += q931_append_ie_channel_identification_bra(
+					dlc->intf->sendbuf + size,
+					Q931_IE_CI_PE_EXCLUSIVE,
+					chanset);
+		}
+
+		size += q931_append_ie_restart_indicator(dlc->intf->sendbuf + size,
+				Q931_IE_RI_C_INDICATED);
+	} else {
+		size += q931_append_ie_restart_indicator(dlc->intf->sendbuf + size,
+				Q931_IE_RI_C_SIGNLE_INTERFACE);
+	}
+
+	return q931_send_frame(dlc, dlc->intf->sendbuf, size);
+}
+
+int q931_send_restart_acknowledge(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	struct q931_chanset *chanset)
+{
+	int size = 0;
+
+	assert(gc);
+	assert(dlc);
+
+	report_dlc(dlc, LOG_DEBUG, "Sending RESTART_ACKNOWLEDGE\n");
+
+	size += q931_global_prepare_header(gc, gc->intf->sendbuf,
+			Q931_MT_RESTART_ACKNOWLEDGE);
+	
+	if (chanset) {
+		if (gc->intf->type == Q931_INTF_TYPE_PRA) {
+			size += q931_append_ie_channel_identification_pra(
+					dlc->intf->sendbuf + size,
+					Q931_IE_CI_ICS_PRA_INDICATED,
+					Q931_IE_CI_PE_EXCLUSIVE,
+					chanset);
+		} else {
+			size += q931_append_ie_channel_identification_bra(
+					dlc->intf->sendbuf + size,
+					Q931_IE_CI_PE_EXCLUSIVE,
+					chanset);
+		}
+
+		size += q931_append_ie_restart_indicator(dlc->intf->sendbuf + size,
+				Q931_IE_RI_C_INDICATED);
+	} else {
+		size += q931_append_ie_restart_indicator(dlc->intf->sendbuf + size,
+				Q931_IE_RI_C_SIGNLE_INTERFACE);
+	}
+
+	return q931_send_frame(dlc, dlc->intf->sendbuf, size);
 }
 
 /*************** STATUS ENQUIRY
