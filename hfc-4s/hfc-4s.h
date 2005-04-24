@@ -174,6 +174,7 @@ struct hfc_chan_simplex {
 	struct hfc_chan_duplex *chan;
 
 	int fifo_id;
+	int bit_reversed;
 
 	// Counters cache
 	union {
@@ -253,7 +254,7 @@ enum hfc_chip_type
 	HFC_CHIPTYPE_8S,
 };
 
-typedef struct hfc_card {
+struct hfc_card {
 	int id;
 	spinlock_t lock;
 
@@ -280,7 +281,10 @@ typedef struct hfc_card {
 	int ignore_first_timer_interrupt;
 
 	int open_ports;
-} hfc_card;
+
+	dev_t first_dev;
+	struct cdev cdev;
+};
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)
 {

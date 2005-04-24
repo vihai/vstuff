@@ -1673,6 +1673,19 @@ static int lapd_connect(struct socket *sock, struct sockaddr *uaddr,
 		lapd_discard_iqueue(sk);
 
 		lapd_change_state(sk, LAPD_DLS_AWAITING_ESTABLISH);
+
+		if (flags & O_NONBLOCK) {
+			err = -EWOULDBLOCK;
+			goto wouldblock;
+		}
+
+		err = lapd_multiframe_wait_for_establishment(sk);
+		if (err) {
+			if (err == -ECONNRESET)
+				err = -ETIMEDOUT;
+
+			goto err_multiframe_wait_for_establishment;
+		}
 	break;
 
 	case LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE:

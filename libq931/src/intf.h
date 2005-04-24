@@ -86,13 +86,15 @@ struct q931_interface
 	void (*release_confirm)(struct q931_call *call);//TE
 	void (*release_indication)(struct q931_call *call);
 	void (*resume_confirm)(struct q931_call *call);//TE
-	void (*resume_indication)(struct q931_call *call);
+	void (*resume_indication)(struct q931_call *call,
+		__u8 *call_identity, int call_identity_len);
 	void (*setup_complete_indication)(struct q931_call *call);//TE
 	void (*setup_confirm)(struct q931_call *call);
 	void (*setup_indication)(struct q931_call *call);
 	void (*status_indication)(struct q931_call *call);
 	void (*suspend_confirm)(struct q931_call *call);//TE
-	void (*suspend_indication)(struct q931_call *call);
+	void (*suspend_indication)(struct q931_call *call,
+		__u8 *call_identity, int call_identity_len);
 	void (*timeout_indication)(struct q931_call *call);
 
 	void (*connect_channel)(struct q931_channel *chan);

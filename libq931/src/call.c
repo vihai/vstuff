@@ -915,6 +915,7 @@ static int q931_channel_select_setup(
 		assert(channel);
 
 		if (channel->state == Q931_CHANSTATE_AVAILABLE) {
+			channel->call = call;
 			call->channel = channel;
 			call->channel->state = Q931_CHANSTATE_SELECTED;
 			return TRUE;
@@ -924,6 +925,7 @@ static int q931_channel_select_setup(
 		assert(channel);
 
 		if (channel->state == Q931_CHANSTATE_AVAILABLE) {
+			channel->call = call;
 			call->channel = channel;
 			call->channel->state = Q931_CHANSTATE_SELECTED;
 			return TRUE;
@@ -1868,6 +1870,7 @@ void q931_resume_response(struct q931_call *call)
 
 	switch (call->state) {
 	case N17_RESUME_REQUEST:
+		call->channel = q931_channel_alloc(call);
 		q931_send_resume_acknowledge(call, call->dlc);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
@@ -1980,14 +1983,6 @@ void q931_setup_request(struct q931_call *call)
 
 	switch (call->state) {
 	case N0_NULL_STATE:
-
-		/* We may send SETUP with:
-		 * 1) The indicated channel with no alternatives
-		 * 2) The indicated channel with any alternatives
-		 * 3) Any channel acceptable
-		 * 4) No channel available
-		 */
-
 		call->channel = q931_channel_alloc(call);
 		q931_call_start_timer(call, T303);
 
@@ -2236,11 +2231,8 @@ void q931_suspend_response(struct q931_call *call)
 	switch (call->state) {
 	case N15_SUSPEND_REQUEST:
 		q931_send_suspend_acknowledge(call, call->dlc);
-
 		// NOTE: Timer T307 is running in the call control block
-
 		q931_intf_del_call(call);
-
 		q931_call_set_state(call, N0_NULL_STATE);
 	break;
 
@@ -3917,7 +3909,7 @@ static int q931_call_handle_called_number(
 		return FALSE;
 	}
 
-	char *number = ie->data + 2;
+	char *number = ie->data + 1;
 
 	if (number[ie->len - 1] == '#') {
 		call->sending_complete = TRUE;
@@ -5925,6 +5917,20 @@ inline static void q931_handle_resume(
 
 	// Only on BRIs
 
+	__u8 call_identity[11] = "";
+	int call_identity_len = 0;
+	int i;
+	for (i=0; i<msg->ies_cnt; i++) {
+		if (msg->ies[i].info->id == Q931_IE_CALL_IDENTITY) {
+			printf("###########################à %d\n",msg->ies[i].len);
+
+			call_identity_len = msg->ies[i].len;
+			memcpy(call_identity, msg->ies[i].data, msg->ies[i].len);
+
+			break;
+		}
+	}
+
 	switch (call->state) {
 	case N0_NULL_STATE:
 		if (call->intf->type == Q931_INTF_TYPE_PRA) {
@@ -5933,7 +5939,8 @@ inline static void q931_handle_resume(
 		}
 
 		q931_call_set_state(call, N17_RESUME_REQUEST);
-		q931_call_primitive(call, resume_indication);
+		q931_call_primitive(call, resume_indication,
+			call_identity, call_identity_len);
 	break;
 
 
@@ -6093,15 +6100,30 @@ inline static void q931_handle_suspend(
 	assert(msg);
 
 	switch (call->state) {
-	case N10_ACTIVE:
-		if (call->intf->type == Q931_INTF_TYPE_BRA_POINT_TO_POINT ||
-		    call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
-			q931_call_set_state(call, N15_SUSPEND_REQUEST);
-			q931_call_primitive(call, suspend_indication);
-		} else {
+	case N10_ACTIVE: {
+		__u8 call_identity[11] = "";
+		int call_identity_len = 0;
+		int i;
+		for (i=0; i<msg->ies_cnt; i++) {
+			if (msg->ies[i].info->id == Q931_IE_CALL_IDENTITY) {
+				printf("###########################à %d\n",msg->ies[i].len);
+
+				call_identity_len = msg->ies[i].len;
+				memcpy(call_identity, msg->ies[i].data, msg->ies[i].len);
+
+				break;
+			}
+		}
+
+		if (call->intf->type == Q931_INTF_TYPE_PRA) {
 			q931_send_suspend_reject(call, call->dlc,
 				Q931_IE_C_CV_FACILITY_REJECTED);
+		} else {
+			q931_call_set_state(call, N15_SUSPEND_REQUEST);
+			q931_call_primitive(call, suspend_indication,
+				call_identity, call_identity_len);
 		}
+	}
 	break;
 
 	case U0_NULL_STATE:
@@ -6374,8 +6396,12 @@ void q931_call_dl_release_indication(struct q931_call *call)
 
 			// FIXME
 			if (connect(call->dlc->socket, NULL, 0) < 0) {
+				report_call(call, LOG_WARNING,
+					"Cannot reconnect: %s\n",
+					strerror(errno));
 				return;
 			}
+			sleep(1);
 
 			q931_dl_establish_confirm(call->dlc);
 		}

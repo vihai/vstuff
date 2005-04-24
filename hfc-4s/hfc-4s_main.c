@@ -24,9 +24,10 @@
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
-
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
+#include <linux/cdev.h>
+#include <linux/kdev_t.h>
 
 #include <lapd.h>
 
@@ -89,37 +90,39 @@ static void hfc_config_chan_as_b_voice(struct hfc_chan_duplex *chan)
 {
 	struct hfc_card *card = chan->port->card;
 
-	hfc_debug_chan(0, chan, "initializing\n");
+	hfc_debug_chan(0, chan, "configuring channel %s for voice\n", chan->name);
+
+	hfc_select_port(card, chan->port->id);
+
+	chan->port->regs.st_ctrl_2 |= 
+		hfc_A_ST_CTRL2_V_B1_RX_EN|
+		hfc_A_ST_CTRL2_V_B2_RX_EN;
+	hfc_outb(card, hfc_A_ST_CTRL2,
+		chan->port->regs.st_ctrl_2);
+
+/*	chan->port->regs.st_ctrl_0 |=
+		hfc_A_ST_CTRL0_V_B1_EN;
+	hfc_outb(card, hfc_A_ST_CTRL0,
+		chan->port->regs.st_ctrl_0);*/
 
 	// RX
+	chan->rx.bit_reversed = TRUE;
 	hfc_fifo_select(&chan->rx);
-
 	hfc_fifo_reset(card);
-
 	hfc_outb(card, hfc_A_CON_HDLC,
 		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
+		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
 
-	hfc_outb(card, hfc_A_SUBCH_CFG,
-		hfc_A_SUBCH_CFG_V_BIT_CNT_2);
-
-	hfc_outb(card, hfc_A_IRQ_MSK,
-		hfc_A_IRQ_MSK_V_IRQ);
-
 	// TX
+	chan->tx.bit_reversed = TRUE;
 	hfc_fifo_select(&chan->tx);
-
 	hfc_fifo_reset(card);
-
 	hfc_outb(card, hfc_A_CON_HDLC,
 		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
+		hfc_A_CON_HDCL_V_IFF|
+		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
-
-	hfc_outb(card, hfc_A_SUBCH_CFG,
-		hfc_A_SUBCH_CFG_V_BIT_CNT_2);
-
-	hfc_outb(card, hfc_A_IRQ_MSK,
-		hfc_A_IRQ_MSK_V_IRQ);
 }
 
 void hfc_reset_card(struct hfc_card *card)
@@ -317,26 +320,13 @@ static char *hfc_status_to_name(int status)
 	return "*UNK*";
 }
 
-static void hfc_hexdump(char *src,char *dst, int size)
-{
-	static char hexchars[] = "0123456789ABCDEF";
-
-	int i;
-	for(i=0;i<size;i++) {
-		dst[i*2]  = hexchars[(src[i] & 0xf0) >> 4];
-		dst[i*2+1]= hexchars[src[i] & 0xf];
-	}
-
-	dst[size*2]='\0';
-}
-
 static int hfc_proc_read_info(char *page, char **start,
 		off_t off, int count, 
 		int *eof, void *data)
 {
 //	struct hfc_card *card = data;
 
-	u8 chip_id;
+//	u8 chip_id;
 //	chip_id = hfc_inb(card, hfc_CHIP_ID);
 
 	int len;
@@ -427,20 +417,24 @@ static int hfc_proc_read_fifos(char *page, char **start,
 		frx.f1f2 = hfc_inw(card, hfc_A_F12);
 		zrx.z1z2 = hfc_inl(card, hfc_A_Z12);
 
-		hfc_fifo_select(&card->ports[i].chans[j].tx);
-
 		union hfc_fgroup ftx;
 		union hfc_zgroup ztx;
-		ftx.f1f2 = hfc_inw(card, hfc_A_F12);
-		ztx.z1z2 = hfc_inl(card, hfc_A_Z12);
+		if (card->ports[i].chans[j].id != E) {
+			hfc_fifo_select(&card->ports[i].chans[j].tx);
+
+			ftx.f1f2 = hfc_inw(card, hfc_A_F12);
+			ztx.z1z2 = hfc_inl(card, hfc_A_Z12);
+		}
 
 		spin_unlock_irqrestore(&card->lock, flags);
 
 		len += snprintf(page + len, PAGE_SIZE - len,
-			"%2s        : %02x %02x %04x %04x   %02x %02x %04x %04x\n",
+			"%2s        : %02x %02x %04x %04x %4d  %02x %02x %04x %04x %4d\n",
 			card->ports[i].chans[j].name,
 			frx.f1, frx.f2, zrx.z1, zrx.z2,
-			ftx.f1, ftx.f2, ztx.z1, ztx.z2);
+			hfc_fifo_used_rx(&card->ports[i].chans[j].rx),
+			ftx.f1, ftx.f2, ztx.z1, ztx.z2,
+			hfc_fifo_used_tx(&card->ports[i].chans[j].tx));
 		}
 
 	}
@@ -486,7 +480,7 @@ static int hfc_ppp_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct hfc_chan_duplex *chan = ppp_chan->private;
+//	struct hfc_chan_duplex *chan = ppp_chan->private;
 
 hfc_debug_chan(0, chan, "ioctl(%d,%ld)", cmd, arg);
 
@@ -576,10 +570,9 @@ static int hfc_open(struct net_device *netdev)
 		}
 
 		// RX
+		chan->rx.bit_reversed = FALSE;
 		hfc_fifo_select(&chan->rx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_IFF|
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
@@ -593,10 +586,9 @@ static int hfc_open(struct net_device *netdev)
 			hfc_A_IRQ_MSK_V_IRQ);
 
 		// TX
+		chan->tx.bit_reversed = FALSE;
 		hfc_fifo_select(&chan->tx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_IFF|
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
@@ -674,10 +666,9 @@ static int hfc_close(struct net_device *netdev)
 			0);
 
 		// RX
+		chan->rx.bit_reversed = FALSE;
 		hfc_fifo_select(&chan->rx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_IFF|
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
@@ -687,10 +678,9 @@ static int hfc_close(struct net_device *netdev)
 		hfc_outb(card, hfc_A_IRQ_MSK, 0);
 
 		// TX
+		chan->tx.bit_reversed = FALSE;
 		hfc_fifo_select(&chan->tx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_IFF|
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
@@ -792,10 +782,9 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 		}
 
 		// Only RX FIFO is needed for E channel
+		chan->rx.bit_reversed = FALSE;
 		hfc_fifo_select(&port->chans[E].rx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
 			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
@@ -818,8 +807,8 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 			return;
 		}
 
+		chan->rx.bit_reversed = FALSE;
 		hfc_fifo_select(&port->chans[E].rx);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
 			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
@@ -902,7 +891,8 @@ static inline void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
 		hfc_netdev_frame_arrived(chan);
 	else if (chan->chan->status == open_ppp)
 		hfc_ppp_frame_arrived(chan);
-	else {
+	else if (chan->chan->status == open_voice) {
+	} else {
 		hfc_fifo_drop_frame(chan);
 		hfc_msg_schan(KERN_ERR, chan, "Frame arrived on unopened chan?\n");
 	}
@@ -1156,7 +1146,7 @@ static inline void hfc_netdev_frame_arrived(struct hfc_chan_simplex *chan)
 static inline void hfc_ppp_frame_arrived(struct hfc_chan_simplex *chan)
 {
 	struct hfc_chan_duplex *fdchan = chan->chan;
-	struct hfc_port *port = fdchan->port;
+//	struct hfc_port *port = fdchan->port;
 
 	int antiloop = 16; // Copy no more than 16 frames
 
@@ -1259,10 +1249,9 @@ hfc_msg_chan(KERN_INFO, chan, "VISDN_SET_BEARER_PPP\n");
 			b1_chan->port->regs.st_ctrl_0);
 
 		// RX
+		chan->rx.bit_reversed = FALSE;
 		hfc_fifo_select(&b1_chan->rx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
 			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
@@ -1272,10 +1261,9 @@ hfc_msg_chan(KERN_INFO, chan, "VISDN_SET_BEARER_PPP\n");
 			hfc_A_IRQ_MSK_V_IRQ);
 
 		// TX
+		chan->tx.bit_reversed = FALSE;
 		hfc_fifo_select(&b1_chan->tx);
-
 		hfc_fifo_reset(card);
-
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
 			hfc_A_CON_HDCL_V_IFF|
@@ -1362,6 +1350,129 @@ static ssize_t show_port_id(struct class_device *dev, char *buf)
 }
 
 static CLASS_DEVICE_ATTR(port_id, S_IRUGO, show_port_id, NULL);
+
+int hfc_voice_open(
+	struct inode *inode,
+	struct file *file)
+{
+	nonseekable_open(inode, file);
+
+	struct hfc_card *card;
+	card = container_of(inode->i_cdev, struct hfc_card, cdev);
+
+	struct hfc_chan_duplex *chan;
+
+	if ((inode->i_rdev - card->first_dev > card->num_ports * 2) ||
+	    (inode->i_rdev - card->first_dev < 0))
+		return -ENODEV;
+
+	int port_idx = (inode->i_rdev - card->first_dev) / 2;
+
+	if ((inode->i_rdev - card->first_dev) % 2 == 0)
+		chan = &card->ports[port_idx].chans[B1];
+	else
+		chan = &card->ports[port_idx].chans[B2];
+
+	file->private_data = chan;
+
+	hfc_config_chan_as_b_voice(chan);
+
+	chan->status = open_voice;
+
+	return 0;
+}
+
+int hfc_voice_release(
+	struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+ssize_t hfc_voice_read(
+	struct file *file,
+	char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
+	struct hfc_chan_duplex *chan = file->private_data;
+	struct hfc_card *card = chan->port->card;
+	int err = 0;
+	__u8 buf2[128];
+
+	unsigned long flags;
+
+	spin_lock_irqsave(&card->lock, flags);
+
+	hfc_fifo_select(&chan->rx);
+	hfc_fifo_refresh_fz_cache(&chan->rx);
+
+	int available_octets = hfc_fifo_used_rx(&chan->rx);
+	int copied_octets = 0;
+
+	if (count > sizeof(buf2))
+		count = sizeof(buf2);
+
+	copied_octets = available_octets < count ? available_octets : count;
+
+	hfc_fifo_mem_read(&chan->rx, buf2, copied_octets);
+
+	spin_unlock_irqrestore(&card->lock, flags);
+
+	err = copy_to_user(buf, buf2, copied_octets);
+	if (err < 0)
+		goto err_copy_to_user;
+
+
+	return copied_octets;
+
+err_copy_to_user:
+
+	return err;
+}
+
+ssize_t hfc_voice_write(
+	struct file *file,
+	const char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
+	return -EINVAL;
+}
+
+#define HFC_IOC_FIFO_IN_AVAIL _IOR(0xd0, 1, int)
+
+ssize_t hfc_voice_ioctl(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	switch(cmd) {
+	case HFC_IOC_FIFO_IN_AVAIL:
+	break;
+	}
+
+	return -EINVAL;
+}
+
+static unsigned int hfc_voice_poll(
+	struct file *file,
+	poll_table *wait)
+{
+	
+}
+
+struct file_operations hfc_voice_fops =
+{
+	.owner		= THIS_MODULE,
+	.read		= hfc_voice_read,
+	.write		= hfc_voice_write,
+	.ioctl		= hfc_voice_ioctl,
+	.open		= hfc_voice_open,
+	.release	= hfc_voice_release,
+	.llseek		= no_llseek,
+	.poll		= hfc_voice_poll,
+};
 
 static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	const struct pci_device_id *ent)
@@ -1616,6 +1727,21 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 			hfc_proc_read_fifos, card);
 	card->proc_fifos->owner = THIS_MODULE;
 
+
+	err = alloc_chrdev_region(&card->first_dev, 0, card->num_ports * 2, hfc_DRIVER_NAME);
+	if (err < 0)
+		goto err_register_chrdev;
+
+	hfc_msg_card(KERN_ERR, card, "Major %d, Minor %d\n", MAJOR(card->first_dev), MINOR(card->first_dev));
+
+	cdev_init(&card->cdev, &hfc_voice_fops);
+	card->cdev.owner = THIS_MODULE;
+
+	err = cdev_add(&card->cdev, card->first_dev, card->num_ports * 2);
+	if (err < 0)
+		goto err_cdev_add;
+
+	// Move reset_card before register_netdev, otherwise there is a race condition
 	hfc_reset_card(card);
 
 	hfc_msg_card(KERN_INFO, card,
@@ -1628,6 +1754,10 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	return 0;
 
+	cdev_del(&card->cdev);
+err_cdev_add:
+	unregister_chrdev_region(card->first_dev, card->num_ports * 2);
+err_register_chrdev:
 	//FIXME  (all ports)
 //	unregister_netdev(card->chans[D].netdev);
 err_register_netdev_d:
@@ -1653,6 +1783,11 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 
 //	unregister_netdev(card->chans[B2].netdev);
 //	unregister_netdev(card->chans[B1].netdev);
+
+	cdev_del(&card->cdev);
+	cdev_put(&card->cdev);
+
+	unregister_chrdev_region(card->first_dev, card->num_ports * 2);
 
 	int i;
 	for (i=0; i<card->num_ports; i++) {

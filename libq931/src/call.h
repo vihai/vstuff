@@ -141,13 +141,15 @@ struct q931_call
 	void (*release_confirm)(struct q931_call *call);//TE
 	void (*release_indication)(struct q931_call *call);
 	void (*resume_confirm)(struct q931_call *call);//TE
-	void (*resume_indication)(struct q931_call *call);
+	void (*resume_indication)(struct q931_call *call,
+		__u8 *call_identity, int call_identity_len);
 	void (*setup_complete_indication)(struct q931_call *call);//TE
 	void (*setup_confirm)(struct q931_call *call);
 	void (*setup_indication)(struct q931_call *call);
 	void (*status_indication)(struct q931_call *call);
 	void (*suspend_confirm)(struct q931_call *call);//TE
-	void (*suspend_indication)(struct q931_call *call);
+	void (*suspend_indication)(struct q931_call *call,
+		__u8 *call_identity, int call_identity_len);
 	void (*timeout_indication)(struct q931_call *call);
 };
 
@@ -239,10 +241,10 @@ static inline void q931_call_set_called_number(
 #define q931_call_timer_running(call, timer)		\
 		q931_timer_pending(&(call)->timer)	\
 
-#define q931_call_primitive(call, primitive, ...)	\
+#define q931_call_primitive(call, primitive, arg...)	\
 	do {						\
 		if ((call)->primitive)			\
-			(call)->primitive(call);	\
+			(call)->primitive(call, ## arg);	\
 	} while(0);
 
 

@@ -18,6 +18,8 @@ TODO
 
 - Add ARPHRD_LAPD to linux/include/linux/if_arp.h
 - Add ETH_P_LAPD to linux/include/linux/if_ether.h
+- See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL number
+
 
 - The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
   - A specific flag would be better.
@@ -75,6 +77,16 @@ Missing:
 ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 
 
+-----------------------
+Why not using JACK?
+- Jack is tailored for few high-bandwidth streams
+- vISDN needs to handle many (maybe hundreds) of low-bandwidth channels
+
+- vISDN is inherently full-duplex
+
+Can we independently handle rx and tx once echo-cancellation has been applied?
+
+
 HISTORY:
 
 
@@ -86,6 +98,12 @@ First PPP connecion
 
 18/3/2005 14:30
 LAPD with full features
+
+17/4/2005 21:00
+q.931 completed
+
+20/4/2005 01:00
+First audio heared
 
 
 DL-UNIT DATA-REQUEST

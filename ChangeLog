@@ -2,6 +2,29 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-04-24 02:53:12 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-29
+
+    Summary:
+      Commit for backup purposes
+    Revision:
+      isdn--devel--0.1--patch-29
+
+    
+    
+
+    new files:
+     hfc-4s/.arch-ids/.arch-inventory.id
+     hfc-4s/.arch-ids/sniffer.c.id
+     hfc-4s/.arch-ids/sniffer_async.c.id hfc-4s/.arch-inventory
+     hfc-4s/sniffer.c hfc-4s/sniffer_async.c
+
+    modified files:
+     ChangeLog NOTES chan_visdn/chan_visdn.c hfc-4s/fifo.c
+     hfc-4s/fifo.h hfc-4s/hfc-4s.h hfc-4s/hfc-4s_main.c
+     lapd/af_lapd.c libq931/src/call.c libq931/src/call.h
+     libq931/src/intf.h libq931/src/q931.c
+
+
 2005-04-17 16:26:41 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-28
 
     Summary:

@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/cdev.h>
 
 #include "hfc-4s.h"
 #include "fifo.h"
@@ -25,7 +26,7 @@ static inline void hfc_fifo_next_frame(struct hfc_chan_simplex *chan)
 	hfc_wait_busy(chan->chan->port->card);
 }
 
-static int hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
+int hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
 	void *data, int size)
 {
 	int i;

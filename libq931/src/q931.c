@@ -61,6 +61,8 @@ void q931_leave(struct q931_lib *lib)
 
 void q931_dl_establish_indication(struct q931_dlc *dlc)
 {
+	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-INDICATION\n");
+
 	dlc->status = DLC_CONNECTED;
 
 	struct q931_call *call, *callt;
@@ -70,11 +72,11 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 
 			if (ces->dlc == dlc) {
 				if (ces == call->selected_ces) {
-					q931_ces_dl_release_indication(ces);
+					q931_ces_dl_establish_indication(ces);
 
 					break;
 				} else {
-					q931_ces_dl_release_indication(ces);
+					q931_ces_dl_establish_indication(ces);
 
 					return;
 				}
@@ -87,6 +89,8 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 
 void q931_dl_establish_confirm(struct q931_dlc *dlc)
 {
+	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-CONFIRM\n");
+
 	dlc->status = DLC_CONNECTED;
 
 	struct q931_call *call, *callt;
@@ -113,6 +117,8 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 
 void q931_dl_release_indication(struct q931_dlc *dlc)
 {
+	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-INDICATION\n");
+
 	dlc->status = DLC_DISCONNECTED;
 
 	struct q931_call *call, *callt;
@@ -137,8 +143,10 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 	}
 }
 
-void q931_dl_release_confirmation(struct q931_dlc *dlc)
+void q931_dl_release_confirm(struct q931_dlc *dlc)
 {
+	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-CONFIRM\n");
+
 	dlc->status = DLC_DISCONNECTED;
 
 	struct q931_call *call, *callt;
@@ -267,9 +275,9 @@ void q931_decode_information_elements(
 		} else {
 			// Variable Length IE
 
-			ie->data = msg->raw + curpos;
 			ie->len = *(__u8 *)(msg->raw + curpos);
 			curpos++;
+			ie->data = msg->raw + curpos;
 
 			if (codeset == 0) {
 				// Check out-of-sequence

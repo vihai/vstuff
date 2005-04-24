@@ -5,6 +5,9 @@
 #ifndef _HFC_FIFO_H
 #define _HFC_FIFO_H
 
+int hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
+	void *data, int size);
+
 static inline u16 Z_inc(struct hfc_chan_simplex *chan, u16 z, u16 inc)
 {
 	// declared as u32 in order to manage overflows
@@ -119,8 +122,8 @@ static inline void hfc_fifo_select(struct hfc_chan_simplex *chan)
 //	WARN_ON(!irqs_disabled() || !in_interrupt());
 
 	hfc_outb(chan->chan->port->card, hfc_R_FIFO,
-		hfc_R_FIFO_V_FIFO_ID(chan->fifo_id));
-//		hfc_R_FIFO_V_REV);
+		hfc_R_FIFO_V_FIFO_ID(chan->fifo_id) |
+		(chan->bit_reversed ? hfc_R_FIFO_V_REV : 0));
 
 	hfc_wait_busy(chan->chan->port->card);
 	hfc_fifo_refresh_fz_cache(chan);
