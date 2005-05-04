@@ -38,6 +38,7 @@ enum q931_ie_cause_value
 	Q931_IE_C_CV_NO_ANSWER_FROM_USER			= 19,
 	Q931_IE_C_CV_CALL_REJECTED				= 21,
 	Q931_IE_C_CV_NUMBER_CHANGED				= 22,
+	Q931_IE_C_CV_CALL_REJECTED_DUE_TO_ACR			= 24,
 	Q931_IE_C_CV_NON_SELECTED_USER_CLEARING			= 26,
 	Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER			= 27,
 	Q931_IE_C_CV_INVALID_NUMBER_FORMAT			= 28,
@@ -138,12 +139,28 @@ struct q931_ie_cause_onwire_4
 } __attribute__ ((__packed__));
 
 int q931_ie_cause_check(
-	struct q931_message *msg,
-	struct q931_ie *ie);
+	const struct q931_message *msg,
+	const struct q931_ie *ie);
+
 int q931_append_ie_cause(void *buf,
         enum q931_ie_cause_location location,
-        enum q931_ie_cause_value value);
+        enum q931_ie_cause_value cause);
+int q931_append_ie_cause_diag(void *buf,
+	enum q931_ie_cause_location location,
+	enum q931_ie_cause_value cause,
+	const __u8 *diag,
+	int diaglen);
+
+struct q931_causeset;
+int q931_append_ie_causes(void *buf,
+	enum q931_ie_cause_location location,
+	const struct q931_causeset *causeset);
 
 void q931_ie_cause_value_infos_init();
+
+struct q931_causeset;
+void q931_ie_cause_add_to_causeset(
+	const struct q931_ie *ie,
+	struct q931_causeset *causeset);
 
 #endif

@@ -242,15 +242,20 @@ inline static void q931_global_handle_restart(
 
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_RESTART);
 		} else {
-			q931_global_send_status(gc, msg->dlc,
-				Q931_IE_C_CV_IDENTIFIED_CHANNEL_DOES_NOT_EXIST);
+			struct q931_causeset causeset = Q931_CAUSESET_INITC(
+                                Q931_IE_C_CV_IDENTIFIED_CHANNEL_DOES_NOT_EXIST);
+
+			q931_global_send_status(gc, msg->dlc, &causeset);
 		}
 	break;
 
 	case Q931_GLOBAL_STATE_RESTART_REQUEST:
-	case Q931_GLOBAL_STATE_RESTART:
-		q931_global_send_status(gc, msg->dlc,
-			Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+	case Q931_GLOBAL_STATE_RESTART: {
+		struct q931_causeset causeset = Q931_CAUSESET_INITC(
+                        Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+
+		q931_global_send_status(gc, msg->dlc, &causeset);
+	}
 	break;
 	}
 }
@@ -300,9 +305,12 @@ inline static void q931_global_handle_restart_acknowledge(
 	break;
 
 	case Q931_GLOBAL_STATE_NULL:
-	case Q931_GLOBAL_STATE_RESTART:
-		q931_global_send_status(gc, msg->dlc,
-			Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+	case Q931_GLOBAL_STATE_RESTART: {
+		struct q931_causeset causeset = Q931_CAUSESET_INITC(
+                        Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+
+		q931_global_send_status(gc, msg->dlc, &causeset);
+	}
 	break;
 	}
 }
@@ -395,9 +403,12 @@ void q931_dispatch_global_message(
 		q931_global_handle_restart_acknowledge(gc, msg);
 	break;
 
-	default:
-		q931_global_send_status(gc, msg->dlc,
-			Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+	default: {
+		struct q931_causeset causeset = Q931_CAUSESET_INITC(
+                        Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+
+		q931_global_send_status(gc, msg->dlc, &causeset);
+	}
 	break;
 	}
 }

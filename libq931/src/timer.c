@@ -64,19 +64,23 @@ longtime_t q931_run_timers(struct q931_lib *lib)
 	longtime_t next_timer = -1;
 	int next_timer_set = 0;
 
-	struct q931_timer *timer, *t;
-	list_for_each_entry_safe(timer, t, &lib->timers, node) {
-		if (!next_timer_set || timer->expires < next_timer)
-			next_timer = timer->expires;
+	do {
+		struct q931_timer *timer, *t;
+retry:
+		list_for_each_entry_safe(timer, t, &lib->timers, node) {
+			if (timer->expires < now) {
+				list_del(&timer->node);
+				timer->pending = FALSE;
 
-		if (timer->expires < now) {
-			timer->func(timer->data);
+				timer->func(timer->data);
 
-			list_del(&timer->node);
+				goto retry;
+			}
 
-			timer->pending = FALSE;
+			if (!next_timer_set || timer->expires < next_timer)
+				next_timer = timer->expires;
 		}
-	}
+	} while (0);
 
 	if (next_timer == -1)
 		return -1;

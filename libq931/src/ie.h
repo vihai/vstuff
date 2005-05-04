@@ -103,7 +103,9 @@ struct q931_ie_info
 	int network_type;
 	enum q931_ie_id id;
 	const char *name;
-	int (*validity_check)(struct q931_message *msg, struct q931_ie *ie);
+	int (*validity_check)(
+		const struct q931_message *msg,
+		const struct q931_ie *ie);
 };
 
 enum q931_ie_direction
@@ -146,8 +148,8 @@ static inline int q931_get_so_ie_type(__u8 ie_id)
 static inline int q931_get_so_ie_id(__u8 ie_id)
 {
  return (q931_get_so_ie_type(ie_id) == Q931_SOIE_TYPE1) ?
-          ie_id :
-          (ie_id & Q931_SINGLE_OCTET_ID_MASK);
+          (ie_id & Q931_SINGLE_OCTET_ID_MASK) :
+	   ie_id;
 }
 
 static inline int q931_get_so_ie_type2_value(__u8 ie_id)

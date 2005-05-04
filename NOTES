@@ -8,6 +8,11 @@ FEATURES/NOTES
 
 TODO
 
+- Siemens PBX are buggy and doesn't support responding CONNECT to a SETUP
+  message. Use q931_proceeding_request instead of q931_setup_response
+
+- Remove __devexit from removal functions
+
 - Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
   safe, since ISDN interfaces will never run AppleTalk, however it is an ugly
   hack and should be fixed.
@@ -104,6 +109,12 @@ q.931 completed
 
 20/4/2005 01:00
 First audio heared
+
+26/4/2004 22:40
+First half-call (voice in only one direction :))
+
+26/4/2004 23:20
+First full-call :)
 
 
 DL-UNIT DATA-REQUEST

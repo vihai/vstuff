@@ -50,6 +50,8 @@ struct q931_interface
 
 	struct q931_global_call global_call;
 
+	int tones_option;
+
 	__u8 sendbuf[260]; // FIXME (size should be N202-dependent)
 
 	longtime_t T301;
@@ -83,16 +85,21 @@ struct q931_interface
 	void (*proceeding_indication)(struct q931_call *call);
 	void (*progress_indication)(struct q931_call *call);
 	void (*reject_indication)(struct q931_call *call);
-	void (*release_confirm)(struct q931_call *call);//TE
-	void (*release_indication)(struct q931_call *call);
-	void (*resume_confirm)(struct q931_call *call);//TE
+	void (*release_confirm)(struct q931_call *call,
+		enum q931_release_confirm_status status);//TE
+	void (*release_indication)(struct q931_call *call,
+		const struct q931_causeset *causeset);
+	void (*resume_confirm)(struct q931_call *call,
+		enum q931_resume_confirm_status status);//TE
 	void (*resume_indication)(struct q931_call *call,
 		__u8 *call_identity, int call_identity_len);
 	void (*setup_complete_indication)(struct q931_call *call);//TE
 	void (*setup_confirm)(struct q931_call *call);
 	void (*setup_indication)(struct q931_call *call);
-	void (*status_indication)(struct q931_call *call);
-	void (*suspend_confirm)(struct q931_call *call);//TE
+	void (*status_indication)(struct q931_call *call,
+		enum q931_status_indication_status status);
+	void (*suspend_confirm)(struct q931_call *call,
+		enum q931_suspend_confirm_status status);//TE
 	void (*suspend_indication)(struct q931_call *call,
 		__u8 *call_identity, int call_identity_len);
 	void (*timeout_indication)(struct q931_call *call);
@@ -106,7 +113,7 @@ struct q931_interface
 	void (*timeout_management_indication)(struct q931_global_call *gc);
 	void (*status_management_indication)(struct q931_global_call *gc);
 	void (*management_restart_confirm)(struct q931_global_call *gc,
-		struct q931_chanset *chanset);
+		const struct q931_chanset *chanset);
 };
 
 inline static void q931_intf_add_call(

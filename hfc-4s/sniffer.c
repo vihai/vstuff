@@ -43,6 +43,7 @@ static int xrun_recovery(snd_pcm_t *handle, int err)
 	}
 	return err;
 }
+
 static void async_direct_callback(snd_async_handler_t *ahandler)
 {
 	snd_pcm_t *handle = snd_async_handler_get_pcm(ahandler);
@@ -326,56 +327,5 @@ sleep(2);
 		}
 	}
 
-
-
-exit(0);
-/*
-	__u16 *data;
-	int frames;
-	int pcmreturn;
-
-	data = (__u16 *)malloc(500000);
-
-	int f;
-	__u8 buf[64];
-
-
-	int nsyscalls = 0;
-	int noctets = 0;
-
-	printf("%d\n", time(NULL));
-
-	snd_pcm_writei(pcm, data, 16);
-
-	for(;;) {
-		int r = read(f, buf, 16);
-		nsyscalls++;
-		noctets+=r;
-
-		int j;
-		for (j=0; j<r; j++) {
-			data[j] = alaw[buf[j]];
-		}
-
-		printf("%d ", r);
-
-		if (r == 0) {
-			continue;
-		}
-
-		while ((pcmreturn = snd_pcm_writei(pcm, data, r)) < 0) {
-			snd_pcm_prepare(pcm);
-			fprintf(stderr, "<<<<<<<<<<<<<<< Buffer Underrun >>>>>>>>>>>>>>>\n");
-		}
-
-
-//		for (j=0; j<r; j++)
-//			printf("%02x", buf[j]);
-
-//		printf("\n");
-
-		usleep(1);
-	}
-*/
 	return 0;
 }

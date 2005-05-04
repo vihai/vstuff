@@ -11,8 +11,8 @@
 #include "chanset.h"
 
 static inline int q931_ie_channel_identification_check_bra(
-	struct q931_message *msg,
-	struct q931_ie *ie)
+	const struct q931_message *msg,
+	const struct q931_ie *ie)
 {
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
 		(struct q931_ie_channel_identification_onwire_3 *)
@@ -43,8 +43,8 @@ static inline int q931_ie_channel_identification_check_bra(
 }
 
 static inline int q931_ie_channel_identification_check_pra(
-	struct q931_message *msg,
-	struct q931_ie *ie)
+	const struct q931_message *msg,
+	const struct q931_ie *ie)
 {
 	struct q931_ie_channel_identification_onwire_3c *oct_3c =
 		(struct q931_ie_channel_identification_onwire_3c *)
@@ -70,8 +70,8 @@ static inline int q931_ie_channel_identification_check_pra(
 }
 
 int q931_ie_channel_identification_check(
-	struct q931_message *msg,
-	struct q931_ie *ie)
+	const struct q931_message *msg,
+	const struct q931_ie *ie)
 {
 	if (ie->len < 1) {
 		report_msg(msg, LOG_ERR, "IE size < 2\n");
@@ -139,7 +139,7 @@ int q931_ie_channel_identification_check(
 }
 
 void q931_ie_channel_identification_to_chanset(
-	struct q931_ie *ie,
+	const struct q931_ie *ie,
 	struct q931_chanset *chanset)
 {
 	assert(chanset);
@@ -170,7 +170,7 @@ void q931_ie_channel_identification_to_chanset(
 
 int q931_append_ie_channel_identification_bra(void *buf,
 	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	struct q931_chanset *chanset)
+	const struct q931_chanset *chanset)
 {
 	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
 
@@ -212,7 +212,7 @@ int q931_append_ie_channel_identification_bra(void *buf,
 int q931_append_ie_channel_identification_pra(void *buf,
 	enum q931_ie_channel_identification_info_channel_selection_pra selection,
 	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	struct q931_chanset *chanset)
+	const struct q931_chanset *chanset)
 {
 	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
 

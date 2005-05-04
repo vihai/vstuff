@@ -36,13 +36,15 @@
 #include "ie_hlc.h"
 #include "ie_restind.h"
 
-static int q931_prepare_header(const struct q931_call *call,
+static int q931_prepare_header(
+	const struct q931_call *call,
 	__u8 *frame,
 	__u8 message_type)
 {
 	int size = 0;
 
-	// Header
+	report_call(call, LOG_DEBUG, "Sending %s\n",
+		q931_message_type_to_text(message_type));
 
 	struct q931_header *hdr = (struct q931_header *)(frame + size);
 	size += sizeof(struct q931_header);
@@ -78,7 +80,8 @@ static int q931_prepare_header(const struct q931_call *call,
 	return size;
 }
 
-static int q931_global_prepare_header(const struct q931_global_call *gc,
+static int q931_global_prepare_header(
+	const struct q931_global_call *gc,
 	__u8 *frame,
 	__u8 message_type)
 {
@@ -188,8 +191,6 @@ static int q931_send_uframe(struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	report_dlc(dlc, LOG_DEBUG, "q931_send_uframe\n");
-
 	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0) {
 		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",strerror(errno));
 		return errno;
@@ -220,8 +221,6 @@ int q931_send_alerting(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending ALERTING\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_ALERTING);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -247,8 +246,6 @@ int q931_send_call_proceeding(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending CALL_PROCEEDING\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -257,14 +254,12 @@ int q931_send_call_proceeding(
 int q931_send_call_proceeding_channel(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	struct q931_channel *channel)
+	const struct q931_channel *channel)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending CALL_PROCEEDING\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
 
@@ -312,9 +307,40 @@ int q931_send_connect(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending CONNECT\n");
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
+}
+
+int q931_send_connect_channel(
+	struct q931_call *call,
+	struct q931_dlc *dlc,
+	const struct q931_channel *channel)
+{
+	int size = 0;
+
+	assert(call);
+	assert(dlc);
+	assert(channel);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT);
+
+	struct q931_chanset cs;
+	q931_chanset_init(&cs);
+	q931_chanset_add(&cs, channel->id);
+
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		size += q931_append_ie_channel_identification_pra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_ICS_PRA_INDICATED,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
+	} else {
+		size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
+	}
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -338,8 +364,6 @@ int q931_send_connect_acknowledge(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending CONNECT_ACKNOWLEDGE\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CONNECT_ACKNOWLEDGE);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -361,22 +385,23 @@ int q931_send_connect_acknowledge(
 int q931_send_disconnect(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
+	assert(causeset);
 
-	report_call(call, LOG_DEBUG, "Sending DISCONNECT\n");
+	q931_causeset_copy(&call->disconnect_cause, causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_DISCONNECT);
 
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
+	size += q931_append_ie_causes(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-			cause);
+			causeset);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -384,28 +409,29 @@ int q931_send_disconnect(
 int q931_send_disconnect_pi(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
+	assert(causeset);
 
-	report_call(call, LOG_DEBUG, "Sending DISCONNECT\n");
+	q931_causeset_copy(&call->disconnect_cause, causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_DISCONNECT);
 
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
+	size += q931_append_ie_causes(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-			cause);
+			causeset);
 
 	size += q931_append_ie_progress_indicator(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_PI_LOCATION_PRIVATE_NET_SERVING_LOCAL_USER,
-			Q931_IE_PI_PD_IN_BAND_INFORMATION_OR_APPROPRIATE_PATTERN_AVAILABLE);
+			Q931_IE_PI_PD_IN_BAND_INFORMATION);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -432,8 +458,6 @@ int q931_send_info(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending INFORMATION\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_INFORMATION);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -457,8 +481,6 @@ int q931_send_notify(
 
 	assert(call);
 	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending NOTIFY\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_INFORMATION);
 
@@ -488,8 +510,6 @@ int q931_send_progress(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending PROGRESS\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_PROGRESS);
 
 	// FIXME add Progress indicator
@@ -511,38 +531,25 @@ int q931_send_progress(
 
 int q931_send_release(
 	struct q931_call *call,
-	struct q931_dlc *dlc)
-{
-	int size = 0;
-
-	assert(call);
-	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending RELEASE\n");
-
-	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE);
-
-	return q931_send_frame(dlc, call->intf->sendbuf, size);
-}
-
-int q931_send_release_cause(
-	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause_value)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending RELEASE\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE);
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
-			call->intf->role == LAPD_ROLE_TE ?
-				Q931_IE_C_L_USER :
-				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
-			cause_value);
+
+	if (causeset) {
+		q931_causeset_copy(&call->release_cause, causeset);
+
+		size += q931_append_ie_causes(call->intf->sendbuf + size,
+				call->intf->role == LAPD_ROLE_TE ?
+					Q931_IE_C_L_USER :
+					Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
+				causeset);
+	}
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -561,39 +568,23 @@ int q931_send_release_cause(
 
 int q931_send_release_complete(
 	struct q931_call *call,
-	struct q931_dlc *dlc)
-{
-	int size = 0;
-
-	assert(call);
-	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending RELEASE_COMPLETE\n");
-
-	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE_COMPLETE);
-
-	return q931_send_frame(dlc, call->intf->sendbuf, size);
-}
-
-int q931_send_release_complete_cause(
-	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause_value)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending RELEASE_COMPLETE\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RELEASE_COMPLETE);
 
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
-			call->intf->role == LAPD_ROLE_TE ?
-				Q931_IE_C_L_USER :
-				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
-			cause_value);
+	if (causeset) {
+		size += q931_append_ie_causes(call->intf->sendbuf + size,
+				call->intf->role == LAPD_ROLE_TE ?
+					Q931_IE_C_L_USER :
+					Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER, // FIXME
+				causeset);
+	}
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -615,8 +606,6 @@ int q931_send_resume(
 
 	assert(call);
 	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending RESUME\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME);
 
@@ -642,8 +631,6 @@ int q931_send_resume_acknowledge(
 	assert(call);
 	assert(dlc);
 	assert(call->channel);
-
-	report_call(call, LOG_DEBUG, "Sending RESUME_ACKNOWLEDGE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_ACKNOWLEDGE);
 
@@ -680,14 +667,13 @@ int q931_send_resume_acknowledge(
 int q931_send_resume_reject(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending RESUME_REJECT\n");
+	assert(causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_REJECT);
 	size += q931_append_ie_cause(call->intf->sendbuf + size,
@@ -734,18 +720,16 @@ int q931_send_setup(
 	assert(dlc);
 	assert(call->called_number);
 
-	report_call(call, LOG_DEBUG, "Sending SETUP\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP);
 	size += q931_append_ie_bearer_capability_alaw(call->intf->sendbuf + size);
 	size += q931_append_ie_called_party_number(
 			call->intf->sendbuf + size,
 			call->called_number);
 
-	if (strlen(call->calling_number))
+/*	if (strlen(call->calling_number))
 		size += q931_append_ie_calling_party_number(
 				call->intf->sendbuf + size,
-				call->calling_number);
+				call->calling_number);*/
 
 	size += q931_append_ie_high_layer_compatibility_telephony(
 			call->intf->sendbuf + size);
@@ -765,7 +749,7 @@ int q931_send_setup_channel(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
 	enum q931_setup_mode setup_mode,
-	struct q931_channel *channel)
+	const struct q931_channel *channel)
 {
 	int size = 0;
 
@@ -773,18 +757,16 @@ int q931_send_setup_channel(
 	assert(dlc);
 	assert(call->called_number);
 
-	report_call(call, LOG_DEBUG, "Sending SETUP\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SETUP);
 	size += q931_append_ie_bearer_capability_alaw(call->intf->sendbuf + size);
 	size += q931_append_ie_called_party_number(
 			call->intf->sendbuf + size,
 			call->called_number);
 
-	if (strlen(call->calling_number))
+/*	if (strlen(call->calling_number))
 		size += q931_append_ie_calling_party_number(
 				call->intf->sendbuf + size,
-				call->calling_number);
+				call->calling_number);*/
 
 	if (channel) {
 		struct q931_chanset cs;
@@ -851,8 +833,6 @@ int q931_send_setup_acknowledge(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending SETUP_ACKNOWLEDGE\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf,
 			Q931_MT_SETUP_ACKNOWLEDGE);
 
@@ -862,15 +842,13 @@ int q931_send_setup_acknowledge(
 int q931_send_setup_acknowledge_channel(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	struct q931_channel *channel)
+	const struct q931_channel *channel)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
 	assert(channel);
-
-	report_call(call, LOG_DEBUG, "Sending SETUP_ACKNOWLEDGE\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf,
 			Q931_MT_SETUP_ACKNOWLEDGE);
@@ -895,6 +873,46 @@ int q931_send_setup_acknowledge_channel(
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
+int q931_send_setup_acknowledge_channel_progind(
+	struct q931_call *call,
+	struct q931_dlc *dlc,
+	const struct q931_channel *channel,
+	enum q931_ie_progress_indicator_progress_description progind_descr)
+{
+	int size = 0;
+
+	assert(call);
+	assert(dlc);
+	assert(channel);
+
+	size += q931_prepare_header(call, call->intf->sendbuf,
+			Q931_MT_SETUP_ACKNOWLEDGE);
+
+	struct q931_chanset cs;
+	q931_chanset_init(&cs);
+	q931_chanset_add(&cs, channel->id);
+
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		size += q931_append_ie_channel_identification_pra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_ICS_PRA_INDICATED,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
+	} else {
+		size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
+	}
+
+	size += q931_append_ie_progress_indicator(
+			call->intf->sendbuf + size,
+			Q931_IE_PI_LOCATION_PRIVATE_NET_SERVING_LOCAL_USER,
+			progind_descr);
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
+}
+
 /***************** STATUS
  *
  * IEs:
@@ -910,14 +928,13 @@ int q931_send_status(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
 	__u8 state,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending STATUS\n");
+	assert(causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS);
 
@@ -935,22 +952,22 @@ int q931_send_status(
 int q931_global_send_status(
 	struct q931_global_call *gc,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(gc);
 	assert(dlc);
 
-	report_dlc(dlc, LOG_DEBUG, "Sending STATUS\n");
-
 	size += q931_global_prepare_header(gc, gc->intf->sendbuf, Q931_MT_STATUS);
-	
-	size += q931_append_ie_cause(dlc->intf->sendbuf + size,
-			dlc->intf->role == LAPD_ROLE_TE ? // FIXME
-				Q931_IE_C_L_USER :
-				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+
+	if (causeset) {
+		size += q931_append_ie_cause(dlc->intf->sendbuf + size,
+				dlc->intf->role == LAPD_ROLE_TE ? // FIXME
+					Q931_IE_C_L_USER :
+					Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
+				Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+	}
 
 	size += q931_append_ie_call_state(dlc->intf->sendbuf + size, gc->state);
 
@@ -960,14 +977,12 @@ int q931_global_send_status(
 int q931_send_restart(
 	struct q931_global_call *gc,
 	struct q931_dlc *dlc,
-	struct q931_chanset *chanset)
+	const struct q931_chanset *chanset)
 {
 	int size = 0;
 
 	assert(gc);
 	assert(dlc);
-
-	report_dlc(dlc, LOG_DEBUG, "Sending RESTART\n");
 
 	size += q931_global_prepare_header(gc, gc->intf->sendbuf, Q931_MT_RESTART);
 	
@@ -998,14 +1013,12 @@ int q931_send_restart(
 int q931_send_restart_acknowledge(
 	struct q931_global_call *gc,
 	struct q931_dlc *dlc,
-	struct q931_chanset *chanset)
+	const struct q931_chanset *chanset)
 {
 	int size = 0;
 
 	assert(gc);
 	assert(dlc);
-
-	report_dlc(dlc, LOG_DEBUG, "Sending RESTART_ACKNOWLEDGE\n");
 
 	size += q931_global_prepare_header(gc, gc->intf->sendbuf,
 			Q931_MT_RESTART_ACKNOWLEDGE);
@@ -1052,8 +1065,6 @@ int q931_send_status_enquiry(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending STATUS_ENQUIRY\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS_ENQUIRY);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -1073,8 +1084,6 @@ int q931_send_suspend(
 	struct q931_dlc *dlc)
 {
 	int size = 0;
-
-	report_call(call, LOG_DEBUG, "Sending SUSPEND\n");
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND);
 
@@ -1099,8 +1108,6 @@ int q931_send_suspend_acknowledge(
 	assert(call);
 	assert(dlc);
 
-	report_call(call, LOG_DEBUG, "Sending SUSPEND_ACKNOWLEDGE\n");
-
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_ACKNOWLEDGE);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
@@ -1119,14 +1126,13 @@ int q931_send_suspend_acknowledge(
 int q931_send_suspend_reject(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	int size = 0;
 
 	assert(call);
 	assert(dlc);
-
-	report_call(call, LOG_DEBUG, "Sending SUSPEND_REJECT\n");
+	assert(causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_REJECT);
 	size += q931_append_ie_cause(call->intf->sendbuf + size,

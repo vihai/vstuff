@@ -13,6 +13,7 @@ libq931_a_SOURCES =	\
 	out.c		\
 	global.c	\
 	chanset.c	\
+	causeset.c	\
 	callref.c	\
 	ie_bearercap.c	\
 	ie_cdpn.c	\

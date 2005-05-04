@@ -93,7 +93,7 @@ static struct q931_ie_info q931_ie_infos[] =
 		NULL,
 	},
 	{
-		13,
+		12,
 		1,
 		Q931_NT_ETSI,
 		Q931_IE_BEARER_CAPABILITY,
@@ -173,7 +173,7 @@ static struct q931_ie_info q931_ie_infos[] =
 		NULL,
 	},
 	{
-		34,
+		82,
 		1,
 		Q931_NT_ETSI,
 		Q931_IE_DISPLAY,
@@ -459,13 +459,19 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	// ALERTING
 	{
 		Q931_MT_ALERTING,
+		Q931_IE_BEARER_CAPABILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_ALERTING,
 		Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_FACILITY,
+		Q931_IE_FACILITY, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -483,7 +489,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_USER_USER,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -491,6 +497,12 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	// CALL PROCEEDING
 	{
 		Q931_MT_CALL_PROCEEDING,
+		Q931_IE_BEARER_CAPABILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_CALL_PROCEEDING,
 		Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
@@ -507,8 +519,20 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
+	{
+		Q931_MT_CALL_PROCEEDING,
+		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
 
 	// CONNECT
+	{
+		Q931_MT_CONNECT,
+		Q931_IE_BEARER_CAPABILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
 	{
 		Q931_MT_CONNECT,
 		Q931_IE_CHANNEL_IDENTIFICATION,
@@ -517,7 +541,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_FACILITY,
+		Q931_IE_FACILITY, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -547,7 +571,13 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_USER_USER,
+		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_CONNECT,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -575,12 +605,6 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	// CONNECT ACKNOWLEDGE
 	{
 		Q931_MT_CONNECT_ACKNOWLEDGE,
-		Q931_IE_CHANNEL_IDENTIFICATION,
-		Q931_IE_DIR_N_TO_U,
-		Q931_IE_OPTIONAL,
-	},
-	{
-		Q931_MT_CONNECT_ACKNOWLEDGE,
 		Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
@@ -595,7 +619,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_FACILITY,
+		Q931_IE_FACILITY, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -613,7 +637,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_USER_USER,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -670,6 +694,12 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	// PROGRESS
 	{
 		Q931_MT_PROGRESS,
+		Q931_IE_BEARER_CAPABILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_PROGRESS,
 		Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
@@ -688,7 +718,13 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_USER_USER,
+		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_PROGRESS,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -702,7 +738,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_FACILITY,
+		Q931_IE_FACILITY, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -714,7 +750,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_USER_USER,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -728,7 +764,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_FACILITY,
+		Q931_IE_FACILITY, //????
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -740,7 +776,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_USER_USER,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
@@ -802,7 +838,7 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_FACILITY,
+		Q931_IE_FACILITY, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -874,7 +910,13 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_USER_USER,
+		Q931_IE_DATE_TIME,
+		Q931_IE_DIR_N_TO_U,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_SETUP,
+		Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},

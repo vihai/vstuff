@@ -127,6 +127,8 @@ static inline void hfc_fifo_select(struct hfc_chan_simplex *chan)
 
 	hfc_wait_busy(chan->chan->port->card);
 	hfc_fifo_refresh_fz_cache(chan);
+
+	wmb(); // Is this needed?
 }
 
 void hfc_fifo_clear_rx(struct hfc_chan_simplex *chan);

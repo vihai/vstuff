@@ -8,8 +8,7 @@
 #include "list.h"
 #include "ie.h"
 #include "message.h"
-
-#include "ie_cause.h"
+#include "causeset.h"
 
 enum q931_call_direction
 {
@@ -61,12 +60,29 @@ enum q931_setup_mode
 	Q931_SETUP_BROADCAST,
 };
 
-enum q931_tone_type
+enum q931_suspend_confirm_status
 {
-	Q931_TONE_DIAL,
-	Q931_TONE_BUSY,
-	Q931_TONE_HANGUP,
-	Q931_TONE_FAILURE,
+	Q931_SUSPEND_CONFIRM_OK,
+	Q931_SUSPEND_CONFIRM_ERROR,
+	Q931_SUSPEND_CONFIRM_TIMEOUT,
+};
+
+enum q931_release_confirm_status
+{
+	Q931_RELEASE_CONFIRM_OK,
+	Q931_RELEASE_CONFIRM_ERROR,
+};
+
+enum q931_resume_confirm_status
+{
+	Q931_RESUME_CONFIRM_OK,
+	Q931_RESUME_CONFIRM_TIMEOUT,
+};
+
+enum q931_status_indication_status
+{
+	Q931_STATUS_INDICATION_OK,
+	Q931_STATUS_INDICATION_ERROR,
 };
 
 #define Q931_MAX_DIGITS 20
@@ -97,14 +113,21 @@ struct q931_call
 	int T303_fired;
 	int T308_fired;
 
+	int send_chanid_in_response;
+
 	int senq_status_97_98_received;
 	int senq_cnt;
 
-	enum q931_ie_cause_value disconnect_cause;
-	enum q931_ie_cause_value release_with_cause;
-	__u8 release_diagnostics[10]; // FIXME???
+	int disconnect_indication_sent;
+	int release_complete_received;
 
-	struct q931_channel *channel; // Maybe we should have a channel mask, instead
+	struct q931_causeset disconnect_cause;
+	struct q931_causeset release_with_cause;
+	struct q931_causeset saved_cause;
+	struct q931_causeset release_cause;
+
+	// Maybe we should have a channel mask, instead
+	struct q931_channel *channel;
 
 	void *pvt;
 
@@ -138,16 +161,21 @@ struct q931_call
 	void (*proceeding_indication)(struct q931_call *call);
 	void (*progress_indication)(struct q931_call *call);
 	void (*reject_indication)(struct q931_call *call);
-	void (*release_confirm)(struct q931_call *call);//TE
-	void (*release_indication)(struct q931_call *call);
-	void (*resume_confirm)(struct q931_call *call);//TE
+	void (*release_confirm)(struct q931_call *call,
+		enum q931_release_confirm_status status);//TE
+	void (*release_indication)(struct q931_call *call,
+		const struct q931_causeset *causeset);
+	void (*resume_confirm)(struct q931_call *call,
+		enum q931_resume_confirm_status status);//TE
 	void (*resume_indication)(struct q931_call *call,
 		__u8 *call_identity, int call_identity_len);
 	void (*setup_complete_indication)(struct q931_call *call);//TE
 	void (*setup_confirm)(struct q931_call *call);
 	void (*setup_indication)(struct q931_call *call);
-	void (*status_indication)(struct q931_call *call);
-	void (*suspend_confirm)(struct q931_call *call);//TE
+	void (*status_indication)(struct q931_call *call,
+		enum q931_status_indication_status status);
+	void (*suspend_confirm)(struct q931_call *call,
+		enum q931_suspend_confirm_status status);//TE
 	void (*suspend_indication)(struct q931_call *call,
 		__u8 *call_identity, int call_identity_len);
 	void (*timeout_indication)(struct q931_call *call);
@@ -166,18 +194,18 @@ void q931_free_call(struct q931_call *call);
 
 void q931_alerting_request(struct q931_call *call);
 void q931_disconnect_request(struct q931_call *call,
-	enum q931_ie_cause_value cause);
+	const struct q931_causeset *causeset);
 void q931_info_request(struct q931_call *call);
 void q931_more_info_request(struct q931_call *call);
 void q931_notify_request(struct q931_call *call);
 void q931_proceeding_request(struct q931_call *call);
 void q931_progress_request(struct q931_call *call);
 void q931_reject_request(struct q931_call *call,
-	enum q931_ie_cause_value cause);
+	const struct q931_causeset *causeset);
 void q931_release_request(struct q931_call *call);
 void q931_resume_request(struct q931_call *call);
 void q931_resume_reject_request(struct q931_call *call,
-	enum q931_ie_cause_value cause);
+	const struct q931_causeset *causeset);
 
 void q931_resume_response(struct q931_call *call);
 void q931_setup_complete_request(struct q931_call *call);
@@ -186,7 +214,7 @@ void q931_setup_response(struct q931_call *call);
 void q931_status_enquiry_request(struct q931_call *call,
 	struct q931_ces *ces);
 void q931_suspend_reject_request(struct q931_call *call,
-	enum q931_ie_cause_value cause);
+	const struct q931_causeset *causeset);
 
 void q931_suspend_response(struct q931_call *call);
 void q931_suspend_request(struct q931_call *call);
@@ -209,6 +237,13 @@ static inline void q931_call_set_called_number(
 		sizeof(call->called_number));
 	call->called_number[sizeof(call->called_number)-1]='\0';
 }
+
+const char *q931_call_state_to_text(enum q931_call_state state);
+
+struct q931_call *q931_find_call_by_reference(
+	struct q931_interface *intf,
+	enum q931_call_direction direction,
+	q931_callref call_reference);
 
 
 #ifdef Q931_PRIVATE
@@ -252,11 +287,6 @@ void q931_dispatch_message(
 	struct q931_call *call,
 	struct q931_message *msg);
 
-struct q931_call *q931_find_call_by_reference(
-	struct q931_interface *intf,
-	enum q931_call_direction direction,
-	q931_callref call_reference);
-
 void q931_call_set_state(
 	struct q931_call *call,
 	enum q931_call_state state);
@@ -274,7 +304,8 @@ void q931_int_call_proceeding_indication(struct q931_call *call, struct q931_ces
 void q931_int_release_complete_indication(struct q931_call *call, struct q931_ces *ces);
 void q931_int_info_indication(struct q931_call *call, struct q931_ces *ces);
 void q931_int_progress_indication(struct q931_call *call, struct q931_ces *ces);
-void q931_int_release_indication( struct q931_call *call, struct q931_ces *ces);
+void q931_int_release_indication( struct q931_call *call, struct q931_ces *ces,
+	const struct q931_causeset *causeset);
 
 #endif
 #endif

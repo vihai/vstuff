@@ -7,5 +7,6 @@
 #include "logging.h"
 #include "call.h"
 #include "intf.h"
+#include "ces.h"
 
 #endif

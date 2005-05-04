@@ -203,240 +203,348 @@ int ie_has_content_errors(
 	return FALSE;
 }
 
-void q931_decode_information_elements(
-	struct q931_call *call,
-	struct q931_message *msg)
+struct q931_decode_status
 {
-	int curpos= sizeof(struct q931_header) + msg->callref_len + 1;
-	int codeset = 0;
-	int codeset_locked = FALSE;
-	int invalid_mandatory_ie_present = FALSE;
-	int invalid_optional_ie_present = FALSE;
-	int unrecognized_ie_present = FALSE;
-	struct q931_ie *ie;
+	int curpos;
+	int curie;
 
-	int i=0;
-	while(curpos < msg->rawlen) {
-		ie = &msg->ies[msg->ies_cnt];
+	int codeset;
+	int codeset_locked;
 
-		__u8 first_octet = *(__u8 *)(msg->raw + curpos);
-		curpos++;
+	__u8 ie_id;
 
-		if (q931_is_so_ie(first_octet)) {
-			// Single octet IE
+	int invalid_mand_ies_cnt;
+	__u8 invalid_mand_ies[32];
 
-			if (q931_get_so_ie_id(first_octet) == Q931_IE_SHIFT) {
-				if (q931_get_so_ie_type2_value(first_octet) & 0x08) {
-					// Locking shift
+	int invalid_opt_ies_cnt;
+	__u8 invalid_opt_ies[32];
 
-					report_dlc(msg->dlc, LOG_DEBUG,
-						"Locked Switch from codeset %u to codeset %u",
-						codeset,
-						q931_get_so_ie_type2_value(first_octet) & 0x07);
+	int unrecognized_ies_cnt;
+	__u8 unrecognized_ies[32];
+};
 
-					codeset = q931_get_so_ie_type2_value(first_octet) & 0x07;
-					codeset_locked = FALSE;
+void q931_decode_so_ie(
+	const struct q931_call *call,
+	struct q931_message *msg,
+	struct q931_decode_status *ds)
+{
+	struct q931_ie *ie =
+		&msg->ies[msg->ies_cnt];
 
-					continue;
-				} else {
-					// Non-Locking shift
+	if (ds->codeset == 0) {
+		ie->info =
+			q931_get_ie_info(ds->ie_id);
 
-					report_dlc(msg->dlc, LOG_DEBUG,
-						"Non-Locked Switch from codeset %u to codeset %u",
-						codeset,
-						q931_get_so_ie_type2_value(first_octet));
+		if (ie->info) {
+			ie->len = 0;
+			ie->data = NULL;
+			msg->ies_cnt++;
 
-					codeset = q931_get_so_ie_type2_value(first_octet);
-					codeset_locked = TRUE;
-
-					continue;
-				}
-			}
-
-			if (codeset == 0) {
-				ie->info =
-					q931_get_ie_info(first_octet);
-
-				if (ie->info) {
-					ie->len = 0;
-					ie->data = NULL;
-					msg->ies_cnt++;
-
-					report_dlc(msg->dlc, LOG_DEBUG,
-						"SO IE %d ===> %u (%s)\n", i,
-						first_octet,
-						ie->info->name);
-				} else {
-					report_dlc(msg->dlc, LOG_DEBUG,
-						"SO IE %d ===> %u (unknown)\n", i,
-						first_octet);
-				}
-			}
+			report_dlc(msg->dlc, LOG_DEBUG,
+				"SO IE %d ===> %u (%s)\n",
+				ds->curie,
+				ds->ie_id,
+				ie->info->name);
 		} else {
-			// Variable Length IE
+			report_dlc(msg->dlc, LOG_DEBUG,
+				"SO IE %d ===> %u (unknown)\n",
+				ds->curie,
+				ds->ie_id);
+		}
+	}
+}
 
-			ie->len = *(__u8 *)(msg->raw + curpos);
-			curpos++;
-			ie->data = msg->raw + curpos;
+void q931_decode_vl_ie(
+	const struct q931_call *call,
+	struct q931_message *msg,
+	struct q931_decode_status *ds)
+{
+	struct q931_ie *ie =
+		&msg->ies[msg->ies_cnt];
 
-			if (codeset == 0) {
-				// Check out-of-sequence
-				// Check duplicated IEs
-				// Check missing mandatory IE
+	ie->len = *(__u8 *)(msg->raw + ds->curpos);
+	ds->curpos++;
+	ie->data = msg->raw + ds->curpos;
 
-				ie->info =
-					q931_get_ie_info(first_octet);
+	if (ds->codeset == 0) {
+		// Check out-of-sequence
+		// Check duplicated IEs
+		// Check missing mandatory IE
 
-				const struct q931_ie_info_per_mt *ie_info2 =
-					q931_get_ie_info_per_mt(
-						msg->message_type, first_octet);
+		ie->info =
+			q931_get_ie_info(ds->ie_id);
 
-				if (!ie->info) {
-					if (q931_ie_comprehension_required(first_octet)) {
-						unrecognized_ie_present = TRUE;
+		const struct q931_ie_info_per_mt *ie_info2 =
+			q931_get_ie_info_per_mt(
+				msg->message_type, ds->ie_id);
 
-						report_dlc(msg->dlc, LOG_DEBUG,
-							"Unrecognized IE %d in message"
-							" for which comprehension is required\n",
-							first_octet);
-					}
+		if (!ie->info) {
+			if (q931_ie_comprehension_required(ds->ie_id)) {
+				ds->unrecognized_ies[ds->unrecognized_ies_cnt++] =
+					ds->ie_id;
 
-					goto skip_this_ie;
+				report_dlc(msg->dlc, LOG_DEBUG,
+					"Unrecognized IE %d in message"
+					" for which comprehension is required\n",
+					ds->ie_id);
+			}
+
+			goto skip_this_ie;
+		}
+
+		if (!ie_info2) {
+			report_msg(msg, LOG_DEBUG,
+				"Unexpected IE %d in message type %s\n",
+				ds->ie_id,
+				q931_message_type_to_text(
+					msg->message_type));
+
+			goto skip_this_ie;
+		}
+
+		if (!ie_has_content_errors(msg, &msg->ies[msg->ies_cnt])) {
+			report_msg(msg, LOG_DEBUG,
+				"VS IE %d ===> %u (%s) -- length %u\n",
+				ds->curie,
+				ds->ie_id,
+				ie->info->name,
+				ie->len);
+
+			msg->ies_cnt++;
+		} else {
+			// If mandatory or comprension required
+			if (q931_ie_comprehension_required(ds->ie_id)) {
+				if (ds->invalid_mand_ies_cnt <
+				    sizeof(ds->invalid_mand_ies)/
+				    sizeof(*ds->invalid_mand_ies)) {
+					ds->invalid_mand_ies[ds->invalid_mand_ies_cnt]
+						= ds->ie_id;
+
+					ds->invalid_mand_ies_cnt++;
 				}
+			} else {
+				if (ds->invalid_opt_ies_cnt <
+				    sizeof(ds->invalid_opt_ies)/
+				    sizeof(*ds->invalid_opt_ies)) {
+					ds->invalid_opt_ies[ds->invalid_opt_ies_cnt]
+						= ds->ie_id;
 
-				if (!ie_info2) {
-					report_msg(msg, LOG_DEBUG,
-						"Unexpected IE %d in message type %s\n",
-						first_octet,
-						q931_message_type_to_text(
-							msg->message_type));
-
-					goto skip_this_ie;
-				}
-
-				if (!ie_has_content_errors(msg, &msg->ies[msg->ies_cnt])) {
-					report_msg(msg, LOG_DEBUG,
-						"VS IE %d ===> %u (%s) -- length %u\n", i,
-						first_octet,
-						ie->info->name,
-						ie->len);
-
-					msg->ies_cnt++;
-				} else {
-					// If mandatory or comprension required
-					if (0) {
-						invalid_mandatory_ie_present = TRUE;
-//						call->release_diagnostics[0] = first_octet; // FIXME
-					} else {
-						invalid_optional_ie_present = TRUE;
-//						call->release_diagnostics[0] = first_octet;
-					}
+					ds->invalid_opt_ies_cnt++;
 				}
 			}
+		}
+	}
 
 skip_this_ie:
 
-			curpos += ie->len;
+	ds->curpos += ie->len;
 
-			if(curpos > msg->rawlen) {
-				report_msg(msg, LOG_ERR, "MALFORMED FRAME\n");
-				// FIXME
-				break;
+	if(ds->curpos > msg->rawlen) {
+		report_msg(msg, LOG_ERR, "MALFORMED FRAME\n");
+		// FIXME
+		return;
+	}
+}
+
+void q931_decode_shift_ie(
+	const struct q931_call *call,
+	struct q931_message *msg,
+	struct q931_decode_status *ds)
+{
+	if (q931_get_so_ie_type2_value(ds->ie_id) & 0x08) {
+		// Locking shift
+
+		report_dlc(msg->dlc, LOG_DEBUG,
+			"Locked Switch from codeset %u to codeset %u\n",
+			ds->codeset,
+			q931_get_so_ie_type2_value(ds->ie_id) & 0x07);
+
+		ds->codeset = q931_get_so_ie_type2_value(ds->ie_id) & 0x07;
+		ds->codeset_locked = FALSE;
+	} else {
+		// Non-Locking shift
+
+		report_dlc(msg->dlc, LOG_DEBUG,
+			"Non-Locked Switch from codeset %u to codeset %u\n",
+			ds->codeset,
+			q931_get_so_ie_type2_value(ds->ie_id));
+
+		ds->codeset = q931_get_so_ie_type2_value(ds->ie_id);
+		ds->codeset_locked = TRUE;
+	}
+}
+
+int q931_decode_information_elements(
+	struct q931_call *call,
+	struct q931_message *msg)
+{
+	struct q931_decode_status ds;
+	memset(&ds, 0x00, sizeof(ds));
+
+	ds.curpos = sizeof(struct q931_header) + msg->callref_len + 1;
+	ds.codeset = 0;
+	ds.codeset_locked = FALSE;
+
+	while(ds.curpos < msg->rawlen) {
+		ds.ie_id = *(__u8 *)(msg->raw + ds.curpos);
+		ds.curpos++;
+
+		if (q931_is_so_ie(ds.ie_id)) {
+			if (q931_get_so_ie_id(ds.ie_id) == Q931_IE_SHIFT) {
+				q931_decode_shift_ie(call, msg, &ds);
+
+				continue;
 			}
+
+			q931_decode_so_ie(call, msg, &ds);
+		} else {
+			q931_decode_vl_ie(call, msg, &ds);
 		}
 
-		if (!codeset_locked)
-			codeset = 0;
+		if (!ds.codeset_locked)
+			ds.codeset = 0;
 
-		i++;
+		ds.curie++;
 	}
 
+	 // TODO: Uhm... we should do some validity check for the global call too
 	if (!call)
-		return;
+		return TRUE;
 
-	if (invalid_mandatory_ie_present) {
+//	if (mandatory ies missing)
+	if (ds.invalid_mand_ies_cnt) {
 		switch(msg->message_type) {
 		case Q931_MT_SETUP:
-		case Q931_MT_RELEASE:
-			q931_send_release_complete_cause(call, msg->dlc,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
+		case Q931_MT_RELEASE: {
+			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			return;
+			q931_causeset_add_diag(&causeset,
+					Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+					ds.invalid_mand_ies,
+					ds.invalid_mand_ies_cnt);
+
+			q931_send_release_complete(call, msg->dlc, &causeset);
+
+			return FALSE;
+		}
 		break;
 
 		case Q931_MT_DISCONNECT:
-			call->release_with_cause =
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			q931_causeset_init(&call->release_with_cause);
+			q931_causeset_add_diag(&call->release_with_cause,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.invalid_mand_ies,
+				ds.invalid_mand_ies_cnt);
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
 			// Ignore content errors in RELEASE_COMPLETE
 		break;
 
-		default:
+		default: {
+			struct q931_causeset causeset = Q931_CAUSESET_INIT;
+
+			q931_causeset_add_diag(&causeset,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.invalid_mand_ies,
+				ds.invalid_mand_ies_cnt);
+
 			q931_send_status(call, msg->dlc,
 				call->state,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS
-				/* ADD diagnostics here FIXME */);
+				&causeset);
 
-			return;
+			return FALSE;
+		}
 		break;
 		}
-	} else if (unrecognized_ie_present) {
+	} else if (ds.unrecognized_ies_cnt) {
 		switch(msg->message_type) {
 		case Q931_MT_DISCONNECT:
-			call->release_with_cause =
-				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
+			q931_causeset_init(&call->release_with_cause);
+			q931_causeset_add_diag(&call->release_with_cause,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.unrecognized_ies,
+				ds.unrecognized_ies_cnt);
 		break;
 
-		case Q931_MT_RELEASE:
-			q931_send_release_complete_cause(call, msg->dlc,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
+		case Q931_MT_RELEASE: {
+			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			return;
+			q931_causeset_add_diag(&causeset,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.unrecognized_ies,
+				ds.unrecognized_ies_cnt);
+
+			q931_send_release_complete(call, msg->dlc, &causeset);
+
+			return FALSE;
+		}
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
 			// Ignore content errors in RELEASE_COMPLETE
 		break;
 
-		default:
-			q931_send_status(call, msg->dlc,
-				call->state,
-				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT
-				/* ADD diagnostics here FIXME */);
+		default: {
+			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			return;
+			q931_causeset_add_diag(&causeset,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.unrecognized_ies,
+				ds.unrecognized_ies_cnt);
+
+			q931_send_status(call, msg->dlc, call->state, &causeset);
+
+			return FALSE;
+		}
 		break;
 		}
-	} else if (invalid_optional_ie_present) {
+	} else if (ds.invalid_opt_ies_cnt) {
 		switch(msg->message_type) {
 		case Q931_MT_DISCONNECT:
-			call->release_with_cause =
-				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
+			q931_causeset_init(&call->release_with_cause);
+			q931_causeset_add_diag(&call->release_with_cause,
+				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT,
+				ds.unrecognized_ies,
+				ds.unrecognized_ies_cnt);
 		break;
 
-		case Q931_MT_RELEASE:
-			q931_send_release_complete_cause(call, msg->dlc,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS);
+		case Q931_MT_RELEASE: {
+			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			return;
+			q931_causeset_add_diag(&causeset,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.invalid_opt_ies,
+				ds.invalid_opt_ies_cnt);
+
+			q931_send_release_complete(call, msg->dlc, &causeset);
+
+			return FALSE;
+		}
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
 			// Ignore content errors in RELEASE_COMPLETE
 		break;
 
-		default:
-			q931_send_status(call, msg->dlc,
-				call->state,
-				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT
-				/* ADD diagnostics here FIXME */);
+		default: {
+			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			return;
+			q931_causeset_add_diag(&causeset,
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
+				ds.invalid_opt_ies,
+				ds.invalid_opt_ies_cnt);
+
+			q931_send_status(call, msg->dlc,
+				call->state, &causeset);
+
+			return FALSE;
+		}
 		break;
 		}
 	}
+
+	return TRUE;
 }
 
 void q931_receive(struct q931_dlc *dlc)
@@ -534,9 +642,12 @@ void q931_receive(struct q931_dlc *dlc)
 			msg.callref_direction =
 				Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE;
 		}
-	   
-		// LITTLE ENDIAN
+		   
+#if __BYTE_ORDER == __LITTLE_ENDIAN
 		msg.callref |= val << ((hdr->call_reference_len-i-1) * 8);
+#else
+		msg.callref |= val << (hdr->i * 8);
+#endif
 	}
 
 
@@ -554,8 +665,9 @@ void q931_receive(struct q931_dlc *dlc)
 		msg.message_type);
 
 	if (msg.callref == 0x00) { // FIXME CHECKME
-		q931_decode_information_elements(NULL, &msg);
-		q931_dispatch_global_message(&dlc->intf->global_call, &msg);
+		if (q931_decode_information_elements(NULL, &msg))
+			q931_dispatch_global_message(
+				&dlc->intf->global_call, &msg);
 
 		return;
 	}
@@ -586,8 +698,11 @@ void q931_receive(struct q931_dlc *dlc)
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE for an unknown callref\n");
 
-			q931_send_release_complete_cause(call, dlc,
-				Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+			struct q931_causeset causeset =
+				Q931_CAUSESET_INITC(
+					Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+
+			q931_send_release_complete(call, dlc, &causeset);
 
 			return;
 		break;
@@ -617,9 +732,12 @@ void q931_receive(struct q931_dlc *dlc)
 			// Pass it to the handler
 		break;
 
-		default:
-			q931_send_release_cause(call, dlc,
-				Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+		default: {
+			struct q931_causeset causeset =
+				Q931_CAUSESET_INITC(
+					Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+
+			q931_send_release(call, dlc, &causeset);
 			q931_call_start_timer(call, T308);
 
 			if (call->state == N0_NULL_STATE)
@@ -628,29 +746,29 @@ void q931_receive(struct q931_dlc *dlc)
 				q931_call_set_state(call, N19_RELEASE_REQUEST);
 
 			return;
+		}
 		break;
 		}
 	}
 
-	q931_decode_information_elements(call, &msg);
+	if (q931_decode_information_elements(call, &msg)) {
+		struct q931_ces *ces, *tces;
+		list_for_each_entry_safe(ces, tces, &call->ces, node) {
 
-	struct q931_ces *ces, *tces;
-	list_for_each_entry_safe(ces, tces, &call->ces, node) {
+			if (ces->dlc == dlc) {
+				// selected_ces may change after "dispatch_message"
+				if (ces == call->selected_ces) {
+					q931_ces_dispatch_message(ces, &msg);
 
-		if (ces->dlc == dlc) {
-			// selected_ces may change after "dispatch_message"
-			if (ces == call->selected_ces) {
-				q931_ces_dispatch_message(ces, &msg);
+					break;
+				} else {
+					q931_ces_dispatch_message(ces, &msg);
 
-				break;
-			} else {
-				q931_ces_dispatch_message(ces, &msg);
-
-				return;
+					return;
+				}
 			}
 		}
+
+		q931_dispatch_message(call, &msg);
 	}
-
-	q931_dispatch_message(call, &msg);
-
 }

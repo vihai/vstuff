@@ -2,6 +2,41 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-05-04 02:15:50 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-30
+
+    Summary:
+      Various fixes and causeset implementation
+    Revision:
+      isdn--devel--0.1--patch-30
+
+    
+    
+
+    new files:
+     libq931/src/.arch-ids/causeset.c.id
+     libq931/src/.arch-ids/causeset.h.id libq931/src/causeset.c
+     libq931/src/causeset.h streambus/.arch-ids/=id
+
+    modified files:
+     ChangeLog NOTES chan_visdn/chan_visdn.c hfc-4s/fifo.h
+     hfc-4s/hfc-4s_main.c hfc-4s/sniffer.c libq931/src/Makefile.am
+     libq931/src/call.c libq931/src/call.h libq931/src/ces.c
+     libq931/src/ces.h libq931/src/channel.c libq931/src/channel.h
+     libq931/src/chanset.c libq931/src/chanset.h
+     libq931/src/global.c libq931/src/ie.c libq931/src/ie.h
+     libq931/src/ie_bearercap.h libq931/src/ie_call_state.c
+     libq931/src/ie_call_state.h libq931/src/ie_cause.c
+     libq931/src/ie_cause.h libq931/src/ie_chanid.c
+     libq931/src/ie_chanid.h libq931/src/ie_progind.c
+     libq931/src/ie_progind.h libq931/src/ie_restind.c
+     libq931/src/ie_restind.h libq931/src/intf.h libq931/src/out.c
+     libq931/src/out.h libq931/src/q931.c libq931/src/q931.h
+     libq931/src/timer.c
+
+    new directories:
+     streambus streambus/.arch-ids
+
+
 2005-04-24 02:53:12 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-29
 
     Summary:

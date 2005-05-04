@@ -29,8 +29,8 @@ struct q931_ie_restart_indicator_onwire_3
 } __attribute__ ((__packed__));
 
 int q931_ie_restart_indicator_check(
-	struct q931_message *msg,
-	struct q931_ie *ie);
+	const struct q931_message *msg,
+	const struct q931_ie *ie);
 
 int q931_append_ie_restart_indicator(void *buf,
 	enum q931_ie_restart_indicator_class restart_class);

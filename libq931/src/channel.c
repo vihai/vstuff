@@ -67,3 +67,20 @@ struct q931_channel *get_channel_by_id(
 	return NULL;
 }
 
+const char *q931_channel_state_to_text(enum q931_channel_state state)
+{
+	switch(state) {
+	case Q931_CHANSTATE_AVAILABLE:
+		return "AVAILABLE";
+	case Q931_CHANSTATE_SELECTED:
+		return "SELECTED";
+	case Q931_CHANSTATE_PROPOSED:
+		return "PROPOSED";
+	case Q931_CHANSTATE_CONNECTED:
+		return "CONNECTED";
+	case Q931_CHANSTATE_DISCONNECTED:
+		return "DISCONNECTED";
+	}
+
+	assert(0);
+}

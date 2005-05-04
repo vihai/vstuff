@@ -24,7 +24,7 @@
 
 #include "ie_call_state.h"
 
-static const char *q931_ces_state_to_text(enum q931_call_state state)
+const char *q931_ces_state_to_text(enum q931_call_state state)
 {
 	switch (state) {
 	case U0_NULL_STATE:
@@ -115,12 +115,14 @@ void q931_ces_dl_establish_indication(struct q931_ces *ces)
 	assert(ces);
 
 	if (ces->state == I25_OVERLAP_RECEIVING) {
-		q931_ces_stop_timer(ces, T304);
-		q931_send_release_cause(ces->call, ces->dlc,
+		struct q931_causeset causeset = Q931_CAUSESET_INITC(
 			Q931_IE_C_CV_TEMPORARY_FAILURE);
+
+		q931_ces_stop_timer(ces, T304);
+		q931_send_release(ces->call, ces->dlc, &causeset);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 	}
 }
 
@@ -134,7 +136,7 @@ void q931_ces_dl_release_indication(struct q931_ces *ces)
 
 	if (ces->state != I0_NULL_STATE) {
 		q931_ces_stop_any_timer(ces);
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 		q931_int_release_complete_indication(ces->call, ces);
 	}
 }
@@ -167,11 +169,11 @@ static __u8 q931_ces_state_to_ie_state(
 
 static inline void q931_ces_send_status(
 	struct q931_ces *ces,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	q931_send_status(ces->call, ces->dlc,
 		q931_ces_state_to_ie_state(ces->state),
-		cause);
+		causeset);
 }
 
 #define q931_ces_unexpected_timer(call)	\
@@ -214,9 +216,12 @@ static void _q931_ces_message_not_compatible_with_state(
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
-	case I25_OVERLAP_RECEIVING:
-		q931_ces_send_status(ces,
+	case I25_OVERLAP_RECEIVING: {
+		struct q931_causeset causeset = Q931_CAUSESET_INITC(
 			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
+
+		q931_ces_send_status(ces, &causeset);
+	}
 	break;
 	}
 
@@ -305,7 +310,7 @@ void q931_ces_setup_ack_request(struct q931_ces *ces)
 }
 
 void q931_ces_release_request(struct q931_ces *ces,
-	enum q931_ie_cause_value cause)
+	const struct q931_causeset *causeset)
 {
 	assert(ces);
 
@@ -314,27 +319,27 @@ void q931_ces_release_request(struct q931_ces *ces,
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 		q931_ces_start_timer(ces, T308);
-		q931_send_release_cause(ces->call, ces->dlc, cause);
+		q931_send_release(ces->call, ces->dlc, causeset);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
 		q931_ces_start_timer(ces, T308);
-		q931_send_release_cause(ces->call, ces->dlc, cause);
+		q931_send_release(ces->call, ces->dlc, causeset);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-	break;
-
-	case I19_RELEASE_REQUEST:
-		q931_ces_send_status(ces,
-			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
 		q931_ces_start_timer(ces, T308);
-		q931_send_release_cause(ces->call, ces->dlc, cause);
+		q931_send_release(ces->call, ces->dlc, causeset);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
 	break;
+
+	case I19_RELEASE_REQUEST:
+		q931_ces_unexpected_primitive(ces);
+	break;
+
 	}
 }
 
@@ -394,13 +399,6 @@ static inline void q931_ces_handle_alerting(
 	assert(msg);
 
 	switch (ces->state) {
-	case I7_CALL_RECEIVED:
-	case I8_CONNECT_REQUEST:
-	case I19_RELEASE_REQUEST:
-		q931_ces_send_status(ces,
-			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
-	break;
-
 	case I9_INCOMING_CALL_PROCEEDING:
 		q931_ces_set_state(ces, I7_CALL_RECEIVED);
 		q931_int_alerting_indication(ces->call, ces);
@@ -412,7 +410,6 @@ static inline void q931_ces_handle_alerting(
 		q931_int_alerting_indication(ces->call, ces);
 	break;
 
-	case I0_NULL_STATE:
 	default:
 		q931_ces_message_not_compatible_with_state(ces);
 	break;
@@ -427,21 +424,12 @@ static inline void q931_ces_handle_call_proceeding(
 	assert(msg);
 
 	switch (ces->state) {
-	case I7_CALL_RECEIVED:
-	case I8_CONNECT_REQUEST:
-	case I9_INCOMING_CALL_PROCEEDING:
-	case I19_RELEASE_REQUEST:
-		q931_ces_send_status(ces,
-			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
-	break;
-
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
 		q931_ces_set_state(ces, I9_INCOMING_CALL_PROCEEDING);
 		q931_int_call_proceeding_indication(ces->call, ces);
 	break;
 
-	case I0_NULL_STATE:
 	default:
 		q931_ces_message_not_compatible_with_state(ces);
 	break;
@@ -461,12 +449,6 @@ static inline void q931_ces_handle_connect(
 		q931_int_connect_indication(ces->call, ces);
 	break;
 
-	case I8_CONNECT_REQUEST:
-	case I19_RELEASE_REQUEST:
-		q931_ces_send_status(ces,
-			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
-	break;
-
 	case I9_INCOMING_CALL_PROCEEDING:
 		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
 		q931_int_connect_indication(ces->call, ces);
@@ -478,7 +460,6 @@ static inline void q931_ces_handle_connect(
 		q931_int_connect_indication(ces->call, ces);
 	break;
 
-	case I0_NULL_STATE:
 	default:
 		q931_ces_message_not_compatible_with_state(ces);
 	break;
@@ -498,18 +479,11 @@ static inline void q931_ces_handle_progress(
 		q931_int_progress_indication(ces->call, ces);
 	break;
 
-	case I8_CONNECT_REQUEST:
-	case I19_RELEASE_REQUEST:
-		q931_ces_send_status(ces,
-			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
-	break;
-
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
 		q931_int_progress_indication(ces->call, ces);
 	break;
 
-	case I0_NULL_STATE:
 	default:
 		q931_ces_message_not_compatible_with_state(ces);
 	break;
@@ -526,17 +500,17 @@ static inline void q931_ces_handle_disconnect(
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
-		q931_send_release(ces->call, ces->dlc);
+		q931_send_release(ces->call, ces->dlc, NULL);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_send_release(ces->call, ces->dlc);
+		q931_send_release(ces->call, ces->dlc, NULL);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 	break;
 
 	case I19_RELEASE_REQUEST:
@@ -545,10 +519,10 @@ static inline void q931_ces_handle_disconnect(
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_send_release(ces->call, ces->dlc);
+		q931_send_release(ces->call, ces->dlc, NULL);
 		q931_ces_start_timer(ces, T308);
 		q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 	break;
 
 	case I0_NULL_STATE:
@@ -569,8 +543,8 @@ static inline void q931_ces_handle_release(
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_send_release_complete(ces->call, ces->dlc);
-		q931_int_release_indication(ces->call, ces);
+		q931_send_release_complete(ces->call, ces->dlc, NULL);
+		q931_int_release_indication(ces->call, ces, NULL);
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
@@ -581,8 +555,8 @@ static inline void q931_ces_handle_release(
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_send_release_complete(ces->call, ces->dlc);
-		q931_int_release_indication(ces->call, ces);
+		q931_send_release_complete(ces->call, ces->dlc, NULL);
+		q931_int_release_indication(ces->call, ces, NULL);
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
@@ -604,7 +578,7 @@ static inline void q931_ces_handle_release_complete(
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 		q931_int_release_complete_indication(ces->call, ces);
 	break;
 
@@ -615,7 +589,7 @@ static inline void q931_ces_handle_release_complete(
 
 	case I25_OVERLAP_RECEIVING:
 		q931_ces_stop_timer(ces, T304);
-		q931_int_release_indication(ces->call, ces);
+		q931_int_release_indication(ces->call, ces, NULL);
 
 		// Implementation dependend
 		/*
@@ -691,18 +665,22 @@ static inline void q931_ces_handle_status(
 
 		if (onwire_state == q931_ces_state_to_ie_state(I0_NULL_STATE)) {
 			q931_ces_stop_any_timer(ces);
-			q931_int_release_indication(ces->call, ces);
+			q931_int_release_indication(ces->call, ces, NULL);
 			q931_int_release_complete_indication(ces->call, ces);
 		} else if (onwire_state == q931_ces_state_to_ie_state(ces->state)) {
 				// NOTE 1. FURTHER ACTIONS ARE AN IMPLEMENTATION OPTION.
 		} else {
 			q931_ces_stop_any_timer(ces);
-			q931_send_release_cause(ces->call, ces->dlc,
+			struct q931_causeset causeset = Q931_CAUSESET_INITC(
 				Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE);
+
+			q931_send_release(ces->call, ces->dlc, &causeset);
+
 			q931_ces_start_timer(ces, T308);
 			q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-			q931_call_primitive(ces->call, status_indication); // WITH ERROR
-			q931_int_release_indication(ces->call, ces);
+			q931_call_primitive(ces->call, status_indication,
+				Q931_STATUS_INDICATION_ERROR);
+			q931_int_release_indication(ces->call, ces, NULL);
 		}
 	break;
 
@@ -759,8 +737,10 @@ static inline void q931_ces_handle_status_enquiry(
 	assert(ces);
 	assert(msg);
 
-	q931_ces_send_status(ces,
+	struct q931_causeset causeset = Q931_CAUSESET_INITC(
 		Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY);
+
+	q931_ces_send_status(ces, &causeset);
 }
 
 void q931_ces_timer_T304(void *data)
@@ -773,11 +753,13 @@ void q931_ces_timer_T304(void *data)
 		return;
 	}
 
-	q931_send_release_cause(ces->call, ces->dlc,
+	struct q931_causeset causeset = Q931_CAUSESET_INITC(
 		Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY);
+
+	q931_send_release(ces->call, ces->dlc, &causeset);
 	q931_ces_start_timer(ces, T308);
 	q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-	q931_int_release_indication(ces->call, ces);
+	q931_int_release_indication(ces->call, ces, NULL);
 }
 
 void q931_ces_timer_T308(void *data)
@@ -791,7 +773,7 @@ void q931_ces_timer_T308(void *data)
 	}
 
 	if (!ces->T308_fired) {
-		q931_send_release(ces->call, ces->dlc);
+		q931_send_release(ces->call, ces->dlc, NULL);
 		q931_ces_start_timer(ces, T308);
 
 	} else {
@@ -815,10 +797,13 @@ void q931_ces_timer_T322(void *data)
 			// Implementation dependent
 		} else {
 			if (ces->senq_cnt > 3) {
-				q931_send_release_cause(ces->call, ces->dlc,
+				struct q931_causeset causeset = Q931_CAUSESET_INITC(
 					Q931_IE_C_CV_TEMPORARY_FAILURE);
+
+				q931_send_release(ces->call, ces->dlc,
+					&causeset);
 				q931_ces_start_timer(ces, T308);
-				q931_int_release_indication(ces->call, ces);
+				q931_int_release_indication(ces->call, ces, NULL);
 			} else {
 				q931_send_status_enquiry(ces->call, ces->dlc);
 				q931_ces_start_timer(ces, T322);

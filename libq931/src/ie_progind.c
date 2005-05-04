@@ -19,7 +19,7 @@ int q931_append_ie_progress_indicator(void *buf,
 	ie_bc_3_4->ext = 1;
 	ie_bc_3_4->coding_standard = Q931_IE_PI_CS_CCITT;
 	ie_bc_3_4->location = location;
-	ie_bc_3_4->ext = 1;
+	ie_bc_3_4->ext2 = 1;
 	ie_bc_3_4->progress_description = description;
 	ie->len += sizeof(struct q931_ie_progress_indicator_onwire_3_4);
 

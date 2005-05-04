@@ -19,7 +19,7 @@ void q931_chanset_init(
 
 void q931_chanset_copy(
 	struct q931_chanset *chanset,
-	struct q931_chanset *src_chanset)
+	const struct q931_chanset *src_chanset)
 {
 	assert(chanset);
 	assert(src_chanset);
@@ -69,7 +69,7 @@ void q931_chanset_del(
 
 void q931_chanset_merge(
 	struct q931_chanset *chanset,
-	struct q931_chanset *src_chanset)
+	const struct q931_chanset *src_chanset)
 {
 	int i;
 	for (i=0; i<src_chanset->nchans; i++) {
@@ -87,7 +87,7 @@ chan_found:
 }
 
 int q931_chanset_contains(
-	struct q931_chanset *chanset,
+	const struct q931_chanset *chanset,
 	int channel_id)
 {
 	int i;
@@ -100,8 +100,8 @@ int q931_chanset_contains(
 }
 
 int q931_chanset_equal(
-	struct q931_chanset *chanset,
-	struct q931_chanset *chanset2)
+	const struct q931_chanset *chanset,
+	const struct q931_chanset *chanset2)
 {
 	assert(chanset);
 	assert(chanset2);
@@ -111,7 +111,7 @@ int q931_chanset_equal(
 
 void q931_chanset_intersect(
 	struct q931_chanset *chanset,
-	struct q931_chanset *chanset2)
+	const struct q931_chanset *chanset2)
 {
 	assert(chanset);
 	assert(chanset2);

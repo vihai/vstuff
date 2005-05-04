@@ -11,8 +11,8 @@
 #include "ie_restind.h"
 
 int q931_ie_restart_indicator_check(
-	struct q931_message *msg,
-	struct q931_ie *ie)
+	const struct q931_message *msg,
+	const struct q931_ie *ie)
 {
 	if (ie->len < 1) {
 		report_msg(msg, LOG_ERR, "IE size < 1\n");

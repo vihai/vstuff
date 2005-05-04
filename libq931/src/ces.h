@@ -59,6 +59,10 @@ struct q931_ces
 	int senq_cnt;
 };
 
+const char *q931_ces_state_to_text(enum q931_call_state state);
+
+#ifdef Q931_PRIVATE
+
 void q931_ces_dispatch_message(
 	struct q931_ces *ces,
 	struct q931_message *msg);
@@ -80,8 +84,10 @@ void q931_ces_connect_request(struct q931_ces *ces);
 void q931_ces_call_proceeding_request(struct q931_ces *ces);
 void q931_ces_setup_ack_request(struct q931_ces *ces);
 void q931_ces_release_request(struct q931_ces *ces,
-	enum q931_ie_cause_value cause);
+	const struct q931_causeset *cause);
 void q931_ces_info_request(struct q931_ces *ces);
 void q931_ces_status_enquiry_request(struct q931_ces *ces);
+
+#endif
 
 #endif

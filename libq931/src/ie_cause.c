@@ -1,6 +1,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #define Q931_PRIVATE
 
@@ -230,8 +231,8 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 };
 
 int q931_ie_cause_check(
-	struct q931_message *msg,
-	struct q931_ie *ie)
+	const struct q931_message *msg,
+	const struct q931_ie *ie)
 {
 	int nextoct = 0;
 
@@ -335,5 +336,76 @@ int q931_append_ie_cause(void *buf,
 	ie->len += 1;
 
 	return ie->len + sizeof(struct q931_ie_onwire);
+}
+
+int q931_append_ie_cause_diag(void *buf,
+	enum q931_ie_cause_location location,
+	enum q931_ie_cause_value value,
+	const __u8 *diag,
+	int diaglen)
+{
+	int len;
+
+	len = q931_append_ie_cause(buf, location, value);
+
+	memcpy(buf + len, diag, diaglen);
+	len += diaglen;
+
+	return len + 1;
+}
+
+int q931_append_ie_causes(void *buf,
+	enum q931_ie_cause_location location,
+	const struct q931_causeset *causeset)
+{
+	int len = 0;
+
+	int i;
+	for (i=0; i<causeset->ncauses; i++) {
+		if (causeset->causes[i].diaglen) {
+			len += q931_append_ie_cause_diag(buf + len, location,
+				causeset->causes[i].cause,
+				causeset->causes[i].diag,
+				causeset->causes[i].diaglen);
+		} else {
+			len += q931_append_ie_cause(buf + len, location,
+				causeset->causes[i].cause);
+		}
+	}
+
+	return len;
+}
+
+void q931_ie_cause_add_to_causeset(
+	const struct q931_ie *ie,
+	struct q931_causeset *causeset)
+{
+	assert(ie);
+	assert(ie->info);
+	assert(ie->info->id == Q931_IE_CAUSE);
+	assert(causeset);
+
+	causeset->ncauses = 0;
+
+	int nextoct = 0;
+	struct q931_ie_cause_onwire_3 *oct_3 =
+		(struct q931_ie_cause_onwire_3 *)
+		(ie->data + nextoct);
+
+	nextoct++;
+
+	if (oct_3->ext == 0)
+		nextoct++;
+
+	struct q931_ie_cause_onwire_4 *oct_4 =
+		(struct q931_ie_cause_onwire_4 *)
+		(ie->data + nextoct);
+
+	nextoct++;
+
+	q931_causeset_add_diag(causeset,
+		oct_4->cause_value,
+		ie->data + nextoct,
+		ie->len - nextoct);
 }
 
