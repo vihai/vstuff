@@ -60,6 +60,18 @@ enum q931_setup_mode
 	Q931_SETUP_BROADCAST,
 };
 
+enum q931_setup_confirm_status
+{
+	Q931_SETUP_CONFIRM_OK,
+	Q931_SETUP_CONFIRM_ERROR,
+};
+
+enum q931_setup_complete_indication_status
+{
+	Q931_SETUP_COMPLETE_INDICATION_OK,
+	Q931_SETUP_COMPLETE_INDICATION_ERROR,
+};
+
 enum q931_suspend_confirm_status
 {
 	Q931_SUSPEND_CONFIRM_OK,
@@ -170,7 +182,8 @@ struct q931_call
 	void (*resume_indication)(struct q931_call *call,
 		__u8 *call_identity, int call_identity_len);
 	void (*setup_complete_indication)(struct q931_call *call);//TE
-	void (*setup_confirm)(struct q931_call *call);
+	void (*setup_confirm)(struct q931_call *call,
+		enum q931_setup_confirm_status status);
 	void (*setup_indication)(struct q931_call *call);
 	void (*status_indication)(struct q931_call *call,
 		enum q931_status_indication_status status);
@@ -278,8 +291,8 @@ struct q931_call *q931_find_call_by_reference(
 
 #define q931_call_primitive(call, primitive, arg...)	\
 	do {						\
-		if ((call)->primitive)			\
-			(call)->primitive(call, ## arg);	\
+		if ((call)->intf->lib->primitive)			\
+			(call)->intf->lib->primitive(call, ## arg);	\
 	} while(0);
 
 

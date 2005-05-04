@@ -8,9 +8,6 @@ FEATURES/NOTES
 
 TODO
 
-- Siemens PBX are buggy and doesn't support responding CONNECT to a SETUP
-  message. Use q931_proceeding_request instead of q931_setup_response
-
 - Remove __devexit from removal functions
 
 - Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
@@ -70,19 +67,20 @@ Implement: 5.9 User notification procedure
 
 Restart Procedure is completely untested, test it.
 
-
 Primitive passing is implemented with function calls.
 Called functions may call back before the code ends.
 To overcome this, we must ensure that primitive functions
 are called after any other operation (state change, message sending, etc).
 
-Reduce redundand code coming from FSM description
-
-Missing:
 ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 
+---------------------------- chan_visdn
 
------------------------
+Implement Progress indicators to notify interworking with non-ISDN
+
+
+
+----------------------- streambus
 Why not using JACK?
 - Jack is tailored for few high-bandwidth streams
 - vISDN needs to handle many (maybe hundreds) of low-bandwidth channels

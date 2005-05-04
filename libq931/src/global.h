@@ -4,6 +4,12 @@
 #include "intf.h"
 #include "chanset.h"
 
+#define q931_global_primitive(gc, primitive, arg...)		\
+	do {							\
+		if ((gc)->intf->lib->primitive)			\
+			(gc)->intf->lib->primitive(gc, ## arg);	\
+	} while(0);
+
 enum q931_global_state
 {
 	Q931_GLOBAL_STATE_NULL,

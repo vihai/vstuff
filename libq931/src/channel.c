@@ -70,6 +70,8 @@ struct q931_channel *get_channel_by_id(
 const char *q931_channel_state_to_text(enum q931_channel_state state)
 {
 	switch(state) {
+	case Q931_CHANSTATE_MAINTAINANCE:
+		return "MAINTAINANCE";
 	case Q931_CHANSTATE_AVAILABLE:
 		return "AVAILABLE";
 	case Q931_CHANSTATE_SELECTED:

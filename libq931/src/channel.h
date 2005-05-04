@@ -1,8 +1,15 @@
 #ifndef _CHANNEL_H
 #define _CHANNEL_H
 
+#define q931_channel_primitive(channel, primitive, arg...)			\
+	do {									\
+		if ((channel)->intf->lib->primitive)				\
+			(channel)->intf->lib->primitive(channel, ## arg);	\
+	} while(0);
+
 enum q931_channel_state
 {
+	Q931_CHANSTATE_MAINTAINANCE,
 	Q931_CHANSTATE_AVAILABLE,
 	Q931_CHANSTATE_SELECTED,
 	Q931_CHANSTATE_PROPOSED,

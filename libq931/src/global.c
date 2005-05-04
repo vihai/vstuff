@@ -119,9 +119,7 @@ void q931_global_restart_confirm(
 					&gc->restart_acked_chans);
 
 				q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
-
-				if (gc->intf->management_restart_confirm)
-					gc->intf->management_restart_confirm(gc, &cs);
+				q931_global_primitive(gc, management_restart_confirm, &cs);
 			} else {
 				gc->restart_responded = TRUE;
 			}
@@ -194,8 +192,8 @@ inline static void q931_global_handle_status(
 		if (onwire_state == q931_global_state_to_ie_state(gc->state)) {
 			// Implementation dependent
 		} else {
-			if (gc->intf->status_management_indication)
-				gc->intf->status_management_indication(gc); // With error
+			q931_global_primitive(gc, status_management_indication);
+			// WITH ERROR
 		}
 	}
 	break;
@@ -277,9 +275,7 @@ inline static void q931_global_handle_restart_acknowledge(
 				&gc->restart_reqd_chans,
 				&gc->restart_acked_chans);
 
-			if (gc->intf->management_restart_confirm)
-				gc->intf->management_restart_confirm(gc, &cs);
-
+			q931_global_primitive(gc, management_restart_confirm, &cs);
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 		} else if (!gc->T317_expired) {
 
@@ -328,8 +324,7 @@ void q931_global_timer_T316(void *data)
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 
 			// Indicate that restart has failed
-			if (gc->intf->management_restart_confirm)
-				gc->intf->management_restart_confirm(gc, NULL);
+			q931_global_primitive(gc, management_restart_confirm, NULL);
 		} else {
 			q931_send_restart(gc, &gc->intf->dlc, &gc->restart_reqd_chans);
 			q931_global_start_timer(gc, T316);
@@ -364,8 +359,7 @@ void q931_global_timer_T317(void *data)
 
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 
-			if (gc->intf->management_restart_confirm)
-				gc->intf->management_restart_confirm(gc, &cs);
+			q931_global_primitive(gc, management_restart_confirm, &cs);
 		} else {
 			gc->T317_expired = TRUE;
 		}
@@ -379,9 +373,7 @@ void q931_global_timer_T317(void *data)
 		}
 
 		q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
-
-		if (gc->intf->timeout_management_indication)
-			gc->intf->timeout_management_indication(gc);
+		q931_global_primitive(gc, timeout_management_indication);
 	break;
 	}
 }

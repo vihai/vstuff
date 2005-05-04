@@ -1182,12 +1182,16 @@ static void visdn_q931_resume_indication(
 	q931_resume_response(q931_call);
 }
 
-static void visdn_q931_setup_complete_indication(struct q931_call *q931_call)
+static void visdn_q931_setup_complete_indication(
+	struct q931_call *q931_call,
+	enum q931_setup_complete_indication_status status)
 {
 	printf("*** %s\n", __FUNCTION__);
 }
 
-static void visdn_q931_setup_confirm(struct q931_call *q931_call)
+static void visdn_q931_setup_confirm(
+	struct q931_call *q931_call,
+	enum q931_setup_confirm_status status)
 {
 	printf("*** %s\n", __FUNCTION__);
 
@@ -1680,6 +1684,67 @@ int load_module()
 	q931.libq931 = q931_init();
 	q931_set_logger_func(q931.libq931, visdn_logger);
 
+	// Setup all callbacks for libq931 primitives
+	q931.libq931->alerting_indication =
+		visdn_q931_alerting_indication;
+	q931.libq931->connect_indication =
+		visdn_q931_connect_indication;
+	q931.libq931->disconnect_indication =
+		visdn_q931_disconnect_indication;
+	q931.libq931->error_indication =
+		visdn_q931_error_indication;
+	q931.libq931->info_indication =
+		visdn_q931_info_indication;
+	q931.libq931->more_info_indication =
+		visdn_q931_more_info_indication;
+	q931.libq931->notify_indication =
+		visdn_q931_notify_indication;
+	q931.libq931->proceeding_indication =
+		visdn_q931_proceeding_indication;
+	q931.libq931->progress_indication =
+		visdn_q931_progress_indication;
+	q931.libq931->reject_indication =
+		visdn_q931_reject_indication;
+	q931.libq931->release_confirm =
+		visdn_q931_release_confirm;
+	q931.libq931->release_indication =
+		visdn_q931_release_indication;
+	q931.libq931->resume_confirm =
+		visdn_q931_resume_confirm;
+	q931.libq931->resume_indication =
+		visdn_q931_resume_indication;
+	q931.libq931->setup_complete_indication =
+		visdn_q931_setup_complete_indication;
+	q931.libq931->setup_confirm =
+		visdn_q931_setup_confirm;
+	q931.libq931->setup_indication =
+		visdn_q931_setup_indication;
+	q931.libq931->status_indication =
+		visdn_q931_status_indication;
+	q931.libq931->suspend_confirm =
+		visdn_q931_suspend_confirm;
+	q931.libq931->suspend_indication =
+		visdn_q931_suspend_indication;
+	q931.libq931->timeout_indication =
+		visdn_q931_timeout_indication;
+
+	q931.libq931->connect_channel =
+		visdn_q931_connect_channel;
+	q931.libq931->disconnect_channel =
+		visdn_q931_disconnect_channel;
+	q931.libq931->start_tone =
+		visdn_q931_start_tone;
+	q931.libq931->stop_tone =
+		visdn_q931_stop_tone;
+
+	q931.libq931->management_restart_confirm =
+		visdn_q931_management_restart_confirm;
+	q931.libq931->timeout_management_indication =
+		visdn_q931_timeout_management_indication;
+	q931.libq931->status_management_indication =
+		visdn_q931_status_management_indication;
+
+
 	// Enum interfaces and open them
 	struct ifaddrs *ifaddrs;
 	struct ifaddrs *ifaddr;
@@ -1731,66 +1796,6 @@ int load_module()
 		}
 
 		intf->tones_option = TRUE;
-
-		// Setup all callbacks for libq931 primitives
-		intf->alerting_indication =
-			visdn_q931_alerting_indication;
-		intf->connect_indication =
-			visdn_q931_connect_indication;
-		intf->disconnect_indication =
-			visdn_q931_disconnect_indication;
-		intf->error_indication =
-			visdn_q931_error_indication;
-		intf->info_indication =
-			visdn_q931_info_indication;
-		intf->more_info_indication =
-			visdn_q931_more_info_indication;
-		intf->notify_indication =
-			visdn_q931_notify_indication;
-		intf->proceeding_indication =
-			visdn_q931_proceeding_indication;
-		intf->progress_indication =
-			visdn_q931_progress_indication;
-		intf->reject_indication =
-			visdn_q931_reject_indication;
-		intf->release_confirm =
-			visdn_q931_release_confirm;
-		intf->release_indication =
-			visdn_q931_release_indication;
-		intf->resume_confirm =
-			visdn_q931_resume_confirm;
-		intf->resume_indication =
-			visdn_q931_resume_indication;
-		intf->setup_complete_indication =
-			visdn_q931_setup_complete_indication;
-		intf->setup_confirm =
-			visdn_q931_setup_confirm;
-		intf->setup_indication =
-			visdn_q931_setup_indication;
-		intf->status_indication =
-			visdn_q931_status_indication;
-		intf->suspend_confirm =
-			visdn_q931_suspend_confirm;
-		intf->suspend_indication =
-			visdn_q931_suspend_indication;
-		intf->timeout_indication =
-			visdn_q931_timeout_indication;
-
-		intf->connect_channel =
-			visdn_q931_connect_channel;
-		intf->disconnect_channel =
-			visdn_q931_disconnect_channel;
-		intf->start_tone =
-			visdn_q931_start_tone;
-		intf->stop_tone =
-			visdn_q931_stop_tone;
-
-		intf->management_restart_confirm =
-			visdn_q931_management_restart_confirm;
-		intf->timeout_management_indication =
-			visdn_q931_timeout_management_indication;
-		intf->status_management_indication =
-			visdn_q931_status_management_indication;
 
 		if (intf->role == LAPD_ROLE_NT) {
 			if (listen(intf->master_socket, 100) < 0) {
