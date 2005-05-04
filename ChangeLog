@@ -2,6 +2,31 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-05-04 13:45:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-32
+
+    Summary:
+      Added kernel timer module to clock asterisk
+    Revision:
+      isdn--devel--0.1--patch-32
+
+    
+    
+
+    new files:
+     visdn-timer/.arch-ids/.arch-inventory.id
+     visdn-timer/.arch-ids/=id visdn-timer/.arch-ids/Makefile.id
+     visdn-timer/.arch-ids/visdn-timer.h.id
+     visdn-timer/.arch-ids/visdn-timer_main.c.id
+     visdn-timer/.arch-inventory visdn-timer/Makefile
+     visdn-timer/visdn-timer.h visdn-timer/visdn-timer_main.c
+
+    modified files:
+     ChangeLog
+
+    new directories:
+     visdn-timer visdn-timer/.arch-ids
+
+
 2005-05-04 13:32:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-31
 
     Summary:
