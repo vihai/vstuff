@@ -21,6 +21,7 @@
 #include "out.h"
 #include "call.h"
 #include "intf.h"
+#include "proto.h"
 
 #include "ie_call_state.h"
 
@@ -201,11 +202,12 @@ static void _q931_ces_unexpected_primitive(
 		q931_ces_state_to_text(ces->state));
 }
 
-#define q931_ces_message_not_compatible_with_state(call)	\
-	_q931_ces_message_not_compatible_with_state((call), __FUNCTION__)
+#define q931_ces_message_not_compatible_with_state(call, msg)	\
+	_q931_ces_message_not_compatible_with_state((call), (msg), __FUNCTION__)
 
 static void _q931_ces_message_not_compatible_with_state(
 	struct q931_ces *ces,
+	const struct q931_message *msg,
 	const char *event)
 {
 	switch (ces->state) {
@@ -217,8 +219,12 @@ static void _q931_ces_message_not_compatible_with_state(
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I19_RELEASE_REQUEST:
 	case I25_OVERLAP_RECEIVING: {
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-			Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE);
+		struct q931_causeset causeset = Q931_CAUSESET_INIT;
+		q931_causeset_add_diag(&causeset,
+			Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE,
+			(msg->raw + sizeof(struct q931_header) +
+				msg->callref_len),
+			1);
 
 		q931_ces_send_status(ces, &causeset);
 	}
@@ -411,7 +417,7 @@ static inline void q931_ces_handle_alerting(
 	break;
 
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -431,7 +437,7 @@ static inline void q931_ces_handle_call_proceeding(
 	break;
 
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -461,7 +467,7 @@ static inline void q931_ces_handle_connect(
 	break;
 
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -485,7 +491,7 @@ static inline void q931_ces_handle_progress(
 	break;
 
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -527,7 +533,7 @@ static inline void q931_ces_handle_disconnect(
 
 	case I0_NULL_STATE:
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -562,7 +568,7 @@ static inline void q931_ces_handle_release(
 
 	case I0_NULL_STATE:
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -604,7 +610,7 @@ static inline void q931_ces_handle_release_complete(
 
 	case I0_NULL_STATE:
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -693,7 +699,7 @@ static inline void q931_ces_handle_status(
 
 	case I0_NULL_STATE:
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -725,7 +731,7 @@ static inline void q931_ces_handle_info(
 
 	case I0_NULL_STATE:
 	default:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 	}
 }
@@ -892,7 +898,7 @@ void q931_ces_dispatch_message(
 	case Q931_MT_SUSPEND:
 	case Q931_MT_SUSPEND_ACKNOWLEDGE:
 	case Q931_MT_SUSPEND_REJECT:
-		q931_ces_message_not_compatible_with_state(ces);
+		q931_ces_message_not_compatible_with_state(ces, msg);
 	break;
 
 	default:

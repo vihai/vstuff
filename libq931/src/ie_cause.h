@@ -138,6 +138,32 @@ struct q931_ie_cause_onwire_4
 #endif
 } __attribute__ ((__packed__));
 
+enum q931_ie_cause_diag_condition
+{
+	Q931_IE_C_D_C_UNKNOWN	= 0x0,
+	Q931_IE_C_D_C_PERMANENT	= 0x1,
+	Q931_IE_C_D_C_TRANSIENT	= 0x2
+};
+
+struct q931_ie_cause_diag_1_2
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8 ext1:1;
+	__u8 attribute_number:7;
+
+	__u8 ext2:1;
+	__u8 :5;
+	__u8 condition:2;
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+	__u8 condition:2;
+	__u8 :5;
+	__u8 ext2:1;
+
+	__u8 attribute_number:7;
+	__u8 ext1:1;
+#endif
+} __attribute__ ((__packed__));
+
 int q931_ie_cause_check(
 	const struct q931_message *msg,
 	const struct q931_ie *ie);

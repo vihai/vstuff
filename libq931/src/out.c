@@ -676,11 +676,11 @@ int q931_send_resume_reject(
 	assert(causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_RESUME_REJECT);
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
+	size += q931_append_ie_causes(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+			causeset);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
@@ -938,11 +938,11 @@ int q931_send_status(
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_STATUS);
 
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
+	size += q931_append_ie_causes(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+			causeset);
 
 	size += q931_append_ie_call_state(call->intf->sendbuf + size, state);
 
@@ -962,11 +962,11 @@ int q931_global_send_status(
 	size += q931_global_prepare_header(gc, gc->intf->sendbuf, Q931_MT_STATUS);
 
 	if (causeset) {
-		size += q931_append_ie_cause(dlc->intf->sendbuf + size,
+		size += q931_append_ie_causes(dlc->intf->sendbuf + size,
 				dlc->intf->role == LAPD_ROLE_TE ? // FIXME
 					Q931_IE_C_L_USER :
 					Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-				Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+				causeset);
 	}
 
 	size += q931_append_ie_call_state(dlc->intf->sendbuf + size, gc->state);
@@ -1135,11 +1135,11 @@ int q931_send_suspend_reject(
 	assert(causeset);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_SUSPEND_REJECT);
-	size += q931_append_ie_cause(call->intf->sendbuf + size,
+	size += q931_append_ie_causes(call->intf->sendbuf + size,
 			call->intf->role == LAPD_ROLE_TE ? // FIXME
 				Q931_IE_C_L_USER :
 				Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER,
-			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+			causeset);
 
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
