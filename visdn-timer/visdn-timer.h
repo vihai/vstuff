@@ -14,8 +14,8 @@
 
 #include <linux/delay.h>
 
-#define visdn_DRIVER_NAME "visdn-timer"
-#define visdn_DRIVER_PREFIX visdn_DRIVER_NAME ": "
-#define visdn_DRIVER_DESCR "Timer generator for vISDN"
+#define visdn_MODULE_NAME "visdn-system-timer"
+#define visdn_MODULE_PREFIX visdn_MODULE_NAME ": "
+#define visdn_MODULE_DESCR "Timer generator for vISDN"
 
 #endif

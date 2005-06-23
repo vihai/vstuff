@@ -2,6 +2,65 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-06-23 00:47:54 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-35
+
+    Summary:
+      Commit for backup purposes
+    Revision:
+      isdn--devel--0.1--patch-35
+
+    
+    
+
+    new files:
+     pppd_plugin/.arch-ids/=id pppd_plugin/.arch-ids/visdn.c.id
+     pppd_plugin/visdn.c softport/.arch-ids/Makefile.id
+     softport/.arch-ids/softport_main.c.id softport/Makefile
+     softport/softport_main.c udev/.arch-ids/60-visdn.rules.id
+     udev/.arch-ids/=id udev/60-visdn.rules
+     visdn-core/.arch-ids/=id visdn-core/.arch-ids/Makefile.id
+     visdn-core/.arch-ids/chan.c.id visdn-core/.arch-ids/chan.h.id
+     visdn-core/.arch-ids/port.c.id visdn-core/.arch-ids/port.h.id
+     visdn-core/.arch-ids/timer.c.id
+     visdn-core/.arch-ids/timer.h.id
+     visdn-core/.arch-ids/visdn.h.id
+     visdn-core/.arch-ids/visdn_main.c.id
+     visdn-core/.arch-ids/visdn_mod.h.id visdn-core/Makefile
+     visdn-core/chan.c visdn-core/chan.h visdn-core/port.c
+     visdn-core/port.h visdn-core/timer.c visdn-core/timer.h
+     visdn-core/visdn.h visdn-core/visdn_main.c
+     visdn-core/visdn_mod.h
+
+    removed files:
+     hfc-4s/.arch-ids/TODO.id hfc-4s/TODO hfc-usb/.arch-ids/TODO.id
+     hfc-usb/TODO
+
+    modified files:
+     ChangeLog Makefile.am NOTES chan_visdn/Makefile
+     chan_visdn/chan_visdn.c fake_isdn/fake_isdn.c hfc-4s/Makefile
+     hfc-4s/hfc-4s.h hfc-4s/hfc-4s_main.c hfc-pci/hfc-pci_main.c
+     hfc-usb/hfc-usb.h hfc-usb/hfc-usb_main.c hfc-usb/regs.h
+     lapd/af_lapd.c lapd/lapd.h lapd/lapd_dev.c lapd/lapd_in.c
+     lapd/lapd_out.h lapd/tei_mgmt.h lapd/tei_mgmt_nt.c
+     lapd/tei_mgmt_nt.h lapd/tei_mgmt_te.c lapd/tei_mgmt_te.h
+     visdn-timer/visdn-timer.h visdn-timer/visdn-timer_main.c
+
+    renamed files:
+     streambus/.arch-ids/=id
+       ==> softport/.arch-ids/=id
+
+    new directories:
+     pppd_plugin pppd_plugin/.arch-ids softport/.arch-ids udev
+     udev/.arch-ids visdn-core visdn-core/.arch-ids
+
+    removed directories:
+     streambus/.arch-ids
+
+    renamed directories:
+     streambus
+       ==> softport
+
+
 2005-05-04 16:13:29 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-34
 
     Summary:

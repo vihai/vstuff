@@ -28,7 +28,7 @@ struct lapd_utme
 
 	enum lapd_tei_status status;
 
-	lapd_tei_t tei;
+	u8 tei;
 	u16 tei_request_ri;
 	int tei_request_pending;
 
@@ -54,7 +54,7 @@ static inline void lapd_utme_put(
 }
 
 extern void lapd_utme_set_static_tei(
-	struct lapd_utme *tme, lapd_tei_t tei);
+	struct lapd_utme *tme, u8 tei);
 
 static inline void lapd_utme_reset_timer(
 	struct lapd_utme *tme,

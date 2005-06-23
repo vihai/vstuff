@@ -26,8 +26,6 @@
 		(dev)->name,				\
 		## arg)
 
-typedef u8 lapd_tei_t;
-
 enum lapd_tei_status
 {
 	TEI_UNASSIGNED,

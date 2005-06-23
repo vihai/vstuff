@@ -62,7 +62,7 @@ static inline int lapd_utme_send_tei_request(
  */
 
 static inline int lapd_utme_send_tei_check_response(
-	struct lapd_utme *tme, lapd_tei_t tei)
+	struct lapd_utme *tme, u8 tei)
 {
 	u16 ri;
 	get_random_bytes(&ri, sizeof(ri));
@@ -76,7 +76,7 @@ static inline int lapd_utme_send_tei_check_response(
  */
 
 static inline int lapd_utme_send_tei_verify(
-	struct lapd_utme *tme, lapd_tei_t tei)
+	struct lapd_utme *tme, u8 tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_VERIFY, 0, tme->tei);
 }
@@ -127,17 +127,23 @@ void lapd_utme_T202_timer(unsigned long data)
 		tme->tei_request_pending = FALSE;
 		tme->tei_request_ri = 0;
 
-		struct sock *sk;
-		struct hlist_node *node;
 		read_lock_bh(&lapd_hash_lock);
-		sk_for_each(sk, node, &lapd_hash) {
-			if (!lapd_sk(sk)->nt_mode &&
-			    lapd_sk(sk)->usr_tme == tme) {
-				lapd_utme_send_to_socket(sk,
-					LAPD_INT_MDL_ERROR_RESPONSE,
-					0);
+
+		int i;
+		for(i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+			struct sock *sk;
+			struct hlist_node *node;
+
+			sk_for_each(sk, node, &lapd_hash[i]) {
+				if (!lapd_sk(sk)->nt_mode &&
+				    lapd_sk(sk)->usr_tme == tme) {
+					lapd_utme_send_to_socket(sk,
+						LAPD_INT_MDL_ERROR_RESPONSE,
+						0);
+				}
 			}
 		}
+
 		read_unlock_bh(&lapd_hash_lock);
 
 		goto retransmit_expired;
@@ -220,18 +226,24 @@ static void lapd_utme_recv_tei_assigned(struct sk_buff *skb)
 
 			lapd_utme_stop_timer(tme, &tme->T202_timer);
 
-			struct sock *sk;
-			struct hlist_node *node;
 			read_lock_bh(&lapd_hash_lock);
-			sk_for_each(sk, node, &lapd_hash) {
-				if (!lapd_sk(sk)->nt_mode &&
-				    lapd_sk(sk)->usr_tme == tme) {
-					lapd_utme_send_to_socket(sk,
-						LAPD_INT_MDL_ASSIGN_REQUEST,
-						tme->tei);
+
+			int i;
+			for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+				struct sock *sk;
+				struct hlist_node *node;
+
+				sk_for_each(sk, node, &lapd_hash[i]) {
+					if (!lapd_sk(sk)->nt_mode &&
+					    lapd_sk(sk)->usr_tme == tme) {
+						lapd_utme_send_to_socket(sk,
+							LAPD_INT_MDL_ASSIGN_REQUEST,
+							tme->tei);
+					}
 				}
 			}
 			read_unlock_bh(&lapd_hash_lock);
+
 			spin_unlock(&tme->lock);
 
 			goto tme_found;
@@ -348,16 +360,21 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 
 			lapd_utme_state_changed(tme);
 
-			struct sock *sk;
 			read_lock_bh(&lapd_hash_lock);
-			sk_for_each(sk, node, &lapd_hash) {
-				if (!lapd_sk(sk)->nt_mode &&
-				    lapd_sk(sk)->usr_tme == tme) {
-					lapd_utme_send_to_socket(sk,
-						LAPD_INT_MDL_REMOVE_REQUEST,
-						0);
+
+			int i;
+			for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+				struct sock *sk;
+				sk_for_each(sk, node, &lapd_hash[i]) {
+					if (!lapd_sk(sk)->nt_mode &&
+					    lapd_sk(sk)->usr_tme == tme) {
+						lapd_utme_send_to_socket(sk,
+							LAPD_INT_MDL_REMOVE_REQUEST,
+							0);
+					}
 				}
 			}
+
 			read_unlock_bh(&lapd_hash_lock);
 
 			// FIXME TODO Shall we inform the upper layer that a
@@ -441,7 +458,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 }
 
 void lapd_utme_set_static_tei(
-	struct lapd_utme *tme, lapd_tei_t tei)
+	struct lapd_utme *tme, u8 tei)
 {
 	spin_lock_bh(&tme->lock);
 	tme->tei = tei;

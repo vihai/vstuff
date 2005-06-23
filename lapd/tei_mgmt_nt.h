@@ -32,9 +32,9 @@ struct lapd_ntme
 	int tei_check_outstanding;
 	int tei_check_count;
 	int tei_check_responses[2];
-	lapd_tei_t tei_check_tei;
+	u8 tei_check_tei;
 
-	lapd_tei_t teis[LAPD_NUM_DYN_TEIS];
+	u8 teis[LAPD_NUM_DYN_TEIS];
 
 	void (*destroy)(struct lapd_ntme *tme);
 };

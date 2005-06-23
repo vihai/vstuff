@@ -57,7 +57,7 @@ static void lapd_kill_by_device(struct net_device *dev)
 	struct hlist_node *node;
 
 	write_lock_bh(&lapd_hash_lock);
-	sk_for_each(sk, node, &lapd_hash) {
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
 		struct lapd_opt *lo = lapd_sk(sk);
 
 		if (lo->dev == dev) {

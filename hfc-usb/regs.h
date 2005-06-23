@@ -1,481 +1,264 @@
 #ifndef _HFC_REGS_H
 #define _HFC_REGS_H
 
-#define hfc_R_CIRM		0x00
-#define hfc_R_CTRL		0x01
-#define hfc_R_BRG_PCM_CFG	0x02
-#define hfc_R_RAM_ADDR0		0x08
-#define hfc_R_RAM_ADDR1		0x09
-#define hfc_R_RAM_ADDR2		0x0A
-#define hfc_R_FIRST_FIFO	0x0B
-#define hfc_R_RAM_MISC		0x0C
-#define hfc_R_FIFO_MD		0x0D
-#define hfc_A_INC_RES_FIFO	0x0E
-#define hfc_R_FSM_IDX		0x0F
-#define hfc_R_FIFO		0x0F
-#define hfc_R_SLOT		0x10
-#define hfc_R_IRQMSK_MISC	0x11
-#define hfc_R_SCI_MSK		0x12
-#define hfc_R_IRQ_CTRL		0x13
-#define hfc_R_PCM_MD0		0x14
-#define hfc_R_PCM_MD1		0x15
-#define hfc_R_PCM_MD2		0x15
-#define hfc_R_SH0H		0x15
-#define hfc_R_SH1H		0x15
-#define hfc_R_SH0L		0x15
-#define hfc_R_SH1L		0x15
-#define hfc_R_SL_SEL0		0x15
-#define hfc_R_SL_SEL1		0x15
-#define hfc_R_SL_SEL2		0x15
-#define hfc_R_SL_SEL3		0x15
-#define hfc_R_SL_SEL4		0x15
-#define hfc_R_SL_SEL5		0x15
-#define hfc_R_SL_SEL6		0x15
-#define hfc_R_SL_SEL7		0x15
-#define hfc_R_ST_SEL		0x16
-#define hfc_R_ST_SYNC		0x17
-#define hfc_R_CONF_EN		0x18
-#define hfc_R_TI_WD		0x1A
-#define hfc_R_BERT_WD_MD	0x1B
-#define hfc_R_DTMF		0x1C
-#define hfc_R_DTMF_N		0x1D
-#define hfc_A_ST_WR_STA		0x30
-#define hfc_A_ST_CTRL0		0x31
-#define hfc_A_ST_CTRL1		0x32
-#define hfc_A_ST_CTRL2		0x33
-#define hfc_A_ST_SQ_WR		0x34
-#define hfc_A_ST_CLK_DLY	0x37
+#define HFC_REG_CIRM    		0x00
+#define HFC_REG_CIRM_2_CLKI		(0x0 << 0)
+#define HFC_REG_CIRM_6_CLKI		(0x1 << 0)
+#define HFC_REG_CIRM_10_CLKI		(0x2 << 0)
+#define HFC_REG_CIRM_14_CLKI		(0x3 << 0)
+#define HFC_REG_CIRM_18_CLKI		(0x4 << 0)
+#define HFC_REG_CIRM_22_CLKI		(0x5 << 0)
+#define HFC_REG_CIRM_26_CLKI		(0x6 << 0)
+#define HFC_REG_CIRM_30_CLKI		(0x7 << 0)
+#define HFC_REG_CIRM_RESET		(1 << 3)
+#define HFC_REG_CIRM_AUX_TRISTATE	(0 << 4)
+#define HFC_REG_CIRM_AUX_FIXED		(1 << 4)
 
-#define hfc_R_PWM0		0x38
-#define hfc_R_PWM1		0x39
-#define hfc_A_ST_B1_TX		0x3C
-#define hfc_A_ST_B2_TX		0x3D
-#define hfc_A_ST_D_TX		0x3E
-#define hfc_R_GPIO_OUT0		0x40
-#define hfc_R_GPIO_OUT1		0x41
-#define hfc_R_GPIO_EN0		0x42
-#define hfc_R_GPIO_EN1		0x43
-#define hfc_R_GPIO_SEL		0x44
-#define hfc_R_PWM_MD		0x46
-#define hfc_A_SL_CFG		0xD0
-#define hfc_A_CONF		0xD1
-#define hfc_A_CH_MSK		0xF4
-#define hfc_A_CON_HDLC		0xFA
-#define hfc_A_SUBCH_CFG		0xFB
-#define hfc_A_CHANNEL		0xFC
-#define hfc_A_FIFO_SEQ		0xFD
-#define hfc_A_IRQ_MSK		0xFF
+// int length register
+#define HFC_REG_USB_SIZE		0x07
+#define HFC_REG_USB_SIZE_OUT(val)	(((val)/8) << 0)
+#define HFC_REG_USB_SIZE_IN(val)	(((val)/8) << 4)
 
-#define hfc_A_Z12		0x04
-#define hfc_A_Z1L		0x04
-#define hfc_A_Z1		0x04
-#define hfc_A_Z1H		0x05
-#define hfc_A_Z2L		0x06
-#define hfc_A_Z2		0x06
-#define hfc_A_Z2H		0x07
-#define hfc_A_F1		0x0C
-#define hfc_A_F12		0x0C
-#define hfc_A_F2		0x0D
-#define hfc_R_IRQ_OVIEW		0x10
-#define hfc_R_IRQ_MISC		0x11
-#define hfc_R_SCI		0x12
-#define hfc_R_CONF_OFLOW	0x14
-#define hfc_R_RAM_USE		0x15
-#define hfc_R_CHIP_ID		0x16
-#define hfc_R_BERT_STA		0x17
-#define hfc_R_F0_CNTL		0x18
-#define hfc_R_F0_CNTH		0x19
-#define hfc_R_BERT_ECL		0x1A
+// iso length register
+#define HFC_REG_USB_SIZE_I		0x06
+#define HFC_REG_USB_SIZE_I_VAL(val)	((val) << 0)
 
-#define hfc_R_BERT_ECH		0x1B
-#define hfc_R_STATUS		0x1C
-#define hfc_R_CHIP_RV		0x1F
-#define hfc_A_ST_RD_STA		0x30
-#define hfc_A_ST_SQ_RD		0x34
-#define hfc_A_ST_B1_RX		0x3C
-#define hfc_A_ST_B2_RX		0x3D
-#define hfc_A_ST_D_RX		0x3E
-#define hfc_A_ST_E_RX		0x3F
-#define hfc_R_GPIO_IN0		0x40
-#define hfc_R_GPIO_IN1		0x41
-#define hfc_R_GPI_IN0		0x44
-#define hfc_R_GPI_IN1		0x45
-#define hfc_R_GPI_IN2		0x46
-#define hfc_R_GPI_IN3		0x47
-#define hfc_R_INT_DATA		0x88
-#define hfc_R_IRQ_FIFO_BL0	0xC8
-#define hfc_R_IRQ_FIFO_BL1	0xC9
-#define hfc_R_IRQ_FIFO_BL2	0xCA
-#define hfc_R_IRQ_FIFO_BL3	0xCB
-#define hfc_R_IRQ_FIFO_BL4	0xCC
-#define hfc_R_IRQ_FIFO_BL5	0xCD
-#define hfc_R_IRQ_FIFO_BL6	0xCE
-#define hfc_R_IRQ_FIFO_BL7	0xCF
+#define HFC_REG_F_CROSS			0x0b
+#define HFC_REG_F_CROSS_REV_B1_TX	(1 << 0)
+#define HFC_REG_F_CROSS_REV_B1_RX	(1 << 1)
+#define HFC_REG_F_CROSS_REV_B2_TX	(1 << 2)
+#define HFC_REG_F_CROSS_REV_B2_RX	(1 << 3)
+#define HFC_REG_F_CROSS_REV_D_TX	(1 << 4)
+#define HFC_REG_F_CROSS_REV_D_RX	(1 << 5)
+#define HFC_REG_F_CROSS_REV_PCM_TX	(1 << 6)
+#define HFC_REG_F_CROSS_REV_PCM_RX	(1 << 7)
 
-#define hfc_A_FIFO_DATA2	0x80
-#define hfc_A_FIFO_DATA0	0x80
-#define hfc_A_FIFO_DATA1	0x80
-#define hfc_A_FIFO_DATA2_NOINC	0x84
-#define hfc_A_FIFO_DATA0_NOINC	0x84
-#define hfc_A_FIFO_DATA1_NOINC	0x84
-#define hfc_R_RAM_DATA		0xC0
+#define HFC_REG_F_MODE			0x0d
+#define HFC_REG_F_MODE_CSM		(1 << 7)
+
+#define HFC_REG_INC_RES_F		0x0e
+#define HFC_REG_INC_RES_F_INC		(1 << 0)
+#define HFC_REG_INC_RES_F_RESET		(1 << 1)
+
+#define HFC_REG_FIFO			0x0f
+#define HFC_REG_FIFO_B1_TX		(0x0 << 0)
+#define HFC_REG_FIFO_B1_RX		(0x1 << 0)
+#define HFC_REG_FIFO_B2_TX		(0x2 << 0)
+#define HFC_REG_FIFO_B2_RX		(0x3 << 0)
+#define HFC_REG_FIFO_D_TX		(0x4 << 0)
+#define HFC_REG_FIFO_D_RX		(0x5 << 0)
+#define HFC_REG_FIFO_PCM_TX		(0x6 << 0)
+#define HFC_REG_FIFO_PCM_RX		(0x7 << 0)
+
+#define HFC_REG_FIF_DATA		0x80
+#define HFC_REG_FIF_DATA_NOINC		0x84
+#define HFC_REG_F_USAGE			0x1a
+
+#define HFC_REG_FIF_F1			0x0c
+#define HFC_REG_FIF_F2			0x0d
+#define HFC_REG_FIF_Z1			0x04
+#define HFC_REG_FIF_Z2			0x06
+
+#define HFC_REG_F_THRESH		0x0c
+#define HFC_REG_F_THRESH_TX(val)	((val) << 0)
+#define HFC_REG_F_THRESH_RX(val)	((val) << 4)
 
 
-// R_CIRM
-#define hfc_R_CIRM_V_IRQ_SEL_NONE	(0 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ0	(1 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ1	(2 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ2	(3 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ3	(4 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ4	(5 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ5	(6 << 0)
-#define hfc_R_CIRM_V_IRQ_SEL_IRQ6	(7 << 0)
-#define hfc_R_CIRM_V_SRES		(1 << 3)
-#define hfc_R_CIRM_V_HFC_RES		(1 << 4)
-#define hfc_R_CIRM_V_PCM_RES		(1 << 5)
-#define hfc_R_CIRM_V_ST_RES		(1 << 6)
-#define hfc_R_CIRM_V_RLD_EPR		(1 << 7)
+#define HFC_REG_INT_S1			0x10
+#define HFC_REG_INT_S1_B1_TX		(1 << 0)
+#define HFC_REG_INT_S1_B1_RX		(1 << 1)
+#define HFC_REG_INT_S1_B2_TX		(1 << 2)
+#define HFC_REG_INT_S1_B2_RX		(1 << 3)
+#define HFC_REG_INT_S1_D_TX		(1 << 4)
+#define HFC_REG_INT_S1_D_RX		(1 << 5)
+#define HFC_REG_INT_S1_PCM_TX		(1 << 6)
+#define HFC_REG_INT_S1_PCM_RX		(1 << 7)
 
-// R_STATUS
-#define hfc_R_STATUS_V_BUSY		(1 << 0)
-#define hfc_R_STATUS_V_PROC		(1 << 1)
-#define hfc_R_STATUS_V_DTMF_IRQSTA	(1 << 2)
-#define hfc_R_STATUS_V_LOST_STA		(1 << 3)
-#define hfc_R_STATUS_V_SYNC_IN		(1 << 4)
-#define hfc_R_STATUS_V_EXT_IRQSTA	(1 << 5)
-#define hfc_R_STATUS_V_MISC_IRQSTA	(1 << 6)
-#define hfc_R_STATUS_V_FR_IRQSTA	(1 << 7)
+#define HFC_REG_INT_S2			0x11
+#define HFC_REG_INT_S2_STATE		(1 << 0)
+#define HFC_REG_INT_S2_TIMER		(1 << 1)
+#define HFC_REG_INT_S2_PROC		(1 << 2)
+#define HFC_REG_INT_S2_GCI		(1 << 3)
+#define HFC_REG_INT_S2_RR		(1 << 4)
+#define HFC_REG_INT_S2_USB		(1 << 5)
 
-// R_IRQ_OVIEW
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL0	(1 << 0)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL1	(1 << 1)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL2	(1 << 2)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL3	(1 << 3)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL4	(1 << 4)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL5	(1 << 5)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL6	(1 << 6)
-#define hfc_R_IRQ_OVIEW_V_IRQ_FIFO_BL7	(1 << 7)
+#define HFC_REG_INT_M1			0x1a
+#define HFC_REG_INT_M1_B1_TX		(1 << 0)
+#define HFC_REG_INT_M1_B1_RX		(1 << 1)
+#define HFC_REG_INT_M1_B2_TX		(1 << 2)
+#define HFC_REG_INT_M1_B2_RX		(1 << 3)
+#define HFC_REG_INT_M1_D_TX		(1 << 4)
+#define HFC_REG_INT_M1_D_RX		(1 << 5)
+#define HFC_REG_INT_M1_PCM_TX		(1 << 6)
+#define HFC_REG_INT_M1_PCM_RX		(1 << 7)
 
-//R_IRQ_MISC
-#define hfc_R_IRQ_MISC_V_TI_IRQ		(1 << 1)
-#define hfc_R_IRQ_MISC_V_IRQ_PROC	(1 << 2)
-#define hfc_R_IRQ_MISC_V_DTMF_IRQ	(1 << 3)
-#define hfc_R_IRQ_MISC_V_EXT_IRQ	(1 << 5)
+#define HFC_REG_INT_M2			0x1b
+#define HFC_REG_INT_M2_STATE		(1 << 0)
+#define HFC_REG_INT_M2_TIMER		(1 << 1)
+#define HFC_REG_INT_M2_PROC		(1 << 2)
+#define HFC_REG_INT_M2_GCI		(1 << 3)
+#define HFC_REG_INT_M2_RR		(1 << 4)
+#define HFC_REG_INT_M2_USB		(1 << 5)
+#define HFC_REG_INT_M2_INT_REV		(1 << 6)
+#define HFC_REG_MINT_2_INT_ENA		(1 << 7)
 
-// R_PWM_MD
-#define hfc_R_PWM_MD_V_EXT_IRQ_EN		(1 << 3)
-#define hfc_R_PWM_MD_V_PWM0_MD_DISABLE		(0 << 4)
-#define hfc_R_PWM_MD_V_PWM0_MD_PUSH_PULL	(1 << 4)
-#define hfc_R_PWM_MD_V_PWM0_MD_PUSH		(2 << 4)
-#define hfc_R_PWM_MD_V_PWM0_MD_PULL		(3 << 4)
-#define hfc_R_PWM_MD_V_PWM1_MD_DISABLE		(0 << 6)
-#define hfc_R_PWM_MD_V_PWM1_MD_PUSH_PULL	(1 << 6)
-#define hfc_R_PWM_MD_V_PWM1_MD_PUSH		(2 << 6)
-#define hfc_R_PWM_MD_V_PWM1_MD_PULL		(3 << 6)
+#define HFC_REG_HDLC_PAR		0xfb
+#define HFC_REG_HDLC_PAR_PROC_8BITS	(0x0 << 0)
+#define HFC_REG_HDLC_PAR_PROC_1BITS	(0x1 << 0)
+#define HFC_REG_HDLC_PAR_PROC_2BITS	(0x2 << 0)
+#define HFC_REG_HDLC_PAR_PROC_3BITS	(0x3 << 0)
+#define HFC_REG_HDLC_PAR_PROC_4BITS	(0x4 << 0)
+#define HFC_REG_HDLC_PAR_PROC_5BITS	(0x5 << 0)
+#define HFC_REG_HDLC_PAR_PROC_6BITS	(0x6 << 0)
+#define HFC_REG_HDLC_PAR_PROC_7BITS	(0x7 << 0)
+#define HFC_REG_HDLC_PAR_START_0BIT	(0x0 << 3)
+#define HFC_REG_HDLC_PAR_START_1BIT	(0x1 << 3)
+#define HFC_REG_HDLC_PAR_START_2BIT	(0x2 << 3)
+#define HFC_REG_HDLC_PAR_START_3BIT	(0x3 << 3)
+#define HFC_REG_HDLC_PAR_START_4BIT	(0x4 << 3)
+#define HFC_REG_HDLC_PAR_START_5BIT	(0x5 << 3)
+#define HFC_REG_HDLC_PAR_START_6BIT	(0x6 << 3)
+#define HFC_REG_HDLC_PAR_START_7BIT	(0x7 << 3)
+#define HFC_REG_HDLC_PAR_LOOP		(1 << 6)
+#define HFC_REG_HDLC_PAR_INVERT		(1 << 7)
 
-// R_TI_WD
-#define hfc_R_TI_WD_V_EV_TS_250_US	(0x0 << 0)
-#define hfc_R_TI_WD_V_EV_TS_500_US	(0x1 << 0)
-#define hfc_R_TI_WD_V_EV_TS_1_MS	(0x2 << 0)
-#define hfc_R_TI_WD_V_EV_TS_2_MS	(0x3 << 0)
-#define hfc_R_TI_WD_V_EV_TS_4_MS	(0x4 << 0)
-#define hfc_R_TI_WD_V_EV_TS_8_MS	(0x5 << 0)
-#define hfc_R_TI_WD_V_EV_TS_16_MS	(0x6 << 0)
-#define hfc_R_TI_WD_V_EV_TS_32_MS	(0x7 << 0)
-#define hfc_R_TI_WD_V_EV_TS_64_MS	(0x8 << 0)
-#define hfc_R_TI_WD_V_EV_TS_128_MS	(0x9 << 0)
-#define hfc_R_TI_WD_V_EV_TS_256_MS	(0xA << 0)
-#define hfc_R_TI_WD_V_EV_TS_512_MS	(0xB << 0)
-#define hfc_R_TI_WD_V_EV_TS_1_024_S	(0xC << 0)
-#define hfc_R_TI_WD_V_EV_TS_2_048_S	(0xD << 0)
-#define hfc_R_TI_WD_V_EV_TS_4_096_S	(0xE << 0)
-#define hfc_R_TI_WD_V_EV_TS_8_192_S	(0xF << 0)
+// channel connect register
+#define HFC_REG_CON_HDLC		0xfa
+#define HFC_REG_CON_HDLC_IFF		(1 << 0)
+#define HFC_REG_CON_HDLC_HDLC		(0 << 1)
+#define HFC_REG_CON_HDLC_HDLC_ENA	(0x2 << 2)
+#define HFC_REG_CON_HDLC_TRANS		(1 << 1)
+#define HFC_REG_CON_HDLC_TRANS_8	(0x0 << 2)
+#define HFC_REG_CON_HDLC_TRANS_16	(0x1 << 2)
+#define HFC_REG_CON_HDLC_TRANS_32	(0x2 << 2)
+#define HFC_REG_CON_HDLC_TRANS_64	(0x3 << 2)
+#define HFC_REG_CON_FIFO_from_ST	(0 << 5)
+#define HFC_REG_CON_FIFO_from_PCM	(1 << 5)
+#define HFC_REG_CON_ST_from_FIFO	(0 << 6)
+#define HFC_REG_CON_ST_from_PCM		(1 << 6)
+#define HFC_REG_CON_PCM_from_FIFO	(0 << 7)
+#define HFC_REG_CON_PCM_from_ST		(1 << 7)
 
-#define hfc_R_TI_WD_V_WD_TS_2_MS	(0x0 << 4)
-#define hfc_R_TI_WD_V_WD_TS_4_MS	(0x1 << 4)
-#define hfc_R_TI_WD_V_WD_TS_8_MS	(0x2 << 4)
-#define hfc_R_TI_WD_V_WD_TS_16_MS	(0x3 << 4)
-#define hfc_R_TI_WD_V_WD_TS_32_MS	(0x4 << 4)
-#define hfc_R_TI_WD_V_WD_TS_64_MS	(0x5 << 4)
-#define hfc_R_TI_WD_V_WD_TS_128_MS	(0x6 << 4)
-#define hfc_R_TI_WD_V_WD_TS_256_MS	(0x7 << 4)
-#define hfc_R_TI_WD_V_WD_TS_512_MS	(0x8 << 4)
-#define hfc_R_TI_WD_V_WD_TS_1_024_S	(0x9 << 4)
-#define hfc_R_TI_WD_V_WD_TS_2_048_S	(0xA << 4)
-#define hfc_R_TI_WD_V_WD_TS_4_096_S	(0xB << 4)
-#define hfc_R_TI_WD_V_WD_TS_8_192_S	(0xC << 4)
-#define hfc_R_TI_WD_V_WD_TS_16_384_S	(0xD << 4)
-#define hfc_R_TI_WD_V_WD_TS_32_768_S	(0xE << 4)
-#define hfc_R_TI_WD_V_WD_TS_65_536_S	(0xF << 4)
+// ID value of HFC-USB
+#define HFC_REG_CHIP_ID			0x16
 
-// R_IRQMSK_MISC
-#define hfc_R_IRQMSK_MISC_V_TI_IRQMSK	(1 << 1)
-#define hfc_R_IRQMSK_MISC_V_PROC_IRQMSK	(1 << 2)
-#define hfc_R_IRQMSK_MISC_V_DTMF_IRQMSK	(1 << 3)
-#define hfc_R_IRQMSK_MISC_V_EXT_IRQMSK	(1 << 5)
+#define HFC_REG_STATUS			0x1c
+#define HFC_REG_STATUS_BUSY		(1 << 0)
+#define HFC_REG_STATUS_PROCESSING	(1 << 1)
+#define HFC_REG_STATUS_INT		(1 << 6)
+#define HFC_REG_STATUS_FRAME_INT	(1 << 7)
 
-// R_PCM_MD0
-#define hfc_R_PCM_MD0_V_PCM_MD			(1 << 0)
-#define hfc_R_PCM_MD0_V_C4_POL			(1 << 1)
-#define hfc_R_PCM_MD0_V_F0_NEG			(1 << 2)
-#define hfc_R_PCM_MD0_V_F0_LEN			(1 << 3)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL0	(0x0 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL1	(0x1 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL2	(0x2 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL3	(0x3 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL4	(0x4 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL5	(0x5 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL6	(0x6 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SL_SEL7	(0x7 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD1	(0x9 << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD2	(0xA << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SH0L		(0xC << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SH0H		(0xD << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SH1L		(0xE << 4)
-#define hfc_R_PCM_MD0_V_PCM_IDX_R_SH1H		(0xF << 4)
+#define HFC_REG_P_ADR_W			0x13
+#define HFC_REG_P_DATA			0x1f
 
-// R_SCI
-#define hfc_R_SCI_V_SCI_ST0		(1 << 0)
-#define hfc_R_SCI_V_SCI_ST1		(1 << 1)
-#define hfc_R_SCI_V_SCI_ST2		(1 << 2)
-#define hfc_R_SCI_V_SCI_ST3		(1 << 3)
-#define hfc_R_SCI_V_SCI_ST4		(1 << 4)
-#define hfc_R_SCI_V_SCI_ST5		(1 << 5)
-#define hfc_R_SCI_V_SCI_ST6		(1 << 6)
-#define hfc_R_SCI_V_SCI_ST7		(1 << 7)
+#define HFC_REG_B1_SSL			0x20
+#define HFC_REG_B2_SSL			0x21
+#define HFC_REG_AUX1_SSL		0x22
+#define HFC_REG_AUX2_SSL		0x23
+#define HFC_REG_B1_RSL			0x24
+#define HFC_REG_B2_RSL			0x25
+#define HFC_REG_AUX1_RSL		0x26
+#define HFC_REG_AUX2_RSL		0x27
 
-// R_SCI_MSK
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST0	(1 << 0)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST1	(1 << 1)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST2	(1 << 2)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST3	(1 << 3)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST4	(1 << 4)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST5	(1 << 5)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST6	(1 << 6)
-#define hfc_R_SCI_MSK_V_SCI_MSK_ST7	(1 << 7)
+#define HFC_REG_MST_MODE0		0x14
+#define HFC_REG_MST_MODE0_SLAVE		(0 << 0)
+#define HFC_REG_MST_MODE0_MASTER	(1 << 0)
+#define HFC_REG_MST_MODE0_C4_NEGATIVE	(0 << 1)
+#define HFC_REG_MST_MODE0_C4_POSITIVE	(1 << 1)
+#define HFC_REG_MST_MODE0_F0_NEGATIVE	(0 << 2)
+#define HFC_REG_MST_MODE0_F0_POSITIVE	(1 << 2)
+#define HFC_REG_MST_MODE0_F0_1_C4	(0 << 3)
+#define HFC_REG_MST_MODE0_F0_2_C4	(1 << 3)
+#define HFC_REG_MST_MODE0_CODECA_F1A_B1	(0x0 << 4)
+#define HFC_REG_MST_MODE0_CODECA_F1A_B2	(0x1 << 4)
+#define HFC_REG_MST_MODE0_CODECA_F1A_AUX1	(0x2 << 4)
+#define HFC_REG_MST_MODE0_CODECA_F1A_C2O	(0x3 << 4)
+#define HFC_REG_MST_MODE0_CODECB_F1B_B1	(0x0 << 6)
+#define HFC_REG_MST_MODE0_CODECB_F1B_B2	(0x1 << 6)
+#define HFC_REG_MST_MODE0_CODECB_F1B_AUX1	(0x2 << 6)
+#define HFC_REG_MST_MODE0_CODECB_F1B_AUX2	(0x3 << 6)
 
-// R_FIFO_MD
-#define hfc_R_FIFO_MD_V_FIFO_MD_00	(0x0 << 0)
-#define hfc_R_FIFO_MD_V_FIFO_MD_10	(0x1 << 0)
-#define hfc_R_FIFO_MD_V_FIFO_MD_11	(0x2 << 0)
-#define hfc_R_FIFO_MD_V_DF_MD_SM	(0x0 << 2)
-#define hfc_R_FIFO_MD_V_DF_MD_CSM	(0x1 << 2)
-#define hfc_R_FIFO_MD_V_DF_MD_FSM	(0x3 << 2)
-#define hfc_R_FIFO_MD_V_FIFO_SZ_00	(0x0 << 4)
-#define hfc_R_FIFO_MD_V_FIFO_SZ_01	(0x1 << 4)
-#define hfc_R_FIFO_MD_V_FIFO_SZ_10	(0x2 << 4)
-#define hfc_R_FIFO_MD_V_FIFO_SZ_11	(0x3 << 4)
+#define HFC_REG_MST_MODE1		0x15
+#define HFC_REG_MST_MODE1_AUX1_MIRROR	(0 << 0)
+#define HFC_REG_MST_MODE1_AUX2_MIRROR	(0 << 1)
+#define HFC_REG_MST_MODE1_DPLL_4	(0x0 << 2)
+#define HFC_REG_MST_MODE1_DPLL_2	(0x1 << 2)
+#define HFC_REG_MST_MODE1_DPLL_3	(0x2 << 2)
+#define HFC_REG_MST_MODE1_DPLL_1	(0x3 << 2)
+#define HFC_REG_MST_MODE1_PCM30		(0x0 << 4)
+#define HFC_REG_MST_MODE1_PCM64		(0x1 << 4)
+#define HFC_REG_MST_MODE1_PCM128	(0x2 << 4)
+#define HFC_REG_MST_MODE1_TEST_LOOP	(1 << 6)
+#define HFC_REG_MST_MODE1_PCM_WRITE	(1 << 7)
 
-// R_BRG_PCM_CFG
-#define hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_1_5	(0 << 5)
-#define hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_3_0	(1 << 5)
-#define hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS	(0x0 << 6)
-#define hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_5NS	(0x1 << 6)
-#define hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_7NS	(0x2 << 6)
-#define hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_9NS	(0x3 << 6)
+#define HFC_REG_MST_MODE2		0x16
+#define HFC_REG_MST_MODE2_F1A_OKI	(1 << 0)
+#define HFC_REG_MST_MODE2_F1B_OKI	(1 << 1)
+#define HFC_REG_MST_MODE2_PCM_31_0	(0x0 << 4)
+#define HFC_REG_MST_MODE2_PCM_63_32	(0x1 << 4)
+#define HFC_REG_MST_MODE2_PCM_95_64	(0x2 << 4)
+#define HFC_REG_MST_MODE2_PCM_127_96	(0x3 << 4)
 
-// R_CTRL
-#define hfc_R_CTRL_V_FIFO_LPRIO	(1 << 1)
-#define hfc_R_CTRL_V_SLOW_RD		(1 << 2)
-#define hfc_R_CTRL_V_EXT_RAM		(1 << 3)
-#define hfc_R_CTRL_V_CLK_OFF		(1 << 5)
-#define hfc_R_CTRL_V_ST_CLK_DIV4	(0x0 << 6)
-#define hfc_R_CTRL_V_ST_CLK_DIV8	(0x1 << 6)
-#define hfc_R_CTRL_V_ST_CLK_DIV1	(0x2 << 6)
-#define hfc_R_CTRL_V_ST_CLK_DIV2	(0x3 << 6)
+#define HFC_REG_F0_CNT_L		0x17
+#define HFC_REG_F0_CNT_L_VAL(val)	((val) & 0x00ff)
+#define HFC_REG_F0_CNT_H		0x18
+#define HFC_REG_F0_CNT_H_VAL(val)	(((val) & 0xff00) >> 8)
 
-// R_IRQ_CTRL
-#define hfc_R_V_FIFO_IRQ	(1 << 0)
-#define hfc_R_V_GLOB_IRQ_EN	(1 << 3)
-#define hfc_R_V_IRQ_POL_LOW	(0 << 4)
-#define hfc_R_V_IRQ_POL_HIGH	(1 << 4)
+#define HFC_REG_C_I			0x28
 
-// R_FIFO
-#define hfc_R_FIFO_V_FIFO_DIR_TX	(0 << 0)
-#define hfc_R_FIFO_V_FIFO_DIR_RX	(1 << 0)
-#define hfc_R_FIFO_V_FIFO_NUM(num)	((num) << 1)
-#define hfc_R_FIFO_V_FIFO_ID(num)	(num)
-#define hfc_R_FIFO_V_REV	(1 << 7)
+#define HFC_REG_TRxR			0x29
+#define HFC_REG_MON1_D			0x2A
+#define HFC_REG_MON2_D			0x2B
 
-// A_INC_RES_FIFO
-#define hfc_A_INC_RES_FIFO_V_INC_F	(1 << 0)
-#define hfc_A_INC_RES_FIFO_V_RES_F	(1 << 1)
-#define hfc_A_INC_RES_FIFO_V_RES_LOST	(1 << 2)
+#define HFC_REG_STATES			0x30
+#define HFC_REG_STATES_STATE_VAL(val)	((val) << 0)
+#define HFC_REG_STATES_FRAME_SYNC	(1 << 4)
+#define HFC_REG_STATES_T2_EXPIRED	(1 << 5)
+#define HFC_REG_STATES_INFO0		(1 << 6)
+#define HFC_REG_STATES_LOAD_STATE	(1 << 4)
+#define HFC_REG_STATES_START_DEACTIVATION	(0x2 << 5)
+#define HFC_REG_STATES_START_ACTIVATION		(0x3 << 5)
+#define HFC_REG_STATES_G2_G3		(1 << 7)
 
-// A_CON_HDCL
-#define hfc_A_CON_HDCL_V_IFF			(1 << 0)
-#define hfc_A_CON_HDCL_V_HDLC_TRP_HDLC		(0 << 1)
-#define hfc_A_CON_HDCL_V_HDLC_TRP_TRP		(1 << 1)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_DISABLED	(0x0 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_64		(0x1 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_128		(0x2 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_256		(0x3 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_512		(0x4 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_1024		(0x5 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_2048		(0x6 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_4096		(0x7 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED	(0x0 << 2)
-#define hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED	(0x1 << 2)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM	(0x0 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_PCM			(0x2 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_ST_to_PCM		(0x4 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_ST_to_PCM			(0x6 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST			(0x0 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_PCM		(0x1 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST_ST_from_PCM	(0x2 << 5)
-#define hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_PCM_ST_from_PCM	(0x3 << 5)
+// S-bus control register (tx)
+#define HFC_REG_SCTRL			0x31
+#define HFC_REG_SCTRL_B1_ENA		(1 << 0)
+#define HFC_REG_SCTRL_B2_ENA		(1 << 1)
+#define HFC_REG_SCTRL_TE		(0 << 2)
+#define HFC_REG_SCTRL_NT		(1 << 2)
+#define HFC_REG_SCTRL_D_HIPRI		(0 << 3)
+#define HFC_REG_SCTRL_D_LOPRI		(1 << 3)
+#define HFC_REG_SCTRL_SQ_ENA		(1 << 4)
+#define HFC_REG_SCTRL_96_KHZ		(1 << 5)
+#define HFC_REG_SCTRL_CAPACITIVE	(0 << 6)
+#define HFC_REG_SCTRL_NON_CAPACITIVE	(1 << 6)
+#define HFC_REG_SCTRL_POWER_DOWN	(1 << 7)
 
-// A_SUBCH_CFG
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_8		(0x0 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_1		(0x1 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_2		(0x2 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_3		(0x3 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_4		(0x4 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_5		(0x5 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_6		(0x6 << 0)
-#define hfc_A_SUBCH_CFG_V_BIT_CNT_7		(0x7 << 0)
-#define hfc_A_SUBCH_CFG_V_START_BIT(num)	((num) << 3)
-#define hfc_A_SUBCH_CFG_V_LOOP_FIFO		(1 << 6)
-#define hfc_A_SUBCH_CFG_V_INV_DATA		(1 << 7)
+// same for E and special funcs
+#define HFC_REG_SCTRL_E			0x32
+#define HFC_REG_SCTRL_E_FORCE_G2_G3	(1 << 0)
+#define HFC_REG_SCTRL_E_D_RESET		(1 << 2)
+#define HFC_REG_SCTRL_E_D_U_ENABLE	(1 << 3)
+#define HFC_REG_SCTRL_E_E_ZERO		(1 << 4)
+#define HFC_REG_SCTRL_E_SWAP_B1_B2	(1 << 7)
 
-// A_IRQ_MSK
-#define hfc_A_IRQ_MSK_V_IRQ		(1 << 0)
-#define hfc_A_IRQ_MSK_V_BERT_EN		(1 << 1)
-#define hfc_A_IRQ_MSK_V_MIX_IRQ		(1 << 2)
+// S-bus control register (rx)
+#define HFC_REG_SCTRL_R			0x33
+#define HFC_REG_SCTRL_R_B1_ENA		(1 << 0)
+#define HFC_REG_SCTRL_R_B2_ENA		(1 << 1)
 
-// R_ST_SEL
-#define hfc_R_ST_SEL_V_ST_SEL(num)	((num) << 0)
-#define hfc_R_ST_SEL_V_MULT_SEL		(1 << 3)
+#define HFC_REG_SQ_REC			0x34
+#define HFC_REG_SQ_SEND			0x34
 
-// A_ST_CTRL0
-#define hfc_A_ST_CTRL0_V_B1_EN		(1 << 0)
-#define hfc_A_ST_CTRL0_V_B2_EN		(1 << 1)
-#define hfc_A_ST_CTRL0_V_ST_MD_TE	(0 << 2)
-#define hfc_A_ST_CTRL0_V_ST_MD_NT	(1 << 2)
-#define hfc_A_ST_CTRL0_V_D_PRIO		(1 << 3)
-#define hfc_A_ST_CTRL0_V_SQ_EN		(1 << 4)
-#define hfc_A_ST_CTRL0_V_96_KHZ		(1 << 5)
-#define hfc_A_ST_CTRL0_V_TX_LI		(1 << 6)
-#define hfc_A_ST_CTRL0_V_ST_STOP	(1 << 7)
+// bit delay register
+#define HFC_REG_CLKDEL			0x37
 
-// A_ST_CTRL1
-#define hfc_A_ST_CTRL1_V_G2_G3_EN	(1 << 0)
-#define hfc_A_ST_CTRL1_V_D_HI		(1 << 2)
-#define hfc_A_ST_CTRL1_V_E_IGNO		(1 << 3)
-#define hfc_A_ST_CTRL1_V_E_LO		(1 << 4)
-#define hfc_A_ST_CTRL1_V_B12_SWAP	(1 << 7)
-
-// A_ST_CTRL2
-#define hfc_A_ST_CTRL2_V_B1_RX_EN	(1 << 0)
-#define hfc_A_ST_CTRL2_V_B2_RX_EN	(1 << 1)
-#define hfc_A_ST_CTRL2_V_ST_TRI		(1 << 6)
-
-// A_ST_CLK_DLY
-#define hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(num)	((num) << 0)
-#define hfc_A_ST_CLK_DLY_V_ST_SMPL(num)		((num) << 4)
-
-// A_ST_WR_STA
-#define hfc_A_ST_WR_STA_V_ST_SET_STA(num)	((num) << 0)
-#define hfc_A_ST_WR_STA_V_ST_LD_STA		(1 << 4)
-#define hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION	(0x2 << 5)
-#define hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION	(0x3 << 5)
-#define hfc_A_ST_WR_STA_V_SET_G2_G3		(1 << 7)
-
-// A_ST_RD_STA
-#define hfc_A_ST_RD_STA_V_ST_STA(val)		((val) & 0xF)
-#define hfc_A_ST_RD_STA_V_FR_SYNC		(1 << 4)
-#define hfc_A_ST_RD_STA_V_T2_EXP		(1 << 5)
-#define hfc_A_ST_RD_STA_V_INFO0			(1 << 6)
-#define hfc_A_ST_RD_STA_V_G2_G3			(1 << 7)
-
-// A_ST_SQ_RD
-#define hfc_A_ST_SQ_RD_V_ST_SQ_RD(val)		((val) & 0xF)
-#define hfc_A_ST_SQ_RD_V_MF_RX_RDY		(1 << 4)
-#define hfc_A_ST_SQ_RD_V_MF_TX_RDY		(1 << 7)
-
-// R_ST_SYNC
-#define hfc_R_ST_SYNC_V_SYNC_SEL(num)		((num) << 0)
-#define hfc_R_ST_SYNC_V_AUTO_SYNC		(1 << 3)
-
-// R_IRQ_FIFO_BL0
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO0_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO0_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO1_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO1_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO2_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO2_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO3_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL0_V_IRQ_FIFO3_RX	(1 << 7)
-
-// R_IRQ_FIFO_BL1
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO4_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO4_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO5_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO5_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO6_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO6_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO7_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL1_V_IRQ_FIFO7_RX	(1 << 7)
-
-// R_IRQ_FIFO_BL2
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO8_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO8_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO9_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO9_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO10_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO10_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO11_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL2_V_IRQ_FIFO11_RX	(1 << 7)
-
-// R_IRQ_FIFO_BL3
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO12_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO12_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO13_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO13_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO14_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO14_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO15_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL3_V_IRQ_FIFO15_RX	(1 << 7)
-
-// R_IRQ_FIFO_BL4
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO16_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO16_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO17_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO17_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO18_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO18_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO19_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL4_V_IRQ_FIFO19_RX	(1 << 7)
-
-
-// R_IRQ_FIFO_BL5
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO20_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO20_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO21_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO21_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO22_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO22_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO23_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL5_V_IRQ_FIFO23_RX	(1 << 7)
-
-// R_IRQ_FIFO_BL6
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO24_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO24_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO25_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO25_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO26_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO26_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO27_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL6_V_IRQ_FIFO27_RX	(1 << 7)
-
-// R_IRQ_FIFO_BL7
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO28_TX	(1 << 0)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO28_RX	(1 << 1)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO29_TX	(1 << 2)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO29_RX	(1 << 3)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO30_TX	(1 << 4)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO30_RX	(1 << 5)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO31_TX	(1 << 6)
-#define hfc_R_IRQ_FIFO_BL7_V_IRQ_FIFO31_RX	(1 << 7)
+#define HFC_B1_REC			0x3c
+#define HFC_B1_SEND			0x3c
+#define HFC_B2_REC			0x3d
+#define HFC_B2_SEND			0x3d
+#define HFC_D_REC			0x3e
+#define HFC_D_SEND			0x3e
+#define HFC_E_REC			0x3f
 
 #endif

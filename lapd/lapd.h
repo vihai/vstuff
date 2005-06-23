@@ -75,11 +75,8 @@ struct sockaddr_lapd {
 
 #include <asm/atomic.h>
 #include <linux/types.h>
-//#include <linux/socket.h>
-
-#include "lapd_proto.h"
-#include "tei_mgmt_nt.h"
-#include "tei_mgmt_te.h"
+#include <linux/netdevice.h>
+#include <net/sock.h>
 
 #ifndef TRUE
 #define TRUE 1
@@ -90,6 +87,9 @@ struct sockaddr_lapd {
 #endif
 
 #define LAPD_BROADCAST_TEI	127
+
+#define LAPD_HASHBITS		5
+#define LAPD_HASHSIZE		((1 << LAPD_HASHBITS) - 1)
 
 #ifdef SOCK_DEBUGGING
 #define lapd_debug_sk(sk, format, arg...)		\
@@ -123,7 +123,7 @@ struct sockaddr_lapd {
 		(dev)->name,				\
 		## arg)
 
-extern struct hlist_head lapd_hash;
+extern struct hlist_head lapd_hash[LAPD_HASHSIZE];
 extern rwlock_t lapd_hash_lock;
 
 enum {
@@ -271,7 +271,7 @@ static inline struct lapd_opt *lapd_sk(const struct sock *__sk)
 
 extern void setup_lapd(struct net_device *netdev);
 
-struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi);
+struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi);
 
 int lapd_device_event(struct notifier_block *this,
 			unsigned long event, void *ptr);
@@ -287,6 +287,11 @@ void lapd_deliver_internal_message(
 	struct sock *sk,
 	enum lapd_int_msg_type type,
 	int param);
+
+static inline struct hlist_head *lapd_get_hash(struct net_device *dev)
+{
+	return &lapd_hash[dev->ifindex & (LAPD_HASHSIZE - 1)];
+}
 
 #endif
 #endif

@@ -203,7 +203,7 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 			goto found;
 		}
 
-		lapd_tei_t tei = lapd_ntme_find_available_tei(tme);
+		u8 tei = lapd_ntme_find_available_tei(tme);
 
 		lapd_ntme_send_tei_assigned(tme, tm->body.ri, tei);
 

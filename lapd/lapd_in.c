@@ -377,26 +377,24 @@ static inline int lapd_pass_frame_to_socket_nt(
 	int queued = 0;
 
 	write_lock_bh(&lapd_hash_lock);
-	sk_for_each(sk, node, &lapd_hash) {
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
 		struct lapd_opt *lo = lapd_sk(sk);
 
-		if (lo->dev == dev) {
-			if (sk->sk_state == TCP_LISTEN) {
-				listening_sk = sk;
-				continue;
-			}
+		if (sk->sk_state == TCP_LISTEN) {
+			listening_sk = sk;
+			continue;
+		}
 
-			if (lo->sapi == hdr->addr.sapi &&
-		 	    lo->tei == hdr->addr.tei) {
+		if (lo->sapi == hdr->addr.sapi &&
+	 	    lo->tei == hdr->addr.tei) {
 
-				skb->sk = sk;
+			skb->sk = sk;
 
-				write_unlock_bh(&lapd_hash_lock);
+			write_unlock_bh(&lapd_hash_lock);
 
-				queued = lapd_pass_frame_to_socket(sk, skb);
+			queued = lapd_pass_frame_to_socket(sk, skb);
 
-				goto frame_handled;
-			}
+			goto frame_handled;
 		}
 	}
 
@@ -420,7 +418,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 			return FALSE;
 		}
 
-		sk_add_node(newsk, &lapd_hash);
+		sk_add_node(newsk, lapd_get_hash(dev));
 		write_unlock_bh(&lapd_hash_lock);
 
 		skb->sk = newsk;
@@ -489,7 +487,7 @@ static inline int lapd_pass_frame_to_socket_te(
 
 	read_lock_bh(&lapd_hash_lock);
 	if (hdr->addr.tei != LAPD_BROADCAST_TEI) {
-		sk_for_each(sk, node, &lapd_hash) {
+		sk_for_each(sk, node, lapd_get_hash(dev)) {
 			struct lapd_opt *lo = lapd_sk(sk);
 
 			if (lo->dev == dev &&
@@ -504,7 +502,7 @@ static inline int lapd_pass_frame_to_socket_te(
 			}
 		}
 	} else {
-		sk_for_each_safe(sk, node, tmp, &lapd_hash) {
+		sk_for_each_safe(sk, node, tmp, lapd_get_hash(dev)) {
 			struct lapd_opt *lo = lapd_sk(sk);
 
 			if (lo->dev == dev &&

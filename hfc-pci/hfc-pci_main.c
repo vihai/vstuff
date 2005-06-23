@@ -1230,7 +1230,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	chan->tx.fifo_size = chan->tx.z_max - chan->tx.z_min + 1;
 	chan->tx.f_num     = chan->tx.f_max - chan->tx.f_min + 1;
 
-	chan->netdev = alloc_netdev(0, "isdn%dd", setup_lapd);
+	chan->netdev = alloc_netdev(0, "visdn%dd", setup_lapd);
 	if(!chan->netdev) {
 		printk(KERN_ERR hfc_DRIVER_PREFIX
 			"net_device alloc failed, abort.\n");

@@ -198,7 +198,7 @@ static int __init fake_init_module(void)
 
 	chan->card = card;
 
-	chan->netdev = alloc_netdev(0, "isdn%da", setup_lapd);
+	chan->netdev = alloc_netdev(0, "visdn%da", setup_lapd);
 	if(!chan->netdev) {
 		printk(KERN_ERR fake_DRIVER_PREFIX
 			"net_device alloc failed, abort.\n");
@@ -219,7 +219,7 @@ static int __init fake_init_module(void)
 
 	chan->card = card;
 
-	chan->netdev = alloc_netdev(0, "isdn%db", setup_lapd);
+	chan->netdev = alloc_netdev(0, "visdn%db", setup_lapd);
 	if(!chan->netdev) {
 		printk(KERN_ERR fake_DRIVER_PREFIX
 			"net_device alloc failed, abort.\n");

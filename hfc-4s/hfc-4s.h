@@ -14,7 +14,8 @@
 #define _HFC_4S_H
 
 #include <linux/delay.h>
-#include <linux/ppp_channel.h>
+
+#include <visdn.h>
 
 #include "regs.h"
 
@@ -214,20 +215,18 @@ struct hfc_port;
 struct hfc_chan_duplex {
 	struct hfc_port *port;
 
+	enum hfc_chan_status status;
+
 	char *name;
 	int id;
-
-	enum hfc_chan_status status;
 
 	unsigned short protocol;
 
 	struct hfc_chan_simplex rx;
 	struct hfc_chan_simplex tx;
 
-	struct net_device *netdev;
+	struct visdn_chan visdn_chan;
 	struct net_device_stats net_device_stats;
-
-	struct ppp_channel ppp_chan;
 };
 
 struct hfc_port
@@ -238,7 +237,6 @@ struct hfc_port
 
 	struct hfc_chan_duplex chans[4];
 	int echo_enabled;
-	int nt_mode;
 	u8 l1_state;
 
 	struct
@@ -246,6 +244,8 @@ struct hfc_port
 		u8 st_ctrl_0;
 		u8 st_ctrl_2;
 	} regs;
+
+	struct visdn_port visdn_port;
 };
 
 enum hfc_chip_type
@@ -281,9 +281,6 @@ struct hfc_card {
 	int ignore_first_timer_interrupt;
 
 	int open_ports;
-
-	dev_t first_dev;
-	struct cdev cdev;
 };
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)

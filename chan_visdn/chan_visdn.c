@@ -43,6 +43,7 @@
 #include <asterisk/indications.h>
 #include <asterisk/cli.h>
 
+#include <streambus.h>
 #include <lapd.h>
 #include <q931.h>
 
@@ -788,7 +789,7 @@ ast_log(LOG_ERROR, "VISDN_REQUEST\n");
 
         ast_chan->type = type;
 
-	ast_chan->fds[0] = open("visdntimer", O_RDONLY);
+	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 	if (ast_chan->fds[0] < 0) {
 		ast_log(LOG_WARNING, "Unable to open timer %s\n",
 			strerror(errno));
@@ -1235,7 +1236,7 @@ static void visdn_q931_setup_indication(struct q931_call *q931_call)
 
         ast_chan->type = type;
 
-	ast_chan->fds[0] = open("visdntimer", O_RDONLY);
+	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 	if (ast_chan->fds[0] < 0) {
 		ast_log(LOG_WARNING, "Unable to open timer %s\n",
 			strerror(errno));
@@ -1404,6 +1405,22 @@ static void visdn_q931_timeout_indication(struct q931_call *q931_call)
 	printf("*** %s\n", __FUNCTION__);
 }
 
+enum sb_bearertype
+{
+        VISDN_BT_VOICE  = 1,
+        VISDN_BT_PPP    = 2,
+};
+
+struct sb_setbearer
+{
+        int sb_index;
+        enum sb_bearertype sb_bearertype;
+};
+
+#define VISDN_SET_BEARER        SIOCDEVPRIVATE
+#define VISDN_PPP_GET_CHAN      (SIOCDEVPRIVATE+1)
+#define VISDN_PPP_GET_UNIT      (SIOCDEVPRIVATE+2)
+
 static void visdn_q931_connect_channel(struct q931_channel *channel)
 {
 	printf("*** %s B%d\n", __FUNCTION__, channel->id+1);
@@ -1419,14 +1436,21 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	const char *devname;
+	struct ifreq ifr;
+	strncpy(ifr.ifr_name, channel->call->intf->name, sizeof(ifr.ifr_name));
 
-	if (channel->id == 0)
-		devname = "pippo";
-	else
-		devname = "pippo2";
+	struct sb_setbearer bt;
+	bt.sb_index = channel->id;
+	bt.sb_bearertype = VISDN_BT_VOICE;
+	ifr.ifr_data = (void *)&bt;
 
-	visdn_chan->channel_fd = open(devname, O_RDWR);
+	if (ioctl(channel->call->dlc->socket, VISDN_SET_BEARER,
+	    (caddr_t) &ifr) < 0) {
+		ast_log(LOG_ERROR, "ioctl(VISDN_SET_BEARER_PPP): %s\n", strerror(errno));
+		return;
+	}
+
+	visdn_chan->channel_fd = open("pippo", O_RDWR);
 	if (visdn_chan->channel_fd < 0) {
 		ast_log(LOG_ERROR, "Cannot open channel\n");
 	}

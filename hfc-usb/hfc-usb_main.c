@@ -312,13 +312,150 @@ static int hfc_proc_read_fifos(char *page, char **start,
  * net_device interface functions
  ******************************************/
 
+struct hfc_fifo_control
+{
+#if defined(__BIG_ENDIAN_BITFIELD)
+	u8 state:4;
+	u8 :2;
+	u8 err:1;
+	u8 eof:1;
+
+	u8 fill_b1_tx:1;
+	u8 fill_b1_rx:1;
+	u8 fill_b2_tx:1;
+	u8 fill_b2_rx:1;
+	u8 fill_d_tx:1;
+	u8 fill_d_rx:1;
+	u8 fill_pcm_tx:1;
+	u8 fill_pcm_rx:1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	u8 eof:1;
+	u8 err:1;
+	u8 :2;
+	u8 state:4;
+
+	u8 fill_pcm_rx:1;
+	u8 fill_pcm_tx:1;
+	u8 fill_d_rx:1;
+	u8 fill_d_tx:1;
+	u8 fill_b2_rx:1;
+	u8 fill_b2_tx:1;
+	u8 fill_b1_rx:1;
+	u8 fill_b1_tx:1;
+#endif
+} __attribute__ ((__packed__));
+
 static void hfc_rx_complete(struct urb *urb, struct pt_regs *regs)
 {
 	struct hfc_chan_simplex *chan = urb->context;
+	struct hfc_chan_duplex *fdchan = chan->chan;
 	struct hfc_card *card = chan->chan->card;
 
-	printk(KERN_DEBUG hfc_DRIVER_PREFIX
-		"rx_complete! %d %04x %d\n", urb->status, *(u16 *)chan->buffer, urb->actual_length);
+	struct hfc_fifo_control *fifo_control =
+		(struct hfc_fifo_control *)chan->urb_buf;
+
+	if (fifo_control->state != card->l1_state) {
+		card->l1_state = fifo_control->state;
+
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX
+			"State change: %d\n", fifo_control->state);
+	}
+
+	int offset;
+	if (chan->expecting_data)
+		offset = 0;
+	else
+		offset = sizeof(struct hfc_fifo_control);
+
+	if (chan->expecting_data ||
+	    urb->actual_length > sizeof(struct hfc_fifo_control)) {
+		memcpy(chan->frame_buf + chan->frame_buf_pos, chan->urb_buf + offset,
+			urb->actual_length - offset);
+
+		chan->frame_buf_pos += urb->actual_length - offset;
+
+		if (fifo_control->eof) {
+			int frame_len = chan->frame_buf_pos;
+
+			chan->frame_buf_pos = 0;
+
+	if (frame_len < 3) {
+		hfc_debug_schan(2, chan,
+			"invalid frame received, just %d bytes\n",
+			frame_len);
+
+		//hfc_fifo_drop_frame(chan);
+
+		fdchan->net_device_stats.rx_dropped++;
+
+		goto out;
+	} else if(frame_len == 3) {
+		hfc_debug_schan(2, chan,
+			"empty frame received\n");
+
+		//hfc_fifo_drop_frame(chan);
+
+		fdchan->net_device_stats.rx_dropped++;
+
+		goto out;
+	}
+
+	struct sk_buff *skb =
+		dev_alloc_skb(frame_len - 3);
+
+	if (!skb) {
+		hfc_msg_schan(KERN_ERR, chan,
+			"cannot allocate skb: frame dropped\n");
+
+		//hfc_fifo_drop_frame(chan);
+
+		fdchan->net_device_stats.rx_dropped++;
+
+		goto out;
+	}
+
+	// Oh... this is the echo channel... redirect to D
+	// channel's netdev
+	if (fdchan->id == E) {
+		skb->protocol = htons(card->chans[D].protocol);
+		skb->dev = card->chans[D].netdev;
+		skb->pkt_type = PACKET_OTHERHOST;
+	} else {
+		skb->protocol = htons(fdchan->protocol);
+		skb->dev = fdchan->netdev;
+		skb->pkt_type = PACKET_HOST;
+	}
+
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+	memcpy(skb_put(skb, frame_len - 3),
+		chan->frame_buf,
+		frame_len - 3);
+
+	fdchan->net_device_stats.rx_packets++;
+	fdchan->net_device_stats.rx_bytes += frame_len - 1;
+
+	netif_rx(skb);
+
+
+			printk(KERN_DEBUG hfc_DRIVER_PREFIX
+				"Frame? %s %d: ",
+				chan->chan->name,
+				urb->actual_length);
+
+			int i;
+			for (i=0; i<frame_len; i++) {
+				printk("%02x", *(u8 *)(chan->frame_buf + i));
+			}
+
+			printk("\n");
+		}
+	}
+
+	if (urb->actual_length == chan->int_endpoint->desc.wMaxPacketSize)
+		chan->expecting_data = TRUE;
+
+out:;
 
 	int err;
 	err = usb_submit_urb(urb, GFP_ATOMIC);
@@ -333,17 +470,20 @@ static void hfc_tx_complete(struct urb *urb, struct pt_regs *regs)
 	struct hfc_chan_simplex *chan = urb->context;
 
 	printk(KERN_DEBUG hfc_DRIVER_PREFIX
-		"tx_complete! %d %04x %d\n", urb->interval, *(u16 *)chan->buffer, urb->actual_length);
+		"tx_complete! %d %04x %d\n",
+		urb->interval, *(u16 *)chan->urb_buf, urb->actual_length);
 
 }
 
-static int hfc_configure_int_chan(struct hfc_chan_simplex *chan)
+static int hfc_setup_int_channel(struct hfc_chan_duplex *fdchan)
 {
+	struct hfc_chan_simplex *chan = &fdchan->rx;
 	int err;
 
 	chan->pipe = usb_rcvintpipe(
 		chan->chan->card->usb_dev,
-		chan->int_endpoint->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
+		chan->int_endpoint->desc.bEndpointAddress &
+			USB_ENDPOINT_NUMBER_MASK);
 
 	printk(KERN_ERR hfc_DRIVER_PREFIX "--------------------------> %s %d %d %d\n", chan->chan->name, chan->pipe, chan->int_endpoint->desc.bEndpointAddress, chan->int_endpoint->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK);
 
@@ -359,17 +499,10 @@ static int hfc_configure_int_chan(struct hfc_chan_simplex *chan)
 		chan->urb,
 		chan->chan->card->usb_dev,
 		chan->pipe,
-		chan->buffer,
+		chan->urb_buf,
 		chan->int_endpoint->desc.wMaxPacketSize,
 		hfc_rx_complete,
 		chan, 1);
-
-	err = usb_submit_urb(chan->urb, GFP_KERNEL);
-	if (err < 0) {
-		printk(KERN_ERR hfc_DRIVER_PREFIX
-			"usb_submit_urb() error\n");
-		return err;
-	}
 
 	return 0;
 }
@@ -380,18 +513,17 @@ static int hfc_open(struct net_device *netdev)
 	struct hfc_card *card = chan->card;
 	int err = 0;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	spin_lock_bh(&card->lock);
 
 	if (chan->status != free &&
 		(chan->id != D || chan->status != open_framed)) {
-		spin_unlock_irqrestore(&card->lock, flags);
+		spin_unlock_bh(&card->lock);
 		return -EBUSY;
 	}
 
 	chan->status = open_framed;
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	spin_unlock_bh(&card->lock);
 
 	// Ok, now the chanel is ours we need to configure it
 
@@ -450,13 +582,21 @@ static int hfc_open(struct net_device *netdev)
 //		hfc_write(card, HFC_REG_INC_RES_F,
 //			0);
 
-		hfc_configure_int_chan(&card->chans[D].rx);
+/*		hfc_configure_int_chan(&card->chans[D].rx);
 		hfc_configure_int_chan(&card->chans[B1].rx);
 		hfc_configure_int_chan(&card->chans[B2].rx);
-		hfc_configure_int_chan(&card->chans[E].rx);
+		hfc_configure_int_chan(&card->chans[E].rx);*/
 
 		// Unlock the state machine
 		hfc_write(card, HFC_REG_STATES, 0);
+
+		// Submit the URB and start receiving
+		err = usb_submit_urb(chan->urb, GFP_KERNEL);
+		if (err < 0) {
+			printk(KERN_ERR hfc_DRIVER_PREFIX
+				"usb_submit_urb() error\n");
+			return err;
+		}
 
 /*
 		u8 data[] = { 0x01, 0x00, 0x83 };
@@ -518,11 +658,10 @@ static int hfc_close(struct net_device *netdev)
 	struct hfc_chan_duplex *chan = netdev->priv;
 	struct hfc_card *card = chan->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	spin_lock_bh(&card->lock);
 
 	if (chan->status != open_framed) {
-		spin_unlock_irqrestore(&card->lock, flags);
+		spin_unlock_bh(&card->lock);
 		return -EINVAL;
 	}
 
@@ -543,7 +682,7 @@ static int hfc_close(struct net_device *netdev)
 	break;
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	spin_unlock_bh(&card->lock);
 
 	printk(KERN_INFO hfc_DRIVER_PREFIX
 		"card %d: "
@@ -583,8 +722,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 	struct hfc_chan_duplex *chan = netdev->priv;
 	struct hfc_card *card = chan->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	spin_lock_bh(&card->lock);
 
         if(netdev->flags & IFF_PROMISC && !card->echo_enabled) {
 		if (card->nt_mode) {
@@ -593,8 +731,7 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 				"is in NT mode. Promiscuity is useless\n",
 				card->id);
 
-			spin_unlock_irqrestore(&card->lock, flags);
-			return;
+			goto promisc_in_nt_mode;
 		}
 
 		printk(KERN_INFO hfc_DRIVER_PREFIX
@@ -602,10 +739,8 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 			"entered in promiscuous mode\n",
 			card->id);
         } else if(!(netdev->flags & IFF_PROMISC) && card->echo_enabled) {
-		if (!card->echo_enabled) {
-			spin_unlock_irqrestore(&card->lock, flags);
-			return;
-		}
+		if (!card->echo_enabled)
+			goto already_promisc;
 
 		card->echo_enabled = FALSE;
 
@@ -615,7 +750,10 @@ static void hfc_set_multicast_list(struct net_device *netdev)
 			card->id);
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+promisc_in_nt_mode:
+already_promisc:
+
+	spin_unlock(&card->lock);
 
 //	hfc_update_fifo_state(card);
 }
@@ -634,7 +772,8 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
 	chan->netdev->set_multicast_list = hfc_set_multicast_list;
 	chan->netdev->features = NETIF_F_NO_CSUM;
 
-	chan->netdev->mtu = chan->tx.fifo_size;
+	chan->netdev->mtu = 512; // FIXME
+//	chan->netdev->mtu = chan->tx.fifo_size;
 
 	memset(chan->netdev->dev_addr, 0x00, sizeof(chan->netdev->dev_addr));
 
@@ -712,7 +851,7 @@ found:
 	chan->rx.chan    = chan;
 	chan->rx.fifo_id = 5;
 
-	chan->netdev = alloc_netdev(0, "isdn%dd", setup_lapd);
+	chan->netdev = alloc_netdev(0, "visdn%dd", setup_lapd);
 	if(!chan->netdev) {
 		printk(KERN_ERR hfc_DRIVER_PREFIX
 			"net_device alloc failed, abort.\n");
@@ -862,13 +1001,12 @@ static void hfc_disconnect(struct usb_interface *usb_intf)
 		"shutting down.\n",
 		card->id);
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock,flags);
+	spin_lock_bh(&card->lock);
 
 	// softreset clears all pending interrupts
 //	hfc_softreset(card);
 
-	spin_unlock_irqrestore(&card->lock,flags);
+	spin_unlock_bh(&card->lock);
 
 	remove_proc_entry("fifos", card->proc_dir);
 	remove_proc_entry("info", card->proc_dir);

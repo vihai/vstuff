@@ -25,7 +25,7 @@
 #include "tei_mgmt_te.h"
 #include "multiframe.h"
 
-struct hlist_head lapd_hash = HLIST_HEAD_INIT;
+struct hlist_head lapd_hash[LAPD_HASHSIZE];
 rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
 
 static kmem_cache_t *lapd_sk_cachep;
@@ -39,24 +39,23 @@ struct lapd_iter_state {
 
 static struct sock *lapd_get_first(struct seq_file *seq)
 {
-	struct sock *sk;
-
-	struct hlist_node *node;
-
-	sk_for_each(sk, node, &lapd_hash) {
-		if (sk->sk_family == PF_LAPD)
-			goto found;
-	}
-
-	sk = NULL;
-
-found:
-	return sk;
+	return hlist_entry(lapd_hash[0].first, struct sock, sk_node);
 }
 
 static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 {
-	sk = sk_next(sk);
+	struct lapd_iter_state *state = seq->private;
+ 
+	do {
+		sk = sk_next(sk);
+ try_again:
+		;
+	} while (sk);
+ 
+	if (!sk && ++state->bucket < ARRAY_SIZE(lapd_hash)) {
+		sk = sk_head(&lapd_hash[state->bucket]);
+		goto try_again;
+	}
 
 	return sk;
 }
@@ -65,9 +64,11 @@ static struct sock *lapd_get_idx(struct seq_file *seq, loff_t pos)
 {
 	struct sock *sk = lapd_get_first(seq);
 
-	if (sk)
+	if (sk) {
 		while (pos && (sk = lapd_get_next(seq, sk)) != NULL)
 			--pos;
+	}
+
 	return pos ? NULL : sk;
 }
 
@@ -85,7 +86,9 @@ static void *lapd_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 		sk = lapd_get_first(seq);
 	else
 		sk = lapd_get_next(seq, v);
+
 	++*pos;
+
 	return sk;
 }
 
@@ -750,12 +753,16 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		// same interface.
 
 		read_lock_bh(&lapd_hash_lock);
-		sk_for_each(othersk, node, &lapd_hash) {
-			if (lapd_sk(othersk)->nt_mode &&
-			    lapd_sk(othersk)->dev == dev) {
-				read_unlock_bh(&lapd_hash_lock);
-				err = -EBUSY;
-				goto err_socket_already_present;
+
+		int i;
+		for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+			sk_for_each(othersk, node, &lapd_hash[i]) {
+				if (lapd_sk(othersk)->nt_mode &&
+				    lapd_sk(othersk)->dev == dev) {
+					read_unlock_bh(&lapd_hash_lock);
+					err = -EBUSY;
+					goto err_socket_already_present;
+				}
 			}
 		}
 		read_unlock_bh(&lapd_hash_lock);
@@ -791,6 +798,10 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	} else if(lo->sapi == LAPD_SAPI_X25) {
 		lo->sap = &lapd_dev(lo->dev)->x25;
 	}
+
+	write_lock_bh(&lapd_hash_lock);
+	sk_add_node(sk, lapd_get_hash(lo->dev));
+	write_unlock_bh(&lapd_hash_lock);
 
 	return 0;
 
@@ -1263,7 +1274,7 @@ static void lapd_unhash_timer(unsigned long data)
 	sock_put(sk);
 }
 
-struct sock *lapd_new_sock(struct sock *parent_sk, lapd_tei_t tei, int sapi)
+struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi)
 {
 	struct sock *sk;
 	sk = sk_alloc(PF_LAPD, GFP_ATOMIC,
@@ -1998,10 +2009,6 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	INIT_HLIST_HEAD(&lo->new_dlcs);
 
-	write_lock_bh(&lapd_hash_lock);
-	sk_add_node(sk, &lapd_hash);
-	write_unlock_bh(&lapd_hash_lock);
-
 	return 0;
 
 //	sk_free(sk);
@@ -2034,6 +2041,11 @@ struct packet_type lapd_packet_type = {
 static int __init lapd_init(void)
 {
 	int err;
+
+	int i;
+	for (i=0; i< ARRAY_SIZE(lapd_hash); i++) {
+		INIT_HLIST_HEAD(&lapd_hash[i]);
+	}
 
 	lapd_sk_cachep = kmem_cache_create("lapd_sock",
 				sizeof(struct lapd_sock), 0,
