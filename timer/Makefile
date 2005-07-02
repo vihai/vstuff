@@ -4,8 +4,10 @@ ifndef src
 	src=$(shell pwd)
 endif
 
-obj-m	:= visdn-core.o
-visdn-core-y	:= visdn_main.o chan.o port.o timer.o
+EXTRA_CFLAGS = -I $(src)/../core
+
+obj-m	:= visdn-timer.o
+visdn-timer-y	:= timer_main.o
 
 all:
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`

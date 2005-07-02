@@ -18,8 +18,9 @@
 #include <linux/fs.h>
 #include <linux/poll.h>
 
-#include "../visdn/visdn.h"
-#include "visdn-timer.h"
+#include <visdn.h>
+
+#include "timer.h"
 
 static wait_queue_head_t timerwait;
 static struct timer_list timer;

@@ -4,7 +4,7 @@ ifndef src
 	src=$(shell pwd)
 endif
 
-EXTRA_CFLAGS = -I $(src)/../lapd/ -I $(src)/../visdn-core/
+EXTRA_CFLAGS = -I $(src)/../lapd/ -I $(src)/../core/
 
 obj-m	:= hfc-4s.o
 hfc-4s-y	:= hfc-4s_main.o fifo.o

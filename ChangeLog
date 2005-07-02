@@ -2,6 +2,77 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-07-02 00:31:10 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-36
+
+    Summary:
+      Commit for backup purposes
+    Revision:
+      isdn--devel--0.1--patch-36
+
+    
+    
+
+    new files:
+     softport/.arch-ids/softport.h.id softport/softport.h
+     tests/.arch-ids/connect.c.id tests/.arch-ids/jitter.c.id
+     tests/connect.c tests/jitter.c
+
+    removed files:
+     visdn-core/.arch-ids/=id visdn-core/.arch-ids/Makefile.id
+     visdn-core/.arch-ids/chan.c.id visdn-core/.arch-ids/chan.h.id
+     visdn-core/.arch-ids/port.c.id visdn-core/.arch-ids/port.h.id
+     visdn-core/.arch-ids/timer.c.id
+     visdn-core/.arch-ids/timer.h.id
+     visdn-core/.arch-ids/visdn.h.id
+     visdn-core/.arch-ids/visdn_main.c.id
+     visdn-core/.arch-ids/visdn_mod.h.id visdn-core/Makefile
+     visdn-core/chan.c visdn-core/chan.h visdn-core/port.c
+     visdn-core/port.h visdn-core/timer.c visdn-core/timer.h
+     visdn-core/visdn.h visdn-core/visdn_main.c
+     visdn-core/visdn_mod.h
+
+    modified files:
+     ChangeLog chan_visdn/Makefile chan_visdn/chan_visdn.c
+     hfc-4s/Makefile hfc-4s/hfc-4s.h hfc-4s/hfc-4s_main.c
+     softport/Makefile softport/softport_main.c
+     tests/.arch-inventory tests/sniffer.c timer/Makefile
+     timer/timer_main.c
+
+    renamed files:
+     hfc-4s/.arch-ids/sniffer.c.id
+       ==> tests/.arch-ids/sniffer.c.id
+     hfc-4s/.arch-ids/sniffer_async.c.id
+       ==> tests/.arch-ids/sniffer_async.c.id
+     hfc-4s/sniffer.c
+       ==> tests/sniffer.c
+     hfc-4s/sniffer_async.c
+       ==> tests/sniffer_async.c
+     visdn-timer/.arch-ids/.arch-inventory.id
+       ==> timer/.arch-ids/.arch-inventory.id
+     visdn-timer/.arch-ids/=id
+       ==> timer/.arch-ids/=id
+     visdn-timer/.arch-ids/Makefile.id
+       ==> timer/.arch-ids/Makefile.id
+     visdn-timer/.arch-ids/visdn-timer.h.id
+       ==> timer/.arch-ids/timer.h.id
+     visdn-timer/.arch-ids/visdn-timer_main.c.id
+       ==> timer/.arch-ids/timer_main.c.id
+     visdn-timer/visdn-timer.h
+       ==> timer/timer.h
+     visdn-timer/visdn-timer_main.c
+       ==> timer/timer_main.c
+
+    new directories:
+     timer/.arch-ids
+
+    removed directories:
+     visdn-core visdn-core/.arch-ids visdn-timer/.arch-ids
+
+    renamed directories:
+     visdn-timer
+       ==> timer
+
+
 2005-06-23 00:47:54 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-35
 
     Summary:

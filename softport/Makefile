@@ -4,10 +4,10 @@ ifndef src
 	src=$(shell pwd)
 endif
 
-EXTRA_CFLAGS = -I $(src)/../visdn-core/
+EXTRA_CFLAGS = -I $(src)/../core/
 
-obj-m	:= streambus.o
-streambus-y	:= streambus_main.o
+obj-m	:= softport.o
+softport-y	:= softport_main.o
 
 all:
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`

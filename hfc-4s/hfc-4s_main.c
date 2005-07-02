@@ -31,6 +31,8 @@
 
 #if CONFIG_PCI
 
+#define to_chan_duplex(chan) container_of(chan, struct hfc_chan_duplex, visdn_chan)
+
 static int force_l1_up = 0;
 static struct proc_dir_entry *hfc_proc_hfc_dir;
 
@@ -86,12 +88,7 @@ static void hfc_softreset(struct hfc_card *card)
 // Must be called with interrupts disabled and port selected
 void hfc__do_set_role(struct hfc_port *port, int nt_mode)
 {
-printk(KERN_INFO "AAAAAAAAAAAAA\n");
-
 	if (nt_mode) {
-
-printk(KERN_INFO "##############\n");
-
 		port->regs.st_ctrl_0 =
 			hfc_A_ST_CTRL0_V_ST_MD_NT;
 		hfc_outb(port->card, hfc_A_ST_CTRL0,
@@ -119,8 +116,6 @@ printk(KERN_INFO "##############\n");
 	}
 
 	port->visdn_port.nt_mode = nt_mode;
-
-printk(KERN_INFO "BBBBBBBBBBBBB %d\n", port->visdn_port.nt_mode);
 }
 
 void hfc_reset_card(struct hfc_card *card)
@@ -182,7 +177,7 @@ static void hfc_update_fifo_state(struct hfc_card *card)
 	spin_lock_irqsave(&card->chans[B1].lock, flags);
 	if (!card->fifo_suspended &&
 		(card->chans[B1].status == open_framed ||
-		card->chans[B1].status == open_voice)) {
+		card->chans[B1].status == open_trans)) {
 
  	 	if(!(card->regs.fifo_en & hfc_FIFOEN_B1RX)) {
 			card->regs.fifo_en |= hfc_FIFOEN_B1RX;
@@ -204,7 +199,7 @@ static void hfc_update_fifo_state(struct hfc_card *card)
 	spin_lock_irqsave(&card->chans[B2].lock, flags);
 	if (!card->fifo_suspended &&
 		(card->chans[B2].status == open_framed ||
-		card->chans[B2].status == open_voice ||
+		card->chans[B2].status == open_trans ||
 		card->chans[B2].status == sniff_aux)) {
 
  	 	if(!(card->regs.fifo_en & hfc_FIFOEN_B2RX)) {
@@ -301,9 +296,8 @@ static char *hfc_status_to_name(int status)
 {
 	struct hfc_status_to_name_names names[] = {
 		{ free, "free" },
-		{ open_lapd, "lapd" },
-		{ open_ppp, "ppp" },
-		{ open_voice, "voice" },
+		{ open_hdlc, "framed" },
+		{ open_trans, "transparent" },
 		{ sniff_aux, "sniff aux" },
 		{ loopback, "loopback" },
 		};
@@ -465,7 +459,7 @@ static int hfc_open(struct visdn_chan *visdn_chan, int mode)
 		return -EBUSY;
 	}
 
-	chan->status = open_lapd;
+	chan->status = open_hdlc;
 
 	// This is the D channel so let's configure the port first
 
@@ -546,7 +540,7 @@ static int hfc_close(struct visdn_chan *visdn_chan)
 	case D:
 		spin_lock_irqsave(&card->lock, flags);
 
-		if (chan->status != open_lapd) {
+		if (chan->status != open_hdlc) {
 			spin_unlock_irqrestore(&card->lock, flags);
 			return -EINVAL;
 		}
@@ -785,7 +779,7 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return IRQ_HANDLED;
 }
 
-static inline void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
+void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
 {
 	struct hfc_chan_duplex *fdchan = chan->chan;
 //	struct hfc_port *port = fdchan->port;
@@ -857,14 +851,15 @@ static inline void hfc_handle_fifo_rx_interrupt(struct hfc_chan_simplex *chan)
 		hfc_msg_schan(KERN_CRIT, chan, "Infinite loop detected\n");
 }
 
-static inline void hfc_handle_fifo_tx_interrupt(struct hfc_chan_simplex *chan)
+void hfc_handle_fifo_tx_interrupt(struct hfc_chan_simplex *chan)
 {
 	hfc_debug_schan(3, chan, "Received TX interrupt\n");
 
-	visdn_wake_queue(&chan->chan->visdn_chan);
+	if (chan->chan->status == open_hdlc)
+		visdn_wake_queue(&chan->chan->visdn_chan);
 }
 
-static inline void hfc_handle_port_fifo_interrupt(struct hfc_port *port)
+/*static inline*/ void hfc_handle_port_fifo_interrupt(struct hfc_port *port)
 {
 	struct hfc_card *card = port->card;
 
@@ -1004,8 +999,8 @@ static inline void hfc_handle_processing_interrupt(struct hfc_card *card)
 
 static inline void hfc_handle_voice(struct hfc_card *card)
 {
-/*	if (card->chans[B1].status != open_voice &&
-		card->chans[B2].status != open_voice)
+/*	if (card->chans[B1].status != open_trans &&
+		card->chans[B2].status != open_trans)
 		return;
 */
 // TODO
@@ -1067,17 +1062,12 @@ static void hfc_config_bchan_for_voice(struct hfc_chan_duplex *chan, int mode)
 		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
-	chan->status = open_voice;
+	chan->status = open_trans;
 
 	spin_unlock_irqrestore(&card->lock, flags);
 }
 
-enum sb_bearertype
-{
-	VISDN_BT_VOICE	= 1,
-	VISDN_BT_PPP	= 2,
-};
-
+/*
 struct sb_setbearer
 {
 	int sb_index;
@@ -1088,13 +1078,15 @@ struct sb_setbearer
 #define VISDN_PPP_GET_CHAN	(SIOCDEVPRIVATE+1)
 #define VISDN_PPP_GET_UNIT	(SIOCDEVPRIVATE+2)
 
+*/
 static int hfc_do_ioctl(struct visdn_chan *visdn_chan,
 	struct ifreq *ifr, int cmd)
 {
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
+//	struct hfc_chan_duplex *chan = visdn_chan->priv;
 //	struct hfc_card *card = chan->port->card;
 
 //	unsigned long flags;
+/*
 
 	switch (cmd) {
 	case VISDN_SET_BEARER: {
@@ -1122,7 +1114,6 @@ hfc_msg_chan(KERN_INFO, chan, "VISDN_SET_BEARER %d %d\n", sb.sb_index, sb.sb_bea
 
 	}
 
-/*
 	struct hfc_card *card;
 
 	struct hfc_chan_duplex *chan;
@@ -1186,7 +1177,7 @@ hfc_msg_chan(KERN_INFO, chan, "VISDN_SET_BEARER %d %d\n", sb.sb_index, sb.sb_bea
 		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
-	chan->status = open_voice;
+	chan->status = open_trans;
 
 	spin_unlock_irqrestore(&card->lock, flags);
 */
@@ -1249,11 +1240,11 @@ hfc_msg_chan(KERN_INFO, chan,
 	"PPPPPPPPPPPP: int %d unit %d\n",
 	ppp_channel_index(&b1_chan->ppp_chan),
 	ppp_unit_number(&b1_chan->ppp_chan));
-*/
+
 
 	break;
 
-/*	case VISDN_PPP_GET_CHAN:
+	case VISDN_PPP_GET_CHAN:
 hfc_msg_chan(KERN_INFO, chan, "VISDN_PPP_GET_CHAN:\n");
 
 		put_user(ppp_channel_index(&bchan->ppp_chan),
@@ -1265,48 +1256,170 @@ hfc_msg_chan(KERN_INFO, chan, "VISDN_PPP_GET_UNIT:\n");
 
 		put_user(ppp_unit_number(&bchan->ppp_chan),
 			(int __user *)ifr->ifr_data);
-	break;*/
+	break;
 
 	default:
 		return -ENOIOCTLCMD;
 	}
+*/
 
 	return 0;
 }
 
-int hfc_voice_open(
-	struct inode *inode,
-	struct file *file)
+ssize_t hfc_samples_read(
+	struct visdn_chan *visdn_chan,
+	char __user *buf, size_t count)
 {
-	nonseekable_open(inode, file);
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_card *card = chan->port->card;
 
-/*
-	struct hfc_card *card;
+	int err = 0;
 
-	struct hfc_chan_duplex *chan;
+	__u8 buf2[128];
 
-	if ((inode->i_rdev - card->first_dev > card->num_ports * 2) ||
-	    (inode->i_rdev - card->first_dev < 0))
-		return -ENODEV;
+	unsigned long flags;
 
-	int port_idx = (inode->i_rdev - card->first_dev) / 2;
+	spin_lock_irqsave(&card->lock, flags);
+
+	hfc_fifo_select(&chan->rx);
+	hfc_fifo_refresh_fz_cache(&chan->rx);
+
+	int available_octets = hfc_fifo_used_rx(&chan->rx);
+	int copied_octets = 0;
+
+	if (count > sizeof(buf2))
+		count = sizeof(buf2);
+
+	copied_octets = available_octets < count ? available_octets : count;
+
+	hfc_fifo_mem_read(&chan->rx, buf2, copied_octets);
+
+	spin_unlock_irqrestore(&card->lock, flags);
+
+	err = copy_to_user(buf, buf2, copied_octets);
+	if (err < 0)
+		goto err_copy_to_user;
+
+
+	return copied_octets;
+
+err_copy_to_user:
+
+	return err;
+}
+
+ssize_t hfc_samples_write(
+	struct visdn_chan *visdn_chan,
+	const char __user *buf, size_t count)
+{
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_card *card = chan->port->card;
+	int err = 0;
+
+	__u8 buf2[256];
+
+	// Umpf... we need an intermediate buffer... we need to disable interrupts
+	// for the whole time since we must ensure that noone selects another FIFO
+	// in the meantime, so we may not directly copy from FIFO to user.
+	// There is for sure a better solution :)
+
+	int copied_octets = count;
+	if (copied_octets > sizeof(buf2))
+		copied_octets = sizeof(buf2);
+
+	err = copy_from_user(buf2, buf, copied_octets);
+	if (err < 0)
+		goto err_copy_to_user;
+
+	unsigned long flags;
+	spin_lock_irqsave(&card->lock, flags);
+
+	hfc_fifo_select(&chan->tx);
+	hfc_fifo_refresh_fz_cache(&chan->tx);
+
+	int available_octets = hfc_fifo_free_tx(&chan->tx);
+	if (copied_octets > available_octets)
+		copied_octets = available_octets;
+
+	hfc_fifo_put(&chan->rx, buf2, copied_octets);
+
+	spin_unlock_irqrestore(&card->lock, flags);
+
+	return copied_octets;
+
+err_copy_to_user:
+
+	return err;
+}
+
+#define HFC_IOC_FIFO_IN_AVAIL _IOR(0xd0, 1, int)
+
+ssize_t hfc_voice_ioctl(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	switch(cmd) {
+	case HFC_IOC_FIFO_IN_AVAIL:
+	break;
+	}
+
+	return -EINVAL;
+}
+
+int hfc_port_set_role(
+	struct visdn_port *visdn_port,
+	int nt_mode)
+{
+	struct hfc_port *port = visdn_port->priv;
+
+	unsigned long flags;
+	spin_lock_irqsave(&port->card->lock, flags);
+
+	hfc_select_port(port->card, port->id);
+
+	hfc__do_set_role(port, nt_mode);
+
+	spin_unlock_irqrestore(&port->card->lock, flags);
+
+	return 0;
+}
+
+static int hfc_connect_to(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan *visdn_chan2,
+	int flags)
+{
+	get_device(&visdn_chan2->device);
+
+	visdn_chan->connected_chan = visdn_chan2;
+
+	sysfs_create_link(&visdn_chan->device.kobj, &visdn_chan2->device.kobj, "connected");
+
+printk(KERN_INFO "COOOOONNNECT 1\n");
+
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_card *card = chan->port->card;
+
 	u8 st_ctrl_0;
 	u8 st_ctrl_2;
 
-	if ((inode->i_rdev - card->first_dev) % 2 == 0) {
-		chan = &card->ports[port_idx].chans[B1];
+printk(KERN_INFO "COOOOONNNECT 2\n");
 
+	if (chan->id == B1) {
 		st_ctrl_0 = hfc_A_ST_CTRL0_V_B1_EN;
 		st_ctrl_2 = hfc_A_ST_CTRL2_V_B1_RX_EN;
-	} else {
-		chan = &card->ports[port_idx].chans[B2];
-
+	} else if (chan->id == B2) {
 		st_ctrl_0 = hfc_A_ST_CTRL0_V_B2_EN;
 		st_ctrl_2 = hfc_A_ST_CTRL2_V_B2_RX_EN;
+	} else {
+		hfc_msg(KERN_ERR, "Cannot connect %s to %s\n",
+			chan->name, to_chan_duplex(visdn_chan2)->name);
+		return -EINVAL;
 	}
 
-	file->private_data = chan;
-
+printk(KERN_INFO "COOOOONNNECT 3\n");
 	hfc_debug_chan(0, chan, "configuring channel %s for voice\n", chan->name);
 
 	unsigned long flags;
@@ -1314,17 +1427,13 @@ int hfc_voice_open(
 
 	hfc_select_port(card, chan->port->id);
 
-	if ((file->f_flags & O_ACCMODE) == O_RDONLY ||
-	    (file->f_flags & O_ACCMODE) == O_RDWR) {
-		chan->port->regs.st_ctrl_2 |= st_ctrl_2;
-		hfc_outb(card, hfc_A_ST_CTRL2, chan->port->regs.st_ctrl_2);
-	}
+	// RX
+//	chan->port->regs.st_ctrl_2 |= st_ctrl_2;
+//	hfc_outb(card, hfc_A_ST_CTRL2, chan->port->regs.st_ctrl_2);
 
-	if ((file->f_flags & O_ACCMODE) == O_WRONLY ||
-	    (file->f_flags & O_ACCMODE) == O_RDWR) {
-		chan->port->regs.st_ctrl_0 |= st_ctrl_0;
-		hfc_outb(card, hfc_A_ST_CTRL0, chan->port->regs.st_ctrl_0);
-	}
+	// TX
+	chan->port->regs.st_ctrl_0 |= st_ctrl_0;
+	hfc_outb(card, hfc_A_ST_CTRL0, chan->port->regs.st_ctrl_0);
 
 	// RX
 	chan->rx.bit_reversed = TRUE;
@@ -1344,18 +1453,26 @@ int hfc_voice_open(
 		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
-	chan->status = open_voice;
+	chan->status = open_trans;
 
 	spin_unlock_irqrestore(&card->lock, flags);
-*/
 
+printk(KERN_INFO "COOOOONNNECT 4\n");
 	return 0;
 }
 
-int hfc_voice_release(
-	struct inode *inode, struct file *file)
+static int hfc_disconnect(struct visdn_chan *visdn_chan)
 {
-/*	struct hfc_chan_duplex *chan = file->private_data;
+	WARN_ON(!visdn_chan->connected_chan);
+
+	put_device(&visdn_chan->device);
+
+	visdn_chan->connected_chan = NULL;
+
+	sysfs_remove_link(&visdn_chan->device.kobj, "connected");
+
+
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
 	u8 st_ctrl_0;
@@ -1401,129 +1518,6 @@ int hfc_voice_release(
 	hfc_fifo_reset(card);
 
 	spin_unlock_irqrestore(&card->lock, flags);
-*/
-	return 0;
-}
-
-ssize_t hfc_voice_read(
-	struct file *file,
-	char __user *buf,
-	size_t count,
-	loff_t *offp)
-{
-//	struct hfc_chan_duplex *chan = file->private_data;
-//	struct hfc_card *card = chan->port->card;
-	int err = 0;
-/*
-	__u8 buf2[128];
-
-	unsigned long flags;
-
-	spin_lock_irqsave(&card->lock, flags);
-
-	hfc_fifo_select(&chan->rx);
-	hfc_fifo_refresh_fz_cache(&chan->rx);
-
-	int available_octets = hfc_fifo_used_rx(&chan->rx);
-	int copied_octets = 0;
-
-	if (count > sizeof(buf2))
-		count = sizeof(buf2);
-
-	copied_octets = available_octets < count ? available_octets : count;
-
-	hfc_fifo_mem_read(&chan->rx, buf2, copied_octets);
-
-	spin_unlock_irqrestore(&card->lock, flags);
-
-	err = copy_to_user(buf, buf2, copied_octets);
-	if (err < 0)
-		goto err_copy_to_user;
-
-
-	return copied_octets;
-
-err_copy_to_user:
-*/
-	return err;
-}
-
-ssize_t hfc_voice_write(
-	struct file *file,
-	const char __user *buf,
-	size_t count,
-	loff_t *offp)
-{
-//	struct hfc_chan_duplex *chan = file->private_data;
-//	struct hfc_card *card = chan->port->card;
-	int err = 0;
-/*
-	__u8 buf2[256];
-
-	// Umpf... we need an intermediate buffer... we need to disable interrupts
-	// for the whole time since we must ensure that noone selects another FIFO
-	// in the meantime, so we may not directly copy from FIFO to user.
-	// There is for sure a better solution :)
-
-	int copied_octets = count;
-	if (copied_octets > sizeof(buf2))
-		copied_octets = sizeof(buf2);
-
-	err = copy_from_user(buf2, buf, copied_octets);
-	if (err < 0)
-		goto err_copy_to_user;
-
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
-	hfc_fifo_select(&chan->tx);
-	hfc_fifo_refresh_fz_cache(&chan->tx);
-
-	int available_octets = hfc_fifo_free_tx(&chan->tx);
-	if (copied_octets > available_octets)
-		copied_octets = available_octets;
-
-	hfc_fifo_put(&chan->rx, buf2, copied_octets);
-
-	spin_unlock_irqrestore(&card->lock, flags);
-
-	return copied_octets;
-
-err_copy_to_user:
-*/
-	return err;
-}
-
-#define HFC_IOC_FIFO_IN_AVAIL _IOR(0xd0, 1, int)
-
-ssize_t hfc_voice_ioctl(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	switch(cmd) {
-	case HFC_IOC_FIFO_IN_AVAIL:
-	break;
-	}
-
-	return -EINVAL;
-}
-
-int hfc_port_set_role(
-	struct visdn_port *visdn_port,
-	int nt_mode)
-{
-	struct hfc_port *port = visdn_port->priv;
-
-	unsigned long flags;
-	spin_lock_irqsave(&port->card->lock, flags);
-
-	hfc_select_port(port->card, port->id);
-
-	hfc__do_set_role(port, nt_mode);
-
-	spin_unlock_irqrestore(&port->card->lock, flags);
 
 	return 0;
 }
@@ -1538,17 +1532,12 @@ struct visdn_chan_ops hfc_chan_ops = {
 	.frame_xmit	= hfc_frame_xmit,
 	.get_stats	= hfc_get_stats,
 	.do_ioctl	= hfc_do_ioctl,
-};
 
-struct file_operations hfc_voice_fops =
-{
-	.owner		= THIS_MODULE,
-	.read		= hfc_voice_read,
-	.write		= hfc_voice_write,
-	.ioctl		= hfc_voice_ioctl,
-	.open		= hfc_voice_open,
-	.release	= hfc_voice_release,
-	.llseek		= no_llseek,
+	.connect_to	= hfc_connect_to,
+	.disconnect	= hfc_disconnect,
+
+	.samples_read	= hfc_samples_read,
+	.samples_write	= hfc_samples_write,
 };
 
 static int __devinit hfc_probe(struct pci_dev *pci_dev,

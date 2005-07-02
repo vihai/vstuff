@@ -3,6 +3,7 @@
  *
  * vISDN Linux Telephony Interface driver
  * 
+ * Copyright 2004,2005 Daniele "Vihai" Orlandi <daniele@orlandi.com>
  * Copyright 2004 Lele Forzani <lele@windmill.it>
  *
  * This program is free software, distributed under the terms of
@@ -43,9 +44,11 @@
 #include <asterisk/indications.h>
 #include <asterisk/cli.h>
 
-#include <streambus.h>
+#include <softport.h>
 #include <lapd.h>
 #include <q931.h>
+
+#include <visdn.h>
 
 #define FRAME_SIZE 160
 
@@ -1444,16 +1447,53 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	bt.sb_bearertype = VISDN_BT_VOICE;
 	ifr.ifr_data = (void *)&bt;
 
-	if (ioctl(channel->call->dlc->socket, VISDN_SET_BEARER,
-	    (caddr_t) &ifr) < 0) {
-		ast_log(LOG_ERROR, "ioctl(VISDN_SET_BEARER_PPP): %s\n", strerror(errno));
+	char path[60], dest[60];
+	snprintf(path, sizeof(path),
+		"/sys/class/net/%s/device/../B%d",
+		channel->call->intf->name,
+		channel->id+1);
+
+	if (readlink(path, dest, sizeof(dest)) < 0) {
+		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
 		return;
 	}
 
-	visdn_chan->channel_fd = open("pippo", O_RDWR);
-	if (visdn_chan->channel_fd < 0) {
-		ast_log(LOG_ERROR, "Cannot open channel\n");
+	char *chanid = strrchr(dest, '/');
+	if (!chanid || !strlen(chanid + 1)) {
+		ast_log(LOG_ERROR, "Invalid chanid found in symlink %s\n", dest);
+		return;
 	}
+
+	chanid++;
+	ast_log(LOG_NOTICE, "Connecting softport %d to chan %s\n", 0, chanid);
+
+	visdn_chan->channel_fd = open("/dev/visdn/softport/0", O_RDWR);
+	if (visdn_chan->channel_fd < 0) {
+		ast_log(LOG_ERROR, "Cannot open softport: %s\n", strerror(errno));
+		return;
+	}
+
+	struct visdn_connect vc;
+	strcpy(vc.src_chanid, "");
+	strcpy(vc.dst_chanid, chanid);
+	vc.flags = 0;
+
+	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
+	    (caddr_t) &vc) < 0) {
+		ast_log(LOG_ERROR, "ioctl(VISDN_CONNECT): %s\n", strerror(errno));
+		return;
+	}
+
+/*
+	if (ioctl(channel->call->dlc->socket, VISDN_SET_BEARER,
+	    (caddr_t) &ifr) < 0) {
+		ast_log(LOG_ERROR, "ioctl(VISDN_SET_BEARER): %s\n", strerror(errno));
+		return;
+	}
+*/
+
+
+	
 }
 
 static void visdn_q931_disconnect_channel(struct q931_channel *channel)

@@ -204,9 +204,8 @@ struct hfc_chan_simplex {
 
 enum hfc_chan_status {
 	free,
-	open_lapd,
-	open_ppp,
-	open_voice,
+	open_hdlc,
+	open_trans,
 	sniff_aux,
 	loopback,
 };
