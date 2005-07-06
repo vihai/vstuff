@@ -13,20 +13,24 @@
 
 #ifdef __KERNEL__
 
+#include <visdn.h>
+
 #define sb_DRIVER_NAME "visdn-softport"
 #define sb_DRIVER_PREFIX sb_DRIVER_NAME ": "
 #define sb_DRIVER_DESCR "Softport implementation"
 
 #define SB_CHAN_HASHBITS 8
+#define SB_CHAN_HASHSIZE (1 << SB_CHAN_HASHBITS)
 
-#include <visdn.h>
+#define to_sb_chan(visdn_chan) container_of(visdn_chan, struct sb_chan, visdn_chan)
 
 struct sb_chan
 {
-	struct hlist_node index_hlist;
-	struct visdn_chan visdn_chan;
-	struct class_device class_dev;
 	int index;
+
+	struct hlist_node index_hlist_node;
+
+	struct visdn_chan visdn_chan;
 };
 
 #endif

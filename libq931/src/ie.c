@@ -581,6 +581,12 @@ static struct q931_ie_info_per_mt q931_ie_infos_per_mt[] =
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
+	{ //??? Probably right, see ETS 300 097
+		Q931_MT_CONNECT,
+		Q931_IE_CONNECTED_NUMBER,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
 
 	// CONGESTION CONTROL
 	{

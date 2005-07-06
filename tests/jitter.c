@@ -6,7 +6,7 @@
 int main()
 {
 	int fd;
-	fd = open("visdntimer", O_RDONLY);
+	fd = open("/dev/visdn/timer", O_RDONLY);
 	if (!fd) {
 		printf("open; %s\n", strerror(errno));
 		return 1;

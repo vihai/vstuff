@@ -618,8 +618,8 @@ static int hfc_close(struct visdn_chan *visdn_chan)
 static int hfc_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *skb)
 {
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_card *card = chan->port->card;
 
+	hfc_select_port(chan->port->card, chan->port->id);
 	hfc_check_l1_up(chan->port);
 
 	hfc_fifo_select(&chan->tx);
@@ -1391,21 +1391,18 @@ static int hfc_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
-	get_device(&visdn_chan2->device);
+	if (visdn_chan->connected_chan)
+		return -EBUSY;
 
-	visdn_chan->connected_chan = visdn_chan2;
-
-	sysfs_create_link(&visdn_chan->device.kobj, &visdn_chan2->device.kobj, "connected");
-
-printk(KERN_INFO "COOOOONNNECT 1\n");
+printk(KERN_INFO "hfc-4s chan %s connected to %s\n",
+		visdn_chan->device.bus_id,
+		visdn_chan2->device.bus_id);
 
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
 	u8 st_ctrl_0;
 	u8 st_ctrl_2;
-
-printk(KERN_INFO "COOOOONNNECT 2\n");
 
 	if (chan->id == B1) {
 		st_ctrl_0 = hfc_A_ST_CTRL0_V_B1_EN;
@@ -1419,17 +1416,16 @@ printk(KERN_INFO "COOOOONNNECT 2\n");
 		return -EINVAL;
 	}
 
-printk(KERN_INFO "COOOOONNNECT 3\n");
 	hfc_debug_chan(0, chan, "configuring channel %s for voice\n", chan->name);
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	unsigned long cpuflags;
+	spin_lock_irqsave(&card->lock, cpuflags);
 
 	hfc_select_port(card, chan->port->id);
 
 	// RX
-//	chan->port->regs.st_ctrl_2 |= st_ctrl_2;
-//	hfc_outb(card, hfc_A_ST_CTRL2, chan->port->regs.st_ctrl_2);
+	chan->port->regs.st_ctrl_2 |= st_ctrl_2;
+	hfc_outb(card, hfc_A_ST_CTRL2, chan->port->regs.st_ctrl_2);
 
 	// TX
 	chan->port->regs.st_ctrl_0 |= st_ctrl_0;
@@ -1455,22 +1451,19 @@ printk(KERN_INFO "COOOOONNNECT 3\n");
 
 	chan->status = open_trans;
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	spin_unlock_irqrestore(&card->lock, cpuflags);
 
-printk(KERN_INFO "COOOOONNNECT 4\n");
 	return 0;
 }
 
 static int hfc_disconnect(struct visdn_chan *visdn_chan)
 {
-	WARN_ON(!visdn_chan->connected_chan);
+	if (!visdn_chan->connected_chan)
+		return 0;
 
-	put_device(&visdn_chan->device);
-
-	visdn_chan->connected_chan = NULL;
-
-	sysfs_remove_link(&visdn_chan->device.kobj, "connected");
-
+printk(KERN_INFO "hfc-4s chan %s disconnecting from %s\n",
+		visdn_chan->device.bus_id,
+		visdn_chan->connected_chan->device.bus_id);
 
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;

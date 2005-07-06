@@ -424,7 +424,7 @@ static int visdn_call(
 	}
 
 	q931_call_set_called_number(q931_call, number),
-	q931_call->sending_complete = TRUE;
+	q931_call->sending_complete = FALSE;
 
 	if ((ast_chan->_state != AST_STATE_DOWN) &&
 	    (ast_chan->_state != AST_STATE_RESERVED)) {
@@ -729,10 +729,11 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 	if (visdn_chan->channel_fd < 0) {
 		ast_log(LOG_WARNING,
 			"Attempting to write on unconnected channel\n");
-		return -1;
+		return 0;
 	}
 
-/*printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
+/*
+printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
 	*(__u8 *)(frame->data + 0),
 	*(__u8 *)(frame->data + 1),
 	*(__u8 *)(frame->data + 2),
@@ -741,7 +742,8 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 	*(__u8 *)(frame->data + 5),
 	*(__u8 *)(frame->data + 6),
 	*(__u8 *)(frame->data + 7),
-	frame->datalen);*/
+	frame->datalen);
+*/
 
 	write(visdn_chan->channel_fd, frame->data, frame->datalen);
 
@@ -791,6 +793,10 @@ ast_log(LOG_ERROR, "VISDN_REQUEST\n");
 	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/null");
 
         ast_chan->type = type;
+
+	int i;
+	for (i=0; i<AST_MAX_FDS; i++)
+		ast_chan->fds[i] = -1;
 
 	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 	if (ast_chan->fds[0] < 0) {
@@ -1013,14 +1019,9 @@ static void visdn_q931_error_indication(struct q931_call *q931_call)
 	printf("*** %s\n", __FUNCTION__);
 }
 
-static void visdn_q931_info_indication(struct q931_call *q931_call)
+static void visdn_overlap_sending_info(struct q931_call *q931_call)
 {
-	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
-
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
-
-	if (!ast_chan)
-		return;
 
 	if (q931_call->sending_complete) {
 		if (ast_exists_extension(NULL, "visdn",
@@ -1091,6 +1092,20 @@ static void visdn_q931_info_indication(struct q931_call *q931_call)
 			}
 		}
 	}
+}
+
+static void visdn_q931_info_indication(struct q931_call *q931_call)
+{
+	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
+
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan)
+		return;
+
+	if (q931_call->state == U2_OVERLAP_SENDING ||
+	    q931_call->state == N2_OVERLAP_SENDING)
+		visdn_overlap_sending_info(q931_call);
 }
 
 static void visdn_q931_more_info_indication(struct q931_call *q931_call)
@@ -1238,6 +1253,10 @@ static void visdn_q931_setup_indication(struct q931_call *q931_call)
 
 
         ast_chan->type = type;
+
+	int i;
+	for (i=0; i<AST_MAX_FDS; i++)
+		ast_chan->fds[i] = -1;
 
 	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 	if (ast_chan->fds[0] < 0) {
@@ -1447,13 +1466,14 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	bt.sb_bearertype = VISDN_BT_VOICE;
 	ifr.ifr_data = (void *)&bt;
 
-	char path[60], dest[60];
+	char path[100], dest[100];
 	snprintf(path, sizeof(path),
 		"/sys/class/net/%s/device/../B%d",
 		channel->call->intf->name,
 		channel->id+1);
 
-	if (readlink(path, dest, sizeof(dest)) < 0) {
+	memset(dest, 0x00, sizeof(dest));
+	if (readlink(path, dest, sizeof(dest) - 1) < 0) {
 		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
 		return;
 	}
@@ -1465,9 +1485,9 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	}
 
 	chanid++;
-	ast_log(LOG_NOTICE, "Connecting softport %d to chan %s\n", 0, chanid);
+	ast_log(LOG_NOTICE, "Connecting softport to chan %s\n", chanid);
 
-	visdn_chan->channel_fd = open("/dev/visdn/softport/0", O_RDWR);
+	visdn_chan->channel_fd = open("/dev/visdn/softport", O_RDWR);
 	if (visdn_chan->channel_fd < 0) {
 		ast_log(LOG_ERROR, "Cannot open softport: %s\n", strerror(errno));
 		return;
@@ -1475,7 +1495,7 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 	struct visdn_connect vc;
 	strcpy(vc.src_chanid, "");
-	strcpy(vc.dst_chanid, chanid);
+	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s", chanid);
 	vc.flags = 0;
 
 	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
@@ -1496,6 +1516,8 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	
 }
 
+int visdn_gendial_stop(struct ast_channel *chan);
+
 static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 {
 	printf("*** %s B%d\n", __FUNCTION__, channel->id+1);
@@ -1505,7 +1527,12 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 	if (!ast_chan) 
 		return;
 
+	// FIXME
+	if (ast_chan->generator)
+		visdn_gendial_stop(ast_chan);
+
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+
 	close(visdn_chan->channel_fd);
 }
 
@@ -1533,6 +1560,8 @@ static void *visdn_generator_thread_main(void *aaa)
 
 	int ms = 500;
 
+	ast_log(LOG_ERROR, "###################### GENERATOR THREAD STARTED\n");
+
 	while (gen_chans_num) {
 		struct ast_channel *chan;
 
@@ -1557,6 +1586,8 @@ static void *visdn_generator_thread_main(void *aaa)
 
 	visdn_generator_thread = AST_PTHREADT_NULL;
 
+	ast_log(LOG_ERROR, "###################### GENERATOR THREAD STOPPED\n");
+
 	return NULL;
 }
 
@@ -1565,6 +1596,12 @@ int visdn_gendial_start(struct ast_channel *chan)
 	int res = -1;
 
 	ast_mutex_lock(&gen_chans_lock);
+
+	int i;
+	for (i=0; i<gen_chans_num; i++) {
+		if (gen_chans[i] == chan)
+			goto already_generating;
+	}
 
 	if (gen_chans_num > sizeof(gen_chans)) {
 		ast_log(LOG_WARNING, "MAX 256 chans in dialtone generation\n");
@@ -1583,7 +1620,7 @@ int visdn_gendial_start(struct ast_channel *chan)
 	}
 
 err_too_many_channels:
-
+already_generating:
 	ast_mutex_unlock(&gen_chans_lock);
 	return res;
 }
@@ -1650,6 +1687,21 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 	case Q931_TONE_DIAL: {
 		struct tone_zone_sound *ts;
 		ts = ast_get_indication_tone(ast_chan->zone, "dial");
+
+		if (ts) {
+			if (ast_playtones_start(ast_chan, 0, ts->data, 0))
+				ast_log(LOG_NOTICE,"Unable to start playtones\n");
+		} else {
+			ast_tonepair_start(ast_chan, 350, 440, 0, 0);
+		}
+
+		visdn_gendial_start(ast_chan);
+	}
+	break;
+
+	case Q931_TONE_HANGUP: {
+		struct tone_zone_sound *ts;
+		ts = ast_get_indication_tone(ast_chan->zone, "congestion");
 
 		if (ts) {
 			if (ast_playtones_start(ast_chan, 0, ts->data, 0))
