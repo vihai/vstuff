@@ -106,6 +106,13 @@ Notes:
 In NT mode there is only one TEI management entity per interface
 In TE mode there can be at most one TEI management per socket
 
+--------------------------- HFC-4S
+
+We may be able to avoid interrupt disabling (changing them with spin_lock_bh)
+if we ensure that nothing inside hfc_interrupt() changes the chip's state
+(for example by selecting another FIFO or another port). Few struct hfc_card
+members are accessed in IRQ handler, we shoudl check every concurrent access.
+
 ---------------------------libq931:
 
 Implement: 5.9 User notification procedure

@@ -19,31 +19,37 @@
 #include "hfc-4s.h"
 #include "fifo.h"
 
-static inline void hfc_fifo_next_frame(struct hfc_chan_simplex *chan)
+static inline void hfc_fifo_next_frame(struct hfc_fifo *fifo)
 {
-	hfc_outb(chan->chan->port->card, hfc_A_INC_RES_FIFO,
+	struct hfc_card *card = fifo->card;
+
+	hfc_outb(card, hfc_A_INC_RES_FIFO,
 		hfc_A_INC_RES_FIFO_V_INC_F);
-	hfc_wait_busy(chan->chan->port->card);
+
+	hfc_wait_busy(card);
 }
 
-int hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
+int hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	void *data, int size)
 {
+	struct hfc_card *card = fifo->card;
+
 	int i;
 	for (i=0; i<size; i++) {
-		((u8 *)data)[i] = hfc_inb(chan->chan->port->card,
-			hfc_A_FIFO_DATA0);
+		((u8 *)data)[i] = hfc_inb(card, hfc_A_FIFO_DATA0);
 	}
 
 	return size;
 }
 
-static void hfc_fifo_mem_write(struct hfc_chan_simplex *chan,
+static void hfc_fifo_mem_write(struct hfc_fifo *fifo,
 	void *data, int size)
 {
+	struct hfc_card *card = fifo->card;
+
 	int i;
 	for (i=0; i<size; i++) {
-		hfc_outb(chan->chan->port->card,
+		hfc_outb(card,
 			hfc_A_FIFO_DATA0,
 			((u8 *)data)[i]);
 	}
@@ -97,36 +103,37 @@ static void hfc_fifo_mem_write(struct hfc_chan_simplex *chan,
 	}*/
 }
 
-int hfc_fifo_get(struct hfc_chan_simplex *chan,
+int hfc_fifo_get(struct hfc_fifo *fifo,
 		void *data, int size)
 {
-	// Some useless statistic
-	chan->bytes += size;
+	struct hfc_card *card = fifo->card;
 
-	int available_bytes = hfc_fifo_used_rx(chan);
+	// Some useless statistic
+	// fifo->chan->bytes += size;
+
+	int available_bytes = hfc_fifo_used_rx(fifo);
 
 	if (available_bytes < size) {
-		hfc_msg_schan(KERN_WARNING, chan,
+		hfc_msg_fifo(KERN_WARNING, fifo,
 			"RX FIFO not enough (%d) bytes to receive!\n",
 			available_bytes);
 
 		return -1;
 	}
 
-	hfc_fifo_mem_read(chan, data, size);
+	hfc_fifo_mem_read(fifo, data, size);
 
-	hfc_outb(chan->chan->port->card, hfc_A_INC_RES_FIFO,
-		hfc_A_INC_RES_FIFO_V_INC_F);
-	hfc_wait_busy(chan->chan->port->card);
+	hfc_outb(card, hfc_A_INC_RES_FIFO, hfc_A_INC_RES_FIFO_V_INC_F);
+	hfc_wait_busy(card);
 
 	return available_bytes - size;
 }
 
-void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size)
+void hfc_fifo_drop(struct hfc_fifo *fifo, int size)
 {
-	int available_bytes = hfc_fifo_used_rx(chan);
+	int available_bytes = hfc_fifo_used_rx(fifo);
 	if (available_bytes + 1 < size) {
-		hfc_msg_schan(KERN_WARNING, chan,
+		hfc_msg_fifo(KERN_WARNING, fifo,
 			"RX FIFO not enough (%d) bytes to drop!\n",
 			available_bytes);
 
@@ -136,61 +143,61 @@ void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size)
 	// FIXME read and drop bytes
 }
 
-void hfc_fifo_put(struct hfc_chan_simplex *chan,
+void hfc_fifo_put(struct hfc_fifo *fifo,
 			void *data, int size)
 {
-	hfc_fifo_mem_write(chan, data, size);
+	hfc_fifo_mem_write(fifo, data, size);
 
-	chan->bytes += size;
+	// fifo->chan->bytes += size;
 }
 
-int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
+int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size)
 {
 
-	if (chan->f1 == chan->f2) {
+	if (fifo->f1 == fifo->f2) {
 		// nothing received, strange uh?
-		hfc_msg_schan(KERN_WARNING, chan,
+		hfc_msg_fifo(KERN_WARNING, fifo,
 			"get_frame called with no frame in FIFO.\n");
 
 		return -1;
 	}
 
 	// frame_size includes CRC+CRC+STAT
-	int frame_size = hfc_fifo_get_frame_size(chan);
+	int frame_size = hfc_fifo_get_frame_size(fifo);
 
 	if (frame_size <= 0) {
-		hfc_debug_schan(2, chan, "invalid (empty) frame received.\n");
+		hfc_debug_fifo(2, fifo, "invalid (empty) frame received.\n");
 
-		hfc_fifo_drop_frame(chan);
+		hfc_fifo_drop_frame(fifo);
 		return -1;
 	}
 
 	// STAT is not really received on wire
-	chan->bytes += frame_size - 1;
+	// fifo->chan->bytes += frame_size - 1;
 
 #ifdef DEBUG
 	if(debug_level == 3) {
-		hfc_debug_schan(3, chan, "RX len %2d: ", frame_size);
+		hfc_debug_fifo(3, fifo, "RX len %2d: ", frame_size);
 	} else if(debug_level >= 4) {
-		hfc_debug_schan(4, chan,
+		hfc_debug_fifo(4, fifo,
 			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			chan->f1, chan->f2, chan->z1, chan->z2,
+			fifo->f1, fifo->f2, fifo->z1, fifo->z2,
 			frame_size);
 	}
 #endif
 
 	int unread_bytes = frame_size -
-		hfc_fifo_mem_read(chan, data,
+		hfc_fifo_mem_read(fifo, data,
 			frame_size < max_size ? frame_size : max_size);
 
 	while (unread_bytes > 1) {
 		u8 trash;
-		hfc_fifo_mem_read(chan, &trash, 1);
+		hfc_fifo_mem_read(fifo, &trash, 1);
 		unread_bytes--;
 	}
 
 	u8 stat;
-	hfc_fifo_mem_read(chan, &stat, sizeof(stat));
+	hfc_fifo_mem_read(fifo, &stat, sizeof(stat));
 
 #ifdef DEBUG
 	if (debug_level >= 3)
@@ -200,48 +207,48 @@ int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
 	if (stat == 0xff) {
 		// Frame abort detected
 
-		hfc_debug_schan(3, chan, "Frame abort detected\n");
+		hfc_debug_fifo(3, fifo, "Frame abort detected\n");
 
-		hfc_fifo_drop_frame(chan);
+		hfc_fifo_drop_frame(fifo);
 		return -1;
 	} else if (stat != 0x00) {
 		// CRC not ok, frame broken, skipping
-		hfc_debug_schan(2, chan, "Received frame with wrong CRC\n");
+		hfc_debug_fifo(2, fifo, "Received frame with wrong CRC\n");
 
-		chan->crc++;
-		chan->chan->net_device_stats.rx_errors++;
+		// fifo->chan->crc++;
+		// fifo->chan->chan->net_device_stats.rx_errors++;
 
-		hfc_fifo_drop_frame(chan);
+		hfc_fifo_drop_frame(fifo);
 		return -1;
 	}
 
-	chan->frames++;
+	// fifo->chan->frames++;
 
-	hfc_fifo_next_frame(chan);
+	hfc_fifo_next_frame(fifo);
 
 	return frame_size;
 }
 
-void hfc_fifo_drop_frame(struct hfc_chan_simplex *chan)
+void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 {
 	// FIXME read and drop all the frame
 
-	hfc_fifo_next_frame(chan);
+	hfc_fifo_next_frame(fifo);
 }
 
-void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
+void hfc_fifo_put_frame(struct hfc_fifo *fifo,
 		 void *data, int size)
 {
 #ifdef DEBUG
 	if (debug_level == 3) {
-		hfc_fifo_refresh_fz_cache(chan);
-		hfc_debug_schan(3, chan, "TX len %2d: ", size);
+		hfc_fifo_refresh_fz_cache(fifo);
+		hfc_debug_fifo(3, fifo, "TX len %2d: ", size);
 
 	} else if (debug_level >= 4) {
-		hfc_fifo_refresh_fz_cache(chan);
-		hfc_debug_schan(4, chan,
+		hfc_fifo_refresh_fz_cache(fifo);
+		hfc_debug_fifo(4, fifo,
 			"TX (f1=%02x, f2=%02x, z1=N/A, z2=%04x) len %2d: ",
-			chan->f1, chan->f2, chan->z2,
+			fifo->f1, fifo->f2, fifo->z2,
 			size);
 	}
 
@@ -254,9 +261,9 @@ void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
 	}
 #endif
 
-	hfc_fifo_put(chan, data, size);
+	hfc_fifo_put(fifo, data, size);
 
-	hfc_fifo_next_frame(chan);
+	hfc_fifo_next_frame(fifo);
 
-	chan->frames++;
+	// fifo->chan->frames++;
 }
