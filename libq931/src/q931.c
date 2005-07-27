@@ -83,7 +83,8 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 			}
 		}
 
-		q931_call_dl_establish_indication(call);
+		if (call->dlc == dlc)
+			q931_call_dl_establish_indication(call);
 	}
 }
 
@@ -111,7 +112,8 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 			}
 		}
 
-		q931_call_dl_establish_confirm(call);
+		if (call->dlc == dlc)
+			q931_call_dl_establish_confirm(call);
 	}
 }
 
@@ -139,7 +141,8 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 			}
 		}
 
-		q931_call_dl_release_indication(call);
+		if (call->dlc == dlc)
+			q931_call_dl_release_indication(call);
 	}
 }
 
@@ -167,7 +170,8 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 			}
 		}
 
-		q931_call_dl_release_confirm(call);
+		if (call->dlc == dlc)
+			q931_call_dl_release_confirm(call);
 	}
 }
 
@@ -229,7 +233,7 @@ void q931_decode_so_ie(
 	struct q931_decode_status *ds)
 {
 	struct q931_ie *ie =
-		&msg->ies[msg->ies_cnt];
+		&msg->ies.ies[msg->ies.count];
 
 	if (ds->codeset == 0) {
 		ie->info =
@@ -238,7 +242,7 @@ void q931_decode_so_ie(
 		if (ie->info) {
 			ie->len = 0;
 			ie->data = NULL;
-			msg->ies_cnt++;
+			msg->ies.count++;
 
 			report_dlc(msg->dlc, LOG_DEBUG,
 				"SO IE %d ===> %u (%s)\n",
@@ -260,7 +264,7 @@ void q931_decode_vl_ie(
 	struct q931_decode_status *ds)
 {
 	struct q931_ie *ie =
-		&msg->ies[msg->ies_cnt];
+		&msg->ies.ies[msg->ies.count];
 
 	ie->len = *(__u8 *)(msg->raw + ds->curpos);
 	ds->curpos++;
@@ -302,7 +306,7 @@ void q931_decode_vl_ie(
 			goto skip_this_ie;
 		}
 
-		if (!ie_has_content_errors(msg, &msg->ies[msg->ies_cnt])) {
+		if (!ie_has_content_errors(msg, &msg->ies.ies[msg->ies.count])) {
 			report_msg(msg, LOG_DEBUG,
 				"VS IE %d ===> %u (%s) -- length %u\n",
 				ds->curie,
@@ -310,7 +314,7 @@ void q931_decode_vl_ie(
 				ie->info->name,
 				ie->len);
 
-			msg->ies_cnt++;
+			msg->ies.count++;
 		} else {
 			// If mandatory or comprension required
 			if (q931_ie_comprehension_required(ds->ie_id)) {

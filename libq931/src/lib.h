@@ -21,36 +21,78 @@ struct q931_lib
 
 	void (*report)(int level, const char *format, ...);
 
-	void (*alerting_indication)(struct q931_call *call);
-	void (*connect_indication)(struct q931_call *call);
-	void (*disconnect_indication)(struct q931_call *call);
-	void (*error_indication)(struct q931_call *call); // TE
-	void (*info_indication)(struct q931_call *call);
-	void (*more_info_indication)(struct q931_call *call);
-	void (*notify_indication)(struct q931_call *call);
-	void (*proceeding_indication)(struct q931_call *call);
-	void (*progress_indication)(struct q931_call *call);
-	void (*reject_indication)(struct q931_call *call);
-	void (*release_confirm)(struct q931_call *call,
+	void (*alerting_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*connect_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*disconnect_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*error_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies); // TE
+	void (*info_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*more_info_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*notify_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*proceeding_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*progress_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*reject_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*release_confirm)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		enum q931_release_confirm_status status);//TE
-	void (*release_indication)(struct q931_call *call,
+	void (*release_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		const struct q931_causeset *causeset);
-	void (*resume_confirm)(struct q931_call *call,
+	void (*resume_confirm)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		enum q931_resume_confirm_status status);//TE
-	void (*resume_indication)(struct q931_call *call,
+	void (*resume_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		__u8 *call_identity, int call_identity_len);
-	void (*setup_complete_indication)(struct q931_call *call,
+	void (*setup_complete_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		enum q931_setup_complete_indication_status status);//TE
-	void (*setup_confirm)(struct q931_call *call,
+	void (*setup_confirm)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		enum q931_setup_confirm_status status);
-	void (*setup_indication)(struct q931_call *call);
-	void (*status_indication)(struct q931_call *call,
+	void (*setup_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
+	void (*status_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		enum q931_status_indication_status status);
-	void (*suspend_confirm)(struct q931_call *call,
+	void (*suspend_confirm)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		enum q931_suspend_confirm_status status);//TE
-	void (*suspend_indication)(struct q931_call *call,
+	void (*suspend_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies,
 		__u8 *call_identity, int call_identity_len);
-	void (*timeout_indication)(struct q931_call *call);
+	void (*timeout_indication)(
+		struct q931_call *call,
+		const struct q931_ies *ies);
 
 	void (*connect_channel)(struct q931_channel *chan);
 	void (*disconnect_channel)(struct q931_channel *chan);

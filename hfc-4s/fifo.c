@@ -42,6 +42,24 @@ int hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	return size;
 }
 
+int hfc_fifo_mem_read_to_user(struct hfc_fifo *fifo,
+	void __user *data, int size)
+{
+	struct hfc_card *card = fifo->card;
+	int err;
+
+	int i;
+	for (i=0; i<size; i++) {
+		err = put_user(hfc_inb(card, hfc_A_FIFO_DATA0),
+				(u8 *)(data + i));
+
+		if (err < 0)
+			return err;
+	}
+
+	return size;
+}
+
 static void hfc_fifo_mem_write(struct hfc_fifo *fifo,
 	void *data, int size)
 {
@@ -186,14 +204,32 @@ int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size)
 	}
 #endif
 
-	int unread_bytes = frame_size -
+	int read_bytes =
 		hfc_fifo_mem_read(fifo, data,
 			frame_size < max_size ? frame_size : max_size);
+
+	int unread_bytes = frame_size - read_bytes;
+
+	if (debug_level >= 3) {
+		int i;
+		for (i=0; i<read_bytes; i++)
+			printk("%02x", ((u8 *)data)[i]);
+	}
+
+#ifdef DEBUG
+	if (unread_bytes > 1 && debug_level >= 3)
+		printk(" ");
+#endif
 
 	while (unread_bytes > 1) {
 		u8 trash;
 		hfc_fifo_mem_read(fifo, &trash, 1);
 		unread_bytes--;
+
+#ifdef DEBUG
+		if (debug_level >= 3)
+			printk("%02x", trash);
+#endif
 	}
 
 	u8 stat;
@@ -201,7 +237,7 @@ int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size)
 
 #ifdef DEBUG
 	if (debug_level >= 3)
-		printk("\n"); 
+		printk(" %02x\n", stat); 
 #endif
 
 	if (stat == 0xff) {

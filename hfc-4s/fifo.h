@@ -99,6 +99,8 @@ struct hfc_fifo
 
 int hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	void *data, int size);
+int hfc_fifo_mem_read_to_user(struct hfc_fifo *fifo,
+	void __user *data, int size);
 
 #include "card.h"
 #include "port.h"

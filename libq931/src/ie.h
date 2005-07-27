@@ -17,6 +17,12 @@ struct q931_ie
 	void *data;
 };
 
+struct q931_ies
+{
+	struct q931_ie ies[260]; // FIXME
+	int count;
+};
+
 struct q931_ie_onwire
 {
 	__u8 id;

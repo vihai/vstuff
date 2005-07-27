@@ -177,11 +177,11 @@ inline static void q931_global_handle_status(
 		__u8 onwire_state = 0;
 
 		int i;
-		for(i=0; i<msg->ies_cnt; i++) {
-			if (msg->ies[i].info->id == Q931_IE_CALL_STATE) {
+		for(i=0; i<msg->ies.count; i++) {
+			if (msg->ies.ies[i].info->id == Q931_IE_CALL_STATE) {
 				struct q931_ie_call_state_onwire_3 *oct_3 =
 					(struct q931_ie_call_state_onwire_3 *)
-					(msg->ies[i].data + 0);
+					(msg->ies.ies[i].data + 0);
 
 				onwire_state = oct_3->value;
 
@@ -216,9 +216,11 @@ inline static void q931_global_handle_restart(
 		q931_chanset_init(&cs);
 
 		int i;
-		for (i=0; i<msg->ies_cnt; i++) {
-			if (msg->ies[i].info->id == Q931_IE_CHANNEL_IDENTIFICATION)
-				q931_ie_channel_identification_to_chanset(&msg->ies[i], &cs);
+		for (i=0; i<msg->ies.count; i++) {
+			if (msg->ies.ies[i].info->id ==
+					Q931_IE_CHANNEL_IDENTIFICATION)
+				q931_ie_channel_identification_to_chanset(
+					&msg->ies.ies[i], &cs);
 		}
 
 		// Any indicated channel allowed to be restarted?
@@ -281,13 +283,14 @@ inline static void q931_global_handle_restart_acknowledge(
 
 			// Store channel id received in restart ack
 			int i;
-			for (i=0; i<msg->ies_cnt; i++) {
-				if (msg->ies[i].info->id == Q931_IE_CHANNEL_IDENTIFICATION) {
+			for (i=0; i<msg->ies.count; i++) {
+				if (msg->ies.ies[i].info->id ==
+						Q931_IE_CHANNEL_IDENTIFICATION) {
 
 					struct q931_chanset cs;
 
 					q931_ie_channel_identification_to_chanset(
-						&msg->ies[i],
+						&msg->ies.ies[i],
 						&cs);
 
 					q931_chanset_merge(&gc->restart_acked_chans, &cs);

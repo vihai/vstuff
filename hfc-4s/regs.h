@@ -344,8 +344,8 @@
 #define hfc_R_RAM_USE		0x15
 
 #define hfc_R_CHIP_ID		0x16
-#define hfc_R_CHIP_ID_V_PNP_IRQ(chipid)		((chipid & 0x0f) >> 0)
-#define hfc_R_CHIP_ID_V_CHIP_ID(chipid)		((chipid & 0xf0) >> 4)
+#define hfc_R_CHIP_ID_V_PNP_IRQ(chipid)		(((chipid) & 0x0f) >> 0)
+#define hfc_R_CHIP_ID_V_CHIP_ID(chipid)		(((chipid) & 0xf0) >> 4)
 #define hfc_R_CHIP_ID_V_CHIP_ID_HFC_4S		0xc
 #define hfc_R_CHIP_ID_V_CHIP_ID_HFC_8S		0xd
 
@@ -371,6 +371,8 @@
 #define hfc_R_STATUS_V_FR_IRQSTA		(1 << 7)
 
 #define hfc_R_CHIP_RV		0x1F
+#define hfc_R_CHIP_RV_V_CHIP_RV_MASK		0x0f
+#define hfc_R_CHIP_RV_V_CHIP_RV(num)		(((num) & 0x0f) >> 0)
 
 #define hfc_A_ST_RD_STA		0x30
 #define hfc_A_ST_RD_STA_V_ST_STA(val)		((val) & 0xF)

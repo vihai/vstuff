@@ -366,6 +366,11 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_ASSIGNED:
 	case LAPD_TEI_MT_DENIED:
 	case LAPD_TEI_MT_CHK_REQ:
+		lapd_printk_dev(KERN_INFO, skb->dev,
+			"TEI Management TE message (%u) in NT mode\n",
+			tm->body.message_type);
+	break;
+
 	default:
 		lapd_printk_dev(KERN_INFO, skb->dev,
 			"unknown/unimplemented message_type %u\n",

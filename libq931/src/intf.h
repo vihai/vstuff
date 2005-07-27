@@ -50,8 +50,6 @@ struct q931_interface
 
 	struct q931_global_call global_call;
 
-	int tones_option;
-
 	__u8 sendbuf[260]; // FIXME (size should be N202-dependent)
 
 	longtime_t T301;

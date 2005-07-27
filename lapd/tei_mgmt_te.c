@@ -337,10 +337,10 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 			"TEI request with C/R=0 ?\n");
 	}
 
-	struct hlist_node *node;
+	struct hlist_node *t;
 	struct lapd_utme *tme;
 	read_lock_bh(&lapd_utme_hash_lock);
-	hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
+	hlist_for_each_entry(tme, t, &lapd_utme_hash, node) {
 		spin_lock(&tme->lock);
 
 		if (tme->dev != skb->dev) {
@@ -365,7 +365,8 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 			int i;
 			for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
 				struct sock *sk;
-				sk_for_each(sk, node, &lapd_hash[i]) {
+				struct hlist_node *t2;
+				sk_for_each(sk, t2, &lapd_hash[i]) {
 					if (!lapd_sk(sk)->nt_mode &&
 					    lapd_sk(sk)->usr_tme == tme) {
 						lapd_utme_send_to_socket(sk,
@@ -448,6 +449,11 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_VERIFY:
 	case LAPD_TEI_MT_CHK_RES:
 	case LAPD_TEI_MT_REQUEST:
+		lapd_printk_tme(KERN_INFO, skb->dev,
+			"TEI management NT message (%u) in TE mode\n",
+			tm->body.message_type);
+	break;
+
 	default:
 		lapd_printk_tme(KERN_INFO, skb->dev,
 			"unknown/unimplemented message_type %u\n",

@@ -67,18 +67,18 @@ static void sb_chan_release(struct visdn_chan *visdn_chan)
 	kfree(to_sb_chan(visdn_chan));
 }
 
-static int sb_chan_open(struct visdn_chan *visdn_chan, int mode)
+static int sb_chan_open(struct visdn_chan *visdn_chan)
 {
 	printk(KERN_INFO "sb_open()\n");
 
-	return -EINVAL;
+	return 0;
 }
 
 static int sb_chan_close(struct visdn_chan *visdn_chan)
 {
 	printk(KERN_INFO "sb_close()\n");
 
-	return -EINVAL;
+	return 0;
 }
 
 static int sb_chan_connect_to(

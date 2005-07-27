@@ -7,6 +7,10 @@
 int q931_send_alerting(
 	struct q931_call *call,
 	struct q931_dlc *dlc);
+int q931_send_alerting_channel(
+	struct q931_call *call,
+	struct q931_dlc *dlc,
+	const struct q931_channel *channel);
 
 int q931_send_call_proceeding(
 	struct q931_call *call,

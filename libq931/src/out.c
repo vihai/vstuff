@@ -148,6 +148,7 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 		}*/
 
 		if (connect(dlc->socket, NULL, 0) < 0) {
+			report_dlc(dlc, LOG_ERR, "connect: %s\n", strerror(errno));
 			return errno;
 		}
 
@@ -163,6 +164,7 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 	if (sendmsg(dlc->socket, &msg, 0) < 0) {
 		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",strerror(errno));
 		return errno;
+	} else {
 	}
 
 	return 0;
@@ -226,6 +228,39 @@ int q931_send_alerting(
 	return q931_send_frame(dlc, call->intf->sendbuf, size);
 }
 
+int q931_send_alerting_channel(
+	struct q931_call *call,
+	struct q931_dlc *dlc,
+	const struct q931_channel *channel)
+{
+	int size = 0;
+
+	assert(call);
+	assert(dlc);
+	assert(channel);
+
+	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_ALERTING);
+
+	struct q931_chanset cs;
+	q931_chanset_init(&cs);
+	q931_chanset_add(&cs, channel->id);
+
+	if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		size += q931_append_ie_channel_identification_pra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_ICS_PRA_INDICATED,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
+	} else {
+		size += q931_append_ie_channel_identification_bra(
+				call->intf->sendbuf + size,
+				Q931_IE_CI_PE_EXCLUSIVE,
+				&cs);
+	}
+
+	return q931_send_frame(dlc, call->intf->sendbuf, size);
+}
+
 /*************** CALL PROCEEDING
  *
  * IEs:
@@ -260,6 +295,7 @@ int q931_send_call_proceeding_channel(
 
 	assert(call);
 	assert(dlc);
+	assert(channel);
 
 	size += q931_prepare_header(call, call->intf->sendbuf, Q931_MT_CALL_PROCEEDING);
 

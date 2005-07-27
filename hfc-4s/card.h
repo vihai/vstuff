@@ -59,21 +59,15 @@ struct hfc_card {
 	struct proc_dir_entry *proc_info;
 	struct proc_dir_entry *proc_fifos;
 
-	int num_ports;
-	struct hfc_port ports[8];
+	int num_st_ports;
+	struct hfc_st_port st_ports[8];
+	struct hfc_pcm_port pcm_port;
 
 	int num_fifos;
 	struct hfc_fifo fifos[32][2];
 
 	unsigned long io_bus_mem;
 	void *io_mem;
-
-	int sync_loss_reported;
-	int late_irqs;
-
-	int ignore_first_timer_interrupt;
-
-	int open_ports;
 
 	int clock_source;
 	int ramsize;

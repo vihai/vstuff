@@ -94,17 +94,15 @@ struct hfc_chan_simplex
 };
 
 enum hfc_chan_status {
-	free,
-	open_hdlc,
-	open_trans,
-	open_bert,
-	sniff_aux,
-	loopback,
+	HFC_STATUS_FREE,
+	HFC_STATUS_OPEN_HDLC,
+	HFC_STATUS_OPEN_TRANS,
+	HFC_STATUS_OPEN_BERT,
 };
 
-struct hfc_port;
+struct hfc_st_port;
 struct hfc_chan_duplex {
-	struct hfc_port *port;
+	struct hfc_st_port *port;
 
 	enum hfc_chan_status status;
 
