@@ -606,18 +606,29 @@ static inline int q931_channel_select_response_bra(
 		assert(ind_chan);
 		assert(alt_chan);
 
-		if (!call->channel) {
+		if (!call->proposed_channel) {
 			// Ok, we did not indicate a channel so, attempt to use what
 			// other party requests in his response
 
 			if (ind_chan->state == Q931_CHANSTATE_AVAILABLE) {
 				// Nice, the channel is available
 
+				report_call(call, LOG_DEBUG,
+					"No channel proposed in setup, "
+					"using indicated channel B%d",
+					ind_chan->id+1);
+
 				call->channel = ind_chan;
 				call->channel->call = call;
 				call->channel->state = Q931_CHANSTATE_SELECTED;
+
 				return TRUE;
 			}
+
+			report_call(call, LOG_DEBUG,
+				"No channel proposed in setup, "
+				"but indicated channel B%d is unavailable",
+				ind_chan->id+1);
 
 			q931_causeset_add(causeset,
 				Q931_IE_C_CV_CHANNEL_UNACCEPTABLE);
@@ -626,7 +637,7 @@ static inline int q931_channel_select_response_bra(
 		}
 
 		// Uh oh, we already indicated the same channel
-		if (call->channel == ind_chan) {
+		if (call->proposed_channel == ind_chan) {
 			// Good, the channel is compatible, we will use it
 
 			if (oct_3->preferred_exclusive == Q931_IE_CI_PE_PREFERRED) {
@@ -644,22 +655,9 @@ static inline int q931_channel_select_response_bra(
 			call->channel = ind_chan;
 			call->channel->call = call;
 			call->channel->state = Q931_CHANSTATE_SELECTED;
+
 			return TRUE;
-		}
-
-		if (call->channel) {
-			/* Ehm... we indicated a channel with no
-			 * acceptable alternative and the other
-			 * party indicates another channel??
-			 */
-
-			q931_causeset_add(causeset,
-				Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE);
-
-			return FALSE;
-		}
-
-		if (call->channel->state == Q931_CHANSTATE_PROPOSED) {
+		} else {
 			/* Uh, well, we proposed another channel but 
 			 * the other party doesn't agree. We are nice
 			 * and use her choice.
@@ -681,10 +679,10 @@ static inline int q931_channel_select_response_bra(
 			call->channel = alt_chan;
 			call->channel->call = call;
 			call->channel->state = Q931_CHANSTATE_SELECTED;
+
 			return TRUE;
 		}
 
-		// The channel is not preselected? This is bogus!
 		assert(0);
 		return FALSE;
 
@@ -739,33 +737,43 @@ static inline int q931_channel_select_response_pra(
 
 static int q931_channel_select_response(
 	struct q931_call *call,
-	struct q931_message *msg,
+	const struct q931_ies *ies,
 	struct q931_causeset *causeset)
 {
 	assert(call);
-	assert(msg);
+	assert(ies);
 	assert(call->intf);
 
 	int i;
-	for(i=0; i<msg->ies.count; i++) {
-		if (msg->ies.ies[i].info->id == Q931_IE_CHANNEL_IDENTIFICATION) {
+	for(i=0; i<ies->count; i++) {
+		if (ies->ies[i].info->id == Q931_IE_CHANNEL_IDENTIFICATION) {
 			struct q931_ie_channel_identification_onwire_3 *oct_3 =
 				(struct q931_ie_channel_identification_onwire_3 *)
-				(&msg->ies.ies[i].data + 0);
+				(&ies->ies[i].data + 0);
 
 			if (oct_3->interface_type == Q931_IE_CI_IT_BASIC)
 				return q931_channel_select_response_bra(call,
-						&msg->ies.ies[i], causeset);
+						&ies->ies[i], causeset);
 			else
 				return q931_channel_select_response_pra(call,
-						&msg->ies.ies[i], causeset);
+						&ies->ies[i], causeset);
 		}
 	}
 
 	if (!call->channel) {
-		report_call(call, LOG_WARNING,
-			"No channel identification IE, in response to setup"
-			" let's hope we will have it later\n");
+		if (!call->proposed_channel) {
+			report_call(call, LOG_DEBUG,
+				"No channel identification IE"
+				" and no proposed channel\n");
+		} else {
+			report_call(call, LOG_DEBUG,
+				"No channel identification IE,"
+				" using proposed channel %d\n",
+				call->proposed_channel->id);
+
+			call->channel = call->proposed_channel;
+			call->channel->call = call;
+		}
 	}
 
 	return TRUE;
@@ -803,6 +811,10 @@ static inline struct q931_channel *q931_channel_select_setup_bra(
 		assert(alt_chan);
 
 		if (ind_chan->state == Q931_CHANSTATE_AVAILABLE) {
+			report_call(call, LOG_DEBUG,
+				"Requested channel B%d available\n",
+				ind_chan->id+1);
+
 			return ind_chan;
 		}
 
@@ -811,23 +823,38 @@ static inline struct q931_channel *q931_channel_select_setup_bra(
 		if (oct_3->preferred_exclusive == Q931_IE_CI_PE_EXCLUSIVE) {
 			// Uuops, the party offers no alternative
 
+			report_call(call, LOG_DEBUG,
+				"Requested channel B%d unavailable and no "
+				"alternatives offered\n",
+				ind_chan->id+1);
+
 			q931_causeset_add(causeset,
 				Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE);
 
 			return NULL;
 		}
 
-		if (ind_chan->state == Q931_CHANSTATE_AVAILABLE) {
-			if (send_chanid_in_response)
-				*send_chanid_in_response = TRUE;
-			return ind_chan;
-		}
+		// Let's see if the alternative is ok
 
 		if (alt_chan->state == Q931_CHANSTATE_AVAILABLE) {
+
+			report_call(call, LOG_DEBUG,
+				"Requested channel B%d unavailable but "
+				"alternative B%d is ok\n",
+				ind_chan->id+1,
+				alt_chan->id+1);
+
 			if (send_chanid_in_response)
 				*send_chanid_in_response = TRUE;
+
 			return alt_chan;
 		}
+
+		report_call(call, LOG_DEBUG,
+			"Both requested channel B%d and "
+			"alternative B%d are unavailable\n",
+			ind_chan->id+1,
+			alt_chan->id+1);
 
 		q931_causeset_add(causeset,
 			Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE);
@@ -841,8 +868,14 @@ static inline struct q931_channel *q931_channel_select_setup_bra(
 		assert(channel);
 
 		if (channel->state == Q931_CHANSTATE_AVAILABLE) {
+
+			report_call(call, LOG_DEBUG,
+				"Party requested any channel, giving her B%d\n",
+				channel->id+1);
+
 			if (send_chanid_in_response)
 				*send_chanid_in_response = TRUE;
+
 			return channel;
 		}
 
@@ -850,8 +883,18 @@ static inline struct q931_channel *q931_channel_select_setup_bra(
 		assert(channel);
 
 		if (channel->state == Q931_CHANSTATE_AVAILABLE) {
+
+			report_call(call, LOG_DEBUG,
+				"Party requested any channel, giving her B%d\n",
+				channel->id+1);
+
 			return channel;
 		}
+
+		report_call(call, LOG_DEBUG,
+			"Party requested any channel,"
+			" but no channel is available\n",
+			channel->id+1);
 
 		q931_causeset_add(causeset,
 			Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE);
@@ -863,6 +906,10 @@ static inline struct q931_channel *q931_channel_select_setup_bra(
 		// can alloc the freed channel and continue, otherwise
 		// respond with RELEASE COMPLETE with cause #34
 		// FIXME TODO FIXME TODO
+
+		report_call(call, LOG_DEBUG,
+			"Party requested NO channel, but we don't support"
+			" channel freeing yet\n");
 
 		q931_causeset_add(causeset,
 			Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE);
@@ -1748,8 +1795,8 @@ void q931_setup_request(struct q931_call *call)
 	report_call(call, LOG_DEBUG, "SETUP-REQ\n");
 
 	switch (call->state) {
-	case N0_NULL_STATE:
-		call->channel = q931_channel_alloc(call);
+	case N0_NULL_STATE: {
+		call->proposed_channel = q931_channel_select(call);
 		q931_call_start_timer(call, T303);
 
 		if (call->intf->type ==
@@ -1760,15 +1807,16 @@ void q931_setup_request(struct q931_call *call)
 			q931_send_setup_channel(call,
 				&call->intf->bc_dlc,
 				Q931_SETUP_BROADCAST,
-				call->channel);
+				call->proposed_channel);
 		} else {
 			q931_send_setup_channel(call,
 				call->dlc,
 				Q931_SETUP_POINT_TO_POINT,
-				call->channel);
+				call->proposed_channel);
 		}
 
 		q931_call_set_state(call, N6_CALL_PRESENT);
+	}
 	break;
 
 	case U0_NULL_STATE:
@@ -2061,11 +2109,18 @@ void q931_int_connect_indication(
 	report_call(call, LOG_DEBUG, "INT-CONNECT-INDICATION\n");
 
 	switch (call->state) {
-	case N7_CALL_RECEIVED:
-		call->preselected_ces = ces;
-		q931_call_stop_timer(call, T301);
-		q931_call_set_state(call, N8_CONNECT_REQUEST);
-		q931_call_primitive(call, connect_indication, ies);
+	case N7_CALL_RECEIVED: {
+		struct q931_causeset causeset = Q931_CAUSESET_INIT;
+
+		if (q931_channel_select_response(call, ies, &causeset)) {
+			call->preselected_ces = ces;
+			q931_call_stop_timer(call, T301);
+			q931_call_set_state(call, N8_CONNECT_REQUEST);
+			q931_call_primitive(call, connect_indication, ies);
+		} else {
+			q931_ces_release_request(ces, &causeset);
+		}
+	}
 	break;
 
 	case N8_CONNECT_REQUEST:
@@ -3147,7 +3202,7 @@ inline static void q931_handle_alerting(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T303);
 				q931_call_start_timer(call, T301);
 				q931_call_set_state(call, N7_CALL_RECEIVED);
@@ -3162,7 +3217,7 @@ inline static void q931_handle_alerting(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_start_timer(call, T301);
 				q931_call_set_state(call, N7_CALL_RECEIVED);
 				q931_call_primitive(call, alerting_indication,
@@ -3184,7 +3239,7 @@ inline static void q931_handle_alerting(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_ces_alerting_request(ces);
 			} else {
 				q931_ces_release_request(ces, &causeset);
@@ -3216,7 +3271,7 @@ inline static void q931_handle_alerting(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T310);
 				q931_call_start_timer(call, T301);
 				q931_call_set_state(call, N7_CALL_RECEIVED);
@@ -3271,7 +3326,7 @@ inline static void q931_handle_alerting(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_start_timer(call, T301);
 				q931_call_set_state(call, N7_CALL_RECEIVED);
 				q931_call_primitive(call, alerting_indication,
@@ -3325,7 +3380,7 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T303);
 				q931_call_start_timer(call, T310);
 				q931_call_primitive(call, proceeding_indication,
@@ -3339,7 +3394,7 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg,
+			if (q931_channel_select_response(call, &msg->ies,
 			    &causeset)) {
 				q931_call_start_timer(call, T310);
 				q931_call_set_state(call,
@@ -3365,7 +3420,7 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_ces_call_proceeding_request(ces);
 			} else {
 				q931_ces_release_request(ces, &causeset);
@@ -3426,7 +3481,7 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_start_timer(call, T310);
 				q931_call_set_state(call, N9_INCOMING_CALL_PROCEEDING);
 				q931_call_primitive(call, proceeding_indication,
@@ -3449,7 +3504,7 @@ inline static void q931_handle_call_proceeding(
 
 		struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-		if (q931_channel_select_response(call, msg, &causeset)) {
+		if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 			q931_call_set_state(call, U3_OUTGOING_CALL_PROCEEDING);
 			q931_call_control_channel(call->channel);
 			q931_call_primitive(call, proceeding_indication,
@@ -3491,7 +3546,7 @@ inline static void q931_handle_connect(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T303);
 				call->preselected_ces = ces;
 				q931_call_start_timer(call, T301);
@@ -3507,7 +3562,7 @@ inline static void q931_handle_connect(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
 				q931_call_primitive(call, setup_confirm,
 					&msg->ies, Q931_SETUP_CONFIRM_OK);
@@ -3528,7 +3583,7 @@ inline static void q931_handle_connect(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T301);
 				call->preselected_ces = ces;
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
@@ -3568,7 +3623,7 @@ inline static void q931_handle_connect(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T310);
 				call->preselected_ces = ces;
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
@@ -3622,7 +3677,7 @@ inline static void q931_handle_connect(
 
 			struct q931_causeset causeset = Q931_CAUSESET_INIT;
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				call->preselected_ces = ces;
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
 				q931_call_primitive(call, connect_indication,
@@ -3846,7 +3901,7 @@ inline static void q931_handle_setup_acknowledge(
 	case N6_CALL_PRESENT: {
 		if (call->broadcast_setup) {
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_stop_timer(call, T303);
 
 				struct q931_ces *ces;
@@ -3866,7 +3921,7 @@ inline static void q931_handle_setup_acknowledge(
 		} else {
 			q931_call_stop_timer(call, T303);
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_call_start_timer(call, T304);
 				q931_call_set_state(call, N25_OVERLAP_RECEIVING);
 				q931_call_primitive(call, more_info_indication,
@@ -3888,7 +3943,7 @@ inline static void q931_handle_setup_acknowledge(
 			struct q931_ces *ces;
 			ces = q931_ces_alloc(call, msg->dlc);
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_ces_setup_ack_request(ces);
 			} else {
 				q931_ces_release_request(ces, &causeset);
@@ -3947,7 +4002,7 @@ inline static void q931_handle_setup_acknowledge(
 			struct q931_ces *ces;
 			ces = q931_ces_alloc(call, msg->dlc);
 
-			if (q931_channel_select_response(call, msg, &causeset)) {
+			if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 				q931_ces_setup_ack_request(ces);
 			} else {
 				q931_ces_release_request(ces, &causeset);
@@ -3960,7 +4015,7 @@ inline static void q931_handle_setup_acknowledge(
 	case U1_CALL_INITIATED:
 		q931_call_stop_timer(call, T303);
 
-		if (q931_channel_select_response(call, msg, &causeset)) {
+		if (q931_channel_select_response(call, &msg->ies, &causeset)) {
 			q931_call_start_timer(call, T304);
 			q931_call_set_state(call, U2_OVERLAP_SENDING);
 			q931_call_control_channel(call->channel);

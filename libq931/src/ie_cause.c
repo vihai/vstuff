@@ -311,12 +311,11 @@ void q931_ie_cause_value_infos_init()
 	      q931_ie_cause_value_compare);
 }
 
-int q931_append_ie_cause(void *buf,
+void q931_append_ie_cause_common(void *buf,
+	struct q931_ie_onwire *ie,
 	enum q931_ie_cause_location location,
 	enum q931_ie_cause_value value)
 {
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
-
 	ie->id = Q931_IE_CAUSE;
 	ie->len = 0;
 
@@ -334,6 +333,15 @@ int q931_append_ie_cause(void *buf,
 	oct_4->ext = 1;
 	oct_4->cause_value = value;
 	ie->len += 1;
+}
+
+int q931_append_ie_cause(void *buf,
+	enum q931_ie_cause_location location,
+	enum q931_ie_cause_value value)
+{
+	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+
+	q931_append_ie_cause_common(buf, ie, location, value);
 
 	return ie->len + sizeof(struct q931_ie_onwire);
 }
@@ -344,14 +352,14 @@ int q931_append_ie_cause_diag(void *buf,
 	const __u8 *diag,
 	int diaglen)
 {
-	int len;
+	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
 
-	len = q931_append_ie_cause(buf, location, value);
+	q931_append_ie_cause_common(buf, ie, location, value);
 
-	memcpy(buf + len, diag, diaglen);
-	len += diaglen;
+	memcpy(&ie->data[ie->len], diag, diaglen);
+	ie->len += diaglen;
 
-	return len + 1;
+	return ie->len + sizeof(struct q931_ie_onwire);
 }
 
 int q931_append_ie_causes(void *buf,

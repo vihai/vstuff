@@ -34,6 +34,7 @@ struct q931_channel
 	void *pvt;
 };
 
+struct q931_channel *q931_channel_select(struct q931_call *call);
 struct q931_channel *q931_channel_alloc(struct q931_call *call);
 struct q931_channel *get_channel_by_id(
 	struct q931_interface *intf,

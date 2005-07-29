@@ -10,7 +10,7 @@
 #include "channel.h"
 #include "intf.h"
 
-struct q931_channel *q931_channel_alloc(struct q931_call *call)
+struct q931_channel *q931_channel_select(struct q931_call *call)
 {
 	assert(call);
 	assert(call->intf);
@@ -19,12 +19,6 @@ struct q931_channel *q931_channel_alloc(struct q931_call *call)
 	for(i=0; i<call->intf->n_channels; i++) {
 		if (call->intf->channels[i].state ==
 		      Q931_CHANSTATE_AVAILABLE) {
-
-			call->intf->channels[i].state =
-				Q931_CHANSTATE_SELECTED;
-
-			call->intf->channels[i].call = call;
-
 			return &call->intf->channels[i];
 		}
 	}
@@ -32,7 +26,7 @@ struct q931_channel *q931_channel_alloc(struct q931_call *call)
 	return NULL;
 }
 
-struct q931_channel *q931_channel_select(struct q931_call *call)
+struct q931_channel *q931_channel_alloc(struct q931_call *call)
 {
 	assert(call);
 	assert(call->intf);

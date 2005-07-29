@@ -2,6 +2,54 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-07-29 23:42:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-40
+
+    Summary:
+      Improved HFC-4S with FSM mode support
+    Revision:
+      isdn--devel--0.1--patch-40
+
+    
+    
+
+    new files:
+     hfc-4s/.arch-ids/card_inline.h.id
+     hfc-4s/.arch-ids/card_sysfs.c.id
+     hfc-4s/.arch-ids/card_sysfs.h.id hfc-4s/.arch-ids/chan.c.id
+     hfc-4s/.arch-ids/chan_sysfs.c.id
+     hfc-4s/.arch-ids/chan_sysfs.h.id
+     hfc-4s/.arch-ids/fifo_inline.h.id hfc-4s/.arch-ids/fsm.c.id
+     hfc-4s/.arch-ids/fsm.h.id hfc-4s/.arch-ids/pcm_port.c.id
+     hfc-4s/.arch-ids/pcm_port.h.id
+     hfc-4s/.arch-ids/pcm_port_inline.h.id
+     hfc-4s/.arch-ids/pcm_port_sysfs.c.id
+     hfc-4s/.arch-ids/pcm_port_sysfs.h.id
+     hfc-4s/.arch-ids/st_port.c.id
+     hfc-4s/.arch-ids/st_port_inline.h.id
+     hfc-4s/.arch-ids/st_port_sysfs.c.id
+     hfc-4s/.arch-ids/st_port_sysfs.h.id hfc-4s/.arch-ids/util.h.id
+     hfc-4s/card_inline.h hfc-4s/card_sysfs.c hfc-4s/card_sysfs.h
+     hfc-4s/chan.c hfc-4s/chan_sysfs.c hfc-4s/chan_sysfs.h
+     hfc-4s/fifo_inline.h hfc-4s/fsm.c hfc-4s/fsm.h
+     hfc-4s/pcm_port.c hfc-4s/pcm_port.h hfc-4s/pcm_port_inline.h
+     hfc-4s/pcm_port_sysfs.c hfc-4s/pcm_port_sysfs.h
+     hfc-4s/st_port.c hfc-4s/st_port_inline.h
+     hfc-4s/st_port_sysfs.c hfc-4s/st_port_sysfs.h hfc-4s/util.h
+
+    modified files:
+     ChangeLog chan_visdn/Makefile hfc-4s/Makefile hfc-4s/card.h
+     hfc-4s/chan.h hfc-4s/fifo.c hfc-4s/fifo.h hfc-4s/hfc-4s.h
+     hfc-4s/hfc-4s_main.c hfc-4s/regs.h hfc-4s/st_port.h
+     libq931/src/call.c libq931/src/call.h libq931/src/channel.c
+     libq931/src/channel.h libq931/src/ie_cause.c
+
+    renamed files:
+     hfc-4s/.arch-ids/port.h.id
+       ==> hfc-4s/.arch-ids/st_port.h.id
+     hfc-4s/port.h
+       ==> hfc-4s/st_port.h
+
+
 2005-07-27 16:41:33 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-39
 
     Summary:

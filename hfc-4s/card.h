@@ -14,30 +14,36 @@
 #define _HFC_CARD_H
 
 #include <linux/delay.h>
+#include <linux/pci.h>
 
 #include <visdn.h>
 
-#include "port.h"
+#include "st_port.h"
+#include "pcm_port.h"
+#include "fifo.h"
 #include "regs.h"
 //#include "fifo.h"
 
 #ifdef DEBUG
-#define hfc_debug_card(dbglevel, card, format, arg...)	\
+#define hfc_debug_card(card, dbglevel, format, arg...)	\
 	if (debug_level >= dbglevel)			\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
-			"card: %d "			\
-			format, card->id, ## arg)
+			"C%s "				\
+			format,				\
+			(card)->pcidev->dev.bus_id,	\
+			## arg)
 #else
-#define hfc_debug_card(dbglevel, card, format, arg...) do {} while (0)
+#define hfc_debug_card(card, dbglevel, format, arg...) do {} while (0)
 #endif
 
-#define hfc_msg_card(level, card, format, arg...)	\
+#define hfc_msg_card(card, level, format, arg...)	\
 	printk(level hfc_DRIVER_PREFIX			\
-		"card: %d "				\
-		format, card->id, ## arg)
+		"C%p "					\
+		format,					\
+		(card)->pcidev->dev.bus_id,		\
+		## arg)
 
 struct hfc_card {
-	int id;
 	spinlock_t lock;
 
 	// This struct contains a copy of some registers whose bits may be
@@ -65,6 +71,7 @@ struct hfc_card {
 
 	int num_fifos;
 	struct hfc_fifo fifos[32][2];
+	struct hfc_fifo *first_fifo;
 
 	unsigned long io_bus_mem;
 	void *io_mem;
@@ -75,50 +82,18 @@ struct hfc_card {
 	int output_level;
 };
 
-static inline u8 hfc_inb(struct hfc_card *card, int offset)
-{
- return readb(card->io_mem + offset);
-}
+struct hfc_fifo *hfc_allocate_fifo(
+	struct hfc_card *card,
+	enum hfc_direction direction);
+void hfc_deallocate_fifo(struct hfc_fifo *fifo);
 
-static inline void hfc_outb(struct hfc_card *card, int offset, u8 value)
-{
- writeb(value, card->io_mem + offset);
-}
+void hfc_configure_fifos(
+	struct hfc_card *card,
+	int v_ram_sz,
+	int v_fifo_md,
+	int v_fifo_sz);
 
-static inline u16 hfc_inw(struct hfc_card *card, int offset)
-{
- return readw(card->io_mem + offset);
-}
-
-static inline void hfc_outw(struct hfc_card *card, int offset, u16 value)
-{
- writew(value, card->io_mem + offset);
-}
-
-static inline u32 hfc_inl(struct hfc_card *card, int offset)
-{
- return readl(card->io_mem + offset);
-}
-
-static inline void hfc_outl(struct hfc_card *card, int offset, u32 value)
-{
- writel(value, card->io_mem + offset);
-}
-
-static inline void hfc_wait_busy(struct hfc_card *card)
-{
-	int i;
-	for (i=0; i<1000; i++) {
-		if (!(hfc_inb(card, hfc_R_STATUS) & hfc_R_STATUS_V_BUSY))
-			return;
-
-		udelay(1);
-	}
-
-	printk(KERN_ERR hfc_DRIVER_PREFIX
-		"card %d: "
-		"card is stuck in busy state...\n",
-		card->id);
-}
+void hfc_softreset(struct hfc_card *card);
+void hfc_initialize_hw(struct hfc_card *card);
 
 #endif

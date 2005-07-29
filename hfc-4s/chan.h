@@ -15,64 +15,66 @@
 
 #include <visdn.h>
 
-//#include "regs.h"
-//#include "fifo.h"
+#include "util.h"
 
 #define hfc_D_CHAN_OFF 2
 #define hfc_B1_CHAN_OFF 0
 #define hfc_B2_CHAN_OFF 1
 #define hfc_E_CHAN_OFF 3
 
+#define to_chan_duplex(chan) container_of(chan, struct hfc_chan_duplex, visdn_chan)
 
 #ifdef DEBUG
-#define hfc_debug_chan(dbglevel, chan, format, arg...)	\
-	if (debug_level >= dbglevel)			\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
-			"card: %d "			\
-			"port: %d "			\
-			"chan: %s "			\
-			format,				\
-			chan->port->card->id,		\
-			chan->port->id,			\
-			chan->name,			\
+#define hfc_debug_chan(chan, dbglevel, format, arg...)			\
+	if (debug_level >= dbglevel)					\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
+			"%s:"						\
+			"st%d:"						\
+			"chan[%s] "					\
+			format,						\
+			(chan)->port->card->pcidev->dev.bus_id,		\
+			(chan)->port->id,				\
+			(chan)->name,					\
 			## arg)
 
-#define hfc_debug_schan(dbglevel, chan, format, arg...)	\
-	if (debug_level >= dbglevel)			\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
-			"card: %d "			\
-			"port: %d "			\
-			"chan: %s "			\
-			format,				\
-			chan->chan->port->card->id,	\
-			chan->chan->port->id,		\
-			chan->chan->name,		\
+#define hfc_debug_schan(chan, dbglevel, format, arg...)			\
+	if (debug_level >= dbglevel)					\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
+			"%s:"						\
+			"st%d:"						\
+			"chan[%s,%s] "					\
+			format,						\
+			(chan)->chan->port->card->pcidev->dev.bus_id,	\
+			(chan)->chan->port->id,				\
+			(chan)->chan->name,				\
+			(chan)->direction == RX ? "RX" : "TX",		\
 			## arg)
 #else
-#define hfc_debug_chan(dbglevel, chan, format, arg...) do {} while (0)
-#define hfc_debug_schan(dbglevel, schan, format, arg...) do {} while (0)
+#define hfc_debug_chan(chan, dbglevel, format, arg...) do {} while (0)
+#define hfc_debug_schan(schan, dbglevel, format, arg...) do {} while (0)
 #endif
 
-#define hfc_msg_chan(level, chan, format, arg...)	\
-	printk(level hfc_DRIVER_PREFIX			\
-		"card: %d "				\
-		"port: %d "				\
-		"chan: %s "				\
-		format,					\
-		chan->port->card->id,			\
-		chan->port->id,				\
-		chan->name,				\
+#define hfc_msg_chan(chan, level, format, arg...)			\
+	printk(level hfc_DRIVER_PREFIX					\
+		"%s:"							\
+		"st%d:"							\
+		"chan[%s] "						\
+		format,							\
+		(chan)->port->card->pcidev->dev.bus_id,			\
+		(chan)->port->id,					\
+		(chan)->name,						\
 		## arg)
 
-#define hfc_msg_schan(level, chan, format, arg...)	\
-	printk(level hfc_DRIVER_PREFIX			\
-		"card: %d "				\
-		"port: %d "				\
-		"chan: %s "				\
-		format,					\
-		chan->chan->port->card->id,		\
-		chan->chan->port->id,			\
-		chan->chan->name,			\
+#define hfc_msg_schan(chan, level, format, arg...)			\
+	printk(level hfc_DRIVER_PREFIX					\
+		"%s:"							\
+		"st%d:"							\
+		"chan[%s,%s] "						\
+		format,							\
+		(chan)->chan->port->card->pcidev->dev.bus_id,		\
+		(chan)->chan->chan->port->id,				\
+		(chan)->chan->chan->name,				\
+		(chan)->direction == RX ? "RX" : "TX",			\
 		## arg)
 
 struct hfc_chan;
@@ -84,8 +86,6 @@ struct hfc_chan_simplex
 
 	struct hfc_chan_duplex *chan;
 	struct hfc_fifo *fifo;
-
-	struct tasklet_struct tasklet;
 
 	unsigned long long frames;
 	unsigned long long bytes;
@@ -109,6 +109,8 @@ struct hfc_chan_duplex {
 	char *name;
 	int id;
 
+	int hw_index;
+
 	unsigned short protocol;
 
 	struct hfc_chan_simplex rx;
@@ -117,5 +119,10 @@ struct hfc_chan_duplex {
 	struct visdn_chan visdn_chan;
 	struct net_device_stats net_device_stats;
 };
+
+extern struct visdn_chan_ops hfc_chan_ops;
+
+void hfc_chan_enable(struct hfc_chan_duplex *chan);
+void hfc_chan_disable(struct hfc_chan_duplex *chan);
 
 #endif

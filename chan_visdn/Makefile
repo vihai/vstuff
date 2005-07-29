@@ -33,7 +33,7 @@ all: $(SHAREDOS)
 clean:
 	rm -f *.so *.o
 
-%.so : %.o
+%.so : %.o ../libq931/src/libq931.a
 	$(CC) -shared -Xlinker -x -o $@ $< $(LIBS)
 
 install: all
