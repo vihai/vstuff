@@ -1,8 +1,9 @@
-#ifndef _MESSAGE_H
-#define _MESSAGE_H
+#ifndef _LIBQ931_MESSAGE_H
+#define _LIBQ931_MESSAGE_H
 
 #include "call.h"
 #include "dlc.h"
+#include "ies.h"
 
 struct q931_ie;
 struct q931_message

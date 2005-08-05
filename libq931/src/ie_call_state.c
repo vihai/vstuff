@@ -7,9 +7,23 @@
 #include "logging.h"
 #include "ie_call_state.h"
 
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_call_state_init(
+	struct q931_ie_call_state *ie)
+{
+	ie->ie.type = ie_type;
+}
+
+void q931_ie_call_state_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+}
+
 int q931_ie_call_state_check(
-	const struct q931_message *msg,
-	const struct q931_ie *ie)
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
 {
 	if (ie->len < 1) {
 		report_msg(msg, LOG_ERR, "IE size < 1\n");
@@ -30,20 +44,25 @@ int q931_ie_call_state_check(
 	return TRUE;
 }
 
-int q931_append_ie_call_state(void *buf, __u8 value)
+int q931_ie_call_state_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size)
 {
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	struct q931_ie_call_state *ie =
+		container_of(generic_ie, struct q931_ie_call_state, ie);
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ie->id = Q931_IE_CALL_STATE;
-	ie->len = 0;
+	ieow->id = Q931_IE_CALL_STATE;
+	ieow->len = 0;
 
-	ie->data[ie->len] = 0x00;
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_call_state_onwire_3 *oct_3 =
-	  (struct q931_ie_call_state_onwire_3 *)(&ie->data[ie->len]);
-	oct_3->coding_standard = Q931_IE_CS_CS_CCITT;
-	oct_3->value = value;
-	ie->len += 1;
+	  (struct q931_ie_call_state_onwire_3 *)(&ieow->data[ieow->len]);
+	oct_3->coding_standard = ie->coding_standard;
+	oct_3->value = ie->value;
+	ieow->len += 1;
 
-	return ie->len + sizeof(struct q931_ie_onwire);
+	return ieow->len + sizeof(struct q931_ie_onwire);
 }
 

@@ -1,5 +1,5 @@
-#ifndef _INTF_H
-#define _INTF_H
+#ifndef _LIBQ931_INTF_H
+#define _LIBQ931_INTF_H
 
 #include <netinet/in.h>
 #include <lapd.h>
@@ -49,8 +49,6 @@ struct q931_interface
 	int n_channels;
 
 	struct q931_global_call global_call;
-
-	__u8 sendbuf[260]; // FIXME (size should be N202-dependent)
 
 	longtime_t T301;
 	longtime_t T302;

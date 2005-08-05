@@ -5,13 +5,13 @@
 
 #include "card_inline.h"
 
-static inline void hfc_st_port_select(struct hfc_card *card, u8 id)
+static inline void hfc_st_port_select(struct hfc_st_port *port)
 {
 	WARN_ON(!irqs_disabled() && !in_irq());
 
 	mb();
-	hfc_outb(card, hfc_R_ST_SEL,
-		hfc_R_ST_SEL_V_ST_SEL(id));
+	hfc_outb(port->card, hfc_R_ST_SEL,
+		hfc_R_ST_SEL_V_ST_SEL(port->id));
 	mb();
 }
 

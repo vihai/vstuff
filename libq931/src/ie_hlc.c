@@ -4,6 +4,23 @@
 
 #include "ie_hlc.h"
 
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_high_layer_compatibility_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+}
+
+int q931_ie_high_layer_compatibility_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
+{
+	// TODO
+
+	return TRUE;
+}
+
 int q931_append_ie_high_layer_compatibility_telephony(void *buf)
 {
 	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;

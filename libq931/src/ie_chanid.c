@@ -10,9 +10,23 @@
 #include "message.h"
 #include "chanset.h"
 
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_channel_identification_init(
+	struct q931_ie_channel_identification *ie)
+{
+	ie->ie.type = ie_type;
+}
+
+void q931_ie_channel_identification_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+}
+
 static inline int q931_ie_channel_identification_check_bra(
-	const struct q931_message *msg,
-	const struct q931_ie *ie)
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
 {
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
 		(struct q931_ie_channel_identification_onwire_3 *)
@@ -43,8 +57,8 @@ static inline int q931_ie_channel_identification_check_bra(
 }
 
 static inline int q931_ie_channel_identification_check_pra(
-	const struct q931_message *msg,
-	const struct q931_ie *ie)
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
 {
 	struct q931_ie_channel_identification_onwire_3c *oct_3c =
 		(struct q931_ie_channel_identification_onwire_3c *)
@@ -70,8 +84,8 @@ static inline int q931_ie_channel_identification_check_pra(
 }
 
 int q931_ie_channel_identification_check(
-	const struct q931_message *msg,
-	const struct q931_ie *ie)
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
 {
 	if (ie->len < 1) {
 		report_msg(msg, LOG_ERR, "IE size < 2\n");
@@ -124,7 +138,7 @@ int q931_ie_channel_identification_check(
 			return FALSE;
 		}
 
-		return q931_ie_channel_identification_check_pra(msg, ie);
+		return q931_ie_channel_identification_check_pra(ie, msg);
 
 	} else {
 		if (oct_3->interface_type == Q931_IE_CI_IT_PRIMARY) {
@@ -134,7 +148,7 @@ int q931_ie_channel_identification_check(
 			return FALSE;
 		}
 
-		return q931_ie_channel_identification_check_bra(msg, ie);
+		return q931_ie_channel_identification_check_bra(ie, msg);
 	}
 }
 
@@ -144,8 +158,8 @@ void q931_ie_channel_identification_to_chanset(
 {
 	assert(chanset);
 	assert(ie);
-	assert(ie->info);
-	assert(ie->info->id == Q931_IE_CHANNEL_IDENTIFICATION);
+	assert(ie->type);
+	assert(ie->type->id == Q931_IE_CHANNEL_IDENTIFICATION);
 
 	chanset->nchans = 0;
 
@@ -158,8 +172,10 @@ void q931_ie_channel_identification_to_chanset(
 		    oct_3->info_channel_selection == Q931_IE_CI_ICS_BRA_ANY) {
 			chanset->chans[chanset->nchans] = 0;
 			chanset->nchans++;
-		} else if (oct_3->info_channel_selection == Q931_IE_CI_ICS_BRA_B2 ||
-		           oct_3->info_channel_selection == Q931_IE_CI_ICS_BRA_ANY) {
+		}
+
+		if (oct_3->info_channel_selection == Q931_IE_CI_ICS_BRA_B2 ||
+		    oct_3->info_channel_selection == Q931_IE_CI_ICS_BRA_ANY) {
 			chanset->chans[chanset->nchans] = 1;
 			chanset->nchans++;
 		}
@@ -168,89 +184,109 @@ void q931_ie_channel_identification_to_chanset(
 	}
 }
 
-int q931_append_ie_channel_identification_bra(void *buf,
-	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	const struct q931_chanset *chanset)
+int q931_ie_channel_identification_write_to_buf_bra(
+	const struct q931_ie_channel_identification *ie,
+	void *buf,
+	int max_size)
 {
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ie->id = Q931_IE_CHANNEL_IDENTIFICATION;
-	ie->len = 0;
-
-	ie->data[ie->len] = 0x00;
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
-	  (struct q931_ie_channel_identification_onwire_3 *)(&ie->data[ie->len]);
+	  (struct q931_ie_channel_identification_onwire_3 *)(&ieow->data[ieow->len]);
 	oct_3->ext = 1;
 	oct_3->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 	oct_3->interface_type = Q931_IE_CI_IT_BASIC;
-	oct_3->preferred_exclusive = prefexcl;
-	oct_3->d_channel_indicator = Q931_IE_CI_DCI_IS_NOT_D_CHAN;
+	oct_3->preferred_exclusive = ie->preferred_exclusive;
+	oct_3->d_channel_indicator = ie->d_channel_indicator;
 
-	if (!chanset || chanset->nchans == 0) {
+	if (ie->chanset.nchans == 0) {
 		oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_NO_CHANNEL;
-	} else if (chanset->nchans == 1) {
-		if (chanset->chans[0] == 0)
+	} else if (ie->chanset.nchans == 1) {
+		if (ie->chanset.chans[0] == 0)
 			oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_B1;
-		else if (chanset->chans[0] == 1)
+		else if (ie->chanset.chans[0] == 1)
 			oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_B2;
 		else
 			assert(0);
-	} else if (chanset->nchans == 2) {
-		assert(chanset->chans[0] == 0 || chanset->chans[0] == 1);
-		assert(chanset->chans[1] == 0 || chanset->chans[1] == 1);
+	} else if (ie->chanset.nchans == 2) {
+		assert(ie->chanset.chans[0] == 0 || ie->chanset.chans[0] == 1);
+		assert(ie->chanset.chans[1] == 0 || ie->chanset.chans[1] == 1);
 
 		oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_ANY;
 	} else {
 		assert(0);
 	}
 
-	ie->len += 1;
+	ieow->len += 1;
 
-	return ie->len + sizeof(struct q931_ie_onwire);
+	return ieow->len + sizeof(struct q931_ie_onwire);
 }
 
-int q931_append_ie_channel_identification_pra(void *buf,
-	enum q931_ie_channel_identification_info_channel_selection_pra selection,
-	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	const struct q931_chanset *chanset)
+static int q931_ie_channel_identification_write_to_buf_pra(
+	const struct q931_ie_channel_identification *ie,
+	void *buf,
+	int max_size)
 {
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ie->id = Q931_IE_CHANNEL_IDENTIFICATION;
-	ie->len = 0;
-
-	ie->data[ie->len] = 0x00;
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
-	  (struct q931_ie_channel_identification_onwire_3 *)(&ie->data[ie->len]);
+	  (struct q931_ie_channel_identification_onwire_3 *)(&ieow->data[ieow->len]);
 	oct_3->ext = 1;
 	oct_3->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 	oct_3->interface_type = Q931_IE_CI_IT_PRIMARY;
-	oct_3->preferred_exclusive = prefexcl;
-	oct_3->d_channel_indicator = Q931_IE_CI_DCI_IS_NOT_D_CHAN;
-	oct_3->info_channel_selection = selection;
-	ie->len += 1;
+	oct_3->preferred_exclusive = ie->preferred_exclusive;
+	oct_3->d_channel_indicator = ie->d_channel_indicator;
+	oct_3->info_channel_selection = Q931_IE_CI_ICS_PRA_NO_CHANNEL; //FIXME
+	ieow->len += 1;
 
 	// Interface implicit, do not add Interface identifier
 
-	ie->data[ie->len] = 0x00;
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_channel_identification_onwire_3c *oct_3c =
-	  (struct q931_ie_channel_identification_onwire_3c *)(&ie->data[ie->len]);
+	  (struct q931_ie_channel_identification_onwire_3c *)(&ieow->data[ieow->len]);
 	oct_3c->ext = 1;
 	oct_3c->coding_standard = Q931_IE_CI_CS_CCITT;
 	oct_3c->number_map = Q931_IE_CI_NM_NUMBER;
 	oct_3c->channel_type_map_identifier_type = Q931_IE_CI_ET_B;
-	ie->len += 1;
+	ieow->len += 1;
 
-	ie->data[ie->len] = 0x00;
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_channel_identification_onwire_3d *oct_3d =
-	  (struct q931_ie_channel_identification_onwire_3d *)(&ie->data[ie->len]);
+	  (struct q931_ie_channel_identification_onwire_3d *)(&ieow->data[ieow->len]);
 	oct_3d->ext = 1;
 
 	int i;
-	for (i=0; i<chanset->nchans; i++) {
-		oct_3d->channel_number = chanset->chans[i];
-		ie->len += 1;
+	for (i=0; i<ie->chanset.nchans; i++) {
+		oct_3d->channel_number = ie->chanset.chans[i];
+		ieow->len += 1;
 	}
 
-	return ie->len + sizeof(struct q931_ie_onwire);
+	return ieow->len + sizeof(struct q931_ie_onwire);
 }
+
+int q931_ie_channel_identification_write_to_buf(
+	const struct q931_ie *generic_ie,
+        void *buf,
+	int max_size)
+{
+	const struct q931_ie_channel_identification *ie =
+		container_of(generic_ie, struct q931_ie_channel_identification, ie);
+
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
+
+	ieow->id = Q931_IE_CHANNEL_IDENTIFICATION;
+	ieow->len = 0;
+
+	if (ie->interface_type == Q931_IE_CI_IT_BASIC) {
+		return q931_ie_channel_identification_write_to_buf_bra(
+				ie, buf + sizeof(*ieow),
+				max_size - sizeof(*ieow));
+	} else {
+		return q931_ie_channel_identification_write_to_buf_pra(
+				ie, buf + sizeof(*ieow),
+				max_size - sizeof(*ieow));
+	}
+}
+

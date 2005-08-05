@@ -6,6 +6,46 @@
 #include "card.h"
 #include "card_inline.h"
 
+static inline void hfc_pcm_port_slot_init(
+	struct hfc_pcm_slot *slot,
+	struct hfc_pcm_port *port,
+	int hw_index,
+	enum hfc_direction direction)
+{
+	slot->port = port;
+	slot->hw_index = hw_index;
+	slot->direction = direction;
+}
+
+void hfc_pcm_port_init(struct hfc_pcm_port *port)
+{
+	int i;
+	for (i=0; i<sizeof(port->slots)/sizeof(*port->slots); i++) {
+		hfc_pcm_port_slot_init(&port->slots[i][RX], port, i, RX);
+		hfc_pcm_port_slot_init(&port->slots[i][TX], port, i, TX);
+	}
+}
+
+struct hfc_pcm_slot *hfc_pcm_port_allocate_slot(
+	struct hfc_pcm_port *port,
+	enum hfc_direction direction)
+{
+	int i;
+	for (i=0; i<port->num_slots; i++) {
+		if (!port->slots[i][direction].used) {
+			port->slots[i][direction].used = TRUE;
+			return &port->slots[i][direction];
+		}
+	}
+
+	return NULL;
+}
+
+void hfc_pcm_port_deallocate_slot(struct hfc_pcm_slot *slot)
+{
+	slot->used = FALSE;
+}
+
 static int hfc_pcm_port_enable(
 	struct visdn_port *visdn_port)
 {

@@ -1,5 +1,5 @@
-#ifndef _DLC_H
-#define _DLC_H
+#ifndef _LIBQ931_DLC_H
+#define _LIBQ931_DLC_H
 
 #define report_dlc(dlc, lvl, format, arg...)				\
 	(dlc)->intf->lib->report((lvl), format, ## arg)

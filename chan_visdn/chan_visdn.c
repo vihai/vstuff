@@ -83,6 +83,10 @@ struct visdn_chan {
 
 	int inbound;
 	int channel_fd;
+
+	char calling_number[21];
+	char called_number[21];
+	int sending_complete;
 };
 
 enum poll_info_type
@@ -450,26 +454,6 @@ static int visdn_call(
 	struct q931_call *q931_call;
 	q931_call = q931_alloc_call_out(intf);
 
-	if (ast_chan->callerid) {
-
-		char callerid[255];
-		char *name, *number;
-
-		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
-		ast_callerid_parse(callerid, &name, &number);
-
-		if (number)
-			q931_call_set_calling_number(q931_call, number);
-		else
-			ast_log(LOG_WARNING,
-				"Unable to parse '%s'"
-				" into CallerID name & number\n",
-				callerid);
-	}
-
-	q931_call_set_called_number(q931_call, number),
-	q931_call->sending_complete = FALSE;
-
 	if ((ast_chan->_state != AST_STATE_DOWN) &&
 	    (ast_chan->_state != AST_STATE_RESERVED)) {
 		ast_log(LOG_WARNING,
@@ -503,7 +487,54 @@ static int visdn_call(
 
 	ast_mutex_unlock(&ast_chan->lock);
 
-	q931_setup_request(q931_call);
+	struct q931_ies ies = Q931_IES_INIT;
+
+	struct q931_ie_bearer_capability bc;
+	q931_ie_bearer_capability_init(&bc);
+	bc.coding_standard = Q931_IE_BC_CS_CCITT;
+	bc.information_transfer_capability = Q931_IE_BC_ITC_SPEECH;
+	bc.transfer_mode = Q931_IE_BC_TM_CIRCUIT;
+	bc.information_transfer_rate = Q931_IE_BC_ITR_64;
+	bc.user_information_layer_1_protocol = Q931_IE_BC_UIL1P_G711_ALAW;
+	q931_ies_add(&ies, &bc.ie);
+
+	struct q931_ie_called_party_number cdpn;
+	q931_ie_called_party_number_init(&cdpn);
+	cdpn.type_of_number = Q931_IE_CDPN_TON_UNKNOWN;
+	cdpn.numbering_plan_identificator = Q931_IE_CDPN_NPI_UNKNOWN;
+	sprintf(cdpn.number, sizeof(cdpn.number), "%s", number);
+	q931_ie_add(&ies, &cdpn.ie);
+
+	/*
+	if (ast_chan->callerid) {
+
+		char callerid[255];
+		char *name, *number;
+
+		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
+		ast_callerid_parse(callerid, &name, &number);
+
+		if (number)
+			q931_call_set_calling_number(q931_call, number);
+		else
+			ast_log(LOG_WARNING,
+				"Unable to parse '%s'"
+				" into CallerID name & number\n",
+				callerid);
+	}
+	*/
+
+	/*
+	struct q931_ie_high_layer_compatibility hlc;
+	q931_ie_high_layer_compatibility_init(&hlc);
+	
+	hlc.coding_standard = Q931_IE_HLC_CS_CCITT;
+	hlc.interpretation = Q931_IE_HLC_P_FIRST;
+	hlc.presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
+	hlc.characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
+	*/
+
+	q931_setup_request(q931_call, &ies);
 
 err_channel_not_down:
 err_intf_not_found:
@@ -541,6 +572,8 @@ static int visdn_bridge(
 	struct ast_channel **rc)
 {
 	ast_log(LOG_WARNING, "visdn_bridge\n");
+
+	return -2;
 
 	/* if need DTMF, cant native bridge (at least not yet...) */
 	if (flags & (AST_BRIDGE_DTMF_CHANNEL_0 | AST_BRIDGE_DTMF_CHANNEL_1))
@@ -1152,9 +1185,41 @@ static void visdn_q931_error_indication(
 	printf("*** %s\n", __FUNCTION__);
 }
 
-static void visdn_overlap_sending_info(struct q931_call *q931_call)
+static void visdn_q931_info_indication(
+	struct q931_call *q931_call,
+	const struct q931_ies *ies)
 {
+	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
+
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+
+	if (!ast_chan)
+		return;
+
+	if (q931_call->state != U2_OVERLAP_SENDING &&
+	    q931_call->state != N2_OVERLAP_SENDING) {
+		ast_log(LOG_WARNING, "Received info not in overlap sending\n");
+		return;
+	}
+
+	int i;
+	for(i=0; i<msg->ies.count; i++) {
+		if (msg->ies.ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
+			call->sending_complete = TRUE;
+		} else if (msg->ies.ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
+			if (!q931_call_handle_called_number(call, &msg->ies.ies[i])) {
+
+				struct q931_causeset causeset =
+					Q931_CAUSESET_INITC(
+						Q931_IE_C_CV_INVALID_NUMBER_FORMAT);
+
+				q931_disconnect_request(q931_call, &causeset);
+
+				return;
+			}
+		}
+	}
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
@@ -1207,48 +1272,28 @@ static void visdn_overlap_sending_info(struct q931_call *q931_call)
 				q931_call->called_number,
 				sizeof(ast_chan->exten)-1);
 
-			if (ast_pbx_start(ast_chan)) {
-				ast_log(LOG_ERROR,
-					"Unable to start PBX on %s\n",
-					ast_chan->name);
-				ast_hangup(ast_chan);
+			if (!ast->chan->pbx) {
+				if (ast_pbx_start(ast_chan)) {
+					ast_log(LOG_ERROR,
+						"Unable to start PBX on %s\n",
+						ast_chan->name);
+					ast_hangup(ast_chan);
 
-				struct q931_causeset causeset = Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+					struct q931_causeset causeset = Q931_CAUSESET_INITC(
+						Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
 
-				q931_disconnect_request(q931_call, &causeset);
-			} else {
-//				q931_proceeding_request(q931_call);
-//				ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
-			}
-		}
-	}
-}
-
-static void visdn_q931_info_indication(
-	struct q931_call *q931_call,
-	const struct q931_ies *ies)
-{
-	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
-
-	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
-
-	if (!ast_chan)
-		return;
-
-	if (q931_call->state == U2_OVERLAP_SENDING ||
-	    q931_call->state == N2_OVERLAP_SENDING)
-		visdn_overlap_sending_info(q931_call);
-	else {
-		int i;
-		for (i=0; i<ies->count; i++) {
-			if (ies->ies[i].info->id ==
-				Q931_IE_CALLED_PARTY_NUMBER) {
-				int j;
-				char *number = ies->ies[i].data;
-				for (j=0; j<ies->ies[i].len - 1; j++) {
-					printf("SEND FRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAME %c\n", number[j]);
+					q931_disconnect_request(q931_call, &causeset);
+				} else {
+					if (!ast_matchmore_extension(NULL, "visdn",
+							q931_call->called_number, 1,
+							q931_call->calling_number)) {
+						q931_proceeding_request(q931_call);
+						ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
+					}
 				}
+			} else {
+				struct ast_frame f = { AST_FRAME_DTMF, number[i] };
+				ast_queue_frame(ast_chan, &f);
 			}
 		}
 	}
@@ -1380,6 +1425,35 @@ static void visdn_q931_setup_confirm(
 	ast_setstate(ast_chan, AST_STATE_UP);
 }
 
+static int visdn_handle_called_number(
+	struct visdn_chan *visdn_chan,
+	const struct q931_ie *ie)
+{
+	if (strlen(visdn_chan->called_number) + ie->len - 1 >
+			sizeof(visdn_chan->called_number)) {
+		ast_log(LOG_NOTICE,
+			"Called number overflow\n");
+
+		return FALSE;
+	}
+
+	char *number = ie->data + 1;
+
+	if (number[ie->len - 1] == '#') {
+		visdn_chan->sending_complete = TRUE;
+		visdn_chan->called_number[strlen(visdn_chan->called_number) +
+				ie->len - 2] = 0x00;
+		strncat(visdn_chan->called_number, number, ie->len - 2);
+	} else {
+		visdn_chan->called_number[strlen(visdn_chan->called_number) +
+				ie->len - 1] = 0x00;
+		strncat(visdn_chan->called_number, number, ie->len - 1);
+	}
+
+	return TRUE;
+}
+
+
 static void visdn_q931_setup_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
@@ -1388,7 +1462,20 @@ static void visdn_q931_setup_indication(
 
 	int i;
 	for(i=0; i<ies->count; i++) {
-		if (ies->ies[i].info->id == Q931_IE_BEARER_CAPABILITY) {
+		if (msg->ies.ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
+			call->sending_complete = TRUE;
+		} else if (msg->ies.ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
+			if (!q931_call_handle_called_number(call, &msg->ies.ies[i])) {
+
+				struct q931_causeset causeset =
+					Q931_CAUSESET_INITC(
+						Q931_IE_C_CV_INVALID_NUMBER_FORMAT);
+
+				q931_reject_request(q931_call, &causeset);
+
+				return;
+			}
+		} else if (ies->ies[i].info->id == Q931_IE_BEARER_CAPABILITY) {
 			struct q931_ie_bearer_capability_onwire_3 *oct_3 =
 				(struct q931_ie_bearer_capability_onwire_3 *)
 				(ies->ies[i].data + 0);

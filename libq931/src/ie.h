@@ -1,6 +1,5 @@
-
-#ifndef _IE_H
-#define _IE_H
+#ifndef _LIBQ931_IE_H
+#define _LIBQ931_IE_H
 
 #include <linux/types.h>
 #include <endian.h>
@@ -8,19 +7,16 @@
 #include "util.h"
 #include "msgtype.h"
 
-struct q931_ie_info;
+struct q931_ie_type;
 
 struct q931_ie
 {
-	const struct q931_ie_info *info;
+	const struct q931_ie_type *type;
+
+	int refcnt;
+
 	int len;
 	void *data;
-};
-
-struct q931_ies
-{
-	struct q931_ie ies[260]; // FIXME
-	int count;
 };
 
 struct q931_ie_onwire
@@ -102,16 +98,23 @@ enum q931_ie_id
 
 struct q931_call;
 struct q931_message;
-struct q931_ie_info
+struct q931_ie_type
 {
 	int max_len;
 	int max_occur;
 	int network_type;
 	enum q931_ie_id id;
 	const char *name;
+	void (*init)(
+		const struct q931_ie_type *type);
+
 	int (*validity_check)(
-		const struct q931_message *msg,
-		const struct q931_ie *ie);
+		const struct q931_ie *ie,
+		const struct q931_message *msg);
+
+	int (*write_to_buf)(
+		const struct q931_ie *ie,
+		void *buf, int max_size);
 };
 
 enum q931_ie_direction
@@ -127,7 +130,7 @@ enum q931_ie_presence
 	Q931_IE_MANDATORY,
 };
 
-struct q931_ie_info_per_mt
+struct q931_ie_type_per_mt
 {
 	enum q931_message_type message_type;
 	enum q931_ie_id ie_id;
@@ -170,10 +173,10 @@ static inline int q931_ie_comprehension_required(__u8 ie_id)
  return ie_id & Q931_IE_COMPREHENSION_REQUIRED_MASK;
 }
 
-void q931_ie_infos_init();
-const struct q931_ie_info *q931_get_ie_info(
+void q931_ie_types_init();
+const struct q931_ie_type *q931_get_ie_type(
 	enum q931_ie_id id);
-const struct q931_ie_info_per_mt *q931_get_ie_info_per_mt(
+const struct q931_ie_type_per_mt *q931_get_ie_type_per_mt(
 	enum q931_message_type message_type,
 	enum q931_ie_id ie_id);
 

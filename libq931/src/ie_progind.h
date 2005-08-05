@@ -1,6 +1,6 @@
 
-#ifndef _IE_PROGIND_H
-#define _IE_PROGIND_H
+#ifndef _LIBQ931_IE_PROGIND_H
+#define _LIBQ931_IE_PROGIND_H
 
 #include "ie.h"
 
@@ -34,6 +34,20 @@ enum q931_ie_progress_indicator_progress_description
 	Q931_IE_PI_PD_IN_BAND_INFORMATION			= 0x8,
 };
 
+struct q931_ie_progress_indicator
+{
+	struct q931_ie ie;
+
+	enum q931_ie_progress_indicator_coding_standard
+		coding_standard;
+	enum q931_ie_progress_indicator_location
+		indicator_location;
+	enum q931_ie_progress_indicator_progress_description
+		progress_description;
+};
+
+#ifdef Q931_PRIVATE
+
 struct q931_ie_progress_indicator_onwire_3_4
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -59,6 +73,19 @@ struct q931_ie_progress_indicator_onwire_3_4
 
 #endif
 
-int q931_append_ie_progress_indicator(void *buf,
-	enum q931_ie_progress_indicator_location location,
-	enum q931_ie_progress_indicator_progress_description description);
+void q931_ie_progress_indicator_init(
+	struct q931_ie_progress_indicator *ie);
+
+void q931_ie_progress_indicator_register(
+	const struct q931_ie_type *type);
+
+int q931_ie_progress_indicator_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
+
+int q931_ie_progress_indicator_write_to_buf(
+	const struct q931_ie *generic_ie,
+        void *buf,
+	int max_size);
+
+#endif

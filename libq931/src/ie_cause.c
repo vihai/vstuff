@@ -11,6 +11,14 @@
 #include "message.h"
 #include "ie_cause.h"
 
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_cause_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+}
+
 struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 {
 	{
@@ -231,8 +239,8 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 };
 
 int q931_ie_cause_check(
-	const struct q931_message *msg,
-	const struct q931_ie *ie)
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
 {
 	int nextoct = 0;
 
@@ -311,79 +319,7 @@ void q931_ie_cause_value_infos_init()
 	      q931_ie_cause_value_compare);
 }
 
-void q931_append_ie_cause_common(void *buf,
-	struct q931_ie_onwire *ie,
-	enum q931_ie_cause_location location,
-	enum q931_ie_cause_value value)
-{
-	ie->id = Q931_IE_CAUSE;
-	ie->len = 0;
-
-	ie->data[ie->len] = 0x00;
-	struct q931_ie_cause_onwire_3 *oct_3 =
-	  (struct q931_ie_cause_onwire_3 *)(&ie->data[ie->len]);
-	oct_3->ext = 1;
-	oct_3->coding_standard = Q931_IE_C_CS_CCITT;
-	oct_3->location = location;
-	ie->len += 1;
-
-	ie->data[ie->len] = 0x00;
-	struct q931_ie_cause_onwire_4 *oct_4 =
-	  (struct q931_ie_cause_onwire_4 *)(&ie->data[ie->len]);
-	oct_4->ext = 1;
-	oct_4->cause_value = value;
-	ie->len += 1;
-}
-
-int q931_append_ie_cause(void *buf,
-	enum q931_ie_cause_location location,
-	enum q931_ie_cause_value value)
-{
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
-
-	q931_append_ie_cause_common(buf, ie, location, value);
-
-	return ie->len + sizeof(struct q931_ie_onwire);
-}
-
-int q931_append_ie_cause_diag(void *buf,
-	enum q931_ie_cause_location location,
-	enum q931_ie_cause_value value,
-	const __u8 *diag,
-	int diaglen)
-{
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
-
-	q931_append_ie_cause_common(buf, ie, location, value);
-
-	memcpy(&ie->data[ie->len], diag, diaglen);
-	ie->len += diaglen;
-
-	return ie->len + sizeof(struct q931_ie_onwire);
-}
-
-int q931_append_ie_causes(void *buf,
-	enum q931_ie_cause_location location,
-	const struct q931_causeset *causeset)
-{
-	int len = 0;
-
-	int i;
-	for (i=0; i<causeset->ncauses; i++) {
-		if (causeset->causes[i].diaglen) {
-			len += q931_append_ie_cause_diag(buf + len, location,
-				causeset->causes[i].cause,
-				causeset->causes[i].diag,
-				causeset->causes[i].diaglen);
-		} else {
-			len += q931_append_ie_cause(buf + len, location,
-				causeset->causes[i].cause);
-		}
-	}
-
-	return len;
-}
-
+/*
 void q931_ie_cause_add_to_causeset(
 	const struct q931_ie *ie,
 	struct q931_causeset *causeset)
@@ -416,4 +352,37 @@ void q931_ie_cause_add_to_causeset(
 		ie->data + nextoct,
 		ie->len - nextoct);
 }
+*/
 
+int q931_ie_cause_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size)
+{
+	struct q931_ie_cause *ie =
+		container_of(generic_ie, struct q931_ie_cause, ie);
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
+
+	ieow->id = Q931_IE_CAUSE;
+	ieow->len = 0;
+
+	ieow->data[ieow->len] = 0x00;
+	struct q931_ie_cause_onwire_3 *oct_3 =
+	  (struct q931_ie_cause_onwire_3 *)(&ieow->data[ieow->len]);
+	oct_3->ext = 1;
+	oct_3->coding_standard = ie->coding_standard;
+	oct_3->location = ie->location;
+	ieow->len += 1;
+
+	ieow->data[ieow->len] = 0x00;
+	struct q931_ie_cause_onwire_4 *oct_4 =
+	  (struct q931_ie_cause_onwire_4 *)(&ieow->data[ieow->len]);
+	oct_4->ext = 1;
+	oct_4->cause_value = ie->value;
+	ieow->len += 1;
+
+	memcpy(&ieow->data[ieow->len], ie->diagnostics, ie->diagnostics_len);
+	ieow->len += ie->diagnostics_len;
+
+	return ieow->len + sizeof(struct q931_ie_onwire);
+}

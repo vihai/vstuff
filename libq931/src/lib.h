@@ -1,5 +1,5 @@
-#ifndef _LIB_H
-#define _LIB_H
+#ifndef _LIBQ931_LIB_H
+#define _LIBQ931_LIB_H
 
 #include "dlc.h"
 #include "list.h"
@@ -57,8 +57,7 @@ struct q931_lib
 		enum q931_release_confirm_status status);//TE
 	void (*release_indication)(
 		struct q931_call *call,
-		const struct q931_ies *ies,
-		const struct q931_causeset *causeset);
+		const struct q931_ies *ies);
 	void (*resume_confirm)(
 		struct q931_call *call,
 		const struct q931_ies *ies,

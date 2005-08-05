@@ -106,24 +106,14 @@ void hfc_upload_fsm(
 
 	int index = 0;
 	for (i=0; i<nfifos; i++) {
-		struct hfc_fifo *next_fifo = NULL;
-
 		if (i < nfifos-1)
-			next_fifo = fifos[i+1];
+			hfc_upload_fsm_entry(card, fifos[i],
+				fifos[i]->connected_chan, fifos[i+1], index);
+		else
+			hfc_upload_fsm_entry(card, fifos[i],
+				fifos[i]->connected_chan, NULL, index);
 
-		if (fifos[i]->looped_chan) {
-			hfc_upload_fsm_entry(card, fifos[i],
-				fifos[i]->connected_chan, fifos[i], index);
-			index++;
-
-			hfc_upload_fsm_entry(card, fifos[i],
-				fifos[i]->looped_chan, next_fifo, index);
-			index++;
-		} else {
-			hfc_upload_fsm_entry(card, fifos[i],
-				fifos[i]->connected_chan, next_fifo, index);
-			index++;
-		}
+		index++;
 	}
 }
 

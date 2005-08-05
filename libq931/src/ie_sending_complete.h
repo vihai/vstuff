@@ -1,13 +1,18 @@
-#ifndef _IE_SENDING_COMPLETE_H
-#define _IE_SENDING_COMPLETE_H
+#ifndef _LIBQ931_IE_SENDING_COMPLETE_H
+#define _LIBQ931_IE_SENDING_COMPLETE_H
 
 #include "ie.h"
 
-static inline int q931_append_ie_sending_complete(void *buf)
-{
- *(__u8 *)buf = Q931_IE_SENDING_COMPLETE;
+void q931_ie_sending_complete_register(
+	const struct q931_ie_type *type);
 
- return 1;
-}
+int q931_ie_sending_complete_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
+
+int q931_ie_sending_complete_write_to_buf(
+        const struct q931_ie *generic_ie,
+        void *buf,
+        int max_size);
 
 #endif

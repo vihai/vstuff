@@ -1,5 +1,5 @@
-#ifndef _CALL_H
-#define _CALL_H
+#ifndef _LIBQ931_CALL_H
+#define _LIBQ931_CALL_H
 
 #include <string.h>
 
@@ -8,7 +8,7 @@
 #include "list.h"
 #include "ie.h"
 #include "message.h"
-#include "causeset.h"
+#include "ies.h"
 
 enum q931_call_direction
 {
@@ -52,12 +52,6 @@ enum q931_call_state
 	N19_RELEASE_REQUEST,
 	N22_CALL_ABORT,
 	N25_OVERLAP_RECEIVING
-};
-
-enum q931_setup_mode
-{
-	Q931_SETUP_POINT_TO_POINT,
-	Q931_SETUP_BROADCAST,
 };
 
 enum q931_setup_confirm_status
@@ -116,27 +110,25 @@ struct q931_call
 
 	enum q931_call_state state;
 
-	char calling_number[Q931_MAX_DIGITS + 1];
-	char called_number[Q931_MAX_DIGITS + 1];
-	int sending_complete;
 	int broadcast_setup;
 	int tones_option;
 
 	int T303_fired;
 	int T308_fired;
 
-	struct q931_message setup_msg;
-
 	int senq_status_97_98_received;
 	int senq_cnt;
 
 	int disconnect_indication_sent;
 	int release_complete_received;
+	int digits_dialled;
 
-	struct q931_causeset disconnect_cause;
-	struct q931_causeset release_with_cause;
-	struct q931_causeset saved_cause;
-	struct q931_causeset release_cause;
+	struct q931_ies setup_ies;
+
+	struct q931_ies disconnect_cause;
+	struct q931_ies release_with_cause;
+	struct q931_ies saved_cause;
+	struct q931_ies release_cause;
 
 	// Maybe we should have a channel mask, instead
 	struct q931_channel *channel;
@@ -176,34 +168,57 @@ struct q931_call *q931_alloc_call_out(
 
 void q931_free_call(struct q931_call *call);
 
-void q931_alerting_request(struct q931_call *call);
-void q931_disconnect_request(struct q931_call *call,
-	const struct q931_causeset *causeset);
-void q931_info_request(struct q931_call *call);
-void q931_more_info_request(struct q931_call *call);
-void q931_notify_request(struct q931_call *call);
-void q931_proceeding_request(struct q931_call *call);
-void q931_progress_request(struct q931_call *call);
-void q931_reject_request(struct q931_call *call,
-	const struct q931_causeset *causeset);
-void q931_release_request(struct q931_call *call);
-void q931_resume_request(struct q931_call *call);
-void q931_resume_reject_request(struct q931_call *call,
-	const struct q931_causeset *causeset);
+void q931_alerting_request(
+	struct q931_call *call);
+void q931_disconnect_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_info_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_more_info_request(
+	struct q931_call *call);
+void q931_notify_request(
+	struct q931_call *call);
+void q931_proceeding_request(
+	struct q931_call *call);
+void q931_progress_request(
+	struct q931_call *call);
+void q931_reject_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_release_request(
+	struct q931_call *call);
+void q931_resume_request(
+	struct q931_call *call);
+void q931_resume_reject_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
 
-void q931_resume_response(struct q931_call *call);
-void q931_setup_complete_request(struct q931_call *call);
-void q931_setup_request(struct q931_call *call);
-void q931_setup_response(struct q931_call *call);
-void q931_status_enquiry_request(struct q931_call *call,
+void q931_resume_response
+	(struct q931_call *call);
+void q931_setup_complete_request(
+	struct q931_call *call);
+void q931_setup_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_setup_response(
+	struct q931_call *call);
+void q931_status_enquiry_request(
+	struct q931_call *call,
 	struct q931_ces *ces);
-void q931_suspend_reject_request(struct q931_call *call,
-	const struct q931_causeset *causeset);
+void q931_suspend_reject_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
 
-void q931_suspend_response(struct q931_call *call);
-void q931_suspend_request(struct q931_call *call);
-void q931_restart_request(struct q931_call *call);
+void q931_suspend_response(
+	struct q931_call *call);
+void q931_suspend_request(
+	struct q931_call *call);
+void q931_restart_request(
+	struct q931_call *call);
 
+/*
 static inline void q931_call_set_calling_number(
 	struct q931_call *call,
 	const char *calling_number)
@@ -220,7 +235,7 @@ static inline void q931_call_set_called_number(
 	strncpy(call->called_number, called_number,
 		sizeof(call->called_number));
 	call->called_number[sizeof(call->called_number)-1]='\0';
-}
+}*/
 
 const char *q931_call_state_to_text(enum q931_call_state state);
 
@@ -312,8 +327,7 @@ void q931_int_progress_indication(
 void q931_int_release_indication( 
 	struct q931_call *call,
 	struct q931_ces *ces,
-	const struct q931_ies *ies,
-	const struct q931_causeset *causeset);
+	const struct q931_ies *ies);
 
 #endif
 #endif

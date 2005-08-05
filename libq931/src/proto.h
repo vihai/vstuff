@@ -1,3 +1,6 @@
+#ifndef _LIBQ931_PROTO_H
+#define _LIBQ931_PROTO_H
+
 struct q931_header
 {
 	__u8 protocol_discriminator;
@@ -36,3 +39,4 @@ enum q931_protocol_discriminators
  Q931_PROTOCOL_DISCRIMINATOR_GR303	= 0x4f,
 };
 
+#endif

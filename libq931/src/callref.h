@@ -1,5 +1,5 @@
-#ifndef _CALLREF_H
-#define _CALLREF_H
+#ifndef _LIBQ931_CALLREF_H
+#define _LIBQ931_CALLREF_H
 
 enum q931_callref_flag
 {

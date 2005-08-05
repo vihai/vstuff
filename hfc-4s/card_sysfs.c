@@ -25,15 +25,16 @@ static ssize_t hfc_store_output_level(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 	
-	int output_level;
-	sscanf(buf, "%x", &output_level);
+	int value;
+	if (sscanf(buf, "%x", &value) < 1)
+		return -EINVAL;
 
-	if (output_level < 0 || output_level > 0xff)
+	if (value < 0 || value > 0xff)
 		return -EINVAL;
 
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
-	hfc_outb(card, hfc_R_PWM1, output_level);
+	hfc_outb(card, hfc_R_PWM1, value);
 	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
@@ -68,9 +69,8 @@ static ssize_t hfc_store_bert_mode(
 
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
-	card->regs.bert_wd_md &= ~hfc_R_BERT_WD_MD_V_PAT_SEQ_MASK;
-	card->regs.bert_wd_md |= hfc_R_BERT_WD_MD_V_PAT_SEQ(mode & 0x7);
-	hfc_outb(card, hfc_R_BERT_WD_MD, card->regs.bert_wd_md);
+	card->bert_mode = mode;
+	hfc_update_bert_wd_md(card, 0);
 	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
@@ -99,10 +99,7 @@ static ssize_t hfc_store_bert_err(
 	
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
-
-	hfc_outb(card, hfc_R_BERT_WD_MD,
-		card->regs.bert_wd_md | hfc_R_BERT_WD_MD_V_BERT_ERR);
-
+	hfc_update_bert_wd_md(card, hfc_R_BERT_WD_MD_V_BERT_ERR);
 	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
@@ -269,27 +266,21 @@ static ssize_t hfc_store_clock_source_config(
 	unsigned long flags;
 
 	if (count >= 4 && !strncmp(buf, "auto", 4)) {
-		spin_lock_irqsave(&card->lock, flags);
-		hfc_outb(card, hfc_R_ST_SYNC,
-			hfc_R_ST_SYNC_V_AUTO_SYNC_ENABLED);
 		card->clock_source = -1;
-
-		spin_unlock_irqrestore(&card->lock, flags);
 
 		hfc_debug_card(card, 1, "Clock source set to auto\n");
 	} else if(count > 0) {
 		int clock_source;
 		sscanf(buf, "%d", &clock_source);
 
-		spin_lock_irqsave(&card->lock, flags);
-		hfc_outb(card, hfc_R_ST_SYNC,
-			hfc_R_ST_SYNC_V_SYNC_SEL(clock_source & 0x07) |
-			hfc_R_ST_SYNC_V_AUTO_SYNC_DISABLED);
 		card->clock_source = clock_source;
-		spin_unlock_irqrestore(&card->lock, flags);
 
 		hfc_debug_card(card, 1, "Clock source set to %d\n", clock_source);
 	}
+
+	spin_lock_irqsave(&card->lock, flags);
+	hfc_update_st_sync(card);
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
 }

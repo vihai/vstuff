@@ -1,5 +1,5 @@
-#ifndef _LOGGING_H
-#define _LOGGING_H
+#ifndef _LIBQ931_LOGGING_H
+#define _LIBQ931_LOGGING_H
 
 enum q931_log_level
 {

@@ -4,6 +4,29 @@
 
 #include "ie_progind.h"
 
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_progress_indicator_init(
+	struct q931_ie_progress_indicator *ie)
+{
+	ie->ie.type = ie_type;
+}
+
+void q931_ie_progress_indicator_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+}
+
+int q931_ie_progress_indicator_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
+{
+	// TODO
+
+	return TRUE;
+}
+
 int q931_append_ie_progress_indicator(void *buf,
 	enum q931_ie_progress_indicator_location location,
 	enum q931_ie_progress_indicator_progress_description description)

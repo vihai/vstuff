@@ -66,8 +66,7 @@ static int hfc_st_port_set_role(
 	unsigned long flags;
 	spin_lock_irqsave(&port->card->lock, flags);
 
-	hfc_st_port_select(port->card, port->id);
-
+	hfc_st_port_select(port);
 	hfc_st_port__do_set_role(port, nt_mode);
 
 	spin_unlock_irqrestore(&port->card->lock, flags);
@@ -83,7 +82,7 @@ static int hfc_st_port_enable(
 	unsigned long flags;
 	spin_lock_irqsave(&port->card->lock, flags);
 
-	hfc_st_port_select(port->card, port->id);
+	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
 
 	spin_unlock_irqrestore(&port->card->lock, flags);
@@ -101,7 +100,7 @@ static int hfc_st_port_disable(
 	unsigned long flags;
 	spin_lock_irqsave(&port->card->lock, flags);
 
-	hfc_st_port_select(port->card, port->id);
+	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);

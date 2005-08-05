@@ -1,5 +1,5 @@
-#ifndef _CES_H
-#define _CES_H
+#ifndef _LIBQ931_CES_H
+#define _LIBQ931_CES_H
 
 #include "timer.h"
 
@@ -74,19 +74,31 @@ struct q931_ces *q931_ces_alloc(
 void q931_ces_del(struct q931_ces *ces);
 void q931_ces_free(struct q931_ces *ces);
 
-void q931_ces_dl_establish_indication(struct q931_ces *ces);
-void q931_ces_dl_release_indication(struct q931_ces *ces);
-void q931_ces_dl_establish_confirm(struct q931_ces *ces);
-void q931_ces_dl_release_confirm(struct q931_ces *ces);
+void q931_ces_dl_establish_indication(
+	struct q931_ces *ces);
+void q931_ces_dl_release_indication(
+	struct q931_ces *ces);
+void q931_ces_dl_establish_confirm(
+	struct q931_ces *ces);
+void q931_ces_dl_release_confirm(
+	struct q931_ces *ces);
 
-void q931_ces_alerting_request(struct q931_ces *ces);
-void q931_ces_connect_request(struct q931_ces *ces);
-void q931_ces_call_proceeding_request(struct q931_ces *ces);
-void q931_ces_setup_ack_request(struct q931_ces *ces);
-void q931_ces_release_request(struct q931_ces *ces,
-	const struct q931_causeset *cause);
-void q931_ces_info_request(struct q931_ces *ces);
-void q931_ces_status_enquiry_request(struct q931_ces *ces);
+void q931_ces_alerting_request(
+	struct q931_ces *ces);
+void q931_ces_connect_request(
+	struct q931_ces *ces);
+void q931_ces_call_proceeding_request(
+	struct q931_ces *ces);
+void q931_ces_setup_ack_request(
+	struct q931_ces *ces);
+void q931_ces_release_request(
+	struct q931_ces *ces,
+	const struct q931_ies *ies);
+void q931_ces_info_request(
+	struct q931_ces *ces,
+	const struct q931_ies *ies);
+void q931_ces_status_enquiry_request(
+	struct q931_ces *ces);
 
 #endif
 

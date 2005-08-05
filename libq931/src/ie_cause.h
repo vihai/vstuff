@@ -1,8 +1,9 @@
 
-#ifndef _IE_CAUSE_H
-#define _IE_CAUSE_H
+#ifndef _LIBQ931_IE_CAUSE_H
+#define _LIBQ931_IE_CAUSE_H
 
 #include "ie.h"
+#include "ies.h"
 
 /************************* Progress Indicator ***************************/
 
@@ -95,6 +96,25 @@ enum q931_ie_cause_value_recommendation
 	Q931_IE_C_R_X25		= 0x04,
 };
 
+struct q931_ie_cause
+{
+	struct q931_ie ie;
+
+	enum q931_ie_cause_coding_standard
+		coding_standard;
+	enum q931_ie_cause_location
+		location;
+	enum q931_ie_cause_value
+		value;
+	enum q931_ie_cause_value_recommendation
+		recommendation;
+
+	__u8 diagnostics[27];
+	int diagnostics_len;
+};
+
+#ifdef Q931_PRIVATE
+
 struct q931_ie_cause_value_info
 {
 	__u8 id;
@@ -164,29 +184,26 @@ struct q931_ie_cause_diag_1_2
 #endif
 } __attribute__ ((__packed__));
 
-int q931_ie_cause_check(
-	const struct q931_message *msg,
-	const struct q931_ie *ie);
-
-int q931_append_ie_cause(void *buf,
-        enum q931_ie_cause_location location,
-        enum q931_ie_cause_value cause);
-int q931_append_ie_cause_diag(void *buf,
-	enum q931_ie_cause_location location,
-	enum q931_ie_cause_value cause,
-	const __u8 *diag,
-	int diaglen);
-
-struct q931_causeset;
-int q931_append_ie_causes(void *buf,
-	enum q931_ie_cause_location location,
-	const struct q931_causeset *causeset);
-
 void q931_ie_cause_value_infos_init();
 
-struct q931_causeset;
-void q931_ie_cause_add_to_causeset(
-	const struct q931_ie *ie,
-	struct q931_causeset *causeset);
+void q931_ie_cause_register(
+	const struct q931_ie_type *type);
 
+void q931_ie_cause_init(
+	struct q931_ie_cause *cause);
+
+int q931_ie_cause_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
+
+int q931_ie_cause_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size);
+
+int q931_ies_contain_cause(
+	const struct q931_ies *ies,
+	enum q931_ie_cause_value cause);
+
+#endif
 #endif

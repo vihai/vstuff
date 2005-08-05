@@ -86,6 +86,7 @@ struct hfc_chan_simplex
 
 	struct hfc_chan_duplex *chan;
 	struct hfc_fifo *fifo;
+	struct hfc_pcm_slot *slot;
 
 	unsigned long long frames;
 	unsigned long long bytes;

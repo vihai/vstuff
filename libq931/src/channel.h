@@ -1,5 +1,5 @@
-#ifndef _CHANNEL_H
-#define _CHANNEL_H
+#ifndef _LIBQ931_CHANNEL_H
+#define _LIBQ931_CHANNEL_H
 
 #define q931_channel_primitive(channel, primitive, arg...)			\
 	do {									\

@@ -76,7 +76,6 @@ struct hfc_fifo
 {
 	struct hfc_card *card;
 	struct hfc_chan_simplex *connected_chan;
-	struct hfc_chan_simplex *looped_chan;
 
 	int hw_index;
 	enum hfc_direction direction;

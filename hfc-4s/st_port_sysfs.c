@@ -32,7 +32,7 @@ static ssize_t hfc_store_l1_state(
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
 
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
 		hfc_outb(card, hfc_A_ST_WR_STA,
@@ -107,7 +107,7 @@ static ssize_t hfc_store_st_clock_delay(
 	spin_lock_irqsave(&card->lock, flags);
 
 	port->clock_delay = value;
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 	port->regs.st_clk_dly &= ~hfc_A_ST_CLK_DLY_V_ST_CLK_DLY_MSK;
 	port->regs.st_clk_dly |= hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay);
 	hfc_outb(card, hfc_A_ST_CLK_DLY, port->regs.st_clk_dly);
@@ -152,7 +152,7 @@ static ssize_t hfc_store_st_sampling_comp(
 	spin_lock_irqsave(&card->lock, flags);
 
 	port->sampling_comp = value;
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 	port->regs.st_clk_dly &= ~hfc_A_ST_CLK_DLY_V_ST_SMPL_MSK;
 	port->regs.st_clk_dly |=
 		hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp);

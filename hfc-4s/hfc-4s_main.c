@@ -163,8 +163,9 @@ void hfc_softreset(struct hfc_card *card)
 
 	hfc_msg_card(card, KERN_INFO, "resetting\n");
 
+	mb();
 	hfc_outb(card, hfc_R_CIRM, hfc_R_CIRM_V_SRES);
-	wmb();
+	mb();
 	hfc_outb(card, hfc_R_CIRM, 0);
 	mb();
 
@@ -261,15 +262,66 @@ static void hfc_initialize_hw_nonsoft(struct hfc_card *card)
 	// R_CIRM
 }
 
+void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits)
+{
+	hfc_outb(card, hfc_R_PCM_MD0,
+		otherbits |
+		(card->pcm_port.master ?
+			hfc_R_PCM_MD0_V_PCM_MD_MASTER :
+			hfc_R_PCM_MD0_V_PCM_MD_SLAVE));
+}
+
+void hfc_update_pcm_md1(struct hfc_card *card)
+{
+	u8 pcm_md1 = 0;
+	if (card->pcm_port.bitrate == 0) {
+		pcm_md1 |= hfc_R_PCM_MD1_V_PCM_DR_2MBIT;
+		card->pcm_port.num_slots = 32;
+	} else if (card->pcm_port.bitrate == 1) {
+		pcm_md1 |= hfc_R_PCM_MD1_V_PCM_DR_4MBIT;
+		card->pcm_port.num_slots = 64;
+	} else if (card->pcm_port.bitrate == 2) {
+		pcm_md1 |= hfc_R_PCM_MD1_V_PCM_DR_8MBIT;
+		card->pcm_port.num_slots = 64;
+	}
+
+	hfc_pcm_multireg_select(card, hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD1);
+	hfc_outb(card, hfc_R_PCM_MD1, pcm_md1);
+}
+
+void hfc_update_st_sync(struct hfc_card *card)
+{
+	if (card->clock_source == -1)
+		hfc_outb(card, hfc_R_ST_SYNC,
+			hfc_R_ST_SYNC_V_AUTO_SYNC_ENABLED);
+	else
+		hfc_outb(card, hfc_R_ST_SYNC,
+			hfc_R_ST_SYNC_V_SYNC_SEL(card->clock_source & 0x07) |
+			hfc_R_ST_SYNC_V_AUTO_SYNC_DISABLED);
+}
+
+void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
+{
+	hfc_outb(card, hfc_R_BERT_WD_MD,
+		hfc_R_BERT_WD_MD_V_PAT_SEQ(card->bert_mode & 0x7) |
+		otherbits);
+}
+
 void hfc_initialize_hw(struct hfc_card *card)
 {
 	WARN_ON(!irqs_disabled() && !in_irq());
+
+	card->output_level = 0x19;
+	card->clock_source = -1;
+	card->bert_mode = 0;
+
+	card->pcm_port.master = TRUE;
+	card->pcm_port.bitrate = 0;
 
 	hfc_outb(card, hfc_R_PWM_MD,
 		hfc_R_PWM_MD_V_PWM0_MD_PUSH |
 		hfc_R_PWM_MD_V_PWM1_MD_PUSH);
 
-	card->output_level = 0x19;
 	hfc_outb(card, hfc_R_PWM1, card->output_level);
 
 	// Timer setup
@@ -277,9 +329,10 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_TI_WD_V_EV_TS_8_192_S);
 //		hfc_R_TI_WD_V_EV_TS_1_MS);
 
-	// C4IO F0IO are outputs (master mode) TODO: Slave mode
-	hfc_outb(card, hfc_R_PCM_MD0,
-		hfc_R_PCM_MD0_V_PCM_MD);
+	hfc_update_pcm_md0(card, 0);
+	hfc_update_pcm_md1(card);
+	hfc_update_st_sync(card);
+	hfc_update_bert_wd_md(card, 0);
 
 	hfc_outb(card, hfc_R_SCI_MSK,
 		hfc_R_SCI_MSK_V_SCI_MSK_ST0|
@@ -295,22 +348,16 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_GPIO_SEL_V_GPIO_SEL6 |
 		hfc_R_GPIO_SEL_V_GPIO_SEL7)*/
 
-	// Automatic synchronization
-	hfc_outb(card, hfc_R_ST_SYNC,
-		hfc_R_ST_SYNC_V_AUTO_SYNC_ENABLED);
-	card->clock_source = -1;
-
-	card->bert_mode = 0;
-	card->regs.bert_wd_md = 0;
-	hfc_outb(card, hfc_R_BERT_WD_MD, card->regs.bert_wd_md);
 
 	// Timer interrupt enabled
 	hfc_outb(card, hfc_R_IRQMSK_MISC,
 		hfc_R_IRQMSK_MISC_V_TI_IRQMSK);
 
 	int i;
-	for (i=0; i<card->num_st_ports; i++)
+	for (i=0; i<card->num_st_ports; i++) {
+		hfc_st_port_select(&card->st_ports[i]);
 		hfc_st_port__do_set_role(&card->st_ports[i], 0);
+	}
 
 	// Enable interrupts
 	hfc_outb(card, hfc_R_IRQ_CTRL,
@@ -323,14 +370,11 @@ struct hfc_fifo *hfc_allocate_fifo(
 	struct hfc_card *card,
 	enum hfc_direction direction)
 {
-	struct hfc_fifo *fifo = NULL;
-
 	int i;
 	for (i=0; i<card->num_fifos; i++) {
 		if (!card->fifos[i][direction].used) {
 			card->fifos[i][direction].used = TRUE;
-			fifo = &card->fifos[i][direction];
-			return fifo;
+			return &card->fifos[i][direction];
 		}
 	}
 
@@ -453,7 +497,7 @@ static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
 {
 	struct hfc_card *card = port->card;
 
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 
 	u8 new_state = hfc_A_ST_RD_STA_V_ST_STA(hfc_inb(card, hfc_A_ST_RD_STA));
 
@@ -555,6 +599,8 @@ static int __devinit hfc_probe(
 		hfc_fifo_init(&card->fifos[i][TX], card, i, TX);
 	}
 	card->num_fifos = 0;
+
+	hfc_pcm_port_init(&card->pcm_port);
 
 	pci_set_drvdata(pci_dev, card);
 

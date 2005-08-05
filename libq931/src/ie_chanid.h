@@ -1,6 +1,6 @@
 
-#ifndef _IE_CHANID_H
-#define _IE_CHANID_H
+#ifndef _LIBQ931_IE_CHANID_H
+#define _LIBQ931_IE_CHANID_H
 
 #include "ie.h"
 #include "chanset.h"
@@ -68,6 +68,29 @@ enum q931_ie_channel_identification_element_type
 	Q931_IE_CI_ET_H11		= 0x8,
 	Q931_IE_CI_ET_H12		= 0x9
 };
+
+struct q931_ie_channel_identification
+{
+	struct q931_ie ie;
+
+	enum q931_ie_channel_identification_interface_id_present
+		interface_id_present;
+	enum q931_ie_channel_identification_interface_type
+		interface_type;
+	enum q931_ie_channel_identification_preferred_exclusive
+		preferred_exclusive;
+	enum q931_ie_channel_identification_d_channel_indicator
+		d_channel_indicator;
+	enum q931_ie_channel_identification_coding_standard
+		coding_standard;
+
+	struct q931_chanset chanset;
+
+//	enum q931_ie_channel_identification_number_map
+//	enum q931_ie_channel_identification_element_type
+};
+
+#ifdef Q931_PRIVATE
 
 struct q931_ie_channel_identification_onwire_3
 {
@@ -138,19 +161,23 @@ struct q931_ie_channel_identification_onwire_3d
 } __attribute__ ((__packed__));
 #endif
 
+void q931_ie_channel_identification_init(
+	struct q931_ie_channel_identification *ie);
+
+void q931_ie_channel_identification_register(
+	const struct q931_ie_type *type);
+
 int q931_ie_channel_identification_check(
-	const struct q931_message *msg,
-	const struct q931_ie *ie);
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
 
 void q931_ie_channel_identification_to_chanset(
 	const struct q931_ie *ie,
 	struct q931_chanset *chanset);
 
-int q931_append_ie_channel_identification_bra(void *buf,
-	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	const struct q931_chanset *chanset);
+int q931_ie_channel_identification_write_to_buf(
+	const struct q931_ie *generic_ie,
+        void *buf,
+	int max_size);
 
-int q931_append_ie_channel_identification_pra(void *buf,
-	enum q931_ie_channel_identification_info_channel_selection_pra selection,
-	enum q931_ie_channel_identification_preferred_exclusive prefexcl,
-	const struct q931_chanset *chanset);
+#endif

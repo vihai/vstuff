@@ -1,6 +1,6 @@
 
-#ifndef _IE_CGPN_H
-#define _IE_CGPN_H
+#ifndef _LIBQ931_IE_CGPN_H
+#define _LIBQ931_IE_CGPN_H
 
 #include "ie.h"
 
@@ -17,7 +17,7 @@ enum q931_ie_calling_party_number_type_of_number
 	Q931_IE_CGPN_TON_RESERVED_FOR_EXT	= 0x7
 };
 
-enum q931_ie_calling_party_number_numbering_plan
+enum q931_ie_calling_party_number_numbering_plan_identificator
 {
 	Q931_IE_CGPN_NP_UNKNOWN			= 0x0,
 	Q931_IE_CGPN_NP_ISDN_TELEPHONY		= 0x1,
@@ -44,6 +44,20 @@ enum q931_ie_calling_party_number_screening_indicator
 	Q931_IE_CGPN_SI_NETWORK_PROVIDED			= 0x3,
 };
 
+struct q931_ie_calling_party_number
+{
+	struct q931_ie ie;
+
+	enum q931_ie_calling_party_number_type_of_number
+		type_of_number;
+	enum q931_ie_calling_party_number_numbering_plan_identificator
+		numbering_plan_identificator;
+
+	char number[21];
+};
+
+#ifdef Q931_PRIVATE
+
 struct q931_ie_calling_party_number_onwire_3_4
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -69,6 +83,20 @@ struct q931_ie_calling_party_number_onwire_3_4
 #endif
 } __attribute__ ((__packed__));
 
-int q931_append_ie_calling_party_number(void *buf, const char *calling_number);
+void q931_ie_calling_party_number_init(
+	struct q931_ie_calling_party_number *ie);
 
+void q931_ie_calling_party_number_register(
+	const struct q931_ie_type *type);
+
+int q931_ie_calling_party_number_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
+
+int q931_ie_calling_party_number_write_to_buf(
+	const struct q931_ie *generic_ie,
+        void *buf,
+	int max_size);
+
+#endif
 #endif

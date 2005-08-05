@@ -1,5 +1,5 @@
-#ifndef _CHANSET_H
-#define _CHANSET_H
+#ifndef _LIBQ931_CHANSET_H
+#define _LIBQ931_CHANSET_H
 
 #define Q931_CHANSET_MAX_SIZE	32
 

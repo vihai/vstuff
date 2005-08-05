@@ -1,5 +1,5 @@
-#ifndef _MSGTYPE_H
-#define _MSGTYPE_H
+#ifndef _LIBQ931_MSGTYPE_H
+#define _LIBQ931_MSGTYPE_H
 
 enum q931_message_type
 {

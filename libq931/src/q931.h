@@ -1,5 +1,5 @@
-#ifndef _Q931_H
-#define _Q931_H
+#ifndef _LIBQ931_Q931_H
+#define _LIBQ931_Q931_H
 
 #include "lib.h"
 #include "dlc.h"

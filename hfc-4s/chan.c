@@ -12,6 +12,7 @@
 #include "card.h"
 #include "st_port.h"
 #include "st_port_inline.h"
+#include "pcm_port_inline.h"
 #include "fifo.h"
 #include "fifo_inline.h"
 #include "fsm.h"
@@ -22,7 +23,7 @@ void hfc_chan_disable(struct hfc_chan_duplex *chan)
 
 	WARN_ON(!irqs_disabled() && !in_irq());
 
-	hfc_st_port_select(card, chan->port->id);
+	hfc_st_port_select(chan->port);
 
 	if (chan->id == B1 || chan->id == B2) {
 		if (chan->id == B1) {
@@ -71,7 +72,7 @@ void hfc_chan_enable(struct hfc_chan_duplex *chan)
 	if (chan->id != B1 && chan->id != B2)
 		return;
 
-	hfc_st_port_select(card, chan->port->id);
+	hfc_st_port_select(chan->port);
 
 	if (chan->id == B1) {
 		chan->port->regs.st_ctrl_0 |= hfc_A_ST_CTRL0_V_B1_EN;
@@ -224,17 +225,29 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 
 	hfc_chan_disable(chan);
 
-	if (chan->rx.fifo)
+	if (chan->rx.fifo) {
 		hfc_deallocate_fifo(chan->rx.fifo);
+		chan->rx.fifo->connected_chan = NULL;
+		chan->rx.fifo = NULL;
+	}
 
-	chan->rx.fifo->connected_chan = NULL;
-	chan->rx.fifo = NULL;
-
-	if (chan->tx.fifo)
+	if (chan->tx.fifo) {
 		hfc_deallocate_fifo(chan->tx.fifo);
+		chan->tx.fifo->connected_chan = NULL;
+		chan->tx.fifo = NULL;
+	}
 
-	chan->tx.fifo->connected_chan = NULL;
-	chan->tx.fifo = NULL;
+	if (chan->rx.slot) {
+		hfc_pcm_port_deallocate_slot(chan->rx.slot);
+		chan->rx.slot->connected_chan = NULL;
+		chan->rx.slot = NULL;
+	}
+
+	if (chan->tx.slot) {
+		hfc_pcm_port_deallocate_slot(chan->tx.slot);
+		chan->tx.slot->connected_chan = NULL;
+		chan->tx.slot = NULL;
+	}
 
 	hfc_upload_fsm(card);
 
@@ -253,7 +266,7 @@ static int hfc_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *sk
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
 	
-	hfc_st_port_select(chan->port->card, chan->port->id);
+	hfc_st_port_select(chan->port);
 	hfc_st_port_check_l1_up(chan->port);
 
 	hfc_fifo_select(chan->tx.fifo);
@@ -547,34 +560,75 @@ static int hfc_bridge(
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
 
-	chan->rx.fifo = hfc_allocate_fifo(card, RX);
-	if (!chan->rx.fifo) {
-		err = -ENOMEM;
+	struct hfc_fifo *fifo_1_rx = hfc_allocate_fifo(card, RX);
+	if (!fifo_1_rx) {
+		err = -EBUSY;
 		goto err_allocate_fifo_1_rx;
 	}
 
-	chan->rx.fifo = hfc_allocate_fifo(card, TX);
-	if (!chan->tx.fifo) {
-		err = -ENOMEM;
+	struct hfc_fifo *fifo_1_tx = hfc_allocate_fifo(card, TX);
+	if (!fifo_1_tx) {
+		err = -EBUSY;
 		goto err_allocate_fifo_1_tx;
 	}
 
-	chan2->rx.fifo = hfc_allocate_fifo(card, RX);
-	if (!chan2->rx.fifo) {
-		err = -ENOMEM;
+	struct hfc_fifo *fifo_2_rx = hfc_allocate_fifo(card, RX);
+	if (!fifo_2_rx) {
+		err = -EBUSY;
 		goto err_allocate_fifo_2_rx;
 	}
 
-	chan2->rx.fifo = hfc_allocate_fifo(card, TX);
-	if (!chan2->tx.fifo) {
-		err = -ENOMEM;
+	struct hfc_fifo *fifo_2_tx = hfc_allocate_fifo(card, TX);
+	if (!fifo_2_tx) {
+		err = -EBUSY;
 		goto err_allocate_fifo_2_tx;
 	}
 
+	struct hfc_pcm_slot *slot_1_rx;
+	slot_1_rx = hfc_pcm_port_allocate_slot(&card->pcm_port, RX);
+	if (!slot_1_rx) {
+		err = -EBUSY;
+		goto err_allocate_slot_1_rx;
+	}
+
+	struct hfc_pcm_slot *slot_1_tx;
+	slot_1_tx = hfc_pcm_port_allocate_slot(&card->pcm_port, TX);
+	if (!slot_1_tx) {
+		err = -EBUSY;
+		goto err_allocate_slot_1_tx;
+	}
+
+	struct hfc_pcm_slot *slot_2_rx;
+	slot_2_rx = hfc_pcm_port_allocate_slot(&card->pcm_port, RX);
+	if (!slot_2_rx) {
+		err = -EBUSY;
+		goto err_allocate_slot_2_rx;
+	}
+
+	struct hfc_pcm_slot *slot_2_tx;
+	slot_2_tx = hfc_pcm_port_allocate_slot(&card->pcm_port, TX);
+	if (!slot_2_tx) {
+		err = -EBUSY;
+		goto err_allocate_slot_2_tx;
+	}
+
+	chan->rx.fifo = fifo_1_rx;;
 	chan->rx.fifo->connected_chan = &chan->rx;
+	chan->tx.fifo = fifo_1_tx;
 	chan->tx.fifo->connected_chan = &chan->tx;
+	chan2->rx.fifo = fifo_2_rx;
 	chan2->rx.fifo->connected_chan = &chan2->rx;
+	chan2->tx.fifo = fifo_2_tx;
 	chan2->tx.fifo->connected_chan = &chan2->tx;
+
+	chan->rx.slot = slot_1_rx;
+	chan->rx.slot->connected_chan = &chan->rx;
+	chan->tx.slot = slot_1_tx;
+	chan->tx.slot->connected_chan = &chan->tx;
+	chan2->rx.slot = slot_2_rx;
+	chan2->rx.slot->connected_chan = &chan2->rx;
+	chan2->tx.slot = slot_2_tx;
+	chan2->tx.slot->connected_chan = &chan2->tx;
 
 	hfc_upload_fsm(card);
 
@@ -610,19 +664,27 @@ static int hfc_bridge(
 		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 		hfc_A_CON_HDCL_V_DATA_FLOW_ST_to_PCM);
 
+//	hfc_pcm_multireg_select(card, hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD1);
+//	hfc_outb(card, hfc_R_PCM_MD1, hfc_R_PCM_MD1_V_PCM_LOOP);
+
+
 	// Slot 0
-	hfc_outb(card, hfc_R_SLOT,
-		hfc_R_SLOT_V_SL_DIR_RX |
-		hfc_R_SLOT_V_SL_NUM(0));
+	hfc_pcm_slot_select(card,
+		(slot_1_rx->direction == RX ?
+			hfc_R_SLOT_V_SL_DIR_RX :
+			hfc_R_SLOT_V_SL_DIR_TX) |
+		hfc_R_SLOT_V_SL_NUM(slot_1_rx->hw_index));
 
 	hfc_outb(card, hfc_A_SL_CFG,
 		hfc_A_SL_CFG_V_CH_SDIR_RX |
 		hfc_A_SL_CFG_V_CH_NUM(chan->hw_index) |
 		hfc_A_SL_CFG_V_ROUT_LOOP);
 
-	hfc_outb(card, hfc_R_SLOT,
-		hfc_R_SLOT_V_SL_DIR_TX |
-		hfc_R_SLOT_V_SL_NUM(0));
+	hfc_pcm_slot_select(card,
+		(slot_1_tx->direction == RX ?
+			hfc_R_SLOT_V_SL_DIR_RX :
+			hfc_R_SLOT_V_SL_DIR_TX) |
+		hfc_R_SLOT_V_SL_NUM(slot_1_tx->hw_index));
 
 	hfc_outb(card, hfc_A_SL_CFG,
 		hfc_A_SL_CFG_V_CH_SDIR_TX |
@@ -630,40 +692,53 @@ static int hfc_bridge(
 		hfc_A_SL_CFG_V_ROUT_LOOP);
 
 	// Slot 1
-	hfc_outb(card, hfc_R_SLOT,
-		hfc_R_SLOT_V_SL_DIR_RX |
-		hfc_R_SLOT_V_SL_NUM(1));
+	hfc_pcm_slot_select(card,
+		(slot_2_rx->direction == RX ?
+			hfc_R_SLOT_V_SL_DIR_RX :
+			hfc_R_SLOT_V_SL_DIR_TX) |
+		hfc_R_SLOT_V_SL_NUM(slot_2_rx->hw_index));
 
 	hfc_outb(card, hfc_A_SL_CFG,
 		hfc_A_SL_CFG_V_CH_SDIR_RX |
 		hfc_A_SL_CFG_V_CH_NUM(chan2->hw_index) |
 		hfc_A_SL_CFG_V_ROUT_LOOP);
 
-	hfc_outb(card, hfc_R_SLOT,
-		hfc_R_SLOT_V_SL_DIR_TX |
-		hfc_R_SLOT_V_SL_NUM(1));
+	hfc_pcm_slot_select(card,
+		(slot_2_tx->direction == RX ?
+			hfc_R_SLOT_V_SL_DIR_RX :
+			hfc_R_SLOT_V_SL_DIR_TX) |
+		hfc_R_SLOT_V_SL_NUM(slot_2_tx->hw_index));
 
 	hfc_outb(card, hfc_A_SL_CFG,
 		hfc_A_SL_CFG_V_CH_SDIR_TX |
 		hfc_A_SL_CFG_V_CH_NUM(chan->hw_index) |
 		hfc_A_SL_CFG_V_ROUT_LOOP);
 
+	hfc_chan_enable(chan);
+	hfc_chan_enable(chan2);
+
 	spin_unlock_irqrestore(&card->lock, flags);
 	
 	return VISDN_CONNECT_BRIDGED;
 
-	hfc_deallocate_fifo(chan2->tx.fifo);
-	chan2->tx.fifo = NULL;
+	hfc_pcm_port_deallocate_slot(slot_1_tx);
+err_allocate_slot_1_tx:
+	hfc_pcm_port_deallocate_slot(slot_1_rx);
+err_allocate_slot_1_rx:
+	hfc_pcm_port_deallocate_slot(slot_2_tx);
+err_allocate_slot_2_tx:
+	hfc_pcm_port_deallocate_slot(slot_2_rx);
+err_allocate_slot_2_rx:
+	hfc_deallocate_fifo(fifo_2_tx);
 err_allocate_fifo_2_tx:
-	hfc_deallocate_fifo(chan2->rx.fifo);
-	chan2->rx.fifo = NULL;
+	hfc_deallocate_fifo(fifo_2_rx);
 err_allocate_fifo_2_rx:
-	hfc_deallocate_fifo(chan->tx.fifo);
-	chan->tx.fifo = NULL;
+	hfc_deallocate_fifo(fifo_1_tx);
 err_allocate_fifo_1_tx:
-	hfc_deallocate_fifo(chan->rx.fifo);
-	chan->rx.fifo = NULL;
+	hfc_deallocate_fifo(fifo_1_rx);
 err_allocate_fifo_1_rx:
+
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	return err;
 }

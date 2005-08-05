@@ -10,9 +10,23 @@
 
 #include "ie_restind.h"
 
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_restart_indicator_init(
+	struct  q931_ie_restart_indicator *ie)
+{
+	ie->ie.type = ie_type;
+}
+
+void q931_ie_restart_indicator_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+}
+
 int q931_ie_restart_indicator_check(
-	const struct q931_message *msg,
-	const struct q931_ie *ie)
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
 {
 	if (ie->len < 1) {
 		report_msg(msg, LOG_ERR, "IE size < 1\n");
@@ -32,7 +46,7 @@ int q931_ie_restart_indicator_check(
 	}
 
 	if (oct_3->restart_class != Q931_IE_RI_C_INDICATED &&
-	    oct_3->restart_class != Q931_IE_RI_C_SIGNLE_INTERFACE &&
+	    oct_3->restart_class != Q931_IE_RI_C_SINGLE_INTERFACE &&
 	    oct_3->restart_class != Q931_IE_RI_C_ALL_INTERFACES) {
 		report_msg(msg, LOG_ERR,
 			"IE specifies invalid class\n");

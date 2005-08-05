@@ -2,6 +2,58 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-05 03:52:52 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-41
+
+    Summary:
+      libq931 revolution backup
+    Revision:
+      isdn--devel--0.1--patch-41
+
+    
+    
+
+    new files:
+     libq931/src/.arch-ids/call_inline.h.id
+     libq931/src/.arch-ids/ces_inline.h.id
+     libq931/src/.arch-ids/ie_sending_complete.c.id
+     libq931/src/.arch-ids/ies.h.id libq931/src/call_inline.h
+     libq931/src/ces_inline.h libq931/src/ie_sending_complete.c
+     libq931/src/ies.h
+
+    removed files:
+     .arch-ids/acinclude.m4.id acinclude.m4
+     libq931/src/.arch-ids/causeset.c.id
+     libq931/src/.arch-ids/causeset.h.id libq931/src/causeset.c
+     libq931/src/causeset.h
+
+    modified files:
+     ChangeLog Makefile.am aclocal.m4 chan_visdn/chan_visdn.c
+     hfc-4s/card.h hfc-4s/card_sysfs.c hfc-4s/chan.c hfc-4s/chan.h
+     hfc-4s/chan_sysfs.c hfc-4s/fifo.h hfc-4s/fsm.c
+     hfc-4s/hfc-4s_main.c hfc-4s/pcm_port.c hfc-4s/pcm_port.h
+     hfc-4s/pcm_port_inline.h hfc-4s/pcm_port_sysfs.c hfc-4s/regs.h
+     hfc-4s/st_port.c hfc-4s/st_port_inline.h
+     hfc-4s/st_port_sysfs.c libq931/src/Makefile.am
+     libq931/src/call.c libq931/src/call.h libq931/src/callref.h
+     libq931/src/ces.c libq931/src/ces.h libq931/src/channel.h
+     libq931/src/chanset.h libq931/src/dlc.h libq931/src/global.c
+     libq931/src/global.h libq931/src/ie.c libq931/src/ie.h
+     libq931/src/ie_bearercap.c libq931/src/ie_bearercap.h
+     libq931/src/ie_call_state.c libq931/src/ie_call_state.h
+     libq931/src/ie_cause.c libq931/src/ie_cause.h
+     libq931/src/ie_cdpn.c libq931/src/ie_cdpn.h
+     libq931/src/ie_cgpn.c libq931/src/ie_cgpn.h
+     libq931/src/ie_chanid.c libq931/src/ie_chanid.h
+     libq931/src/ie_hlc.c libq931/src/ie_hlc.h
+     libq931/src/ie_progind.c libq931/src/ie_progind.h
+     libq931/src/ie_restind.c libq931/src/ie_restind.h
+     libq931/src/ie_sending_complete.h libq931/src/intf.h
+     libq931/src/lib.h libq931/src/list.h libq931/src/logging.h
+     libq931/src/message.h libq931/src/msgtype.h libq931/src/out.c
+     libq931/src/out.h libq931/src/proto.h libq931/src/q931.c
+     libq931/src/q931.h libq931/src/timer.h libq931/src/util.h
+
+
 2005-07-29 23:42:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-40
 
     Summary:

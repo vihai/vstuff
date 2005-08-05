@@ -1,6 +1,6 @@
 
-#ifndef _IE_BEARERCAP_H
-#define _IE_BEARERCAP_H
+#ifndef _LIBQ931_IE_BEARERCAP_H
+#define _LIBQ931_IE_BEARERCAP_H
 
 #include "ie.h"
 
@@ -51,9 +51,30 @@ enum q931_ie_bearer_capability_user_information_layer_1_protocol
 	Q931_IE_BC_UIL1P_X31		= 0x09,
 };
 
-#define	Q931_IE_BC_LAYER_1_IDENT 0x1
-#define	Q931_IE_BC_LAYER_2_IDENT 0x2
-#define	Q931_IE_BC_LAYER_3_IDENT 0x2
+enum q931_ie_bearer_capability_user_information_layer_ident
+{
+	Q931_IE_BC_LAYER_1_IDENT	= 0x1,
+	Q931_IE_BC_LAYER_2_IDENT	= 0x2,
+	Q931_IE_BC_LAYER_3_IDENT	= 0x2,
+};
+
+struct q931_ie_bearer_capability
+{
+	struct q931_ie ie;
+
+	enum q931_ie_bearer_capability_coding_standard
+		coding_standard;
+	enum q931_ie_bearer_capability_information_transfer_capability
+		information_transfer_capability;
+	enum q931_ie_bearer_capability_transfer_mode
+		transfer_mode;
+	enum q931_ie_bearer_capability_information_transfer_rate
+		information_transfer_rate;
+	enum q931_ie_bearer_capability_user_information_layer_1_protocol
+		user_information_layer_1_protocol;
+};
+
+#ifdef Q931_PRIVATE
 
 struct q931_ie_bearer_capability_onwire_3
 {
@@ -259,7 +280,17 @@ struct q931_ie_bearer_capability_onwire_7
 #endif
 } __attribute__ ((__packed__));
 
-int q931_append_ie_bearer_capability_alaw(void *buf);
-int q931_append_ie_bearer_capability_ulaw(void *buf);
+void q931_ie_bearer_capability_register(
+	const struct q931_ie_type *type);
 
+int q931_ie_bearer_capability_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
+
+int q931_ie_bearer_capability_write_to_buf(
+	const struct q931_ie *ie,
+	void *buf,
+	int max_size);
+
+#endif
 #endif

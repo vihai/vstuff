@@ -167,7 +167,7 @@ static ssize_t hfc_show_sq_bits(
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
 
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 
 	int bits = hfc_A_ST_SQ_RD_V_ST_SQ_RD(hfc_inb(card, hfc_A_ST_SQ_RD));
 
@@ -197,7 +197,7 @@ static ssize_t hfc_store_sq_bits(
 		return -EINVAL;
 
 	spin_lock_irqsave(&card->lock, flags);
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 	hfc_outb(card, hfc_A_ST_SQ_WR, value);
 	spin_unlock_irqrestore(&card->lock, flags);
 
@@ -239,7 +239,7 @@ static ssize_t hfc_store_sq_enabled(
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
 
-	hfc_st_port_select(card, port->id);
+	hfc_st_port_select(port);
 
 	if (value)
 		port->regs.st_ctrl_0 |= hfc_A_ST_CTRL0_V_SQ_EN;

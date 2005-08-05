@@ -1,5 +1,5 @@
-#ifndef _IE_HLC_H
-#define _IE_HLC_H
+#ifndef _LIBQ931_IE_HLC_H
+#define _LIBQ931_IE_HLC_H
 
 #include "ie.h"
 
@@ -38,6 +38,7 @@ enum q931_ie_high_layer_compatibility_characteristics_identification
 	Q931_IE_HLC_CI_RESERVED					= 0x7f,
 };
 
+#ifdef Q931_PRIVATE
 
 struct q931_ie_high_layer_compatibility_onwire_3
 {
@@ -68,6 +69,13 @@ struct q931_ie_high_layer_compatibility_onwire_4
 #endif
 } __attribute__ ((__packed__));
 
-int q931_append_ie_high_layer_compatibility_telephony(void *buf);
+void q931_ie_high_layer_compatibility_register(
+	const struct q931_ie_type *type);
 
+int q931_ie_high_layer_compatibility_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg);
+
+
+#endif
 #endif

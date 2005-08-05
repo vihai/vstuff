@@ -102,7 +102,8 @@
 #define hfc_R_IRQ_CTRL_V_IRQ_POL_HIGH		(1 << 4)
 
 #define hfc_R_PCM_MD0		0x14
-#define hfc_R_PCM_MD0_V_PCM_MD			(1 << 0)
+#define hfc_R_PCM_MD0_V_PCM_MD_MASTER		(1 << 0)
+#define hfc_R_PCM_MD0_V_PCM_MD_SLAVE		(0 << 0)
 #define hfc_R_PCM_MD0_V_C4_POL			(1 << 1)
 #define hfc_R_PCM_MD0_V_F0_NEG			(1 << 2)
 #define hfc_R_PCM_MD0_V_F0_LEN			(1 << 3)

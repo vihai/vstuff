@@ -1,5 +1,5 @@
-#ifndef _GLOBAL_H
-#define _GLOBAL_H
+#ifndef _LIBQ931_GLOBAL_H
+#define _LIBQ931_GLOBAL_H
 
 #include "intf.h"
 #include "chanset.h"

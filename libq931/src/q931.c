@@ -26,6 +26,10 @@
 #include "intf.h"
 #include "proto.h"
 
+#include "ie_cause.h"
+
+#include "call_inline.h"
+
 void q931_default_report(int level, const char *format, ...)
 {
 	va_list ap;
@@ -45,7 +49,7 @@ struct q931_lib *q931_init()
 	lib->report = q931_default_report;
 
 	// Non-reentrant, FIXME
-	q931_ie_infos_init();
+	q931_ie_types_init();
 	q931_message_types_init();
 
 	INIT_LIST_HEAD(&lib->timers);
@@ -181,16 +185,16 @@ int ie_has_content_errors(
 {
 	assert(msg);
 	assert(ie);
-	assert(ie->info);
+	assert(ie->type);
 
-	if (ie->info->max_len >= 0 &&
-	    ie->len > ie->info->max_len) {
+	if (ie->type->max_len >= 0 &&
+	    ie->len > ie->type->max_len) {
 
 		report_msg(msg, LOG_DEBUG,
 			"IE bigger than maximum "
 			" specified len (%d > %d)\n",
 			ie->len,
-			ie->info->max_len);
+			ie->type->max_len);
 
 		if (0) { // Access IE??! 5.8.7.2
 		} else if (0) { // Call identity???
@@ -199,8 +203,8 @@ int ie_has_content_errors(
 
 	}
 
-	if (ie->info->validity_check &&
-	     !ie->info->validity_check(msg, ie)) {
+	if (ie->type->validity_check &&
+	     !ie->type->validity_check(ie, msg)) {
 		return TRUE;
 	}
 
@@ -236,10 +240,10 @@ void q931_decode_so_ie(
 		&msg->ies.ies[msg->ies.count];
 
 	if (ds->codeset == 0) {
-		ie->info =
-			q931_get_ie_info(ds->ie_id);
+		ie->type =
+			q931_get_ie_type(ds->ie_id);
 
-		if (ie->info) {
+		if (ie->type) {
 			ie->len = 0;
 			ie->data = NULL;
 			msg->ies.count++;
@@ -248,7 +252,7 @@ void q931_decode_so_ie(
 				"SO IE %d ===> %u (%s)\n",
 				ds->curie,
 				ds->ie_id,
-				ie->info->name);
+				ie->type->name);
 		} else {
 			report_dlc(msg->dlc, LOG_DEBUG,
 				"SO IE %d ===> %u (unknown)\n",
@@ -275,14 +279,14 @@ void q931_decode_vl_ie(
 		// Check duplicated IEs
 		// Check missing mandatory IE
 
-		ie->info =
-			q931_get_ie_info(ds->ie_id);
+		ie->type =
+			q931_get_ie_type(ds->ie_id);
 
-		const struct q931_ie_info_per_mt *ie_info2 =
-			q931_get_ie_info_per_mt(
+		const struct q931_ie_type_per_mt *ie_type2 =
+			q931_get_ie_type_per_mt(
 				msg->message_type, ds->ie_id);
 
-		if (!ie->info) {
+		if (!ie->type) {
 			if (q931_ie_comprehension_required(ds->ie_id)) {
 				ds->unrecognized_ies[ds->unrecognized_ies_cnt++] =
 					ds->ie_id;
@@ -296,7 +300,7 @@ void q931_decode_vl_ie(
 			goto skip_this_ie;
 		}
 
-		if (!ie_info2) {
+		if (!ie_type2) {
 			report_msg(msg, LOG_DEBUG,
 				"Unexpected IE %d in message type %s\n",
 				ds->ie_id,
@@ -311,7 +315,7 @@ void q931_decode_vl_ie(
 				"VS IE %d ===> %u (%s) -- length %u\n",
 				ds->curie,
 				ds->ie_id,
-				ie->info->name,
+				ie->type->name,
 				ie->len);
 
 			msg->ies.count++;
@@ -420,25 +424,37 @@ int q931_decode_information_elements(
 		switch(msg->message_type) {
 		case Q931_MT_SETUP:
 		case Q931_MT_RELEASE: {
-			struct q931_causeset causeset = Q931_CAUSESET_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_causeset_add_diag(&causeset,
-					Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-					ds.invalid_mand_ies,
-					ds.invalid_mand_ies_cnt);
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.invalid_mand_ies,
+				ds.invalid_mand_ies_cnt);
+			cause.diagnostics_len = ds.invalid_mand_ies_cnt;
+			q931_ies_add(&ies, &cause.ie);
 
-			q931_send_release_complete(call, msg->dlc, &causeset);
+			q931_call_send_release_complete(call, &ies);
 
 			return FALSE;
 		}
 		break;
 
-		case Q931_MT_DISCONNECT:
-			q931_causeset_init(&call->release_with_cause);
-			q931_causeset_add_diag(&call->release_with_cause,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.invalid_mand_ies,
+		case Q931_MT_DISCONNECT: {
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
+
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.invalid_mand_ies,
 				ds.invalid_mand_ies_cnt);
+			cause.diagnostics_len = ds.invalid_mand_ies_cnt;
+			// Reset release with cause?
+			q931_ies_add(&call->release_with_cause, &cause.ie);
+		}
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
@@ -446,16 +462,19 @@ int q931_decode_information_elements(
 		break;
 
 		default: {
-			struct q931_causeset causeset = Q931_CAUSESET_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_causeset_add_diag(&causeset,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.invalid_mand_ies,
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.invalid_mand_ies,
 				ds.invalid_mand_ies_cnt);
+			cause.diagnostics_len = ds.invalid_mand_ies_cnt;
+			q931_ies_add(&ies, &cause.ie);
 
-			q931_send_status(call, msg->dlc,
-				call->state,
-				&causeset);
+			q931_call_send_status(call, &ies);
 
 			return FALSE;
 		}
@@ -463,23 +482,35 @@ int q931_decode_information_elements(
 		}
 	} else if (ds.unrecognized_ies_cnt) {
 		switch(msg->message_type) {
-		case Q931_MT_DISCONNECT:
-			q931_causeset_init(&call->release_with_cause);
-			q931_causeset_add_diag(&call->release_with_cause,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.unrecognized_ies,
+		case Q931_MT_DISCONNECT: {
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
+
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
+			cause.diagnostics_len = ds.unrecognized_ies_cnt;
+			// Reset release with cause?
+			q931_ies_add(&call->release_with_cause, &cause.ie);
+		}
 		break;
 
 		case Q931_MT_RELEASE: {
-			struct q931_causeset causeset = Q931_CAUSESET_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_causeset_add_diag(&causeset,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.unrecognized_ies,
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
+			cause.diagnostics_len = ds.unrecognized_ies_cnt;
+			q931_ies_add(&ies, &cause.ie);
 
-			q931_send_release_complete(call, msg->dlc, &causeset);
+			q931_call_send_release_complete(call, &ies);
 
 			return FALSE;
 		}
@@ -490,14 +521,19 @@ int q931_decode_information_elements(
 		break;
 
 		default: {
-			struct q931_causeset causeset = Q931_CAUSESET_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_causeset_add_diag(&causeset,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.unrecognized_ies,
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
+			cause.diagnostics_len = ds.unrecognized_ies_cnt;
+			q931_ies_add(&ies, &cause.ie);
 
-			q931_send_status(call, msg->dlc, call->state, &causeset);
+			q931_call_send_status(call, &ies);
 
 			return FALSE;
 		}
@@ -505,23 +541,22 @@ int q931_decode_information_elements(
 		}
 	} else if (ds.invalid_opt_ies_cnt) {
 		switch(msg->message_type) {
-		case Q931_MT_DISCONNECT:
-			q931_causeset_init(&call->release_with_cause);
-			q931_causeset_add_diag(&call->release_with_cause,
-				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT,
-				ds.unrecognized_ies,
+		case Q931_MT_DISCONNECT: {
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
+
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
+			memcpy(cause.diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
+			cause.diagnostics_len = ds.unrecognized_ies_cnt;
+			// Reset release with cause?
+			q931_ies_add(&call->release_with_cause, &cause.ie);
+		}
 		break;
 
 		case Q931_MT_RELEASE: {
-			struct q931_causeset causeset = Q931_CAUSESET_INIT;
-
-			q931_causeset_add_diag(&causeset,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.invalid_opt_ies,
-				ds.invalid_opt_ies_cnt);
-
-			q931_send_release_complete(call, msg->dlc, &causeset);
 
 			return FALSE;
 		}
@@ -532,15 +567,19 @@ int q931_decode_information_elements(
 		break;
 
 		default: {
-			struct q931_causeset causeset = Q931_CAUSESET_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_causeset_add_diag(&causeset,
-				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS,
-				ds.invalid_opt_ies,
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			memcpy(cause.diagnostics, ds.invalid_opt_ies,
 				ds.invalid_opt_ies_cnt);
+			cause.diagnostics_len = ds.invalid_opt_ies_cnt;
+			q931_ies_add(&ies, &cause.ie);
 
-			q931_send_status(call, msg->dlc,
-				call->state, &causeset);
+			q931_call_send_status(call, &ies);
 
 			return FALSE;
 		}
@@ -702,11 +741,16 @@ void q931_receive(struct q931_dlc *dlc)
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE for an unknown callref\n");
 
-			struct q931_causeset causeset =
-				Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_send_release_complete(call, dlc, &causeset);
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+			q931_ies_add(&ies, &cause.ie);
+
+			q931_call_send_release_complete(call, &ies);
 
 			return;
 		break;
@@ -737,11 +781,17 @@ void q931_receive(struct q931_dlc *dlc)
 		break;
 
 		default: {
-			struct q931_causeset causeset =
-				Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
 
-			q931_send_release(call, dlc, &causeset);
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+			q931_ies_add(&ies, &cause.ie);
+
+			q931_call_send_release(call, &ies);
+
 			q931_call_start_timer(call, T308);
 
 			if (call->state == N0_NULL_STATE)

@@ -1,5 +1,5 @@
-#ifndef _TIMER_H
-#define _TIMER_H
+#ifndef _LIBQ931_TIMER_H
+#define _LIBQ931_TIMER_H
 
 #include "list.h"
 

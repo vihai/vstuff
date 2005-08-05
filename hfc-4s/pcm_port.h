@@ -15,6 +15,8 @@
 
 #include <visdn.h>
 
+#include "util.h"
+
 #define to_pcm_port(port) container_of(port, struct hfc_pcm_port, visdn_port)
 
 #ifdef DEBUG
@@ -40,6 +42,19 @@
 		(port)->hw_index,			\
 		## arg)
 
+struct hfc_pcm_port;
+struct hfc_pcm_slot
+{
+	struct hfc_pcm_port *port;
+
+	int hw_index;
+	enum hfc_direction direction;
+
+	struct hfc_chan_simplex *connected_chan;
+
+	int used;
+};
+
 struct hfc_pcm_port
 {
 	struct hfc_card *card;
@@ -52,11 +67,20 @@ struct hfc_pcm_port
 	int f0_len;
 	int pll_adj;
 
-	int data_rate;
+	int bitrate;
+
+	int num_slots;
+	struct hfc_pcm_slot slots[128][2];
 
 	struct visdn_port visdn_port;
 };
 
 extern struct visdn_port_ops hfc_pcm_port_ops;
+
+void hfc_pcm_port_init(struct hfc_pcm_port *port);
+struct hfc_pcm_slot *hfc_pcm_port_allocate_slot(
+	struct hfc_pcm_port *port,
+	enum hfc_direction direction);
+void hfc_pcm_port_deallocate_slot(struct hfc_pcm_slot *slot);
 
 #endif

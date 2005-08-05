@@ -33,7 +33,8 @@
 			(card)->pcidev->dev.bus_id,	\
 			## arg)
 #else
-#define hfc_debug_card(card, dbglevel, format, arg...) do {} while (0)
+#define hfc_debug_card(card, dbglevel, format, arg...)	\
+	do { card = card; } while (0)
 #endif
 
 #define hfc_msg_card(card, level, format, arg...)	\
@@ -54,7 +55,6 @@ struct hfc_card {
 		u8 ctrl;
 		u8 fifo_md;
 		u8 irqmsk_misc;
-		u8 bert_wd_md;
 	} regs;
 
 	struct pci_dev *pcidev;
@@ -71,7 +71,6 @@ struct hfc_card {
 
 	int num_fifos;
 	struct hfc_fifo fifos[32][2];
-	struct hfc_fifo *first_fifo;
 
 	unsigned long io_bus_mem;
 	void *io_mem;
@@ -95,5 +94,10 @@ void hfc_configure_fifos(
 
 void hfc_softreset(struct hfc_card *card);
 void hfc_initialize_hw(struct hfc_card *card);
+
+void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits);
+void hfc_update_pcm_md1(struct hfc_card *card);
+void hfc_update_st_sync(struct hfc_card *card);
+void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits);
 
 #endif

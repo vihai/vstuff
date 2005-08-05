@@ -5,23 +5,53 @@
 
 #include "ie_cdpn.h"
 
-int q931_append_ie_called_party_number(void *buf, const char *called_number)
+static const struct q931_ie_type *ie_type;
+
+void q931_ie_called_party_number_register(
+	const struct q931_ie_type *type)
 {
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	ie_type = type;
+}
 
-	ie->id = Q931_IE_CALLED_PARTY_NUMBER;
-	ie->len = 0;
+int q931_ie_called_party_number_check(
+	const struct q931_ie *ie,
+	const struct q931_message *msg)
+{
+	// TODO
 
-	ie->data[ie->len] = 0x00;
+	return TRUE;
+}
+
+void q931_ie_called_party_number_init(
+	struct q931_ie_called_party_number *cdpn)
+{
+	memset(cdpn, 0x0, sizeof(*cdpn));
+}
+
+int q931_ie_called_party_number_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size)
+{
+	struct q931_ie_called_party_number *ie =
+		container_of(generic_ie, struct q931_ie_called_party_number, ie);
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
+
+	// Check max_size
+
+	ieow->id = Q931_IE_CALLED_PARTY_NUMBER;
+	ieow->len = 0;
+
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_called_party_number_onwire_3 *oct_3 =
-	  (struct q931_ie_called_party_number_onwire_3 *)(&ie->data[ie->len]);
+	  (struct q931_ie_called_party_number_onwire_3 *)(&ieow->data[ieow->len]);
 	oct_3->ext = 1;
-	oct_3->type_of_number = Q931_IE_CDPN_TON_UNKNOWN;
-	oct_3->numbering_plan_identificator = Q931_IE_CDPN_NP_UNKNOWN;
-	ie->len += 1;
+	oct_3->type_of_number = ie->type_of_number;
+	oct_3->numbering_plan_identificator = ie->numbering_plan_identificator;
+	ieow->len += 1;
 
-	memcpy(&ie->data[ie->len], called_number, strlen(called_number));
-	ie->len += strlen(called_number);
+	memcpy(&ieow->data[ieow->len], ie->number, strlen(ie->number));
+	ieow->len += strlen(ie->number);
 
-	return ie->len + sizeof(struct q931_ie_onwire);
+	return ieow->len + sizeof(struct q931_ie_onwire);
 }

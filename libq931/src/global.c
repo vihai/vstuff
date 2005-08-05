@@ -16,6 +16,8 @@
 
 #include "ie_chanid.h"
 #include "ie_call_state.h"
+#include "ie_restind.h"
+#include "ie_cause.h"
 
 static const char *q931_global_state_to_text(enum q931_global_state state)
 {
@@ -67,10 +69,39 @@ void q931_management_restart_request(
 		gc->restart_acknowledged = 0;
 		gc->restart_request_count = 0;
 
-		q931_chanset_init(&gc->restart_acked_chans);
-		q931_chanset_copy(&gc->restart_reqd_chans, chanset);
+		struct q931_ies ies = Q931_IES_INIT;
 
-		q931_send_restart(gc, &gc->intf->dlc, chanset);
+		if (chanset && q931_chanset_count(chanset)) {
+			q931_chanset_init(&gc->restart_acked_chans);
+			q931_chanset_copy(&gc->restart_reqd_chans, chanset);
+
+			struct q931_ie_channel_identification ci;
+			q931_ie_channel_identification_init(&ci);
+
+			ci.interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+			if (gc->intf->type == Q931_INTF_TYPE_PRA) {
+				ci.interface_type = Q931_IE_CI_IT_PRIMARY;
+			} else {
+				ci.interface_type = Q931_IE_CI_IT_BASIC;
+			}
+			ci.coding_standard = Q931_IE_CI_CS_CCITT;
+			q931_chanset_init(&ci.chanset);
+			q931_chanset_copy(&ci.chanset, &gc->restart_reqd_chans);
+			q931_ies_add(&ies, &ci.ie);
+
+			struct q931_ie_restart_indicator ri;
+			q931_ie_restart_indicator_init(&ri);
+			ri.ri_class = Q931_IE_RI_C_INDICATED;
+			q931_ies_add(&ies, &ri.ie);
+		} else {
+			struct q931_ie_restart_indicator ri;
+			q931_ie_restart_indicator_init(&ri);
+			ri.ri_class = Q931_IE_RI_C_SINGLE_INTERFACE;
+			q931_ies_add(&ies, &ri.ie);
+		}
+
+		q931_send_message(NULL, &gc->intf->dlc, Q931_MT_RESTART, &ies);
+
 		q931_global_start_timer(gc, T316);
 
 		struct q931_call *call;
@@ -135,8 +166,30 @@ void q931_global_restart_confirm(
 		if (gc->restart_request_count == 0) {
 			q931_global_stop_timer(gc, T317);
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
-			q931_send_restart_acknowledge(gc, &gc->intf->dlc,
-				&gc->restart_acked_chans);
+
+			struct q931_ies ies = Q931_IES_INIT;
+
+			struct q931_ie_channel_identification ci;
+			q931_ie_channel_identification_init(&ci);
+
+			ci.interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+			if (call->intf->type == Q931_INTF_TYPE_PRA) {
+				ci.interface_type = Q931_IE_CI_IT_PRIMARY;
+			} else {
+				ci.interface_type = Q931_IE_CI_IT_BASIC;
+			}
+			ci.coding_standard = Q931_IE_CI_CS_CCITT;
+			q931_chanset_init(&ci.chanset);
+			q931_chanset_copy(&ci.chanset, &gc->restart_acked_chans);
+			q931_ies_add(&ies, &ci.ie);
+
+			struct q931_ie_restart_indicator ri;
+			q931_ie_restart_indicator_init(&ri);
+			ri.ri_class = Q931_IE_RI_C_INDICATED;
+			q931_ies_add(&ies, &ri.ie);
+
+			q931_global_send_message(NULL, &gc->intf->dlc,
+				Q931_MT_RESTART_ACKNOWLEDGE, &ies);
 		} else {
 			q931_chanset_add(&gc->restart_acked_chans,
 				call->channel->id);
@@ -178,7 +231,7 @@ inline static void q931_global_handle_status(
 
 		int i;
 		for(i=0; i<msg->ies.count; i++) {
-			if (msg->ies.ies[i].info->id == Q931_IE_CALL_STATE) {
+			if (msg->ies.ies[i].type->id == Q931_IE_CALL_STATE) {
 				struct q931_ie_call_state_onwire_3 *oct_3 =
 					(struct q931_ie_call_state_onwire_3 *)
 					(msg->ies.ies[i].data + 0);
@@ -217,7 +270,7 @@ inline static void q931_global_handle_restart(
 
 		int i;
 		for (i=0; i<msg->ies.count; i++) {
-			if (msg->ies.ies[i].info->id ==
+			if (msg->ies.ies[i].type->id ==
 					Q931_IE_CHANNEL_IDENTIFICATION)
 				q931_ie_channel_identification_to_chanset(
 					&msg->ies.ies[i], &cs);
@@ -242,19 +295,29 @@ inline static void q931_global_handle_restart(
 
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_RESTART);
 		} else {
-			struct q931_causeset causeset = Q931_CAUSESET_INITC(
-                                Q931_IE_C_CV_IDENTIFIED_CHANNEL_DOES_NOT_EXIST);
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause cause;
+			q931_ie_cause_init(&cause);
+			cause.coding_standard = Q931_IE_C_CS_CCITT;
+			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause.value = Q931_IE_C_CV_IDENTIFIED_CHANNEL_DOES_NOT_EXIST;
+			q931_ies_add(&ies, &cause.ie);
 
-			q931_global_send_status(gc, msg->dlc, &causeset);
+			q931_global_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
 		}
 	break;
 
 	case Q931_GLOBAL_STATE_RESTART_REQUEST:
 	case Q931_GLOBAL_STATE_RESTART: {
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-                        Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+		struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ie_cause cause;
+		q931_ie_cause_init(&cause);
+		cause.coding_standard = Q931_IE_C_CS_CCITT;
+		cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause.value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+		q931_ies_add(&ies, &cause.ie);
 
-		q931_global_send_status(gc, msg->dlc, &causeset);
+		q931_global_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
 	}
 	break;
 	}
@@ -284,7 +347,7 @@ inline static void q931_global_handle_restart_acknowledge(
 			// Store channel id received in restart ack
 			int i;
 			for (i=0; i<msg->ies.count; i++) {
-				if (msg->ies.ies[i].info->id ==
+				if (msg->ies.ies[i].type->id ==
 						Q931_IE_CHANNEL_IDENTIFICATION) {
 
 					struct q931_chanset cs;
@@ -305,10 +368,15 @@ inline static void q931_global_handle_restart_acknowledge(
 
 	case Q931_GLOBAL_STATE_NULL:
 	case Q931_GLOBAL_STATE_RESTART: {
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-                        Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+		struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ie_cause cause;
+		q931_ie_cause_init(&cause);
+		cause.coding_standard = Q931_IE_C_CS_CCITT;
+		cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause.value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+		q931_ies_add(&ies, &cause.ie);
 
-		q931_global_send_status(gc, msg->dlc, &causeset);
+		q931_global_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
 	}
 	break;
 	}
@@ -329,7 +397,37 @@ void q931_global_timer_T316(void *data)
 			// Indicate that restart has failed
 			q931_global_primitive(gc, management_restart_confirm, NULL);
 		} else {
-			q931_send_restart(gc, &gc->intf->dlc, &gc->restart_reqd_chans);
+			struct q931_ies ies = Q931_IES_INIT;
+
+			if (q931_chanset_count(&gc->restart_reqd_chans)) {
+				struct q931_ie_channel_identification ci;
+				q931_ie_channel_identification_init(&ci);
+
+				ci.interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+				if (gc->intf->type == Q931_INTF_TYPE_PRA) {
+					ci.interface_type = Q931_IE_CI_IT_PRIMARY;
+				} else {
+					ci.interface_type = Q931_IE_CI_IT_BASIC;
+				}
+				ci.coding_standard = Q931_IE_CI_CS_CCITT;
+				q931_chanset_init(&ci.chanset);
+				q931_chanset_copy(&ci.chanset, &gc->restart_reqd_chans);
+				q931_ies_add(&ies, &ci.ie);
+
+				struct q931_ie_restart_indicator ri;
+				q931_ie_restart_indicator_init(&ri);
+				ri.ri_class = Q931_IE_RI_C_INDICATED;
+				q931_ies_add(&ies, &ri.ie);
+			} else {
+				struct q931_ie_restart_indicator ri;
+				q931_ie_restart_indicator_init(&ri);
+				ri.ri_class = Q931_IE_RI_C_SINGLE_INTERFACE;
+				q931_ies_add(&ies, &ri.ie);
+			}
+
+			q931_global_send_message(NULL, &gc->intf->dlc,
+				Q931_MT_RESTART, &ies);
+
 			q931_global_start_timer(gc, T316);
 		}
 	break;
@@ -371,8 +469,29 @@ void q931_global_timer_T317(void *data)
 	case Q931_GLOBAL_STATE_RESTART:
 		// Any channel restarted?
 		if (q931_chanset_count(&gc->restart_acked_chans)) {
-			q931_send_restart_acknowledge(gc, &gc->intf->dlc,
-				&gc->restart_acked_chans);
+			struct q931_ies ies = Q931_IES_INIT;
+
+			struct q931_ie_channel_identification ci;
+			q931_ie_channel_identification_init(&ci);
+
+			ci.interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+			if (gc->intf->type == Q931_INTF_TYPE_PRA) {
+				ci.interface_type = Q931_IE_CI_IT_PRIMARY;
+			} else {
+				ci.interface_type = Q931_IE_CI_IT_BASIC;
+			}
+			ci.coding_standard = Q931_IE_CI_CS_CCITT;
+			q931_chanset_init(&ci.chanset);
+			q931_chanset_copy(&ci.chanset, &gc->restart_acked_chans);
+			q931_ies_add(&ies, &ci.ie);
+
+			struct q931_ie_restart_indicator ri;
+			q931_ie_restart_indicator_init(&ri);
+			ri.ri_class = Q931_IE_RI_C_INDICATED;
+			q931_ies_add(&ies, &ri.ie);
+
+			q931_global_send_message(NULL, &gc->intf->dlc,
+				Q931_MT_RESTART, &ies);
 		}
 
 		q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
@@ -399,10 +518,15 @@ void q931_dispatch_global_message(
 	break;
 
 	default: {
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-                        Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE);
+		struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ie_cause cause;
+		q931_ie_cause_init(&cause);
+		cause.coding_standard = Q931_IE_C_CS_CCITT;
+		cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause.value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+		q931_ies_add(&ies, &cause.ie);
 
-		q931_global_send_status(gc, msg->dlc, &causeset);
+		q931_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
 	}
 	break;
 	}
