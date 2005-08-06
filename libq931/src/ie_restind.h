@@ -17,8 +17,11 @@ struct q931_ie_restart_indicator
 {
 	struct q931_ie ie;
 
-	enum q931_ie_restart_indicator_class ri_class;
+	enum q931_ie_restart_indicator_class restart_class;
 };
+
+struct q931_ie_restart_indicator *q931_ie_restart_indicator_alloc(void);
+struct q931_ie *q931_ie_restart_indicator_alloc_abstract(void);
 
 #ifdef Q931_PRIVATE
 
@@ -37,15 +40,14 @@ struct q931_ie_restart_indicator_onwire_3
 #endif
 } __attribute__ ((__packed__));
 
-void q931_ie_restart_indicator_init(
-	struct  q931_ie_restart_indicator *ie);
-
 void q931_ie_restart_indicator_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_restart_indicator_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_restart_indicator_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_restart_indicator_write_to_buf(
 	const struct q931_ie *generic_ie,

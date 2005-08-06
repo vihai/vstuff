@@ -113,6 +113,9 @@ struct q931_ie_cause
 	int diagnostics_len;
 };
 
+struct q931_ie_cause *q931_ie_cause_alloc(void);
+struct q931_ie *q931_ie_cause_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_cause_value_info
@@ -189,12 +192,11 @@ void q931_ie_cause_value_infos_init();
 void q931_ie_cause_register(
 	const struct q931_ie_type *type);
 
-void q931_ie_cause_init(
-	struct q931_ie_cause *cause);
-
-int q931_ie_cause_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_cause_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_cause_write_to_buf(
 	const struct q931_ie *generic_ie,

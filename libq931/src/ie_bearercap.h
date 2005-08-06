@@ -74,6 +74,9 @@ struct q931_ie_bearer_capability
 		user_information_layer_1_protocol;
 };
 
+struct q931_ie_bearer_capability *q931_ie_bearer_capability_alloc(void);
+struct q931_ie *q931_ie_bearer_capability_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_bearer_capability_onwire_3
@@ -283,9 +286,11 @@ struct q931_ie_bearer_capability_onwire_7
 void q931_ie_bearer_capability_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_bearer_capability_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_bearer_capability_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_bearer_capability_write_to_buf(
 	const struct q931_ie *ie,

@@ -1,4 +1,5 @@
 #include <string.h>
+#include <assert.h>
 #include <stdlib.h>
 
 #define Q931_PRIVATE
@@ -9,37 +10,59 @@
 
 static const struct q931_ie_type *ie_type;
 
-void q931_ie_call_state_init(
-	struct q931_ie_call_state *ie)
-{
-	ie->ie.type = ie_type;
-}
-
 void q931_ie_call_state_register(
 	const struct q931_ie_type *type)
 {
 	ie_type = type;
 }
 
-int q931_ie_call_state_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg)
+struct q931_ie_call_state *q931_ie_call_state_alloc(void)
 {
-	if (ie->len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+	struct q931_ie_call_state *ie;
+	ie = malloc(sizeof(*ie));
+	assert(ie);
 
+	ie->ie.refcnt = 1;
+	ie->ie.type = ie_type;
+
+	return ie;
+}
+
+struct q931_ie *q931_ie_call_state_alloc_abstract(void)
+{
+	return &q931_ie_call_state_alloc()->ie;
+}
+
+int q931_ie_call_state_read_from_buf(
+	struct q931_ie *abstract_ie,
+	const struct q931_message *msg,
+	int pos,
+	int len)
+{
+	assert(abstract_ie->type == ie_type);
+
+	struct q931_ie_call_state *ie =
+		container_of(abstract_ie,
+			struct q931_ie_call_state, ie);
+
+	int nextoct = 0;
+
+	if (len < 1) {
+		report_msg(msg, LOG_ERR, "IE size < 1\n");
 		return FALSE;
 	}
 
 	struct q931_ie_call_state_onwire_3 *oct_3 =
 		(struct q931_ie_call_state_onwire_3 *)
-		(ie->data + 0);
+		(msg->rawies + pos + (nextoct++));
 
 	if (oct_3->coding_standard != Q931_IE_CS_CS_CCITT) {
 		report_msg(msg, LOG_ERR, "coding stanrdard != CCITT\n");
-
 		return FALSE;
 	}
+
+	ie->coding_standard = oct_3->coding_standard;
+	ie->value = oct_3->value;
 
 	return TRUE;
 }

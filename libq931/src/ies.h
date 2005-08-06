@@ -3,9 +3,11 @@
 
 #define Q931_IES_INIT { { }, 0 }
 
+#define Q931_IES_NUM_IES 260
+
 struct q931_ies
 {
-	struct q931_ie ies[260]; // FIXME
+	struct q931_ie *ies[Q931_IES_NUM_IES]; // FIXME make this dynamic
 	int count;
 };
 
@@ -16,6 +18,10 @@ static inline void q931_ies_init(
 }
 
 void q931_ies_add(
+	struct q931_ies *ies,
+	struct q931_ie *ie);
+
+void q931_ies_del(
 	struct q931_ies *ies,
 	struct q931_ie *ie);
 

@@ -188,13 +188,20 @@ static int visdn_cli_print_call_list(int fd, struct q931_interface *intf)
 					first_call = FALSE;
 				}
 
-				ast_cli(fd, "  %c %5ld %-12s %-12s %s\n",
+				ast_cli(fd, "  %c %5ld %s\n",
+					(call->direction == Q931_CALL_DIRECTION_INBOUND)
+						? 'I' : 'O',
+					call->call_reference,
+					q931_call_state_to_text(call->state));
+
+/*				ast_cli(fd, "  %c %5ld %-12s %-12s %s\n",
 					(call->direction == Q931_CALL_DIRECTION_INBOUND)
 						? 'I' : 'O',
 					call->call_reference,
 					call->calling_number,
 					call->called_number,
 					q931_call_state_to_text(call->state));
+*/
 			}
 		}
 	}
@@ -217,11 +224,11 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 	ast_cli(fd, "State           : %s\n",
 		q931_call_state_to_text(call->state));
 
-	ast_cli(fd, "Calling Number  : %s\n", call->calling_number);
-	ast_cli(fd, "Called Number   : %s\n", call->called_number);
+//	ast_cli(fd, "Calling Number  : %s\n", call->calling_number);
+//	ast_cli(fd, "Called Number   : %s\n", call->called_number);
 
-	ast_cli(fd, "Sending complete: %s\n",
-		call->sending_complete ? "Yes" : "No");
+//	ast_cli(fd, "Sending complete: %s\n",
+//		call->sending_complete ? "Yes" : "No");
 
 	ast_cli(fd, "Broadcast seutp : %s\n",
 		call->broadcast_setup ? "Yes" : "No");
@@ -489,21 +496,21 @@ static int visdn_call(
 
 	struct q931_ies ies = Q931_IES_INIT;
 
-	struct q931_ie_bearer_capability bc;
-	q931_ie_bearer_capability_init(&bc);
-	bc.coding_standard = Q931_IE_BC_CS_CCITT;
-	bc.information_transfer_capability = Q931_IE_BC_ITC_SPEECH;
-	bc.transfer_mode = Q931_IE_BC_TM_CIRCUIT;
-	bc.information_transfer_rate = Q931_IE_BC_ITR_64;
-	bc.user_information_layer_1_protocol = Q931_IE_BC_UIL1P_G711_ALAW;
-	q931_ies_add(&ies, &bc.ie);
+	struct q931_ie_bearer_capability *bc =
+		q931_ie_bearer_capability_alloc();
+	bc->coding_standard = Q931_IE_BC_CS_CCITT;
+	bc->information_transfer_capability = Q931_IE_BC_ITC_SPEECH;
+	bc->transfer_mode = Q931_IE_BC_TM_CIRCUIT;
+	bc->information_transfer_rate = Q931_IE_BC_ITR_64;
+	bc->user_information_layer_1_protocol = Q931_IE_BC_UIL1P_G711_ALAW;
+	q931_ies_add(&ies, &bc->ie);
 
-	struct q931_ie_called_party_number cdpn;
-	q931_ie_called_party_number_init(&cdpn);
-	cdpn.type_of_number = Q931_IE_CDPN_TON_UNKNOWN;
-	cdpn.numbering_plan_identificator = Q931_IE_CDPN_NPI_UNKNOWN;
-	sprintf(cdpn.number, sizeof(cdpn.number), "%s", number);
-	q931_ie_add(&ies, &cdpn.ie);
+	struct q931_ie_called_party_number *cdpn =
+		q931_ie_called_party_number_alloc();
+	cdpn->type_of_number = Q931_IE_CDPN_TON_UNKNOWN;
+	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_UNKNOWN;
+	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
+	q931_ies_add(&ies, &cdpn->ie);
 
 	/*
 	if (ast_chan->callerid) {
@@ -706,19 +713,29 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_BUSY: {
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-			Q931_IE_C_CV_USER_BUSY);
+                struct q931_ies ies = Q931_IES_INIT;
 
-		q931_disconnect_request(visdn_chan->q931_call, &causeset);
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->value = Q931_IE_C_CV_USER_BUSY;
+		q931_ies_add(&ies, &cause->ie);
+
+		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
 	}
 	break;
 
 	case AST_CONTROL_CONGESTION: {
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-			Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER); // Right?
+                struct q931_ies ies = Q931_IES_INIT;
 
-		q931_disconnect_request(visdn_chan->q931_call, &causeset);
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+		q931_ies_add(&ies, &cause->ie);
+
+		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
 	}
 	break;
@@ -809,10 +826,15 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	    visdn_chan->q931_call->state != U17_RESUME_REQUEST &&
 	    visdn_chan->q931_call->state != U19_RELEASE_REQUEST) {
 
-		struct q931_causeset causeset = Q931_CAUSESET_INITC(
-			Q931_IE_C_CV_NORMAL_CALL_CLEARING);
+                struct q931_ies ies = Q931_IES_INIT;
 
-		q931_disconnect_request(visdn_chan->q931_call, &causeset);
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
+		q931_ies_add(&ies, &cause->ie);
+
+		q931_disconnect_request(visdn_chan->q931_call, &ies);
 	}
 
 	visdn_chan->q931_call->pvt = NULL;
@@ -1185,11 +1207,35 @@ static void visdn_q931_error_indication(
 	printf("*** %s\n", __FUNCTION__);
 }
 
+static int visdn_handle_called_number(
+	struct visdn_chan *visdn_chan,
+	const struct q931_ie_called_party_number *ie)
+{
+	if (strlen(visdn_chan->called_number) + strlen(ie->number) - 1 >
+			sizeof(visdn_chan->called_number)) {
+		ast_log(LOG_NOTICE,
+			"Called number overflow\n");
+
+		return FALSE;
+	}
+
+	if (ie->number[strlen(ie->number) - 2] == '#') {
+		visdn_chan->sending_complete = TRUE;
+		strcat(visdn_chan->called_number, ie->number);
+	} else {
+		strcat(visdn_chan->called_number, ie->number);
+	}
+
+	return TRUE;
+}
+
+
+
 static void visdn_q931_info_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
+	printf("*** %s\n", __FUNCTION__);
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -1203,33 +1249,51 @@ static void visdn_q931_info_indication(
 		return;
 	}
 
+	struct q931_ie_called_party_number *cdpn = NULL;
+
 	int i;
-	for(i=0; i<msg->ies.count; i++) {
-		if (msg->ies.ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
-			call->sending_complete = TRUE;
-		} else if (msg->ies.ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
-			if (!q931_call_handle_called_number(call, &msg->ies.ies[i])) {
-
-				struct q931_causeset causeset =
-					Q931_CAUSESET_INITC(
-						Q931_IE_C_CV_INVALID_NUMBER_FORMAT);
-
-				q931_disconnect_request(q931_call, &causeset);
-
-				return;
-			}
+	for(i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
+			visdn_chan->sending_complete = TRUE;
+		} else if (ies->ies[i]->type->id == Q931_IE_CALLED_PARTY_NUMBER) {
+			cdpn = container_of(ies->ies[i],
+				struct q931_ie_called_party_number, ie);
 		}
+	}
+
+	if (ast_chan->pbx) {
+		if (!cdpn)
+			return;
+
+		struct ast_frame f = { AST_FRAME_DTMF, cdpn->number[i] };
+		ast_queue_frame(ast_chan, &f);
+
+		return;
+	}
+
+	if (!visdn_handle_called_number(visdn_chan, cdpn)) {
+                struct q931_ies ies = Q931_IES_INIT;
+
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
+		q931_ies_add(&ies, &cause->ie);
+
+		q931_disconnect_request(q931_call, &ies);
+
+		return;
 	}
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-	if (q931_call->sending_complete) {
+	if (visdn_chan->sending_complete) {
 		if (ast_exists_extension(NULL, "visdn",
-				q931_call->called_number, 1,
-				q931_call->calling_number)) {
+				visdn_chan->called_number, 1,
+				visdn_chan->calling_number)) {
 
 			strncpy(ast_chan->exten,
-				q931_call->called_number,
+				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
 			if (ast_pbx_start(ast_chan)) {
@@ -1238,65 +1302,82 @@ static void visdn_q931_info_indication(
 					ast_chan->name);
 				ast_hangup(ast_chan);
 
-				struct q931_causeset causeset = Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+		                struct q931_ies ies = Q931_IES_INIT;
 
-				q931_disconnect_request(q931_call, &causeset);
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+				q931_ies_add(&ies, &cause->ie);
+
+				q931_disconnect_request(q931_call, &ies);
 			} else {
 				q931_proceeding_request(q931_call);
 				ast_setstate(ast_chan, AST_STATE_RING);
 			}
 		} else {
-			struct q931_causeset causeset = Q931_CAUSESET_INITC(
-				Q931_IE_C_CV_UNALLOCATED_NUMBER);
+	                struct q931_ies ies = Q931_IES_INIT;
 
-			q931_disconnect_request(q931_call, &causeset);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value = Q931_IE_C_CV_UNALLOCATED_NUMBER;
+			q931_ies_add(&ies, &cause->ie);
+
+			q931_disconnect_request(q931_call, &ies);
 		}
 	} else {
 		if (!ast_canmatch_extension(NULL, "visdn",
-				q931_call->called_number, 1,
-				q931_call->calling_number)) {
-			struct q931_causeset causeset = Q931_CAUSESET_INITC(
-				Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+				visdn_chan->called_number, 1,
+				visdn_chan->calling_number)) {
 
-			q931_disconnect_request(q931_call, &causeset);
+	                struct q931_ies ies = Q931_IES_INIT;
+
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
+			q931_ies_add(&ies, &cause->ie);
+
+			q931_disconnect_request(q931_call, &ies);
 
 			return;
 		}
 
 		if (ast_exists_extension(NULL, "visdn",
-				q931_call->called_number, 1,
-				q931_call->calling_number)) {
+				visdn_chan->called_number, 1,
+				visdn_chan->calling_number)) {
 
 			strncpy(ast_chan->exten,
-				q931_call->called_number,
+				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
-			if (!ast->chan->pbx) {
-				if (ast_pbx_start(ast_chan)) {
-					ast_log(LOG_ERROR,
-						"Unable to start PBX on %s\n",
-						ast_chan->name);
-					ast_hangup(ast_chan);
+			if (ast_pbx_start(ast_chan)) {
+				ast_log(LOG_ERROR,
+					"Unable to start PBX on %s\n",
+					ast_chan->name);
+				ast_hangup(ast_chan);
 
-					struct q931_causeset causeset = Q931_CAUSESET_INITC(
-						Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+		                struct q931_ies ies = Q931_IES_INIT;
 
-					q931_disconnect_request(q931_call, &causeset);
-				} else {
-					if (!ast_matchmore_extension(NULL, "visdn",
-							q931_call->called_number, 1,
-							q931_call->calling_number)) {
-						q931_proceeding_request(q931_call);
-						ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
-					}
-				}
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+				q931_ies_add(&ies, &cause->ie);
+
+				q931_disconnect_request(q931_call, &ies);
 			} else {
-				struct ast_frame f = { AST_FRAME_DTMF, number[i] };
-				ast_queue_frame(ast_chan, &f);
+				if (!ast_matchmore_extension(NULL, "visdn",
+						visdn_chan->called_number, 1,
+						visdn_chan->calling_number)) {
+					q931_proceeding_request(q931_call);
+					ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
+				}
 			}
 		}
 	}
+
 }
 
 static void visdn_q931_more_info_indication(
@@ -1370,8 +1451,7 @@ static void visdn_q931_release_confirm(
 
 static void visdn_q931_release_indication(
 	struct q931_call *q931_call,
-	const struct q931_ies *ies,
-	const struct q931_causeset *causeset)
+	const struct q931_ies *ies)
 {
 	printf("*** %s\n", __FUNCTION__);
 
@@ -1425,78 +1505,11 @@ static void visdn_q931_setup_confirm(
 	ast_setstate(ast_chan, AST_STATE_UP);
 }
 
-static int visdn_handle_called_number(
-	struct visdn_chan *visdn_chan,
-	const struct q931_ie *ie)
-{
-	if (strlen(visdn_chan->called_number) + ie->len - 1 >
-			sizeof(visdn_chan->called_number)) {
-		ast_log(LOG_NOTICE,
-			"Called number overflow\n");
-
-		return FALSE;
-	}
-
-	char *number = ie->data + 1;
-
-	if (number[ie->len - 1] == '#') {
-		visdn_chan->sending_complete = TRUE;
-		visdn_chan->called_number[strlen(visdn_chan->called_number) +
-				ie->len - 2] = 0x00;
-		strncat(visdn_chan->called_number, number, ie->len - 2);
-	} else {
-		visdn_chan->called_number[strlen(visdn_chan->called_number) +
-				ie->len - 1] = 0x00;
-		strncat(visdn_chan->called_number, number, ie->len - 1);
-	}
-
-	return TRUE;
-}
-
-
 static void visdn_q931_setup_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	printf("*** %s %s\n", __FUNCTION__, q931_call->called_number);
-
-	int i;
-	for(i=0; i<ies->count; i++) {
-		if (msg->ies.ies[i].info->id == Q931_IE_SENDING_COMPLETE) {
-			call->sending_complete = TRUE;
-		} else if (msg->ies.ies[i].info->id == Q931_IE_CALLED_PARTY_NUMBER) {
-			if (!q931_call_handle_called_number(call, &msg->ies.ies[i])) {
-
-				struct q931_causeset causeset =
-					Q931_CAUSESET_INITC(
-						Q931_IE_C_CV_INVALID_NUMBER_FORMAT);
-
-				q931_reject_request(q931_call, &causeset);
-
-				return;
-			}
-		} else if (ies->ies[i].info->id == Q931_IE_BEARER_CAPABILITY) {
-			struct q931_ie_bearer_capability_onwire_3 *oct_3 =
-				(struct q931_ie_bearer_capability_onwire_3 *)
-				(ies->ies[i].data + 0);
-
-			if (oct_3->information_transfer_capability ==
-					Q931_IE_BC_ITC_SPEECH ||
-			    oct_3->information_transfer_capability ==
-					Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
-
-				q931_call->tones_option = TRUE;
-			} else {
-				struct q931_causeset causeset = Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED);
-
-				q931_reject_request(q931_call, &causeset);
-
-				return;
-			}
-		}
-	}
-
+	printf("*** %s\n", __FUNCTION__);
 
 	struct visdn_chan *visdn_chan;
 	visdn_chan = visdn_alloc();
@@ -1507,6 +1520,56 @@ static void visdn_q931_setup_indication(
 
 	visdn_chan->inbound = 1;
 	visdn_chan->q931_call = q931_call;
+
+	int i;
+	for(i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
+			visdn_chan->sending_complete = TRUE;
+		} else if (ies->ies[i]->type->id == Q931_IE_CALLED_PARTY_NUMBER) {
+			struct q931_ie_called_party_number *cdpn =
+				container_of(ies->ies[i],
+					struct q931_ie_called_party_number, ie);
+
+			if (!visdn_handle_called_number(visdn_chan, cdpn)) {
+
+		                struct q931_ies ies = Q931_IES_INIT;
+
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
+				q931_ies_add(&ies, &cause->ie);
+
+				q931_reject_request(q931_call, &ies);
+
+				return;
+			}
+		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
+			struct q931_ie_bearer_capability *bc =
+				container_of(ies->ies[i],
+					struct q931_ie_bearer_capability, ie);
+
+			if (bc->information_transfer_capability ==
+					Q931_IE_BC_ITC_SPEECH ||
+			    bc->information_transfer_capability ==
+					Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
+
+				q931_call->tones_option = TRUE;
+			} else {
+		                struct q931_ies ies = Q931_IES_INIT;
+
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED;
+				q931_ies_add(&ies, &cause->ie);
+
+				q931_reject_request(q931_call, &ies);
+
+				return;
+			}
+		}
+	}
 
 	struct ast_channel *ast_chan;
 	ast_chan = visdn_new(visdn_chan, AST_STATE_OFFHOOK);
@@ -1529,15 +1592,15 @@ static void visdn_q931_setup_indication(
 	ast_mutex_unlock(&usecnt_lock);
 	ast_update_use_count();
 
-	ast_set_callerid(ast_chan, q931_call->calling_number, 0);
+	ast_set_callerid(ast_chan, visdn_chan->calling_number, 0);
 
-	if (q931_call->sending_complete) {
+	if (visdn_chan->sending_complete) {
 		if (ast_exists_extension(NULL, "visdn",
-				q931_call->called_number, 1,
-				q931_call->calling_number)) {
+				visdn_chan->called_number, 1,
+				visdn_chan->calling_number)) {
 
 			strncpy(ast_chan->exten,
-				q931_call->called_number,
+				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
 			if (ast_pbx_start(ast_chan)) {
@@ -1546,10 +1609,15 @@ static void visdn_q931_setup_indication(
 					ast_chan->name);
 				ast_hangup(ast_chan);
 
-				struct q931_causeset causeset = Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+		                struct q931_ies ies = Q931_IES_INIT;
 
-				q931_reject_request(q931_call, &causeset);
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+				q931_ies_add(&ies, &cause->ie);
+
+				q931_reject_request(q931_call, &ies);
 			} else {
 				q931_proceeding_request(q931_call);
 				ast_setstate(ast_chan, AST_STATE_RING);
@@ -1558,23 +1626,33 @@ static void visdn_q931_setup_indication(
 			ast_log(LOG_NOTICE,
 				"No extension %s in context '%s',"
 				" ignoring call\n",
-				q931_call->called_number,
+				visdn_chan->called_number,
 				"visdn");
 
-			struct q931_causeset causeset = Q931_CAUSESET_INITC(
-				Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+	                struct q931_ies ies = Q931_IES_INIT;
 
-			q931_reject_request(q931_call, &causeset);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
+			q931_ies_add(&ies, &cause->ie);
+
+			q931_reject_request(q931_call, &ies);
 		}
 
 	} else {
-		if (!ast_canmatch_extension(NULL, "visdn", q931_call->called_number,
-				1, q931_call->calling_number)) {
+		if (!ast_canmatch_extension(NULL, "visdn", visdn_chan->called_number,
+				1, visdn_chan->calling_number)) {
 
-			struct q931_causeset causeset = Q931_CAUSESET_INITC(
-				Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION);
+	                struct q931_ies ies = Q931_IES_INIT;
 
-			q931_reject_request(q931_call, &causeset);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
+			q931_ies_add(&ies, &cause->ie);
+
+			q931_reject_request(q931_call, &ies);
 
 			ast_hangup(ast_chan);
 
@@ -1582,11 +1660,11 @@ static void visdn_q931_setup_indication(
 		}
 
 		if (ast_exists_extension(NULL, "visdn",
-				q931_call->called_number, 1,
-				q931_call->calling_number)) {
+				visdn_chan->called_number, 1,
+				visdn_chan->calling_number)) {
 
 			strncpy(ast_chan->exten,
-				q931_call->called_number,
+				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
 			if (ast_pbx_start(ast_chan)) {
@@ -1595,10 +1673,15 @@ static void visdn_q931_setup_indication(
 					ast_chan->name);
 				ast_hangup(ast_chan);
 
-				struct q931_causeset causeset = Q931_CAUSESET_INITC(
-					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER);
+		                struct q931_ies ies = Q931_IES_INIT;
 
-				q931_reject_request(q931_call, &causeset);
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+				q931_ies_add(&ies, &cause->ie);
+
+				q931_reject_request(q931_call, &ies);
 			} else {
 				q931_proceeding_request(q931_call);
 				ast_setstate(ast_chan, AST_STATE_RING);

@@ -41,14 +41,17 @@ struct q931_ie_progress_indicator
 	enum q931_ie_progress_indicator_coding_standard
 		coding_standard;
 	enum q931_ie_progress_indicator_location
-		indicator_location;
+		location;
 	enum q931_ie_progress_indicator_progress_description
 		progress_description;
 };
 
+struct q931_ie_progress_indicator *q931_ie_progress_indicator_alloc(void);
+struct q931_ie *q931_ie_progress_indicator_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
-struct q931_ie_progress_indicator_onwire_3_4
+struct q931_ie_progress_indicator_onwire_3
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
@@ -61,27 +64,29 @@ struct q931_ie_progress_indicator_onwire_3_4
 	__u8 coding_standard:2;
 	__u8 ext:1;
 #endif
+} __attribute__ ((__packed__));
 
+struct q931_ie_progress_indicator_onwire_4
+{
 #if __BYTE_ORDER == __BIG_ENDIAN
-	__u8 ext2:1;
+	__u8 ext:1;
 	__u8 progress_description:7;
 #elif __BYTE_ORDER == __LITTLE_ENDIAN
 	__u8 progress_description:7;
-	__u8 ext2:1;
+	__u8 ext:1;
 #endif
 } __attribute__ ((__packed__));
 
 #endif
 
-void q931_ie_progress_indicator_init(
-	struct q931_ie_progress_indicator *ie);
-
 void q931_ie_progress_indicator_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_progress_indicator_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_progress_indicator_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_progress_indicator_write_to_buf(
 	const struct q931_ie *generic_ie,

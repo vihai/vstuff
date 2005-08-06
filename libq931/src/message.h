@@ -17,6 +17,9 @@ struct q931_message
 	int callref_len;
 	enum q931_callref_flag callref_direction;
 
+	__u8 *rawies;
+	int rawies_len;
+
 	struct q931_ies ies;
 };
 

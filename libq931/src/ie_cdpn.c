@@ -1,8 +1,9 @@
-
 #include <string.h>
+#include <assert.h>
 
 #define Q931_PRIVATE
 
+#include "lib.h"
 #include "ie_cdpn.h"
 
 static const struct q931_ie_type *ie_type;
@@ -13,19 +14,53 @@ void q931_ie_called_party_number_register(
 	ie_type = type;
 }
 
-int q931_ie_called_party_number_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg)
+struct q931_ie_called_party_number *q931_ie_called_party_number_alloc()
 {
-	// TODO
+	struct q931_ie_called_party_number *ie;
+	ie = malloc(sizeof(*ie));
+	assert(ie);
 
-	return TRUE;
+	ie->ie.refcnt = 1;
+	ie->ie.type = ie_type;
+
+	memset(ie->number, 0x0, sizeof(*ie->number));
+
+	return ie;
 }
 
-void q931_ie_called_party_number_init(
-	struct q931_ie_called_party_number *cdpn)
+struct q931_ie *q931_ie_called_party_number_alloc_abstract()
 {
-	memset(cdpn, 0x0, sizeof(*cdpn));
+	return &q931_ie_called_party_number_alloc()->ie;
+}
+
+int q931_ie_called_party_number_read_from_buf(
+	struct q931_ie *abstract_ie,
+	const struct q931_message *msg,
+	int pos,
+	int len)
+{
+	assert(abstract_ie->type == ie_type);
+
+	struct q931_ie_called_party_number *ie =
+		container_of(abstract_ie,
+			struct q931_ie_called_party_number, ie);
+
+	if (len < 1) {
+		report_msg(msg, LOG_ERR, "IE size < 1\n");
+		return FALSE;
+	}
+
+	struct q931_ie_called_party_number_onwire_3 *oct_3 =
+		(struct q931_ie_called_party_number_onwire_3 *)
+		(msg->rawies + pos + 0);
+
+	ie->type_of_number = oct_3->type_of_number;
+	ie->numbering_plan_identificator = oct_3->numbering_plan_identificator;
+
+	memcpy(ie->number, msg->rawies + pos + 1, len - 1);
+	ie->number[len] = '\0';
+
+	return TRUE;
 }
 
 int q931_ie_called_party_number_write_to_buf(

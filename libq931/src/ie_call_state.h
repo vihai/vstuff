@@ -64,6 +64,9 @@ struct q931_ie_call_state
 		value;
 };
 
+struct q931_ie_call_state *q931_ie_call_state_alloc(void);
+struct q931_ie *q931_ie_call_state_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_call_state_onwire_3
@@ -77,15 +80,14 @@ struct q931_ie_call_state_onwire_3
 #endif
 } __attribute__ ((__packed__));
 
-void q931_ie_call_state_init(
-	struct q931_ie_call_state *ie);
-
 void q931_ie_call_state_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_call_state_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_call_state_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_call_state_write_to_buf(
 	const struct q931_ie *generic_ie,

@@ -13,12 +13,6 @@
 
 static const struct q931_ie_type *ie_type;
 
-void q931_ie_cause_register(
-	const struct q931_ie_type *type)
-{
-	ie_type = type;
-}
-
 struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 {
 	{
@@ -238,54 +232,6 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 	},
 };
 
-int q931_ie_cause_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg)
-{
-	int nextoct = 0;
-
-	if (ie->len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
-
-		return FALSE;
-	}
-
-	struct q931_ie_cause_onwire_3 *oct_3 =
-		(struct q931_ie_cause_onwire_3 *)
-		(ie->data + nextoct);
-
-	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
-		report_msg(msg, LOG_ERR, "coding stanrdard != CCITT\n");
-
-		return FALSE;
-	}
-
-	if (oct_3->ext == 0) {
-		nextoct++;
-
-		struct q931_ie_cause_onwire_3a *oct_3a =
-			(struct q931_ie_cause_onwire_3a *)
-			(ie->data + nextoct);
-
-		if (oct_3a->ext != 1) {
-			report_msg(msg, LOG_ERR,
-				"Extension bit unexpectedly set to 0\n");
-
-			return FALSE;
-		}
-
-		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
-			report_msg(msg, LOG_ERR,
-				"Recommendation unexpectedly != Q.931\n");
-
-			return FALSE;
-		}
-	}
-
-	return TRUE;
-}
-
-
 static int q931_ie_cause_value_compare(const void *a, const void *b)
 {
 	return q931_intcmp(((struct q931_ie_cause_value_info *)a)->id,
@@ -319,40 +265,86 @@ void q931_ie_cause_value_infos_init()
 	      q931_ie_cause_value_compare);
 }
 
-/*
-void q931_ie_cause_add_to_causeset(
-	const struct q931_ie *ie,
-	struct q931_causeset *causeset)
+void q931_ie_cause_register(
+	const struct q931_ie_type *type)
 {
-	assert(ie);
-	assert(ie->info);
-	assert(ie->info->id == Q931_IE_CAUSE);
-	assert(causeset);
+	ie_type = type;
+}
 
-	causeset->ncauses = 0;
+struct q931_ie_cause *q931_ie_cause_alloc(void)
+{
+	struct q931_ie_cause *ie;
+	ie = malloc(sizeof(*ie));
+	assert(ie);
+
+	ie->ie.refcnt = 1;
+	ie->ie.type = ie_type;
+
+	return ie;
+}
+
+struct q931_ie *q931_ie_cause_alloc_abstract(void)
+{
+	return &q931_ie_cause_alloc()->ie;
+}
+
+int q931_ie_cause_read_from_buf(
+	struct q931_ie *abstract_ie,
+	const struct q931_message *msg,
+	int pos,
+	int len)
+{
+	assert(abstract_ie->type == ie_type);
+
+	struct q931_ie_cause *ie = 
+		container_of(abstract_ie,
+			struct q931_ie_cause, ie);
 
 	int nextoct = 0;
+
+	if (len < 1) {
+		report_msg(msg, LOG_ERR, "IE size < 1\n");
+
+		return FALSE;
+	}
+
 	struct q931_ie_cause_onwire_3 *oct_3 =
 		(struct q931_ie_cause_onwire_3 *)
-		(ie->data + nextoct);
+		(msg->rawies + pos + nextoct);
 
-	nextoct++;
+	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
+		report_msg(msg, LOG_ERR, "coding stanrdard != CCITT\n");
 
-	if (oct_3->ext == 0)
+		return FALSE;
+	}
+
+	ie->coding_standard = oct_3->coding_standard;
+
+	if (oct_3->ext == 0) {
 		nextoct++;
 
-	struct q931_ie_cause_onwire_4 *oct_4 =
-		(struct q931_ie_cause_onwire_4 *)
-		(ie->data + nextoct);
+		struct q931_ie_cause_onwire_3a *oct_3a =
+			(struct q931_ie_cause_onwire_3a *)
+			(msg->rawies + pos + nextoct);
 
-	nextoct++;
+		if (oct_3a->ext != 1) {
+			report_msg(msg, LOG_ERR, "Extension bit unexpectedly set to 0\n");
+			return FALSE;
+		}
 
-	q931_causeset_add_diag(causeset,
-		oct_4->cause_value,
-		ie->data + nextoct,
-		ie->len - nextoct);
+		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
+			report_msg(msg, LOG_ERR,
+				"Recommendation unexpectedly != Q.931\n");
+
+			return FALSE;
+		}
+	}
+
+	ie->recommendation = Q931_IE_C_R_Q931;
+
+	return TRUE;
 }
-*/
+
 
 int q931_ie_cause_write_to_buf(
 	const struct q931_ie *generic_ie,
@@ -386,3 +378,23 @@ int q931_ie_cause_write_to_buf(
 
 	return ieow->len + sizeof(struct q931_ie_onwire);
 }
+
+int q931_ies_contain_cause(
+	const struct q931_ies *ies,
+	enum q931_ie_cause_value cause_value)
+{
+	int i;
+	for (i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_CAUSE) {
+			struct q931_ie_cause *cause =
+				container_of(ies->ies[i],
+					struct q931_ie_cause, ie);
+
+			if (cause->value == cause_value)
+				return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+

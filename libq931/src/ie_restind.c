@@ -12,36 +12,52 @@
 
 static const struct q931_ie_type *ie_type;
 
-void q931_ie_restart_indicator_init(
-	struct  q931_ie_restart_indicator *ie)
-{
-	ie->ie.type = ie_type;
-}
-
 void q931_ie_restart_indicator_register(
 	const struct q931_ie_type *type)
 {
 	ie_type = type;
 }
 
-int q931_ie_restart_indicator_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg)
+struct q931_ie_restart_indicator *q931_ie_restart_indicator_alloc(void)
 {
-	if (ie->len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+	struct q931_ie_restart_indicator *ie;
+	ie = malloc(sizeof(*ie));
+	assert(ie);
 
+	ie->ie.type = ie_type;
+	ie->ie.refcnt = 1;
+
+	return ie;
+}
+
+struct q931_ie *q931_ie_restart_indicator_alloc_abstract(void)
+{
+	return &q931_ie_restart_indicator_alloc()->ie;
+}
+
+int q931_ie_restart_indicator_read_from_buf(
+	struct q931_ie *abstract_ie,
+	const struct q931_message *msg,
+	int pos,
+	int len)
+{
+	assert(abstract_ie->type == ie_type);
+
+	struct q931_ie_restart_indicator *ie =
+		container_of(abstract_ie,
+			struct q931_ie_restart_indicator, ie);
+
+	if (len < 1) {
+		report_msg(msg, LOG_ERR, "IE size < 1\n");
 		return FALSE;
 	}
 
 	struct q931_ie_restart_indicator_onwire_3 *oct_3 =
 		(struct q931_ie_restart_indicator_onwire_3 *)
-		(ie->data + 0);
+		(msg->rawies + pos + 0);
 
 	if (oct_3->ext != 1) {
-		report_msg(msg, LOG_ERR,
-			"Ext != 1\n");
-
+		report_msg(msg, LOG_ERR, "Ext != 1\n");
 		return FALSE;
 	}
 
@@ -54,23 +70,29 @@ int q931_ie_restart_indicator_check(
 		return FALSE;
 	}
 
+	ie->restart_class = oct_3->restart_class;
+
 	return TRUE;
 }
 
-int q931_append_ie_restart_indicator(void *buf,
-	enum q931_ie_restart_indicator_class restart_class)
+int q931_ie_restart_indicator_write_to_buf(
+	const struct q931_ie *abstract_ie,
+	void *buf,
+	int max_size)
 {
-	struct q931_ie_onwire *ie = (struct q931_ie_onwire *)buf;
+	struct q931_ie_restart_indicator *ie =
+		container_of(abstract_ie, struct q931_ie_restart_indicator, ie);
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ie->id = Q931_IE_RESTART_INDICATOR;
-	ie->len = 0;
+	ieow->id = Q931_IE_RESTART_INDICATOR;
+	ieow->len = 0;
 
-	ie->data[ie->len] = 0x00;
+	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_restart_indicator_onwire_3 *oct_3 =
-	  (struct q931_ie_restart_indicator_onwire_3 *)(&ie->data[ie->len]);
+	  (struct q931_ie_restart_indicator_onwire_3 *)(&ieow->data[ieow->len]);
 	oct_3->ext = 1;
-	oct_3->restart_class = restart_class;
-	ie->len += 1;
+	oct_3->restart_class = ie->restart_class;
+	ieow->len += 1;
 
-	return ie->len + sizeof(struct q931_ie_onwire);
+	return ieow->len + sizeof(struct q931_ie_onwire);
 }

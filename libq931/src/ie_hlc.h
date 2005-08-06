@@ -38,6 +38,25 @@ enum q931_ie_high_layer_compatibility_characteristics_identification
 	Q931_IE_HLC_CI_RESERVED					= 0x7f,
 };
 
+struct q931_ie_high_layer_compatibility
+{
+	struct q931_ie ie;
+
+	enum q931_ie_high_layer_compatibility_coding_standard
+		coding_standard;
+	enum q931_ie_high_layer_compatibility_interpretation
+		interpretation;
+	enum q931_ie_high_layer_compatibility_presentation_method
+		presentation_method;
+	enum q931_ie_high_layer_compatibility_characteristics_identification
+		characteristics_identification;
+	enum q931_ie_high_layer_compatibility_characteristics_identification
+		extended_characteristics_identification;
+};
+
+struct q931_ie_high_layer_compatibility *q931_ie_high_layer_compatibility_alloc(void);
+struct q931_ie *q931_ie_high_layer_compatibility_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_high_layer_compatibility_onwire_3
@@ -69,12 +88,32 @@ struct q931_ie_high_layer_compatibility_onwire_4
 #endif
 } __attribute__ ((__packed__));
 
+struct q931_ie_high_layer_compatibility_onwire_4a
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8 ext:1;
+	__u8 extended_characteristics_identification:7;
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+	__u8 extended_characteristics_identification:7;
+	__u8 ext:1;
+#else
+#error Unsupported byte order
+#endif
+} __attribute__ ((__packed__));
+
 void q931_ie_high_layer_compatibility_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_high_layer_compatibility_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_high_layer_compatibility_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
+
+int q931_ie_high_layer_compatibility_write_to_buf(
+	const struct q931_ie *generic_ie,
+        void *buf,
+	int max_size);
 
 
 #endif

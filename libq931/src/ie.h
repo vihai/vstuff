@@ -1,6 +1,7 @@
 #ifndef _LIBQ931_IE_H
 #define _LIBQ931_IE_H
 
+#include <stdlib.h>
 #include <linux/types.h>
 #include <endian.h>
 
@@ -15,9 +16,21 @@ struct q931_ie
 
 	int refcnt;
 
-	int len;
-	void *data;
+//	int len;
+//	void *data;
 };
+
+static inline void q931_ie_get(struct q931_ie *ie)
+{
+	ie->refcnt++;
+}
+
+static inline void q931_ie_put(struct q931_ie *ie)
+{
+	ie->refcnt--;
+	if (ie->refcnt == 0)
+		free(ie);
+}
 
 struct q931_ie_onwire
 {
@@ -108,9 +121,13 @@ struct q931_ie_type
 	void (*init)(
 		const struct q931_ie_type *type);
 
-	int (*validity_check)(
-		const struct q931_ie *ie,
-		const struct q931_message *msg);
+	struct q931_ie *(*alloc)(void);
+
+	int (*read_from_buf)(
+		struct q931_ie *ie,
+		const struct q931_message *msg,
+		int pos,
+		int len);
 
 	int (*write_to_buf)(
 		const struct q931_ie *ie,

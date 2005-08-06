@@ -7,7 +7,7 @@
 struct q931_chanset
 {
 	int nchans;
-	int chans[Q931_CHANSET_MAX_SIZE];
+	struct q931_channel *chans[Q931_CHANSET_MAX_SIZE];
 };
 
 void q931_chanset_init(
@@ -15,7 +15,7 @@ void q931_chanset_init(
 
 void q931_chanset_add(
 	struct q931_chanset *chanset,
-	int chan_id);
+	struct q931_channel *channel);
 
 void q931_chanset_merge(
 	struct q931_chanset *chanset,
@@ -23,7 +23,7 @@ void q931_chanset_merge(
 
 int q931_chanset_contains(
 	const struct q931_chanset *chanset,
-	int channel_id);
+	const struct q931_channel *channel);
 
 int q931_chanset_equal(
 	const struct q931_chanset *chanset,

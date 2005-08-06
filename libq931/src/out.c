@@ -219,9 +219,9 @@ int q931_send_message(
 	if (ies) {
 		int i;
 		for (i=0; i<ies->count; i++) {
-			assert(ies->ies[i].type->write_to_buf);
+			assert(ies->ies[i]->type->write_to_buf);
 
-			size += ies->ies[i].type->write_to_buf(&ies->ies[i],
+			size += ies->ies[i]->type->write_to_buf(ies->ies[i],
 					buf + size,
 					sizeof(buf) - size);
 		}
@@ -247,9 +247,9 @@ int q931_send_message_bc(
 
 	int i;
 	for (i=0; i<ies->count; i++) {
-		assert(ies->ies[i].type->write_to_buf);
+		assert(ies->ies[i]->type->write_to_buf);
 
-		size += ies->ies[i].type->write_to_buf(&ies->ies[i],
+		size += ies->ies[i]->type->write_to_buf(ies->ies[i],
 					buf + size,
 					sizeof(buf) - size);
 	}
@@ -275,9 +275,9 @@ int q931_global_send_message(
 	if (ies) {
 		int i;
 		for (i=0; i<ies->count; i++) {
-			assert(ies->ies[i].type->write_to_buf);
+			assert(ies->ies[i]->type->write_to_buf);
 
-			size += ies->ies[i].type->write_to_buf(&ies->ies[i],
+			size += ies->ies[i]->type->write_to_buf(ies->ies[i],
 					buf + size,
 					sizeof(buf) - size);
 		}

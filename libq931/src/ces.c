@@ -120,12 +120,11 @@ void q931_ces_dl_establish_indication(struct q931_ces *ces)
 
 	if (ces->state == I25_OVERLAP_RECEIVING) {
 		struct q931_ies ies = Q931_IES_INIT;
-		struct q931_ie_cause cause;
-		q931_ie_cause_init(&cause);
 
-		cause.coding_standard = Q931_IE_C_CS_CCITT;
-		cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-		cause.value = Q931_IE_C_CV_TEMPORARY_FAILURE;
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->value = Q931_IE_C_CV_TEMPORARY_FAILURE;
 
 		q931_ces_stop_timer(ces, T304);
 		q931_ces_send_release(ces, &ies);
@@ -184,11 +183,10 @@ static inline void q931_ces_send_ces_status(
 
 	q931_ies_merge(&ies, user_ies);
 
-	struct q931_ie_call_state cs;
-	q931_ie_call_state_init(&cs);
-	cs.coding_standard = Q931_IE_CS_CS_CCITT;
-	cs.value = q931_ces_state_to_ie_state(ces->state),
-	q931_ies_add(&ies, &cs.ie);
+	struct q931_ie_call_state *cs = q931_ie_call_state_alloc();
+	cs->coding_standard = Q931_IE_CS_CS_CCITT;
+	cs->value = q931_ces_state_to_ie_state(ces->state),
+	q931_ies_add(&ies, &cs->ie);
 
 	q931_ces_send_status(ces, &ies);
 }
@@ -236,17 +234,16 @@ static void _q931_ces_message_not_compatible_with_state(
 	case I19_RELEASE_REQUEST:
 	case I25_OVERLAP_RECEIVING: {
 		struct q931_ies ies = Q931_IES_INIT;
-		struct q931_ie_cause cause;
-		q931_ie_cause_init(&cause);
-		cause.coding_standard = Q931_IE_C_CS_CCITT;
-		cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-		cause.value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
-		memcpy(&cause.diagnostics,
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
+		memcpy(&cause->diagnostics,
 			msg->raw + sizeof(struct q931_header) +
 				msg->callref_len,
 			1);
-		cause.diagnostics_len = 1;
-		q931_ies_add(&ies, &cause.ie);
+		cause->diagnostics_len = 1;
+		q931_ies_add(&ies, &cause->ie);
 
 		q931_ces_send_ces_status(ces, &ies);
 	}
@@ -647,34 +644,17 @@ static inline void q931_ces_handle_status(
 	assert(ces);
 	assert(msg);
 
-	__u8 onwire_state = 0;
-	enum q931_ie_cause_value cause_value = 0;
+	struct q931_ie_call_state *cs = NULL;
+	struct q931_ie_cause *cause = NULL;
 
 	int i;
 	for (i=0; i<msg->ies.count; i++) {
-		if (msg->ies.ies[i].type->id == Q931_IE_CALL_STATE) {
-			struct q931_ie_call_state_onwire_3 *oct_3 =
-				(struct q931_ie_call_state_onwire_3 *)
-				(msg->ies.ies[i].data + 0);
-
-			onwire_state = oct_3->value;
-		} else if (msg->ies.ies[i].type->id == Q931_IE_CAUSE) {
-			int nextoct = 0;
-
-			struct q931_ie_cause_onwire_3 *oct_3 =
-				(struct q931_ie_cause_onwire_3 *)
-				(msg->ies.ies[i].data + nextoct);
-
-			if (oct_3->ext == 0)
-				 nextoct++;
-
-			nextoct++;
-
-			struct q931_ie_cause_onwire_4 *oct_4 =
-				(struct q931_ie_cause_onwire_4 *)
-				(msg->ies.ies[i].data + nextoct);
-
-			cause_value = oct_4->cause_value;
+		if (msg->ies.ies[i]->type->id == Q931_IE_CALL_STATE) {
+			cs = container_of(msg->ies.ies[i],
+				struct q931_ie_call_state, ie);
+		} else if (msg->ies.ies[i]->type->id == Q931_IE_CAUSE) {
+			cause = container_of(msg->ies.ies[i],
+				struct q931_ie_cause, ie);
 		}
 	}
 
@@ -684,32 +664,31 @@ static inline void q931_ces_handle_status(
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I25_OVERLAP_RECEIVING:
 		if (q931_timer_pending(&ces->call->T322)) {
-			if (cause_value ==
+			if (cause->value ==
 				Q931_IE_C_CV_MESSAGE_TYPE_NON_EXISTENT_OR_IMPLEMENTED) {
 				// Save cause and call state (!?!?!?)
 				return;
-			} else if(cause_value ==
+			} else if(cause->value ==
 				Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY) {
 				q931_ces_stop_timer(ces, T322);
 			}
 		}
 
-		if (onwire_state == q931_ces_state_to_ie_state(I0_NULL_STATE)) {
+		if (cs && cs->value == q931_ces_state_to_ie_state(I0_NULL_STATE)) {
 			q931_ces_stop_any_timer(ces);
 			q931_int_release_indication(ces->call, ces, &msg->ies);
 			q931_int_release_complete_indication(ces->call, ces, &msg->ies);
-		} else if (onwire_state == q931_ces_state_to_ie_state(ces->state)) {
+		} else if (cs && cs->value == q931_ces_state_to_ie_state(ces->state)) {
 				// NOTE 1. FURTHER ACTIONS ARE AN IMPLEMENTATION OPTION.
 		} else {
 			q931_ces_stop_any_timer(ces);
 
 			struct q931_ies ies = Q931_IES_INIT;
-			struct q931_ie_cause cause;
-			q931_ie_cause_init(&cause);
-			cause.coding_standard = Q931_IE_C_CS_CCITT;
-			cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause.value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
-			q931_ies_add(&ies, &cause.ie);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
+			q931_ies_add(&ies, &cause->ie);
 
 			q931_ces_send_release(ces, &ies);
 
@@ -722,7 +701,7 @@ static inline void q931_ces_handle_status(
 	break;
 
 	case I19_RELEASE_REQUEST:
-		if (onwire_state == q931_ces_state_to_ie_state(I0_NULL_STATE)) {
+		if (cs && cs->value == q931_ces_state_to_ie_state(I0_NULL_STATE)) {
 			q931_ces_stop_timer(ces, T308);
 			q931_int_release_complete_indication(ces->call, ces, &msg->ies);
 		}
@@ -752,8 +731,8 @@ static inline void q931_ces_handle_info(
 	case I19_RELEASE_REQUEST:
 		// Do nothing
 		// NOTE 1. THE INDIVIDUAL PROCESS MAY PASS AN INT. INFO
-		//         INDICATION TO THE GLOBAL PROCESS AT THIS POINT.
-		//         (REF. SECTION 5.0)
+		//	 INDICATION TO THE GLOBAL PROCESS AT THIS POINT.
+		//	 (REF. SECTION 5.0)
 
 	break;
 
@@ -775,12 +754,11 @@ static inline void q931_ces_handle_status_enquiry(
 	assert(msg);
 
 	struct q931_ies ies = Q931_IES_INIT;
-	struct q931_ie_cause cause;
-	q931_ie_cause_init(&cause);
-	cause.coding_standard = Q931_IE_C_CS_CCITT;
-	cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-	cause.value = Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY;
-	q931_ies_add(&ies, &cause.ie);
+	struct q931_ie_cause *cause = q931_ie_cause_alloc();
+	cause->coding_standard = Q931_IE_C_CS_CCITT;
+	cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	cause->value = Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY;
+	q931_ies_add(&ies, &cause->ie);
 
 	q931_ces_send_status(ces, &ies);
 }
@@ -796,14 +774,13 @@ void q931_ces_timer_T304(void *data)
 	}
 
 	struct q931_ies ies = Q931_IES_INIT;
-	struct q931_ie_cause cause;
-	q931_ie_cause_init(&cause);
-	cause.coding_standard = Q931_IE_C_CS_CCITT;
-	cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-	cause.value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
-	memcpy(cause.diagnostics, "304", 3);
-	cause.diagnostics_len = 3;
-	q931_ies_add(&ies, &cause.ie);
+	struct q931_ie_cause *cause = q931_ie_cause_alloc();
+	cause->coding_standard = Q931_IE_C_CS_CCITT;
+	cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
+	memcpy(cause->diagnostics, "304", 3);
+	cause->diagnostics_len = 3;
+	q931_ies_add(&ies, &cause->ie);
 
 	q931_ces_send_release(ces, &ies);
 	q931_ces_start_timer(ces, T308);
@@ -847,12 +824,11 @@ void q931_ces_timer_T322(void *data)
 		} else {
 			if (ces->senq_cnt > 3) {
 				struct q931_ies ies = Q931_IES_INIT;
-				struct q931_ie_cause cause;
-				q931_ie_cause_init(&cause);
-				cause.coding_standard = Q931_IE_C_CS_CCITT;
-				cause.location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-				cause.value = Q931_IE_C_CV_TEMPORARY_FAILURE;
-				q931_ies_add(&ies, &cause.ie);
+				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->value = Q931_IE_C_CV_TEMPORARY_FAILURE;
+				q931_ies_add(&ies, &cause->ie);
 
 				q931_ces_send_release(ces, &ies);
 				q931_ces_start_timer(ces, T308);

@@ -90,6 +90,9 @@ struct q931_ie_channel_identification
 //	enum q931_ie_channel_identification_element_type
 };
 
+struct q931_ie_channel_identification *q931_ie_channel_identification_alloc(void);
+struct q931_ie *q931_ie_channel_identification_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_channel_identification_onwire_3
@@ -161,19 +164,14 @@ struct q931_ie_channel_identification_onwire_3d
 } __attribute__ ((__packed__));
 #endif
 
-void q931_ie_channel_identification_init(
-	struct q931_ie_channel_identification *ie);
-
 void q931_ie_channel_identification_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_channel_identification_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
-
-void q931_ie_channel_identification_to_chanset(
-	const struct q931_ie *ie,
-	struct q931_chanset *chanset);
+int q931_ie_channel_identification_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_channel_identification_write_to_buf(
 	const struct q931_ie *generic_ie,

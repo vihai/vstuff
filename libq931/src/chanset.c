@@ -29,32 +29,34 @@ void q931_chanset_copy(
 
 void q931_chanset_add(
 	struct q931_chanset *chanset,
-	int chan_id)
+	struct q931_channel *channel)
 {
 	assert(chanset);
 	assert(chanset->nchans < Q931_CHANSET_MAX_SIZE);
+	assert(channel);
 
 	// Avoid inserting duplicated
 	int i;
 	for (i=0; i<chanset->nchans; i++) {
-		if (chanset->chans[i] == chan_id)
+		if (chanset->chans[i] == channel)
 			return;
 	}
 
-	chanset->chans[chanset->nchans] = chan_id;
+	chanset->chans[chanset->nchans] = channel;
 	chanset->nchans++;
 }
 
 void q931_chanset_del(
 	struct q931_chanset *chanset,
-	int chan_id)
+	const struct q931_channel *channel)
 {
 	assert(chanset);
 	assert(chanset->nchans);
+	assert(channel);
 
 	int i;
 	for (i=0; i<chanset->nchans; i++) {
-		if (chanset->chans[i] == chan_id) {
+		if (chanset->chans[i] == channel) {
 			int j;
 			for (j=i; j<chanset->nchans - 1; j++) {
 				chanset->chans[j] = chanset->chans[j+1];
@@ -88,11 +90,11 @@ chan_found:
 
 int q931_chanset_contains(
 	const struct q931_chanset *chanset,
-	int channel_id)
+	const struct q931_channel *channel)
 {
 	int i;
 	for (i=0; i<chanset->nchans; i++) {
-		if (chanset->chans[i] == channel_id)
+		if (chanset->chans[i] == channel)
 			return TRUE;
 	}
 

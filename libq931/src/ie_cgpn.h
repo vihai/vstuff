@@ -53,12 +53,21 @@ struct q931_ie_calling_party_number
 	enum q931_ie_calling_party_number_numbering_plan_identificator
 		numbering_plan_identificator;
 
+	enum q931_ie_calling_party_number_presentation_indicator
+		presentation_indicator;
+	enum q931_ie_calling_party_number_screening_indicator
+		screening_indicator;
+
+
 	char number[21];
 };
 
+struct q931_ie_calling_party_number *q931_ie_calling_party_number_alloc(void);
+struct q931_ie *q931_ie_calling_party_number_alloc_abstract(void);
+
 #ifdef Q931_PRIVATE
 
-struct q931_ie_calling_party_number_onwire_3_4
+struct q931_ie_calling_party_number_onwire_3
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
@@ -69,9 +78,12 @@ struct q931_ie_calling_party_number_onwire_3_4
 	__u8 type_of_number:3;
 	__u8 ext:1;
 #endif
+} __attribute__ ((__packed__));
 
+struct q931_ie_calling_party_number_onwire_3a
+{
 #if __BYTE_ORDER == __BIG_ENDIAN
-	__u8 ext2:1;
+	__u8 ext:1;
 	__u8 presentation_indicator:2;
 	__u8 :3;
 	__u8 screening_indicator:2;
@@ -79,19 +91,18 @@ struct q931_ie_calling_party_number_onwire_3_4
 	__u8 screening_indicator:2;
 	__u8 :3;
 	__u8 presentation_indicator:2;
-	__u8 ext2:1;
+	__u8 ext:1;
 #endif
 } __attribute__ ((__packed__));
-
-void q931_ie_calling_party_number_init(
-	struct q931_ie_calling_party_number *ie);
 
 void q931_ie_calling_party_number_register(
 	const struct q931_ie_type *type);
 
-int q931_ie_calling_party_number_check(
-	const struct q931_ie *ie,
-	const struct q931_message *msg);
+int q931_ie_calling_party_number_read_from_buf(
+	struct q931_ie *ie,
+	const struct q931_message *msg,
+	int pos,
+	int len);
 
 int q931_ie_calling_party_number_write_to_buf(
 	const struct q931_ie *generic_ie,
