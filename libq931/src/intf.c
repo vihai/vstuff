@@ -135,14 +135,12 @@ struct q931_interface *q931_open_interface(
 		intf->T322 =   4 * 1000000LL;
 	}
 
-	intf->type = Q931_INTF_TYPE_BRA_MULTIPOINT;
+	// FIXME TODO: Take this from the config
+	intf->type = Q931_INTF_TYPE_BRA;
+	intf->config = Q931_INTF_CONFIG_MULTIPOINT;
 
 	switch (intf->type) {
-	case Q931_INTF_TYPE_BRA_POINT_TO_POINT:
-		intf->n_channels = 2;
-		intf->call_reference_len = 1;
-	break;
-	case Q931_INTF_TYPE_BRA_MULTIPOINT:
+	case Q931_INTF_TYPE_BRA:
 		intf->n_channels = 2;
 		intf->call_reference_len = 1;
 	break;

@@ -84,21 +84,26 @@ void q931_ces_dl_release_confirm(
 	struct q931_ces *ces);
 
 void q931_ces_alerting_request(
-	struct q931_ces *ces);
+	struct q931_ces *ces,
+	const struct q931_ies *user_ies);
 void q931_ces_connect_request(
-	struct q931_ces *ces);
+	struct q931_ces *ces,
+	const struct q931_ies *user_ies);
 void q931_ces_call_proceeding_request(
-	struct q931_ces *ces);
+	struct q931_ces *ces,
+	const struct q931_ies *user_ies);
 void q931_ces_setup_ack_request(
-	struct q931_ces *ces);
+	struct q931_ces *ces,
+	const struct q931_ies *user_ies);
 void q931_ces_release_request(
 	struct q931_ces *ces,
-	const struct q931_ies *ies);
+	const struct q931_ies *user_ies);
 void q931_ces_info_request(
 	struct q931_ces *ces,
-	const struct q931_ies *ies);
+	const struct q931_ies *user_ies);
 void q931_ces_status_enquiry_request(
-	struct q931_ces *ces);
+	struct q931_ces *ces,
+	const struct q931_ies *user_ies);
 
 #endif
 

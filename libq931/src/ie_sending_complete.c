@@ -20,6 +20,8 @@ struct q931_ie_sending_complete *q931_ie_sending_complete_alloc(void)
 	ie = malloc(sizeof(*ie));
 	assert(ie);
 
+	memset(ie, 0x00, sizeof(*ie));
+
 	ie->ie.type = ie_type;
 	ie->ie.refcnt = 1;
 

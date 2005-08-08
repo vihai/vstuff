@@ -16,13 +16,13 @@ enum q931_ie_progress_indicator_coding_standard
 
 enum q931_ie_progress_indicator_location
 {
-	Q931_IE_PI_LOCATION_USER				= 0x0,
-	Q931_IE_PI_LOCATION_PRIVATE_NET_SERVING_LOCAL_USER	= 0x1,
-	Q931_IE_PI_LOCATION_PUBLIC_NETWORK_SERVING_LOCAL_USER	= 0x2,
-	Q931_IE_PI_LOCATION_PUBLIC_NETWORK_SERVING_REMOTE_USER	= 0x4,
-	Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER	= 0x5,
-	Q931_IE_PI_LOCATION_INTERNATIONAL_NETWORK		= 0x7,
-	Q931_IE_PI_LOCATION_NETWORK_BEYOND_INTERNETWORKING_POINT= 0xa,
+	Q931_IE_PI_L_USER					= 0x0,
+	Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_LOCAL_USER		= 0x1,
+	Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_LOCAL_USER		= 0x2,
+	Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_REMOTE_USER		= 0x4,
+	Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_REMOTE_USER	= 0x5,
+	Q931_IE_PI_L_INTERNATIONAL_NETWORK			= 0x7,
+	Q931_IE_PI_L_NETWORK_BEYOND_INTERNETWORKING_POINT	= 0xa,
 };
 
 enum q931_ie_progress_indicator_progress_description
@@ -48,6 +48,10 @@ struct q931_ie_progress_indicator
 
 struct q931_ie_progress_indicator *q931_ie_progress_indicator_alloc(void);
 struct q931_ie *q931_ie_progress_indicator_alloc_abstract(void);
+
+enum q931_ie_progress_indicator_location
+	q931_ie_progress_indicator_location(
+		const struct q931_call *call);
 
 #ifdef Q931_PRIVATE
 

@@ -17,9 +17,23 @@
 
 enum q931_interface_type
 {
-	Q931_INTF_TYPE_BRA_POINT_TO_POINT,
-	Q931_INTF_TYPE_BRA_MULTIPOINT,
+	Q931_INTF_TYPE_BRA,
 	Q931_INTF_TYPE_PRA,
+};
+
+enum q931_interface_config
+{
+	Q931_INTF_CONFIG_POINT_TO_POINT,
+	Q931_INTF_CONFIG_MULTIPOINT,
+};
+
+enum q931_interface_network_role
+{
+	Q931_INTF_NET_USER,
+	Q931_INTF_NET_PRIVATE,
+	Q931_INTF_NET_LOCAL,
+	Q931_INTF_NET_TRANSIT,
+	Q931_INTF_NET_INTERNATIONAL,
 };
 
 struct q931_call;
@@ -32,6 +46,8 @@ struct q931_interface
 	char *name;
 
 	enum q931_interface_type type;
+	enum q931_interface_config config;
+	enum q931_interface_network_role network_role;
 	enum lapd_role role;
 
 	int master_socket;	// Multipoint master_socket

@@ -20,6 +20,8 @@ struct q931_ie_bearer_capability *q931_ie_bearer_capability_alloc(void)
 	ie = malloc(sizeof(*ie));
 	assert(ie);
 
+	memset(ie, 0x00, sizeof(*ie));
+
 	ie->ie.refcnt = 1;
 	ie->ie.type = ie_type;
 

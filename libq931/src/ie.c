@@ -1078,8 +1078,8 @@ void q931_ie_types_init()
 
 	int i;
 	for (i=0;
-	     i<sizeof(q931_ie_types_per_mt)/
-		sizeof(struct q931_ie_type_per_mt); i++) {
+	     i<sizeof(q931_ie_types)/
+		sizeof(struct q931_ie_type); i++) {
 
 		if (q931_ie_types[i].init)
 			q931_ie_types[i].init(&q931_ie_types[i]);

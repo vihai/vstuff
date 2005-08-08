@@ -18,8 +18,9 @@ enum q931_ie_cause_coding_standard
 enum q931_ie_cause_location
 {
 	Q931_IE_C_L_USER					= 0x0,
-	Q931_IE_C_L_PRIVATE_NET_SERVING_LOCAL_USER		= 0x1,
+	Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER		= 0x1,
 	Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER		= 0x2,
+	Q931_IE_C_L_TRANSIT_NETWORK				= 0x3,
 	Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER		= 0x4,
 	Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER		= 0x5,
 	Q931_IE_C_L_INTERNATIONAL_NETWORK			= 0x7,
@@ -47,7 +48,7 @@ enum q931_ie_cause_value
 	Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY			= 30,
 	Q931_IE_C_CV_NORMAL_UNSPECIFIED				= 31,
 
-	Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE		= 34,
+	Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE		= 34,
 	Q931_IE_C_CV_NETWORK_OUT_OF_ORDER			= 38,
 	Q931_IE_C_CV_TEMPORARY_FAILURE				= 41,
 	Q931_IE_C_CV_SWITCHING_EQUIPMENT_CONGESTION		= 42,
@@ -115,6 +116,29 @@ struct q931_ie_cause
 
 struct q931_ie_cause *q931_ie_cause_alloc(void);
 struct q931_ie *q931_ie_cause_alloc_abstract(void);
+
+enum q931_ie_cause_location q931_ie_cause_location(
+	enum q931_call_direction dir,
+	enum q931_interface_network_role network_role,
+	enum lapd_role role);
+
+static inline enum q931_ie_cause_location q931_ie_cause_location_call(
+	struct q931_call *call)
+{
+	return q931_ie_cause_location(
+			call->direction,
+			call->intf->network_role,
+			call->intf->role);
+}
+
+static inline enum q931_ie_cause_location q931_ie_cause_location_gc(
+	struct q931_global_call *gc)
+{
+	return q931_ie_cause_location(
+			Q931_CALL_DIRECTION_INBOUND,
+			gc->intf->network_role,
+			gc->intf->role);
+}
 
 #ifdef Q931_PRIVATE
 

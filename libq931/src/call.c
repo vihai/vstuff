@@ -426,7 +426,7 @@ static void q931_call_send_call_status_with_state(
 	struct q931_ie_call_state *cs = q931_ie_call_state_alloc();
 	cs->coding_standard = Q931_IE_CS_CS_CCITT;
 	cs->value = q931_call_state_to_ie_state(state);
-	q931_ies_add(&ies, &cs->ie);
+	q931_ies_add_put(&ies, &cs->ie);
 
 	q931_call_send_status(call, &ies);
 }
@@ -491,18 +491,18 @@ void _q931_call_message_not_compatible_with_state(
 	struct q931_ie_cause *cause = q931_ie_cause_alloc();
 
 	cause->coding_standard = Q931_IE_C_CS_CCITT;
-	cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	cause->location = q931_ie_cause_location_call(call);
 
 	if (call->state == N0_NULL_STATE) {
 		cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_release(call, &ies);
 		q931_call_start_timer(call, T308);
 		q931_call_set_state(call, N19_RELEASE_REQUEST);
 	} if (call->state == U0_NULL_STATE) {
 		cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_release(call, &ies);
 		q931_call_start_timer(call, T308);
@@ -513,7 +513,7 @@ void _q931_call_message_not_compatible_with_state(
 			msg->raw + sizeof(struct q931_header) +
 			msg->callref_len, 1);
 		cause->diagnostics_len = 1;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_call_status(call, &ies);
 	}
@@ -661,7 +661,7 @@ static int q931_channel_select_response(
 				"but no indicated channel is unavailable");
 		}
 
-// FIXME			q931_ies_add(causeset,
+// FIXME			q931_ies_add_put(causeset,
 //				Q931_IE_C_CV_CHANNEL_UNACCEPTABLE);
 
 		return FALSE;
@@ -820,7 +820,9 @@ static struct q931_channel *q931_channel_select_setup(
 	return NULL;
 }
 
-void q931_alerting_request(struct q931_call *call)
+void q931_alerting_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -829,18 +831,20 @@ void q931_alerting_request(struct q931_call *call)
 	switch (call->state) {
 	case N2_OVERLAP_SENDING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_alerting(call, NULL);
+		q931_call_send_alerting(call, user_ies);
 		q931_call_set_state(call, N4_CALL_DELIVERED);
 	break;
 
 	case N3_OUTGOING_CALL_PROCEEDING:
-		q931_call_send_alerting(call, NULL);
+		q931_call_send_alerting(call, user_ies);
 		q931_call_set_state(call, N4_CALL_DELIVERED);
 	break;
 
 	case U6_CALL_PRESENT: {
 		int send_chanid_in_response = FALSE;
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
 
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
@@ -856,19 +860,16 @@ void q931_alerting_request(struct q931_call *call)
 				q931_ie_channel_identification_alloc();
 
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			if (call->intf->type == Q931_INTF_TYPE_PRA) {
-				ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-			} else {
-				ci->interface_type = Q931_IE_CI_IT_BASIC;
-			}
+			ci->interface_type =
+				q931_ie_channel_identification_intftype(call->intf);
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add(&ies, &ci->ie);
+			q931_ies_add_put(&ies, &ci->ie);
 
 			q931_call_send_alerting(call, &ies);
 		} else
-			q931_call_send_alerting(call, NULL);
+			q931_call_send_alerting(call, user_ies);
 
 		q931_call_set_state(call, U7_CALL_RECEIVED);
 	}
@@ -876,13 +877,13 @@ void q931_alerting_request(struct q931_call *call)
 
 	case U8_CONNECT_REQUEST:
 	case U9_INCOMING_CALL_PROCEEDING:
-		q931_call_send_alerting(call, NULL);
+		q931_call_send_alerting(call, user_ies);
 		q931_call_set_state(call, U7_CALL_RECEIVED);
 	break;
 
 	case U25_OVERLAP_RECEIVING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_alerting(call, NULL);
+		q931_call_send_alerting(call, user_ies);
 		q931_call_set_state(call, U7_CALL_RECEIVED);
 	break;
 
@@ -912,10 +913,9 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = // FIXME TODO
-				Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			pi->location = q931_ie_progress_indicator_location(call);
 			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add(&ies, &pi->ie);
+			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_tone(call->channel, Q931_TONE_HANGUP);
@@ -935,10 +935,9 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = // FIXME TODO
-				Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			pi->location = q931_ie_progress_indicator_location(call);
 			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add(&ies, &pi->ie);
+			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_tone(call->channel, Q931_TONE_HANGUP);
@@ -963,10 +962,9 @@ void q931_disconnect_request(struct q931_call *call,
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
 				pi->coding_standard = Q931_IE_PI_CS_CCITT;
-				pi->location = // FIXME TODO
-					Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				pi->location = q931_ie_progress_indicator_location(call);
 				pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-				q931_ies_add(&ies, &pi->ie);
+				q931_ies_add_put(&ies, &pi->ie);
 
 				q931_call_send_disconnect(call, &ies);
 				q931_call_start_tone(call->channel, Q931_TONE_HANGUP);
@@ -1081,10 +1079,9 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = // FIXME TODO
-				Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			pi->location = q931_ie_progress_indicator_location(call);
 			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add(&ies, &pi->ie);
+			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_tone(call->channel, Q931_TONE_HANGUP);
@@ -1103,10 +1100,9 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = // FIXME TODO
-				Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			pi->location = q931_ie_progress_indicator_location(call);
 			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add(&ies, &pi->ie);
+			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_tone(call->channel, Q931_TONE_HANGUP);
@@ -1265,7 +1261,9 @@ void q931_info_request(
 	}
 }
 
-void q931_more_info_request(struct q931_call *call)
+void q931_more_info_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1274,6 +1272,9 @@ void q931_more_info_request(struct q931_call *call)
 	switch (call->state) {
 	case N1_CALL_INITIATED: {
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
+
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
 				&ies, NULL);
@@ -1289,26 +1290,21 @@ void q931_more_info_request(struct q931_call *call)
 		struct q931_ie_channel_identification *ci =
 			q931_ie_channel_identification_alloc();
 		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
-			ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-		} else {
-			ci->interface_type = Q931_IE_CI_IT_BASIC;
-		}
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(call->intf);
+		ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 		ci->coding_standard = Q931_IE_CI_CS_CCITT;
 		q931_chanset_init(&ci->chanset);
 		q931_chanset_add(&ci->chanset, call->channel);
-		q931_ies_add(&ies, &ci->ie);
+		q931_ies_add_put(&ies, &ci->ie);
 
 		if (call->tones_option) {
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = // FIXME TODO
-				Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			pi->location = q931_ie_progress_indicator_location(call);
 			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add(&ies, &pi->ie);
-
-			q931_call_send_setup_acknowledge(call, &ies);
+			q931_ies_add_put(&ies, &pi->ie);
 		}
 
 		q931_call_send_setup_acknowledge(call, &ies);
@@ -1329,16 +1325,19 @@ void q931_more_info_request(struct q931_call *call)
 		if (call->broadcast_setup) {
 			struct q931_ces *ces;
 			list_for_each_entry(ces, &call->ces, node) {
-				q931_ces_info_request(ces, NULL);
+				q931_ces_info_request(ces, user_ies);
 			}
 		} else {
-			q931_call_send_information(call, NULL);
+			q931_call_send_information(call, user_ies);
 			q931_call_start_timer(call, T304);
 		}
 	break;
 
 	case U6_CALL_PRESENT: {
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
+
 		int send_chanid_in_response = FALSE;
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
@@ -1357,15 +1356,13 @@ void q931_more_info_request(struct q931_call *call)
 			struct q931_ie_channel_identification *ci =
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			if (call->intf->type == Q931_INTF_TYPE_PRA) {
-				ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-			} else {
-				ci->interface_type = Q931_IE_CI_IT_BASIC;
-			}
+			ci->interface_type =
+				q931_ie_channel_identification_intftype(call->intf);
+			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add(&ies, &ci->ie);
+			q931_ies_add_put(&ies, &ci->ie);
 		}
 
 		q931_call_send_setup_acknowledge(call, &ies);
@@ -1382,7 +1379,9 @@ void q931_more_info_request(struct q931_call *call)
 	
 }
 
-void q931_notify_request(struct q931_call *call)
+void q931_notify_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1395,11 +1394,11 @@ void q931_notify_request(struct q931_call *call)
 
 	case N10_ACTIVE:
 	case N15_SUSPEND_REQUEST:
-		q931_call_send_notify(call, NULL);
+		q931_call_send_notify(call, user_ies);
 	break;
 
 	case U10_ACTIVE:
-		q931_call_send_notify(call, NULL);
+		q931_call_send_notify(call, user_ies);
 	break;
 
 	default:
@@ -1408,7 +1407,9 @@ void q931_notify_request(struct q931_call *call)
 	}
 }
 
-void q931_proceeding_request(struct q931_call *call)
+void q931_proceeding_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1417,6 +1418,9 @@ void q931_proceeding_request(struct q931_call *call)
 	switch (call->state) {
 	case N1_CALL_INITIATED: {
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
+
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
 				&ies, NULL);
@@ -1433,15 +1437,13 @@ void q931_proceeding_request(struct q931_call *call)
 		struct q931_ie_channel_identification *ci =
 			q931_ie_channel_identification_alloc();
 		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
-			ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-		} else {
-			ci->interface_type = Q931_IE_CI_IT_BASIC;
-		}
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(call->intf);
+		ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 		ci->coding_standard = Q931_IE_CI_CS_CCITT;
 		q931_chanset_init(&ci->chanset);
 		q931_chanset_add(&ci->chanset, call->channel);
-		q931_ies_add(&ies, &ci->ie);
+		q931_ies_add_put(&ies, &ci->ie);
 
 		q931_call_send_call_proceeding(call, &ies);
 
@@ -1452,12 +1454,15 @@ void q931_proceeding_request(struct q931_call *call)
 
 	case N2_OVERLAP_SENDING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_call_proceeding(call, NULL);
+		q931_call_send_call_proceeding(call, user_ies);
 		q931_call_set_state(call, N3_OUTGOING_CALL_PROCEEDING);
 	break;
 
 	case U6_CALL_PRESENT: {
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
+
 		int send_chanid_in_response = FALSE;
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
@@ -1476,15 +1481,13 @@ void q931_proceeding_request(struct q931_call *call)
 			struct q931_ie_channel_identification *ci =
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			if (call->intf->type == Q931_INTF_TYPE_PRA) {
-				ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-			} else {
-				ci->interface_type = Q931_IE_CI_IT_BASIC;
-			}
+			ci->interface_type =
+				q931_ie_channel_identification_intftype(call->intf);
+			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add(&ies, &ci->ie);
+			q931_ies_add_put(&ies, &ci->ie);
 		}
 
 		q931_call_send_call_proceeding(call, &ies);
@@ -1495,7 +1498,7 @@ void q931_proceeding_request(struct q931_call *call)
 
 	case U25_OVERLAP_RECEIVING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_call_proceeding(call, NULL);
+		q931_call_send_call_proceeding(call, user_ies);
 		q931_call_set_state(call, U9_INCOMING_CALL_PROCEEDING);
 	break;
 
@@ -1505,7 +1508,9 @@ void q931_proceeding_request(struct q931_call *call)
 	}
 }
 
-void q931_progress_request(struct q931_call *call)
+void q931_progress_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1517,12 +1522,12 @@ void q931_progress_request(struct q931_call *call)
 	case N4_CALL_DELIVERED:
 	case U7_CALL_RECEIVED:
 	case U8_CONNECT_REQUEST:
-		q931_call_send_progress(call, NULL);
+		q931_call_send_progress(call, user_ies);
 	break;
 
 	case U25_OVERLAP_RECEIVING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_progress(call, NULL);
+		q931_call_send_progress(call, user_ies);
 	break;
 
 	default:
@@ -1559,7 +1564,9 @@ void q931_reject_request(
 	}
 }
 
-void q931_release_request(struct q931_call *call)
+void q931_release_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1568,10 +1575,13 @@ void q931_release_request(struct q931_call *call)
 	switch (call->state) {
 	case N11_DISCONNECT_REQUEST: {
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
+
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 
 		struct q931_ie_cause_diag_1_2 *diag =
@@ -1582,7 +1592,7 @@ void q931_release_request(struct q931_call *call)
 		diag->ext2 = 1;
 		diag->condition = Q931_IE_C_D_C_PERMANENT;
 		cause->diagnostics_len = sizeof(*diag);
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_release(call, &ies);
 		q931_call_start_timer(call, T308);
@@ -1590,12 +1600,17 @@ void q931_release_request(struct q931_call *call)
 	}
 	break;
 
-	case U12_DISCONNECT_INDICATION:
+	case U12_DISCONNECT_INDICATION: {
+		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, &call->release_with_cause);
+		q931_ies_merge(&ies, user_ies);
+
 		q931_call_disconnect_channel(call->channel);
-		q931_call_send_release(call,
-			&call->release_with_cause);
+		q931_call_send_release(call, &ies);
 		q931_call_start_timer(call, T308);
 		q931_call_set_state(call, U19_RELEASE_REQUEST);
+	}
 	break;
 
 	default:
@@ -1604,18 +1619,20 @@ void q931_release_request(struct q931_call *call)
 	}
 }
 
-void q931_resume_request(struct q931_call *call)
+void q931_resume_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
 	report_call(call, LOG_DEBUG, "RESUME-REQ\n");
 
-	if (call->intf->type == Q931_INTF_TYPE_PRA)
-		assert(0);
+	if (call->intf->type != Q931_INTF_TYPE_BRA)
+		q931_call_unexpected_primitive(call);
 
 	switch (call->state) {
 	case U0_NULL_STATE:
-		q931_call_send_resume(call, NULL);
+		q931_call_send_resume(call, user_ies);
 		q931_call_start_timer(call, T318);
 		q931_call_set_state(call, U17_RESUME_REQUEST);
 	break;
@@ -1626,7 +1643,8 @@ void q931_resume_request(struct q931_call *call)
 	}
 }
 
-void q931_resume_reject_request(struct q931_call *call,
+void q931_resume_reject_request(
+	struct q931_call *call,
 	const struct q931_ies *user_ies)
 {
 	assert(call);
@@ -1646,7 +1664,9 @@ void q931_resume_reject_request(struct q931_call *call,
 	}
 }
 
-void q931_resume_response(struct q931_call *call)
+void q931_resume_response(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1655,7 +1675,7 @@ void q931_resume_response(struct q931_call *call)
 	switch (call->state) {
 	case N17_RESUME_REQUEST:
 		call->channel = q931_channel_alloc(call);
-		q931_call_send_resume_acknowledge(call, NULL);
+		q931_call_send_resume_acknowledge(call, user_ies);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
 
@@ -1665,7 +1685,9 @@ void q931_resume_response(struct q931_call *call)
 	}
 }
 
-void q931_setup_complete_request(struct q931_call *call)
+void q931_setup_complete_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1679,23 +1701,23 @@ void q931_setup_complete_request(struct q931_call *call)
 			call->selected_ces = call->preselected_ces;
 			call->dlc = call->preselected_ces->dlc;
 
-			q931_call_send_connect_acknowledge(call, NULL);
+			q931_call_send_connect_acknowledge(call, user_ies);
 			q931_ces_free(call->selected_ces);
 
 			struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_NON_SELECTED_USER_CLEARING;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			struct q931_ces *ces = NULL;
 			list_for_each_entry(ces, &call->ces, node) {
 				q931_ces_release_request(ces, &ies);
 			}
 		} else {
-			q931_call_send_connect_acknowledge(call, NULL);
+			q931_call_send_connect_acknowledge(call, user_ies);
 		}
 
 		q931_call_set_state(call, N10_ACTIVE);
@@ -1725,18 +1747,16 @@ void q931_setup_request(
 		struct q931_ie_channel_identification *ci =
 			q931_ie_channel_identification_alloc();
 		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
-			ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-		} else {
-			ci->interface_type = Q931_IE_CI_IT_BASIC;
-		}
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(call->intf);
+		ci->preferred_exclusive = Q931_IE_CI_PE_PREFERRED;
 		ci->coding_standard = Q931_IE_CI_CS_CCITT;
 		q931_chanset_init(&ci->chanset);
 		q931_chanset_add(&ci->chanset, call->proposed_channel);
-		q931_ies_add(&call->setup_ies, &ci->ie);
+		q931_ies_add_put(&call->setup_ies, &ci->ie);
 
-		if (call->intf->type ==
-		      Q931_INTF_TYPE_BRA_MULTIPOINT) {
+		if (call->intf->config ==
+		      Q931_INTF_CONFIG_MULTIPOINT) {
 			call->broadcast_setup = TRUE;
 			q931_call_start_timer(call, T312);
 
@@ -1764,7 +1784,9 @@ void q931_setup_request(
 	}
 }
 
-void q931_setup_response(struct q931_call *call)
+void q931_setup_response(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1773,22 +1795,25 @@ void q931_setup_response(struct q931_call *call)
 	switch (call->state) {
 	case N2_OVERLAP_SENDING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_connect(call, NULL);
+		q931_call_send_connect(call, user_ies);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
 
 	case N3_OUTGOING_CALL_PROCEEDING:
-		q931_call_send_connect(call, NULL);
+		q931_call_send_connect(call, user_ies);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
 
 	case N4_CALL_DELIVERED:
-		q931_call_send_connect(call, NULL);
+		q931_call_send_connect(call, user_ies);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
 
 	case U6_CALL_PRESENT: {
 		struct q931_ies ies = Q931_IES_INIT;
+
+		q931_ies_merge(&ies, user_ies);
+
 		int send_chanid_in_response = FALSE;
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
@@ -1807,15 +1832,13 @@ void q931_setup_response(struct q931_call *call)
 			struct q931_ie_channel_identification *ci =
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			if (call->intf->type == Q931_INTF_TYPE_PRA) {
-				ci->interface_type = Q931_IE_CI_IT_PRIMARY;
-			} else {
-				ci->interface_type = Q931_IE_CI_IT_BASIC;
-			}
+			ci->interface_type =
+				q931_ie_channel_identification_intftype(call->intf);
+			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add(&ies, &ci->ie);
+			q931_ies_add_put(&ies, &ci->ie);
 		}
 
 		q931_call_send_connect(call, &ies);
@@ -1827,14 +1850,14 @@ void q931_setup_response(struct q931_call *call)
 
 	case U7_CALL_RECEIVED:
 	case U9_INCOMING_CALL_PROCEEDING:
-		q931_call_send_connect(call, NULL);
+		q931_call_send_connect(call, user_ies);
 		q931_call_start_timer(call, T313);
 		q931_call_set_state(call, U8_CONNECT_REQUEST);
 	break;
 
 	case U25_OVERLAP_RECEIVING:
 		q931_call_stop_timer(call, T302);
-		q931_call_send_connect(call, NULL);
+		q931_call_send_connect(call, user_ies);
 		q931_call_start_timer(call, T313);
 		q931_call_set_state(call, U8_CONNECT_REQUEST);
 	break;
@@ -1847,7 +1870,8 @@ void q931_setup_response(struct q931_call *call)
 
 void q931_status_enquiry_request(
 	struct q931_call *call,
-	struct q931_ces *ces)
+	struct q931_ces *ces,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1864,17 +1888,18 @@ void q931_status_enquiry_request(
 		if (call->broadcast_setup) {
 			if (call->state != N6_CALL_PRESENT) {
 				if (ces) {
-					q931_ces_status_enquiry_request(ces);
+					q931_ces_status_enquiry_request(ces, user_ies);
 				} else {
 					struct q931_ces *ces;
 					list_for_each_entry(ces, &call->ces, node) {
-						q931_ces_status_enquiry_request(ces);
+						q931_ces_status_enquiry_request(
+							ces, user_ies);
 					}
 				}
 			}
 		} else {
 			if (!q931_call_timer_running(call, T322)) {
-				q931_call_send_status_enquiry(call, NULL);
+				q931_call_send_status_enquiry(call, user_ies);
 				call->senq_status_97_98_received = 0;
 				call->senq_cnt = 0;
 				q931_call_start_timer(call, T322);
@@ -1884,7 +1909,7 @@ void q931_status_enquiry_request(
 
 	default:
 		if (!q931_call_timer_running(call, T322)) {
-			q931_call_send_status_enquiry(call, NULL);
+			q931_call_send_status_enquiry(call, user_ies);
 			call->senq_status_97_98_received = 0;
 			call->senq_cnt = 0;
 			q931_call_start_timer(call, T322);
@@ -1893,7 +1918,8 @@ void q931_status_enquiry_request(
 	}
 }
 
-void q931_suspend_reject_request(struct q931_call *call,
+void q931_suspend_reject_request(
+	struct q931_call *call,
 	const struct q931_ies *user_ies)
 {
 	assert(call);
@@ -1912,7 +1938,9 @@ void q931_suspend_reject_request(struct q931_call *call,
 	}
 }
 
-void q931_suspend_response(struct q931_call *call)
+void q931_suspend_response(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1920,7 +1948,7 @@ void q931_suspend_response(struct q931_call *call)
 
 	switch (call->state) {
 	case N15_SUSPEND_REQUEST:
-		q931_call_send_suspend_acknowledge(call, NULL);
+		q931_call_send_suspend_acknowledge(call, user_ies);
 		// NOTE: Timer T307 is running in the call control block
 		q931_intf_del_call(call);
 		q931_call_set_state(call, N0_NULL_STATE);
@@ -1932,7 +1960,9 @@ void q931_suspend_response(struct q931_call *call)
 	}
 }
 
-void q931_suspend_request(struct q931_call *call)
+void q931_suspend_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1940,7 +1970,7 @@ void q931_suspend_request(struct q931_call *call)
 
 	switch (call->state) {
 	case U10_ACTIVE:
-		q931_call_send_suspend(call, NULL);
+		q931_call_send_suspend(call, user_ies);
 		q931_call_start_timer(call, T319);
 		q931_call_set_state(call, U15_SUSPEND_REQUEST);
 	break;
@@ -1951,7 +1981,9 @@ void q931_suspend_request(struct q931_call *call)
 	}
 }
 
-void q931_restart_request(struct q931_call *call)
+void q931_restart_request(
+	struct q931_call *call,
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 
@@ -1978,7 +2010,7 @@ void q931_restart_request(struct q931_call *call)
 		q931_call_release_channel(call->channel);
 		q931_call_set_state(call, U0_NULL_STATE);
 		q931_intf_del_call(call);
-		q931_call_primitive(call, release_indication, NULL);
+		q931_call_primitive(call, release_indication, user_ies);
 		q931_global_restart_confirm(&call->intf->global_call, call);
 	break;
 
@@ -2003,7 +2035,7 @@ void q931_restart_request(struct q931_call *call)
 		q931_call_release_channel(call->channel);
 		q931_call_set_state(call, N0_NULL_STATE);
 		q931_intf_del_call(call);
-		q931_call_primitive(call, release_indication, NULL);
+		q931_call_primitive(call, release_indication, user_ies);
 		q931_global_restart_confirm(&call->intf->global_call, call);
 	break;
 	}
@@ -2272,9 +2304,9 @@ void q931_int_release_indication(
 			struct q931_ies ies = Q931_IES_INIT;
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_NON_SELECTED_USER_CLEARING;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			struct q931_ces *ces;
 			list_for_each_entry(ces, &call->ces, node) {
@@ -2385,11 +2417,11 @@ static void q931_timer_T301(void *data)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 		memcpy(cause->diagnostics, "301", 3);
 		cause->diagnostics_len = 3;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		if (call->broadcast_setup) {
 			struct q931_ces *ces;
@@ -2438,18 +2470,17 @@ static void q931_timer_T302(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			if (call->tones_option) {
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
 				pi->coding_standard = Q931_IE_PI_CS_CCITT;
-				pi->location = // FIXME TODO
-					Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				pi->location = q931_ie_progress_indicator_location(call);
 				pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-				q931_ies_add(&ies, &pi->ie);
+				q931_ies_add_put(&ies, &pi->ie);
 
 				q931_call_send_disconnect(call, &ies);
 				q931_call_start_tone(call->channel,
@@ -2479,9 +2510,9 @@ static void q931_timer_T302(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_timer(call, T305);
@@ -2543,11 +2574,11 @@ static void q931_timer_T303(void *data)
 
 				struct q931_ie_cause *cause = q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+				cause->location = q931_ie_cause_location_call(call);
 				cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 				memcpy(cause->diagnostics, "303", 3);
 				cause->diagnostics_len = 3;
-				q931_ies_add(&ies, &cause->ie);
+				q931_ies_add_put(&ies, &cause->ie);
 
 				q931_call_send_disconnect(call, &ies);
 				q931_call_set_state(call, N12_DISCONNECT_INDICATION);
@@ -2566,11 +2597,11 @@ static void q931_timer_T303(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "303", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_release_complete(call, &ies);
 			q931_call_set_state(call, U0_NULL_STATE);
@@ -2611,11 +2642,11 @@ static void q931_timer_T304(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "304", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			struct q931_ces *ces;
 			list_for_each_entry(ces, &call->ces, node) {
@@ -2626,11 +2657,11 @@ static void q931_timer_T304(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "304", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_disconnect_channel(call->channel);
@@ -2648,11 +2679,11 @@ static void q931_timer_T304(void *data)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 		memcpy(cause->diagnostics, "304", 3);
 		cause->diagnostics_len = 3;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_disconnect(call, &ies);
 		q931_call_start_timer(call, T305);
@@ -2746,18 +2777,18 @@ static void q931_timer_T308(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "308", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ies_merge(&ies, &call->release_cause);
 
 			q931_call_send_release(call, &ies);
 			q931_call_start_timer(call, T308);
 		} else {
-			if (call->intf->type == Q931_INTF_TYPE_BRA_MULTIPOINT) {
+			if (call->intf->config == Q931_INTF_CONFIG_MULTIPOINT) {
 				q931_call_release_channel(call->channel);
 			} else {
 				call->channel->state = Q931_CHANSTATE_MAINTAINANCE;
@@ -2776,7 +2807,7 @@ static void q931_timer_T308(void *data)
 			q931_call_send_release(call, NULL);
 			q931_call_start_timer(call, T308);
 		} else {
-			if (call->intf->type != Q931_INTF_TYPE_BRA_MULTIPOINT) {
+			if (call->intf->config != Q931_INTF_CONFIG_MULTIPOINT) {
 				call->channel->state = Q931_CHANSTATE_MAINTAINANCE;
 			}
 
@@ -2849,11 +2880,11 @@ static void q931_timer_T310(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "310", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ies_merge(&ies, &call->release_cause);
 
@@ -2866,11 +2897,11 @@ static void q931_timer_T310(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "310", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_release_channel(call->channel);
@@ -3015,11 +3046,11 @@ static void q931_timer_T313(void *data)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 		memcpy(cause->diagnostics, "313", 3);
 		cause->diagnostics_len = 3;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 
 		q931_call_send_disconnect(call, &ies);
@@ -3073,11 +3104,11 @@ static void q931_timer_T318(void *data)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 		memcpy(cause->diagnostics, "318", 3);
 		cause->diagnostics_len = 3;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_release(call, &ies);
 		q931_call_start_timer(call, T308);
@@ -3158,9 +3189,9 @@ static void q931_timer_T322(void *data)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_TEMPORARY_FAILURE;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_release(call, &ies);
 			q931_call_start_timer(call, T308);
@@ -3196,7 +3227,7 @@ static inline void q931_handle_alerting(
 				q931_call_set_state(call, N7_CALL_RECEIVED);
 				q931_call_primitive(call, alerting_indication,
 					&msg->ies);
-				q931_ces_alerting_request(ces);
+				q931_ces_alerting_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3228,7 +3259,7 @@ static inline void q931_handle_alerting(
 			struct q931_ies causes = Q931_IES_INIT;
 
 			if (q931_channel_select_response(call, &msg->ies, &causes)) {
-				q931_ces_alerting_request(ces);
+				q931_ces_alerting_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3246,9 +3277,9 @@ static inline void q931_handle_alerting(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_NON_SELECTED_USER_CLEARING;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		} else {
@@ -3269,7 +3300,7 @@ static inline void q931_handle_alerting(
 				q931_call_set_state(call, N7_CALL_RECEIVED);
 				q931_call_primitive(call, alerting_indication,
 					&msg->ies);
-				q931_ces_alerting_request(ces);
+				q931_ces_alerting_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3298,11 +3329,11 @@ static inline void q931_handle_alerting(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		} else {
@@ -3310,11 +3341,11 @@ static inline void q931_handle_alerting(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		}
@@ -3333,7 +3364,7 @@ static inline void q931_handle_alerting(
 				q931_call_set_state(call, N7_CALL_RECEIVED);
 				q931_call_primitive(call, alerting_indication,
 					&msg->ies);
-				q931_ces_alerting_request(ces);
+				q931_ces_alerting_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3387,7 +3418,7 @@ inline static void q931_handle_call_proceeding(
 				q931_call_start_timer(call, T310);
 				q931_call_primitive(call, proceeding_indication,
 					&msg->ies);
-				q931_ces_call_proceeding_request(ces);
+				q931_ces_call_proceeding_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3423,7 +3454,7 @@ inline static void q931_handle_call_proceeding(
 			struct q931_ies causes = Q931_IES_INIT;
 
 			if (q931_channel_select_response(call, &msg->ies, &causes)) {
-				q931_ces_call_proceeding_request(ces);
+				q931_ces_call_proceeding_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3438,9 +3469,9 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_NON_SELECTED_USER_CLEARING;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			struct q931_ces *ces;
 			ces = q931_ces_alloc(call, msg->dlc);
@@ -3467,11 +3498,11 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		} else {
@@ -3479,11 +3510,11 @@ inline static void q931_handle_call_proceeding(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		}
@@ -3502,7 +3533,7 @@ inline static void q931_handle_call_proceeding(
 				q931_call_set_state(call, N9_INCOMING_CALL_PROCEEDING);
 				q931_call_primitive(call, proceeding_indication,
 					&msg->ies);
-				q931_ces_call_proceeding_request(ces);
+				q931_ces_call_proceeding_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3569,7 +3600,7 @@ inline static void q931_handle_connect(
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
 				q931_call_primitive(call, setup_confirm,
 					&msg->ies, Q931_SETUP_CONFIRM_OK);
-				q931_ces_connect_request(ces);
+				q931_ces_connect_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3605,7 +3636,7 @@ inline static void q931_handle_connect(
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
 				q931_call_primitive(call, connect_indication,
 					&msg->ies);
-				q931_ces_connect_request(ces);
+				q931_ces_connect_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3623,9 +3654,9 @@ inline static void q931_handle_connect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_NON_SELECTED_USER_CLEARING;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			struct q931_ces *ces;
 			ces = q931_ces_alloc(call, msg->dlc);
@@ -3649,7 +3680,7 @@ inline static void q931_handle_connect(
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
 				q931_call_primitive(call, connect_indication,
 					&msg->ies);
-				q931_ces_connect_request(ces);
+				q931_ces_connect_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3677,11 +3708,11 @@ inline static void q931_handle_connect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		} else {
@@ -3689,11 +3720,11 @@ inline static void q931_handle_connect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		}
@@ -3713,7 +3744,7 @@ inline static void q931_handle_connect(
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
 				q931_call_primitive(call, connect_indication,
 					&msg->ies);
-				q931_ces_connect_request(ces);
+				q931_ces_connect_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3928,7 +3959,7 @@ inline static void q931_handle_setup_acknowledge(
 				q931_call_set_state(call, N25_OVERLAP_RECEIVING);
 				q931_call_primitive(call, more_info_indication,
 					&msg->ies);
-				q931_ces_setup_ack_request(ces);
+				q931_ces_setup_ack_request(ces, &msg->ies);
 			} else {
 				struct q931_ces *ces;
 				ces = q931_ces_alloc(call, msg->dlc);
@@ -3965,7 +3996,7 @@ inline static void q931_handle_setup_acknowledge(
 			struct q931_ies causes = Q931_IES_INIT;
 
 			if (q931_channel_select_response(call, &msg->ies, &causes)) {
-				q931_ces_setup_ack_request(ces);
+				q931_ces_setup_ack_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -3980,9 +4011,9 @@ inline static void q931_handle_setup_acknowledge(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_NON_SELECTED_USER_CLEARING;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			struct q931_ces *ces;
 			ces = q931_ces_alloc(call, msg->dlc);
@@ -4009,11 +4040,11 @@ inline static void q931_handle_setup_acknowledge(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		} else {
@@ -4021,11 +4052,11 @@ inline static void q931_handle_setup_acknowledge(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 			memcpy(cause->diagnostics, "312", 3);
 			cause->diagnostics_len = 3;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_ces_release_request(ces, &ies);
 		}
@@ -4039,7 +4070,7 @@ inline static void q931_handle_setup_acknowledge(
 
 			struct q931_ies causes = Q931_IES_INIT;
 			if (q931_channel_select_response(call, &msg->ies, &causes)) {
-				q931_ces_setup_ack_request(ces);
+				q931_ces_setup_ack_request(ces, &msg->ies);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
@@ -4111,13 +4142,13 @@ inline static void q931_handle_disconnect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_call_status_with_state(call, &ies,
 				N6_CALL_PRESENT);
@@ -4135,13 +4166,13 @@ inline static void q931_handle_disconnect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_call_status_with_state(call, &ies,
 				N6_CALL_PRESENT);
@@ -4158,13 +4189,13 @@ inline static void q931_handle_disconnect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_call_status_with_state(call, &ies,
 				N6_CALL_PRESENT);
@@ -4208,13 +4239,13 @@ inline static void q931_handle_disconnect(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_call_status_with_state(call, &ies,
 				N6_CALL_PRESENT);
@@ -4306,9 +4337,9 @@ inline static void q931_handle_release(
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_release_complete(call, &ies);
 		q931_intf_del_call(call);
@@ -4754,7 +4785,7 @@ inline static void q931_handle_status(
 			cs = container_of(msg->ies.ies[i],
 				struct q931_ie_call_state, ie);
 		} else if (msg->ies.ies[i]->type->id == Q931_IE_CAUSE) {
-			q931_ies_add(&ies, msg->ies.ies[i]);
+			q931_ies_add_put(&ies, msg->ies.ies[i]);
 		}
 	}
 
@@ -4765,13 +4796,13 @@ inline static void q931_handle_status(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies2, &cause->ie);
+			q931_ies_add_put(&ies2, &cause->ie);
 
 			q931_call_send_release(call, &ies2);
 			q931_call_set_state(call, N19_RELEASE_REQUEST);
@@ -4835,13 +4866,13 @@ inline static void q931_handle_status(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies2, &cause->ie);
+			q931_ies_add_put(&ies2, &cause->ie);
 
 			q931_call_send_release(call, &ies2);
 
@@ -4859,13 +4890,13 @@ inline static void q931_handle_status(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies2, &cause->ie);
+			q931_ies_add_put(&ies2, &cause->ie);
 
 			q931_call_send_release(call, &ies2);
 
@@ -4902,9 +4933,9 @@ inline static void q931_handle_status_enquiry(
 
 	struct q931_ie_cause *cause = q931_ie_cause_alloc();
 	cause->coding_standard = Q931_IE_C_CS_CCITT;
-	cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	cause->location = q931_ie_cause_location_call(call);
 	cause->value = Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY;
-	q931_ies_add(&ies, &cause->ie);
+	q931_ies_add_put(&ies, &cause->ie);
 
 	q931_call_send_status(call, &ies);
 }
@@ -4970,13 +5001,13 @@ inline static void q931_handle_info(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
 			memcpy(cause->diagnostics,
 				msg->raw + sizeof(struct q931_header) +
 				msg->callref_len, 1);
 			cause->diagnostics_len = 1;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_call_status_with_state(call, &ies,
 				N6_CALL_PRESENT);
@@ -5126,7 +5157,7 @@ inline static void q931_handle_resume(
 
 	switch (call->state) {
 	case N0_NULL_STATE:
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			q931_call_message_not_compatible_with_state(call, msg);
 			return;
 		}
@@ -5152,7 +5183,7 @@ inline static void q931_handle_resume_acknowledge(
 
 	switch (call->state) {
 	case U17_RESUME_REQUEST:
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			q931_call_message_not_compatible_with_state(call, msg);
 			return;
 		}
@@ -5179,7 +5210,7 @@ inline static void q931_handle_resume_reject(
 
 	switch (call->state) {
 	case U17_RESUME_REQUEST:
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			q931_call_message_not_compatible_with_state(call, msg);
 			return;
 		}
@@ -5221,14 +5252,14 @@ inline static void q931_handle_suspend(
 			}
 		}
 
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_FACILITY_REJECTED;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_suspend_reject(call, &ies);
 		} else {
@@ -5255,7 +5286,7 @@ inline static void q931_handle_suspend_acknowledge(
 
 	switch (call->state) {
 	case U15_SUSPEND_REQUEST:
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			q931_call_message_not_compatible_with_state(call, msg);
 			return;
 		}
@@ -5285,7 +5316,7 @@ inline static void q931_handle_suspend_reject(
 
 	switch (call->state) {
 	case U15_SUSPEND_REQUEST:
-		if (call->intf->type == Q931_INTF_TYPE_PRA) {
+		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			q931_call_message_not_compatible_with_state(call, msg);
 			return;
 		}
@@ -5310,9 +5341,9 @@ void q931_call_dl_establish_indication(struct q931_call *call)
 
 	struct q931_ie_cause *cause = q931_ie_cause_alloc();
 	cause->coding_standard = Q931_IE_C_CS_CCITT;
-	cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	cause->location = q931_ie_cause_location_call(call);
 	cause->value = Q931_IE_C_CV_TEMPORARY_FAILURE;
-	q931_ies_add(&ies, &cause->ie);
+	q931_ies_add_put(&ies, &cause->ie);
 
 	switch (call->state) {
 	case N2_OVERLAP_SENDING: {
@@ -5322,10 +5353,9 @@ void q931_call_dl_establish_indication(struct q931_call *call)
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = // FIXME TODO
-				Q931_IE_PI_LOCATION_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			pi->location = q931_ie_progress_indicator_location(call);
 			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add(&ies, &pi->ie);
+			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_tone(call->channel, Q931_TONE_FAILURE);
@@ -5385,9 +5415,9 @@ void q931_call_dl_establish_confirm(struct q931_call *call)
 
 	struct q931_ie_cause *cause = q931_ie_cause_alloc();
 	cause->coding_standard = Q931_IE_C_CS_CCITT;
-	cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	cause->location = q931_ie_cause_location_call(call);
 	cause->value = Q931_IE_C_CV_NORMAL_UNSPECIFIED;
-	q931_ies_add(&ies, &cause->ie);
+	q931_ies_add_put(&ies, &cause->ie);
 
 	if (call->state == N10_ACTIVE ||
 	    call->state == U10_ACTIVE) {
@@ -5641,9 +5671,9 @@ void q931_dispatch_message(
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_call_status(call, &ies);
 	}
@@ -5654,9 +5684,9 @@ void q931_dispatch_message(
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		cause->location = q931_ie_cause_location_call(call);
 		cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
-		q931_ies_add(&ies, &cause->ie);
+		q931_ies_add_put(&ies, &cause->ie);
 
 		if (call->state == N0_NULL_STATE) {
 			q931_call_send_release(call, &ies);
@@ -5671,9 +5701,9 @@ void q931_dispatch_message(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->location = q931_ie_cause_location_call(call);
 			cause->value = Q931_IE_C_CV_MESSAGE_TYPE_NON_EXISTENT_OR_IMPLEMENTED;
-			q931_ies_add(&ies, &cause->ie);
+			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_call_status(call, &ies);
 		}

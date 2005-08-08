@@ -21,6 +21,10 @@ void q931_ies_add(
 	struct q931_ies *ies,
 	struct q931_ie *ie);
 
+void q931_ies_add_put(
+	struct q931_ies *ies,
+	struct q931_ie *ie);
+
 void q931_ies_del(
 	struct q931_ies *ies,
 	struct q931_ie *ie);
@@ -38,5 +42,8 @@ static inline int q931_ies_count(
 {
 	return ies->count;
 }
+
+void q931_ies_sort(
+	struct q931_ies *ies);
 
 #endif

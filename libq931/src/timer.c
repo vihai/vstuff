@@ -31,6 +31,9 @@ void q931_start_timer(
 
 		timer->pending = TRUE;
 	}
+
+	if (lib->timer_update)
+		lib->timer_update(lib);
 }
 
 longtime_t q931_longtime_now()
@@ -62,7 +65,7 @@ longtime_t q931_run_timers(struct q931_lib *lib)
 {
 	longtime_t now = q931_longtime_now();
 	longtime_t next_timer = -1;
-	int next_timer_set = 0;
+	BOOL next_timer_set = FALSE;
 
 	do {
 		struct q931_timer *timer, *t;
@@ -77,8 +80,11 @@ retry:
 				goto retry;
 			}
 
-			if (!next_timer_set || timer->expires < next_timer)
+			if (timer->pending &&
+			   (!next_timer_set || timer->expires < next_timer)) {
 				next_timer = timer->expires;
+				next_timer_set = TRUE;
+			}
 		}
 	} while (0);
 

@@ -20,6 +20,8 @@ struct q931_ie_calling_party_number *q931_ie_calling_party_number_alloc()
 	ie = malloc(sizeof(*ie));
 	assert(ie);
 
+	memset(ie, 0x00, sizeof(*ie));
+
 	ie->ie.refcnt = 1;
 	ie->ie.type = ie_type;
 

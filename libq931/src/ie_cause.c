@@ -85,7 +85,7 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 	},
 
 	{
-	Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE,
+	Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE,
 	"No circuit/channel available",
 	},
 	{
@@ -277,6 +277,8 @@ struct q931_ie_cause *q931_ie_cause_alloc(void)
 	ie = malloc(sizeof(*ie));
 	assert(ie);
 
+	memset(ie, 0x00, sizeof(*ie));
+
 	ie->ie.refcnt = 1;
 	ie->ie.type = ie_type;
 
@@ -312,13 +314,13 @@ int q931_ie_cause_read_from_buf(
 		(struct q931_ie_cause_onwire_3 *)
 		(msg->rawies + pos + nextoct);
 
-	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
-		report_msg(msg, LOG_ERR, "coding stanrdard != CCITT\n");
-
-		return FALSE;
-	}
-
 	ie->coding_standard = oct_3->coding_standard;
+
+	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
+		// What should we do?
+		report_msg(msg, LOG_WARNING,
+			"What should we do if coding_standard != CCITT?\n");
+	}
 
 	if (oct_3->ext == 0) {
 		nextoct++;
@@ -398,3 +400,43 @@ int q931_ies_contain_cause(
 	return FALSE;
 }
 
+enum q931_ie_cause_location q931_ie_cause_location(
+	enum q931_call_direction direction,
+	enum q931_interface_network_role network_role,
+	enum lapd_role role)
+{
+	if (network_role == Q931_INTF_NET_USER) {
+		return Q931_IE_C_L_USER;
+	} else if (network_role == Q931_INTF_NET_PRIVATE) {
+		if (role == LAPD_ROLE_NT) {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+			else
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		} else {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			else
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+		}
+	} else if (network_role == Q931_INTF_NET_LOCAL) {
+		if (role == LAPD_ROLE_NT) {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+			else
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+		} else {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+			else
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+		}
+	} else if (network_role == Q931_INTF_NET_TRANSIT) {
+		return Q931_IE_C_L_TRANSIT_NETWORK;
+	} else if (network_role == Q931_INTF_NET_INTERNATIONAL) {
+		return Q931_IE_C_L_INTERNATIONAL_NETWORK;
+	}
+
+	assert(0);
+	return 0;
+}

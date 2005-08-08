@@ -19,7 +19,10 @@ struct q931_lib
 	struct list_head timers;
 	struct list_head intfs;
 
+	void *pvt;
+
 	void (*report)(int level, const char *format, ...);
+	void (*timer_update)(struct q931_lib *lib);
 
 	void (*alerting_indication)(
 		struct q931_call *call,
@@ -117,6 +120,8 @@ void q931_leave(struct q931_lib *lib);
 void q931_receive(struct q931_dlc *dlc);
 
 #ifdef Q931_PRIVATE
+
+typedef char BOOL;
 
 void q931_dl_establish_confirm(struct q931_dlc *dlc);
 

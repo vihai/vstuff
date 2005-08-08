@@ -205,7 +205,7 @@ int q931_send_message(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
 	enum q931_message_type mt,
-	const struct q931_ies *ies)
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 	assert(dlc);
@@ -215,13 +215,16 @@ int q931_send_message(
 
 	size += q931_prepare_header(call, buf, mt);
 
-	// FIXME TODO FIXME TODO Reorder IES!!!!!!
-	if (ies) {
-		int i;
-		for (i=0; i<ies->count; i++) {
-			assert(ies->ies[i]->type->write_to_buf);
+	if (user_ies) {
+		struct q931_ies ies = Q931_IES_INIT;
+		q931_ies_copy(&ies, user_ies);
+		q931_ies_sort(&ies);
 
-			size += ies->ies[i]->type->write_to_buf(ies->ies[i],
+		int i;
+		for (i=0; i<ies.count; i++) {
+			assert(ies.ies[i]->type->write_to_buf);
+
+			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
 					buf + size,
 					sizeof(buf) - size);
 		}
@@ -234,24 +237,29 @@ int q931_send_message_bc(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
 	enum q931_message_type mt,
-	const struct q931_ies *ies)
+	const struct q931_ies *user_ies)
 {
 	assert(call);
 	assert(dlc);
-	assert(ies);
 
 	__u8 buf[260];
 	int size = 0;
 
 	size += q931_prepare_header(call, buf, mt);
 
-	int i;
-	for (i=0; i<ies->count; i++) {
-		assert(ies->ies[i]->type->write_to_buf);
+	if (user_ies) {
+		struct q931_ies ies = Q931_IES_INIT;
+		q931_ies_copy(&ies, user_ies);
+		q931_ies_sort(&ies);
 
-		size += ies->ies[i]->type->write_to_buf(ies->ies[i],
-					buf + size,
-					sizeof(buf) - size);
+		int i;
+		for (i=0; i<ies.count; i++) {
+			assert(ies.ies[i]->type->write_to_buf);
+
+			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
+						buf + size,
+						sizeof(buf) - size);
+		}
 	}
 
 	return q931_send_uframe(dlc, buf, size);
@@ -261,7 +269,7 @@ int q931_global_send_message(
 	struct q931_global_call *gc,
 	struct q931_dlc *dlc,
 	enum q931_message_type mt,
-	const struct q931_ies *ies)
+	const struct q931_ies *user_ies)
 {
 	assert(gc);
 	assert(dlc);
@@ -271,13 +279,16 @@ int q931_global_send_message(
 
 	size += q931_global_prepare_header(gc, buf, Q931_MT_STATUS);
 
-	// FIXME TODO FIXME TODO Reorder IES!!!!!!
-	if (ies) {
-		int i;
-		for (i=0; i<ies->count; i++) {
-			assert(ies->ies[i]->type->write_to_buf);
+	if (user_ies) {
+		struct q931_ies ies = Q931_IES_INIT;
+		q931_ies_copy(&ies, user_ies);
+		q931_ies_sort(&ies);
 
-			size += ies->ies[i]->type->write_to_buf(ies->ies[i],
+		int i;
+		for (i=0; i<ies.count; i++) {
+			assert(ies.ies[i]->type->write_to_buf);
+
+			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
 					buf + size,
 					sizeof(buf) - size);
 		}

@@ -23,6 +23,14 @@ void q931_ies_add(
 	ies->count++;
 }
 
+void q931_ies_add_put(
+	struct q931_ies *ies,
+	struct q931_ie *ie)
+{
+	q931_ies_add(ies, ie);
+	q931_ie_put(ie);
+}
+
 void q931_ies_del(
 	struct q931_ies *ies,
 	struct q931_ie *ie)
@@ -50,8 +58,10 @@ void q931_ies_merge(
 	struct q931_ies *ies,
 	const struct q931_ies *src_ies)
 {
+	if (!src_ies)
+		return;
+
 	assert(ies);
-	assert(src_ies);
 	assert(ies->count + src_ies->count < Q931_IES_NUM_IES);
 
 	int i;
@@ -64,6 +74,9 @@ void q931_ies_copy(
 	struct q931_ies *ies,
 	const struct q931_ies *src_ies)
 {
+	if (!src_ies)
+		return;
+
 	assert(ies);
 	assert(src_ies);
 
@@ -77,3 +90,17 @@ void q931_ies_copy(
 	}
 }
 
+static int q931_ies_compare(const void *a, const void *b)
+{
+	return q931_intcmp((*((struct q931_ie **)a))->type->id,
+	                   (*((struct q931_ie **)b))->type->id);
+}
+
+void q931_ies_sort(
+	struct q931_ies *ies)
+{
+	qsort(ies->ies,
+	      ies->count,
+	      sizeof(*ies->ies),
+	      q931_ies_compare);
+}
