@@ -103,7 +103,7 @@ err_copy_from_user:
 	return err;
 }
 
-ssize_t visdn_ctl_ioctl(
+int visdn_ctl_ioctl(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,

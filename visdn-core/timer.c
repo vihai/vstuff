@@ -56,7 +56,7 @@ int visdn_timer_cdev_release(
 	return 0;
 }
 
-ssize_t visdn_timer_cdev_ioctl(
+int visdn_timer_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
