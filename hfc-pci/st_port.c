@@ -54,6 +54,8 @@ void hfc_st_port__do_set_role(struct hfc_st_port *port, int nt_mode)
 	}
 
 	port->visdn_port.nt_mode = nt_mode;
+
+	hfc_debug_port(port, 1, " role set to %s\n", nt_mode?"NT":"TE");
 }
 
 static int hfc_st_port_set_role(

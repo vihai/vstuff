@@ -1040,6 +1040,7 @@ void q931_disconnect_request(struct q931_call *call,
 				q931_call_primitive(call, release_indication,
 					user_ies);
 
+////////////////////////// If we do del call the CES will not be able to receive release complete
 				q931_call_set_state(call, N0_NULL_STATE);
 				q931_intf_del_call(call);
 			}

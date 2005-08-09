@@ -708,15 +708,13 @@ int visdn_chan_register(
 	BUG_ON(!name);
 	BUG_ON(!port);
 
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_chan_register(%s) called\n", name);
-
 	chan->device.parent = &port->device;
 
 	snprintf(chan->device.bus_id, sizeof(chan->device.bus_id),
 		"%d.%s", port->index, name);
 
 	chan->device.bus = &visdn_bus_type;
-	chan->device.driver = port->device.driver;
+//	chan->device.driver = port->device.driver;
 	chan->device.driver_data = NULL;
 	chan->device.release = visdn_chan_release;
 

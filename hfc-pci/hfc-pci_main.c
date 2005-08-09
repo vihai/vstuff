@@ -458,7 +458,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 {
 	int err;
 
-	struct hfc_card *card = NULL;
+	struct hfc_card *card;
 	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
 	if (!card) {
 		hfc_msg(KERN_CRIT, "unable to kmalloc!\n");
@@ -474,11 +474,13 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	// From here on hfc_msg_card may be used
 
-	if ((err = pci_enable_device(pci_dev))) {
+	err = pci_enable_device(pci_dev);
+	if (err < 0) {
 		goto err_pci_enable_device;
 	}
 
-	if ((err = pci_set_dma_mask(pci_dev, PCI_DMA_32BIT))) {
+	err = pci_set_dma_mask(pci_dev, PCI_DMA_32BIT);
+	if (err < 0) {
 		hfc_msg_card(card, KERN_ERR,
 			"No suitable DMA configuration available.\n");
 		goto err_pci_set_dma_mask;
@@ -631,7 +633,6 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	fifo->f2        = card->fifo_mem + 0x2181;
 	fifo->fifo_size = fifo->z_max - fifo->z_min + 1;
 	fifo->f_num     = fifo->f_max - fifo->f_min + 1;
-
 
 	visdn_port_init(&card->st_port.visdn_port, &hfc_st_port_ops);
 	card->st_port.card = card;

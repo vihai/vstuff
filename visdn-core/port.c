@@ -103,7 +103,7 @@ static ssize_t visdn_port_store_role(
 	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
 		if (port->ops->set_role)
 			port->ops->set_role(port, 1);
-	} else if (!strncmp(buf, "TE", 2) && !port->nt_mode) {
+	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
 		if (port->ops->set_role)
 			port->ops->set_role(port, 0);
 	}
