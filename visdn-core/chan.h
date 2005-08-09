@@ -56,7 +56,7 @@ struct visdn_chan_ops
 
 	ssize_t (*samples_read)(struct visdn_chan *chan,
 		char __user *buf, size_t count);
-	int (*samples_write)(struct visdn_chan *chan,
+	ssize_t (*samples_write)(struct visdn_chan *chan,
 		const char __user *buf, size_t count);
 };
 
