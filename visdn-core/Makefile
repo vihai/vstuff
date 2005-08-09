@@ -1,0 +1,20 @@
+KSOURCE = /usr/src/linux
+
+ifndef src
+	src=$(shell pwd)
+endif
+
+obj-m	:= visdn-core.o
+visdn-core-y	:= core_main.o chan.o port.o timer.o
+
+all:
+	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`
+
+clean:
+	$(MAKE) -C $(KSOURCE) clean SUBDIRS=`pwd`
+
+debug:
+	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd` EXTRA_CFLAGS="$(EXTRA_CFLAGS) -DDEBUG" CONFIG_DEBUG_INFO=1
+
+install:
+	echo "Install not yet implemented!!!"

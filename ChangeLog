@@ -2,6 +2,36 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-09 13:01:24 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-45
+
+    Summary:
+      /core/ was not tagged
+    Revision:
+      isdn--devel--0.1--patch-45
+
+    
+    
+
+    new files:
+     visdn-core/.arch-ids/=id visdn-core/.arch-ids/Makefile.id
+     visdn-core/.arch-ids/chan.c.id visdn-core/.arch-ids/chan.h.id
+     visdn-core/.arch-ids/core_main.c.id
+     visdn-core/.arch-ids/port.c.id visdn-core/.arch-ids/port.h.id
+     visdn-core/.arch-ids/timer.c.id
+     visdn-core/.arch-ids/timer.h.id
+     visdn-core/.arch-ids/visdn.h.id
+     visdn-core/.arch-ids/visdn_mod.h.id visdn-core/Makefile
+     visdn-core/chan.c visdn-core/chan.h visdn-core/core_main.c
+     visdn-core/port.c visdn-core/port.h visdn-core/timer.c
+     visdn-core/timer.h visdn-core/visdn.h visdn-core/visdn_mod.h
+
+    modified files:
+     ChangeLog
+
+    new directories:
+     visdn-core visdn-core/.arch-ids
+
+
 2005-08-09 11:51:59 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-44
 
     Summary:
