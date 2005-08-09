@@ -1,0 +1,85 @@
+
+General:
+
+- Fix all copyright notices and file headers
+- Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
+- Correctly implement automake/autoconf/libtool for every subsystem
+- Check all input data in ioctls/setsockopt for security bugs
+
+
+chan_visdn
+
+- Implement contexts in visdn.conf
+- Implement groups in visdn.conf
+- Fix/complete Progress indicators to notify interworking with non-ISDN
+
+
+libq931
+
+- Fix hangup after T312 expiration in multipoint links
+
+- Implement: 5.9 User notification procedure
+
+- Restart Procedure is completely untested, test it.
+
+- ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
+
+
+visdn_core
+
+- Complete PPP support
+
+
+lapd/netdev
+
+- There is a deadlock/race condition on modules removal when an application
+  has an open socket and doesn't exit immediately
+
+- Implement point-to-point and static TEIs
+
+- Implement automatic TEI check for TEIs that are presumably unused and could
+  be released
+
+- Implement SOCK_RAW sockets (?)
+
+- DL_DATA-REQUEST in AWAITING shoud put the frame in queue
+
+- Lock accesses to TME and make tei atomic_t  (?)
+
+- Implement socket closure after timeout and T203
+
+- Implement listen backlog maximum size
+
+- Implement frame acknowledging throught outgoing i-frames instead of specific RR
+
+- Indagate whether it is possiblle to strictly serialize frames coming from the
+  same device (and thus going to the same socket). Currently netif_rx spreads the
+  load on per-CPU queues and frames may get analyzed concurrently.
+
+- Check what happens when 64 sockets are open (every dynamic TEIs)
+
+- Should we add incoming interface, interface role and packet_type to ethereal's
+  frame?
+
+- Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
+  safe, since ISDN interfaces will never run AppleTalk, however it is an ugly
+  hack and should be fixed.
+
+- Add AF_LAPD to linux/include/linux/socket.h
+- Add PF_LAPD to linux/include/linux/socket.h
+- Add SOL_LAPD to linux/inclode/linx/socket.h ????
+
+- Add ARPHRD_LAPD to linux/include/linux/if_arp.h
+- Add ETH_P_LAPD to linux/include/linux/if_ether.h
+- See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL number
+
+- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
+  - A specific flag would be better.
+
+hfc-4s
+
+- We may be able to avoid interrupt disabling in hfc-4s by removing every
+  hardware access from the interrupt handler and serializing accesses to
+  hardware with semaphores.
+
+

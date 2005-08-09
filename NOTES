@@ -1,149 +1,9 @@
 
-FEATURES/NOTES
-
-- The socket MUST be bound to an interface to function properly.
-
-- The socket layer supports multiple sockets on TE interfaces. A TEI is assigned
-  to each socket for complete transparency between different q.931 speakers.
-
-TODO
-
-
-
-
-
-
-
-/sys/devices/pci0000:00/0000:00:09.0/port0/chanD/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chanB1/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chanB2/
-/sys/devices/pci0000:00/0000:00:09.0/port1/chanD/
-/sys/devices/pci0000:00/0000:00:09.0/port1/chanB1/
-/sys/devices/pci0000:00/0000:00:09.0/port1/chanB2/
-/sys/devices/pci0000:00/0000:00:09.0/port2/chanD/
-/sys/devices/pci0000:00/0000:00:09.0/port2/chanB1/
-/sys/devices/pci0000:00/0000:00:09.0/port2/chanB2/
-/sys/devices/pci0000:00/0000:00:09.0/port3/chanD/
-/sys/devices/pci0000:00/0000:00:09.0/port3/chanB1/
-/sys/devices/pci0000:00/0000:00:09.0/port3/chanB2/
-
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan0/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan1/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan2/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan3/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan4/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan5/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan6/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan7/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan8/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan29/
-/sys/devices/pci0000:00/0000:00:09.0/port0/chan30/
-
-
-/sys/class/visdn_adapters/
-  0000:00:09.0 => /sys/devices/pci0000:00/0000:00:09.0
-    
-
-/sys/class/visdn_port/
-	
-
-
-
-
-- There is a deadlock/race condition on modules removal when an application
-  has an open socket and doesn't exit immediately
-
-- Remove __devexit from removal functions
-
-- Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
-  safe, since ISDN interfaces will never run AppleTalk, however it is an ugly
-  hack and should be fixed.
-
-- Add AF_LAPD to linux/include/linux/socket.h
-- Add PF_LAPD to linux/include/linux/socket.h
-- Add SOL_LAPD to linux/inclode/linx/socket.h ????
-
-- Add ARPHRD_LAPD to linux/include/linux/if_arp.h
-- Add ETH_P_LAPD to linux/include/linux/if_ether.h
-- See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL number
-
-
-- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
-  - A specific flag would be better.
-
-- Fix all copyright notices and file headers
-
-- Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
-
-- Use Automake/Autoconf for chan_isdn
-
-- Implement automatic TEI check for TEIs that are presumably unused and could
-- be released
-
-- Implement SOCK_RAW sockets (?)
-
-- DL_DATA-REQUEST in AWAITING shoud put the frame in queue
-
-- Lock accesses to TME and make tei atomic_t  (?)
-
-- Check all input data in ioctls/setsockopt for security bugs
-
-- Implement socket closure after timeout and T203
-
-- Implement listen backlog maximum size
-- Implement frame acknowledging throught outgoing i-frames instead of specific RR
-
-- Indagate whether it is possiblle to strictly serialize frames coming from the
-  same device (and thus going to the same socket). Currently netif_rx spreads the
-  load on per-CPU queues and frames may get analyzed concurrently.
-
-Check what happens when 64 sockets are open (every dynamic TEIs)
-
-Should we add incoming interface, interface role and packet_type to ethereal's
-Frame?
-
-Notes:
-In NT mode there is only one TEI management entity per interface
-In TE mode there can be at most one TEI management per socket
-
---------------------------- HFC-4S
-
-We may be able to avoid interrupt disabling (changing them with spin_lock_bh)
-if we ensure that nothing inside hfc_interrupt() changes the chip's state
-(for example by selecting another FIFO or another port). Few struct hfc_card
-members are accessed in IRQ handler, we shoudl check every concurrent access.
-
----------------------------libq931:
-
-Implement: 5.9 User notification procedure
-
-Restart Procedure is completely untested, test it.
-
-Primitive passing is implemented with function calls.
-Called functions may call back before the code ends.
-To overcome this, we must ensure that primitive functions
-are called after any other operation (state change, message sending, etc).
-
-ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
-
----------------------------- chan_visdn
-
-Implement Progress indicators to notify interworking with non-ISDN
-
-
-
------------------------ streambus
-Why not using JACK?
-- Jack is tailored for few high-bandwidth streams
-- vISDN needs to handle many (maybe hundreds) of low-bandwidth channels
-
-- vISDN is inherently full-duplex
-
-Can we independently handle rx and tx once echo-cancellation has been applied?
-
-
 HISTORY:
 
+
+9/8/2005 23:40
+In production on nabla
 
 18/2/2005 2:05
 First call made throught the public network... no voice however :)
@@ -165,6 +25,7 @@ First half-call (voice in only one direction :))
 
 26/4/2004 23:20
 First full-call :)
+
 
 
 DL-UNIT DATA-REQUEST
