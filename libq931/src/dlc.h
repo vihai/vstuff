@@ -2,7 +2,12 @@
 #define _LIBQ931_DLC_H
 
 #define report_dlc(dlc, lvl, format, arg...)				\
-	(dlc)->intf->lib->report((lvl), format, ## arg)
+	(dlc)->intf->lib->report(					\
+		(lvl),							\
+		"TEI '%d': "						\
+		format,							\
+		(dlc)->tei,						\
+		## arg)
 
 enum q931_dlc_status
 {

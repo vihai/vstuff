@@ -1,129 +1,100 @@
 /*
- * zaphfc.c - Zaptel driver for HFC-S PCI A based ISDN BRI cards
- *
- * Copyright (C) 2004 Daniele Orlandi
- * Copyright (C) 2002, 2003, 2004, Junghanns.NET GmbH
- *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
- *
- * Major rewrite of the driver made by
- * Klaus-Peter Junghanns <kpj@junghanns.net>
- *
- * This program is free software and may be modified and
- * distributed under the terms of the GNU Public License.
- *
+ * FIXME
  */
 
 #ifndef _HFC_FIFO_H
 #define _HFC_FIFO_H
 
-static inline u16 *Z1_F1(struct hfc_chan_simplex *chan)
+#include "regs.h"
+#include "util.h"
+#include "module.h"
+
+#define hfc_FIFO_D	2
+#define hfc_FIFO_B1	0
+#define hfc_FIFO_B2	1
+
+#ifdef DEBUG
+#define hfc_debug_fifo(fifo, dbglevel, format, arg...)		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
+			"%s-%s:"				\
+			"fifo[%d,%s]:"				\
+			format,					\
+			(fifo)->card->pcidev->dev.bus->name,	\
+			(fifo)->card->pcidev->dev.bus_id,	\
+			(fifo)->hw_index,			\
+			(fifo)->direction == RX ? "RX" : "TX",	\
+			## arg)
+#else
+#define hfc_debug_fifo(chan, dbglevel, format, arg...) do {} while (0)
+#endif
+
+#define hfc_msg_fifo(fifo, level, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		"%s-%s:"				\
+		"fifo[%d,%s]:"				\
+		format,					\
+		(fifo)->card->pcidev->dev.bus->name,	\
+		(fifo)->card->pcidev->dev.bus_id,	\
+		(fifo)->hw_index,			\
+		(fifo)->direction == RX ? "RX" : "TX",	\
+		## arg)
+
+/* NOTE: FIFO pointers are not declared volatile because accesses to the
+ *       FIFOs are inherently safe.
+ */
+
+struct hfc_fifo
 {
-	return chan->z1_base + (*chan->f1 * 4);
-}
+	struct hfc_card *card;
+	struct hfc_chan_simplex *connected_chan;
 
-static inline u16 *Z2_F1(struct hfc_chan_simplex *chan)
-{
-	return chan->z2_base + (*chan->f1 * 4);
-}
+	int hw_index;
+	enum hfc_direction direction;
 
-static inline u16 *Z1_F2(struct hfc_chan_simplex *chan)
-{
-	return chan->z1_base + (*chan->f2 * 4);
-}
+	int bit_reversed;
 
-static inline u16 *Z2_F2(struct hfc_chan_simplex *chan)
-{
-	return chan->z2_base + (*chan->f2 * 4);
-}
+	int used;
 
-static inline u16 Z_inc(struct hfc_chan_simplex *chan, u16 z, u16 inc)
-{
-	// declared as u32 in order to manage overflows
-	u32 newz = z + inc;
-	if (newz > chan->z_max)
-		newz -= chan->fifo_size;
+	void *z1_base,*z2_base;
+	void *fifo_base;
+	void *z_base;
+	u16 z_min;
+	u16 z_max;
+	u16 fifo_size;
 
-	return newz;
-}
+	u8 *f1,*f2;
+	u8 f_min;
+	u8 f_max;
+	u8 f_num;
 
-static inline u8 F_inc(struct hfc_chan_simplex *chan, u8 f, u8 inc)
-{
-	// declared as u16 in order to manage overflows
-	u16 newf = f + inc;
-	if (newf > chan->f_max)
-		newf -= chan->f_num;
+	struct tasklet_struct tasklet;
+};
 
-	return newf;
-}
+void hfc_fifo_clear_rx(struct hfc_fifo *fifo);
+void hfc_fifo_clear_tx(struct hfc_fifo *fifo);
+int hfc_fifo_get(struct hfc_fifo *fifo, void *data, int size);
+void hfc_fifo_put(struct hfc_fifo *fifo, void *data, int size);
+void hfc_fifo_drop(struct hfc_fifo *fifo, int size);
+int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size);
+void hfc_fifo_drop_frame(struct hfc_fifo *fifo);
+void hfc_fifo_put_frame(struct hfc_fifo *fifo, void *data, int size);
+void hfc_fifo_init(
+	struct hfc_fifo *fifo,
+	struct hfc_card *card,
+	int hw_index,
+	enum hfc_direction direction);
+void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed);
 
-static inline u16 hfc_fifo_used_rx(struct hfc_chan_simplex *chan)
-{
-	return (*Z1_F2(chan) - *Z2_F2(chan) + chan->fifo_size) % chan->fifo_size;
-}
+int hfc_fifo_mem_read_user(
+	struct hfc_fifo *fifo,
+	void __user *data,
+	int size);
 
-static inline u16 hfc_fifo_get_frame_size(struct hfc_chan_simplex *chan)
-{
- // This +1 is needed because in frame mode the available bytes are Z2-Z1+1
- // while in transparent mode I wouldn't consider the byte pointed by Z2 to
- // be available, otherwise, the FIFO would always contain one byte, even
- // when Z1==Z2
+int hfc_fifo_mem_write_user(
+	struct hfc_fifo *fifo,
+	const void __user *data,
+	int size);
 
-	return hfc_fifo_used_rx(chan) + 1;
-}
-
-static inline u8 hfc_fifo_u8(struct hfc_chan_simplex *chan, u16 z)
-{
-	return *((u8 *)(chan->z_base + z));
-}
-
-static inline u16 hfc_fifo_used_tx(struct hfc_chan_simplex *chan)
-{
-	return (*Z1_F1(chan) - *Z2_F1(chan) + chan->fifo_size) % chan->fifo_size;
-}
-
-static inline u16 hfc_fifo_free_rx(struct hfc_chan_simplex *chan)
-{
-	u16 free_bytes=*Z2_F1(chan) - *Z1_F1(chan);
-
-	if (free_bytes > 0)
-		return free_bytes;
-	else
-		return free_bytes + chan->fifo_size;
-}
-
-static inline u16 hfc_fifo_free_tx(struct hfc_chan_simplex *chan)
-{
-	u16 free_bytes=*Z2_F1(chan) - *Z1_F1(chan);
-
-	if (free_bytes > 0)
-		return free_bytes;
-	else
-		return free_bytes + chan->fifo_size;
-}
-
-static inline int hfc_fifo_has_frames(struct hfc_chan_simplex *chan)
-{
-	return *chan->f1 != *chan->f2;
-}
-
-static inline u8 hfc_fifo_used_frames(struct hfc_chan_simplex *chan)
-{
-	return (*chan->f1 - *chan->f2 + chan->f_num) % chan->f_num;
-}
-
-static inline u8 hfc_fifo_free_frames(struct hfc_chan_simplex *chan)
-{
-	return (*chan->f2 - *chan->f1 + chan->f_num) % chan->f_num;
-}
-
-void hfc_fifo_clear_rx(struct hfc_chan_simplex *chan);
-void hfc_fifo_clear_tx(struct hfc_chan_simplex *chan);
-int hfc_fifo_get(struct hfc_chan_simplex *chan, void *data, int size);
-void hfc_fifo_put(struct hfc_chan_simplex *chan, void *data, int size);
-void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size);
-int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size);
-void hfc_fifo_drop_frame(struct hfc_chan_simplex *chan);
-void hfc_fifo_put_frame(struct hfc_chan_simplex *chan, void *data, int size);
 
 #endif

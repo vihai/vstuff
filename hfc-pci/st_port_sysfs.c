@@ -2,9 +2,9 @@
 #include <linux/spinlock.h>
 
 #include "st_port.h"
-#include "st_port_inline.h"
 #include "st_port_sysfs.h"
 #include "card.h"
+#include "card_inline.h"
 
 static ssize_t hfc_show_l1_state(
 	struct device *device,
@@ -13,9 +13,11 @@ static ssize_t hfc_show_l1_state(
 	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
+	u8 l1_state = hfc_inb(port->card, hfc_STATES) & hfc_STATES_STATE_MASK;
+
 	return snprintf(buf, PAGE_SIZE, "%c%d\n",
 		port->visdn_port.nt_mode?'G':'F',
-		port->l1_state);
+		l1_state);
 }
 
 static ssize_t hfc_store_l1_state(
@@ -28,19 +30,13 @@ static ssize_t hfc_store_l1_state(
 	struct hfc_card *card = port->card;
 	int err;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
-	hfc_st_port_select(port);
-
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
-			hfc_A_ST_WR_STA_V_SET_G2_G3);
+		hfc_outb(card, hfc_STATES,
+			hfc_STATES_ACTIVATE|
+			hfc_STATES_NT_G2_G3);
 	} else if (count >= 10 && !strncmp(buf, "deactivate", 10)) {
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION|
-			hfc_A_ST_WR_STA_V_SET_G2_G3);
+		hfc_outb(card, hfc_STATES,
+			hfc_STATES_DEACTIVATE);
 	} else {
 		int state;
 		if (sscanf(buf, "%d", &state) < 1) {
@@ -55,18 +51,15 @@ static ssize_t hfc_store_l1_state(
 			goto err_invalid_state;
 		}
 
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_SET_STA(state));
+		hfc_outb(card, hfc_STATES,
+			hfc_STATES_STATE(state) |
+			hfc_STATES_LOAD_STATE);
 	}
-
-	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
 
 err_invalid_scanf:
 err_invalid_state:
-
-	spin_unlock_irqrestore(&card->lock, flags);
 
 	return err;
 }
@@ -76,6 +69,7 @@ static DEVICE_ATTR(l1_state, S_IRUGO | S_IWUSR,
 		hfc_store_l1_state);
 
 //----------------------------------------------------------------------------
+
 static ssize_t hfc_show_st_clock_delay(
 	struct device *device,
 	char *buf)
@@ -84,16 +78,6 @@ static ssize_t hfc_show_st_clock_delay(
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%02x\n", port->clock_delay);
-}
-
-static void hfc_update_st_clk_dly(struct hfc_st_port *port)
-{
-	u8 st_clk_dly;
-
-	st_clk_dly = hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
-		     hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp);
-
-	hfc_outb(port->card, hfc_A_ST_CLK_DLY, st_clk_dly);
 }
 
 static ssize_t hfc_store_st_clock_delay(
@@ -114,9 +98,9 @@ static ssize_t hfc_store_st_clock_delay(
 
 	unsigned long flags;
 	spin_lock_irqsave(&card->lock, flags);
+
 	port->clock_delay = value;
 	hfc_update_st_clk_dly(port);
-	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
 }
@@ -143,7 +127,6 @@ static ssize_t hfc_store_st_sampling_comp(
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
-	struct hfc_card *card = port->card;
 
 	unsigned int value;
 	if (sscanf(buf, "%u", &value) < 1)
@@ -152,11 +135,8 @@ static ssize_t hfc_store_st_sampling_comp(
 	if (value > 0x7)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
 	port->sampling_comp = value;
 	hfc_update_st_clk_dly(port);
-	spin_unlock_irqrestore(&card->lock, flags);
 
 	return count;
 }

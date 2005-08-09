@@ -26,7 +26,6 @@
 #include <lapd.h>
 #include <visdn.h>
 
-#include "hfc-4s.h"
 #include "st_port.h"
 #include "st_port_inline.h"
 #include "st_port_sysfs.h"
@@ -222,7 +221,7 @@ void hfc_configure_fifos(
 		hfc_configure_fifo(&card->fifos[i][RX], fcfg, fzcfg);
 		hfc_configure_fifo(&card->fifos[i][TX], fcfg, fzcfg);
 
-printk(KERN_INFO "FIFO %d zmin=%04x zmax=%04x fmin=%02x fmax=%02x\n",
+printk(KERN_DEBUG "FIFO %d zmin=%04x zmax=%04x fmin=%02x fmax=%02x\n",
 	i,
 	fzcfg->z_min,
 	fzcfg->z_max,
@@ -578,7 +577,7 @@ static int __devinit hfc_probe(
 	struct pci_dev *pci_dev,
 	const struct pci_device_id *ent)
 {
-	int err = 0;
+	int err;
 
 	struct hfc_card *card = NULL;
 	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
@@ -588,10 +587,13 @@ static int __devinit hfc_probe(
 		goto err_alloc_hfccard;
 	}
 
-	memset(card, 0x00, sizeof(struct hfc_card));
+	memset(card, 0x00, sizeof(*card));
 
 	spin_lock_init(&card->lock);
 	card->pcidev = pci_dev;
+	pci_set_drvdata(pci_dev, card);
+
+	// From here on hfc_msg_card may be used
 
 	int i;
 	for (i=0; i<sizeof(card->fifos)/sizeof(*card->fifos); i++) {
@@ -599,10 +601,6 @@ static int __devinit hfc_probe(
 		hfc_fifo_init(&card->fifos[i][TX], card, i, TX);
 	}
 	card->num_fifos = 0;
-
-	hfc_pcm_port_init(&card->pcm_port);
-
-	pci_set_drvdata(pci_dev, card);
 
 	if ((err = pci_enable_device(pci_dev))) {
 		goto err_pci_enable_device;
@@ -633,14 +631,16 @@ static int __devinit hfc_probe(
 		goto err_noiobase;
 	}
 
-	if(!(card->io_mem = ioremap(card->io_bus_mem, hfc_PCI_MEM_SIZE))) {
+	card->io_mem = ioremap(card->io_bus_mem, hfc_PCI_MEM_SIZE);
+	if(!card->io_mem) {
 		hfc_msg_card(card, KERN_CRIT, "cannot ioremap I/O memory\n");
 		err = -ENODEV;
 		goto err_ioremap;
 	}
 
-	if ((err = request_irq(card->pcidev->irq, &hfc_interrupt,
-		SA_SHIRQ, hfc_DRIVER_NAME, card))) {
+	err = request_irq(card->pcidev->irq, &hfc_interrupt,
+		SA_SHIRQ, hfc_DRIVER_NAME, card);
+	if (err < 0) {
 		hfc_msg_card(card, KERN_CRIT, "unable to register irq\n");
 		goto err_request_irq;
 	}
@@ -763,13 +763,14 @@ static int __devinit hfc_probe(
 		chan->tx.direction = TX;
 
 		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
+		chan->visdn_chan.priv = chan;
+		chan->visdn_chan.speed = 16000;
 		chan->visdn_chan.role = VISDN_CHAN_ROLE_E;
 		chan->visdn_chan.roles = VISDN_CHAN_ROLE_E;
 		chan->visdn_chan.flags = 0;
 		chan->visdn_chan.protocol = 0;
-		chan->visdn_chan.priv = chan;
 
-//---------------------------------- E
+//---------------------------------- SQ
 		chan = &card->st_ports[i].chans[SQ];
 
 		chan->port = &card->st_ports[i];
@@ -784,13 +785,15 @@ static int __devinit hfc_probe(
 		chan->tx.direction = TX;
 
 		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
+		chan->visdn_chan.speed = 4000;
 		chan->visdn_chan.role = VISDN_CHAN_ROLE_S; // FIXME
 		chan->visdn_chan.roles = VISDN_CHAN_ROLE_S; // FIXME
+		chan->visdn_chan.priv = chan;
 		chan->visdn_chan.flags = 0;
 		chan->visdn_chan.protocol = 0;
-		chan->visdn_chan.priv = chan;
 	}
 
+	hfc_pcm_port_init(&card->pcm_port);
 	card->pcm_port.card = card;
 	visdn_port_init(&card->pcm_port.visdn_port, &hfc_pcm_port_ops);
 		card->st_ports[i].visdn_port.priv = &card->st_ports[i];

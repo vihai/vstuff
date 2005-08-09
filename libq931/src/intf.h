@@ -92,6 +92,7 @@ inline static void q931_intf_add_call(
 	struct q931_interface *intf,
 	struct q931_call *call)
 {
+	q931_call_get(call);
 	list_add_tail(&call->calls_node, &intf->calls);
 	intf->ncalls++;
 }
@@ -100,6 +101,7 @@ inline static void q931_intf_del_call(
 	struct q931_call *call)
 {
 	list_del(&call->calls_node);
+	q931_call_put(call);
 	
 	call->intf->ncalls--;
 }

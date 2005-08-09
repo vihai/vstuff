@@ -2,6 +2,65 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-09 11:51:59 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-44
+
+    Summary:
+      Ported hfc-pci to the new architecture and various bugfixes
+    Revision:
+      isdn--devel--0.1--patch-44
+
+    
+    
+
+    new files:
+     hfc-pci/.arch-ids/card.h.id hfc-pci/.arch-ids/card_inline.h.id
+     hfc-pci/.arch-ids/card_sysfs.c.id
+     hfc-pci/.arch-ids/card_sysfs.h.id
+     hfc-pci/.arch-ids/card_sysfs.id hfc-pci/.arch-ids/chan.c.id
+     hfc-pci/.arch-ids/chan.h.id hfc-pci/.arch-ids/chan_sysfs.c.id
+     hfc-pci/.arch-ids/chan_sysfs.h.id
+     hfc-pci/.arch-ids/fifo_inline.h.id
+     hfc-pci/.arch-ids/pcm_port.c.id
+     hfc-pci/.arch-ids/pcm_port.h.id
+     hfc-pci/.arch-ids/pcm_port_sysfs.c.id
+     hfc-pci/.arch-ids/pcm_port_sysfs.h.id
+     hfc-pci/.arch-ids/regs.h.id hfc-pci/.arch-ids/st_port.c.id
+     hfc-pci/.arch-ids/st_port.h.id
+     hfc-pci/.arch-ids/st_port_sysfs.c.id
+     hfc-pci/.arch-ids/st_port_sysfs.h.id
+     hfc-pci/.arch-ids/util.h.id hfc-pci/card.h
+     hfc-pci/card_inline.h hfc-pci/card_sysfs hfc-pci/card_sysfs.c
+     hfc-pci/card_sysfs.h hfc-pci/chan.c hfc-pci/chan.h
+     hfc-pci/chan_sysfs.c hfc-pci/chan_sysfs.h
+     hfc-pci/fifo_inline.h hfc-pci/pcm_port.c hfc-pci/pcm_port.h
+     hfc-pci/pcm_port_sysfs.c hfc-pci/pcm_port_sysfs.h
+     hfc-pci/regs.h hfc-pci/st_port.c hfc-pci/st_port.h
+     hfc-pci/st_port_sysfs.c hfc-pci/st_port_sysfs.h hfc-pci/util.h
+
+    modified files:
+     ChangeLog chan_visdn/Makefile chan_visdn/chan_visdn.c
+     demoswitch/demoswitch.c hfc-4s/card.h hfc-4s/card_inline.h
+     hfc-4s/card_sysfs.c hfc-4s/chan.c hfc-4s/chan.h
+     hfc-4s/chan_sysfs.c hfc-4s/fifo.c hfc-4s/fifo.h
+     hfc-4s/hfc-4s_main.c hfc-4s/module.h hfc-4s/pcm_port.c
+     hfc-4s/pcm_port.h hfc-4s/pcm_port_sysfs.c hfc-4s/st_port.c
+     hfc-4s/st_port.h hfc-4s/st_port_sysfs.c hfc-pci/Makefile
+     hfc-pci/fifo.c hfc-pci/fifo.h hfc-pci/hfc-pci_main.c
+     hfc-pci/module.h hw-config libq931/src/call.c
+     libq931/src/call.h libq931/src/ces.c libq931/src/dlc.h
+     libq931/src/ie_cause.h libq931/src/intf.h libq931/src/q931.c
+
+    renamed files:
+     hfc-4s/.arch-ids/hfc-4s.h.id
+       ==> hfc-4s/.arch-ids/module.h.id
+     hfc-4s/hfc-4s.h
+       ==> hfc-4s/module.h
+     hfc-pci/.arch-ids/hfc-pci.h.id
+       ==> hfc-pci/.arch-ids/module.h.id
+     hfc-pci/hfc-pci.h
+       ==> hfc-pci/module.h
+
+
 2005-08-08 14:42:13 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-43
 
     Summary:

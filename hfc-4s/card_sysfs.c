@@ -1,7 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 
-#include "hfc-4s.h"
 #include "card.h"
 #include "card_inline.h"
 #include "fifo.h"
@@ -342,13 +341,16 @@ static ssize_t hfc_show_fifo_state(
 //		if (!card->fifos[i][RX].used && !card->fifos[i][TX].used)
 //			continue;
 
+		struct hfc_fifo *fifo_rx = &card->fifos[i][RX];
+		struct hfc_fifo *fifo_tx = &card->fifos[i][TX];
+
 		unsigned long flags;
 		spin_lock_irqsave(&card->lock, flags);
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			"%2d   :", i);
 
-		hfc_fifo_select(&card->fifos[i][RX]);
+		hfc_fifo_select(fifo_rx);
 
 		union hfc_fgroup f;
 		union hfc_zgroup z;
@@ -359,9 +361,9 @@ static ssize_t hfc_show_fifo_state(
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			" %02x %02x %04x %04x %4d",
 			f.f1, f.f2, z.z1, z.z2,
-			hfc_fifo_used_rx(&card->fifos[i][RX]));
+			hfc_fifo_used_rx(fifo_rx));
 
-		hfc_fifo_select(&card->fifos[i][TX]);
+		hfc_fifo_select(fifo_tx);
 
 		f.f1f2 = hfc_inw(card, hfc_A_F12);
 		z.z1z2 = hfc_inl(card, hfc_A_Z12);
@@ -369,20 +371,20 @@ static ssize_t hfc_show_fifo_state(
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			"   %02x %02x %04x %04x %4d",
 			f.f1, f.f2, z.z1, z.z2,
-			hfc_fifo_used_tx(&card->fifos[i][TX]));
+			hfc_fifo_used_tx(fifo_tx));
 
-		if (card->fifos[i][RX].connected_chan) {
+		if (fifo_rx->connected_chan) {
 			len += snprintf(buf + len, PAGE_SIZE - len,
 				" %d:%s",
-				card->fifos[i][RX].connected_chan->chan->port->id,
-				card->fifos[i][RX].connected_chan->chan->name);
+				fifo_rx->connected_chan->chan->port->id,
+				fifo_rx->connected_chan->chan->name);
 		}
 
-		if (card->fifos[i][TX].connected_chan) {
+		if (fifo_tx->connected_chan) {
 			len += snprintf(buf + len, PAGE_SIZE - len,
 				" %d:%s",
-				card->fifos[i][RX].connected_chan->chan->port->id,
-				card->fifos[i][RX].connected_chan->chan->name);
+				fifo_tx->connected_chan->chan->port->id,
+				fifo_tx->connected_chan->chan->name);
 		}
 
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");

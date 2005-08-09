@@ -5,8 +5,6 @@
 #include "ie.h"
 #include "ies.h"
 
-/************************* Progress Indicator ***************************/
-
 enum q931_ie_cause_coding_standard
 {
 	Q931_IE_C_CS_CCITT	= 0x0,

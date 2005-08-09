@@ -77,6 +77,7 @@ struct q931_ces *q931_ces_alloc(
 	if (!ces)
 		return NULL;
 
+	q931_call_get(call);
 	ces->call = call;
 	ces->state = I0_NULL_STATE;
 	ces->dlc = dlc;
@@ -103,6 +104,7 @@ void q931_ces_free(struct q931_ces *ces)
 		ces->call->call_reference);
 
 	list_del(&ces->node);
+	q931_call_put(ces->call);
 
 	free(ces);
 }
@@ -263,6 +265,8 @@ void q931_ces_alerting_request(
 {
 	assert(ces);
 
+	report_ces(ces, LOG_DEBUG, "CES-ALERTING-REQ\n");
+
 	switch (ces->state) {
 	case I0_NULL_STATE:
 		q931_ces_set_state(ces, I7_CALL_RECEIVED);
@@ -283,6 +287,8 @@ void q931_ces_connect_request(
 	const struct q931_ies *user_ies)
 {
 	assert(ces);
+
+	report_ces(ces, LOG_DEBUG, "CES-CONNECT-REQ\n");
 
 	switch (ces->state) {
 	case I0_NULL_STATE:
@@ -305,6 +311,8 @@ void q931_ces_call_proceeding_request(
 {
 	assert(ces);
 
+	report_ces(ces, LOG_DEBUG, "CES-PROCEEDING-REQ\n");
+
 	switch (ces->state) {
 	case I0_NULL_STATE:
 		q931_ces_set_state(ces, I9_INCOMING_CALL_PROCEEDING);
@@ -325,6 +333,8 @@ void q931_ces_setup_ack_request(
 	const struct q931_ies *user_ies)
 {
 	assert(ces);
+
+	report_ces(ces, LOG_DEBUG, "CES-SETUP-ACK-REQ\n");
 
 	switch (ces->state) {
 	case I0_NULL_STATE:
@@ -347,6 +357,8 @@ void q931_ces_release_request(
 	const struct q931_ies *ies)
 {
 	assert(ces);
+
+	report_ces(ces, LOG_DEBUG, "CES-RELEASE-REQ\n");
 
 	switch (ces->state) {
 	case I0_NULL_STATE:
@@ -383,6 +395,8 @@ void q931_ces_info_request(
 {
 	assert(ces);
 
+	report_ces(ces, LOG_DEBUG, "CES-INFO-REQ\n");
+
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
@@ -409,6 +423,8 @@ void q931_ces_status_enquiry_request(
 	const struct q931_ies *user_ies)
 {
 	assert(ces);
+
+	report_ces(ces, LOG_DEBUG, "CES-STATUS-ENQ-REQ\n");
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:

@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _HFC_4S_H
-#define _HFC_4S_H
+#ifndef _HFC_MODULE_H
+#define _HFC_MODULE_H
 
 #define hfc_DRIVER_NAME "hfc-4s"
 #define hfc_DRIVER_PREFIX hfc_DRIVER_NAME ": "

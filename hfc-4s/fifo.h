@@ -17,9 +17,10 @@
 #define hfc_debug_fifo(fifo, dbglevel, format, arg...)		\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
-			"%s:"					\
+			"%s-%s:"				\
 			"fifo[%d,%s]:"				\
 			format,					\
+			(fifo)->card->pcidev->dev.bus->name,	\
 			(fifo)->card->pcidev->dev.bus_id,	\
 			(fifo)->hw_index,			\
 			(fifo)->direction == RX ? "RX" : "TX",	\
@@ -30,9 +31,10 @@
 
 #define hfc_msg_fifo(fifo, level, format, arg...)	\
 	printk(level hfc_DRIVER_PREFIX			\
-		"%s:"					\
+		"%s-%s:"				\
 		"fifo[%d,%s]:"				\
 		format,					\
+		(fifo)->card->pcidev->dev.bus->name,	\
 		(fifo)->card->pcidev->dev.bus_id,	\
 		(fifo)->hw_index,			\
 		(fifo)->direction == RX ? "RX" : "TX",	\
@@ -124,5 +126,6 @@ void hfc_fifo_init(
 	struct hfc_card *card,
 	int hw_index,
 	enum hfc_direction direction);
+void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed);
 
 #endif

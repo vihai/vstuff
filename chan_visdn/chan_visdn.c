@@ -311,10 +311,11 @@ static int visdn_cli_print_call_list(int fd, struct q931_interface *intf)
 
 static void visdn_cli_print_call(int fd, struct q931_call *call)
 {
-	ast_cli(fd, "--------- Call %ld %s\n",
+	ast_cli(fd, "--------- Call %ld %s (%d refs)\n",
 		call->call_reference,
 		call->direction == Q931_CALL_DIRECTION_INBOUND ?
-			"inbound" : "outbound");
+			"inbound" : "outbound",
+		call->refcnt);
 
 	ast_cli(fd, "Interface       : %s\n", call->intf->name);
 
@@ -637,8 +638,15 @@ static int visdn_call(
 	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
 	q931_ies_add_put(&ies, &cdpn->ie);
 
-	/*
-	if (ast_chan->callerid) {
+	// FIXME TODO Make this configurable to allow overlap receiving (PBXs)
+	if (q931_call->intf->role == LAPD_ROLE_NT) {
+		struct q931_ie_sending_complete *sc =
+			q931_ie_sending_complete_alloc();
+
+		q931_ies_add_put(&ies, &sc->ie);
+	}
+
+	if (ast_chan->callerid && strlen(ast_chan->callerid)) {
 
 		char callerid[255];
 		char *name, *number;
@@ -646,25 +654,38 @@ static int visdn_call(
 		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
 		ast_callerid_parse(callerid, &name, &number);
 
-		if (number)
-			q931_call_set_calling_number(q931_call, number);
-		else
+		if (number) {
+			struct q931_ie_calling_party_number *cgpn =
+				q931_ie_calling_party_number_alloc();
+
+			cgpn->type_of_number =
+				Q931_IE_CGPN_TON_UNKNOWN;
+			cgpn->numbering_plan_identificator =
+				Q931_IE_CGPN_NP_ISDN_TELEPHONY; // FIXME
+			cgpn->presentation_indicator =
+				Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+			cgpn->screening_indicator =
+				Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
+			cgpn->number[0] = '\0';
+
+			strncpy(cgpn->number, number, sizeof(cgpn->number));
+
+			q931_ies_add_put(&ies, &cgpn->ie);
+		} else {
 			ast_log(LOG_WARNING,
 				"Unable to parse '%s'"
 				" into CallerID name & number\n",
 				callerid);
+		}
 	}
-	*/
 
-	/*
-	struct q931_ie_high_layer_compatibility hlc;
-	q931_ie_high_layer_compatibility_init(&hlc);
+	struct q931_ie_high_layer_compatibility *hlc =
+		q931_ie_high_layer_compatibility_alloc();
 	
-	hlc.coding_standard = Q931_IE_HLC_CS_CCITT;
-	hlc.interpretation = Q931_IE_HLC_P_FIRST;
-	hlc.presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
-	hlc.characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
-	*/
+	hlc->coding_standard = Q931_IE_HLC_CS_CCITT;
+	hlc->interpretation = Q931_IE_HLC_P_FIRST;
+	hlc->presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
+	hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
 
 	ast_mutex_lock(&q931_lock);
 	q931_setup_request(q931_call, &ies);
@@ -893,10 +914,30 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	}
 	break;
 
-	case AST_CONTROL_PROGRESS:
+	case AST_CONTROL_PROGRESS: {
+                struct q931_ies ies = Q931_IES_INIT;
+
+		struct q931_ie_progress_indicator *pi =
+			q931_ie_progress_indicator_alloc();
+		pi->coding_standard = Q931_IE_PI_CS_CCITT;
+		pi->location = q931_ie_progress_indicator_location(
+					visdn_chan->q931_call);
+
+		if (ast_chan->dialed &&
+		   strcmp(ast_chan->dialed->type, VISDN_CHAN_TYPE)) {
+			pi->progress_description =
+				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
+		} else {
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
+		}
+
+		q931_ies_add_put(&ies, &pi->ie);
+
 		ast_mutex_lock(&q931_lock);
-		q931_progress_request(visdn_chan->q931_call, NULL); // NULL ? FIXME
+		q931_progress_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&q931_lock);
+	}
 	break;
 
 	case AST_CONTROL_PROCEEDING:
@@ -2117,22 +2158,6 @@ static void visdn_q931_timeout_indication(
 	printf("*** %s\n", __FUNCTION__);
 }
 
-enum sb_bearertype
-{
-        VISDN_BT_VOICE  = 1,
-        VISDN_BT_PPP    = 2,
-};
-
-struct sb_setbearer
-{
-        int sb_index;
-        enum sb_bearertype sb_bearertype;
-};
-
-#define VISDN_SET_BEARER        SIOCDEVPRIVATE
-#define VISDN_PPP_GET_CHAN      (SIOCDEVPRIVATE+1)
-#define VISDN_PPP_GET_UNIT      (SIOCDEVPRIVATE+2)
-
 static void visdn_q931_connect_channel(struct q931_channel *channel)
 {
 	printf("*** %s B%d\n", __FUNCTION__, channel->id+1);
@@ -2149,6 +2174,22 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
 /*
+enum sb_bearertype
+{
+        VISDN_BT_VOICE  = 1,
+        VISDN_BT_PPP    = 2,
+};
+
+struct sb_setbearer
+{
+        int sb_index;
+        enum sb_bearertype sb_bearertype;
+};
+
+#define VISDN_SET_BEARER        SIOCDEVPRIVATE
+#define VISDN_PPP_GET_CHAN      (SIOCDEVPRIVATE+1)
+#define VISDN_PPP_GET_UNIT      (SIOCDEVPRIVATE+2)
+
 	struct ifreq ifr;
 	strncpy(ifr.ifr_name, channel->call->intf->name, sizeof(ifr.ifr_name));
 
@@ -2405,12 +2446,10 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 
 /*
 	case Q931_TONE_BUSY:
-		ast_indicate(ast_chan, AST_CONTROL_BUSY);
 	break;
 
 	case Q931_TONE_HANGUP:
 	case Q931_TONE_FAILURE:
-		ast_indicate(ast_chan, AST_CONTROL_CONGESTION);
 	break;*/
 	default:;
 	}

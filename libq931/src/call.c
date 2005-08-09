@@ -192,6 +192,8 @@ struct q931_call *q931_alloc_call(struct q931_interface *intf)
 	if (!call) abort();
 	memset(call, 0x00, sizeof(*call));
 
+	call->refcnt = 1;
+
 	call->intf = intf;
 
 	if (call->intf->role == LAPD_ROLE_TE)
@@ -273,7 +275,7 @@ struct q931_call *q931_alloc_call_out(
 		report_call(call, LOG_ERR,
 			"Cannot find an available call reference number!\n");
 
-		q931_free_call(call);
+		q931_call_put(call);
 		return NULL;
 	}
 
@@ -287,13 +289,50 @@ struct q931_call *q931_alloc_call_out(
 	return call;
 }
 
-void q931_free_call(struct q931_call *call)
+void q931_call_get(struct q931_call *call)
 {
 	assert(call);
-	assert(call->calls_node.next == LIST_POISON1);
-	assert(call->calls_node.prev == LIST_POISON2);
 
-	free(call);
+	call->refcnt++;
+}
+
+void q931_call_put(struct q931_call *call)
+{
+	assert(call);
+
+	call->refcnt--;
+
+	if (!call->refcnt) {
+		assert(call->calls_node.next == LIST_POISON1);
+		assert(call->calls_node.prev == LIST_POISON2);
+
+		free(call);
+	}
+}
+
+void _q931_call_start_timer(
+	struct q931_call *call,
+	struct q931_timer *timer,
+	int delta)
+{
+	if (!q931_timer_pending(timer)) {
+		q931_call_get(call);
+
+		q931_start_timer_delta(
+			call->intf->lib,
+			timer,
+			delta);
+	}
+}
+
+void _q931_call_stop_timer(
+	struct q931_call *call,
+	struct q931_timer *timer)
+{
+	if (q931_timer_pending(timer)) {
+		q931_stop_timer(timer);
+		q931_call_put(call);
+	}
 }
 
 struct q931_call *q931_find_call_by_reference(
@@ -993,9 +1032,6 @@ void q931_disconnect_request(struct q931_call *call,
 					q931_ces_release_request(ces, user_ies);
 				}
 			} else {
-				q931_call_set_state(call, N0_NULL_STATE);
-				q931_intf_del_call(call);
-
 				struct q931_ces *ces;
 				list_for_each_entry(ces, &call->ces, node) {
 					q931_ces_release_request(ces, user_ies);
@@ -1003,6 +1039,9 @@ void q931_disconnect_request(struct q931_call *call,
 
 				q931_call_primitive(call, release_indication,
 					user_ies);
+
+				q931_call_set_state(call, N0_NULL_STATE);
+				q931_intf_del_call(call);
 			}
 		} else {
 			q931_call_send_disconnect(call, &ies);
@@ -2451,6 +2490,8 @@ static void q931_timer_T301(void *data)
 		q931_call_unexpected_primitive(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T302(void *data)
@@ -2530,6 +2571,8 @@ static void q931_timer_T302(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T303(void *data)
@@ -2552,7 +2595,8 @@ static void q931_timer_T303(void *data)
 					q931_call_primitive(call,
 						release_indication, NULL);
 				} else {
-					q931_call_send_setup_bc(call, &call->setup_ies);
+					q931_call_send_setup_bc(call,
+						&call->setup_ies);
 					q931_call_start_timer(call, T303);
 					q931_call_start_timer(call, T312);
 				}
@@ -2616,6 +2660,7 @@ static void q931_timer_T303(void *data)
 
 	call->T303_fired = TRUE;
 
+	q931_call_put(call);
 }
 
 static void q931_timer_T304(void *data)
@@ -2696,6 +2741,8 @@ static void q931_timer_T304(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 
@@ -2724,6 +2771,8 @@ static void q931_timer_T305(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T306(void *data)
@@ -2746,6 +2795,8 @@ static void q931_timer_T306(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T307(void *data)
@@ -2760,6 +2811,8 @@ static void q931_timer_T307(void *data)
 
 	report_call(call, LOG_ERR,
 		"Unexpected timer T307\n");
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T308(void *data)
@@ -2825,6 +2878,8 @@ static void q931_timer_T308(void *data)
 	}
 
 	call->T308_fired = TRUE;
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T309(void *data)
@@ -2854,6 +2909,8 @@ static void q931_timer_T309(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T310(void *data)
@@ -2916,6 +2973,8 @@ static void q931_timer_T310(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T312(void *data)
@@ -3028,6 +3087,8 @@ static void q931_timer_T312(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T313(void *data)
@@ -3064,6 +3125,8 @@ static void q931_timer_T313(void *data)
 		q931_call_unexpected_timer(call);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T314(void *data)
@@ -3076,6 +3139,8 @@ static void q931_timer_T314(void *data)
 
 	report_call(call, LOG_ERR,
 		"Unexpected timer T314\n");
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T316(void *data)
@@ -3088,6 +3153,8 @@ static void q931_timer_T316(void *data)
 
 	report_call(call, LOG_ERR,
 		"Unexpected timer T316\n");
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T318(void *data)
@@ -3123,6 +3190,7 @@ static void q931_timer_T318(void *data)
 	break;
 	}
 
+	q931_call_put(call);
 }
 
 static void q931_timer_T319(void *data)
@@ -3140,6 +3208,8 @@ static void q931_timer_T319(void *data)
 	} else {
 		q931_call_unexpected_timer(call);
 	}
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T320(void *data)
@@ -3152,6 +3222,8 @@ static void q931_timer_T320(void *data)
 
 	report_call(call, LOG_ERR,
 		"Unexpected timer T320\n");
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T321(void *data)
@@ -3164,6 +3236,8 @@ static void q931_timer_T321(void *data)
 
 	report_call(call, LOG_ERR,
 		"Unexpected timer T321\n");
+
+	q931_call_put(call);
 }
 
 static void q931_timer_T322(void *data)
@@ -3177,6 +3251,8 @@ static void q931_timer_T322(void *data)
 	if (call->state == N0_NULL_STATE ||
 	    call->state == U0_NULL_STATE) {
 		q931_call_unexpected_timer(call);
+
+		q931_call_put(call);
 		return;
 	}
 
@@ -3204,6 +3280,8 @@ static void q931_timer_T322(void *data)
 			call->senq_cnt++;
 		}
 	}
+
+	q931_call_put(call);
 }
 
 static inline void q931_handle_alerting(
@@ -3396,6 +3474,8 @@ static inline void q931_handle_alerting(
 		q931_call_message_not_compatible_with_state(call, msg);
 	break;
 	}
+
+	q931_call_put(call);
 }
 
 inline static void q931_handle_call_proceeding(

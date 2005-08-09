@@ -96,6 +96,7 @@ enum q931_status_indication_status
 struct q931_call
 {
 	struct list_head calls_node;
+	int refcnt;
 
 	struct q931_interface *intf;
 
@@ -258,6 +259,8 @@ struct q931_call *q931_find_call_by_reference(
 	enum q931_call_direction direction,
 	q931_callref call_reference);
 
+void q931_call_get(struct q931_call *call);
+void q931_call_put(struct q931_call *call);
 
 #ifdef Q931_PRIVATE
 
@@ -268,25 +271,33 @@ struct q931_call *q931_find_call_by_reference(
 			Q931_CALL_DIRECTION_OUTBOUND ? 'O' : 'I'),	\
 		## arg)
 
-#define q931_call_start_timer(call, timer)		\
-	do {						\
-		q931_start_timer_delta(			\
-			(call)->intf->lib,		\
-			&(call)->timer,			\
-			(call)->intf->timer);		\
-		report_call(call, LOG_DEBUG,		\
-			"%s:%d Timer %s started\n",	\
-			__FILE__,__LINE__,		\
-			#timer);			\
+void _q931_call_start_timer(
+	struct q931_call *call,
+	struct q931_timer *timer,
+	int delta);
+
+#define q931_call_start_timer(call, timer)			\
+	do {							\
+		_q931_call_start_timer(call,			\
+			&(call)->timer,				\
+			(call)->intf->timer);			\
+		report_call(call, LOG_DEBUG,			\
+			"%s:%d Timer %s started\n",		\
+			__FILE__,__LINE__,			\
+			#timer);				\
 	} while(0)
 
-#define q931_call_stop_timer(call, timer)		\
-	do {						\
-		q931_stop_timer(&(call)->timer);	\
-		report_call(call, LOG_DEBUG,		\
-			"%s:%d Timer %s stopped\n",	\
-			__FILE__,__LINE__,		\
-			#timer);			\
+void _q931_call_stop_timer(
+	struct q931_call *call,
+	struct q931_timer *timer);
+
+#define q931_call_stop_timer(call, timer)			\
+	do {							\
+		_q931_call_stop_timer(call, &(call)->timer);	\
+		report_call(call, LOG_DEBUG,			\
+			"%s:%d Timer %s stopped\n",		\
+			__FILE__,__LINE__,			\
+			#timer);				\
 	} while(0)
 
 #define q931_call_timer_running(call, timer)		\

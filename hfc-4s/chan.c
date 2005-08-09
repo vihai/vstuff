@@ -7,7 +7,6 @@
 #include <lapd.h>
 #include <visdn.h>
 
-#include "hfc-4s.h"
 #include "chan.h"
 #include "card.h"
 #include "st_port.h"
@@ -41,7 +40,6 @@ void hfc_chan_disable(struct hfc_chan_duplex *chan)
 	}
 
 	// RX
-	chan->rx.fifo->bit_reversed = FALSE;
 	hfc_fifo_select(chan->rx.fifo);
 	hfc_fifo_reset(chan->rx.fifo);
 	hfc_outb(card, hfc_A_CON_HDLC,
@@ -53,7 +51,6 @@ void hfc_chan_disable(struct hfc_chan_duplex *chan)
 	hfc_outb(card, hfc_A_IRQ_MSK, 0);
 
 	// TX
-	chan->tx.fifo->bit_reversed = FALSE;
 	hfc_fifo_select(chan->tx.fifo);
 	hfc_fifo_reset(chan->tx.fifo);
 	hfc_outb(card, hfc_A_CON_HDLC,
@@ -138,8 +135,10 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	hfc_upload_fsm(card);
 
 	// ------------- RX -----------------------------
-	chan->rx.fifo->bit_reversed =
-		chan->visdn_chan.bitorder == VISDN_CHAN_BITORDER_MSB;
+
+	hfc_fifo_set_bit_order(
+		chan->rx.fifo,
+		chan->visdn_chan.bitorder == VISDN_CHAN_BITORDER_MSB);
 
 	hfc_fifo_select(chan->rx.fifo);
 	hfc_fifo_reset(chan->rx.fifo);
@@ -166,8 +165,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	// ------------- TX -----------------------------
 
 	if (chan->tx.fifo) {
-		chan->tx.fifo->bit_reversed =
-			chan->visdn_chan.bitorder == VISDN_CHAN_BITORDER_MSB;
+		hfc_fifo_set_bit_order(
+			chan->tx.fifo,
+			chan->visdn_chan.bitorder == VISDN_CHAN_BITORDER_MSB);
 
 		hfc_fifo_select(chan->tx.fifo);
 		hfc_fifo_reset(chan->tx.fifo);

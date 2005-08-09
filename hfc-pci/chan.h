@@ -16,6 +16,7 @@
 #include <visdn.h>
 
 #include "util.h"
+#include "fifo.h"
 
 #define hfc_D_CHAN_OFF 2
 #define hfc_B1_CHAN_OFF 0
@@ -74,7 +75,7 @@
 		"st%d:"							\
 		"chan[%s,%s] "						\
 		format,							\
-		(chan)->chan->port->card->pcidev->dev.bus->name,	\
+		(chan)->port->card->pcidev->dev.bus->name,		\
 		(chan)->chan->port->card->pcidev->dev.bus_id,		\
 		(chan)->chan->chan->port->id,				\
 		(chan)->chan->chan->name,				\
@@ -91,18 +92,13 @@ struct hfc_chan_simplex
 	struct hfc_chan_duplex *chan;
 	struct hfc_fifo *fifo;
 	struct hfc_pcm_slot *slot;
-
-	unsigned long long frames;
-	unsigned long long bytes;
-	unsigned long long fifo_full;
-	unsigned long long crc;
 };
 
 enum hfc_chan_status {
 	HFC_STATUS_FREE,
 	HFC_STATUS_OPEN_HDLC,
 	HFC_STATUS_OPEN_TRANS,
-	HFC_STATUS_OPEN_BERT,
+	HFC_STATUS_OPEN_E_AUX,
 };
 
 struct hfc_st_port;

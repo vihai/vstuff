@@ -4,10 +4,18 @@ ifndef src
 	src=$(shell pwd)
 endif
 
-EXTRA_CFLAGS = -I $(src)/../lapd/
+EXTRA_CFLAGS = -I $(src)/../lapd/ -I $(src)/../core/
 
 obj-m	:= hfc-pci.o
-hfc-pci-y	:= hfc-pci_main.o fifo.o
+hfc-pci-y	:=	st_port.o			\
+			st_port_sysfs.o			\
+			pcm_port.o			\
+			pcm_port_sysfs.o		\
+			chan.o				\
+			chan_sysfs.o			\
+			fifo.o				\
+			card_sysfs.o			\
+			hfc-pci_main.o
 
 all:
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`

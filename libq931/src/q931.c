@@ -693,6 +693,7 @@ void q931_receive(struct q931_dlc *dlc)
 #endif
 	}
 
+	report_dlc(dlc, LOG_DEBUG, "Received message:\n");
 
 	report_dlc(dlc, LOG_DEBUG,
 		"  call reference = %u %lu %c\n",

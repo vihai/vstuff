@@ -53,7 +53,6 @@ static int hfc_pcm_port_enable(
 	unsigned long flags;
 	spin_lock_irqsave(&port->card->lock, flags);
 
-
 	spin_unlock_irqrestore(&port->card->lock, flags);
 
 	hfc_debug_pcm_port(port, 2, "enabled\n");

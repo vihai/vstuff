@@ -9,3 +9,5 @@ echo 1 > /sys/devices/pci0000\:00/0000\:00\:09.0/st1/enabled
 
 echo 1 > /sys/devices/pci0000\:00/0000\:00\:09.0/st3/enabled
 
+echo NT > /sys/devices/pci0000\:00/0000\:00\:07.0/st0/role
+echo 1 > /sys/devices/pci0000\:00/0000\:00\:07.0/st0/enabled

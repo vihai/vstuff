@@ -16,7 +16,6 @@
 #include <linux/netdevice.h>
 #include <linux/cdev.h>
 
-#include "hfc-4s.h"
 #include "fifo.h"
 #include "fifo_inline.h"
 #include "card.h"
@@ -305,6 +304,11 @@ void hfc_fifo_put_frame(struct hfc_fifo *fifo,
 	hfc_fifo_next_frame(fifo);
 
 	// fifo->chan->frames++;
+}
+
+void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
+{
+	fifo->bit_reversed = reversed;
 }
 
 void hfc_fifo_rx_tasklet(unsigned long data)

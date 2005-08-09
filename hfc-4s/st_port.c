@@ -1,7 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 
-#include "hfc-4s.h"
 #include "st_port.h"
 #include "st_port_inline.h"
 #include "card.h"
@@ -104,7 +103,6 @@ static int hfc_st_port_disable(
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
-	// Should we clear LD_STA?
 
 	spin_unlock_irqrestore(&port->card->lock, flags);
 

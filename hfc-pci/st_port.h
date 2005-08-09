@@ -16,7 +16,6 @@
 #include <visdn.h>
 
 #include "chan.h"
-//#include "fifo.h"
 
 #define to_st_port(port) container_of(port, struct hfc_st_port, visdn_port)
 
@@ -57,20 +56,13 @@ struct hfc_st_port
 
 	int id;
 
-//	int enabled;
 	u8 l1_state;
 	int clock_delay;
 	int sampling_comp;
 
 	struct hfc_chan_duplex chans[5];
 
-	// This struct contains a copy of some registers whose bits may be
-	// changed independently.
-	struct
-	{
-		u8 st_ctrl_0;
-		u8 st_ctrl_2;
-	} regs;
+	int echo_enabled;
 
 	struct visdn_port visdn_port;
 };
@@ -78,6 +70,7 @@ struct hfc_st_port
 extern struct visdn_port_ops hfc_st_port_ops;
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port);
+void hfc_update_st_clk_dly(struct hfc_st_port *port);
 void hfc_st_port__do_set_role(struct hfc_st_port *port, int nt_mode);
 
 #endif

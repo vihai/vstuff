@@ -1,7 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 
-#include "hfc-4s.h"
 #include "chan.h"
 #include "chan_sysfs.h"
 #include "card.h"
@@ -46,7 +45,7 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 	hfc_upload_fsm(card);
 
 	// RX
-	chan->rx.fifo->bit_reversed = FALSE;
+	hfc_fifo_set_bit_order(chan->rx.fifo, FALSE);
 	hfc_fifo_select(chan->rx.fifo);
 	hfc_fifo_reset(chan->rx.fifo);
 	hfc_outb(card, hfc_A_CON_HDLC,
@@ -58,7 +57,7 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 		hfc_A_IRQ_MSK_V_BERT_EN);
 
 	// TX
-	chan->tx.fifo->bit_reversed = FALSE;
+	hfc_fifo_set_bit_order(chan->tx.fifo, FALSE);
 	hfc_fifo_select(chan->tx.fifo);
 	hfc_fifo_reset(chan->tx.fifo);
 	hfc_outb(card, hfc_A_CON_HDLC,
@@ -169,6 +168,7 @@ static ssize_t hfc_show_sq_bits(
 
 	hfc_st_port_select(port);
 
+	// TODO sleep until complete frame read
 	int bits = hfc_A_ST_SQ_RD_V_ST_SQ_RD(hfc_inb(card, hfc_A_ST_SQ_RD));
 
 	spin_unlock_irqrestore(&card->lock, flags);

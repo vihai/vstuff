@@ -4,7 +4,7 @@
 #include <linux/pci.h>
 
 #include "card.h"
-#include "hfc-4s.h"
+#include "module.h"
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)
 {

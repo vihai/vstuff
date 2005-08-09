@@ -19,197 +19,157 @@
 #include <linux/spinlock.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
-/*#include <linux/init.h>
-#include <linux/config.h>
-#include <linux/interrupt.h>
-#include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/version.h>
-#include <linux/delay.h>
-#include <linux/proc_fs.h>
-*/
 
-#include "hfc-pci.h"
+#include "card.h"
 #include "fifo.h"
+#include "fifo_inline.h"
 
-void hfc_fifo_clear_rx(struct hfc_chan_simplex *chan)
+void hfc_fifo_clear_rx(struct hfc_fifo *fifo)
 {
-	*chan->f2 = *chan->f1;
-	*Z2_F2(chan) = *Z1_F2(chan);
+	*fifo->f2 = *fifo->f1;
+	*Z2_F2(fifo) = *Z1_F2(fifo);
 }
 
-void hfc_fifo_clear_tx(struct hfc_chan_simplex *chan)
-{
-	*chan->f1 = *chan->f2;
-	*Z1_F1(chan) = *Z2_F1(chan);
-
-	if (chan->chan->status == open_voice) {
-		// Make sure that at least hfc_TX_FIFO_PRELOAD bytes are
-		// present in the TX FIFOs
-
-		// Create hfc_TX_FIFO_PRELOAD bytes of empty data
-		// (0x7f is mute audio)
-		u8 empty_fifo[hfc_TX_FIFO_PRELOAD + CHUNKSIZE + hfc_RX_FIFO_PRELOAD];
-		memset(empty_fifo, 0x7f, sizeof(empty_fifo));
-
-		hfc_fifo_put(chan, empty_fifo, sizeof(empty_fifo));
-	}
-}
-
-static void hfc_fifo_mem_read(struct hfc_chan_simplex *chan,
+static void hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	int z_start,
-	void *data, int size)
+	void *data,
+	int size)
 {
-	int bytes_to_boundary = chan->z_max - z_start + 1;
-	if (bytes_to_boundary >= size) {
+	int octets_to_boundary = fifo->z_max - z_start + 1;
+	if (octets_to_boundary >= size) {
 		memcpy(data,
-			chan->z_base + z_start,
+			fifo->z_base + z_start,
 			size);
 	} else {
 		// Buffer wrap
 		memcpy(data,
-			chan->z_base + z_start,
-			bytes_to_boundary);
+			fifo->z_base + z_start,
+			octets_to_boundary);
 
-		memcpy(data + bytes_to_boundary,
-			chan->fifo_base,
-			size - bytes_to_boundary);
+		memcpy(data + octets_to_boundary,
+			fifo->fifo_base,
+			size - octets_to_boundary);
 	}
 }
 
-static void hfc_fifo_mem_write(struct hfc_chan_simplex *chan,
+void hfc_fifo_mem_write(struct hfc_fifo *fifo,
 	void *data, int size)
 {
-	int bytes_to_boundary = chan->z_max - *Z1_F1(chan) + 1;
-	if (bytes_to_boundary >= size) {
-		memcpy(chan->z_base + *Z1_F1(chan),
+	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
+	if (octets_to_boundary >= size) {
+		memcpy(fifo->z_base + *Z1_F1(fifo),
 			data,
 			size);
 	} else {
 		// FIFO wrap
 
-		memcpy(chan->z_base + *Z1_F1(chan),
+		memcpy(fifo->z_base + *Z1_F1(fifo),
 			data,
-			bytes_to_boundary);
+			octets_to_boundary);
 
-		memcpy(chan->fifo_base,
-			data + bytes_to_boundary,
-			size - bytes_to_boundary);
+		memcpy(fifo->fifo_base,
+			data + octets_to_boundary,
+			size - octets_to_boundary);
 	}
 }
 
-int hfc_fifo_get(struct hfc_chan_simplex *chan,
-		void *data, int size)
+int hfc_fifo_mem_read_user(
+	struct hfc_fifo *fifo,
+	void __user *buf,
+	int size)
 {
-	// Some useless statistic
-	chan->bytes += size;
+	return 0;
 
-	int available_bytes = hfc_fifo_used_rx(chan);
+	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
+	if (octets_to_boundary >= size) {
+		if (copy_to_user(buf, fifo->z_base + *Z1_F1(fifo), size))
+			return -EFAULT;
+	} else {
+		// FIFO wrap
 
-	if (available_bytes < size) {
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
-			"RX FIFO not enough (%d) bytes to receive!\n",
-			chan->chan->card->cardnum,
-			chan->chan->name,
-			available_bytes);
+		if (copy_to_user(buf, fifo->z_base + *Z1_F1(fifo), octets_to_boundary))
+			return -EFAULT;
 
-		return -1;
+		if (copy_to_user(buf + octets_to_boundary,
+				fifo->fifo_base,
+				size - octets_to_boundary))
+			return -EFAULT;
 	}
 
-	hfc_fifo_mem_read(chan, *Z2_F2(chan), data, size);
-
-	*Z2_F2(chan) = Z_inc(chan, *Z2_F2(chan), size);
-
-	return available_bytes - size;
+	return 0;
 }
 
-void hfc_fifo_drop(struct hfc_chan_simplex *chan, int size)
+int hfc_fifo_mem_write_user(
+	struct hfc_fifo *fifo,
+	const void __user *buf,
+	int size)
 {
-	int available_bytes = hfc_fifo_used_rx(chan);
-	if (available_bytes + 1 < size) {
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
-			"RX FIFO not enough (%d) bytes to drop!\n",
-			chan->chan->card->cardnum,
-			chan->chan->name,
-			available_bytes);
+	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
+	if (octets_to_boundary >= size) {
+		if (copy_from_user(fifo->z_base + *Z1_F1(fifo), buf, size))
+			return -EFAULT;
+	} else {
+		// FIFO wrap
+
+		if (copy_from_user(fifo->z_base + *Z1_F1(fifo),
+				buf,
+				octets_to_boundary))
+			return -EFAULT;
+
+		if (copy_from_user(fifo->fifo_base,
+				buf + octets_to_boundary,
+				size - octets_to_boundary))
+			return -EFAULT;
+	}
+
+	return 0;
+}
+
+void hfc_fifo_drop(struct hfc_fifo *fifo, int size)
+{
+	int available_octets = hfc_fifo_used_rx(fifo);
+	if (available_octets + 1 < size) {
+		hfc_msg_fifo(fifo, KERN_WARNING,
+			"RX FIFO not enough (%d) octets to drop!\n",
+			available_octets);
 
 		return;
 	}
 
-	*Z2_F2(chan) = Z_inc(chan, *Z2_F2(chan), size);
+	*Z2_F2(fifo) = Z_inc(fifo, *Z2_F2(fifo), size);
 }
 
-void hfc_fifo_put(struct hfc_chan_simplex *chan,
-			void *data, int size)
-{
-	int free_bytes = hfc_fifo_free_tx(chan);
-	if (free_bytes < size) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
-			"TX FIFO full!\n",
-			chan->chan->card->cardnum,
-			chan->chan->name);
-
-		chan->fifo_full++;
-
-		hfc_fifo_clear_tx(chan);
-	}
-
-	hfc_fifo_mem_write(chan, data, size);
-
-	chan->bytes += size;
-
-	*Z1_F1(chan) = Z_inc(chan, *Z1_F1(chan), size);
-}
-
-int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
+int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size)
 {
 
-	if (*chan->f1 == *chan->f2) {
+	if (*fifo->f1 == *fifo->f2) {
 		// nothing received, strange uh?
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
-			"get_frame called with no frame in FIFO.\n",
-			chan->chan->card->cardnum,
-			chan->chan->name);
+		hfc_msg_fifo(fifo, KERN_WARNING,
+			"get_frame called with no frame in FIFO.\n");
 
 		return -1;
 	}
 
 	// frame_size includes CRC+CRC+STAT
-	int frame_size = hfc_fifo_get_frame_size(chan);
+	int frame_size = hfc_fifo_get_frame_size(fifo);
 
 #ifdef DEBUG
 	if(debug_level == 3) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
+		hfc_msg_fifo(fifo, KERN_DEBUG,
 			"RX len %2d: ",
-			chan->chan->card->cardnum,
-			chan->chan->name,
 			frame_size);
 	} else if(debug_level >= 4) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
+		hfc_msg_fifo(fifo, KERN_DEBUG,
 			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			chan->chan->card->cardnum,
-			chan->chan->name,
-			*chan->f1, *chan->f2, *Z1_F2(chan), *Z2_F2(chan),
+			*fifo->f1, *fifo->f2, *Z1_F2(fifo), *Z2_F2(fifo),
 			frame_size);
 	}
 
 	if(debug_level >= 3) {
 		int i;
 		for (i=0; i < frame_size; i++) {
-			printk("%02x", hfc_fifo_u8(chan,
-				Z_inc(chan, *Z2_F2(chan), i)));
+			printk("%02x", hfc_fifo_u8(fifo,
+				Z_inc(fifo, *Z2_F2(fifo), i)));
 		}
 
 		printk("\n"); 
@@ -219,109 +179,89 @@ int hfc_fifo_get_frame(struct hfc_chan_simplex *chan, void *data, int max_size)
 	if (frame_size <= 0) {
 #ifdef DEBUG
 		if (debug_level >= 2) {
-			printk(KERN_DEBUG hfc_DRIVER_PREFIX
-				"card %d: "
-				"chan %s: "
-				"invalid (empty) frame received.\n",
-				chan->chan->card->cardnum,
-				chan->chan->name);
+			hfc_msg_fifo(fifo, KERN_DEBUG,
+				"invalid (empty) frame received.\n");
 		}
 #endif
 
-		hfc_fifo_drop_frame(chan);
+		hfc_fifo_drop_frame(fifo);
 		return -1;
 	}
 
 	// STAT is not really received
-	chan->bytes += frame_size - 1;
+//	fifo->bytes += frame_size - 1;
 
 	// Calculate beginning of the next frame
-	u16 newz2 = Z_inc(chan, *Z2_F2(chan), frame_size);
+	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
 
 	// We cannot use hfc_fifo_get because of different semantic of
 	// "available bytes" and to avoid useless increment of Z2
-	hfc_fifo_mem_read(chan, *Z2_F2(chan), data,
+	hfc_fifo_mem_read(fifo, *Z2_F2(fifo), data,
 		frame_size < max_size ? frame_size : max_size);
 
-	if (hfc_fifo_u8(chan, Z_inc(chan, *Z2_F2(chan),
+	if (hfc_fifo_u8(fifo, Z_inc(fifo, *Z2_F2(fifo),
 		frame_size - 1)) != 0x00) {
 		// CRC not ok, frame broken, skipping
 #ifdef DEBUG
 		if(debug_level >= 2) {
-			printk(KERN_WARNING hfc_DRIVER_PREFIX
-				"card %d: "
-				"chan %s: "
-				"Received frame with wrong CRC\n",
-				chan->chan->card->cardnum,
-				chan->chan->name);
+			hfc_msg_fifo(fifo, KERN_WARNING,
+				"Received frame with wrong CRC\n");
 		}
 #endif
 
-		chan->crc++;
-		chan->chan->net_device_stats.rx_errors++;
+//		fifo->crc++;
+//		fifo->fifo->net_device_stats.rx_errors++;
 
-		hfc_fifo_drop_frame(chan);
+		hfc_fifo_drop_frame(fifo);
 		return -1;
 	}
 
-	chan->frames++;
+//	fifo->frames++;
 
-	*chan->f2 = F_inc(chan, *chan->f2, 1);
+	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
 
 	// Set Z2 for the next frame we're going to receive
-	*Z2_F2(chan) = newz2;
+	*Z2_F2(fifo) = newz2;
 
 	return frame_size;
 }
 
-void hfc_fifo_drop_frame(struct hfc_chan_simplex *chan)
+void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 {
 
-	if (*chan->f1 == *chan->f2) {
+	if (*fifo->f1 == *fifo->f2) {
 		// nothing received, strange eh?
-		printk(KERN_WARNING hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
-			"skip_frame called with no frame in FIFO.\n",
-			chan->chan->card->cardnum,
-			chan->chan->name);
+		hfc_msg_fifo(fifo, KERN_WARNING,
+			"skip_frame called with no frame in FIFO.\n");
 
 		return;
 	}
 
-//	chan->drops++;
+//	fifo->drops++;
 
-	int available_bytes = hfc_fifo_used_rx(chan) + 1;
+	int available_octets = hfc_fifo_used_rx(fifo) + 1;
 
 	// Calculate beginning of the next frame
-	u16 newz2 = Z_inc(chan, *Z2_F2(chan), available_bytes);
+	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), available_octets);
 
-	*chan->f2 = F_inc(chan, *chan->f2, 1);
+	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
 
 	// Set Z2 for the next frame we're going to receive
-	*Z2_F2(chan) = newz2;
+	*Z2_F2(fifo) = newz2;
 }
 
-void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
+void hfc_fifo_put_frame(struct hfc_fifo *fifo,
 		 void *data, int size)
 {
 #ifdef DEBUG
 	if (debug_level == 3) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
+		hfc_msg_fifo(fifo, KERN_DEBUG,
 			"TX len %2d: ",
-			chan->chan->card->cardnum,
-			chan->chan->name,
 			size);
 	} else if (debug_level >= 4) {
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
+		hfc_msg_fifo(fifo, KERN_DEBUG,
 			"TX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			chan->chan->card->cardnum,
-			chan->chan->name,
-			*chan->f1, *chan->f2, *Z1_F1(chan), *Z2_F1(chan),
+			*fifo->f1, *fifo->f2, *Z1_F1(fifo), *Z2_F1(fifo),
 			size);
 	}
 
@@ -334,31 +274,138 @@ void hfc_fifo_put_frame(struct hfc_chan_simplex *chan,
 	}
 #endif
 
-	int available_frames = hfc_fifo_free_frames(chan);
+/*	int available_frames = hfc_fifo_free_frames(fifo);
 
-	if (available_frames >= chan->f_num) {
-		printk(KERN_CRIT hfc_DRIVER_PREFIX
-			"card %d: "
-			"chan %s: "
-			"TX FIFO total number of frames exceeded!\n",
-			chan->chan->card->cardnum,
-			chan->chan->name);
+	if (available_frames >= fifo->f_num) {
+		hfc_msg_fifo(fifo, KERN_CRIT,
+			"TX FIFO total number of frames exceeded!\n");
 
-		chan->fifo_full++;
+//		fifo->fifo_full++;
 
-		hfc_fifo_clear_tx(chan);
+		// FIFO RESET ?
 
 		return;
-	}
+	}*/
 
-	hfc_fifo_put(chan, data, size);
+	hfc_fifo_mem_write(fifo, data, size);
 
-	u16 newz1 = *Z1_F1(chan);
+	u16 newz1 = Z_inc(fifo, *Z1_F1(fifo), size);
+	*Z1_F1(fifo) = newz1;
+	*fifo->f1 = F_inc(fifo, *fifo->f1, 1);
+	*Z1_F1(fifo) = newz1;
 
-	*chan->f1 = F_inc(chan, *chan->f1, 1);
-
-	*Z1_F1(chan) = newz1;
-
-	chan->frames++;
+//	fifo->frames++;
 }
 
+void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
+{
+	struct hfc_card *card = fifo->card;
+
+	BUG_ON(!fifo->connected_chan);
+
+	if (fifo->connected_chan->chan->id == B1) {
+		if (reversed)
+			card->regs.cirm |= hfc_CIRM_B1_REV;
+		else
+			card->regs.cirm &= ~hfc_CIRM_B1_REV;
+	} else if (fifo->connected_chan->chan->id == B2) {
+		if (reversed)
+			card->regs.cirm |= hfc_CIRM_B2_REV;
+		else
+			card->regs.cirm &= ~hfc_CIRM_B2_REV;
+	}
+
+	hfc_outb(card, hfc_CIRM, card->regs.cirm);
+}
+
+void hfc_fifo_rx_tasklet(unsigned long data)
+{
+	struct hfc_fifo *fifo = (struct hfc_fifo *)data;
+
+	WARN_ON(!fifo->connected_chan);
+	if (!fifo->connected_chan)
+		return;
+
+	struct hfc_chan_simplex *chan = fifo->connected_chan;
+	struct hfc_chan_duplex *fdchan = chan->chan;
+
+	if (!hfc_fifo_has_frames(fifo))
+		goto no_frames;
+
+	int frame_size = hfc_fifo_get_frame_size(fifo);
+
+	if (frame_size < 3) {
+		hfc_debug_fifo(fifo, 2,
+			"invalid frame received, just %d octets\n",
+			frame_size);
+
+		hfc_fifo_drop_frame(fifo);
+
+		fdchan->net_device_stats.rx_dropped++;
+
+		goto err_invalid_frame;
+	} else if(frame_size == 3) {
+		hfc_debug_fifo(fifo, 2,
+			"empty frame received\n");
+
+		hfc_fifo_drop_frame(fifo);
+
+		fdchan->net_device_stats.rx_dropped++;
+
+		goto err_empty_frame;
+	}
+
+	struct sk_buff *skb =
+		visdn_alloc_skb(frame_size - 3);
+
+	if (!skb) {
+		hfc_msg_fifo(fifo, KERN_ERR,
+			"cannot allocate skb: frame dropped\n");
+
+		hfc_fifo_drop_frame(fifo);
+
+		fdchan->net_device_stats.rx_dropped++;
+
+		goto err_alloc_skb;
+	}
+
+	if (hfc_fifo_get_frame(fifo,
+		skb_put(skb, frame_size - 3),
+		frame_size - 3) == -1) {
+		goto err_get_frame;
+	}
+
+	fdchan->net_device_stats.rx_packets++;
+	fdchan->net_device_stats.rx_bytes += frame_size - 1;
+
+	visdn_frame_rx(&fdchan->visdn_chan, skb);
+
+	goto all_went_well;
+
+err_get_frame:
+	kfree_skb(skb);
+err_alloc_skb:
+err_empty_frame:
+err_invalid_frame:
+no_frames:
+all_went_well:
+
+	if (hfc_fifo_has_frames(fifo))
+		tasklet_schedule(&fifo->tasklet);
+}
+
+void hfc_fifo_init(
+	struct hfc_fifo *fifo,
+	struct hfc_card *card,
+	int hw_index,
+	enum hfc_direction direction)
+{
+	fifo->hw_index = hw_index;
+	fifo->direction = direction;
+	fifo->card = card;
+
+	if (fifo->direction == RX)
+		tasklet_init(&fifo->tasklet,
+			hfc_fifo_rx_tasklet,
+			(unsigned long)fifo);
+}
