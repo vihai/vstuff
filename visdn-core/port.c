@@ -115,18 +115,6 @@ static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
 		visdn_port_show_role,
 		visdn_port_store_role);
 
-static int visdn_port_hotplug(struct device *cd, char **envp,
-	int num_envp, char *buf, int size)
-{
-//	struct visdn_port *visdn_port = to_visdn_port(cd);
-
-	envp[0] = NULL;
-
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_hotplug called\n");
-
-	return 0;
-}
-
 static void visdn_port_release(struct device *cd)
 {
 //	struct visdn_port *visdn_port =

@@ -92,8 +92,6 @@ struct file_operations visdn_timer_fops =
 	.llseek		= no_llseek,
 };
 
-static struct hlist_head visdn_timer_index_hash[1 << VISDN_PORT_HASHBITS];
-
 static ssize_t visdn_timer_show_freq(
 	struct class_device *dev,
 	char *buf)
@@ -113,7 +111,7 @@ static ssize_t visdn_timer_store_freq(
 
 static CLASS_DEVICE_ATTR(timer_freq, S_IRUGO,
 		visdn_timer_show_freq,
-		NULL);
+		visdn_timer_store_freq);
 
 static int visdn_timer_hotplug(struct class_device *cd, char **envp,
 	int num_envp, char *buf, int size)
@@ -169,6 +167,14 @@ void visdn_timer_init(
 }
 EXPORT_SYMBOL(visdn_timer_init);
 
+#ifdef NO_CLASS_DEV_DEVT
+static ssize_t show_dev(struct class_device *class_dev, char *buf)
+{
+	return print_dev_t(buf, visdn_first_dev);
+}
+static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
+#endif
+
 int visdn_timer_register(
 	struct visdn_timer *visdn_timer,
 	const char *name)
@@ -185,7 +191,9 @@ int visdn_timer_register(
 	memset(class_dev, 0x00, sizeof(class_dev));
 	class_dev->class = &visdn_timer_class;
 	class_dev->class_data = visdn_timer;
+#ifndef NO_CLASS_DEV_DEVT
 	class_dev->devt = visdn_first_dev + 1;
+#endif
 
 	snprintf(class_dev->class_id, sizeof(class_dev->class_id),
 		"%s", name);
@@ -193,6 +201,12 @@ int visdn_timer_register(
 	err = class_device_register(class_dev);
 	if (err < 0)
 		goto err_class_device_register;
+
+#ifdef NO_CLASS_DEV_DEVT
+	class_device_create_file(
+		class_dev,
+		&class_device_attr_dev);
+#endif
 
 	err = class_device_create_file(
 			class_dev,

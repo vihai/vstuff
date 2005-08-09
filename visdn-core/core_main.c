@@ -169,6 +169,14 @@ static struct class_device visdn_control_class_dev;
  * Module stuff
  ******************************************/
 
+#ifdef NO_CLASS_DEV_DEVT
+static ssize_t show_dev(struct class_device *class_dev, char *buf)
+{
+	return print_dev_t(buf, visdn_first_dev);
+}
+static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
+#endif
+
 static int __init visdn_init_module(void)
 {
 	int err;
@@ -192,7 +200,9 @@ static int __init visdn_init_module(void)
 	class_device_initialize(&visdn_control_class_dev);
 	visdn_control_class_dev.class = &visdn_class;
 	visdn_control_class_dev.class_data = NULL;
+#ifndef NO_CLASS_DEV_DEVT
 	visdn_control_class_dev.devt = visdn_first_dev;
+#endif
 	snprintf(visdn_control_class_dev.class_id,
 		sizeof(visdn_control_class_dev.class_id),
 		"control");
@@ -200,6 +210,12 @@ static int __init visdn_init_module(void)
 	err = class_device_register(&visdn_control_class_dev);
 	if (err < 0)
 		goto err_control_class_device_register;
+
+#ifdef NO_CLASS_DEV_DEVT
+	class_device_create_file(
+		&visdn_control_class_dev,
+		&class_device_attr_dev);
+#endif
 
 	err = visdn_timer_modinit();
 	if (err < 0)
