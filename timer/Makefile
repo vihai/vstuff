@@ -4,7 +4,7 @@ ifndef src
 	src=$(shell pwd)
 endif
 
-EXTRA_CFLAGS = -I $(src)/../core
+EXTRA_CFLAGS = -I $(src)/../visdn-core/
 
 obj-m	:= visdn-timer.o
 visdn-timer-y	:= timer_main.o

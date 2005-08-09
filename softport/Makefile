@@ -4,7 +4,7 @@ ifndef src
 	src=$(shell pwd)
 endif
 
-EXTRA_CFLAGS = -I $(src)/../core/
+EXTRA_CFLAGS = -I $(src)/../visdn-core/
 
 obj-m	:= softport.o
 softport-y	:= softport_main.o

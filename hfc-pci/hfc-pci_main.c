@@ -159,6 +159,8 @@ void hfc_initialize_hw(struct hfc_card *card)
 	hfc_inb(card, hfc_INT_S1);
 	hfc_inb(card, hfc_INT_S2);
 
+	hfc_st_port__do_set_role(&card->st_port, 0);
+
 	// Enable IRQ output
 	card->regs.m1 = hfc_INT_M1_DREC | hfc_INT_M1_L1STATE | hfc_INT_M1_TIMER;
 	hfc_outb(card, hfc_INT_M1, card->regs.m1);
