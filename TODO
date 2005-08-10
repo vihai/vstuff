@@ -34,7 +34,28 @@
 
 
 
-
+[14:19] <vihai> Allora... ragiono a voce alta... tu fai segno con la testa se va bene
+[14:19] <vihai> Io ricevo un setup_indication dalla libq931 (ovvero ho ricevuto un SETUP)
+[14:20] <vihai> Nel setup_indication c'è un numero valido, overlap dialing è disattivato, io lancio il pbx e finisco mandando un proceeding
+[14:20] <vihai> Se il numero non è completo/invalito, rispondo con un setup_reject
+[14:21] <fsck> ok
+[14:22] <vihai> Se l'overlap è abilitato guardo se il numero PUO' matchare
+[14:22] <vihai> Se non puo' matchare => reject
+[14:22] <vihai> Finché può matchare continuo l'overlap
+[14:22] <vihai> Quando il numero matcha un'estensione (che può essere una regexp) devo guardare se l'estensione supporta l'overlap
+[14:23] <vihai> Se lo supporta faccio partire il pbx e mando il resto delle cifre come frame DTMF
+[14:24] <vihai> Se non lo supporta uso un timeout
+[14:24] <vihai> Il problema è... come capisco se l'estensione supporta l'overlap dialing?
+[14:26] <fsck> mhh... non credo ci sia un modo adesso
+[14:29] <vihai> Uhm... allora....
+[14:30] <vihai> Posso fare che se durante l'overlap esiste un'estensione e NON può matchare ulteriormente (ovvero non è una regexp) faccio partire subito il pbx
+[14:30] <vihai> Se invece esiste e può matchare ulteriormente uso il timeout
+[14:31] <vihai> Però cacchio.... così impongo il timeout anche facendo l'overlap solo su ISDN
+[14:32] <fsck> uno switch a mano per ora?
+[14:33] <vihai> Per dire cosa? Attivare/disattivare i DTMF frame?
+[14:34] <fsck> per dire "questa estensione supporta l'overlap"
+[14:36] <vihai> Dentro la configurazione di visdn?
+[14:37] <fsck> eh no dentro extensions.conf
 
 
 

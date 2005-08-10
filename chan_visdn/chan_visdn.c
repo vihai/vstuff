@@ -254,7 +254,8 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Context              : %s\n"
 			"Default caller ID    : %s\n"
 			"Force caller ID      : %s\n"
-			"Overlap Dialing      : %s\n",
+			"Overlap Sending      : %s\n"
+			"Overlap Receiving    : %s\n",
 			visdn_interface_network_role_to_string(
 				intf->network_role),
 			visdn_type_of_number_to_string(
@@ -892,7 +893,7 @@ static int visdn_call(
 	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
 	q931_ies_add_put(&ies, &cdpn->ie);
 
-	if (intf->role == LAPD_ROLE_NT &&
+	if (intf->q931_intf->role == LAPD_ROLE_NT &&
 	    !intf->overlap_receiving) {
 		struct q931_ie_sending_complete *sc =
 			q931_ie_sending_complete_alloc();
