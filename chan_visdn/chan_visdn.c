@@ -105,14 +105,14 @@ struct poll_info
 
 AST_MUTEX_DEFINE_STATIC(q931_lock);
 
-enum visdn_dialplan
+enum visdn_type_of_number
 {
-	VISDN_DIALPLAN_UNKNOWN,
-	VISDN_DIALPLAN_INTERNATIONAL,
-	VISDN_DIALPLAN_NATIONAL,
-	VISDN_DIALPLAN_NETWORK_SPECIFIC,
-	VISDN_DIALPLAN_SUBSCRIBER,
-	VISDN_DIALPLAN_ABBREVIATED,
+	VISDN_TYPE_OF_NUMBER_UNKNOWN,
+	VISDN_TYPE_OF_NUMBER_INTERNATIONAL,
+	VISDN_TYPE_OF_NUMBER_NATIONAL,
+	VISDN_TYPE_OF_NUMBER_NETWORK_SPECIFIC,
+	VISDN_TYPE_OF_NUMBER_SUBSCRIBER,
+	VISDN_TYPE_OF_NUMBER_ABBREVIATED,
 };
 
 struct visdn_interface
@@ -120,12 +120,14 @@ struct visdn_interface
 	char name[IFNAMSIZ];
 
 	enum q931_interface_network_role network_role;
-	enum visdn_dialplan dialplan;
-	enum visdn_dialplan local_dialplan;
+	enum visdn_type_of_number type_of_number;
+	enum visdn_type_of_number local_type_of_number;
 	int tones_option;
 	char context[AST_MAX_EXTENSION];
 	char default_caller_id[128];
 	int force_caller_id;
+	int overlap_sending;
+	int overlap_receiving;
 
 	struct q931_interface *q931_intf;
 };
@@ -162,12 +164,14 @@ struct visdn_state
 
 	.default_intf = {
 		.network_role = Q931_INTF_NET_PRIVATE,
-		.dialplan = VISDN_DIALPLAN_UNKNOWN,
-		.local_dialplan = VISDN_DIALPLAN_UNKNOWN,
+		.type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN,
+		.local_type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN,
 		.tones_option = TRUE,
 		.context = "visdn",
 		.default_caller_id = "",
 		.force_caller_id = FALSE,
+		.overlap_sending = TRUE,
+		.overlap_receiving = FALSE,
 	}
 };
 
@@ -206,20 +210,20 @@ static const char *visdn_interface_network_role_to_string(
 	}
 }
 
-static const char *visdn_dialplan_to_string(enum visdn_dialplan dialplan)
+static const char *visdn_type_of_number_to_string(enum visdn_type_of_number type_of_number)
 {
-	switch(dialplan) {
-	case VISDN_DIALPLAN_UNKNOWN:
+	switch(type_of_number) {
+	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
 		return "unknown";
-	case VISDN_DIALPLAN_INTERNATIONAL:
+	case VISDN_TYPE_OF_NUMBER_INTERNATIONAL:
 		return "international";
-	case VISDN_DIALPLAN_NATIONAL:
+	case VISDN_TYPE_OF_NUMBER_NATIONAL:
 		return "national";
-	case VISDN_DIALPLAN_NETWORK_SPECIFIC:
+	case VISDN_TYPE_OF_NUMBER_NETWORK_SPECIFIC:
 		return "network specific";
-	case VISDN_DIALPLAN_SUBSCRIBER:
+	case VISDN_TYPE_OF_NUMBER_SUBSCRIBER:
 		return "subscriber";
-	case VISDN_DIALPLAN_ABBREVIATED:
+	case VISDN_TYPE_OF_NUMBER_ABBREVIATED:
 		return "private";
 	default:
 		return "INVALID!";
@@ -243,23 +247,26 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 					"UNUSED!");
 
 		ast_cli(fd, 
-			"Network role      : %s\n"
-			"Dialplan          : %s\n"
-			"Local dialplan    : %s\n"
-			"Tones option      : %s\n"
-			"Context           : %s\n"
-			"Default caller ID : %s\n"
-			"Force caller ID   : %s\n",
+			"Network role         : %s\n"
+			"Type of number       : %s\n"
+			"Local type of number : %s\n"
+			"Tones option         : %s\n"
+			"Context              : %s\n"
+			"Default caller ID    : %s\n"
+			"Force caller ID      : %s\n"
+			"Overlap Dialing      : %s\n",
 			visdn_interface_network_role_to_string(
 				intf->network_role),
-			visdn_dialplan_to_string(
-				intf->dialplan),
-			visdn_dialplan_to_string(
-				intf->local_dialplan),
+			visdn_type_of_number_to_string(
+				intf->type_of_number),
+			visdn_type_of_number_to_string(
+				intf->local_type_of_number),
 			intf->tones_option ? "Yes" : "No",
 			intf->context,
 			intf->default_caller_id,
-			intf->force_caller_id ? "Yes" : "No");
+			intf->force_caller_id ? "Yes" : "No",
+			intf->overlap_sending ? "Yes" : "No",
+			intf->overlap_receiving ? "Yes" : "No");
 	}
 
 	ast_mutex_unlock(&q931_lock);
@@ -267,29 +274,29 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 	return 0;
 }
 
-static enum visdn_dialplan visdn_string_to_dialplan(const char *str)
+static enum visdn_type_of_number visdn_string_to_type_of_number(const char *str)
 {
-	 enum visdn_dialplan dialplan = VISDN_DIALPLAN_UNKNOWN;
+	 enum visdn_type_of_number type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN;
 
 	if (!strcasecmp(str, "unknown"))
-		dialplan = VISDN_DIALPLAN_UNKNOWN;
+		type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN;
 	else if (!strcasecmp(str, "international"))
-		dialplan = VISDN_DIALPLAN_INTERNATIONAL;
+		type_of_number = VISDN_TYPE_OF_NUMBER_INTERNATIONAL;
 	else if (!strcasecmp(str, "national"))
-		dialplan = VISDN_DIALPLAN_NATIONAL;
+		type_of_number = VISDN_TYPE_OF_NUMBER_NATIONAL;
 	else if (!strcasecmp(str, "network_specific"))
-		dialplan = VISDN_DIALPLAN_NETWORK_SPECIFIC;
+		type_of_number = VISDN_TYPE_OF_NUMBER_NETWORK_SPECIFIC;
 	else if (!strcasecmp(str, "subscriber"))
-		dialplan = VISDN_DIALPLAN_SUBSCRIBER;
+		type_of_number = VISDN_TYPE_OF_NUMBER_SUBSCRIBER;
 	else if (!strcasecmp(str, "abbreviated"))
-		dialplan = VISDN_DIALPLAN_ABBREVIATED;
+		type_of_number = VISDN_TYPE_OF_NUMBER_ABBREVIATED;
 	else {
 		ast_log(LOG_ERROR,
-			"Unknown dialplan '%s'\n",
+			"Unknown type_of_number '%s'\n",
 			str);
 	}
 
-	return dialplan;
+	return type_of_number;
 }
 
 static enum q931_interface_network_role
@@ -322,10 +329,10 @@ static int visdn_intf_from_var(
 {
 	if (!strcasecmp(var->name, "network_role")) {
 		intf->network_role = visdn_string_to_network_role(var->value);
-	} else if (!strcasecmp(var->name, "dialplan")) {
-		intf->dialplan = visdn_string_to_dialplan(var->value);
-	} else if (!strcasecmp(var->name, "local_dialplan")) {
-		intf->local_dialplan = visdn_string_to_dialplan(var->value);
+	} else if (!strcasecmp(var->name, "type_of_number")) {
+		intf->type_of_number = visdn_string_to_type_of_number(var->value);
+	} else if (!strcasecmp(var->name, "local_type_of_number")) {
+		intf->local_type_of_number = visdn_string_to_type_of_number(var->value);
 	} else if (!strcasecmp(var->name, "tones_option")) {
 		intf->tones_option = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "context")) {
@@ -336,6 +343,10 @@ static int visdn_intf_from_var(
 			sizeof(intf->default_caller_id));
 	} else if (!strcasecmp(var->name, "force_caller_id")) {
 		intf->force_caller_id = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "overlap_sending")) {
+		intf->overlap_sending = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "overlap_receiving")) {
+		intf->overlap_receiving = ast_true(var->value);
 	} else {
 		return -1;
 	}
@@ -348,14 +359,16 @@ static void visdn_copy_interface_config(
 	const struct visdn_interface *src)
 {
 	dst->network_role = src->network_role;
-	dst->dialplan = src->dialplan;
-	dst->local_dialplan = src->local_dialplan;
+	dst->type_of_number = src->type_of_number;
+	dst->local_type_of_number = src->local_type_of_number;
 	dst->tones_option = src->tones_option;
 	strncpy(dst->context, src->context,
 		sizeof(dst->context));
 	strncpy(dst->default_caller_id, src->default_caller_id,
 		sizeof(dst->default_caller_id));
 	dst->force_caller_id = src->force_caller_id;
+	dst->overlap_sending = src->overlap_sending;
+	dst->overlap_receiving = src->overlap_receiving;
 }
 
 static void visdn_reload_config(void)
@@ -728,39 +741,39 @@ static inline struct ast_channel *callpvt_to_astchan(
 }
 
 static enum q931_ie_called_party_number_type_of_number
-	visdn_dialplan_to_cdpn(enum visdn_dialplan dialplan)
+	visdn_type_of_number_to_cdpn(enum visdn_type_of_number type_of_number)
 {
-	switch(dialplan) {
-	case VISDN_DIALPLAN_UNKNOWN:
+	switch(type_of_number) {
+	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
 		return Q931_IE_CDPN_TON_UNKNOWN;
-	case VISDN_DIALPLAN_INTERNATIONAL:
+	case VISDN_TYPE_OF_NUMBER_INTERNATIONAL:
 		return Q931_IE_CDPN_TON_INTERNATIONAL;
-	case VISDN_DIALPLAN_NATIONAL:
+	case VISDN_TYPE_OF_NUMBER_NATIONAL:
 		return Q931_IE_CDPN_TON_NATIONAL;
-	case VISDN_DIALPLAN_NETWORK_SPECIFIC:
+	case VISDN_TYPE_OF_NUMBER_NETWORK_SPECIFIC:
 		return Q931_IE_CDPN_TON_NETWORK_SPECIFIC;
-	case VISDN_DIALPLAN_SUBSCRIBER:
+	case VISDN_TYPE_OF_NUMBER_SUBSCRIBER:
 		return Q931_IE_CDPN_TON_SUBSCRIBER;
-	case VISDN_DIALPLAN_ABBREVIATED:
+	case VISDN_TYPE_OF_NUMBER_ABBREVIATED:
 		return Q931_IE_CDPN_TON_ABBREVIATED;
 	}
 }
 
 static enum q931_ie_calling_party_number_type_of_number
-	visdn_dialplan_to_cgpn(enum visdn_dialplan dialplan)
+	visdn_type_of_number_to_cgpn(enum visdn_type_of_number type_of_number)
 {
-	switch(dialplan) {
-	case VISDN_DIALPLAN_UNKNOWN:
+	switch(type_of_number) {
+	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
 		return Q931_IE_CGPN_TON_UNKNOWN;
-	case VISDN_DIALPLAN_INTERNATIONAL:
+	case VISDN_TYPE_OF_NUMBER_INTERNATIONAL:
 		return Q931_IE_CDPN_TON_INTERNATIONAL;
-	case VISDN_DIALPLAN_NATIONAL:
+	case VISDN_TYPE_OF_NUMBER_NATIONAL:
 		return Q931_IE_CGPN_TON_NATIONAL;
-	case VISDN_DIALPLAN_NETWORK_SPECIFIC:
+	case VISDN_TYPE_OF_NUMBER_NETWORK_SPECIFIC:
 		return Q931_IE_CGPN_TON_NETWORK_SPECIFIC;
-	case VISDN_DIALPLAN_SUBSCRIBER:
+	case VISDN_TYPE_OF_NUMBER_SUBSCRIBER:
 		return Q931_IE_CGPN_TON_SUBSCRIBER;
-	case VISDN_DIALPLAN_ABBREVIATED:
+	case VISDN_TYPE_OF_NUMBER_ABBREVIATED:
 		return Q931_IE_CGPN_TON_ABBREVIATED;
 	}
 }
@@ -874,13 +887,13 @@ static int visdn_call(
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
 	cdpn->type_of_number =
-		visdn_dialplan_to_cdpn(intf->dialplan);
+		visdn_type_of_number_to_cdpn(intf->type_of_number);
 	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
 	q931_ies_add_put(&ies, &cdpn->ie);
 
-	// FIXME TODO Make this configurable to allow overlap receiving (PBXs)
-	if (q931_call->intf->role == LAPD_ROLE_NT) {
+	if (intf->role == LAPD_ROLE_NT &&
+	    !intf->overlap_receiving) {
 		struct q931_ie_sending_complete *sc =
 			q931_ie_sending_complete_alloc();
 
@@ -900,7 +913,7 @@ static int visdn_call(
 				q931_ie_calling_party_number_alloc();
 
 			cgpn->type_of_number =
-				visdn_dialplan_to_cgpn(intf->local_dialplan);
+				visdn_type_of_number_to_cgpn(intf->local_type_of_number);
 			cgpn->numbering_plan_identificator =
 				Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
 			cgpn->presentation_indicator =
@@ -1222,7 +1235,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
-	cdpn->type_of_number = visdn_dialplan_to_cdpn(intf->dialplan);
+	cdpn->type_of_number = visdn_type_of_number_to_cdpn(intf->type_of_number);
 	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 	cdpn->number[0] = digit;
 	cdpn->number[1] = '\0';
@@ -2277,7 +2290,8 @@ static void visdn_q931_setup_indication(
 	else
 		ast_set_callerid(ast_chan, intf->default_caller_id, 0);
 
-	if (visdn_chan->sending_complete) {
+	if (!intf->overlap_sending ||
+	    visdn_chan->sending_complete) {
 		if (ast_exists_extension(NULL, intf->context,
 				visdn_chan->called_number, 1,
 				visdn_chan->calling_number)) {
@@ -2312,8 +2326,8 @@ static void visdn_q931_setup_indication(
 			}
 		} else {
 			ast_log(LOG_NOTICE,
-				"No extension %s in context '%s',"
-				" ignoring call\n",
+				"No extension '%s' in context '%s',"
+				" rejecting call\n",
 				visdn_chan->called_number,
 				intf->context);
 

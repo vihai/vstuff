@@ -31,48 +31,6 @@
 [01:23] <fsck> si è quello
 [01:23] <fsck> le chiamate fax non vogliono l'ec
 [01:24] <fsck> io metterei un flag
-[01:24] <fsck> uhm.. accettare o meno l'overlap?
-[01:25] <vihai> L'ho visto in zapata.conf
-[01:25] <vihai> Come dovrei comportarmi se qualcuno mi manda un setup senza sending complete?
-[01:26] <fsck> se overlap=no procedi
-[01:26] <fsck> se overlap=yes inizi con lo switch
-[01:27] <fsck> come zaptel? :)
-[01:27] <vihai> In che casi serve?
-[01:27] <vihai> Non l'ho mai provato con zaptel
-[01:29] <fsck> se qualcuno sta digitando in overlap e matcha  il prefisso, parte il simple switch e se non arrivano altre cifre deve scadere il digittimeout prima che il canale venga risposto
-[01:30] <fsck> ovvero, se qualcuno manda un setup senza seding complete, zaptel rispode se overlap=no, altrimenti inizia il simple switch
-[01:32] <vihai> Io non ho un simpleswitch, almeno per ora
-[01:32] <vihai> devo studiarmi la faccenda con calma
-[01:33] <fsck> yup
-[01:34] <vihai> La questione del dialplan, invece...
-[01:34] <fsck> oooh install fatto!
-[01:35] <vihai> Bene :)
-[01:35] <vihai> Ho due dialplan, uno da mettere nel called party number, uno nel calling party number, che in zaptel sono dialplan e localdialplan
-[01:36] <vihai> Non ho ancora capito quale dovrebbe essere il modo giusto di configurarli... se non "provo e vedo quale va"...
-[01:37] <vihai> ...però mi par di ricordare che telecom non usi la stessa config ovunque...
-[01:44] <fsck> infatti
-[01:45] <fsck> da me se non metto unknown nel localdialplan la centrale mi fa l'override del numero
-[01:46] <fsck> a vaprio con national va bene
-[01:47] <vihai> Li chiamo dialplan e localdialplan?
-[01:48] <fsck> boh? :)
-[01:49] <fsck> li ho chiamati io cosi la pima volta :)
-[01:49] <vihai> Facciamo dialplan e cid_dialplan ?
-[01:49] <fsck> uhm,  non mi pare abbia senso
-[01:50] <fsck> localdialplan è sempre il dialplan del TUO lato, il cid invece dipende dal verso della chiamata
-[01:50] <vihai> Ok
-[02:09] <vihai> Come sta andando?
-[02:10] <fsck> ora va finisco l'upgrade e vado a zzz
-[02:11] <vihai> Riusciamo domani a provare visdn? :)
-[02:12] <fsck> spero
-[02:13] <fsck> se non mi avesse strarotto il cazszo sperandio oggi...
-[02:13] <vihai> Pure oggi?
-[02:13] <vihai> ...ma non va in vacanza?
-[02:17] <fsck> no lui si diverte cosi
-[02:23] <fsck> vado ciau!
-[02:23] <vihai> Ciao!
-[02:23] <vihai> Notte!
-[02:23] <vihai> A domani!
-
 
 
 
@@ -157,10 +115,14 @@ lapd/netdev
 - The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
   - A specific flag would be better.
 
+- Implement E-channel sniffing
+
 hfc-4s
 
 - We may be able to avoid interrupt disabling in hfc-4s by removing every
   hardware access from the interrupt handler and serializing accesses to
   hardware with semaphores.
+
+- Implement E-channel sniffing
 
 
