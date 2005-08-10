@@ -19,13 +19,13 @@ enum q931_ie_calling_party_number_type_of_number
 
 enum q931_ie_calling_party_number_numbering_plan_identificator
 {
-	Q931_IE_CGPN_NP_UNKNOWN			= 0x0,
-	Q931_IE_CGPN_NP_ISDN_TELEPHONY		= 0x1,
-	Q931_IE_CGPN_NP_DATA			= 0x3,
-	Q931_IE_CGPN_NP_TELEX			= 0x4,
-	Q931_IE_CGPN_NP_NATIONAL_STANDARD	= 0x8,
-	Q931_IE_CGPN_NP_PRIVATE			= 0x9,
-	Q931_IE_CGPN_NP_RESERVED_FOR_EXT	= 0xf
+	Q931_IE_CGPN_NPI_UNKNOWN		= 0x0,
+	Q931_IE_CGPN_NPI_ISDN_TELEPHONY		= 0x1,
+	Q931_IE_CGPN_NPI_DATA			= 0x3,
+	Q931_IE_CGPN_NPI_TELEX			= 0x4,
+	Q931_IE_CGPN_NPI_NATIONAL_STANDARD	= 0x8,
+	Q931_IE_CGPN_NPI_PRIVATE		= 0x9,
+	Q931_IE_CGPN_NPI_RESERVED_FOR_EXT	= 0xf
 };
 
 enum q931_ie_calling_party_number_presentation_indicator

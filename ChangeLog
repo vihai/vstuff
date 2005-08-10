@@ -2,6 +2,25 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-10 12:01:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-53
+
+    Summary:
+      Added support for interface configuration in visdn.conf
+    Revision:
+      isdn--devel--0.1--patch-53
+
+    
+    
+
+    new files:
+     etc/.arch-ids/ethereal_coloring_rules.id
+     etc/ethereal_coloring_rules
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c etc/asterisk/visdn.conf
+     libq931/src/ie_cgpn.h libq931/src/intf.h
+
+
 2005-08-09 21:51:05 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-52
 
     Summary:

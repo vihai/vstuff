@@ -1,4 +1,85 @@
 
+
+[00:17] <vihai> Sto implementando un po' di roba in visdn.conf
+[00:18] <vihai> Tra le caratteristiche di ciascun interfaccia metterei:
+[00:18] <vihai> - Contesto inbound
+[00:18] <vihai> - Default Caller ID
+[00:18] <vihai> - Dialplan (in e out?)
+[00:19] <vihai> - Ruolo (User, Private, Network, Transit, International)
+[00:20] <vihai> - Generazione dei toni?
+[00:23] <vihai> - Caller ID forzato?
+[00:24] <vihai> Altro?
+[00:52] <vihai> Sei scomparso?
+[01:15] <fsck> no stavo ravanando
+[01:15] <fsck> yast sbaglia anche i moduli da includere nell'initrd
+[01:15] <vihai> Perché?
+[01:16] <fsck> non mette scsi-mod e sd-mod e gli hcd
+[01:17] <vihai> Che dici dei parametri di configurazione?
+[01:18] <fsck> uhm l'ecocancel?
+[01:19] <vihai> E' da configurare per ogni interfaccia? In che casi non va messo?
+[01:20] <fsck> quando quell'interfaccia non è al margine di una rete tutta digitale è inutile
+[01:20] <fsck> la segnalazione
+[01:20] <fsck> o meglio la "variante" della segnalazione
+[01:21] <vihai> Non faccio prima a vedere se il canale connesso è digiale o meno e abilitare l'echo cancel dinamicamente?
+[01:21] <fsck> come fai a sapere se il canale a valle è digitale o meno?
+[01:21] <fsck> e soprattutto se lui fa l'ecocancel
+[01:22] <vihai> C'è un flag in *, devo vedere se è fatto apposta
+[01:23] <fsck> quello della digital quality?
+[01:23] <fsck> se è quello è per settare l'ec PER CALL
+[01:23] <vihai> Comunqu posso fare un (yes, no, auto) 
+[01:23] <vihai> AST_FLAG_DIGITAL
+[01:23] <fsck> si è quello
+[01:23] <fsck> le chiamate fax non vogliono l'ec
+[01:24] <fsck> io metterei un flag
+[01:24] <fsck> uhm.. accettare o meno l'overlap?
+[01:25] <vihai> L'ho visto in zapata.conf
+[01:25] <vihai> Come dovrei comportarmi se qualcuno mi manda un setup senza sending complete?
+[01:26] <fsck> se overlap=no procedi
+[01:26] <fsck> se overlap=yes inizi con lo switch
+[01:27] <fsck> come zaptel? :)
+[01:27] <vihai> In che casi serve?
+[01:27] <vihai> Non l'ho mai provato con zaptel
+[01:29] <fsck> se qualcuno sta digitando in overlap e matcha  il prefisso, parte il simple switch e se non arrivano altre cifre deve scadere il digittimeout prima che il canale venga risposto
+[01:30] <fsck> ovvero, se qualcuno manda un setup senza seding complete, zaptel rispode se overlap=no, altrimenti inizia il simple switch
+[01:32] <vihai> Io non ho un simpleswitch, almeno per ora
+[01:32] <vihai> devo studiarmi la faccenda con calma
+[01:33] <fsck> yup
+[01:34] <vihai> La questione del dialplan, invece...
+[01:34] <fsck> oooh install fatto!
+[01:35] <vihai> Bene :)
+[01:35] <vihai> Ho due dialplan, uno da mettere nel called party number, uno nel calling party number, che in zaptel sono dialplan e localdialplan
+[01:36] <vihai> Non ho ancora capito quale dovrebbe essere il modo giusto di configurarli... se non "provo e vedo quale va"...
+[01:37] <vihai> ...però mi par di ricordare che telecom non usi la stessa config ovunque...
+[01:44] <fsck> infatti
+[01:45] <fsck> da me se non metto unknown nel localdialplan la centrale mi fa l'override del numero
+[01:46] <fsck> a vaprio con national va bene
+[01:47] <vihai> Li chiamo dialplan e localdialplan?
+[01:48] <fsck> boh? :)
+[01:49] <fsck> li ho chiamati io cosi la pima volta :)
+[01:49] <vihai> Facciamo dialplan e cid_dialplan ?
+[01:49] <fsck> uhm,  non mi pare abbia senso
+[01:50] <fsck> localdialplan è sempre il dialplan del TUO lato, il cid invece dipende dal verso della chiamata
+[01:50] <vihai> Ok
+[02:09] <vihai> Come sta andando?
+[02:10] <fsck> ora va finisco l'upgrade e vado a zzz
+[02:11] <vihai> Riusciamo domani a provare visdn? :)
+[02:12] <fsck> spero
+[02:13] <fsck> se non mi avesse strarotto il cazszo sperandio oggi...
+[02:13] <vihai> Pure oggi?
+[02:13] <vihai> ...ma non va in vacanza?
+[02:17] <fsck> no lui si diverte cosi
+[02:23] <fsck> vado ciau!
+[02:23] <vihai> Ciao!
+[02:23] <vihai> Notte!
+[02:23] <vihai> A domani!
+
+
+
+
+
+
+
+
 General:
 
 - Fix all copyright notices and file headers

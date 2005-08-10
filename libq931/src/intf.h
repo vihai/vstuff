@@ -41,6 +41,7 @@ struct q931_interface
 {
 	struct list_head node;
 
+	void *pvt;
 	struct q931_lib *lib;
 
 	char *name;
