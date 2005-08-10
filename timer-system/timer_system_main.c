@@ -20,7 +20,7 @@
 
 #include <visdn.h>
 
-#include "timer.h"
+#include "timer_system.h"
 
 static wait_queue_head_t timerwait;
 static struct timer_list timer;

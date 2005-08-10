@@ -2,6 +2,47 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-10 23:22:58 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-56
+
+    Summary:
+      Renamed timer to timer-system
+    Revision:
+      isdn--devel--0.1--patch-56
+
+    
+    
+
+    modified files:
+     ChangeLog Makefile.am chan_visdn/Makefile
+     timer-system/Makefile timer-system/timer_system_main.c
+
+    renamed files:
+     timer/.arch-ids/.arch-inventory.id
+       ==> timer-system/.arch-ids/.arch-inventory.id
+     timer/.arch-ids/=id
+       ==> timer-system/.arch-ids/=id
+     timer/.arch-ids/Makefile.id
+       ==> timer-system/.arch-ids/Makefile.id
+     timer/.arch-ids/timer.h.id
+       ==> timer-system/.arch-ids/timer_system.h.id
+     timer/.arch-ids/timer_main.c.id
+       ==> timer-system/.arch-ids/timer_system_main.c.id
+     timer/timer.h
+       ==> timer-system/timer_system.h
+     timer/timer_main.c
+       ==> timer-system/timer_system_main.c
+
+    new directories:
+     timer-system/.arch-ids
+
+    removed directories:
+     timer/.arch-ids
+
+    renamed directories:
+     timer
+       ==> timer-system
+
+
 2005-08-10 22:05:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-55
 
     Summary:

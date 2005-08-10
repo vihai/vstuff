@@ -6,8 +6,8 @@ endif
 
 EXTRA_CFLAGS = -I $(src)/../visdn-core/
 
-obj-m	:= visdn-timer.o
-visdn-timer-y	:= timer_main.o
+obj-m	:= visdn-timer-system.o
+visdn-timer-system-y	:= timer_system_main.o
 
 all:
 	$(MAKE) -C $(KSOURCE) modules SUBDIRS=`pwd`

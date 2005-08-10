@@ -18,7 +18,7 @@ CFLAGS+=$(shell if uname -m | grep -q ppc; then echo "-fsigned-char"; fi)
 
 
 
-LIBS=-L../libq931/src -lq931 -lefence
+LIBS=-L../libq931/src -lq931
 CC=gcc
 INSTALL=install
 
