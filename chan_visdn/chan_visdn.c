@@ -1348,13 +1348,11 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 
 	int r = read(visdn_chan->channel_fd, buf, 160);
 
-/*
 struct timeval tv;
 gettimeofday(&tv, NULL);
 unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 
 printf("R %.3f %d %d\n", t/1000000.0, visdn_chan->channel_fd, r);
-*/
 
 	f.frametype = AST_FRAME_VOICE;
 	f.subclass = AST_FORMAT_ALAW;
@@ -1397,7 +1395,6 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 		return 0;
 	}
 
-/*
 printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
 	*(__u8 *)(frame->data + 0),
 	*(__u8 *)(frame->data + 1),
@@ -1408,7 +1405,6 @@ printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
 	*(__u8 *)(frame->data + 6),
 	*(__u8 *)(frame->data + 7),
 	frame->datalen);
-*/
 
 	write(visdn_chan->channel_fd, frame->data, frame->datalen);
 
@@ -2042,21 +2038,17 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 				q931_disconnect_request(q931_call, &ies);
 				ast_mutex_unlock(&q931_lock);
 			}
+
+			if (!ast_matchmore_extension(NULL, intf->context,
+					visdn_chan->called_number, 1,
+					visdn_chan->calling_number)) {
+
+				ast_mutex_lock(&q931_lock);
+				q931_proceeding_request(q931_call, NULL);
+				ast_mutex_unlock(&q931_lock);
+			}
 		}
-
-/*		if (!ast_matchmore_extension(NULL, intf->context,
-				visdn_chan->called_number, 1,
-				visdn_chan->calling_number)) {
-
-			ast_mutex_lock(&q931_lock);
-			q931_proceeding_request(q931_call);
-			ast_mutex_unlock(&q931_lock);
-
-			ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
-		}
-*/
 	}
-
 }
 
 static void visdn_q931_more_info_indication(
@@ -2124,8 +2116,10 @@ static void visdn_q931_release_confirm(
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
-	if (ast_chan)
-		ast_hangup(ast_chan);
+	if (!ast_chan)
+		return;
+
+	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 }
 
 static void visdn_q931_release_indication(
@@ -2394,11 +2388,16 @@ static void visdn_q931_setup_indication(
 				q931_reject_request(q931_call, &ies);
 				ast_mutex_unlock(&q931_lock);
 			} else {
-				ast_mutex_lock(&q931_lock);
-				q931_proceeding_request(q931_call, NULL);
-				ast_mutex_unlock(&q931_lock);
-
 				ast_setstate(ast_chan, AST_STATE_RING);
+
+				if (!ast_matchmore_extension(NULL, intf->context,
+						visdn_chan->called_number, 1,
+						visdn_chan->calling_number)) {
+
+					ast_mutex_lock(&q931_lock);
+					q931_proceeding_request(q931_call, NULL);
+					ast_mutex_unlock(&q931_lock);
+				}
 			}
 		} else {
 			ast_mutex_lock(&q931_lock);

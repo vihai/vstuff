@@ -17,7 +17,7 @@ static ssize_t hfc_show_fifo_state(
 
 	int len = 0;
 
-	len = snprintf(buf + len, PAGE_SIZE - len,
+	len += snprintf(buf + len, PAGE_SIZE - len,
 		"       Receive                Transmit\n"
 		"Fifo#  F1 F2   Z1   Z2 Used   F1 F2   Z1   Z2 Used Connected\n");
 	int i;
@@ -25,7 +25,7 @@ static ssize_t hfc_show_fifo_state(
 		struct hfc_fifo *fifo_rx = &card->fifos[i][RX];
 		struct hfc_fifo *fifo_tx = &card->fifos[i][TX];
 
-		len = snprintf(buf + len, PAGE_SIZE - len,
+		len += snprintf(buf + len, PAGE_SIZE - len,
 			"%2d     %02x %02x %04x %04x %4d   %02x %02x %04x %04x %4d",
 			i,
 			*fifo_rx->f1,
