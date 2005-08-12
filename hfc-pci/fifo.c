@@ -78,14 +78,14 @@ int hfc_fifo_mem_read_user(
 	void __user *buf,
 	int size)
 {
-	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
+	int octets_to_boundary = fifo->z_max - *Z2_F2(fifo) + 1;
 	if (octets_to_boundary >= size) {
-		if (copy_to_user(buf, fifo->z_base + *Z1_F1(fifo), size))
+		if (copy_to_user(buf, fifo->z_base + *Z2_F2(fifo), size))
 			return -EFAULT;
 	} else {
 		// FIFO wrap
 
-		if (copy_to_user(buf, fifo->z_base + *Z1_F1(fifo), octets_to_boundary))
+		if (copy_to_user(buf, fifo->z_base + *Z2_F2(fifo), octets_to_boundary))
 			return -EFAULT;
 
 		if (copy_to_user(buf + octets_to_boundary,

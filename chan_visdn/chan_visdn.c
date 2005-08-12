@@ -1337,7 +1337,7 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 	static struct ast_frame f;
-	static char buf[160];
+	static char buf[512];
 
 	if (visdn_chan->channel_fd < 0) {
 		f.frametype = AST_FRAME_NULL;
@@ -1354,7 +1354,7 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return &f;
 	}
 
-	int r = read(visdn_chan->channel_fd, buf, 160);
+	int r = read(visdn_chan->channel_fd, buf, 512);
 
 /*struct timeval tv;
 gettimeofday(&tv, NULL);
