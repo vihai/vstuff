@@ -1348,11 +1348,10 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 
 	int r = read(visdn_chan->channel_fd, buf, 160);
 
-struct timeval tv;
+/*struct timeval tv;
 gettimeofday(&tv, NULL);
 unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-
-printf("R %.3f %d %d\n", t/1000000.0, visdn_chan->channel_fd, r);
+printf("R %.3f %d %d\n", t/1000000.0, visdn_chan->channel_fd, r);*/
 
 	f.frametype = AST_FRAME_VOICE;
 	f.subclass = AST_FORMAT_ALAW;
@@ -1395,7 +1394,7 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 		return 0;
 	}
 
-printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
+/*printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
 	*(__u8 *)(frame->data + 0),
 	*(__u8 *)(frame->data + 1),
 	*(__u8 *)(frame->data + 2),
@@ -1404,7 +1403,7 @@ printf("W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
 	*(__u8 *)(frame->data + 5),
 	*(__u8 *)(frame->data + 6),
 	*(__u8 *)(frame->data + 7),
-	frame->datalen);
+	frame->datalen);*/
 
 	write(visdn_chan->channel_fd, frame->data, frame->datalen);
 
