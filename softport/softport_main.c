@@ -284,7 +284,7 @@ err_copy_from_user:
 	return err;
 }
 
-ssize_t sb_cdev_ioctl(
+int sb_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
@@ -308,10 +308,6 @@ struct file_operations sb_fops =
 	.open		= sb_cdev_open,
 	.release	= sb_cdev_release,
 	.llseek		= no_llseek,
-};
-
-static struct class_device_attribute *sb_class_attributes[] = {
-	NULL
 };
 
 #define to_chan(class) container_of(class, struct sb_chan, class_dev)
@@ -345,51 +341,6 @@ struct visdn_port_ops sb_port_ops = {
 	.set_role	= NULL,
 };
 
-static int __devinit sb_probe(struct device *dev)
-{
-	printk(KERN_INFO "######## sb_probe\n");
-
-	return 0;
-}
-
-static int __devexit sb_remove(struct device *dev)
-{
-	int i;
-
-	printk(KERN_INFO "######## sb_remove\n");
-
-	for (i=0; i<256; i++) {
-	}
-
-	return 0;
-}
-
-/*static void sb_device_release(struct device *device)
-{
-	printk(KERN_DEBUG sb_DRIVER_PREFIX "sb_device_release called\n");
-}
-
-static struct device_driver sb_driver = {
-	.name           = sb_DRIVER_NAME,
-	.bus            = NULL,
-	.probe          = sb_probe,
-	.remove         = sb_remove,
-	.suspend        = NULL,
-	.resume         = NULL,
-};
-
-static struct bus_type sb_bus =
-{
-	.name		= "softport",
-};
-
-static struct device sb_device =
-{
-	.bus_id		= "softport",
-	.release	= sb_device_release,
-	.bus		= &sb_bus,
-};*/
-
 static int __init sb_init_module(void)
 {
 	int err;
@@ -400,20 +351,6 @@ static int __init sb_init_module(void)
 	for (i=0; i< ARRAY_SIZE(sb_chan_index_hash); i++) {
 		INIT_HLIST_HEAD(&sb_chan_index_hash[i]);
 	}
-
-/*	err = bus_register(&sb_bus);
-	if (err < 0)
-		goto err_bus_register;
-
-	
-	err = driver_register(&sb_driver);
-	if (err < 0)
-		goto err_driver_register;
-
-	err = device_register(&sb_device);
-	if (err < 0)
-		goto err_device_register;
-*/
 
 	err = class_register(&sb_class);
 	if (err < 0)
@@ -457,12 +394,6 @@ err_cdev_add:
 err_register_chrdev:
 	class_unregister(&sb_class);
 err_class_register:
-//	device_unregister(&sb_device);
-//err_device_register:
-//	driver_unregister(&sb_driver);
-//err_driver_register:
-//	bus_unregister(&sb_bus);
-//err_bus_register:
 
 	return err;
 }
@@ -476,9 +407,6 @@ static void __exit sb_module_exit(void)
 	cdev_del(&sb_cdev);
 	unregister_chrdev_region(sb_first_dev, 1);
 	class_unregister(&sb_class);
-//	device_unregister(&sb_device);
-//	driver_unregister(&sb_driver);
-//	bus_unregister(&sb_bus);
 
 	printk(KERN_INFO sb_DRIVER_DESCR " unloaded\n");
 }

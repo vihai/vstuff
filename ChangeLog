@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-12 10:44:48 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-58
+
+    Summary:
+      Voice fix for hfc-pci
+    Revision:
+      isdn--devel--0.1--patch-58
+
+    
+    
+
+    modified files:
+     ChangeLog hfc-pci/fifo.c softport/softport_main.c
+
+
 2005-08-12 10:09:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-57
 
     Summary:
