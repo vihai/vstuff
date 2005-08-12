@@ -119,6 +119,8 @@ struct visdn_interface
 {
 	char name[IFNAMSIZ];
 
+	int configured;
+
 	enum q931_interface_network_role network_role;
 	enum visdn_type_of_number type_of_number;
 	enum visdn_type_of_number local_type_of_number;
@@ -392,6 +394,11 @@ static void visdn_reload_config(void)
 		var = var->next;
 	}
 
+	int i;
+	for (i=0; i<visdn.nifs; i++) {
+		visdn.ifs[i].configured = FALSE;
+	}
+
 	const char *cat;
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
@@ -401,7 +408,6 @@ static void visdn_reload_config(void)
 
 		struct visdn_interface *intf = NULL;
 
-		int i;
 		for (i=0; i<visdn.nifs; i++) {
 			if (!strcasecmp(visdn.ifs[i].name, cat)) {
 				intf = &visdn.ifs[i];
@@ -422,6 +428,8 @@ static void visdn_reload_config(void)
 			strncpy(intf->name, cat, sizeof(intf->name));
 			visdn_copy_interface_config(intf, &visdn.default_intf);
 		}
+
+		intf->configured = TRUE;
 
 		var = ast_variable_browse(cfg, (char *)cat);
 		while (var) {
@@ -1778,6 +1786,10 @@ static int visdn_q931_thread_do_poll()
 					active_calls_cnt++;
 			}
 		}
+
+		ast_log(LOG_WARNING,
+			"There are still %d active calls, waiting...\n",
+			active_calls_cnt);
 	}
 
 	return (!visdn.have_to_exit || active_calls_cnt > 0);

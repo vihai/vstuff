@@ -127,9 +127,12 @@ struct q931_interface *q931_open_interface(
 		intf->T309 =  90 * 1000000LL;
 		intf->T310 =  35 * 1000000LL;
 		intf->T312 = intf->T303 + 2 * 1000000LL;
+		intf->T313 =   4 * 1000000LL;
 		intf->T314 =   4 * 1000000LL;
 		intf->T316 = 120 * 1000000LL;
 		intf->T317 =  60 * 1000000LL;
+		intf->T318 =   4 * 1000000LL;
+		intf->T319 =   4 * 1000000LL;
 		intf->T320 =  30 * 1000000LL;
 		intf->T321 =  30 * 1000000LL;
 		intf->T322 =   4 * 1000000LL;
