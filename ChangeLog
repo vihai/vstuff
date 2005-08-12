@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-12 13:43:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-61
+
+    Summary:
+      Oops... timers problem was not fixed in the right way
+    Revision:
+      isdn--devel--0.1--patch-61
+
+    
+    
+
+    modified files:
+     ChangeLog libq931/src/intf.c
+
+
 2005-08-12 13:31:45 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-60
 
     Summary:
