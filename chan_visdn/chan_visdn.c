@@ -1254,7 +1254,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	q931_info_request(q931_call, &ies);
 	ast_mutex_unlock(&q931_lock);
 
-	return 0;
+	return 1;
 }
 
 static int visdn_sendtext(struct ast_channel *ast, char *text)
@@ -2407,6 +2407,10 @@ static void visdn_q931_setup_indication(
 
 					ast_mutex_lock(&q931_lock);
 					q931_proceeding_request(q931_call, NULL);
+					ast_mutex_unlock(&q931_lock);
+				} else {
+					ast_mutex_lock(&q931_lock);
+					q931_more_info_request(q931_call, NULL);
 					ast_mutex_unlock(&q931_lock);
 				}
 			}

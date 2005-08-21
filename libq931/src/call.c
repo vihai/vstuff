@@ -1319,7 +1319,7 @@ void q931_more_info_request(
 			 q931_channel_select_setup(call, &call->setup_ies,
 				&ies, NULL);
 
-		assert(chan); // Is there a race condition? FIXME TODO BUG
+		assert(chan); // May there be a race condition? FIXME TODO BUG
 
 		call->channel = chan;
 		chan->call = call;
@@ -3974,6 +3974,18 @@ inline static void q931_handle_setup(
 	assert(call);
 	assert(msg);
 
+	int i;
+	for (i=0; i<msg->ies.count; i++) {
+		if (msg->ies.ies[i]->type->id == Q931_IE_CALLED_PARTY_NUMBER) {
+			struct q931_ie_called_party_number *cdpn;
+			cdpn = container_of(msg->ies.ies[i],
+				struct q931_ie_called_party_number, ie);
+
+			if (strlen(cdpn->number))
+				call->digits_dialled = TRUE;
+		}
+	}
+
 	switch (call->state) {
 	case N0_NULL_STATE: {
 		struct q931_ies ies = Q931_IES_INIT;
@@ -5055,6 +5067,18 @@ inline static void q931_handle_info(
 {
 	assert(call);
 	assert(msg);
+
+	int i;
+	for (i=0; i<msg->ies.count; i++) {
+		if (msg->ies.ies[i]->type->id == Q931_IE_CALLED_PARTY_NUMBER) {
+			struct q931_ie_called_party_number *cdpn;
+			cdpn = container_of(msg->ies.ies[i],
+				struct q931_ie_called_party_number, ie);
+
+			if (strlen(cdpn->number))
+				call->digits_dialled = TRUE;
+		}
+	}
 
 	switch (call->state) {
 	case N2_OVERLAP_SENDING:
