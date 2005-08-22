@@ -1,5 +1,4 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 #include <linux/init.h>
 #include <linux/config.h>
 #include <linux/delay.h>
@@ -19,8 +18,6 @@
 void hfc_chan_disable(struct hfc_chan_duplex *chan)
 {
 	struct hfc_card *card = chan->port->card;
-
-	WARN_ON(!irqs_disabled() && !in_irq());
 
 	hfc_st_port_select(chan->port);
 
@@ -92,9 +89,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_card *card = chan->port->card;
 
 	int err;
-	unsigned long flags;
 
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	if (chan->status != HFC_STATUS_FREE) {
 		err = -EBUSY;
@@ -194,7 +191,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_chan_enable(chan);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");
 
@@ -208,7 +205,7 @@ err_allocate_fifo_rx:
 err_invalid_framing:
 err_channel_busy:
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return err;
 }
@@ -218,8 +215,8 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	chan->status = HFC_STATUS_FREE;
 
@@ -251,20 +248,22 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 
 	hfc_upload_fsm(card);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel closed.\n");
 
 	return 0;
 }
 
-static int hfc_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *skb)
+static int hfc_chan_frame_xmit(
+	struct visdn_chan *visdn_chan,
+	struct sk_buff *skb)
 {
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	
 	hfc_st_port_select(chan->port);
 	hfc_st_port_check_l1_up(chan->port);
@@ -291,7 +290,7 @@ static int hfc_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *sk
 
 	hfc_fifo_put_frame(chan->tx.fifo, skb->data, skb->len);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	visdn_kfree_skb(skb);
 
@@ -300,7 +299,7 @@ static int hfc_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *sk
 err_no_free_tx:
 err_no_free_frames:
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return 0;
 }
@@ -389,8 +388,6 @@ static ssize_t hfc_chan_samples_read(
 
 	int err;
 
-	unsigned long flags;
-
 	// Avoid user specifying too big transfers
 	if (count > 65536)
 		count = 65536;
@@ -402,7 +399,8 @@ static ssize_t hfc_chan_samples_read(
 		goto err_kmalloc;
 	}
 
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	hfc_fifo_select(chan->rx.fifo);
 	hfc_fifo_refresh_fz_cache(chan->rx.fifo);
@@ -416,7 +414,7 @@ static ssize_t hfc_chan_samples_read(
 	// Cannot read directly to user due to put_user sleeping
 	hfc_fifo_mem_read(chan->rx.fifo, buf2, copied_octets);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	err = copy_to_user(buf, buf2, copied_octets);
 	if (err < 0)
@@ -456,8 +454,8 @@ static ssize_t hfc_chan_samples_write(
 	if (err < 0)
 		goto err_copy_to_user;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	hfc_fifo_select(chan->tx.fifo);
 	hfc_fifo_refresh_fz_cache(chan->tx.fifo);
@@ -468,7 +466,7 @@ static ssize_t hfc_chan_samples_write(
 
 	hfc_fifo_put(chan->rx.fifo, buf2, copied_octets);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return copied_octets;
 
@@ -557,8 +555,8 @@ static int hfc_bridge(
 	struct hfc_card *card = chan->port->card;
 	int err;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	struct hfc_fifo *fifo_1_rx = hfc_allocate_fifo(card, RX);
 	if (!fifo_1_rx) {
@@ -717,7 +715,7 @@ static int hfc_bridge(
 	hfc_chan_enable(chan);
 	hfc_chan_enable(chan2);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 	
 	return VISDN_CONNECT_BRIDGED;
 
@@ -738,7 +736,7 @@ err_allocate_fifo_1_tx:
 	hfc_deallocate_fifo(fifo_1_rx);
 err_allocate_fifo_1_rx:
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return err;
 }

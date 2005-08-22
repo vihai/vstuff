@@ -45,12 +45,12 @@ static ssize_t hfc_store_master(
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	port->master = value;
 //	hfc_update_pcm_md0(card, 0);
 	// FIXME TODO
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -74,8 +74,8 @@ static ssize_t hfc_show_slots_state(
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"Slot    Chan\n");
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	int i;
 	for (i=0; i<port->num_slots; i++) {
@@ -110,7 +110,7 @@ static ssize_t hfc_show_slots_state(
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return len;
 

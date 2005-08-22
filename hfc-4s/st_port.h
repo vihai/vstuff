@@ -72,6 +72,8 @@ struct hfc_st_port
 		u8 st_ctrl_2;
 	} regs;
 
+	struct work_struct state_change_work;
+
 	struct visdn_port visdn_port;
 };
 
@@ -79,5 +81,6 @@ extern struct visdn_port_ops hfc_st_port_ops;
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port);
 void hfc_st_port__do_set_role(struct hfc_st_port *port, int nt_mode);
+void hfc_st_port_state_change_work(void *data);
 
 #endif

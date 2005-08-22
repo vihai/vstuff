@@ -14,8 +14,8 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 
 	int err;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	if (chan->status != HFC_STATUS_FREE) {
 		err = -EBUSY;
@@ -72,7 +72,7 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 
 	chan->status = HFC_STATUS_OPEN_BERT;
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	hfc_msg_chan(chan, KERN_INFO, "BERT enabled\n");
 
@@ -84,7 +84,7 @@ err_allocate_fifo_tx:
 err_allocate_fifo_rx:
 err_busy:
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return err;
 }
@@ -94,8 +94,8 @@ static int hfc_bert_disable(
 {
 	struct hfc_card *card = chan->port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	if (chan->status == HFC_STATUS_OPEN_BERT) {
 		hfc_chan_disable(chan);
@@ -105,7 +105,7 @@ static int hfc_bert_disable(
 		hfc_msg_chan(chan, KERN_INFO, "BERT disabled\n");
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return 0;
 }
@@ -163,15 +163,15 @@ static ssize_t hfc_show_sq_bits(
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	hfc_st_port_select(port);
 
 	// TODO sleep until complete frame read
 	int bits = hfc_A_ST_SQ_RD_V_ST_SQ_RD(hfc_inb(card, hfc_A_ST_SQ_RD));
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return snprintf(buf, PAGE_SIZE, "%01x\n", bits);
 
@@ -187,8 +187,6 @@ static ssize_t hfc_store_sq_bits(
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 	
-	unsigned long flags;
-
 	unsigned int value;
 	if (sscanf(buf, "%01x", &value) < 1)
 		return -EINVAL;
@@ -196,10 +194,11 @@ static ssize_t hfc_store_sq_bits(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_outb(card, hfc_A_ST_SQ_WR, value);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -236,8 +235,8 @@ static ssize_t hfc_store_sq_enabled(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	hfc_st_port_select(port);
 
@@ -249,7 +248,7 @@ static ssize_t hfc_store_sq_enabled(
 	hfc_outb(port->card, hfc_A_ST_CTRL0,
 		port->regs.st_ctrl_0);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }

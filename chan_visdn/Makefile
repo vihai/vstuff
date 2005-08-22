@@ -33,8 +33,8 @@ all: $(SHAREDOS)
 clean:
 	rm -f *.so *.o
 
-%.so : %.o ../libq931/src/libq931.a
-	$(CC) -shared -Xlinker -x -o $@ $< $(LIBS)
+chan_visdn.so : chan_visdn.o echo.o ../libq931/src/libq931.a
+	$(CC) -shared -Xlinker -x -o $@ chan_visdn.o echo.o $(LIBS)
 
 install: all
 	for x in $(SHAREDOS); do $(INSTALL) -m 755 $$x $(MODULES_DIR) ; done

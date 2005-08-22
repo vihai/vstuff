@@ -158,7 +158,7 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 
 void hfc_softreset(struct hfc_card *card)
 {
-	WARN_ON(!irqs_disabled() && !in_irq());
+	WARN_ON(atomic_read(&card->sem.count) > 0);
 
 	hfc_msg_card(card, KERN_INFO, "resetting\n");
 
@@ -272,6 +272,8 @@ void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits)
 
 void hfc_update_pcm_md1(struct hfc_card *card)
 {
+	WARN_ON(atomic_read(&card->sem.count) > 0);
+
 	u8 pcm_md1 = 0;
 	if (card->pcm_port.bitrate == 0) {
 		pcm_md1 |= hfc_R_PCM_MD1_V_PCM_DR_2MBIT;
@@ -308,7 +310,7 @@ void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
 
 void hfc_initialize_hw(struct hfc_card *card)
 {
-	WARN_ON(!irqs_disabled() && !in_irq());
+	WARN_ON(atomic_read(&card->sem.count) > 0);
 
 	card->output_level = 0x19;
 	card->clock_source = -1;
@@ -389,9 +391,6 @@ void hfc_deallocate_fifo(struct hfc_fifo *fifo)
  * Interrupt Handler
  ******************************************/
 
-static inline void hfc_handle_timer_interrupt(struct hfc_card *card);
-static inline void hfc_handle_state_interrupt(struct hfc_st_port *port);
-
 void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
 	if (fifo->connected_chan &&
@@ -402,7 +401,16 @@ void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 {
-	tasklet_schedule(&fifo->tasklet);
+	schedule_work(&fifo->work);
+}
+
+static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
+{
+}
+
+static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
+{
+	schedule_work(&port->state_change_work);
 }
 
 static inline void hfc_handle_fifo_block_interrupt(
@@ -428,6 +436,14 @@ static inline void hfc_handle_fifo_block_interrupt(
 	if (fifo_irq & (1 << 7))
 		hfc_handle_fifo_rx_interrupt(&card->fifos[block * 4 + 3][RX]);
 }
+
+/*
+ * Interrupt handling routine.
+ *
+ * NOTE: We must be careful to not change port/fifo/slot selection register,
+ *       otherwise we may race with code protected only by semaphores.
+ *
+ */
 
 static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -475,87 +491,6 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return IRQ_HANDLED;
 }
 
-static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
-{
-/*	if(card->ignore_first_timer_interrupt) {
-		card->ignore_first_timer_interrupt = FALSE;
-		return;
-	}*/
-
-/*	if ((port->nt_mode && card->l1_state == 3) ||
-		(!card->nt_mode && card->l1_state == 7)) {
-
-		card->regs.ctmt &= ~hfc_CTMT_TIMER_MASK;
-		hfc_outb(card, hfc_CTMT, card->regs.ctmt);
-
-		hfc_resume_fifo(card);
-	}*/
-}
-
-static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
-{
-	struct hfc_card *card = port->card;
-
-	hfc_st_port_select(port);
-
-	u8 new_state = hfc_A_ST_RD_STA_V_ST_STA(hfc_inb(card, hfc_A_ST_RD_STA));
-
-	hfc_debug_port(port, 1,
-		"layer 1 state = %c%d\n",
-		port->visdn_port.nt_mode?'G':'F',
-		new_state);
-
-	if (port->visdn_port.nt_mode) {
-		// NT mode
-
-		if (new_state == 2) {
-			// Allows transition from G2 to G3
-			hfc_outb(card, hfc_A_ST_WR_STA,
-				hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
-				hfc_A_ST_WR_STA_V_SET_G2_G3);
-		} else if (new_state == 3) {
-			// fix to G3 state (see specs) ? Why? TODO FIXME
-			hfc_outb(card, hfc_A_ST_WR_STA,
-				hfc_A_ST_WR_STA_V_ST_SET_STA(3)|
-				hfc_A_ST_WR_STA_V_ST_LD_STA);
-		}
-
-		if (new_state == 3 && port->l1_state != 3) {
-//			hfc_resume_fifo(card);
-		}
-
-		if (new_state != 3 && port->l1_state == 3) {
-//			hfc_suspend_fifo(card);
-		}
-	} else {
-		if (new_state == 3) {
-//			if (force_l1_up) {
-//				hfc_outb(card, hfc_STATES, hfc_STATES_DO_ACTION |
-//						hfc_STATES_ACTIVATE);
-//			}
-		}
-
-		if (new_state == 7 && port->l1_state != 7) {
-			// TE is now active, schedule FIFO activation after
-			// some time, otherwise the first frames are lost
-
-//			card->regs.ctmt |= hfc_CTMT_TIMER_50 | hfc_CTMT_TIMER_CLEAR;
-//			hfc_outb(card, hfc_CTMT, card->regs.ctmt);
-
-			// Activating the timer firest an interrupt immediately, we
-			// obviously need to ignore it
-		}
-
-		if (new_state != 7 && port->l1_state == 7) {
-			// TE has become inactive, disable FIFO
-//			hfc_suspend_fifo(card);
-		}
-	}
-
-	port->l1_state = new_state;
-}
-
-
 /*
 struct sb_setbearer
 {
@@ -589,7 +524,8 @@ static int __devinit hfc_probe(
 
 	memset(card, 0x00, sizeof(*card));
 
-	spin_lock_init(&card->lock);
+	init_MUTEX(&card->sem);
+
 	card->pcidev = pci_dev;
 	pci_set_drvdata(pci_dev, card);
 
@@ -672,6 +608,10 @@ static int __devinit hfc_probe(
 	for (i=0; i<card->num_st_ports; i++) {
 		card->st_ports[i].card = card;
 		card->st_ports[i].id = i;
+
+		INIT_WORK(&card->st_ports[i].state_change_work,
+			hfc_st_port_state_change_work,
+			&card->st_ports[i]);
 
 		visdn_port_init(&card->st_ports[i].visdn_port, &hfc_st_port_ops);
 		card->st_ports[i].visdn_port.priv = &card->st_ports[i];
@@ -798,12 +738,11 @@ static int __devinit hfc_probe(
 	visdn_port_init(&card->pcm_port.visdn_port, &hfc_pcm_port_ops);
 		card->st_ports[i].visdn_port.priv = &card->st_ports[i];
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	down(&card->sem);
 	hfc_initialize_hw_nonsoft(card);
 	hfc_softreset(card);
 	hfc_initialize_hw(card);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	// Ok, the hardware is ready and the data structures are initialized,
 	// we can now register to the system.
@@ -929,10 +868,9 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	visdn_port_unregister(&card->st_ports[0].visdn_port);
 
 	// softreset clears all pending interrupts
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock,flags);
+	down(&card->sem);
 	hfc_softreset(card);
-	spin_unlock_irqrestore(&card->lock,flags);
+	up(&card->sem);
 
 	// There should be no interrupt from here on
 

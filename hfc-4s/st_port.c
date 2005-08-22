@@ -1,9 +1,76 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "st_port.h"
 #include "st_port_inline.h"
 #include "card.h"
+
+void hfc_st_port_state_change_work(void *data)
+{
+	struct hfc_st_port *port = data;
+	struct hfc_card *card = port->card;
+
+	down(&card->sem);
+
+	hfc_st_port_select(port);
+
+	u8 new_state = hfc_A_ST_RD_STA_V_ST_STA(hfc_inb(card, hfc_A_ST_RD_STA));
+
+	hfc_debug_port(port, 1,
+		"layer 1 state = %c%d\n",
+		port->visdn_port.nt_mode?'G':'F',
+		new_state);
+
+	if (port->visdn_port.nt_mode) {
+		// NT mode
+
+		if (new_state == 2) {
+			// Allows transition from G2 to G3
+			hfc_outb(card, hfc_A_ST_WR_STA,
+				hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
+				hfc_A_ST_WR_STA_V_SET_G2_G3);
+		} else if (new_state == 3) {
+			// fix to G3 state (see specs) ? Why? TODO FIXME
+			hfc_outb(card, hfc_A_ST_WR_STA,
+				hfc_A_ST_WR_STA_V_ST_SET_STA(3)|
+				hfc_A_ST_WR_STA_V_ST_LD_STA);
+		}
+
+		if (new_state == 3 && port->l1_state != 3) {
+//			hfc_resume_fifo(card);
+		}
+
+		if (new_state != 3 && port->l1_state == 3) {
+//			hfc_suspend_fifo(card);
+		}
+	} else {
+		if (new_state == 3) {
+//			if (force_l1_up) {
+//				hfc_outb(card, hfc_STATES, hfc_STATES_DO_ACTION |
+//						hfc_STATES_ACTIVATE);
+//			}
+		}
+
+		if (new_state == 7 && port->l1_state != 7) {
+			// TE is now active, schedule FIFO activation after
+			// some time, otherwise the first frames are lost
+
+//			card->regs.ctmt |= hfc_CTMT_TIMER_50 | hfc_CTMT_TIMER_CLEAR;
+//			hfc_outb(card, hfc_CTMT, card->regs.ctmt);
+
+			// Activating the timer firest an interrupt immediately, we
+			// obviously need to ignore it
+		}
+
+		if (new_state != 7 && port->l1_state == 7) {
+			// TE has become inactive, disable FIFO
+//			hfc_suspend_fifo(card);
+		}
+	}
+
+	port->l1_state = new_state;
+
+	up(&card->sem);
+}
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port)
 {
@@ -25,7 +92,7 @@ void hfc_st_port_check_l1_up(struct hfc_st_port *port)
 
 void hfc_st_port__do_set_role(struct hfc_st_port *port, int nt_mode)
 {
-	WARN_ON(!irqs_disabled() && !in_irq());
+	WARN_ON(atomic_read(&port->card->sem.count) > 0);
 
 	if (nt_mode) {
 		port->regs.st_ctrl_0 =
@@ -62,13 +129,11 @@ static int hfc_st_port_set_role(
 {
 	struct hfc_st_port *port = visdn_port->priv;
 
-	unsigned long flags;
-	spin_lock_irqsave(&port->card->lock, flags);
-
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_st_port__do_set_role(port, nt_mode);
-
-	spin_unlock_irqrestore(&port->card->lock, flags);
+	up(&port->card->sem);
 
 	return 0;
 }
@@ -78,13 +143,11 @@ static int hfc_st_port_enable(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
-	unsigned long flags;
-	spin_lock_irqsave(&port->card->lock, flags);
-
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
-
-	spin_unlock_irqrestore(&port->card->lock, flags);
+	up(&port->card->sem);
 
 	hfc_debug_port(port, 2, "enabled\n");
 
@@ -96,15 +159,13 @@ static int hfc_st_port_disable(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
-	unsigned long flags;
-	spin_lock_irqsave(&port->card->lock, flags);
-
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
-
-	spin_unlock_irqrestore(&port->card->lock, flags);
+	up(&port->card->sem);
 
 	hfc_debug_port(port, 2, "disabled\n");
 

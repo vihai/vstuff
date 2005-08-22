@@ -8,7 +8,7 @@
 
 static inline void hfc_pcm_slot_select(struct hfc_card *card, u8 id)
 {
-	WARN_ON(!irqs_disabled() && !in_irq());
+	WARN_ON(atomic_read(&card->sem.count) > 0);
 
 	mb();
 	hfc_outb(card, hfc_R_SLOT, id);
@@ -18,7 +18,7 @@ static inline void hfc_pcm_slot_select(struct hfc_card *card, u8 id)
 
 static inline void hfc_pcm_multireg_select(struct hfc_card *card, u8 id)
 {
-	WARN_ON(!irqs_disabled() && !in_irq());
+	WARN_ON(atomic_read(&card->sem.count) > 0);
 
 	mb();
 	hfc_update_pcm_md0(card, id);

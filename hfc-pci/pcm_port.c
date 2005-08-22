@@ -49,11 +49,11 @@ static int hfc_pcm_port_enable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
+	struct hfc_card *card = port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&port->card->lock, flags);
-
-	spin_unlock_irqrestore(&port->card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
+	up(&card->sem);
 
 	hfc_debug_pcm_port(port, 2, "enabled\n");
 
@@ -64,11 +64,11 @@ static int hfc_pcm_port_disable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
+	struct hfc_card *card = port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&port->card->lock, flags);
-
-	spin_unlock_irqrestore(&port->card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
+	up(&card->sem);
 
 	hfc_debug_pcm_port(port, 2, "disabled\n");
 

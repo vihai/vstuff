@@ -71,8 +71,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_card *card = chan->port->card;
 
 	int err;
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	if (chan->status != HFC_STATUS_FREE) {
 		err = -EBUSY;
@@ -88,7 +89,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_invalid_framing;
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	// Noone else could muck with our channel, now
 
@@ -164,14 +165,14 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	chan->status = HFC_STATUS_FREE;
 
 	hfc_chan_disable(chan);
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel closed.\n");
 
@@ -183,7 +184,11 @@ static int hfc_chan_frame_xmit(
 	struct sk_buff *skb)
 {
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_card *card = chan->port->card;
+	struct hfc_card *card = chan->port->card;
+
+	// Should we lock?
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	hfc_st_port_check_l1_up(chan->port);
 
@@ -206,12 +211,16 @@ static int hfc_chan_frame_xmit(
 
 	hfc_fifo_put_frame(chan->tx.fifo, skb->data, skb->len);
 
+	up(&card->sem);
+
 	visdn_kfree_skb(skb);
 
 	return 0;
 
 err_no_free_tx:
 err_no_free_frames:
+
+	up(&card->sem);
 
 	return 0;
 }
@@ -302,8 +311,13 @@ static ssize_t hfc_chan_samples_read(
 	size_t count)
 {
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_card *card = chan->port->card;
 
 	int err;
+
+	// Should we lock?
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	int copied_octets = hfc_fifo_used_rx(chan->rx.fifo);
 	if (copied_octets > count)
@@ -317,6 +331,8 @@ static ssize_t hfc_chan_samples_read(
 					*Z2_F2(chan->rx.fifo),
 					copied_octets);
 
+	up(&card->sem);
+
 	return copied_octets;
 
 err_fifo_mem_read_user:
@@ -329,7 +345,12 @@ static ssize_t hfc_chan_samples_write(
 	const char __user *buf, size_t count)
 {
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_card *card = chan->port->card;
+
 	int err = 0;
+
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	int copied_octets = hfc_fifo_free_tx(chan->tx.fifo);
 	if (copied_octets > count)
@@ -343,9 +364,13 @@ static ssize_t hfc_chan_samples_write(
 					*Z1_F1(chan->tx.fifo),
 					count);
 
+	up(&card->sem);
+
 	return copied_octets;
 
 err_fifo_mem_write_user:
+
+	up(&card->sem);
 
 	return err;
 }

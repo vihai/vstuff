@@ -31,10 +31,11 @@ static ssize_t hfc_store_output_level(
 	if (value < 0 || value > 0xff)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	// Uhm... this should be safe without locks, indagate
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	hfc_outb(card, hfc_R_PWM1, value);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -66,11 +67,11 @@ static ssize_t hfc_store_bert_mode(
 	int mode;
 	sscanf(buf, "%d", &mode);
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	card->bert_mode = mode;
 	hfc_update_bert_wd_md(card, 0);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -96,10 +97,10 @@ static ssize_t hfc_store_bert_err(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 	
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	hfc_update_bert_wd_md(card, hfc_R_BERT_WD_MD_V_BERT_ERR);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -154,11 +155,11 @@ static ssize_t hfc_show_bert_cnt(
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
 	int cnt;
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	cnt = hfc_inb(card, hfc_R_BERT_ECL);
 	cnt += hfc_inb(card, hfc_R_BERT_ECH) << 8;
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", cnt);
 }
@@ -189,8 +190,6 @@ static ssize_t hfc_store_ramsize(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 	
-	unsigned long flags;
-
 	unsigned int value;
 	
 	if (sscanf(buf, "%u", &value) < 1)
@@ -202,7 +201,8 @@ static ssize_t hfc_store_ramsize(
 		return -EINVAL;
 
 	if (value != card->ramsize) {
-		spin_lock_irqsave(&card->lock, flags);
+		if (down_interruptible(&card->sem))
+			return -ERESTARTSYS;
 
 		card->regs.ctrl &= ~hfc_R_CTRL_V_EXT_RAM;
 		card->regs.ram_misc &= ~hfc_R_RAM_MISC_V_RAM_SZ_MASK;
@@ -228,7 +228,7 @@ static ssize_t hfc_store_ramsize(
 
 		card->ramsize = value;
 
-		spin_unlock_irqrestore(&card->lock, flags);
+		up(&card->sem);
 
 		hfc_debug_card(card, 1, "RAM size set to %d\n", value);
 	}
@@ -262,7 +262,8 @@ static ssize_t hfc_store_clock_source_config(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 	
-	unsigned long flags;
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 
 	if (count >= 4 && !strncmp(buf, "auto", 4)) {
 		card->clock_source = -1;
@@ -277,9 +278,8 @@ static ssize_t hfc_store_clock_source_config(
 		hfc_debug_card(card, 1, "Clock source set to %d\n", clock_source);
 	}
 
-	spin_lock_irqsave(&card->lock, flags);
 	hfc_update_st_sync(card);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -336,6 +336,9 @@ static ssize_t hfc_show_fifo_state(
 		"\n      Receive                 Transmit\n"
 		"FIFO#  F1 F2   Z1   Z2 Used   F1 F2   Z1   Z2 Used Connected\n");
 
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
+
 	int i;
 	for (i=0; i<card->num_fifos; i++) {
 //		if (!card->fifos[i][RX].used && !card->fifos[i][TX].used)
@@ -343,9 +346,6 @@ static ssize_t hfc_show_fifo_state(
 
 		struct hfc_fifo *fifo_rx = &card->fifos[i][RX];
 		struct hfc_fifo *fifo_tx = &card->fifos[i][TX];
-
-		unsigned long flags;
-		spin_lock_irqsave(&card->lock, flags);
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			"%2d   :", i);
@@ -388,9 +388,9 @@ static ssize_t hfc_show_fifo_state(
 		}
 
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
-
-		spin_unlock_irqrestore(&card->lock, flags);
 	}
+
+	up(&card->sem);
 
 	return len;
 }

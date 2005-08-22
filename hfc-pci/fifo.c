@@ -316,9 +316,9 @@ void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
 	hfc_outb(card, hfc_CIRM, card->regs.cirm);
 }
 
-void hfc_fifo_rx_tasklet(unsigned long data)
+void hfc_fifo_rx_work(void *data)
 {
-	struct hfc_fifo *fifo = (struct hfc_fifo *)data;
+	struct hfc_fifo *fifo = data;
 
 	WARN_ON(!fifo->connected_chan);
 	if (!fifo->connected_chan)
@@ -389,7 +389,7 @@ no_frames:
 all_went_well:
 
 	if (hfc_fifo_has_frames(fifo))
-		tasklet_schedule(&fifo->tasklet);
+		schedule_work(&fifo->work);
 }
 
 void hfc_fifo_init(
@@ -403,7 +403,7 @@ void hfc_fifo_init(
 	fifo->card = card;
 
 	if (fifo->direction == RX)
-		tasklet_init(&fifo->tasklet,
-			hfc_fifo_rx_tasklet,
-			(unsigned long)fifo);
+		INIT_WORK(&fifo->work,
+			hfc_fifo_rx_work,
+			fifo);
 }

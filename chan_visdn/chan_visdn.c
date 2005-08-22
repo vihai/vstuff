@@ -54,6 +54,8 @@
 
 #include <visdn.h>
 
+#include "echo.h"
+
 #define FRAME_SIZE 160
 
 #define assert(cond)							\
@@ -84,6 +86,8 @@ struct visdn_chan {
 	char calling_number[21];
 	char called_number[21];
 	int sending_complete;
+
+	echo_can_state_t *ec;
 };
 
 enum poll_info_type
@@ -1266,6 +1270,9 @@ static int visdn_sendtext(struct ast_channel *ast, char *text)
 
 static void visdn_destroy(struct visdn_chan *visdn_chan)
 {
+	if (visdn_chan->ec)
+		echo_can_free(visdn_chan->ec);
+
 	free(visdn_chan);
 }
 
@@ -1281,6 +1288,8 @@ static struct visdn_chan *visdn_alloc()
 
 	visdn_chan->channel_fd = -1;
 
+	visdn_chan->ec = echo_can_create(256, 0);
+
 	return visdn_chan;
 }
 
@@ -1294,6 +1303,14 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
+
+	struct q931_call *q931_call = visdn_chan->q931_call;
+
+	visdn_destroy(visdn_chan);
+
+	q931_call->pvt = NULL;
+
+	ast_chan->pvt->pvt = NULL;
 
 	if (visdn_chan->q931_call->state != N0_NULL_STATE &&
 	    visdn_chan->q931_call->state != N1_CALL_INITIATED &&
@@ -1314,20 +1331,15 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(visdn_chan->q931_call);
+		cause->location = q931_ie_cause_location_call(q931_call);
 		cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 		q931_ies_add_put(&ies, &cause->ie);
 
 		ast_mutex_lock(&q931_lock);
-		q931_disconnect_request(visdn_chan->q931_call, &ies);
+		q931_disconnect_request(q931_call, &ies);
 		ast_mutex_unlock(&q931_lock);
 	}
 
-	visdn_chan->q931_call->pvt = NULL;
-
-	visdn_destroy(visdn_chan);
-
-	ast_chan->pvt->pvt = NULL;
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
 	return 0;
@@ -1354,7 +1366,14 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return &f;
 	}
 
-	int r = read(visdn_chan->channel_fd, buf, 512);
+	int nread = read(visdn_chan->channel_fd, buf, 512);
+
+	for (i=0; i<nread; i++) {
+		buf[i] = linear_to_alaw(
+				echo_can_update(visdn_chan->ec,
+					alaw_to_linear(txbuf[i]),
+					alaw_to_linear(buf[i])));
+	}
 
 /*struct timeval tv;
 gettimeofday(&tv, NULL);
@@ -1363,8 +1382,8 @@ printf("R %.3f %d %d\n", t/1000000.0, visdn_chan->channel_fd, r);*/
 
 	f.frametype = AST_FRAME_VOICE;
 	f.subclass = AST_FORMAT_ALAW;
-	f.samples = r;
-	f.datalen = r;
+	f.samples = nread;
+	f.datalen = nread;
 	f.data = buf;
 	f.offset = 0;
 	f.src = VISDN_CHAN_TYPE;
@@ -1379,8 +1398,6 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	/* Write a frame of (presumably voice) data */
-	
 	if (frame->frametype != AST_FRAME_VOICE) {
 		ast_log(LOG_WARNING,
 			"Don't know what to do with frame type '%d'\n",
@@ -2549,7 +2566,7 @@ struct sb_setbearer
 	}
 }
 
-int visdn_gendial_stop(struct ast_channel *chan);
+int visdn_generator_stop(struct ast_channel *chan);
 
 static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 {
@@ -2562,7 +2579,7 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 
 	// FIXME
 	if (ast_chan->generator)
-		visdn_gendial_stop(ast_chan);
+		visdn_generator_stop(ast_chan);
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
@@ -2623,7 +2640,7 @@ static void *visdn_generator_thread_main(void *aaa)
 	return NULL;
 }
 
-int visdn_gendial_start(struct ast_channel *chan)
+int visdn_generator_start(struct ast_channel *chan)
 {
 	int res = -1;
 
@@ -2654,10 +2671,11 @@ int visdn_gendial_start(struct ast_channel *chan)
 err_too_many_channels:
 already_generating:
 	ast_mutex_unlock(&gen_chans_lock);
+
 	return res;
 }
 
-int visdn_gendial_stop(struct ast_channel *chan)
+int visdn_generator_stop(struct ast_channel *chan)
 {
 	ast_mutex_lock(&gen_chans_lock);
 
@@ -2718,34 +2736,33 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 		struct tone_zone_sound *ts;
 		ts = ast_get_indication_tone(ast_chan->zone, "dial");
 
+		ast_mutex_lock(&ast_chan->lock);
 		if (ts) {
 			if (ast_playtones_start(ast_chan, 0, ts->data, 0))
 				ast_log(LOG_NOTICE,"Unable to start playtones\n");
 		} else {
 			ast_tonepair_start(ast_chan, 350, 440, 0, 0);
 		}
+		ast_mutex_unlock(&ast_chan->lock);
 
-		visdn_gendial_start(ast_chan);
+		visdn_generator_start(ast_chan);
 	}
 	break;
 
 	case Q931_TONE_HANGUP: {
-		// Do nothing as asterisk frees the channel just after visdn_hangup()
-
-/*
 		struct tone_zone_sound *ts;
 		ts = ast_get_indication_tone(ast_chan->zone, "congestion");
 
+		ast_mutex_lock(&ast_chan->lock);
 		if (ts) {
 			if (ast_playtones_start(ast_chan, 0, ts->data, 0))
 				ast_log(LOG_NOTICE,"Unable to start playtones\n");
 		} else {
 			ast_tonepair_start(ast_chan, 350, 440, 0, 0);
 		}
+		ast_mutex_unlock(&ast_chan->lock);
 
-//		visdn_gendial_start(ast_chan);
-*/
-
+		visdn_generator_start(ast_chan);
 	}
 	break;
 
@@ -2753,7 +2770,6 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 	case Q931_TONE_BUSY:
 	break;
 
-	case Q931_TONE_HANGUP:
 	case Q931_TONE_FAILURE:
 	break;*/
 	default:;
@@ -2768,7 +2784,7 @@ static void visdn_q931_stop_tone(struct q931_channel *channel)
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
-	visdn_gendial_stop(ast_chan);
+	visdn_generator_stop(ast_chan);
 }
 
 static void visdn_q931_management_restart_confirm(

@@ -13,7 +13,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 #include <linux/init.h>
 #include <linux/config.h>
 #include <linux/pci.h>
@@ -246,62 +245,7 @@ static int hfc_proc_read_info(char *page, char **start,
 
 static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
 {
-	struct hfc_card *card = port->card;
-
-	u8 new_state = hfc_inb(card, hfc_STATES) & hfc_STATES_STATE_MASK;
-
-#ifdef DEBUG
-	if (debug_level >= 1) {
-		hfc_msg_port(port, KERN_DEBUG,
-			"layer 1 state = %c%d\n",
-			port->visdn_port.nt_mode?'G':'F',
-			new_state);
-	}
-#endif
-
-	if (port->visdn_port.nt_mode) {
-		// NT mode
-
-		if (new_state == 2) {
-			// Allows transition from G2 to G3
-			hfc_outb(card, hfc_STATES,
-				hfc_STATES_ACTIVATE |
-				hfc_STATES_NT_G2_G3);
-		} else if (new_state == 3) {
-			// fix to G3 state (see specs)
-			hfc_outb(card, hfc_STATES, hfc_STATES_LOAD_STATE | 3);
-		}
-
-		if (new_state == 3 && port->l1_state != 3) {
-			//hfc_resume_fifo(card);
-		}
-
-		if (new_state != 3 && port->l1_state == 3) {
-			//hfc_suspend_fifo(card);
-		}
-	} else {
-		if (new_state == 3) {
-		}
-
-		if (new_state == 7 && port->l1_state != 7) {
-			// TE is now active, schedule FIFO activation after
-			// some time, otherwise the first frames are lost
-
-			card->regs.ctmt |= hfc_CTMT_TIMER_50 | hfc_CTMT_TIMER_CLEAR;
-			hfc_outb(card, hfc_CTMT, card->regs.ctmt);
-
-			// Activating the timer firest an interrupt immediately, we
-			// obviously need to ignore it
-			card->ignore_first_timer_interrupt = TRUE;
-		}
-
-		if (new_state != 7 && port->l1_state == 7) {
-			// TE has become inactive, disable FIFO
-			//hfc_suspend_fifo(card);
-		}
-	}
-
-	port->l1_state = new_state;
+	schedule_work(&port->state_change_work);
 }
 
 static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
@@ -377,22 +321,22 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (s1 & hfc_INT_S1_DREC) {
 			// D chan RX (bit 5)
 			if (&card->st_port.chans[D].rx.fifo)
-				tasklet_schedule(
-					&card->st_port.chans[D].rx.fifo->tasklet);
+				schedule_work(
+					&card->st_port.chans[D].rx.fifo->work);
 		}
 
 		if (s1 & hfc_INT_S1_B1REC) {
 			// B1 chan RX (bit 3)
 			if (&card->st_port.chans[B1].rx.fifo)
-				tasklet_schedule(
-					&card->st_port.chans[B1].rx.fifo->tasklet);
+				schedule_work(
+					&card->st_port.chans[B1].rx.fifo->work);
 		}
 
 		if (s1 & hfc_INT_S1_B2REC) {
 			// B2 chan RX (bit 4)
 			if (&card->st_port.chans[B2].rx.fifo)
-				tasklet_schedule(
-					&card->st_port.chans[B2].rx.fifo->tasklet);
+				schedule_work(
+					&card->st_port.chans[B2].rx.fifo->work);
 		}
 
 		if (s1 & hfc_INT_S1_DTRANS) {
@@ -470,7 +414,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	memset(card, 0x00, sizeof(*card));
 
-	spin_lock_init(&card->lock);
+	init_MUTEX(&card->sem);
+
 	card->pcidev = pci_dev;
 	pci_set_drvdata(pci_dev, card);
 
@@ -639,6 +584,9 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	visdn_port_init(&card->st_port.visdn_port, &hfc_st_port_ops);
 	card->st_port.card = card;
 	card->st_port.visdn_port.priv = &card->st_port;
+	INIT_WORK(&card->st_port.state_change_work,
+		hfc_st_port_state_change_work,
+		&card->st_port);
 
 	struct hfc_chan_duplex *chan;
 
@@ -776,11 +724,10 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	card->st_port.visdn_port.priv = &card->st_port;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	down(&card->sem);
 	hfc_softreset(card);
 	hfc_initialize_hw(card);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	// Ok, the hardware is ready and the data structures are initialized,
 	// we can now register to the system.
@@ -879,11 +826,10 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	visdn_chan_unregister(&card->st_port.chans[D].visdn_chan);
 	visdn_port_unregister(&card->st_port.visdn_port);
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	down(&card->sem);
 	hfc_softreset(card);
 	// disable memio and bustmaster
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	// There should be no interrupt from here on
 

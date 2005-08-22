@@ -311,9 +311,9 @@ void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
 	fifo->bit_reversed = reversed;
 }
 
-void hfc_fifo_rx_tasklet(unsigned long data)
+void hfc_fifo_rx_work(void *data)
 {
-	struct hfc_fifo *fifo = (struct hfc_fifo *)data;
+	struct hfc_fifo *fifo = data;
 
 	if (!fifo->connected_chan) {
 		hfc_msg(KERN_INFO, "Spurious interrupt\n");
@@ -324,9 +324,7 @@ void hfc_fifo_rx_tasklet(unsigned long data)
 	struct hfc_chan_duplex *fdchan = chan->chan;
 	struct hfc_card *card = fdchan->port->card;
 
-
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	down(&card->sem);
 
 	// FIFO selection has to be done for each frame to clear
 	// internal buffer (see specs 4.4.4).
@@ -396,9 +394,9 @@ no_frames:
 all_went_well:
 
 	if (hfc_fifo_has_frames(fifo))
-		tasklet_schedule(&fifo->tasklet);
+		schedule_work(&fifo->work);
 
-	spin_unlock_irqrestore(&card->lock,flags);
+	up(&card->sem);
 }
 
 void hfc_fifo_init(
@@ -412,7 +410,7 @@ void hfc_fifo_init(
 	fifo->direction = direction;
 
 	if (fifo->direction == RX)
-		tasklet_init(&fifo->tasklet,
-			hfc_fifo_rx_tasklet,
-			(unsigned long)fifo);
+		INIT_WORK(&fifo->work,
+			hfc_fifo_rx_work,
+			fifo);
 }

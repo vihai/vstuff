@@ -28,8 +28,8 @@ static ssize_t hfc_store_l1_state(
 	struct hfc_card *card = port->card;
 	int err;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 
 	hfc_st_port_select(port);
 
@@ -59,14 +59,14 @@ static ssize_t hfc_store_l1_state(
 			hfc_A_ST_WR_STA_V_ST_SET_STA(state));
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 
 err_invalid_scanf:
 err_invalid_state:
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return err;
 }
@@ -90,6 +90,8 @@ static void hfc_update_st_clk_dly(struct hfc_st_port *port)
 {
 	u8 st_clk_dly;
 
+	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+
 	st_clk_dly = hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
 		     hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp);
 
@@ -112,11 +114,11 @@ static ssize_t hfc_store_st_clock_delay(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	port->clock_delay = value;
 	hfc_update_st_clk_dly(port);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -152,11 +154,11 @@ static ssize_t hfc_store_st_sampling_comp(
 	if (value > 0x7)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	port->sampling_comp = value;
 	hfc_update_st_clk_dly(port);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }

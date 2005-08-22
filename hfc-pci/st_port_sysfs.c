@@ -30,6 +30,9 @@ static ssize_t hfc_store_l1_state(
 	struct hfc_card *card = port->card;
 	int err;
 
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
+
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
 		hfc_outb(card, hfc_STATES,
 			hfc_STATES_ACTIVATE|
@@ -56,10 +59,14 @@ static ssize_t hfc_store_l1_state(
 			hfc_STATES_LOAD_STATE);
 	}
 
+	up(&card->sem);
+
 	return count;
 
 err_invalid_scanf:
 err_invalid_state:
+
+	up(&card->sem);
 
 	return err;
 }
@@ -96,11 +103,11 @@ static ssize_t hfc_store_st_clock_delay(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	port->clock_delay = value;
 	hfc_update_st_clk_dly(port);
+	up(&card->sem);
 
 	return count;
 }
@@ -127,6 +134,7 @@ static ssize_t hfc_store_st_sampling_comp(
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
 
 	unsigned int value;
 	if (sscanf(buf, "%u", &value) < 1)
@@ -135,8 +143,11 @@ static ssize_t hfc_store_st_sampling_comp(
 	if (value > 0x7)
 		return -EINVAL;
 
+	if (down_interruptible(&card->sem))
+		return -ERESTARTSYS;
 	port->sampling_comp = value;
 	hfc_update_st_clk_dly(port);
+	up(&card->sem);
 
 	return count;
 }

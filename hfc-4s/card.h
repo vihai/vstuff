@@ -47,7 +47,7 @@
 		## arg)
 
 struct hfc_card {
-	spinlock_t lock;
+	struct semaphore sem;
 
 	// This struct contains a copy of some registers whose bits may be
 	// changed independently.

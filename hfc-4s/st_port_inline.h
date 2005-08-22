@@ -7,7 +7,7 @@
 
 static inline void hfc_st_port_select(struct hfc_st_port *port)
 {
-	WARN_ON(!irqs_disabled() && !in_irq());
+	WARN_ON(atomic_read(&port->card->sem.count) > 0);
 
 	mb();
 	hfc_outb(port->card, hfc_R_ST_SEL,

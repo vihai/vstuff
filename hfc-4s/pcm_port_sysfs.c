@@ -46,9 +46,8 @@ static ssize_t hfc_store_bitrate(
 		port->bitrate = 2;
 	return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-	mb();
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	hfc_outb(card, hfc_R_CIRM, hfc_R_CIRM_V_PCM_RES);
 	mb();
 	hfc_outb(card, hfc_R_CIRM, 0);
@@ -56,7 +55,7 @@ static ssize_t hfc_store_bitrate(
 	hfc_wait_busy(card);
 	hfc_update_pcm_md0(card, 0);
 	hfc_update_pcm_md1(card);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -93,11 +92,11 @@ static ssize_t hfc_store_master(
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	port->master = value;
 	hfc_update_pcm_md0(card, 0);
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return count;
 }
@@ -117,15 +116,14 @@ static ssize_t hfc_show_f0io_counter(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 	u16 counter;
 
 	counter = hfc_inb(card, hfc_R_F0_CNTL);
 	counter += hfc_inb(card, hfc_R_F0_CNTH) << 8;
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", counter);
 
@@ -150,8 +148,8 @@ static ssize_t hfc_show_slots_state(
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"Slot    Chan\n");
 
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
 
 	int i;
 	for (i=0; i<port->num_slots; i++) {
@@ -186,7 +184,7 @@ static ssize_t hfc_show_slots_state(
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 	}
 
-	spin_unlock_irqrestore(&card->lock, flags);
+	up(&card->sem);
 
 	return len;
 

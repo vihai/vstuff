@@ -68,7 +68,7 @@ struct hfc_fifo
 	u8 f_max;
 	u8 f_num;
 
-	struct tasklet_struct tasklet;
+	struct work_struct work;
 };
 
 void hfc_fifo_clear_rx(struct hfc_fifo *fifo);

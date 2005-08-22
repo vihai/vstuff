@@ -105,7 +105,7 @@ struct hfc_fifo
 	u8 f_max;
 	u8 f_num;
 
-	struct tasklet_struct tasklet;
+	struct work_struct work;
 };
 
 int hfc_fifo_mem_read(struct hfc_fifo *fifo,

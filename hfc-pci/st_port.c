@@ -1,9 +1,70 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "st_port.h"
 #include "card.h"
 #include "card_inline.h"
+
+
+void hfc_st_port_state_change_work(void *data)
+{
+	struct hfc_st_port *port = data;
+	struct hfc_card *card = port->card;
+
+	down(&card->sem);
+
+	u8 new_state = hfc_inb(card, hfc_STATES) & hfc_STATES_STATE_MASK;
+
+	hfc_debug_port(port, 1,
+			"layer 1 state = %c%d\n",
+			port->visdn_port.nt_mode?'G':'F',
+			new_state);
+
+	if (port->visdn_port.nt_mode) {
+		// NT mode
+
+		if (new_state == 2) {
+			// Allows transition from G2 to G3
+			hfc_outb(card, hfc_STATES,
+				hfc_STATES_ACTIVATE |
+				hfc_STATES_NT_G2_G3);
+		} else if (new_state == 3) {
+			// fix to G3 state (see specs)
+			hfc_outb(card, hfc_STATES, hfc_STATES_LOAD_STATE | 3);
+		}
+
+		if (new_state == 3 && port->l1_state != 3) {
+			//hfc_resume_fifo(card);
+		}
+
+		if (new_state != 3 && port->l1_state == 3) {
+			//hfc_suspend_fifo(card);
+		}
+	} else {
+		if (new_state == 3) {
+		}
+
+		if (new_state == 7 && port->l1_state != 7) {
+			// TE is now active, schedule FIFO activation after
+			// some time, otherwise the first frames are lost
+
+			card->regs.ctmt |= hfc_CTMT_TIMER_50 | hfc_CTMT_TIMER_CLEAR;
+			hfc_outb(card, hfc_CTMT, card->regs.ctmt);
+
+			// Activating the timer firest an interrupt immediately, we
+			// obviously need to ignore it
+			card->ignore_first_timer_interrupt = TRUE;
+		}
+
+		if (new_state != 7 && port->l1_state == 7) {
+			// TE has become inactive, disable FIFO
+			//hfc_suspend_fifo(card);
+		}
+	}
+
+	port->l1_state = new_state;
+
+	up(&card->sem);
+}
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port)
 {

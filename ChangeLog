@@ -2,6 +2,29 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-22 22:12:43 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-64
+
+    Summary:
+      Modified HFC-4S and HFC-PCI to not need IRQ disabiling
+    Revision:
+      isdn--devel--0.1--patch-64
+
+    
+    
+
+    modified files:
+     ChangeLog chan_visdn/Makefile chan_visdn/chan_visdn.c
+     hfc-4s/card.h hfc-4s/card_sysfs.c hfc-4s/chan.c
+     hfc-4s/chan_sysfs.c hfc-4s/fifo.c hfc-4s/fifo.h
+     hfc-4s/fifo_inline.h hfc-4s/hfc-4s_main.c hfc-4s/pcm_port.c
+     hfc-4s/pcm_port_inline.h hfc-4s/pcm_port_sysfs.c
+     hfc-4s/st_port.c hfc-4s/st_port.h hfc-4s/st_port_inline.h
+     hfc-4s/st_port_sysfs.c hfc-pci/card.h hfc-pci/chan.c
+     hfc-pci/fifo.c hfc-pci/fifo.h hfc-pci/hfc-pci_main.c
+     hfc-pci/pcm_port.c hfc-pci/pcm_port_sysfs.c hfc-pci/st_port.c
+     hfc-pci/st_port.h hfc-pci/st_port_sysfs.c
+
+
 2005-08-21 13:19:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-63
 
     Summary:
