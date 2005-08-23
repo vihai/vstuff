@@ -227,7 +227,7 @@ int q931_ie_cause_write_to_buf(
 
 void q931_ie_cause_dump(
 	const struct q931_ie *ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix);
 
 int q931_ies_contain_cause(

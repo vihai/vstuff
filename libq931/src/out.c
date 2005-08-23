@@ -227,6 +227,11 @@ int q931_send_message(
 			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
 					buf + size,
 					sizeof(buf) - size);
+
+			if (ies.ies[i]->type->dump)
+				ies.ies[i]->type->dump(
+					ies.ies[i],
+					call->intf->lib->report, "  ");
 		}
 	}
 
@@ -259,6 +264,11 @@ int q931_send_message_bc(
 			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
 						buf + size,
 						sizeof(buf) - size);
+
+			if (ies.ies[i]->type->dump)
+				ies.ies[i]->type->dump(
+					ies.ies[i],
+					call->intf->lib->report, "  ");
 		}
 	}
 
@@ -291,6 +301,11 @@ int q931_global_send_message(
 			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
 					buf + size,
 					sizeof(buf) - size);
+
+			if (ies.ies[i]->type->dump)
+				ies.ies[i]->type->dump(
+					ies.ies[i],
+					gc->intf->lib->report, "  ");
 		}
 	}
 

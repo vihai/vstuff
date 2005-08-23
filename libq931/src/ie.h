@@ -136,7 +136,7 @@ struct q931_ie_type
 
 	void (*dump)(
 		const struct q931_ie *ie,
-		const struct q931_message *msg,
+		void (*report)(int level, const char *format, ...),
 		const char *prefix);
 };
 

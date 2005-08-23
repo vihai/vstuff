@@ -376,33 +376,33 @@ static const char *q931_ie_channel_identification_coding_standard_to_text(
 
 void q931_ie_channel_identification_dump(
 	const struct q931_ie *generic_ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_channel_identification *ie =
 		container_of(generic_ie, struct q931_ie_channel_identification, ie);
 
-	report_msg(msg, LOG_DEBUG, "%sInterface id = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sInterface id = %s (%d)\n", prefix,
 		q931_ie_channel_identification_interface_id_present_to_text(
 			ie->interface_id_present),
 		ie->interface_id_present);
 
-	report_msg(msg, LOG_DEBUG, "%sInterface type = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sInterface type = %s (%d)\n", prefix,
 		q931_ie_channel_identification_interface_type_to_text(
 			ie->interface_type),
 		ie->interface_type);
 
-	report_msg(msg, LOG_DEBUG, "%sPref/Excl = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sPref/Excl = %s (%d)\n", prefix,
 		q931_ie_channel_identification_preferred_exclusive_to_text(
 			ie->preferred_exclusive),
 		ie->preferred_exclusive);
 
-	report_msg(msg, LOG_DEBUG, "%sD channel ident = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sD channel ident = %s (%d)\n", prefix,
 		q931_ie_channel_identification_d_channel_indicator_to_text(
 			ie->d_channel_indicator),
 		ie->d_channel_indicator);
 
-	report_msg(msg, LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_channel_identification_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);

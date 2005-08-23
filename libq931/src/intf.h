@@ -46,6 +46,8 @@ struct q931_interface
 
 	char *name;
 
+	int flags;
+
 	enum q931_interface_type type;
 	enum q931_interface_config config;
 	enum q931_interface_network_role network_role;
@@ -54,6 +56,8 @@ struct q931_interface
 	int master_socket;	// Multipoint master_socket
 	struct q931_dlc bc_dlc;	// Broadcast DLC for multipoint interfaces
 	struct q931_dlc dlc; 
+
+	struct list_head dlcs;
 
 	q931_callref next_call_reference;
 	int call_reference_len;
@@ -107,9 +111,12 @@ inline static void q931_intf_del_call(
 	call->intf->ncalls--;
 }
 
+#define Q931_INTF_FLAGS_DEBUG (1 << 0)
+
 struct q931_interface *q931_open_interface(
 	struct q931_lib *lib,
-	const char *name);
+	const char *name,
+	int flags);
 void q931_close_interface(struct q931_interface *intf);
 
 q931_callref q931_alloc_call_reference(struct q931_interface *intf);

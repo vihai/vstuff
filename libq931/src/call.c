@@ -230,6 +230,8 @@ struct q931_call *q931_alloc_call(struct q931_interface *intf)
 	q931_init_timer(&call->T321, q931_timer_T321, call);
 	q931_init_timer(&call->T322, q931_timer_T322, call);
 
+	q931_intf_add_call(dlc->intf, call);
+
 	return call;
 }
 
@@ -252,7 +254,7 @@ struct q931_call *q931_alloc_call_in(
 	call->direction = Q931_CALL_DIRECTION_INBOUND;
 	call->call_reference = call_reference;
 
-	q931_intf_add_call(dlc->intf, call);
+///	q931_intf_add_call(dlc->intf, call);
 
 	return call;
 }
@@ -283,8 +285,6 @@ struct q931_call *q931_alloc_call_out(
 		call->dlc = &intf->dlc;
 	else
 		call->dlc = NULL;
-
-	q931_intf_add_call(call->intf, call);
 
 	return call;
 }

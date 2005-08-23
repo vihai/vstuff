@@ -57,7 +57,8 @@ try_again:
 
 struct q931_interface *q931_open_interface(
 	struct q931_lib *lib,
-	const char *name)
+	const char *name,
+	int flags)
 {
 	struct q931_interface *intf;
 
@@ -70,6 +71,7 @@ struct q931_interface *q931_open_interface(
 	memset(intf, 0x00, sizeof(*intf));
 
 	INIT_LIST_HEAD(&intf->calls);
+	INIT_LIST_HEAD(&intf->dlcs);
 
 	intf->lib = lib;
 	intf->name = strdup(name);
@@ -78,6 +80,15 @@ struct q931_interface *q931_open_interface(
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
 	if (socket < 0)
 		goto err_socket;
+
+	intf->flags = flags;
+
+	if (intf->flags & Q931_INTF_FLAGS_DEBUG) {
+		int on=1;
+
+		setsockopt(s, SOL_SOCKET, SO_DEBUG,
+				&on, sizeof(on));
+	}
 
 	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
 			name, strlen(name)+1) < 0)

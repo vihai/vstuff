@@ -1,6 +1,5 @@
 
-SUBDIRS = visdn-core lapd hfc-pci hfc-4s libq931 chan_visdn traffic timer-system
-
-#SUBDIRS += hfc-usb
-SUBDIRS += fake_isdn
-
+SUBDIRS = visdn-core lapd timer-system fake_isdn	\
+		hfc-pci hfc-4s 				\
+		libq931 chan_visdn			\
+		traffic

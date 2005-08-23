@@ -116,13 +116,13 @@ static const char *q931_ie_restart_indicator_restart_class_to_text(
 
 void q931_ie_restart_indicator_dump(
 	const struct q931_ie *generic_ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_restart_indicator *ie =
 		container_of(generic_ie, struct q931_ie_restart_indicator, ie);
 
-	report_msg(msg, LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
 		q931_ie_restart_indicator_restart_class_to_text(
 			ie->restart_class),
 		ie->restart_class);

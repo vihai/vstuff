@@ -111,7 +111,7 @@ int q931_ie_calling_party_number_write_to_buf(
 
 void q931_ie_calling_party_number_dump(
 	const struct q931_ie *ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix);
 
 #endif

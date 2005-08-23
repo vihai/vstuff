@@ -208,23 +208,23 @@ static const char *q931_ie_progress_indicator_progress_description_to_text(
 
 void q931_ie_progress_indicator_dump(
 	const struct q931_ie *generic_ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_progress_indicator *ie =
 		container_of(generic_ie, struct q931_ie_progress_indicator, ie);
 
-	report_msg(msg, LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_progress_indicator_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report_msg(msg, LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
 		q931_ie_progress_indicator_location_to_text(
 			ie->location),
 		ie->location);
 
-	report_msg(msg, LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
 		q931_ie_progress_indicator_progress_description_to_text(
 			ie->progress_description),
 		ie->progress_description);

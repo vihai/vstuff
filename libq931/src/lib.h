@@ -118,6 +118,9 @@ static inline void q931_set_logger_func(
 struct q931_lib *q931_init();
 void q931_leave(struct q931_lib *lib);
 void q931_receive(struct q931_dlc *dlc);
+struct q931_dlc *q931_accept(
+	struct q931_interface *intf,
+	int accept_socket);
 
 #ifdef Q931_PRIVATE
 

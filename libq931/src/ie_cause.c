@@ -500,23 +500,23 @@ static const char *q931_ie_cause_cause_value_to_text(
 
 void q931_ie_cause_dump(
 	const struct q931_ie *generic_ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_cause *ie =
 		container_of(generic_ie, struct q931_ie_cause, ie);
 
-	report_msg(msg, LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_cause_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report_msg(msg, LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
 		q931_ie_cause_location_to_text(
 			ie->location),
 		ie->location);
 
-	report_msg(msg, LOG_DEBUG, "%sCause value = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sCause value = %s (%d)\n", prefix,
 		q931_ie_cause_cause_value_to_text(
 			ie->value),
 		ie->value);

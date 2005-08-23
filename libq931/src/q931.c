@@ -245,7 +245,8 @@ void q931_decode_so_ie(
 					q931_ies_add(&msg->ies, ie);
 
 				if (ie->type->dump)
-					ie->type->dump(ie, msg, "  ");
+					ie->type->dump(ie,
+						call->intf->lib->report, "  ");
 
 				report_dlc(msg->dlc, LOG_DEBUG,
 					"SO IE %d ===> %u (%s)\n",
@@ -325,7 +326,8 @@ void q931_decode_vl_ie(
 					q931_ies_add_put(&msg->ies, ie);
 
 				if (ie->type->dump)
-					ie->type->dump(ie, msg, "  ");
+					ie->type->dump(ie,
+						call->intf->lib->report, "  ");
 			}
 		} else {
 			// If mandatory or comprension required
@@ -594,6 +596,51 @@ int q931_decode_information_elements(
 	}
 
 	return TRUE;
+}
+
+struct q931_dlc *q931_accept(
+	struct q931_interface *intf,
+	int accept_socket)
+{
+	struct q931_dlc *dlc;
+	dlc = malloc(sizeof(*dlc));
+	if (!dlc)
+		goto err_malloc;
+
+	dlc->socket = accept(accept_socket, NULL, 0);
+	if (dlc->socket < 0)
+		goto err_accept;
+
+	dlc->intf = intf;
+
+	int optlen=sizeof(dlc->tei);
+	if (getsockopt(dlc->socket, SOL_LAPD, LAPD_TEI,
+		&dlc->tei, &optlen) < 0) {
+		report_intf(intf, LOG_ERR,
+			"getsockopt: %s\n", strerror(errno));
+		goto err_getsockopt;
+	}
+
+	if (intf->flags & Q931_INTF_FLAGS_DEBUG) {
+		int on = 1;
+
+		if (setsockopt(dlc->socket, SOL_SOCKET, SO_DEBUG,
+						&on, sizeof(on)) < 0)
+			report_intf(intf, LOG_ERR,
+				"setsockopt: %s\n", strerror(errno));
+	}
+
+	list_add_tail(&dlc->intf_node, &intf->dlcs);
+
+	return dlc;
+
+err_getsockopt:
+	close(dlc->socket);
+err_accept:
+	free(dlc);
+err_malloc:
+
+	return NULL;
 }
 
 void q931_receive(struct q931_dlc *dlc)

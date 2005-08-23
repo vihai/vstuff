@@ -1,6 +1,8 @@
 #ifndef _LIBQ931_DLC_H
 #define _LIBQ931_DLC_H
 
+#include "list.h"
+
 #define report_dlc(dlc, lvl, format, arg...)				\
 	(dlc)->intf->lib->report(					\
 		(lvl),							\
@@ -22,8 +24,9 @@ struct q931_dlc
 {
 	struct q931_lib *lib;
 
+	struct list_head intf_node;
+
 	int socket;
-	int poll_id;
 	struct q931_interface *intf;
 	enum q931_dlc_status status;
 	int tei;

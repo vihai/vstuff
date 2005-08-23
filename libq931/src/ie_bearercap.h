@@ -299,7 +299,7 @@ int q931_ie_bearer_capability_write_to_buf(
 
 void q931_ie_bearer_capability_dump(
 	const struct q931_ie *ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix);
 
 #endif

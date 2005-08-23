@@ -167,22 +167,22 @@ static const char *q931_ie_calling_party_number_numbering_plan_identificator_to_
 
 void q931_ie_calling_party_number_dump(
 	const struct q931_ie *generic_ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_calling_party_number *ie =
 		container_of(generic_ie, struct q931_ie_calling_party_number, ie);
 
-	report_msg(msg, LOG_DEBUG, "%sType of number = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sType of number = %s (%d)\n", prefix,
 		q931_ie_calling_party_number_type_of_number_to_text(
 			ie->type_of_number),
 		ie->type_of_number);
 
-	report_msg(msg, LOG_DEBUG, "%sNumbering plan = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sNumbering plan = %s (%d)\n", prefix,
 		q931_ie_calling_party_number_numbering_plan_identificator_to_text(
 			ie->numbering_plan_identificator),
 		ie->numbering_plan_identificator);
 
-	report_msg(msg, LOG_DEBUG, "%sNumber = %s\n", prefix,
+	report(LOG_DEBUG, "%sNumber = %s\n", prefix,
 		ie->number);
 }

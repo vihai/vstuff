@@ -321,37 +321,37 @@ static const char *q931_ie_bearer_capability_user_information_layer_1_protocol_t
 
 void q931_ie_bearer_capability_dump(
 	const struct q931_ie *generic_ie,
-	const struct q931_message *msg,
+	void (*report)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_bearer_capability *ie =
 		container_of(generic_ie, struct q931_ie_bearer_capability, ie);
 
-	report_msg(msg, LOG_DEBUG,
+	report(LOG_DEBUG,
 		"%sCoding Standard = %s (%d)\n", prefix,
 		q931_ie_bearer_capability_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report_msg(msg, LOG_DEBUG,
+	report(LOG_DEBUG,
 		"%sInformation Transfer Capability = %s (%d)\n", prefix,
 		q931_ie_bearer_capability_information_transfer_capability_to_text(
 			ie->information_transfer_capability),
 		ie->information_transfer_capability);
 
-	report_msg(msg, LOG_DEBUG,
+	report(LOG_DEBUG,
 		"%sTransfer mode = %s (%d)\n", prefix,
 		q931_ie_bearer_capability_transfer_mode_to_text(
 			ie->transfer_mode),
 		ie->transfer_mode);
 
-	report_msg(msg, LOG_DEBUG,
+	report(LOG_DEBUG,
 		"%sInformation Transfer Rate = %s (%d)\n", prefix,
 		q931_ie_bearer_capability_information_transfer_rate_to_text(
 			ie->information_transfer_rate),
 		ie->information_transfer_rate);
 
-	report_msg(msg, LOG_DEBUG,
+	report(LOG_DEBUG,
 		"%sUser information layer 1 protocol = %s (%d)\n", prefix,
 		q931_ie_bearer_capability_user_information_layer_1_protocol_to_text(
 			ie->user_information_layer_1_protocol),
