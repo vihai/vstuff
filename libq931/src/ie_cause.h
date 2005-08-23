@@ -142,7 +142,7 @@ static inline enum q931_ie_cause_location q931_ie_cause_location_gc(
 
 struct q931_ie_cause_value_info
 {
-	__u8 id;
+	enum q931_ie_cause_value value;
 	const char *name;
 };
 
@@ -224,6 +224,11 @@ int q931_ie_cause_write_to_buf(
 	const struct q931_ie *generic_ie,
 	void *buf,
 	int max_size);
+
+void q931_ie_cause_dump(
+	const struct q931_ie *ie,
+	const struct q931_message *msg,
+	const char *prefix);
 
 int q931_ies_contain_cause(
 	const struct q931_ies *ies,

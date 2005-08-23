@@ -7,6 +7,7 @@
 
 #include "util.h"
 #include "msgtype.h"
+#include "dlc.h"
 
 struct q931_ie_type;
 
@@ -132,6 +133,11 @@ struct q931_ie_type
 	int (*write_to_buf)(
 		const struct q931_ie *ie,
 		void *buf, int max_size);
+
+	void (*dump)(
+		const struct q931_ie *ie,
+		const struct q931_message *msg,
+		const char *prefix);
 };
 
 enum q931_ie_direction

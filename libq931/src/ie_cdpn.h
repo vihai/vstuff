@@ -71,5 +71,10 @@ int q931_ie_called_party_number_write_to_buf(
         void *buf,
 	int max_size);
 
+void q931_ie_called_party_number_dump(
+	const struct q931_ie *ie,
+	const struct q931_message *msg,
+	const char *prefix);
+
 #endif
 #endif

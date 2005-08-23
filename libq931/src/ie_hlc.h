@@ -5,10 +5,10 @@
 
 enum q931_ie_high_layer_compatibility_coding_standard
 {
-	Q931_IE_HLC_CS_CCITT	= 0x0,
-	Q931_IE_HLC_CS_RESERVED	= 0x1,
-	Q931_IE_HLC_CS_NATIONAL	= 0x2,
-	Q931_IE_HLC_CS_SPECIFIC	= 0x3,
+	Q931_IE_HLC_CS_CCITT		= 0x0,
+	Q931_IE_HLC_CS_RESERVED		= 0x1,
+	Q931_IE_HLC_CS_NATIONAL		= 0x2,
+	Q931_IE_HLC_CS_NETWORK_SPECIFIC	= 0x3,
 };
 
 enum q931_ie_high_layer_compatibility_interpretation
@@ -115,6 +115,10 @@ int q931_ie_high_layer_compatibility_write_to_buf(
         void *buf,
 	int max_size);
 
+void q931_ie_high_layer_compatibility_dump(
+	const struct q931_ie *ie,
+	const struct q931_message *msg,
+	const char *prefix);
 
 #endif
 #endif

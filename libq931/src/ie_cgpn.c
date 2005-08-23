@@ -115,3 +115,74 @@ int q931_ie_calling_party_number_write_to_buf(
 
 	return ieow->len + sizeof(struct q931_ie_onwire);
 }
+
+static const char *q931_ie_calling_party_number_type_of_number_to_text(
+        enum q931_ie_calling_party_number_type_of_number
+                type_of_number)
+{
+        switch(type_of_number) {
+	case Q931_IE_CGPN_TON_UNKNOWN:
+		return "Unknown";
+	case Q931_IE_CGPN_TON_INTERNATIONAL:
+		return "International";
+	case Q931_IE_CGPN_TON_NATIONAL:
+		return "National";
+	case Q931_IE_CGPN_TON_NETWORK_SPECIFIC:
+		return "Network specific";
+	case Q931_IE_CGPN_TON_SUBSCRIBER:
+		return "Subscriber";
+	case Q931_IE_CGPN_TON_ABBREVIATED:
+		return "Abbreviated";
+	case Q931_IE_CGPN_TON_RESERVED_FOR_EXT:
+		return "Reserved";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_calling_party_number_numbering_plan_identificator_to_text(
+        enum q931_ie_calling_party_number_numbering_plan_identificator
+                numbering_plan_identificator)
+{
+        switch(numbering_plan_identificator) {
+	case Q931_IE_CGPN_NPI_UNKNOWN:
+		return "Unknown";
+	case Q931_IE_CGPN_NPI_ISDN_TELEPHONY:
+		return "ISDN Telephony";
+	case Q931_IE_CGPN_NPI_DATA:
+		return "Data";
+	case Q931_IE_CGPN_NPI_TELEX:
+		return "Telex";
+	case Q931_IE_CGPN_NPI_NATIONAL_STANDARD:
+		return "National standard";
+	case Q931_IE_CGPN_NPI_PRIVATE:
+		return "Private";
+	case Q931_IE_CGPN_NPI_RESERVED_FOR_EXT:
+		return "Reserved";
+	default:
+		return "*INVALID*";
+	}
+}
+
+
+void q931_ie_calling_party_number_dump(
+	const struct q931_ie *generic_ie,
+	const struct q931_message *msg,
+	const char *prefix)
+{
+	struct q931_ie_calling_party_number *ie =
+		container_of(generic_ie, struct q931_ie_calling_party_number, ie);
+
+	report_msg(msg, LOG_DEBUG, "%sType of number = %s (%d)\n", prefix,
+		q931_ie_calling_party_number_type_of_number_to_text(
+			ie->type_of_number),
+		ie->type_of_number);
+
+	report_msg(msg, LOG_DEBUG, "%sNumbering plan = %s (%d)\n", prefix,
+		q931_ie_calling_party_number_numbering_plan_identificator_to_text(
+			ie->numbering_plan_identificator),
+		ie->numbering_plan_identificator);
+
+	report_msg(msg, LOG_DEBUG, "%sNumber = %s\n", prefix,
+		ie->number);
+}

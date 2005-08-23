@@ -53,3 +53,10 @@ int q931_ie_sending_complete_write_to_buf(
 
 	return 1;
 }
+
+void q931_ie_sending_complete_dump(
+	const struct q931_ie *generic_ie,
+	const struct q931_message *msg,
+	const char *prefix)
+{
+}

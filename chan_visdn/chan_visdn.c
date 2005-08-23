@@ -1160,7 +1160,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&q931_lock);
 
-		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
+//		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
 	}
 	break;
 
@@ -1177,7 +1177,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&q931_lock);
 
-		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
+//		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
 	}
 	break;
 
@@ -1293,6 +1293,8 @@ static struct visdn_chan *visdn_alloc()
 	return visdn_chan;
 }
 
+static int visdn_generator_stop(struct ast_channel *chan);
+
 static int visdn_hangup(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -1304,40 +1306,46 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		return 0;
 	}
 
+	// Make sure the generator is stopped
+	if (!ast_chan->pbx)
+		visdn_generator_stop(ast_chan);
+
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
 	visdn_destroy(visdn_chan);
 
-	q931_call->pvt = NULL;
-
 	ast_chan->pvt->pvt = NULL;
 
-	if (visdn_chan->q931_call->state != N0_NULL_STATE &&
-	    visdn_chan->q931_call->state != N1_CALL_INITIATED &&
-	    visdn_chan->q931_call->state != N11_DISCONNECT_REQUEST &&
-	    visdn_chan->q931_call->state != N12_DISCONNECT_INDICATION &&
-	    visdn_chan->q931_call->state != N17_RESUME_REQUEST &&
-	    visdn_chan->q931_call->state != N19_RELEASE_REQUEST &&
-	    visdn_chan->q931_call->state != N22_CALL_ABORT &&
-	    visdn_chan->q931_call->state != U0_NULL_STATE &&
-	    visdn_chan->q931_call->state != U6_CALL_PRESENT &&
-	    visdn_chan->q931_call->state != U11_DISCONNECT_REQUEST &&
-	    visdn_chan->q931_call->state != U12_DISCONNECT_INDICATION &&
-	    visdn_chan->q931_call->state != U15_SUSPEND_REQUEST &&
-	    visdn_chan->q931_call->state != U17_RESUME_REQUEST &&
-	    visdn_chan->q931_call->state != U19_RELEASE_REQUEST) {
+	if (q931_call) {
+		q931_call->pvt = NULL;
 
-                struct q931_ies ies = Q931_IES_INIT;
+		if (q931_call->state != N0_NULL_STATE &&
+		    q931_call->state != N1_CALL_INITIATED &&
+		    q931_call->state != N11_DISCONNECT_REQUEST &&
+		    q931_call->state != N12_DISCONNECT_INDICATION &&
+		    q931_call->state != N17_RESUME_REQUEST &&
+		    q931_call->state != N19_RELEASE_REQUEST &&
+		    q931_call->state != N22_CALL_ABORT &&
+		    q931_call->state != U0_NULL_STATE &&
+		    q931_call->state != U6_CALL_PRESENT &&
+		    q931_call->state != U11_DISCONNECT_REQUEST &&
+		    q931_call->state != U12_DISCONNECT_INDICATION &&
+		    q931_call->state != U15_SUSPEND_REQUEST &&
+		    q931_call->state != U17_RESUME_REQUEST &&
+		    q931_call->state != U19_RELEASE_REQUEST) {
 
-		struct q931_ie_cause *cause = q931_ie_cause_alloc();
-		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(q931_call);
-		cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
-		q931_ies_add_put(&ies, &cause->ie);
+                        struct q931_ies ies = Q931_IES_INIT;
 
-		ast_mutex_lock(&q931_lock);
-		q931_disconnect_request(q931_call, &ies);
-		ast_mutex_unlock(&q931_lock);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(q931_call);
+			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
+			q931_ies_add_put(&ies, &cause->ie);
+
+			ast_mutex_lock(&q931_lock);
+			q931_disconnect_request(q931_call, &ies);
+			ast_mutex_unlock(&q931_lock);
+		}
 	}
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
@@ -1368,12 +1376,12 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 
 	int nread = read(visdn_chan->channel_fd, buf, 512);
 
-	for (i=0; i<nread; i++) {
+/*	for (i=0; i<nread; i++) {
 		buf[i] = linear_to_alaw(
 				echo_can_update(visdn_chan->ec,
 					alaw_to_linear(txbuf[i]),
 					alaw_to_linear(buf[i])));
-	}
+	}*/
 
 /*struct timeval tv;
 gettimeofday(&tv, NULL);
@@ -2566,8 +2574,6 @@ struct sb_setbearer
 	}
 }
 
-int visdn_generator_stop(struct ast_channel *chan);
-
 static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 {
 	printf("*** %s B%d\n", __FUNCTION__, channel->id+1);
@@ -2640,7 +2646,7 @@ static void *visdn_generator_thread_main(void *aaa)
 	return NULL;
 }
 
-int visdn_generator_start(struct ast_channel *chan)
+static int visdn_generator_start(struct ast_channel *chan)
 {
 	int res = -1;
 
@@ -2675,7 +2681,7 @@ already_generating:
 	return res;
 }
 
-int visdn_generator_stop(struct ast_channel *chan)
+static int visdn_generator_stop(struct ast_channel *chan)
 {
 	ast_mutex_lock(&gen_chans_lock);
 
@@ -2762,7 +2768,8 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 		}
 		ast_mutex_unlock(&ast_chan->lock);
 
-		visdn_generator_start(ast_chan);
+		if (!ast_chan->pbx)
+			visdn_generator_start(ast_chan);
 	}
 	break;
 

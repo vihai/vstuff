@@ -147,3 +147,85 @@ enum q931_ie_progress_indicator_location
 	return 0;
 }
 
+static const char *q931_ie_progress_indicator_coding_standard_to_text(
+	enum q931_ie_progress_indicator_coding_standard coding_standard)
+{
+	switch(coding_standard) {
+	case Q931_IE_PI_CS_CCITT:
+		return "CCITT";
+	case Q931_IE_PI_CS_RESERVED:
+		return "Reserved";
+	case Q931_IE_PI_CS_NATIONAL:
+		return "National";
+	case Q931_IE_PI_CS_NETWORK_SPECIFIC:
+		return "Specific";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_progress_indicator_location_to_text(
+	enum q931_ie_progress_indicator_location location)
+{
+	switch(location) {
+	case Q931_IE_PI_L_USER:
+		return "User";
+	case Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_LOCAL_USER:
+		return "Private network serving local user";
+	case Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_LOCAL_USER:
+		return "Public network serving local user";
+	case Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_REMOTE_USER:
+		return "Public network serving remote user";
+	case Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_REMOTE_USER:
+		return "Private network serving remote user";
+	case Q931_IE_PI_L_INTERNATIONAL_NETWORK:
+		return "International network";
+	case Q931_IE_PI_L_NETWORK_BEYOND_INTERNETWORKING_POINT:
+		return "Network beyond internetworking point";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_progress_indicator_progress_description_to_text(
+	enum q931_ie_progress_indicator_progress_description progress_description)
+{
+	switch(progress_description) {
+	case Q931_IE_PI_PD_CALL_NOT_END_TO_END:
+		return "Call is not end-to-end";
+	case Q931_IE_PI_PD_DESTINATION_ADDRESS_IS_NON_ISDN:
+		return "Destination address is non-ISDN";
+	case Q931_IE_PI_PD_ORIGINATION_ADDRESS_IS_NON_ISDN:
+		return "Origination address is non-ISDN";
+	case Q931_IE_PI_PD_CALL_HAS_RETURNED_TO_THE_ISDN:
+		return "Call has returned to the ISDN";
+	case Q931_IE_PI_PD_IN_BAND_INFORMATION:
+		return "In-band information or appropriate pattern now available";
+	default:
+		return "*INVALID*";
+	}
+}
+
+void q931_ie_progress_indicator_dump(
+	const struct q931_ie *generic_ie,
+	const struct q931_message *msg,
+	const char *prefix)
+{
+	struct q931_ie_progress_indicator *ie =
+		container_of(generic_ie, struct q931_ie_progress_indicator, ie);
+
+	report_msg(msg, LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+		q931_ie_progress_indicator_coding_standard_to_text(
+			ie->coding_standard),
+		ie->coding_standard);
+
+	report_msg(msg, LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
+		q931_ie_progress_indicator_location_to_text(
+			ie->location),
+		ie->location);
+
+	report_msg(msg, LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
+		q931_ie_progress_indicator_progress_description_to_text(
+			ie->progress_description),
+		ie->progress_description);
+}

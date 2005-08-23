@@ -172,7 +172,6 @@ struct q931_ie_channel_identification_onwire_3d
 	__u8 slot_map;
   };
 } __attribute__ ((__packed__));
-#endif
 
 void q931_ie_channel_identification_register(
 	const struct q931_ie_type *type);
@@ -188,4 +187,10 @@ int q931_ie_channel_identification_write_to_buf(
         void *buf,
 	int max_size);
 
+void q931_ie_channel_identification_dump(
+	const struct q931_ie *ie,
+	const struct q931_message *msg,
+	const char *prefix);
+
+#endif
 #endif

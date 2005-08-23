@@ -13,6 +13,226 @@
 
 static const struct q931_ie_type *ie_type;
 
+void q931_ie_cause_register(
+	const struct q931_ie_type *type)
+{
+	ie_type = type;
+
+	q931_ie_cause_value_infos_init();
+}
+
+struct q931_ie_cause *q931_ie_cause_alloc(void)
+{
+	struct q931_ie_cause *ie;
+	ie = malloc(sizeof(*ie));
+	assert(ie);
+
+	memset(ie, 0x00, sizeof(*ie));
+
+	ie->ie.refcnt = 1;
+	ie->ie.type = ie_type;
+
+	return ie;
+}
+
+struct q931_ie *q931_ie_cause_alloc_abstract(void)
+{
+	return &q931_ie_cause_alloc()->ie;
+}
+
+int q931_ie_cause_read_from_buf(
+	struct q931_ie *abstract_ie,
+	const struct q931_message *msg,
+	int pos,
+	int len)
+{
+	assert(abstract_ie->type == ie_type);
+
+	struct q931_ie_cause *ie = 
+		container_of(abstract_ie,
+			struct q931_ie_cause, ie);
+
+	int nextoct = 0;
+
+	if (len < 1) {
+		report_msg(msg, LOG_ERR, "IE size < 1\n");
+
+		return FALSE;
+	}
+
+	struct q931_ie_cause_onwire_3 *oct_3 =
+		(struct q931_ie_cause_onwire_3 *)
+		(msg->rawies + pos + nextoct);
+
+	ie->coding_standard = oct_3->coding_standard;
+
+	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
+		// What should we do?
+		report_msg(msg, LOG_WARNING,
+			"What should we do if coding_standard != CCITT?\n");
+	}
+
+	if (oct_3->ext == 0) {
+		nextoct++;
+
+		struct q931_ie_cause_onwire_3a *oct_3a =
+			(struct q931_ie_cause_onwire_3a *)
+			(msg->rawies + pos + nextoct);
+
+		if (oct_3a->ext != 1) {
+			report_msg(msg, LOG_ERR, "Extension bit unexpectedly set to 0\n");
+			return FALSE;
+		}
+
+		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
+			report_msg(msg, LOG_ERR,
+				"Recommendation unexpectedly != Q.931\n");
+
+			return FALSE;
+		}
+	}
+
+	ie->recommendation = Q931_IE_C_R_Q931;
+
+	return TRUE;
+}
+
+
+int q931_ie_cause_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size)
+{
+	struct q931_ie_cause *ie =
+		container_of(generic_ie, struct q931_ie_cause, ie);
+	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
+
+	ieow->id = Q931_IE_CAUSE;
+	ieow->len = 0;
+
+	ieow->data[ieow->len] = 0x00;
+	struct q931_ie_cause_onwire_3 *oct_3 =
+	  (struct q931_ie_cause_onwire_3 *)(&ieow->data[ieow->len]);
+	oct_3->ext = 1;
+	oct_3->coding_standard = ie->coding_standard;
+	oct_3->location = ie->location;
+	ieow->len += 1;
+
+	ieow->data[ieow->len] = 0x00;
+	struct q931_ie_cause_onwire_4 *oct_4 =
+	  (struct q931_ie_cause_onwire_4 *)(&ieow->data[ieow->len]);
+	oct_4->ext = 1;
+	oct_4->cause_value = ie->value;
+	ieow->len += 1;
+
+	memcpy(&ieow->data[ieow->len], ie->diagnostics, ie->diagnostics_len);
+	ieow->len += ie->diagnostics_len;
+
+	return ieow->len + sizeof(struct q931_ie_onwire);
+}
+
+int q931_ies_contain_cause(
+	const struct q931_ies *ies,
+	enum q931_ie_cause_value cause_value)
+{
+	int i;
+	for (i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_CAUSE) {
+			struct q931_ie_cause *cause =
+				container_of(ies->ies[i],
+					struct q931_ie_cause, ie);
+
+			if (cause->value == cause_value)
+				return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+enum q931_ie_cause_location q931_ie_cause_location(
+	enum q931_call_direction direction,
+	enum q931_interface_network_role network_role,
+	enum lapd_role role)
+{
+	if (network_role == Q931_INTF_NET_USER) {
+		return Q931_IE_C_L_USER;
+	} else if (network_role == Q931_INTF_NET_PRIVATE) {
+		if (role == LAPD_ROLE_NT) {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+			else
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		} else {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			else
+				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+		}
+	} else if (network_role == Q931_INTF_NET_LOCAL) {
+		if (role == LAPD_ROLE_NT) {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+			else
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+		} else {
+			if (direction == Q931_CALL_DIRECTION_INBOUND)
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+			else
+				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+		}
+	} else if (network_role == Q931_INTF_NET_TRANSIT) {
+		return Q931_IE_C_L_TRANSIT_NETWORK;
+	} else if (network_role == Q931_INTF_NET_INTERNATIONAL) {
+		return Q931_IE_C_L_INTERNATIONAL_NETWORK;
+	}
+
+	assert(0);
+	return 0;
+}
+
+static const char *q931_ie_cause_coding_standard_to_text(
+	enum q931_ie_cause_coding_standard coding_standard)
+{
+	switch(coding_standard) {
+	case Q931_IE_C_CS_CCITT:
+		return "CCITT";
+	case Q931_IE_C_CS_RESERVED:
+		return "Reserved";
+	case Q931_IE_C_CS_NATIONAL:
+		return "National";
+	case Q931_IE_C_CS_SPECIFIC:
+		return "Specific";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_cause_location_to_text(
+	enum q931_ie_cause_location location)
+{
+	switch(location) {
+	case Q931_IE_C_L_USER:
+		return "User";
+	case Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER:
+		return "Private network serving local user";
+	case Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER:
+		return "Public network serving local user";
+	case Q931_IE_C_L_TRANSIT_NETWORK:
+		return "Transit network";
+	case Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER:
+		return "Public network serving remote user";
+	case Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER:
+		return "Private network serving remote user";
+	case Q931_IE_C_L_INTERNATIONAL_NETWORK:
+		return "International network";
+	case Q931_IE_C_L_NETWORK_BEYOND_INTERNETWORKING_POINT:
+		return "Network beyond internetworking point";
+	default:
+		return "*INVALID*";
+	}
+}
+
 struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 {
 	{
@@ -234,15 +454,15 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 
 static int q931_ie_cause_value_compare(const void *a, const void *b)
 {
-	return q931_intcmp(((struct q931_ie_cause_value_info *)a)->id,
-	                   ((struct q931_ie_cause_value_info *)b)->id);
+	return q931_intcmp(((struct q931_ie_cause_value_info *)a)->value,
+	                   ((struct q931_ie_cause_value_info *)b)->value);
 }
 
-const struct q931_ie_cause_value_info *q931_get_ie_cause_value_info(int id)
+const struct q931_ie_cause_value_info *q931_get_ie_cause_value_info(int value)
 {
 	struct q931_ie_cause_value_info key, *res;
 
-	key.id = id;
+	key.value = value;
 	key.name = NULL;
 
 	res = (struct q931_ie_cause_value_info *)
@@ -265,178 +485,39 @@ void q931_ie_cause_value_infos_init()
 	      q931_ie_cause_value_compare);
 }
 
-void q931_ie_cause_register(
-	const struct q931_ie_type *type)
+
+static const char *q931_ie_cause_cause_value_to_text(
+	enum q931_ie_cause_value cause_value)
 {
-	ie_type = type;
+	const struct q931_ie_cause_value_info *info =
+		q931_get_ie_cause_value_info(cause_value);
+
+	if (info)
+		return info->name;
+	else
+		return "*INVALID*";
 }
 
-struct q931_ie_cause *q931_ie_cause_alloc(void)
-{
-	struct q931_ie_cause *ie;
-	ie = malloc(sizeof(*ie));
-	assert(ie);
-
-	memset(ie, 0x00, sizeof(*ie));
-
-	ie->ie.refcnt = 1;
-	ie->ie.type = ie_type;
-
-	return ie;
-}
-
-struct q931_ie *q931_ie_cause_alloc_abstract(void)
-{
-	return &q931_ie_cause_alloc()->ie;
-}
-
-int q931_ie_cause_read_from_buf(
-	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
-{
-	assert(abstract_ie->type == ie_type);
-
-	struct q931_ie_cause *ie = 
-		container_of(abstract_ie,
-			struct q931_ie_cause, ie);
-
-	int nextoct = 0;
-
-	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
-
-		return FALSE;
-	}
-
-	struct q931_ie_cause_onwire_3 *oct_3 =
-		(struct q931_ie_cause_onwire_3 *)
-		(msg->rawies + pos + nextoct);
-
-	ie->coding_standard = oct_3->coding_standard;
-
-	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
-		// What should we do?
-		report_msg(msg, LOG_WARNING,
-			"What should we do if coding_standard != CCITT?\n");
-	}
-
-	if (oct_3->ext == 0) {
-		nextoct++;
-
-		struct q931_ie_cause_onwire_3a *oct_3a =
-			(struct q931_ie_cause_onwire_3a *)
-			(msg->rawies + pos + nextoct);
-
-		if (oct_3a->ext != 1) {
-			report_msg(msg, LOG_ERR, "Extension bit unexpectedly set to 0\n");
-			return FALSE;
-		}
-
-		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
-			report_msg(msg, LOG_ERR,
-				"Recommendation unexpectedly != Q.931\n");
-
-			return FALSE;
-		}
-	}
-
-	ie->recommendation = Q931_IE_C_R_Q931;
-
-	return TRUE;
-}
-
-
-int q931_ie_cause_write_to_buf(
+void q931_ie_cause_dump(
 	const struct q931_ie *generic_ie,
-	void *buf,
-	int max_size)
+	const struct q931_message *msg,
+	const char *prefix)
 {
 	struct q931_ie_cause *ie =
 		container_of(generic_ie, struct q931_ie_cause, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_CAUSE;
-	ieow->len = 0;
+	report_msg(msg, LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+		q931_ie_cause_coding_standard_to_text(
+			ie->coding_standard),
+		ie->coding_standard);
 
-	ieow->data[ieow->len] = 0x00;
-	struct q931_ie_cause_onwire_3 *oct_3 =
-	  (struct q931_ie_cause_onwire_3 *)(&ieow->data[ieow->len]);
-	oct_3->ext = 1;
-	oct_3->coding_standard = ie->coding_standard;
-	oct_3->location = ie->location;
-	ieow->len += 1;
+	report_msg(msg, LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
+		q931_ie_cause_location_to_text(
+			ie->location),
+		ie->location);
 
-	ieow->data[ieow->len] = 0x00;
-	struct q931_ie_cause_onwire_4 *oct_4 =
-	  (struct q931_ie_cause_onwire_4 *)(&ieow->data[ieow->len]);
-	oct_4->ext = 1;
-	oct_4->cause_value = ie->value;
-	ieow->len += 1;
-
-	memcpy(&ieow->data[ieow->len], ie->diagnostics, ie->diagnostics_len);
-	ieow->len += ie->diagnostics_len;
-
-	return ieow->len + sizeof(struct q931_ie_onwire);
-}
-
-int q931_ies_contain_cause(
-	const struct q931_ies *ies,
-	enum q931_ie_cause_value cause_value)
-{
-	int i;
-	for (i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_CAUSE) {
-			struct q931_ie_cause *cause =
-				container_of(ies->ies[i],
-					struct q931_ie_cause, ie);
-
-			if (cause->value == cause_value)
-				return TRUE;
-		}
-	}
-
-	return FALSE;
-}
-
-enum q931_ie_cause_location q931_ie_cause_location(
-	enum q931_call_direction direction,
-	enum q931_interface_network_role network_role,
-	enum lapd_role role)
-{
-	if (network_role == Q931_INTF_NET_USER) {
-		return Q931_IE_C_L_USER;
-	} else if (network_role == Q931_INTF_NET_PRIVATE) {
-		if (role == LAPD_ROLE_NT) {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
-			else
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-		} else {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			else
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
-		}
-	} else if (network_role == Q931_INTF_NET_LOCAL) {
-		if (role == LAPD_ROLE_NT) {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
-			else
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
-		} else {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
-			else
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
-		}
-	} else if (network_role == Q931_INTF_NET_TRANSIT) {
-		return Q931_IE_C_L_TRANSIT_NETWORK;
-	} else if (network_role == Q931_INTF_NET_INTERNATIONAL) {
-		return Q931_IE_C_L_INTERNATIONAL_NETWORK;
-	}
-
-	assert(0);
-	return 0;
+	report_msg(msg, LOG_DEBUG, "%sCause value = %s (%d)\n", prefix,
+		q931_ie_cause_cause_value_to_text(
+			ie->value),
+		ie->value);
 }

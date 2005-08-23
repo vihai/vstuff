@@ -264,3 +264,148 @@ int q931_ie_channel_identification_write_to_buf(
 	}
 }
 
+static const char *q931_ie_channel_identification_interface_id_present_to_text(
+	enum q931_ie_channel_identification_interface_id_present
+		interface_id_present)
+{
+        switch(interface_id_present) {
+	case Q931_IE_CI_IIP_IMPLICIT:
+		return "Implicit";
+	case Q931_IE_CI_IIP_EXPLICIT:
+		return "Explicit";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_channel_identification_interface_type_to_text(
+	enum q931_ie_channel_identification_interface_type
+		interface_type)
+{
+        switch(interface_type) {
+	case Q931_IE_CI_IT_BASIC:
+		return "Basic";
+	case Q931_IE_CI_IT_PRIMARY:
+		return "Primary";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_channel_identification_preferred_exclusive_to_text(
+	enum q931_ie_channel_identification_preferred_exclusive
+		preferred_exclusive)
+{
+        switch(preferred_exclusive) {
+	case Q931_IE_CI_PE_PREFERRED:
+		return "Preferred";
+	case Q931_IE_CI_PE_EXCLUSIVE:
+		return "Exclusive";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_channel_identification_d_channel_indicator_to_text(
+	enum q931_ie_channel_identification_d_channel_indicator
+		d_channel_indicator)
+{
+        switch(d_channel_indicator) {
+	case Q931_IE_CI_DCI_IS_NOT_D_CHAN:
+		return "Is not D channel";
+	case Q931_IE_CI_DCI_IS_D_CHAN:
+		return "Is D channel";
+	default:
+		return "*INVALID*";
+	}
+}
+
+/*static const char *q931_ie_channel_identification_info_channel_selection_bra_to_text(
+	enum q931_ie_channel_identification_info_channel_selection_bra
+		info_channel_selection_bra)
+{
+        switch(info_channel_selection_bra) {
+	case Q931_IE_CI_ICS_BRA_NO_CHANNEL:
+		return "No channel";
+	case Q931_IE_CI_ICS_BRA_B1:
+		return "B1";
+	case Q931_IE_CI_ICS_BRA_B2:
+		return "B2";
+	case Q931_IE_CI_ICS_BRA_ANY:
+		return "Any channel";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_channel_identification_info_channel_selection_pra_to_text(
+	enum q931_ie_channel_identification_info_channel_selection_pra
+		info_channel_selection)
+{
+        switch(info_channel_selection) {
+	case Q931_IE_CI_ICS_PRA_NO_CHANNEL:
+		return "No channel";
+	case Q931_IE_CI_ICS_PRA_INDICATED:
+		return "Indicated";
+	case Q931_IE_CI_ICS_PRA_RESERVED:
+		return "Reserved";
+	case Q931_IE_CI_ICS_PRA_ANY:
+		return "Any channel";
+	default:
+		return "*INVALID*";
+	}
+}*/
+
+static const char *q931_ie_channel_identification_coding_standard_to_text(
+	enum q931_ie_channel_identification_coding_standard
+		coding_standard)
+{
+        switch(coding_standard) {
+	case Q931_IE_CI_CS_CCITT:
+		return "CCITT";
+	case Q931_IE_CI_CS_RESERVED:
+		return "Reserved";
+	case Q931_IE_CI_CS_NATIONAL:
+		return "National";
+	case Q931_IE_CI_CS_NETWORK:
+		return "Network";
+	default:
+		return "*INVALID*";
+	}
+}
+
+void q931_ie_channel_identification_dump(
+	const struct q931_ie *generic_ie,
+	const struct q931_message *msg,
+	const char *prefix)
+{
+	struct q931_ie_channel_identification *ie =
+		container_of(generic_ie, struct q931_ie_channel_identification, ie);
+
+	report_msg(msg, LOG_DEBUG, "%sInterface id = %s (%d)\n", prefix,
+		q931_ie_channel_identification_interface_id_present_to_text(
+			ie->interface_id_present),
+		ie->interface_id_present);
+
+	report_msg(msg, LOG_DEBUG, "%sInterface type = %s (%d)\n", prefix,
+		q931_ie_channel_identification_interface_type_to_text(
+			ie->interface_type),
+		ie->interface_type);
+
+	report_msg(msg, LOG_DEBUG, "%sPref/Excl = %s (%d)\n", prefix,
+		q931_ie_channel_identification_preferred_exclusive_to_text(
+			ie->preferred_exclusive),
+		ie->preferred_exclusive);
+
+	report_msg(msg, LOG_DEBUG, "%sD channel ident = %s (%d)\n", prefix,
+		q931_ie_channel_identification_d_channel_indicator_to_text(
+			ie->d_channel_indicator),
+		ie->d_channel_indicator);
+
+	report_msg(msg, LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+		q931_ie_channel_identification_coding_standard_to_text(
+			ie->coding_standard),
+		ie->coding_standard);
+
+	// FIXME Add chanset
+}

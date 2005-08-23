@@ -2,6 +2,31 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-23 13:12:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-65
+
+    Summary:
+      Added basic IE dump capabilities and fixed congestion bug in visdn_chan
+    Revision:
+      isdn--devel--0.1--patch-65
+
+    
+    
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c libq931/src/ie.c
+     libq931/src/ie.h libq931/src/ie_bearercap.c
+     libq931/src/ie_bearercap.h libq931/src/ie_call_state.c
+     libq931/src/ie_call_state.h libq931/src/ie_cause.c
+     libq931/src/ie_cause.h libq931/src/ie_cdpn.c
+     libq931/src/ie_cdpn.h libq931/src/ie_cgpn.c
+     libq931/src/ie_cgpn.h libq931/src/ie_chanid.c
+     libq931/src/ie_chanid.h libq931/src/ie_hlc.c
+     libq931/src/ie_hlc.h libq931/src/ie_progind.c
+     libq931/src/ie_progind.h libq931/src/ie_restind.c
+     libq931/src/ie_restind.h libq931/src/ie_sending_complete.c
+     libq931/src/ie_sending_complete.h libq931/src/q931.c
+
+
 2005-08-22 22:12:43 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-64
 
     Summary:

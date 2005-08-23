@@ -51,6 +51,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_sending_complete_alloc_abstract,
 		.read_from_buf	= q931_ie_sending_complete_read_from_buf,
 		.write_to_buf   = q931_ie_sending_complete_write_to_buf,
+		.dump		= q931_ie_sending_complete_dump,
 	},
 	{
 		.max_len	= 1,
@@ -97,6 +98,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_bearer_capability_alloc_abstract,
 		.read_from_buf	= q931_ie_bearer_capability_read_from_buf,
 		.write_to_buf   = q931_ie_bearer_capability_write_to_buf,
+		.dump		= q931_ie_bearer_capability_dump,
 	},
 	{
 		.max_len	= 32,
@@ -108,6 +110,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_cause_alloc_abstract,
 		.read_from_buf	= q931_ie_cause_read_from_buf,
 		.write_to_buf   = q931_ie_cause_write_to_buf,
+		.dump		= q931_ie_cause_dump,
 	},
 	{
 		.max_len	= 10,
@@ -119,6 +122,7 @@ static struct q931_ie_type q931_ie_types[] =
 //		.alloc		= q931_ie_call_identity_alloc_abstract,
 //		.read_from_buf	= q931_ie_call_identity_read_from_buf,
 //		.write_to_buf   = q931_ie_call_identity_write_to_buf,
+//		.dump		= q931_ie_call_identity_dump,
 	},
 	{
 		.max_len	= 3,
@@ -130,6 +134,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_call_state_alloc_abstract,
 		.read_from_buf	= q931_ie_call_state_read_from_buf,
 		.write_to_buf   = q931_ie_call_state_write_to_buf,
+		.dump		= q931_ie_call_state_dump,
 	},
 	{
 		.max_len	= -1,
@@ -141,6 +146,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_channel_identification_alloc_abstract,
 		.read_from_buf	= q931_ie_channel_identification_read_from_buf,
 		.write_to_buf   = q931_ie_channel_identification_write_to_buf,
+		.dump		= q931_ie_channel_identification_dump,
 	},
 	{
 		.max_len	= -1,
@@ -159,6 +165,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_progress_indicator_alloc_abstract,
 		.read_from_buf	= q931_ie_progress_indicator_read_from_buf,
 		.write_to_buf   = q931_ie_progress_indicator_write_to_buf,
+		.dump		= q931_ie_progress_indicator_dump,
 	},
 	{
 		.max_len	= -1,
@@ -324,6 +331,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_calling_party_number_alloc_abstract,
 		.read_from_buf	= q931_ie_calling_party_number_read_from_buf,
 		.write_to_buf   = q931_ie_calling_party_number_write_to_buf,
+		.dump		= q931_ie_calling_party_number_dump,
 	},
 	{
 		.max_len	= 23,
@@ -342,6 +350,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_called_party_number_alloc_abstract,
 		.read_from_buf	= q931_ie_called_party_number_read_from_buf,
 		.write_to_buf   = q931_ie_called_party_number_write_to_buf,
+		.dump		= q931_ie_called_party_number_dump,
 	},
 	{
 		.max_len	= 23,
@@ -402,6 +411,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.alloc		= q931_ie_restart_indicator_alloc_abstract,
 		.read_from_buf	= q931_ie_restart_indicator_read_from_buf,
 		.write_to_buf   = q931_ie_restart_indicator_write_to_buf,
+		.dump		= q931_ie_restart_indicator_dump,
 	},
 	{
 		.max_len	= -1,
@@ -1084,6 +1094,4 @@ void q931_ie_types_init()
 		if (q931_ie_types[i].init)
 			q931_ie_types[i].init(&q931_ie_types[i]);
 	}
-	
-	q931_ie_cause_value_infos_init();
 }

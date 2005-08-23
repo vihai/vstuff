@@ -98,3 +98,32 @@ int q931_ie_restart_indicator_write_to_buf(
 
 	return ieow->len + sizeof(struct q931_ie_onwire);
 }
+
+static const char *q931_ie_restart_indicator_restart_class_to_text(
+	enum q931_ie_restart_indicator_restart_class class)
+{
+	switch(class) {
+	case Q931_IE_RI_C_INDICATED:
+		return "Indicated";
+	case Q931_IE_RI_C_SINGLE_INTERFACE:
+		return "Single interface";
+	case Q931_IE_RI_C_ALL_INTERFACES:
+		return "All interfaces";
+	default:
+		return "*INVALID*";
+	}
+}
+
+void q931_ie_restart_indicator_dump(
+	const struct q931_ie *generic_ie,
+	const struct q931_message *msg,
+	const char *prefix)
+{
+	struct q931_ie_restart_indicator *ie =
+		container_of(generic_ie, struct q931_ie_restart_indicator, ie);
+
+	report_msg(msg, LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
+		q931_ie_restart_indicator_restart_class_to_text(
+			ie->restart_class),
+		ie->restart_class);
+}

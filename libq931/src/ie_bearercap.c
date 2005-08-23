@@ -47,8 +47,8 @@ int q931_ie_bearer_capability_read_from_buf(
 
 	int nextoct = 0;
 
-	if (len < 1) {
-		report_msg(msg, LOG_WARNING, "IE size < 2\n");
+	if (len < 3) {
+		report_msg(msg, LOG_WARNING, "IE size < 3\n");
 		return FALSE;
 	}
 
@@ -91,9 +91,6 @@ int q931_ie_bearer_capability_read_from_buf(
 			}
 		}
 	}
-
-	if (nextoct >= len)
-		return TRUE;
 
 	struct q931_ie_bearer_capability_onwire_5 *oct_5 =
 		(struct q931_ie_bearer_capability_onwire_5 *)
@@ -217,4 +214,146 @@ int q931_ie_bearer_capability_write_to_buf(
 	ieow->len += 1;
 
 	return ieow->len + sizeof(struct q931_ie_onwire);
+}
+
+static const char *q931_ie_bearer_capability_coding_standard_to_text(
+	enum q931_ie_bearer_capability_coding_standard coding_standard)
+{
+	switch(coding_standard) {
+	case Q931_IE_BC_CS_CCITT:
+		return "CCITT";
+	case Q931_IE_BC_CS_RESERVED:
+		return "Reserved";
+	case Q931_IE_BC_CS_NATIONAL:
+		return "National";
+	case Q931_IE_BC_CS_SPECIFIC:
+		return "Specific";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *
+	q931_ie_bearer_capability_information_transfer_capability_to_text(
+	enum q931_ie_bearer_capability_information_transfer_capability
+		information_transfer_capability)
+{
+	switch(information_transfer_capability) {
+	case Q931_IE_BC_ITC_SPEECH:
+		return "Speech";
+	case Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL:
+		return "Unrestricted Digital";
+	case Q931_IE_BC_ITC_RESTRICTED_DIGITAL:
+		return "Restricted Digital";
+	case Q931_IE_BC_ITC_3_1_KHZ_AUDIO:
+		return "3.1 kHz audio";
+	case Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL_WITH_TONES:
+		return "Unrestricted digital with tones";
+	case Q931_IE_BC_ITC_VIDEO:
+		return "Video";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_bearer_capability_transfer_mode_to_text(
+	enum q931_ie_bearer_capability_transfer_mode transfer_mode)
+{
+	switch(transfer_mode) {
+	case Q931_IE_BC_TM_CIRCUIT:
+		return "Circuit";
+	case Q931_IE_BC_TM_PACKET:
+		return "Packet";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_bearer_capability_information_transfer_rate_to_text(
+	enum q931_ie_bearer_capability_information_transfer_rate
+		information_transfer_rate)
+{
+	switch(information_transfer_rate) {
+	case Q931_IE_BC_ITR_PACKET:
+		return "Packet";
+	case Q931_IE_BC_ITR_64:
+		return "64 kbps";
+	case Q931_IE_BC_ITR_64_X_2:
+		return "2 x 64 kbps";
+	case Q931_IE_BC_ITR_384:
+		return "384 kbps";
+	case Q931_IE_BC_ITR_1536:
+		return "1536 kbps";
+	case Q931_IE_BC_ITR_1920:
+		return "1920 kbps";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_bearer_capability_user_information_layer_1_protocol_to_text(
+	enum q931_ie_bearer_capability_user_information_layer_1_protocol
+		user_information_layer_1_protocol)
+{
+	switch(user_information_layer_1_protocol) {
+	case Q931_IE_BC_UIL1P_V110:
+		return "v.110";
+	case Q931_IE_BC_UIL1P_G711_ULAW:
+		return "g.711 u-law";
+	case Q931_IE_BC_UIL1P_G711_ALAW:
+		return "g.711 a-law";
+	case Q931_IE_BC_UIL1P_G721:
+		return "g.721";
+	case Q931_IE_BC_UIL1P_G722:
+		return "g.722";
+	case Q931_IE_BC_UIL1P_G7XX_VIDEO:
+		return "g.7xx video";
+	case Q931_IE_BC_UIL1P_NON_CCITT:
+		return "Non-CCITT";
+	case Q931_IE_BC_UIL1P_V120:
+		return "v.120";
+	case Q931_IE_BC_UIL1P_X31:
+		return "x.31";
+	default:
+		return "*INVALID*";
+	}
+}
+
+void q931_ie_bearer_capability_dump(
+	const struct q931_ie *generic_ie,
+	const struct q931_message *msg,
+	const char *prefix)
+{
+	struct q931_ie_bearer_capability *ie =
+		container_of(generic_ie, struct q931_ie_bearer_capability, ie);
+
+	report_msg(msg, LOG_DEBUG,
+		"%sCoding Standard = %s (%d)\n", prefix,
+		q931_ie_bearer_capability_coding_standard_to_text(
+			ie->coding_standard),
+		ie->coding_standard);
+
+	report_msg(msg, LOG_DEBUG,
+		"%sInformation Transfer Capability = %s (%d)\n", prefix,
+		q931_ie_bearer_capability_information_transfer_capability_to_text(
+			ie->information_transfer_capability),
+		ie->information_transfer_capability);
+
+	report_msg(msg, LOG_DEBUG,
+		"%sTransfer mode = %s (%d)\n", prefix,
+		q931_ie_bearer_capability_transfer_mode_to_text(
+			ie->transfer_mode),
+		ie->transfer_mode);
+
+	report_msg(msg, LOG_DEBUG,
+		"%sInformation Transfer Rate = %s (%d)\n", prefix,
+		q931_ie_bearer_capability_information_transfer_rate_to_text(
+			ie->information_transfer_rate),
+		ie->information_transfer_rate);
+
+	report_msg(msg, LOG_DEBUG,
+		"%sUser information layer 1 protocol = %s (%d)\n", prefix,
+		q931_ie_bearer_capability_user_information_layer_1_protocol_to_text(
+			ie->user_information_layer_1_protocol),
+		ie->user_information_layer_1_protocol);
 }

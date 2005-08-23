@@ -18,7 +18,7 @@ enum q931_ie_bearer_capability_information_transfer_capability
 	Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL		= 0x08,
 	Q931_IE_BC_ITC_RESTRICTED_DIGITAL		= 0x09,
 	Q931_IE_BC_ITC_3_1_KHZ_AUDIO			= 0x10,
-	Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL_WITH_TONES	= 0x10,
+	Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL_WITH_TONES	= 0x11,
 	Q931_IE_BC_ITC_VIDEO				= 0x18,
 };
 
@@ -296,6 +296,11 @@ int q931_ie_bearer_capability_write_to_buf(
 	const struct q931_ie *ie,
 	void *buf,
 	int max_size);
+
+void q931_ie_bearer_capability_dump(
+	const struct q931_ie *ie,
+	const struct q931_message *msg,
+	const char *prefix);
 
 #endif
 #endif

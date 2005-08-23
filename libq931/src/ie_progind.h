@@ -8,10 +8,10 @@
 
 enum q931_ie_progress_indicator_coding_standard
 {
-	Q931_IE_PI_CS_CCITT	= 0x0,
-	Q931_IE_PI_CS_RESERVED	= 0x1,
-	Q931_IE_PI_CS_NATIONAL	= 0x2,
-	Q931_IE_PI_CS_SPECIFIC	= 0x3,
+	Q931_IE_PI_CS_CCITT		= 0x0,
+	Q931_IE_PI_CS_RESERVED		= 0x1,
+	Q931_IE_PI_CS_NATIONAL		= 0x2,
+	Q931_IE_PI_CS_NETWORK_SPECIFIC	= 0x3,
 };
 
 enum q931_ie_progress_indicator_location
@@ -96,5 +96,10 @@ int q931_ie_progress_indicator_write_to_buf(
 	const struct q931_ie *generic_ie,
         void *buf,
 	int max_size);
+
+void q931_ie_progress_indicator_dump(
+	const struct q931_ie *ie,
+	const struct q931_message *msg,
+	const char *prefix);
 
 #endif

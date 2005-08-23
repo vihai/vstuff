@@ -244,14 +244,17 @@ void q931_decode_so_ie(
 						ds->rawies_curpos, 1))
 					q931_ies_add(&msg->ies, ie);
 
+				if (ie->type->dump)
+					ie->type->dump(ie, msg, "  ");
+
+				report_dlc(msg->dlc, LOG_DEBUG,
+					"SO IE %d ===> %u (%s)\n",
+					ds->curie,
+					ds->ie_id,
+					ie_type->name);
+
 				q931_ie_put(ie);
 			}
-
-			report_dlc(msg->dlc, LOG_DEBUG,
-				"SO IE %d ===> %u (%s)\n",
-				ds->curie,
-				ds->ie_id,
-				ie_type->name);
 		} else {
 			report_dlc(msg->dlc, LOG_DEBUG,
 				"SO IE %d ===> %u (unknown)\n",
@@ -320,6 +323,9 @@ void q931_decode_vl_ie(
 				if (ie->type->read_from_buf(ie, msg,
 						ds->rawies_curpos, ie_len))
 					q931_ies_add_put(&msg->ies, ie);
+
+				if (ie->type->dump)
+					ie->type->dump(ie, msg, "  ");
 			}
 		} else {
 			// If mandatory or comprension required
