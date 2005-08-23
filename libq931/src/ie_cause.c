@@ -54,8 +54,8 @@ int q931_ie_cause_read_from_buf(
 
 	int nextoct = 0;
 
-	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+	if (len < 2) {
+		report_msg(msg, LOG_ERR, "IE size < 2\n");
 
 		return FALSE;
 	}
@@ -63,6 +63,7 @@ int q931_ie_cause_read_from_buf(
 	struct q931_ie_cause_onwire_3 *oct_3 =
 		(struct q931_ie_cause_onwire_3 *)
 		(msg->rawies + pos + nextoct);
+	nextoct++;
 
 	ie->coding_standard = oct_3->coding_standard;
 
@@ -73,11 +74,10 @@ int q931_ie_cause_read_from_buf(
 	}
 
 	if (oct_3->ext == 0) {
-		nextoct++;
-
 		struct q931_ie_cause_onwire_3a *oct_3a =
 			(struct q931_ie_cause_onwire_3a *)
 			(msg->rawies + pos + nextoct);
+		nextoct++;
 
 		if (oct_3a->ext != 1) {
 			report_msg(msg, LOG_ERR, "Extension bit unexpectedly set to 0\n");
@@ -93,6 +93,13 @@ int q931_ie_cause_read_from_buf(
 	}
 
 	ie->recommendation = Q931_IE_C_R_Q931;
+
+	struct q931_ie_cause_onwire_4 *oct_4 =
+		(struct q931_ie_cause_onwire_4 *)
+		(msg->rawies + pos + nextoct);
+	nextoct++;
+
+	ie->value = oct_4->cause_value;
 
 	return TRUE;
 }

@@ -1118,14 +1118,12 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	if (visdn.debug)
 		ast_log(LOG_NOTICE, "visdn_answer\n");
 
-	ast_indicate(ast_chan, -1);
+//	ast_indicate(ast_chan, -1);
 
 	if (!visdn_chan) {
 		ast_log(LOG_ERROR, "NO VISDN_CHAN!!\n");
 		return -1;
 	}
-
-//	ast_queue_frame(ast_chan, &visdn_chan->fr);
 
 	q931_setup_response(visdn_chan->q931_call, NULL);
 
