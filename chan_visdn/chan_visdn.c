@@ -54,7 +54,7 @@
 
 #include <visdn.h>
 
-#include "echo.h"
+//#include "echo.h"
 
 #define FRAME_SIZE 160
 
@@ -87,7 +87,7 @@ struct visdn_chan {
 	char called_number[21];
 	int sending_complete;
 
-	echo_can_state_t *ec;
+//	echo_can_state_t *ec;
 };
 
 enum poll_info_type
@@ -1270,8 +1270,8 @@ static int visdn_sendtext(struct ast_channel *ast, char *text)
 
 static void visdn_destroy(struct visdn_chan *visdn_chan)
 {
-	if (visdn_chan->ec)
-		echo_can_free(visdn_chan->ec);
+//	if (visdn_chan->ec)
+//		echo_can_free(visdn_chan->ec);
 
 	free(visdn_chan);
 }
@@ -1288,7 +1288,7 @@ static struct visdn_chan *visdn_alloc()
 
 	visdn_chan->channel_fd = -1;
 
-	visdn_chan->ec = echo_can_create(256, 0);
+//	visdn_chan->ec = echo_can_create(256, 0);
 
 	return visdn_chan;
 }

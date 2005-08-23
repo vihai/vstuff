@@ -1,20 +1,11 @@
 
 
-[00:17] <vihai> Sto implementando un po' di roba in visdn.conf
-[00:18] <vihai> Tra le caratteristiche di ciascun interfaccia metterei:
-[00:18] <vihai> - Contesto inbound
-[00:18] <vihai> - Default Caller ID
-[00:18] <vihai> - Dialplan (in e out?)
-[00:19] <vihai> - Ruolo (User, Private, Network, Transit, International)
-[00:20] <vihai> - Generazione dei toni?
-[00:23] <vihai> - Caller ID forzato?
-[00:24] <vihai> Altro?
-[00:52] <vihai> Sei scomparso?
-[01:15] <fsck> no stavo ravanando
-[01:15] <fsck> yast sbaglia anche i moduli da includere nell'initrd
-[01:15] <vihai> Perché?
-[01:16] <fsck> non mette scsi-mod e sd-mod e gli hcd
-[01:17] <vihai> Che dici dei parametri di configurazione?
+[00:50] <fsck> - una breve introduzione a come caricare i moduli, attivare le interfacce
+[00:50] <fsck> - una breve intro a chan_visdn
+[00:50] <fsck> - la faccenda del crash (che da una cattiva impressione, visto che al primo colpo uno dimentica qualcosa :)
+[00:51] <fsck> - un buildscript anche molto rozzo, che faccia aclocal/automake/autoconf e i make necessari
+
+
 [01:18] <fsck> uhm l'ecocancel?
 [01:19] <vihai> E' da configurare per ogni interfaccia? In che casi non va messo?
 [01:20] <fsck> quando quell'interfaccia non è al margine di una rete tutta digitale è inutile
