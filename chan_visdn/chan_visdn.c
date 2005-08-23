@@ -1739,8 +1739,9 @@ static void visdn_accept(
 
 	if (visdn.debug)
 		ast_log(LOG_NOTICE,
-			"New DLC (TEI=%d) accepted...\n",
-			newdlc->tei);
+			"New DLC (TEI=%d) accepted on interface %s\n",
+			newdlc->tei,
+			intf->name);
 
 	refresh_polls_list(
 		visdn.polls,
