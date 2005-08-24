@@ -26,9 +26,9 @@
 #include <lapd.h>
 #include <visdn.h>
 
-#include "st_port.h"
-#include "st_port_inline.h"
-#include "st_port_sysfs.h"
+#include "e1_port.h"
+#include "e1_port_inline.h"
+#include "e1_port_sysfs.h"
 #include "pcm_port.h"
 #include "pcm_port_inline.h"
 #include "pcm_port_sysfs.h"
@@ -45,9 +45,7 @@ int debug_level = 0;
 #endif
 
 static struct pci_device_id hfc_pci_ids[] = {
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_8S,
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_E1,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{0,}
 };
@@ -223,18 +221,18 @@ void hfc_configure_fifos(
 		hfc_configure_fifo(&card->fifos[i][TX], fcfg, fzcfg);
 
 		hfc_debug_card(card, 3, "FIFO %d zmin=%04x zmax=%04x fmin=%02x fmax=%02x\n",
-		i,
-		fzcfg->z_min,
-		fzcfg->z_max,
-		fcfg->f_min,
-		fcfg->f_max);
+			i,
+			fzcfg->z_min,
+			fzcfg->z_max,
+			fcfg->f_min,
+			fcfg->f_max);
 	}
 }
 
 static void hfc_initialize_hw_nonsoft(struct hfc_card *card)
 {
 	// FIFO RAM configuration
-	card->ram_size = 32;
+	card->ramsize = 32;
 	card->regs.ram_misc = hfc_R_RAM_MISC_V_RAM_SZ_32K;
 
 	hfc_outb(card, hfc_R_RAM_MISC, card->regs.ram_misc);
@@ -291,17 +289,6 @@ void hfc_update_pcm_md1(struct hfc_card *card)
 	hfc_outb(card, hfc_R_PCM_MD1, pcm_md1);
 }
 
-void hfc_update_st_sync(struct hfc_card *card)
-{
-	if (card->clock_source == -1)
-		hfc_outb(card, hfc_R_ST_SYNC,
-			hfc_R_ST_SYNC_V_AUTO_SYNC_ENABLED);
-	else
-		hfc_outb(card, hfc_R_ST_SYNC,
-			hfc_R_ST_SYNC_V_SYNC_SEL(card->clock_source & 0x07) |
-			hfc_R_ST_SYNC_V_AUTO_SYNC_DISABLED);
-}
-
 void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
 {
 	hfc_outb(card, hfc_R_BERT_WD_MD,
@@ -333,7 +320,6 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 	hfc_update_pcm_md0(card, 0);
 	hfc_update_pcm_md1(card);
-	hfc_update_st_sync(card);
 	hfc_update_bert_wd_md(card, 0);
 
 	hfc_outb(card, hfc_R_SCI_MSK,
@@ -350,16 +336,11 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_GPIO_SEL_V_GPIO_SEL6 |
 		hfc_R_GPIO_SEL_V_GPIO_SEL7)*/
 
-
 	// Timer interrupt enabled
 	hfc_outb(card, hfc_R_IRQMSK_MISC,
 		hfc_R_IRQMSK_MISC_V_TI_IRQMSK);
 
-	int i;
-	for (i=0; i<card->num_st_ports; i++) {
-		hfc_st_port_select(&card->st_ports[i]);
-		hfc_st_port__do_set_role(&card->st_ports[i], 0);
-	}
+	hfc_e1_port_initialize_hw(&card->e1_port);
 
 	// Enable interrupts
 	hfc_outb(card, hfc_R_IRQ_CTRL,
@@ -409,7 +390,7 @@ static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
 {
 }
 
-static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
+static inline void hfc_handle_state_interrupt(struct hfc_e1_port *port)
 {
 	schedule_work(&port->state_change_work);
 }
@@ -480,12 +461,9 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 	}
 
-	if (irq_sci) {
-		int i;
-		for (i=0; i<card->num_st_ports; i++) {
-			if (irq_sci & (1 << card->st_ports[i].id)) {
-				hfc_handle_state_interrupt(&card->st_ports[i]);
-			}
+	if (irq_sci) { dfgkndfkgjdfgn
+		if (irq_sci & (1 << card->st_ports[i].id)) {
+			hfc_handle_state_interrupt(&card->st_ports[i]);
 		}
 	}
 
@@ -584,11 +562,7 @@ static int __devinit hfc_probe(
 
 	int chip_type = hfc_R_CHIP_ID_V_CHIP_ID(hfc_inb(card, hfc_R_CHIP_ID));
 
-	if (chip_type == hfc_R_CHIP_ID_V_CHIP_ID_HFC_4S) {
-		card->num_st_ports = 4;
-	} else if (chip_type == hfc_R_CHIP_ID_V_CHIP_ID_HFC_8S) {
-		card->num_st_ports = 8;
-	} else {
+	if (chip_type != hfc_R_CHIP_ID_V_CHIP_ID_HFC_E1) {
 		hfc_msg_card(card, KERN_ERR,
 			"unknown chip type '0x%02x'\n", chip_type);
 
@@ -601,22 +575,21 @@ static int __devinit hfc_probe(
 		goto err_unsupported_revision;
 
 	hfc_msg_card(card, KERN_ERR,
-		"HFC-%cS chip rev. %02x detected\n",
-			chip_type == hfc_R_CHIP_ID_V_CHIP_ID_HFC_4S ?
-				'4' : '8',
+		"HFC-E1 chip rev. %02x detected\n",
 			revision);
 
-	for (i=0; i<card->num_st_ports; i++) {
-		card->st_ports[i].card = card;
-		card->st_ports[i].id = i;
+	card->e1_port.card = card;
+	card->e1_port.id = i;
 
-		INIT_WORK(&card->st_ports[i].state_change_work,
-			hfc_st_port_state_change_work,
-			&card->st_ports[i]);
+	INIT_WORK(&card->e1_port.state_change_work,
+		hfc_e1_port_state_change_work,
+		&card->e1_port);
 
-		visdn_port_init(&card->st_ports[i].visdn_port, &hfc_st_port_ops);
-		card->st_ports[i].visdn_port.priv = &card->st_ports[i];
+	visdn_port_init(&card->e1_port.visdn_port, &hfc_e1_port_ops);
+	card->e1_port.visdn_port.priv = &card->e1_port;
 
+	int i;
+	for (i=0; i<32; i++) {
 		struct hfc_chan_duplex *chan;
 //---------------------------------- D
 
@@ -773,16 +746,6 @@ static int __devinit hfc_probe(
 
 		hfc_chan_sysfs_create_files_B(&card->st_ports[i].chans[B2]);
 
-		visdn_chan_register(
-			&card->st_ports[i].chans[E].visdn_chan, "E",
-			&card->st_ports[i].visdn_port);
-
-		visdn_chan_register(
-			&card->st_ports[i].chans[SQ].visdn_chan, "SQ",
-			&card->st_ports[i].visdn_port);
-
-		hfc_chan_sysfs_create_files_SQ(&card->st_ports[i].chans[SQ]);
-
 		hfc_st_port_sysfs_create_files(&card->st_ports[i]);
 	}
 
@@ -805,10 +768,7 @@ static int __devinit hfc_probe(
 
 	return 0;
 
-	visdn_port_unregister(&card->st_ports[3].visdn_port);
-	visdn_port_unregister(&card->st_ports[2].visdn_port);
-	visdn_port_unregister(&card->st_ports[1].visdn_port);
-	visdn_port_unregister(&card->st_ports[0].visdn_port);
+	visdn_port_unregister(&card->e1_port.visdn_port);
 
 	hfc_card_sysfs_delete_files(card);
 err_card_sysfs_create_files:
@@ -840,29 +800,6 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 
 	visdn_port_unregister(&card->pcm_port.visdn_port);
 
-	visdn_chan_unregister(&card->st_ports[3].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[3].visdn_port);
-
-	visdn_chan_unregister(&card->st_ports[2].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[2].visdn_port);
-
-	visdn_chan_unregister(&card->st_ports[1].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[1].visdn_port);
-
-	visdn_chan_unregister(&card->st_ports[0].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[0].chans[E].visdn_chan);
 	visdn_chan_unregister(&card->st_ports[0].chans[B2].visdn_chan);
 	visdn_chan_unregister(&card->st_ports[0].chans[B1].visdn_chan);
 	visdn_chan_unregister(&card->st_ports[0].chans[D].visdn_chan);

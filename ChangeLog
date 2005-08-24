@@ -2,6 +2,60 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-24 19:18:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-75
+
+    Summary:
+      Checked in hfc-e1, though it is still not working
+    Revision:
+      isdn--devel--0.1--patch-75
+
+    
+    
+
+    new files:
+     hfc-e1/.arch-ids/.arch-inventory.id hfc-e1/.arch-ids/=id
+     hfc-e1/.arch-ids/Makefile.id hfc-e1/.arch-ids/card.h.id
+     hfc-e1/.arch-ids/card_inline.h.id
+     hfc-e1/.arch-ids/card_sysfs.c.id
+     hfc-e1/.arch-ids/card_sysfs.h.id hfc-e1/.arch-ids/chan.c.id
+     hfc-e1/.arch-ids/chan.h.id hfc-e1/.arch-ids/chan_sysfs.c.id
+     hfc-e1/.arch-ids/chan_sysfs.h.id hfc-e1/.arch-ids/e1_port.c.id
+     hfc-e1/.arch-ids/e1_port.h.id
+     hfc-e1/.arch-ids/e1_port_inline.h.id
+     hfc-e1/.arch-ids/e1_port_sysfs.c.id
+     hfc-e1/.arch-ids/e1_port_sysfs.h.id hfc-e1/.arch-ids/fifo.c.id
+     hfc-e1/.arch-ids/fifo.h.id hfc-e1/.arch-ids/fifo_inline.h.id
+     hfc-e1/.arch-ids/fsm.c.id hfc-e1/.arch-ids/fsm.h.id
+     hfc-e1/.arch-ids/hfc-e1_main.c.id hfc-e1/.arch-ids/module.h.id
+     hfc-e1/.arch-ids/pcm_port.c.id hfc-e1/.arch-ids/pcm_port.h.id
+     hfc-e1/.arch-ids/pcm_port_inline.h.id
+     hfc-e1/.arch-ids/pcm_port_sysfs.c.id
+     hfc-e1/.arch-ids/pcm_port_sysfs.h.id
+     hfc-e1/.arch-ids/regs.h.id hfc-e1/.arch-ids/util.h.id
+     hfc-e1/.arch-inventory hfc-e1/Makefile hfc-e1/card.h
+     hfc-e1/card_inline.h hfc-e1/card_sysfs.c hfc-e1/card_sysfs.h
+     hfc-e1/chan.c hfc-e1/chan.h hfc-e1/chan_sysfs.c
+     hfc-e1/chan_sysfs.h hfc-e1/e1_port.c hfc-e1/e1_port.h
+     hfc-e1/e1_port_inline.h hfc-e1/e1_port_sysfs.c
+     hfc-e1/e1_port_sysfs.h hfc-e1/fifo.c hfc-e1/fifo.h
+     hfc-e1/fifo_inline.h hfc-e1/fsm.c hfc-e1/fsm.h
+     hfc-e1/hfc-e1_main.c hfc-e1/module.h hfc-e1/pcm_port.c
+     hfc-e1/pcm_port.h hfc-e1/pcm_port_inline.h
+     hfc-e1/pcm_port_sysfs.c hfc-e1/pcm_port_sysfs.h hfc-e1/regs.h
+     hfc-e1/util.h
+
+    modified files:
+     AUTHORS ChangeLog Makefile.am README hfc-4s/card.h
+     hfc-4s/card_sysfs.c hfc-4s/hfc-4s_main.c hfc-4s/pcm_port.c
+     hfc-4s/st_port.c hfc-4s/st_port.h hfc-4s/st_port_sysfs.c
+     hfc-4s/util.h hfc-pci/pcm_port.c hfc-pci/st_port.c
+     hfc-pci/st_port.h hfc-pci/st_port_sysfs.c visdn-core/port.c
+     visdn-core/port.h
+
+    new directories:
+     hfc-e1 hfc-e1/.arch-ids
+
+
 2005-08-24 14:05:39 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-74
 
     Summary:

@@ -13,7 +13,6 @@ struct visdn_port_ops
 {
 	int (*enable)(struct visdn_port *port);
 	int (*disable)(struct visdn_port *port);
-	int (*set_role)(struct visdn_port *port, int nt_mode);
 };
 
 struct visdn_port
@@ -30,7 +29,6 @@ struct visdn_port
 	struct visdn_port_ops *ops;
 
 	int enabled;
-	int nt_mode;
 };
 
 int visdn_port_modinit(void);

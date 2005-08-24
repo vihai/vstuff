@@ -6,6 +6,74 @@
 #include "st_port_sysfs.h"
 #include "card.h"
 
+static ssize_t hfc_show_role(
+	struct device *device,
+	char *buf)
+{
+	struct visdn_port *visdn_port = to_visdn_port(device);
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+		port->nt_mode? "NT" : "TE");
+}
+
+static ssize_t hfc_store_role(
+	struct device *device,
+	const char *buf,
+	size_t count)
+{
+	struct visdn_port *visdn_port = to_visdn_port(device);
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	if (count < 2)
+		return count;
+
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
+
+	hfc_st_port_select(port);
+
+	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
+		port->regs.st_ctrl_0 =
+			hfc_A_ST_CTRL0_V_ST_MD_NT;
+		hfc_outb(port->card, hfc_A_ST_CTRL0,
+			port->regs.st_ctrl_0);
+
+		port->clock_delay = 0x0C;
+		port->sampling_comp = 0x6;
+
+		hfc_outb(port->card, hfc_A_ST_CLK_DLY,
+			hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay)|
+			hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
+
+		port->nt_mode = TRUE;
+	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
+		port->regs.st_ctrl_0 =
+			hfc_A_ST_CTRL0_V_ST_MD_TE;
+		hfc_outb(port->card, hfc_A_ST_CTRL0,
+			port->regs.st_ctrl_0);
+
+		port->clock_delay = 0x0E;
+		port->sampling_comp = 0x6;
+
+		hfc_outb(port->card, hfc_A_ST_CLK_DLY,
+			hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay)|
+			hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
+
+		port->nt_mode = FALSE;
+	}
+
+	up(&port->card->sem);
+
+	return count;
+}
+
+static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
+		hfc_show_role,
+		hfc_store_role);
+
+//----------------------------------------------------------------------------
+
 static ssize_t hfc_show_l1_state(
 	struct device *device,
 	char *buf)
@@ -14,7 +82,7 @@ static ssize_t hfc_show_l1_state(
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%c%d\n",
-		port->visdn_port.nt_mode?'G':'F',
+		port->nt_mode?'G':'F',
 		port->l1_state);
 }
 
@@ -49,8 +117,8 @@ static ssize_t hfc_store_l1_state(
 		}
 
 		if (state < 0 ||
-		    (port->visdn_port.nt_mode && state > 7) ||
-		    (!port->visdn_port.nt_mode && state > 3)) {
+		    (port->nt_mode && state > 7) ||
+		    (!port->nt_mode && state > 3)) {
 			err = -EINVAL;
 			goto err_invalid_state;
 		}
@@ -76,6 +144,7 @@ static DEVICE_ATTR(l1_state, S_IRUGO | S_IWUSR,
 		hfc_store_l1_state);
 
 //----------------------------------------------------------------------------
+
 static ssize_t hfc_show_st_clock_delay(
 	struct device *device,
 	char *buf)
@@ -174,6 +243,12 @@ int hfc_st_port_sysfs_create_files(
 
 	err = device_create_file(
 		&port->visdn_port.device,
+		&dev_attr_role);
+	if (err < 0)
+		goto err_device_create_file_role;
+
+	err = device_create_file(
+		&port->visdn_port.device,
 		&dev_attr_l1_state);
 	if (err < 0)
 		goto err_device_create_file_l1_state;
@@ -194,6 +269,10 @@ int hfc_st_port_sysfs_create_files(
 
 	device_remove_file(
 		&port->visdn_port.device,
+		&dev_attr_role);
+err_device_create_file_role:
+	device_remove_file(
+		&port->visdn_port.device,
 		&dev_attr_st_sampling_comp);
 err_device_create_file_st_sampling_comp:
 	device_remove_file(
@@ -211,6 +290,9 @@ err_device_create_file_l1_state:
 void hfc_st_port_sysfs_delete_files(
         struct hfc_st_port *port)
 {
+	device_remove_file(
+		&port->visdn_port.device,
+		&dev_attr_role);
 	device_remove_file(
 		&port->visdn_port.device,
 		&dev_attr_st_sampling_comp);

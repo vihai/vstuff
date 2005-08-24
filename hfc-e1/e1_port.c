@@ -1,12 +1,12 @@
 #include <linux/kernel.h>
 
-#include "st_port.h"
-#include "st_port_inline.h"
+#include "e1_port.h"
+#include "e1_port_inline.h"
 #include "card.h"
 
-void hfc_st_port_state_change_work(void *data)
+void hfc_e1_port_state_change_work(void *data)
 {
-	struct hfc_st_port *port = data;
+	struct hfc_e1_port *port = data;
 	struct hfc_card *card = port->card;
 
 	down(&card->sem);
@@ -17,10 +17,10 @@ void hfc_st_port_state_change_work(void *data)
 
 	hfc_debug_port(port, 1,
 		"layer 1 state = %c%d\n",
-		port->nt_mode?'G':'F',
+		port->visdn_port.nt_mode?'G':'F',
 		new_state);
 
-	if (port->nt_mode) {
+	if (port->visdn_port.nt_mode) {
 		// NT mode
 
 		if (new_state == 2) {
@@ -72,13 +72,13 @@ void hfc_st_port_state_change_work(void *data)
 	up(&card->sem);
 }
 
-void hfc_st_port_check_l1_up(struct hfc_st_port *port)
+void hfc_e1_port_check_l1_up(struct hfc_e1_port *port)
 {
 	struct hfc_card *card = port->card;
 
 	if (port->visdn_port.enabled &&
-		((!port->nt_mode && port->l1_state != 7) ||
-		(port->nt_mode && port->l1_state != 3))) {
+		((!port->visdn_port.nt_mode && port->l1_state != 7) ||
+		(port->visdn_port.nt_mode && port->l1_state != 3))) {
 
 		hfc_debug_port(port, 1,
 			"L1 is down, bringing up L1.\n");
@@ -90,10 +90,10 @@ void hfc_st_port_check_l1_up(struct hfc_st_port *port)
        	}
 }
 
-static int hfc_st_port_enable(
+static int hfc_e1_port_enable(
 	struct visdn_port *visdn_port)
 {
-	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
 
 	if (down_interruptible(&port->card->sem))
 		return -ERESTARTSYS;
@@ -106,10 +106,10 @@ static int hfc_st_port_enable(
 	return 0;
 }
 
-static int hfc_st_port_disable(
+static int hfc_e1_port_disable(
 	struct visdn_port *visdn_port)
 {
-	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
 
 	if (down_interruptible(&port->card->sem))
 		return -ERESTARTSYS;
@@ -124,7 +124,7 @@ static int hfc_st_port_disable(
 	return 0;
 }
 
-struct visdn_port_ops hfc_st_port_ops = {
-	.enable		= hfc_st_port_enable,
-	.disable	= hfc_st_port_disable,
+struct visdn_port_ops hfc_e1_port_ops = {
+	.enable		= hfc_e1_port_enable,
+	.disable	= hfc_e1_port_disable,
 };

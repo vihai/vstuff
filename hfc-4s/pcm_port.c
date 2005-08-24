@@ -74,7 +74,6 @@ static int hfc_pcm_port_disable(
 }
 
 struct visdn_port_ops hfc_pcm_port_ops = {
-	.set_role	= NULL,
 	.enable		= hfc_pcm_port_enable,
 	.disable	= hfc_pcm_port_disable,
 };

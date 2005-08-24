@@ -10,15 +10,15 @@
  *
  */
 
-#ifndef _HFC_ST_PORT_H
-#define _HFC_ST_PORT_H
+#ifndef _HFC_E1_PORT_H
+#define _HFC_E1_PORT_H
 
 #include <visdn.h>
 
 #include "chan.h"
 //#include "fifo.h"
 
-#define to_st_port(port) container_of(port, struct hfc_st_port, visdn_port)
+#define to_e1_port(port) container_of(port, struct hfc_e1_port, visdn_port)
 
 #ifdef DEBUG
 #define hfc_debug_port(port, dbglevel, format, arg...)		\
@@ -45,43 +45,55 @@
 		(port)->id,					\
 		## arg)
 
-#define D 0
-#define B1 1
-#define B2 2
-#define E 3
-#define SQ 4
+enum hfc_e1_port_code
+{
+	HFC_E1_PORT_CODE_NRZ,
+	HFC_E1_PORT_CODE_AMI,
+	HFC_E1_PORT_CODE_HDB3,
+};
 
-struct hfc_st_port
+enum hfc_e1_port_ais_mode
+{
+	HFC_E1_PORT_AIS_MODE_ETS_300_233
+	HFC_E1_PORT_AIS_MODE_ITU_T_G_776
+};
+
+struct hfc_e1_port
 {
 	struct hfc_card *card;
 
 	int id;
 
-	int nt_mode;
 //	int enabled;
 	u8 l1_state;
-	int clock_delay;
-	int sampling_comp;
+	enum hfc_e1_port_code rx_line_code;
+	enum hfc_e1_port_code tx_line_code;
+	BOOL rx_full_bauded;
+	BOOL tx_full_bauded;
+	BOOL rx_cmi_enabled;
+	BOOL tx_cmi_enabled;
+	BOOL rx_cmi_inverted;
+	BOOL tx_cmi_inverted;
+	BOOL rx_invert_clock;
+	BOOL tx_invert_clock;
+	BOOL rx_invert_data;
+	BOOL tx_invert_data;
+	enum hfc_e1_port_ais_mode ais_mode;
 
-	struct hfc_chan_duplex chans[5];
+	BOOL rx_crc4;
+	BOOL tx_crc4;
 
-	// This struct contains a copy of some registers whose bits may be
-	// changed independently.
-	struct
-	{
-		u8 st_ctrl_0;
-		u8 st_ctrl_2;
-	} regs;
+	struct hfc_chan_duplex chans[32];
 
 	struct work_struct state_change_work;
 
 	struct visdn_port visdn_port;
 };
 
-extern struct visdn_port_ops hfc_st_port_ops;
+extern struct visdn_port_ops hfc_e1_port_ops;
 
-void hfc_st_port_check_l1_up(struct hfc_st_port *port);
-void hfc_st_port__do_set_role(struct hfc_st_port *port, int nt_mode);
-void hfc_st_port_state_change_work(void *data);
+void hfc_e1_port_check_l1_up(struct hfc_e1_port *port);
+void hfc_e1_port__do_set_role(struct hfc_e1_port *port, int nt_mode);
+void hfc_e1_port_state_change_work(void *data);
 
 #endif

@@ -80,41 +80,6 @@ static DEVICE_ATTR(port_id, S_IRUGO | S_IWUSR,
 		visdn_port_show_port_name,
 		NULL);
 
-static ssize_t visdn_port_show_role(
-	struct device *device,
-	char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n",
-		to_visdn_port(device)->nt_mode?"NT":"TE");
-}
-
-static ssize_t visdn_port_store_role(
-	struct device *device,
-	const char *buf,
-	size_t count)
-{
-	struct visdn_port *port = to_visdn_port(device);
-
-	//chan->netdev->dev_addr[0] = 0x01;
-
-	if (count < 2)
-		return count;
-
-	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
-		if (port->ops->set_role)
-			port->ops->set_role(port, 1);
-	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
-		if (port->ops->set_role)
-			port->ops->set_role(port, 0);
-	}
-
-	return count;
-}
-
-static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
-		visdn_port_show_role,
-		visdn_port_store_role);
-
 static void visdn_port_release(struct device *cd)
 {
 //	struct visdn_port *visdn_port =
@@ -221,19 +186,13 @@ int visdn_port_register(
 			&port->device,
 			&dev_attr_enabled);
 	if (err < 0)
-		goto err_device_create_file;
+		goto err_device_create_file_enabled;
 
 	err = device_create_file(
 			&port->device,
 			&dev_attr_port_id);
 	if (err < 0)
-		goto err_device_create_file;
-
-	err = device_create_file(
-			&port->device,
-			&dev_attr_role);
-	if (err < 0)
-		goto err_device_create_file;
+		goto err_device_create_file_port_id;
 
 	if (port->device.parent) { // FIXME
 		sysfs_create_link(
@@ -243,7 +202,14 @@ int visdn_port_register(
 
 	return 0;
 
-err_device_create_file:
+	device_remove_file(
+		&port->device,
+		&dev_attr_port_id);
+err_device_create_file_port_id:
+	device_remove_file(
+		&port->device,
+		&dev_attr_enabled);
+err_device_create_file_enabled:
 	device_unregister(&port->device);
 err_device_register:
 
@@ -255,6 +221,13 @@ void visdn_port_unregister(
 	struct visdn_port *port)
 {
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_unregister called\n");
+
+	device_remove_file(
+		&port->device,
+		&dev_attr_port_id);
+	device_remove_file(
+		&port->device,
+		&dev_attr_enabled);
 
 	if (port->device.parent) { // FIXME
 		sysfs_remove_link(

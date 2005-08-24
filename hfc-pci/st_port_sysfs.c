@@ -6,6 +6,64 @@
 #include "card.h"
 #include "card_inline.h"
 
+static ssize_t hfc_show_role(
+	struct device *device,
+	char *buf)
+{
+	struct visdn_port *visdn_port = to_visdn_port(device);
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+		port->nt_mode ? "NT" : "TE");
+}
+
+static ssize_t hfc_store_role(
+	struct device *device,
+	const char *buf,
+	size_t count)
+{
+	struct visdn_port *visdn_port = to_visdn_port(device);
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	if (count < 2)
+		return count;
+
+	if (down_interruptible(&port->card->sem))
+		return -ERESTARTSYS;
+
+	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
+		port->card->regs.sctrl =
+			hfc_SCTRL_MODE_NT;
+		hfc_outb(port->card, hfc_SCTRL,
+			port->card->regs.sctrl);
+
+		port->clock_delay = 0x0C;
+		port->sampling_comp = 0x6;
+		hfc_update_st_clk_dly(port);
+
+		port->nt_mode = TRUE;
+	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
+		port->card->regs.sctrl =
+			hfc_SCTRL_MODE_TE;
+		hfc_outb(port->card, hfc_SCTRL,
+			port->card->regs.sctrl);
+
+		port->clock_delay = 0x0E;
+		port->sampling_comp = 0x6;
+		hfc_update_st_clk_dly(port);
+
+		port->nt_mode = FALSE;
+	}
+
+	up(&port->card->sem);
+
+	hfc_debug_port(port, 1,
+		"role set to %s\n",
+		port->nt_mode ? "NT" : "TE");
+
+	return count;
+}
+
 static ssize_t hfc_show_l1_state(
 	struct device *device,
 	char *buf)
@@ -16,7 +74,7 @@ static ssize_t hfc_show_l1_state(
 	u8 l1_state = hfc_inb(port->card, hfc_STATES) & hfc_STATES_STATE_MASK;
 
 	return snprintf(buf, PAGE_SIZE, "%c%d\n",
-		port->visdn_port.nt_mode?'G':'F',
+		port->nt_mode ? 'G' : 'F',
 		l1_state);
 }
 
@@ -48,8 +106,8 @@ static ssize_t hfc_store_l1_state(
 		}
 
 		if (state < 0 ||
-		    (port->visdn_port.nt_mode && state > 7) ||
-		    (!port->visdn_port.nt_mode && state > 3)) {
+		    (port->nt_mode && state > 7) ||
+		    (!port->nt_mode && state > 3)) {
 			err = -EINVAL;
 			goto err_invalid_state;
 		}

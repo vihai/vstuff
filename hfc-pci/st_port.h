@@ -56,6 +56,7 @@ struct hfc_st_port
 
 	int id;
 
+	int nt_mode;
 	u8 l1_state;
 	int clock_delay;
 	int sampling_comp;

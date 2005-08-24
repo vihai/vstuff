@@ -18,11 +18,10 @@
 
 #include <visdn.h>
 
-#include "st_port.h"
+#include "e1_port.h"
 #include "pcm_port.h"
 #include "fifo.h"
 #include "regs.h"
-//#include "fifo.h"
 
 #ifdef DEBUG
 #define hfc_debug_card(card, dbglevel, format, arg...)	\
@@ -61,8 +60,7 @@ struct hfc_card {
 
 	struct pci_dev *pcidev;
 
-	int num_st_ports;
-	struct hfc_st_port st_ports[8];
+	struct hfc_e1_port e1_port;
 	struct hfc_pcm_port pcm_port;
 
 	int num_fifos;
@@ -72,7 +70,7 @@ struct hfc_card {
 	void *io_mem;
 
 	int clock_source;
-	int ram_size;
+	int ramsize;
 	int bert_mode;
 	int output_level;
 };

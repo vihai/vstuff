@@ -1,7 +1,7 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 
-#include "st_port.h"
+#include "e1_port.h"
 #include "card.h"
 #include "card_inline.h"
 
@@ -49,11 +49,10 @@ static int hfc_pcm_port_enable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
-	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&card->sem))
+	if (down_interruptible(&port->card->sem))
 		return -ERESTARTSYS;
-	up(&card->sem);
+	up(&port->card->sem);
 
 	hfc_debug_pcm_port(port, 2, "enabled\n");
 
@@ -64,11 +63,10 @@ static int hfc_pcm_port_disable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
-	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&card->sem))
+	if (down_interruptible(&port->card->sem))
 		return -ERESTARTSYS;
-	up(&card->sem);
+	up(&port->card->sem);
 
 	hfc_debug_pcm_port(port, 2, "disabled\n");
 
@@ -76,6 +74,7 @@ static int hfc_pcm_port_disable(
 }
 
 struct visdn_port_ops hfc_pcm_port_ops = {
+	.set_role	= NULL,
 	.enable		= hfc_pcm_port_enable,
 	.disable	= hfc_pcm_port_disable,
 };
