@@ -303,6 +303,8 @@ void q931_call_put(struct q931_call *call)
 	call->refcnt--;
 
 	if (!call->refcnt) {
+		report_call(call, LOG_DEBUG, "Freeing call\n");
+
 		q931_intf_del_call(call);
 
 		free(call);
@@ -3474,8 +3476,6 @@ static inline void q931_handle_alerting(
 		q931_call_message_not_compatible_with_state(call, msg);
 	break;
 	}
-
-	q931_call_put(call);
 }
 
 inline static void q931_handle_call_proceeding(
