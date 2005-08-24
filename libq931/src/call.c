@@ -681,7 +681,7 @@ static int q931_channel_select_response(
 
 				report_call(call, LOG_DEBUG,
 					"No channel proposed in setup, "
-					"using indicated channel B%d",
+					"using indicated channel B%d\n",
 					ci->chanset.chans[i]->id+1);
 
 				call->channel = ci->chanset.chans[i];
@@ -692,13 +692,13 @@ static int q931_channel_select_response(
 			} else {
 				report_call(call, LOG_DEBUG,
 					"No channel proposed in setup, "
-					"but indicated channel B%d is unavailable",
+					"but indicated channel B%d is unavailable\n",
 					ci->chanset.chans[i]->id+1);
 			}
 
 			report_call(call, LOG_DEBUG,
 				"No channel proposed in setup, "
-				"but no indicated channel is unavailable");
+				"but no indicated channel is unavailable\n");
 		}
 
 // FIXME			q931_ies_add_put(causeset,
