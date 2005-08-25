@@ -55,6 +55,16 @@ AC_SUBST(ksrcdir)
 
 AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
 
+#-----------------------------------------------------------------------------
+
+AC_ARG_WITH(
+	[asterisk],
+	AC_HELP_STRING(
+		[--with-asterisk],
+		[Enable asterisk module compilation]))
+
+AM_CONDITIONAL(asterisk, test "$with_asterisk" = yes)
+
 AC_ARG_WITH(
 	[asterisk-modules],
 	AC_HELP_STRING(
@@ -73,7 +83,18 @@ AC_ARG_WITH(
 		[Specify asterisk includes directory]),
 	[astincdir=${withval}],
 	[astincdir="/usr/include/"])
-#AC_SUBST(kernel_sources)
+AC_SUBST(astincdir)
+
+AC_ARG_WITH(
+	[asterisk-config],
+	AC_HELP_STRING(
+		[--with-asterisk-config],
+		[Specify asterisk configuration directory]),
+	[astconfdir=${withval}],
+	[astconfdir="/etc/asterisk/"])
+AC_SUBST(astconfdir)
+
+#-----------------------------------------------------------------------------
 
 AC_ARG_ENABLE(
 	[tests],
@@ -82,6 +103,27 @@ AC_ARG_ENABLE(
 		[Enable testing tools]))
 
 AM_CONDITIONAL(tests, test "$enable_tests" = yes)
+
+#-----------------------------------------------------------------------------
+drivers="hfc-pci, hfc-4s"
+
+AC_ARG_ENABLE(
+	[drivers],
+	AC_HELP_STRING(
+		[--enable-drivers=<list>],
+		[Enable drivers (comma separated list of driver names), currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1, fake-isdn]),
+	drivers="$enableval")
+
+AM_CONDITIONAL(driver_hfc_usb,
+	test -n "`echo $drivers | grep hfc-usb`" || test $drivers = "all")
+AM_CONDITIONAL(driver_hfc_pci,
+	test -n "`echo $drivers | grep hfc-pci`" || test $drivers = "all")
+AM_CONDITIONAL(driver_hfc_4s,
+	test -n "`echo $drivers | grep hfc-4s`" || test $drivers = "all")
+AM_CONDITIONAL(driver_hfc_e1,
+	test -n "`echo $drivers | grep hfc-e1`" || test $drivers = "all")
+AM_CONDITIONAL(driver_fake_isdn,
+	test -n "`echo $drivers | grep fake_isdn`" || test $drivers = "all")
 
 AC_CONFIG_FILES([Makefile
                  libq931/Makefile 

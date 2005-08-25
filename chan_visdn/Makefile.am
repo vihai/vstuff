@@ -8,7 +8,7 @@ INCLUDES =				\
 	-I$(top_builddir)/lapd/		\
 	-I$(top_builddir)/visdn-core/	\
 	-I$(top_builddir)/softport/	\
-	-I/opt/asterisk/usr/include/
+	-I$(astincdir)
 
 chan_visdn_la_LIBADD = ../libq931/libq931.la
 chan_visdn_la_LDFLAGS = -module

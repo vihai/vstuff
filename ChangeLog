@@ -2,6 +2,27 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-25 20:34:28 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-77
+
+    Summary:
+      Ability to select compiled drivers in the build system
+    Revision:
+      isdn--devel--0.1--patch-77
+
+    
+    
+
+    new files:
+     .arch-ids/DEVELOPERS.id DEVELOPERS
+
+    modified files:
+     ChangeLog INSTALL Makefile.am chan_visdn/Makefile.am
+     configure.ac fake_isdn/Makefile hfc-4s/Makefile
+     hfc-e1/Makefile hfc-pci/Makefile hfc-usb/Makefile
+     lapd/Makefile softport/Makefile timer-system/Makefile
+     visdn-core/Makefile {arch}/=tagging-method
+
+
 2005-08-25 17:15:44 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-76
 
     Summary:
