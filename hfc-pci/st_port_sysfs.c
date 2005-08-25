@@ -64,6 +64,12 @@ static ssize_t hfc_store_role(
 	return count;
 }
 
+static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
+		hfc_show_role,
+		hfc_store_role);
+
+//----------------------------------------------------------------------------
+
 static ssize_t hfc_show_l1_state(
 	struct device *device,
 	char *buf)
@@ -221,6 +227,12 @@ int hfc_st_port_sysfs_create_files(
 
 	err = device_create_file(
 		&port->visdn_port.device,
+		&dev_attr_role);
+	if (err < 0)
+		goto err_device_create_file_role;
+
+	err = device_create_file(
+		&port->visdn_port.device,
 		&dev_attr_l1_state);
 	if (err < 0)
 		goto err_device_create_file_l1_state;
@@ -241,6 +253,10 @@ int hfc_st_port_sysfs_create_files(
 
 	device_remove_file(
 		&port->visdn_port.device,
+		&dev_attr_role);
+err_device_create_file_role:
+	device_remove_file(
+		&port->visdn_port.device,
 		&dev_attr_st_sampling_comp);
 err_device_create_file_st_sampling_comp:
 	device_remove_file(
@@ -258,6 +274,9 @@ err_device_create_file_l1_state:
 void hfc_st_port_sysfs_delete_files(
         struct hfc_st_port *port)
 {
+	device_remove_file(
+		&port->visdn_port.device,
+		&dev_attr_role);
 	device_remove_file(
 		&port->visdn_port.device,
 		&dev_attr_st_sampling_comp);

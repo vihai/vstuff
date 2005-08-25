@@ -2,6 +2,320 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-25 17:15:44 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-76
+
+    Summary:
+      Big build system cleanup
+    Revision:
+      isdn--devel--0.1--patch-76
+
+    
+    
+
+    new files:
+     .arch-ids/bootstrap.id bootstrap
+     chan_visdn/.arch-ids/.arch-inventory.id
+     chan_visdn/.arch-ids/Makefile.am.id chan_visdn/.arch-inventory
+     chan_visdn/Makefile.am fake_isdn/.arch-ids/Makefile.in.id
+     fake_isdn/Makefile.in hfc-4s/.arch-ids/Makefile.in.id
+     hfc-4s/Makefile.in hfc-e1/.arch-ids/Makefile.in.id
+     hfc-e1/Makefile.in hfc-pci/.arch-ids/Makefile.in.id
+     hfc-pci/Makefile.in hfc-usb/.arch-ids/Makefile.in.id
+     hfc-usb/Makefile.in lapd/.arch-ids/Makefile.in.id
+     lapd/Makefile.in softport/.arch-ids/Makefile.in.id
+     softport/Makefile.in tests/.arch-ids/Makefile.am.id
+     tests/Makefile.am timer-system/.arch-ids/Makefile.in.id
+     timer-system/Makefile.in visdn-core/.arch-ids/Makefile.in.id
+     visdn-core/Makefile.in
+
+    removed files:
+     chan_visdn/.arch-ids/Makefile.id chan_visdn/Makefile
+     demoswitch/.arch-ids/.arch-inventory.id
+     demoswitch/.arch-ids/=id demoswitch/.arch-ids/Makefile.am.id
+     demoswitch/.arch-inventory demoswitch/Makefile.am
+     hfc-pci/.arch-ids/card_sysfs.id hfc-pci/card_sysfs
+     libq931/.arch-ids/.arch-inventory.id
+     libq931/.arch-ids/AUTHORS.id libq931/.arch-ids/COPYING.id
+     libq931/.arch-ids/ChangeLog.id libq931/.arch-ids/INSTALL.id
+     libq931/.arch-ids/Makefile.am.id libq931/.arch-ids/NEWS.id
+     libq931/.arch-ids/README.id libq931/.arch-ids/buildauto.id
+     libq931/.arch-ids/configure.ac.id libq931/.arch-ids/depcomp.id
+     libq931/.arch-ids/install-sh.id libq931/.arch-ids/missing.id
+     libq931/.arch-inventory libq931/AUTHORS libq931/COPYING
+     libq931/ChangeLog libq931/INSTALL libq931/Makefile.am
+     libq931/NEWS libq931/README libq931/buildauto
+     libq931/configure.ac libq931/depcomp libq931/install-sh
+     libq931/missing libq931/src/.arch-ids/=id
+
+    modified files:
+     .arch-inventory ChangeLog INSTALL Makefile.am TODO aclocal.m4
+     chan_visdn/chan_visdn.c configure.ac fake_isdn/Makefile
+     hfc-4s/Makefile hfc-e1/Makefile hfc-pci/Makefile
+     hfc-pci/st_port_sysfs.c hfc-usb/Makefile lapd/Makefile
+     libq931/.arch-inventory libq931/Makefile.am libq931/call.h
+     libq931/call_inline.h libq931/ces.h libq931/dlc.h
+     libq931/global.h libq931/ie.h libq931/ie_bearercap.h
+     libq931/ie_call_state.h libq931/ie_cause.h libq931/ie_cdpn.h
+     libq931/ie_cgpn.h libq931/ie_chanid.h libq931/ie_hlc.h
+     libq931/ie_progind.h libq931/ie_restind.h
+     libq931/ie_sending_complete.h libq931/intf.h libq931/lib.h
+     libq931/message.h libq931/out.h libq931/q931.h libq931/timer.h
+     softport/Makefile softport/softport_main.c
+     tests/.arch-inventory tests/connect.c tests/demoswitch.c
+     timer-system/Makefile traffic/Makefile.am visdn-core/Makefile
+     {arch}/=tagging-method
+
+    renamed files:
+     demoswitch/.arch-ids/demoswitch.c.id
+       ==> tests/.arch-ids/demoswitch.c.id
+     demoswitch/demoswitch.c
+       ==> tests/demoswitch.c
+     libq931/src/.arch-ids/.arch-inventory.id
+       ==> libq931/.arch-ids/.arch-inventory.id
+     libq931/src/.arch-ids/Makefile.am.id
+       ==> libq931/.arch-ids/Makefile.am.id
+     libq931/src/.arch-ids/TODO.id
+       ==> libq931/.arch-ids/TODO.id
+     libq931/src/.arch-ids/call.c.id
+       ==> libq931/.arch-ids/call.c.id
+     libq931/src/.arch-ids/call.h.id
+       ==> libq931/.arch-ids/call.h.id
+     libq931/src/.arch-ids/call_inline.h.id
+       ==> libq931/.arch-ids/call_inline.h.id
+     libq931/src/.arch-ids/callref.c.id
+       ==> libq931/.arch-ids/callref.c.id
+     libq931/src/.arch-ids/callref.h.id
+       ==> libq931/.arch-ids/callref.h.id
+     libq931/src/.arch-ids/ces.c.id
+       ==> libq931/.arch-ids/ces.c.id
+     libq931/src/.arch-ids/ces.h.id
+       ==> libq931/.arch-ids/ces.h.id
+     libq931/src/.arch-ids/ces_inline.h.id
+       ==> libq931/.arch-ids/ces_inline.h.id
+     libq931/src/.arch-ids/channel.c.id
+       ==> libq931/.arch-ids/channel.c.id
+     libq931/src/.arch-ids/channel.h.id
+       ==> libq931/.arch-ids/channel.h.id
+     libq931/src/.arch-ids/chanset.c.id
+       ==> libq931/.arch-ids/chanset.c.id
+     libq931/src/.arch-ids/chanset.h.id
+       ==> libq931/.arch-ids/chanset.h.id
+     libq931/src/.arch-ids/dlc.h.id
+       ==> libq931/.arch-ids/dlc.h.id
+     libq931/src/.arch-ids/global.c.id
+       ==> libq931/.arch-ids/global.c.id
+     libq931/src/.arch-ids/global.h.id
+       ==> libq931/.arch-ids/global.h.id
+     libq931/src/.arch-ids/ie.c.id
+       ==> libq931/.arch-ids/ie.c.id
+     libq931/src/.arch-ids/ie.h.id
+       ==> libq931/.arch-ids/ie.h.id
+     libq931/src/.arch-ids/ie_bearercap.c.id
+       ==> libq931/.arch-ids/ie_bearercap.c.id
+     libq931/src/.arch-ids/ie_bearercap.h.id
+       ==> libq931/.arch-ids/ie_bearercap.h.id
+     libq931/src/.arch-ids/ie_call_state.c.id
+       ==> libq931/.arch-ids/ie_call_state.c.id
+     libq931/src/.arch-ids/ie_call_state.h.id
+       ==> libq931/.arch-ids/ie_call_state.h.id
+     libq931/src/.arch-ids/ie_cause.c.id
+       ==> libq931/.arch-ids/ie_cause.c.id
+     libq931/src/.arch-ids/ie_cause.h.id
+       ==> libq931/.arch-ids/ie_cause.h.id
+     libq931/src/.arch-ids/ie_cdpn.c.id
+       ==> libq931/.arch-ids/ie_cdpn.c.id
+     libq931/src/.arch-ids/ie_cdpn.h.id
+       ==> libq931/.arch-ids/ie_cdpn.h.id
+     libq931/src/.arch-ids/ie_cgpn.c.id
+       ==> libq931/.arch-ids/ie_cgpn.c.id
+     libq931/src/.arch-ids/ie_cgpn.h.id
+       ==> libq931/.arch-ids/ie_cgpn.h.id
+     libq931/src/.arch-ids/ie_chanid.c.id
+       ==> libq931/.arch-ids/ie_chanid.c.id
+     libq931/src/.arch-ids/ie_chanid.h.id
+       ==> libq931/.arch-ids/ie_chanid.h.id
+     libq931/src/.arch-ids/ie_hlc.c.id
+       ==> libq931/.arch-ids/ie_hlc.c.id
+     libq931/src/.arch-ids/ie_hlc.h.id
+       ==> libq931/.arch-ids/ie_hlc.h.id
+     libq931/src/.arch-ids/ie_progind.c.id
+       ==> libq931/.arch-ids/ie_progind.c.id
+     libq931/src/.arch-ids/ie_progind.h.id
+       ==> libq931/.arch-ids/ie_progind.h.id
+     libq931/src/.arch-ids/ie_restind.c.id
+       ==> libq931/.arch-ids/ie_restind.c.id
+     libq931/src/.arch-ids/ie_restind.h.id
+       ==> libq931/.arch-ids/ie_restind.h.id
+     libq931/src/.arch-ids/ie_sending_complete.c.id
+       ==> libq931/.arch-ids/ie_sending_complete.c.id
+     libq931/src/.arch-ids/ie_sending_complete.h.id
+       ==> libq931/.arch-ids/ie_sending_complete.h.id
+     libq931/src/.arch-ids/ies.c.id
+       ==> libq931/.arch-ids/ies.c.id
+     libq931/src/.arch-ids/ies.h.id
+       ==> libq931/.arch-ids/ies.h.id
+     libq931/src/.arch-ids/intf.c.id
+       ==> libq931/.arch-ids/intf.c.id
+     libq931/src/.arch-ids/intf.h.id
+       ==> libq931/.arch-ids/intf.h.id
+     libq931/src/.arch-ids/lib.h.id
+       ==> libq931/.arch-ids/lib.h.id
+     libq931/src/.arch-ids/list.h.id
+       ==> libq931/.arch-ids/list.h.id
+     libq931/src/.arch-ids/logging.h.id
+       ==> libq931/.arch-ids/logging.h.id
+     libq931/src/.arch-ids/message.h.id
+       ==> libq931/.arch-ids/message.h.id
+     libq931/src/.arch-ids/msgtype.c.id
+       ==> libq931/.arch-ids/msgtype.c.id
+     libq931/src/.arch-ids/msgtype.h.id
+       ==> libq931/.arch-ids/msgtype.h.id
+     libq931/src/.arch-ids/out.c.id
+       ==> libq931/.arch-ids/out.c.id
+     libq931/src/.arch-ids/out.h.id
+       ==> libq931/.arch-ids/out.h.id
+     libq931/src/.arch-ids/proto.h.id
+       ==> libq931/.arch-ids/proto.h.id
+     libq931/src/.arch-ids/q931.c.id
+       ==> libq931/.arch-ids/q931.c.id
+     libq931/src/.arch-ids/q931.h.id
+       ==> libq931/.arch-ids/q931.h.id
+     libq931/src/.arch-ids/timer.c.id
+       ==> libq931/.arch-ids/timer.c.id
+     libq931/src/.arch-ids/timer.h.id
+       ==> libq931/.arch-ids/timer.h.id
+     libq931/src/.arch-ids/user.c.id
+       ==> libq931/.arch-ids/user.c.id
+     libq931/src/.arch-ids/util.h.id
+       ==> libq931/.arch-ids/util.h.id
+     libq931/src/.arch-inventory
+       ==> libq931/.arch-inventory
+     libq931/src/Makefile.am
+       ==> libq931/Makefile.am
+     libq931/src/TODO
+       ==> libq931/TODO
+     libq931/src/call.c
+       ==> libq931/call.c
+     libq931/src/call.h
+       ==> libq931/call.h
+     libq931/src/call_inline.h
+       ==> libq931/call_inline.h
+     libq931/src/callref.c
+       ==> libq931/callref.c
+     libq931/src/callref.h
+       ==> libq931/callref.h
+     libq931/src/ces.c
+       ==> libq931/ces.c
+     libq931/src/ces.h
+       ==> libq931/ces.h
+     libq931/src/ces_inline.h
+       ==> libq931/ces_inline.h
+     libq931/src/channel.c
+       ==> libq931/channel.c
+     libq931/src/channel.h
+       ==> libq931/channel.h
+     libq931/src/chanset.c
+       ==> libq931/chanset.c
+     libq931/src/chanset.h
+       ==> libq931/chanset.h
+     libq931/src/dlc.h
+       ==> libq931/dlc.h
+     libq931/src/global.c
+       ==> libq931/global.c
+     libq931/src/global.h
+       ==> libq931/global.h
+     libq931/src/ie.c
+       ==> libq931/ie.c
+     libq931/src/ie.h
+       ==> libq931/ie.h
+     libq931/src/ie_bearercap.c
+       ==> libq931/ie_bearercap.c
+     libq931/src/ie_bearercap.h
+       ==> libq931/ie_bearercap.h
+     libq931/src/ie_call_state.c
+       ==> libq931/ie_call_state.c
+     libq931/src/ie_call_state.h
+       ==> libq931/ie_call_state.h
+     libq931/src/ie_cause.c
+       ==> libq931/ie_cause.c
+     libq931/src/ie_cause.h
+       ==> libq931/ie_cause.h
+     libq931/src/ie_cdpn.c
+       ==> libq931/ie_cdpn.c
+     libq931/src/ie_cdpn.h
+       ==> libq931/ie_cdpn.h
+     libq931/src/ie_cgpn.c
+       ==> libq931/ie_cgpn.c
+     libq931/src/ie_cgpn.h
+       ==> libq931/ie_cgpn.h
+     libq931/src/ie_chanid.c
+       ==> libq931/ie_chanid.c
+     libq931/src/ie_chanid.h
+       ==> libq931/ie_chanid.h
+     libq931/src/ie_hlc.c
+       ==> libq931/ie_hlc.c
+     libq931/src/ie_hlc.h
+       ==> libq931/ie_hlc.h
+     libq931/src/ie_progind.c
+       ==> libq931/ie_progind.c
+     libq931/src/ie_progind.h
+       ==> libq931/ie_progind.h
+     libq931/src/ie_restind.c
+       ==> libq931/ie_restind.c
+     libq931/src/ie_restind.h
+       ==> libq931/ie_restind.h
+     libq931/src/ie_sending_complete.c
+       ==> libq931/ie_sending_complete.c
+     libq931/src/ie_sending_complete.h
+       ==> libq931/ie_sending_complete.h
+     libq931/src/ies.c
+       ==> libq931/ies.c
+     libq931/src/ies.h
+       ==> libq931/ies.h
+     libq931/src/intf.c
+       ==> libq931/intf.c
+     libq931/src/intf.h
+       ==> libq931/intf.h
+     libq931/src/lib.h
+       ==> libq931/lib.h
+     libq931/src/list.h
+       ==> libq931/list.h
+     libq931/src/logging.h
+       ==> libq931/logging.h
+     libq931/src/message.h
+       ==> libq931/message.h
+     libq931/src/msgtype.c
+       ==> libq931/msgtype.c
+     libq931/src/msgtype.h
+       ==> libq931/msgtype.h
+     libq931/src/out.c
+       ==> libq931/out.c
+     libq931/src/out.h
+       ==> libq931/out.h
+     libq931/src/proto.h
+       ==> libq931/proto.h
+     libq931/src/q931.c
+       ==> libq931/q931.c
+     libq931/src/q931.h
+       ==> libq931/q931.h
+     libq931/src/timer.c
+       ==> libq931/timer.c
+     libq931/src/timer.h
+       ==> libq931/timer.h
+     libq931/src/user.c
+       ==> libq931/user.c
+     libq931/src/util.h
+       ==> libq931/util.h
+     traffic/.arch-ids/traffic.c.id
+       ==> tests/.arch-ids/traffic.c.id
+     traffic/traffic.c
+       ==> tests/traffic.c
+
+    removed directories:
+     demoswitch demoswitch/.arch-ids libq931/src
+     libq931/src/.arch-ids
+
+
 2005-08-24 19:18:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-75
 
     Summary:

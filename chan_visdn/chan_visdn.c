@@ -50,7 +50,7 @@
 
 #include <softport.h>
 #include <lapd.h>
-#include <q931.h>
+#include <libq931/q931.h>
 
 #include <visdn.h>
 

@@ -6,6 +6,10 @@ General:
 - Correctly implement automake/autoconf/libtool for every subsystem
 - Check all input data in ioctls/setsockopt for security bugs
 
+Build system:
+
+- Check if the kernel source tree has been correctly prepare (make/makei
+  modules_prepare)
 
 chan_visdn
 

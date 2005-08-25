@@ -1,13 +1,100 @@
-AC_INIT(visdn, 0.1)
+AC_PREREQ(2.59)
+AC_INIT(visdn, 0.0.1, daniele@orlandi.com)
+AC_CONFIG_AUX_DIR(config)
 AM_INIT_AUTOMAKE
 
-ALL_LINGUAS="en"
+AC_CONFIG_SRCDIR([chan_visdn/chan_visdn.c])
+AC_CONFIG_HEADER([config.h])
 
+## Checks for libraries.
+## FIXME: Replace `main' with a function in `-lq931':
+#AC_CHECK_LIB([q931], [main])
+
+# Checks for programs.
 AC_PROG_CC
-AC_ISC_POSIX
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+AC_PROG_LIBTOOL
+AC_PROG_AWK
 
-AC_STDC_HEADERS
+# Checks for header files.
+AC_HEADER_STDC
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h netinet/in.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
 
-AC_CONFIG_FILES([Makefile traffic/Makefile demoswitch/Makefile])
-AC_CONFIG_SUBDIRS(libq931)
+# Checks for typedefs, structures, and compiler characteristics.
+AC_HEADER_STDBOOL
+AC_C_CONST
+AC_C_INLINE
+AC_TYPE_OFF_T
+AC_TYPE_SIZE_T
+AC_HEADER_TIME
+AC_STRUCT_TM
+
+# Checks for library functions.
+AC_FUNC_ERROR_AT_LINE
+AC_FUNC_FORK
+AC_PROG_GCC_TRADITIONAL
+AC_FUNC_MALLOC
+AC_FUNC_MEMCMP
+AC_FUNC_SELECT_ARGTYPES
+AC_FUNC_SETVBUF_REVERSED
+AC_TYPE_SIGNAL
+AC_FUNC_VPRINTF
+AC_CHECK_FUNCS([gettimeofday memset select socket strcasecmp strchr strdup strerror strncasecmp strrchr strstr])
+
+AC_ARG_WITH(
+	[kernel-sources],
+	AC_HELP_STRING(
+		[--with-kernel-sources],
+		[Specify kernel sourcetree to compile modules]),
+	[ksrcdir=${withval}],
+	[ksrcdir="/usr/src/linux"])
+AC_SUBST(ksrcdir)
+
+AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
+
+AC_ARG_WITH(
+	[asterisk-modules],
+	AC_HELP_STRING(
+		[--with-asterisk-modules],
+		[Specify asterisk modules directory]),
+	[astmoddir=${withval}],
+	[astmoddir="/usr/lib/asterisk/modules/"])
+AC_SUBST(astmoddir)
+
+test ${prefix} != NONE && astmoddir="${prefix}/$astmoddir"
+
+AC_ARG_WITH(
+	[asterisk-includes],
+	AC_HELP_STRING(
+		[--with-asterisk-includes],
+		[Specify asterisk includes directory]),
+	[astincdir=${withval}],
+	[astincdir="/usr/include/"])
+#AC_SUBST(kernel_sources)
+
+AC_ARG_ENABLE(
+	[tests],
+	AC_HELP_STRING(
+		[--enable-tests],
+		[Enable testing tools]))
+
+AM_CONDITIONAL(tests, test "$enable_tests" = yes)
+
+AC_CONFIG_FILES([Makefile
+                 libq931/Makefile 
+                 chan_visdn/Makefile
+                 tests/Makefile
+                 fake_isdn/Makefile
+                 hfc-4s/Makefile
+                 hfc-e1/Makefile
+                 hfc-pci/Makefile
+                 hfc-usb/Makefile
+                 lapd/Makefile
+                 softport/Makefile
+                 timer-system/Makefile
+                 visdn-core/Makefile])
+
 AC_OUTPUT

@@ -338,7 +338,8 @@ static struct class sb_class = {
  ******************************************/
 
 struct visdn_port_ops sb_port_ops = {
-	.set_role	= NULL,
+	.enable		= NULL,
+	.disable	= NULL,
 };
 
 static int __init sb_init_module(void)

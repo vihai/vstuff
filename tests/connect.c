@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include "../core/visdn.h"
+#include <visdn.h>
 
 int main()
 {
