@@ -68,8 +68,6 @@ typedef struct hfc_card {
 		u8 trm;
 		u8 cirm;
 
-		u8 sctrl;
-		u8 sctrl_r;
 		u8 sctrl_e;
 
 		u8 connect;

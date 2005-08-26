@@ -99,10 +99,10 @@ struct hfc_chan_simplex
 };
 
 enum hfc_chan_status {
-	HFC_STATUS_FREE,
-	HFC_STATUS_OPEN_HDLC,
-	HFC_STATUS_OPEN_TRANS,
-	HFC_STATUS_OPEN_BERT,
+	HFC_CHAN_STATUS_FREE,
+	HFC_CHAN_STATUS_OPEN_HDLC,
+	HFC_CHAN_STATUS_OPEN_TRANS,
+	HFC_CHAN_STATUS_OPEN_BERT,
 };
 
 struct hfc_st_port;
@@ -111,7 +111,7 @@ struct hfc_chan_duplex {
 
 	enum hfc_chan_status status;
 
-	char *name;
+	const char *name;
 	int id;
 
 	int hw_index;
@@ -123,9 +123,15 @@ struct hfc_chan_duplex {
 	struct net_device_stats net_device_stats;
 };
 
-extern struct visdn_chan_ops hfc_chan_ops;
-
-void hfc_chan_enable(struct hfc_chan_duplex *chan);
-void hfc_chan_disable(struct hfc_chan_duplex *chan);
+void hfc_chan_init(
+	struct hfc_chan_duplex *chan,
+	struct hfc_st_port *port,
+	const char *name,
+	int id,
+	int hw_index,
+	int speed,
+	int role,
+	int roles,
+	int protocol);
 
 #endif

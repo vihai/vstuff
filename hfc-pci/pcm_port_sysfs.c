@@ -45,12 +45,12 @@ static ssize_t hfc_store_master(
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	port->master = value;
 //	hfc_update_pcm_md0(card, 0);
 	// FIXME TODO
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -74,7 +74,7 @@ static ssize_t hfc_show_slots_state(
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"Slot    Chan\n");
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	int i;
@@ -110,7 +110,7 @@ static ssize_t hfc_show_slots_state(
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 	}
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return len;
 

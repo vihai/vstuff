@@ -41,15 +41,13 @@ static ssize_t hfc_show_fifo_state(
 
 		if (fifo_rx->connected_chan) {
 			len += snprintf(buf + len, PAGE_SIZE - len,
-				" %d:%s",
-				fifo_rx->connected_chan->chan->port->id,
+				" st:%s",
 				fifo_rx->connected_chan->chan->name);
 		}
 
 		if (fifo_tx->connected_chan) {
 			len += snprintf(buf + len, PAGE_SIZE - len,
-				" %d:%s",
-				fifo_tx->connected_chan->chan->port->id,
+				" st:%s",
 				fifo_tx->connected_chan->chan->name);
 		}
 

@@ -30,6 +30,8 @@
 #define PCI_DMA_32BIT	0x00000000ffffffffULL
 #endif
 
+typedef char BOOL;
+
 #ifndef TRUE
 #define TRUE 1
 #endif

@@ -5,6 +5,21 @@
 
 #include "card.h"
 
+static inline void hfc_card_lock(struct hfc_card *card)
+{
+	down(&card->sem);
+}
+
+static inline int hfc_card_lock_interruptible(struct hfc_card *card)
+{
+	return down_interruptible(&card->sem);
+}
+
+static inline void hfc_card_unlock(struct hfc_card *card)
+{
+	up(&card->sem);
+}
+
 static inline u8 hfc_inb(struct hfc_card *card, int offset)
 {
 	return readb(card->io_mem + offset);

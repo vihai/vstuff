@@ -1,15 +1,64 @@
 #include <linux/kernel.h>
 
+#include <lapd.h>
+
 #include "st_port.h"
 #include "st_port_inline.h"
 #include "card.h"
 
-void hfc_st_port_state_change_work(void *data)
+void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
+{
+	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+
+	u8 st_ctrl_0 = 0;
+
+	if (port->nt_mode)
+		st_ctrl_0 |= hfc_A_ST_CTRL0_V_ST_MD_NT;
+	else
+		st_ctrl_0 |= hfc_A_ST_CTRL0_V_ST_MD_TE;
+
+	if (port->sq_enabled)
+		st_ctrl_0 |= hfc_A_ST_CTRL0_V_SQ_EN;
+
+	if (port->chans[B1].status != HFC_CHAN_STATUS_FREE)
+		st_ctrl_0 |= hfc_A_ST_CTRL0_V_B1_EN;
+
+	if (port->chans[B2].status != HFC_CHAN_STATUS_FREE)
+		st_ctrl_0 |= hfc_A_ST_CTRL0_V_B2_EN;
+
+	hfc_outb(port->card, hfc_A_ST_CTRL0, st_ctrl_0);
+}
+
+void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
+{
+	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+
+	u8 st_ctrl_2 = 0;
+
+	if (port->chans[B1].status != HFC_CHAN_STATUS_FREE)
+		st_ctrl_2 |= hfc_A_ST_CTRL2_V_B1_RX_EN;
+
+	if (port->chans[B2].status != HFC_CHAN_STATUS_FREE)
+		st_ctrl_2 |= hfc_A_ST_CTRL2_V_B2_RX_EN;
+
+	hfc_outb(port->card, hfc_A_ST_CTRL2, st_ctrl_2);
+}
+
+void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
+{
+	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+
+	hfc_outb(port->card, hfc_A_ST_CLK_DLY,
+		hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
+		hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
+}
+
+static void hfc_st_port_state_change_work(void *data)
 {
 	struct hfc_st_port *port = data;
 	struct hfc_card *card = port->card;
 
-	down(&card->sem);
+	hfc_card_lock(card);
 
 	hfc_st_port_select(port);
 
@@ -69,7 +118,7 @@ void hfc_st_port_state_change_work(void *data)
 
 	port->l1_state = new_state;
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 }
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port)
@@ -94,12 +143,13 @@ static int hfc_st_port_enable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
-	up(&port->card->sem);
+	hfc_card_unlock(card);
 
 	hfc_debug_port(port, 2, "enabled\n");
 
@@ -110,14 +160,15 @@ static int hfc_st_port_disable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
-	up(&port->card->sem);
+	hfc_card_unlock(card);
 
 	hfc_debug_port(port, 2, "disabled\n");
 
@@ -128,3 +179,35 @@ struct visdn_port_ops hfc_st_port_ops = {
 	.enable		= hfc_st_port_enable,
 	.disable	= hfc_st_port_disable,
 };
+
+void hfc_st_port_init(
+	struct hfc_st_port *port,
+	struct hfc_card *card,
+	int id)
+{
+	port->card = card;
+	port->id = id;
+
+	INIT_WORK(&port->state_change_work,
+		hfc_st_port_state_change_work,
+		port);
+
+	visdn_port_init(&port->visdn_port, &hfc_st_port_ops);
+	port->visdn_port.priv = port;
+
+	port->nt_mode = FALSE;
+	port->clock_delay = HFC_DEF_TE_CLK_DLY;
+	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+
+	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF + id*4,
+		16000, VISDN_CHAN_ROLE_D, VISDN_CHAN_ROLE_D, ETH_P_LAPD);
+	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF + id*4,
+		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B, 0);
+	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF + id*4,
+		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B, 0);
+	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF + id*4,
+		16000, VISDN_CHAN_ROLE_E, VISDN_CHAN_ROLE_E, 0);
+	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
+		4000, VISDN_CHAN_ROLE_S, VISDN_CHAN_ROLE_S, 0);
+}
+

@@ -77,12 +77,12 @@ struct hfc_pcm_port
 	struct visdn_port visdn_port;
 };
 
-extern struct visdn_port_ops hfc_pcm_port_ops;
-
-void hfc_pcm_port_init(struct hfc_pcm_port *port);
 struct hfc_pcm_slot *hfc_pcm_port_allocate_slot(
 	struct hfc_pcm_port *port,
 	enum hfc_direction direction);
 void hfc_pcm_port_deallocate_slot(struct hfc_pcm_slot *slot);
+void hfc_pcm_port_init(
+	struct hfc_pcm_port *port,
+	struct hfc_card *card);
 
 #endif

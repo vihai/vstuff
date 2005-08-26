@@ -63,10 +63,13 @@ struct hfc_card {
 
 	int num_st_ports;
 	struct hfc_st_port st_ports[8];
+	struct hfc_st_port *st_port_selected;
+
 	struct hfc_pcm_port pcm_port;
 
 	int num_fifos;
 	struct hfc_fifo fifos[32][2];
+	struct hfc_fifo *fifo_selected;
 
 	unsigned long io_bus_mem;
 	void *io_mem;

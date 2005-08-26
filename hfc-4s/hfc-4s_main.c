@@ -12,7 +12,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 #include <linux/init.h>
 #include <linux/config.h>
 #include <linux/pci.h>
@@ -23,7 +22,7 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 
-#include <lapd.h>
+//#include <lapd.h>
 #include <visdn.h>
 
 #include "st_port.h"
@@ -358,7 +357,9 @@ void hfc_initialize_hw(struct hfc_card *card)
 	int i;
 	for (i=0; i<card->num_st_ports; i++) {
 		hfc_st_port_select(&card->st_ports[i]);
-		hfc_st_port__do_set_role(&card->st_ports[i], 0);
+		hfc_st_port_update_st_ctrl_0(&card->st_ports[i]);
+		hfc_st_port_update_st_ctrl_2(&card->st_ports[i]);
+		hfc_st_port_update_st_clk_dly(&card->st_ports[i]);
 	}
 
 	// Enable interrupts
@@ -532,13 +533,6 @@ static int __devinit hfc_probe(
 
 	// From here on hfc_msg_card may be used
 
-	int i;
-	for (i=0; i<sizeof(card->fifos)/sizeof(*card->fifos); i++) {
-		hfc_fifo_init(&card->fifos[i][RX], card, i, RX);
-		hfc_fifo_init(&card->fifos[i][TX], card, i, TX);
-	}
-	card->num_fifos = 0;
-
 	if ((err = pci_enable_device(pci_dev))) {
 		goto err_pci_enable_device;
 	}
@@ -606,144 +600,26 @@ static int __devinit hfc_probe(
 				'4' : '8',
 			revision);
 
+	// Initialize all the card's components
+
+	int i;
+	for (i=0; i<sizeof(card->fifos)/sizeof(*card->fifos); i++) {
+		hfc_fifo_init(&card->fifos[i][RX], card, i, RX);
+		hfc_fifo_init(&card->fifos[i][TX], card, i, TX);
+	}
+	card->num_fifos = 0;
+
 	for (i=0; i<card->num_st_ports; i++) {
-		card->st_ports[i].card = card;
-		card->st_ports[i].id = i;
-
-		INIT_WORK(&card->st_ports[i].state_change_work,
-			hfc_st_port_state_change_work,
-			&card->st_ports[i]);
-
-		visdn_port_init(&card->st_ports[i].visdn_port, &hfc_st_port_ops);
-		card->st_ports[i].visdn_port.priv = &card->st_ports[i];
-
-		struct hfc_chan_duplex *chan;
-//---------------------------------- D
-
-		chan = &card->st_ports[i].chans[D];
-
-		chan->port = &card->st_ports[i];
-		chan->name = "D";
-		chan->status = HFC_STATUS_FREE;
-		chan->id = D;
-		chan->hw_index = hfc_D_CHAN_OFF + i*4;
-
-		chan->rx.chan = chan;
-		chan->rx.direction = RX;
-
-		chan->tx.chan = chan;
-		chan->tx.direction = TX;
-
-		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-		chan->visdn_chan.priv = chan;
-		chan->visdn_chan.speed = 16000;
-		chan->visdn_chan.role = VISDN_CHAN_ROLE_D;
-		chan->visdn_chan.roles = VISDN_CHAN_ROLE_D;
-		chan->visdn_chan.protocol = ETH_P_LAPD;
-		chan->visdn_chan.flags = 0;
-
-//---------------------------------- B1
-		chan = &card->st_ports[i].chans[B1];
-
-		chan->port = &card->st_ports[i];
-		chan->name = "B1";
-		chan->status = HFC_STATUS_FREE;
-		chan->id = B1;
-		chan->hw_index = hfc_B1_CHAN_OFF + i*4;
-
-		chan->rx.chan = chan;
-		chan->rx.direction = RX;
-
-		chan->tx.chan = chan;
-		chan->tx.direction = TX;
-
-		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-		chan->visdn_chan.priv = chan;
-		chan->visdn_chan.speed = 64000;
-		chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-		chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
-		chan->visdn_chan.protocol = 0;
-		chan->visdn_chan.flags = 0;
-
-//---------------------------------- B2
-		chan = &card->st_ports[i].chans[B2];
-
-		chan->port = &card->st_ports[i];
-		chan->name = "B2";
-		chan->status = HFC_STATUS_FREE;
-		chan->id = B2;
-		chan->hw_index = hfc_B2_CHAN_OFF + i*4;
-
-		chan->rx.chan = chan;
-		chan->rx.direction = RX;
-
-		chan->tx.chan = chan;
-		chan->tx.direction = TX;
-
-		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-		chan->visdn_chan.priv = chan;
-		chan->visdn_chan.speed = 64000;
-		chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-		chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
-		chan->visdn_chan.protocol = 0;
-		chan->visdn_chan.flags = 0;
-
-//---------------------------------- E
-		chan = &card->st_ports[i].chans[E];
-
-		chan->port = &card->st_ports[i];
-		chan->name = "E";
-		chan->status = HFC_STATUS_FREE;
-		chan->id = E;
-		chan->hw_index = hfc_E_CHAN_OFF + i*4;
-
-		chan->rx.chan = chan;
-		chan->rx.direction = RX;
-
-		chan->tx.chan = NULL;
-		chan->tx.direction = TX;
-
-		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-		chan->visdn_chan.priv = chan;
-		chan->visdn_chan.speed = 16000;
-		chan->visdn_chan.role = VISDN_CHAN_ROLE_E;
-		chan->visdn_chan.roles = VISDN_CHAN_ROLE_E;
-		chan->visdn_chan.flags = 0;
-		chan->visdn_chan.protocol = 0;
-
-//---------------------------------- SQ
-		chan = &card->st_ports[i].chans[SQ];
-
-		chan->port = &card->st_ports[i];
-		chan->name = "SQ";
-		chan->status = HFC_STATUS_FREE;
-		chan->id = SQ;
-
-		chan->rx.chan = chan;
-		chan->rx.direction = RX;
-
-		chan->tx.chan = NULL;
-		chan->tx.direction = TX;
-
-		visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-		chan->visdn_chan.speed = 4000;
-		chan->visdn_chan.role = VISDN_CHAN_ROLE_S; // FIXME
-		chan->visdn_chan.roles = VISDN_CHAN_ROLE_S; // FIXME
-		chan->visdn_chan.priv = chan;
-		chan->visdn_chan.flags = 0;
-		chan->visdn_chan.protocol = 0;
+		hfc_st_port_init(&card->st_ports[i], card, i);
 	}
 
-	hfc_pcm_port_init(&card->pcm_port);
-	card->pcm_port.card = card;
-	visdn_port_init(&card->pcm_port.visdn_port, &hfc_pcm_port_ops);
-		card->st_ports[i].visdn_port.priv = &card->st_ports[i];
+	hfc_pcm_port_init(&card->pcm_port, card);
 
-	down(&card->sem);
+	hfc_card_lock(card);
 	hfc_initialize_hw_nonsoft(card);
 	hfc_softreset(card);
 	hfc_initialize_hw(card);
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	// Ok, the hardware is ready and the data structures are initialized,
 	// we can now register to the system.
@@ -869,9 +745,9 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	visdn_port_unregister(&card->st_ports[0].visdn_port);
 
 	// softreset clears all pending interrupts
-	down(&card->sem);
+	hfc_card_lock(card);
 	hfc_softreset(card);
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	// There should be no interrupt from here on
 

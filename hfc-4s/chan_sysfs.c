@@ -14,10 +14,10 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 
 	int err;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
-	if (chan->status != HFC_STATUS_FREE) {
+	if (chan->status != HFC_CHAN_STATUS_FREE) {
 		err = -EBUSY;
 		goto err_busy;
 	}
@@ -68,11 +68,14 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 	hfc_outb(card, hfc_A_IRQ_MSK,
 		hfc_A_IRQ_MSK_V_BERT_EN);
 
-	hfc_chan_enable(chan);
+	chan->status = HFC_CHAN_STATUS_OPEN_BERT;
 
-	chan->status = HFC_STATUS_OPEN_BERT;
+	// Enable the channel in the port
+	hfc_st_port_select(chan->port);
+	hfc_st_port_update_st_ctrl_0(chan->port);
+	hfc_st_port_update_st_ctrl_2(chan->port);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	hfc_msg_chan(chan, KERN_INFO, "BERT enabled\n");
 
@@ -84,7 +87,7 @@ err_allocate_fifo_tx:
 err_allocate_fifo_rx:
 err_busy:
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return err;
 }
@@ -94,18 +97,42 @@ static int hfc_bert_disable(
 {
 	struct hfc_card *card = chan->port->card;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
-	if (chan->status == HFC_STATUS_OPEN_BERT) {
-		hfc_chan_disable(chan);
+	if (chan->status == HFC_CHAN_STATUS_OPEN_BERT) {
+		chan->status = HFC_CHAN_STATUS_FREE;
 
-		chan->status = HFC_STATUS_FREE;
+		hfc_st_port_select(chan->port);
+		hfc_st_port_update_st_ctrl_0(chan->port);
+		hfc_st_port_update_st_ctrl_2(chan->port);
+
+		// RX
+		hfc_fifo_select(chan->rx.fifo);
+		hfc_fifo_reset(chan->rx.fifo);
+		hfc_outb(card, hfc_A_CON_HDLC,
+			hfc_A_CON_HDCL_V_IFF|
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+
+		hfc_outb(card, hfc_A_IRQ_MSK, 0);
+
+		// TX
+		hfc_fifo_select(chan->tx.fifo);
+		hfc_fifo_reset(chan->tx.fifo);
+		hfc_outb(card, hfc_A_CON_HDLC,
+			hfc_A_CON_HDCL_V_IFF|
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
+
+		hfc_outb(card, hfc_A_IRQ_MSK, 0);
 
 		hfc_msg_chan(chan, KERN_INFO, "BERT disabled\n");
 	}
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return 0;
 }
@@ -119,7 +146,7 @@ static ssize_t hfc_show_bert_enabled(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		chan->status == HFC_STATUS_OPEN_BERT ? 1 : 0);
+		chan->status == HFC_CHAN_STATUS_OPEN_BERT ? 1 : 0);
 }
 
 static ssize_t hfc_store_bert_enabled(
@@ -163,7 +190,7 @@ static ssize_t hfc_show_sq_bits(
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	hfc_st_port_select(port);
@@ -171,7 +198,7 @@ static ssize_t hfc_show_sq_bits(
 	// TODO sleep until complete frame read
 	int bits = hfc_A_ST_SQ_RD_V_ST_SQ_RD(hfc_inb(card, hfc_A_ST_SQ_RD));
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return snprintf(buf, PAGE_SIZE, "%01x\n", bits);
 
@@ -194,11 +221,11 @@ static ssize_t hfc_store_sq_bits(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	hfc_st_port_select(port);
 	hfc_outb(card, hfc_A_ST_SQ_WR, value);
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -217,7 +244,7 @@ static ssize_t hfc_show_sq_enabled(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		(chan->port->regs.st_ctrl_0 & hfc_A_ST_CTRL0_V_SQ_EN) ? 1 : 0);
+		(chan->port->sq_enabled ? 1 : 0));
 
 }
 
@@ -235,20 +262,15 @@ static ssize_t hfc_store_sq_enabled(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
+	port->sq_enabled = !!value;
+
 	hfc_st_port_select(port);
+	hfc_st_port_update_st_ctrl_0(port);
 
-	if (value)
-		port->regs.st_ctrl_0 |= hfc_A_ST_CTRL0_V_SQ_EN;
-	else
-		port->regs.st_ctrl_0 &= ~hfc_A_ST_CTRL0_V_SQ_EN;
-
-	hfc_outb(port->card, hfc_A_ST_CTRL0,
-		port->regs.st_ctrl_0);
-
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 }

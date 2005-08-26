@@ -1,5 +1,4 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "chan.h"
 #include "chan_sysfs.h"
@@ -59,7 +58,7 @@ static ssize_t hfc_show_sq_enabled(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		(chan->port->card->regs.sctrl & hfc_SCTRL_SQ_ENA) ? 1 : 0);
+		(chan->port->sq_enabled ? 1 : 0));
 
 }
 
@@ -77,12 +76,12 @@ static ssize_t hfc_store_sq_enabled(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	if (value)
-		card->regs.sctrl |= hfc_SCTRL_SQ_ENA;
-	else
-		card->regs.sctrl &= ~hfc_SCTRL_SQ_ENA;
-
-	hfc_outb(card, hfc_SCTRL, card->regs.sctrl);
+	
+	if (hfc_card_lock_interruptible(card))
+		return -ERESTARTSYS;
+	port->sq_enabled = !!value;
+	hfc_st_port_update_sctrl(port),
+	hfc_card_unlock(card);
 
 	return count;
 }

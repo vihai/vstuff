@@ -40,6 +40,8 @@
 
 #define hfc_PCI_MEM_SIZE	0x1000
 
+typedef char BOOL;
+
 #ifndef TRUE
 #define TRUE 1
 #endif

@@ -17,71 +17,7 @@
 
 void hfc_chan_disable(struct hfc_chan_duplex *chan)
 {
-	struct hfc_card *card = chan->port->card;
-
-	hfc_st_port_select(chan->port);
-
-	if (chan->id == B1 || chan->id == B2) {
-		if (chan->id == B1) {
-			chan->port->regs.st_ctrl_0 &= ~hfc_A_ST_CTRL0_V_B1_EN;
-			chan->port->regs.st_ctrl_2 &= ~hfc_A_ST_CTRL2_V_B1_RX_EN;
-		} else if (chan->id == B2) {
-			chan->port->regs.st_ctrl_0 &= ~hfc_A_ST_CTRL0_V_B2_EN;
-			chan->port->regs.st_ctrl_2 &= ~hfc_A_ST_CTRL2_V_B2_RX_EN;
-		}
-
-		hfc_outb(card, hfc_A_ST_CTRL0,
-			chan->port->regs.st_ctrl_0);
-		hfc_outb(card, hfc_A_ST_CTRL2,
-			chan->port->regs.st_ctrl_2);
-	}
-
-	// RX
-	hfc_fifo_select(chan->rx.fifo);
-	hfc_fifo_reset(chan->rx.fifo);
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_IFF|
-		hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-	hfc_outb(card, hfc_A_IRQ_MSK, 0);
-
-	// TX
-	hfc_fifo_select(chan->tx.fifo);
-	hfc_fifo_reset(chan->tx.fifo);
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_IFF|
-		hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
-
-	hfc_outb(card, hfc_A_IRQ_MSK, 0);
 }
-
-void hfc_chan_enable(struct hfc_chan_duplex *chan)
-{
-	struct hfc_card *card = chan->port->card;
-
-	if (chan->id != B1 && chan->id != B2)
-		return;
-
-	hfc_st_port_select(chan->port);
-
-	if (chan->id == B1) {
-		chan->port->regs.st_ctrl_0 |= hfc_A_ST_CTRL0_V_B1_EN;
-		chan->port->regs.st_ctrl_2 |= hfc_A_ST_CTRL2_V_B1_RX_EN;
-	} else if (chan->id == B2) {
-		chan->port->regs.st_ctrl_0 |= hfc_A_ST_CTRL0_V_B2_EN;
-		chan->port->regs.st_ctrl_2 |= hfc_A_ST_CTRL2_V_B2_RX_EN;
-	}
-
-	hfc_outb(card, hfc_A_ST_CTRL0,
-		chan->port->regs.st_ctrl_0);
-	hfc_outb(card, hfc_A_ST_CTRL2,
-		chan->port->regs.st_ctrl_2);
-}
-
 
 static int hfc_chan_open(struct visdn_chan *visdn_chan)
 {
@@ -90,18 +26,18 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 	int err;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
-	if (chan->status != HFC_STATUS_FREE) {
+	if (chan->status != HFC_CHAN_STATUS_FREE) {
 		err = -EBUSY;
 		goto err_channel_busy;
 	}
 
 	if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_TRANS) {
-		chan->status = HFC_STATUS_OPEN_TRANS;
+		chan->status = HFC_CHAN_STATUS_OPEN_TRANS;
 	} else if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_HDLC) {
-		chan->status = HFC_STATUS_OPEN_HDLC;
+		chan->status = HFC_CHAN_STATUS_OPEN_HDLC;
 	} else {
 		err = -EINVAL;
 		goto err_invalid_framing;
@@ -189,9 +125,12 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			hfc_A_IRQ_MSK_V_IRQ);
 	}
 
-	hfc_chan_enable(chan);
+	// Enable channel in the port
+	hfc_st_port_select(chan->port);
+	hfc_st_port_update_st_ctrl_0(chan->port);
+	hfc_st_port_update_st_ctrl_2(chan->port);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");
 
@@ -201,11 +140,11 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 err_allocate_fifo_tx:
 	hfc_deallocate_fifo(chan->rx.fifo);
 err_allocate_fifo_rx:
-	chan->status = HFC_STATUS_FREE;
+	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
 err_channel_busy:
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return err;
 }
@@ -215,12 +154,36 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
-	chan->status = HFC_STATUS_FREE;
+	chan->status = HFC_CHAN_STATUS_FREE;
 
-	hfc_chan_disable(chan);
+	hfc_st_port_select(chan->port);
+	hfc_st_port_update_st_ctrl_0(chan->port);
+	hfc_st_port_update_st_ctrl_2(chan->port);
+
+	// RX
+	hfc_fifo_select(chan->rx.fifo);
+	hfc_fifo_reset(chan->rx.fifo);
+	hfc_outb(card, hfc_A_CON_HDLC,
+		hfc_A_CON_HDCL_V_IFF|
+		hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+
+	hfc_outb(card, hfc_A_IRQ_MSK, 0);
+
+	// TX
+	hfc_fifo_select(chan->tx.fifo);
+	hfc_fifo_reset(chan->tx.fifo);
+	hfc_outb(card, hfc_A_CON_HDLC,
+		hfc_A_CON_HDCL_V_IFF|
+		hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
+
+	hfc_outb(card, hfc_A_IRQ_MSK, 0);
 
 	if (chan->rx.fifo) {
 		hfc_deallocate_fifo(chan->rx.fifo);
@@ -248,7 +211,7 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 
 	hfc_upload_fsm(card);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel closed.\n");
 
@@ -262,7 +225,7 @@ static int hfc_chan_frame_xmit(
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	
 	hfc_st_port_select(chan->port);
@@ -290,7 +253,7 @@ static int hfc_chan_frame_xmit(
 
 	hfc_fifo_put_frame(chan->tx.fifo, skb->data, skb->len);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	visdn_kfree_skb(skb);
 
@@ -299,7 +262,7 @@ static int hfc_chan_frame_xmit(
 err_no_free_tx:
 err_no_free_frames:
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return 0;
 }
@@ -399,7 +362,7 @@ static ssize_t hfc_chan_samples_read(
 		goto err_kmalloc;
 	}
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	hfc_fifo_select(chan->rx.fifo);
@@ -414,7 +377,7 @@ static ssize_t hfc_chan_samples_read(
 	// Cannot read directly to user due to put_user sleeping
 	hfc_fifo_mem_read(chan->rx.fifo, buf2, copied_octets);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	err = copy_to_user(buf, buf2, copied_octets);
 	if (err < 0)
@@ -454,7 +417,7 @@ static ssize_t hfc_chan_samples_write(
 	if (err < 0)
 		goto err_copy_to_user;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	hfc_fifo_select(chan->tx.fifo);
@@ -466,7 +429,7 @@ static ssize_t hfc_chan_samples_write(
 
 	hfc_fifo_put(chan->rx.fifo, buf2, copied_octets);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return copied_octets;
 
@@ -555,7 +518,7 @@ static int hfc_bridge(
 	struct hfc_card *card = chan->port->card;
 	int err;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	struct hfc_fifo *fifo_1_rx = hfc_allocate_fifo(card, RX);
@@ -596,14 +559,15 @@ static int hfc_bridge(
 		goto err_allocate_slot_1_tx;
 	}
 
-	struct hfc_pcm_slot *slot_2_rx;
+	 // Without = NULL gcc complains, why?
+	struct hfc_pcm_slot *slot_2_rx = NULL;
 	slot_2_rx = hfc_pcm_port_allocate_slot(&card->pcm_port, RX);
 	if (!slot_2_rx) {
 		err = -EBUSY;
 		goto err_allocate_slot_2_rx;
 	}
 
-	struct hfc_pcm_slot *slot_2_tx;
+	struct hfc_pcm_slot *slot_2_tx = NULL;
 	slot_2_tx = hfc_pcm_port_allocate_slot(&card->pcm_port, TX);
 	if (!slot_2_tx) {
 		err = -EBUSY;
@@ -712,10 +676,16 @@ static int hfc_bridge(
 		hfc_A_SL_CFG_V_CH_NUM(chan->hw_index) |
 		hfc_A_SL_CFG_V_ROUT_LOOP);
 
-	hfc_chan_enable(chan);
-	hfc_chan_enable(chan2);
+	// Enable channel(s) in the port
+	hfc_st_port_select(chan->port);
+	hfc_st_port_update_st_ctrl_0(chan->port);
+	hfc_st_port_update_st_ctrl_2(chan->port);
 
-	up(&card->sem);
+	hfc_st_port_select(chan2->port);
+	hfc_st_port_update_st_ctrl_0(chan2->port);
+	hfc_st_port_update_st_ctrl_2(chan2->port);
+
+	hfc_card_unlock(card);
 	
 	return VISDN_CONNECT_BRIDGED;
 
@@ -736,7 +706,7 @@ err_allocate_fifo_1_tx:
 	hfc_deallocate_fifo(fifo_1_rx);
 err_allocate_fifo_1_rx:
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return err;
 }
@@ -799,4 +769,36 @@ struct visdn_chan_ops hfc_chan_ops = {
 	.samples_read	= hfc_chan_samples_read,
 	.samples_write	= hfc_chan_samples_write,
 };
+
+void hfc_chan_init(
+	struct hfc_chan_duplex *chan,
+	struct hfc_st_port *port,
+	const char *name,
+	int id,
+	int hw_index,
+	int speed,
+	int role,
+	int roles,
+	int protocol)
+{
+	chan->port = port;
+	chan->name = name;
+	chan->status = HFC_CHAN_STATUS_FREE;
+	chan->id = id;
+	chan->hw_index = hw_index;
+
+	chan->rx.chan = chan;
+	chan->rx.direction = RX;
+
+	chan->tx.chan = chan;
+	chan->tx.direction = TX;
+
+	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
+	chan->visdn_chan.priv = chan;
+	chan->visdn_chan.speed = speed;
+	chan->visdn_chan.role = role;
+	chan->visdn_chan.roles = roles;
+	chan->visdn_chan.protocol = protocol;
+	chan->visdn_chan.flags = 0;
+}
 

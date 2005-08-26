@@ -24,38 +24,32 @@ static ssize_t hfc_store_role(
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
 
 	if (count < 2)
 		return count;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 
 	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
-		port->card->regs.sctrl =
-			hfc_SCTRL_MODE_NT;
-		hfc_outb(port->card, hfc_SCTRL,
-			port->card->regs.sctrl);
-
-		port->clock_delay = 0x0C;
-		port->sampling_comp = 0x6;
-		hfc_update_st_clk_dly(port);
-
 		port->nt_mode = TRUE;
+		port->clock_delay = HFC_DEF_NT_CLK_DLY;
+		port->sampling_comp = HFC_DEF_NT_SAMPL_COMP;
+
+		hfc_st_port_update_sctrl(port);
+		hfc_st_port_update_st_clk_dly(port);
+
 	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
-		port->card->regs.sctrl =
-			hfc_SCTRL_MODE_TE;
-		hfc_outb(port->card, hfc_SCTRL,
-			port->card->regs.sctrl);
-
-		port->clock_delay = 0x0E;
-		port->sampling_comp = 0x6;
-		hfc_update_st_clk_dly(port);
-
 		port->nt_mode = FALSE;
+		port->clock_delay = HFC_DEF_TE_CLK_DLY;
+		port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+
+		hfc_st_port_update_sctrl(port);
+		hfc_st_port_update_st_clk_dly(port);
 	}
 
-	up(&port->card->sem);
+	hfc_card_unlock(card);
 
 	hfc_debug_port(port, 1,
 		"role set to %s\n",
@@ -94,7 +88,7 @@ static ssize_t hfc_store_l1_state(
 	struct hfc_card *card = port->card;
 	int err;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
@@ -123,14 +117,14 @@ static ssize_t hfc_store_l1_state(
 			hfc_STATES_LOAD_STATE);
 	}
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 
 err_invalid_scanf:
 err_invalid_state:
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return err;
 }
@@ -167,11 +161,11 @@ static ssize_t hfc_store_st_clock_delay(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	port->clock_delay = value;
-	hfc_update_st_clk_dly(port);
-	up(&card->sem);
+	hfc_st_port_update_st_clk_dly(port);
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -207,11 +201,11 @@ static ssize_t hfc_store_st_sampling_comp(
 	if (value > 0x7)
 		return -EINVAL;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	port->sampling_comp = value;
-	hfc_update_st_clk_dly(port);
-	up(&card->sem);
+	hfc_st_port_update_st_clk_dly(port);
+	hfc_card_unlock(card);
 
 	return count;
 }

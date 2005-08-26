@@ -1,29 +1,8 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "st_port.h"
 #include "card.h"
 #include "card_inline.h"
-
-static inline void hfc_pcm_port_slot_init(
-	struct hfc_pcm_slot *slot,
-	struct hfc_pcm_port *port,
-	int hw_index,
-	enum hfc_direction direction)
-{
-	slot->port = port;
-	slot->hw_index = hw_index;
-	slot->direction = direction;
-}
-
-void hfc_pcm_port_init(struct hfc_pcm_port *port)
-{
-	int i;
-	for (i=0; i<sizeof(port->slots)/sizeof(*port->slots); i++) {
-		hfc_pcm_port_slot_init(&port->slots[i][RX], port, i, RX);
-		hfc_pcm_port_slot_init(&port->slots[i][TX], port, i, TX);
-	}
-}
 
 struct hfc_pcm_slot *hfc_pcm_port_allocate_slot(
 	struct hfc_pcm_port *port,
@@ -51,9 +30,9 @@ static int hfc_pcm_port_enable(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	hfc_debug_pcm_port(port, 2, "enabled\n");
 
@@ -66,9 +45,9 @@ static int hfc_pcm_port_disable(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	hfc_debug_pcm_port(port, 2, "disabled\n");
 
@@ -79,4 +58,29 @@ struct visdn_port_ops hfc_pcm_port_ops = {
 	.enable		= hfc_pcm_port_enable,
 	.disable	= hfc_pcm_port_disable,
 };
+
+static inline void hfc_pcm_port_slot_init(
+	struct hfc_pcm_slot *slot,
+	struct hfc_pcm_port *port,
+	int hw_index,
+	enum hfc_direction direction)
+{
+	slot->port = port;
+	slot->hw_index = hw_index;
+	slot->direction = direction;
+}
+
+void hfc_pcm_port_init(
+	struct hfc_pcm_port *port,
+	struct hfc_card *card)
+{
+	port->card = card;
+	visdn_port_init(&port->visdn_port, &hfc_pcm_port_ops);
+
+	int i;
+	for (i=0; i<sizeof(port->slots)/sizeof(*port->slots); i++) {
+		hfc_pcm_port_slot_init(&port->slots[i][RX], port, i, RX);
+		hfc_pcm_port_slot_init(&port->slots[i][TX], port, i, TX);
+	}
+}
 

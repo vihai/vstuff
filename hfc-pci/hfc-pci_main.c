@@ -24,13 +24,12 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 
-#include <lapd.h>
-
 #include "card.h"
 #include "fifo.h"
 #include "card_inline.h"
 #include "card_sysfs.h"
 #include "chan_sysfs.h"
+#include "st_port.h"
 #include "st_port_sysfs.h"
 #include "pcm_port_sysfs.h"
 
@@ -125,16 +124,9 @@ void hfc_initialize_hw(struct hfc_card *card)
 	card->regs.trm = 0;
 	hfc_outb(card, hfc_TRM, card->regs.trm);
 
-	// Select the non-capacitive line mode for the S/T interface */
-	card->regs.sctrl = hfc_SCTRL_NONE_CAP;
-
 	// S/T Auto awake
 	card->regs.sctrl_e = hfc_SCTRL_E_AUTO_AWAKE;
 	hfc_outb(card, hfc_SCTRL_E, card->regs.sctrl_e);
-
-	// No B-channel enabled at startup
-	card->regs.sctrl_r = 0;
-	hfc_outb(card, hfc_SCTRL_R, card->regs.sctrl_r);
 
 	// HFC Master Mode
 	hfc_outb(card, hfc_MST_MODE, hfc_MST_MODE_MASTER);
@@ -158,7 +150,9 @@ void hfc_initialize_hw(struct hfc_card *card)
 	hfc_inb(card, hfc_INT_S1);
 	hfc_inb(card, hfc_INT_S2);
 
-	hfc_st_port__do_set_role(&card->st_port, 0);
+	hfc_st_port_update_sctrl(&card->st_port);
+	hfc_st_port_update_sctrl_r(&card->st_port);
+	hfc_st_port_update_st_clk_dly(&card->st_port);
 
 	// Enable IRQ output
 	card->regs.m1 = hfc_INT_M1_DREC | hfc_INT_M1_L1STATE | hfc_INT_M1_TIMER;
@@ -581,153 +575,13 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	fifo->fifo_size = fifo->z_max - fifo->z_min + 1;
 	fifo->f_num     = fifo->f_max - fifo->f_min + 1;
 
-	visdn_port_init(&card->st_port.visdn_port, &hfc_st_port_ops);
-	card->st_port.card = card;
-	card->st_port.visdn_port.priv = &card->st_port;
-	INIT_WORK(&card->st_port.state_change_work,
-		hfc_st_port_state_change_work,
-		&card->st_port);
+	hfc_st_port_init(&card->st_port, card);
+	hfc_pcm_port_init(&card->pcm_port, card);
 
-	struct hfc_chan_duplex *chan;
-
-//---------------------------------- D
-	chan = &card->st_port.chans[D];
-
-	chan->port = &card->st_port;
-	chan->name = "D";
-	chan->status = HFC_STATUS_FREE;
-	chan->id = D;
-
-	chan->rx.chan = chan;
-	chan->rx.direction = RX;
-	chan->rx.fifo = &card->fifos[D][RX];
-	chan->rx.fifo->connected_chan = &chan->rx;
-
-	chan->tx.chan = chan;
-	chan->tx.direction = TX;
-	chan->tx.fifo = &card->fifos[D][TX];
-	chan->tx.fifo->connected_chan = &chan->tx;
-
-	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = 16000;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_D;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_D;
-	chan->visdn_chan.protocol = ETH_P_LAPD;
-	chan->visdn_chan.flags = 0;
-
-//---------------------------------- B1
-	chan = &card->st_port.chans[B1];
-
-	chan->port = &card->st_port;
-	chan->name = "B1";
-	chan->status = HFC_STATUS_FREE;
-	chan->id = B1;
-
-	chan->rx.chan = chan;
-	chan->rx.direction = RX;
-	chan->rx.fifo = &card->fifos[B1][RX];
-	chan->rx.fifo->connected_chan = &chan->rx;
-
-	chan->tx.chan = chan;
-	chan->tx.direction = TX;
-	chan->tx.fifo = &card->fifos[B1][TX];
-	chan->tx.fifo->connected_chan = &chan->tx;
-
-	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = 64000;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.protocol = 0;
-	chan->visdn_chan.flags = 0;
-
-//---------------------------------- B2
-	chan = &card->st_port.chans[B2];
-
-	chan->port = &card->st_port;
-	chan->name = "B2";
-	chan->status = HFC_STATUS_FREE;
-	chan->id = B2;
-
-	chan->rx.chan = chan;
-	chan->rx.direction = RX;
-	chan->rx.fifo = &card->fifos[B2][RX];
-	chan->rx.fifo->connected_chan = &chan->rx;
-
-	chan->tx.chan = chan;
-	chan->tx.direction = TX;
-	chan->tx.fifo = &card->fifos[B2][TX];
-	chan->tx.fifo->connected_chan = &chan->tx;
-
-	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = 64000;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.protocol = 0;
-	chan->visdn_chan.flags = 0;
-
-//---------------------------------- E
-	chan = &card->st_port.chans[E];
-
-	chan->port = &card->st_port;
-	chan->name = "E";
-	chan->status = HFC_STATUS_FREE;
-	chan->id = E;
-
-	chan->rx.chan = chan;
-	chan->rx.direction = RX;
-	chan->rx.fifo = NULL;
-
-	chan->tx.chan = chan;
-	chan->tx.direction = TX;
-	chan->tx.fifo = NULL;
-
-	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = 16000;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_E;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_E;
-	chan->visdn_chan.protocol = 0;
-	chan->visdn_chan.flags = 0;
-
-//---------------------------------- SQ
-	chan = &card->st_port.chans[SQ];
-
-	chan->port = &card->st_port;
-	chan->name = "B2";
-	chan->status = HFC_STATUS_FREE;
-	chan->id = SQ;
-
-	chan->rx.chan = chan;
-	chan->rx.direction = RX;
-	chan->rx.fifo = NULL;
-
-	chan->tx.chan = chan;
-	chan->tx.direction = TX;
-	chan->tx.fifo = NULL;
-
-	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
-	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = 4000;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_S;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_S;
-	chan->visdn_chan.protocol = 0;
-	chan->visdn_chan.flags = 0;
-
-// -------------------------------------------------------
-
-	hfc_pcm_port_init(&card->pcm_port);
-	card->pcm_port.card = card;
-	visdn_port_init(&card->pcm_port.visdn_port, &hfc_pcm_port_ops);
-
-	card->st_port.visdn_port.priv = &card->st_port;
-
-	down(&card->sem);
+	hfc_card_lock(card);
 	hfc_softreset(card);
 	hfc_initialize_hw(card);
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	// Ok, the hardware is ready and the data structures are initialized,
 	// we can now register to the system.
@@ -826,10 +680,10 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	visdn_chan_unregister(&card->st_port.chans[D].visdn_chan);
 	visdn_port_unregister(&card->st_port.visdn_port);
 
-	down(&card->sem);
+	hfc_card_lock(card);
 	hfc_softreset(card);
 	// disable memio and bustmaster
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	// There should be no interrupt from here on
 

@@ -46,7 +46,7 @@ static ssize_t hfc_store_bitrate(
 		port->bitrate = 2;
 	return -EINVAL;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 	hfc_outb(card, hfc_R_CIRM, hfc_R_CIRM_V_PCM_RES);
 	mb();
@@ -55,7 +55,7 @@ static ssize_t hfc_store_bitrate(
 	hfc_wait_busy(card);
 	hfc_update_pcm_md0(card, 0);
 	hfc_update_pcm_md1(card);
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -92,11 +92,11 @@ static ssize_t hfc_store_master(
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 	port->master = value;
 	hfc_update_pcm_md0(card, 0);
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -116,14 +116,14 @@ static ssize_t hfc_show_f0io_counter(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 	u16 counter;
 
 	counter = hfc_inb(card, hfc_R_F0_CNTL);
 	counter += hfc_inb(card, hfc_R_F0_CNTH) << 8;
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", counter);
 
@@ -148,7 +148,7 @@ static ssize_t hfc_show_slots_state(
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"Slot    Chan\n");
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(port->card))
 		return -ERESTARTSYS;
 
 	int i;
@@ -184,7 +184,7 @@ static ssize_t hfc_show_slots_state(
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 	}
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return len;
 

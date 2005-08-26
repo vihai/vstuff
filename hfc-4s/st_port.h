@@ -51,14 +51,19 @@
 #define E 3
 #define SQ 4
 
+#define HFC_DEF_NT_CLK_DLY 0x0C
+#define HFC_DEF_NT_SAMPL_COMP 0x6
+#define HFC_DEF_TE_CLK_DLY 0x0E
+#define HFC_DEF_TE_SAMPL_COMP 0x6
+
 struct hfc_st_port
 {
 	struct hfc_card *card;
 
 	int id;
 
-	int nt_mode;
-//	int enabled;
+	BOOL nt_mode;
+	BOOL sq_enabled;
 	u8 l1_state;
 	int clock_delay;
 	int sampling_comp;
@@ -67,21 +72,20 @@ struct hfc_st_port
 
 	// This struct contains a copy of some registers whose bits may be
 	// changed independently.
-	struct
-	{
-		u8 st_ctrl_0;
-		u8 st_ctrl_2;
-	} regs;
 
 	struct work_struct state_change_work;
 
 	struct visdn_port visdn_port;
 };
 
-extern struct visdn_port_ops hfc_st_port_ops;
-
 void hfc_st_port_check_l1_up(struct hfc_st_port *port);
-void hfc_st_port__do_set_role(struct hfc_st_port *port, int nt_mode);
-void hfc_st_port_state_change_work(void *data);
+void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port);
+void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port);
+void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port);
+
+void hfc_st_port_init(
+	struct hfc_st_port *port,
+	struct hfc_card *card,
+	int id);
 
 #endif

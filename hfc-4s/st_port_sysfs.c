@@ -1,5 +1,4 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "st_port.h"
 #include "st_port_inline.h"
@@ -24,46 +23,30 @@ static ssize_t hfc_store_role(
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
 
 	if (count < 2)
 		return count;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	hfc_st_port_select(port);
 
 	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
-		port->regs.st_ctrl_0 =
-			hfc_A_ST_CTRL0_V_ST_MD_NT;
-		hfc_outb(port->card, hfc_A_ST_CTRL0,
-			port->regs.st_ctrl_0);
-
-		port->clock_delay = 0x0C;
-		port->sampling_comp = 0x6;
-
-		hfc_outb(port->card, hfc_A_ST_CLK_DLY,
-			hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay)|
-			hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
-
 		port->nt_mode = TRUE;
+		port->clock_delay = HFC_DEF_NT_CLK_DLY;
+		port->sampling_comp = HFC_DEF_NT_SAMPL_COMP;
 	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
-		port->regs.st_ctrl_0 =
-			hfc_A_ST_CTRL0_V_ST_MD_TE;
-		hfc_outb(port->card, hfc_A_ST_CTRL0,
-			port->regs.st_ctrl_0);
-
-		port->clock_delay = 0x0E;
-		port->sampling_comp = 0x6;
-
-		hfc_outb(port->card, hfc_A_ST_CLK_DLY,
-			hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay)|
-			hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
-
 		port->nt_mode = FALSE;
+		port->clock_delay = HFC_DEF_TE_CLK_DLY;
+		port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 	}
 
-	up(&port->card->sem);
+	hfc_st_port_update_st_ctrl_0(port);
+	hfc_st_port_update_st_clk_dly(port);
+
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -96,7 +79,7 @@ static ssize_t hfc_store_l1_state(
 	struct hfc_card *card = port->card;
 	int err;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
 	hfc_st_port_select(port);
@@ -127,14 +110,14 @@ static ssize_t hfc_store_l1_state(
 			hfc_A_ST_WR_STA_V_ST_SET_STA(state));
 	}
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return count;
 
 err_invalid_scanf:
 err_invalid_state:
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 
 	return err;
 }
@@ -155,18 +138,6 @@ static ssize_t hfc_show_st_clock_delay(
 	return snprintf(buf, PAGE_SIZE, "%02x\n", port->clock_delay);
 }
 
-static void hfc_update_st_clk_dly(struct hfc_st_port *port)
-{
-	u8 st_clk_dly;
-
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
-
-	st_clk_dly = hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
-		     hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp);
-
-	hfc_outb(port->card, hfc_A_ST_CLK_DLY, st_clk_dly);
-}
-
 static ssize_t hfc_store_st_clock_delay(
 	struct device *device,
 	const char *buf,
@@ -183,11 +154,11 @@ static ssize_t hfc_store_st_clock_delay(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	port->clock_delay = value;
-	hfc_update_st_clk_dly(port);
-	up(&card->sem);
+	hfc_st_port_update_st_clk_dly(port);
+	hfc_card_unlock(card);
 
 	return count;
 }
@@ -223,11 +194,11 @@ static ssize_t hfc_store_st_sampling_comp(
 	if (value > 0x7)
 		return -EINVAL;
 
-	if (down_interruptible(&port->card->sem))
+	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	port->sampling_comp = value;
-	hfc_update_st_clk_dly(port);
-	up(&card->sem);
+	hfc_st_port_update_st_clk_dly(port);
+	hfc_card_unlock(card);
 
 	return count;
 }
