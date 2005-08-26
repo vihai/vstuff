@@ -4,9 +4,9 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "logging.h"
-#include "ie_call_state.h"
+#include <libq931/lib.h>
+#include <libq931/logging.h>
+#include <libq931/ie_call_state.h>
 
 static const struct q931_ie_type *ie_type;
 

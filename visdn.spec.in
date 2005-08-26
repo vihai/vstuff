@@ -1,0 +1,57 @@
+#
+# spec file for vISDN
+#
+
+BuildRequires: aaa_base acl attr bash bzip2 coreutils cpio cpp devs diffutils filesystem findutils flex gawk glibc glibc-devel glibc-locale grep groff gzip libgcc libnscd libselinux m4 make man mktemp module-init-tools net-tools netcfg patch permissions procinfo procps sed autoconf automake binutils expat gcc libtool pkgconfig rpm
+
+Name:         visdn
+License:      GPL
+Group:        Productivity/Networking/ISDN
+Autoreqprov:  on
+Summary:      Versatile ISDN framework for Linux
+Version:      @PACKAGE_VERSION@
+Release:      1
+URL:          http://www.orlandi.com/visdn/
+Source:       http://www.orlandi.com/visdn/download/@PACKAGE_TARNAME@-@PACKAGE_VERSION@.tar.bz2
+BuildRoot:    %{_tmppath}/%{name}-%{version}-build
+
+%description
+vISDN is an ISDN framework designed to be clean, general purpose, standards
+compliant, for voice and data applications.
+
+
+
+Authors:
+--------
+    Daniele Orlandi <daniele@orlandi.com>
+
+%debug_package
+%prep
+%setup -q
+
+%build
+./configure \
+	--sysconfdir=/etc \
+	--mandir=%{_mandir} \
+	--libdir=/usr/%{_lib}
+make %{?jobs:-j%jobs}
+
+%install
+make "DESTDIR=$RPM_BUILD_ROOT" install
+
+%clean
+rm -rf %{buildroot}
+
+%post
+
+%postun
+
+%files
+%defattr(-,root,root)
+%doc AUTHORS COPYING ChangeLog FEATURES INSTALL NEWS
+/lib/*
+
+
+%changelog -n visdn
+* Thu Aug 25 2005 - daniele@orlandi.com
+- new package 

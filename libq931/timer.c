@@ -3,10 +3,10 @@
 
 #define Q931_PRIVATE
 
-#include "util.h"
-#include "lib.h"
-#include "list.h"
-#include "timer.h"
+#include <libq931/util.h>
+#include <libq931/lib.h>
+#include <libq931/list.h>
+#include <libq931/timer.h>
 
 void q931_init_timer(
 	struct q931_timer *timer,

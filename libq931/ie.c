@@ -6,17 +6,17 @@
 
 #define Q931_PRIVATE
 
-#include "ie.h"
-#include "ie_sending_complete.h"
-#include "ie_bearercap.h"
-#include "ie_cdpn.h"
-#include "ie_cgpn.h"
-#include "ie_chanid.h"
-#include "ie_progind.h"
-#include "ie_cause.h"
-#include "ie_call_state.h"
-#include "ie_hlc.h"
-#include "ie_restind.h"
+#include <libq931/ie.h>
+#include <libq931/ie_sending_complete.h>
+#include <libq931/ie_bearercap.h>
+#include <libq931/ie_cdpn.h>
+#include <libq931/ie_cgpn.h>
+#include <libq931/ie_chanid.h>
+#include <libq931/ie_progind.h>
+#include <libq931/ie_cause.h>
+#include <libq931/ie_call_state.h>
+#include <libq931/ie_hlc.h>
+#include <libq931/ie_restind.h>
 
 static struct q931_ie_type q931_ie_types[] =
 {

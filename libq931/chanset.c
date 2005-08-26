@@ -6,8 +6,8 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "chanset.h"
+#include <libq931/lib.h>
+#include <libq931/chanset.h>
 
 void q931_chanset_init(
 	struct q931_chanset *chanset)

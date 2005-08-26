@@ -49,7 +49,7 @@ AC_ARG_WITH(
 	AC_HELP_STRING(
 		[--with-kernel-sources],
 		[Specify kernel sourcetree to compile modules]),
-	[ksrcdir=${withval}],
+	[ksrcdir=$withval],
 	[ksrcdir="/usr/src/linux"])
 AC_SUBST(ksrcdir)
 
@@ -57,11 +57,13 @@ AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
 
 #-----------------------------------------------------------------------------
 
+with_asterisk=yes
+
 AC_ARG_WITH(
 	[asterisk],
 	AC_HELP_STRING(
 		[--with-asterisk],
-		[Enable asterisk module compilation]))
+		[Enable asterisk module compilation]),)
 
 AM_CONDITIONAL(asterisk, test "$with_asterisk" = yes)
 
@@ -70,18 +72,19 @@ AC_ARG_WITH(
 	AC_HELP_STRING(
 		[--with-asterisk-modules],
 		[Specify asterisk modules directory]),
-	[astmoddir=${withval}],
+	[astmoddir=$withval],
 	[astmoddir="/usr/lib/asterisk/modules/"])
-AC_SUBST(astmoddir)
 
-test ${prefix} != NONE && astmoddir="${prefix}/$astmoddir"
+test $prefix != "NONE" && astmoddir="$prefix/$astmoddir"
+
+AC_SUBST(astmoddir)
 
 AC_ARG_WITH(
 	[asterisk-includes],
 	AC_HELP_STRING(
 		[--with-asterisk-includes],
 		[Specify asterisk includes directory]),
-	[astincdir=${withval}],
+	[astincdir=$withval],
 	[astincdir="/usr/include/"])
 AC_SUBST(astincdir)
 
@@ -90,8 +93,11 @@ AC_ARG_WITH(
 	AC_HELP_STRING(
 		[--with-asterisk-config],
 		[Specify asterisk configuration directory]),
-	[astconfdir=${withval}],
+	[astconfdir=$withval],
 	[astconfdir="/etc/asterisk/"])
+
+test $prefix != "NONE" && astconfdir="$prefix/$astconfdir"
+
 AC_SUBST(astconfdir)
 
 #-----------------------------------------------------------------------------
@@ -115,15 +121,15 @@ AC_ARG_ENABLE(
 	drivers="$enableval")
 
 AM_CONDITIONAL(driver_hfc_usb,
-	test -n "`echo $drivers | grep hfc-usb`" || test $drivers = "all")
+	test -n "`echo $drivers | grep hfc-usb`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_hfc_pci,
-	test -n "`echo $drivers | grep hfc-pci`" || test $drivers = "all")
+	test -n "`echo $drivers | grep hfc-pci`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_hfc_4s,
-	test -n "`echo $drivers | grep hfc-4s`" || test $drivers = "all")
+	test -n "`echo $drivers | grep hfc-4s`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_hfc_e1,
-	test -n "`echo $drivers | grep hfc-e1`" || test $drivers = "all")
+	test -n "`echo $drivers | grep hfc-e1`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_fake_isdn,
-	test -n "`echo $drivers | grep fake_isdn`" || test $drivers = "all")
+	test -n "`echo $drivers | grep fake_isdn`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
                  libq931/Makefile 
@@ -137,6 +143,7 @@ AC_CONFIG_FILES([Makefile
                  lapd/Makefile
                  softport/Makefile
                  timer-system/Makefile
-                 visdn-core/Makefile])
+                 visdn-core/Makefile
+                 visdn.spec])
 
 AC_OUTPUT

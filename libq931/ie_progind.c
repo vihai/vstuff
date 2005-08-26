@@ -3,8 +3,8 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "ie_progind.h"
+#include <libq931/lib.h>
+#include <libq931/ie_progind.h>
 
 static const struct q931_ie_type *ie_type;
 

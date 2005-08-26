@@ -13,18 +13,18 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "logging.h"
-#include "msgtype.h"
-#include "ie.h"
-#include "ces.h"
-#include "out.h"
-#include "call.h"
-#include "intf.h"
-#include "proto.h"
+#include <libq931/lib.h>
+#include <libq931/logging.h>
+#include <libq931/msgtype.h>
+#include <libq931/ie.h>
+#include <libq931/ces.h>
+#include <libq931/out.h>
+#include <libq931/call.h>
+#include <libq931/intf.h>
+#include <libq931/proto.h>
 
-#include "ie_call_state.h"
-#include "ie_cause.h"
+#include <libq931/ie_call_state.h>
+#include <libq931/ie_cause.h>
 
 #include "ces_inline.h"
 

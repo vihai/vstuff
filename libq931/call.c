@@ -15,26 +15,26 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "logging.h"
-#include "msgtype.h"
-#include "ie.h"
-#include "out.h"
-#include "call.h"
-#include "intf.h"
-#include "ces.h"
-#include "channel.h"
-#include "proto.h"
+#include <libq931/lib.h>
+#include <libq931/logging.h>
+#include <libq931/msgtype.h>
+#include <libq931/ie.h>
+#include <libq931/out.h>
+#include <libq931/call.h>
+#include <libq931/intf.h>
+#include <libq931/ces.h>
+#include <libq931/channel.h>
+#include <libq931/proto.h>
 
-#include "ie_sending_complete.h"
-#include "ie_bearercap.h"
-#include "ie_cdpn.h"
-#include "ie_cgpn.h"
-#include "ie_chanid.h"
-#include "ie_progind.h"
-#include "ie_cause.h"
-#include "ie_call_state.h"
-#include "ie_hlc.h"
+#include <libq931/ie_sending_complete.h>
+#include <libq931/ie_bearercap.h>
+#include <libq931/ie_cdpn.h>
+#include <libq931/ie_cgpn.h>
+#include <libq931/ie_chanid.h>
+#include <libq931/ie_progind.h>
+#include <libq931/ie_cause.h>
+#include <libq931/ie_call_state.h>
+#include <libq931/ie_hlc.h>
 
 #include "call_inline.h"
 

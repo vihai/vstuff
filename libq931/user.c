@@ -13,8 +13,8 @@
 
 #define Q931_PRIVATE
 
-#include "msgtype.h"
-#include "ie.h"
+#include <libq931/msgtype.h>
+#include <libq931/ie.h>
 
 static int shutting_down = FALSE;
 static int shutdown_acked;

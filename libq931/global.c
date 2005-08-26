@@ -7,17 +7,17 @@
 
 #include <assert.h>
 
-#include "lib.h"
-#include "intf.h"
-#include "logging.h"
-#include "global.h"
-#include "out.h"
-#include "chanset.h"
+#include <libq931/lib.h>
+#include <libq931/intf.h>
+#include <libq931/logging.h>
+#include <libq931/global.h>
+#include <libq931/out.h>
+#include <libq931/chanset.h>
 
-#include "ie_chanid.h"
-#include "ie_call_state.h"
-#include "ie_restind.h"
-#include "ie_cause.h"
+#include <libq931/ie_chanid.h>
+#include <libq931/ie_call_state.h>
+#include <libq931/ie_restind.h>
+#include <libq931/ie_cause.h>
 
 static const char *q931_global_state_to_text(enum q931_global_state state)
 {

@@ -3,12 +3,12 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "logging.h"
-#include "intf.h"
-#include "message.h"
+#include <libq931/lib.h>
+#include <libq931/logging.h>
+#include <libq931/intf.h>
+#include <libq931/message.h>
 
-#include "ie_restind.h"
+#include <libq931/ie_restind.h>
 
 static const struct q931_ie_type *ie_type;
 

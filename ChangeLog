@@ -2,6 +2,158 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-26 02:21:02 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-78
+
+    Summary:
+      Further improvements in build system
+    Revision:
+      isdn--devel--0.1--patch-78
+
+    
+    
+
+    new files:
+     .arch-ids/visdn.spec.in.id libq931/libq931/.arch-ids/=id
+     visdn.spec.in
+
+    modified files:
+     ChangeLog Makefile.am TODO chan_visdn/Makefile.am configure.ac
+     libq931/Makefile.am libq931/call.c libq931/callref.c
+     libq931/ces.c libq931/channel.c libq931/chanset.c
+     libq931/global.c libq931/ie.c libq931/ie_bearercap.c
+     libq931/ie_call_state.c libq931/ie_cause.c libq931/ie_cdpn.c
+     libq931/ie_cgpn.c libq931/ie_chanid.c libq931/ie_hlc.c
+     libq931/ie_progind.c libq931/ie_restind.c
+     libq931/ie_sending_complete.c libq931/ies.c libq931/intf.c
+     libq931/msgtype.c libq931/out.c libq931/q931.c libq931/timer.c
+     libq931/user.c
+
+    renamed files:
+     libq931/.arch-ids/call.h.id
+       ==> libq931/libq931/.arch-ids/call.h.id
+     libq931/.arch-ids/callref.h.id
+       ==> libq931/libq931/.arch-ids/callref.h.id
+     libq931/.arch-ids/ces.h.id
+       ==> libq931/libq931/.arch-ids/ces.h.id
+     libq931/.arch-ids/channel.h.id
+       ==> libq931/libq931/.arch-ids/channel.h.id
+     libq931/.arch-ids/chanset.h.id
+       ==> libq931/libq931/.arch-ids/chanset.h.id
+     libq931/.arch-ids/dlc.h.id
+       ==> libq931/libq931/.arch-ids/dlc.h.id
+     libq931/.arch-ids/global.h.id
+       ==> libq931/libq931/.arch-ids/global.h.id
+     libq931/.arch-ids/ie.h.id
+       ==> libq931/libq931/.arch-ids/ie.h.id
+     libq931/.arch-ids/ie_bearercap.h.id
+       ==> libq931/libq931/.arch-ids/ie_bearercap.h.id
+     libq931/.arch-ids/ie_call_state.h.id
+       ==> libq931/libq931/.arch-ids/ie_call_state.h.id
+     libq931/.arch-ids/ie_cause.h.id
+       ==> libq931/libq931/.arch-ids/ie_cause.h.id
+     libq931/.arch-ids/ie_cdpn.h.id
+       ==> libq931/libq931/.arch-ids/ie_cdpn.h.id
+     libq931/.arch-ids/ie_cgpn.h.id
+       ==> libq931/libq931/.arch-ids/ie_cgpn.h.id
+     libq931/.arch-ids/ie_chanid.h.id
+       ==> libq931/libq931/.arch-ids/ie_chanid.h.id
+     libq931/.arch-ids/ie_hlc.h.id
+       ==> libq931/libq931/.arch-ids/ie_hlc.h.id
+     libq931/.arch-ids/ie_progind.h.id
+       ==> libq931/libq931/.arch-ids/ie_progind.h.id
+     libq931/.arch-ids/ie_restind.h.id
+       ==> libq931/libq931/.arch-ids/ie_restind.h.id
+     libq931/.arch-ids/ie_sending_complete.h.id
+       ==> libq931/libq931/.arch-ids/ie_sending_complete.h.id
+     libq931/.arch-ids/ies.h.id
+       ==> libq931/libq931/.arch-ids/ies.h.id
+     libq931/.arch-ids/intf.h.id
+       ==> libq931/libq931/.arch-ids/intf.h.id
+     libq931/.arch-ids/lib.h.id
+       ==> libq931/libq931/.arch-ids/lib.h.id
+     libq931/.arch-ids/list.h.id
+       ==> libq931/libq931/.arch-ids/list.h.id
+     libq931/.arch-ids/logging.h.id
+       ==> libq931/libq931/.arch-ids/logging.h.id
+     libq931/.arch-ids/message.h.id
+       ==> libq931/libq931/.arch-ids/message.h.id
+     libq931/.arch-ids/msgtype.h.id
+       ==> libq931/libq931/.arch-ids/msgtype.h.id
+     libq931/.arch-ids/out.h.id
+       ==> libq931/libq931/.arch-ids/out.h.id
+     libq931/.arch-ids/proto.h.id
+       ==> libq931/libq931/.arch-ids/proto.h.id
+     libq931/.arch-ids/q931.h.id
+       ==> libq931/libq931/.arch-ids/q931.h.id
+     libq931/.arch-ids/timer.h.id
+       ==> libq931/libq931/.arch-ids/timer.h.id
+     libq931/.arch-ids/util.h.id
+       ==> libq931/libq931/.arch-ids/util.h.id
+     libq931/call.h
+       ==> libq931/libq931/call.h
+     libq931/callref.h
+       ==> libq931/libq931/callref.h
+     libq931/ces.h
+       ==> libq931/libq931/ces.h
+     libq931/channel.h
+       ==> libq931/libq931/channel.h
+     libq931/chanset.h
+       ==> libq931/libq931/chanset.h
+     libq931/dlc.h
+       ==> libq931/libq931/dlc.h
+     libq931/global.h
+       ==> libq931/libq931/global.h
+     libq931/ie.h
+       ==> libq931/libq931/ie.h
+     libq931/ie_bearercap.h
+       ==> libq931/libq931/ie_bearercap.h
+     libq931/ie_call_state.h
+       ==> libq931/libq931/ie_call_state.h
+     libq931/ie_cause.h
+       ==> libq931/libq931/ie_cause.h
+     libq931/ie_cdpn.h
+       ==> libq931/libq931/ie_cdpn.h
+     libq931/ie_cgpn.h
+       ==> libq931/libq931/ie_cgpn.h
+     libq931/ie_chanid.h
+       ==> libq931/libq931/ie_chanid.h
+     libq931/ie_hlc.h
+       ==> libq931/libq931/ie_hlc.h
+     libq931/ie_progind.h
+       ==> libq931/libq931/ie_progind.h
+     libq931/ie_restind.h
+       ==> libq931/libq931/ie_restind.h
+     libq931/ie_sending_complete.h
+       ==> libq931/libq931/ie_sending_complete.h
+     libq931/ies.h
+       ==> libq931/libq931/ies.h
+     libq931/intf.h
+       ==> libq931/libq931/intf.h
+     libq931/lib.h
+       ==> libq931/libq931/lib.h
+     libq931/list.h
+       ==> libq931/libq931/list.h
+     libq931/logging.h
+       ==> libq931/libq931/logging.h
+     libq931/message.h
+       ==> libq931/libq931/message.h
+     libq931/msgtype.h
+       ==> libq931/libq931/msgtype.h
+     libq931/out.h
+       ==> libq931/libq931/out.h
+     libq931/proto.h
+       ==> libq931/libq931/proto.h
+     libq931/q931.h
+       ==> libq931/libq931/q931.h
+     libq931/timer.h
+       ==> libq931/libq931/timer.h
+     libq931/util.h
+       ==> libq931/libq931/util.h
+
+    new directories:
+     libq931/libq931 libq931/libq931/.arch-ids
+
+
 2005-08-25 20:34:28 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-77
 
     Summary:

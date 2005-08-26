@@ -16,19 +16,20 @@
 #	configure config-h.in stamp-h.in	\
 #	$(AUX_DIST)
 
-EXTRA_DIST =
-	bootstrap				\
-	etc/ethereal_coloring_rules
-
-sysconf_DATA =
-	etc/ethereal_coloring_rules		\
+sysconf_DATA =					\
 	etc/udev/30-visdn.rules			\
 	etc/sysconfig/scripts/ifup-visdn	\
 	etc/sysconfig/network/ifcfg-visdn0
 
-astconf_DATA =
+astconf_DATA =					\
 	etc/asterisk/visdn.conf
 
+EXTRA_DIST =					\
+	bootstrap				\
+	visdn.spec				\
+	etc/ethereal_coloring_rules		\
+	$(sysconf_DATA)				\
+	$(astconf_DATA)
 
 SUBDIRS =
 
@@ -66,3 +67,6 @@ endif
 if tests
 SUBDIRS += tests
 endif
+
+dist-rpm: dist-bzip2
+	rpmbuild -ta @PACKAGE_TARNAME@-@PACKAGE_VERSION@.tar.bz2

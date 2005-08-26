@@ -5,10 +5,10 @@
 
 #define Q931_PRIVATE
 
-#include "list.h"
-#include "logging.h"
-#include "channel.h"
-#include "intf.h"
+#include <libq931/list.h>
+#include <libq931/logging.h>
+#include <libq931/channel.h>
+#include <libq931/intf.h>
 
 struct q931_channel *q931_channel_select(struct q931_call *call)
 {

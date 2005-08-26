@@ -3,7 +3,7 @@
 
 #define Q931_PRIVATE
 
-#include "callref.h"
+#include <libq931/callref.h>
 
 void q931_make_callref(
 	void *void_buf,

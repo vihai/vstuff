@@ -10,6 +10,7 @@ Build system:
 
 - Check if the kernel source tree has been correctly prepare (make/makei
   modules_prepare)
+- Avoid libtool to install chan_visdn.a, chan_visdn.la and run ldconfig
 
 chan_visdn
 

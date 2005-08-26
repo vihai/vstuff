@@ -6,8 +6,8 @@
 
 #define Q931_PRIVATE
 
-#include "lib.h"
-#include "ies.h"
+#include <libq931/lib.h>
+#include <libq931/ies.h>
 
 void q931_ies_add(
 	struct q931_ies *ies,
