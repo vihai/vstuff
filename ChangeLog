@@ -2,6 +2,77 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-28 03:29:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-81
+
+    Summary:
+      Furher core/netdev cleanup
+    Revision:
+      isdn--devel--0.1--patch-81
+
+    
+    
+
+    modified files:
+     ChangeLog Makefile.am configure.ac etc/udev/30-visdn.rules
+     hfc-4s/chan.c visdn-core/core_main.c visdn-core/visdn.h
+     visdn-netdev/Makefile.in visdn-netdev/netdev.h
+     visdn-netdev/netdev_main.c visdn-ppp/Makefile.in
+     visdn-streamport/Makefile.in
+     visdn-streamport/streamport_main.c
+     visdn-timer-system/Makefile.in
+     visdn-timer-system/timer-system_main.c
+
+    renamed files:
+     timer-system/.arch-ids/.arch-inventory.id
+       ==> visdn-timer-system/.arch-ids/.arch-inventory.id
+     timer-system/.arch-ids/=id
+       ==> visdn-timer-system/.arch-ids/=id
+     timer-system/.arch-ids/Makefile.in.id
+       ==> visdn-timer-system/.arch-ids/Makefile.in.id
+     timer-system/.arch-ids/timer_system.h.id
+       ==> visdn-timer-system/.arch-ids/timer-system.h.id
+     timer-system/.arch-ids/timer_system_main.c.id
+       ==> visdn-timer-system/.arch-ids/timer-system_main.c.id
+     timer-system/timer_system.h
+       ==> visdn-timer-system/timer-system.h
+     timer-system/timer_system_main.c
+       ==> visdn-timer-system/timer-system_main.c
+     visdn-netdev/.arch-ids/visdn-netdev.h.id
+       ==> visdn-netdev/.arch-ids/netdev.h.id
+     visdn-netdev/.arch-ids/visdn-netdev_main.c.id
+       ==> visdn-netdev/.arch-ids/netdev_main.c.id
+     visdn-netdev/visdn-netdev.h
+       ==> visdn-netdev/netdev.h
+     visdn-netdev/visdn-netdev_main.c
+       ==> visdn-netdev/netdev_main.c
+     visdn-ppp/.arch-ids/visdn-ppp.h.id
+       ==> visdn-ppp/.arch-ids/ppp.h.id
+     visdn-ppp/.arch-ids/visdn-ppp_main.c.id
+       ==> visdn-ppp/.arch-ids/ppp_main.c.id
+     visdn-ppp/visdn-ppp.h
+       ==> visdn-ppp/ppp.h
+     visdn-ppp/visdn-ppp_main.c
+       ==> visdn-ppp/ppp_main.c
+     visdn-streamport/.arch-ids/visdn-streamport.h.id
+       ==> visdn-streamport/.arch-ids/streamport.h.id
+     visdn-streamport/.arch-ids/visdn-streamport_main.c.id
+       ==> visdn-streamport/.arch-ids/streamport_main.c.id
+     visdn-streamport/visdn-streamport.h
+       ==> visdn-streamport/streamport.h
+     visdn-streamport/visdn-streamport_main.c
+       ==> visdn-streamport/streamport_main.c
+
+    new directories:
+     visdn-timer-system/.arch-ids
+
+    removed directories:
+     timer-system/.arch-ids
+
+    renamed directories:
+     timer-system
+       ==> visdn-timer-system
+
+
 2005-08-28 01:51:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-80
 
     Summary:

@@ -3,7 +3,7 @@
 
 @SET_MAKE@
 
-subdir = timer-system
+subdir = visdn-timer-system
 DIST_SOURCES = timer_system_main.c
 DIST_HEADERS = timer_system.h
 
@@ -91,7 +91,7 @@ EXTRA_CFLAGS=-I $(abssrcdir)/../visdn-core/
 
 # Kbuild:
 obj-m	:= visdn-timer-system.o
-visdn-timer-system-y	:= timer_system_main.o
+visdn-timer-system-y	:= timer-system_main.o
 # end Kbuild
 
 all:

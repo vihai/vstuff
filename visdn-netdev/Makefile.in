@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = visdn-netdev
-DIST_SOURCES = visdn-netdev.c
-DIST_HEADERS = 
+DIST_SOURCES = netdev_main.c
+DIST_HEADERS = netdev.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
@@ -91,7 +91,7 @@ EXTRA_CFLAGS=-I$(abssrcdir)/../visdn-core/ -I$(abssrcdir)/../lapd/
 
 # Kbuild:
 obj-m	:= visdn-netdev.o
-visdn-netdev-y	:= visdn-netdev_main.o
+visdn-netdev-y	:= netdev_main.o
 # end Kbuild
 
 all:

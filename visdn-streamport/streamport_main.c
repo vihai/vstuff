@@ -20,7 +20,7 @@
 #include <linux/device.h>
 #include <linux/list.h>
 
-#include "visdn-streamport.h"
+#include "streamport.h"
 
 static dev_t vsp_first_dev;
 static struct cdev vsp_cdev;
@@ -313,29 +313,6 @@ struct file_operations vsp_fops =
 	.llseek		= no_llseek,
 };
 
-#define to_chan(class) container_of(class, struct vsp_chan, class_dev)
-
-static int vsp_class_hotplug(struct class_device *cd, char **envp,
-	int num_envp, char *buf, int size)
-{
-	envp[0] = NULL;
-
-	return 0;
-}
-
-static void vsp_class_release(struct class_device *cd)
-{
-	printk(KERN_DEBUG vsp_MODULE_PREFIX "vsp_class_release called\n");
-}
-
-static struct class vsp_class = {
-	.name = vsp_MODULE_NAME,
-	.release = vsp_class_release,
-#ifdef CONFIG_HOTPLUG
-	.hotplug = vsp_class_hotplug,
-#endif
-};
-
 /******************************************
  * Module stuff
  ******************************************/
@@ -356,9 +333,13 @@ static int __init vsp_init_module(void)
 		INIT_HLIST_HEAD(&vsp_chan_index_hash[i]);
 	}
 
-	err = class_register(&vsp_class);
+	visdn_port_init(&vsp_visdn_port, &vsp_port_ops);
+	err = visdn_port_register(
+		&vsp_visdn_port,
+		vsp_MODULE_NAME, vsp_MODULE_NAME,
+		&visdn_system_device);
 	if (err < 0)
-		goto err_class_register;
+		goto err_visdn_port_register;
 
 	err = alloc_chrdev_region(&vsp_first_dev, 0, 1, vsp_MODULE_NAME);
 	if (err < 0)
@@ -373,23 +354,15 @@ static int __init vsp_init_module(void)
 
 	snprintf(vsp_class_dev.class_id,
 		sizeof(vsp_class_dev.class_id),
-		vsp_MODULE_NAME);
-	vsp_class_dev.class = &vsp_class;
-	vsp_class_dev.dev =  NULL; // vsp_device
+		"streamport");
+	vsp_class_dev.class = &visdn_system_class;
+	vsp_class_dev.dev = &vsp_visdn_port.device;
 	vsp_class_dev.devt = vsp_first_dev;
 
 	err = class_device_register(&vsp_class_dev);
 	if (err < 0) {
 		// TODO FIXME
 	}
-
-	visdn_port_init(&vsp_visdn_port, &vsp_port_ops);
-	err = visdn_port_register(
-		&vsp_visdn_port,
-		vsp_MODULE_NAME, vsp_MODULE_NAME,
-		&visdn_system_device);
-	if (err < 0)
-		goto err_visdn_port_register;
 
 	return 0;
 
@@ -399,8 +372,6 @@ err_visdn_port_register:
 err_cdev_add:
 	unregister_chrdev_region(vsp_first_dev, 1);
 err_register_chrdev:
-	class_unregister(&vsp_class);
-err_class_register:
 
 	return err;
 }
@@ -413,7 +384,6 @@ static void __exit vsp_module_exit(void)
 	visdn_port_unregister(&vsp_visdn_port);
 	cdev_del(&vsp_cdev);
 	unregister_chrdev_region(vsp_first_dev, 1);
-	class_unregister(&vsp_class);
 
 	printk(KERN_INFO vsp_MODULE_DESCR " unloaded\n");
 }

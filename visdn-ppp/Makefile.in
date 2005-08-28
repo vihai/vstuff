@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = visdn-ppp
-DIST_SOURCES = visdn-ppp.c
-DIST_HEADERS = 
+DIST_SOURCES = ppp_main.c
+DIST_HEADERS = ppp.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@

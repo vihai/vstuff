@@ -24,6 +24,7 @@
 
 extern dev_t visdn_first_dev;
 extern struct device visdn_system_device;
+extern struct class visdn_system_class;
 
 int visdn_frame_rx(struct visdn_chan *chan, struct sk_buff *skb);
 

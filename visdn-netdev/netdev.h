@@ -8,9 +8,9 @@
 
 #include <visdn.h>
 
-#define vnd_DRIVER_NAME "visdn-netdev"
-#define vnd_DRIVER_PREFIX sb_DRIVER_NAME ": "
-#define vnd_DRIVER_DESCR "Netdevice gateway"
+#define vnd_MODULE_NAME "visdn-netdev"
+#define vnd_MODULE_PREFIX sb_MODULE_NAME ": "
+#define vnd_MODULE_DESCR "Netdevice gateway"
 
 #define VND_CHAN_HASHBITS 8
 #define VND_CHAN_HASHSIZE (1 << VND_CHAN_HASHBITS)

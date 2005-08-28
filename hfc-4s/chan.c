@@ -386,6 +386,7 @@ static ssize_t hfc_chan_samples_read(
 
 	// Read from FIFO in atomic context
 	// Cannot read directly to user due to put_user sleeping
+	// NO, now we can!!! FIXME!
 	hfc_fifo_mem_read(chan->rx.fifo, buf2, copied_octets);
 
 	hfc_card_unlock(card);

@@ -32,7 +32,7 @@ EXTRA_DIST =					\
 SUBDIRS =
 
 if kernel_modules
-SUBDIRS += visdn-core lapd timer-system visdn-streamport visdn-netdev
+SUBDIRS += visdn-core lapd visdn-timer-system visdn-streamport visdn-netdev
 
 if driver_hfc_usb
 SUBDIRS += hfc-usb

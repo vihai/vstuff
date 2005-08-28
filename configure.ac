@@ -143,7 +143,7 @@ AC_CONFIG_FILES([Makefile
                  lapd/Makefile
                  visdn-core/Makefile
                  visdn-streamport/Makefile
-                 timer-system/Makefile
+                 visdn-timer-system/Makefile
                  visdn-netdev/Makefile
                  visdn-ppp/Makefile
                  visdn.spec])

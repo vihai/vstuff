@@ -1,3 +1,2 @@
 KERNEL="*", SUBSYSTEM="visdn", NAME="visdn/%k"
-KERNEL="*", SUBSYSTEM="visdn_timer", NAME="visdn/timers/%k", SYMLINK="visdn/timer"
-KERNEL="*", SUBSYSTEM="visdn_streamport", NAME="visdn/streamport"
+KERNEL="*", SUBSYSTEM="visdn-timer", NAME="visdn/timers/%k", SYMLINK="visdn/timer"

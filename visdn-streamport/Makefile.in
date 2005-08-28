@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = visdn-streamport
-DIST_SOURCES = visdn-streamport_main.c
-DIST_HEADERS = visdn-streamport.h
+DIST_SOURCES = streamport_main.c
+DIST_HEADERS = streamport.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
@@ -90,7 +90,7 @@ EXTRA_CFLAGS=-I $(abssrcdir)/../visdn-core/
 
 # Kbuild:
 obj-m	:= visdn-streamport.o
-visdn-streamport-y	:= visdn-streamport_main.o
+visdn-streamport-y	:= streamport_main.o
 # end Kbuild
 
 all:

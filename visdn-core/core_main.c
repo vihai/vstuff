@@ -138,8 +138,6 @@ struct file_operations visdn_ctl_fops =
 static int visdn_hotplug(struct class_device *cd, char **envp,
 	int num_envp, char *buf, int size)
 {
-//	struct visdn *visdn = to_visdn(cd);
-
 	envp[0] = NULL;
 
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_hotplug called\n");
@@ -149,19 +147,14 @@ static int visdn_hotplug(struct class_device *cd, char **envp,
 
 static void visdn_release(struct class_device *cd)
 {
-//	struct visdn *visdn =
-//		container_of(cd, struct visdn, class_dev);
-
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_release called\n");
-
-	// kfree ??
 }
 
-static struct class visdn_class = {
+static struct class visdn_system_class = {
 	.name = "visdn",
 	.release = visdn_release,
 	.hotplug = visdn_hotplug,
 };
+EXPORT_SYMBOL(visdn_system_class);
 
 static struct class_device visdn_control_class_dev;
 
@@ -198,15 +191,29 @@ static int __init visdn_init_module(void)
 	visdn_ctl_cdev.owner = THIS_MODULE;
 	err = cdev_add(&visdn_ctl_cdev, visdn_first_dev + 0, 1);
 	if (err < 0)
-		goto err_cdev_add_ctl;
+		goto err_cdev_add;
 
-	err = class_register(&visdn_class);
+	visdn_system_device.bus = NULL;
+	visdn_system_device.parent = NULL;
+	visdn_system_device.driver_data = NULL;
+	visdn_system_device.release = visdn_system_device_release;
+
+	snprintf(visdn_system_device.bus_id,
+		sizeof(visdn_system_device.bus_id),
+		"visdn-system");
+
+	err = device_register(&visdn_system_device);
+	if (err < 0)
+		goto err_system_device_register;
+
+	err = class_register(&visdn_system_class);
 	if (err < 0)
 		goto err_class_register;
 
 	class_device_initialize(&visdn_control_class_dev);
-	visdn_control_class_dev.class = &visdn_class;
+	visdn_control_class_dev.class = &visdn_system_class;
 	visdn_control_class_dev.class_data = NULL;
+	visdn_control_class_dev.dev = &visdn_system_device;
 #ifndef NO_CLASS_DEV_DEVT
 	visdn_control_class_dev.devt = visdn_first_dev;
 #endif
@@ -223,19 +230,6 @@ static int __init visdn_init_module(void)
 		&visdn_control_class_dev,
 		&class_device_attr_dev);
 #endif
-
-	visdn_system_device.bus = NULL;
-	visdn_system_device.parent = NULL;
-	visdn_system_device.driver_data = NULL;
-	visdn_system_device.release = visdn_system_device_release;
-
-	snprintf(visdn_system_device.bus_id,
-		sizeof(visdn_system_device.bus_id),
-		"visdn-system");
-
-	err = device_register(&visdn_system_device);
-	if (err < 0)
-		goto err_system_device_register;
 
 	err = visdn_timer_modinit();
 	if (err < 0)
@@ -259,12 +253,12 @@ err_port_modinit:
 err_timer_modinit:
 	class_device_del(&visdn_control_class_dev);
 err_control_class_device_register:
+	class_unregister(&visdn_system_class);
+err_class_register:
 	device_unregister(&visdn_system_device);
 err_system_device_register:
-	class_unregister(&visdn_class);
-err_class_register:
 	cdev_del(&visdn_ctl_cdev);
-err_cdev_add_ctl:
+err_cdev_add:
 	unregister_chrdev_region(visdn_first_dev, 2);
 err_alloc_chrdev_region:
 
@@ -279,11 +273,11 @@ static void __exit visdn_module_exit(void)
 	visdn_port_modexit();
 	visdn_timer_modexit();
 
+	class_device_del(&visdn_control_class_dev);
+	class_unregister(&visdn_system_class);
+
 	device_unregister(&visdn_system_device);
 
-	class_device_del(&visdn_control_class_dev);
-
-	class_unregister(&visdn_class);
 	cdev_del(&visdn_ctl_cdev);
 	unregister_chrdev_region(visdn_first_dev, 2);
 

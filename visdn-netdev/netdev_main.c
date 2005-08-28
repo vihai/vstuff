@@ -13,7 +13,11 @@
 #include <visdn.h>
 #include <lapd.h>
 
-#include "visdn-netdev.h"
+#include "netdev.h"
+
+static dev_t vnd_first_dev;
+static struct cdev vnd_cdev;
+static struct class_device vnd_control_class_dev;
 
 struct hlist_head vnd_chan_index_hash[VND_CHAN_HASHSIZE];
 
@@ -152,7 +156,7 @@ struct visdn_chan_ops vnd_chan_ops = {
 	.get_stats		= NULL,
 	.do_ioctl		= NULL,
 
-        .connect_to     	= vnd_chan_connect_to,
+	.connect_to     	= vnd_chan_connect_to,
 	.disconnect		= vnd_chan_disconnect,
 
 	.samples_read   	= NULL,
@@ -213,7 +217,7 @@ static void vnd_netdev_set_multicast_list(struct net_device *netdev)
 {
 //	struct vnd_chan *chan = netdev->priv;
 
-//        if(netdev->flags & IFF_PROMISC && !port->echo_enabled) {
+//	if(netdev->flags & IFF_PROMISC && !port->echo_enabled) {
 //	}
 }
 
@@ -228,13 +232,35 @@ static int vnd_netdev_do_ioctl(struct net_device *netdev,
 		return -EOPNOTSUPP;
 }
 
-// Uhm... I don't like this "side effect" way to interact with the device
-static ssize_t vnd_show_create(
-	struct device *device,
-	char *buf)
+static int vnd_read_done = FALSE;
+
+int vnd_cdev_open(
+	struct inode *inode,
+	struct file *file)
 {
-        struct visdn_port *visdn_port = to_visdn_port(device);
+	nonseekable_open(inode, file);
+
+	vnd_read_done = FALSE;
+
+	return 0;
+}
+
+int vnd_cdev_release(
+	struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+ssize_t vnd_cdev_read(
+	struct file *file,
+	char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
 	int err;
+
+	if (vnd_read_done)
+		return 0;
 
 	struct vnd_chan *chan = NULL;
 	chan = kmalloc(sizeof(*chan), GFP_KERNEL);
@@ -278,7 +304,7 @@ static ssize_t vnd_show_create(
 
 	preempt_disable();
 
-	err = visdn_chan_register(&chan->visdn_chan, chanid, visdn_port);
+	err = visdn_chan_register(&chan->visdn_chan, chanid, &vnd_port);
 	if (err < 0)
 		goto err_visdn_chan_register;
 
@@ -323,8 +349,20 @@ static ssize_t vnd_show_create(
 
 	preempt_enable();
 
-        return snprintf(buf, PAGE_SIZE, "%s\n", chan->visdn_chan.device.bus_id);
+	char busid[30];
+	int len = snprintf(busid, sizeof(busid), "%s\n",
+		chan->visdn_chan.device.bus_id);
 
+	if (copy_to_user(buf, busid, len)) {
+		err = -EFAULT;
+		goto err_copy_to_user;
+	}
+
+	vnd_read_done = TRUE;
+
+	return len;
+
+err_copy_to_user:
 	visdn_chan_unregister(&chan->visdn_chan);
 err_visdn_chan_register:
 	unregister_netdev(chan->netdev);
@@ -337,9 +375,16 @@ err_kmalloc:
 	return err;
 }
 
-static DEVICE_ATTR(create, S_IRUGO,
-	vnd_show_create,
-	NULL);
+struct file_operations vnd_fops =
+{
+	.owner		= THIS_MODULE,
+	.read		= vnd_cdev_read,
+	.write		= NULL,
+	.ioctl		= NULL,
+	.open		= vnd_cdev_open,
+	.release	= vnd_cdev_release,
+	.llseek		= no_llseek,
+};
 
 /******************************************
  * Module stuff
@@ -350,11 +395,19 @@ struct visdn_port_ops vnd_port_ops = {
 	.disable	= NULL,
 };
 
+#ifdef NO_CLASS_DEV_DEVT
+static ssize_t show_dev(struct class_device *class_dev, char *buf)
+{
+	return print_dev_t(buf, vnd_first_dev);
+}
+static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
+#endif
+
 static int __init vnd_init_module(void)
 {
 	int err;
 
-	printk(KERN_INFO vnd_DRIVER_DESCR " loading\n");
+	printk(KERN_INFO vnd_MODULE_DESCR " loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vnd_chan_index_hash); i++) {
@@ -362,22 +415,53 @@ static int __init vnd_init_module(void)
 	}
 
 	visdn_port_init(&vnd_port, &vnd_port_ops);
-	err = visdn_port_register(&vnd_port, "netdev", "netdev", &visdn_system_device);
+	err = visdn_port_register(&vnd_port,
+		"netdev", "netdev",
+		&visdn_system_device);
 	if (err < 0)
 		goto err_visdn_port_register;
 
-	err = device_create_file(
-		&vnd_port.device,
-		&dev_attr_create);
+	err = alloc_chrdev_region(&vnd_first_dev, 0, 1, vnd_MODULE_NAME);
 	if (err < 0)
-		goto err_device_create_file_create;
+		goto err_register_chrdev;
+
+	cdev_init(&vnd_cdev, &vnd_fops);
+	vnd_cdev.owner = THIS_MODULE;
+
+	err = cdev_add(&vnd_cdev, vnd_first_dev, 1);
+	if (err < 0)
+		goto err_cdev_add;
+
+	class_device_initialize(&vnd_control_class_dev);
+	vnd_control_class_dev.class = &visdn_system_class;
+	vnd_control_class_dev.class_data = NULL;
+	vnd_control_class_dev.dev = &vnd_port.device;
+#ifndef NO_CLASS_DEV_DEVT
+	vnd_control_class_dev.devt = vnd_first_dev;
+#endif
+	snprintf(vnd_control_class_dev.class_id,
+		sizeof(vnd_control_class_dev.class_id),
+		"netdev-control");
+
+	err = class_device_register(&vnd_control_class_dev);
+	if (err < 0)
+		goto err_control_class_device_register;
+
+#ifdef NO_CLASS_DEV_DEVT
+	class_device_create_file(
+		&vnd_control_class_dev,
+		&class_device_attr_dev);
+#endif
+
 
 	return 0;
 
-	device_remove_file(
-		&vnd_port.device,
-		&dev_attr_create);
-err_device_create_file_create:
+	class_device_del(&vnd_control_class_dev);
+err_control_class_device_register:
+	cdev_del(&vnd_cdev);
+err_cdev_add:
+	unregister_chrdev_region(vnd_first_dev, 1);
+err_register_chrdev:
 	visdn_port_unregister(&vnd_port);
 err_visdn_port_register:
 
@@ -404,18 +488,16 @@ static void __exit vnd_module_exit(void)
 		}
 	}
 
-	device_remove_file(
-		&vnd_port.device,
-		&dev_attr_create);
+	class_device_del(&vnd_control_class_dev);
 
 	visdn_port_unregister(&vnd_port);
 
-	printk(KERN_INFO vnd_DRIVER_DESCR " unloaded\n");
+	printk(KERN_INFO vnd_MODULE_DESCR " unloaded\n");
 }
 
 module_exit(vnd_module_exit);
 
-MODULE_DESCRIPTION(vnd_DRIVER_DESCR);
+MODULE_DESCRIPTION(vnd_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
 #ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
