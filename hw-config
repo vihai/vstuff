@@ -1,13 +1,80 @@
+#! /bin/bash -x
 
-echo 7 > /sys/devices/pci0000\:00/0000\:00\:09.0/bert_mode
+modprobe ppp_generic
+insmod /root/isdn--devel/lapd/lapd.ko
+insmod /root/isdn--devel/visdn-core/visdn-core.ko
+insmod /root/isdn--devel/visdn-netdev/visdn-netdev.ko
+insmod /root/isdn--devel/visdn-streamport/visdn-streamport.ko
+insmod /root/isdn--devel/timer-system/visdn-timer-system.ko
+#insmod /root/isdn--devel/fake_isdn/fake_isdn.ko ab_drops=0
+##insmod /root/isdn--devel/fake_isdn/fake_isdn.ko ab_drops=200
+insmod /root/isdn--devel/hfc-4s/hfc-4s.ko debug_level=3
+insmod /root/isdn--devel/hfc-pci/hfc-pci.ko debug_level=3
 
-echo NT > /sys/devices/pci0000\:00/0000\:00\:09.0/st0/role
-echo NT > /sys/devices/pci0000\:00/0000\:00\:09.0/st1/role
 
-echo 1 > /sys/devices/pci0000\:00/0000\:00\:09.0/st0/enabled
-echo 1 > /sys/devices/pci0000\:00/0000\:00\:09.0/st1/enabled
+#ifconfig visdn0a up
+#ifconfig visdn0b allmulti
+#ifconfig visdn0b up
 
-echo 1 > /sys/devices/pci0000\:00/0000\:00\:09.0/st3/enabled
+cd /sys/devices/pci0000\:00/0000\:00\:09.0
 
-echo NT > /sys/devices/pci0000\:00/0000\:00\:07.0/st0/role
-echo 1 > /sys/devices/pci0000\:00/0000\:00\:07.0/st0/enabled
+echo 7 > bert_mode
+
+pushd st0
+echo NT > role
+NETDEV_CHAN=`cat /dev/visdn/netdev-control`
+D_CHAN=`basename \`readlink D\``
+echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+echo 1 > enabled
+nameif -r visdn1.0 visdn${NETDEV_CHAN##*.}d
+ip link set visdn1.0 allmulticast on
+ip link set visdn1.0 up
+popd
+
+pushd st1
+echo NT > role
+NETDEV_CHAN=`cat /dev/visdn/netdev-control`
+D_CHAN=`basename \`readlink D\``
+echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+echo 1 > enabled
+nameif -r visdn1.1 visdn${NETDEV_CHAN##*.}d
+ip link set visdn1.1 allmulticast on
+ip link set visdn1.1 up
+popd
+
+pushd st2
+echo TE > role
+NETDEV_CHAN=`cat /dev/visdn/netdev-control`
+D_CHAN=`basename \`readlink D\``
+echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+#echo 1 > enabled
+nameif -r visdn1.2 visdn${NETDEV_CHAN##*.}d
+ip link set visdn1.2 allmulticast off
+ip link set visdn1.2 up
+popd
+
+pushd st3
+echo TE > role
+NETDEV_CHAN=`cat /dev/visdn/netdev-control`
+D_CHAN=`basename \`readlink D\``
+echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+echo 1 > enabled
+nameif -r visdn1.3 visdn${NETDEV_CHAN##*.}d
+ip link set visdn1.3 allmulticast off
+ip link set visdn1.3 up
+popd
+
+#..................
+cd /sys/devices/pci0000\:00/0000\:00\:07.0
+
+pushd st0
+echo TE > role
+NETDEV_CHAN=`cat /dev/visdn/netdev-control`
+D_CHAN=`basename \`readlink D\``
+echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+echo 1 > enabled
+nameif -r visdn0 visdn${NETDEV_CHAN##*.}d
+ip link set visdn0 allmulticast off
+ip link set visdn0 up
+popd
+

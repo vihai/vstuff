@@ -224,10 +224,11 @@ static void vnd_netdev_set_multicast_list(struct net_device *netdev)
 static int vnd_netdev_do_ioctl(struct net_device *netdev,
 	struct ifreq *ifr, int cmd)
 {
-	struct visdn_chan *chan = netdev->priv;
+	struct vnd_chan *chan = netdev->priv;
 
-	if (chan->ops->do_ioctl)
-		return chan->ops->do_ioctl(chan, ifr, cmd);
+	if (chan->visdn_chan.ops->do_ioctl)
+		return chan->visdn_chan.ops->do_ioctl(
+				&chan->visdn_chan, ifr, cmd);
 	else
 		return -EOPNOTSUPP;
 }

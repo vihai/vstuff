@@ -113,27 +113,27 @@ void visdn_chan_modexit(void);
 
 #define to_visdn_chan(class) container_of(class, struct visdn_chan, device)
 
-void visdn_chan_init(
+extern void visdn_chan_init(
 	struct visdn_chan *visdn_chan,
 	struct visdn_chan_ops *ops);
 
-struct visdn_chan *visdn_chan_alloc(void);
+extern struct visdn_chan *visdn_chan_alloc(void);
 
-int visdn_disconnect(
+extern int visdn_disconnect(
 	struct visdn_chan *chan1,
 	struct visdn_chan *chan2);
 
-int visdn_chan_register(
+extern int visdn_chan_register(
 	struct visdn_chan *visdn_chan,
 	const char *name,
 	struct visdn_port *visdn_port);
 
-void visdn_chan_unregister(
+extern void visdn_chan_unregister(
 	struct visdn_chan *visdn_chan);
 
-struct visdn_chan *visdn_search_chan(const char *chanid);
+extern struct visdn_chan *visdn_search_chan(const char *chanid);
 
-int visdn_connect(struct visdn_chan *chan1,
+extern int visdn_connect(struct visdn_chan *chan1,
 		struct visdn_chan *chan2,
 		int flags);
 

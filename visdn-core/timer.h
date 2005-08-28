@@ -26,17 +26,17 @@ void visdn_timer_modexit(void);
 
 #define to_visdn_timer(class) container_of(class, struct visdn_timer, class_dev)
 
-void visdn_timer_init(
+extern void visdn_timer_init(
 	struct visdn_timer *visdn_timer,
 	struct visdn_timer_ops *ops);
 
-struct visdn_timer *visdn_timer_alloc(void);
+extern struct visdn_timer *visdn_timer_alloc(void);
 
-int visdn_timer_register(
+extern int visdn_timer_register(
 	struct visdn_timer *visdn_timer,
 	const char *name);
 
-void visdn_timer_unregister(
+extern void visdn_timer_unregister(
 	struct visdn_timer *visdn_timer);
 
 #endif

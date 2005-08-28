@@ -34,19 +34,19 @@ struct visdn_port
 int visdn_port_modinit(void);
 void visdn_port_modexit(void);
 
-void visdn_port_init(
+extern void visdn_port_init(
 	struct visdn_port *visdn_port,
 	struct visdn_port_ops *ops);
 
-struct visdn_port *visdn_port_alloc(void);
+extern struct visdn_port *visdn_port_alloc(void);
 
-int visdn_port_register(
+extern int visdn_port_register(
 	struct visdn_port *visdn_port,
 	const char *global_name,
 	const char *local_name,
 	struct device *parent_device);
 
-void visdn_port_unregister(
+extern void visdn_port_unregister(
 	struct visdn_port *visdn_port);
 
 #endif
