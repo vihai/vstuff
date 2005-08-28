@@ -1,5 +1,5 @@
-#ifndef _PORT_H
-#define _PORT_H
+#ifndef _VISDN_PORT_H
+#define _VISDN_PORT_H
 
 #ifdef __KERNEL__
 
@@ -42,7 +42,8 @@ struct visdn_port *visdn_port_alloc(void);
 
 int visdn_port_register(
 	struct visdn_port *visdn_port,
-	const char *name,
+	const char *global_name,
+	const char *local_name,
 	struct device *parent_device);
 
 void visdn_port_unregister(

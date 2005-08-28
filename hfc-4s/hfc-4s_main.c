@@ -395,10 +395,7 @@ void hfc_deallocate_fifo(struct hfc_fifo *fifo)
 
 void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
-	if (fifo->connected_chan &&
-	    fifo->connected_chan->chan->visdn_chan.framing ==
-			VISDN_CHAN_FRAMING_HDLC)
-		visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
+	visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
 }
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
@@ -629,7 +626,7 @@ static int __devinit hfc_probe(
 		snprintf(portid, sizeof(portid), "st%d", i);
 
 		visdn_port_register(&card->st_ports[i].visdn_port,
-			portid, &pci_dev->dev);
+			"%d", portid, &pci_dev->dev);
 
 		visdn_chan_register(
 			&card->st_ports[i].chans[D].visdn_chan, "D",
@@ -663,7 +660,7 @@ static int __devinit hfc_probe(
 	}
 
 	visdn_port_register(&card->pcm_port.visdn_port,
-		"pcm", &pci_dev->dev);
+		"%d", "pcm", &pci_dev->dev);
 
 	hfc_pcm_port_sysfs_create_files(&card->pcm_port);
 

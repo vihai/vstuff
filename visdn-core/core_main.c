@@ -177,6 +177,13 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
+static void visdn_system_device_release(struct device *cd)
+{
+}
+
+struct device visdn_system_device;
+EXPORT_SYMBOL(visdn_system_device);
+
 static int __init visdn_init_module(void)
 {
 	int err;
@@ -217,6 +224,19 @@ static int __init visdn_init_module(void)
 		&class_device_attr_dev);
 #endif
 
+	visdn_system_device.bus = NULL;
+	visdn_system_device.parent = NULL;
+	visdn_system_device.driver_data = NULL;
+	visdn_system_device.release = visdn_system_device_release;
+
+	snprintf(visdn_system_device.bus_id,
+		sizeof(visdn_system_device.bus_id),
+		"visdn-system");
+
+	err = device_register(&visdn_system_device);
+	if (err < 0)
+		goto err_system_device_register;
+
 	err = visdn_timer_modinit();
 	if (err < 0)
 		goto err_timer_modinit;
@@ -239,6 +259,8 @@ err_port_modinit:
 err_timer_modinit:
 	class_device_del(&visdn_control_class_dev);
 err_control_class_device_register:
+	device_unregister(&visdn_system_device);
+err_system_device_register:
 	class_unregister(&visdn_class);
 err_class_register:
 	cdev_del(&visdn_ctl_cdev);
@@ -257,7 +279,10 @@ static void __exit visdn_module_exit(void)
 	visdn_port_modexit();
 	visdn_timer_modexit();
 
+	device_unregister(&visdn_system_device);
+
 	class_device_del(&visdn_control_class_dev);
+
 	class_unregister(&visdn_class);
 	cdev_del(&visdn_ctl_cdev);
 	unregister_chrdev_region(visdn_first_dev, 2);

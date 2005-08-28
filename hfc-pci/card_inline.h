@@ -10,6 +10,11 @@ static inline void hfc_card_lock(struct hfc_card *card)
 	down(&card->sem);
 }
 
+static inline int hfc_card_trylock(struct hfc_card *card)
+{
+	return down_trylock(&card->sem);
+}
+
 static inline int hfc_card_lock_interruptible(struct hfc_card *card)
 {
 	return down_interruptible(&card->sem);

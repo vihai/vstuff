@@ -23,6 +23,7 @@
 #ifdef __KERNEL__
 
 extern dev_t visdn_first_dev;
+extern struct device visdn_system_device;
 
 int visdn_frame_rx(struct visdn_chan *chan, struct sk_buff *skb);
 
@@ -38,26 +39,43 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 
 static inline void visdn_stop_queue(struct visdn_chan *chan)
 {
-	netif_stop_queue(chan->netdev);
+	if (chan->connected_chan &&
+	    chan->connected_chan->ops->stop_queue)
+		chan->connected_chan->ops->stop_queue(
+			chan->connected_chan);
 }
 
 static inline void visdn_start_queue(struct visdn_chan *chan)
 {
-	netif_start_queue(chan->netdev);
+	if (chan->connected_chan &&
+	    chan->connected_chan->ops->start_queue)
+		chan->connected_chan->ops->start_queue(
+			chan->connected_chan);
 }
 
 static inline void visdn_wake_queue(struct visdn_chan *chan)
 {
-	netif_wake_queue(chan->netdev);
+	if (chan->connected_chan &&
+	    chan->connected_chan->ops->wake_queue)
+		chan->connected_chan->ops->wake_queue(
+			chan->connected_chan);
 }
 
+static inline void visdn_frame_input_error(struct visdn_chan *chan, int code)
+{
+	if (chan->connected_chan &&
+	    chan->connected_chan->ops->frame_input_error)
+		chan->connected_chan->ops->frame_input_error(
+			chan->connected_chan, code);
+}
+
+/*
 enum visdn_bearertype
 {
         VISDN_BT_VOICE  = 1,
         VISDN_BT_PPP    = 2,
 };
 
-/*
 struct visdn_setbearer
 {
         int sb_index;

@@ -1,5 +1,5 @@
-#ifndef _CHAN_H
-#define _CHAN_H
+#ifndef _VISDN_CHAN_H
+#define _VISDN_CHAN_H
 
 #define VISDN_IOC_CONNECT	_IOR(0xd0, 2, unsigned int)
 #define VISDN_IOC_DISCONNECT	_IOR(0xd0, 3, unsigned int)
@@ -21,7 +21,8 @@ struct visdn_connect
 #ifdef __KERNEL__
 
 #include <linux/skbuff.h>
-#include <linux/ppp_channel.h>
+#include <linux/if.h>
+#include <linux/device.h>
 #include <linux/netdevice.h>
 
 #define VISDN_CHAN_HASHBITS 8
@@ -40,6 +41,8 @@ struct visdn_chan_ops
 	int (*close)(struct visdn_chan *chan);
 
 	int (*frame_xmit)(struct visdn_chan *chan, struct sk_buff *skb);
+	void (*frame_input_error)(struct visdn_chan *chan, int code);
+
 	struct net_device_stats *(*get_stats)(struct visdn_chan *chan);
 	void (*set_promisc)(struct visdn_chan *chan, int enabled);
 	int (*do_ioctl)(struct visdn_chan *chan, struct ifreq *ifr, int cmd);
@@ -58,6 +61,10 @@ struct visdn_chan_ops
 		char __user *buf, size_t count);
 	ssize_t (*samples_write)(struct visdn_chan *chan,
 		const char __user *buf, size_t count);
+
+	void (*stop_queue)(struct visdn_chan *chan);
+	void (*start_queue)(struct visdn_chan *chan);
+	void (*wake_queue)(struct visdn_chan *chan);
 };
 
 #define VISDN_CHAN_ROLE_B	(1<<0)
@@ -66,18 +73,12 @@ struct visdn_chan_ops
 #define VISDN_CHAN_ROLE_S	(1<<3)
 #define VISDN_CHAN_ROLE_Q	(1<<4)
 
-enum visdn_chan_framing
-{
-	VISDN_CHAN_FRAMING_TRANS,
-	VISDN_CHAN_FRAMING_HDLC,
-	VISDN_CHAN_FRAMING_MTP,
-};
+#define VISDN_CHAN_FRAMING_TRANS	(1 << 0)
+#define VISDN_CHAN_FRAMING_HDLC		(1 << 1)
+#define VISDN_CHAN_FRAMING_MTP		(1 << 2)
 
-enum visdn_chan_bitorder
-{
-	VISDN_CHAN_BITORDER_LSB,
-	VISDN_CHAN_BITORDER_MSB,
-};
+#define VISDN_CHAN_BITORDER_LSB		(1 << 0)
+#define VISDN_CHAN_BITORDER_MSB		(1 << 1)
 
 struct visdn_chan
 {
@@ -89,11 +90,6 @@ struct visdn_chan
 	struct visdn_port *port;
 	struct visdn_chan_ops *ops;
 
-	struct ppp_channel ppp_chan;
-
-	struct net_device *netdev;
-	unsigned short protocol;
-
 	struct visdn_chan *connected_chan;
 
 	void *priv;
@@ -103,8 +99,13 @@ struct visdn_chan
 	int roles;
 	int flags;
 
-	enum visdn_chan_framing framing;
-	enum visdn_chan_bitorder bitorder;
+	int framing_current;
+	int framing_supported;
+	int framing_preferred;
+
+	int bitorder_current;
+	int bitorder_supported;
+	int bitorder_preferred;
 };
 
 int visdn_chan_modinit(void);

@@ -587,7 +587,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	// we can now register to the system.
 
 	visdn_port_register(&card->st_port.visdn_port,
-		"st0", &pci_dev->dev);
+		"%d", "st0", &pci_dev->dev);
 
 	visdn_chan_register(
 		&card->st_port.chans[D].visdn_chan, "D",
@@ -620,7 +620,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	hfc_st_port_sysfs_create_files(&card->st_port);
 
 	visdn_port_register(&card->pcm_port.visdn_port,
-		"pcm", &pci_dev->dev);
+		"%d", "pcm", &pci_dev->dev);
 
 	hfc_pcm_port_sysfs_create_files(&card->pcm_port);
 

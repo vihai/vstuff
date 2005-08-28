@@ -230,7 +230,7 @@ sleep(2);
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
 	int f;
-	f = open("/dev/visdn/softport/0", O_RDONLY);
+	f = open("/dev/visdn/streamport/0", O_RDONLY);
 	if (f < 0) {
 		printf("open: %s\n", strerror(errno));
 	}

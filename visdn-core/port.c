@@ -82,12 +82,6 @@ static DEVICE_ATTR(port_id, S_IRUGO | S_IWUSR,
 
 static void visdn_port_release(struct device *cd)
 {
-//	struct visdn_port *visdn_port =
-//		container_of(cd, struct visdn_port, class_dev);
-
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_release called\n");
-
-	// kfree ??
 }
 
 struct visdn_port *visdn_port_alloc(void)
@@ -148,13 +142,15 @@ static int visdn_port_new_index(void)
 
 int visdn_port_register(
 	struct visdn_port *port,
-	const char *port_name,
+	const char *global_name,
+	const char *local_name,
 	struct device *parent_device)
 {
 	int err;
 
 	BUG_ON(!port);
-	BUG_ON(!port_name);
+	BUG_ON(!local_name);
+	BUG_ON(!global_name);
 
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_register() called\n");
 
@@ -165,16 +161,20 @@ int visdn_port_register(
 	port->device.driver_data = NULL;
 	port->device.release = visdn_port_release;
 
-	snprintf(port->device.bus_id, sizeof(port->device.bus_id),
-		"%d", port->index);
+	if (strchr(global_name, '%'))
+		snprintf(port->device.bus_id,
+			sizeof(port->device.bus_id),
+			global_name,
+			port->index);
+	else
+		strlcpy(port->device.bus_id,
+			global_name,
+			sizeof(port->device.bus_id));
 
 	snprintf(port->port_name, sizeof(port->port_name),
-		"%s", port_name);
+		"%s", local_name);
 
 	if (port->device.parent) {
-		BUG_ON(!port->device.parent->bus);
-		BUG_ON(!port->device.parent->bus->name);
-
 		port->device.driver = parent_device->driver;
 	}
 
@@ -197,7 +197,9 @@ int visdn_port_register(
 	if (port->device.parent) { // FIXME
 		sysfs_create_link(
 			&port->device.parent->kobj,
-			&port->device.kobj, port_name);
+			&port->device.kobj,
+			(char *)local_name);
+			// should sysfs_create_link(...., const char *name) ?
 	}
 
 	return 0;

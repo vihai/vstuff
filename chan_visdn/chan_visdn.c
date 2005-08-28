@@ -48,7 +48,7 @@
 #include <asterisk/indications.h>
 #include <asterisk/cli.h>
 
-#include <softport.h>
+#include <visdn-streamport.h>
 #include <lapd.h>
 #include <libq931/q931.h>
 
@@ -2692,7 +2692,7 @@ struct sb_setbearer
 
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/device/../B%d",
+		"/sys/class/net/%s/device/connected/../B%d",
 		channel->call->intf->name,
 		channel->id+1);
 
@@ -2712,12 +2712,12 @@ struct sb_setbearer
 
 	if (visdn.debug)
 		ast_log(LOG_NOTICE,
-			"Connecting softport to chan %s\n",
+			"Connecting streamport to chan %s\n",
 			chanid);
 
-	visdn_chan->channel_fd = open("/dev/visdn/softport", O_RDWR);
+	visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
 	if (visdn_chan->channel_fd < 0) {
-		ast_log(LOG_ERROR, "Cannot open softport: %s\n", strerror(errno));
+		ast_log(LOG_ERROR, "Cannot open streamport: %s\n", strerror(errno));
 		return;
 	}
 

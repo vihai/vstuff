@@ -3,7 +3,6 @@
 #include <linux/config.h>
 #include <linux/delay.h>
 
-#include <lapd.h>
 #include <visdn.h>
 
 #include "chan.h"
@@ -34,9 +33,11 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_channel_busy;
 	}
 
-	if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_TRANS) {
+	if (chan->visdn_chan.framing_current ==
+				VISDN_CHAN_FRAMING_TRANS) {
 		chan->status = HFC_CHAN_STATUS_OPEN_TRANS;
-	} else if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_HDLC) {
+	} else if (chan->visdn_chan.framing_current ==
+				VISDN_CHAN_FRAMING_HDLC) {
 		chan->status = HFC_CHAN_STATUS_OPEN_HDLC;
 	} else {
 		err = -EINVAL;
@@ -71,19 +72,22 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_fifo_set_bit_order(
 		chan->rx.fifo,
-		chan->visdn_chan.bitorder == VISDN_CHAN_BITORDER_MSB);
+		chan->visdn_chan.bitorder_current ==
+			VISDN_CHAN_BITORDER_MSB);
 
 	hfc_fifo_select(chan->rx.fifo);
 	hfc_fifo_reset(chan->rx.fifo);
 
-	if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_TRANS) {
+	if (chan->visdn_chan.framing_current ==
+			VISDN_CHAN_FRAMING_TRANS) {
 
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
 			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
 
-	} else if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_HDLC) {
+	} else if (chan->visdn_chan.framing_current ==
+			VISDN_CHAN_FRAMING_HDLC) {
 
 		hfc_outb(card, hfc_A_CON_HDLC,
 			hfc_A_CON_HDCL_V_IFF|
@@ -100,19 +104,22 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	if (chan->tx.fifo) {
 		hfc_fifo_set_bit_order(
 			chan->tx.fifo,
-			chan->visdn_chan.bitorder == VISDN_CHAN_BITORDER_MSB);
+			chan->visdn_chan.bitorder_current ==
+				VISDN_CHAN_BITORDER_MSB);
 
 		hfc_fifo_select(chan->tx.fifo);
 		hfc_fifo_reset(chan->tx.fifo);
 
-		if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_TRANS) {
+		if (chan->visdn_chan.framing_current ==
+				VISDN_CHAN_FRAMING_TRANS) {
 
 			hfc_outb(card, hfc_A_CON_HDLC,
 				hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
 				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
 				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
-		} else if (chan->visdn_chan.framing == VISDN_CHAN_FRAMING_HDLC) {
+		} else if (chan->visdn_chan.framing_current ==
+				VISDN_CHAN_FRAMING_HDLC) {
 
 			hfc_outb(card, hfc_A_CON_HDLC,
 				hfc_A_CON_HDCL_V_IFF|
@@ -225,8 +232,12 @@ static int hfc_chan_frame_xmit(
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	if (hfc_card_trylock(card)) {
+		// Mmmh... the card is locked and we may be in interrupt
+		// context. We must defer the transmission.
+
+		return 1;
+	}
 	
 	hfc_st_port_select(chan->port);
 	hfc_st_port_check_l1_up(chan->port);
@@ -778,8 +789,7 @@ void hfc_chan_init(
 	int hw_index,
 	int speed,
 	int role,
-	int roles,
-	int protocol)
+	int roles)
 {
 	chan->port = port;
 	chan->name = name;
@@ -798,7 +808,14 @@ void hfc_chan_init(
 	chan->visdn_chan.speed = speed;
 	chan->visdn_chan.role = role;
 	chan->visdn_chan.roles = roles;
-	chan->visdn_chan.protocol = protocol;
 	chan->visdn_chan.flags = 0;
+
+	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
+					     VISDN_CHAN_FRAMING_HDLC;
+	chan->visdn_chan.framing_preferred = 0;
+
+	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB |
+					      VISDN_CHAN_BITORDER_MSB;
+	chan->visdn_chan.bitorder_preferred = 0;
 }
 

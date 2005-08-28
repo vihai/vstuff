@@ -124,7 +124,6 @@ void hfc_chan_init(
 	int speed,
 	int role,
 	int roles,
-	int protocol,
 	struct hfc_fifo *fifo_tx,
 	struct hfc_fifo *fifo_rx);
 

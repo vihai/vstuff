@@ -8,15 +8,16 @@
 
 static inline void hfc_card_lock(struct hfc_card *card)
 {
-	hfc_msg_card(card, KERN_DEBUG, "DOWN\n");
-
 	down(&card->sem);
+}
+
+static inline int hfc_card_trylock(struct hfc_card *card)
+{
+	return down_trylock(&card->sem);
 }
 
 static inline int hfc_card_lock_interruptible(struct hfc_card *card)
 {
-	hfc_msg_card(card, KERN_DEBUG, "DOWN\n");
-
 	return down_interruptible(&card->sem);
 }
 
@@ -26,8 +27,6 @@ static inline void hfc_card_unlock(struct hfc_card *card)
 	card->fifo_selected = NULL;
 	card->pcm_multireg = -1;
 	card->pcm_slot_selected = NULL;*/
-
-	hfc_msg_card(card, KERN_DEBUG, "UP\n");
 
 	up(&card->sem);
 }

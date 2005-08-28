@@ -1,5 +1,5 @@
-#ifndef _TIMER_H
-#define _TIMER_H
+#ifndef _VISDN_TIMER_H
+#define _VISDN_TIMER_H
 
 #ifdef __KERNEL__
 

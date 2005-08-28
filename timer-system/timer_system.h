@@ -9,13 +9,13 @@
  *
  */
 
-#ifndef _VISDN_TIMER_H
-#define _VISDN_TIMER_H
+#ifndef _VISDN_TIMER_SYSTEM_H
+#define _VISDN_TIMER_SYSTEM_H
 
 #include <linux/delay.h>
 
-#define visdn_MODULE_NAME "visdn-system-timer"
-#define visdn_MODULE_PREFIX visdn_MODULE_NAME ": "
-#define visdn_MODULE_DESCR "Timer generator for vISDN"
+#define vts_MODULE_NAME "visdn-system-timer"
+#define vts_MODULE_PREFIX vts_MODULE_NAME ": "
+#define vts_MODULE_DESCR "Timer generator for vISDN"
 
 #endif

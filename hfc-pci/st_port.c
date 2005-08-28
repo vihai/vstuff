@@ -1,7 +1,5 @@
 #include <linux/kernel.h>
 
-#include <lapd.h>
-
 #include "st_port.h"
 #include "card.h"
 #include "card_inline.h"
@@ -182,19 +180,19 @@ void hfc_st_port_init(
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 
 	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF,
-		16000, VISDN_CHAN_ROLE_D, VISDN_CHAN_ROLE_D, ETH_P_LAPD,
+		16000, VISDN_CHAN_ROLE_D, VISDN_CHAN_ROLE_D,
 		&card->fifos[D][RX], &card->fifos[D][TX]);
 	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF,
-		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B, 0,
+		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B,
 		&card->fifos[B1][RX], &card->fifos[B1][TX]);
 	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF,
-		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B, 0,
+		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B,
 		&card->fifos[B2][RX], &card->fifos[B2][TX]);
 	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF,
-		16000, VISDN_CHAN_ROLE_E, VISDN_CHAN_ROLE_E, 0,
+		16000, VISDN_CHAN_ROLE_E, VISDN_CHAN_ROLE_E,
 		NULL, NULL);
 	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
-		4000, VISDN_CHAN_ROLE_S, VISDN_CHAN_ROLE_S, 0,
+		4000, VISDN_CHAN_ROLE_S, VISDN_CHAN_ROLE_S,
 		NULL, NULL);
 }
 

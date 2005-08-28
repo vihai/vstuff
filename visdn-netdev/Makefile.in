@@ -3,9 +3,9 @@
 
 @SET_MAKE@
 
-subdir = softport
-DIST_SOURCES = softport_main.c
-DIST_HEADERS = softport.h
+subdir = visdn-netdev
+DIST_SOURCES = visdn-netdev.c
+DIST_HEADERS = 
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
@@ -84,13 +84,14 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS=-I $(abssrcdir)/../visdn-core/
+EXTRA_CFLAGS=-I$(abssrcdir)/../visdn-core/ -I$(abssrcdir)/../lapd/
+#EXTRA_CFLAGS+=-DNO_CLASS_DEV_DEVT
 
 ########################## Targets #################################
 
 # Kbuild:
-obj-m	:= softport.o
-softport-y	:= softport_main.o
+obj-m	:= visdn-netdev.o
+visdn-netdev-y	:= visdn-netdev_main.o
 # end Kbuild
 
 all:

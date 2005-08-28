@@ -18,7 +18,6 @@ chan_visdn
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Close DLCs after defined amount of inactivity
-- KNOWN BUG: Something is making * take a long time to exit
 - Fix autocompletion in cli commands
 
 libq931
@@ -31,13 +30,17 @@ libq931
 
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 
+timer:
+
+- Make sure the timing function is called with a precise long term frequency
+  (do not schedule with increments)
 
 visdn_core
 
 - Complete PPP support
 
 
-lapd/netdev
+lapd
 
 - There is a deadlock/race condition on modules removal when an application
   has an open socket and doesn't exit immediately
@@ -83,7 +86,10 @@ lapd/netdev
 - The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
   - A specific flag would be better.
 
+visdn-netdev:
+
 - Implement E-channel sniffing
+- Use a device for "connect" method, it is much safer than a sysfs attribute
 
 hfc-4s
 
@@ -92,6 +98,19 @@ hfc-4s
   hardware with semaphores.
 
 - Implement E-channel sniffing
+
+- Fix counters
+
+hfc-pci
+
+- Fix counters
+- Add wake_queue
+
+
+
+
+
+
 
 
 Some ideas for me...

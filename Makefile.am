@@ -17,9 +17,7 @@
 #	$(AUX_DIST)
 
 sysconf_DATA =					\
-	etc/udev/30-visdn.rules			\
-	etc/sysconfig/scripts/ifup-visdn	\
-	etc/sysconfig/network/ifcfg-visdn0
+	etc/udev/30-visdn.rules	
 
 astconf_DATA =					\
 	etc/asterisk/visdn.conf
@@ -34,7 +32,7 @@ EXTRA_DIST =					\
 SUBDIRS =
 
 if kernel_modules
-SUBDIRS += visdn-core lapd timer-system softport
+SUBDIRS += visdn-core lapd timer-system visdn-streamport visdn-netdev
 
 if driver_hfc_usb
 SUBDIRS += hfc-usb

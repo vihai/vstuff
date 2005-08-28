@@ -15,16 +15,16 @@
 
 #include <visdn.h>
 
-#define sb_DRIVER_NAME "visdn-softport"
-#define sb_DRIVER_PREFIX sb_DRIVER_NAME ": "
-#define sb_DRIVER_DESCR "Softport implementation"
+#define vsp_MODULE_NAME "visdn-streamport"
+#define vsp_MODULE_PREFIX vsp_MODULE_NAME ": "
+#define vsp_MODULE_DESCR "vISDN streamport module"
 
 #define SB_CHAN_HASHBITS 8
 #define SB_CHAN_HASHSIZE (1 << SB_CHAN_HASHBITS)
 
-#define to_sb_chan(visdn_chan) container_of(visdn_chan, struct sb_chan, visdn_chan)
+#define to_vsp_chan(visdn_chan) container_of(visdn_chan, struct vsp_chan, visdn_chan)
 
-struct sb_chan
+struct vsp_chan
 {
 	int index;
 

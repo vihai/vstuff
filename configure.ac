@@ -141,9 +141,11 @@ AC_CONFIG_FILES([Makefile
                  hfc-pci/Makefile
                  hfc-usb/Makefile
                  lapd/Makefile
-                 softport/Makefile
-                 timer-system/Makefile
                  visdn-core/Makefile
+                 visdn-streamport/Makefile
+                 timer-system/Makefile
+                 visdn-netdev/Makefile
+                 visdn-ppp/Makefile
                  visdn.spec])
 
 AC_OUTPUT

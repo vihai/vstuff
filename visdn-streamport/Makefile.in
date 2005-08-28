@@ -1,85 +1,81 @@
 # Makefile.in: hybrid automake-generated and Kbuild makefile to compile
 # kernel modules
 
+@SET_MAKE@
 
-
-subdir = hfc-e1
-DIST_SOURCES = card_sysfs.c chan.c chan_sysfs.c chan_sysfs.h e1_port.c \
-	e1_port_sysfs.c fifo.c fsm.c hfc-e1_main.c pcm_port.c pcm_port_sysfs.c 
-DIST_HEADERS = card.h card_inline.h card_sysfs.h chan.h chan_sysfs.h \
-	e1_port.h e1_port_inline.h e1_port_sysfs.h fifo.h fifo_inline.h \
-	fsm.h module.h pcm_port.h pcm_port_inline.h pcm_port_sysfs.h regs.h \
-	util.h
+subdir = visdn-streamport
+DIST_SOURCES = visdn-streamport_main.c
+DIST_HEADERS = visdn-streamport.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
-srcdir = .
-top_srcdir = ..
-
-pkgdatadir = $(datadir)/visdn
-pkglibdir = $(libdir)/visdn
-pkgincludedir = $(includedir)/visdn
+srcdir = @srcdir@
+top_srcdir = @top_srcdir@
+VPATH = @srcdir@
+pkgdatadir = $(datadir)/@PACKAGE@
+pkglibdir = $(libdir)/@PACKAGE@
+pkgincludedir = $(includedir)/@PACKAGE@
 top_builddir = ..
-INSTALL = /usr/bin/install -c
+INSTALL = @INSTALL@
 install_sh_DATA = $(install_sh) -c -m 644
 install_sh_PROGRAM = $(install_sh) -c
 install_sh_SCRIPT = $(install_sh) -c
 INSTALL_HEADER = $(INSTALL_DATA)
 transform = $(program_transform_name)
-build_triplet = i686-suse-linux
-host_triplet = i686-suse-linux
+build_triplet = @build@
+host_triplet = @host@
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(DIST_HEADERS) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /root/isdn--devel/config/missing --run aclocal-1.9
-AR = ar
-AUTOCONF = ${SHELL} /root/isdn--devel/config/missing --run autoconf
-AUTOHEADER = ${SHELL} /root/isdn--devel/config/missing --run autoheader
-AUTOMAKE = ${SHELL} /root/isdn--devel/config/missing --run automake-1.9
-INSTALL_DATA = ${INSTALL} -m 644
-INSTALL_PROGRAM = ${INSTALL}
-INSTALL_SCRIPT = ${INSTALL}
-INSTALL_STRIP_PROGRAM = ${SHELL} $(install_sh) -c -s
-PACKAGE = visdn
-PACKAGE_BUGREPORT = daniele@orlandi.com
-PACKAGE_NAME = visdn
-PACKAGE_STRING = visdn 0.0.1
-PACKAGE_TARNAME = visdn
-PACKAGE_VERSION = 0.0.1
-PATH_SEPARATOR = :
-SHELL = /bin/sh
-STRIP = strip
-VERSION = 0.0.1
-bindir = ${exec_prefix}/bin
-build = i686-suse-linux
-build_alias = 
-build_cpu = i686
-build_os = linux
-build_vendor = suse
-datadir = ${prefix}/share
-exec_prefix = ${prefix}
-host = i686-suse-linux
-host_alias = 
-host_cpu = i686
-host_os = linux
-host_vendor = suse
-includedir = ${prefix}/include
-infodir = ${prefix}/info
-install_sh = /root/isdn--devel/config/install-sh
-libdir = ${exec_prefix}/lib
-libexecdir = ${exec_prefix}/libexec
-localstatedir = ${prefix}/var
-mandir = ${prefix}/man
-mkdir_p = mkdir -p --
-oldincludedir = /usr/include
-prefix = /usr/local
-program_transform_name = s,x,x,
-sbindir = ${exec_prefix}/sbin
-sharedstatedir = ${prefix}/com
-sysconfdir = ${prefix}/etc
-target_alias = 
+ACLOCAL = @ACLOCAL@
+AR = @AR@
+AUTOCONF = @AUTOCONF@
+AUTOHEADER = @AUTOHEADER@
+AUTOMAKE = @AUTOMAKE@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
+PACKAGE = @PACKAGE@
+PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
+PACKAGE_NAME = @PACKAGE_NAME@
+PACKAGE_STRING = @PACKAGE_STRING@
+PACKAGE_TARNAME = @PACKAGE_TARNAME@
+PACKAGE_VERSION = @PACKAGE_VERSION@
+PATH_SEPARATOR = @PATH_SEPARATOR@
+SHELL = @SHELL@
+STRIP = @STRIP@
+VERSION = @VERSION@
+bindir = @bindir@
+build = @build@
+build_alias = @build_alias@
+build_cpu = @build_cpu@
+build_os = @build_os@
+build_vendor = @build_vendor@
+datadir = @datadir@
+exec_prefix = @exec_prefix@
+host = @host@
+host_alias = @host_alias@
+host_cpu = @host_cpu@
+host_os = @host_os@
+host_vendor = @host_vendor@
+includedir = @includedir@
+infodir = @infodir@
+install_sh = @install_sh@
+libdir = @libdir@
+libexecdir = @libexecdir@
+localstatedir = @localstatedir@
+mandir = @mandir@
+mkdir_p = @mkdir_p@
+oldincludedir = @oldincludedir@
+prefix = @prefix@
+program_transform_name = @program_transform_name@
+sbindir = @sbindir@
+sharedstatedir = @sharedstatedir@
+sysconfdir = @sysconfdir@
+target_alias = @target_alias@
 
-ksrcdir = /usr/src/linux
+ksrcdir = @ksrcdir@
 
 # Use $(src) when we are run inside Kbuild
 ifdef src
@@ -88,22 +84,13 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS=-I $(abssrcdir)/../lapd/ -I $(abssrcdir)/../visdn-core/ -DDEBUG
+EXTRA_CFLAGS=-I $(abssrcdir)/../visdn-core/
 
 ########################## Targets #################################
 
 # Kbuild:
-obj-m	:= hfc-e1.o
-hfc-e1-y	:=	e1_port.o		\
-			e1_port_sysfs.o		\
-			pcm_port.o		\
-			pcm_port_sysfs.o	\
-			chan.o			\
-			chan_sysfs.o		\
-			fifo.o			\
-			fsm.o			\
-			card_sysfs.o		\
-			hfc-e1_main.o 
+obj-m	:= visdn-streamport.o
+visdn-streamport-y	:= visdn-streamport_main.o
 # end Kbuild
 
 all:

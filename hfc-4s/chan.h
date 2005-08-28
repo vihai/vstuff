@@ -131,7 +131,6 @@ void hfc_chan_init(
 	int hw_index,
 	int speed,
 	int role,
-	int roles,
-	int protocol);
+	int roles);
 
 #endif
