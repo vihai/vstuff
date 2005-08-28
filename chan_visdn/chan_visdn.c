@@ -56,6 +56,8 @@
 
 //#include "echo.h"
 
+#include "../config.h"
+
 #define FRAME_SIZE 160
 
 #define assert(cond)							\
@@ -165,9 +167,9 @@ struct visdn_state
 	.usecnt = 0,
 	.timer_fd = -1,
 	.control_fd = -1,
-	.debug = TRUE,
+	.debug = DEBUG,
 	.debug_q921 = FALSE,
-	.debug_q931 = TRUE,
+	.debug_q931 = DEBUG,
 
 	.default_intf = {
 		.network_role = Q931_INTF_NET_PRIVATE,

@@ -111,6 +111,16 @@ AC_ARG_ENABLE(
 AM_CONDITIONAL(tests, test "$enable_tests" = yes)
 
 #-----------------------------------------------------------------------------
+
+AC_ARG_ENABLE(
+	[debug],
+	AC_HELP_STRING(
+		[--enable-debug],
+		[Debugging defaults]))
+AC_SUBST(enable_debug)
+AC_DEFINE(DEBUG, 1, [Debugging defaults])
+
+#-----------------------------------------------------------------------------
 drivers="hfc-pci, hfc-4s"
 
 AC_ARG_ENABLE(
