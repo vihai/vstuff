@@ -2,6 +2,47 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-28 12:36:25 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-83
+
+    Summary:
+      visdn-timer-system was in the wrong place
+    Revision:
+      isdn--devel--0.1--patch-83
+
+    
+    
+
+    new files:
+     visdn-timer-system/.arch-ids/.arch-inventory.id
+     visdn-timer-system/.arch-inventory
+
+    removed files:
+     visdn-timer-system/visdn-timer-system/.arch-ids/.arch-inventory.id
+     visdn-timer-system/visdn-timer-system/.arch-ids/=id
+     visdn-timer-system/visdn-timer-system/.arch-inventory
+
+    modified files:
+     ChangeLog
+
+    renamed files:
+     visdn-timer-system/visdn-timer-system/.arch-ids/Makefile.in.id
+       ==> visdn-timer-system/.arch-ids/Makefile.in.id
+     visdn-timer-system/visdn-timer-system/.arch-ids/timer-system.h.id
+       ==> visdn-timer-system/.arch-ids/timer-system.h.id
+     visdn-timer-system/visdn-timer-system/.arch-ids/timer-system_main.c.id
+       ==> visdn-timer-system/.arch-ids/timer-system_main.c.id
+     visdn-timer-system/visdn-timer-system/Makefile.in
+       ==> visdn-timer-system/Makefile.in
+     visdn-timer-system/visdn-timer-system/timer-system.h
+       ==> visdn-timer-system/timer-system.h
+     visdn-timer-system/visdn-timer-system/timer-system_main.c
+       ==> visdn-timer-system/timer-system_main.c
+
+    removed directories:
+     visdn-timer-system/visdn-timer-system
+     visdn-timer-system/visdn-timer-system/.arch-ids
+
+
 2005-08-28 12:33:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-82
 
     Summary:
