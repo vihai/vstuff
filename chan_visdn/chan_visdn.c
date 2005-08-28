@@ -1496,6 +1496,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			q931_disconnect_request(q931_call, &ies);
 			ast_mutex_unlock(&q931_lock);
 		}
+
+		q931_call_put(q931_call);
 	}
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);

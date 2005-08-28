@@ -230,6 +230,7 @@ struct q931_call *q931_alloc_call(struct q931_interface *intf)
 	q931_init_timer(&call->T321, q931_timer_T321, call);
 	q931_init_timer(&call->T322, q931_timer_T322, call);
 
+	q931_call_get(call);
 	q931_intf_add_call(intf, call);
 
 	return call;

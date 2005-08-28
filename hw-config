@@ -5,7 +5,7 @@ insmod /root/isdn--devel/lapd/lapd.ko
 insmod /root/isdn--devel/visdn-core/visdn-core.ko
 insmod /root/isdn--devel/visdn-netdev/visdn-netdev.ko
 insmod /root/isdn--devel/visdn-streamport/visdn-streamport.ko
-insmod /root/isdn--devel/timer-system/visdn-timer-system.ko
+insmod /root/isdn--devel/visdn-timer-system/visdn-timer-system.ko
 #insmod /root/isdn--devel/fake_isdn/fake_isdn.ko ab_drops=0
 ##insmod /root/isdn--devel/fake_isdn/fake_isdn.ko ab_drops=200
 insmod /root/isdn--devel/hfc-4s/hfc-4s.ko debug_level=3
