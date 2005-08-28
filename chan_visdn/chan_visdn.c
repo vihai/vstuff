@@ -2328,7 +2328,10 @@ static void visdn_q931_release_indication(
 	if (!ast_chan)
 		return;
 
-	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	if (ast_chan->pbx)
+		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	else
+		ast_hangup(ast_chan);
 }
 
 static void visdn_q931_resume_confirm(

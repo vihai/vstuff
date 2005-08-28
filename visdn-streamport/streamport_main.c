@@ -88,7 +88,7 @@ static int vsp_chan_connect_to(
 	    visdn_chan->connected_chan)
 		return -EBUSY;
 
-	printk(KERN_INFO "Softport %s connected to %s\n",
+	printk(KERN_INFO "Streamport %s connected to %s\n",
 		visdn_chan->device.bus_id,
 		visdn_chan2->device.bus_id);
 
@@ -100,7 +100,7 @@ static int vsp_chan_disconnect(struct visdn_chan *visdn_chan)
 	if (!visdn_chan->connected_chan)
 		return 0;
 
-	printk(KERN_INFO "Softport %s disconnected from %s\n",
+	printk(KERN_INFO "Streamport %s disconnected from %s\n",
 		visdn_chan->device.bus_id,
 		visdn_chan->connected_chan->device.bus_id);
 
@@ -163,7 +163,7 @@ int vsp_cdev_open(
 
 	file->private_data = chan;
 
-	printk(KERN_WARNING "SOFTPORT %d opened\n", chan->index);
+	printk(KERN_WARNING "Streamport %d opened\n", chan->index);
 
 	return 0;
 

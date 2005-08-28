@@ -8,8 +8,8 @@
  * distributed under the terms of the GNU Public License.
  */
 
-#ifndef _SOFTPORT_H
-#define _SOFTPORT_H
+#ifndef _VISDN_STREAMPORT_H
+#define _VISDN_STREAMPORT_H
 
 #ifdef __KERNEL__
 

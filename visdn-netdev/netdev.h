@@ -1,5 +1,5 @@
-#ifndef _SOFTPORT_H
-#define _SOFTPORT_H
+#ifndef _VISDN_NETDEV_H
+#define _VISDN_NETDEV_H
 
 #ifdef __KERNEL__
 
