@@ -48,7 +48,7 @@
 #include <asterisk/indications.h>
 #include <asterisk/cli.h>
 
-#include <visdn-streamport.h>
+#include <streamport.h>
 #include <lapd.h>
 #include <libq931/q931.h>
 
