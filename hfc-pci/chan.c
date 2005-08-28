@@ -98,6 +98,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		chan->visdn_chan.bitorder_current ==
 			VISDN_CHAN_BITORDER_MSB);
 
+	hfc_st_port_update_sctrl(chan->port);
+	hfc_st_port_update_sctrl_r(chan->port);
+
 	hfc_card_unlock(card);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");

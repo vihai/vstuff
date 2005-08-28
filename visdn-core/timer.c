@@ -39,8 +39,6 @@ int visdn_timer_cdev_open(
 	struct class_device *device;
 	down_write(&visdn_timer_class.subsys.rwsem);
 	list_for_each_entry(device, &visdn_timer_class.children, node) {
-		printk(KERN_DEBUG "------------> %s\n", device->kobj.name);
-
 		file->private_data = to_visdn_timer(device);
 		to_visdn_timer(device)->file = file;
 		break;
