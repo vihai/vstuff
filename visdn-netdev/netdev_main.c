@@ -201,6 +201,8 @@ static int vnd_netdev_frame_xmit(
 	return -EOPNOTSUPP;
 }
 
+static struct net_device_stats vnd_dummy_stats = { };
+
 static struct net_device_stats *vnd_netdev_get_stats(struct net_device *netdev)
 {
 	struct vnd_chan *chan = netdev->priv;
@@ -210,7 +212,7 @@ static struct net_device_stats *vnd_netdev_get_stats(struct net_device *netdev)
 		return chan->visdn_chan.connected_chan->ops->get_stats(
 				chan->visdn_chan.connected_chan);
 
-	return NULL;
+	return &vnd_dummy_stats;
 }
 
 static void vnd_netdev_set_multicast_list(struct net_device *netdev)

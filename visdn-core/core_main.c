@@ -131,10 +131,6 @@ struct file_operations visdn_ctl_fops =
 	.llseek		= no_llseek,
 };
 
-
-
-
-
 static int visdn_hotplug(struct class_device *cd, char **envp,
 	int num_envp, char *buf, int size)
 {
