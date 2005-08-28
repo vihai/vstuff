@@ -493,6 +493,10 @@ static void __exit vnd_module_exit(void)
 
 	class_device_del(&vnd_control_class_dev);
 
+	cdev_del(&vnd_cdev);
+
+	unregister_chrdev_region(vnd_first_dev, 1);
+
 	visdn_port_unregister(&vnd_port);
 
 	printk(KERN_INFO vnd_MODULE_DESCR " unloaded\n");
