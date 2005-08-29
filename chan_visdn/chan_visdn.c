@@ -511,7 +511,7 @@ static void visdn_reload_config(void)
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
 
-		if (!strcasecmp(cat, "general"))
+		if (!strcasecmp(cat, "global"))
 			continue;
 
 		struct visdn_interface *intf = NULL;
