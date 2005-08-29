@@ -1,9 +1,7 @@
 
 General:
 
-- Fix all copyright notices and file headers
 - Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
-- Correctly implement automake/autoconf/libtool for every subsystem
 - Check all input data in ioctls/setsockopt for security bugs
 
 Build system:

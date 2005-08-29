@@ -2786,7 +2786,7 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 }
 
 static pthread_t visdn_generator_thread = AST_PTHREADT_NULL;
-AST_MUTEX_DEFINE_STATIC(gen_chans_lock);
+AST_MUTEX_DEFINE_STATIC(visdn_generator_lock);
 static struct ast_channel *gen_chans[256];
 static int gen_chans_num = 0;
 
@@ -2814,23 +2814,33 @@ static void *visdn_generator_thread_main(void *aaa)
 	while (gen_chans_num) {
 		struct ast_channel *chan;
 
+		ast_mutex_lock(&visdn_generator_lock);
+
+		// Uhm... we're going to sleep with mutex held... this will
+		// produce lots of contention and big sleeps for other
+		// threads who need to access generator structures
+
 		chan = ast_waitfor_n(gen_chans, gen_chans_num, &ms);
 		if (chan) {
 			void *tmp;
 			int res;
-                	int (*generate)(struct ast_channel *chan, void *tmp,
-			int datalen, int samples);
+
+			ast_mutex_lock(&chan->lock);
 
 			tmp = chan->generatordata;
 			chan->generatordata = NULL;
-			generate = chan->generator->generate;
-			res = generate(chan, tmp, f.datalen, f.samples);
+			res = chan->generator->generate(
+				chan, tmp, f.datalen, f.samples);
 			chan->generatordata = tmp;
 			if (res) {
 			        ast_log(LOG_DEBUG, "Auto-deactivating generator\n");
 			        ast_deactivate_generator(chan);
 			}
+
+			ast_mutex_unlock(&chan->lock);
 		}
+
+		ast_mutex_unlock(&visdn_generator_lock);
 	}
 
 	visdn_generator_thread = AST_PTHREADT_NULL;
@@ -2845,7 +2855,7 @@ static int visdn_generator_start(struct ast_channel *chan)
 {
 	int res = -1;
 
-	ast_mutex_lock(&gen_chans_lock);
+	ast_mutex_lock(&visdn_generator_lock);
 
 	int i;
 	for (i=0; i<gen_chans_num; i++) {
@@ -2871,14 +2881,14 @@ static int visdn_generator_start(struct ast_channel *chan)
 
 err_too_many_channels:
 already_generating:
-	ast_mutex_unlock(&gen_chans_lock);
+	ast_mutex_unlock(&visdn_generator_lock);
 
 	return res;
 }
 
 static int visdn_generator_stop(struct ast_channel *chan)
 {
-	ast_mutex_lock(&gen_chans_lock);
+	ast_mutex_lock(&visdn_generator_lock);
 
 	int i;
 	for (i=0; i<gen_chans_num; i++) {
@@ -2902,7 +2912,7 @@ static int visdn_generator_stop(struct ast_channel *chan)
 		pthread_kill(visdn_generator_thread, SIGURG);
 	}
 
-	ast_mutex_unlock(&gen_chans_lock);
+	ast_mutex_unlock(&visdn_generator_lock);
 
 	/* Wait for it to un-block */
 	while(chan->blocking)
@@ -2912,7 +2922,7 @@ static int visdn_generator_stop(struct ast_channel *chan)
 
 err_chan_not_found:
 
-	ast_mutex_unlock(&gen_chans_lock);
+	ast_mutex_unlock(&visdn_generator_lock);
 
 	return 0;
 }

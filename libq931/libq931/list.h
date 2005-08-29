@@ -1,3 +1,5 @@
+/* Taken from Linux include/linux/list.h */
+
 #ifndef _LINUX_LIST_H
 #define _LINUX_LIST_H
 
