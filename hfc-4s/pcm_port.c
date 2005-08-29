@@ -1,5 +1,16 @@
+/*
+ * Cologne Chip's HFC-4S and HFC-8S vISDN driver
+ *
+ * Copyright (C) 2004-2005 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
+ */
+
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "st_port.h"
 #include "card.h"

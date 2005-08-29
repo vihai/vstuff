@@ -1,9 +1,17 @@
+/*
+ * vISDN gateway between vISDN's crossconnector and Linux's netdev subsystem
+ *
+ * Copyright (C) 2005 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
+ */
+
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/version.h>
-#include <linux/delay.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>

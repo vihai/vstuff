@@ -1,11 +1,12 @@
 /*
+ * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
  *
- * This program is free software and may be modified and
- * distributed under the terms of the GNU Public License.
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
  *
  */
 

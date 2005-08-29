@@ -1,3 +1,15 @@
+/*
+ * vISDN gateway between vISDN's crossconnector and Linux's ppp subsystem
+ *
+ * Copyright (C) 2005 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
+ */
+
 
 static int hfc_ppp_start_xmit(
 	struct ppp_channel *ppp_chan,

@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = visdn-timer-system
-DIST_SOURCES = timer_system_main.c
-DIST_HEADERS = timer_system.h
+DIST_SOURCES = timer-system_main.c
+DIST_HEADERS = timer-system.h
 
 DIST_COMMON = $(srcdir)/Makefile.in
 

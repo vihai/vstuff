@@ -1,20 +1,18 @@
 /*
- * fifo.c
+ * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
  *
- * This program is free software and may be modified and
- * distributed under the terms of the GNU Public License.
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
  *
  */
 
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
-#include <linux/cdev.h>
 
 #include "fifo.h"
 #include "fifo_inline.h"

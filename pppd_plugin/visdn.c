@@ -1,24 +1,27 @@
-/* visdn.c - pppd plugin to implement PPPovISDN protocol.
+/*
+ * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright 2000 Mitchell Blank Jr.
- * Based in part on work from Jens Axboe and Paul Mackerras.
+ * Copyright (C) 2004-2005 Daniele Orlandi
  *
- *  This program is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU General Public License
- *  as published by the Free Software Foundation; either version
- *  2 of the License, or (at your option) any later version.
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
  *
- *  26 May 2003 dennis@yellowtuna.co.nz - modified for pppd 2.4.2
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
+ * This file is inspired and slightly copied from other pppd plugins
+ *
  */
+
 #include "pppd.h"
 #include "pathnames.h"
-#include "fsm.h" /* Needed for lcp.h to include cleanly */
+#include "fsm.h"
 #include "lcp.h"
 #include <sys/stat.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
 
-#include "/root/isdn--devel/lapd/lapd_user.h"
+#include <visdn.h>
+#include <lapd.h>
 
 static int visdn_accept = 0;
 static bool llc_encaps = 0;

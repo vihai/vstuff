@@ -1,13 +1,13 @@
 /*
- * Asterisk -- A telephony toolkit for Linux.
+ * vISDN channel driver for Asterisk
  *
- * vISDN Linux Telephony Interface driver
- * 
- * Copyright 2004,2005 Daniele "Vihai" Orlandi <daniele@orlandi.com>
- * Copyright 2004 Lele Forzani <lele@windmill.it>
+ * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * This program is free software, distributed under the terms of
- * the GNU General Public License
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
  */
 
 #include <stdio.h>
@@ -491,7 +491,7 @@ static void visdn_reload_config(void)
 	ast_mutex_lock(&visdn.lock);
 
 	struct ast_variable *var;
-	var = ast_variable_browse(cfg, "general");
+	var = ast_variable_browse(cfg, "global");
 	while (var) {
 		if (visdn_intf_from_var(&visdn.default_intf, var) < 0) {
 			ast_log(LOG_WARNING,
@@ -1171,7 +1171,7 @@ static int visdn_bridge(
 	char path[100], dest1[100], dest2[100];
 
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/device/../B%d",
+		"/sys/class/net/%s/device/connected/../B%d",
 		visdn_chan1->q931_call->intf->name,
 		visdn_chan1->q931_call->channel->id+1);
 

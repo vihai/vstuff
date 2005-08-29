@@ -16,20 +16,17 @@ Build system:
 
 chan_visdn
 
-- Implement contexts in visdn.conf
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Close DLCs after defined amount of inactivity
 - Fix autocompletion in cli commands
+- Implement "allowed_caller_ids" which may eventually replace
+  force_inbound_caller_id
 
 libq931
 
-- Fix hangup after T312 expiration in multipoint links
-
 - Implement: 5.9 User notification procedure
-
 - Restart Procedure is completely untested, test it.
-
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 
 timer:

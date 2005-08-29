@@ -1,22 +1,19 @@
 /*
- * Copyright (C) 2005 Daniele Orlandi
+ * vISDN low-level drivers infrastructure core
  *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * This program is free software and may be modified and
- * distributed under the terms of the GNU Public License.
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
  *
- * Please read the README file for important infos.
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
  */
 
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 #include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/version.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
-#include <linux/poll.h>
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
 #include <linux/device.h>

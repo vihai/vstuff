@@ -1,28 +1,24 @@
 /*
- * Copyright (C) 2004 Daniele Orlandi
+ * Cologne Chip's HFC-USB vISDN driver
  *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * This program is free software and may be modified and
- * distributed under the terms of the GNU Public License.
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
  *
  */
 
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
-#include <linux/init.h>
-#include <linux/config.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#include <linux/version.h>
 #include <linux/usb.h>
 #include <linux/delay.h>
 #include <linux/proc_fs.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
-
-#include <lapd.h>
 
 #include "hfc-usb.h"
 #include "fifo.h"

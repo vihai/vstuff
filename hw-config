@@ -6,75 +6,55 @@ insmod /root/isdn--devel/visdn-core/visdn-core.ko
 insmod /root/isdn--devel/visdn-netdev/visdn-netdev.ko
 insmod /root/isdn--devel/visdn-streamport/visdn-streamport.ko
 insmod /root/isdn--devel/visdn-timer-system/visdn-timer-system.ko
-#insmod /root/isdn--devel/fake_isdn/fake_isdn.ko ab_drops=0
-##insmod /root/isdn--devel/fake_isdn/fake_isdn.ko ab_drops=200
 insmod /root/isdn--devel/hfc-4s/hfc-4s.ko debug_level=3
 insmod /root/isdn--devel/hfc-pci/hfc-pci.ko debug_level=3
 
 
-#ifconfig visdn0a up
-#ifconfig visdn0b allmulti
-#ifconfig visdn0b up
+config_if() {
 
-cd /sys/devices/pci0000\:00/0000\:00\:09.0
+	local DEVICE_ID=$1
+	local PORT_ID=$2
+	local NETDEV_NAME=$3
+	local ROLE=$4
 
-echo 7 > bert_mode
+        pushd "/sys/devices/$DEVICE_ID" || ( echo "Invalid device ID"; return )
 
-pushd st0
-echo NT > role
-NETDEV_CHAN=`cat /dev/visdn/netdev-control`
-D_CHAN=`basename \`readlink D\``
-echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
-echo 1 > enabled
-nameif -r visdn1.0 visdn${NETDEV_CHAN##*.}d
-ip link set visdn1.0 allmulticast on
-ip link set visdn1.0 up
+	pushd $PORT_ID || ( echo "Missing port"; return )
+
+	[ -f role ] || ( echo "Missing role"; return )
+	[ -f enabled ] || ( echo "Missing enabled"; return )
+	[ -f /sys/bus/visdn/connect ] || ( echo "Missing connect"; return )
+	[ -c /dev/visdn/netdev-control ] || ( echo "Missing netdev-control"; return )
+
+	echo $ROLE > role
+
+	local D_SYSFS_DIR=`readlink D`
+	local D_CHAN=`basename $D_SYSFS_DIR`
+
+	if [ ! -L "$D_SYSFS_DIR/connected" ] ; then
+		local NETDEV_CHAN=`cat /dev/visdn/netdev-control`
+		echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+
+		nameif -r $NETDEV_NAME visdn${NETDEV_CHAN##*.}d
+	fi
+
+	echo 1 > enabled
+
+	if [ $ROLE = "NT" ] ; then
+		ip link set $NETDEV_NAME allmulticast on
+	else
+		ip link set $NETDEV_NAME allmulticast off
+	fi
+
+	ip link set $NETDEV_NAME up
 popd
 
-pushd st1
-echo NT > role
-NETDEV_CHAN=`cat /dev/visdn/netdev-control`
-D_CHAN=`basename \`readlink D\``
-echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
-echo 1 > enabled
-nameif -r visdn1.1 visdn${NETDEV_CHAN##*.}d
-ip link set visdn1.1 allmulticast on
-ip link set visdn1.1 up
 popd
+}
 
-pushd st2
-echo TE > role
-NETDEV_CHAN=`cat /dev/visdn/netdev-control`
-D_CHAN=`basename \`readlink D\``
-echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
-#echo 1 > enabled
-nameif -r visdn1.2 visdn${NETDEV_CHAN##*.}d
-ip link set visdn1.2 allmulticast off
-ip link set visdn1.2 up
-popd
-
-pushd st3
-echo TE > role
-NETDEV_CHAN=`cat /dev/visdn/netdev-control`
-D_CHAN=`basename \`readlink D\``
-echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
-echo 1 > enabled
-nameif -r visdn1.3 visdn${NETDEV_CHAN##*.}d
-ip link set visdn1.3 allmulticast off
-ip link set visdn1.3 up
-popd
-
-#..................
-cd /sys/devices/pci0000\:00/0000\:00\:07.0
-
-pushd st0
-echo TE > role
-NETDEV_CHAN=`cat /dev/visdn/netdev-control`
-D_CHAN=`basename \`readlink D\``
-echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
-echo 1 > enabled
-nameif -r visdn0 visdn${NETDEV_CHAN##*.}d
-ip link set visdn0 allmulticast off
-ip link set visdn0 up
-popd
+config_if "pci0000:00/0000:00:09.0" "st0" "visdn1.0" "NT"
+config_if "pci0000:00/0000:00:09.0" "st1" "visdn1.1" "NT"
+config_if "pci0000:00/0000:00:09.0" "st2" "visdn1.2" "TE"
+config_if "pci0000:00/0000:00:09.0" "st3" "visdn1.3" "TE"
+config_if "pci0000:00/0000:00:07.0" "st0" "visdn0" "TE"
 

@@ -2,6 +2,78 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-29 15:44:31 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-92
+
+    Summary:
+      Fixed copyright notices, changed [general] to [global]
+    Revision:
+      isdn--devel--0.1--patch-92
+
+    
+    
+
+    new files:
+     libq931/.arch-ids/COPYING.id libq931/COPYING
+
+    removed files:
+     traffic/.arch-ids/.arch-inventory.id traffic/.arch-ids/=id
+     traffic/.arch-ids/Makefile.am.id traffic/.arch-inventory
+     traffic/Makefile.am
+
+    modified files:
+     COPYING ChangeLog NOTES TODO chan_visdn/chan_visdn.c
+     configure.ac etc/asterisk/visdn.conf etc/udev/30-visdn.rules
+     fake_isdn/fake_isdn.c fake_isdn/fake_isdn.h hfc-4s/card.h
+     hfc-4s/card_inline.h hfc-4s/card_sysfs.c hfc-4s/card_sysfs.h
+     hfc-4s/chan.c hfc-4s/chan.h hfc-4s/chan_sysfs.c
+     hfc-4s/chan_sysfs.h hfc-4s/fifo.c hfc-4s/fifo.h
+     hfc-4s/fifo_inline.h hfc-4s/fsm.c hfc-4s/fsm.h
+     hfc-4s/hfc-4s_main.c hfc-4s/module.h hfc-4s/pcm_port.c
+     hfc-4s/pcm_port.h hfc-4s/pcm_port_inline.h
+     hfc-4s/pcm_port_sysfs.c hfc-4s/pcm_port_sysfs.h hfc-4s/regs.h
+     hfc-4s/st_port.c hfc-4s/st_port.h hfc-4s/st_port_inline.h
+     hfc-4s/st_port_sysfs.c hfc-4s/st_port_sysfs.h hfc-4s/util.h
+     hfc-pci/card.h hfc-pci/card_inline.h hfc-pci/card_sysfs.c
+     hfc-pci/card_sysfs.h hfc-pci/chan.c hfc-pci/chan.h
+     hfc-pci/chan_sysfs.c hfc-pci/chan_sysfs.h hfc-pci/fifo.c
+     hfc-pci/fifo.h hfc-pci/fifo_inline.h hfc-pci/hfc-pci_main.c
+     hfc-pci/module.h hfc-pci/pcm_port.c hfc-pci/pcm_port.h
+     hfc-pci/pcm_port_sysfs.c hfc-pci/pcm_port_sysfs.h
+     hfc-pci/regs.h hfc-pci/st_port.c hfc-pci/st_port.h
+     hfc-pci/st_port_sysfs.c hfc-pci/st_port_sysfs.h hfc-pci/util.h
+     hfc-usb/fifo.c hfc-usb/fifo.h hfc-usb/hfc-usb.h
+     hfc-usb/hfc-usb_main.c hfc-usb/regs.h hw-config lapd/af_lapd.c
+     lapd/lapd.h lapd/lapd_dev.c lapd/lapd_in.c lapd/lapd_in.h
+     lapd/lapd_out.c lapd/lapd_out.h lapd/lapd_proto.h
+     lapd/multiframe.c lapd/multiframe.h lapd/tei_mgmt.c
+     lapd/tei_mgmt.h lapd/tei_mgmt_nt.c lapd/tei_mgmt_nt.h
+     lapd/tei_mgmt_te.c lapd/tei_mgmt_te.h libq931/call.c
+     libq931/call_inline.h libq931/callref.c libq931/ces.c
+     libq931/ces_inline.h libq931/channel.c libq931/chanset.c
+     libq931/global.c libq931/ie.c libq931/ie_bearercap.c
+     libq931/ie_call_state.c libq931/ie_cause.c libq931/ie_cdpn.c
+     libq931/ie_cgpn.c libq931/ie_chanid.c libq931/ie_hlc.c
+     libq931/ie_progind.c libq931/ie_restind.c
+     libq931/ie_sending_complete.c libq931/ies.c libq931/intf.c
+     libq931/msgtype.c libq931/out.c libq931/q931.c libq931/timer.c
+     libq931/user.c pppd_plugin/visdn.c tests/connect.c
+     tests/demoswitch.c tests/jitter.c tests/sniffer.c
+     tests/sniffer_async.c tests/test.c tests/traffic.c
+     visdn-core/chan.c visdn-core/chan.h visdn-core/core_main.c
+     visdn-core/port.c visdn-core/port.h visdn-core/timer.c
+     visdn-core/timer.h visdn-core/visdn.h visdn-core/visdn_mod.h
+     visdn-netdev/netdev.h visdn-netdev/netdev_main.c
+     visdn-ppp/ppp.h visdn-ppp/ppp_main.c
+     visdn-streamport/streamport.h
+     visdn-streamport/streamport_main.c
+     visdn-timer-system/Makefile.in
+     visdn-timer-system/timer-system.h
+     visdn-timer-system/timer-system_main.c
+
+    removed directories:
+     traffic traffic/.arch-ids
+
+
 2005-08-28 23:44:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-91
 
     Summary:
