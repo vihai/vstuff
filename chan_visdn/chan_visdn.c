@@ -976,6 +976,15 @@ static int visdn_call(
 		goto err_invalid_format;
 	}
 
+	enum q931_ie_bearer_capability_information_transfer_capability bc_itc =
+		Q931_IE_BC_ITC_SPEECH;
+
+	const char *options = strsep(&stringp, "/");
+	if (options) {
+		if (strchr(options, 'D'))
+			bc_itc = Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
+	}
+
 	ast_mutex_lock(&visdn.lock);
 	struct visdn_interface *intf = NULL;
 
@@ -1040,7 +1049,7 @@ static int visdn_call(
 	struct q931_ie_bearer_capability *bc =
 		q931_ie_bearer_capability_alloc();
 	bc->coding_standard = Q931_IE_BC_CS_CCITT;
-	bc->information_transfer_capability = Q931_IE_BC_ITC_SPEECH;
+	bc->information_transfer_capability = bc_itc;
 	bc->transfer_mode = Q931_IE_BC_TM_CIRCUIT;
 	bc->information_transfer_rate = Q931_IE_BC_ITR_64;
 	bc->user_information_layer_1_protocol = Q931_IE_BC_UIL1P_G711_ALAW;
@@ -2442,13 +2451,24 @@ static void visdn_q931_setup_indication(
 				sizeof(visdn_chan->calling_number));
 
 		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
+
+			// We should check the destination bearer capability
+			// unfortunately we don't know if the destination is
+			// compatible until we start the PBX... this is a
+			// design flaw in Asterisk
+
 			struct q931_ie_bearer_capability *bc =
 				container_of(ies->ies[i],
 					struct q931_ie_bearer_capability, ie);
 
 			if (bc->information_transfer_capability ==
+				Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL) {
+
+				q931_call->tones_option = FALSE;
+
+			} else  if (bc->information_transfer_capability ==
 					Q931_IE_BC_ITC_SPEECH ||
-			    bc->information_transfer_capability ==
+				    bc->information_transfer_capability ==
 					Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
 
 				q931_call->tones_option = intf->tones_option;

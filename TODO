@@ -29,6 +29,9 @@ libq931
 - Restart Procedure is completely untested, test it.
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 
+app_visdn_ppp:
+- Handle hangup
+
 timer:
 
 - Make sure the timing function is called with a precise long term frequency

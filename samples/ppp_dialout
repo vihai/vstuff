@@ -1,4 +1,5 @@
-Channel: VISDN/visdn1.3/7021003070
+#Channel: VISDN/visdn1.3/7021003070
+Channel: VISDN/visdn0/230/D
 MaxRetries: 2
 RetryTime: 60
 WaitTime: 30

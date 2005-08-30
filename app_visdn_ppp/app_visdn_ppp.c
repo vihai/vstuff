@@ -152,23 +152,32 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 	int status;
 	int signalled;
 	for (;;) {
-		res = wait4(pid, &status, WNOHANG, NULL);
-		if (!res) {
-			/* Check for hangup */
-			if (chan->_softhangup && !signalled) {
-				ast_log(LOG_NOTICE,
-					"Channel '%s' hungup."
-					" Signalling PPP at %d to die...\n",
-					chan->name, pid);
+		while(ast_waitfor(chan, -1) > -1) {
+			res = wait4(pid, &status, WNOHANG, NULL);
+			if (!res) {
+				/* Check for hangup */
+				if (chan->_softhangup && !signalled) {
+					ast_log(LOG_NOTICE,
+						"Channel '%s' hungup."
+						" Signalling PPP at %d to die...\n",
+						chan->name, pid);
 
-				kill(pid, SIGTERM);
-				signalled = 1;
+					kill(pid, SIGTERM);
+					signalled = 1;
+				}
+
+				/* Try again */
+				sleep(1);
+				continue;
 			}
 
-			/* Try again */
-			sleep(1);
-			continue;
+			f = ast_read(chan);
+			if (!f)
+				break;
+
+			ast_frfree(f);
 		}
+
 
 		if (res < 0) {
 			ast_log(LOG_WARNING,
