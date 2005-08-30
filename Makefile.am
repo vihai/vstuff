@@ -77,7 +77,10 @@ dist-rpm: dist-bzip2
 	rpmbuild -ta @PACKAGE_TARNAME@-@PACKAGE_VERSION@.tar.bz2
 
 #release: dist-gzip dist-bzip2 dist-rpm
-release: dist-gzip dist-bzip2
+release: distdir
+	tardir=$(distdir) && $(am__tar) | GZIP=$(GZIP_ENV) gzip -c >$(distdir).tar.gz
+	tardir=$(distdir) && $(am__tar) | bzip2 -9 -c >$(distdir).tar.bz2
+	$(am__remove_distdir)
 	gpg --sign -ab $(distdir).tar.gz
 	gpg --sign -ab $(distdir).tar.bz2
 	scp $(distdir).tar.gz $(distdir).tar.gz.asc \

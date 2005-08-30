@@ -16,10 +16,15 @@ Release process
 
 Well, Arch is nice but hard to learn...
 
-Make sure configure.ac version is set correctly
-Commit the change
-tla tag --seal --setup $(tla logs -f | tail -n 1) visdn--release--1.0
+tla changes
+(check and commit, eventually)
+tla tag --setup $(tla logs -f | tail -n 1) visdn--release--VERSION
+
+Switch on nabla
+
+tla get visdn--release--VERSION
+vim configure.ac
+tla commit --seal -s "Version set and tree sealed"
+
 make release
-Bump version in configure.ac
-Commit the change
 
