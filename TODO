@@ -14,6 +14,7 @@ Build system:
 
 chan_visdn
 
+- Communication errors are badly handled
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Close DLCs after defined amount of inactivity
@@ -102,7 +103,8 @@ hfc-pci
 
 - Fix counters
 - Add wake_queue
-
+- When DTX fifo becomes full "TX FIFO full, throttling" and then the output
+  queue is stopped. We sould call wake somewhere
 
 
 

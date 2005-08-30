@@ -133,6 +133,8 @@ AC_ARG_WITH(
 	[pppdincdir="/usr/include/pppd"])
 AC_SUBST(pppdincdir)
 
+################ CHECK HEADERS EXISTANCE
+
 AC_ARG_WITH(
 	[pppd-config],
 	AC_HELP_STRING(
