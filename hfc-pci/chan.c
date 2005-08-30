@@ -84,7 +84,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 				chan->port->card->regs.ctmt &= ~hfc_CTMT_TRANSB2;
 			}
 
-			chan->port->card->regs.connect &= hfc_CONNECT_B1_MASK;
+			chan->port->card->regs.connect &= hfc_CONNECT_B2_MASK;
 			chan->port->card->regs.connect |=
 				hfc_CONNECT_B2_HFC_from_ST |
 				hfc_CONNECT_B2_ST_from_HFC |
