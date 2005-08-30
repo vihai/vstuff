@@ -294,8 +294,7 @@ ssize_t vnd_cdev_read(
 					     VISDN_CHAN_FRAMING_MTP;
 	chan->visdn_chan.framing_preferred = 0;
 
-	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB |
-					      VISDN_CHAN_BITORDER_MSB;
+	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
 	chan->visdn_chan.bitorder_preferred = 0;
 
 //	err = sysfs_create_link(&chan->netdev->class_dev.kobj, &chan->class_dev.kobj, "visdn_chan");

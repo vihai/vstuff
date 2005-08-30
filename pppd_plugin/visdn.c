@@ -12,16 +12,18 @@
  *
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+
 #include "pppd.h"
 #include "pathnames.h"
 #include "fsm.h"
 #include "lcp.h"
-#include <sys/stat.h>
-#include <net/if.h>
-#include <sys/ioctl.h>
 
 #include <visdn.h>
-#include <lapd.h>
 
 static int visdn_accept = 0;
 static bool llc_encaps = 0;
@@ -60,9 +62,6 @@ static int visdn_setdevname(char *cmd, char **argv, int doit)
 	extern struct stat devstat;
 
 	info("PPPovISDN visdn_setdevname %s", cmd);
-
-	if (!strstr(cmd, "isdn"))
-		return 0;
 
 //	if (device_got_set)
 //		return 0;
@@ -108,8 +107,6 @@ static void no_device_given_visdn(void)
 }
 
 
-#define VISDN_SET_BEARER_PPP  12345678
-
 static int visdn_connect(void)
 {
 	int fd;
@@ -118,16 +115,19 @@ static int visdn_connect(void)
 	if (!device_got_set)
 		no_device_given_visdn();
 
-	fd = socket(AF_LAPD, SOCK_DGRAM, 0);
+	fd = open("/dev/visdn/ppp", O_RDWR);
 	if (fd < 0)
-		fatal("failed to create socket: %m");
+		fatal("failed to open ppp-control device: %m");
 
-	struct ifreq ifr;
+	struct visdn_connect vc;
+	strcpy(vc.src_chanid, "");
+	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s", devnam);
+	vc.flags = 0;
 
-	strlcpy(ifr.ifr_name, devnam , sizeof(ifr.ifr_name));
-
-	if (ioctl(fd, VISDN_SET_BEARER_PPP, (caddr_t) &ifr) < 0)
-		fatal("ioctl(VISDN_SET_BEARER_PPP): %m");
+	if (ioctl(fd, VISDN_IOC_CONNECT,
+	    (caddr_t) &vc) < 0) {
+		fatal("ioctl(VISDN_CONNECT): %m\n");
+	}
 
 	strlcpy(ppp_devnam, devnam, sizeof(ppp_devnam));
 

@@ -285,7 +285,7 @@ err_no_free_frames:
 
 	hfc_card_unlock(card);
 
-	return 0;
+	return 1;
 }
 
 static struct net_device_stats *hfc_chan_get_stats(struct visdn_chan *visdn_chan)

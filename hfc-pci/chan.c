@@ -205,7 +205,7 @@ static int hfc_chan_frame_xmit(
 
 	hfc_card_unlock(card);
 
-	return 0;
+	return 1;
 }
 
 static struct net_device_stats *hfc_chan_get_stats(struct visdn_chan *visdn_chan)

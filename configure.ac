@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT(visdn, 0.9.0, daniele@orlandi.com)
+AC_INIT(visdn, 0.9.1, daniele@orlandi.com)
 AC_CONFIG_AUX_DIR(config)
 AM_INIT_AUTOMAKE
 
@@ -102,6 +102,51 @@ AC_SUBST(astconfdir)
 
 #-----------------------------------------------------------------------------
 
+with_pppd=yes
+
+AC_ARG_WITH(
+	[pppd],
+	AC_HELP_STRING(
+		[--with-pppd],
+		[Enable PPPD plugin compilation]),)
+
+AM_CONDITIONAL(pppd, test "$with_pppd" = yes)
+
+AC_ARG_WITH(
+	[pppd-plugins],
+	AC_HELP_STRING(
+		[--with-pppd-plugins],
+		[Specify PPPD plugins directory]),
+	[pppdpluginsdir=$withval],
+	[pppdpluginsdir="/usr/lib/pppd/2.4.2"])
+
+test $prefix != "NONE" && pppdpluginsdir="$prefix/$pppdpluginsdir"
+
+AC_SUBST(pppdpluginsdir)
+
+AC_ARG_WITH(
+	[pppd-includes],
+	AC_HELP_STRING(
+		[--with-pppd-includes],
+		[Specify pppd includes directory]),
+	[pppdincdir=$withval],
+	[pppdincdir="/usr/include/pppd"])
+AC_SUBST(pppdincdir)
+
+AC_ARG_WITH(
+	[pppd-config],
+	AC_HELP_STRING(
+		[--with-pppd-config],
+		[Specify pppd configuration directory]),
+	[pppdconfdir=$withval],
+	[pppdconfdir="/etc/ppp"])
+
+test $prefix != "NONE" && pppdconfdir="$prefix/$pppdconfdir"
+
+AC_SUBST(pppdconfdir)
+
+#-----------------------------------------------------------------------------
+
 AC_ARG_ENABLE(
 	[tests],
 	AC_HELP_STRING(
@@ -144,6 +189,7 @@ AM_CONDITIONAL(driver_fake_isdn,
 AC_CONFIG_FILES([Makefile
                  libq931/Makefile 
                  chan_visdn/Makefile
+                 pppd_plugin/Makefile
                  tests/Makefile
                  fake_isdn/Makefile
                  hfc-4s/Makefile
