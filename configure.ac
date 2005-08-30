@@ -191,6 +191,7 @@ AM_CONDITIONAL(driver_fake_isdn,
 AC_CONFIG_FILES([Makefile
                  libq931/Makefile 
                  chan_visdn/Makefile
+                 app_visdn_ppp/Makefile
                  pppd_plugin/Makefile
                  tests/Makefile
                  fake_isdn/Makefile

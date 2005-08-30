@@ -61,6 +61,7 @@ SUBDIRS += libq931
 
 if asterisk
 SUBDIRS += chan_visdn
+SUBDIRS += app_visdn_ppp
 endif
 
 if pppd

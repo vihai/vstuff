@@ -2,6 +2,42 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-30 13:58:46 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-98
+
+    Summary:
+      Added app_visdn_ppp
+    Revision:
+      isdn--devel--0.1--patch-98
+
+    
+    
+
+    new files:
+     app_visdn_ppp/.arch-ids/.arch-inventory.id
+     app_visdn_ppp/.arch-ids/=id
+     app_visdn_ppp/.arch-ids/Makefile.am.id
+     app_visdn_ppp/.arch-ids/app_visdn_ppp.c.id
+     app_visdn_ppp/.arch-inventory app_visdn_ppp/Makefile.am
+     app_visdn_ppp/app_visdn_ppp.c
+     chan_visdn/.arch-ids/chan_visdn.h.id chan_visdn/chan_visdn.h
+     samples/.arch-ids/=id samples/.arch-ids/ppp_dialout.id
+     samples/ppp_dialout
+
+    modified files:
+     ChangeLog Makefile.am TODO chan_visdn/chan_visdn.c
+     configure.ac
+
+    renamed files:
+     etc/.arch-ids/ethereal_coloring_rules.id
+       ==> samples/.arch-ids/ethereal_coloring_rules.id
+     etc/ethereal_coloring_rules
+       ==> samples/ethereal_coloring_rules
+
+    new directories:
+     app_visdn_ppp app_visdn_ppp/.arch-ids samples
+     samples/.arch-ids
+
+
 2005-08-30 04:23:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-97
 
     Summary:

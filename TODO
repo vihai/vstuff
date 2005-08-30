@@ -21,6 +21,7 @@ chan_visdn
 - Fix autocompletion in cli commands
 - Implement "allowed_caller_ids" which may eventually replace
   force_inbound_caller_id
+- MWI on ISDN phones
 
 libq931
 

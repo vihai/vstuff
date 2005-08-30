@@ -57,6 +57,7 @@
 //#include "echo.h"
 
 #include "../config.h"
+#include "chan_visdn.h"
 
 #define FRAME_SIZE 160
 
@@ -78,19 +79,6 @@ static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
 #define VISDN_DESCRIPTION "VISDN Channel For Asterisk"
 #define VISDN_CHAN_TYPE "VISDN"
 #define VISDN_CONFIG_FILE "visdn.conf"
-
-struct visdn_chan {
-	struct ast_channel *ast_chan;
-	struct q931_call *q931_call;
-
-	int channel_fd;
-
-	char calling_number[21];
-	char called_number[21];
-	int sending_complete;
-
-//	echo_can_state_t *ec;
-};
 
 enum poll_info_type
 {
@@ -2692,38 +2680,6 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-/*
-enum sb_bearertype
-{
-        VISDN_BT_VOICE  = 1,
-        VISDN_BT_PPP    = 2,
-};
-
-struct sb_setbearer
-{
-        int sb_index;
-        enum sb_bearertype sb_bearertype;
-};
-
-#define VISDN_SET_BEARER        SIOCDEVPRIVATE
-#define VISDN_PPP_GET_CHAN      (SIOCDEVPRIVATE+1)
-#define VISDN_PPP_GET_UNIT      (SIOCDEVPRIVATE+2)
-
-	struct ifreq ifr;
-	strncpy(ifr.ifr_name, channel->call->intf->name, sizeof(ifr.ifr_name));
-
-	struct sb_setbearer bt;
-	bt.sb_index = channel->id;
-	bt.sb_bearertype = VISDN_BT_VOICE;
-	ifr.ifr_data = (void *)&bt;
-
-	if (ioctl(channel->call->dlc->socket, VISDN_SET_BEARER,
-	    (caddr_t) &ifr) < 0) {
-		ast_log(LOG_ERROR, "ioctl(VISDN_SET_BEARER): %s\n", strerror(errno));
-		return;
-	}
-*/
-
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
 		"/sys/class/net/%s/device/connected/../B%d",
@@ -2742,12 +2698,13 @@ struct sb_setbearer
 		return;
 	}
 
-	chanid++;
+	strncpy(visdn_chan->visdn_chanid, chanid + 1,
+		sizeof(visdn_chan->visdn_chanid));
 
 	if (visdn.debug)
 		ast_log(LOG_NOTICE,
 			"Connecting streamport to chan %s\n",
-			chanid);
+			visdn_chan->visdn_chanid);
 
 	visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
 	if (visdn_chan->channel_fd < 0) {
@@ -2757,7 +2714,8 @@ struct sb_setbearer
 
 	struct visdn_connect vc;
 	strcpy(vc.src_chanid, "");
-	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s", chanid);
+	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s",
+		visdn_chan->visdn_chanid);
 	vc.flags = 0;
 
 	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
