@@ -49,7 +49,24 @@ enum q931_ie_bearer_capability_user_information_layer_1_protocol
 	Q931_IE_BC_UIL1P_NON_CCITT	= 0x07,
 	Q931_IE_BC_UIL1P_V120		= 0x08,
 	Q931_IE_BC_UIL1P_X31		= 0x09,
+	Q931_IE_BC_UIL1P_UNUSED		= -1,
 };
+
+enum q931_ie_bearer_capability_user_information_layer_2_protocol
+{
+	Q931_IE_BC_UIL2P_Q921		= 0x02,
+	Q931_IE_BC_UIL2P_X_25		= 0x06,
+	Q931_IE_BC_UIL2P_UNUSED		= -1,
+};
+
+enum q931_ie_bearer_capability_user_information_layer_3_protocol
+{
+	Q931_IE_BC_UIL3P_Q931		= 0x02,
+	Q931_IE_BC_UIL3P_X_25		= 0x06,
+	Q931_IE_BC_UIL3P_UNUSED		= -1,
+};
+
+#define Q931_IE_BC_IDENT_MASK 0x60
 
 enum q931_ie_bearer_capability_user_information_layer_ident
 {
@@ -72,6 +89,10 @@ struct q931_ie_bearer_capability
 		information_transfer_rate;
 	enum q931_ie_bearer_capability_user_information_layer_1_protocol
 		user_information_layer_1_protocol;
+	enum q931_ie_bearer_capability_user_information_layer_2_protocol
+		user_information_layer_2_protocol;
+	enum q931_ie_bearer_capability_user_information_layer_3_protocol
+		user_information_layer_3_protocol;
 };
 
 struct q931_ie_bearer_capability *q931_ie_bearer_capability_alloc(void);

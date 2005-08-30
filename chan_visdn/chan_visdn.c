@@ -978,11 +978,15 @@ static int visdn_call(
 
 	enum q931_ie_bearer_capability_information_transfer_capability bc_itc =
 		Q931_IE_BC_ITC_SPEECH;
+	enum q931_ie_bearer_capability_user_information_layer_1_protocol bc_l1p =
+		Q931_IE_BC_UIL1P_G711_ALAW;
 
 	const char *options = strsep(&stringp, "/");
 	if (options) {
-		if (strchr(options, 'D'))
+		if (strchr(options, 'D')) {
 			bc_itc = Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
+			bc_l1p = Q931_IE_BC_UIL1P_UNUSED;
+		}
 	}
 
 	ast_mutex_lock(&visdn.lock);
@@ -1052,7 +1056,9 @@ static int visdn_call(
 	bc->information_transfer_capability = bc_itc;
 	bc->transfer_mode = Q931_IE_BC_TM_CIRCUIT;
 	bc->information_transfer_rate = Q931_IE_BC_ITR_64;
-	bc->user_information_layer_1_protocol = Q931_IE_BC_UIL1P_G711_ALAW;
+	bc->user_information_layer_1_protocol = bc_l1p;
+	bc->user_information_layer_2_protocol = Q931_IE_BC_UIL2P_UNUSED;
+	bc->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
 	q931_ies_add_put(&ies, &bc->ie);
 
 	struct q931_ie_called_party_number *cdpn =

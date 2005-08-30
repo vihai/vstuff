@@ -22,6 +22,9 @@ chan_visdn
 - Implement "allowed_caller_ids" which may eventually replace
   force_inbound_caller_id
 - MWI on ISDN phones
+- Asterisk's design forbids me to implement some sort of parameter negotiation
+  so it is impossible to know what bearer capabilities are accepted by a
+  destination, if it supports overlap dialing and so on...
 
 libq931
 
