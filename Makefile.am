@@ -25,7 +25,8 @@ astconf_DATA =					\
 EXTRA_DIST =					\
 	bootstrap				\
 	visdn.spec				\
-	etc/ethereal_coloring_rules		\
+	samples/ethereal_coloring_rules		\
+	samples/ppp_dialout			\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)
 
@@ -74,3 +75,11 @@ endif
 
 dist-rpm: dist-bzip2
 	rpmbuild -ta @PACKAGE_TARNAME@-@PACKAGE_VERSION@.tar.bz2
+
+#release: dist-gzip dist-bzip2 dist-rpm
+release: dist-gzip dist-bzip2
+	gpg --sign -ab $(distdir).tar.gz
+	gpg --sign -ab $(distdir).tar.bz2
+	scp $(distdir).tar.gz $(distdir).tar.gz.asc \
+	    $(distdir).tar.bz2 $(distdir).tar.bz2.asc \
+	    root@aj.uli.it:/www/www.orlandi.com/htdocs/visdn/download/
