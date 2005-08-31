@@ -142,7 +142,7 @@ static void visdn_release(struct class_device *cd)
 {
 }
 
-static struct class visdn_system_class = {
+struct class visdn_system_class = {
 	.name = "visdn",
 	.release = visdn_release,
 	.hotplug = visdn_hotplug,
