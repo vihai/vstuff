@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-31 12:17:32 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-110
+
+    Summary:
+      Fixed wake_queue invocation and generic cleanup
+    Revision:
+      isdn--devel--0.1--patch-110
+
+    
+    
+
+    modified files:
+     ChangeLog hfc-4s/hfc-4s_main.c hfc-pci/hfc-pci_main.c
+
+
 2005-08-31 04:52:25 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-109
 
     Summary:

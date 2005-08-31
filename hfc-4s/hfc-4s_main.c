@@ -21,7 +21,6 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 
-//#include <lapd.h>
 #include <visdn.h>
 
 #include "st_port.h"
@@ -392,7 +391,7 @@ void hfc_deallocate_fifo(struct hfc_fifo *fifo)
  * Interrupt Handler
  ******************************************/
 
-void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
+static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
 	visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
 }
@@ -488,19 +487,6 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	return IRQ_HANDLED;
 }
-
-/*
-struct sb_setbearer
-{
-	int sb_index;
-	enum sb_bearertype sb_bearertype;
-};
-
-#define VISDN_SET_BEARER	SIOCDEVPRIVATE
-#define VISDN_PPP_GET_CHAN	(SIOCDEVPRIVATE+1)
-#define VISDN_PPP_GET_UNIT	(SIOCDEVPRIVATE+2)
-
-*/
 
 /******************************************
  * Module initialization and cleanup
@@ -712,33 +698,15 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 
 	visdn_port_unregister(&card->pcm_port.visdn_port);
 
-	visdn_chan_unregister(&card->st_ports[3].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[3].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[3].visdn_port);
-
-	visdn_chan_unregister(&card->st_ports[2].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[2].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[2].visdn_port);
-
-	visdn_chan_unregister(&card->st_ports[1].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[1].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[1].visdn_port);
-
-	visdn_chan_unregister(&card->st_ports[0].chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[0].chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[0].chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[0].chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_ports[0].chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_ports[0].visdn_port);
+	int i;
+	for (i=card->num_st_ports - 1; i>=0; i--) {
+		visdn_chan_unregister(&card->st_ports[i].chans[SQ].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[E].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[B2].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[B1].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[D].visdn_chan);
+		visdn_port_unregister(&card->st_ports[i].visdn_port);
+	}
 
 	// softreset clears all pending interrupts
 	hfc_card_lock(card);
@@ -844,4 +812,3 @@ module_param(debug_level, int, 0444);
 MODULE_PARM(debug_level,"i");
 MODULE_PARM_DESC(debug_level, "Initial debug level");
 #endif
-

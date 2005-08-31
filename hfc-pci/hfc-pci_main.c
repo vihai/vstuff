@@ -160,107 +160,34 @@ void hfc_initialize_hw(struct hfc_card *card)
 	hfc_outb(card, hfc_INT_M2, card->regs.m2);
 }
 
-/*
-static int hfc_proc_read_info(char *page, char **start,
-		off_t off, int count, 
-		int *eof, void *data)
-{
-	struct hfc_card *card = data;
-
-	u8 chip_id;
-	chip_id = hfc_inb(card, hfc_CHIP_ID);
-
-	int len;
-	len = snprintf(page, PAGE_SIZE,
-		"Cardnum   : %d\n"
-		"IRQ       : %d\n"
-		"PCI Mem   : %#08lx (0x%p)\n"
-		"FIFO Mem  : %#08lx (0x%p)\n"
-		"Mode      : %s\n"
-		"CHIP_ID   : %#02x\n"
-		"L1 State  : %c%d\n"
-		"Sync Lost : %s\n"
-		"Late IRQs : %d\n"
-		"FIFO susp : %s\n"
-		"\nChannel     %12s %12s %12s %12s %4s %4s %4s\n"
-		"D         : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %s\n"
-		"B1        : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %s\n"
-		"B2        : %12llu %12llu %12llu %12llu %4llu %4llu %4llu %s\n"
-		,card->cardnum
-		,card->pcidev->irq
-		,card->io_bus_mem, card->io_mem
-		,(ulong)card->fifo_bus_mem, card->fifo_mem
-		,card->nt_mode?"NT":"TE"
-		,chip_id
-		,card->nt_mode?'G':'F'
-		,card->l1_state
-		,card->sync_loss_reported?"YES":"NO"
-		,card->late_irqs
-		,card->fifo_suspended?"YES":"NO"
-
-		,"RX Frames","TX Frames","RX Bytes","TX Bytes","RXFF","TXFF","CRC"
-		,card->chans[D].rx.frames
-		,card->chans[D].tx.frames
-		,card->chans[D].rx.bytes
-		,card->chans[D].tx.bytes
-		,card->chans[D].rx.fifo_full
-		,card->chans[D].tx.fifo_full
-		,card->chans[D].rx.crc
-		,hfc_status_to_name(card->chans[D].status)
-
-		,card->chans[B1].rx.frames
-		,card->chans[B1].tx.frames
-		,card->chans[B1].rx.bytes
-		,card->chans[B1].tx.bytes
-		,card->chans[B1].rx.fifo_full
-		,card->chans[B1].tx.fifo_full
-		,card->chans[B1].rx.crc
-		,hfc_status_to_name(card->chans[B1].status)
-
-		,card->chans[B2].rx.frames
-		,card->chans[B2].tx.frames
-		,card->chans[B2].rx.bytes
-		,card->chans[B2].tx.bytes
-		,card->chans[B2].rx.fifo_full
-		,card->chans[B2].tx.fifo_full
-		,card->chans[B2].rx.crc
-		,hfc_status_to_name(card->chans[B2].status)
-		);
-
-	return len;
-}
-*/
-
 /******************************************
  * Interrupt Handler
  ******************************************/
+
+static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
+{
+	schedule_work(&fifo->work);
+}
+
+static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
+{
+	visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
+}
+
+static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
+{
+}
 
 static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
 {
 	schedule_work(&port->state_change_work);
 }
 
-static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
-{
-/*
-	if(card->ignore_first_timer_interrupt) {
-		card->ignore_first_timer_interrupt = FALSE;
-		return;
-	}
-
-	if ((card->st_port.nt_mode && card->st_port.l1_state == 3) ||
-		(!card->st_port.nt_mode && card->st_port.l1_state == 7)) {
-
-		card->regs.ctmt &= ~hfc_CTMT_TIMER_MASK;
-		hfc_outb(card, hfc_CTMT, card->regs.ctmt);
-	}*/
-}
-
 static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct hfc_card *card = dev_id;
 
-	if (!card) {
+	if (unlikely(!card)) {
 		hfc_msg(KERN_CRIT,
 			"spurious interrupt (IRQ %d)\n",
 			irq);
@@ -290,10 +217,6 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * > processing the Fifos as PCI master so that data is read and
 	 * > written in the 32k memory window. But there is no restriction
 	 * > to access data in the memory window during this time.
-	 *
-	 * // if (status & hfc_STATUS_PCI_PROC) {
-	 * // return IRQ_HANDLED;
-	 * // }
 	 */
 
 	u8 s1 = hfc_inb(card, hfc_INT_S1);
@@ -312,37 +235,45 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		if (s1 & hfc_INT_S1_DREC) {
 			// D chan RX (bit 5)
-			if (&card->st_port.chans[D].rx.fifo)
-				schedule_work(
-					&card->st_port.chans[D].rx.fifo->work);
+			if (card->st_port.chans[D].rx.fifo)
+				hfc_handle_fifo_rx_interrupt(
+					card->st_port.chans[D].rx.fifo);
 		}
 
 		if (s1 & hfc_INT_S1_B1REC) {
 			// B1 chan RX (bit 3)
-			if (&card->st_port.chans[B1].rx.fifo)
-				schedule_work(
-					&card->st_port.chans[B1].rx.fifo->work);
+			if (card->st_port.chans[B1].rx.fifo)
+				hfc_handle_fifo_rx_interrupt(
+					card->st_port.chans[B1].rx.fifo);
 		}
 
 		if (s1 & hfc_INT_S1_B2REC) {
 			// B2 chan RX (bit 4)
-			if (&card->st_port.chans[B2].rx.fifo)
-				schedule_work(
-					&card->st_port.chans[B2].rx.fifo->work);
+			if (card->st_port.chans[B2].rx.fifo)
+				hfc_handle_fifo_rx_interrupt(
+					card->st_port.chans[B2].rx.fifo);
 		}
 
 		if (s1 & hfc_INT_S1_DTRANS) {
 			// D chan TX (bit 2)
+			if (card->st_port.chans[D].rx.fifo)
+				hfc_handle_fifo_tx_interrupt(
+					card->st_port.chans[D].rx.fifo);
 		}
 
 		if (s1 & hfc_INT_S1_B1TRANS) {
 			// B1 chan TX (bit 0)
+			if (card->st_port.chans[B1].rx.fifo)
+				hfc_handle_fifo_tx_interrupt(
+					card->st_port.chans[B1].rx.fifo);
 		}
 
 		if (s1 & hfc_INT_S1_B2TRANS) {
 			// B2 chan TX (bit 1)
+			if (card->st_port.chans[B2].rx.fifo)
+				hfc_handle_fifo_tx_interrupt(
+					card->st_port.chans[B2].rx.fifo);
 		}
-
 	}
 
 	if (s2 != 0) {
@@ -790,4 +721,3 @@ module_param(debug_level, int, 0444);
 MODULE_PARM(debug_level,"i");
 MODULE_PARM_DESC(debug_level, "Initial debug level");
 #endif
-
