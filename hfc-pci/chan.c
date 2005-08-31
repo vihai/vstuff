@@ -371,10 +371,7 @@ err_fifo_mem_write_user:
 static int hfc_chan_do_ioctl(struct visdn_chan *visdn_chan,
 	struct ifreq *ifr, int cmd)
 {
-//	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_card *card = chan->port->card;
-
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static int hfc_bridge(

@@ -463,74 +463,7 @@ err_copy_to_user:
 static int hfc_chan_do_ioctl(struct visdn_chan *visdn_chan,
 	struct ifreq *ifr, int cmd)
 {
-//	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_card *card = chan->port->card;
-
-//	unsigned long flags;
-/*
-
-	switch (cmd) {
-	case VISDN_SET_BEARER: {
-
-	struct sb_setbearer sb;
-	if (copy_from_user(&sb, ifr->ifr_data, sizeof(sb)))
-		return -EFAULT;
-
-hfc_msg_chan(chan, KERN_INFO, "VISDN_SET_BEARER %d %d\n", sb.sb_index, sb.sb_bearertype);
-
-	struct hfc_chan_duplex *bchan;
-	if (sb.sb_index == 0)
-		bchan = &chan->port->chans[B1];
-	else if (sb.sb_index == 1)
-		bchan = &chan->port->chans[B2];
-	else
-		return -EINVAL;
-
-	if (sb.sb_bearertype == VISDN_BT_VOICE) {
-		
-	} else if (sb.sb_bearertype == VISDN_BT_PPP) {
-
-		b1_chan->status = open_ppp;
-
-		spin_unlock_irqrestore(&card->lock, flags);
-
-////////////////////////////
-		b1_chan->ppp_chan.private = b1_chan;
-		b1_chan->ppp_chan.ops = &hfc_ppp_ops;
-		b1_chan->ppp_chan.mtu = 1000; //FIXME
-		b1_chan->ppp_chan.hdrlen = 2;
-
-		ppp_register_channel(&b1_chan->ppp_chan);
-////////////////////////
-
-hfc_msg_chan(chan, KERN_INFO,
-	"PPPPPPPPPPPP: int %d unit %d\n",
-	ppp_channel_index(&b1_chan->ppp_chan),
-	ppp_unit_number(&b1_chan->ppp_chan));
-
-
-	break;
-
-	case VISDN_PPP_GET_CHAN:
-hfc_msg_chan(chan, KERN_INFO, "VISDN_PPP_GET_CHAN:\n");
-
-		put_user(ppp_channel_index(&bchan->ppp_chan),
-			(int __user *)ifr->ifr_data);
-	break;
-
-	case VISDN_PPP_GET_UNIT:
-hfc_msg_chan(chan, KERN_INFO, "VISDN_PPP_GET_UNIT:\n");
-
-		put_user(ppp_unit_number(&bchan->ppp_chan),
-			(int __user *)ifr->ifr_data);
-	break;
-
-	default:
-		return -ENOIOCTLCMD;
-	}
-*/
-
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static int hfc_bridge(
