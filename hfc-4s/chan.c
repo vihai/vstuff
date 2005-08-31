@@ -147,6 +147,8 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	hfc_st_port_update_st_ctrl_0(chan->port);
 	hfc_st_port_update_st_ctrl_2(chan->port);
 
+	memset(&chan->stats, 0x00, sizeof(chan->stats));
+
 	hfc_card_unlock(card);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");
@@ -248,31 +250,65 @@ static int hfc_chan_frame_xmit(
 
 		return NETDEV_TX_LOCKED;
 	}
-	
+
+	struct hfc_fifo *fifo = chan->tx.fifo;
+
 	hfc_st_port_select(chan->port);
 	hfc_st_port_check_l1_up(chan->port);
 
-	hfc_fifo_select(chan->tx.fifo);
+	hfc_fifo_select(fifo);
 	// hfc_fifo_select() updates F/Z cache, so,
 	// size calculations are allowed
 
-	if (!hfc_fifo_free_frames(chan->tx.fifo)) {
+	if (!hfc_fifo_free_frames(fifo)) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
 
 		visdn_stop_queue(visdn_chan);
 
+		chan->stats.tx_errors++;
+		chan->stats.tx_fifo_errors++;
+
 		goto err_no_free_frames;
 	}
 
-	if (hfc_fifo_free_tx(chan->tx.fifo) < skb->len) {
+	if (hfc_fifo_free_tx(fifo) < skb->len) {
 		hfc_debug_chan(chan, 3, "TX FIFO full, throttling\n");
 
 		visdn_stop_queue(visdn_chan);
 
+		chan->stats.tx_errors++;
+		chan->stats.tx_fifo_errors++;
+
 		goto err_no_free_tx;
 	}
 
-	hfc_fifo_put_frame(chan->tx.fifo, skb->data, skb->len);
+#ifdef DEBUG
+	if (debug_level == 3) {
+		hfc_fifo_refresh_fz_cache(fifo);
+		hfc_debug_fifo(fifo, 3, "TX len %2d: ", skb->len);
+
+	} else if (debug_level >= 4) {
+		hfc_fifo_refresh_fz_cache(fifo);
+		hfc_debug_fifo(fifo, 4,
+			"TX (f1=%02x, f2=%02x, z1=N/A, z2=%04x) len %2d: ",
+			fifo->f1, fifo->f2, fifo->z2,
+			skb->len);
+	}
+
+	if (debug_level >= 3) {
+		int i;
+		for (i=0; i<skb->len; i++)
+			printk("%02x",((u8 *)skb->data)[i]);
+
+		printk("\n");
+	}
+#endif
+
+	hfc_fifo_mem_write(fifo, skb->data, skb->len);
+	hfc_fifo_next_frame(fifo);
+
+	chan->stats.tx_packets++;
+	chan->stats.tx_bytes += skb->len + 2;
 
 	hfc_card_unlock(card);
 
@@ -291,77 +327,9 @@ err_no_free_frames:
 static struct net_device_stats *hfc_chan_get_stats(struct visdn_chan *visdn_chan)
 {
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_card *card = chan->card;
 
-	return &chan->net_device_stats;
+	return &chan->stats;
 }
-
-/*
-static void hfc_set_multicast_list(struct net_device *netdev)
-{
-	struct hfc_chan_duplex *chan = netdev->priv;
-	struct hfc_st_port *port = chan->port;
-	struct hfc_card *card = port->card;
-
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
-        if(netdev->flags & IFF_PROMISC && !port->echo_enabled) {
-		if (port->nt_mode) {
-			hfc_msg_port(port, KERN_INFO,
-				"is in NT mode. Promiscuity is useless\n");
-
-			spin_unlock_irqrestore(&card->lock, flags);
-			return;
-		}
-
-		// Only RX FIFO is needed for E channel
-		chan->rx.bit_reversed = FALSE;
-		hfc_fifo_select(&port->chans[E].rx);
-		hfc_fifo_reset(card);
-		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-		hfc_outb(card, hfc_A_SUBCH_CFG,
-			hfc_A_SUBCH_CFG_V_BIT_CNT_2);
-
-		hfc_outb(card, hfc_A_IRQ_MSK,
-			hfc_A_IRQ_MSK_V_IRQ);
-
-		port->echo_enabled = TRUE;
-
-		hfc_msg_port(port, KERN_INFO,
-			"entered in promiscuous mode\n");
-
-        } else if(!(netdev->flags & IFF_PROMISC) && port->echo_enabled) {
-		if (!port->echo_enabled) {
-			spin_unlock_irqrestore(&card->lock, flags);
-			return;
-		}
-
-		chan->rx.bit_reversed = FALSE;
-		hfc_fifo_select(&port->chans[E].rx);
-		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
-			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-		hfc_outb(card, hfc_A_IRQ_MSK,
-			0);
-
-		port->echo_enabled = FALSE;
-
-		hfc_msg_port(port, KERN_INFO,
-			"left promiscuous mode.\n");
-	}
-
-	spin_unlock_irqrestore(&card->lock, flags);
-
-//	hfc_update_fifo_state(card);
-}
-*/
 
 static ssize_t hfc_chan_samples_read(
 	struct visdn_chan *visdn_chan,
@@ -370,19 +338,6 @@ static ssize_t hfc_chan_samples_read(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
-	int err;
-
-	// Avoid user specifying too big transfers
-	if (count > 65536)
-		count = 65536;
-
-	// Allocate a big enough buffer
-	u8 *buf2 = kmalloc(count, GFP_KERNEL);
-	if (!buf2) {
-		err = -EFAULT;
-		goto err_kmalloc;
-	}
-
 	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 
@@ -390,30 +345,17 @@ static ssize_t hfc_chan_samples_read(
 	hfc_fifo_refresh_fz_cache(chan->rx.fifo);
 
 	int available_octets = hfc_fifo_used_rx(chan->rx.fifo);
-	int copied_octets = 0;
+	int copied_octets;
 
 	copied_octets = available_octets < count ? available_octets : count;
 
-	// Read from FIFO in atomic context
-	// Cannot read directly to user due to put_user sleeping
-	// NO, now we can!!! FIXME!
-	hfc_fifo_mem_read(chan->rx.fifo, buf2, copied_octets);
+	hfc_fifo_mem_read_to_user(chan->rx.fifo, buf, copied_octets);
+
+	chan->stats.rx_bytes += copied_octets;
 
 	hfc_card_unlock(card);
 
-	err = copy_to_user(buf, buf2, copied_octets);
-	if (err < 0)
-		goto err_copy_to_user;
-
-	kfree(buf2);
-
 	return copied_octets;
-
-err_copy_to_user:
-	kfree(buf2);
-err_kmalloc:
-
-	return err;
 }
 
 static ssize_t hfc_chan_samples_write(
@@ -422,22 +364,6 @@ static ssize_t hfc_chan_samples_write(
 {
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
-	int err = 0;
-
-	__u8 buf2[256]; // FIXME TODO
-
-	// Umpf... we need an intermediate buffer... we need to disable interrupts
-	// for the whole time since we must ensure that noone selects another FIFO
-	// in the meantime, so we may not directly copy from FIFO to user.
-	// There is for sure a better solution :)
-
-	int copied_octets = count;
-	if (copied_octets > sizeof(buf2))
-		copied_octets = sizeof(buf2);
-
-	err = copy_from_user(buf2, buf, copied_octets);
-	if (err < 0)
-		goto err_copy_to_user;
 
 	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
@@ -445,19 +371,19 @@ static ssize_t hfc_chan_samples_write(
 	hfc_fifo_select(chan->tx.fifo);
 	hfc_fifo_refresh_fz_cache(chan->tx.fifo);
 
+	int copied_octets = count;
+
 	int available_octets = hfc_fifo_free_tx(chan->tx.fifo);
 	if (copied_octets > available_octets)
 		copied_octets = available_octets;
 
-	hfc_fifo_put(chan->rx.fifo, buf2, copied_octets);
+	hfc_fifo_mem_write_from_user(chan->rx.fifo, buf, copied_octets);
+
+	chan->stats.rx_bytes += copied_octets;
 
 	hfc_card_unlock(card);
 
 	return copied_octets;
-
-err_copy_to_user:
-
-	return err;
 }
 
 static int hfc_chan_do_ioctl(struct visdn_chan *visdn_chan,
@@ -674,24 +600,26 @@ static int hfc_chan_connect_to(
 	if (visdn_chan->connected_chan)
 		return -EBUSY;
 
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
-	struct hfc_chan_duplex *chan2 = visdn_chan2->priv;
-	struct hfc_card *card = chan->port->card;
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_chan_duplex *chan2 = to_chan_duplex(visdn_chan2);
 
-	hfc_debug_card(card, 2, "Connecting chan %s to %s\n",
-		visdn_chan->device.bus_id,
+	hfc_debug_chan(chan, 2, "connecting to %s\n",
 		visdn_chan2->device.bus_id);
 
 	if (chan->id != B1 && chan->id != B2) {
-		hfc_msg(KERN_ERR, "Cannot connect %s to %s\n",
-			chan->name, to_chan_duplex(visdn_chan2)->name);
+		hfc_msg_chan(chan, KERN_ERR, "Cannot connect to %s\n",
+			chan2->name);
+
 		return -EINVAL;
 	}
 
 	if (visdn_chan->device.parent->parent ==
 			visdn_chan2->device.parent->parent) {
-		printk(KERN_DEBUG "Both channels belong to the me,"
-			" attempting private bridge\n");
+
+		hfc_debug_chan(chan, 2,
+			"and %s: Both channels belong to the me,"
+			" attempting private bridge\n",
+			chan2->name);
 
 		return hfc_bridge(chan, chan2);
 	}

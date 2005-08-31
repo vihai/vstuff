@@ -112,7 +112,7 @@ struct hfc_chan_duplex {
 	struct hfc_chan_simplex tx;
 
 	struct visdn_chan visdn_chan;
-	struct net_device_stats net_device_stats;
+	struct net_device_stats stats;
 };
 
 void hfc_chan_init(

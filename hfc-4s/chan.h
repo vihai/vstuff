@@ -91,11 +91,6 @@ struct hfc_chan_simplex
 	struct hfc_chan_duplex *chan;
 	struct hfc_fifo *fifo;
 	struct hfc_pcm_slot *slot;
-
-	unsigned long long frames;
-	unsigned long long bytes;
-	unsigned long long fifo_full;
-	unsigned long long crc;
 };
 
 enum hfc_chan_status {
@@ -120,7 +115,7 @@ struct hfc_chan_duplex {
 	struct hfc_chan_simplex tx;
 
 	struct visdn_chan visdn_chan;
-	struct net_device_stats net_device_stats;
+	struct net_device_stats stats;
 };
 
 void hfc_chan_init(

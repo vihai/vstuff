@@ -113,15 +113,15 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	hfc_st_port_update_sctrl(chan->port);
 	hfc_st_port_update_sctrl_r(chan->port);
 
+	memset(&chan->stats, 0x00, sizeof(chan->stats));
+
 	hfc_card_unlock(card);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");
 
 	return 0;
 
-/*	spin_lock_irqsave(&card->lock, flags);
 	chan->status = HFC_CHAN_STATUS_FREE;
-	spin_unlock_irqrestore(&card->lock, flags);*/
 err_invalid_framing:
 err_channel_busy:
 
@@ -183,24 +183,37 @@ static int hfc_chan_frame_xmit(
 
 	hfc_st_port_check_l1_up(chan->port);
 
-/*
-	if (!hfc_fifo_free_frames(chan->tx.fifo)) {
+	struct hfc_fifo *fifo = chan->tx.fifo;
+
+	if (!hfc_fifo_free_frames(fifo)) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
 
 		visdn_stop_queue(visdn_chan);
 
+		chan->stats.tx_errors++;
+		chan->stats.tx_fifo_errors++;
+
 		goto err_no_free_frames;
 	}
 
-	if (hfc_fifo_free_tx(chan->tx.fifo) < skb->len) {
+	if (hfc_fifo_free_tx(fifo) < skb->len) {
 		hfc_debug_chan(chan, 3, "TX FIFO full, throttling\n");
 
 		visdn_stop_queue(visdn_chan);
 
 		goto err_no_free_tx;
-	}*/
+	}
 
-	hfc_fifo_put_frame(chan->tx.fifo, skb->data, skb->len);
+	hfc_fifo_mem_write(fifo, skb->data, skb->len);
+
+	// Move Z1 and jump to next frame
+	u16 newz1 = Z_inc(fifo, *Z1_F1(fifo), skb->len);
+	*Z1_F1(fifo) = newz1;
+	*fifo->f1 = F_inc(fifo, *fifo->f1, 1);
+	*Z1_F1(fifo) = newz1;
+
+	chan->stats.tx_packets++;
+	chan->stats.tx_bytes += skb->len + 2;
 
 	hfc_card_unlock(card);
 
@@ -208,8 +221,8 @@ static int hfc_chan_frame_xmit(
 
 	return NETDEV_TX_OK;
 
-//err_no_free_tx:
-//err_no_free_frames:
+err_no_free_tx:
+err_no_free_frames:
 
 	hfc_card_unlock(card);
 
@@ -219,82 +232,9 @@ static int hfc_chan_frame_xmit(
 static struct net_device_stats *hfc_chan_get_stats(struct visdn_chan *visdn_chan)
 {
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_card *card = chan->port->card;
 
-	return &chan->net_device_stats;
+	return &chan->stats;
 }
-
-/*
-
-TO ENABLE SNIFFING, PICK UP A FREE CHANNEL
-IF CHANNEL IS B2 WE'RE OK
-IF CHANNEL IS B1 SWITCH B1/B2 WITH SCTRL_E AND EXCHANGE FIFOS
-
-static void hfc_set_multicast_list(struct net_device *netdev)
-{
-	struct hfc_chan_duplex *chan = netdev->priv;
-	struct hfc_st_port *port = chan->port;
-	struct hfc_card *card = port->card;
-
-	unsigned long flags;
-	spin_lock_irqsave(&card->lock, flags);
-
-        if(netdev->flags & IFF_PROMISC && !port->echo_enabled) {
-		if (port->nt_mode) {
-			hfc_msg_port(port, KERN_INFO,
-				"is in NT mode. Promiscuity is useless\n");
-
-			spin_unlock_irqrestore(&card->lock, flags);
-			return;
-		}
-
-		// Only RX FIFO is needed for E channel
-		chan->rx.bit_reversed = FALSE;
-		hfc_fifo_select(&port->chans[E].rx);
-		hfc_fifo_reset(card);
-		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-		hfc_outb(card, hfc_A_SUBCH_CFG,
-			hfc_A_SUBCH_CFG_V_BIT_CNT_2);
-
-		hfc_outb(card, hfc_A_IRQ_MSK,
-			hfc_A_IRQ_MSK_V_IRQ);
-
-		port->echo_enabled = TRUE;
-
-		hfc_msg_port(port, KERN_INFO,
-			"entered in promiscuous mode\n");
-
-        } else if(!(netdev->flags & IFF_PROMISC) && port->echo_enabled) {
-		if (!port->echo_enabled) {
-			spin_unlock_irqrestore(&card->lock, flags);
-			return;
-		}
-
-		chan->rx.bit_reversed = FALSE;
-		hfc_fifo_select(&port->chans[E].rx);
-		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
-			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-		hfc_outb(card, hfc_A_IRQ_MSK,
-			0);
-
-		port->echo_enabled = FALSE;
-
-		hfc_msg_port(port, KERN_INFO,
-			"left promiscuous mode.\n");
-	}
-
-	spin_unlock_irqrestore(&card->lock, flags);
-
-//	hfc_update_fifo_state(card);
-}
-*/
 
 static ssize_t hfc_chan_samples_read(
 	struct visdn_chan *visdn_chan,
@@ -321,6 +261,8 @@ static ssize_t hfc_chan_samples_read(
 	*Z2_F2(chan->rx.fifo) = Z_inc(chan->rx.fifo,
 					*Z2_F2(chan->rx.fifo),
 					copied_octets);
+
+	chan->stats.rx_bytes += copied_octets;
 
 	hfc_card_unlock(card);
 
@@ -357,6 +299,8 @@ static ssize_t hfc_chan_samples_write(
 					*Z1_F1(chan->tx.fifo),
 					count);
 
+	chan->stats.rx_bytes += copied_octets;
+
 	hfc_card_unlock(card);
 
 	return copied_octets;
@@ -389,17 +333,16 @@ static int hfc_chan_connect_to(
 	if (visdn_chan->connected_chan)
 		return -EBUSY;
 
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
-//	struct hfc_chan_duplex *chan2 = visdn_chan2->priv;
-	struct hfc_card *card = chan->port->card;
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+	struct hfc_chan_duplex *chan2 = to_chan_duplex(visdn_chan2);
 
-	hfc_debug_card(card, 2, "Connecting chan %s to %s\n",
-		visdn_chan->device.bus_id,
+	hfc_debug_chan(chan, 2, "connecting to %s\n",
 		visdn_chan2->device.bus_id);
 
 	if (chan->id != B1 && chan->id != B2) {
-		hfc_msg(KERN_ERR, "Cannot connect %s to %s\n",
-			chan->name, to_chan_duplex(visdn_chan2)->name);
+		hfc_msg_chan(chan, KERN_ERR, "Cannot connect to %s\n",
+			chan2->name);
+
 		return -EINVAL;
 	}
 
@@ -416,10 +359,12 @@ static int hfc_chan_connect_to(
 
 static int hfc_chan_disconnect(struct visdn_chan *visdn_chan)
 {
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
+
 	if (!visdn_chan->connected_chan)
 		return 0;
 
-printk(KERN_INFO "hfc-4s chan %s disconnecting from %s\n",
+	hfc_debug_chan(chan, 2, "hfc-4s chan %s disconnecting from %s\n",
 		visdn_chan->device.bus_id,
 		visdn_chan->connected_chan->device.bus_id);
 

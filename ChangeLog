@@ -2,6 +2,23 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-08-31 04:52:25 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-109
+
+    Summary:
+      Added statistics and cleaned up rx/tx functions
+    Revision:
+      isdn--devel--0.1--patch-109
+
+    
+    
+
+    modified files:
+     ChangeLog hfc-4s/chan.c hfc-4s/chan.h hfc-4s/fifo.c
+     hfc-4s/fifo.h hfc-4s/fifo_inline.h hfc-pci/chan.c
+     hfc-pci/chan.h hfc-pci/fifo.c hfc-pci/fifo.h
+     hfc-pci/fifo_inline.h
+
+
 2005-08-31 03:22:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-108
 
     Summary:

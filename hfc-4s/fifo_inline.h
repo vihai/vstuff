@@ -15,6 +15,16 @@
 
 #include "card_inline.h"
 
+static inline void hfc_fifo_next_frame(struct hfc_fifo *fifo)
+{
+	struct hfc_card *card = fifo->card;
+
+	hfc_outb(card, hfc_A_INC_RES_FIFO,
+		hfc_A_INC_RES_FIFO_V_INC_F);
+
+	hfc_wait_busy(card);
+}
+
 static inline u16 Z_inc(struct hfc_fifo *fifo, u16 z, u16 inc)
 {
 	// declared as u32 in order to manage overflows

@@ -23,7 +23,7 @@ void hfc_fifo_clear_rx(struct hfc_fifo *fifo)
 	*Z2_F2(fifo) = *Z1_F2(fifo);
 }
 
-static void hfc_fifo_mem_read(struct hfc_fifo *fifo,
+void hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	int z_start,
 	void *data,
 	int size)
@@ -45,8 +45,9 @@ static void hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	}
 }
 
-void hfc_fifo_mem_write(struct hfc_fifo *fifo,
-	void *data, int size)
+void hfc_fifo_mem_write(
+	struct hfc_fifo *fifo,
+	const void *data, int size)
 {
 	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
 	if (octets_to_boundary >= size) {
@@ -130,93 +131,6 @@ void hfc_fifo_drop(struct hfc_fifo *fifo, int size)
 	*Z2_F2(fifo) = Z_inc(fifo, *Z2_F2(fifo), size);
 }
 
-int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size)
-{
-
-	if (*fifo->f1 == *fifo->f2) {
-		// nothing received, strange uh?
-		hfc_msg_fifo(fifo, KERN_WARNING,
-			"get_frame called with no frame in FIFO.\n");
-
-		return -1;
-	}
-
-	// frame_size includes CRC+CRC+STAT
-	int frame_size = hfc_fifo_get_frame_size(fifo);
-
-#ifdef DEBUG
-	if(debug_level == 3) {
-		hfc_msg_fifo(fifo, KERN_DEBUG,
-			"RX len %2d: ",
-			frame_size);
-	} else if(debug_level >= 4) {
-		hfc_msg_fifo(fifo, KERN_DEBUG,
-			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			*fifo->f1, *fifo->f2, *Z1_F2(fifo), *Z2_F2(fifo),
-			frame_size);
-	}
-
-	if(debug_level >= 3) {
-		int i;
-		for (i=0; i < frame_size; i++) {
-			printk("%02x", hfc_fifo_u8(fifo,
-				Z_inc(fifo, *Z2_F2(fifo), i)));
-		}
-
-		printk("\n"); 
-	}
-#endif
-
-	if (frame_size <= 0) {
-#ifdef DEBUG
-		if (debug_level >= 2) {
-			hfc_msg_fifo(fifo, KERN_DEBUG,
-				"invalid (empty) frame received.\n");
-		}
-#endif
-
-		hfc_fifo_drop_frame(fifo);
-		return -1;
-	}
-
-	// STAT is not really received
-//	fifo->bytes += frame_size - 1;
-
-	// Calculate beginning of the next frame
-	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
-
-	// We cannot use hfc_fifo_get because of different semantic of
-	// "available bytes" and to avoid useless increment of Z2
-	hfc_fifo_mem_read(fifo, *Z2_F2(fifo), data,
-		frame_size < max_size ? frame_size : max_size);
-
-	if (hfc_fifo_u8(fifo, Z_inc(fifo, *Z2_F2(fifo),
-		frame_size - 1)) != 0x00) {
-		// CRC not ok, frame broken, skipping
-#ifdef DEBUG
-		if(debug_level >= 2) {
-			hfc_msg_fifo(fifo, KERN_WARNING,
-				"Received frame with wrong CRC\n");
-		}
-#endif
-
-//		fifo->crc++;
-//		fifo->fifo->net_device_stats.rx_errors++;
-
-		hfc_fifo_drop_frame(fifo);
-		return -1;
-	}
-
-//	fifo->frames++;
-
-	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
-
-	// Set Z2 for the next frame we're going to receive
-	*Z2_F2(fifo) = newz2;
-
-	return frame_size;
-}
-
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 {
 
@@ -239,53 +153,6 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 	// Set Z2 for the next frame we're going to receive
 	*Z2_F2(fifo) = newz2;
-}
-
-void hfc_fifo_put_frame(struct hfc_fifo *fifo,
-		 void *data, int size)
-{
-#ifdef DEBUG
-	if (debug_level == 3) {
-		hfc_msg_fifo(fifo, KERN_DEBUG,
-			"TX len %2d: ",
-			size);
-	} else if (debug_level >= 4) {
-		hfc_msg_fifo(fifo, KERN_DEBUG,
-			"TX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			*fifo->f1, *fifo->f2, *Z1_F1(fifo), *Z2_F1(fifo),
-			size);
-	}
-
-	if (debug_level >= 3) {
-		int i;
-		for (i=0; i<size; i++)
-			printk("%02x",((u8 *)data)[i]);
-
-		printk("\n");
-	}
-#endif
-
-/*	int available_frames = hfc_fifo_free_frames(fifo);
-
-	if (available_frames >= fifo->f_num) {
-		hfc_msg_fifo(fifo, KERN_CRIT,
-			"TX FIFO total number of frames exceeded!\n");
-
-//		fifo->fifo_full++;
-
-		// FIFO RESET ?
-
-		return;
-	}*/
-
-	hfc_fifo_mem_write(fifo, data, size);
-
-	u16 newz1 = Z_inc(fifo, *Z1_F1(fifo), size);
-	*Z1_F1(fifo) = newz1;
-	*fifo->f1 = F_inc(fifo, *fifo->f1, 1);
-	*Z1_F1(fifo) = newz1;
-
-//	fifo->frames++;
 }
 
 void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
@@ -319,29 +186,33 @@ void hfc_fifo_rx_work(void *data)
 
 	struct hfc_chan_simplex *chan = fifo->connected_chan;
 	struct hfc_chan_duplex *fdchan = chan->chan;
+	struct hfc_card *card = fdchan->port->card;
+
+	down(&card->sem);
 
 	if (!hfc_fifo_has_frames(fifo))
 		goto no_frames;
 
+	// frame_size includes CRC+CRC+STAT
 	int frame_size = hfc_fifo_get_frame_size(fifo);
 
 	if (frame_size < 3) {
-		hfc_debug_fifo(fifo, 2,
+		hfc_debug_fifo(fifo, 3,
 			"invalid frame received, just %d octets\n",
 			frame_size);
 
-		hfc_fifo_drop_frame(fifo);
-
-		fdchan->net_device_stats.rx_dropped++;
+		fdchan->stats.rx_errors++;
+		fdchan->stats.rx_length_errors++;
 
 		goto err_invalid_frame;
+
 	} else if(frame_size == 3) {
-		hfc_debug_fifo(fifo, 2,
+		hfc_debug_fifo(fifo, 3,
 			"empty frame received\n");
 
-		hfc_fifo_drop_frame(fifo);
+		fdchan->stats.rx_errors++;
+		fdchan->stats.rx_length_errors++;
 
-		fdchan->net_device_stats.rx_dropped++;
 
 		goto err_empty_frame;
 	}
@@ -353,36 +224,96 @@ void hfc_fifo_rx_work(void *data)
 		hfc_msg_fifo(fifo, KERN_ERR,
 			"cannot allocate skb: frame dropped\n");
 
-		hfc_fifo_drop_frame(fifo);
-
-		fdchan->net_device_stats.rx_dropped++;
+		fdchan->stats.rx_dropped++;
 
 		goto err_alloc_skb;
 	}
 
-	if (hfc_fifo_get_frame(fifo,
+	// Calculate beginning of the next frame
+	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
+
+	// We cannot use hfc_fifo_get because of different semantic of
+	// "available bytes" and to avoid useless increment of Z2
+	hfc_fifo_mem_read(fifo, *Z2_F2(fifo),
 		skb_put(skb, frame_size - 3),
-		frame_size - 3) == -1) {
-		goto err_get_frame;
+		frame_size - 3);
+
+	struct { u8 crc[2], stat; } __attribute((packed)) stat;
+
+	hfc_fifo_mem_read(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 1),
+		&stat, sizeof(stat));
+
+#ifdef DEBUG
+	if(debug_level == 3) {
+		hfc_msg_fifo(fifo, KERN_DEBUG,
+			"RX len %2d: ",
+			frame_size);
+	} else if(debug_level >= 4) {
+		hfc_msg_fifo(fifo, KERN_DEBUG,
+			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
+			*fifo->f1, *fifo->f2, *Z1_F2(fifo), *Z2_F2(fifo),
+			frame_size);
 	}
 
-	fdchan->net_device_stats.rx_packets++;
-	fdchan->net_device_stats.rx_bytes += frame_size - 1;
+	if(debug_level >= 3) {
+		int i;
+		for (i=0; i < frame_size; i++) {
+			printk("%02x", hfc_fifo_u8(fifo,
+				Z_inc(fifo, *Z2_F2(fifo), i)));
+		}
+
+		printk("\n"); 
+	}
+#endif
+
+	if (stat.stat == 0xff) {
+		// Frame abort detected
+
+		hfc_debug_fifo(fifo, 3, "Frame abort detected\n");
+
+		fdchan->stats.rx_errors++;
+		fdchan->stats.collisions++;
+
+		goto err_frame_abort;
+
+	} else if (stat.stat != 0x00) {
+		// CRC not ok, frame broken, skipping
+
+		hfc_debug_fifo(fifo, 2, "Received frame with wrong CRC\n");
+
+		fdchan->stats.rx_errors++;
+		fdchan->stats.rx_crc_errors++;
+
+		goto err_crc_error;
+	}
+
+	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
+
+	// Set Z2 for the next frame we're going to receive
+	*Z2_F2(fifo) = newz2;
+
+	fdchan->stats.rx_packets++;
+	// STAT is not really received on wire
+	fdchan->stats.rx_bytes += frame_size - 1;
 
 	visdn_frame_rx(&fdchan->visdn_chan, skb);
 
 	goto all_went_well;
 
-err_get_frame:
+err_crc_error:
+err_frame_abort:
 	kfree_skb(skb);
 err_alloc_skb:
 err_empty_frame:
 err_invalid_frame:
+	hfc_fifo_drop_frame(fifo);
 no_frames:
 all_went_well:
 
 	if (hfc_fifo_has_frames(fifo))
 		schedule_work(&fifo->work);
+
+	up(&card->sem);
 }
 
 void hfc_fifo_init(

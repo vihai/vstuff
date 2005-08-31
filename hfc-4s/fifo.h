@@ -120,15 +120,18 @@ int hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	void *data, int size);
 int hfc_fifo_mem_read_to_user(struct hfc_fifo *fifo,
 	void __user *data, int size);
+void hfc_fifo_mem_write(struct hfc_fifo *fifo,
+	const void *data, int size);
+void hfc_fifo_mem_write_from_user(
+	struct hfc_fifo *fifo,
+	const void __user *data, int size);
 
 void hfc_fifo_clear_rx(struct hfc_fifo *fifo);
 void hfc_fifo_clear_tx(struct hfc_fifo *fifo);
 int hfc_fifo_get(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_put(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_drop(struct hfc_fifo *fifo, int size);
-int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size);
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo);
-void hfc_fifo_put_frame(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_init(
 	struct hfc_fifo *fifo,
 	struct hfc_card *card,

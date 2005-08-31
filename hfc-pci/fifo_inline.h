@@ -112,7 +112,12 @@ static inline u8 hfc_fifo_used_frames(struct hfc_fifo *fifo)
 
 static inline u8 hfc_fifo_free_frames(struct hfc_fifo *fifo)
 {
-	return (*fifo->f2 - *fifo->f1 + fifo->f_num) % fifo->f_num;
+	u8 free_frames = *fifo->f2 - *fifo->f1;
+
+	if (free_frames > 0)
+		return free_frames;
+	else
+		return free_frames + fifo->f_num;
 }
 
 #endif
