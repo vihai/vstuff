@@ -15,6 +15,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
+#include <linux/netdevice.h>
 #include <linux/device.h>
 #include <linux/list.h>
 
@@ -27,34 +28,34 @@ static dev_t vnd_first_dev;
 static struct cdev vnd_cdev;
 static struct class_device vnd_control_class_dev;
 
-struct hlist_head vnd_chan_index_hash[VND_CHAN_HASHSIZE];
+struct hlist_head vnd_netdevice_index_hash[VND_CHAN_HASHSIZE];
 
-static inline struct hlist_head *vnd_chan_index_get_hash(int index)
+static inline struct hlist_head *vnd_netdevice_index_get_hash(int index)
 {
-	return &vnd_chan_index_hash[index & (VND_CHAN_HASHSIZE - 1)];
+	return &vnd_netdevice_index_hash[index & (VND_CHAN_HASHSIZE - 1)];
 }
 
-struct vnd_chan *__vnd_chan_get_by_index(int index)
+struct vnd_netdevice *__vnd_netdevice_get_by_index(int index)
 {
 	struct hlist_node *t;
-	struct vnd_chan *vnd_chan;
+	struct vnd_netdevice *vnd_netdevice;
 
-	hlist_for_each_entry(vnd_chan, t, vnd_chan_index_get_hash(index),
+	hlist_for_each_entry(vnd_netdevice, t, vnd_netdevice_index_get_hash(index),
 			index_hlist_node) {
-		if (vnd_chan->index == index)
-			return vnd_chan;
+		if (vnd_netdevice->index == index)
+			return vnd_netdevice;
 	}
 
 	return NULL;
 }
 
-static int vnd_chan_new_index(void)
+static int vnd_netdevice_new_index(void)
 {
 	static int index;
 	for (;;) {
 		if (++index <= 0)
 			index = 1;
-		if (!__vnd_chan_get_by_index(index))
+		if (!__vnd_netdevice_get_by_index(index))
 			return index;
 	}
 }
@@ -63,9 +64,9 @@ struct visdn_port vnd_port;
 
 static void vnd_chan_release(struct visdn_chan *visdn_chan)
 {
-	struct vnd_chan *chan = to_vnd_chan(visdn_chan);
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
-	kfree(chan);
+	kfree(netdevice);
 }
 
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
@@ -84,24 +85,19 @@ static int vnd_chan_close(struct visdn_chan *visdn_chan)
 
 static int vnd_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *skb)
 {
-	struct vnd_chan *chan = to_vnd_chan(visdn_chan);
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
 	skb->protocol = htons(ETH_P_LAPD); // FIXME chan->protocol);
-	skb->dev = chan->netdev;
-	skb->pkt_type = PACKET_HOST;
+	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-/*	// Oh... this is the echo channel... redirect to D
-	// channel's netdev
-	if (fdchan->id == E) {
-		skb->protocol = htons(port->chans[D].protocol);
-		skb->dev = port->chans[D].netdev;
-		skb->pkt_type = PACKET_OTHERHOST;
-	} else {
-		skb->protocol = htons(fdchan->protocol);
-		skb->dev = fdchan->netdev;
+	if (visdn_chan == &netdevice->visdn_chan) {
 		skb->pkt_type = PACKET_HOST;
-	}*/
+	} else {
+		skb->pkt_type = PACKET_OTHERHOST;
+	}
+
+	netdevice->netdev->last_rx = jiffies;
 
 	return netif_rx(skb);
 }
@@ -111,6 +107,9 @@ static int vnd_chan_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
+	int err;
+
 	if (visdn_chan2->connected_chan ||
 	    visdn_chan->connected_chan)
 		return -EBUSY;
@@ -119,11 +118,30 @@ static int vnd_chan_connect_to(
 		visdn_chan->device.bus_id,
 		visdn_chan2->device.bus_id);
 
+	if (visdn_chan == &netdevice->visdn_chan) {
+		err = register_netdev(netdevice->netdev);
+		if(err) {
+			printk(KERN_CRIT
+				"Cannot register net device %s, aborting.\n",
+				netdevice->netdev->name);
+			goto err_register_netdev;
+		}
+	}
+
 	return 0;
+
+err_register_netdev:
+
+	return err;
 }
 
 static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 {
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
+
+	if (visdn_chan == &netdevice->visdn_chan)
+		unregister_netdev(netdevice->netdev);
+
 	if (!visdn_chan->connected_chan)
 		return 0;
 
@@ -136,23 +154,23 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 
 void vnd_chan_stop_queue(struct visdn_chan *visdn_chan)
 {
-	struct vnd_chan *chan = to_vnd_chan(visdn_chan);
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
-	netif_stop_queue(chan->netdev);
+	netif_stop_queue(netdevice->netdev);
 }
 
 void vnd_chan_start_queue(struct visdn_chan *visdn_chan)
 {
-	struct vnd_chan *chan = to_vnd_chan(visdn_chan);
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
-	netif_start_queue(chan->netdev);
+	netif_start_queue(netdevice->netdev);
 }
 
 void vnd_chan_wake_queue(struct visdn_chan *visdn_chan)
 {
-	struct vnd_chan *chan = to_vnd_chan(visdn_chan);
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
-	netif_wake_queue(chan->netdev);
+	netif_wake_queue(netdevice->netdev);
 }
 
 struct visdn_chan_ops vnd_chan_ops = {
@@ -177,18 +195,25 @@ struct visdn_chan_ops vnd_chan_ops = {
 
 static int vnd_netdev_open(struct net_device *netdev)
 {
-//	struct visdn_chan *chan = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
 
 	printk(KERN_INFO "vnd_netdev_open()\n");
 
-	return 0;
+	return visdn_open(netdevice->visdn_chan.connected_chan);
 }
 
 static int vnd_netdev_stop(struct net_device *netdev)
 {
-//	struct visdn_chan *chan = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
 
 	printk(KERN_INFO "vnd_netdev_stop()\n");
+
+	if (netdevice->visdn_chan.connected_chan)
+		visdn_close(netdevice->visdn_chan.connected_chan);
+
+	if (netdevice->visdn_chan_e.open &&
+	    netdevice->visdn_chan_e.connected_chan)
+		visdn_close(netdevice->visdn_chan_e.connected_chan);
 
 	return 0;
 }
@@ -197,14 +222,14 @@ static int vnd_netdev_frame_xmit(
 	struct sk_buff *skb,
 	struct net_device *netdev)
 {
-	struct vnd_chan *chan = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
 
 	netdev->trans_start = jiffies;
 
-	if (chan->visdn_chan.connected_chan &&
-	    chan->visdn_chan.connected_chan->ops->frame_xmit)
-		return chan->visdn_chan.connected_chan->ops->frame_xmit(
-				chan->visdn_chan.connected_chan, skb);
+	if (netdevice->visdn_chan.connected_chan &&
+	    netdevice->visdn_chan.connected_chan->ops->frame_xmit)
+		return netdevice->visdn_chan.connected_chan->ops->frame_xmit(
+				netdevice->visdn_chan.connected_chan, skb);
 
 	return -EOPNOTSUPP;
 }
@@ -213,32 +238,43 @@ static struct net_device_stats vnd_dummy_stats = { };
 
 static struct net_device_stats *vnd_netdev_get_stats(struct net_device *netdev)
 {
-	struct vnd_chan *chan = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
 
-	if (chan->visdn_chan.connected_chan &&
-	    chan->visdn_chan.connected_chan->ops->frame_xmit)
-		return chan->visdn_chan.connected_chan->ops->get_stats(
-				chan->visdn_chan.connected_chan);
+	if (netdevice->visdn_chan.connected_chan &&
+	    netdevice->visdn_chan.connected_chan->ops->frame_xmit)
+		return netdevice->visdn_chan.connected_chan->ops->get_stats(
+				netdevice->visdn_chan.connected_chan);
 
 	return &vnd_dummy_stats;
 }
 
 static void vnd_netdev_set_multicast_list(struct net_device *netdev)
 {
-//	struct vnd_chan *chan = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
 
-//	if(netdev->flags & IFF_PROMISC && !port->echo_enabled) {
-//	}
+	if (netdevice->visdn_chan_e.connected_chan) {
+
+		if((netdev->flags & IFF_PROMISC) &&
+		   !netdevice->visdn_chan_e.connected_chan->open) {
+
+			visdn_open(netdevice->visdn_chan_e.connected_chan);
+
+		} else if(!(netdev->flags & IFF_PROMISC) &&
+		          netdevice->visdn_chan_e.connected_chan->open) {
+
+			visdn_close(netdevice->visdn_chan_e.connected_chan);
+		}
+	}
 }
 
 static int vnd_netdev_do_ioctl(struct net_device *netdev,
 	struct ifreq *ifr, int cmd)
 {
-	struct vnd_chan *chan = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
 
-	if (chan->visdn_chan.ops->do_ioctl)
-		return chan->visdn_chan.ops->do_ioctl(
-				&chan->visdn_chan, ifr, cmd);
+	if (netdevice->visdn_chan.connected_chan->ops->do_ioctl)
+		return netdevice->visdn_chan.connected_chan->ops->do_ioctl(
+				netdevice->visdn_chan.connected_chan, ifr, cmd);
 	else
 		return -EOPNOTSUPP;
 }
@@ -273,95 +309,97 @@ ssize_t vnd_cdev_read(
 	if (vnd_read_done)
 		return 0;
 
-	struct vnd_chan *chan = NULL;
-	chan = kmalloc(sizeof(*chan), GFP_KERNEL);
-	if (!chan) {
+	struct vnd_netdevice *netdevice = NULL;
+	netdevice = kmalloc(sizeof(*netdevice), GFP_KERNEL);
+	if (!netdevice) {
 		err = -EFAULT;
 		goto err_kmalloc;
 	}
 
-	visdn_chan_init(&chan->visdn_chan, &vnd_chan_ops);
+	memset(netdevice, 0x00, sizeof(*netdevice));
 
-	chan->index = vnd_chan_new_index();
+	netdevice->index = vnd_netdevice_new_index();
+	hlist_add_head(&netdevice->index_hlist_node,
+			vnd_netdevice_index_get_hash(netdevice->index));
 
-	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = 0;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.flags = 0;
+	// Main chan
+	visdn_chan_init(&netdevice->visdn_chan, &vnd_chan_ops);
 
-	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_HDLC |
+	netdevice->visdn_chan.priv = netdevice;
+	netdevice->visdn_chan.autoopen = FALSE;
+	netdevice->visdn_chan.speed = 0;
+	netdevice->visdn_chan.role = VISDN_CHAN_ROLE_D;
+	netdevice->visdn_chan.roles = VISDN_CHAN_ROLE_D;
+
+	netdevice->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_HDLC |
 					     VISDN_CHAN_FRAMING_MTP;
-	chan->visdn_chan.framing_preferred = 0;
+	netdevice->visdn_chan.framing_preferred = 0;
 
-	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
-	chan->visdn_chan.bitorder_preferred = 0;
+	netdevice->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
+	netdevice->visdn_chan.bitorder_preferred = 0;
 
-//	err = sysfs_create_link(&chan->netdev->class_dev.kobj, &chan->class_dev.kobj, "visdn_chan");
+	// E-chan
+	visdn_chan_init(&netdevice->visdn_chan_e, &vnd_chan_ops);
 
-	hlist_add_head(&chan->index_hlist_node, vnd_chan_index_get_hash(chan->index));
+	netdevice->visdn_chan_e.priv = netdevice;
+	netdevice->visdn_chan_e.autoopen = FALSE;
+	netdevice->visdn_chan_e.speed = 0;
+	netdevice->visdn_chan_e.role = VISDN_CHAN_ROLE_D;
+	netdevice->visdn_chan_e.roles = VISDN_CHAN_ROLE_D;
+
+	netdevice->visdn_chan_e.framing_supported = VISDN_CHAN_FRAMING_HDLC |
+					     VISDN_CHAN_FRAMING_MTP;
+	netdevice->visdn_chan_e.framing_preferred = 0;
+
+	netdevice->visdn_chan_e.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
+	netdevice->visdn_chan_e.bitorder_preferred = 0;
 
 	char chanid[60];
-	snprintf(chanid, sizeof(chanid), "%d", chan->index);
 
-	// We need chan registered to register netddev but someone may use
-	// the channel before netdev is registered. This is a short race
-	// condition, we MAY be able to avoid just disabling preemption.
-	// Every callback is in user context except frame_tx but in order
-	// to call frame_tx the channel must be connected with connect_to
-	// which is in user context.
-	// Anyway, this needs further investigation
-
-	preempt_disable();
-
-	err = visdn_chan_register(&chan->visdn_chan, chanid, &vnd_port);
+	snprintf(chanid, sizeof(chanid), "%d", netdevice->index);
+	err = visdn_chan_register(&netdevice->visdn_chan, chanid, &vnd_port);
 	if (err < 0)
 		goto err_visdn_chan_register;
 
-	char ifname[60];
-	snprintf(ifname, sizeof(ifname), "visdn%dd", chan->index);
+	snprintf(chanid, sizeof(chanid), "%de", netdevice->index);
+	err = visdn_chan_register(&netdevice->visdn_chan_e, chanid, &vnd_port);
+	if (err < 0)
+		goto err_visdn_chan_e_register;
 
-	chan->netdev = alloc_netdev(0, ifname, setup_lapd);
-	if(!chan->netdev) {
+	char ifname[60];
+	snprintf(ifname, sizeof(ifname), "visdn%dd", netdevice->index);
+
+	netdevice->netdev = alloc_netdev(0, ifname, setup_lapd);
+	if(!netdevice->netdev) {
 		printk(KERN_CRIT
 			"net_device alloc failed, abort.\n");
 		err = -ENOMEM;
 		goto err_alloc_netdev;
 	}
 
-	chan->netdev->priv = chan;
-	chan->netdev->open = vnd_netdev_open;
-	chan->netdev->stop = vnd_netdev_stop;
-	chan->netdev->hard_start_xmit = vnd_netdev_frame_xmit;
-	chan->netdev->get_stats = vnd_netdev_get_stats;
-	chan->netdev->set_multicast_list = vnd_netdev_set_multicast_list;
-	chan->netdev->do_ioctl = vnd_netdev_do_ioctl;
-	chan->netdev->features = NETIF_F_NO_CSUM;
+	netdevice->netdev->priv = netdevice;
+	netdevice->netdev->open = vnd_netdev_open;
+	netdevice->netdev->stop = vnd_netdev_stop;
+	netdevice->netdev->hard_start_xmit = vnd_netdev_frame_xmit;
+	netdevice->netdev->get_stats = vnd_netdev_get_stats;
+	netdevice->netdev->set_multicast_list = vnd_netdev_set_multicast_list;
+	netdevice->netdev->do_ioctl = vnd_netdev_do_ioctl;
+	netdevice->netdev->features = NETIF_F_NO_CSUM;
 
-	chan->netdev->mtu = 200;
-//	chan->netdev->mtu = chan->tx.fifo_size;
+	netdevice->netdev->mtu = 200;
+//	netdevice->netdev->mtu = netdevice->tx.fifo_size;
 
-	memset(chan->netdev->dev_addr, 0x00, sizeof(chan->netdev->dev_addr));
+	memset(netdevice->netdev->dev_addr, 0x00, sizeof(netdevice->netdev->dev_addr));
 
-	SET_MODULE_OWNER(chan->netdev);
-	SET_NETDEV_DEV(chan->netdev, &chan->visdn_chan.device);
+	SET_MODULE_OWNER(netdevice->netdev);
+	SET_NETDEV_DEV(netdevice->netdev, &netdevice->visdn_chan.device);
 
-	chan->netdev->irq = 0;
-	chan->netdev->base_addr = 0;
-
-	err = register_netdev(chan->netdev);
-	if(err) {
-		printk(KERN_CRIT
-			"Cannot register net device %s, aborting.\n",
-			chan->netdev->name);
-		goto err_register_netdev;
-	}
-
-	preempt_enable();
+	netdevice->netdev->irq = 0;
+	netdevice->netdev->base_addr = 0;
 
 	char busid[30];
 	int len = snprintf(busid, sizeof(busid), "%s\n",
-		chan->visdn_chan.device.bus_id);
+		netdevice->visdn_chan.device.bus_id);
 
 	if (copy_to_user(buf, busid, len)) {
 		err = -EFAULT;
@@ -373,13 +411,14 @@ ssize_t vnd_cdev_read(
 	return len;
 
 err_copy_to_user:
-	visdn_chan_unregister(&chan->visdn_chan);
+	visdn_chan_unregister(&netdevice->visdn_chan_e);
+err_visdn_chan_e_register:
+	visdn_chan_unregister(&netdevice->visdn_chan);
 err_visdn_chan_register:
-	unregister_netdev(chan->netdev);
-err_register_netdev:
-	free_netdev(chan->netdev);
+	free_netdev(netdevice->netdev);
 err_alloc_netdev:
-	kfree(chan);
+	kfree(netdevice);
+//	hlist_del(); FIXME
 err_kmalloc:
 
 	return err;
@@ -420,8 +459,8 @@ static int __init vnd_init_module(void)
 	printk(KERN_INFO vnd_MODULE_DESCR " loading\n");
 
 	int i;
-	for (i=0; i< ARRAY_SIZE(vnd_chan_index_hash); i++) {
-		INIT_HLIST_HEAD(&vnd_chan_index_hash[i]);
+	for (i=0; i< ARRAY_SIZE(vnd_netdevice_index_hash); i++) {
+		INIT_HLIST_HEAD(&vnd_netdevice_index_hash[i]);
 	}
 
 	visdn_port_init(&vnd_port, &vnd_port_ops);
@@ -483,18 +522,17 @@ module_init(vnd_init_module);
 static void __exit vnd_module_exit(void)
 {
 	struct hlist_node *t;
-	struct vnd_chan *chan;
+	struct vnd_netdevice *netdevice;
 
 	int i;
-	for (i=0; i<ARRAY_SIZE(vnd_chan_index_hash); i++) {
-		hlist_for_each_entry(chan, t, &vnd_chan_index_hash[i],
+	for (i=0; i<ARRAY_SIZE(vnd_netdevice_index_hash); i++) {
+		hlist_for_each_entry(netdevice, t, &vnd_netdevice_index_hash[i],
 				index_hlist_node) {
 
-			visdn_chan_unregister(&chan->visdn_chan);
-			unregister_netdev(chan->netdev);
-			//free_netdev(chan->netdev);
+			visdn_chan_unregister(&netdevice->visdn_chan);
+			visdn_chan_unregister(&netdevice->visdn_chan_e);
 
-			//kfree(chan);
+			free_netdev(netdevice->netdev);
 		}
 	}
 

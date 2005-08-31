@@ -6,7 +6,7 @@ General:
 
 Build system:
 
-- Check if the kernel source tree has been correctly prepare (make/makei
+- Check if the kernel source tree has been correctly prepare (make/make
   modules_prepare)
 - Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and complain
   about non-standard directory location
@@ -42,8 +42,7 @@ timer:
 
 visdn_core
 
-- Complete PPP support
-
+-
 
 lapd
 
@@ -93,31 +92,14 @@ lapd
 
 visdn-netdev:
 
-- Implement E-channel sniffing
-- Use a device for "connect" method, it is much safer than a sysfs attribute
+- Implement protocol attribute
+- We are not locking!!!
 
 hfc-4s
 
-- We may be able to avoid interrupt disabling in hfc-4s by removing every
-  hardware access from the interrupt handler and serializing accesses to
-  hardware with semaphores.
-
-- Implement E-channel sniffing
-
-- Fix counters
-
 hfc-pci
 
-- Fix counters
-- Add wake_queue
-- When DTX fifo becomes full "TX FIFO full, throttling" and then the output
-  queue is stopped. We sould call wake somewhere
-
-
-
-
-
-
+-
 
 Some ideas for me...
 

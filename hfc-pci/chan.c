@@ -23,7 +23,8 @@
 static int hfc_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
-	struct hfc_card *card = chan->port->card;
+	struct hfc_st_port *port = chan->port;
+	struct hfc_card *card = port->card;
 
 	int err;
 
@@ -47,6 +48,12 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	}
 
 	if (chan->id == D) {
+		chan->rx.fifo = &card->fifos[D][RX];
+		chan->rx.fifo->connected_chan = &chan->rx;
+
+		chan->tx.fifo = &card->fifos[D][TX];
+		chan->tx.fifo->connected_chan = &chan->tx;
+
 		chan->port->card->regs.mst_emod &= ~hfc_MST_EMOD_D_MASK;
 		chan->port->card->regs.mst_emod |=
 			hfc_MST_EMOD_D_HFC_from_ST |
@@ -59,6 +66,12 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		chan->port->card->regs.m1 |= hfc_INT_M1_DREC | hfc_INT_M1_DTRANS;
 	} else if (chan->id == B1 || chan->id == B2) {
 		if (chan->id == B1) {
+			chan->rx.fifo = &card->fifos[B1][RX];
+			chan->rx.fifo->connected_chan = &chan->rx;
+
+			chan->tx.fifo = &card->fifos[B1][TX];
+			chan->tx.fifo->connected_chan = &chan->tx;
+
 			if (chan->visdn_chan.framing_current ==
 					VISDN_CHAN_FRAMING_TRANS) {
 				chan->port->card->regs.ctmt |= hfc_CTMT_TRANSB1;
@@ -76,6 +89,12 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			chan->port->card->regs.fifo_en |= hfc_FIFO_EN_B1;
 			chan->port->card->regs.m1 |= hfc_INT_M1_B1REC | hfc_INT_M1_B1TRANS;
 		} else {
+			chan->rx.fifo = &card->fifos[B2][RX];
+			chan->rx.fifo->connected_chan = &chan->rx;
+
+			chan->tx.fifo = &card->fifos[B2][TX];
+			chan->tx.fifo->connected_chan = &chan->tx;
+
 			if (chan->visdn_chan.framing_current ==
 					VISDN_CHAN_FRAMING_TRANS) {
 				chan->port->card->regs.ctmt |= hfc_CTMT_TRANSB2;
@@ -93,22 +112,65 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			chan->port->card->regs.m1 |= hfc_INT_M1_B2REC | hfc_INT_M1_B2TRANS;
 			chan->port->card->regs.fifo_en |= hfc_FIFO_EN_B2;
 		}
+	} else if (chan->id == E) {
 
-		hfc_outb(card, hfc_CONNECT, chan->port->card->regs.connect);
-		hfc_outb(card, hfc_CTMT, chan->port->card->regs.ctmt);
+		if (port->chans[B2].status == HFC_CHAN_STATUS_FREE) {
+			port->chans[B2].status = HFC_CHAN_STATUS_OPEN_E_AUX;
+
+			chan->rx.fifo = &card->fifos[B2][RX];
+			chan->rx.fifo->connected_chan = &chan->rx;
+
+			chan->port->card->regs.connect &= hfc_CONNECT_B2_MASK;
+			chan->port->card->regs.connect |=
+				hfc_CONNECT_B2_HFC_from_ST |
+				hfc_CONNECT_B2_ST_from_HFC |
+				hfc_CONNECT_B2_GCI_from_HFC;
+
+			chan->port->card->regs.m1 |= hfc_INT_M1_B2REC;
+			chan->port->card->regs.fifo_en |= hfc_FIFO_EN_B2;
+			chan->port->card->regs.ctmt &= ~hfc_CTMT_TRANSB2;
+
+		} else if(port->chans[B1].status == HFC_CHAN_STATUS_FREE) {
+
+			// We should switch B1/B2
+
+			hfc_debug_chan(chan, 1, "B2 channel busy\n");
+
+			err = -EBUSY;
+			goto err_busy;
+
+		} else {
+			hfc_debug_chan(chan, 1, "No B channel available for E AUX\n");
+
+			err = -EBUSY;
+			goto err_busy;
+		}
+
+		card->regs.trm |= hfc_TRM_ECHO;
+
+	} else {
+		return -EINVAL;
 	}
 
 	hfc_outb(card, hfc_FIFO_EN, chan->port->card->regs.fifo_en);
 	hfc_outb(card, hfc_INT_M1, chan->port->card->regs.m1);
+	hfc_outb(card, hfc_CONNECT, chan->port->card->regs.connect);
+	hfc_outb(card, hfc_CTMT, chan->port->card->regs.ctmt);
+	hfc_outb(card, hfc_TRM, chan->port->card->regs.trm);
 
-	hfc_fifo_set_bit_order(
-		chan->rx.fifo,
-		chan->visdn_chan.bitorder_current ==
-			VISDN_CHAN_BITORDER_MSB);
-	hfc_fifo_set_bit_order(
-		chan->tx.fifo,
-		chan->visdn_chan.bitorder_current ==
-			VISDN_CHAN_BITORDER_MSB);
+	if (chan->rx.fifo) {
+		hfc_fifo_set_bit_order(
+			chan->rx.fifo,
+			chan->visdn_chan.bitorder_current ==
+				VISDN_CHAN_BITORDER_MSB);
+	}
+
+	if (chan->tx.fifo) {
+		hfc_fifo_set_bit_order(
+			chan->tx.fifo,
+			chan->visdn_chan.bitorder_current ==
+				VISDN_CHAN_BITORDER_MSB);
+	}
 
 	hfc_st_port_update_sctrl(chan->port);
 	hfc_st_port_update_sctrl_r(chan->port);
@@ -121,6 +183,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 	return 0;
 
+err_busy:
 	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
 err_channel_busy:
@@ -154,10 +217,23 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	} else if (chan->id == D) {
 		chan->port->card->regs.fifo_en &= ~hfc_FIFO_EN_DTX;
 		chan->port->card->regs.m1 &= ~(hfc_INT_M1_DREC | hfc_INT_M1_DTRANS);
+	} else if (chan->id == E) {
+		card->regs.trm &= ~hfc_TRM_ECHO;
 	}
 
 	hfc_outb(card, hfc_FIFO_EN, chan->port->card->regs.fifo_en);
 	hfc_outb(card, hfc_INT_M1, chan->port->card->regs.m1);
+	hfc_outb(card, hfc_TRM, chan->port->card->regs.trm);
+
+	if (chan->rx.fifo) {
+		chan->rx.fifo->connected_chan = NULL;
+		chan->rx.fifo = NULL;
+	}
+
+	if (chan->tx.fifo) {
+		chan->tx.fifo->connected_chan = NULL;
+		chan->tx.fifo = NULL;
+	}
 
 	hfc_card_unlock(card);
 
@@ -393,9 +469,7 @@ void hfc_chan_init(
 	int hw_index,
 	int speed,
 	int role,
-	int roles,
-	struct hfc_fifo *fifo_rx,
-	struct hfc_fifo *fifo_tx)
+	int roles)
 {
 	chan->port = port;
 	chan->name = name;
@@ -405,22 +479,19 @@ void hfc_chan_init(
 
 	chan->rx.chan = chan;
 	chan->rx.direction = RX;
-	chan->rx.fifo = fifo_rx;
-	if (fifo_rx)
-		fifo_rx->connected_chan = &chan->rx;
+	chan->rx.fifo = NULL;
 
 	chan->tx.chan = chan;
 	chan->tx.direction = TX;
-	chan->tx.fifo = fifo_tx;
-	if (fifo_tx)
-		fifo_tx->connected_chan = &chan->tx;
+	chan->tx.fifo = NULL;
 
 	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
+
+	chan->visdn_chan.autoopen = TRUE;
 	chan->visdn_chan.priv = chan;
 	chan->visdn_chan.speed = speed;
 	chan->visdn_chan.role = role;
 	chan->visdn_chan.roles = roles;
-	chan->visdn_chan.flags = 0;
 
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;

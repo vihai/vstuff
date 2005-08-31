@@ -192,19 +192,14 @@ void hfc_st_port_init(
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 
 	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF,
-		16000, VISDN_CHAN_ROLE_D, VISDN_CHAN_ROLE_D,
-		&card->fifos[D][RX], &card->fifos[D][TX]);
+		16000, VISDN_CHAN_ROLE_D, VISDN_CHAN_ROLE_D);
 	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF,
-		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B,
-		&card->fifos[B1][RX], &card->fifos[B1][TX]);
+		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B);
 	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF,
-		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B,
-		&card->fifos[B2][RX], &card->fifos[B2][TX]);
+		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B);
 	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF,
-		16000, VISDN_CHAN_ROLE_E, VISDN_CHAN_ROLE_E,
-		NULL, NULL);
+		16000, VISDN_CHAN_ROLE_E, VISDN_CHAN_ROLE_E);
 	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
-		4000, VISDN_CHAN_ROLE_S, VISDN_CHAN_ROLE_S,
-		NULL, NULL);
+		4000, VISDN_CHAN_ROLE_S, VISDN_CHAN_ROLE_S);
 }
 

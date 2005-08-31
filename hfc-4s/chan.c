@@ -61,6 +61,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_allocate_fifo_rx;
 	}
 
+	chan->rx.fifo = fifo_rx;
+	fifo_rx->connected_chan = &chan->rx;
+
 	if (chan->id != E) {
 		struct hfc_fifo *fifo_tx;
 		fifo_tx = hfc_allocate_fifo(card, TX);
@@ -73,43 +76,38 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		fifo_tx->connected_chan = &chan->tx;
 	}
 
-	chan->rx.fifo = fifo_rx;
-	fifo_rx->connected_chan = &chan->rx;
-
 	hfc_upload_fsm(card);
 
-	// ------------- RX -----------------------------
+	if (chan->rx.fifo) {
+		hfc_fifo_set_bit_order(
+			chan->rx.fifo,
+			chan->visdn_chan.bitorder_current ==
+				VISDN_CHAN_BITORDER_MSB);
 
-	hfc_fifo_set_bit_order(
-		chan->rx.fifo,
-		chan->visdn_chan.bitorder_current ==
-			VISDN_CHAN_BITORDER_MSB);
+		hfc_fifo_select(chan->rx.fifo);
+		hfc_fifo_reset(chan->rx.fifo);
 
-	hfc_fifo_select(chan->rx.fifo);
-	hfc_fifo_reset(chan->rx.fifo);
+		if (chan->visdn_chan.framing_current ==
+				VISDN_CHAN_FRAMING_TRANS) {
 
-	if (chan->visdn_chan.framing_current ==
-			VISDN_CHAN_FRAMING_TRANS) {
+			hfc_outb(card, hfc_A_CON_HDLC,
+				hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
+				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
+				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
 
-		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+		} else if (chan->visdn_chan.framing_current ==
+				VISDN_CHAN_FRAMING_HDLC) {
 
-	} else if (chan->visdn_chan.framing_current ==
-			VISDN_CHAN_FRAMING_HDLC) {
+			hfc_outb(card, hfc_A_CON_HDLC,
+				hfc_A_CON_HDCL_V_IFF|
+				hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
+				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+		}
 
-		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_IFF|
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+		hfc_outb(card, hfc_A_IRQ_MSK,
+			hfc_A_IRQ_MSK_V_IRQ);
 	}
-
-	hfc_outb(card, hfc_A_IRQ_MSK,
-		hfc_A_IRQ_MSK_V_IRQ);
-
-	// ------------- TX -----------------------------
 
 	if (chan->tx.fifo) {
 		hfc_fifo_set_bit_order(
@@ -155,9 +153,11 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 	return 0;
 
-	hfc_deallocate_fifo(chan->tx.fifo);
+	if (chan->tx.fifo)
+		hfc_deallocate_fifo(chan->tx.fifo);
 err_allocate_fifo_tx:
-	hfc_deallocate_fifo(chan->rx.fifo);
+	if (chan->rx.fifo)
+		hfc_deallocate_fifo(chan->rx.fifo);
 err_allocate_fifo_rx:
 	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
@@ -182,35 +182,35 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_st_port_update_st_ctrl_0(chan->port);
 	hfc_st_port_update_st_ctrl_2(chan->port);
 
-	// RX
-	hfc_fifo_select(chan->rx.fifo);
-	hfc_fifo_reset(chan->rx.fifo);
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_IFF|
-		hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-	hfc_outb(card, hfc_A_IRQ_MSK, 0);
-
-	// TX
-	hfc_fifo_select(chan->tx.fifo);
-	hfc_fifo_reset(chan->tx.fifo);
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_IFF|
-		hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
-
-	hfc_outb(card, hfc_A_IRQ_MSK, 0);
-
 	if (chan->rx.fifo) {
+		// RX
+		hfc_fifo_select(chan->rx.fifo);
+		hfc_fifo_reset(chan->rx.fifo);
+		hfc_outb(card, hfc_A_CON_HDLC,
+			hfc_A_CON_HDCL_V_IFF|
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
+
+		hfc_outb(card, hfc_A_IRQ_MSK, 0);
+
 		hfc_deallocate_fifo(chan->rx.fifo);
 		chan->rx.fifo->connected_chan = NULL;
 		chan->rx.fifo = NULL;
 	}
 
 	if (chan->tx.fifo) {
+		// TX
+		hfc_fifo_select(chan->tx.fifo);
+		hfc_fifo_reset(chan->tx.fifo);
+		hfc_outb(card, hfc_A_CON_HDLC,
+			hfc_A_CON_HDCL_V_IFF|
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
+
+		hfc_outb(card, hfc_A_IRQ_MSK, 0);
+
 		hfc_deallocate_fifo(chan->tx.fifo);
 		chan->tx.fifo->connected_chan = NULL;
 		chan->tx.fifo = NULL;
@@ -676,11 +676,12 @@ void hfc_chan_init(
 	chan->tx.direction = TX;
 
 	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
+
+	chan->visdn_chan.autoopen = TRUE;
 	chan->visdn_chan.priv = chan;
 	chan->visdn_chan.speed = speed;
 	chan->visdn_chan.role = role;
 	chan->visdn_chan.roles = roles;
-	chan->visdn_chan.flags = 0;
 
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;

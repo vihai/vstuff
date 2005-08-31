@@ -106,10 +106,14 @@ struct visdn_chan
 
 	void *priv;
 
+	int open;
+
+	// Add MTU and speed negotiation
+
+	int autoopen;
 	int speed;
 	int role;
 	int roles;
-	int flags;
 
 	int framing_current;
 	int framing_supported;

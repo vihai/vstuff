@@ -17,11 +17,15 @@
 #include "port.h"
 #include "timer.h"
 
-#define VISDN_SET_BEARER        SIOCDEVPRIVATE
-#define VISDN_PPP_GET_CHAN      (SIOCDEVPRIVATE+1)
-#define VISDN_PPP_GET_UNIT      (SIOCDEVPRIVATE+2)
-
 #ifdef __KERNEL__
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
 
 extern dev_t visdn_first_dev;
 extern struct device visdn_system_device;
@@ -37,6 +41,46 @@ static inline struct sk_buff *visdn_alloc_skb(unsigned int length)
 static inline void visdn_kfree_skb(struct sk_buff *skb)
 {
 	kfree_skb(skb);
+}
+
+static inline int visdn_open(struct visdn_chan *chan)
+{
+	int err = 0;
+
+	if (chan->open) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	if (chan->ops->open)
+		err = chan->ops->open(chan);
+
+	if (err < 0)
+		return err;
+
+	chan->open = TRUE;
+
+	return 0;
+}
+
+static inline int visdn_close(struct visdn_chan *chan)
+{
+	int err = 0;
+
+	if (!chan->open) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	if (chan->ops->close)
+		err = chan->ops->close(chan);
+
+	if (err < 0)
+		return err;
+
+	chan->open = FALSE;
+
+	return 0;
 }
 
 static inline void visdn_stop_queue(struct visdn_chan *chan)
@@ -70,20 +114,6 @@ static inline void visdn_frame_input_error(struct visdn_chan *chan, int code)
 		chan->connected_chan->ops->frame_input_error(
 			chan->connected_chan, code);
 }
-
-/*
-enum visdn_bearertype
-{
-        VISDN_BT_VOICE  = 1,
-        VISDN_BT_PPP    = 2,
-};
-
-struct visdn_setbearer
-{
-        int sb_index;
-        enum sb_bearertype sb_bearertype;
-};
-*/
 
 #endif
 

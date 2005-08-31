@@ -123,8 +123,6 @@ void hfc_chan_init(
 	int hw_index,
 	int speed,
 	int role,
-	int roles,
-	struct hfc_fifo *fifo_tx,
-	struct hfc_fifo *fifo_rx);
+	int roles);
 
 #endif

@@ -16,7 +16,11 @@
 #include <visdn.h>
 
 #include "chan.h"
-//#include "fifo.h"
+
+#define hfc_D_CHAN_OFF 2
+#define hfc_B1_CHAN_OFF 0
+#define hfc_B2_CHAN_OFF 1
+#define hfc_E_CHAN_OFF 3
 
 #define to_st_port(port) container_of(port, struct hfc_st_port, visdn_port)
 

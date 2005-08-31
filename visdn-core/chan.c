@@ -256,11 +256,10 @@ int visdn_connect(
 		&chan1->device.kobj,
 		"connected");
 
-	if (chan1->ops->open)
-		chan1->ops->open(chan1);
-
-	if (chan2->ops->open)
-		chan2->ops->open(chan2);
+	if (chan1->autoopen && chan2->autoopen) {
+		visdn_open(chan1);
+		visdn_open(chan2);
+	}
 
 	return 0;
 }
@@ -288,11 +287,11 @@ int visdn_disconnect(
 	chan2->connected_chan = NULL;
 	put_device(&chan1->device);
 
-	if (chan1->ops->close)
-		chan1->ops->close(chan1);
+	if (chan1->open)
+		visdn_close(chan1);
 
-	if (chan2->ops->close)
-		chan2->ops->close(chan2);
+	if (chan2->open)
+		visdn_close(chan2);
 
 	return 0;
 }
@@ -451,25 +450,19 @@ static DEVICE_ATTR(bitorder, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
-static ssize_t visdn_chan_show_flags(
+static ssize_t visdn_chan_show_autoopen(
 	struct device *device,
 	char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "0x%x\n",
-		to_visdn_chan(device)->flags);
+	struct visdn_chan *chan = to_visdn_chan(device);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		chan->autoopen ? 1 : 0);
 }
 
-static ssize_t visdn_chan_store_flags(
-	struct device *device,
-	const char *buf,
-	size_t count)
-{
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(flags, S_IRUGO | S_IWUSR,
-		visdn_chan_show_flags,
-		visdn_chan_store_flags);
+static DEVICE_ATTR(autoopen, S_IRUGO,
+		visdn_chan_show_autoopen,
+		NULL);
 
 //----------------------------------------------------------------------------
 
@@ -538,7 +531,7 @@ int visdn_chan_register(
 
 	err = device_create_file(
 			&chan->device,
-			&dev_attr_flags);
+			&dev_attr_autoopen);
 	if (err < 0)
 		goto err_device_create_file;
 

@@ -215,9 +215,6 @@
 #define hfc_D_SEND		0xF8
 #define hfc_E_REC		0xFC
 
-
-
-
 /* bits in the __SSL and __RSL registers */
 #define	hfc_SRSL_STIO		0x40
 #define hfc_SRSL_ENABLE		0x80

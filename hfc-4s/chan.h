@@ -17,11 +17,6 @@
 
 #include "util.h"
 
-#define hfc_D_CHAN_OFF 2
-#define hfc_B1_CHAN_OFF 0
-#define hfc_B2_CHAN_OFF 1
-#define hfc_E_CHAN_OFF 3
-
 #define to_chan_duplex(chan) container_of(chan, struct hfc_chan_duplex, visdn_chan)
 
 #ifdef DEBUG

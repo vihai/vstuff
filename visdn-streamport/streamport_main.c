@@ -140,10 +140,10 @@ int vsp_cdev_open(
 	chan->index = vsp_chan_new_index();
 
 	chan->visdn_chan.priv = chan;
+	chan->visdn_chan.autoopen = FALSE;
 	chan->visdn_chan.speed = 0;
 	chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
 	chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.flags = 0;
 
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS;
 	chan->visdn_chan.framing_preferred = VISDN_CHAN_FRAMING_TRANS;
@@ -179,6 +179,11 @@ int vsp_cdev_release(
 	BUG_ON(!file->private_data);
 
 	struct vsp_chan *chan = file->private_data;
+
+	if (chan->visdn_chan.connected_chan &&
+	    chan->visdn_chan.connected_chan->ops->close)
+		chan->visdn_chan.connected_chan->ops->close(
+			chan->visdn_chan.connected_chan);
 
 	visdn_chan_unregister(&chan->visdn_chan);
 
@@ -238,9 +243,6 @@ static inline int visdn_cdev_do_ioctl_connect(
 	int err;
 
 	struct vsp_chan *chan = file->private_data;
-	struct visdn_chan *chan1 = &chan->visdn_chan;
-
-	BUG_ON(!chan1);
 
 	struct visdn_connect connect;
 
@@ -249,36 +251,36 @@ static inline int visdn_cdev_do_ioctl_connect(
 		goto err_copy_from_user;
 	}
 
-	printk(KERN_INFO "ioctl(IOC_CONNECT, '%s', '%s')\n",
+	printk(KERN_DEBUG "ioctl(IOC_CONNECT, '%s', '%s')\n",
 		connect.src_chanid,
 		connect.dst_chanid);
 
-	struct visdn_chan *chan2 = visdn_search_chan(connect.dst_chanid);
-	if (!chan2) {
+	struct visdn_chan *visdn_chan2 = visdn_search_chan(connect.dst_chanid);
+	if (!visdn_chan2) {
 		err = -ENODEV;
 		goto err_search_dst;
 	}
 
-	printk(KERN_ERR "chan2 found, %s %p %p \n",chan2->device.bus_id, chan2, chan2->ops);
-
-	if (chan1 == chan2) {
+	if (visdn_chan2 == &chan->visdn_chan) {
 		err = -EINVAL;
 		goto err_connect_self;
 	}
 
-	err = visdn_connect(chan1, chan2, connect.flags);
+	err = visdn_connect(&chan->visdn_chan, visdn_chan2, connect.flags);
 	if (err < 0)
 		goto err_connect;
 
+	visdn_open(chan->visdn_chan.connected_chan);
+
 	// Release reference returned by visdn_search_chan()
-	put_device(&chan2->device);
+	put_device(&visdn_chan2->device);
 
 	return 0;
 
 //	visdn_disconnect()
 err_connect:
 err_connect_self:
-	put_device(&chan2->device);
+	put_device(&visdn_chan2->device);
 err_search_dst:
 err_copy_from_user:
 

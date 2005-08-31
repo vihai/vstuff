@@ -27,9 +27,7 @@
 #define VND_CHAN_HASHBITS 8
 #define VND_CHAN_HASHSIZE (1 << VND_CHAN_HASHBITS)
 
-#define to_vnd_chan(visdn_chan) container_of(visdn_chan, struct vnd_chan, visdn_chan)
-
-struct vnd_chan
+struct vnd_netdevice
 {
 	int index;
 	struct hlist_node index_hlist_node;
@@ -37,6 +35,7 @@ struct vnd_chan
 	struct net_device *netdev;
 
 	struct visdn_chan visdn_chan;
+	struct visdn_chan visdn_chan_e;
 };
 
 #endif

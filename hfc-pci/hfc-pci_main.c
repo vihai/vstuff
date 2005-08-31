@@ -166,12 +166,14 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 {
-	schedule_work(&fifo->work);
+	if (fifo->connected_chan)
+		schedule_work(&fifo->work);
 }
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
-	visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
+	if (fifo->connected_chan)
+		visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
 }
 
 static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
@@ -233,47 +235,29 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			hfc_handle_state_interrupt(&card->st_port);
 		}
 
-		if (s1 & hfc_INT_S1_DREC) {
-			// D chan RX (bit 5)
-			if (card->st_port.chans[D].rx.fifo)
-				hfc_handle_fifo_rx_interrupt(
-					card->st_port.chans[D].rx.fifo);
-		}
+		// D chan RX (bit 5)
+		if (s1 & hfc_INT_S1_DREC)
+			hfc_handle_fifo_rx_interrupt(&card->fifos[D][RX]);
 
-		if (s1 & hfc_INT_S1_B1REC) {
-			// B1 chan RX (bit 3)
-			if (card->st_port.chans[B1].rx.fifo)
-				hfc_handle_fifo_rx_interrupt(
-					card->st_port.chans[B1].rx.fifo);
-		}
+		// B1 chan RX (bit 3)
+		if (s1 & hfc_INT_S1_B1REC)
+			hfc_handle_fifo_rx_interrupt(&card->fifos[B2][RX]);
 
-		if (s1 & hfc_INT_S1_B2REC) {
-			// B2 chan RX (bit 4)
-			if (card->st_port.chans[B2].rx.fifo)
-				hfc_handle_fifo_rx_interrupt(
-					card->st_port.chans[B2].rx.fifo);
-		}
+		// B2 chan RX (bit 4)
+		if (s1 & hfc_INT_S1_B2REC)
+			hfc_handle_fifo_rx_interrupt(&card->fifos[B2][RX]);
 
-		if (s1 & hfc_INT_S1_DTRANS) {
-			// D chan TX (bit 2)
-			if (card->st_port.chans[D].rx.fifo)
-				hfc_handle_fifo_tx_interrupt(
-					card->st_port.chans[D].rx.fifo);
-		}
+		// D chan TX (bit 2)
+		if (s1 & hfc_INT_S1_DTRANS)
+			hfc_handle_fifo_tx_interrupt(&card->fifos[D][TX]);
 
-		if (s1 & hfc_INT_S1_B1TRANS) {
-			// B1 chan TX (bit 0)
-			if (card->st_port.chans[B1].rx.fifo)
-				hfc_handle_fifo_tx_interrupt(
-					card->st_port.chans[B1].rx.fifo);
-		}
+		// B1 chan TX (bit 0)
+		if (s1 & hfc_INT_S1_B1TRANS)
+			hfc_handle_fifo_tx_interrupt(&card->fifos[B1][TX]);
 
-		if (s1 & hfc_INT_S1_B2TRANS) {
-			// B2 chan TX (bit 1)
-			if (card->st_port.chans[B2].rx.fifo)
-				hfc_handle_fifo_tx_interrupt(
-					card->st_port.chans[B2].rx.fifo);
-		}
+		// B2 chan TX (bit 1)
+		if (s1 & hfc_INT_S1_B2TRANS)
+			hfc_handle_fifo_tx_interrupt(&card->fifos[B2][TX]);
 	}
 
 	if (s2 != 0) {
