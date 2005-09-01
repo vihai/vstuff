@@ -220,8 +220,6 @@ static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
 
 void setup_lapd(struct net_device *netdev)
 {
-	/* Fill in the fields of the device structure with localtalk-generic values. */
-
 	netdev->change_mtu         = lapd_change_mtu;
 	netdev->hard_header        = NULL;
 	netdev->rebuild_header     = NULL;

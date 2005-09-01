@@ -33,6 +33,7 @@ struct vnd_netdevice
 	struct hlist_node index_hlist_node;
 
 	struct net_device *netdev;
+	int type;
 
 	struct visdn_chan visdn_chan;
 	struct visdn_chan visdn_chan_e;

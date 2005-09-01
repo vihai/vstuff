@@ -24,14 +24,14 @@ static dev_t vsp_first_dev;
 static struct cdev vsp_cdev;
 static struct class_device vsp_class_dev;
 
-struct hlist_head vsp_chan_index_hash[SB_CHAN_HASHSIZE];
+static struct hlist_head vsp_chan_index_hash[SB_CHAN_HASHSIZE];
 
 static inline struct hlist_head *vsp_chan_index_get_hash(int index)
 {
 	return &vsp_chan_index_hash[index & (SB_CHAN_HASHSIZE - 1)];
 }
 
-struct vsp_chan *__vsp_chan_get_by_index(int index)
+static struct vsp_chan *__vsp_chan_get_by_index(int index)
 {
 	struct hlist_node *t;
 	struct vsp_chan *vsp_chan;
@@ -56,7 +56,7 @@ static int vsp_chan_new_index(void)
 	}
 }
 
-struct visdn_port vsp_visdn_port;
+static struct visdn_port vsp_visdn_port;
 
 static void vsp_chan_release(struct visdn_chan *visdn_chan)
 {
@@ -105,7 +105,7 @@ static int vsp_chan_disconnect(struct visdn_chan *visdn_chan)
 	return 0;
 }
 
-struct visdn_chan_ops vsp_chan_ops = {
+static struct visdn_chan_ops vsp_chan_ops = {
 	.release	= vsp_chan_release,
 	.open		= vsp_chan_open,
 	.close		= vsp_chan_close,
@@ -120,7 +120,7 @@ struct visdn_chan_ops vsp_chan_ops = {
 	.samples_write  = NULL,
 };
 
-int vsp_cdev_open(
+static int vsp_cdev_open(
 	struct inode *inode,
 	struct file *file)
 {
@@ -173,7 +173,7 @@ err_kmalloc:
 	return err;
 }
 
-int vsp_cdev_release(
+static int vsp_cdev_release(
 	struct inode *inode, struct file *file)
 {
 	BUG_ON(!file->private_data);
@@ -190,7 +190,7 @@ int vsp_cdev_release(
 	return 0;
 }
 
-ssize_t vsp_cdev_read(
+static ssize_t vsp_cdev_read(
 	struct file *file,
 	char __user *buf,
 	size_t count,
@@ -210,7 +210,7 @@ ssize_t vsp_cdev_read(
 			chan->visdn_chan.connected_chan, buf, count);
 }
 
-ssize_t vsp_cdev_write(
+static ssize_t vsp_cdev_write(
 	struct file *file,
 	const char __user *buf,
 	size_t count,
@@ -230,9 +230,6 @@ ssize_t vsp_cdev_write(
 			chan->visdn_chan.connected_chan,
 			buf, count);
 }
-
-#define SB_IOC_FIFO_IN_AVAIL	_IOR(0xd0, 1, int)
-
 
 static inline int visdn_cdev_do_ioctl_connect(
 	struct inode *inode,
@@ -287,7 +284,7 @@ err_copy_from_user:
 	return err;
 }
 
-int vsp_cdev_ioctl(
+static int vsp_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
@@ -302,7 +299,7 @@ int vsp_cdev_ioctl(
 	return -EINVAL;
 }
 
-struct file_operations vsp_fops =
+static struct file_operations vsp_fops =
 {
 	.owner		= THIS_MODULE,
 	.read		= vsp_cdev_read,
@@ -317,7 +314,7 @@ struct file_operations vsp_fops =
  * Module stuff
  ******************************************/
 
-struct visdn_port_ops vsp_port_ops = {
+static struct visdn_port_ops vsp_port_ops = {
 	.enable		= NULL,
 	.disable	= NULL,
 };

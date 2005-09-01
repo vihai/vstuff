@@ -28,14 +28,14 @@ static dev_t vnd_first_dev;
 static struct cdev vnd_cdev;
 static struct class_device vnd_control_class_dev;
 
-struct hlist_head vnd_netdevice_index_hash[VND_CHAN_HASHSIZE];
+static struct hlist_head vnd_netdevice_index_hash[VND_CHAN_HASHSIZE];
 
 static inline struct hlist_head *vnd_netdevice_index_get_hash(int index)
 {
 	return &vnd_netdevice_index_hash[index & (VND_CHAN_HASHSIZE - 1)];
 }
 
-struct vnd_netdevice *__vnd_netdevice_get_by_index(int index)
+static struct vnd_netdevice *__vnd_netdevice_get_by_index(int index)
 {
 	struct hlist_node *t;
 	struct vnd_netdevice *vnd_netdevice;
@@ -60,7 +60,7 @@ static int vnd_netdevice_new_index(void)
 	}
 }
 
-struct visdn_port vnd_port;
+static struct visdn_port vnd_port;
 
 static void vnd_chan_release(struct visdn_chan *visdn_chan)
 {
@@ -152,21 +152,21 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 	return 0;
 }
 
-void vnd_chan_stop_queue(struct visdn_chan *visdn_chan)
+static void vnd_chan_stop_queue(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
 	netif_stop_queue(netdevice->netdev);
 }
 
-void vnd_chan_start_queue(struct visdn_chan *visdn_chan)
+static void vnd_chan_start_queue(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
 	netif_start_queue(netdevice->netdev);
 }
 
-void vnd_chan_wake_queue(struct visdn_chan *visdn_chan)
+static void vnd_chan_wake_queue(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
@@ -279,26 +279,40 @@ static int vnd_netdev_do_ioctl(struct net_device *netdev,
 		return -EOPNOTSUPP;
 }
 
-static int vnd_read_done = FALSE;
+struct vnd_request
+{
+	int type;
+	char output[30];
+	int output_off;
+	int output_len;
+};
 
-int vnd_cdev_open(
+static int vnd_cdev_open(
 	struct inode *inode,
 	struct file *file)
 {
 	nonseekable_open(inode, file);
 
-	vnd_read_done = FALSE;
+	struct vnd_request *vnd_request;
+	vnd_request = kmalloc(sizeof(*vnd_request), GFP_KERNEL);
+	memset(vnd_request, 0x00, sizeof(*vnd_request));
+
+	file->private_data = vnd_request;
 
 	return 0;
 }
 
-int vnd_cdev_release(
+static int vnd_cdev_release(
 	struct inode *inode, struct file *file)
 {
+	struct vnd_request *vnd_request = file->private_data;
+
+	kfree(vnd_request);
+
 	return 0;
 }
 
-ssize_t vnd_cdev_read(
+static ssize_t vnd_cdev_read(
 	struct file *file,
 	char __user *buf,
 	size_t count,
@@ -306,8 +320,52 @@ ssize_t vnd_cdev_read(
 {
 	int err;
 
-	if (vnd_read_done)
+	struct vnd_request *vnd_request = file->private_data;
+
+	if (vnd_request->output_off == vnd_request->output_len)
 		return 0;
+
+	int copied_bytes = vnd_request->output_len - vnd_request->output_off;
+	if (copied_bytes > count)
+		copied_bytes = count;
+
+	if (copy_to_user(buf, vnd_request->output, copied_bytes)) {
+		err = -EFAULT;
+		goto err_copy_to_user;
+	}
+
+	vnd_request->output_off += copied_bytes;
+
+	return copied_bytes;
+
+err_copy_to_user:
+
+	return err;
+}
+
+static int vnd_create_request(
+	struct vnd_request *vnd_request,
+	char *reqp)
+{
+	int err;
+
+	const char *protocol = strsep(&reqp, " \n\r");
+	if (!protocol) {
+		err = -EINVAL;
+		goto err_missing_protocol;
+	}
+
+	void (*setup_func)(struct net_device *) = NULL;
+	int type;
+
+	if (!strcmp(protocol, "lapd")) {
+		type = ARPHRD_LAPD;
+		setup_func = setup_lapd;
+//	} else if (!strcmp(protocol, "mtp")) {
+	} else {
+		err = -EINVAL;
+		goto err_unsupported_protocol;
+	}
 
 	struct vnd_netdevice *netdevice = NULL;
 	netdevice = kmalloc(sizeof(*netdevice), GFP_KERNEL);
@@ -369,7 +427,8 @@ ssize_t vnd_cdev_read(
 	char ifname[60];
 	snprintf(ifname, sizeof(ifname), "visdn%dd", netdevice->index);
 
-	netdevice->netdev = alloc_netdev(0, ifname, setup_lapd);
+	netdevice->type = type;
+	netdevice->netdev = alloc_netdev(0, ifname, setup_func);
 	if(!netdevice->netdev) {
 		printk(KERN_CRIT
 			"net_device alloc failed, abort.\n");
@@ -397,20 +456,17 @@ ssize_t vnd_cdev_read(
 	netdevice->netdev->irq = 0;
 	netdevice->netdev->base_addr = 0;
 
-	char busid[30];
-	int len = snprintf(busid, sizeof(busid), "%s\n",
-		netdevice->visdn_chan.device.bus_id);
+	vnd_request->output_len =
+		snprintf(vnd_request->output,
+			sizeof(vnd_request->output),
+			"%s\n",
+			netdevice->visdn_chan.device.bus_id);
 
-	if (copy_to_user(buf, busid, len)) {
-		err = -EFAULT;
-		goto err_copy_to_user;
-	}
+	vnd_request->output_off = 0;
+	vnd_request->type = type;
+	
+	return 0;
 
-	vnd_read_done = TRUE;
-
-	return len;
-
-err_copy_to_user:
 	visdn_chan_unregister(&netdevice->visdn_chan_e);
 err_visdn_chan_e_register:
 	visdn_chan_unregister(&netdevice->visdn_chan);
@@ -420,15 +476,75 @@ err_alloc_netdev:
 	kfree(netdevice);
 //	hlist_del(); FIXME
 err_kmalloc:
+err_unsupported_protocol:
+err_missing_protocol:
 
 	return err;
 }
 
-struct file_operations vnd_fops =
+static int vnd_destroy_request(
+	struct vnd_request *vnd_request,
+	char *reqp)
+{
+	return 0;
+}
+
+static ssize_t vnd_cdev_write(
+	struct file *file,
+	const char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
+	int err;
+	char request[50];
+
+	struct vnd_request *vnd_request = file->private_data;
+
+	if (copy_from_user(request, buf,
+			count < (sizeof(request) - 1) ?
+				count : (sizeof(request) - 1))) {
+                err = -EFAULT;
+                goto err_copy_from_user;
+        }
+
+	request[sizeof(request) - 1] = '\0';
+
+	char *reqp = request;
+
+	const char *command = strsep(&reqp, " ");
+	if (!command) {
+		err = -EINVAL;
+		goto err_missing_command;
+	}
+
+	if (!strcmp(command, "create")) {
+		err = vnd_create_request(vnd_request, reqp);
+		if (err < 0)
+			goto err_command;
+	} else if (!strcmp(command, "destroy")) {
+		err = vnd_destroy_request(vnd_request, reqp);
+		if (err < 0)
+			goto err_command;
+	} else {
+		err = -EINVAL;
+		goto err_invalid_command;
+	}
+
+	return count;
+
+err_command:
+err_invalid_command:
+err_missing_command:
+err_copy_from_user:
+
+	return err;
+}
+
+static struct file_operations vnd_fops =
 {
 	.owner		= THIS_MODULE,
 	.read		= vnd_cdev_read,
-	.write		= NULL,
+	.write		= vnd_cdev_write,
 	.ioctl		= NULL,
 	.open		= vnd_cdev_open,
 	.release	= vnd_cdev_release,
