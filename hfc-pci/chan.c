@@ -36,10 +36,10 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_channel_busy;
 	}
 
-	if (chan->visdn_chan.framing_current ==
+	if (chan->visdn_chan.pars.framing ==
 				VISDN_CHAN_FRAMING_TRANS) {
 		chan->status = HFC_CHAN_STATUS_OPEN_TRANS;
-	} else if (chan->visdn_chan.framing_current ==
+	} else if (chan->visdn_chan.pars.framing ==
 				VISDN_CHAN_FRAMING_HDLC) {
 		chan->status = HFC_CHAN_STATUS_OPEN_HDLC;
 	} else {
@@ -53,6 +53,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 		chan->tx.fifo = &card->fifos[D][TX];
 		chan->tx.fifo->connected_chan = &chan->tx;
+
+		chan->visdn_chan.max_mtu = chan->tx.fifo->fifo_size;
+		visdn_renegotiate_parameters(visdn_chan);
 
 		chan->port->card->regs.mst_emod &= ~hfc_MST_EMOD_D_MASK;
 		chan->port->card->regs.mst_emod |=
@@ -72,10 +75,13 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			chan->tx.fifo = &card->fifos[B1][TX];
 			chan->tx.fifo->connected_chan = &chan->tx;
 
-			if (chan->visdn_chan.framing_current ==
+			chan->visdn_chan.max_mtu = chan->tx.fifo->fifo_size;
+			visdn_renegotiate_parameters(visdn_chan);
+
+			if (chan->visdn_chan.pars.framing ==
 					VISDN_CHAN_FRAMING_TRANS) {
 				chan->port->card->regs.ctmt |= hfc_CTMT_TRANSB1;
-			} else if (chan->visdn_chan.framing_current ==
+			} else if (chan->visdn_chan.pars.framing ==
 					VISDN_CHAN_FRAMING_HDLC) {
 				chan->port->card->regs.ctmt &= ~hfc_CTMT_TRANSB1;
 			}
@@ -95,10 +101,13 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			chan->tx.fifo = &card->fifos[B2][TX];
 			chan->tx.fifo->connected_chan = &chan->tx;
 
-			if (chan->visdn_chan.framing_current ==
+			chan->visdn_chan.max_mtu = chan->tx.fifo->fifo_size;
+			visdn_renegotiate_parameters(visdn_chan);
+
+			if (chan->visdn_chan.pars.framing ==
 					VISDN_CHAN_FRAMING_TRANS) {
 				chan->port->card->regs.ctmt |= hfc_CTMT_TRANSB2;
-			} else if (chan->visdn_chan.framing_current ==
+			} else if (chan->visdn_chan.pars.framing ==
 					VISDN_CHAN_FRAMING_HDLC) {
 				chan->port->card->regs.ctmt &= ~hfc_CTMT_TRANSB2;
 			}
@@ -161,14 +170,14 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	if (chan->rx.fifo) {
 		hfc_fifo_set_bit_order(
 			chan->rx.fifo,
-			chan->visdn_chan.bitorder_current ==
+			chan->visdn_chan.pars.bitorder ==
 				VISDN_CHAN_BITORDER_MSB);
 	}
 
 	if (chan->tx.fifo) {
 		hfc_fifo_set_bit_order(
 			chan->tx.fifo,
-			chan->visdn_chan.bitorder_current ==
+			chan->visdn_chan.pars.bitorder ==
 				VISDN_CHAN_BITORDER_MSB);
 	}
 
@@ -398,6 +407,13 @@ static int hfc_bridge(
 	struct hfc_chan_duplex *chan,
 	struct hfc_chan_duplex *chan2)
 {
+/*	if (chan->id != B1 && chan->id != B2) {
+		hfc_msg_chan(chan, KERN_ERR, "Cannot connect to %s\n",
+			chan2->name);
+
+		return -EINVAL;
+	}*/
+
 	return -EOPNOTSUPP;
 }
 
@@ -410,22 +426,16 @@ static int hfc_chan_connect_to(
 		return -EBUSY;
 
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
-	struct hfc_chan_duplex *chan2 = to_chan_duplex(visdn_chan2);
 
 	hfc_debug_chan(chan, 2, "connecting to %s\n",
 		visdn_chan2->device.bus_id);
-
-	if (chan->id != B1 && chan->id != B2) {
-		hfc_msg_chan(chan, KERN_ERR, "Cannot connect to %s\n",
-			chan2->name);
-
-		return -EINVAL;
-	}
 
 /*	if (visdn_chan->device.parent->parent ==
 			visdn_chan2->device.parent->parent) {
 		printk(KERN_DEBUG "Both channels belong to the me,"
 			" attempting private bridge\n");
+
+		struct hfc_chan_duplex *chan2 = to_chan_duplex(visdn_chan2);
 
 		return hfc_bridge(chan, chan2);
 	}*/
@@ -447,18 +457,29 @@ static int hfc_chan_disconnect(struct visdn_chan *visdn_chan)
 	return 0;
 }
 
+static int hfc_chan_update_parameters(
+        struct visdn_chan *chan,
+        struct visdn_chan_pars *pars)
+{
+	memcpy(&chan->pars, pars, sizeof(chan->pars));
+
+	return 0;
+}
+
 struct visdn_chan_ops hfc_chan_ops = {
-	.open		= hfc_chan_open,
-	.close		= hfc_chan_close,
-	.frame_xmit	= hfc_chan_frame_xmit,
-	.get_stats	= hfc_chan_get_stats,
-	.do_ioctl	= hfc_chan_do_ioctl,
+	.open			= hfc_chan_open,
+	.close			= hfc_chan_close,
+	.frame_xmit		= hfc_chan_frame_xmit,
+	.get_stats		= hfc_chan_get_stats,
+	.do_ioctl		= hfc_chan_do_ioctl,
 
-	.connect_to	= hfc_chan_connect_to,
-	.disconnect	= hfc_chan_disconnect,
+	.connect_to		= hfc_chan_connect_to,
+	.disconnect		= hfc_chan_disconnect,
 
-	.samples_read	= hfc_chan_samples_read,
-	.samples_write	= hfc_chan_samples_write,
+	.update_parameters	= hfc_chan_update_parameters,
+
+	.samples_read		= hfc_chan_samples_read,
+	.samples_write		= hfc_chan_samples_write,
 };
 
 void hfc_chan_init(
@@ -466,10 +487,7 @@ void hfc_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	int hw_index,
-	int speed,
-	int role,
-	int roles)
+	int hw_index)
 {
 	chan->port = port;
 	chan->name = name;
@@ -487,11 +505,11 @@ void hfc_chan_init(
 
 	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
 
-	chan->visdn_chan.autoopen = TRUE;
 	chan->visdn_chan.priv = chan;
-	chan->visdn_chan.speed = speed;
-	chan->visdn_chan.role = role;
-	chan->visdn_chan.roles = roles;
+
+	chan->visdn_chan.autoopen = TRUE;
+
+	chan->visdn_chan.max_mtu = 0; // We'll set it after opening the port
 
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;

@@ -1,10 +1,12 @@
 
 General:
+--------
 
 - Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
 - Check all input data in ioctls/setsockopt for security bugs
 
 Build system:
+-------------
 
 - Check if the kernel source tree has been correctly prepare (make/make
   modules_prepare)
@@ -12,7 +14,8 @@ Build system:
   about non-standard directory location
 - Avoid modpost complaining about undefined symbols in other modules
 
-chan_visdn
+chan_visdn:
+-----------
 
 - Communication errors are badly handled
 - Implement groups in visdn.conf
@@ -26,25 +29,34 @@ chan_visdn
   so it is impossible to know what bearer capabilities are accepted by a
   destination, if it supports overlap dialing and so on...
 
-libq931
+libq931:
+--------
 
 - Implement: 5.9 User notification procedure
 - Restart Procedure is completely untested, test it.
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 
 app_visdn_ppp:
+--------------
+
 - Handle hangup
 
 timer:
+------
 
 - Make sure the timing function is called with a precise long term frequency
   (do not schedule with increments)
 
-visdn_core
+visdn_core:
+-----------
 
--
+- Channels parameter negotiation during connect should be improved and support
+  dynamic renegotiation
+- Channel bitrate negotiation
+- Channel bundling
 
-lapd
+lapd:
+-----
 
 - There is a deadlock/race condition on modules removal when an application
   has an open socket and doesn't exit immediately
@@ -91,64 +103,18 @@ lapd
   - A specific flag would be better.
 
 visdn-netdev:
+-------------
 
 - Implement protocol attribute
 - We are not locking!!!
 
-hfc-4s
+visdn-ppp:
 
-hfc-pci
+- Handle MTU
 
--
+hfc-4s:
+-------
 
-Some ideas for me...
-
-[00:50] <fsck> - una breve introduzione a come caricare i moduli, attivare le interfacce
-[00:50] <fsck> - una breve intro a chan_visdn
-[00:50] <fsck> - la faccenda del crash (che da una cattiva impressione, visto che al primo colpo uno dimentica qualcosa :)
-[00:51] <fsck> - un buildscript anche molto rozzo, che faccia aclocal/automake/autoconf e i make necessari
-
-
-[01:18] <fsck> uhm l'ecocancel?
-[01:19] <vihai> E' da configurare per ogni interfaccia? In che casi non va messo?
-[01:20] <fsck> quando quell'interfaccia non è al margine di una rete tutta digitale è inutile
-[01:20] <fsck> la segnalazione
-[01:20] <fsck> o meglio la "variante" della segnalazione
-[01:21] <vihai> Non faccio prima a vedere se il canale connesso è digiale o meno e abilitare l'echo cancel dinamicamente?
-[01:21] <fsck> come fai a sapere se il canale a valle è digitale o meno?
-[01:21] <fsck> e soprattutto se lui fa l'ecocancel
-[01:22] <vihai> C'è un flag in *, devo vedere se è fatto apposta
-[01:23] <fsck> quello della digital quality?
-[01:23] <fsck> se è quello è per settare l'ec PER CALL
-[01:23] <vihai> Comunqu posso fare un (yes, no, auto) 
-[01:23] <vihai> AST_FLAG_DIGITAL
-[01:23] <fsck> si è quello
-[01:23] <fsck> le chiamate fax non vogliono l'ec
-[01:24] <fsck> io metterei un flag
-
-
-
-[14:19] <vihai> Allora... ragiono a voce alta... tu fai segno con la testa se va bene
-[14:19] <vihai> Io ricevo un setup_indication dalla libq931 (ovvero ho ricevuto un SETUP)
-[14:20] <vihai> Nel setup_indication c'è un numero valido, overlap dialing è disattivato, io lancio il pbx e finisco mandando un proceeding
-[14:20] <vihai> Se il numero non è completo/invalito, rispondo con un setup_reject
-[14:21] <fsck> ok
-[14:22] <vihai> Se l'overlap è abilitato guardo se il numero PUO' matchare
-[14:22] <vihai> Se non puo' matchare => reject
-[14:22] <vihai> Finché può matchare continuo l'overlap
-[14:22] <vihai> Quando il numero matcha un'estensione (che può essere una regexp) devo guardare se l'estensione supporta l'overlap
-[14:23] <vihai> Se lo supporta faccio partire il pbx e mando il resto delle cifre come frame DTMF
-[14:24] <vihai> Se non lo supporta uso un timeout
-[14:24] <vihai> Il problema è... come capisco se l'estensione supporta l'overlap dialing?
-[14:26] <fsck> mhh... non credo ci sia un modo adesso
-[14:29] <vihai> Uhm... allora....
-[14:30] <vihai> Posso fare che se durante l'overlap esiste un'estensione e NON può matchare ulteriormente (ovvero non è una regexp) faccio partire subito il pbx
-[14:30] <vihai> Se invece esiste e può matchare ulteriormente uso il timeout
-[14:31] <vihai> Però cacchio.... così impongo il timeout anche facendo l'overlap solo su ISDN
-[14:32] <fsck> uno switch a mano per ora?
-[14:33] <vihai> Per dire cosa? Attivare/disattivare i DTMF frame?
-[14:34] <fsck> per dire "questa estensione supporta l'overlap"
-[14:36] <vihai> Dentro la configurazione di visdn?
-[14:37] <fsck> eh no dentro extensions.conf
-
+hfc-pci:
+-------
 

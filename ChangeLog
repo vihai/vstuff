@@ -2,6 +2,24 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-01 17:12:15 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-114
+
+    Summary:
+      Channel MTU negotiation implemented
+    Revision:
+      isdn--devel--0.1--patch-114
+
+    
+    
+
+    modified files:
+     ChangeLog NOTES TODO hfc-4s/chan.c hfc-4s/chan.h
+     hfc-4s/st_port.c hfc-pci/chan.c hfc-pci/chan.h
+     hfc-pci/st_port.c visdn-core/chan.c visdn-core/chan.h
+     visdn-netdev/netdev_main.c visdn-ppp/ppp_main.c
+     visdn-streamport/streamport_main.c
+
+
 2005-09-01 01:18:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-113
 
     Summary:

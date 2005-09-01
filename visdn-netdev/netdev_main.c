@@ -152,6 +152,26 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 	return 0;
 }
 
+static int vnd_chan_update_parameters(
+        struct visdn_chan *visdn_chan,
+        struct visdn_chan_pars *pars)
+{
+	struct vnd_netdevice *netdevice = visdn_chan->priv;
+
+	if (pars->mtu != visdn_chan->pars.mtu) {
+		// We must set visdn_chan->pars.mtu before calling dev_set_mtu
+		// because mtu_changed() callback will check for it
+
+		visdn_chan->pars.mtu = pars->mtu;
+
+		dev_set_mtu(netdevice->netdev, pars->mtu);
+	}
+
+        memcpy(&visdn_chan->pars, pars, sizeof(visdn_chan->pars));
+
+        return 0;
+}
+
 static void vnd_chan_stop_queue(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
@@ -184,6 +204,8 @@ struct visdn_chan_ops vnd_chan_ops = {
 
 	.connect_to     	= vnd_chan_connect_to,
 	.disconnect		= vnd_chan_disconnect,
+
+	.update_parameters	= vnd_chan_update_parameters,
 
 	.samples_read   	= NULL,
 	.samples_write  	= NULL,
@@ -236,7 +258,8 @@ static int vnd_netdev_frame_xmit(
 
 static struct net_device_stats vnd_dummy_stats = { };
 
-static struct net_device_stats *vnd_netdev_get_stats(struct net_device *netdev)
+static struct net_device_stats *vnd_netdev_get_stats(
+	struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
@@ -248,7 +271,8 @@ static struct net_device_stats *vnd_netdev_get_stats(struct net_device *netdev)
 	return &vnd_dummy_stats;
 }
 
-static void vnd_netdev_set_multicast_list(struct net_device *netdev)
+static void vnd_netdev_set_multicast_list(
+	struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
@@ -267,7 +291,8 @@ static void vnd_netdev_set_multicast_list(struct net_device *netdev)
 	}
 }
 
-static int vnd_netdev_do_ioctl(struct net_device *netdev,
+static int vnd_netdev_do_ioctl(
+	struct net_device *netdev,
 	struct ifreq *ifr, int cmd)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
@@ -277,6 +302,20 @@ static int vnd_netdev_do_ioctl(struct net_device *netdev,
 				netdevice->visdn_chan.connected_chan, ifr, cmd);
 	else
 		return -EOPNOTSUPP;
+}
+
+static int vnd_netdev_change_mtu(
+	struct net_device *netdev,
+	int new_mtu)
+{
+	struct vnd_netdevice *netdevice = netdev->priv;
+
+	if (new_mtu > netdevice->visdn_chan.pars.mtu)
+		return -EINVAL;
+
+	netdev->mtu = new_mtu;
+
+	return 0;
 }
 
 struct vnd_request
@@ -396,10 +435,10 @@ static int vnd_create_request(
 	visdn_chan_init(&netdevice->visdn_chan, &vnd_chan_ops);
 
 	netdevice->visdn_chan.priv = netdevice;
+
 	netdevice->visdn_chan.autoopen = FALSE;
-	netdevice->visdn_chan.speed = 0;
-	netdevice->visdn_chan.role = VISDN_CHAN_ROLE_D;
-	netdevice->visdn_chan.roles = VISDN_CHAN_ROLE_D;
+
+	netdevice->visdn_chan.max_mtu = 0;
 
 	netdevice->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_HDLC |
 					     VISDN_CHAN_FRAMING_MTP;
@@ -413,9 +452,8 @@ static int vnd_create_request(
 
 	netdevice->visdn_chan_e.priv = netdevice;
 	netdevice->visdn_chan_e.autoopen = FALSE;
-	netdevice->visdn_chan_e.speed = 0;
-	netdevice->visdn_chan_e.role = VISDN_CHAN_ROLE_D;
-	netdevice->visdn_chan_e.roles = VISDN_CHAN_ROLE_D;
+
+	netdevice->visdn_chan_e.max_mtu = 0;
 
 	netdevice->visdn_chan_e.framing_supported = VISDN_CHAN_FRAMING_HDLC |
 					     VISDN_CHAN_FRAMING_MTP;
@@ -455,10 +493,10 @@ static int vnd_create_request(
 	netdevice->netdev->get_stats = vnd_netdev_get_stats;
 	netdevice->netdev->set_multicast_list = vnd_netdev_set_multicast_list;
 	netdevice->netdev->do_ioctl = vnd_netdev_do_ioctl;
+	netdevice->netdev->change_mtu = vnd_netdev_change_mtu;
 	netdevice->netdev->features = NETIF_F_NO_CSUM;
 
-	netdevice->netdev->mtu = 200;
-//	netdevice->netdev->mtu = netdevice->tx.fifo_size;
+	netdevice->netdev->mtu = netdevice->visdn_chan.pars.mtu;
 
 	memset(netdevice->netdev->dev_addr, 0x00, sizeof(netdevice->netdev->dev_addr));
 

@@ -21,7 +21,7 @@ enum visdn_connect_flags
 	VISDN_CONNECT_FLAG_SIMPLEX	= (1 << 0),
 };
 
-#define VISDN_CHANID_SIZE	64
+#define VISDN_CHANID_SIZE	32
 
 struct visdn_connect
 {
@@ -45,6 +45,8 @@ struct visdn_connect
 extern struct bus_type visdn_bus_type;
 
 struct visdn_chan;
+struct visdn_chan_pars;
+
 struct visdn_chan_ops
 {
 	void (*release)(struct visdn_chan *chan);
@@ -64,6 +66,10 @@ struct visdn_chan_ops
 				int flags);
 	int (*disconnect)(struct visdn_chan *chan);
 
+	int (*update_parameters)(
+		struct visdn_chan *chan,
+		struct visdn_chan_pars *pars);
+
 	// bridge() callback should actually belong to a "card" structure
 	int (*bridge)(struct visdn_chan *chan,
 				struct visdn_chan *chan2);
@@ -79,18 +85,20 @@ struct visdn_chan_ops
 	void (*wake_queue)(struct visdn_chan *chan);
 };
 
-#define VISDN_CHAN_ROLE_B	(1<<0)
-#define VISDN_CHAN_ROLE_D	(1<<1)
-#define VISDN_CHAN_ROLE_E	(1<<2)
-#define VISDN_CHAN_ROLE_S	(1<<3)
-#define VISDN_CHAN_ROLE_Q	(1<<4)
-
 #define VISDN_CHAN_FRAMING_TRANS	(1 << 0)
 #define VISDN_CHAN_FRAMING_HDLC		(1 << 1)
 #define VISDN_CHAN_FRAMING_MTP		(1 << 2)
 
 #define VISDN_CHAN_BITORDER_LSB		(1 << 0)
 #define VISDN_CHAN_BITORDER_MSB		(1 << 1)
+
+struct visdn_chan_pars
+{
+	int mtu;
+	int bitrate;
+	int framing;
+	int bitorder;
+};
 
 struct visdn_chan
 {
@@ -108,18 +116,15 @@ struct visdn_chan
 
 	int open;
 
-	// Add MTU and speed negotiation
-
 	int autoopen;
-	int speed;
-	int role;
-	int roles;
 
-	int framing_current;
+	struct visdn_chan_pars pars;
+
+	int max_mtu;
+
 	int framing_supported;
 	int framing_preferred;
 
-	int bitorder_current;
 	int bitorder_supported;
 	int bitorder_preferred;
 };
@@ -152,7 +157,8 @@ extern struct visdn_chan *visdn_search_chan(const char *chanid);
 extern int visdn_connect(struct visdn_chan *chan1,
 		struct visdn_chan *chan2,
 		int flags);
-
+extern int visdn_renegotiate_parameters(
+	struct visdn_chan *chan);
 
 #endif
 

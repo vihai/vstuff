@@ -146,6 +146,31 @@ lapd_pass_frame_to_socket_te
 	bh_lock_sock(sk); (in lapd_pass_frame_to_socket())
 
 
+Sep  1 17:59:39 bastard kernel: ip            D 00000000     0  7037   6765                     (NOTLB)
+Sep  1 17:59:39 bastard kernel: da753e18 00000082 ddb88040 00000000 00000000 00000000 4611a340 000f4214 
+Sep  1 17:59:39 bastard kernel:        c03b58c8 dd972060 dd9721b4 c033f9e0 dd972060 00000246 c033f9e8 c02d050e 
+Sep  1 17:59:39 bastard kernel:        00000001 dd972060 c01171a0 c033f9e8 c033f9e8 ffffff66 00000246 c03b620a 
+Sep  1 17:59:39 bastard kernel: Call Trace:
+Sep  1 17:59:39 bastard kernel:  [<c02d050e>] __down+0x6e/0xd0
+Sep  1 17:59:39 bastard kernel:  [<c01171a0>] default_wake_function+0x0/0x10
+Sep  1 17:59:39 bastard kernel:  [<c02d0673>] __down_failed+0x7/0xc
+Sep  1 17:59:39 bastard kernel:  [<c0270117>] .text.lock.rtnetlink+0xb/0x54
+Sep  1 17:59:39 bastard kernel:  [<c026a868>] unregister_netdev+0x8/0x15
+Sep  1 17:59:39 bastard kernel:  [<e1415181>] vnd_chan_disconnect+0x41/0x50 [visdn_netdev]
+Sep  1 17:59:39 bastard kernel:  [<e141d83c>] visdn_disconnect+0xdc/0x120 [visdn_core]
+Sep  1 17:59:39 bastard kernel:  [<e141d4b7>] visdn_negotiate_parameters+0x1b7/0x1c0 [visdn_core]
+Sep  1 17:59:39 bastard kernel:  [<e14431bd>] hfc_chan_open+0xbd/0x580 [hfc_4s]
+Sep  1 17:59:39 bastard kernel:  [<e14152c9>] vnd_netdev_open+0x69/0x70 [visdn_netdev]
+Sep  1 17:59:39 bastard kernel:  [<c02683f8>] dev_open+0x58/0x70
+Sep  1 17:59:39 bastard kernel:  [<c026982c>] dev_change_flags+0x4c/0x110
+Sep  1 17:59:39 bastard kernel:  [<c02a620e>] devinet_ioctl+0x4ae/0x550
+Sep  1 17:59:39 bastard kernel:  [<c02a7d96>] inet_ioctl+0x66/0x90
+Sep  1 17:59:39 bastard kernel:  [<c02604d0>] sock_ioctl+0x160/0x210
+Sep  1 17:59:39 bastard kernel:  [<c0260370>] sock_ioctl+0x0/0x210
+Sep  1 17:59:39 bastard kernel:  [<c01611b6>] do_ioctl+0x46/0x60
+Sep  1 17:59:39 bastard kernel:  [<c0161345>] vfs_ioctl+0x55/0x1c0
+Sep  1 17:59:39 bastard kernel:  [<c01614f0>] sys_ioctl+0x40/0x70
+Sep  1 17:59:39 bastard kernel:  [<c0102c49>] sysenter_past_esp+0x52/0x79
 
 
 
@@ -195,24 +220,3 @@ Some ideas for me...
 [14:26] <fsck> mhh... non credo ci sia un modo adesso
 [14:29] <vihai> Uhm... allora....
 [14:30] <vihai> Posso fare che se durante l'overlap esiste un'estensione e NON può matchare ulteriormente (ovvero non è una regexp) faccio partire subito il pbx
-
-
-
-
-
-
-
-
-BERT modes
-
-’0’ = continuous ’0’ pattern
-’1’ = continuous ’1’ pattern
-’2’ = sequence length 29−1 bits
-’3’ = sequence length 210−1 bits
-’4’ = sequence length 215−1 bits
-’5’ = sequence length 220−1 bits
-’6’ = sequence length 220−1 bits, but maximal 14 bits are zero
-’7’ = pseudo random pattern seq. 223−1
-
- Note: These sequences are defined in ITU-T O.150
-and O.151 specifications.

@@ -209,15 +209,10 @@ void hfc_st_port_init(
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 
-	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF + id*4,
-		16000, VISDN_CHAN_ROLE_D, VISDN_CHAN_ROLE_D);
-	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF + id*4,
-		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B);
-	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF + id*4,
-		64000, VISDN_CHAN_ROLE_B, VISDN_CHAN_ROLE_B);
-	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF + id*4,
-		16000, VISDN_CHAN_ROLE_E, VISDN_CHAN_ROLE_E);
-	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
-		4000, VISDN_CHAN_ROLE_S, VISDN_CHAN_ROLE_S);
+	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF + id*4);
+	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF + id*4);
+	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF + id*4);
+	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF + id*4);
+	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0);
 }
 

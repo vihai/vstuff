@@ -120,9 +120,6 @@ void hfc_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	int hw_index,
-	int speed,
-	int role,
-	int roles);
+	int hw_index);
 
 #endif

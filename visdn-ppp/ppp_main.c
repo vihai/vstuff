@@ -211,10 +211,10 @@ int vppp_cdev_open(
 	chan->index = vppp_chan_new_index();
 
 	chan->visdn_chan.priv = chan;
+
 	chan->visdn_chan.autoopen = FALSE;
-	chan->visdn_chan.speed = 0;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
+
+	chan->visdn_chan.max_mtu = 200; // FIXME
 
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_HDLC;
 	chan->visdn_chan.framing_preferred = 0;
@@ -224,7 +224,7 @@ int vppp_cdev_open(
 
 	chan->ppp_chan.private = chan;
 	chan->ppp_chan.ops = &vppp_ppp_ops;
-	chan->ppp_chan.mtu = 1000; //FIXME
+	chan->ppp_chan.mtu = 200; //FIXME
 	chan->ppp_chan.hdrlen = 2;
 
 	err = ppp_register_channel(&chan->ppp_chan);

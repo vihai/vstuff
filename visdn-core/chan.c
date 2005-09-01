@@ -146,6 +146,91 @@ struct visdn_chan *visdn_search_chan(const char *chanid)
 }
 EXPORT_SYMBOL(visdn_search_chan);
 
+static int visdn_default_update_parameters(
+	struct visdn_chan *chan,
+	struct visdn_chan_pars *pars)
+{
+	memcpy(&chan->pars, pars, sizeof(chan->pars));
+
+	return 0;
+}
+
+static int visdn_negotiate_parameters(
+	struct visdn_chan *chan1,
+	struct visdn_chan *chan2)
+{
+	// Negotiate channel parameters -------------------------
+
+	struct visdn_chan_pars pars;
+
+	memset(&pars, 0, sizeof(pars));
+
+/*	if (!((chan1->min_mtu <= chan2->min_mtu &&
+             chan2->min_mtu <= chan1->max_mtu) ||
+	    (chan2->min_mtu <= chan1->max_mtu &&
+	     chan1->max_mtu <= chan2->max_mtu)))
+		return -EXDEV;*/
+
+	if (chan1->max_mtu && chan2->max_mtu)
+		pars.mtu = min(chan1->max_mtu, chan2->max_mtu);
+	else if (chan1->max_mtu)
+		pars.mtu = chan1->max_mtu;
+	else if (chan2->max_mtu)
+		pars.mtu = chan2->max_mtu;
+
+	if (!(chan1->framing_supported & chan2->framing_supported))
+		return -EXDEV;
+
+	unsigned long framing;
+	framing = chan1->framing_supported & chan2->framing_supported &
+		 (chan1->framing_preferred | chan2->framing_preferred);
+
+	if (!framing)
+		framing = chan1->framing_supported & chan2->framing_supported;
+
+	pars.framing = 1 << find_first_bit(&framing, sizeof(framing));
+
+	// Bitorder may be converted manually inside stream copying routines TODO
+	if (!(chan1->bitorder_supported & chan2->bitorder_supported))
+		return -EXDEV;
+
+	unsigned long bitorder;
+	bitorder = chan1->bitorder_supported & chan2->bitorder_supported &
+		  (chan1->bitorder_preferred | chan2->bitorder_preferred);
+
+	if (!bitorder)
+		bitorder = chan1->bitorder_supported & chan2->bitorder_supported;
+
+	pars.bitorder = 1 << find_first_bit(&bitorder, sizeof(bitorder));
+
+	if (chan1->ops->update_parameters)
+		chan1->ops->update_parameters(chan1, &pars);
+	else
+		visdn_default_update_parameters(chan1, &pars);
+
+	// Apply negotiated parameters ------------------------------
+	printk(KERN_DEBUG "select f=%#x b=%#x m=%d\n",
+		pars.framing,
+		pars.bitorder,
+		pars.mtu);
+
+	if (chan2->ops->update_parameters)
+		chan2->ops->update_parameters(chan2, &pars);
+	else
+		visdn_default_update_parameters(chan2, &pars);
+
+	return 0;
+}
+
+int visdn_renegotiate_parameters(
+	struct visdn_chan *chan)
+{
+	BUG_ON(!chan->connected_chan);
+
+	return visdn_negotiate_parameters(chan, chan->connected_chan);
+}
+EXPORT_SYMBOL(visdn_renegotiate_parameters);
+
 int visdn_connect(
 	struct visdn_chan *chan1,
 	struct visdn_chan *chan2,
@@ -158,24 +243,10 @@ int visdn_connect(
 	BUG_ON(!chan2);
 	BUG_ON(!chan2->ops);
 
-	// Check compatibility
-	if (!(chan1->framing_supported & chan2->framing_supported))
-		return -EXDEV;
-
-	// Bitorder may be converted manually inside stream copying routines TODO
-	if (!(chan1->bitorder_supported & chan2->bitorder_supported))
-		return -EXDEV;
-
-	// Disconnect previously connected chans
-	if (chan1->connected_chan)
-		visdn_disconnect(chan1, chan1->connected_chan);
-
-	if (chan2->connected_chan)
-		visdn_disconnect(chan2, chan2->connected_chan);
-
 	printk(KERN_DEBUG "Connecting chan '%s' to chan '%s'\n",
 		chan1->device.bus_id,
 		chan2->device.bus_id);
+
 
 	printk(KERN_DEBUG "chan1 fsup=%#x fpref=%#x bsup=%#x bpref=%#x\n",
 		chan1->framing_supported,
@@ -189,45 +260,25 @@ int visdn_connect(
 		chan1->bitorder_supported,
 		chan1->bitorder_preferred);
 
-	unsigned long framing;
-	framing = chan1->framing_supported & chan2->framing_supported &
-		 (chan1->framing_preferred | chan2->framing_preferred);
+	// Disconnect previously connected chans
+	if (chan1->connected_chan)
+		visdn_disconnect(chan1, chan1->connected_chan);
 
-	if (framing)
-		framing = 1 << find_first_bit(&framing, sizeof(framing));
-	else {
-		framing = chan1->framing_supported & chan2->framing_supported;
-		framing = 1 << find_first_bit(&framing, sizeof(framing));
-	}
+	if (chan2->connected_chan)
+		visdn_disconnect(chan2, chan2->connected_chan);
 
-	unsigned long bitorder;
-	bitorder = chan1->bitorder_supported & chan2->bitorder_supported &
-		  (chan1->bitorder_preferred | chan2->bitorder_preferred);
+	visdn_negotiate_parameters(chan1, chan2);
 
-	if (bitorder)
-		bitorder = 1 << find_first_bit(&bitorder, sizeof(bitorder));
-	else {
-		bitorder = chan1->bitorder_supported & chan2->bitorder_supported;
-		bitorder = 1 << find_first_bit(&bitorder, sizeof(bitorder));
-	}
-
-	printk(KERN_DEBUG "select f=%#lx b=%#lx\n",
-		framing,
-		bitorder);
-
-	chan1->framing_current = framing;
-	chan1->bitorder_current = bitorder;
-
-	chan2->framing_current = framing;
-	chan2->bitorder_current = bitorder;
-
+	// Connect the channels -------------------------------------
 	if (chan1->ops->connect_to)
 		err = chan1->ops->connect_to(chan1, chan2, flags);
 
 	if (err < 0)
 		return err;
 
-	if (err == VISDN_CONNECT_BRIDGED)
+	if (err == VISDN_CONNECT_BRIDGED) {
+		// FIXME
+	}
 
 	if (!(flags & VISDN_CONNECT_FLAG_SIMPLEX)) {
 		if (chan2->ops->connect_to)
@@ -313,90 +364,17 @@ static DEVICE_ATTR(port_name, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
-static ssize_t visdn_chan_show_role(
-	struct device *device,
-	char *buf)
-{
-	switch(to_visdn_chan(device)->role) {
-		case VISDN_CHAN_ROLE_B:
-			return snprintf(buf, PAGE_SIZE, "B\n");
-		case VISDN_CHAN_ROLE_D:
-			return snprintf(buf, PAGE_SIZE, "D\n");
-		case VISDN_CHAN_ROLE_E:
-			return snprintf(buf, PAGE_SIZE, "E\n");
-		case VISDN_CHAN_ROLE_S:
-			return snprintf(buf, PAGE_SIZE, "S\n");
-		case VISDN_CHAN_ROLE_Q:
-			return snprintf(buf, PAGE_SIZE, "Q\n");
-		default:
-			return snprintf(buf, PAGE_SIZE, "UNKNOWN!\n");
-	}
-}
-
-static ssize_t visdn_chan_store_role(
-	struct device *device,
-	const char *buf,
-	size_t count)
-{
-	return -EOPNOTSUPP;
-}
-
-static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
-		visdn_chan_show_role,
-		visdn_chan_store_role);
-
-//----------------------------------------------------------------------------
-
-static ssize_t visdn_chan_show_roles(
-	struct device *device,
-	char *buf)
-{
-	struct visdn_chan *chan = to_visdn_chan(device);
-	ssize_t curpos = 0;
-
-	if (chan->roles & VISDN_CHAN_ROLE_B)
-		curpos += snprintf(buf + curpos, PAGE_SIZE - curpos, "B\n");
-
-	if (chan->roles & VISDN_CHAN_ROLE_D)
-		curpos += snprintf(buf + curpos, PAGE_SIZE - curpos, "D\n");
-
-	if (chan->roles & VISDN_CHAN_ROLE_E)
-		curpos += snprintf(buf + curpos, PAGE_SIZE - curpos, "E\n");
-
-	if (chan->roles & VISDN_CHAN_ROLE_S)
-		curpos += snprintf(buf + curpos, PAGE_SIZE - curpos, "S\n");
-
-	if (chan->roles & VISDN_CHAN_ROLE_Q)
-		curpos += snprintf(buf + curpos, PAGE_SIZE - curpos, "Q\n");
-
-	return curpos;
-}
-
-static DEVICE_ATTR(roles, S_IRUGO,
-		visdn_chan_show_roles,
-		NULL);
-
-//----------------------------------------------------------------------------
-
-static ssize_t visdn_chan_show_speed(
+static ssize_t visdn_chan_show_bitrate(
 	struct device *device,
 	char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		to_visdn_chan(device)->speed);
+		to_visdn_chan(device)->pars.bitrate);
 }
 
-static ssize_t visdn_chan_store_speed(
-	struct device *device,
-	const char *buf,
-	size_t count)
-{
-	return -EINVAL;
-}
-
-static DEVICE_ATTR(speed, S_IRUGO | S_IWUSR,
-		visdn_chan_show_speed,
-		visdn_chan_store_speed);
+static DEVICE_ATTR(bitrate, S_IRUGO,
+		visdn_chan_show_bitrate,
+		NULL);
 
 //----------------------------------------------------------------------------
 
@@ -407,7 +385,7 @@ static ssize_t visdn_chan_show_framing(
 	struct visdn_chan *chan = to_visdn_chan(device);
 	const char *name;
 
-	switch (chan->framing_current) {
+	switch (chan->pars.framing) {
 	case VISDN_CHAN_FRAMING_TRANS:
 		name = "trans";
 	break;
@@ -441,7 +419,8 @@ static ssize_t visdn_chan_show_bitorder(
 	struct visdn_chan *chan = to_visdn_chan(device);
 
 	return snprintf(buf, PAGE_SIZE, "%s\n",
-		chan->bitorder_current == VISDN_CHAN_BITORDER_LSB ? "lsb" : "msb");
+		chan->pars.bitorder == VISDN_CHAN_BITORDER_LSB ?
+			"lsb" : "msb");
 }
 
 static DEVICE_ATTR(bitorder, S_IRUGO,
@@ -465,8 +444,6 @@ static DEVICE_ATTR(autoopen, S_IRUGO,
 		NULL);
 
 //----------------------------------------------------------------------------
-
-
 
 int visdn_chan_register(
 	struct visdn_chan *chan,
@@ -501,18 +478,6 @@ int visdn_chan_register(
 
 	err = device_create_file(
 			&chan->device,
-			&dev_attr_role);
-	if (err < 0)
-		goto err_device_create_file;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_roles);
-	if (err < 0)
-		goto err_device_create_file;
-
-	err = device_create_file(
-			&chan->device,
 			&dev_attr_framing);
 	if (err < 0)
 		goto err_device_create_file;
@@ -525,7 +490,7 @@ int visdn_chan_register(
 
 	err = device_create_file(
 			&chan->device,
-			&dev_attr_speed);
+			&dev_attr_bitrate);
 	if (err < 0)
 		goto err_device_create_file;
 
@@ -575,23 +540,23 @@ static ssize_t visdn_bus_connect_store(
 	char *locbuf_p = locbuf;
 
 	strncpy(locbuf, buf, sizeof(locbuf));
-	char *chan1_name = strsep(&locbuf_p, ",\n\r");
-	if (!chan1_name)
+	char *chan1_id = strsep(&locbuf_p, ",\n\r");
+	if (!chan1_id)
 		return -EINVAL;
 
-	char *chan2_name = strsep(&locbuf_p, ",\n\r");
-	if (!chan2_name)
+	char *chan2_id = strsep(&locbuf_p, ",\n\r");
+	if (!chan2_id)
 		return -EINVAL;
 
-printk(KERN_INFO "CONNECT(%s,%s)\n", chan1_name, chan2_name);
+printk(KERN_INFO "CONNECT(%s,%s)\n", chan1_id, chan2_id);
 
-	struct visdn_chan *chan1 = visdn_search_chan(chan1_name);
+	struct visdn_chan *chan1 = visdn_search_chan(chan1_id);
 	if (!chan1) {
 		err = -ENODEV;
 		goto err_search_src;
 	}
 
-	struct visdn_chan *chan2 = visdn_search_chan(chan2_name);
+	struct visdn_chan *chan2 = visdn_search_chan(chan2_id);
 	if (!chan2) {
 		err = -ENODEV;
 		goto err_search_dst;

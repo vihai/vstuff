@@ -141,9 +141,6 @@ static int vsp_cdev_open(
 
 	chan->visdn_chan.priv = chan;
 	chan->visdn_chan.autoopen = FALSE;
-	chan->visdn_chan.speed = 0;
-	chan->visdn_chan.role = VISDN_CHAN_ROLE_B;
-	chan->visdn_chan.roles = VISDN_CHAN_ROLE_B;
 
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS;
 	chan->visdn_chan.framing_preferred = VISDN_CHAN_FRAMING_TRANS;
