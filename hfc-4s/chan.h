@@ -118,6 +118,8 @@ void hfc_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	int hw_index);
+	int hw_index,
+	const int bitrates[],
+	int bitrates_cnt);
 
 #endif

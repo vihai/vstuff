@@ -54,16 +54,6 @@ void hfc_upload_fsm_entry(
 		hfc_A_CHANNEL_V_CH_FNUM(
 			chan->chan->hw_index));
 
-	if (chan->chan->id == B1 ||
-	    chan->chan->id == B2) {
-		hfc_outb(card, hfc_A_SUBCH_CFG,
-			hfc_A_SUBCH_CFG_V_BIT_CNT_8);
-	} else if (chan->chan->id == D ||
-	           chan->chan->id == E) {
-		hfc_outb(card, hfc_A_SUBCH_CFG,
-			hfc_A_SUBCH_CFG_V_BIT_CNT_2);
-	}
-
 	if (next_fifo) {
 		hfc_outb(card, hfc_A_FIFO_SEQ,
 			(next_fifo->direction == RX ?

@@ -62,7 +62,13 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	}
 
 	chan->rx.fifo = fifo_rx;
-	fifo_rx->connected_chan = &chan->rx;
+	chan->rx.fifo->connected_chan = &chan->rx;
+	chan->rx.fifo->bitrate = chan->visdn_chan.pars.bitrate;
+	chan->rx.fifo->framing = chan->visdn_chan.pars.framing;
+	chan->rx.fifo->bit_reversed =
+		chan->visdn_chan.pars.bitorder ==
+			VISDN_CHAN_BITORDER_MSB;
+	chan->rx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
 
 	if (chan->id != E) {
 		struct hfc_fifo *fifo_tx;
@@ -73,72 +79,36 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		}
 
 		chan->tx.fifo = fifo_tx;
-		fifo_tx->connected_chan = &chan->tx;
+		chan->tx.fifo->connected_chan = &chan->tx;
+		chan->tx.fifo->bitrate = chan->visdn_chan.pars.bitrate;
+		chan->tx.fifo->framing = chan->visdn_chan.pars.framing;
+		chan->tx.fifo->bit_reversed =
+			chan->visdn_chan.pars.bitorder ==
+				VISDN_CHAN_BITORDER_MSB;
+		chan->tx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
 
 		chan->visdn_chan.max_mtu = fifo_tx->fifo_size;
 
-		visdn_renegotiate_parameters(visdn_chan);
+		err = visdn_renegotiate_parameters(visdn_chan);
+		if (err < 0)
+			goto err_renegotiate_parameters;
 	}
 
 	hfc_upload_fsm(card);
 
 	if (chan->rx.fifo) {
-		hfc_fifo_set_bit_order(
-			chan->rx.fifo,
-			chan->visdn_chan.pars.bitorder ==
-				VISDN_CHAN_BITORDER_MSB);
-
 		hfc_fifo_select(chan->rx.fifo);
+		hfc_fifo_configure(chan->rx.fifo);
 		hfc_fifo_reset(chan->rx.fifo);
-
-		if (chan->visdn_chan.pars.framing ==
-				VISDN_CHAN_FRAMING_TRANS) {
-
-			hfc_outb(card, hfc_A_CON_HDLC,
-				hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-
-		} else if (chan->visdn_chan.pars.framing ==
-				VISDN_CHAN_FRAMING_HDLC) {
-
-			hfc_outb(card, hfc_A_CON_HDLC,
-				hfc_A_CON_HDCL_V_IFF|
-				hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
-		}
 
 		hfc_outb(card, hfc_A_IRQ_MSK,
 			hfc_A_IRQ_MSK_V_IRQ);
 	}
 
 	if (chan->tx.fifo) {
-		hfc_fifo_set_bit_order(
-			chan->tx.fifo,
-			chan->visdn_chan.pars.bitorder ==
-				VISDN_CHAN_BITORDER_MSB);
-
 		hfc_fifo_select(chan->tx.fifo);
+		hfc_fifo_configure(chan->tx.fifo);
 		hfc_fifo_reset(chan->tx.fifo);
-
-		if (chan->visdn_chan.pars.framing ==
-				VISDN_CHAN_FRAMING_TRANS) {
-
-			hfc_outb(card, hfc_A_CON_HDLC,
-				hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
-
-		} else if (chan->visdn_chan.pars.framing ==
-				VISDN_CHAN_FRAMING_HDLC) {
-
-			hfc_outb(card, hfc_A_CON_HDLC,
-				hfc_A_CON_HDCL_V_IFF|
-				hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-				hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
-		}
 
 		hfc_outb(card, hfc_A_IRQ_MSK,
 			hfc_A_IRQ_MSK_V_IRQ);
@@ -153,10 +123,11 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_card_unlock(card);
 
-	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");
+	hfc_debug_chan(chan, 1, "channel opened.\n");
 
 	return 0;
 
+err_renegotiate_parameters:
 	if (chan->tx.fifo)
 		hfc_deallocate_fifo(chan->tx.fifo);
 err_allocate_fifo_tx:
@@ -168,6 +139,8 @@ err_invalid_framing:
 err_channel_busy:
 
 	hfc_card_unlock(card);
+
+	hfc_debug_chan(chan, 1, "Open failed: %d\n", err);
 
 	return err;
 }
@@ -191,9 +164,9 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 		hfc_fifo_select(chan->rx.fifo);
 		hfc_fifo_reset(chan->rx.fifo);
 		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_IFF|
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+			hfc_A_CON_HDCL_V_IFF |
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC |
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED |
 			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
 
 		hfc_outb(card, hfc_A_IRQ_MSK, 0);
@@ -208,9 +181,9 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 		hfc_fifo_select(chan->tx.fifo);
 		hfc_fifo_reset(chan->tx.fifo);
 		hfc_outb(card, hfc_A_CON_HDLC,
-			hfc_A_CON_HDCL_V_IFF|
-			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC|
-			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED|
+			hfc_A_CON_HDCL_V_IFF |
+			hfc_A_CON_HDCL_V_HDLC_TRP_HDLC |
+			hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED |
 			hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
 		hfc_outb(card, hfc_A_IRQ_MSK, 0);
@@ -464,12 +437,31 @@ static int hfc_bridge(
 
 	chan->rx.fifo = fifo_1_rx;;
 	chan->rx.fifo->connected_chan = &chan->rx;
+	chan->rx.fifo->bitrate = 64000;
+	chan->rx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
+	chan->rx.fifo->bit_reversed = FALSE;
+	chan->rx.fifo->connect_to = HFC_FIFO_CONNECT_TO_PCM;
+
 	chan->tx.fifo = fifo_1_tx;
 	chan->tx.fifo->connected_chan = &chan->tx;
+	chan->tx.fifo->bitrate = 64000;
+	chan->tx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
+	chan->tx.fifo->bit_reversed = FALSE;
+	chan->tx.fifo->connect_to = HFC_FIFO_CONNECT_TO_PCM;
+
 	chan2->rx.fifo = fifo_2_rx;
 	chan2->rx.fifo->connected_chan = &chan2->rx;
+	chan2->rx.fifo->bitrate = 64000;
+	chan2->rx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
+	chan2->rx.fifo->bit_reversed = FALSE;
+	chan2->rx.fifo->connect_to = HFC_FIFO_CONNECT_TO_PCM;
+
 	chan2->tx.fifo = fifo_2_tx;
 	chan2->tx.fifo->connected_chan = &chan2->tx;
+	chan2->tx.fifo->bitrate = 64000;
+	chan2->tx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
+	chan2->tx.fifo->bit_reversed = FALSE;
+	chan2->tx.fifo->connect_to = HFC_FIFO_CONNECT_TO_PCM;
 
 	chan->rx.slot = slot_1_rx;
 	chan->rx.slot->connected_chan = &chan->rx;
@@ -483,40 +475,23 @@ static int hfc_bridge(
 	hfc_upload_fsm(card);
 
 	hfc_fifo_select(chan->rx.fifo);
+	hfc_fifo_configure(chan->rx.fifo);
 	hfc_fifo_reset(chan->rx.fifo);
 
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST_ST_from_PCM);
-
 	hfc_fifo_select(chan->tx.fifo);
+	hfc_fifo_configure(chan->tx.fifo);
 	hfc_fifo_reset(chan->tx.fifo);
 
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_ST_to_PCM);
-
 	hfc_fifo_select(chan2->rx.fifo);
+	hfc_fifo_configure(chan2->rx.fifo);
 	hfc_fifo_reset(chan2->rx.fifo);
 
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST_ST_from_PCM);
-
 	hfc_fifo_select(chan2->tx.fifo);
+	hfc_fifo_configure(chan2->tx.fifo);
 	hfc_fifo_reset(chan2->tx.fifo);
-
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_ST_to_PCM);
 
 //	hfc_pcm_multireg_select(card, hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD1);
 //	hfc_outb(card, hfc_R_PCM_MD1, hfc_R_PCM_MD1_V_PCM_LOOP);
-
 
 	// Slot 0
 	hfc_pcm_slot_select(card,
@@ -644,6 +619,8 @@ static int hfc_chan_update_parameters(
 	struct visdn_chan *chan,
 	struct visdn_chan_pars *pars)
 {
+	// TODO: Complain if someone tryies to change framing mode or bitrate
+
 	memcpy(&chan->pars, pars, sizeof(chan->pars));
 
 	return 0;
@@ -670,7 +647,9 @@ void hfc_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	int hw_index)
+	int hw_index,
+	const int bitrates[],
+	int bitrates_cnt)
 {
 	chan->port = port;
 	chan->name = name;
@@ -687,15 +666,14 @@ void hfc_chan_init(
 	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
 
 	chan->visdn_chan.priv = chan;
-
 	chan->visdn_chan.autoopen = TRUE;
-
 	chan->visdn_chan.max_mtu = 0;
-
+	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_LIST;
+	memcpy(chan->visdn_chan.bitrates, bitrates, sizeof(bitrates));
+	chan->visdn_chan.bitrates_cnt = bitrates_cnt;
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;
 	chan->visdn_chan.framing_preferred = 0;
-
 	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB |
 					      VISDN_CHAN_BITORDER_MSB;
 	chan->visdn_chan.bitorder_preferred = 0;

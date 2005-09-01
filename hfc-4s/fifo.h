@@ -82,6 +82,12 @@ struct hfc_fifo_config
 	struct hfc_fifo_zone_config zone2;
 };
 
+enum hfc_fifo_connect_to
+{
+	HFC_FIFO_CONNECT_TO_ST,
+	HFC_FIFO_CONNECT_TO_PCM,
+};
+
 struct hfc_fifo
 {
 	struct hfc_card *card;
@@ -91,6 +97,9 @@ struct hfc_fifo
 	enum hfc_direction direction;
 
 	int bit_reversed;
+	int bitrate;
+	int framing;
+	enum hfc_fifo_connect_to connect_to;
 
 	int used;
 
@@ -132,11 +141,12 @@ int hfc_fifo_get(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_put(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_drop(struct hfc_fifo *fifo, int size);
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo);
+void hfc_fifo_configure(
+	struct hfc_fifo *fifo);
 void hfc_fifo_init(
 	struct hfc_fifo *fifo,
 	struct hfc_card *card,
 	int hw_index,
 	enum hfc_direction direction);
-void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed);
 
 #endif

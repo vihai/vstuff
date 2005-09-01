@@ -149,11 +149,6 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 	hfc_fifo_next_frame(fifo);
 }
 
-void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
-{
-	fifo->bit_reversed = reversed;
-}
-
 void hfc_fifo_rx_work(void *data)
 {
 	struct hfc_fifo *fifo = data;
@@ -280,6 +275,56 @@ all_went_well:
 		schedule_work(&fifo->work);
 
 	up(&card->sem);
+}
+
+void hfc_fifo_configure(
+	struct hfc_fifo *fifo)
+{
+	WARN_ON(atomic_read(&fifo->card->sem.count) > 0);
+
+	struct hfc_card *card = fifo->card;
+
+	u8 subch_bits;
+	switch (fifo->bitrate) {
+		case  8000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_1; break;
+		case 16000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_2; break;
+		case 24000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_3; break;
+		case 32000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_4; break;
+		case 40000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_5; break;
+		case 48000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_6; break;
+		case 56000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_7; break;
+		case 64000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8; break;
+		default: 
+			WARN_ON(1);
+			subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8;
+	}
+
+	hfc_outb(card, hfc_A_SUBCH_CFG, subch_bits);
+
+	u8 con_hdlc = 0;
+
+	if (fifo->framing == VISDN_CHAN_FRAMING_TRANS) {
+		con_hdlc |= hfc_A_CON_HDCL_V_HDLC_TRP_TRP |
+			    hfc_A_CON_HDCL_V_TRP_IRQ_4096;
+	} else if (fifo->framing == VISDN_CHAN_FRAMING_HDLC) {
+		con_hdlc |= hfc_A_CON_HDCL_V_HDLC_TRP_HDLC |
+			    hfc_A_CON_HDCL_V_IFF |
+			    hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED;
+	}
+
+	if (fifo->direction == RX) {
+		if (fifo->connect_to == HFC_FIFO_CONNECT_TO_ST)
+			con_hdlc |= hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST;
+		else
+			con_hdlc |= hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST_ST_from_PCM;
+	} else {
+		if (fifo->connect_to == HFC_FIFO_CONNECT_TO_ST)
+			con_hdlc |= hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM;
+		else
+			con_hdlc |= hfc_A_CON_HDCL_V_DATA_FLOW_ST_to_PCM;
+	}
+
+	hfc_outb(card, hfc_A_CON_HDLC, con_hdlc);
 }
 
 void hfc_fifo_init(

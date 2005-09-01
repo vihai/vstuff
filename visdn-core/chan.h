@@ -92,6 +92,13 @@ struct visdn_chan_ops
 #define VISDN_CHAN_BITORDER_LSB		(1 << 0)
 #define VISDN_CHAN_BITORDER_MSB		(1 << 1)
 
+enum visdn_chan_bitrate_selection
+{
+	VISDN_CHAN_BITRATE_SELECTION_MAX,
+	VISDN_CHAN_BITRATE_SELECTION_LIST,
+	VISDN_CHAN_BITRATE_SELECTION_RANGE, // Not implemented yet
+};
+
 struct visdn_chan_pars
 {
 	int mtu;
@@ -121,6 +128,10 @@ struct visdn_chan
 	struct visdn_chan_pars pars;
 
 	int max_mtu;
+
+	enum visdn_chan_bitrate_selection bitrate_selection;
+	int bitrates[32];
+	int bitrates_cnt;
 
 	int framing_supported;
 	int framing_preferred;

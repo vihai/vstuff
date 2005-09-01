@@ -199,6 +199,8 @@ err_channel_busy:
 
 	hfc_card_unlock(card);
 
+	hfc_debug_chan(chan, 1, "Open failed: %d\n", err);
+
 	return err;
 }
 
@@ -487,7 +489,9 @@ void hfc_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	int hw_index)
+	int hw_index,
+	const int bitrates[],
+	int bitrates_cnt)
 {
 	chan->port = port;
 	chan->name = name;
@@ -506,15 +510,14 @@ void hfc_chan_init(
 	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
 
 	chan->visdn_chan.priv = chan;
-
 	chan->visdn_chan.autoopen = TRUE;
-
 	chan->visdn_chan.max_mtu = 0; // We'll set it after opening the port
-
+	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_LIST;
+	memcpy(chan->visdn_chan.bitrates, bitrates, sizeof(bitrates));
+	chan->visdn_chan.bitrates_cnt = bitrates_cnt;
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;
 	chan->visdn_chan.framing_preferred = 0;
-
 	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB |
 					      VISDN_CHAN_BITORDER_MSB;
 	chan->visdn_chan.bitorder_preferred = 0;

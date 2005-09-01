@@ -211,14 +211,12 @@ int vppp_cdev_open(
 	chan->index = vppp_chan_new_index();
 
 	chan->visdn_chan.priv = chan;
-
 	chan->visdn_chan.autoopen = FALSE;
-
 	chan->visdn_chan.max_mtu = 200; // FIXME
-
+	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_MAX;
+	chan->visdn_chan.bitrates_cnt = 0;
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_HDLC;
 	chan->visdn_chan.framing_preferred = 0;
-
 	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
 	chan->visdn_chan.bitorder_preferred = 0;
 

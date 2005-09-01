@@ -191,10 +191,21 @@ void hfc_st_port_init(
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 
-	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF);
-	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF);
-	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF);
-	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF);
-	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0);
+	// Note: Bitrates must be in increasing order
+	int bitrates_d[] = { 16000 };
+	int bitrates_b[] = { 64000 };
+	int bitrates_s[] = { 4000 };
+
+
+	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF,
+		bitrates_d, sizeof(bitrates_d)/sizeof(*bitrates_d));
+	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF,
+		bitrates_b, sizeof(bitrates_b)/sizeof(*bitrates_b));
+	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF,
+		bitrates_b, sizeof(bitrates_b)/sizeof(*bitrates_b));
+	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF,
+		bitrates_d, sizeof(bitrates_d)/sizeof(*bitrates_d));
+	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
+		bitrates_s, sizeof(bitrates_s)/sizeof(*bitrates_s));
 }
 

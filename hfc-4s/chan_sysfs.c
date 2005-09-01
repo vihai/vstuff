@@ -48,33 +48,33 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 	}
 
 	chan->rx.fifo = fifo_rx;
-	fifo_rx->connected_chan = &chan->rx;
+	chan->rx.fifo->connected_chan = &chan->rx;
+	chan->rx.fifo->bitrate = chan->visdn_chan.pars.bitrate;
+	chan->rx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
+	chan->rx.fifo->bit_reversed = FALSE;
+	chan->rx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
 
 	chan->tx.fifo = fifo_tx;
-	fifo_tx->connected_chan = &chan->tx;
+	chan->tx.fifo->connected_chan = &chan->tx;
+	chan->tx.fifo->bitrate = chan->visdn_chan.pars.bitrate;
+	chan->tx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
+	chan->tx.fifo->bit_reversed = FALSE;
+	chan->tx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
 
 	hfc_upload_fsm(card);
 
 	// RX
-	hfc_fifo_set_bit_order(chan->rx.fifo, FALSE);
 	hfc_fifo_select(chan->rx.fifo);
+	hfc_fifo_configure(chan->rx.fifo);
 	hfc_fifo_reset(chan->rx.fifo);
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_from_ST);
 
 	hfc_outb(card, hfc_A_IRQ_MSK,
 		hfc_A_IRQ_MSK_V_BERT_EN);
 
 	// TX
-	hfc_fifo_set_bit_order(chan->tx.fifo, FALSE);
 	hfc_fifo_select(chan->tx.fifo);
+	hfc_fifo_configure(chan->tx.fifo);
 	hfc_fifo_reset(chan->tx.fifo);
-	hfc_outb(card, hfc_A_CON_HDLC,
-		hfc_A_CON_HDCL_V_HDLC_TRP_TRP|
-		hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_ENABLED|
-		hfc_A_CON_HDCL_V_DATA_FLOW_FIFO_to_ST_FIFO_to_PCM);
 
 	hfc_outb(card, hfc_A_IRQ_MSK,
 		hfc_A_IRQ_MSK_V_BERT_EN);

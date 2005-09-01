@@ -165,18 +165,54 @@ static int visdn_negotiate_parameters(
 
 	memset(&pars, 0, sizeof(pars));
 
-/*	if (!((chan1->min_mtu <= chan2->min_mtu &&
-             chan2->min_mtu <= chan1->max_mtu) ||
-	    (chan2->min_mtu <= chan1->max_mtu &&
-	     chan1->max_mtu <= chan2->max_mtu)))
-		return -EXDEV;*/
-
 	if (chan1->max_mtu && chan2->max_mtu)
 		pars.mtu = min(chan1->max_mtu, chan2->max_mtu);
 	else if (chan1->max_mtu)
 		pars.mtu = chan1->max_mtu;
 	else if (chan2->max_mtu)
 		pars.mtu = chan2->max_mtu;
+
+	if (chan1->bitrate_selection ==
+			VISDN_CHAN_BITRATE_SELECTION_MAX &&
+	    chan2->bitrate_selection ==
+			VISDN_CHAN_BITRATE_SELECTION_MAX) {
+		pars.bitrate = 1000000000;
+	} else if (chan1->bitrate_selection ==
+				VISDN_CHAN_BITRATE_SELECTION_MAX &&
+	           chan2->bitrate_selection ==
+				VISDN_CHAN_BITRATE_SELECTION_LIST) {
+		BUG_ON(chan2->bitrates_cnt <= 0);
+		pars.bitrate = chan2->bitrates[chan2->bitrates_cnt - 1];
+	} else if (chan1->bitrate_selection ==
+				VISDN_CHAN_BITRATE_SELECTION_LIST &&
+	           chan2->bitrate_selection ==
+				 VISDN_CHAN_BITRATE_SELECTION_MAX) {
+		BUG_ON(chan1->bitrates_cnt <= 0);
+		pars.bitrate = chan1->bitrates[chan1->bitrates_cnt - 1];
+	} else {
+		int c1_idx = 0;
+		int c2_idx = 0;
+
+		// Do a merge-search on the two lists finding the biggest
+		// common bitrate
+		while (c1_idx < chan1->bitrates_cnt &&
+		       c2_idx < chan2->bitrates_cnt) {
+			if (chan1->bitrates[c1_idx] ==
+					chan2->bitrates[c2_idx]) {
+				pars.bitrate = chan1->bitrates[c1_idx];
+				c1_idx++;
+				c2_idx++;
+			} else if (chan1->bitrates[c1_idx] >
+					chan2->bitrates[c2_idx]) {
+				c2_idx++;
+			} else {
+				c1_idx++;
+			}
+		}
+	}
+
+	if (!pars.bitrate)
+		return -EXDEV;
 
 	if (!(chan1->framing_supported & chan2->framing_supported))
 		return -EXDEV;
@@ -203,16 +239,12 @@ static int visdn_negotiate_parameters(
 
 	pars.bitorder = 1 << find_first_bit(&bitorder, sizeof(bitorder));
 
+	// Apply negotiated parameters ------------------------------
+
 	if (chan1->ops->update_parameters)
 		chan1->ops->update_parameters(chan1, &pars);
 	else
 		visdn_default_update_parameters(chan1, &pars);
-
-	// Apply negotiated parameters ------------------------------
-	printk(KERN_DEBUG "select f=%#x b=%#x m=%d\n",
-		pars.framing,
-		pars.bitorder,
-		pars.mtu);
 
 	if (chan2->ops->update_parameters)
 		chan2->ops->update_parameters(chan2, &pars);
@@ -364,6 +396,20 @@ static DEVICE_ATTR(port_name, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
+static ssize_t visdn_chan_show_mtu(
+	struct device *device,
+	char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		to_visdn_chan(device)->pars.mtu);
+}
+
+static DEVICE_ATTR(mtu, S_IRUGO,
+		visdn_chan_show_mtu,
+		NULL);
+
+//----------------------------------------------------------------------------
+
 static ssize_t visdn_chan_show_bitrate(
 	struct device *device,
 	char *buf)
@@ -474,31 +520,37 @@ int visdn_chan_register(
 			&chan->device,
 			&dev_attr_port_name);
 	if (err < 0)
-		goto err_device_create_file;
+		goto err_device_create_file_port_name;
 
 	err = device_create_file(
 			&chan->device,
-			&dev_attr_framing);
+			&dev_attr_mtu);
 	if (err < 0)
-		goto err_device_create_file;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_bitorder);
-	if (err < 0)
-		goto err_device_create_file;
+		goto err_device_create_file_mtu;
 
 	err = device_create_file(
 			&chan->device,
 			&dev_attr_bitrate);
 	if (err < 0)
-		goto err_device_create_file;
+		goto err_device_create_file_bitrate;
+
+	err = device_create_file(
+			&chan->device,
+			&dev_attr_framing);
+	if (err < 0)
+		goto err_device_create_file_framing;
+
+	err = device_create_file(
+			&chan->device,
+			&dev_attr_bitorder);
+	if (err < 0)
+		goto err_device_create_file_bitorder;
 
 	err = device_create_file(
 			&chan->device,
 			&dev_attr_autoopen);
 	if (err < 0)
-		goto err_device_create_file;
+		goto err_device_create_file_autoopen;
 
 	sysfs_create_link(
 		&chan->device.parent->kobj,
@@ -509,7 +561,18 @@ int visdn_chan_register(
 
 	return 0;
 
-err_device_create_file:
+	device_remove_file(&chan->device, &dev_attr_autoopen);
+err_device_create_file_autoopen:
+	device_remove_file(&chan->device, &dev_attr_bitorder);
+err_device_create_file_bitorder:
+	device_remove_file(&chan->device, &dev_attr_framing);
+err_device_create_file_framing:
+	device_remove_file(&chan->device, &dev_attr_bitrate);
+err_device_create_file_bitrate:
+	device_remove_file(&chan->device, &dev_attr_mtu);
+err_device_create_file_mtu:
+	device_remove_file(&chan->device, &dev_attr_port_name);
+err_device_create_file_port_name:
 	device_unregister(&chan->device);
 err_device_register:
 
@@ -518,14 +581,21 @@ err_device_register:
 EXPORT_SYMBOL(visdn_chan_register);
 
 void visdn_chan_unregister(
-	struct visdn_chan *visdn_chan)
+	struct visdn_chan *chan)
 {
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_chan_unregister called\n");
 
-	if (visdn_chan->connected_chan)
-		visdn_disconnect(visdn_chan, visdn_chan->connected_chan);
+	if (chan->connected_chan)
+		visdn_disconnect(chan, chan->connected_chan);
 
-	device_unregister(&visdn_chan->device);
+	device_remove_file(&chan->device, &dev_attr_autoopen);
+	device_remove_file(&chan->device, &dev_attr_bitorder);
+	device_remove_file(&chan->device, &dev_attr_framing);
+	device_remove_file(&chan->device, &dev_attr_bitrate);
+	device_remove_file(&chan->device, &dev_attr_mtu);
+	device_remove_file(&chan->device, &dev_attr_port_name);
+
+	device_unregister(&chan->device);
 }
 EXPORT_SYMBOL(visdn_chan_unregister);
 

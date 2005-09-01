@@ -435,15 +435,15 @@ static int vnd_create_request(
 	visdn_chan_init(&netdevice->visdn_chan, &vnd_chan_ops);
 
 	netdevice->visdn_chan.priv = netdevice;
-
 	netdevice->visdn_chan.autoopen = FALSE;
-
 	netdevice->visdn_chan.max_mtu = 0;
-
-	netdevice->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_HDLC |
-					     VISDN_CHAN_FRAMING_MTP;
+	netdevice->visdn_chan.bitrate_selection =
+					 VISDN_CHAN_BITRATE_SELECTION_MAX;
+	netdevice->visdn_chan.bitrates_cnt = 0;
+	netdevice->visdn_chan.framing_supported =
+					VISDN_CHAN_FRAMING_HDLC |
+					VISDN_CHAN_FRAMING_MTP;
 	netdevice->visdn_chan.framing_preferred = 0;
-
 	netdevice->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
 	netdevice->visdn_chan.bitorder_preferred = 0;
 
@@ -452,13 +452,13 @@ static int vnd_create_request(
 
 	netdevice->visdn_chan_e.priv = netdevice;
 	netdevice->visdn_chan_e.autoopen = FALSE;
-
 	netdevice->visdn_chan_e.max_mtu = 0;
-
+	netdevice->visdn_chan_e.bitrate_selection =
+					 VISDN_CHAN_BITRATE_SELECTION_MAX;
+	netdevice->visdn_chan_e.bitrates_cnt = 0;
 	netdevice->visdn_chan_e.framing_supported = VISDN_CHAN_FRAMING_HDLC |
 					     VISDN_CHAN_FRAMING_MTP;
 	netdevice->visdn_chan_e.framing_preferred = 0;
-
 	netdevice->visdn_chan_e.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
 	netdevice->visdn_chan_e.bitorder_preferred = 0;
 
