@@ -87,7 +87,7 @@ static int vnd_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *sk
 {
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
-	skb->protocol = htons(ETH_P_LAPD); // FIXME chan->protocol);
+	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
@@ -281,6 +281,8 @@ static int vnd_netdev_do_ioctl(struct net_device *netdev,
 
 struct vnd_request
 {
+	struct semaphore sem;
+
 	int type;
 	char output[30];
 	int output_off;
@@ -296,6 +298,8 @@ static int vnd_cdev_open(
 	struct vnd_request *vnd_request;
 	vnd_request = kmalloc(sizeof(*vnd_request), GFP_KERNEL);
 	memset(vnd_request, 0x00, sizeof(*vnd_request));
+
+	init_MUTEX(&vnd_request->sem);
 
 	file->private_data = vnd_request;
 
@@ -322,23 +326,31 @@ static ssize_t vnd_cdev_read(
 
 	struct vnd_request *vnd_request = file->private_data;
 
-	if (vnd_request->output_off == vnd_request->output_len)
-		return 0;
+	if (down_interruptible(&vnd_request->sem))
+		return -ERESTARTSYS;
 
-	int copied_bytes = vnd_request->output_len - vnd_request->output_off;
-	if (copied_bytes > count)
-		copied_bytes = count;
+	int copied_bytes = 0;
 
-	if (copy_to_user(buf, vnd_request->output, copied_bytes)) {
-		err = -EFAULT;
-		goto err_copy_to_user;
+	if (vnd_request->output_off < vnd_request->output_len) {
+		copied_bytes = vnd_request->output_len - vnd_request->output_off;
+		if (copied_bytes > count)
+			copied_bytes = count;
+
+		if (copy_to_user(buf, vnd_request->output, copied_bytes)) {
+			err = -EFAULT;
+			goto err_copy_to_user;
+		}
+
+		vnd_request->output_off += copied_bytes;
 	}
 
-	vnd_request->output_off += copied_bytes;
+	up(&vnd_request->sem);
 
 	return copied_bytes;
 
 err_copy_to_user:
+
+	up(&vnd_request->sem);
 
 	return err;
 }
@@ -500,6 +512,9 @@ static ssize_t vnd_cdev_write(
 
 	struct vnd_request *vnd_request = file->private_data;
 
+	if (down_interruptible(&vnd_request->sem))
+		return -ERESTARTSYS;
+
 	if (copy_from_user(request, buf,
 			count < (sizeof(request) - 1) ?
 				count : (sizeof(request) - 1))) {
@@ -530,12 +545,16 @@ static ssize_t vnd_cdev_write(
 		goto err_invalid_command;
 	}
 
+	up(&vnd_request->sem);
+
 	return count;
 
 err_command:
 err_invalid_command:
 err_missing_command:
 err_copy_from_user:
+
+	up(&vnd_request->sem);
 
 	return err;
 }
