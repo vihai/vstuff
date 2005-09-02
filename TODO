@@ -58,9 +58,6 @@ visdn_core:
 lapd:
 -----
 
-- There is a deadlock/race condition on modules removal when an application
-  has an open socket and doesn't exit immediately
-
 - Implement point-to-point and static TEIs
 
 - Implement automatic TEI check for TEIs that are presumably unused and could

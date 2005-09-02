@@ -713,12 +713,16 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	skb_copy_datagram_iovec(skb, hdrsize, msg->msg_iov, copied);
 
 	skb_free_datagram(sk, skb);
-	err = copied;
+
+	return copied;
 
 err_recv_datagram:
 err_no_dev:
 err_shutting_down:
 err_not_established:
+
+	release_sock(sk);
+
 
 	return err;
 }
