@@ -2177,6 +2177,8 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
+			ast_setstate(ast_chan, AST_STATE_RINGING);
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -2241,6 +2243,8 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 			strncpy(ast_chan->exten,
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
+
+			ast_setstate(ast_chan, AST_STATE_RINGING);
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
@@ -2534,6 +2538,8 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
+			ast_setstate(ast_chan, AST_STATE_RINGING);
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -2608,6 +2614,8 @@ static void visdn_q931_setup_indication(
 			strncpy(ast_chan->exten,
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
+
+			ast_setstate(ast_chan, AST_STATE_RINGING);
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
