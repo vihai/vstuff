@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-02 00:33:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-117
+
+    Summary:
+      Fixed fifo handling in hfc-pci, CRC/STAT were read from the wrong place
+    Revision:
+      isdn--devel--0.1--patch-117
+
+    
+    
+
+    modified files:
+     ChangeLog hfc-pci/fifo.c
+
+
 2005-09-02 00:21:56 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-116
 
     Summary:

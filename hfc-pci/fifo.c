@@ -240,7 +240,7 @@ void hfc_fifo_rx_work(void *data)
 
 	struct { u8 crc[2], stat; } __attribute((packed)) stat;
 
-	hfc_fifo_mem_read(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 1),
+	hfc_fifo_mem_read(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 3),
 		&stat, sizeof(stat));
 
 #ifdef DEBUG
