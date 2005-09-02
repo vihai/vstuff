@@ -1140,7 +1140,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	if (visdn.debug)
 		ast_log(LOG_NOTICE, "visdn_answer\n");
 
-//	ast_indicate(ast_chan, -1);
+	ast_indicate(ast_chan, -1);
 
 	if (!visdn_chan) {
 		ast_log(LOG_ERROR, "NO VISDN_CHAN!!\n");
@@ -1262,6 +1262,8 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 	return NULL;
 }
 
+static int visdn_generator_start(struct ast_channel *chan);
+
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -1275,16 +1277,42 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		ast_log(LOG_NOTICE, "visdn_indicate %d\n", condition);
 
 	switch(condition) {
-	case AST_CONTROL_HANGUP:
 	case AST_CONTROL_RING:
 	case AST_CONTROL_TAKEOFFHOOK:
-	case AST_CONTROL_OFFHOOK:
 	case AST_CONTROL_FLASH:
 	case AST_CONTROL_WINK:
 	case AST_CONTROL_OPTION:
 	case AST_CONTROL_RADIO_KEY:
 	case AST_CONTROL_RADIO_UNKEY:
 		return 1;
+	break;
+
+	case AST_CONTROL_OFFHOOK: {
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "dial");
+		if (tone) {
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+			if (!ast_chan->pbx)
+				visdn_generator_start(ast_chan);
+		}
+
+		return 0;
+	}
+	break;
+
+	case AST_CONTROL_HANGUP: {
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "busy");
+		if (tone) {
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+			if (!ast_chan->pbx)
+				visdn_generator_start(ast_chan);
+		}
+
+		return 0;
+	}
 	break;
 
 	case AST_CONTROL_RINGING: {
@@ -1312,12 +1340,19 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		q931_alerting_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
 
-		return 1;
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "ring");
+		if (tone)
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+		return 0;
 	}
 	break;
 
 	case AST_CONTROL_ANSWER:
-//		q931_setup_response(visdn_chan->q931_call);
+		ast_playtones_stop(ast_chan);
+
+		return 0;
 	break;
 
 	case AST_CONTROL_BUSY: {
@@ -1333,7 +1368,12 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
 
-//		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "busy");
+		if (tone)
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+		return 0;
 	}
 	break;
 
@@ -1350,7 +1390,12 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
 
-//		ast_softhangup_nolock(ast_chan, AST_SOFTHANGUP_DEV);
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "busy");
+		if (tone)
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+		return 0;
 	}
 	break;
 
@@ -1377,6 +1422,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		ast_mutex_lock(&visdn.lock);
 		q931_progress_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
+
+		return 0;
 	}
 	break;
 
@@ -1384,6 +1431,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		ast_mutex_lock(&visdn.lock);
 		q931_proceeding_request(visdn_chan->q931_call, NULL);
 		ast_mutex_unlock(&visdn.lock);
+
+		return 0;
 	break;
 	}
 
@@ -2935,49 +2984,21 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 		return;
 
 	switch (tone) {
-	case Q931_TONE_DIAL: {
-		struct tone_zone_sound *ts;
-		ts = ast_get_indication_tone(ast_chan->zone, "dial");
-
-		ast_mutex_lock(&ast_chan->lock);
-		if (ts) {
-			if (ast_playtones_start(ast_chan, 0, ts->data, 0))
-				ast_log(LOG_WARNING,
-					"Unable to start playtones\n");
-		} else {
-			ast_tonepair_start(ast_chan, 350, 440, 0, 0);
-		}
-		ast_mutex_unlock(&ast_chan->lock);
-
-		visdn_generator_start(ast_chan);
-	}
+	case Q931_TONE_DIAL:
+		ast_indicate(ast_chan, AST_CONTROL_OFFHOOK);
 	break;
 
-	case Q931_TONE_HANGUP: {
-		struct tone_zone_sound *ts;
-		ts = ast_get_indication_tone(ast_chan->zone, "congestion");
-
-		ast_mutex_lock(&ast_chan->lock);
-		if (ts) {
-			if (ast_playtones_start(ast_chan, 0, ts->data, 0))
-				ast_log(LOG_WARNING,
-					"Unable to start playtones\n");
-		} else {
-			ast_tonepair_start(ast_chan, 350, 440, 0, 0);
-		}
-		ast_mutex_unlock(&ast_chan->lock);
-
-		if (!ast_chan->pbx)
-			visdn_generator_start(ast_chan);
-	}
+	case Q931_TONE_HANGUP:
+		ast_indicate(ast_chan, AST_CONTROL_HANGUP);
 	break;
 
-/*
 	case Q931_TONE_BUSY:
+		ast_indicate(ast_chan, AST_CONTROL_BUSY);
 	break;
 
 	case Q931_TONE_FAILURE:
-	break;*/
+		ast_indicate(ast_chan, AST_CONTROL_CONGESTION);
+	break;
 	default:;
 	}
 }
@@ -2990,6 +3011,7 @@ static void visdn_q931_stop_tone(struct q931_channel *channel)
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
+	ast_indicate(ast_chan, -1);
 	visdn_generator_stop(ast_chan);
 }
 
