@@ -47,6 +47,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	}
 
 	if (chan->status != HFC_CHAN_STATUS_FREE) {
+		hfc_debug_chan(chan, 1, "open failed: channel busy\n");
 		err = -EBUSY;
 		goto err_channel_busy;
 	}
@@ -58,6 +59,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 				VISDN_CHAN_FRAMING_HDLC) {
 		chan->status = HFC_CHAN_STATUS_OPEN_HDLC;
 	} else {
+		hfc_debug_chan(chan, 1,
+			"open failed: unsupported framing %d\n",
+			chan->visdn_chan.pars.framing);
 		err = -EINVAL;
 		goto err_invalid_framing;
 	}
@@ -176,7 +180,8 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		card->regs.trm |= hfc_TRM_ECHO;
 
 	} else {
-		return -EINVAL;
+		err = -ENOTSUPP;
+		goto err_invalid_chan;
 	}
 
 	hfc_outb(card, hfc_FIFO_EN, chan->port->card->regs.fifo_en);
@@ -214,6 +219,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 err_busy:
 	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
+err_invalid_chan:
 err_channel_busy:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:

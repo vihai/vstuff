@@ -55,6 +55,12 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_channel_busy;
 	}
 
+	if (chan->id != D && chan->id != E &&
+	    chan->id != B1 && chan->id != B2) {
+		err = -ENOTSUPP;
+		goto err_invalid_chan;
+	}
+
 	if (chan->visdn_chan.pars.framing ==
 				VISDN_CHAN_FRAMING_TRANS) {
 		chan->status = HFC_CHAN_STATUS_OPEN_TRANS;
@@ -149,6 +155,7 @@ err_allocate_fifo_tx:
 err_allocate_fifo_rx:
 	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
+err_invalid_chan:
 err_channel_busy:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
