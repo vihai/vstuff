@@ -5,7 +5,7 @@
 
 subdir = hfc-e1
 DIST_SOURCES = card_sysfs.c chan.c chan_sysfs.c chan_sysfs.h e1_port.c \
-	e1_port_sysfs.c fifo.c fsm.c hfc-e1_main.c pcm_port.c pcm_port_sysfs.c 
+	e1_port_sysfs.c fifo.c fsm.c hfc-e1_main.c pcm_port.c pcm_port_sysfs.c
 DIST_HEADERS = card.h card_inline.h card_sysfs.h chan.h chan_sysfs.h \
 	e1_port.h e1_port_inline.h e1_port_sysfs.h fifo.h fifo_inline.h \
 	fsm.h module.h pcm_port.h pcm_port_inline.h pcm_port_sysfs.h regs.h \
@@ -88,7 +88,7 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS=-I $(abssrcdir)/../lapd/ -I $(abssrcdir)/../visdn-core/ -DDEBUG
+EXTRA_CFLAGS=-I $(abssrcdir)/../lapd/ -I $(abssrcdir)/../visdn-core/ -DDEBUG -std=gnu99
 
 ########################## Targets #################################
 
@@ -103,7 +103,7 @@ hfc-e1-y	:=	e1_port.o		\
 			fifo.o			\
 			fsm.o			\
 			card_sysfs.o		\
-			hfc-e1_main.o 
+			hfc-e1_main.o
 # end Kbuild
 
 all:

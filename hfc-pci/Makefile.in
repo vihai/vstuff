@@ -87,7 +87,7 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS=-I $(abssrcdir)/../visdn-core/
+EXTRA_CFLAGS=-I $(abssrcdir)/../visdn-core/ -std=gnu99
 
 ifeq (@enable_debug@,yes)
 EXTRA_CFLAGS+=-DDEBUG
