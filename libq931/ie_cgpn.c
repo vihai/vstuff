@@ -73,7 +73,7 @@ int q931_ie_calling_party_number_read_from_buf(
 	ie->type_of_number = oct_3->type_of_number;
 	ie->numbering_plan_identificator = oct_3->numbering_plan_identificator;
 
-	if (oct_3->ext) {
+	if (!oct_3->ext) {
 		struct q931_ie_calling_party_number_onwire_3a *oct_3a =
 			(struct q931_ie_calling_party_number_onwire_3a *)
 			(msg->rawies + pos + (nextoct++));
@@ -88,7 +88,7 @@ int q931_ie_calling_party_number_read_from_buf(
 	}
 
 	memcpy(ie->number, msg->rawies + pos + nextoct, len - nextoct);
-	ie->number[len] = '\0';
+	ie->number[len - nextoct] = '\0';
 
 	return TRUE;
 }

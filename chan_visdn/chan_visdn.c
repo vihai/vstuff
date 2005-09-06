@@ -1097,7 +1097,6 @@ static int visdn_call(
 				Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
 			cgpn->screening_indicator =
 				Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
-			cgpn->number[0] = '\0';
 
 			strncpy(cgpn->number, number, sizeof(cgpn->number));
 
@@ -2580,9 +2579,9 @@ static void visdn_q931_setup_indication(
 	ast_update_use_count();
 
 	if (strlen(visdn_chan->calling_number) && !intf->force_inbound_caller_id)
-		ast_set_callerid(ast_chan, visdn_chan->calling_number, 0);
+		ast_chan->callerid = strdup(visdn_chan->calling_number);
 	else
-		ast_set_callerid(ast_chan, intf->default_inbound_caller_id, 0);
+		ast_chan->callerid = strdup(intf->default_inbound_caller_id);
 
 	if (!intf->overlap_sending ||
 	    visdn_chan->sending_complete) {
