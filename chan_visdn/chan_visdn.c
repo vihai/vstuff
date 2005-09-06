@@ -2512,8 +2512,9 @@ static void visdn_q931_setup_indication(
 				container_of(ies->ies[i],
 					struct q931_ie_calling_party_number, ie);
 
-			strncpy(visdn_chan->calling_number, cgpn->number,
-				sizeof(visdn_chan->calling_number));
+			snprintf(visdn_chan->calling_number,
+				sizeof(visdn_chan->calling_number),
+				"<%s>", cgpn->number);
 
 		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
 
