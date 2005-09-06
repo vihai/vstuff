@@ -31,7 +31,15 @@ static ssize_t hfc_show_enabled(
 {
 	struct visdn_port *port = to_visdn_port(device);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", port->enabled ? 1 : 0);
+	int len;
+	if (visdn_port_lock_interruptible(port))
+		return -ERESTARTSYS;
+
+	len = snprintf(buf, PAGE_SIZE, "%d\n", port->enabled ? 1 : 0);
+
+	visdn_port_unlock(port);
+
+	return len;
 }
 
 static ssize_t hfc_store_enabled(
@@ -45,6 +53,9 @@ static ssize_t hfc_store_enabled(
 	if (sscanf(buf, "%d", &enabled) < 1)
 		return -EINVAL;
 
+	if (visdn_port_lock_interruptible(port))
+		return -ERESTARTSYS;
+
 	if (enabled && !port->enabled) {
 		if (port->ops->enable)
 			port->ops->enable(port);
@@ -56,6 +67,8 @@ static ssize_t hfc_store_enabled(
 
 		port->enabled = enabled;
 	}
+
+	visdn_port_unlock(port);
 
 	return count;
 }
@@ -69,41 +82,61 @@ static ssize_t visdn_port_show_port_name(
 	struct device *device,
 	char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s\n",
-		to_visdn_port(device)->port_name);
+	struct visdn_port *port = to_visdn_port(device);
+
+	if (visdn_port_lock_interruptible(port))
+		return -ERESTARTSYS;
+
+	int len = snprintf(buf, PAGE_SIZE, "%s\n",
+				port->port_name);
+
+	visdn_port_unlock(port);
+
+	return len;
 }
 
 static DEVICE_ATTR(port_id, S_IRUGO | S_IWUSR,
 		visdn_port_show_port_name,
 		NULL);
 
-static void visdn_port_release(struct device *cd)
+static void visdn_port_release(struct device *device)
 {
+	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_release()\n");
+
+	struct visdn_port *port = to_visdn_port(device);
+
+	BUG_ON(!port->ops);
+
+	if (port->ops->release)
+		port->ops->release(port);
 }
 
 struct visdn_port *visdn_port_alloc(void)
 {
-	struct visdn_port *isdn_port;
+	struct visdn_port *port;
 
-	isdn_port = kmalloc(sizeof(*isdn_port), GFP_KERNEL);
-	if (!isdn_port)
+	port = kmalloc(sizeof(*port), GFP_KERNEL);
+	if (!port)
 		return NULL;
 
-	memset(isdn_port, 0x00, sizeof(*isdn_port));
+	memset(port, 0x00, sizeof(*port));
 
-	return isdn_port;
+	return port;
 }
 EXPORT_SYMBOL(visdn_port_alloc);
 
 void visdn_port_init(
-	struct visdn_port *visdn_port,
+	struct visdn_port *port,
 	struct visdn_port_ops *ops)
 {
-	BUG_ON(!visdn_port);
+	BUG_ON(!port);
 	BUG_ON(!ops);
+	BUG_ON(!ops->owner);
 
-	memset(visdn_port, 0x00, sizeof(*visdn_port));
-	visdn_port->ops = ops;
+	memset(port, 0x00, sizeof(*port));
+	port->ops = ops;
+
+	init_MUTEX(&port->sem);
 }
 EXPORT_SYMBOL(visdn_port_init);
 

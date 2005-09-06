@@ -24,8 +24,11 @@
 #include "fifo_inline.h"
 #include "fsm.h"
 
-void hfc_chan_disable(struct hfc_chan_duplex *chan)
+static void hfc_chan_release(struct visdn_chan *chan)
 {
+	printk(KERN_DEBUG "hfc_chan_release()\n");
+
+	// FIXME
 }
 
 static int hfc_chan_open(struct visdn_chan *visdn_chan)
@@ -34,11 +37,20 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_card *card = chan->port->card;
 
 	int err;
+	int res = VISDN_CHAN_OPEN_OK;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	if (visdn_chan_lock_interruptible(visdn_chan)) {
+		err = -ERESTARTSYS;
+		goto err_visdn_chan_lock;
+	}
+
+	if (hfc_card_lock_interruptible(card)) {
+		err = -ERESTARTSYS;
+		goto err_card_lock;
+	}
 
 	if (chan->status != HFC_CHAN_STATUS_FREE) {
+		hfc_debug_chan(chan, 1, "open failed: channel busy\n");
 		err = -EBUSY;
 		goto err_channel_busy;
 	}
@@ -50,6 +62,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 				VISDN_CHAN_FRAMING_HDLC) {
 		chan->status = HFC_CHAN_STATUS_OPEN_HDLC;
 	} else {
+		hfc_debug_chan(chan, 1,
+			"open failed: unsupported framing %d\n",
+			chan->visdn_chan.pars.framing);
 		err = -EINVAL;
 		goto err_invalid_framing;
 	}
@@ -89,9 +104,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 
 		chan->visdn_chan.max_mtu = fifo_tx->fifo_size;
 
-		err = visdn_renegotiate_parameters(visdn_chan);
-		if (err < 0)
-			goto err_renegotiate_parameters;
+		res = VISDN_CHAN_OPEN_RENEGOTIATE;
 	}
 
 	hfc_upload_fsm(card);
@@ -122,12 +135,12 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	memset(&chan->stats, 0x00, sizeof(chan->stats));
 
 	hfc_card_unlock(card);
+	visdn_chan_unlock(visdn_chan);
 
 	hfc_debug_chan(chan, 1, "channel opened.\n");
 
-	return 0;
+	return res;
 
-err_renegotiate_parameters:
 	if (chan->tx.fifo)
 		hfc_deallocate_fifo(chan->tx.fifo);
 err_allocate_fifo_tx:
@@ -137,8 +150,10 @@ err_allocate_fifo_rx:
 	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
 err_channel_busy:
-
+	visdn_chan_unlock(visdn_chan);
+err_visdn_chan_lock:
 	hfc_card_unlock(card);
+err_card_lock:
 
 	hfc_debug_chan(chan, 1, "Open failed: %d\n", err);
 
@@ -147,11 +162,19 @@ err_channel_busy:
 
 static int hfc_chan_close(struct visdn_chan *visdn_chan)
 {
+	int err;
 	struct hfc_chan_duplex *chan = visdn_chan->priv;
 	struct hfc_card *card = chan->port->card;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	if (visdn_chan_lock_interruptible(visdn_chan)) {
+		err = -ERESTARTSYS;
+		goto err_visdn_chan_lock;
+	}
+
+	if (hfc_card_lock_interruptible(card)) {
+		err = -ERESTARTSYS;
+		goto err_card_lock;
+	}
 
 	chan->status = HFC_CHAN_STATUS_FREE;
 
@@ -208,10 +231,18 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_upload_fsm(card);
 
 	hfc_card_unlock(card);
+	visdn_chan_unlock(visdn_chan);
 
 	hfc_msg_chan(chan, KERN_INFO, "channel closed.\n");
 
 	return 0;
+
+	hfc_card_unlock(card);
+err_card_lock:
+	visdn_chan_unlock(visdn_chan);
+err_visdn_chan_lock:
+
+	return err;
 }
 
 static int hfc_chan_frame_xmit(
@@ -240,7 +271,7 @@ static int hfc_chan_frame_xmit(
 	if (!hfc_fifo_free_frames(fifo)) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
 
-		visdn_stop_queue(visdn_chan);
+		visdn_pass_stop_queue(visdn_chan);
 
 		chan->stats.tx_errors++;
 		chan->stats.tx_fifo_errors++;
@@ -251,7 +282,7 @@ static int hfc_chan_frame_xmit(
 	if (hfc_fifo_free_tx(fifo) < skb->len) {
 		hfc_debug_chan(chan, 3, "TX FIFO full, throttling\n");
 
-		visdn_stop_queue(visdn_chan);
+		visdn_pass_stop_queue(visdn_chan);
 
 		chan->stats.tx_errors++;
 		chan->stats.tx_fifo_errors++;
@@ -363,12 +394,6 @@ static ssize_t hfc_chan_samples_write(
 	return copied_octets;
 }
 
-static int hfc_chan_do_ioctl(struct visdn_chan *visdn_chan,
-	struct ifreq *ifr, int cmd)
-{
-	return -EOPNOTSUPP;
-}
-
 static int hfc_bridge(
 	struct hfc_chan_duplex *chan,
 	struct hfc_chan_duplex *chan2)
@@ -380,7 +405,7 @@ static int hfc_bridge(
 		return -ERESTARTSYS;
 
 	if (chan->id != B1 && chan->id != B2)
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 
 	struct hfc_fifo *fifo_1_rx = hfc_allocate_fifo(card, RX);
 	if (!fifo_1_rx) {
@@ -549,7 +574,7 @@ static int hfc_bridge(
 	hfc_st_port_update_st_ctrl_2(chan2->port);
 
 	hfc_card_unlock(card);
-	
+
 	return VISDN_CONNECT_BRIDGED;
 
 	hfc_pcm_port_deallocate_slot(slot_1_tx);
@@ -579,9 +604,6 @@ static int hfc_chan_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
-	if (visdn_chan->connected_chan)
-		return -EBUSY;
-
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	hfc_debug_chan(chan, 2, "connecting to %s\n",
@@ -605,12 +627,8 @@ static int hfc_chan_connect_to(
 
 static int hfc_chan_disconnect(struct visdn_chan *visdn_chan)
 {
-	if (!visdn_chan->connected_chan)
-		return 0;
-
-printk(KERN_INFO "hfc-4s chan %s disconnecting from %s\n",
-		visdn_chan->device.bus_id,
-		visdn_chan->connected_chan->device.bus_id);
+printk(KERN_INFO "hfc-4s chan %s disconnected\n",
+		visdn_chan->device.bus_id);
 
 	return 0;
 }
@@ -627,11 +645,12 @@ static int hfc_chan_update_parameters(
 }
 
 struct visdn_chan_ops hfc_chan_ops = {
+	.owner			= THIS_MODULE,
+	.release		= hfc_chan_release,
 	.open			= hfc_chan_open,
 	.close			= hfc_chan_close,
 	.frame_xmit		= hfc_chan_frame_xmit,
 	.get_stats		= hfc_chan_get_stats,
-	.do_ioctl		= hfc_chan_do_ioctl,
 
 	.connect_to		= hfc_chan_connect_to,
 	.disconnect		= hfc_chan_disconnect,
@@ -669,7 +688,8 @@ void hfc_chan_init(
 	chan->visdn_chan.autoopen = TRUE;
 	chan->visdn_chan.max_mtu = 0;
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_LIST;
-	memcpy(chan->visdn_chan.bitrates, bitrates, sizeof(bitrates));
+
+	memcpy(chan->visdn_chan.bitrates, bitrates, sizeof(*bitrates) * bitrates_cnt);
 	chan->visdn_chan.bitrates_cnt = bitrates_cnt;
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;

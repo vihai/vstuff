@@ -1363,6 +1363,7 @@ void q931_more_info_request(
 
 		q931_call_send_setup_acknowledge(call, &ies);
 
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 
 		if (!call->digits_dialled &&
@@ -1501,6 +1502,7 @@ void q931_proceeding_request(
 
 		q931_call_send_call_proceeding(call, &ies);
 
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 		q931_call_set_state(call, N3_OUTGOING_CALL_PROCEEDING);
 	}
@@ -1749,6 +1751,7 @@ void q931_setup_complete_request(
 
 	switch (call->state) {
 	case N8_CONNECT_REQUEST:
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 
 		if (call->broadcast_setup) {
@@ -3851,6 +3854,7 @@ inline static void q931_handle_connect(
 
 	case U2_OVERLAP_SENDING:
 		q931_call_stop_timer(call, T304);
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 		q931_call_send_connect_acknowledge(call, NULL);
 		q931_call_set_state(call, U10_ACTIVE);
@@ -3859,6 +3863,7 @@ inline static void q931_handle_connect(
 	break;
 
 	case U3_OUTGOING_CALL_PROCEEDING:
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 		q931_call_send_connect_acknowledge(call, NULL);
 		q931_call_set_state(call, U10_ACTIVE);
@@ -3867,6 +3872,7 @@ inline static void q931_handle_connect(
 	break;
 
 	case U4_CALL_DELIVERED:
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 		q931_call_send_connect_acknowledge(call, NULL);
 		q931_call_set_state(call, U10_ACTIVE);
@@ -3894,6 +3900,7 @@ inline static void q931_handle_connect_acknowledge(
 
 	case U8_CONNECT_REQUEST:
 		q931_call_stop_timer(call, T313);
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 		q931_call_set_state(call, U10_ACTIVE);
 		q931_call_primitive(call, setup_complete_indication,
@@ -5306,6 +5313,7 @@ inline static void q931_handle_resume_acknowledge(
 		}
 
 		q931_call_stop_timer(call, T318);
+		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
 		q931_call_set_state(call, U10_ACTIVE);
 		q931_call_primitive(call, resume_confirm, &msg->ies,

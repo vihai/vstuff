@@ -50,6 +50,7 @@ static unsigned int vts_poll(
 }
 
 static struct visdn_timer_ops vts_timer_ops = {
+	.owner	= THIS_MODULE,
 	.poll	= vts_poll,
 };
 

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -512,7 +512,7 @@ static void visdn_reload_config(void)
 		}
 
 		if (!intf) {
-			if (visdn.nifs >= sizeof(visdn.ifs)/sizeof(*visdn.ifs)) {
+			if (visdn.nifs >= ARRAY_SIZE(visdn.ifs)) {
 				ast_log(LOG_ERROR, "Too many interfaces!\n");
 				break;
 			}
@@ -1601,17 +1601,21 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 
 	int nread = read(visdn_chan->channel_fd, buf, 512);
 
-/*	for (i=0; i<nread; i++) {
+/*
+	for (i=0; i<nread; i++) {
 		buf[i] = linear_to_alaw(
 				echo_can_update(visdn_chan->ec,
 					alaw_to_linear(txbuf[i]),
 					alaw_to_linear(buf[i])));
-	}*/
+	}
+*/
 
-/*struct timeval tv;
+#if 0
+struct timeval tv;
 gettimeofday(&tv, NULL);
 unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d %d\n", t/1000000.0, visdn_chan->channel_fd, r);*/
+#endif
 
 	f.frametype = AST_FRAME_VOICE;
 	f.subclass = AST_FORMAT_ALAW;
@@ -1652,7 +1656,8 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 		return 0;
 	}
 
-/*ast_verbose(VERBOSE_PREFIX_3 "W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
+#if 0
+ast_verbose(VERBOSE_PREFIX_3 "W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->channel_fd,
 	*(__u8 *)(frame->data + 0),
 	*(__u8 *)(frame->data + 1),
 	*(__u8 *)(frame->data + 2),
@@ -1661,7 +1666,8 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 	*(__u8 *)(frame->data + 5),
 	*(__u8 *)(frame->data + 6),
 	*(__u8 *)(frame->data + 7),
-	frame->datalen);*/
+	frame->datalen);
+#endif
 
 	write(visdn_chan->channel_fd, frame->data, frame->datalen);
 
@@ -2806,6 +2812,8 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 		ast_log(LOG_ERROR, "ioctl(VISDN_CONNECT): %s\n", strerror(errno));
 		return;
 	}
+
+	return;
 }
 
 static void visdn_q931_disconnect_channel(struct q931_channel *channel)
@@ -2814,7 +2822,7 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
-	if (!ast_chan) 
+	if (!ast_chan)
 		return;
 
 	// FIXME

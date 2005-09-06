@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -12,7 +12,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <linux/termios.h> 
+#include <linux/termios.h>
 #include <linux/tcp.h>
 #include <linux/if_arp.h>
 #include <linux/random.h>
@@ -52,13 +52,13 @@ static struct sock *lapd_get_first(struct seq_file *seq)
 static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 {
 	struct lapd_iter_state *state = seq->private;
- 
+
 	do {
 		sk = sk_next(sk);
  try_again:
 		;
 	} while (sk);
- 
+
 	if (!sk && ++state->bucket < ARRAY_SIZE(lapd_hash)) {
 		sk = sk_head(&lapd_hash[state->bucket]);
 		goto try_again;
@@ -1831,7 +1831,7 @@ static int lapd_listen(struct socket *sock, int backlog)
 	}
 
 	if (!lo->nt_mode) {
-		err = -EOPNOTSUPP;
+		err = -ENOTSUPP;
 		goto err_no_nt_mode;
 	}
 
@@ -1841,7 +1841,7 @@ static int lapd_listen(struct socket *sock, int backlog)
 	}
 
 	if (sk->sk_state == TCP_LISTEN) {
-		err = -EOPNOTSUPP;
+		err = -ENOTSUPP;
 		goto err_already_listening;
 	}
 

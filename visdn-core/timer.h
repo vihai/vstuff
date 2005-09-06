@@ -18,6 +18,9 @@
 struct visdn_timer;
 struct visdn_timer_ops
 {
+	struct module *owner;
+
+	void (*release)(struct visdn_timer *timer);
 	unsigned int (*poll)(struct visdn_timer *timer, poll_table *wait);
 };
 

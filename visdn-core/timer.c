@@ -108,7 +108,7 @@ static CLASS_DEVICE_ATTR(timer_freq, S_IRUGO,
 		visdn_timer_show_freq,
 		visdn_timer_store_freq);
 
-static int visdn_timer_hotplug(struct class_device *cd, char **envp,
+static int visdn_timer_hotplug(struct class_device *device, char **envp,
 	int num_envp, char *buf, int size)
 {
 //	struct visdn_timer *visdn_timer = to_visdn_timer(cd);
@@ -120,14 +120,16 @@ static int visdn_timer_hotplug(struct class_device *cd, char **envp,
 	return 0;
 }
 
-static void visdn_timer_release(struct class_device *cd)
+static void visdn_timer_release(struct class_device *device)
 {
-//	struct visdn_timer *visdn_timer =
-//		container_of(cd, struct visdn_timer, class_dev);
-
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_release called\n");
 
-	// kfree ??
+	struct visdn_timer *timer = to_visdn_timer(device);
+
+	BUG_ON(!timer->ops);
+
+	if (timer->ops->release)
+		timer->ops->release(timer);
 }
 
 static struct class visdn_timer_class = {
@@ -138,27 +140,28 @@ static struct class visdn_timer_class = {
 
 struct visdn_timer *visdn_timer_alloc(void)
 {
-	struct visdn_timer *isdn_port;
+	struct visdn_timer *timer;
 
-	isdn_port = kmalloc(sizeof(*isdn_port), GFP_KERNEL);
-	if (!isdn_port)
+	timer = kmalloc(sizeof(*timer), GFP_KERNEL);
+	if (!timer)
 		return NULL;
 
-	memset(isdn_port, 0x00, sizeof(*isdn_port));
+	memset(timer, 0x00, sizeof(*timer));
 
-	return isdn_port;
+	return timer;
 }
 EXPORT_SYMBOL(visdn_timer_alloc);
 
 void visdn_timer_init(
-	struct visdn_timer *visdn_timer,
+	struct visdn_timer *timer,
 	struct visdn_timer_ops *ops)
 {
-	BUG_ON(!visdn_timer);
+	BUG_ON(!timer);
 	BUG_ON(!ops);
+	BUG_ON(!ops->owner);
 
-	memset(visdn_timer, 0x00, sizeof(*visdn_timer));
-	visdn_timer->ops = ops;
+	memset(timer, 0x00, sizeof(*timer));
+	timer->ops = ops;
 }
 EXPORT_SYMBOL(visdn_timer_init);
 
@@ -171,21 +174,21 @@ static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
 int visdn_timer_register(
-	struct visdn_timer *visdn_timer,
+	struct visdn_timer *timer,
 	const char *name)
 {
 	int err;
 
-	BUG_ON(!visdn_timer);
+	BUG_ON(!timer);
 	BUG_ON(!name);
 
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_register(%s) called\n", name);
 
-	struct class_device *class_dev = &visdn_timer->class_dev;
+	struct class_device *class_dev = &timer->class_dev;
 
 	memset(class_dev, 0x00, sizeof(class_dev));
 	class_dev->class = &visdn_timer_class;
-	class_dev->class_data = visdn_timer;
+	class_dev->class_data = timer;
 #ifndef NO_CLASS_DEV_DEVT
 	class_dev->devt = visdn_first_dev + 1;
 #endif

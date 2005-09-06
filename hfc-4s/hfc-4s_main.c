@@ -192,7 +192,7 @@ void hfc_configure_fifos(
 
 	struct hfc_fifo_config *fcfg = NULL;
 	int i;
-	for (i=0; i<sizeof(hfc_fifo_config)/sizeof(*hfc_fifo_config); i++) {
+	for (i=0; i<ARRAY_SIZE(hfc_fifo_config); i++) {
 		if (hfc_fifo_config[i].v_ram_sz == v_ram_sz &&
 		    hfc_fifo_config[i].v_fifo_md == v_fifo_md &&
 		    hfc_fifo_config[i].v_fifo_sz == v_fifo_sz) {
@@ -393,7 +393,8 @@ void hfc_deallocate_fifo(struct hfc_fifo *fifo)
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
-	visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
+	if (fifo->connected_chan)
+		visdn_pass_wake_queue(&fifo->connected_chan->chan->visdn_chan);
 }
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)

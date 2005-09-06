@@ -1,4 +1,11 @@
 
+Be careful writing hotplug script. Device's attributes and symlinks may get
+created after the hotplug event.
+
+
+
+
+
 HISTORY:
 
 

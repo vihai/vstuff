@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -78,22 +78,32 @@ static inline int visdn_ctl_do_ioctl_connect(
 		goto err_connect_self;
 	}
 
+	err = visdn_chan_lock2_interruptible(chan1, chan2);
+	if (err < 0)
+		goto err_lock;
+
 	err = visdn_connect(chan1, chan2, connect.flags);
 	if (err < 0)
 		goto err_connect;
 
+	visdn_chan_unlock(chan1);
+	visdn_chan_unlock(chan2);
+
 	// Release references returned by visdn_search_chan()
-	put_device(&chan1->device);
-	put_device(&chan2->device);
+	visdn_chan_put(chan1);
+	visdn_chan_put(chan2);
 
 	return 0;
 
 //	visdn_disconnect()
 err_connect:
+	visdn_chan_unlock(chan1);
+	visdn_chan_unlock(chan2);
+err_lock:
 err_connect_self:
-	put_device(&chan2->device);
+	visdn_chan_put(chan2);
 err_search_dst:
-	put_device(&chan1->device);
+	visdn_chan_put(chan1);
 err_search_src:
 err_copy_from_user:
 

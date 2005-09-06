@@ -4,6 +4,7 @@ General:
 
 - Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
 - Check all input data in ioctls/setsockopt for security bugs
+- Document functions (with doxygen?)
 
 Build system:
 -------------
@@ -50,10 +51,8 @@ timer:
 visdn_core:
 -----------
 
-- Channels parameter negotiation during connect should be improved and support
-  dynamic renegotiation
-- Channel bitrate negotiation
 - Channel bundling
+- Allocate a single major number for control devices?
 
 lapd:
 -----
@@ -102,16 +101,27 @@ lapd:
 visdn-netdev:
 -------------
 
-- Implement protocol attribute
-- We are not locking!!!
-
 visdn-ppp:
+----------
 
 - Handle MTU
 
 hfc-4s:
 -------
 
+- Finish PCM bus support
+
 hfc-pci:
 -------
 
+- Finish PCM bus support
+
+hfc-e1:
+-------
+
+- Rewrite using new model
+
+hfc-usb:
+--------
+
+- Rewrite using new model

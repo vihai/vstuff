@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -97,7 +97,7 @@ static ssize_t hfc_show_bert_err(
 	struct device *device,
 	char *buf)
 {
-	return -EOPNOTSUPP;
+	return -ENOTSUPP;
 }
 
 static ssize_t hfc_store_bert_err(
@@ -107,7 +107,7 @@ static ssize_t hfc_store_bert_err(
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
-	
+
 	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 	hfc_update_bert_wd_md(card, hfc_R_BERT_WD_MD_V_BERT_ERR);

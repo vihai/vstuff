@@ -35,6 +35,8 @@ struct vnd_netdevice
 	struct net_device *netdev;
 	int type;
 
+	atomic_t refcnt;
+
 	struct visdn_chan visdn_chan;
 	struct visdn_chan visdn_chan_e;
 };

@@ -23,13 +23,17 @@ extern struct hlist_head visdn_port_index_hash[];
 
 struct visdn_port_ops
 {
+	struct module *owner;
+
+	void (*release)(struct visdn_port *port);
+
 	int (*enable)(struct visdn_port *port);
 	int (*disable)(struct visdn_port *port);
 };
 
 struct visdn_port
 {
-	void *priv;
+	struct semaphore sem;
 
 	struct device device;
 
@@ -41,10 +45,42 @@ struct visdn_port
 	struct visdn_port_ops *ops;
 
 	int enabled;
+
+	void *priv;
 };
 
 int visdn_port_modinit(void);
 void visdn_port_modexit(void);
+
+static inline void visdn_port_get(
+	struct visdn_port *port)
+{
+	get_device(&port->device);
+}
+
+static inline void visdn_port_put(
+	struct visdn_port *port)
+{
+	put_device(&port->device);
+}
+
+static inline void visdn_port_lock(
+	struct visdn_port *port)
+{
+	down(&port->sem);
+}
+
+static inline int visdn_port_lock_interruptible(
+	struct visdn_port *port)
+{
+	return down_interruptible(&port->sem);
+}
+
+static inline void visdn_port_unlock(
+	struct visdn_port *port)
+{
+	up(&port->sem);
+}
 
 extern void visdn_port_init(
 	struct visdn_port *visdn_port,

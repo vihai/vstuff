@@ -36,6 +36,13 @@ void hfc_pcm_port_deallocate_slot(struct hfc_pcm_slot *slot)
 	slot->used = FALSE;
 }
 
+static void hfc_pcm_port_release(struct visdn_port *port)
+{
+	printk(KERN_DEBUG "hfc_pcm_port_release()\n");
+
+	// FIXME
+}
+
 static int hfc_pcm_port_enable(
 	struct visdn_port *visdn_port)
 {
@@ -67,6 +74,8 @@ static int hfc_pcm_port_disable(
 }
 
 struct visdn_port_ops hfc_pcm_port_ops = {
+	.owner		= THIS_MODULE,
+	.release	= hfc_pcm_port_release,
 	.enable		= hfc_pcm_port_enable,
 	.disable	= hfc_pcm_port_disable,
 };

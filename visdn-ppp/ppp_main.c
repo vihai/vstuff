@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -170,7 +170,7 @@ static int vppp_ppp_start_xmit(
 		return !chan->visdn_chan.connected_chan->ops->frame_xmit(
 				chan->visdn_chan.connected_chan, skb);
 
-	return -EOPNOTSUPP;
+	return -ENOTSUPP;
 }
 
 static int vppp_ppp_ioctl(
@@ -282,7 +282,7 @@ ssize_t vppp_cdev_read(
 //	struct vppp_chan *chan = file->private_data;
 	printk(KERN_INFO "vppp_cdev_read()\n");
 
-	return -EOPNOTSUPP;
+	return -ENOTSUPP;
 }
 
 ssize_t vppp_cdev_write(
@@ -296,7 +296,7 @@ ssize_t vppp_cdev_write(
 //	struct vppp_chan *chan = file->private_data;
 	printk(KERN_INFO "vppp_cdev_write()\n");
 
-	return -EOPNOTSUPP;
+	return -ENOTSUPP;
 }
 
 static inline int visdn_cdev_do_ioctl_connect(

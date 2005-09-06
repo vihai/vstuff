@@ -149,6 +149,14 @@ void hfc_st_port_check_l1_up(struct hfc_st_port *port)
        	}
 }
 
+static void hfc_st_port_release(
+	struct visdn_port *port)
+{
+	printk(KERN_DEBUG "hfc_st_port_release()\n");
+
+	// FIXME
+}
+
 static int hfc_st_port_enable(
 	struct visdn_port *visdn_port)
 {
@@ -186,6 +194,8 @@ static int hfc_st_port_disable(
 }
 
 struct visdn_port_ops hfc_st_port_ops = {
+	.owner		= THIS_MODULE,
+	.release	= hfc_st_port_release,
 	.enable		= hfc_st_port_enable,
 	.disable	= hfc_st_port_disable,
 };
@@ -211,18 +221,18 @@ void hfc_st_port_init(
 
 	// Note: Bitrates must be in increasing order
 	int bitrates_d[] = { 16000 };
-	int bitrates_b[] = { 8000, 16000, 24000, 32000, 40000, 48000, 64000 };
+	int bitrates_b[] = { 8000, 16000, 24000, 32000, 40000, 48000, 56000, 64000 };
 	int bitrates_s[] = { 4000 };
 
 	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF + id*4,
-		bitrates_d, sizeof(bitrates_d)/sizeof(*bitrates_d));
+		bitrates_d, ARRAY_SIZE(bitrates_d));
 	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF + id*4,
-		bitrates_d, sizeof(bitrates_b)/sizeof(*bitrates_b));
+		bitrates_b, ARRAY_SIZE(bitrates_b));
 	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF + id*4,
-		bitrates_d, sizeof(bitrates_b)/sizeof(*bitrates_b));
+		bitrates_b, ARRAY_SIZE(bitrates_b));
 	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF + id*4,
-		bitrates_d, sizeof(bitrates_d)/sizeof(*bitrates_d));
+		bitrates_d, ARRAY_SIZE(bitrates_d));
 	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
-		bitrates_s, sizeof(bitrates_s)/sizeof(*bitrates_s));
+		bitrates_s, ARRAY_SIZE(bitrates_s));
 }
 

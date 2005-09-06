@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -20,6 +20,7 @@
 #include <linux/list.h>
 
 #include <visdn.h>
+#include <cxc.h>
 #include <lapd.h>
 
 #include "netdev.h"
@@ -62,11 +63,34 @@ static int vnd_netdevice_new_index(void)
 
 static struct visdn_port vnd_port;
 
+static inline void vnd_netdevice_get(
+	struct vnd_netdevice *netdevice)
+{
+	atomic_inc(&netdevice->refcnt);
+}
+
+static inline void vnd_netdevice_put(
+	struct vnd_netdevice *netdevice)
+{
+#if 0
+	printk(KERN_INFO "vnd_netdevice_put ref=%d\n",
+		atomic_read(&netdevice->refcnt) - 1);
+	dump_stack();
+#endif
+
+	if (atomic_dec_and_test(&netdevice->refcnt)) {
+		if (netdevice->netdev)
+			free_netdev(netdevice->netdev);
+
+		kfree(netdevice);
+	}
+}
+
 static void vnd_chan_release(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 
-	kfree(netdevice);
+	vnd_netdevice_put(netdevice);
 }
 
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
@@ -110,10 +134,6 @@ static int vnd_chan_connect_to(
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 	int err;
 
-	if (visdn_chan2->connected_chan ||
-	    visdn_chan->connected_chan)
-		return -EBUSY;
-
 	printk(KERN_INFO "%s connected to %s\n",
 		visdn_chan->device.bus_id,
 		visdn_chan2->device.bus_id);
@@ -142,12 +162,8 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 	if (visdn_chan == &netdevice->visdn_chan)
 		unregister_netdev(netdevice->netdev);
 
-	if (!visdn_chan->connected_chan)
-		return 0;
-
-	printk(KERN_INFO "%s disconnected from %s\n",
-		visdn_chan->device.bus_id,
-		visdn_chan->connected_chan->device.bus_id);
+	printk(KERN_INFO "%s disconnected\n",
+		visdn_chan->device.bus_id);
 
 	return 0;
 }
@@ -194,13 +210,14 @@ static void vnd_chan_wake_queue(struct visdn_chan *visdn_chan)
 }
 
 struct visdn_chan_ops vnd_chan_ops = {
+	.owner			= THIS_MODULE,
+
 	.release		= vnd_chan_release,
 	.open			= vnd_chan_open,
 	.close			= vnd_chan_close,
 	.frame_xmit		= vnd_chan_frame_xmit,
 	.frame_input_error	= NULL,
 	.get_stats		= NULL,
-	.do_ioctl		= NULL,
 
 	.connect_to     	= vnd_chan_connect_to,
 	.disconnect		= vnd_chan_disconnect,
@@ -218,10 +235,33 @@ struct visdn_chan_ops vnd_chan_ops = {
 static int vnd_netdev_open(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
+	struct visdn_chan *chan = &netdevice->visdn_chan;
+	int err;
 
 	printk(KERN_INFO "vnd_netdev_open()\n");
 
-	return visdn_open(netdevice->visdn_chan.connected_chan);
+	err = visdn_pass_open(chan);
+
+	if (err == VISDN_CHAN_OPEN_RENEGOTIATE) {
+		struct visdn_chan *dst;
+		dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+		if (!dst) {
+			err = -ENODEV;
+			goto err_no_dst;
+		}
+
+		printk(KERN_INFO "Driver asked to renegotiate parameters\n");
+
+		visdn_negotiate_parameters(chan, dst);
+
+		err = 0;
+
+		visdn_chan_put(dst);
+err_no_dst:
+		;
+	}
+
+	return err;
 }
 
 static int vnd_netdev_stop(struct net_device *netdev)
@@ -230,14 +270,9 @@ static int vnd_netdev_stop(struct net_device *netdev)
 
 	printk(KERN_INFO "vnd_netdev_stop()\n");
 
-	if (netdevice->visdn_chan.connected_chan)
-		visdn_close(netdevice->visdn_chan.connected_chan);
+	visdn_pass_close(&netdevice->visdn_chan_e);
 
-	if (netdevice->visdn_chan_e.open &&
-	    netdevice->visdn_chan_e.connected_chan)
-		visdn_close(netdevice->visdn_chan_e.connected_chan);
-
-	return 0;
+	return visdn_pass_close(&netdevice->visdn_chan);
 }
 
 static int vnd_netdev_frame_xmit(
@@ -248,27 +283,15 @@ static int vnd_netdev_frame_xmit(
 
 	netdev->trans_start = jiffies;
 
-	if (netdevice->visdn_chan.connected_chan &&
-	    netdevice->visdn_chan.connected_chan->ops->frame_xmit)
-		return netdevice->visdn_chan.connected_chan->ops->frame_xmit(
-				netdevice->visdn_chan.connected_chan, skb);
-
-	return -EOPNOTSUPP;
+	return visdn_pass_frame_xmit(&netdevice->visdn_chan, skb);
 }
-
-static struct net_device_stats vnd_dummy_stats = { };
 
 static struct net_device_stats *vnd_netdev_get_stats(
 	struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
-	if (netdevice->visdn_chan.connected_chan &&
-	    netdevice->visdn_chan.connected_chan->ops->frame_xmit)
-		return netdevice->visdn_chan.connected_chan->ops->get_stats(
-				netdevice->visdn_chan.connected_chan);
-
-	return &vnd_dummy_stats;
+	return visdn_pass_get_stats(&netdevice->visdn_chan);
 }
 
 static void vnd_netdev_set_multicast_list(
@@ -276,32 +299,32 @@ static void vnd_netdev_set_multicast_list(
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
-	if (netdevice->visdn_chan_e.connected_chan) {
+	struct visdn_chan *dst;
+	dst = visdn_cxc_get_by_src(&visdn_cxc, &netdevice->visdn_chan_e);
+	if (!dst)
+		return;
 
-		if((netdev->flags & IFF_PROMISC) &&
-		   !netdevice->visdn_chan_e.connected_chan->open) {
+	if((netdev->flags & IFF_PROMISC) &&
+	   !test_bit(VISDN_CHAN_STATE_OPEN, &dst->state)) {
 
-			visdn_open(netdevice->visdn_chan_e.connected_chan);
+		visdn_open(dst);
 
-		} else if(!(netdev->flags & IFF_PROMISC) &&
-		          netdevice->visdn_chan_e.connected_chan->open) {
+	} else if(!(netdev->flags & IFF_PROMISC) &&
+	          test_bit(VISDN_CHAN_STATE_OPEN, &dst->state)) {
 
-			visdn_close(netdevice->visdn_chan_e.connected_chan);
-		}
+		visdn_close(dst);
 	}
+
+	visdn_chan_put(dst);
 }
 
 static int vnd_netdev_do_ioctl(
 	struct net_device *netdev,
 	struct ifreq *ifr, int cmd)
 {
-	struct vnd_netdevice *netdevice = netdev->priv;
+//	struct vnd_netdevice *netdevice = netdev->priv;
 
-	if (netdevice->visdn_chan.connected_chan->ops->do_ioctl)
-		return netdevice->visdn_chan.connected_chan->ops->do_ioctl(
-				netdevice->visdn_chan.connected_chan, ifr, cmd);
-	else
-		return -EOPNOTSUPP;
+	return -EOPNOTSUPP;
 }
 
 static int vnd_netdev_change_mtu(
@@ -310,6 +333,7 @@ static int vnd_netdev_change_mtu(
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
+	// LOCKING*********** FIXME
 	if (new_mtu > netdevice->visdn_chan.pars.mtu)
 		return -EINVAL;
 
@@ -336,6 +360,9 @@ static int vnd_cdev_open(
 
 	struct vnd_request *vnd_request;
 	vnd_request = kmalloc(sizeof(*vnd_request), GFP_KERNEL);
+	if (!vnd_request)
+		return -EFAULT;
+
 	memset(vnd_request, 0x00, sizeof(*vnd_request));
 
 	init_MUTEX(&vnd_request->sem);
@@ -370,6 +397,7 @@ static ssize_t vnd_cdev_read(
 
 	int copied_bytes = 0;
 
+	// FIXME: Use offp
 	if (vnd_request->output_off < vnd_request->output_len) {
 		copied_bytes = vnd_request->output_len - vnd_request->output_off;
 		if (copied_bytes > count)
@@ -427,6 +455,8 @@ static int vnd_create_request(
 
 	memset(netdevice, 0x00, sizeof(*netdevice));
 
+	atomic_set(&netdevice->refcnt, 1);
+
 	netdevice->index = vnd_netdevice_new_index();
 	hlist_add_head(&netdevice->index_hlist_node,
 			vnd_netdevice_index_get_hash(netdevice->index));
@@ -464,11 +494,13 @@ static int vnd_create_request(
 
 	char chanid[60];
 
+	vnd_netdevice_get(netdevice); // Reference in visdn_chan->priv
 	snprintf(chanid, sizeof(chanid), "%d", netdevice->index);
 	err = visdn_chan_register(&netdevice->visdn_chan, chanid, &vnd_port);
 	if (err < 0)
 		goto err_visdn_chan_register;
 
+	vnd_netdevice_get(netdevice); // Reference in visdn_chan->priv
 	snprintf(chanid, sizeof(chanid), "%de", netdevice->index);
 	err = visdn_chan_register(&netdevice->visdn_chan_e, chanid, &vnd_port);
 	if (err < 0)
@@ -536,7 +568,7 @@ static int vnd_destroy_request(
 	struct vnd_request *vnd_request,
 	char *reqp)
 {
-	return 0;
+	return -ENOTSUPP;
 }
 
 static ssize_t vnd_cdev_write(
@@ -553,9 +585,7 @@ static ssize_t vnd_cdev_write(
 	if (down_interruptible(&vnd_request->sem))
 		return -ERESTARTSYS;
 
-	if (copy_from_user(request, buf,
-			count < (sizeof(request) - 1) ?
-				count : (sizeof(request) - 1))) {
+	if (copy_from_user(request, buf, min(count, (sizeof(request) - 1)))) {
                 err = -EFAULT;
                 goto err_copy_from_user;
         }
@@ -613,6 +643,7 @@ static struct file_operations vnd_fops =
  ******************************************/
 
 struct visdn_port_ops vnd_port_ops = {
+	.owner		= THIS_MODULE,
 	.enable		= NULL,
 	.disable	= NULL,
 };
@@ -705,7 +736,7 @@ static void __exit vnd_module_exit(void)
 			visdn_chan_unregister(&netdevice->visdn_chan);
 			visdn_chan_unregister(&netdevice->visdn_chan_e);
 
-			free_netdev(netdevice->netdev);
+			vnd_netdevice_put(netdevice);
 		}
 	}
 

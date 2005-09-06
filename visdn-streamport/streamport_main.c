@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -60,19 +60,19 @@ static struct visdn_port vsp_visdn_port;
 
 static void vsp_chan_release(struct visdn_chan *visdn_chan)
 {
-	kfree(to_vsp_chan(visdn_chan));
+	printk(KERN_DEBUG "vsp_chan_release()\n");
 }
 
 static int vsp_chan_open(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vsp_open()\n");
+	printk(KERN_DEBUG "vsp_chan_open()\n");
 
 	return 0;
 }
 
 static int vsp_chan_close(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vsp_close()\n");
+	printk(KERN_INFO "vsp_chan_close()\n");
 
 	return 0;
 }
@@ -82,10 +82,6 @@ static int vsp_chan_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
-	if (visdn_chan2->connected_chan ||
-	    visdn_chan->connected_chan)
-		return -EBUSY;
-
 	printk(KERN_INFO "Streamport %s connected to %s\n",
 		visdn_chan->device.bus_id,
 		visdn_chan2->device.bus_id);
@@ -95,23 +91,19 @@ static int vsp_chan_connect_to(
 
 static int vsp_chan_disconnect(struct visdn_chan *visdn_chan)
 {
-	if (!visdn_chan->connected_chan)
-		return 0;
-
-	printk(KERN_INFO "Streamport %s disconnected from %s\n",
-		visdn_chan->device.bus_id,
-		visdn_chan->connected_chan->device.bus_id);
+	printk(KERN_INFO "Streamport %s disconnected\n",
+		visdn_chan->device.bus_id);
 
 	return 0;
 }
 
 static struct visdn_chan_ops vsp_chan_ops = {
+	.owner		= THIS_MODULE,
 	.release	= vsp_chan_release,
 	.open		= vsp_chan_open,
 	.close		= vsp_chan_close,
 	.frame_xmit	= NULL,
 	.get_stats	= NULL,
-	.do_ioctl	= NULL,
 
         .connect_to     = vsp_chan_connect_to,
 	.disconnect	= vsp_chan_disconnect,
@@ -175,16 +167,16 @@ err_kmalloc:
 static int vsp_cdev_release(
 	struct inode *inode, struct file *file)
 {
+	printk(KERN_DEBUG "vsp_cdev_release()\n");
+
 	BUG_ON(!file->private_data);
 
 	struct vsp_chan *chan = file->private_data;
 
-	if (chan->visdn_chan.connected_chan &&
-	    chan->visdn_chan.connected_chan->ops->close)
-		chan->visdn_chan.connected_chan->ops->close(
-			chan->visdn_chan.connected_chan);
-
 	visdn_chan_unregister(&chan->visdn_chan);
+
+	/* No references should be left */
+	kfree(chan);
 
 	return 0;
 }
@@ -199,14 +191,7 @@ static ssize_t vsp_cdev_read(
 
 	struct vsp_chan *chan = file->private_data;
 
-	if (!chan->visdn_chan.connected_chan)
-		return -ENOTCONN;
-
-	if (!chan->visdn_chan.connected_chan->ops->samples_read)
-		return -EOPNOTSUPP;
-
-	return chan->visdn_chan.connected_chan->ops->samples_read(
-			chan->visdn_chan.connected_chan, buf, count);
+	return visdn_pass_samples_read(&chan->visdn_chan, buf, count);
 }
 
 static ssize_t vsp_cdev_write(
@@ -219,18 +204,10 @@ static ssize_t vsp_cdev_write(
 
 	struct vsp_chan *chan = file->private_data;
 
-	if (!chan->visdn_chan.connected_chan)
-		return -ENOTCONN;
-
-	if (!chan->visdn_chan.connected_chan->ops->samples_write)
-		return -EOPNOTSUPP;
-
-	return chan->visdn_chan.connected_chan->ops->samples_write(
-			chan->visdn_chan.connected_chan,
-			buf, count);
+	return visdn_pass_samples_write(&chan->visdn_chan, buf, count);
 }
 
-static inline int visdn_cdev_do_ioctl_connect(
+static inline int vsp_cdev_do_ioctl_connect(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
@@ -266,21 +243,42 @@ static inline int visdn_cdev_do_ioctl_connect(
 	if (err < 0)
 		goto err_connect;
 
-	visdn_open(chan->visdn_chan.connected_chan);
+	err = visdn_pass_open(&chan->visdn_chan);
+	if (err < 0)
+		goto err_open;
 
 	// Release reference returned by visdn_search_chan()
-	put_device(&visdn_chan2->device);
+	visdn_chan_put(visdn_chan2);
 
 	return 0;
 
-//	visdn_disconnect()
+	visdn_pass_close(&chan->visdn_chan);
+err_open:
+	visdn_disconnect(&chan->visdn_chan);
 err_connect:
 err_connect_self:
-	put_device(&visdn_chan2->device);
+	visdn_chan_put(visdn_chan2);
 err_search_dst:
 err_copy_from_user:
 
 	return err;
+}
+
+static inline int vsp_cdev_do_ioctl_disconnect(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vsp_chan *chan = file->private_data;
+
+	printk(KERN_DEBUG "ioctl(IOC_DISCONNECT)\n");
+
+	visdn_disconnect(&chan->visdn_chan);
+
+	visdn_pass_close(&chan->visdn_chan);
+
+	return 0;
 }
 
 static int vsp_cdev_ioctl(
@@ -291,7 +289,10 @@ static int vsp_cdev_ioctl(
 {
 	switch(cmd) {
 	case VISDN_IOC_CONNECT:
-		return visdn_cdev_do_ioctl_connect(inode, file, cmd, arg);
+		return vsp_cdev_do_ioctl_connect(inode, file, cmd, arg);
+	break;
+	case VISDN_IOC_DISCONNECT:
+		return vsp_cdev_do_ioctl_disconnect(inode, file, cmd, arg);
 	break;
 	}
 
@@ -314,6 +315,7 @@ static struct file_operations vsp_fops =
  ******************************************/
 
 static struct visdn_port_ops vsp_port_ops = {
+	.owner		= THIS_MODULE,
 	.enable		= NULL,
 	.disable	= NULL,
 };
@@ -376,6 +378,8 @@ module_init(vsp_init_module);
 
 static void __exit vsp_module_exit(void)
 {
+	// We should free all channels, here!
+
 	class_device_unregister(&vsp_class_dev);
 	visdn_port_unregister(&vsp_visdn_port);
 	cdev_del(&vsp_cdev);

@@ -2,6 +2,30 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-06 01:35:00 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-120
+
+    Summary:
+      Redesigned chan locking and added a separate crossconnector module
+    Revision:
+      isdn--devel--0.1--patch-120
+
+    
+    
+
+    modified files:
+     ChangeLog Makefile.am NOTES TODO chan_visdn/chan_visdn.c
+     chan_visdn/chan_visdn.h hfc-4s/card_sysfs.c hfc-4s/chan.c
+     hfc-4s/hfc-4s_main.c hfc-4s/pcm_port.c hfc-4s/st_port.c
+     hfc-pci/chan.c hfc-pci/hfc-pci_main.c hfc-pci/pcm_port.c
+     hfc-pci/st_port.c lapd/af_lapd.c libq931/call.c
+     visdn-core/Makefile.in visdn-core/chan.c visdn-core/chan.h
+     visdn-core/core_main.c visdn-core/port.c visdn-core/port.h
+     visdn-core/timer.c visdn-core/timer.h visdn-core/visdn.h
+     visdn-netdev/netdev.h visdn-netdev/netdev_main.c
+     visdn-ppp/ppp_main.c visdn-streamport/streamport_main.c
+     visdn-timer-system/timer-system_main.c
+
+
 2005-09-02 01:15:58 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-119
 
     Summary:

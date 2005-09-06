@@ -34,7 +34,7 @@ SUBDIRS =
 
 if kernel_modules
 SUBDIRS += visdn-core lapd visdn-timer-system visdn-streamport	\
-	visdn-netdev visdn-ppp
+	visdn-netdev #visdn-ppp
 
 if driver_hfc_usb
 SUBDIRS += hfc-usb

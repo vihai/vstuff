@@ -173,7 +173,7 @@ static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
 	if (fifo->connected_chan)
-		visdn_wake_queue(&fifo->connected_chan->chan->visdn_chan);
+		visdn_pass_wake_queue(&fifo->connected_chan->chan->visdn_chan);
 }
 
 static inline void hfc_handle_timer_interrupt(struct hfc_card *card)

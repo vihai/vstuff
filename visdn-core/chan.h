@@ -37,8 +37,6 @@ struct visdn_connect
 #include <linux/device.h>
 #include <linux/netdevice.h>
 
-#define VISDN_CHAN_HASHBITS 8
-
 #define VISDN_CONNECT_OK	0
 #define VISDN_CONNECT_BRIDGED	1
 
@@ -49,6 +47,8 @@ struct visdn_chan_pars;
 
 struct visdn_chan_ops
 {
+	struct module *owner;
+
 	void (*release)(struct visdn_chan *chan);
 
 	int (*open)(struct visdn_chan *chan);
@@ -59,7 +59,6 @@ struct visdn_chan_ops
 
 	struct net_device_stats *(*get_stats)(struct visdn_chan *chan);
 	void (*set_promisc)(struct visdn_chan *chan, int enabled);
-	int (*do_ioctl)(struct visdn_chan *chan, struct ifreq *ifr, int cmd);
 
 	int (*connect_to)(struct visdn_chan *chan,
 				struct visdn_chan *chan2,
@@ -99,6 +98,12 @@ enum visdn_chan_bitrate_selection
 	VISDN_CHAN_BITRATE_SELECTION_RANGE, // Not implemented yet
 };
 
+enum visdn_chan_open
+{
+	VISDN_CHAN_OPEN_OK = 0,
+	VISDN_CHAN_OPEN_RENEGOTIATE,
+};
+
 struct visdn_chan_pars
 {
 	int mtu;
@@ -109,6 +114,8 @@ struct visdn_chan_pars
 
 struct visdn_chan
 {
+	struct semaphore sem;
+
 	struct device device;
 
 	int index;
@@ -117,11 +124,9 @@ struct visdn_chan
 	struct visdn_port *port;
 	struct visdn_chan_ops *ops;
 
-	struct visdn_chan *connected_chan;
-
 	void *priv;
 
-	int open;
+	unsigned long state;
 
 	int autoopen;
 
@@ -143,33 +148,99 @@ struct visdn_chan
 int visdn_chan_modinit(void);
 void visdn_chan_modexit(void);
 
+static inline void visdn_chan_get(
+	struct visdn_chan *chan)
+{
+	get_device(&chan->device);
+}
+
+static inline void visdn_chan_put(
+	struct visdn_chan *chan)
+{
+	put_device(&chan->device);
+}
+
+static inline void visdn_chan_lock(
+	struct visdn_chan *chan)
+{
+	down(&chan->sem);
+}
+
+static inline int visdn_chan_lock_interruptible(
+	struct visdn_chan *chan)
+{
+	return down_interruptible(&chan->sem);
+}
+
+static inline void visdn_chan_unlock(
+	struct visdn_chan *chan)
+{
+	up(&chan->sem);
+}
+
+enum visdn_chan_state
+{
+	VISDN_CHAN_STATE_OPEN = 0,
+};
+
+extern int visdn_open(struct visdn_chan *chan);
+extern int visdn_close(struct visdn_chan *chan);
+
+extern int visdn_pass_stop_queue(struct visdn_chan *chan);
+extern int visdn_pass_start_queue(struct visdn_chan *chan);
+extern int visdn_pass_wake_queue(struct visdn_chan *chan);
+extern int visdn_pass_frame_input_error(struct visdn_chan *chan, int code);
+extern int visdn_pass_open(struct visdn_chan *chan);
+extern int visdn_pass_close(struct visdn_chan *chan);
+extern int visdn_pass_frame_xmit(
+	struct visdn_chan *chan,
+	struct sk_buff *skb);
+extern struct net_device_stats *visdn_pass_get_stats(
+	struct visdn_chan *chan);
+extern ssize_t visdn_pass_samples_read(
+	struct visdn_chan *chan,
+	char __user *buf,
+	size_t count);
+extern ssize_t visdn_pass_samples_write(
+	struct visdn_chan *chan,
+	const char __user *buf,
+	size_t count);
+
 #define to_visdn_chan(class) container_of(class, struct visdn_chan, device)
 
+int visdn_chan_lock2(
+	struct visdn_chan *chan1,
+	struct visdn_chan *chan2);
+
+int visdn_chan_lock2_interruptible(
+	struct visdn_chan *chan1,
+	struct visdn_chan *chan2);
+
 extern void visdn_chan_init(
-	struct visdn_chan *visdn_chan,
+	struct visdn_chan *chan,
 	struct visdn_chan_ops *ops);
 
 extern struct visdn_chan *visdn_chan_alloc(void);
 
 extern int visdn_disconnect(
-	struct visdn_chan *chan1,
-	struct visdn_chan *chan2);
+	struct visdn_chan *chan);
 
 extern int visdn_chan_register(
-	struct visdn_chan *visdn_chan,
+	struct visdn_chan *chan,
 	const char *name,
 	struct visdn_port *visdn_port);
 
 extern void visdn_chan_unregister(
-	struct visdn_chan *visdn_chan);
+	struct visdn_chan *chan);
 
 extern struct visdn_chan *visdn_search_chan(const char *chanid);
 
 extern int visdn_connect(struct visdn_chan *chan1,
 		struct visdn_chan *chan2,
 		int flags);
-extern int visdn_renegotiate_parameters(
-	struct visdn_chan *chan);
+extern int visdn_negotiate_parameters(
+	struct visdn_chan *chan1,
+	struct visdn_chan *chan2);
 
 #endif
 
