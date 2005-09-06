@@ -3092,6 +3092,7 @@ static void q931_timer_T312(void *data)
 
 	break;
 
+	case N0_NULL_STATE: // Correct?
 	case N8_CONNECT_REQUEST:
 	case N10_ACTIVE:
 	case N11_DISCONNECT_REQUEST:
