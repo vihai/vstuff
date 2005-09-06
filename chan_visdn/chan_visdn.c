@@ -1262,6 +1262,8 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 	return NULL;
 }
 
+static int visdn_generator_start(struct ast_channel *chan);
+
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -1283,6 +1285,34 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case AST_CONTROL_RADIO_KEY:
 	case AST_CONTROL_RADIO_UNKEY:
 		return 1;
+	break;
+
+	case AST_CONTROL_OFFHOOK: {
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "dial");
+		if (tone) {
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+			if (!ast_chan->pbx)
+				visdn_generator_start(ast_chan);
+		}
+
+		return 0;
+	}
+	break;
+
+	case AST_CONTROL_HANGUP: {
+		const struct tone_zone_sound *tone;
+		tone = ast_get_indication_tone(ast_chan->zone, "busy");
+		if (tone) {
+			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+			if (!ast_chan->pbx)
+				visdn_generator_start(ast_chan);
+		}
+
+		return 0;
+	}
 	break;
 
 	case AST_CONTROL_RINGING: {
@@ -2202,6 +2232,8 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
+			ast_setstate(ast_chan, AST_STATE_RINGING);
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -2266,6 +2298,8 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 			strncpy(ast_chan->exten,
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
+
+			ast_setstate(ast_chan, AST_STATE_RINGING);
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
@@ -2559,6 +2593,8 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
+			ast_setstate(ast_chan, AST_STATE_RINGING);
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -2633,6 +2669,8 @@ static void visdn_q931_setup_indication(
 			strncpy(ast_chan->exten,
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
+
+			ast_setstate(ast_chan, AST_STATE_RINGING);
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
