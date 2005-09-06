@@ -45,8 +45,7 @@ app_visdn_ppp:
 timer:
 ------
 
-- Make sure the timing function is called with a precise long term frequency
-  (do not schedule with increments)
+-
 
 visdn_core:
 -----------
