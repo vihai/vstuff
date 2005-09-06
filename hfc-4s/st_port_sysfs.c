@@ -12,6 +12,8 @@
 
 #include <linux/kernel.h>
 
+#include <kernel_config.h>
+
 #include "st_port.h"
 #include "st_port_inline.h"
 #include "st_port_sysfs.h"

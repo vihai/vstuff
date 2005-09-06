@@ -648,7 +648,7 @@ struct visdn_port_ops vnd_port_ops = {
 	.disable	= NULL,
 };
 
-#ifdef NO_CLASS_DEV_DEVT
+#ifndef HAVE_CLASS_DEV_DEVT
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
 	return print_dev_t(buf, vnd_first_dev);
@@ -689,7 +689,7 @@ static int __init vnd_init_module(void)
 	vnd_control_class_dev.class = &visdn_system_class;
 	vnd_control_class_dev.class_data = NULL;
 	vnd_control_class_dev.dev = &vnd_port.device;
-#ifndef NO_CLASS_DEV_DEVT
+#ifdef HAVE_CLASS_DEV_DEVT
 	vnd_control_class_dev.devt = vnd_first_dev;
 #endif
 	snprintf(vnd_control_class_dev.class_id,
@@ -700,12 +700,11 @@ static int __init vnd_init_module(void)
 	if (err < 0)
 		goto err_control_class_device_register;
 
-#ifdef NO_CLASS_DEV_DEVT
+#ifndef HAVE_CLASS_DEV_DEVT
 	class_device_create_file(
 		&vnd_control_class_dev,
 		&class_device_attr_dev);
 #endif
-
 
 	return 0;
 

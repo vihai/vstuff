@@ -13,6 +13,8 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 
+#include <kernel_config.h>
+
 #include "card.h"
 #include "card_inline.h"
 #include "fifo.h"

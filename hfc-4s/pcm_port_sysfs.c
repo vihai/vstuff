@@ -12,6 +12,8 @@
 
 #include <linux/kernel.h>
 
+#include <kernel_config.h>
+
 #include "pcm_port.h"
 #include "pcm_port_sysfs.h"
 #include "card.h"

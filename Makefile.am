@@ -17,7 +17,7 @@
 #	$(AUX_DIST)
 
 sysconf_DATA =					\
-	etc/udev/30-visdn.rules	
+	etc/udev/30-visdn.rules
 
 astconf_DATA =					\
 	etc/asterisk/visdn.conf
@@ -28,7 +28,8 @@ EXTRA_DIST =					\
 	samples/ethereal_coloring_rules		\
 	samples/ppp_dialout			\
 	$(sysconf_DATA)				\
-	$(astconf_DATA)
+	$(astconf_DATA)				\
+	kernel_compat.h
 
 SUBDIRS =
 
@@ -45,7 +46,7 @@ SUBDIRS += hfc-pci
 endif
 
 if driver_hfc_4s
-SUBDIRS += hfc-4s 
+SUBDIRS += hfc-4s
 endif
 
 if driver_hfc_e1

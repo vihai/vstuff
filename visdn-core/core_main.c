@@ -18,6 +18,8 @@
 #include <linux/kdev_t.h>
 #include <linux/device.h>
 
+#include <kernel_config.h>
+
 #include "visdn.h"
 #include "visdn_mod.h"
 
@@ -26,6 +28,8 @@
 #include "timer.h"
 
 dev_t visdn_first_dev;
+EXPORT_SYMBOL(visdn_first_dev);
+
 static struct cdev visdn_ctl_cdev;
 
 static int visdn_ctl_open(
@@ -165,7 +169,7 @@ static struct class_device visdn_control_class_dev;
  * Module stuff
  ******************************************/
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_CLASS_DEV_DEVT
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
 	return print_dev_t(buf, visdn_first_dev);
@@ -217,7 +221,7 @@ static int __init visdn_init_module(void)
 	visdn_control_class_dev.class = &visdn_system_class;
 	visdn_control_class_dev.class_data = NULL;
 	visdn_control_class_dev.dev = &visdn_system_device;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_CLASS_DEV_DEVT
 	visdn_control_class_dev.devt = visdn_first_dev;
 #endif
 	snprintf(visdn_control_class_dev.class_id,
@@ -228,7 +232,7 @@ static int __init visdn_init_module(void)
 	if (err < 0)
 		goto err_control_class_device_register;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_CLASS_DEV_DEVT
 	class_device_create_file(
 		&visdn_control_class_dev,
 		&class_device_attr_dev);

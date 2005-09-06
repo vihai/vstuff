@@ -26,6 +26,8 @@
 #include <linux/ppp_defs.h>
 #include <linux/if_ppp.h>
 
+#include <kernel_config.h>
+
 #include "lapd.h"
 #include "lapd_in.h"
 #include "lapd_out.h"
@@ -36,7 +38,7 @@
 struct hlist_head lapd_hash[LAPD_HASHSIZE];
 rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 static struct proto lapd_proto = {
 	.name = "lapd",
 	.owner = THIS_MODULE,
@@ -1295,7 +1297,7 @@ static void lapd_unhash_timer(unsigned long data)
 struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi)
 {
 	struct sock *sk;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 	sk = sk_alloc(PF_LAPD, GFP_ATOMIC,
 		parent_sk->sk_prot, 1);
 #else
@@ -1308,7 +1310,7 @@ struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi)
 
 	sock_init_data(NULL, sk);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_SK_PROT
 	sk_set_owner(sk, THIS_MODULE);
 #endif
 
@@ -1322,7 +1324,7 @@ struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi)
 	sk->sk_state = TCP_ESTABLISHED;
 	sk->sk_sleep = parent_sk->sk_sleep;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 	if (sock_flag(parent_sk, SOCK_ZAPPED))
 		sock_set_flag(sk, SOCK_ZAPPED);
 
@@ -1991,7 +1993,7 @@ static int lapd_create(struct socket *sock, int protocol)
 		goto err_invalid_protocol;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 	sk = sk_alloc(PF_LAPD, GFP_KERNEL, &lapd_proto, 1);
 #else
 	sk = sk_alloc(PF_LAPD, GFP_KERNEL, sizeof(struct lapd_sock),
@@ -2007,7 +2009,7 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	sock_init_data(sock, sk);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_SK_PROT
 	sk_set_owner(sk, THIS_MODULE);
 	sk->sk_zapped = 0;
 #endif
@@ -2089,7 +2091,7 @@ static int __init lapd_init(void)
 		INIT_HLIST_HEAD(&lapd_hash[i]);
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 	err = proto_register(&lapd_proto, 1);
 	if (err < 0)
 		goto err_proto_register;
@@ -2116,7 +2118,7 @@ static int __init lapd_init(void)
 
 	return 0;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 	proto_unregister(&lapd_proto);
 err_proto_register:
 #else
@@ -2142,7 +2144,7 @@ static void __exit lapd_exit(void)
 
 	sock_unregister(PF_LAPD);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_SK_PROT
 	proto_unregister(&lapd_proto);
 #else
 	kmem_cache_destroy(lapd_sk_cachep);

@@ -44,6 +44,8 @@ AC_TYPE_SIGNAL
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gettimeofday memset select socket strcasecmp strchr strdup strerror strncasecmp strrchr strstr])
 
+#-----------------------------------------------------------------------------
+
 AC_ARG_WITH(
 	[kernel-sources],
 	AC_HELP_STRING(
@@ -54,6 +56,13 @@ AC_ARG_WITH(
 AC_SUBST(ksrcdir)
 
 AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
+
+AC_ARG_WITH(
+	[kernel-have-sk-prot],
+	AC_HELP_STRING(
+		[--with-kernel-have-sk-prot],
+		[Fedora kernel have sk_prot before 2.6.12]),)
+AC_SUBST(with_kernel_have_sk_prot)
 
 #-----------------------------------------------------------------------------
 
@@ -189,11 +198,12 @@ AM_CONDITIONAL(driver_fake_isdn,
 	test -n "`echo $drivers | grep fake_isdn`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
-                 libq931/Makefile 
+                 libq931/Makefile
                  chan_visdn/Makefile
                  app_visdn_ppp/Makefile
                  pppd_plugin/Makefile
                  tests/Makefile
+		 kernel_config.h
                  fake_isdn/Makefile
                  hfc-4s/Makefile
                  hfc-e1/Makefile

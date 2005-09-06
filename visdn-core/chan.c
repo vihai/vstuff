@@ -16,6 +16,8 @@
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
 
+#include <kernel_config.h>
+
 #include "visdn.h"
 #include "visdn_mod.h"
 #include "chan.h"

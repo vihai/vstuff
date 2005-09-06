@@ -310,10 +310,10 @@ static struct file_operations vsp_fops =
 	.llseek		= no_llseek,
 };
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_CLASS_DEV_DEVT
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
-	return print_dev_t(buf, visdn_first_dev);
+	return print_dev_t(buf, vsp_first_dev);
 }
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
@@ -364,7 +364,7 @@ static int __init vsp_init_module(void)
 	vsp_class_dev.class = &visdn_system_class;
 	vsp_class_dev.dev = &vsp_visdn_port.device;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_CLASS_DEV_DEVT
 	vsp_class_dev.devt = vsp_first_dev;
 #endif
 
@@ -373,7 +373,7 @@ static int __init vsp_init_module(void)
 		// TODO FIXME
 	}
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_CLASS_DEV_DEVT
 	class_device_create_file(
 		&vsp_class_dev,
 		&class_device_attr_dev);

@@ -86,6 +86,8 @@ void visdn_cxc_del(
 	struct visdn_cxc *cxc,
 	struct visdn_chan *chan)
 {
+
+retry:
 	rcu_read_lock();
 
 	struct visdn_cxc_entry *entry;
@@ -95,12 +97,16 @@ void visdn_cxc_del(
 			node) {
 
 		if (entry->src == chan) {
+			rcu_read_unlock();
+
 			if (chan->ops->disconnect)
 				chan->ops->disconnect(chan);
 
 			hlist_del_rcu(&entry->node);
 
 			call_rcu(&entry->rcu, visdn_cxc_delete_rcu);
+
+			goto retry;
 		}
 	}
 

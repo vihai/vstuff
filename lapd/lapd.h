@@ -76,6 +76,7 @@ struct sockaddr_lapd {
 #include <asm/atomic.h>
 #include <linux/types.h>
 #include <linux/netdevice.h>
+#include <linux/version.h>
 #include <net/sock.h>
 
 #ifndef TRUE

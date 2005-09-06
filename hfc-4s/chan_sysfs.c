@@ -12,6 +12,8 @@
 
 #include <linux/kernel.h>
 
+#include <kernel_config.h>
+
 #include "chan.h"
 #include "chan_sysfs.h"
 #include "card.h"
