@@ -9,7 +9,7 @@ General:
 Build system:
 -------------
 
-- Check if the kernel source tree has been correctly prepare (make/make
+- Check if the kernel source tree has been correctly prepared (make/make
   modules_prepare)
 - Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and complain
   about non-standard directory location

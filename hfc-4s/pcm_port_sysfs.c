@@ -19,6 +19,7 @@
 
 static ssize_t hfc_show_bitrate(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -38,6 +39,7 @@ static ssize_t hfc_show_bitrate(
 
 static ssize_t hfc_store_bitrate(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -79,6 +81,7 @@ static DEVICE_ATTR(bitrate, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_master(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -89,6 +92,7 @@ static ssize_t hfc_show_master(
 
 static ssize_t hfc_store_master(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -121,6 +125,7 @@ static DEVICE_ATTR(master, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_f0io_counter(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -148,6 +153,7 @@ static DEVICE_ATTR(f0io_counter, S_IRUGO,
 
 static ssize_t hfc_show_slots_state(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);

@@ -165,7 +165,7 @@ static struct class_device visdn_control_class_dev;
  * Module stuff
  ******************************************/
 
-#ifdef NO_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
 	return print_dev_t(buf, visdn_first_dev);
@@ -217,7 +217,7 @@ static int __init visdn_init_module(void)
 	visdn_control_class_dev.class = &visdn_system_class;
 	visdn_control_class_dev.class_data = NULL;
 	visdn_control_class_dev.dev = &visdn_system_device;
-#ifndef NO_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
 	visdn_control_class_dev.devt = visdn_first_dev;
 #endif
 	snprintf(visdn_control_class_dev.class_id,
@@ -228,7 +228,7 @@ static int __init visdn_init_module(void)
 	if (err < 0)
 		goto err_control_class_device_register;
 
-#ifdef NO_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	class_device_create_file(
 		&visdn_control_class_dev,
 		&class_device_attr_dev);

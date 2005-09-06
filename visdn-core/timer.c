@@ -165,7 +165,7 @@ void visdn_timer_init(
 }
 EXPORT_SYMBOL(visdn_timer_init);
 
-#ifdef NO_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
 	return print_dev_t(buf, visdn_first_dev);
@@ -189,7 +189,7 @@ int visdn_timer_register(
 	memset(class_dev, 0x00, sizeof(class_dev));
 	class_dev->class = &visdn_timer_class;
 	class_dev->class_data = timer;
-#ifndef NO_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
 	class_dev->devt = visdn_first_dev + 1;
 #endif
 
@@ -200,7 +200,7 @@ int visdn_timer_register(
 	if (err < 0)
 		goto err_class_device_register;
 
-#ifdef NO_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	class_device_create_file(
 		class_dev,
 		&class_device_attr_dev);

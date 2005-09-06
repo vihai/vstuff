@@ -13,6 +13,8 @@
 #ifndef _VISDN_H
 #define _VISDN_H
 
+#include <linux/version.h>
+
 #include "chan.h"
 #include "port.h"
 #include "timer.h"
@@ -42,6 +44,13 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 {
 	kfree_skb(skb);
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#define DEVICE_ATTR_COMPAT struct device_attribute *attr,
+#else
+#define DEVICE_ATTR_COMPAT
+#endif
+
 
 #endif
 

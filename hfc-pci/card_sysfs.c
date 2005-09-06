@@ -22,6 +22,7 @@
 
 static ssize_t hfc_show_fifo_state(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);

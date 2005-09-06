@@ -21,6 +21,7 @@
 
 static ssize_t hfc_show_sq_bits(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(device);
@@ -36,6 +37,7 @@ static ssize_t hfc_show_sq_bits(
 
 static ssize_t hfc_store_sq_bits(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -64,6 +66,7 @@ static DEVICE_ATTR(sq_bits, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_sq_enabled(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(device);
@@ -76,6 +79,7 @@ static ssize_t hfc_show_sq_enabled(
 
 static ssize_t hfc_store_sq_enabled(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {

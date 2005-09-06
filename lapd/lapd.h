@@ -93,8 +93,8 @@ struct sockaddr_lapd {
 
 #ifdef SOCK_DEBUGGING
 #define lapd_debug_sk(sk, format, arg...)		\
-	if ((sk)->sk_debug)				\
-		printk(KERN_DEBUG "lapd: "		\
+		SOCK_DEBUG(sk,				\
+			"lapd: "			\
 			"%s "				\
 			format,				\
 			lapd_sk(sk)->dev?lapd_sk(sk)->dev->name:"",	\

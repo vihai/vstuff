@@ -85,7 +85,6 @@ else
 endif
 
 EXTRA_CFLAGS=-I$(abssrcdir)/../lapd/
-#EXTRA_CFLAGS+=-DNO_CLASS_DEV_DEVT
 
 ########################## Targets #################################
 

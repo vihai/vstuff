@@ -19,6 +19,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/if.h>
+#include <linux/version.h>
 #include <net/datalink.h>
 #include <net/sock.h>
 
@@ -35,7 +36,15 @@
 struct hlist_head lapd_hash[LAPD_HASHSIZE];
 rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+static struct proto lapd_proto = {
+	.name = "lapd",
+	.owner = THIS_MODULE,
+	.obj_size = sizeof(struct lapd_sock),
+};
+#else
 static kmem_cache_t *lapd_sk_cachep;
+#endif
 
 #ifdef CONFIG_PROC_FS
 struct lapd_iter_state {
@@ -1286,26 +1295,43 @@ static void lapd_unhash_timer(unsigned long data)
 struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi)
 {
 	struct sock *sk;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+	sk = sk_alloc(PF_LAPD, GFP_ATOMIC,
+		parent_sk->sk_prot, 1);
+#else
 	sk = sk_alloc(PF_LAPD, GFP_ATOMIC,
 		sizeof(struct lapd_sock),
 		parent_sk->sk_slab);
+#endif
 	if (!sk)
 		return NULL;
 
 	sock_init_data(NULL, sk);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	sk_set_owner(sk, THIS_MODULE);
+#endif
 
 	sk->sk_destruct = lapd_sock_destruct;
 	sk->sk_backlog_rcv = lapd_backlog_rcv;
-	sk->sk_zapped = parent_sk->sk_zapped;
 	sk->sk_type = parent_sk->sk_type;
 	sk->sk_priority = parent_sk->sk_priority;
 	sk->sk_protocol = parent_sk->sk_protocol;
 	sk->sk_rcvbuf = parent_sk->sk_rcvbuf;
 	sk->sk_sndbuf = parent_sk->sk_sndbuf;
-	sk->sk_debug = parent_sk->sk_debug;
 	sk->sk_state = TCP_ESTABLISHED;
 	sk->sk_sleep = parent_sk->sk_sleep;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+	if (sock_flag(parent_sk, SOCK_ZAPPED))
+		sock_set_flag(sk, SOCK_ZAPPED);
+
+	if (sock_flag(parent_sk, SOCK_DBG))
+		sock_set_flag(sk, SOCK_DBG);
+#else
+	sk->sk_zapped = parent_sk->sk_zapped;
+	sk->sk_debug = parent_sk->sk_debug;
+#endif
 
 	init_timer(&sk->sk_timer);
 	sk->sk_timer.function = &lapd_unhash_timer;
@@ -1965,8 +1991,12 @@ static int lapd_create(struct socket *sock, int protocol)
 		goto err_invalid_protocol;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+	sk = sk_alloc(PF_LAPD, GFP_KERNEL, &lapd_proto, 1);
+#else
 	sk = sk_alloc(PF_LAPD, GFP_KERNEL, sizeof(struct lapd_sock),
 			lapd_sk_cachep);
+#endif
 	if (!sk) {
 		err = -ENOMEM;
 		goto err_sk_alloc;
@@ -1976,11 +2006,14 @@ static int lapd_create(struct socket *sock, int protocol)
 	sock->state = SS_UNCONNECTED;
 
 	sock_init_data(sock, sk);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	sk_set_owner(sk, THIS_MODULE);
+	sk->sk_zapped = 0;
+#endif
 
 	sk->sk_destruct = lapd_sock_destruct;
 	sk->sk_backlog_rcv = lapd_backlog_rcv;
-	sk->sk_zapped = 0;
 	sk->sk_protocol = protocol;
 	sk->sk_state = TCP_CLOSE;
 
@@ -2056,6 +2089,11 @@ static int __init lapd_init(void)
 		INIT_HLIST_HEAD(&lapd_hash[i]);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+	err = proto_register(&lapd_proto, 1);
+	if (err < 0)
+		goto err_proto_register;
+#else
 	lapd_sk_cachep = kmem_cache_create("lapd_sock",
 				sizeof(struct lapd_sock), 0,
 				SLAB_HWCACHE_ALIGN, NULL, NULL);
@@ -2066,8 +2104,10 @@ static int __init lapd_init(void)
 		err = -ENOMEM;
 		goto err_kmem_cache_create;
 	}
+#endif
 
 	sock_register(&lapd_family_ops);
+
 	dev_add_pack(&lapd_packet_type);
 
 	register_netdevice_notifier(&lapd_notifier);
@@ -2076,8 +2116,13 @@ static int __init lapd_init(void)
 
 	return 0;
 
-//	kmem_cache_destroy(lapd_sk_cachep);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+	proto_unregister(&lapd_proto);
+err_proto_register:
+#else
+	kmem_cache_destroy(lapd_sk_cachep);
 err_kmem_cache_create:
+#endif
 
 	return err;
 }
@@ -2097,7 +2142,11 @@ static void __exit lapd_exit(void)
 
 	sock_unregister(PF_LAPD);
 
+	proto_unregister(&lapd_proto);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	kmem_cache_destroy(lapd_sk_cachep);
+#endif
 }
 module_exit(lapd_exit);
 

@@ -702,8 +702,9 @@ EXPORT_SYMBOL(visdn_pass_samples_write);
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_refcnt(
-        struct device *device,
-        char *buf)
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n",
 		atomic_read(&to_visdn_chan(device)->device.kobj.kref.refcount));
@@ -717,6 +718,7 @@ static DEVICE_ATTR(refcnt, S_IRUGO,
 
 static ssize_t visdn_chan_show_port_name(
         struct device *device,
+	DEVICE_ATTR_COMPAT
         char *buf)
 {
 	// FIXME: Lock chan and port!?
@@ -733,6 +735,7 @@ static DEVICE_ATTR(port_name, S_IRUGO,
 
 static ssize_t visdn_chan_show_mtu(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *chan = to_visdn_chan(device);
@@ -755,6 +758,7 @@ static DEVICE_ATTR(mtu, S_IRUGO,
 
 static ssize_t visdn_chan_show_bitrate(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *chan = to_visdn_chan(device);
@@ -777,6 +781,7 @@ static DEVICE_ATTR(bitrate, S_IRUGO,
 
 static ssize_t visdn_chan_show_framing(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *chan = to_visdn_chan(device);
@@ -829,6 +834,7 @@ static DEVICE_ATTR(framing, S_IRUGO,
 
 static ssize_t visdn_chan_show_bitorder(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *chan = to_visdn_chan(device);
@@ -853,6 +859,7 @@ static DEVICE_ATTR(bitorder, S_IRUGO,
 
 static ssize_t visdn_chan_show_autoopen(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_chan *chan = to_visdn_chan(device);

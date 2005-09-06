@@ -27,6 +27,7 @@ struct hlist_head visdn_port_index_hash[1 << VISDN_PORT_HASHBITS];
 
 static ssize_t hfc_show_enabled(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *port = to_visdn_port(device);
@@ -44,6 +45,7 @@ static ssize_t hfc_show_enabled(
 
 static ssize_t hfc_store_enabled(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -80,6 +82,7 @@ static DEVICE_ATTR(enabled, S_IRUGO | S_IWUSR,
 
 static ssize_t visdn_port_show_port_name(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *port = to_visdn_port(device);

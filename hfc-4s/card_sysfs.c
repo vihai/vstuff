@@ -19,6 +19,7 @@
 
 static ssize_t hfc_show_output_level(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -29,6 +30,7 @@ static ssize_t hfc_show_output_level(
 
 static ssize_t hfc_store_output_level(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -59,6 +61,7 @@ static DEVICE_ATTR(output_level, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_bert_mode(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -69,6 +72,7 @@ static ssize_t hfc_show_bert_mode(
 
 static ssize_t hfc_store_bert_mode(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -95,6 +99,7 @@ static DEVICE_ATTR(bert_mode, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_bert_err(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	return -ENOTSUPP;
@@ -102,6 +107,7 @@ static ssize_t hfc_show_bert_err(
 
 static ssize_t hfc_store_bert_err(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -124,6 +130,7 @@ static DEVICE_ATTR(bert_err, S_IWUSR,
 
 static ssize_t hfc_show_bert_sync(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -142,6 +149,7 @@ static DEVICE_ATTR(bert_sync, S_IRUGO,
 
 static ssize_t hfc_show_bert_inv(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -160,6 +168,7 @@ static DEVICE_ATTR(bert_inv, S_IRUGO,
 
 static ssize_t hfc_show_bert_cnt(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -183,6 +192,7 @@ static DEVICE_ATTR(bert_cnt, S_IRUGO,
 
 static ssize_t hfc_show_ram_bandwidth(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -201,6 +211,7 @@ static DEVICE_ATTR(ram_bandwidth, S_IRUGO,
 
 static ssize_t hfc_show_ram_size(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -213,6 +224,7 @@ static ssize_t hfc_show_ram_size(
 
 static ssize_t hfc_store_ram_size(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -272,6 +284,7 @@ static DEVICE_ATTR(ram_size, S_IRUGO | S_IWUSR,
 //----------------------------------------------------------------------------
 static ssize_t hfc_show_clock_source_config(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -285,6 +298,7 @@ static ssize_t hfc_show_clock_source_config(
 
 static ssize_t hfc_store_clock_source_config(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -320,6 +334,7 @@ static DEVICE_ATTR(clock_source_config, S_IRUGO | S_IWUSR,
 //----------------------------------------------------------------------------
 static ssize_t hfc_show_clock_source_current(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -338,6 +353,7 @@ static DEVICE_ATTR(clock_source_current, S_IRUGO,
 
 static ssize_t hfc_show_dip_switches(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
@@ -355,6 +371,7 @@ static DEVICE_ATTR(dip_switches, S_IRUGO,
 
 static ssize_t hfc_show_fifo_state(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);

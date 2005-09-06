@@ -15,8 +15,7 @@
 
 #ifdef SOCK_DEBUGGING
 #define lapd_debug_multiframe(sk, format, arg...)	\
-	if ((sk)->sk_debug)				\
-		printk(KERN_DEBUG "lapd: "		\
+		SOCK_DEBUG((sk), "lapd: "		\
 			"%s "				\
 			"V(S)=%u V(R)=%u V(A)=%u: "	\
 			format,				\

@@ -19,6 +19,7 @@
 
 static ssize_t hfc_show_role(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -30,6 +31,7 @@ static ssize_t hfc_show_role(
 
 static ssize_t hfc_store_role(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -71,6 +73,7 @@ static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_l1_state(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -83,6 +86,7 @@ static ssize_t hfc_show_l1_state(
 
 static ssize_t hfc_store_l1_state(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -142,6 +146,7 @@ static DEVICE_ATTR(l1_state, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_st_clock_delay(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -152,6 +157,7 @@ static ssize_t hfc_show_st_clock_delay(
 
 static ssize_t hfc_store_st_clock_delay(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
@@ -182,6 +188,7 @@ static DEVICE_ATTR(st_clock_delay, S_IRUGO | S_IWUSR,
 //----------------------------------------------------------------------------
 static ssize_t hfc_show_st_sampling_comp(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	char *buf)
 {
 	struct visdn_port *visdn_port = to_visdn_port(device);
@@ -192,6 +199,7 @@ static ssize_t hfc_show_st_sampling_comp(
 
 static ssize_t hfc_store_st_sampling_comp(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
