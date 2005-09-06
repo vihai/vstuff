@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -202,7 +202,7 @@ static void hfc_hexdump(char *src,char *dst, int size)
 }
 
 static int hfc_proc_read_info(char *page, char **start,
-		off_t off, int count, 
+		off_t off, int count,
 		int *eof, void *data)
 {
 	struct hfc_card *card = data;
@@ -268,7 +268,7 @@ u8 l1_state = hfc_read(card, HFC_REG_STATES) & 0x07;
 }
 
 static int hfc_proc_read_fifos(char *page, char **start,
-		off_t off, int count, 
+		off_t off, int count,
 		int *eof, void *data)
 {
 	struct hfc_card *card = data;
@@ -781,7 +781,7 @@ static void hfc_setup_lapd(struct hfc_chan_duplex *chan)
  ******************************************/
 
 static void hfc_delete(struct kref *kref)
-{	
+{
 	struct hfc_card *card = to_hfc_dev(kref);
 
 	usb_put_dev(card->usb_dev);

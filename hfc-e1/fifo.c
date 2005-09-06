@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and
  * distributed under the terms of the GNU Public License.
@@ -239,7 +239,7 @@ int hfc_fifo_get_frame(struct hfc_fifo *fifo, void *data, int max_size)
 
 #ifdef DEBUG
 	if (debug_level >= 3)
-		printk(" %02x\n", stat); 
+		printk(" %02x\n", stat);
 #endif
 
 	if (stat == 0xff) {

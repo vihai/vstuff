@@ -546,7 +546,7 @@ static int vnd_create_request(
 
 	vnd_request->output_off = 0;
 	vnd_request->type = type;
-	
+
 	return 0;
 
 	visdn_chan_unregister(&netdevice->visdn_chan_e);

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -742,7 +742,7 @@ static int q931_channel_select_response(
 
 		return TRUE;
 	} else {
-		/* Uh, well, we proposed another channel but 
+		/* Uh, well, we proposed another channel but
 		 * the other party doesn't agree. We are nice
 		 * and use her choice.
 		 */

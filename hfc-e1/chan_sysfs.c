@@ -186,7 +186,7 @@ static ssize_t hfc_store_sq_bits(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_e1_port *port = chan->port;
 	struct hfc_card *card = port->card;
-	
+
 	unsigned int value;
 	if (sscanf(buf, "%01x", &value) < 1)
 		return -EINVAL;
@@ -230,7 +230,7 @@ static ssize_t hfc_store_sq_enabled(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_e1_port *port = chan->port;
 	struct hfc_card *card = port->card;
-	
+
 	unsigned int value;
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;

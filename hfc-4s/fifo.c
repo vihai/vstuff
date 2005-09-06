@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -294,7 +294,7 @@ void hfc_fifo_configure(
 		case 48000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_6; break;
 		case 56000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_7; break;
 		case 64000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8; break;
-		default: 
+		default:
 			WARN_ON(1);
 			subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8;
 	}

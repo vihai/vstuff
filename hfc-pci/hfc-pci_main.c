@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -547,7 +547,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 		"configured at mem %#lx (0x%p) IRQ %u\n",
 		card->io_bus_mem,
 		card->io_mem,
-		card->pcidev->irq); 
+		card->pcidev->irq);
 
 	return 0;
 

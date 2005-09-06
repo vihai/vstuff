@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -277,7 +277,7 @@ void lapd_T203_timer(unsigned long data)
 		lapd_printk(KERN_ERR,
 			"Unexpected T203 expire in state %s\n",
 			lapd_state_to_text(lo->state));
-		
+
 	lo->retrans_cnt = 0;
 
 	if (lo->me_busy) {
@@ -376,7 +376,7 @@ static void lapd_run_iqueue(struct sock *sk)
 	if (lo->v_s == (lo->v_a + lo->sap->k) % 128)
 		lapd_debug_multiframe(sk,
 			"k reached, not sending more frames\n");
-	
+
 	if (sk->sk_send_head ==
 	    (struct sk_buff *)&sk->sk_write_queue)
 		sk->sk_send_head = NULL;
@@ -645,7 +645,7 @@ int lapd_socket_handle_iframe(struct sock *sk,
 		lo->rejection_exception = FALSE;
 	}
 
-	// The receive queue is full 
+	// The receive queue is full
 	if (atomic_read(&sk->sk_rmem_alloc) >= (unsigned)sk->sk_rcvbuf) {
 
 		lapd_debug_multiframe(sk,

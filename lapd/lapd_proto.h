@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -137,7 +137,7 @@ struct lapd_frmr
 {
 	u8 control;
 	u8 control2;
-	
+
 #if defined(__BIG_ENDIAN_BITFIELD)
 	u8 v_s:7;
 	u8 :1;
@@ -217,7 +217,7 @@ static inline u8 lapd_make_cr(int nt_mode, int c_r)
 }
 
 static inline enum lapd_frame_type lapd_frame_type(u8 control)
-{ 
+{
 	if (!(control & 0x01))
 		return LAPD_FRAME_TYPE_IFRAME;
 	else if(!(control & 0x02))

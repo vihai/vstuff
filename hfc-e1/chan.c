@@ -264,7 +264,7 @@ static int hfc_chan_frame_xmit(
 
 	if (down_interruptible(&card->sem))
 		return -ERESTARTSYS;
-	
+
 	hfc_st_port_select(chan->port);
 	hfc_st_port_check_l1_up(chan->port);
 
@@ -502,7 +502,7 @@ hfc_msg_chan(chan, KERN_INFO, "VISDN_SET_BEARER %d %d\n", sb.sb_index, sb.sb_bea
 		return -EINVAL;
 
 	if (sb.sb_bearertype == VISDN_BT_VOICE) {
-		
+
 	} else if (sb.sb_bearertype == VISDN_BT_PPP) {
 
 		b1_chan->status = open_ppp;
@@ -716,7 +716,7 @@ static int hfc_bridge(
 	hfc_chan_enable(chan2);
 
 	up(&card->sem);
-	
+
 	return VISDN_CONNECT_BRIDGED;
 
 	hfc_pcm_port_deallocate_slot(slot_1_tx);

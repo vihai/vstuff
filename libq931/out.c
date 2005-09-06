@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -84,7 +84,7 @@ static int q931_prepare_header(
 		Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE);
 
 	size += hdr->call_reference_len;
-	
+
 	__u8 *message_type_onwire = (__u8 *)(frame + size);
 	size++;
 	*message_type_onwire = message_type;
@@ -119,7 +119,7 @@ static int q931_global_prepare_header(
 		Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE);
 
 	size += hdr->call_reference_len;
-	
+
 	__u8 *message_type_onwire = (__u8 *)(frame + size);
 	size++;
 	*message_type_onwire = message_type;

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -1091,7 +1091,7 @@ void q931_ie_types_init()
 			sizeof(struct q931_ie_type),
 		sizeof(struct q931_ie_type),
 		q931_ie_id_compare);
-	
+
 	qsort(q931_ie_types_per_mt,
 		sizeof(q931_ie_types_per_mt)/
 			sizeof(struct q931_ie_type_per_mt),

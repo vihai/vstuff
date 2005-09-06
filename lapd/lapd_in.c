@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -410,7 +410,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 	if (listening_sk) {
 		// A socket has not been found
 		struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
-		
+
 		if (hdr->addr.sapi != LAPD_SAPI_Q931 &&
 		    hdr->addr.sapi != LAPD_SAPI_X25) {
 			lapd_printk(KERN_WARNING,

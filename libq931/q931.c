@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -750,7 +750,7 @@ void q931_receive(struct q931_dlc *dlc)
 			msg.callref_direction =
 				Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE;
 		}
-		   
+
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 		msg.callref |= val << ((hdr->call_reference_len-i-1) * 8);
 #else

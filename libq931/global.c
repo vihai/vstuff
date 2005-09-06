@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -360,7 +360,6 @@ inline static void q931_global_handle_restart_acknowledge(
 						container_of(msg->ies.ies[i],
 							struct q931_ie_channel_identification, ie);
 
-					
 					q931_chanset_merge(
 						&gc->restart_acked_chans,
 						&ci->chanset);

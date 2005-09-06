@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -59,7 +59,7 @@ int q931_ie_channel_identification_read_from_buf(
 {
 	assert(abstract_ie->type == ie_type);
 
-	struct q931_ie_channel_identification *ie = 
+	struct q931_ie_channel_identification *ie =
 		container_of(abstract_ie,
 			struct q931_ie_channel_identification, ie);
 

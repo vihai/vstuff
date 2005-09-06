@@ -2,7 +2,7 @@
  * Asterisk -- A telephony toolkit for Linux.
  *
  * Echo application -- play back what you hear to evaluate latency
- * 
+ *
  * Copyright (C) 1999, Mark Spencer
  *
  * Mark Spencer <markster@linux-support.net>

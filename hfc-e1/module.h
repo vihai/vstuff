@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2005 Daniele Orlandi
  *
- * Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and
  * distributed under the terms of the GNU Public License.

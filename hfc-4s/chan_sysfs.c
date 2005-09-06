@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -224,7 +224,7 @@ static ssize_t hfc_store_sq_bits(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
-	
+
 	unsigned int value;
 	if (sscanf(buf, "%01x", &value) < 1)
 		return -EINVAL;
@@ -268,7 +268,7 @@ static ssize_t hfc_store_sq_enabled(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
-	
+
 	unsigned int value;
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;

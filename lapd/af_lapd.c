@@ -1994,7 +1994,7 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	// We use ->sapi as a temporary until SO_BINDTODEVICE
 	lo->sapi = protocol;
- 
+
 	// TE mode section
 
 	lo->nt_mode = FALSE;

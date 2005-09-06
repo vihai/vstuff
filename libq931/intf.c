@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU Lesser General Public License.
@@ -115,7 +115,7 @@ struct q931_interface *q931_open_interface(
 		intf->master_socket = -1;
 
 		q931_init_dlc(&intf->dlc, intf, s);
-			
+
 		intf->dlc.status = DLC_DISCONNECTED;
 
 		intf->T301 = 180 * 1000000LL;

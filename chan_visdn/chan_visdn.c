@@ -1026,7 +1026,7 @@ static int visdn_call(
 		err = -1;
 		goto err_channel_not_down;
 	}
-	
+
 	if (option_debug)
 		ast_log(LOG_DEBUG,
 			"Calling %s on %s\n",
@@ -1112,7 +1112,7 @@ static int visdn_call(
 
 	struct q931_ie_high_layer_compatibility *hlc =
 		q931_ie_high_layer_compatibility_alloc();
-	
+
 	hlc->coding_standard = Q931_IE_HLC_CS_CCITT;
 	hlc->interpretation = Q931_IE_HLC_P_FIRST;
 	hlc->presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
@@ -3230,7 +3230,7 @@ int load_module()
 		ast_log(LOG_ERROR, "Unable to start q931 thread.\n");
 		return -1;
 	}
-	
+
 	if (ast_channel_register_ex(VISDN_CHAN_TYPE, VISDN_DESCRIPTION, 
 			 AST_FORMAT_ALAW,
 			 visdn_request, visdn_devicestate)) {
@@ -3238,7 +3238,7 @@ int load_module()
 			VISDN_CHAN_TYPE);
 		return -1;
 	}
-	
+
 	ast_cli_register(&debug_visdn_generic);
 	ast_cli_register(&no_debug_visdn_generic);
 	ast_cli_register(&debug_visdn_q921);
@@ -3249,7 +3249,7 @@ int load_module()
 	ast_cli_register(&show_visdn_channels);
 	ast_cli_register(&show_visdn_interfaces);
 	ast_cli_register(&show_visdn_calls);
-	
+
 	return res;
 }
 

@@ -34,7 +34,7 @@ static ssize_t hfc_store_output_level(
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
-	
+
 	int value;
 	if (sscanf(buf, "%x", &value) < 1)
 		return -EINVAL;
@@ -74,7 +74,7 @@ static ssize_t hfc_store_bert_mode(
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
-	
+
 	int mode;
 	sscanf(buf, "%d", &mode);
 
@@ -218,9 +218,9 @@ static ssize_t hfc_store_ram_size(
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
-	
+
 	unsigned int value;
-	
+
 	if (sscanf(buf, "%u", &value) < 1)
 		return -EINVAL;
 
@@ -290,7 +290,7 @@ static ssize_t hfc_store_clock_source_config(
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
-	
+
 	if (hfc_card_lock_interruptible(card))
 		return -ERESTARTSYS;
 

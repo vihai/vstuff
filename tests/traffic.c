@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -359,7 +359,7 @@ void start_source(int s, const char *prefix, struct opts *opts)
 
 			gettimeofday(&last_tx_tv, NULL);
 			last_tx = last_tx_tv.tv_sec * 1000000LL + last_tx_tv.tv_usec;
-		
+
 			int in_size;
 			if(ioctl(s, SIOCINQ, &in_size) < 0) {
 				printf("%sioctl: %s\n", prefix, strerror(errno));

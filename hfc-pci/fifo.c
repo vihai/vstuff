@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
- * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com> 
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -262,7 +262,7 @@ void hfc_fifo_rx_work(void *data)
 				Z_inc(fifo, *Z2_F2(fifo), i)));
 		}
 
-		printk("\n"); 
+		printk("\n");
 	}
 #endif
 
