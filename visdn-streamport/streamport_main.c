@@ -375,7 +375,7 @@ static int __init vsp_init_module(void)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	class_device_create_file(
-		&visdn_control_class_dev,
+		&vsp_class_dev,
 		&class_device_attr_dev);
 #endif
 

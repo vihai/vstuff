@@ -2142,9 +2142,9 @@ static void __exit lapd_exit(void)
 
 	sock_unregister(PF_LAPD);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
 	proto_unregister(&lapd_proto);
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#else
 	kmem_cache_destroy(lapd_sk_cachep);
 #endif
 }
