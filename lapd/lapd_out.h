@@ -32,7 +32,7 @@ int lapd_send_uframe(struct sock *sk,
 	int p_f,
 	void *data, int datalen);
 
-inline int lapd_send_frame(struct sk_buff *skb);
+int lapd_send_frame(struct sk_buff *skb);
 
 int lapd_send_sframe(struct sock *sk,
 	enum lapd_cr c_r,

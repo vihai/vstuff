@@ -272,19 +272,19 @@ static inline struct lapd_opt *lapd_sk(const struct sock *__sk)
 
 extern void setup_lapd(struct net_device *netdev);
 
-extern struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi);
+struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi);
 
-extern int lapd_device_event(struct notifier_block *this,
-			unsigned long event, void *ptr);
-extern void lapd_frame_reject(struct sock *sk, struct sk_buff *skb,
-	enum lapd_format_errors error);
-extern int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
-extern void lapd_change_state(struct sock *sk, enum lapd_datalink_state newstate);
-extern void lapd_mdl_error_response(struct sock *sk);
-extern void lapd_mdl_assign_request(struct sock *sk, int tei);
-extern void lapd_mdl_remove_request(struct sock *sk);
-extern const char *lapd_state_to_text(enum lapd_datalink_state state);
-extern void lapd_deliver_internal_message(
+int lapd_device_event(struct notifier_block *this,
+ 		unsigned long event, void *ptr);
+void lapd_frame_reject(struct sock *sk, struct sk_buff *skb,
+ enum lapd_format_errors error);
+int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
+void lapd_change_state(struct sock *sk, enum lapd_datalink_state newstate);
+void lapd_mdl_error_response(struct sock *sk);
+void lapd_mdl_assign_request(struct sock *sk, int tei);
+void lapd_mdl_remove_request(struct sock *sk);
+const char *lapd_state_to_text(enum lapd_datalink_state state);
+void lapd_deliver_internal_message(
 	struct sock *sk,
 	enum lapd_int_msg_type type,
 	int param);
