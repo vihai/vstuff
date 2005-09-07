@@ -1,26 +1,49 @@
-#! /bin/bash -x
+#! /bin/bash
+
+set -x
+
+pushd /root/isdn--devel > /dev/null
 
 modprobe ppp_generic
-insmod /root/isdn--devel/lapd/lapd.ko
-insmod /root/isdn--devel/visdn-core/visdn-core.ko
-insmod /root/isdn--devel/visdn-netdev/visdn-netdev.ko
-insmod /root/isdn--devel/visdn-streamport/visdn-streamport.ko
-insmod /root/isdn--devel/visdn-ppp/visdn-ppp.ko
-insmod /root/isdn--devel/visdn-timer-system/visdn-timer-system.ko
-insmod /root/isdn--devel/hfc-4s/hfc-4s.ko debug_level=3
-insmod /root/isdn--devel/hfc-pci/hfc-pci.ko debug_level=3
+insmod visdn-core/visdn-core.ko
+insmod lapd/lapd.ko
+insmod visdn-netdev/visdn-netdev.ko
+insmod visdn-streamport/visdn-streamport.ko
+#insmod visdn-ppp/visdn-ppp.ko
+insmod visdn-timer-system/visdn-timer-system.ko
+insmod hfc-4s/hfc-4s.ko debug_level=3
+insmod hfc-pci/hfc-pci.ko debug_level=3
 
+popd > /dev/null
 
-config_if() {
+set +x
 
+function create_netdev()
+{
+	exec 6<>/dev/visdn/netdev-control
+	echo "create lapd" >&6
+	NETDEV_CHAN=`cat <&6`
+	exec 6<&-
+}
+
+function connect_channels()
+{
+	local CHAN1=$1
+	local CHAN2=$2
+
+	echo "$CHAN1,$CHAN2" > /sys/bus/visdn/connect
+}
+
+function config_if()
+{
 	local DEVICE_ID=$1
 	local PORT_ID=$2
 	local NETDEV_NAME=$3
 	local ROLE=$4
 
-        pushd "/sys/devices/$DEVICE_ID" || ( echo "Invalid device ID"; return )
+        pushd "/sys/devices/$DEVICE_ID" > /dev/null || ( echo "Invalid device ID"; return )
 
-	pushd $PORT_ID || ( echo "Missing port"; return )
+	pushd $PORT_ID > /dev/null || ( echo "Missing port"; return )
 
 	[ -f role ] || ( echo "Missing role"; return )
 	[ -f enabled ] || ( echo "Missing enabled"; return )
@@ -31,10 +54,14 @@ config_if() {
 
 	local D_SYSFS_DIR=`readlink D`
 	local D_CHAN=`basename $D_SYSFS_DIR`
+	local E_SYSFS_DIR=`readlink E`
+	local E_CHAN=`basename $E_SYSFS_DIR`
 
 	if [ ! -L "$D_SYSFS_DIR/connected" ] ; then
-		local NETDEV_CHAN=`cat /dev/visdn/netdev-control`
-		echo "${NETDEV_CHAN},${D_CHAN}" > /sys/bus/visdn/connect
+		create_netdev
+
+		connect_channels "${NETDEV_CHAN}" "$D_CHAN"
+		connect_channels "${NETDEV_CHAN}e" "$E_CHAN"
 
 		nameif -r $NETDEV_NAME visdn${NETDEV_CHAN##*.}d
 	fi
@@ -48,14 +75,20 @@ config_if() {
 	fi
 
 	ip link set $NETDEV_NAME up
-popd
+popd > /dev/null
 
-popd
+popd > /dev/null
 }
 
+#create_netdev
+#
+#echo $NETDEV_CHAN
+#
+#exit
+
+config_if "pci0000:00/0000:00:07.0" "st0" "visdn0" "TE"
 config_if "pci0000:00/0000:00:09.0" "st0" "visdn1.0" "NT"
 config_if "pci0000:00/0000:00:09.0" "st1" "visdn1.1" "NT"
 config_if "pci0000:00/0000:00:09.0" "st2" "visdn1.2" "TE"
 config_if "pci0000:00/0000:00:09.0" "st3" "visdn1.3" "TE"
-config_if "pci0000:00/0000:00:07.0" "st0" "visdn0" "TE"
 
