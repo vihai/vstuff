@@ -133,7 +133,7 @@ static void visdn_timer_release(struct class_device *device)
 }
 
 static struct class visdn_timer_class = {
-	.name = "visdn_timer",
+	.name = "visdn-timer",
 	.release = visdn_timer_release,
 	.hotplug = visdn_timer_hotplug,
 };
