@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-07 11:12:09 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-137
+
+    Summary:
+      Compilation fixes for 2.6.12
+    Revision:
+      isdn--devel--0.1--patch-137
+
+    
+    
+
+    modified files:
+     ChangeLog kernel_config.h.in
+
+
 2005-09-07 03:35:08 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-136
 
     Summary:

@@ -4,14 +4,14 @@
 #include <linux/version.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
-#define DEVICE_ATTR_COMPAT struct device_attribute *attr,
 #define HAVE_CLASS_DEV_DEVT
-#else
-#define DEVICE_ATTR_COMPAT
+#define HAVE_SK_PROT
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,13)
-#define HAVE_SK_PROT
+#define DEVICE_ATTR_COMPAT struct device_attribute *attr,
+#else
+#define DEVICE_ATTR_COMPAT
 #endif
 
 #define with_value 0
