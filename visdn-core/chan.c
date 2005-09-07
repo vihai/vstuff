@@ -417,7 +417,6 @@ int visdn_pass_open(
 	}
 
 	err = visdn_open(dst);
-	printk(KERN_DEBUG "visdn_open() = %d\n", err);
 
 	module_put(dst->ops->owner);
 err_module_get:
@@ -444,10 +443,7 @@ int visdn_pass_close(
 		goto err_module_get;
 	}
 
-	if (dst->ops->close)
-		err = dst->ops->close(dst);
-	else
-		err = 0;
+	err = visdn_close(dst);
 
 	module_put(dst->ops->owner);
 err_module_get:
@@ -1095,9 +1091,9 @@ int visdn_open(struct visdn_chan *chan)
 {
 	int err = 0;
 
-	if (test_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
+	if (test_and_set_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
 		WARN_ON(1);
-		return -EINVAL;
+		return -EBUSY;
 	}
 
 	if (chan->ops->open) {
@@ -1105,8 +1101,6 @@ int visdn_open(struct visdn_chan *chan)
 		if (err < 0)
 			return err;
 	}
-
-	set_bit(VISDN_CHAN_STATE_OPEN, &chan->state);
 
 	return err;
 }
@@ -1116,9 +1110,9 @@ int visdn_close(struct visdn_chan *chan)
 {
 	int err = 0;
 
-	if (!test_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
+	if (!test_and_clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
 		WARN_ON(1);
-		return -EINVAL;
+		return -EBUSY;
 	}
 
 	if (chan->ops->close) {
@@ -1126,8 +1120,6 @@ int visdn_close(struct visdn_chan *chan)
 		if (err < 0)
 			return err;
 	}
-
-	clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state);
 
 	return err;
 }

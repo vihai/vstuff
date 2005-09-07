@@ -95,14 +95,14 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vnd_open()\n");
+	printk(KERN_DEBUG "vnd_open()\n");
 
 	return 0;
 }
 
 static int vnd_chan_close(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vnd_close()\n");
+	printk(KERN_DEBUG "vnd_close()\n");
 
 	return 0;
 }
@@ -134,7 +134,7 @@ static int vnd_chan_connect_to(
 	struct vnd_netdevice *netdevice = visdn_chan->priv;
 	int err;
 
-	printk(KERN_INFO "%s connected to %s\n",
+	printk(KERN_DEBUG "%s connected to %s\n",
 		visdn_chan->device.bus_id,
 		visdn_chan2->device.bus_id);
 
@@ -162,7 +162,7 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 	if (visdn_chan == &netdevice->visdn_chan)
 		unregister_netdev(netdevice->netdev);
 
-	printk(KERN_INFO "%s disconnected\n",
+	printk(KERN_DEBUG "%s disconnected\n",
 		visdn_chan->device.bus_id);
 
 	return 0;
@@ -238,7 +238,7 @@ static int vnd_netdev_open(struct net_device *netdev)
 	struct visdn_chan *chan = &netdevice->visdn_chan;
 	int err;
 
-	printk(KERN_INFO "vnd_netdev_open()\n");
+	printk(KERN_DEBUG "vnd_netdev_open()\n");
 
 	err = visdn_pass_open(chan);
 
@@ -250,7 +250,7 @@ static int vnd_netdev_open(struct net_device *netdev)
 			goto err_no_dst;
 		}
 
-		printk(KERN_INFO "Driver asked to renegotiate parameters\n");
+		printk(KERN_DEBUG "Driver asked to renegotiate parameters\n");
 
 		visdn_negotiate_parameters(chan, dst);
 
@@ -268,7 +268,7 @@ static int vnd_netdev_stop(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
-	printk(KERN_INFO "vnd_netdev_stop()\n");
+	printk(KERN_DEBUG "vnd_netdev_stop()\n");
 
 	visdn_pass_close(&netdevice->visdn_chan_e);
 

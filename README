@@ -1,2 +1,11 @@
 
-Read yourself!
+~~~~~~~~~~~~~~~~~ Known bugs ~~~~~~~~~~~~~~~~~
+
+- Echo cancellation is missing
+
+- No jitter buffer is present in the outbound FIFO, choppy audio will happen
+  during moderately heavy interrupt storms.
+
+Read TODO for more detailed list of bugs or missing features.
+
+
