@@ -47,8 +47,6 @@ struct lapd_utme
 	void (*destroy)(struct lapd_utme *tme);
 };
 
-struct lapd_utme *lapd_utme_alloc(struct net_device *dev);
-
 static inline void lapd_utme_hold(
 	struct lapd_utme *tme)
 {
@@ -90,6 +88,7 @@ static inline void lapd_utme_state_changed(
 {
 }
 
+struct lapd_utme *lapd_utme_alloc(struct net_device *dev);
 int lapd_utme_handle_frame(struct sk_buff *skb);
 void lapd_utme_start_tei_request(struct lapd_utme *tme);
 

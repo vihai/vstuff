@@ -69,9 +69,6 @@ static inline void lapd_ntme_put(
 	}
 }
 
-extern void lapd_ntme_set_static_tei(
-	struct lapd_ntme *tme, int tei);
-
 static inline void lapd_ntme_reset_timer(
 	struct lapd_ntme *tme,
 	struct timer_list *timer,
@@ -89,6 +86,8 @@ static inline void lapd_ntme_stop_timer(
 		lapd_ntme_put(tme);
 }
 
+void lapd_ntme_set_static_tei(
+	struct lapd_ntme *tme, int tei);
 int lapd_ntme_handle_frame(struct sk_buff *skb);
 
 #endif

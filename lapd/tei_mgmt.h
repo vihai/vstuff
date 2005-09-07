@@ -81,7 +81,7 @@ void lapd_tei_mgmt_T201_timer(unsigned long data);
 void lapd_tei_mgmt_T202_timer(unsigned long data);
 int lapd_handle_tei_mgmt(struct sk_buff *skb);
 
-inline int lapd_tm_send(
+int lapd_tm_send(
 	struct net_device *dev,
 	u8 message_type, u16 ri, u8 ai);
 
