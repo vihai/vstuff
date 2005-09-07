@@ -147,30 +147,12 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_len = size;
 
 	if (dlc->status != DLC_CONNECTED) {
-/*		int oldflags;
-
-		if (fcntl(dlc->socket, F_GETFL, &oldflags) < 0) {
-			report_dlc(dlc, LOG_ERR, "fcntl: %s\n", strerror(errno));
-			return errno;
-		}
-
-		if (fcntl(dlc->socket, F_SETFL, oldflags | O_NONBLOCK) < 0) {
-			report_dlc(dlc, LOG_ERR, "fcntl: %s\n", strerror(errno));
-			return errno;
-		}*/
-
 		if (connect(dlc->socket, NULL, 0) < 0) {
 			report_dlc(dlc, LOG_ERR, "connect: %s\n", strerror(errno));
 			return errno;
 		}
 
 		q931_dl_establish_confirm(dlc);
-
-/*		if (fcntl(dlc->socket, F_SETFL, oldflags) < 0) {
-			report_dlc(dlc, LOG_ERR, "fcntl: %s\n", strerror(errno));
-			return errno;
-		}*/
-
 	}
 
 	if (sendmsg(dlc->socket, &msg, 0) < 0) {

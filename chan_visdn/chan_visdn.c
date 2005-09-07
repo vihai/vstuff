@@ -112,6 +112,7 @@ struct visdn_interface
 	char name[IFNAMSIZ];
 
 	int configured;
+	int open_pending;
 
 	enum q931_interface_network_role network_role;
 	enum visdn_type_of_number type_of_number;
@@ -140,6 +141,9 @@ struct visdn_state
 	struct pollfd polls[100];
 	struct poll_info poll_infos[100];
 	int npolls;
+
+	int open_pending;
+	int open_pending_nextcheck;
 
 	int usecnt;
 	int timer_fd;
@@ -521,6 +525,7 @@ static void visdn_reload_config(void)
 			visdn.nifs++;
 
 			intf->q931_intf = NULL;
+			intf->open_pending = FALSE;
 			strncpy(intf->name, cat, sizeof(intf->name));
 			visdn_copy_interface_config(intf, &visdn.default_intf);
 		}
@@ -1302,7 +1307,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 	case AST_CONTROL_HANGUP: {
 		const struct tone_zone_sound *tone;
-		tone = ast_get_indication_tone(ast_chan->zone, "busy");
+		tone = ast_get_indication_tone(ast_chan->zone, "congestion");
 		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
 
@@ -1763,45 +1768,48 @@ static struct ast_channel *visdn_request(char *type, int format, void *data)
 }
 
 // Must be called with visdn.lock acquired
-void refresh_polls_list(
-	struct pollfd *polls,
-	struct poll_info *poll_infos,
-	int *npolls)
+static void refresh_polls_list()
 {
-	*npolls = 0;
+	visdn.npolls = 0;
 
-	polls[*npolls].fd = visdn.netlink_socket;
-	polls[*npolls].events = POLLIN | POLLERR;
-	poll_infos[*npolls].type = POLL_INFO_TYPE_NETLINK;
-	poll_infos[*npolls].interface = NULL;
-	(*npolls)++;
+	visdn.polls[visdn.npolls].fd = visdn.netlink_socket;
+	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_NETLINK;
+	visdn.poll_infos[visdn.npolls].interface = NULL;
+	(visdn.npolls)++;
+
+	visdn.open_pending = FALSE;
 
 	int i;
 	for(i = 0; i < visdn.nifs; i++) {
+		if (visdn.ifs[i].open_pending)
+			visdn.open_pending = TRUE;
+			visdn.open_pending_nextcheck = 0;
+
 		if (!visdn.ifs[i].q931_intf)
 			continue;
 
 		if (visdn.ifs[i].q931_intf->role == LAPD_ROLE_NT) {
-			polls[*npolls].fd = visdn.ifs[i].q931_intf->master_socket;
-			polls[*npolls].events = POLLIN | POLLERR;
-			poll_infos[*npolls].type = POLL_INFO_TYPE_INTERFACE;
-			poll_infos[*npolls].interface = visdn.ifs[i].q931_intf;
-			(*npolls)++;
+			visdn.polls[visdn.npolls].fd = visdn.ifs[i].q931_intf->master_socket;
+			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_INTERFACE;
+			visdn.poll_infos[visdn.npolls].interface = visdn.ifs[i].q931_intf;
+			(visdn.npolls)++;
 		} else {
-			polls[*npolls].fd = visdn.ifs[i].q931_intf->dlc.socket;
-			polls[*npolls].events = POLLIN | POLLERR;
-			poll_infos[*npolls].type = POLL_INFO_TYPE_DLC;
-			poll_infos[*npolls].dlc = &visdn.ifs[i].q931_intf->dlc;
-			(*npolls)++;
+			visdn.polls[visdn.npolls].fd = visdn.ifs[i].q931_intf->dlc.socket;
+			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
+			visdn.poll_infos[visdn.npolls].dlc = &visdn.ifs[i].q931_intf->dlc;
+			(visdn.npolls)++;
 		}
 
 		struct q931_dlc *dlc;
 		list_for_each_entry(dlc,  &visdn.ifs[i].q931_intf->dlcs, intf_node) {
-			polls[*npolls].fd = dlc->socket;
-			polls[*npolls].events = POLLIN | POLLERR;
-			poll_infos[*npolls].type = POLL_INFO_TYPE_DLC;
-			poll_infos[*npolls].dlc = dlc;
-			(*npolls)++;
+			visdn.polls[visdn.npolls].fd = dlc->socket;
+			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
+			visdn.poll_infos[visdn.npolls].dlc = dlc;
+			(visdn.npolls)++;
 		}
 	}
 }
@@ -1824,15 +1832,46 @@ static void visdn_accept(
 			intf->name);
 
 	ast_mutex_lock(&visdn.lock);
-	refresh_polls_list(
-		visdn.polls,
-		visdn.poll_infos,
-		&visdn.npolls);
+	refresh_polls_list();
 	ast_mutex_unlock(&visdn.lock);
 }
 
+static int visdn_open_interface(
+	struct visdn_interface *intf)
+{
+	assert(!intf->q931_intf);
+
+	intf->open_pending = TRUE;
+
+	intf->q931_intf = q931_open_interface(visdn.libq931, intf->name, 0);
+	if (!intf->q931_intf) {
+		ast_log(LOG_WARNING,
+			"Cannot open interface %s, skipping\n",
+			intf->name);
+
+		return -1;
+	}
+
+	intf->q931_intf->pvt = intf;
+	intf->q931_intf->network_role = intf->network_role;
+
+	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+		if (listen(intf->q931_intf->master_socket, 100) < 0) {
+			ast_log(LOG_ERROR,
+				"cannot listen on master socket: %s\n",
+				strerror(errno));
+
+			return -1;
+		}
+	}
+
+	intf->open_pending = FALSE;
+
+	return 0;
+}
+
 // Must be called with visdn.lock acquired
-void visdn_add_interface(const char *name)
+static void visdn_add_interface(const char *name)
 {
 	struct visdn_interface *intf = NULL;
 
@@ -1848,48 +1887,24 @@ void visdn_add_interface(const char *name)
 		intf = &visdn.ifs[visdn.nifs];
 
 		intf->q931_intf = NULL;
+		intf->configured = FALSE;
+		intf->open_pending = FALSE;
 		strncpy(intf->name, name, sizeof(intf->name));
 		visdn_copy_interface_config(intf, &visdn.default_intf);
+		visdn.nifs++;
 	}
 
-	if (intf->q931_intf)
-		return;
-
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "Opening interface %s\n", name);
-
-	intf->q931_intf = q931_open_interface(visdn.libq931, name, 0);
 	if (!intf->q931_intf) {
-		ast_log(LOG_WARNING,
-			"Cannot open interface %s, skipping\n",
-			name);
+		if (visdn.debug)
+			ast_log(LOG_NOTICE, "Opening interface %s\n", name);
 
-		return;
+		visdn_open_interface(intf);
+		refresh_polls_list();
 	}
-
-	intf->q931_intf->pvt = intf;
-	intf->q931_intf->network_role = intf->network_role;
-
-	if (intf->q931_intf->role == LAPD_ROLE_NT) {
-		if (listen(intf->q931_intf->master_socket, 100) < 0) {
-			ast_log(LOG_ERROR,
-				"cannot listen on master socket: %s\n",
-				strerror(errno));
-
-				return;
-		}
-	}
-
-	visdn.nifs++;
-
-	refresh_polls_list(
-		visdn.polls,
-		visdn.poll_infos,
-		&visdn.npolls);
 }
 
 // Must be called with visdn.lock acquired
-void visdn_rem_interface(const char *name)
+static void visdn_rem_interface(const char *name)
 {
 	int i;
 	for (i=0; i<visdn.nifs; i++) {
@@ -1899,10 +1914,7 @@ void visdn_rem_interface(const char *name)
 
 			visdn.ifs[i].q931_intf = NULL;
 
-			refresh_polls_list(
-				visdn.polls,
-				visdn.poll_infos,
-				&visdn.npolls);
+			refresh_polls_list();
 
 			break;
 		}
@@ -1992,10 +2004,15 @@ static int visdn_q931_thread_do_poll()
 	longtime_t usec_to_wait = q931_run_timers(visdn.libq931);
 	int msec_to_wait;
 
-	if (usec_to_wait < 0)
+	if (usec_to_wait < 0) {
 		msec_to_wait = -1;
-	else
+	} else {
 		msec_to_wait = usec_to_wait / 1000 + 1;
+	}
+
+	if (visdn.open_pending)
+		msec_to_wait = (msec_to_wait > 0 && msec_to_wait < 2001) ?
+				msec_to_wait : 2001;
 
 	if (visdn.debug)
 		ast_verbose(VERBOSE_PREFIX_3
@@ -2003,7 +2020,6 @@ static int visdn_q931_thread_do_poll()
 			msec_to_wait);
 
 	// Uhm... we should lock, copy polls and unlock before poll()
-
 	if (poll(visdn.polls, visdn.npolls, msec_to_wait) < 0) {
 		if (errno == EINTR)
 			return TRUE;
@@ -2013,6 +2029,23 @@ static int visdn_q931_thread_do_poll()
 	}
 
 	ast_mutex_lock(&visdn.lock);
+
+	if (time(NULL) > visdn.open_pending_nextcheck) {
+		int i;
+		for(i=0; i<visdn.nifs; i++) {
+			if (visdn.ifs[i].open_pending) {
+				if (visdn.debug)
+					ast_log(LOG_NOTICE,
+						"Retry opening interface %s\n",
+						visdn.ifs[i].name);
+
+				if (visdn_open_interface(&visdn.ifs[i]) < 0)
+					visdn.open_pending_nextcheck = time(NULL) + 2;
+			}
+		}
+
+		refresh_polls_list();
+	}
 
 	int i;
 	for(i = 0; i < visdn.npolls; i++) {
@@ -2041,10 +2074,7 @@ static int visdn_q931_thread_do_poll()
 				err = q931_receive(visdn.poll_infos[i].dlc);
 
 				if (err == Q931_RECEIVE_REFRESH) {
-					refresh_polls_list(
-						visdn.polls,
-						visdn.poll_infos,
-						&visdn.npolls);
+					refresh_polls_list();
 
 					break;
 				}
@@ -2082,10 +2112,7 @@ static void *visdn_q931_thread_main(void *data)
 	ast_mutex_lock(&visdn.lock);
 
 	visdn.npolls = 0;
-	refresh_polls_list(
-		visdn.polls,
-		visdn.poll_infos,
-		&visdn.npolls);
+	refresh_polls_list();
 
 	visdn.have_to_exit = 0;
 

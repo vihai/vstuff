@@ -19,6 +19,7 @@
 #include <linux/types.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <lapd.h>
 
@@ -106,6 +107,19 @@ struct q931_interface *q931_open_interface(
 			name, strlen(name)+1) < 0)
 		goto err_setsockopt;
 
+/*
+	int oldflags;
+      	if (fcntl(s, F_GETFL, &oldflags) < 0) {
+      		report_intf(intf, LOG_ERR, "fcntl: %s\n", strerror(errno));
+      		goto err_fcntl;
+      	}
+
+      	if (fcntl(s, F_SETFL, oldflags | O_NONBLOCK) < 0) {
+      		report_intf(intf, LOG_ERR, "fcntl: %s\n", strerror(errno));
+      		goto err_fcntl;
+      	}
+*/
+
 	int optlen=sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
 		&intf->role, &optlen)<0)
@@ -189,6 +203,7 @@ struct q931_interface *q931_open_interface(
 
 	return intf;
 
+err_fcntl:
 err_getsockopt:
 err_setsockopt:
 	close(s);
