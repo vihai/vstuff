@@ -114,6 +114,7 @@ struct q931_interface *q931_open_interface(
 	if (intf->role == LAPD_ROLE_TE) {
 		intf->master_socket = -1;
 
+		q931_init_dlc(&intf->bc_dlc, NULL, -1);
 		q931_init_dlc(&intf->dlc, intf, s);
 
 		intf->dlc.status = DLC_DISCONNECTED;
@@ -204,10 +205,20 @@ void q931_close_interface(struct q931_interface *interface)
 	list_del(&interface->node);
 
 	if (interface->role == LAPD_ROLE_TE) {
-		shutdown(interface->dlc.socket, 0);
+		shutdown(interface->dlc.socket, 2);
 		close(interface->dlc.socket);
 	} else {
-// FIXME: for each dlc, shutdown and close?
+		struct q931_dlc *dlc, *tpos;
+		list_for_each_entry_safe(dlc, tpos,
+				&interface->dlcs, intf_node) {
+
+			shutdown(dlc->socket, 2);
+			close(dlc->socket);
+
+			list_del(&dlc->intf_node);
+
+			free(dlc);
+		}
 
 		// Broadcast socket == master socket but only we know it :)
 

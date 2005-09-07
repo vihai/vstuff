@@ -1846,7 +1846,6 @@ void visdn_add_interface(const char *name)
 
 	if (!intf) {
 		intf = &visdn.ifs[visdn.nifs];
-		visdn.nifs++;
 
 		intf->q931_intf = NULL;
 		strncpy(intf->name, name, sizeof(intf->name));
@@ -1881,6 +1880,12 @@ void visdn_add_interface(const char *name)
 		}
 	}
 
+	visdn.nifs++;
+
+	refresh_polls_list(
+		visdn.polls,
+		visdn.poll_infos,
+		&visdn.npolls);
 }
 
 // Must be called with visdn.lock acquired
@@ -1894,10 +1899,17 @@ void visdn_rem_interface(const char *name)
 
 			visdn.ifs[i].q931_intf = NULL;
 
+			refresh_polls_list(
+				visdn.polls,
+				visdn.poll_infos,
+				&visdn.npolls);
+
 			break;
 		}
 	}
 }
+
+#define MAX_PAYLOAD 1024
 
 // Must be called with visdn.lock acquired
 static void visdn_netlink_receive()
@@ -1908,19 +1920,19 @@ static void visdn_netlink_receive()
 	tonl.nl_groups = 0;
 
 	struct msghdr skmsg;
-	struct sockaddr_nl nl;
+	struct sockaddr_nl dest_addr;
 	struct cmsghdr cmsg;
 	struct iovec iov;
 
-	__u8 data[1024];
+	__u8 data[NLMSG_SPACE(MAX_PAYLOAD)];
 
 	struct nlmsghdr *hdr = (struct nlmsghdr *)data;
 
 	iov.iov_base = data;
 	iov.iov_len = sizeof(data);
 
-	skmsg.msg_name = &nl;
-	skmsg.msg_namelen = sizeof(nl);
+	skmsg.msg_name = &dest_addr;
+	skmsg.msg_namelen = sizeof(dest_addr);
 	skmsg.msg_iov = &iov;
 	skmsg.msg_iovlen = 1;
 	skmsg.msg_control = &cmsg;
@@ -1932,25 +1944,26 @@ static void visdn_netlink_receive()
 		return;
 	}
 
+	// Implement multipar messages FIXME FIXME TODO
+
 	if (hdr->nlmsg_type == RTM_NEWLINK) {
-		struct ifinfomsg *ifi =
-			(struct ifinfomsg *)(data + sizeof(*hdr));
+		struct ifinfomsg *ifi = NLMSG_DATA(hdr);
 
 		if (ifi->ifi_type == ARPHRD_LAPD) {
 
-			int off = sizeof(*hdr) + sizeof(*ifi);
 			char ifname[IFNAMSIZ] = "";
+			int len = hdr->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifinfomsg));
 
-			while(off < hdr->nlmsg_len) {
-				struct rtattr *rtattr =
-					(struct rtattr *)(data + off);
+			struct rtattr *rtattr;
+			for (rtattr = IFLA_RTA(ifi);
+			     RTA_OK(rtattr, len);
+			     rtattr = RTA_NEXT(rtattr, len)) {
 
-				if (rtattr->rta_type == IFLA_IFNAME)
+				if (rtattr->rta_type == IFLA_IFNAME) {
 					strncpy(ifname,
-						data + off + sizeof(*rtattr),
+						RTA_DATA(rtattr),
 						sizeof(ifname));
-
-				off += rtattr->rta_len;
+				}
 			}
 
 			if (ifi->ifi_flags & IFF_UP) {
@@ -2004,26 +2017,37 @@ static int visdn_q931_thread_do_poll()
 	int i;
 	for(i = 0; i < visdn.npolls; i++) {
 		if (visdn.poll_infos[i].type == POLL_INFO_TYPE_NETLINK) {
-			if (visdn.polls[i].revents & POLLIN) {
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
 				visdn_netlink_receive();
+				break; // polls list may have been changed
 			}
 		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_INTERFACE) {
-			if (visdn.polls[i].revents & POLLERR) {
-				ast_log(LOG_WARNING, "Error on interface %s poll\n",
-					visdn.poll_infos[i].interface->name);
-
-				visdn.polls[i].fd = -1;
-			}
-
-			if (visdn.polls[i].revents & POLLIN) {
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
 				visdn_accept(
 					visdn.poll_infos[i].interface,
 					visdn.polls[i].fd);
+				break; // polls list may have been changed
 			}
 		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_DLC) {
-			if (visdn.polls[i].revents & POLLERR ||
-			    visdn.polls[i].revents & POLLIN) {
-				q931_receive(visdn.poll_infos[i].dlc);
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
+
+				int err;
+				err = q931_receive(visdn.poll_infos[i].dlc);
+
+				if (err == Q931_RECEIVE_REFRESH) {
+					refresh_polls_list(
+						visdn.polls,
+						visdn.poll_infos,
+						&visdn.npolls);
+
+					break;
+				}
 			}
 		}
 	}

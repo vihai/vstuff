@@ -115,9 +115,12 @@ static inline void q931_set_logger_func(
 	lib->report = report;
 }
 
+#define	Q931_RECEIVE_OK		0
+#define Q931_RECEIVE_REFRESH	1
+
 struct q931_lib *q931_init();
 void q931_leave(struct q931_lib *lib);
-void q931_receive(struct q931_dlc *dlc);
+int q931_receive(struct q931_dlc *dlc);
 struct q931_dlc *q931_accept(
 	struct q931_interface *intf,
 	int accept_socket);

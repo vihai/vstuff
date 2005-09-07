@@ -22,8 +22,6 @@ enum q931_dlc_status
 struct q931_interface;
 struct q931_dlc
 {
-	struct q931_lib *lib;
-
 	struct list_head intf_node;
 
 	int socket;
@@ -37,8 +35,12 @@ static inline void q931_init_dlc(
 	struct q931_interface *intf,
 	int socket)
 {
+	INIT_LIST_HEAD(&dlc->intf_node);
+
 	dlc->socket = socket;
 	dlc->intf = intf;
+	dlc->status = DLC_DISCONNECTED;
+	dlc->tei = 0;
 }
 
 #endif

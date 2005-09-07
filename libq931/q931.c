@@ -655,7 +655,7 @@ err_malloc:
 	return NULL;
 }
 
-void q931_receive(struct q931_dlc *dlc)
+int q931_receive(struct q931_dlc *dlc)
 {
 	struct q931_message msg;
 	memset(&msg, 0x00, sizeof(msg));
@@ -686,9 +686,13 @@ void q931_receive(struct q931_dlc *dlc)
 		else {
 			report_dlc(dlc, LOG_ERR,
 				"recvmsg: %s\n", strerror(errno));
+
+			list_del(&dlc->intf_node);
+
+			return Q931_RECEIVE_REFRESH;
 		}
 
-		return;
+		return Q931_RECEIVE_OK;
 	}
 
 	if (msg.rawlen < sizeof(struct q931_header)) {
@@ -696,7 +700,7 @@ void q931_receive(struct q931_dlc *dlc)
 			"Message to small (%d bytes), ignoring\n",
 			msg.rawlen);
 
-		return;
+		return -EBADMSG;
 	}
 
 	struct q931_header *hdr = (struct q931_header *)msg.raw;
@@ -707,14 +711,14 @@ void q931_receive(struct q931_dlc *dlc)
 			" ignoring message\n",
 			hdr->protocol_discriminator);
 
-		return;
+		return -EBADMSG;
 	}
 
 	if (hdr->spare1 != 0) {
 		report_dlc(dlc, LOG_DEBUG,
 			"Call reference size invalid, ignoring frame\n");
 
-		return;
+		return -EBADMSG;
 	}
 
 	if (hdr->call_reference_len > 4) {
@@ -723,7 +727,7 @@ void q931_receive(struct q931_dlc *dlc)
 			" and not supported (max 4), ignoring frame\n",
 			hdr->call_reference_len);
 
-		return;
+		return -EBADMSG;
 	}
 
 	if (hdr->call_reference_len == 1 &&
@@ -732,7 +736,7 @@ void q931_receive(struct q931_dlc *dlc)
 			"The dummy call reference is not supported,"
 			" ignoring frame\n");
 
-		return;
+		return -EBADMSG;
 	}
 
 	msg.callref = 0;
@@ -781,7 +785,7 @@ void q931_receive(struct q931_dlc *dlc)
 			q931_dispatch_global_message(
 				&dlc->intf->global_call, &msg);
 
-		return;
+		return -EBADMSG;
 	}
 
 	struct q931_call *call =
@@ -802,7 +806,7 @@ void q931_receive(struct q931_dlc *dlc)
 			report_dlc(dlc, LOG_ERR,
 				"Error allocating call\n");
 
-			return;
+			return -EFAULT;
 		}
 
 		switch (msg.message_type) {
@@ -819,7 +823,7 @@ void q931_receive(struct q931_dlc *dlc)
 
 			q931_call_send_release_complete(call, &ies);
 
-			return;
+			return Q931_RECEIVE_OK;
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
@@ -827,7 +831,7 @@ void q931_receive(struct q931_dlc *dlc)
 				"Received a RELEASE COMPLETE for an unknown"
 				" callref, ignoring frame\n");
 
-			return;
+			return Q931_RECEIVE_OK;
 		break;
 
 		case Q931_MT_SETUP:
@@ -839,7 +843,7 @@ void q931_receive(struct q931_dlc *dlc)
 					"Received a SETUP/RESUME for an unknown"
 					" outbound callref, ignoring frame\n");
 
-				return;
+				return Q931_RECEIVE_OK;
 			}
 		break;
 
@@ -864,7 +868,7 @@ void q931_receive(struct q931_dlc *dlc)
 			else
 				q931_call_set_state(call, N19_RELEASE_REQUEST);
 
-			return;
+			return Q931_RECEIVE_OK;
 		}
 		break;
 		}
@@ -883,11 +887,13 @@ void q931_receive(struct q931_dlc *dlc)
 				} else {
 					q931_ces_dispatch_message(ces, &msg);
 
-					return;
+					return Q931_RECEIVE_OK;
 				}
 			}
 		}
 
 		q931_dispatch_message(call, &msg);
 	}
+
+	return Q931_RECEIVE_OK;
 }

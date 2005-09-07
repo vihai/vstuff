@@ -55,7 +55,7 @@ struct q931_interface
 
 	int master_socket;	// Multipoint master_socket
 	struct q931_dlc bc_dlc;	// Broadcast DLC for multipoint interfaces
-	struct q931_dlc dlc; 
+	struct q931_dlc dlc;
 
 	struct list_head dlcs;
 
