@@ -29,6 +29,8 @@ int visdn_timer_cdev_open(
 	struct inode *inode,
 	struct file *file)
 {
+	printk(KERN_DEBUG "visdn_timer_cdev_open()\n");
+
 	nonseekable_open(inode, file);
 
 	// TODO FIXME: Use minor to select correct timer
@@ -48,6 +50,8 @@ int visdn_timer_cdev_open(
 int visdn_timer_cdev_release(
 	struct inode *inode, struct file *file)
 {
+	printk(KERN_DEBUG "visdn_timer_cdev_release()\n");
+
 	return 0;
 }
 
@@ -57,10 +61,12 @@ int visdn_timer_cdev_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
+	printk(KERN_DEBUG "visdn_timer_cdev_ioctl()\n");
+
 	switch(cmd) {
 	}
 
-	return -EINVAL;
+	return -EOPNOTSUPP;
 }
 
 
@@ -165,10 +171,10 @@ void visdn_timer_init(
 }
 EXPORT_SYMBOL(visdn_timer_init);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_CLASS_DEV_DEVT
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
-	return print_dev_t(buf, visdn_first_dev);
+	return print_dev_t(buf, visdn_first_dev + 1);
 }
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
@@ -189,7 +195,7 @@ int visdn_timer_register(
 	memset(class_dev, 0x00, sizeof(class_dev));
 	class_dev->class = &visdn_timer_class;
 	class_dev->class_data = timer;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
+#ifdef HAVE_CLASS_DEV_DEVT
 	class_dev->devt = visdn_first_dev + 1;
 #endif
 
@@ -200,7 +206,7 @@ int visdn_timer_register(
 	if (err < 0)
 		goto err_class_device_register;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#ifndef HAVE_CLASS_DEV_DEVT
 	class_device_create_file(
 		class_dev,
 		&class_device_attr_dev);
