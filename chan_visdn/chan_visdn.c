@@ -2882,7 +2882,17 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	close(visdn_chan->channel_fd);
+	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_DISCONNECT, NULL) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+			strerror(errno));
+	}
+
+	if (close(visdn_chan->channel_fd) < 0) {
+		ast_log(LOG_ERROR,
+			"close(visdn_chan->channel_fd): %s\n",
+			strerror(errno));
+	}
 }
 
 static pthread_t visdn_generator_thread = AST_PTHREADT_NULL;

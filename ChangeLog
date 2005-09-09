@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-09 16:24:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-144
+
+    Summary:
+      We now call ioctl(IOC_DISCONNECT) on the channel before closing. It's cleaner.
+    Revision:
+      isdn--devel--0.1--patch-144
+
+    
+    
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2005-09-08 00:58:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-143
 
     Summary:
