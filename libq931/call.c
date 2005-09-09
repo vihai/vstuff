@@ -605,6 +605,8 @@ static void q931_call_disconnect_channel(
 	if (!channel)
 		return;
 
+	assert(channel->call);
+
 	if (channel->state == Q931_CHANSTATE_CONNECTED) {
 		channel->state = Q931_CHANSTATE_DISCONNECTED;
 
@@ -620,6 +622,17 @@ static void q931_call_release_channel(
 
 	if (!channel)
 		return;
+
+	assert(channel->call);
+
+	if (channel->state == Q931_CHANSTATE_CONNECTED) {
+		report_call(channel->call, LOG_ERR,
+			"channel_relase called with channel connected\n");
+
+		channel->state = Q931_CHANSTATE_DISCONNECTED;
+
+		q931_channel_primitive(channel, disconnect_channel);
+	}
 
 	channel->state = Q931_CHANSTATE_AVAILABLE;
 }
@@ -1141,7 +1154,7 @@ void q931_disconnect_request(struct q931_call *call,
 			q931_call_start_tone(call->channel, Q931_TONE_HANGUP);
 			q931_call_start_timer(call, T306);
 		} else {
-			q931_call_release_channel(call->channel);
+			q931_call_disconnect_channel(call->channel);
 			q931_call_send_disconnect(call, &ies);
 			q931_call_start_timer(call, T305);
 		}

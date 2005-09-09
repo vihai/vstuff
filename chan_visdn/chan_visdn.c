@@ -1533,10 +1533,6 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		return 0;
 	}
 
-	// Make sure the generator is stopped
-	if (!ast_chan->pbx)
-		visdn_generator_stop(ast_chan);
-
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
 	if (q931_call) {
@@ -1568,9 +1564,13 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			ast_mutex_unlock(&visdn.lock);
 		}
 
-		q931_call_put(q931_call);
 		q931_call->pvt = NULL;
+		q931_call_put(q931_call);
 	}
+
+	// Make sure the generator is stopped
+	if (!ast_chan->pbx)
+		visdn_generator_stop(ast_chan);
 
 	visdn_destroy(visdn_chan);
 
@@ -2216,11 +2216,12 @@ static void visdn_q931_info_indication(
 	FUNC_DEBUG();
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
-	struct visdn_interface *intf = q931_call->intf->pvt;
 
 	if (!ast_chan)
 		return;
+
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_interface *intf = q931_call->intf->pvt;
 
 	if (q931_call->state != U2_OVERLAP_SENDING &&
 	    q931_call->state != N2_OVERLAP_SENDING) {
@@ -2813,6 +2814,9 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
+	if (!ast_chan)
+		return;
+
 	assert(ast_chan);
 	assert(ast_chan->pvt);
 	assert(ast_chan->pvt->pvt);
@@ -3079,8 +3083,13 @@ static void visdn_q931_stop_tone(struct q931_channel *channel)
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
+	if (!ast_chan)
+		return;
+
 	ast_indicate(ast_chan, -1);
-	visdn_generator_stop(ast_chan);
+
+	if (!ast_chan->pbx);
+		visdn_generator_stop(ast_chan);
 }
 
 static void visdn_q931_management_restart_confirm(
