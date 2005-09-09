@@ -1539,13 +1539,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
-	visdn_destroy(visdn_chan);
-
-	ast_chan->pvt->pvt = NULL;
-
 	if (q931_call) {
-		q931_call->pvt = NULL;
-
 		if (q931_call->state != N0_NULL_STATE &&
 		    q931_call->state != N1_CALL_INITIATED &&
 		    q931_call->state != N11_DISCONNECT_REQUEST &&
@@ -1575,7 +1569,12 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		}
 
 		q931_call_put(q931_call);
+		q931_call->pvt = NULL;
 	}
+
+	visdn_destroy(visdn_chan);
+
+	ast_chan->pvt->pvt = NULL;
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
