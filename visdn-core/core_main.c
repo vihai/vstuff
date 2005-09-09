@@ -280,6 +280,12 @@ static void __exit visdn_module_exit(void)
 	visdn_port_modexit();
 	visdn_timer_modexit();
 
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+        	&vsp_class_dev;
+	        &class_device_attr_dev);
+#endif
+
 	class_device_del(&visdn_control_class_dev);
 	class_unregister(&visdn_system_class);
 

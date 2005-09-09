@@ -397,6 +397,12 @@ static void __exit vsp_module_exit(void)
 {
 	// We should free all channels, here!
 
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+		&vsp_class_dev,
+		&class_device_attr_dev);
+#endif
+
 	class_device_unregister(&vsp_class_dev);
 	visdn_port_unregister(&vsp_visdn_port);
 	cdev_del(&vsp_cdev);

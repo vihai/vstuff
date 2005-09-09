@@ -739,6 +739,12 @@ static void __exit vnd_module_exit(void)
 		}
 	}
 
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+        	&vnd_control_class_dev,
+	        &class_device_attr_dev);
+#endif
+
 	class_device_del(&vnd_control_class_dev);
 
 	cdev_del(&vnd_cdev);
