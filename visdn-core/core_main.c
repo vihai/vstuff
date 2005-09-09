@@ -282,7 +282,7 @@ static void __exit visdn_module_exit(void)
 
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
-        	&vsp_class_dev;
+        	&visdn_control_class_dev,
 	        &class_device_attr_dev);
 #endif
 

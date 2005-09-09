@@ -235,6 +235,12 @@ void visdn_timer_unregister(
 
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_unregister called\n");
 
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+        	class_dev,
+	        &class_device_attr_dev);
+#endif
+
 	class_device_del(class_dev);
 }
 EXPORT_SYMBOL(visdn_timer_unregister);
