@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-10 22:48:39 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-153
+
+    Summary:
+      Removed wrong text from FEATURES and addedd some stub
+    Revision:
+      isdn--devel--0.1--patch-153
+
+    
+    
+
+    modified files:
+     ChangeLog FEATURES NOTES
+
+
 2005-09-10 22:26:57 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-152
 
     Summary:

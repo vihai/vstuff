@@ -1,42 +1,46 @@
 
-This is an attempt at writing a new and improved ISDN layer for Linux
+* Good integration with the kernel
 
-Fundamently it is composed of three steps:
+* Full support for "network terminator" role
 
-- Implement q.921/LAPD thorught the netdev infrastructure
-- Implement some reference driver
-- Implement a TDM bus and voice API
+Current drivers and the above architecture fully support acting as the network
+terminator.
 
-- Manages one TEI per socket meaning that more than one Layer 3 client may speak
-  indipendendently on the channel, e.g. a low level q.931 signalling adaptor for
-  voice applications, an high-level q.931 daemon and an X.25 endpoint daemon (?).
+* D-channel sharing
 
-The ISDN networking doesn't properly map with the socket layer or with the
-ISO/OSI layers.
+More than one application can independently speak on the D-channel. This is
+accomplished by assigning a different TEI to each open socket; the q.921
+standard, in facts, provides for multiple TEIs to be assigned to a single TE.
+The LAPD layer multiplexes frames to their respective socket, in a completely
+transparent manner.
 
-The Layer 1 (Physical layer) can (and will) be activated/deactivated on BRI ports
-when Layer 2 is idle for a specified timeout
+* (almost) completely unintrusive
 
-There is no MAC address and network address, 
+vISDN is currently completely modular and does not require patches to kernel.
+Modules can be compiled externally and inserted in any compatible kernel.
 
-Un DLC è identificato da:
+Of course, to accomplish a perfect integration, tiny modifications to the
+kernel headers would be recomendable.
 
-(Interfaccia, TEI, SAPI)
+* Traffic analysis with Ethereal
 
+vISDN supports packet(7) sniffing of frames. By applying very small
+patches to libpcap and Ethereal you will be able to inspect LAPD and q.931
+traffic in full detail. Ethereal already supports LAPD and q.931 dissecting,
+the patch just enables it to receive LAPD traffic from vISDN interfaces.
 
-There are two roles, the NT and the TE
-Data flows from a TE to the NT and from the NT to one or more TEs.
-Broadcasts are supported in one direction only (from NT to TE).
+Since interface role and frame direction are encoded in SLL header,
+Ethereal is able to clearly show frame source/destination and to interpret
+direction-dependant flags (C/R and P/F bits).
 
-Avrei potuto implementare anche il q.921 in user mode
+* E-channel sniffing
+Basic rate ISDN interfaces support a so called E-channel. The E-channel is used
+to detect collisions when transmitting towards the network on the D-channel.
+The E-channel echoes everything begin transmited from other TEs to the network
+so, it can be used to sniff frames not transmitted by us (which usually are not
+visible).
 
-Una socket è un'entità che rappresenta l'endpoint di una comunicazione.
+All BRI vISDN drivers support E channel sniffing by putting the interface in
+promiscuous mode. You are therefore able to fully sniff communications made by
+other TEs.
 
-Solo una socket può essere aperta con ruolo di NT mentre più di una socket può
-essere aperta in TE mode
-
-
-La trasmissione unacknowledged (simile a SOCK_DGRAM) e acknowledged
-(analoga a SOCK_SEQPACKET) sono MODALITA' di trasmissione all'interno della stessa
-Data Link Connection, quindi ho deciso di implementarle all'interno della stessa
-socket.
