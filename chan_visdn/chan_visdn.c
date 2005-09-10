@@ -1269,6 +1269,7 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 static int visdn_generator_start(struct ast_channel *chan);
 static int visdn_generator_stop(struct ast_channel *chan);
 
+/* We are called with chan->lock'ed */
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -1295,7 +1296,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case -1:
 		ast_playtones_stop(ast_chan);
 
-		if (!ast_chan->pbx);
+		if (!ast_chan->pbx)
 			visdn_generator_stop(ast_chan);
 
 		return 0;
@@ -2950,10 +2951,16 @@ static void *visdn_generator_thread_main(void *aaa)
 		// produce lots of contention and big sleeps for other
 		// threads who need to access generator structures
 
+		struct ast_channel *gen_chans_copy[256];
+		int gen_chans_copy_num = 0;
+
 		ast_mutex_lock(&visdn_generator_lock);
-		chan = ast_waitfor_n(gen_chans, gen_chans_num, &ms);
+		gen_chans_copy_num = gen_chans_num;
+		memcpy(gen_chans_copy, gen_chans,
+			sizeof(*gen_chans_copy) * gen_chans_copy_num);
 		ast_mutex_unlock(&visdn_generator_lock);
 
+		chan = ast_waitfor_n(gen_chans_copy, gen_chans_copy_num, &ms);
 		if (chan) {
 			void *tmp;
 			int res;

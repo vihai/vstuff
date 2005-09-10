@@ -4470,7 +4470,7 @@ inline static void q931_handle_release(
 		q931_call_send_release_complete(call, &ies);
 		q931_call_put(call);
 	}
-	break; 
+	break;
 
 	case N1_CALL_INITIATED:
 	case N3_OUTGOING_CALL_PROCEEDING:
@@ -5073,7 +5073,7 @@ inline static void q931_handle_user_information(
 	assert(call);
 	assert(msg);
 
-	
+
 }
 
 inline static void q931_handle_segment(
