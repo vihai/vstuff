@@ -1,11 +1,14 @@
 
-~~~~~~~~~~~~~~~~~ Known bugs ~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~ Known bad bugs ~~~~~~~~~~~~~~~~~
 
 - Echo cancellation is missing
 
 - No jitter buffer is present in the outbound FIFO, choppy audio will happen
-  during moderately heavy interrupt storms.
+  under system load.
+
+- Communication errors on the lapd sockets block the communication thread,
+  sometimes forever.
+
 
 Read TODO for more detailed list of bugs or missing features.
-
 

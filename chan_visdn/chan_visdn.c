@@ -1556,8 +1556,21 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
 	if (q931_call) {
-		/* ast_chan is not valid anymore, be sure to remove any
-		   reference, before invoking q931 primitives */
+		/*
+		After we return from visdn_hangup() the ast_channel is not
+		valid anymore. On the other way, q.931 "hangup" is a long
+		process, we can only invoke a DISCONNECT-REQ primitive and
+		leave libq931 handle the disconnection process.
+		Unfortunately the consequence is that we cannot rely on
+		libq931's disconnect_channel to actually disconnect the
+		streamport channel. We also cannot generate the disconnection
+		tones.
+
+		Asterisk is very lacky in this respect. A better
+		implementation would have used a reference counter to allow
+		the channel driver to hold a channel until it's not needed
+		anymore
+		*/
 
 		q931_call->pvt = NULL;
 
@@ -1596,6 +1609,19 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	// Make sure the generator is stopped
 	if (!ast_chan->pbx)
 		visdn_generator_stop(ast_chan);
+
+	// Disconnect the softport since we cannot rely on libq931 (see above)
+	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_DISCONNECT, NULL) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+			strerror(errno));
+	}
+
+	if (close(visdn_chan->channel_fd) < 0) {
+		ast_log(LOG_ERROR,
+			"close(visdn_chan->channel_fd): %s\n",
+			strerror(errno));
+	}
 
 	visdn_destroy(visdn_chan);
 

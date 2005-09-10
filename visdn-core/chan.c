@@ -291,6 +291,36 @@ err_bitrate:
 }
 EXPORT_SYMBOL(visdn_negotiate_parameters);
 
+int visdn_disconnect(
+	struct visdn_chan *chan)
+{
+	printk(KERN_DEBUG "visdn_disconnect()\n");
+
+	struct visdn_chan *chan2;
+	chan2 = visdn_cxc_get_by_src(&visdn_cxc, chan);
+
+	if (chan2) {
+		visdn_cxc_del(&visdn_cxc, chan2);
+
+		sysfs_remove_link(&chan2->device.kobj, "connected");
+
+		if (test_bit(VISDN_CHAN_STATE_OPEN, &chan2->state))
+			visdn_close(chan2);
+
+		visdn_chan_put(chan2);
+	}
+
+	visdn_cxc_del(&visdn_cxc, chan);
+
+	sysfs_remove_link(&chan->device.kobj, "connected");
+
+	if (test_bit(VISDN_CHAN_STATE_OPEN, &chan->state))
+		visdn_close(chan);
+
+	return 0;
+}
+EXPORT_SYMBOL(visdn_disconnect);
+
 int visdn_connect(
 	struct visdn_chan *chan1,
 	struct visdn_chan *chan2,
@@ -303,13 +333,30 @@ int visdn_connect(
 	BUG_ON(!chan2);
 	BUG_ON(!chan2->ops);
 
+#if 0
+	// Check that the channels are disconnected
+	visdn_disconnect(chan1);
+	visdn_disconnect(chan2);
+#else
+	struct visdn_chan *tmp_chan;
+	tmp_chan = visdn_cxc_get_by_src(&visdn_cxc, chan1);
+	if (tmp_chan) {
+		visdn_chan_put(tmp_chan);
+		err = -EALREADY;
+		goto err_already_connected;
+	}
+
+	tmp_chan = visdn_cxc_get_by_src(&visdn_cxc, chan2);
+	if (tmp_chan) {
+		visdn_chan_put(tmp_chan);
+		err = -EALREADY;
+		goto err_already_connected;
+	}
+#endif
+
 	printk(KERN_DEBUG "Connecting chan '%s' to chan '%s'\n",
 		chan1->device.bus_id,
 		chan2->device.bus_id);
-
-	// Check that the channels are disconnected
-	visdn_cxc_del(&visdn_cxc, chan1);
-	visdn_cxc_del(&visdn_cxc, chan2);
 
 	err = visdn_negotiate_parameters(chan1, chan2);
 	if (err < 0)
@@ -361,44 +408,11 @@ err_open:
 err_cxc_add_chan2:
 err_cxc_add_chan1:
 err_negotiate_parameters:
+err_already_connected:
 
 	return err;
 }
 EXPORT_SYMBOL(visdn_connect);
-
-int visdn_disconnect(
-	struct visdn_chan *chan)
-{
-	printk(KERN_DEBUG "visdn_disconnect()\n");
-
-	struct visdn_chan *chan2;
-	chan2 = visdn_cxc_get_by_src(&visdn_cxc, chan);
-
-	if (chan2) {
-		visdn_cxc_del(&visdn_cxc, chan2);
-
-		sysfs_remove_link(&chan2->device.kobj, "connected");
-
-		if (test_bit(VISDN_CHAN_STATE_OPEN, &chan2->state))
-			visdn_close(chan2);
-
-		visdn_chan_put(chan2);
-	}
-
-	visdn_cxc_del(&visdn_cxc, chan);
-
-	sysfs_remove_link(&chan->device.kobj, "connected");
-
-	if (test_bit(VISDN_CHAN_STATE_OPEN, &chan->state))
-		visdn_close(chan);
-
-	return 0;
-}
-EXPORT_SYMBOL(visdn_disconnect);
-
-
-
-
 
 int visdn_pass_open(
 	struct visdn_chan *chan)

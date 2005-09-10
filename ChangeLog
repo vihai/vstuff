@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-10 23:40:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-154
+
+    Summary:
+      Disabled autodisconnect to enforce better applications
+    Revision:
+      isdn--devel--0.1--patch-154
+
+    
+    
+
+    modified files:
+     ChangeLog README TODO chan_visdn/chan_visdn.c
+     visdn-core/chan.c
+
+
 2005-09-10 22:48:39 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-153
 
     Summary:

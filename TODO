@@ -102,10 +102,18 @@ lapd:
 visdn-netdev:
 -------------
 
+- Reallocate channel ID from the beginning instead of incrementing every time
+
 visdn-ppp:
 ----------
 
 - Handle MTU
+- Reallocate channel ID from the beginning instead of incrementing every time
+
+visdn-streamport:
+-----------------
+
+- Reallocate channel ID from the beginning instead of incrementing every time
 
 hfc-4s:
 -------
