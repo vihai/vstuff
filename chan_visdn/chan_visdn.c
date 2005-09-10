@@ -1556,6 +1556,11 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
 	if (q931_call) {
+		/* ast_chan is not valid anymore, be sure to remove any
+		   reference, before invoking q931 primitives */
+
+		q931_call->pvt = NULL;
+
 		if (q931_call->state != N0_NULL_STATE &&
 		    q931_call->state != N1_CALL_INITIATED &&
 		    q931_call->state != N11_DISCONNECT_REQUEST &&
@@ -1584,8 +1589,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			ast_mutex_unlock(&visdn.lock);
 		}
 
-		q931_call->pvt = NULL;
 		q931_call_put(q931_call);
+		q931_call = NULL;
 	}
 
 	// Make sure the generator is stopped

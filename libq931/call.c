@@ -267,8 +267,6 @@ struct q931_call *q931_alloc_call_in(
 	call->direction = Q931_CALL_DIRECTION_INBOUND;
 	call->call_reference = call_reference;
 
-///	q931_intf_add_call(dlc->intf, call);
-
 	return call;
 }
 
@@ -626,10 +624,7 @@ static void q931_call_release_channel(
 	assert(channel->call);
 
 	if (channel->state == Q931_CHANSTATE_CONNECTED) {
-		report_call(channel->call, LOG_ERR,
-			"channel_relase called with channel connected\n");
-
-		channel->state = Q931_CHANSTATE_DISCONNECTED;
+		// Is this an unexpected state?
 
 		q931_channel_primitive(channel, disconnect_channel);
 	}
@@ -1067,7 +1062,9 @@ void q931_disconnect_request(struct q931_call *call,
 				q931_call_primitive(call, release_indication,
 					user_ies);
 
-////////////////////////// If we do del call the CES will not be able to receive release complete
+				/* If we do del call the CES will not be able
+				   to receive release complete */
+
 				q931_call_set_state(call, N0_NULL_STATE);
 				q931_call_put(call);
 			}
@@ -1444,7 +1441,6 @@ void q931_more_info_request(
 		q931_call_unexpected_primitive(call);
 	break;
 	}
-	
 }
 
 void q931_notify_request(
