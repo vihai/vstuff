@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-10 20:09:42 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-151
+
+    Summary:
+      Changed from SETUP-REJ to PROCEEDING-REQ+DISCONNECT-REQ
+    Revision:
+      isdn--devel--0.1--patch-151
+
+    
+    
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c
+
+
 2005-09-10 18:49:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-150
 
     Summary:

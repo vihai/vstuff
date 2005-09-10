@@ -29,6 +29,7 @@ chan_visdn:
 - Asterisk's design forbids me to implement some sort of parameter negotiation
   so it is impossible to know what bearer capabilities are accepted by a
   destination, if it supports overlap dialing and so on...
+- Call bumbing
 
 libq931:
 --------
@@ -36,6 +37,7 @@ libq931:
 - Implement: 5.9 User notification procedure
 - Restart Procedure is completely untested, test it.
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
+- Call bumbing
 
 app_visdn_ppp:
 --------------

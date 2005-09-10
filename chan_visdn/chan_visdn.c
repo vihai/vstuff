@@ -2716,19 +2716,27 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number, 1,
 				visdn_chan->calling_number)) {
 
-	                struct q931_ies ies = Q931_IES_INIT;
-
+		        struct q931_ies ies_proc = Q931_IES_INIT;
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
 			cause->location = q931_ie_cause_location_call(q931_call);
 			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
-			q931_ies_add_put(&ies, &cause->ie);
+			q931_ies_add_put(&ies_proc, &cause->ie);
+
+                        struct q931_ies ies_disc = Q931_IES_INIT;
+			struct q931_ie_progress_indicator *pi =
+				q931_ie_progress_indicator_alloc();
+			pi->coding_standard = Q931_IE_PI_CS_CCITT;
+			pi->location = q931_ie_progress_indicator_location(
+						visdn_chan->q931_call);
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
+			q931_ies_add_put(&ies_disc, &pi->ie);
 
 			ast_mutex_lock(&visdn.lock);
-			q931_reject_request(q931_call, &ies);
+			q931_proceeding_request(q931_call, &ies_proc);
+			q931_disconnect_request(q931_call, &ies_disc);
 			ast_mutex_unlock(&visdn.lock);
-
-			ast_hangup(ast_chan);
 
 			return;
 		}
@@ -2749,16 +2757,26 @@ static void visdn_q931_setup_indication(
 					ast_chan->name);
 				ast_hangup(ast_chan);
 
-		                struct q931_ies ies = Q931_IES_INIT;
-
+		                struct q931_ies ies_proc = Q931_IES_INIT;
 				struct q931_ie_cause *cause = q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
 				cause->location = q931_ie_cause_location_call(q931_call);
 				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
-				q931_ies_add_put(&ies, &cause->ie);
+				q931_ies_add_put(&ies_proc, &cause->ie);
+
+                                struct q931_ies ies_disc = Q931_IES_INIT;
+				struct q931_ie_progress_indicator *pi =
+					q931_ie_progress_indicator_alloc();
+				pi->coding_standard = Q931_IE_PI_CS_CCITT;
+				pi->location = q931_ie_progress_indicator_location(
+							visdn_chan->q931_call);
+				pi->progress_description =
+					Q931_IE_PI_PD_IN_BAND_INFORMATION;
+				q931_ies_add_put(&ies_disc, &pi->ie);
 
 				ast_mutex_lock(&visdn.lock);
-				q931_reject_request(q931_call, &ies);
+				q931_proceeding_request(q931_call, &ies_proc);
+				q931_disconnect_request(q931_call, &ies_disc);
 				ast_mutex_unlock(&visdn.lock);
 			} else {
 				ast_setstate(ast_chan, AST_STATE_RING);
