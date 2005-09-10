@@ -1267,6 +1267,7 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 }
 
 static int visdn_generator_start(struct ast_channel *chan);
+static int visdn_generator_stop(struct ast_channel *chan);
 
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
@@ -1289,6 +1290,15 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case AST_CONTROL_RADIO_KEY:
 	case AST_CONTROL_RADIO_UNKEY:
 		return 1;
+	break;
+
+	case -1:
+		ast_playtones_stop(ast_chan);
+
+		if (!ast_chan->pbx);
+			visdn_generator_stop(ast_chan);
+
+		return 0;
 	break;
 
 	case AST_CONTROL_OFFHOOK: {
@@ -1346,8 +1356,12 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "ring");
-		if (tone)
+		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+			if (!ast_chan->pbx)
+				visdn_generator_start(ast_chan);
+		}
 
 		return 0;
 	}
@@ -1355,6 +1369,9 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 	case AST_CONTROL_ANSWER:
 		ast_playtones_stop(ast_chan);
+
+		if (!ast_chan->pbx);
+			visdn_generator_stop(ast_chan);
 
 		return 0;
 	break;
@@ -1396,8 +1413,12 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
-		if (tone)
+		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+			if (!ast_chan->pbx)
+				visdn_generator_start(ast_chan);
+		}
 
 		return 0;
 	}
@@ -1518,8 +1539,6 @@ static struct visdn_chan *visdn_alloc()
 
 	return visdn_chan;
 }
-
-static int visdn_generator_stop(struct ast_channel *chan);
 
 static int visdn_hangup(struct ast_channel *ast_chan)
 {
@@ -2927,33 +2946,35 @@ static void *visdn_generator_thread_main(void *aaa)
 	while (gen_chans_num) {
 		struct ast_channel *chan;
 
-		ast_mutex_lock(&visdn_generator_lock);
-
 		// Uhm... we're going to sleep with mutex held... this will
 		// produce lots of contention and big sleeps for other
 		// threads who need to access generator structures
 
+		ast_mutex_lock(&visdn_generator_lock);
 		chan = ast_waitfor_n(gen_chans, gen_chans_num, &ms);
+		ast_mutex_unlock(&visdn_generator_lock);
+
 		if (chan) {
 			void *tmp;
 			int res;
 
 			ast_mutex_lock(&chan->lock);
 
-			tmp = chan->generatordata;
-			chan->generatordata = NULL;
-			res = chan->generator->generate(
-				chan, tmp, f.datalen, f.samples);
-			chan->generatordata = tmp;
-			if (res) {
-			        ast_log(LOG_DEBUG, "Auto-deactivating generator\n");
-			        ast_deactivate_generator(chan);
+			if (chan->generator) {
+				tmp = chan->generatordata;
+				chan->generatordata = NULL;
+				res = chan->generator->generate(
+					chan, tmp, f.datalen, f.samples);
+				chan->generatordata = tmp;
+				if (res) {
+				        ast_log(LOG_DEBUG,
+						"Auto-deactivating generator\n");
+				        ast_deactivate_generator(chan);
+				}
 			}
 
 			ast_mutex_unlock(&chan->lock);
 		}
-
-		ast_mutex_unlock(&visdn_generator_lock);
 	}
 
 	visdn_generator_thread = AST_PTHREADT_NULL;
@@ -3087,9 +3108,6 @@ static void visdn_q931_stop_tone(struct q931_channel *channel)
 		return;
 
 	ast_indicate(ast_chan, -1);
-
-	if (!ast_chan->pbx);
-		visdn_generator_stop(ast_chan);
 }
 
 static void visdn_q931_management_restart_confirm(
