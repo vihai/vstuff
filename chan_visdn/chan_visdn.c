@@ -1707,7 +1707,7 @@ static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
 		ast_log(LOG_WARNING,
 			"Cannot handle frames in %d format\n",
 			frame->subclass);
-		return -1;
+		return 0;
 	}
 
 	if (visdn_chan->channel_fd < 0) {
@@ -3382,7 +3382,7 @@ int load_module()
 		return -1;
 	}
 
-	if (ast_channel_register_ex(VISDN_CHAN_TYPE, VISDN_DESCRIPTION, 
+	if (ast_channel_register_ex(VISDN_CHAN_TYPE, VISDN_DESCRIPTION,
 			 AST_FORMAT_ALAW,
 			 visdn_request, visdn_devicestate)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n",

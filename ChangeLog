@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-11 00:00:02 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-156
+
+    Summary:
+      Make reception of non-Alaw frames non-fatal
+    Revision:
+      isdn--devel--0.1--patch-156
+
+    
+    
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c
+
+
 2005-09-10 23:45:45 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-155
 
     Summary:

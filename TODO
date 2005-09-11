@@ -30,6 +30,7 @@ chan_visdn:
   so it is impossible to know what bearer capabilities are accepted by a
   destination, if it supports overlap dialing and so on...
 - Call bumbing
+- Handle ULAW
 
 libq931:
 --------
