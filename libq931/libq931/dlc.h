@@ -6,8 +6,9 @@
 #define report_dlc(dlc, lvl, format, arg...)				\
 	(dlc)->intf->lib->report(					\
 		(lvl),							\
-		"TEI '%d': "						\
+		"%s:TEI[%d]: "						\
 		format,							\
+		(dlc)->intf->name,					\
 		(dlc)->tei,						\
 		## arg)
 

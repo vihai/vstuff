@@ -260,7 +260,7 @@ void q931_decode_so_ie(
 					ie->type->dump(ie,
 						call->intf->lib->report, "  ");
 
-				report_dlc(msg->dlc, LOG_DEBUG,
+				report_msg(msg, LOG_DEBUG,
 					"SO IE %d ===> %u (%s)\n",
 					ds->curie,
 					ds->ie_id,
@@ -269,7 +269,7 @@ void q931_decode_so_ie(
 				q931_ie_put(ie);
 			}
 		} else {
-			report_dlc(msg->dlc, LOG_DEBUG,
+			report_msg(msg, LOG_DEBUG,
 				"SO IE %d ===> %u (unknown)\n",
 				ds->curie,
 				ds->ie_id);
@@ -298,7 +298,7 @@ void q931_decode_vl_ie(
 				ds->unrecognized_ies[ds->unrecognized_ies_cnt++] =
 					ds->ie_id;
 
-				report_dlc(msg->dlc, LOG_DEBUG,
+				report_msg(msg, LOG_DEBUG,
 					"Unrecognized IE %d in message"
 					" for which comprehension is required\n",
 					ds->ie_id);
@@ -323,7 +323,7 @@ void q931_decode_vl_ie(
 
 		if (!ie_has_content_errors(msg, ie_type, ie_len)) {
 			report_msg(msg, LOG_DEBUG,
-				"VS IE %d ===> %u (%s) -- length %u\n",
+				"VL IE %d ===> %u (%s) -- length %u\n",
 				ds->curie,
 				ds->ie_id,
 				ie_type->name,
