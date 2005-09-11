@@ -25,6 +25,7 @@ Switch on nabla
 tla get visdn--release--VERSION
 vim configure.ac
 tla commit --seal -s "Version set and tree sealed"
+tla cacherev visdn--release--VERSION--base-0
 
 make release
 

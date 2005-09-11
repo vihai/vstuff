@@ -29,7 +29,7 @@ EXTRA_DIST =					\
 	samples/ppp_dialout			\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)				\
-	kernel_compat.h
+	kernel_config.h.in
 
 SUBDIRS =
 
