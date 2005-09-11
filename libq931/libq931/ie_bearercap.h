@@ -66,8 +66,6 @@ enum q931_ie_bearer_capability_user_information_layer_3_protocol
 	Q931_IE_BC_UIL3P_UNUSED		= -1,
 };
 
-#define Q931_IE_BC_IDENT_MASK 0x60
-
 enum q931_ie_bearer_capability_user_information_layer_ident
 {
 	Q931_IE_BC_LAYER_1_IDENT	= 0x1,
@@ -97,6 +95,15 @@ struct q931_ie_bearer_capability
 
 struct q931_ie_bearer_capability *q931_ie_bearer_capability_alloc(void);
 struct q931_ie *q931_ie_bearer_capability_alloc_abstract(void);
+
+#define Q931_IE_BC_IDENT_MASK 0x60
+#define Q931_IE_BC_IDENT_SHIFT 5
+
+static inline enum q931_ie_bearer_capability_user_information_layer_ident
+	q931_ie_bearer_capability_oct_ident(__u8 oct)
+{
+	return (oct & Q931_IE_BC_IDENT_MASK) >> Q931_IE_BC_IDENT_SHIFT;
+}
 
 #ifdef Q931_PRIVATE
 

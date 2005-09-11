@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-11 20:59:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-158
+
+    Summary:
+      Fixed Bearer Capability IE decoding of octets 5, 6, 7
+    Revision:
+      isdn--devel--0.1--patch-158
+
+    
+    
+
+    modified files:
+     ChangeLog libq931/ie_bearercap.c
+     libq931/libq931/ie_bearercap.h
+
+
 2005-09-11 00:12:28 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-157
 
     Summary:
