@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-12 11:59:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-160
+
+    Summary:
+      Fixed architecture diagram
+    Revision:
+      isdn--devel--0.1--patch-160
+
+
+    modified files:
+     ChangeLog docs/visdn-architecture.odg
+
+
 2005-09-11 21:34:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-159
 
     Summary:
