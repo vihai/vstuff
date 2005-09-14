@@ -94,11 +94,15 @@ struct hfc_pcm_slot *hfc_pcm_port_allocate_slot(
 
 void hfc_pcm_port_init(
 	struct hfc_pcm_port *port,
-	struct hfc_card *card)
+	struct hfc_card *card,
+	const char *name)
 {
 	port->card = card;
 
-	visdn_port_init(&port->visdn_port, &hfc_pcm_port_ops);
+	visdn_port_init(&port->visdn_port);
+	port->visdn_port.ops = &hfc_pcm_port_ops;
+	port->visdn_port.device = &card->pcidev->dev;
+	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
 	int i;
 	for (i=0; i<ARRAY_SIZE(port->slots); i++) {

@@ -2,6 +2,48 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-14 02:09:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-162
+
+    Summary:
+      Revamped driver model and added partial support for multiple crossconnectors
+    Revision:
+      isdn--devel--0.1--patch-162
+
+    
+    
+
+    new files:
+     visdn-cxc-internal/.arch-ids/.arch-inventory.id
+     visdn-cxc-internal/.arch-ids/=id
+     visdn-cxc-internal/.arch-ids/Makefile.in.id
+     visdn-cxc-internal/.arch-ids/cxc_internal.h.id
+     visdn-cxc-internal/.arch-ids/cxc_internal_main.c.id
+     visdn-cxc-internal/.arch-inventory
+     visdn-cxc-internal/Makefile.in
+     visdn-cxc-internal/cxc_internal.h
+     visdn-cxc-internal/cxc_internal_main.c
+
+    modified files:
+     ChangeLog Makefile.am chan_visdn/chan_visdn.c configure.ac
+     hfc-4s/Makefile.in hfc-4s/chan.c hfc-4s/chan_sysfs.c
+     hfc-4s/chan_sysfs.h hfc-4s/hfc-4s_main.c hfc-4s/pcm_port.c
+     hfc-4s/pcm_port.h hfc-4s/pcm_port_sysfs.c hfc-4s/st_port.c
+     hfc-4s/st_port.h hfc-4s/st_port_sysfs.c hfc-pci/Makefile.in
+     hfc-pci/chan.c hfc-pci/chan_sysfs.c hfc-pci/chan_sysfs.h
+     hfc-pci/hfc-pci_main.c hfc-pci/pcm_port.c hfc-pci/pcm_port.h
+     hfc-pci/pcm_port_sysfs.c hfc-pci/st_port.c hfc-pci/st_port.h
+     hfc-pci/st_port_sysfs.c hw-config visdn-core/Makefile.in
+     visdn-core/chan.c visdn-core/chan.h visdn-core/core_main.c
+     visdn-core/cxc.c visdn-core/cxc.h visdn-core/port.c
+     visdn-core/port.h visdn-netdev/Makefile.in
+     visdn-netdev/netdev_main.c visdn-ppp/Makefile.in
+     visdn-ppp/ppp_main.c visdn-streamport/Makefile.in
+     visdn-streamport/streamport_main.c
+
+    new directories:
+     visdn-cxc-internal visdn-cxc-internal/.arch-ids
+
+
 2005-09-13 13:51:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-161
 
     Summary:

@@ -593,10 +593,13 @@ static int __devinit hfc_probe(
 	card->num_fifos = 0;
 
 	for (i=0; i<card->num_st_ports; i++) {
-		hfc_st_port_init(&card->st_ports[i], card, i);
+		char portid[10];
+		snprintf(portid, sizeof(portid), "st%d", i);
+
+		hfc_st_port_init(&card->st_ports[i], card, portid, i);
 	}
 
-	hfc_pcm_port_init(&card->pcm_port, card);
+	hfc_pcm_port_init(&card->pcm_port, card, "pcm");
 
 	hfc_card_lock(card);
 	hfc_initialize_hw_nonsoft(card);
@@ -608,45 +611,28 @@ static int __devinit hfc_probe(
 	// we can now register to the system.
 
 	for (i=0; i<card->num_st_ports; i++) {
-		char portid[10];
-		snprintf(portid, sizeof(portid), "st%d", i);
 
-		visdn_port_register(&card->st_ports[i].visdn_port,
-			"%d", portid, &pci_dev->dev);
+		visdn_port_register(&card->st_ports[i].visdn_port);
 
-		visdn_chan_register(
-			&card->st_ports[i].chans[D].visdn_chan, "D",
-			&card->st_ports[i].visdn_port);
-
+		visdn_chan_register(&card->st_ports[i].chans[D].visdn_chan);
 		hfc_chan_sysfs_create_files_D(&card->st_ports[i].chans[D]);
 
-		visdn_chan_register(
-			&card->st_ports[i].chans[B1].visdn_chan, "B1",
-			&card->st_ports[i].visdn_port);
-
+		visdn_chan_register(&card->st_ports[i].chans[B1].visdn_chan);
 		hfc_chan_sysfs_create_files_B(&card->st_ports[i].chans[B1]);
 
-		visdn_chan_register(
-			&card->st_ports[i].chans[B2].visdn_chan, "B2",
-			&card->st_ports[i].visdn_port);
-
+		visdn_chan_register(&card->st_ports[i].chans[B2].visdn_chan);
 		hfc_chan_sysfs_create_files_B(&card->st_ports[i].chans[B2]);
 
-		visdn_chan_register(
-			&card->st_ports[i].chans[E].visdn_chan, "E",
-			&card->st_ports[i].visdn_port);
+		visdn_chan_register(&card->st_ports[i].chans[E].visdn_chan);
+		hfc_chan_sysfs_create_files_E(&card->st_ports[i].chans[E]);
 
-		visdn_chan_register(
-			&card->st_ports[i].chans[SQ].visdn_chan, "SQ",
-			&card->st_ports[i].visdn_port);
-
+		visdn_chan_register(&card->st_ports[i].chans[SQ].visdn_chan);
 		hfc_chan_sysfs_create_files_SQ(&card->st_ports[i].chans[SQ]);
 
 		hfc_st_port_sysfs_create_files(&card->st_ports[i]);
 	}
 
-	visdn_port_register(&card->pcm_port.visdn_port,
-		"%d", "pcm", &pci_dev->dev);
+	visdn_port_register(&card->pcm_port.visdn_port);
 
 	hfc_pcm_port_sysfs_create_files(&card->pcm_port);
 

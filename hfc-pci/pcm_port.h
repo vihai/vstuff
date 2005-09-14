@@ -86,6 +86,7 @@ void hfc_pcm_port_deallocate_slot(struct hfc_pcm_slot *slot);
 
 void hfc_pcm_port_init(
 	struct hfc_pcm_port *port,
-	struct hfc_card *card);
+	struct hfc_card *card,
+	const char *name);
 
 #endif

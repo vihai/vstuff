@@ -186,7 +186,8 @@ struct visdn_port_ops hfc_st_port_ops = {
 
 void hfc_st_port_init(
 	struct hfc_st_port *port,
-	struct hfc_card *card)
+	struct hfc_card *card,
+	const char *name)
 {
 	port->card = card;
 
@@ -194,18 +195,20 @@ void hfc_st_port_init(
 		hfc_st_port_state_change_work,
 		port);
 
-	visdn_port_init(&port->visdn_port, &hfc_st_port_ops);
-	port->visdn_port.priv = port;
-
 	port->nt_mode = FALSE;
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+
+	visdn_port_init(&port->visdn_port);
+	port->visdn_port.ops = &hfc_st_port_ops;
+	port->visdn_port.driver_data = port;
+	port->visdn_port.device = &card->pcidev->dev;
+	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));;
 
 	// Note: Bitrates must be in increasing order
 	int bitrates_d[] = { 16000 };
 	int bitrates_b[] = { 64000 };
 	int bitrates_s[] = { 4000 };
-
 
 	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF,
 		bitrates_d, ARRAY_SIZE(bitrates_d));

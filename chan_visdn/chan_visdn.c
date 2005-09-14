@@ -1178,7 +1178,7 @@ static int visdn_bridge(
 	char path[100], dest1[100], dest2[100];
 
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/device/connected/../B%d",
+		"/sys/class/net/%s/visdn_channel/connected/../B%d",
 		visdn_chan1->q931_call->intf->name,
 		visdn_chan1->q931_call->channel->id+1);
 
@@ -1197,7 +1197,7 @@ static int visdn_bridge(
 	chanid1++;
 
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/device/../B%d",
+		"/sys/class/net/%s/visdn_channel/../B%d",
 		visdn_chan2->q931_call->intf->name,
 		visdn_chan2->q931_call->channel->id+1);
 
@@ -2900,7 +2900,7 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/device/connected/../B%d",
+		"/sys/class/net/%s/visdn_channel/connected/../B%d",
 		channel->call->intf->name,
 		channel->id+1);
 

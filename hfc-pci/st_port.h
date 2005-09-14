@@ -79,6 +79,7 @@ void hfc_st_port_check_l1_up(struct hfc_st_port *port);
 
 void hfc_st_port_init(
 	struct hfc_st_port *port,
-	struct hfc_card *card);
+	struct hfc_card *card,
+	const char *name);
 
 #endif

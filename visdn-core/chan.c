@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
+#include <linux/kobject.h>
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
 
@@ -24,70 +25,12 @@
 #include "port.h"
 #include "cxc.h"
 
-#include <lapd.h>
-
-struct visdn_cxc visdn_cxc;
-EXPORT_SYMBOL(visdn_cxc);
-
-static int visdn_chan_hotplug(struct device *device, char **envp,
-	int num_envp, char *buf, int size)
-{
-//	struct visdn_chan *visdn_chan = to_visdn_chan(cd);
-
-	envp[0] = NULL;
-
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_chan_hotplug called\n");
-
-	return 0;
-}
-
-static void visdn_chan_release(struct device *device)
-{
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_chan_release called\n");
-
-	struct visdn_chan *chan = to_visdn_chan(device);
-
-	BUG_ON(!chan->ops);
-
-	if (chan->ops->release)
-		chan->ops->release(chan);
-}
-
-struct visdn_chan *visdn_chan_alloc(void)
-{
-	struct visdn_chan *visdn_chan;
-
-	visdn_chan = kmalloc(sizeof(*visdn_chan), GFP_KERNEL);
-	if (!visdn_chan)
-		return NULL;
-
-	memset(visdn_chan, 0x00, sizeof(*visdn_chan));
-
-	return visdn_chan;
-}
-EXPORT_SYMBOL(visdn_chan_alloc);
-
-void visdn_chan_init(
-	struct visdn_chan *chan,
-	struct visdn_chan_ops *ops)
-{
-	BUG_ON(!chan);
-	BUG_ON(!ops);
-	BUG_ON(!ops->owner);
-
-	memset(chan, 0x00, sizeof(*chan));
-	chan->ops = ops;
-
-	init_MUTEX(&chan->sem);
-}
-EXPORT_SYMBOL(visdn_chan_init);
-
 int visdn_frame_rx(struct visdn_chan *chan, struct sk_buff *skb)
 {
 	int res = -ENODEV;
 
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 
 	if (dst) {
 		if (dst->ops->frame_xmit)
@@ -100,65 +43,6 @@ int visdn_frame_rx(struct visdn_chan *chan, struct sk_buff *skb)
 }
 
 EXPORT_SYMBOL(visdn_frame_rx);
-
-static int visdn_suspend(struct device *device, pm_message_t state)
-{
-	printk(KERN_INFO "######### visdn_suspend()\n");
-
-	return -EINVAL;
-}
-
-static int visdn_resume(struct device *dev)
-{
-	printk(KERN_INFO "######### visdn_resume()\n");
-
-	return -EINVAL;
-}
-
-struct bus_type visdn_bus_type = {
-	.name           = "visdn",
-	.suspend        = visdn_suspend,
-	.resume         = visdn_resume,
-	.hotplug	= visdn_chan_hotplug,
-};
-
-struct visdn_search_pars
-{
-	char chanid[60];
-	struct visdn_chan *chan;
-};
-
-static int visdn_search_chan_cback(struct device *device, void *data)
-{
-	struct visdn_search_pars *pars = data;
-
-	if (!strcmp(device->bus_id, pars->chanid)) {
-		struct visdn_chan *chan = to_visdn_chan(device);
-
-		visdn_chan_get(chan);
-		pars->chan = chan;
-
-		return 1;
-	}
-
-	return 0;
-}
-
-struct visdn_chan *visdn_search_chan(const char *chanid)
-{
-	struct visdn_search_pars pars;
-	memset(&pars, 0x00, sizeof(pars));
-
-	printk(KERN_DEBUG "Searching chan %s\n", chanid);
-
-	snprintf(pars.chanid, sizeof(pars.chanid), "%s", chanid);
-
-	bus_for_each_dev(&visdn_bus_type, NULL, &pars,
-		visdn_search_chan_cback);
-
-	return pars.chan;
-}
-EXPORT_SYMBOL(visdn_search_chan);
 
 static int visdn_default_update_parameters(
 	struct visdn_chan *chan,
@@ -297,12 +181,12 @@ int visdn_disconnect(
 	printk(KERN_DEBUG "visdn_disconnect()\n");
 
 	struct visdn_chan *chan2;
-	chan2 = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	chan2 = visdn_cxc_get_by_src(chan->cxc, chan);
 
 	if (chan2) {
-		visdn_cxc_del(&visdn_cxc, chan2);
+		visdn_cxc_disconnect(chan2->cxc, chan2);
 
-		sysfs_remove_link(&chan2->device.kobj, "connected");
+		sysfs_remove_link(&chan2->kobj, "connected");
 
 		if (test_bit(VISDN_CHAN_STATE_OPEN, &chan2->state))
 			visdn_close(chan2);
@@ -310,9 +194,9 @@ int visdn_disconnect(
 		visdn_chan_put(chan2);
 	}
 
-	visdn_cxc_del(&visdn_cxc, chan);
+	visdn_cxc_disconnect(chan->cxc, chan);
 
-	sysfs_remove_link(&chan->device.kobj, "connected");
+	sysfs_remove_link(&chan->kobj, "connected");
 
 	if (test_bit(VISDN_CHAN_STATE_OPEN, &chan->state))
 		visdn_close(chan);
@@ -333,20 +217,26 @@ int visdn_connect(
 	BUG_ON(!chan2);
 	BUG_ON(!chan2->ops);
 
+	if (chan1->cxc != chan2->cxc)
+		return -EINVAL;
+
+	// cxc_get ???? FIXME TODO
+	struct visdn_cxc *cxc = chan1->cxc;
+
 #if 0
 	// Check that the channels are disconnected
 	visdn_disconnect(chan1);
 	visdn_disconnect(chan2);
 #else
 	struct visdn_chan *tmp_chan;
-	tmp_chan = visdn_cxc_get_by_src(&visdn_cxc, chan1);
+	tmp_chan = visdn_cxc_get_by_src(cxc, chan1);
 	if (tmp_chan) {
 		visdn_chan_put(tmp_chan);
 		err = -EALREADY;
 		goto err_already_connected;
 	}
 
-	tmp_chan = visdn_cxc_get_by_src(&visdn_cxc, chan2);
+	tmp_chan = visdn_cxc_get_by_src(cxc, chan2);
 	if (tmp_chan) {
 		visdn_chan_put(tmp_chan);
 		err = -EALREADY;
@@ -355,19 +245,19 @@ int visdn_connect(
 #endif
 
 	printk(KERN_DEBUG "Connecting chan '%s' to chan '%s'\n",
-		chan1->device.bus_id,
-		chan2->device.bus_id);
+		chan1->cxc_id,
+		chan2->cxc_id);
 
 	err = visdn_negotiate_parameters(chan1, chan2);
 	if (err < 0)
 		goto err_negotiate_parameters;
 
 	// Connect the channels -------------------------------------
-	err = visdn_cxc_add(&visdn_cxc, chan1, chan2);
+	err = visdn_cxc_connect(cxc, chan1, chan2);
 	if (err < 0)
 		goto err_cxc_add_chan1;
 
-	err = visdn_cxc_add(&visdn_cxc, chan2, chan1);
+	err = visdn_cxc_connect(cxc, chan2, chan1);
 	if (err < 0)
 		goto err_cxc_add_chan2;
 
@@ -392,13 +282,13 @@ int visdn_connect(
 	}
 
 	sysfs_create_link(
-		&chan1->device.kobj,
-		&chan2->device.kobj,
+		&chan1->kobj,
+		&chan2->kobj,
 		"connected");
 
 	sysfs_create_link(
-		&chan2->device.kobj,
-		&chan1->device.kobj,
+		&chan2->kobj,
+		&chan1->kobj,
 		"connected");
 
 	return 0;
@@ -419,7 +309,7 @@ int visdn_pass_open(
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -446,7 +336,7 @@ int visdn_pass_close(
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -474,7 +364,7 @@ int visdn_pass_frame_xmit(
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -507,7 +397,7 @@ struct net_device_stats *visdn_pass_get_stats(
 	struct net_device_stats *stats = &vnd_dummy_stats;
 
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst)
 		goto err_no_dst;
 
@@ -530,7 +420,7 @@ int visdn_pass_stop_queue(struct visdn_chan *chan)
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -560,7 +450,7 @@ int visdn_pass_start_queue(struct visdn_chan *chan)
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -590,7 +480,7 @@ int visdn_pass_wake_queue(struct visdn_chan *chan)
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -619,7 +509,7 @@ int visdn_pass_frame_input_error(struct visdn_chan *chan, int code)
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -652,7 +542,7 @@ ssize_t visdn_pass_samples_read(
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -684,7 +574,7 @@ ssize_t visdn_pass_samples_write(
 {
 	int err;
 	struct visdn_chan *dst;
-	dst = visdn_cxc_get_by_src(&visdn_cxc, chan);
+	dst = visdn_cxc_get_by_src(chan->cxc, chan);
 	if (!dst) {
 		err = -ENODEV;
 		goto err_no_dst;
@@ -714,44 +604,42 @@ EXPORT_SYMBOL(visdn_pass_samples_write);
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_refcnt(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		atomic_read(&to_visdn_chan(device)->device.kobj.kref.refcount));
+		atomic_read(&chan->kobj.kref.refcount));
 }
 
-static DEVICE_ATTR(refcnt, S_IRUGO,
+static VISDN_CHAN_ATTR(refcnt, S_IRUGO,
 		visdn_chan_show_refcnt,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_port_name(
-        struct device *device,
-	DEVICE_ATTR_COMPAT
+        struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
         char *buf)
 {
 	// FIXME: Lock chan and port!?
 
 	return snprintf(buf, PAGE_SIZE, "%s\n",
-		to_visdn_port(device->parent)->port_name);
+		chan->port->name);
 }
 
-static DEVICE_ATTR(port_name, S_IRUGO,
+static VISDN_CHAN_ATTR(port_name, S_IRUGO,
 		visdn_chan_show_port_name,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_mtu(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *chan = to_visdn_chan(device);
-
 	if (visdn_chan_lock_interruptible(chan))
 		return -ERESTARTSYS;
 
@@ -762,19 +650,17 @@ static ssize_t visdn_chan_show_mtu(
 	return len;
 }
 
-static DEVICE_ATTR(mtu, S_IRUGO,
+static VISDN_CHAN_ATTR(mtu, S_IRUGO,
 		visdn_chan_show_mtu,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_bitrate(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *chan = to_visdn_chan(device);
-
 	if (visdn_chan_lock_interruptible(chan))
 		return -ERESTARTSYS;
 
@@ -785,18 +671,17 @@ static ssize_t visdn_chan_show_bitrate(
 	return len;
 }
 
-static DEVICE_ATTR(bitrate, S_IRUGO,
+static VISDN_CHAN_ATTR(bitrate, S_IRUGO,
 		visdn_chan_show_bitrate,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_framing(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *chan = to_visdn_chan(device);
 	int err;
 
 	if (visdn_chan_lock_interruptible(chan)) {
@@ -838,19 +723,17 @@ err_lock:
 	return err;
 }
 
-static DEVICE_ATTR(framing, S_IRUGO,
+static VISDN_CHAN_ATTR(framing, S_IRUGO,
 		visdn_chan_show_framing,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_bitorder(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *chan = to_visdn_chan(device);
-
 	if (visdn_chan_lock_interruptible(chan))
 		return -ERESTARTSYS;
 
@@ -863,19 +746,17 @@ static ssize_t visdn_chan_show_bitorder(
 	return len;
 }
 
-static DEVICE_ATTR(bitorder, S_IRUGO,
+static VISDN_CHAN_ATTR(bitorder, S_IRUGO,
 		visdn_chan_show_bitorder,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t visdn_chan_show_autoopen(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *chan = to_visdn_chan(device);
-
 	if (visdn_chan_lock_interruptible(chan))
 		return -ERESTARTSYS;
 
@@ -887,104 +768,137 @@ static ssize_t visdn_chan_show_autoopen(
 	return len;
 }
 
-static DEVICE_ATTR(autoopen, S_IRUGO,
+static VISDN_CHAN_ATTR(autoopen, S_IRUGO,
 		visdn_chan_show_autoopen,
 		NULL);
 
 //----------------------------------------------------------------------------
 
-int visdn_chan_register(
-	struct visdn_chan *chan,
-	const char *name,
-	struct visdn_port *port)
+static struct attribute *visdn_chan_default_attrs[] =
+{
+	&visdn_chan_attr_refcnt.attr,
+	&visdn_chan_attr_port_name.attr,
+	&visdn_chan_attr_mtu.attr,
+	&visdn_chan_attr_bitrate.attr,
+	&visdn_chan_attr_framing.attr,
+	&visdn_chan_attr_bitorder.attr,
+	&visdn_chan_attr_autoopen.attr,
+	NULL,
+};
+
+#define VISDN_CHAN_HASHBITS 8
+
+struct hlist_head visdn_chan_index_hash[1 << VISDN_CHAN_HASHBITS];
+
+static inline struct hlist_head *visdn_chan_index_get_hash(int index)
+{
+	return &visdn_chan_index_hash[index & ((1 << VISDN_CHAN_HASHBITS) - 1)];
+}
+
+struct visdn_chan *__visdn_chan_get_by_index(int index)
+{
+	struct hlist_node *t;
+	struct visdn_chan *visdn_chan;
+
+	hlist_for_each_entry(visdn_chan, t, visdn_chan_index_get_hash(index),
+			index_node) {
+		if (visdn_chan->index == index)
+			return visdn_chan;
+	}
+
+	return NULL;
+}
+
+static int visdn_chan_new_index(void)
+{
+	static int index;
+	for (;;) {
+		if (++index <= 0)  // FIXME
+			index = 1;
+		if (!__visdn_chan_get_by_index(index))
+			return index;
+	}
+}
+
+void visdn_chan_init(struct visdn_chan *chan)
+{
+	BUG_ON(!chan);
+
+	memset(chan, 0x00, sizeof(*chan));
+
+	kobj_set_kset_s(chan, visdn_channels_subsys);
+	kobject_init(&chan->kobj);
+	INIT_LIST_HEAD(&chan->port_channels_node);
+	INIT_LIST_HEAD(&chan->cxc_channels_node);
+	INIT_HLIST_NODE(&chan->index_node);
+
+	init_MUTEX(&chan->sem);
+}
+EXPORT_SYMBOL(visdn_chan_init);
+
+int visdn_chan_register(struct visdn_chan *chan)
 {
 	int err;
 
 	BUG_ON(!chan);
-	BUG_ON(!name);
-	BUG_ON(!port);
 
-	chan->device.parent = &port->device;
+	BUG_ON(!chan->port);
+	BUG_ON(!chan->ops);
+	BUG_ON(!chan->ops->owner);
+	BUG_ON(!chan->cxc);
 
-	snprintf(chan->device.bus_id, sizeof(chan->device.bus_id),
-		"%d.%s", port->index, name);
+	if (!visdn_chan_get(chan)) {
+		err  = -EINVAL;
+		goto err_chan_get;
+	}
 
-	chan->device.bus = &visdn_bus_type;
-//	chan->device.driver = port->device.driver;
-	chan->device.driver_data = NULL;
-	chan->device.release = visdn_chan_release;
+	if (!visdn_port_get(chan->port)) {
+		err = -EINVAL;
+		goto err_port_get;
+	}
 
-	err = device_register(&chan->device);
+	chan->index = visdn_chan_new_index();
+
+	snprintf(chan->cxc_id, sizeof(chan->cxc_id),
+		"%06d", chan->index);
+
+	kobject_set_name(&chan->kobj, "%s", chan->cxc_id);
+	chan->kobj.parent = &chan->port->kobj;
+
+	err = kobject_add(&chan->kobj);
 	if (err < 0)
-		goto err_device_register;
+		goto err_kobject_add;
 
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_refcnt);
+	err = visdn_cxc_add(chan->cxc, chan);
 	if (err < 0)
-		goto err_device_create_file_refcnt;
+		goto err_cxc_add;
 
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_port_name);
-	if (err < 0)
-		goto err_device_create_file_port_name;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_mtu);
-	if (err < 0)
-		goto err_device_create_file_mtu;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_bitrate);
-	if (err < 0)
-		goto err_device_create_file_bitrate;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_framing);
-	if (err < 0)
-		goto err_device_create_file_framing;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_bitorder);
-	if (err < 0)
-		goto err_device_create_file_bitorder;
-
-	err = device_create_file(
-			&chan->device,
-			&dev_attr_autoopen);
-	if (err < 0)
-		goto err_device_create_file_autoopen;
+	down_write(&chan->cxc->subsys.rwsem);
+	list_add_tail(&chan->port_channels_node, &chan->port->channels);
+	up_write(&chan->cxc->subsys.rwsem);
 
 	sysfs_create_link(
-		&chan->device.parent->kobj,
-		&chan->device.kobj,
-		(char *)name); // should sysfs_create_link(...., const char *name) ?
+		&visdn_channels_subsys.kset.kobj,
+		&chan->kobj,
+		chan->cxc_id);
 
-	chan->port = port;
+        visdn_chan_put(chan);
+
+	sysfs_create_link(
+		&chan->port->kobj,
+		&chan->kobj,
+		chan->name);
 
 	return 0;
 
-	device_remove_file(&chan->device, &dev_attr_autoopen);
-err_device_create_file_autoopen:
-	device_remove_file(&chan->device, &dev_attr_bitorder);
-err_device_create_file_bitorder:
-	device_remove_file(&chan->device, &dev_attr_framing);
-err_device_create_file_framing:
-	device_remove_file(&chan->device, &dev_attr_bitrate);
-err_device_create_file_bitrate:
-	device_remove_file(&chan->device, &dev_attr_mtu);
-err_device_create_file_mtu:
-	device_remove_file(&chan->device, &dev_attr_port_name);
-err_device_create_file_port_name:
-	device_remove_file(&chan->device, &dev_attr_refcnt);
-err_device_create_file_refcnt:
-	device_unregister(&chan->device);
-err_device_register:
+	visdn_cxc_del(chan->cxc, chan);
+err_cxc_add:
+	kobject_del(&chan->kobj);
+err_kobject_add:
+	visdn_port_put(chan->port);
+err_port_get:
+	visdn_chan_put(chan);
+err_chan_get:
 
 	return err;
 }
@@ -995,36 +909,35 @@ void visdn_chan_unregister(
 {
 	printk(KERN_DEBUG visdn_MODULE_PREFIX
 		"visdn_chan_unregister(%s) called\n",
-		chan->device.bus_id);
+		chan->cxc_id);
 
 	visdn_disconnect(chan);
 
-	device_remove_file(&chan->device, &dev_attr_autoopen);
-	device_remove_file(&chan->device, &dev_attr_bitorder);
-	device_remove_file(&chan->device, &dev_attr_framing);
-	device_remove_file(&chan->device, &dev_attr_bitrate);
-	device_remove_file(&chan->device, &dev_attr_mtu);
-	device_remove_file(&chan->device, &dev_attr_port_name);
-	device_remove_file(&chan->device, &dev_attr_refcnt);
+	sysfs_remove_link(
+		&visdn_channels_subsys.kset.kobj,
+		chan->cxc_id);
 
-	device_unregister(&chan->device);
+	visdn_cxc_del(chan->cxc, chan);
+	kobject_del(&chan->kobj);
+	visdn_port_put(chan->port);
+	visdn_chan_put(chan);
 
 	/* RCU (and other?) may still have references to this object.
 	 * Sleep until everyone has put his reference back.
 	 * Maybe there's a better way to handle this.
 	 */
 
-	if (atomic_read(&chan->device.kobj.kref.refcount) > 1) {
+	if (atomic_read(&chan->kobj.kref.refcount) > 1) {
 
 		/* Usually 50ms are enough */
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((50 * HZ) / 1000);
 
-		while(atomic_read(&chan->device.kobj.kref.refcount) > 1) {
+		while(atomic_read(&chan->kobj.kref.refcount) > 1) {
 			printk(KERN_DEBUG "Waiting for %s refcnt to become 1"
 					" (now %d)\n",
-				chan->device.bus_id,
-				atomic_read(&chan->device.kobj.kref.refcount));
+				chan->cxc_id,
+				atomic_read(&chan->kobj.kref.refcount));
 
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((1000 * HZ) / 1000);
@@ -1139,90 +1052,126 @@ int visdn_close(struct visdn_chan *chan)
 }
 EXPORT_SYMBOL(visdn_close);
 
-static ssize_t visdn_bus_connect_store(
-	struct bus_type *bus_type,
-	const char *buf,
-	size_t count)
+#define to_visdn_chan_attr(_attr) \
+	container_of(_attr, struct visdn_chan_attribute, attr)
+
+
+static ssize_t visdn_chan_attr_show(
+	struct kobject *kobj,
+	struct attribute *attr,
+	char *buf)
 {
-	int err;
-	char locbuf[100];
+	struct visdn_chan_attribute *visdn_chan_attr =
+					to_visdn_chan_attr(attr);
+	struct visdn_chan *visdn_chan = to_visdn_chan(kobj);
+	ssize_t err;
 
-	char *locbuf_p = locbuf;
-
-	strncpy(locbuf, buf, sizeof(locbuf));
-	char *chan1_id = strsep(&locbuf_p, ",\n\r");
-	if (!chan1_id)
-		return -EINVAL;
-
-	char *chan2_id = strsep(&locbuf_p, ",\n\r");
-	if (!chan2_id)
-		return -EINVAL;
-
-	struct visdn_chan *chan1 = visdn_search_chan(chan1_id);
-	if (!chan1) {
-		err = -ENODEV;
-		goto err_search_src;
-	}
-
-	struct visdn_chan *chan2 = visdn_search_chan(chan2_id);
-	if (!chan2) {
-		err = -ENODEV;
-		goto err_search_dst;
-	}
-
-	if (chan1 == chan2) {
-		err = -EINVAL;
-		goto err_connect_self;
-	}
-
-	err = visdn_connect(chan1, chan2, 0);
-	if (err < 0)
-		goto err_connect;
-
-	// Release references returned by visdn_search_chan()
-	visdn_chan_put(chan1);
-	visdn_chan_put(chan2);
-
-        return count;
-
-	// visdn_disconnect
-err_connect:
-err_connect_self:
-	visdn_chan_put(chan2);
-err_search_dst:
-	visdn_chan_put(chan1);
-err_search_src:
+	if (visdn_chan_attr->show)
+		err = visdn_chan_attr->show(visdn_chan, visdn_chan_attr, buf);
+	else
+		err = -EIO;
 
 	return err;
 }
 
-BUS_ATTR(connect, S_IWUSR, NULL, visdn_bus_connect_store);
+static ssize_t visdn_chan_attr_store(
+	struct kobject *kobj,
+	struct attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct visdn_chan_attribute *visdn_chan_attr =
+					to_visdn_chan_attr(attr);
+	struct visdn_chan *visdn_chan = to_visdn_chan(kobj);
+	ssize_t err;
+
+	if (visdn_chan_attr->store)
+		err = visdn_chan_attr->store(visdn_chan, visdn_chan_attr,
+							buf, count);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static struct sysfs_ops visdn_chan_sysfs_ops = {
+	.show   = visdn_chan_attr_show,
+	.store  = visdn_chan_attr_store,
+};
+
+static void visdn_chan_release(struct kobject *kobj)
+{
+	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_chan_release called\n");
+
+	struct visdn_chan *chan = to_visdn_chan(kobj);
+
+	if (chan->ops->release)
+		chan->ops->release(chan);
+	else {
+		printk(KERN_ERR "vISDN channel '%s' does not have a release()"
+			" function, it is broken and must be fixed.\n",
+			chan->cxc_id);
+		WARN_ON(1);
+	}
+}
+
+struct kobj_type ktype_visdn_chan = {
+	.release	= visdn_chan_release,
+	.sysfs_ops	= &visdn_chan_sysfs_ops,
+	.default_attrs	= visdn_chan_default_attrs,
+};
+
+decl_subsys(visdn_channels, &ktype_visdn_chan, NULL);
+
+int visdn_chan_create_file(
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr)
+{
+	int err = 0;
+
+	if (visdn_chan_get(chan)) {
+		err = sysfs_create_file(&chan->kobj, &attr->attr);
+		visdn_chan_put(chan);
+	}
+
+	return err;
+}
+EXPORT_SYMBOL(visdn_chan_create_file);
+
+void visdn_chan_remove_file(
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *attr)
+{
+	if (visdn_chan_get(chan)) {
+		sysfs_remove_file(&chan->kobj, &attr->attr);
+		visdn_chan_put(chan);
+	}
+}
+EXPORT_SYMBOL(visdn_chan_remove_file);
 
 int visdn_chan_modinit(void)
 {
 	int err;
 
-	visdn_cxc_init(&visdn_cxc);
-
-	err = bus_register(&visdn_bus_type);
+	err = subsystem_register(&visdn_channels_subsys);
 	if (err < 0)
-		goto err_bus_register;
-
-	err = bus_create_file(&visdn_bus_type, &bus_attr_connect);
-	if (err < 0)
-		goto err_bus_create_file;
+		goto err_subsystem_register;
 
 	return 0;
 
-	bus_remove_file(&visdn_bus_type, &bus_attr_connect);
-err_bus_create_file:
-	bus_unregister(&visdn_bus_type);
-err_bus_register:
+	subsystem_unregister(&visdn_channels_subsys);
+err_subsystem_register:
 
 	return err;
+/*
+	err = bus_create_file(&visdn_bus_type, &bus_attr_connect);
+	if (err < 0)
+		goto err_bus_create_file;*/
+//	bus_remove_file(&visdn_bus_type, &bus_attr_connect);
+//err_bus_create_file:
 }
 
 void visdn_chan_modexit(void)
 {
-	bus_unregister(&visdn_bus_type);
+	subsystem_unregister(&visdn_channels_subsys);
 }

@@ -18,6 +18,8 @@
 #include <linux/device.h>
 #include <linux/list.h>
 
+#include <cxc_internal.h>
+
 #include "streamport.h"
 
 static dev_t vsp_first_dev;
@@ -83,8 +85,8 @@ static int vsp_chan_connect_to(
 	int flags)
 {
 	printk(KERN_INFO "Streamport %s connected to %s\n",
-		visdn_chan->device.bus_id,
-		visdn_chan2->device.bus_id);
+		visdn_chan->cxc_id,
+		visdn_chan2->cxc_id);
 
 	return 0;
 }
@@ -92,7 +94,7 @@ static int vsp_chan_connect_to(
 static int vsp_chan_disconnect(struct visdn_chan *visdn_chan)
 {
 	printk(KERN_INFO "Streamport %s disconnected\n",
-		visdn_chan->device.bus_id);
+		visdn_chan->cxc_id);
 
 	return 0;
 }
@@ -127,11 +129,15 @@ static int vsp_cdev_open(
 		goto err_kmalloc;
 	}
 
-	visdn_chan_init(&chan->visdn_chan, &vsp_chan_ops);
+	visdn_chan_init(&chan->visdn_chan);
 
 	chan->index = vsp_chan_new_index();
 
-	chan->visdn_chan.priv = chan;
+	chan->visdn_chan.ops = &vsp_chan_ops;
+	chan->visdn_chan.port = &vsp_visdn_port;
+	chan->visdn_chan.cxc = &visdn_int_cxc.cxc;
+	chan->visdn_chan.name[0] = '\0';
+	chan->visdn_chan.driver_data = chan;
 	chan->visdn_chan.autoopen = FALSE;
 
 	chan->visdn_chan.max_mtu = 0;
@@ -142,11 +148,7 @@ static int vsp_cdev_open(
 	chan->visdn_chan.bitorder_supported = VISDN_CHAN_BITORDER_MSB;
 	chan->visdn_chan.bitorder_preferred = 0;
 
-	char chanid[10];
-	snprintf(chanid, sizeof(chanid), "%d", chan->index);
-
-	err = visdn_chan_register(&chan->visdn_chan, chanid,
-		&vsp_visdn_port);
+	err = visdn_chan_register(&chan->visdn_chan);
 	if (err < 0)
 		goto err_chan_register;
 
@@ -228,7 +230,9 @@ static inline int vsp_cdev_do_ioctl_connect(
 		connect.src_chanid,
 		connect.dst_chanid);
 
-	struct visdn_chan *visdn_chan2 = visdn_search_chan(connect.dst_chanid);
+	struct visdn_chan *visdn_chan2 =
+		visdn_cxc_search_chan(&visdn_int_cxc.cxc,
+			connect.dst_chanid);
 	if (!visdn_chan2) {
 		err = -ENODEV;
 		goto err_search_dst;
@@ -339,11 +343,12 @@ static int __init vsp_init_module(void)
 		INIT_HLIST_HEAD(&vsp_chan_index_hash[i]);
 	}
 
-	visdn_port_init(&vsp_visdn_port, &vsp_port_ops);
-	err = visdn_port_register(
-		&vsp_visdn_port,
-		vsp_MODULE_NAME, vsp_MODULE_NAME,
-		&visdn_system_device);
+	visdn_port_init(&vsp_visdn_port);
+	vsp_visdn_port.ops = &vsp_port_ops;
+	vsp_visdn_port.device = &visdn_system_device;
+	strncpy(vsp_visdn_port.name, vsp_MODULE_NAME, sizeof(vsp_visdn_port.name));
+
+	err = visdn_port_register(&vsp_visdn_port);
 	if (err < 0)
 		goto err_visdn_port_register;
 
@@ -362,7 +367,7 @@ static int __init vsp_init_module(void)
 		sizeof(vsp_class_dev.class_id),
 		"streamport");
 	vsp_class_dev.class = &visdn_system_class;
-	vsp_class_dev.dev = &vsp_visdn_port.device;
+	vsp_class_dev.dev = NULL;
 
 #ifdef HAVE_CLASS_DEV_DEVT
 	vsp_class_dev.devt = vsp_first_dev;

@@ -210,6 +210,7 @@ AC_CONFIG_FILES([Makefile
                  hfc-pci/Makefile
                  hfc-usb/Makefile
                  lapd/Makefile
+                 visdn-cxc-internal/Makefile
                  visdn-core/Makefile
                  visdn-streamport/Makefile
                  visdn-timer-system/Makefile

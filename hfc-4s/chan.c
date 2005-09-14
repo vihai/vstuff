@@ -14,6 +14,7 @@
 #include <linux/delay.h>
 
 #include <visdn.h>
+#include <cxc_internal.h>
 
 #include "chan.h"
 #include "card.h"
@@ -33,7 +34,7 @@ static void hfc_chan_release(struct visdn_chan *chan)
 
 static int hfc_chan_open(struct visdn_chan *visdn_chan)
 {
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
 	int err;
@@ -170,7 +171,7 @@ err_card_lock:
 static int hfc_chan_close(struct visdn_chan *visdn_chan)
 {
 	int err;
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
 	if (visdn_chan_lock_interruptible(visdn_chan)) {
@@ -256,7 +257,7 @@ static int hfc_chan_frame_xmit(
 	struct visdn_chan *visdn_chan,
 	struct sk_buff *skb)
 {
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
 	if (hfc_card_trylock(card)) {
@@ -341,7 +342,7 @@ err_no_free_frames:
 
 static struct net_device_stats *hfc_chan_get_stats(struct visdn_chan *visdn_chan)
 {
-	struct hfc_chan_duplex *chan = visdn_chan->priv;
+	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	return &chan->stats;
 }
@@ -614,15 +615,15 @@ static int hfc_chan_connect_to(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	hfc_debug_chan(chan, 2, "connecting to %s\n",
-		visdn_chan2->device.bus_id);
+		visdn_chan2->cxc_id);
 
-	if (visdn_chan->device.parent->parent ==
-			visdn_chan2->device.parent->parent) {
+	if (visdn_chan->port->device ==
+			visdn_chan2->port->device) {
 
 		hfc_debug_chan(chan, 2,
 			"and %s: Both channels belong to the me,"
 			" attempting private bridge\n",
-			visdn_chan2->device.bus_id);
+			visdn_chan2->cxc_id);
 
 		struct hfc_chan_duplex *chan2 = to_chan_duplex(visdn_chan2);
 
@@ -635,7 +636,7 @@ static int hfc_chan_connect_to(
 static int hfc_chan_disconnect(struct visdn_chan *visdn_chan)
 {
 printk(KERN_INFO "hfc-4s chan %s disconnected\n",
-		visdn_chan->device.bus_id);
+		visdn_chan->cxc_id);
 
 	return 0;
 }
@@ -677,8 +678,8 @@ void hfc_chan_init(
 	const int bitrates[],
 	int bitrates_cnt)
 {
-	chan->port = port;
 	chan->name = name;
+	chan->port = port;
 	chan->status = HFC_CHAN_STATUS_FREE;
 	chan->id = id;
 	chan->hw_index = hw_index;
@@ -689,9 +690,13 @@ void hfc_chan_init(
 	chan->tx.chan = chan;
 	chan->tx.direction = TX;
 
-	visdn_chan_init(&chan->visdn_chan, &hfc_chan_ops);
+	visdn_chan_init(&chan->visdn_chan);
 
-	chan->visdn_chan.priv = chan;
+	chan->visdn_chan.ops = &hfc_chan_ops;
+	chan->visdn_chan.port = &port->visdn_port;
+	chan->visdn_chan.cxc = &visdn_int_cxc.cxc;
+	strncpy(chan->visdn_chan.name, name, sizeof(chan->visdn_chan.name));
+	chan->visdn_chan.driver_data = chan;
 	chan->visdn_chan.autoopen = TRUE;
 	chan->visdn_chan.max_mtu = 0;
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_LIST;

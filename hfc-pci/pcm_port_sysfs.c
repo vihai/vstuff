@@ -20,37 +20,35 @@
 #include "card_inline.h"
 
 static ssize_t hfc_show_bitrate(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", 2);
 }
 
-static DEVICE_ATTR(bitrate, S_IRUGO,
+static VISDN_PORT_ATTR(bitrate, S_IRUGO,
 		hfc_show_bitrate,
 		NULL);
 
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_master(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", port->master ? 1 : 0);
 }
 
 static ssize_t hfc_store_master(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
@@ -71,18 +69,17 @@ static ssize_t hfc_store_master(
 	return count;
 }
 
-static DEVICE_ATTR(master, S_IRUGO | S_IWUSR,
+static VISDN_PORT_ATTR(master, S_IRUGO | S_IWUSR,
 		hfc_show_master,
 		hfc_store_master);
 
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_slots_state(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
@@ -133,7 +130,7 @@ static ssize_t hfc_show_slots_state(
 
 }
 
-static DEVICE_ATTR(slots_state, S_IRUGO,
+static VISDN_PORT_ATTR(slots_state, S_IRUGO,
 		hfc_show_slots_state,
 		NULL);
 
@@ -142,38 +139,38 @@ int hfc_pcm_port_sysfs_create_files(
 {
 	int err;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_master);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_master);
 	if (err < 0)
-		goto err_device_create_file_master;
+		goto err_create_file_master;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_bitrate);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_bitrate);
 	if (err < 0)
-		goto err_device_create_file_bitrate;
+		goto err_create_file_bitrate;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_slots_state);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_slots_state);
 	if (err < 0)
-		goto err_device_create_file_slots_state;
+		goto err_create_file_slots_state;
 
 	return 0;
 
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_slots_state);
-err_device_create_file_slots_state:
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_bitrate);
-err_device_create_file_bitrate:
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_master);
-err_device_create_file_master:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_slots_state);
+err_create_file_slots_state:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_bitrate);
+err_create_file_bitrate:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_master);
+err_create_file_master:
 
 	return err;
 
@@ -183,13 +180,13 @@ err_device_create_file_master:
 void hfc_pcm_port_sysfs_delete_files(
         struct hfc_pcm_port *port)
 {
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_slots_state);
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_bitrate);
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_master);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_slots_state);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_bitrate);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_master);
 }

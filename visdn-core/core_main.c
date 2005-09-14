@@ -23,6 +23,7 @@
 #include "visdn.h"
 #include "visdn_mod.h"
 
+#include "cxc.h"
 #include "chan.h"
 #include "port.h"
 #include "timer.h"
@@ -47,6 +48,7 @@ static int visdn_ctl_release(
 	return 0;
 }
 
+/*
 static inline int visdn_ctl_do_ioctl_connect(
 	struct inode *inode,
 	struct file *file,
@@ -113,7 +115,7 @@ err_copy_from_user:
 
 	return err;
 }
-
+*/
 int visdn_ctl_ioctl(
 	struct inode *inode,
 	struct file *file,
@@ -121,9 +123,9 @@ int visdn_ctl_ioctl(
 	unsigned long arg)
 {
 	switch(cmd) {
-	case VISDN_IOC_CONNECT:
+/*	case VISDN_IOC_CONNECT:
 		return visdn_ctl_do_ioctl_connect(inode, file, cmd, arg);
-	break;
+	break;*/
 
 	default:
 		return -EOPNOTSUPP;
@@ -238,6 +240,10 @@ static int __init visdn_init_module(void)
 		&class_device_attr_dev);
 #endif
 
+	err = visdn_cxc_modinit();
+	if (err < 0)
+		goto err_cxc_modinit;
+
 	err = visdn_timer_modinit();
 	if (err < 0)
 		goto err_timer_modinit;
@@ -258,6 +264,8 @@ err_chan_modinit:
 err_port_modinit:
 	visdn_timer_modexit();
 err_timer_modinit:
+	visdn_cxc_modexit();
+err_cxc_modinit:
 	class_device_del(&visdn_control_class_dev);
 err_control_class_device_register:
 	class_unregister(&visdn_system_class);
@@ -279,6 +287,7 @@ static void __exit visdn_module_exit(void)
 	visdn_chan_modexit();
 	visdn_port_modexit();
 	visdn_timer_modexit();
+	visdn_cxc_modexit();
 
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
@@ -296,11 +305,8 @@ static void __exit visdn_module_exit(void)
 
 	printk(KERN_INFO visdn_MODULE_DESCR " unloaded\n");
 }
-
 module_exit(visdn_module_exit);
 
 MODULE_DESCRIPTION(visdn_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif

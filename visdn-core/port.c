@@ -25,15 +25,11 @@
 #include "visdn_mod.h"
 #include "port.h"
 
-struct hlist_head visdn_port_index_hash[1 << VISDN_PORT_HASHBITS];
-
-static ssize_t hfc_show_enabled(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+static ssize_t visdn_port_show_enabled(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *port = to_visdn_port(device);
-
 	int len;
 	if (visdn_port_lock_interruptible(port))
 		return -ERESTARTSYS;
@@ -45,14 +41,12 @@ static ssize_t hfc_show_enabled(
 	return len;
 }
 
-static ssize_t hfc_store_enabled(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+static ssize_t visdn_port_store_enabled(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_port *port = to_visdn_port(device);
-
 	int enabled;
 	if (sscanf(buf, "%d", &enabled) < 1)
 		return -EINVAL;
@@ -77,213 +71,254 @@ static ssize_t hfc_store_enabled(
 	return count;
 }
 
-static DEVICE_ATTR(enabled, S_IRUGO | S_IWUSR,
-		hfc_show_enabled,
-		hfc_store_enabled);
-
+static VISDN_PORT_ATTR(enabled, S_IRUGO | S_IWUSR,
+		visdn_port_show_enabled,
+		visdn_port_store_enabled);
 
 static ssize_t visdn_port_show_port_name(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *port = to_visdn_port(device);
-
 	if (visdn_port_lock_interruptible(port))
 		return -ERESTARTSYS;
 
 	int len = snprintf(buf, PAGE_SIZE, "%s\n",
-				port->port_name);
+				port->name);
 
 	visdn_port_unlock(port);
 
 	return len;
 }
 
-static DEVICE_ATTR(port_id, S_IRUGO | S_IWUSR,
+static VISDN_PORT_ATTR(port_id, S_IRUGO | S_IWUSR,
 		visdn_port_show_port_name,
 		NULL);
 
-static void visdn_port_release(struct device *device)
+static struct attribute *visdn_port_default_attrs[] =
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_release()\n");
+	&visdn_port_attr_enabled.attr,
+	&visdn_port_attr_port_id.attr,
+	NULL,
+};
 
-	struct visdn_port *port = to_visdn_port(device);
-
-	BUG_ON(!port->ops);
-
-	if (port->ops->release)
-		port->ops->release(port);
-}
-
-struct visdn_port *visdn_port_alloc(void)
-{
-	struct visdn_port *port;
-
-	port = kmalloc(sizeof(*port), GFP_KERNEL);
-	if (!port)
-		return NULL;
-
-	memset(port, 0x00, sizeof(*port));
-
-	return port;
-}
-EXPORT_SYMBOL(visdn_port_alloc);
-
-void visdn_port_init(
-	struct visdn_port *port,
-	struct visdn_port_ops *ops)
+void visdn_port_init(struct visdn_port *port)
 {
 	BUG_ON(!port);
-	BUG_ON(!ops);
-	BUG_ON(!ops->owner);
 
 	memset(port, 0x00, sizeof(*port));
-	port->ops = ops;
+
+	kobject_init(&port->kobj);
+	INIT_LIST_HEAD(&port->channels);
 
 	init_MUTEX(&port->sem);
 }
 EXPORT_SYMBOL(visdn_port_init);
 
-static inline struct hlist_head *visdn_port_index_get_hash(int index)
-{
-	return &visdn_port_index_hash[index & ((1 << VISDN_PORT_HASHBITS) - 1)];
-}
+extern struct kobj_type ktype_visdn_port;
 
-struct visdn_port *__visdn_port_get_by_index(int index)
-{
-	struct hlist_node *t;
-	struct visdn_port *visdn_port;
-
-	hlist_for_each_entry(visdn_port, t, visdn_port_index_get_hash(index),
-			index_hlist) {
-		if (visdn_port->index == index)
-			return visdn_port;
-	}
-
-	return NULL;
-}
-
-static int visdn_port_new_index(void)
-{
-	static int index;
-	for (;;) {
-		if (++index <= 0)
-			index = 1;
-		if (!__visdn_port_get_by_index(index))
-			return index;
-	}
-}
-
-int visdn_port_register(
-	struct visdn_port *port,
-	const char *global_name,
-	const char *local_name,
-	struct device *parent_device)
+int visdn_port_register(struct visdn_port *port)
 {
 	int err;
 
 	BUG_ON(!port);
-	BUG_ON(!local_name);
-	BUG_ON(!global_name);
+	BUG_ON(!port->ops);
+	BUG_ON(!port->ops->owner);
 
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_register() called\n");
 
-	port->index = visdn_port_new_index();
-
-	port->device.parent = parent_device;
-	port->device.bus = NULL;
-	port->device.driver_data = NULL;
-	port->device.release = visdn_port_release;
-
-	if (strchr(global_name, '%'))
-		snprintf(port->device.bus_id,
-			sizeof(port->device.bus_id),
-			global_name,
-			port->index);
-	else
-		strlcpy(port->device.bus_id,
-			global_name,
-			sizeof(port->device.bus_id));
-
-	snprintf(port->port_name, sizeof(port->port_name),
-		"%s", local_name);
-
-	if (port->device.parent) {
-		port->device.driver = parent_device->driver;
+	if (!visdn_port_get(port)) {
+		err  = -EINVAL;
+		goto err_port_get;
 	}
 
-	err = device_register(&port->device);
-	if (err < 0)
-		goto err_device_register;
+	if (port->device) {
+		if (!get_device(port->device)) {
+			err = -EINVAL;
+			goto err_device_get;
+		}
+	}
 
-	err = device_create_file(
-			&port->device,
-			&dev_attr_enabled);
-	if (err < 0)
-		goto err_device_create_file_enabled;
+	kobject_set_name(&port->kobj, "%s", port->name);
+	port->kobj.parent = &port->device->kobj;
+	port->kobj.ktype = &ktype_visdn_port;
 
-	err = device_create_file(
-			&port->device,
-			&dev_attr_port_id);
+	err = kobject_add(&port->kobj);
 	if (err < 0)
-		goto err_device_create_file_port_id;
+		goto err_kobject_add;
 
+/*
 	if (port->device.parent) { // FIXME
 		sysfs_create_link(
 			&port->device.parent->kobj,
 			&port->device.kobj,
 			(char *)local_name);
 			// should sysfs_create_link(...., const char *name) ?
-	}
+	}*/
 
 	return 0;
 
-	device_remove_file(
-		&port->device,
-		&dev_attr_port_id);
-err_device_create_file_port_id:
-	device_remove_file(
-		&port->device,
-		&dev_attr_enabled);
-err_device_create_file_enabled:
-	device_unregister(&port->device);
-err_device_register:
+	kobject_del(&port->kobj);
+err_kobject_add:
+	if (port->device)
+		put_device(port->device);
+err_device_get:
+	visdn_port_put(port);
+err_port_get:
 
 	return err;
 }
 EXPORT_SYMBOL(visdn_port_register);
+
+int visdn_port_add_chan(
+	struct visdn_port *port,
+	struct visdn_chan *chan)
+{
+	BUG_ON(!port);
+	BUG_ON(!chan);
+
+	int err;
+
+/*	if (!visdn_port_get(port))
+		goto err_port_get;
+
+	down_write(&chan->cxc->subsys.rwsem);
+	list_add_tail(&dev->bus_list, &dev->bus->devices.list);
+	up_write(&dev->bus->subsys.rwsem);*/
+
+//	sysfs_create_link(&bus->devices.kobj, &dev->kobj, dev->bus_id);
+
+	return 0;
+
+	visdn_port_put(port);
+//err_port_get:
+
+	return err;
+}
+
+void visdn_port_del_device(
+	struct visdn_port *port,
+	struct visdn_chan *chan)
+{
+}
 
 void visdn_port_unregister(
 	struct visdn_port *port)
 {
 	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_unregister called\n");
 
-	device_remove_file(
-		&port->device,
-		&dev_attr_port_id);
-	device_remove_file(
-		&port->device,
-		&dev_attr_enabled);
-
+/*
 	if (port->device.parent) { // FIXME
 		sysfs_remove_link(
 			&port->device.parent->kobj,
 			port->port_name);
-	}
+	}*/
 
-	device_unregister(&port->device);
+	kobject_del(&port->kobj);
+
+	if (port->device)
+		put_device(port->device);
+
+	visdn_port_put(port);
 }
 EXPORT_SYMBOL(visdn_port_unregister);
 
-int visdn_port_modinit(void)
+int visdn_port_create_file(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr)
 {
-	int i;
+	int err = 0;
 
-	for (i=0; i< ARRAY_SIZE(visdn_port_index_hash); i++) {
-		INIT_HLIST_HEAD(&visdn_port_index_hash[i]);
+	if (visdn_port_get(port)) {
+		err = sysfs_create_file(&port->kobj, &attr->attr);
+		visdn_port_put(port);
 	}
 
+	return err;
+}
+EXPORT_SYMBOL(visdn_port_create_file);
+
+void visdn_port_remove_file(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr)
+{
+	if (visdn_port_get(port)) {
+		sysfs_remove_file(&port->kobj, &attr->attr);
+		visdn_port_put(port);
+	}
+}
+EXPORT_SYMBOL(visdn_port_remove_file);
+
+#define to_visdn_port_attr(_attr) \
+	container_of(_attr, struct visdn_port_attribute, attr)
+
+static ssize_t visdn_port_attr_show(
+	struct kobject *kobj,
+	struct attribute *attr,
+	char *buf)
+{
+	struct visdn_port_attribute *visdn_port_attr =
+					to_visdn_port_attr(attr);
+	struct visdn_port *visdn_port = to_visdn_port(kobj);
+	ssize_t err;
+
+	if (visdn_port_attr->show)
+		err = visdn_port_attr->show(visdn_port, visdn_port_attr, buf);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static ssize_t visdn_port_attr_store(
+	struct kobject *kobj,
+	struct attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct visdn_port_attribute *visdn_port_attr =
+					to_visdn_port_attr(attr);
+	struct visdn_port *visdn_port = to_visdn_port(kobj);
+	ssize_t err;
+
+	if (visdn_port_attr->store)
+		err = visdn_port_attr->store(visdn_port, visdn_port_attr,
+							buf, count);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static struct sysfs_ops visdn_port_sysfs_ops = {
+	.show   = visdn_port_attr_show,
+	.store  = visdn_port_attr_store,
+};
+
+static void visdn_port_release(struct kobject *kobj)
+{
+	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_release called\n");
+
+	struct visdn_port *port = to_visdn_port(kobj);
+
+	if (port->ops->release)
+		port->ops->release(port);
+	else {
+		printk(KERN_ERR "vISDN port '%s' does not have a release()"
+			" function, it is broken and must be fixed.\n",
+			port->name);
+		WARN_ON(1);
+	}
+}
+
+static struct kobj_type ktype_visdn_port = {
+	.release	= visdn_port_release,
+	.sysfs_ops	= &visdn_port_sysfs_ops,
+	.default_attrs	= visdn_port_default_attrs,
+};
+
+int visdn_port_modinit(void)
+{
 	return 0;
 }
 

@@ -20,11 +20,10 @@
 #include "card.h"
 
 static ssize_t hfc_show_role(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%s\n",
@@ -32,12 +31,11 @@ static ssize_t hfc_show_role(
 }
 
 static ssize_t hfc_store_role(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
 
@@ -67,18 +65,17 @@ static ssize_t hfc_store_role(
 	return count;
 }
 
-static DEVICE_ATTR(role, S_IRUGO | S_IWUSR,
+static VISDN_PORT_ATTR(role, S_IRUGO | S_IWUSR,
 		hfc_show_role,
 		hfc_store_role);
 
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_l1_state(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%c%d\n",
@@ -87,12 +84,11 @@ static ssize_t hfc_show_l1_state(
 }
 
 static ssize_t hfc_store_l1_state(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
 	int err;
@@ -140,30 +136,28 @@ err_invalid_state:
 	return err;
 }
 
-static DEVICE_ATTR(l1_state, S_IRUGO | S_IWUSR,
+static VISDN_PORT_ATTR(l1_state, S_IRUGO | S_IWUSR,
 		hfc_show_l1_state,
 		hfc_store_l1_state);
 
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_st_clock_delay(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%02x\n", port->clock_delay);
 }
 
 static ssize_t hfc_store_st_clock_delay(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
 
@@ -183,29 +177,27 @@ static ssize_t hfc_store_st_clock_delay(
 	return count;
 }
 
-static DEVICE_ATTR(st_clock_delay, S_IRUGO | S_IWUSR,
+static VISDN_PORT_ATTR(st_clock_delay, S_IRUGO | S_IWUSR,
 		hfc_show_st_clock_delay,
 		hfc_store_st_clock_delay);
 
 //----------------------------------------------------------------------------
 static ssize_t hfc_show_st_sampling_comp(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	char *buf)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%02x\n", port->sampling_comp);
 }
 
 static ssize_t hfc_store_st_sampling_comp(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_port *visdn_port = to_visdn_port(device);
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
 
@@ -225,7 +217,7 @@ static ssize_t hfc_store_st_sampling_comp(
 	return count;
 }
 
-static DEVICE_ATTR(st_sampling_comp, S_IRUGO | S_IWUSR,
+static VISDN_PORT_ATTR(st_sampling_comp, S_IRUGO | S_IWUSR,
 		hfc_show_st_sampling_comp,
 		hfc_store_st_sampling_comp);
 
@@ -234,48 +226,48 @@ int hfc_st_port_sysfs_create_files(
 {
 	int err;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_role);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_role);
 	if (err < 0)
-		goto err_device_create_file_role;
+		goto err_create_file_role;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_l1_state);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_l1_state);
 	if (err < 0)
-		goto err_device_create_file_l1_state;
+		goto err_create_file_l1_state;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_st_clock_delay);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_st_clock_delay);
 	if (err < 0)
-		goto err_device_create_file_st_clock_delay;
+		goto err_create_file_st_clock_delay;
 
-	err = device_create_file(
-		&port->visdn_port.device,
-		&dev_attr_st_sampling_comp);
+	err = visdn_port_create_file(
+		&port->visdn_port,
+		&visdn_port_attr_st_sampling_comp);
 	if (err < 0)
-		goto err_device_create_file_st_sampling_comp;
+		goto err_create_file_st_sampling_comp;
 
 	return 0;
 
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_role);
-err_device_create_file_role:
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_st_sampling_comp);
-err_device_create_file_st_sampling_comp:
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_st_clock_delay);
-err_device_create_file_st_clock_delay:
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_l1_state);
-err_device_create_file_l1_state:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_role);
+err_create_file_role:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_st_sampling_comp);
+err_create_file_st_sampling_comp:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_st_clock_delay);
+err_create_file_st_clock_delay:
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_l1_state);
+err_create_file_l1_state:
 
 	return err;
 }
@@ -283,16 +275,16 @@ err_device_create_file_l1_state:
 void hfc_st_port_sysfs_delete_files(
         struct hfc_st_port *port)
 {
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_role);
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_st_sampling_comp);
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_st_clock_delay);
-	device_remove_file(
-		&port->visdn_port.device,
-		&dev_attr_l1_state);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_role);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_st_sampling_comp);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_st_clock_delay);
+	visdn_port_remove_file(
+		&port->visdn_port,
+		&visdn_port_attr_l1_state);
 }

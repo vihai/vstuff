@@ -3,9 +3,9 @@
 
 @SET_MAKE@
 
-subdir = visdn-core
-DIST_SOURCES = chan.c core_main.c port.c timer.c cxc.c cxc_int.c
-DIST_HEADERS = chan.h port.h timer.h visdn.h visdn_mod.h cxc.h cxc_int.h
+subdir = visdn-cxc-internal
+DIST_SOURCES = cxc_internal_main.c
+DIST_HEADERS = cxc_internal.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
@@ -84,13 +84,13 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS=-I$(abssrcdir)/../ -std=gnu99
+EXTRA_CFLAGS=-I$(abssrcdir)/../visdn-core/ -I$(abssrcdir)/../ -std=gnu99
 
 ########################## Targets #################################
 
 # Kbuild:
-obj-m	:= visdn-core.o
-visdn-core-y	:= core_main.o cxc.o chan.o port.o timer.o
+obj-m	:= visdn-cxc-internal.o
+visdn-cxc-internal-y	:= cxc_internal_main.o
 # end Kbuild
 
 all:

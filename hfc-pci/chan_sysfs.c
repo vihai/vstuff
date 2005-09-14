@@ -22,11 +22,10 @@
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_sq_bits(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *visdn_chan = to_visdn_chan(device);
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
@@ -38,12 +37,11 @@ static ssize_t hfc_show_sq_bits(
 }
 
 static ssize_t hfc_store_sq_bits(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_chan *visdn_chan = to_visdn_chan(device);
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
@@ -60,18 +58,17 @@ static ssize_t hfc_store_sq_bits(
 	return count;
 }
 
-static DEVICE_ATTR(sq_bits, S_IRUGO | S_IWUSR,
+static VISDN_CHAN_ATTR(sq_bits, S_IRUGO | S_IWUSR,
 		hfc_show_sq_bits,
 		hfc_store_sq_bits);
 
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_sq_enabled(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct visdn_chan *visdn_chan = to_visdn_chan(device);
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n",
@@ -80,12 +77,11 @@ static ssize_t hfc_show_sq_enabled(
 }
 
 static ssize_t hfc_store_sq_enabled(
-	struct device *device,
-	DEVICE_ATTR_COMPAT
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_chan *visdn_chan = to_visdn_chan(device);
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
@@ -103,7 +99,7 @@ static ssize_t hfc_store_sq_enabled(
 	return count;
 }
 
-static DEVICE_ATTR(sq_enabled, S_IRUGO | S_IWUSR,
+static VISDN_CHAN_ATTR(sq_enabled, S_IRUGO | S_IWUSR,
 		hfc_show_sq_enabled,
 		hfc_store_sq_enabled);
 
@@ -120,6 +116,12 @@ int hfc_chan_sysfs_create_files_D(
 	return hfc_chan_sysfs_create_files_DB(chan);
 }
 
+int hfc_chan_sysfs_create_files_E(
+	struct hfc_chan_duplex *chan)
+{
+	return 0;
+}
+
 int hfc_chan_sysfs_create_files_B(
 	struct hfc_chan_duplex *chan)
 {
@@ -131,22 +133,22 @@ int hfc_chan_sysfs_create_files_SQ(
 {
 	int err;
 
-	err = device_create_file(
-		&chan->visdn_chan.device,
-		&dev_attr_sq_bits);
+	err = visdn_chan_create_file(
+		&chan->visdn_chan,
+		&visdn_chan_attr_sq_bits);
 	if (err < 0)
-		goto err_device_create_file_sq_bits;
+		goto err_create_file_sq_bits;
 
-	err = device_create_file(
-		&chan->visdn_chan.device,
-		&dev_attr_sq_enabled);
+	err = visdn_chan_create_file(
+		&chan->visdn_chan,
+		&visdn_chan_attr_sq_enabled);
 	if (err < 0)
-		goto err_device_create_file_sq_enabled;
+		goto err_create_file_sq_enabled;
 
-	device_remove_file(&chan->visdn_chan.device, &dev_attr_sq_enabled);
-err_device_create_file_sq_enabled:
-	device_remove_file(&chan->visdn_chan.device, &dev_attr_sq_bits);
-err_device_create_file_sq_bits:
+	visdn_chan_remove_file(&chan->visdn_chan, &visdn_chan_attr_sq_enabled);
+err_create_file_sq_enabled:
+	visdn_chan_remove_file(&chan->visdn_chan, &visdn_chan_attr_sq_bits);
+err_create_file_sq_bits:
 
 	return err;
 }
@@ -162,6 +164,11 @@ void hfc_chan_sysfs_delete_files_D(
 	hfc_chan_sysfs_delete_files_DB(chan);
 }
 
+void hfc_chan_sysfs_delete_files_E(
+	struct hfc_chan_duplex *chan)
+{
+}
+
 void hfc_chan_sysfs_delete_files_B(
 	struct hfc_chan_duplex *chan)
 {
@@ -171,7 +178,7 @@ void hfc_chan_sysfs_delete_files_B(
 void hfc_chan_sysfs_delete_files_SQ(
 	struct hfc_chan_duplex *chan)
 {
-	device_remove_file(&chan->visdn_chan.device, &dev_attr_sq_enabled);
-	device_remove_file(&chan->visdn_chan.device, &dev_attr_sq_bits);
+	visdn_chan_remove_file(&chan->visdn_chan, &visdn_chan_attr_sq_enabled);
+	visdn_chan_remove_file(&chan->visdn_chan, &visdn_chan_attr_sq_bits);
 }
 

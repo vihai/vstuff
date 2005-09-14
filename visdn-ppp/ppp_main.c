@@ -206,11 +206,15 @@ int vppp_cdev_open(
 		goto err_kmalloc;
 	}
 
-	visdn_chan_init(&chan->visdn_chan, &vppp_chan_ops);
+	visdn_chan_init(&chan->visdn_chan);
 
 	chan->index = vppp_chan_new_index();
 
 	chan->visdn_chan.priv = chan;
+	chan->visdn_chan.port = &vppp_visdn_port;
+	chan->visdn_chan.cxc = &visdn_cxc_int;
+	chan->visdn_chan.ops = &vppp_chan_ops;
+	chan->visdn_chan.name[0] = '\0';
 	chan->visdn_chan.autoopen = FALSE;
 	chan->visdn_chan.max_mtu = 200; // FIXME
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_MAX;
@@ -232,8 +236,7 @@ int vppp_cdev_open(
 	char chanid[10];
 	snprintf(chanid, sizeof(chanid), "%d", chan->index);
 
-	err = visdn_chan_register(&chan->visdn_chan, chanid,
-				&vppp_visdn_port);
+	err = visdn_chan_register(&chan->visdn_chan);
 	if (err < 0)
 		goto err_chan_register;
 

@@ -36,11 +36,11 @@ struct visdn_connect
 #include <linux/if.h>
 #include <linux/device.h>
 #include <linux/netdevice.h>
+#include <linux/list.h>
+#include <linux/sysfs.h>
 
 #define VISDN_CONNECT_OK	0
 #define VISDN_CONNECT_BRIDGED	1
-
-extern struct bus_type visdn_bus_type;
 
 struct visdn_chan;
 struct visdn_chan_pars;
@@ -112,19 +112,28 @@ struct visdn_chan_pars
 	int bitorder;
 };
 
+#define to_visdn_chan(obj) container_of(obj, struct visdn_chan, kobj)
+
 struct visdn_chan
 {
-	struct semaphore sem;
+	struct kobject kobj;
 
-	struct device device;
+	struct list_head port_channels_node;
+	struct list_head cxc_channels_node;
+	struct hlist_node index_node;
+	char cxc_id[KOBJ_NAME_LEN];
+	struct visdn_cxc *cxc;
+	struct visdn_port *port;
+
+	char name[KOBJ_NAME_LEN];
 
 	int index;
-	struct hlist_node index_hlist;
 
-	struct visdn_port *port;
+	void *driver_data;
+
 	struct visdn_chan_ops *ops;
 
-	void *priv;
+	struct semaphore sem;
 
 	unsigned long state;
 
@@ -145,19 +154,49 @@ struct visdn_chan
 	int bitorder_preferred;
 };
 
+struct visdn_chan_attribute {
+	struct attribute attr;
+
+	ssize_t (*show)(
+		struct visdn_chan *chan,
+		struct visdn_chan_attribute *attr,
+		char *buf);
+
+	ssize_t (*store)(
+		struct visdn_chan *chan,
+		struct visdn_chan_attribute *attr,
+		const char *buf,
+		size_t count);
+};
+
+#define VISDN_CHAN_ATTR(_name,_mode,_show,_store) \
+	struct visdn_chan_attribute visdn_chan_attr_##_name = \
+		__ATTR(_name,_mode,_show,_store)
+
+extern struct subsystem visdn_channels_subsys;
+
+extern int visdn_chan_create_file(
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute *entry);
+
+extern void visdn_chan_remove_file(
+	struct visdn_chan *chan,
+	struct visdn_chan_attribute * attr);
+
 int visdn_chan_modinit(void);
 void visdn_chan_modexit(void);
 
-static inline void visdn_chan_get(
+static inline struct visdn_chan *visdn_chan_get(
 	struct visdn_chan *chan)
 {
-	get_device(&chan->device);
+	return chan ? to_visdn_chan(kobject_get(&chan->kobj)) : NULL;
 }
 
 static inline void visdn_chan_put(
 	struct visdn_chan *chan)
 {
-	put_device(&chan->device);
+	if (chan)
+		kobject_put(&chan->kobj);
 }
 
 static inline void visdn_chan_lock(
@@ -206,8 +245,6 @@ extern ssize_t visdn_pass_samples_write(
 	const char __user *buf,
 	size_t count);
 
-#define to_visdn_chan(class) container_of(class, struct visdn_chan, device)
-
 int visdn_chan_lock2(
 	struct visdn_chan *chan1,
 	struct visdn_chan *chan2);
@@ -216,24 +253,13 @@ int visdn_chan_lock2_interruptible(
 	struct visdn_chan *chan1,
 	struct visdn_chan *chan2);
 
-extern void visdn_chan_init(
-	struct visdn_chan *chan,
-	struct visdn_chan_ops *ops);
-
-extern struct visdn_chan *visdn_chan_alloc(void);
+extern void visdn_chan_init(struct visdn_chan *chan);
 
 extern int visdn_disconnect(
 	struct visdn_chan *chan);
 
-extern int visdn_chan_register(
-	struct visdn_chan *chan,
-	const char *name,
-	struct visdn_port *visdn_port);
-
-extern void visdn_chan_unregister(
-	struct visdn_chan *chan);
-
-extern struct visdn_chan *visdn_search_chan(const char *chanid);
+extern int visdn_chan_register(struct visdn_chan *chan);
+extern void visdn_chan_unregister(struct visdn_chan *chan);
 
 extern int visdn_connect(struct visdn_chan *chan1,
 		struct visdn_chan *chan2,

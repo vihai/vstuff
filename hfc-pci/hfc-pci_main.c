@@ -488,8 +488,8 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	fifo->fifo_size = fifo->z_max - fifo->z_min + 1;
 	fifo->f_num     = fifo->f_max - fifo->f_min + 1;
 
-	hfc_st_port_init(&card->st_port, card);
-	hfc_pcm_port_init(&card->pcm_port, card);
+	hfc_st_port_init(&card->st_port, card, "st0");
+	hfc_pcm_port_init(&card->pcm_port, card, "pcm");
 
 	hfc_card_lock(card);
 	hfc_softreset(card);
@@ -499,41 +499,26 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 	// Ok, the hardware is ready and the data structures are initialized,
 	// we can now register to the system.
 
-	visdn_port_register(&card->st_port.visdn_port,
-		"%d", "st0", &pci_dev->dev);
+	visdn_port_register(&card->st_port.visdn_port);
 
-	visdn_chan_register(
-		&card->st_port.chans[D].visdn_chan, "D",
-		&card->st_port.visdn_port);
-
+	visdn_chan_register(&card->st_port.chans[D].visdn_chan);
 	hfc_chan_sysfs_create_files_D(&card->st_port.chans[D]);
 
-	visdn_chan_register(
-		&card->st_port.chans[B1].visdn_chan, "B1",
-		&card->st_port.visdn_port);
-
+	visdn_chan_register(&card->st_port.chans[B1].visdn_chan);
 	hfc_chan_sysfs_create_files_B(&card->st_port.chans[B1]);
 
-	visdn_chan_register(
-		&card->st_port.chans[B2].visdn_chan, "B2",
-		&card->st_port.visdn_port);
-
+	visdn_chan_register(&card->st_port.chans[B2].visdn_chan);
 	hfc_chan_sysfs_create_files_B(&card->st_port.chans[B2]);
 
-	visdn_chan_register(
-		&card->st_port.chans[E].visdn_chan, "E",
-		&card->st_port.visdn_port);
+	visdn_chan_register(&card->st_port.chans[E].visdn_chan);
+	hfc_chan_sysfs_create_files_E(&card->st_port.chans[E]);
 
-	visdn_chan_register(
-		&card->st_port.chans[SQ].visdn_chan, "SQ",
-		&card->st_port.visdn_port);
-
+	visdn_chan_register(&card->st_port.chans[SQ].visdn_chan);
 	hfc_chan_sysfs_create_files_SQ(&card->st_port.chans[SQ]);
 
 	hfc_st_port_sysfs_create_files(&card->st_port);
 
-	visdn_port_register(&card->pcm_port.visdn_port,
-		"%d", "pcm", &pci_dev->dev);
+	visdn_port_register(&card->pcm_port.visdn_port);
 
 	hfc_pcm_port_sysfs_create_files(&card->pcm_port);
 

@@ -15,11 +15,7 @@
 
 #ifdef __KERNEL__
 
-#define VISDN_PORT_HASHBITS 8
-
-extern struct hlist_head visdn_port_index_hash[];
-
-#define to_visdn_port(class) container_of(class, struct visdn_port, device)
+#define to_visdn_port(class) container_of(class, struct visdn_port, kobj)
 
 struct visdn_port_ops
 {
@@ -33,35 +29,63 @@ struct visdn_port_ops
 
 struct visdn_port
 {
-	struct semaphore sem;
+	struct kobject kobj;
 
-	struct device device;
+	struct list_head channels;
+	struct device *device;
 
-	struct hlist_node index_hlist;
-	int index;
+	char name[KOBJ_NAME_LEN];
 
-	char port_name[BUS_ID_SIZE];
+	void *driver_data;
 
 	struct visdn_port_ops *ops;
 
-	int enabled;
+	struct semaphore sem;
 
-	void *priv;
+	int enabled;
 };
+
+struct visdn_port_attribute {
+	struct attribute attr;
+
+	ssize_t (*show)(
+		struct visdn_port *port,
+		struct visdn_port_attribute *attr,
+		char *buf);
+
+	ssize_t (*store)(
+		struct visdn_port *port,
+		struct visdn_port_attribute *attr,
+		const char *buf,
+		size_t count);
+};
+
+#define VISDN_PORT_ATTR(_name,_mode,_show,_store) \
+	struct visdn_port_attribute visdn_port_attr_##_name = \
+		__ATTR(_name,_mode,_show,_store)
+
+extern int visdn_port_create_file(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr);
+
+extern void visdn_port_remove_file(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr);
 
 int visdn_port_modinit(void);
 void visdn_port_modexit(void);
 
-static inline void visdn_port_get(
+static inline struct visdn_port *visdn_port_get(
 	struct visdn_port *port)
 {
-	get_device(&port->device);
+	return port ? to_visdn_port(kobject_get(&port->kobj)) : NULL;
 }
 
 static inline void visdn_port_put(
 	struct visdn_port *port)
 {
-	put_device(&port->device);
+	if (port)
+		kobject_put(&port->kobj);
 }
 
 static inline void visdn_port_lock(
@@ -82,17 +106,15 @@ static inline void visdn_port_unlock(
 	up(&port->sem);
 }
 
-extern void visdn_port_init(
-	struct visdn_port *visdn_port,
-	struct visdn_port_ops *ops);
+extern void visdn_port_init(struct visdn_port *visdn_port);
+extern int visdn_port_register(struct visdn_port *visdn_port);
 
-extern struct visdn_port *visdn_port_alloc(void);
-
-extern int visdn_port_register(
-	struct visdn_port *visdn_port,
-	const char *global_name,
-	const char *local_name,
-	struct device *parent_device);
+int visdn_port_add_chan(
+	struct visdn_port *port,
+	struct visdn_chan *chan);
+void visdn_port_del_device(
+	struct visdn_port *port,
+	struct visdn_chan *chan);
 
 extern void visdn_port_unregister(
 	struct visdn_port *visdn_port);
