@@ -91,6 +91,18 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
+	if (visdn_chan == &netdevice->visdn_chan) {
+		sysfs_remove_link(
+			&netdevice->netdev->class_dev.kobj,
+			"visdn_channel");
+
+		sysfs_remove_link(
+			&netdevice->netdev->class_dev.kobj,
+			"visdn_channel_e");
+
+		unregister_netdev(netdevice->netdev);
+	}
+
 	vnd_netdevice_put(netdevice);
 }
 
@@ -132,46 +144,18 @@ static int vnd_chan_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
-	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
-	int err;
+//	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
 	printk(KERN_DEBUG "%s connected to %s\n",
 		visdn_chan->cxc_id,
 		visdn_chan2->cxc_id);
 
-	if (visdn_chan == &netdevice->visdn_chan) {
-		err = register_netdev(netdevice->netdev);
-		if(err) {
-			printk(KERN_CRIT
-				"Cannot register net device %s, aborting.\n",
-				netdevice->netdev->name);
-			goto err_register_netdev;
-		}
-
-		sysfs_create_link(
-			&netdevice->netdev->class_dev.kobj,
-			&netdevice->visdn_chan.kobj,
-			"visdn_channel");
-	}
-
 	return 0;
-
-err_register_netdev:
-
-	return err;
 }
 
 static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 {
-	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
-
-	if (visdn_chan == &netdevice->visdn_chan) {
-		sysfs_remove_link(
-			&netdevice->netdev->class_dev.kobj,
-			"visdn_channel");
-
-		unregister_netdev(netdevice->netdev);
-	}
+//	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
 	printk(KERN_DEBUG "%s disconnected\n",
 		visdn_chan->cxc_id);
@@ -360,6 +344,7 @@ struct vnd_request
 	struct semaphore sem;
 
 	int type;
+	char name[KOBJ_NAME_LEN];
 	char output[100];
 	int output_len;
 };
@@ -447,6 +432,10 @@ static int vnd_create_request(
 		goto err_missing_protocol;
 	}
 
+	const char *name = strsep(&reqp, " \n\r");
+	if (!name)
+		name = "visdn%dd";
+
 	void (*setup_func)(struct net_device *) = NULL;
 	int type;
 
@@ -524,7 +513,7 @@ static int vnd_create_request(
 		goto err_visdn_chan_e_register;
 
 	char ifname[60];
-	snprintf(ifname, sizeof(ifname), "visdn%dd", netdevice->index);
+	snprintf(ifname, sizeof(ifname), name, netdevice->index);
 
 	netdevice->type = type;
 	netdevice->netdev = alloc_netdev(0, ifname, setup_func);
@@ -555,6 +544,24 @@ static int vnd_create_request(
 	netdevice->netdev->irq = 0;
 	netdevice->netdev->base_addr = 0;
 
+	err = register_netdev(netdevice->netdev);
+	if(err) {
+		printk(KERN_CRIT
+			"Cannot register net device %s, aborting.\n",
+			netdevice->netdev->name);
+		goto err_register_netdev;
+	}
+
+	sysfs_create_link(
+		&netdevice->netdev->class_dev.kobj,
+		&netdevice->visdn_chan.kobj,
+			"visdn_channel");
+
+	sysfs_create_link(
+		&netdevice->netdev->class_dev.kobj,
+		&netdevice->visdn_chan_e.kobj,
+			"visdn_channel_e");
+
 	vnd_request->output_len =
 		snprintf(vnd_request->output,
 			sizeof(vnd_request->output),
@@ -567,6 +574,8 @@ static int vnd_create_request(
 
 	return 0;
 
+	unregister_netdev(netdevice->netdev);
+err_register_netdev:
 	visdn_chan_unregister(&netdevice->visdn_chan_e);
 err_visdn_chan_e_register:
 	visdn_chan_unregister(&netdevice->visdn_chan);
