@@ -1,0 +1,285 @@
+#!/bin/bash
+
+VISDN_DIR=/etc/visdn
+
+declare -i NETDEVS_CNT=0
+declare -a NETDEVS_DEVNAME
+declare -a NETDEVS_CHAN_D
+declare -a NETDEVS_CHAN_E
+
+function create_netdev()
+{
+	local NETDEV_PROTOCOL=$1
+	local NETDEV_REQ_DEVNAME=$2
+	local NETDEV_TEI=$3
+
+	exec 6<>/dev/visdn/netdev-control
+	echo "create $NETDEV_PROTOCOL $NETDEV_DEVNAME" >&6
+	read -u 6 NETDEV_DEVNAME
+	read -u 6 NETDEV_CHAN_D
+	read -u 6 NETDEV_CHAN_E
+	exec 6<&-
+}
+
+function connect_channels()
+{
+	local CHAN1=$1
+	local CHAN2=$2
+
+	echo "$CHAN1,$CHAN2" > /sys/visdn_tdm/internal-cxc/connect
+}
+
+
+function read_netdev_block
+{
+	local NETDEV_REQ_DEVNAME=$1
+	local NETDEV_PROTOCOL="lapd"
+	local NETDEV_TEI="auto"
+
+	local LINE
+	while read -u 10 LINE; do
+		if [[ $LINE =~ '</(.*)>' ]]; then
+			if [ "${BASH_REMATCH[1]}" == 'netdev' ]; then
+				if [ -e "/sys/class/net/$NETDEV_REQ_DEVNAME" ]; then
+					echo "Netdev $NETDEV_REQ_DEVNAME exists already"
+
+					NETDEV_DEVNAME=$NETDEV_REQ_DEVNAME
+					NETDEV_CHAN_D=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel\``
+					NETDEV_CHAN_E=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel_e\``
+				else
+					create_netdev "$NETDEV_PROTOCOL" "$NETDEV_REQ_DEVNAME" "$NETDEV_TEI"
+				fi
+
+				if [ "$NETDEV_ROLE" = "NT" ] ; then
+					ip link set $NETDEV_DEVNAME allmulticast on
+				else
+					ip link set $NETDEV_DEVNAME allmulticast off
+				fi
+
+				NETDEVS_DEVNAME[$NETDEVS_CNT]=$NETDEV_DEVNAME
+				NETDEVS_CHAN_D[$NETDEVS_CNT]=$NETDEV_CHAN_D
+				NETDEVS_CHAN_E[$NETDEVS_CNT]=$NETDEV_CHAN_E
+				NETDEVS_CNT=$((NETDEVS_CNT+1))
+
+				return
+			else
+				echo "Invalid block closing tag '$BASH_REMATCH'"
+				exit 1
+			fi
+		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
+			case "${BASH_REMATCH[1]}" in
+				protocol) NETDEV_PROTOCOL=${BASH_REMATCH[2]} ;;
+				role) NETDEV_ROLE=${BASH_REMATCH[2]} ;;
+				tei) NETDEV_TEI=${BASH_REMATCH[2]} ;;
+				*)
+					echo "Unknown directive ${BASH_REMATCH[1]}"
+					continue
+				;;
+			esac
+		fi
+	done
+
+	echo "Unexpected EOF in netdev block"
+}
+
+function handle_netdev_connectmodule
+{
+	local CHANNEL=$1
+	local PARAMETERS=$2
+
+	echo "handle netdev connectmodule $PARAMETERS"
+
+	if [[ ! "$PARAMETERS" =~ '^([-_0-9a-z.]+)[ 	]*(.*)$' ]]; then
+		echo "Invalid parameters for directive connectmodule"
+		exit 1
+	fi
+
+	for (( i=0 ; i<$NETDEVS_CNT; i++)); do
+		if [ "${NETDEVS_DEVNAME[$i]}" = "${BASH_REMATCH[1]}" ]; then
+
+			if [ "${BASH_REMATCH[2]}" = "echo" ]; then
+				connect_channels "$CHANNEL" "${NETDEVS_CHAN_E[$i]}"
+			else
+				connect_channels "$CHANNEL" "${NETDEVS_CHAN_D[$i]}"
+			fi
+
+			ip link set ${NETDEVS_DEVNAME[$i]} up
+
+			break
+		fi
+	done
+}
+
+function handle_connectmodule
+{
+	local CHANNEL=$1
+	local MODULE=$2
+	local PARAMETERS=$3
+
+	case "$MODULE" in
+		netdev) handle_netdev_connectmodule "$CHANNEL" "$PARAMETERS" ;;
+		*)
+			echo "Unsupported module $MODULE"
+			exit 1
+		;;
+	esac
+}
+
+function read_chan_block
+{
+	local CHAN_NAME=$1
+
+	if [ ! -d "$SYSFS_CARD_OBJ/$PORT_NAME/$CHAN_NAME" ]; then
+		echo "Port object $PORT_NAME not found"
+		exit 1
+	fi
+
+	CHANNEL=`basename \`readlink $SYSFS_CARD_OBJ/$PORT_NAME/$CHAN_NAME\``
+
+	local LINE
+	while read -u 10 LINE; do
+		if [[ "$LINE" =~ '^[ 	]*#' ]]; then
+			continue
+		elif [[ $LINE =~ '</(.*)>' ]]; then
+			if [ "${BASH_REMATCH[1]}" == 'chan' ]; then
+
+				return
+			else
+				echo "Invalid block closing tag '$BASH_REMATCH'"
+				exit 1
+			fi
+
+		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
+			case "${BASH_REMATCH[1]}" in
+				connectmodule)
+					if [[ ! ${BASH_REMATCH[2]} =~ '^([-a-z0-9_]+)[	 ]+(.*)$' ]]; then
+						echo "Invalid connectmodule directive parameters"
+						exit 1
+					fi
+
+					handle_connectmodule "$CHANNEL" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+				;;
+				*)
+					echo "Unknown directive ${BASH_REMATCH[1]}"
+					continue
+				;;
+			esac
+		fi
+	done
+
+	echo "Unexpected EOF in netdev block"
+}
+
+function read_port_block
+{
+	local PORT_NAME=$1
+
+	if [ ! -d "$SYSFS_CARD_OBJ/$PORT_NAME" ]; then
+		echo "Port object $PORT_NAME not found"
+		exit 1
+	fi
+
+	if [ ! -f "$SYSFS_CARD_OBJ/$PORT_NAME/enabled" ]; then
+		echo "Attribute 'enabled' not found"
+		exit 1
+	fi
+
+	local LINE
+	while read -u 10 LINE; do
+		if [[ "$LINE" =~ '^[ 	]*#' ]]; then
+			continue
+		elif [[ $LINE =~ '</(.*)>' ]]; then
+			if [ "${BASH_REMATCH[1]}" == 'port' ]; then
+
+				echo "1" > "$SYSFS_CARD_OBJ/$PORT_NAME/enabled"
+
+				return
+			else
+				echo "Invalid block closing tag '$BASH_REMATCH'"
+				exit 1
+			fi
+		elif [[ "$LINE" =~ '<chan (.*)>' ]]; then
+
+			CHAN_NAME=${BASH_REMATCH[1]}
+
+			read_chan_block "$CHAN_NAME"
+
+		elif [[ "$LINE" =~ '[ 	]*attribute[ 	]+(.*)' ]]; then
+			if [[ ! "${BASH_REMATCH[1]}" =~ '^([-a-z0-9_]+)[ 	]+(.*)$' ]]; then
+				echo "Invalid attribute directive format"
+				continue
+			fi
+
+			echo "$PORT_NAME: ${BASH_REMATCH[1]} = ${BASH_REMATCH[2]}"
+
+			echo "${BASH_REMATCH[2]}" > "$SYSFS_CARD_OBJ/$PORT_NAME/${BASH_REMATCH[1]}"
+
+		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
+			case "${BASH_REMATCH[1]}" in
+				xxx) XXX=${BASH_REMATCH[2]} ;;
+				*)
+					echo "Unknown directive ${BASH_REMATCH[1]}"
+					continue
+				;;
+			esac
+		fi
+	done
+
+	echo "Unexpected EOF in netdev block"
+}
+
+for CARD in `ls $VISDN_DIR`; do
+	if [[ ! "$CARD" =~ '^device-([a-z0-9]+)-(.*)$' ]]; then
+		continue
+	fi
+
+	CONFIGFILE="$VISDN_DIR/$CARD"
+
+	BUS=${BASH_REMATCH[1]}
+	BUS_ID=${BASH_REMATCH[2]}
+	SYSFS_CARD_OBJ="/sys/bus/$BUS/devices/$BUS_ID"
+
+	if [ ! -d "$SYSFS_CARD_OBJ" ]; then
+		echo "Card $BUS $BUS_ID not found, configuration ignored"
+		continue
+	fi
+
+	exec 10<$CONFIGFILE
+
+	while read -u 10 LINE; do
+
+		if [[ "$LINE" =~ '^[ 	]*#' ]]; then
+			continue
+		elif [[ "$LINE" =~ '<netdev (.*)>' ]]; then
+
+			NETDEV_DEVNAME=${BASH_REMATCH[1]}
+
+			read_netdev_block "$NETDEV_DEVNAME"
+		elif [[ "$LINE" =~ '<port (.*)>' ]]; then
+
+			PORT_NAME=${BASH_REMATCH[1]}
+
+			read_port_block "$PORT_NAME"
+
+		elif [[ "$LINE" =~ '[ 	]*attribute[ 	]+(.*)' ]]; then
+			if [[ ! "${BASH_REMATCH[1]}" =~ '^([-a-z0-9_]+)[ 	]+(.*)$' ]]; then
+				echo "Invalid attribute directive format"
+				continue
+			fi
+
+			echo "${BASH_REMATCH[1]} = ${BASH_REMATCH[2]}"
+
+			echo "${BASH_REMATCH[2]}" > "$SYSFS_CARD_OBJ/${BASH_REMATCH[1]}"
+		fi
+
+	done
+
+	exec 10<&-
+
+	declare -i i
+
+	for (( i=0 ; i<$NETDEVS_CNT; i++)); do
+
+		echo "Name: ${NETDEVS_DEVNAME[$i]} D:${NETDEVS_CHAN_D[$i]} E:${NETDEVS_CHAN_E[$i]} Role:${NETDEVS_ROLE[$i]}"
+	done
+done

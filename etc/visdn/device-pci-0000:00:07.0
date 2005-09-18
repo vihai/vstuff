@@ -1,0 +1,17 @@
+<netdev visdn0>
+  protocol lapd
+  role TE
+  tei dynamic
+</netdev>
+
+<port st0>
+  attribute role TE
+
+  <chan D>
+    connectmodule netdev visdn0
+  </chan>
+
+  <chan E>
+    connectmodule netdev visdn0 echo
+  </chan>
+</port>

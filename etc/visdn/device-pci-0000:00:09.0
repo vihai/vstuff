@@ -1,0 +1,87 @@
+
+attribute clock_source_config auto
+attribute ram_size 128
+attribute bert_mode 7
+
+#---------------------- st0 -----------------------
+<netdev visdn1.0>
+  protocol lapd
+  role NT
+  tei dynamic
+</netdev>
+
+<port st0>
+  attribute role NT
+
+  <chan D>
+    connectmodule netdev visdn1.0
+  </chan>
+
+  <chan E>
+    connectmodule netdev visdn1.0 echo
+  </chan>
+</port>
+
+#---------------------- st1 -----------------------
+<netdev visdn1.1>
+  protocol lapd
+  role NT
+  tei dynamic
+</netdev>
+
+<port st1>
+  attribute role NT
+
+  <chan D>
+    connectmodule netdev visdn1.1
+  </chan>
+
+  <chan E>
+    connectmodule netdev visdn1.1 echo
+  </chan>
+</port>
+
+#---------------------- st2 -----------------------
+<netdev visdn1.2>
+  protocol lapd
+  role TE
+  tei dynamic
+</netdev>
+
+<port st2>
+  attribute role TE
+
+  <chan D>
+    connectmodule netdev visdn1.2
+  </chan>
+
+  <chan E>
+    connectmodule netdev visdn1.2 echo
+  </chan>
+</port>
+
+#---------------------- st3 -----------------------
+<netdev visdn1.3>
+  protocol lapd
+  role TE
+  tei dynamic
+</netdev>
+
+<port st3>
+  attribute role TE
+
+  <chan D>
+    connectmodule netdev visdn1.3
+  </chan>
+
+  <chan E>
+    connectmodule netdev visdn1.3 echo
+  </chan>
+</port>
+
+#---------------------- pcm -----------------------
+<port pcm>
+  attribute mode master
+  attribute bitrate 8000
+</port>
+
