@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-18 22:23:15 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-165
+
+    Summary:
+      Added modprobes to initscritp
+    Revision:
+      isdn--devel--0.1--patch-165
+
+    
+    
+
+    modified files:
+     ChangeLog DEVELOPERS etc/init libq931/libq931/ie.h
+
+
 2005-09-18 16:55:32 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-164
 
     Summary:

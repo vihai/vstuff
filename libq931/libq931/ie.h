@@ -16,9 +16,6 @@ struct q931_ie
 	const struct q931_ie_type *type;
 
 	int refcnt;
-
-//	int len;
-//	void *data;
 };
 
 static inline void q931_ie_get(struct q931_ie *ie)
@@ -55,7 +52,7 @@ enum q931_ie_id
 	Q931_IE_CHANGE_STATUS			= 0x01,
 	Q931_IE_SPECIAL				= 0x02,
 	Q931_IE_CONNECTED_ADDRESS		= 0x0c,
-	
+
 	Q931_IE_BEARER_CAPABILITY		= 0x04,
 	Q931_IE_CAUSE				= 0x08,
 	Q931_IE_CALL_IDENTITY			= 0x10,

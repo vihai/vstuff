@@ -2,6 +2,13 @@
 
 VISDN_DIR=/etc/visdn
 
+modprobe visdn-netdev
+modprobe visdn-streamport
+#modprobe visdn-ppp/visdn-ppp
+modprobe visdn-timer-system
+modprobe hfc-4s
+modprobe hfc-pci
+
 declare -i NETDEVS_CNT=0
 declare -a NETDEVS_DEVNAME
 declare -a NETDEVS_CHAN_D
