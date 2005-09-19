@@ -523,7 +523,7 @@ void q931_dispatch_global_message(
 		cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
 		q931_ies_add_put(&ies, &cause->ie);
 
-		q931_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
+		q931_global_send_message(gc, msg->dlc, Q931_MT_STATUS, &ies);
 	}
 	break;
 	}
