@@ -35,7 +35,7 @@
 #include <libq931/call.h>
 #include <libq931/intf.h>
 
-q931_callref q931_alloc_call_reference(struct q931_interface *interface)
+q931_callref q931_intf_first_free_call_reference(struct q931_interface *interface)
 {
 	assert(interface);
 

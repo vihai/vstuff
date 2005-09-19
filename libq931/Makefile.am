@@ -21,6 +21,7 @@ libq931_la_SOURCES =			\
 	ie_cdpn.c			\
 	ie_cgpn.c			\
 	ie_chanid.c			\
+	ie_call_identity.c		\
 	ie_progind.c			\
 	ie_cause.c			\
 	ie_call_state.c			\

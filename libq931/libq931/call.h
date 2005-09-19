@@ -158,13 +158,13 @@ struct q931_call
 	struct q931_timer T322;
 };
 
-struct q931_call *q931_alloc_call_in(
+struct q931_call *q931_call_alloc_in(
 	struct q931_interface *intf,
 	struct q931_dlc *dlc,
 	int call_reference,
 	int broadcast_setup);
 
-struct q931_call *q931_alloc_call_out(
+struct q931_call *q931_call_alloc_out(
 	struct q931_interface *intf);
 
 void q931_free_call(struct q931_call *call);
@@ -233,34 +233,16 @@ void q931_restart_request(
 	struct q931_call *call,
 	const struct q931_ies *ies);
 
-/*
-static inline void q931_call_set_calling_number(
-	struct q931_call *call,
-	const char *calling_number)
-{
-	strncpy(call->calling_number, calling_number,
-		sizeof(call->calling_number));
-	call->called_number[sizeof(call->calling_number)-1]='\0';
-}
-
-static inline void q931_call_set_called_number(
-	struct q931_call *call,
-	const char *called_number)
-{
-	strncpy(call->called_number, called_number,
-		sizeof(call->called_number));
-	call->called_number[sizeof(call->called_number)-1]='\0';
-}*/
-
 const char *q931_call_state_to_text(enum q931_call_state state);
 
-struct q931_call *q931_find_call_by_reference(
+struct q931_call *q931_get_call_by_reference(
 	struct q931_interface *intf,
 	enum q931_call_direction direction,
 	q931_callref call_reference);
 
-void q931_call_get(struct q931_call *call);
+struct q931_call *q931_call_get(struct q931_call *call);
 void q931_call_put(struct q931_call *call);
+void q931_call_release_reference(struct q931_call *call);
 
 #ifdef Q931_PRIVATE
 

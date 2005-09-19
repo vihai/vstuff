@@ -789,7 +789,7 @@ int q931_receive(struct q931_dlc *dlc)
 	}
 
 	struct q931_call *call =
-		q931_find_call_by_reference(
+		q931_get_call_by_reference(
 			dlc->intf,
 			msg.callref_direction ==
 				Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE
@@ -798,7 +798,7 @@ int q931_receive(struct q931_dlc *dlc)
 			msg.callref);
 
 	if (!call) {
-		call = q931_alloc_call_in(
+		call = q931_call_alloc_in(
 			dlc->intf, dlc,
 			msg.callref,
 			skmsg.msg_flags & MSG_OOB);
@@ -823,6 +823,9 @@ int q931_receive(struct q931_dlc *dlc)
 
 			q931_call_send_release_complete(call, &ies);
 
+			q931_call_release_reference(call);
+			q931_call_put(call);
+
 			return Q931_RECEIVE_OK;
 		break;
 
@@ -830,6 +833,9 @@ int q931_receive(struct q931_dlc *dlc)
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE COMPLETE for an unknown"
 				" callref, ignoring frame\n");
+
+			q931_call_release_reference(call);
+			q931_call_put(call);
 
 			return Q931_RECEIVE_OK;
 		break;
@@ -842,6 +848,9 @@ int q931_receive(struct q931_dlc *dlc)
 				report_call(call, LOG_DEBUG,
 					"Received a SETUP/RESUME for an unknown"
 					" outbound callref, ignoring frame\n");
+
+				q931_call_release_reference(call);
+				q931_call_put(call);
 
 				return Q931_RECEIVE_OK;
 			}
@@ -868,6 +877,9 @@ int q931_receive(struct q931_dlc *dlc)
 			else
 				q931_call_set_state(call, N19_RELEASE_REQUEST);
 
+			q931_call_release_reference(call);
+			q931_call_put(call);
+
 			return Q931_RECEIVE_OK;
 		}
 		break;
@@ -886,6 +898,7 @@ int q931_receive(struct q931_dlc *dlc)
 					break;
 				} else {
 					q931_ces_dispatch_message(ces, &msg);
+					q931_call_put(call);
 
 					return Q931_RECEIVE_OK;
 				}
@@ -894,6 +907,8 @@ int q931_receive(struct q931_dlc *dlc)
 
 		q931_dispatch_message(call, &msg);
 	}
+
+	q931_call_put(call);
 
 	return Q931_RECEIVE_OK;
 }

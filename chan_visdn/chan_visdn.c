@@ -744,11 +744,11 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 			struct q931_call *call;
 
 			if (callpos[0] == 'i' || callpos[0] == 'I') {
-				call = q931_find_call_by_reference(intf,
+				call = q931_get_call_by_reference(intf,
 					Q931_CALL_DIRECTION_INBOUND,
 					atoi(callpos + 1));
 			} else if (callpos[0] == 'o' || callpos[0] == 'O') {
-				call = q931_find_call_by_reference(intf,
+				call = q931_get_call_by_reference(intf,
 					Q931_CALL_DIRECTION_OUTBOUND,
 					atoi(callpos + 1));
 			} else {
@@ -762,6 +762,8 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 			}
 
 			visdn_cli_print_call(fd, call);
+
+			q931_call_put(call);
 		}
 	}
 
@@ -1019,7 +1021,7 @@ static int visdn_call(
 	}
 
 	struct q931_call *q931_call;
-	q931_call = q931_alloc_call_out(intf->q931_intf);
+	q931_call = q931_call_alloc_out(intf->q931_intf);
 
 	if ((ast_chan->_state != AST_STATE_DOWN) &&
 	    (ast_chan->_state != AST_STATE_RESERVED)) {
@@ -2864,9 +2866,7 @@ static void visdn_q931_suspend_confirm(
 
 static void visdn_q931_suspend_indication(
 	struct q931_call *q931_call,
-	const struct q931_ies *ies,
-	__u8 *call_identity,
-	int call_identity_len)
+	const struct q931_ies *ies)
 {
 	FUNC_DEBUG();
 

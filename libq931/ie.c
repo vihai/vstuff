@@ -24,6 +24,7 @@
 #include <libq931/ie_cdpn.h>
 #include <libq931/ie_cgpn.h>
 #include <libq931/ie_chanid.h>
+#include <libq931/ie_call_identity.h>
 #include <libq931/ie_progind.h>
 #include <libq931/ie_cause.h>
 #include <libq931/ie_call_state.h>
@@ -130,11 +131,11 @@ static struct q931_ie_type q931_ie_types[] =
 		.network_type	= Q931_NT_ETSI,
 		.id		= Q931_IE_CALL_IDENTITY,
 		.name		= "Call Identity",
-//		.init		= q931_ie_call_identity_register,
-//		.alloc		= q931_ie_call_identity_alloc_abstract,
-//		.read_from_buf	= q931_ie_call_identity_read_from_buf,
-//		.write_to_buf   = q931_ie_call_identity_write_to_buf,
-//		.dump		= q931_ie_call_identity_dump,
+		.init		= q931_ie_call_identity_register,
+		.alloc		= q931_ie_call_identity_alloc_abstract,
+		.read_from_buf	= q931_ie_call_identity_read_from_buf,
+		.write_to_buf   = q931_ie_call_identity_write_to_buf,
+		.dump		= q931_ie_call_identity_dump,
 	},
 	{
 		.max_len	= 3,
