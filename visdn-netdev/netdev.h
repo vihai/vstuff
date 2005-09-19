@@ -39,6 +39,8 @@ struct vnd_netdevice
 
 	struct visdn_chan visdn_chan;
 	struct visdn_chan visdn_chan_e;
+
+	struct work_struct promiscuity_change_work;
 };
 
 #endif

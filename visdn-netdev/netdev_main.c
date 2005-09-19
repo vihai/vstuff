@@ -91,6 +91,8 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
+	printk(KERN_DEBUG "vnd_chan_release()\n");
+
 	if (visdn_chan == &netdevice->visdn_chan) {
 		sysfs_remove_link(
 			&netdevice->netdev->class_dev.kobj,
@@ -108,14 +110,14 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_DEBUG "vnd_open()\n");
+	printk(KERN_DEBUG "vnd_chan_open()\n");
 
 	return 0;
 }
 
 static int vnd_chan_close(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_DEBUG "vnd_close()\n");
+	printk(KERN_DEBUG "vnd_chan_close()\n");
 
 	return 0;
 }
@@ -294,6 +296,20 @@ static void vnd_netdev_set_multicast_list(
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
+	schedule_work(&netdevice->promiscuity_change_work);
+}
+
+/* set_multicast_list is called in atomic context, so, we need a deferred
+   work in order to be able to call functions like visdn_open which may
+   sleep.
+
+   This function is a little racy but races shouldn't be much harmful
+*/
+
+static void vnd_promiscuity_change_work(void *data)
+{
+	struct vnd_netdevice *netdevice = data;
+
 	struct visdn_chan *dst;
 	dst = visdn_cxc_get_by_src(
 			&visdn_int_cxc.cxc,
@@ -301,12 +317,12 @@ static void vnd_netdev_set_multicast_list(
 	if (!dst)
 		return;
 
-	if((netdev->flags & IFF_PROMISC) &&
+	if((netdevice->netdev->flags & IFF_PROMISC) &&
 	   !test_bit(VISDN_CHAN_STATE_OPEN, &dst->state)) {
 
 		visdn_open(dst);
 
-	} else if(!(netdev->flags & IFF_PROMISC) &&
+	} else if(!(netdevice->netdev->flags & IFF_PROMISC) &&
 	          test_bit(VISDN_CHAN_STATE_OPEN, &dst->state)) {
 
 		visdn_close(dst);
@@ -502,6 +518,10 @@ static int vnd_create_request(
 	netdevice->visdn_chan_e.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
 	netdevice->visdn_chan_e.bitorder_preferred = 0;
 
+	INIT_WORK(&netdevice->promiscuity_change_work,
+		vnd_promiscuity_change_work,
+		netdevice);
+
 	vnd_netdevice_get(netdevice); // Reference in visdn_chan->driver_data
 	err = visdn_chan_register(&netdevice->visdn_chan);
 	if (err < 0)
@@ -536,7 +556,7 @@ static int vnd_create_request(
 
 	netdevice->netdev->mtu = netdevice->visdn_chan.pars.mtu;
 
-	memset(netdevice->netdev->dev_addr, 0x00,
+	memset(netdevice->netdev->dev_addr, 0,
 		sizeof(netdevice->netdev->dev_addr));
 
 	SET_MODULE_OWNER(netdevice->netdev);
@@ -763,7 +783,9 @@ static void __exit vnd_module_exit(void)
 				index_hlist_node) {
 
 			visdn_chan_unregister(&netdevice->visdn_chan);
+			visdn_chan_put(&netdevice->visdn_chan);
 			visdn_chan_unregister(&netdevice->visdn_chan_e);
+			visdn_chan_put(&netdevice->visdn_chan_e);
 
 			vnd_netdevice_put(netdevice);
 		}

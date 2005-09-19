@@ -236,7 +236,8 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 {
 	int err;
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
-	struct hfc_card *card = chan->port->card;
+	struct hfc_st_port *port = chan->port;
+	struct hfc_card *card = port->card;
 
 	if (visdn_chan_lock_interruptible(visdn_chan)) {
 		err = -ERESTARTSYS;
@@ -265,6 +266,7 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 		chan->port->card->regs.fifo_en &= ~hfc_FIFO_EN_DTX;
 		chan->port->card->regs.m1 &= ~(hfc_INT_M1_DREC | hfc_INT_M1_DTRANS);
 	} else if (chan->id == E) {
+		port->chans[B2].status = HFC_CHAN_STATUS_FREE;
 		card->regs.trm &= ~hfc_TRM_ECHO;
 	}
 
