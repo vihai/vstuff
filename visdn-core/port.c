@@ -115,7 +115,7 @@ void visdn_port_init(struct visdn_port *port)
 }
 EXPORT_SYMBOL(visdn_port_init);
 
-extern struct kobj_type ktype_visdn_port;
+static struct kobj_type ktype_visdn_port;
 
 int visdn_port_register(struct visdn_port *port)
 {
