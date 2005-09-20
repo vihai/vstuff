@@ -17,18 +17,21 @@
 #	$(AUX_DIST)
 
 sysconf_DATA =					\
-	etc/udev/30-visdn.rules
+	etc/udev/30-visdn.rules			\
+	etc/visdn/device-pci-0000:00:07.0	\
+	etc/visdn/device-pci-0000:00:09.0	\
+	etc/init
 
 astconf_DATA =					\
 	etc/asterisk/visdn.conf
 
 EXTRA_DIST =					\
+	$(sysconf_DATA)				\
+	$(astconf_DATA)				\
 	bootstrap				\
 	visdn.spec				\
 	samples/ethereal_coloring_rules		\
 	samples/ppp_dialout			\
-	$(sysconf_DATA)				\
-	$(astconf_DATA)				\
 	kernel_config.h.in
 
 SUBDIRS =
