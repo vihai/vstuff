@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-20 13:14:36 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-173
+
+    Summary:
+      Added support for national_prefix and international_prefix
+    Revision:
+      isdn--devel--0.1--patch-173
+
+    
+    
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c etc/asterisk/visdn.conf
+
+
 2005-09-20 12:12:31 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-172
 
     Summary:

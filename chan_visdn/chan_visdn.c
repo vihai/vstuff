@@ -123,6 +123,8 @@ struct visdn_interface
 	int force_inbound_caller_id;
 	int overlap_sending;
 	int overlap_receiving;
+	char national_prefix[10];
+	char international_prefix[10];
 
 	struct q931_interface *q931_intf;
 };
@@ -173,6 +175,8 @@ struct visdn_state
 		.force_inbound_caller_id = FALSE,
 		.overlap_sending = TRUE,
 		.overlap_receiving = FALSE,
+		.national_prefix = "0",
+		.international_prefix = "00",
 	}
 };
 
@@ -350,7 +354,9 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			intf->default_inbound_caller_id,
 			intf->force_inbound_caller_id ? "Yes" : "No",
 			intf->overlap_sending ? "Yes" : "No",
-			intf->overlap_receiving ? "Yes" : "No");
+			intf->overlap_receiving ? "Yes" : "No",
+			intf->national_prefix,
+			intf->international_prefix);
 
 		if (intf->q931_intf) {
 			ast_cli(fd,
@@ -444,6 +450,12 @@ static int visdn_intf_from_var(
 		intf->overlap_sending = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "overlap_receiving")) {
 		intf->overlap_receiving = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "national_prefix")) {
+		strncpy(intf->national_prefix, var->value,
+			sizeof(intf->national_prefix));
+	} else if (!strcasecmp(var->name, "international_prefix")) {
+		strncpy(intf->international_prefix, var->value,
+			sizeof(intf->international_prefix));
 	} else {
 		return -1;
 	}
@@ -466,6 +478,10 @@ static void visdn_copy_interface_config(
 	dst->force_inbound_caller_id = src->force_inbound_caller_id;
 	dst->overlap_sending = src->overlap_sending;
 	dst->overlap_receiving = src->overlap_receiving;
+	strncpy(dst->national_prefix, src->national_prefix,
+		sizeof(dst->national_prefix));
+	strncpy(dst->international_prefix, src->international_prefix,
+		sizeof(dst->international_prefix));
 }
 
 static void visdn_reload_config(void)
@@ -2631,9 +2647,17 @@ static void visdn_q931_setup_indication(
 				container_of(ies->ies[i],
 					struct q931_ie_calling_party_number, ie);
 
+			const char *prefix = "";
+			if (cgpn->type_of_number ==
+					Q931_IE_CDPN_TON_NATIONAL)
+				prefix = intf->national_prefix;
+			else if (cgpn->type_of_number ==
+					Q931_IE_CDPN_TON_INTERNATIONAL)
+				prefix = intf->international_prefix;
+
 			snprintf(visdn_chan->calling_number,
 				sizeof(visdn_chan->calling_number),
-				"<%s>", cgpn->number);
+				"<%s%s>", prefix, cgpn->number);
 
 		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
 
