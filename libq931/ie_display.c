@@ -103,10 +103,7 @@ void q931_ie_display_dump(
 	char sane_str[10];
 	int i;
 	for(i=0; i<sizeof(sane_str); i++) {
-		if (!ie->data[i])
-			break;
-
-		sane_str[i] = isprint(ie->data[i]) ? ie->data[i] : '.';
+		sane_str[i] = isprint(ie->text[i]) ? ie->text[i] : '.';
 	}
 	sane_str[i] = '\0';
 
