@@ -18,8 +18,7 @@
 
 sysconf_DATA =					\
 	etc/udev/30-visdn.rules			\
-	etc/visdn/device-pci-0000:00:07.0	\
-	etc/visdn/device-pci-0000:00:09.0	\
+	etc/visdn/*				\
 	etc/init
 
 astconf_DATA =					\

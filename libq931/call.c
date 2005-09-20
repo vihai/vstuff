@@ -1818,33 +1818,37 @@ void q931_setup_request(
 	switch (call->state) {
 	case N0_NULL_STATE: {
 		call->proposed_channel = q931_channel_select(call);
-		q931_call_start_timer(call, T303);
-
-		q931_ies_copy(&call->setup_ies, user_ies);
-
-		struct q931_ie_channel_identification *ci =
-			q931_ie_channel_identification_alloc();
-		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-		ci->interface_type =
-			q931_ie_channel_identification_intftype(call->intf);
-		ci->preferred_exclusive = Q931_IE_CI_PE_PREFERRED;
-		ci->coding_standard = Q931_IE_CI_CS_CCITT;
-		q931_chanset_init(&ci->chanset);
-		q931_chanset_add(&ci->chanset, call->proposed_channel);
-		q931_ies_add_put(&call->setup_ies, &ci->ie);
-
-		if (call->intf->config ==
-		      Q931_INTF_CONFIG_MULTIPOINT) {
-			call->broadcast_setup = TRUE;
-			q931_call_start_timer(call, T312);
-
-			q931_call_send_setup_bc(call, &call->setup_ies);
+		if (!call->proposed_channel) {
+			q931_call_primitive(call, release_indication, user_ies);
 		} else {
-			q931_call_send_setup(call,
-				&call->setup_ies);
-		}
+			q931_call_start_timer(call, T303);
 
-		q931_call_set_state(call, N6_CALL_PRESENT);
+			q931_ies_copy(&call->setup_ies, user_ies);
+
+			struct q931_ie_channel_identification *ci =
+				q931_ie_channel_identification_alloc();
+			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+			ci->interface_type =
+				q931_ie_channel_identification_intftype(call->intf);
+			ci->preferred_exclusive = Q931_IE_CI_PE_PREFERRED;
+			ci->coding_standard = Q931_IE_CI_CS_CCITT;
+			q931_chanset_init(&ci->chanset);
+			q931_chanset_add(&ci->chanset, call->proposed_channel);
+			q931_ies_add_put(&call->setup_ies, &ci->ie);
+
+			if (call->intf->config ==
+			      Q931_INTF_CONFIG_MULTIPOINT) {
+				call->broadcast_setup = TRUE;
+				q931_call_start_timer(call, T312);
+
+				q931_call_send_setup_bc(call, &call->setup_ies);
+			} else {
+				q931_call_send_setup(call,
+					&call->setup_ies);
+			}
+
+			q931_call_set_state(call, N6_CALL_PRESENT);
+		}
 	}
 	break;
 
@@ -2027,6 +2031,7 @@ void q931_suspend_response(
 	switch (call->state) {
 	case N15_SUSPEND_REQUEST:
 		q931_call_send_suspend_acknowledge(call, user_ies);
+		q931_call_release_channel(call->channel);
 		// NOTE: Timer T307 is running in the call control block
 		q931_call_release_reference(call);
 		q931_call_set_state(call, N0_NULL_STATE);
