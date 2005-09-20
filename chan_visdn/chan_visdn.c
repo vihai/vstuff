@@ -109,6 +109,8 @@ enum visdn_type_of_number
 
 struct visdn_interface
 {
+	struct list_head ifs_node;
+
 	char name[IFNAMSIZ];
 
 	int configured;
@@ -137,8 +139,7 @@ struct visdn_state
 
 	int have_to_exit;
 
-	struct visdn_interface ifs[100];
-	int nifs;
+	struct list_head ifs;
 
 	struct pollfd polls[100];
 	struct poll_info poll_infos[100];
@@ -184,22 +185,23 @@ static void visdn_set_socket_debug(int on)
 {
 	int i;
 
-	for(i = 0; i < visdn.nifs; i++) {
-		if (!visdn.ifs[i].q931_intf)
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (!intf->q931_intf)
 			continue;
 
-		if (visdn.ifs[i].q931_intf->role == LAPD_ROLE_NT) {
-			setsockopt(visdn.ifs[i].q931_intf->master_socket,
+		if (intf->q931_intf->role == LAPD_ROLE_NT) {
+			setsockopt(intf->q931_intf->master_socket,
 				SOL_SOCKET, SO_DEBUG,
 				&on, sizeof(on));
 		} else {
-			setsockopt(visdn.ifs[i].q931_intf->dlc.socket,
+			setsockopt(intf->q931_intf->dlc.socket,
 				SOL_SOCKET, SO_DEBUG,
 				&on, sizeof(on));
 		}
 
 		struct q931_dlc *dlc;
-		list_for_each_entry(dlc, &visdn.ifs[i].q931_intf->dlcs, intf_node) {
+		list_for_each_entry(dlc, &intf->q931_intf->dlcs, intf_node) {
 			setsockopt(dlc->socket,
 				SOL_SOCKET, SO_DEBUG,
 				&on, sizeof(on));
@@ -322,8 +324,8 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 	ast_mutex_lock(&visdn.lock);
 
 	int i;
-	for (i=0; i<visdn.nifs; i++) {
-		struct visdn_interface *intf = &visdn.ifs[i];
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
 		ast_cli(fd, "\n------ Interface %s ---------\n", intf->name);
 
@@ -510,9 +512,9 @@ static void visdn_reload_config(void)
 		var = var->next;
 	}
 
-	int i;
-	for (i=0; i<visdn.nifs; i++) {
-		visdn.ifs[i].configured = FALSE;
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		intf->configured = FALSE;
 	}
 
 	const char *cat;
@@ -522,28 +524,23 @@ static void visdn_reload_config(void)
 		if (!strcasecmp(cat, "global"))
 			continue;
 
-		struct visdn_interface *intf = NULL;
-
-		for (i=0; i<visdn.nifs; i++) {
-			if (!strcasecmp(visdn.ifs[i].name, cat)) {
-				intf = &visdn.ifs[i];
+		int found = FALSE;
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+			if (!strcasecmp(intf->name, cat)) {
+				found = TRUE;
 				break;
 			}
 		}
 
-		if (!intf) {
-			if (visdn.nifs >= ARRAY_SIZE(visdn.ifs)) {
-				ast_log(LOG_ERROR, "Too many interfaces!\n");
-				break;
-			}
-
-			intf = &visdn.ifs[visdn.nifs];
-			visdn.nifs++;
+		if (!found) {
+			intf = malloc(sizeof(*intf));
 
 			intf->q931_intf = NULL;
 			intf->open_pending = FALSE;
 			strncpy(intf->name, cat, sizeof(intf->name));
 			visdn_copy_interface_config(intf, &visdn.default_intf);
+
+			list_add_tail(&intf->ifs_node, &visdn.ifs);
 		}
 
 		intf->configured = TRUE;
@@ -578,19 +575,20 @@ static int do_show_visdn_channels(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
-	int i;
-	for (i=0; i<visdn.nifs; i++) {
-		if (!visdn.ifs[i].q931_intf)
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+
+		if (!intf->q931_intf)
 			continue;
 
-		ast_cli(fd, "Interface: %s\n", visdn.ifs[i].name);
+		ast_cli(fd, "Interface: %s\n", intf->name);
 
 		int j;
-		for (j=0; j<visdn.ifs[i].q931_intf->n_channels; j++) {
+		for (j=0; j<intf->q931_intf->n_channels; j++) {
 			ast_cli(fd, "  B%d: %s\n",
-				visdn.ifs[i].q931_intf->channels[j].id + 1,
+				intf->q931_intf->channels[j].id + 1,
 				q931_channel_state_to_text(
-					visdn.ifs[i].q931_intf->channels[j].state));
+					intf->q931_intf->channels[j].state));
 		}
 	}
 
@@ -608,26 +606,30 @@ static int do_show_visdn_channels(int fd, int argc, char *argv[])
 		     )
 */
 
-static int visdn_cli_print_call_list(int fd, struct q931_interface *intf)
+static int visdn_cli_print_call_list(
+	int fd,
+	struct q931_interface *filter_intf)
 {
 	int first_call;
 	int i;
 
 	ast_mutex_lock(&visdn.lock);
 
-	for (i=0; i<visdn.nifs; i++) {
-		if (!visdn.ifs[i].q931_intf)
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+
+		if (!intf->q931_intf)
 			continue;
 
 		struct q931_call *call;
 		first_call = TRUE;
 
-		list_for_each_entry(call, &visdn.ifs[i].q931_intf->calls, calls_node) {
+		list_for_each_entry(call, &intf->q931_intf->calls, calls_node) {
 
-			if (!intf || call->intf == intf) {
+			if (!intf || call->intf == filter_intf) {
 
 				if (first_call) {
-					ast_cli(fd, "Interface: %s\n", visdn.ifs[i].q931_intf->name);
+					ast_cli(fd, "Interface: %s\n", intf->q931_intf->name);
 					ast_cli(fd, "  Ref#    Caller       Called       State\n");
 					first_call = FALSE;
 				}
@@ -732,39 +734,38 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 	if (argc == 3) {
 		visdn_cli_print_call_list(fd, NULL);
 	} else if (argc == 4) {
-		struct q931_interface *intf = NULL;
-
 		char *callpos = strchr(argv[3], '/');
 		if (callpos) {
 			*callpos = '\0';
 			callpos++;
 		}
 
-		int i;
-		for (i=0; i<visdn.nifs; i++) {
-			if (visdn.ifs[i].q931_intf &&
-			    !strcasecmp(visdn.ifs[i].name, argv[3])) {
-				intf = visdn.ifs[i].q931_intf;
+		struct visdn_interface *filter_intf = NULL;
+		struct visdn_interface *intf;
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+			if (intf->q931_intf &&
+			    !strcasecmp(intf->name, argv[3])) {
+				filter_intf = intf;
 				break;
 			}
 		}
 
-		if (!intf) {
+		if (!filter_intf) {
 			ast_cli(fd, "Interface not found\n");
 			goto err_intf_not_found;
 		}
 
 		if (!callpos) {
-			visdn_cli_print_call_list(fd, intf);
+			visdn_cli_print_call_list(fd, filter_intf->q931_intf);
 		} else {
 			struct q931_call *call;
 
 			if (callpos[0] == 'i' || callpos[0] == 'I') {
-				call = q931_get_call_by_reference(intf,
+				call = q931_get_call_by_reference(filter_intf->q931_intf,
 					Q931_CALL_DIRECTION_INBOUND,
 					atoi(callpos + 1));
 			} else if (callpos[0] == 'o' || callpos[0] == 'O') {
-				call = q931_get_call_by_reference(intf,
+				call = q931_get_call_by_reference(filter_intf->q931_intf,
 					Q931_CALL_DIRECTION_OUTBOUND,
 					atoi(callpos + 1));
 			} else {
@@ -1013,18 +1014,18 @@ static int visdn_call(
 	}
 
 	ast_mutex_lock(&visdn.lock);
-	struct visdn_interface *intf = NULL;
 
-	int i;
-	for (i=0; i<visdn.nifs; i++) {
-		if (visdn.ifs[i].q931_intf &&
-		    !strcmp(visdn.ifs[i].name, intf_name)) {
-			intf = &visdn.ifs[i];
+	int found = FALSE;
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (intf->q931_intf &&
+		    !strcmp(intf->name, intf_name)) {
+			found = TRUE;
 			break;
 		}
 	}
 
-	if (!intf) {
+	if (!found) {
 		ast_log(LOG_WARNING, "Interface %s not found\n", intf_name);
 		err = -1;
                 goto err_intf_not_found;
@@ -1879,31 +1880,31 @@ static void refresh_polls_list()
 
 	visdn.open_pending = FALSE;
 
-	int i;
-	for(i = 0; i < visdn.nifs; i++) {
-		if (visdn.ifs[i].open_pending)
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (intf->open_pending)
 			visdn.open_pending = TRUE;
 			visdn.open_pending_nextcheck = 0;
 
-		if (!visdn.ifs[i].q931_intf)
+		if (!intf->q931_intf)
 			continue;
 
-		if (visdn.ifs[i].q931_intf->role == LAPD_ROLE_NT) {
-			visdn.polls[visdn.npolls].fd = visdn.ifs[i].q931_intf->master_socket;
+		if (intf->q931_intf->role == LAPD_ROLE_NT) {
+			visdn.polls[visdn.npolls].fd = intf->q931_intf->master_socket;
 			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_INTERFACE;
-			visdn.poll_infos[visdn.npolls].interface = visdn.ifs[i].q931_intf;
+			visdn.poll_infos[visdn.npolls].interface = intf->q931_intf;
 			(visdn.npolls)++;
 		} else {
-			visdn.polls[visdn.npolls].fd = visdn.ifs[i].q931_intf->dlc.socket;
+			visdn.polls[visdn.npolls].fd = intf->q931_intf->dlc.socket;
 			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
-			visdn.poll_infos[visdn.npolls].dlc = &visdn.ifs[i].q931_intf->dlc;
+			visdn.poll_infos[visdn.npolls].dlc = &intf->q931_intf->dlc;
 			(visdn.npolls)++;
 		}
 
 		struct q931_dlc *dlc;
-		list_for_each_entry(dlc,  &visdn.ifs[i].q931_intf->dlcs, intf_node) {
+		list_for_each_entry(dlc,  &intf->q931_intf->dlcs, intf_node) {
 			visdn.polls[visdn.npolls].fd = dlc->socket;
 			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
@@ -1972,25 +1973,25 @@ static int visdn_open_interface(
 // Must be called with visdn.lock acquired
 static void visdn_add_interface(const char *name)
 {
-	struct visdn_interface *intf = NULL;
-
-	int i;
-	for (i=0; i<visdn.nifs; i++) {
-		if (!strcasecmp(visdn.ifs[i].name, name)) {
-			intf = &visdn.ifs[i];
+	int found = FALSE;
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (!strcasecmp(intf->name, name)) {
+			found = TRUE;
 			break;
 		}
 	}
 
-	if (!intf) {
-		intf = &visdn.ifs[visdn.nifs];
+	if (!found) {
+		intf = malloc(sizeof(*intf));
 
 		intf->q931_intf = NULL;
 		intf->configured = FALSE;
 		intf->open_pending = FALSE;
 		strncpy(intf->name, name, sizeof(intf->name));
 		visdn_copy_interface_config(intf, &visdn.default_intf);
-		visdn.nifs++;
+
+		list_add_tail(&intf->ifs_node, &visdn.ifs);
 	}
 
 	if (!intf->q931_intf) {
@@ -2005,13 +2006,13 @@ static void visdn_add_interface(const char *name)
 // Must be called with visdn.lock acquired
 static void visdn_rem_interface(const char *name)
 {
-	int i;
-	for (i=0; i<visdn.nifs; i++) {
-		if (visdn.ifs[i].q931_intf &&
-		    !strcmp(visdn.ifs[i].name, name)) {
-			q931_close_interface(visdn.ifs[i].q931_intf);
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (intf->q931_intf &&
+		    !strcmp(intf->name, name)) {
+			q931_close_interface(intf->q931_intf);
 
-			visdn.ifs[i].q931_intf = NULL;
+			intf->q931_intf = NULL;
 
 			refresh_polls_list();
 
@@ -2130,15 +2131,17 @@ static int visdn_q931_thread_do_poll()
 	ast_mutex_lock(&visdn.lock);
 
 	if (time(NULL) > visdn.open_pending_nextcheck) {
-		int i;
-		for(i=0; i<visdn.nifs; i++) {
-			if (visdn.ifs[i].open_pending) {
+
+		struct visdn_interface *intf;
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+
+			if (intf->open_pending) {
 				if (visdn.debug)
 					ast_log(LOG_NOTICE,
 						"Retry opening interface %s\n",
-						visdn.ifs[i].name);
+						intf->name);
 
-				if (visdn_open_interface(&visdn.ifs[i]) < 0)
+				if (visdn_open_interface(intf) < 0)
 					visdn.open_pending_nextcheck = time(NULL) + 2;
 			}
 		}
@@ -2185,11 +2188,12 @@ static int visdn_q931_thread_do_poll()
 	if (visdn.have_to_exit) {
 		active_calls_cnt = 0;
 
-		for (i=0; i<visdn.nifs; i++) {
-			if (visdn.ifs[i].q931_intf) {
+		struct visdn_interface *intf;
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+			if (intf->q931_intf) {
 				struct q931_call *call;
 				list_for_each_entry(call,
-						&visdn.ifs[i].q931_intf->calls,
+						&intf->q931_intf->calls,
 						calls_node)
 					active_calls_cnt++;
 			}
@@ -3395,6 +3399,8 @@ int load_module()
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
 	ast_mutex_init(&visdn.lock);
+
+	INIT_LIST_HEAD(&visdn.ifs);
 
 	visdn.libq931 = q931_init();
 	q931_set_logger_func(visdn.libq931, visdn_logger);
