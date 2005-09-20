@@ -1038,6 +1038,10 @@ static int visdn_call(
 
 	struct q931_call *q931_call;
 	q931_call = q931_call_alloc_out(intf->q931_intf);
+	if (!q931_call) {
+		ast_log(LOG_WARNING, "Cannot allocate outbound call\n");
+		goto err_call_alloc;
+	}
 
 	if ((ast_chan->_state != AST_STATE_DOWN) &&
 	    (ast_chan->_state != AST_STATE_RESERVED)) {
@@ -1057,7 +1061,7 @@ static int visdn_call(
 
 	q931_call->pvt = ast_chan;
 
-	visdn_chan->q931_call = q931_call;
+	visdn_chan->q931_call = q931_call_get(q931_call);
 
 	char newname[40];
 	snprintf(newname, sizeof(newname), "VISDN/%s/%c%ld",
@@ -1144,9 +1148,14 @@ static int visdn_call(
 
 	ast_mutex_unlock(&visdn.lock);
 
+	q931_call_put(q931_call);
+
 	return 0;
 
 err_channel_not_down:
+	q931_call_release_reference(q931_call);
+	q931_call_put(q931_call);
+err_call_alloc:
 err_intf_not_found:
 	ast_mutex_unlock(&visdn.lock);
 err_invalid_format:
@@ -1572,16 +1581,14 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
 	if (visdn.debug)
-		ast_log(LOG_NOTICE, "visdn_hangup\n");
+		ast_log(LOG_NOTICE, "visdn_hangup %s\n", ast_chan->name);
 
 	if (!visdn_chan) {
 		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
 		return 0;
 	}
 
-	struct q931_call *q931_call = visdn_chan->q931_call;
-
-	if (q931_call) {
+	if (visdn_chan->q931_call) {
 		/*
 		After we return from visdn_hangup() the ast_channel is not
 		valid anymore. On the other way, q.931 "hangup" is a long
@@ -1598,42 +1605,41 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		anymore
 		*/
 
-		q931_call->pvt = NULL;
+		visdn_chan->q931_call->pvt = NULL;
 
-		if (q931_call->state == N15_SUSPEND_REQUEST) {
-			q931_suspend_response(q931_call, NULL);
+		if (visdn_chan->q931_call->state == N15_SUSPEND_REQUEST) {
+			q931_suspend_response(visdn_chan->q931_call, NULL);
 		} else if (
-		    q931_call->state != N0_NULL_STATE &&
-		    q931_call->state != N1_CALL_INITIATED &&
-		    q931_call->state != N11_DISCONNECT_REQUEST &&
-		    q931_call->state != N12_DISCONNECT_INDICATION &&
-		    q931_call->state != N17_RESUME_REQUEST &&
-		    q931_call->state != N19_RELEASE_REQUEST &&
-		    q931_call->state != N22_CALL_ABORT &&
-		    q931_call->state != U0_NULL_STATE &&
-		    q931_call->state != U6_CALL_PRESENT &&
-		    q931_call->state != U11_DISCONNECT_REQUEST &&
-		    q931_call->state != U12_DISCONNECT_INDICATION &&
-		    q931_call->state != U15_SUSPEND_REQUEST &&
-		    q931_call->state != U17_RESUME_REQUEST &&
-		    q931_call->state != U19_RELEASE_REQUEST) {
+		    visdn_chan->q931_call->state != N0_NULL_STATE &&
+		    visdn_chan->q931_call->state != N1_CALL_INITIATED &&
+		    visdn_chan->q931_call->state != N11_DISCONNECT_REQUEST &&
+		    visdn_chan->q931_call->state != N12_DISCONNECT_INDICATION &&
+		    visdn_chan->q931_call->state != N17_RESUME_REQUEST &&
+		    visdn_chan->q931_call->state != N19_RELEASE_REQUEST &&
+		    visdn_chan->q931_call->state != N22_CALL_ABORT &&
+		    visdn_chan->q931_call->state != U0_NULL_STATE &&
+		    visdn_chan->q931_call->state != U6_CALL_PRESENT &&
+		    visdn_chan->q931_call->state != U11_DISCONNECT_REQUEST &&
+		    visdn_chan->q931_call->state != U12_DISCONNECT_INDICATION &&
+		    visdn_chan->q931_call->state != U15_SUSPEND_REQUEST &&
+		    visdn_chan->q931_call->state != U17_RESUME_REQUEST &&
+		    visdn_chan->q931_call->state != U19_RELEASE_REQUEST) {
 
                         struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
+			cause->location = q931_ie_cause_location_call(visdn_chan->q931_call);
 			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 			q931_ies_add_put(&ies, &cause->ie);
 
 			ast_mutex_lock(&visdn.lock);
-			q931_disconnect_request(q931_call, &ies);
+			q931_disconnect_request(visdn_chan->q931_call, &ies);
 			ast_mutex_unlock(&visdn.lock);
 		}
 
-
-		q931_call_put(q931_call);
-		q931_call = NULL;
+		q931_call_put(visdn_chan->q931_call);
+		visdn_chan->q931_call = NULL;
 	}
 
 	// Make sure the generator is stopped
@@ -1664,6 +1670,9 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	ast_chan->pvt->pvt = NULL;
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
+
+	if (visdn.debug)
+		ast_log(LOG_NOTICE, "visdn_hangup complete\n");
 
 	return 0;
 }
@@ -2613,7 +2622,7 @@ static void visdn_q931_setup_indication(
 		goto err_visdn_alloc;
 	}
 
-	visdn_chan->q931_call = q931_call;
+	visdn_chan->q931_call = q931_call_get(q931_call);
 
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
