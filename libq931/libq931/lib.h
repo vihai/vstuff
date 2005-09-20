@@ -67,8 +67,7 @@ struct q931_lib
 		enum q931_resume_confirm_status status);//TE
 	void (*resume_indication)(
 		struct q931_call *call,
-		const struct q931_ies *ies,
-		__u8 *call_identity, int call_identity_len);
+		const struct q931_ies *ies);
 	void (*setup_complete_indication)(
 		struct q931_call *call,
 		const struct q931_ies *ies,

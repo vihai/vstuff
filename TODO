@@ -31,6 +31,8 @@ chan_visdn:
   destination, if it supports overlap dialing and so on...
 - Call bumbing
 - Handle ULAW
+- Handle caller id presentation informations
+- Implement configurable immediate parking?
 
 libq931:
 --------

@@ -82,6 +82,7 @@ enum q931_release_confirm_status
 enum q931_resume_confirm_status
 {
 	Q931_RESUME_CONFIRM_OK,
+	Q931_RESUME_CONFIRM_ERROR,
 	Q931_RESUME_CONFIRM_TIMEOUT,
 };
 

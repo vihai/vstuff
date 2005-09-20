@@ -22,6 +22,7 @@ libq931_la_SOURCES =			\
 	ie_cgpn.c			\
 	ie_chanid.c			\
 	ie_call_identity.c		\
+	ie_display.c			\
 	ie_progind.c			\
 	ie_cause.c			\
 	ie_call_state.c			\
@@ -50,6 +51,8 @@ nobase_include_HEADERS =		\
 	libq931/ie_cdpn.h		\
 	libq931/ie_cgpn.h		\
 	libq931/ie_chanid.h		\
+	libq931/ie_call_identity.h	\
+	libq931/ie_display.h		\
 	libq931/ie_hlc.h		\
 	libq931/ie_progind.h		\
 	libq931/ie_restind.h		\

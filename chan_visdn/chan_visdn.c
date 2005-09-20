@@ -1469,9 +1469,17 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 static int visdn_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 {
-	ast_log(LOG_ERROR, "%s\n", __FUNCTION__);
+	struct visdn_chan *chan = newchan->pvt->pvt;
 
-	return -1;
+	if (chan->ast_chan != oldchan) {
+		ast_log(LOG_WARNING, "old channel wasn't %p but was %p\n",
+				oldchan, chan->ast_chan);
+		return -1;
+	}
+
+	chan->ast_chan = newchan;
+
+	return 0;
 }
 
 static int visdn_setoption(struct ast_channel *ast_chan, int option, void *data, int datalen)
@@ -1576,7 +1584,10 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		q931_call->pvt = NULL;
 
-		if (q931_call->state != N0_NULL_STATE &&
+		if (q931_call->state == N15_SUSPEND_REQUEST) {
+			q931_suspend_response(q931_call, NULL);
+		} else if (
+		    q931_call->state != N0_NULL_STATE &&
 		    q931_call->state != N1_CALL_INITIATED &&
 		    q931_call->state != N11_DISCONNECT_REQUEST &&
 		    q931_call->state != N12_DISCONNECT_INDICATION &&
@@ -1603,6 +1614,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			q931_disconnect_request(q931_call, &ies);
 			ast_mutex_unlock(&visdn.lock);
 		}
+
 
 		q931_call_put(q931_call);
 		q931_call = NULL;
@@ -2542,9 +2554,7 @@ static void visdn_q931_resume_confirm(
 
 static void visdn_q931_resume_indication(
 	struct q931_call *q931_call,
-	const struct q931_ies *ies,
-	__u8 *call_identity,
-	int call_identity_len)
+	const struct q931_ies *ies)
 {
 	FUNC_DEBUG();
 
@@ -2864,13 +2874,131 @@ static void visdn_q931_suspend_confirm(
 	FUNC_DEBUG();
 }
 
+struct visdn_dual {
+	struct ast_channel *chan1;
+	struct ast_channel *chan2;
+};
+
+static void *visdn_park_thread(void *stuff)
+{
+	struct ast_channel *chan1, *chan2;
+	struct visdn_dual *d;
+
+	int ext;
+	int res;
+
+	d = stuff;
+	chan1 = d->chan1;
+	chan2 = d->chan2;
+	free(d);
+
+	ast_mutex_lock(&chan1->lock);
+	ast_do_masquerade(chan1);
+	ast_mutex_unlock(&chan1->lock);
+
+	res = ast_park_call(chan1, chan2, 0, &ext);
+	/* Then hangup */
+	ast_hangup(chan2);
+
+	ast_log(LOG_NOTICE, "Parked on extension '%d'\n", ext);
+
+	return NULL;
+}
+
+static int visdn_park(
+	struct ast_channel *chan1,
+	struct ast_channel *chan2)
+{
+	struct ast_channel *chan1m, *chan2m;
+	pthread_t th;
+
+	chan1m = ast_channel_alloc(0);
+	if (!chan1m)
+		goto err_chan_alloc_1;
+
+	chan2m = ast_channel_alloc(0);
+		goto err_chan_alloc_2;
+
+	snprintf(chan1m->name, sizeof(chan1m->name), "Parking/%s", chan1->name);
+	/* Make formats okay */
+	chan1m->readformat = chan1->readformat;
+	chan1m->writeformat = chan1->writeformat;
+	ast_channel_masquerade(chan1m, chan1);
+	/* Setup the extensions and such */
+	strncpy(chan1m->context, chan1->context, sizeof(chan1m->context) - 1);
+	strncpy(chan1m->exten, chan1->exten, sizeof(chan1m->exten) - 1);
+	chan1m->priority = chan1->priority;
+
+	/* We make a clone of the peer channel too, so we can play
+	   back the announcement */
+	snprintf(chan2m->name, sizeof (chan2m->name), "SIPPeer/%s",chan2->name);
+	/* Make formats okay */
+	chan2m->readformat = chan2->readformat;
+	chan2m->writeformat = chan2->writeformat;
+	ast_channel_masquerade(chan2m, chan2);
+	/* Setup the extensions and such */
+	strncpy(chan2m->context, chan2->context, sizeof(chan2m->context) - 1);
+	strncpy(chan2m->exten, chan2->exten, sizeof(chan2m->exten) - 1);
+	chan2m->priority = chan2->priority;
+
+	ast_mutex_lock(&chan2m->lock);
+	if (ast_do_masquerade(chan2m)) {
+		ast_log(LOG_WARNING, "Masquerade failed :(\n");
+		goto err_masquerade;
+	}
+	ast_mutex_unlock(&chan2m->lock);
+
+	struct visdn_dual *d = malloc(sizeof(struct visdn_dual));
+	if (!d)
+		goto err_malloc;
+
+	memset(d, 0, sizeof(*d));
+
+	d->chan1 = chan1m;
+	d->chan2 = chan2m;
+	if (ast_pthread_create(&th, NULL, visdn_park_thread, d))
+		goto err_pthread_create;
+
+	return 0;
+
+err_pthread_create:
+	free(d);
+err_malloc:
+err_masquerade:
+	ast_mutex_unlock(&chan2m->lock);
+	ast_hangup(chan2m);
+err_chan_alloc_2:
+	ast_hangup(chan1m);
+err_chan_alloc_1:
+
+	return -1;
+}
+
+
 static void visdn_q931_suspend_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
 	FUNC_DEBUG();
 
-	q931_suspend_response(q931_call, NULL);
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan) {
+		ast_log(LOG_WARNING, "Unexpexted !ast_chan\n");
+		return; // Shouldn't happen
+	}
+
+
+	int i;
+	for (i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_CALL_IDENTITY) {
+			struct q931_ie_call_identity *ci;
+			ci = container_of(ies->ies[i],
+				struct q931_ie_call_identity, ie);
+		}
+	}
+
+	visdn_park(ast_chan->bridge, ast_chan);
 }
 
 static void visdn_q931_timeout_indication(

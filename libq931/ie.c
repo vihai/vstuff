@@ -25,6 +25,7 @@
 #include <libq931/ie_cgpn.h>
 #include <libq931/ie_chanid.h>
 #include <libq931/ie_call_identity.h>
+#include <libq931/ie_display.h>
 #include <libq931/ie_progind.h>
 #include <libq931/ie_cause.h>
 #include <libq931/ie_call_state.h>
@@ -207,6 +208,11 @@ static struct q931_ie_type q931_ie_types[] =
 		.network_type	= Q931_NT_ETSI,
 		.id		= Q931_IE_DISPLAY,
 		.name		= "Display",
+		.init		= q931_ie_display_register,
+		.alloc		= q931_ie_display_alloc_abstract,
+		.read_from_buf	= q931_ie_display_read_from_buf,
+		.write_to_buf   = q931_ie_display_write_to_buf,
+		.dump		= q931_ie_display_dump,
 	},
 	{
 		.max_len	= 8,

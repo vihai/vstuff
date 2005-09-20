@@ -1728,6 +1728,8 @@ void q931_resume_reject_request(
 
 	switch (call->state) {
 	case N17_RESUME_REQUEST:
+		// Ensure the lib's user specified IE cause
+
 		q931_call_send_resume_reject(call, user_ies);
 		q931_call_release_reference(call);
 		q931_call_set_state(call, N0_NULL_STATE);
@@ -1749,7 +1751,7 @@ void q931_resume_response(
 
 	switch (call->state) {
 	case N17_RESUME_REQUEST:
-		call->channel = q931_channel_alloc(call);
+//		call->channel = q931_channel_alloc(call);
 		q931_call_send_resume_acknowledge(call, user_ies);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
@@ -5279,47 +5281,30 @@ inline static void q931_handle_resume(
 	assert(call);
 	assert(msg);
 
-	// Only on BRIs
-	if (call->intf->type != Q931_INTF_TYPE_BRA) {
-		q931_call_message_not_compatible_with_state(call, msg);
-		return;
-	}
-
-/*
-	__u8 call_identity[11] = "";
-	int call_identity_len = 0;
-	int i;
-	for (i=0; i<msg->ies.count; i++) {
-		if (msg->ies.ies[i].type->id == Q931_IE_CALL_IDENTITY) {
-			struct q931_ie_call_identity *ci =
-				q931_ie_to_call_identity(msg->ies.ies[i]);
-
-			call_identity_len = msg->ies.ies[i].len;
-			memcpy(call_identity,
-				msg->ies.ies[i].data,
-				msg->ies.ies[i].len);
-
-			break;
-		}
-	}
-
 	switch (call->state) {
 	case N0_NULL_STATE:
 		if (call->intf->type != Q931_INTF_TYPE_BRA) {
-			q931_call_message_not_compatible_with_state(call, msg);
-			return;
-		}
+			struct q931_ies ies = Q931_IES_INIT;
 
-		q931_call_set_state(call, N17_RESUME_REQUEST);
-		q931_call_primitive(call, resume_indication, &msg->ies,
-			call_identity, call_identity_len);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+			q931_ies_add_put(&ies, &cause->ie);
+
+			q931_call_send_release(call, &ies);
+			q931_call_start_timer(call, T308);
+			q931_call_set_state(call, N19_RELEASE_REQUEST);
+		} else {
+			q931_call_set_state(call, N17_RESUME_REQUEST);
+			q931_call_primitive(call, resume_indication, &msg->ies);
+		}
 	break;
 
 	default:
 		q931_call_message_not_compatible_with_state(call, msg);
 	break;
 	}
-*/
 }
 
 inline static void q931_handle_resume_acknowledge(
@@ -5331,11 +5316,6 @@ inline static void q931_handle_resume_acknowledge(
 
 	switch (call->state) {
 	case U17_RESUME_REQUEST:
-		if (call->intf->type != Q931_INTF_TYPE_BRA) {
-			q931_call_message_not_compatible_with_state(call, msg);
-			return;
-		}
-
 		q931_call_stop_timer(call, T318);
 		// Handle failed connection TODO
 		q931_call_connect_channel(call->channel);
@@ -5359,16 +5339,11 @@ inline static void q931_handle_resume_reject(
 
 	switch (call->state) {
 	case U17_RESUME_REQUEST:
-		if (call->intf->type != Q931_INTF_TYPE_BRA) {
-			q931_call_message_not_compatible_with_state(call, msg);
-			return;
-		}
-
 		q931_call_stop_timer(call, T318);
 		q931_call_set_state(call, U0_NULL_STATE);
 		q931_call_release_reference(call);
 		q931_call_primitive(call, resume_confirm, &msg->ies,
-			Q931_RESUME_CONFIRM_TIMEOUT);
+			Q931_RESUME_CONFIRM_ERROR);
 	break;
 
 	default:
@@ -5386,15 +5361,6 @@ inline static void q931_handle_suspend(
 
 	switch (call->state) {
 	case N10_ACTIVE: {
-		int i;
-		for (i=0; i<msg->ies.count; i++) {
-			if (msg->ies.ies[i]->type->id == Q931_IE_CALL_IDENTITY) {
-				struct q931_ie_call_identity *ci;
-				ci = container_of(msg->ies.ies[i],
-					struct q931_ie_call_identity, ie);
-			}
-		}
-
 		if (call->intf->type != Q931_INTF_TYPE_BRA) {
 			struct q931_ies ies = Q931_IES_INIT;
 
@@ -5448,15 +5414,8 @@ inline static void q931_handle_suspend_reject(
 	assert(call);
 	assert(msg);
 
-	// Only for BRI
-
 	switch (call->state) {
 	case U15_SUSPEND_REQUEST:
-		if (call->intf->type != Q931_INTF_TYPE_BRA) {
-			q931_call_message_not_compatible_with_state(call, msg);
-			return;
-		}
-
 		q931_call_stop_timer(call, T319);
 		q931_call_set_state(call, U10_ACTIVE);
 		q931_call_primitive(call, suspend_confirm, &msg->ies,
