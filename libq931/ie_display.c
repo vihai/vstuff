@@ -100,12 +100,14 @@ void q931_ie_display_dump(
 	struct q931_ie_display *ie =
 		container_of(generic_ie, struct q931_ie_display, ie);
 
-	char sane_str[10];
-	int i;
-	for(i=0; i<sizeof(sane_str); i++) {
-		sane_str[i] = isprint(ie->text[i]) ? ie->text[i] : '.';
+	char sane_str[82];
+	strncpy(sane_str, ie->text, sizeof(sane_str));
+
+	char *strp = sane_str;
+	while(*strp) {
+		*strp = isprint(*strp) ? *strp : '.';
+		strp++;
 	}
-	sane_str[i] = '\0';
 
 	report(LOG_DEBUG, "%sDisplay = %s (%d)\n", prefix,
 		sane_str);
