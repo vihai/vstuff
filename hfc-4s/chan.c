@@ -298,7 +298,7 @@ static int hfc_chan_frame_xmit(
 		goto err_no_free_tx;
 	}
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 	if (debug_level == 3) {
 		hfc_fifo_refresh_fz_cache(fifo);
 		hfc_debug_fifo(fifo, 3, "TX len %2d: ", skb->len);

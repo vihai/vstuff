@@ -172,11 +172,28 @@ AC_ARG_ENABLE(
 	[debug],
 	AC_HELP_STRING(
 		[--enable-debug],
-		[Debugging defaults]))
-AC_SUBST(enable_debug)
-AC_DEFINE(DEBUG, 1, [Debugging defaults])
+		[Debugging code]))
+AC_SUBST(enable_debug_code)
+
+if [[ "$enable_debug_code" = "yes" ]]; then
+	AC_DEFINE(DEBUG_CODE, 1, [Debugging code])
+fi
 
 #-----------------------------------------------------------------------------
+
+AC_ARG_ENABLE(
+	[debug-defaults],
+	AC_HELP_STRING(
+		[--enable-debug-defaults],
+		[Debugging defaults]))
+AC_SUBST(enable_debug_defaults)
+
+if [[ "$enable_debug_defaults" = "yes" ]]; then
+	AC_DEFINE(DEBUG_DEFAULTS, 1, [Debugging defaults])
+fi
+
+#-----------------------------------------------------------------------------
+
 drivers="hfc-pci, hfc-4s"
 
 AC_ARG_ENABLE(

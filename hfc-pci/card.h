@@ -23,7 +23,7 @@
 #include "fifo.h"
 #include "regs.h"
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 #define hfc_debug_card(card, dbglevel, format, arg...)	\
 	if (debug_level >= dbglevel)			\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\

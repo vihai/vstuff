@@ -19,7 +19,7 @@
 
 #define to_pcm_port(port) container_of(port, struct hfc_pcm_port, visdn_port)
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 #define hfc_debug_pcm_port(port, dbglevel, format, arg...)	\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\

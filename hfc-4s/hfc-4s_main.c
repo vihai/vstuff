@@ -37,7 +37,7 @@
 #include "card_sysfs.h"
 #include "card_inline.h"
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 int debug_level = 0;
 #endif
 
@@ -710,7 +710,7 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	kfree(card);
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 static ssize_t hfc_show_debug_level(
 	struct device_driver *driver,
 	char *buf)
@@ -753,7 +753,7 @@ static int __init hfc_init_module(void)
 	if (err < 0)
 		goto err_pci_register_driver;
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 	err = driver_create_file(
 		&hfc_driver.driver,
 		&driver_attr_debug_level);
@@ -761,7 +761,7 @@ static int __init hfc_init_module(void)
 
 	return 0;
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 	driver_remove_file(
 		&hfc_driver.driver,
 		&driver_attr_debug_level);
@@ -775,7 +775,7 @@ module_init(hfc_init_module);
 
 static void __exit hfc_module_exit(void)
 {
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 	driver_remove_file(
 		&hfc_driver.driver,
 		&driver_attr_debug_level);
@@ -790,11 +790,9 @@ module_exit(hfc_module_exit);
 
 MODULE_DESCRIPTION(hfc_DRIVER_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 module_param(debug_level, int, 0444);
 MODULE_PARM(debug_level,"i");
 MODULE_PARM_DESC(debug_level, "Initial debug level");

@@ -25,7 +25,7 @@
 
 #define to_chan_duplex(chan) container_of(chan, struct hfc_chan_duplex, visdn_chan)
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 #define hfc_debug_chan(chan, dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)					\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\

@@ -5,6 +5,7 @@ General:
 - Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
 - Check all input data in ioctls/setsockopt for security bugs
 - Document functions (with doxygen?)
+- Create a libvisdn for channel manipulation functions?
 
 Build system:
 -------------

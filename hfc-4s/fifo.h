@@ -21,7 +21,7 @@
 #define hfc_SM_B2_FIFO_OFF 1
 #define hfc_SM_E_FIFO_OFF 3
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 #define hfc_debug_fifo(fifo, dbglevel, format, arg...)		\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\

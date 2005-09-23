@@ -168,9 +168,15 @@ struct visdn_state
 	.usecnt = 0,
 	.timer_fd = -1,
 	.control_fd = -1,
-	.debug = DEBUG,
+#ifdef DEBUG_DEFAULTS
+	.debug = TRUE,
 	.debug_q921 = FALSE,
-	.debug_q931 = DEBUG,
+	.debug_q931 = TRUE,
+#else
+	.debug = FALSE,
+	.debug_q921 = FALSE,
+	.debug_q931 = FALSE,
+#endif
 
 	.default_intf = {
 		.network_role = Q931_INTF_NET_PRIVATE,
@@ -186,6 +192,17 @@ struct visdn_state
 		.international_prefix = "00",
 	}
 };
+
+#ifdef DEBUG_CODE
+#define visdn_debug(format, arg...)			\
+	if (visdn.debug)				\
+		ast_log(LOG_DEBUG,			\
+			format,				\
+			## arg)
+#else
+#define visdn_debug(format, arg...)		\
+	do {} while(0);
+#endif
 
 static void visdn_set_socket_debug(int on)
 {
@@ -1193,8 +1210,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "visdn_answer\n");
+	visdn_debug("visdn_answer\n");
 
 	ast_indicate(ast_chan, -1);
 
@@ -1274,10 +1290,7 @@ static int visdn_bridge(
 
 	chanid2++;
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE,
-			"Connecting chan %s to chan %s\n",
-			chanid1, chanid2);
+	visdn_debug("Connecting chan %s to chan %s\n", chanid1, chanid2);
 
 	struct visdn_connect vc;
 	snprintf(vc.src_chanid, sizeof(vc.src_chanid), "%s", chanid1);
@@ -1338,8 +1351,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		return 1;
 	}
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "visdn_indicate %d\n", condition);
+	visdn_debug("visdn_indicate %d\n", condition);
 
 	switch(condition) {
 	case AST_CONTROL_RING:
@@ -1397,9 +1409,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		if (ast_chan->dialed &&
 		   strcmp(ast_chan->dialed->type, VISDN_CHAN_TYPE)) {
 
-			if (visdn.debug)
-				ast_log(LOG_NOTICE,
-					"Channel is not VISDN, sending"
+			visdn_debug("Channel is not VISDN, sending"
 					" progress indicator\n");
 
 			pi = q931_ie_progress_indicator_alloc();
@@ -1610,8 +1620,7 @@ static struct visdn_chan *visdn_alloc()
 
 static int visdn_hangup(struct ast_channel *ast_chan)
 {
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "visdn_hangup %s\n", ast_chan->name);
+	visdn_debug("visdn_hangup %s\n", ast_chan->name);
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
@@ -1708,8 +1717,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "visdn_hangup complete\n");
+	visdn_debug("visdn_hangup complete\n");
 
 	return 0;
 }
@@ -1961,9 +1969,7 @@ static void visdn_accept(
 	if (!newdlc)
 		return;
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE,
-			"New DLC (TEI=%d) accepted on interface %s\n",
+	visdn_debug("New DLC (TEI=%d) accepted on interface %s\n",
 			newdlc->tei,
 			intf->name);
 
@@ -2032,8 +2038,7 @@ static void visdn_add_interface(const char *name)
 	}
 
 	if (!intf->q931_intf) {
-		if (visdn.debug)
-			ast_log(LOG_NOTICE, "Opening interface %s\n", name);
+		visdn_debug("Opening interface %s\n", name);
 
 		visdn_open_interface(intf);
 		refresh_polls_list();
@@ -2116,17 +2121,13 @@ static void visdn_netlink_receive()
 			}
 
 			if (ifi->ifi_flags & IFF_UP) {
-				if (visdn.debug)
-					ast_log(LOG_NOTICE,
-						 "Netlink msg: %s UP %s\n",
+				visdn_debug("Netlink msg: %s UP %s\n",
 						ifname,
 						(ifi->ifi_flags & IFF_ALLMULTI) ? "NT": "TE");
 
 				visdn_add_interface(ifname);
 			} else {
-				if (visdn.debug)
-					ast_log(LOG_NOTICE,
-						 "Netlink msg: %s DOWN %s\n",
+				visdn_debug("Netlink msg: %s DOWN %s\n",
 						ifname,
 						(ifi->ifi_flags & IFF_ALLMULTI) ? "NT": "TE");
 
@@ -2151,10 +2152,7 @@ static int visdn_q931_thread_do_poll()
 		msec_to_wait = (msec_to_wait > 0 && msec_to_wait < 2001) ?
 				msec_to_wait : 2001;
 
-	if (visdn.debug)
-		ast_verbose(VERBOSE_PREFIX_3
-			"Time to wait = %d\n",
-			msec_to_wait);
+	visdn_debug("select timeout = %d\n", msec_to_wait);
 
 	// Uhm... we should lock, copy polls and unlock before poll()
 	if (poll(visdn.polls, visdn.npolls, msec_to_wait) < 0) {
@@ -2173,9 +2171,7 @@ static int visdn_q931_thread_do_poll()
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
 			if (intf->open_pending) {
-				if (visdn.debug)
-					ast_log(LOG_NOTICE,
-						"Retry opening interface %s\n",
+				visdn_debug("Retry opening interface %s\n",
 						intf->name);
 
 				if (visdn_open_interface(intf) < 0)
@@ -2263,10 +2259,14 @@ static void *visdn_q931_thread_main(void *data)
 	return NULL;
 }
 
+#ifdef DEBUG_CODE
 #define FUNC_DEBUG()					\
 	if (visdn.debug)				\
 		ast_verbose(VERBOSE_PREFIX_3		\
-			"%s\n", __FUNCTION__);		\
+			"%s\n", __FUNCTION__);
+#else
+#define FUNC_DEBUG() do {} while(0)
+#endif
 
 static void visdn_q931_alerting_indication(
 	struct q931_call *q931_call,
@@ -3167,9 +3167,7 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	strncpy(visdn_chan->visdn_chanid, chanid + 1,
 		sizeof(visdn_chan->visdn_chanid));
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE,
-			"Connecting streamport to chan %s\n",
+	visdn_debug("Connecting streamport to chan %s\n",
 			visdn_chan->visdn_chanid);
 
 	visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
@@ -3259,8 +3257,7 @@ static void *visdn_generator_thread_main(void *aaa)
 
 	int ms = 500;
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "Generator thread started\n");
+	visdn_debug("Generator thread started\n");
 
 	while (gen_chans_num) {
 		struct ast_channel *chan;
@@ -3304,8 +3301,7 @@ static void *visdn_generator_thread_main(void *aaa)
 
 	visdn_generator_thread = AST_PTHREADT_NULL;
 
-	if (visdn.debug)
-		ast_log(LOG_NOTICE, "Generator thread stopped\n");
+	visdn_debug("Generator thread stopped\n");
 
 	return NULL;
 }

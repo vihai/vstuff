@@ -212,7 +212,7 @@ void hfc_fifo_rx_work(void *data)
 
 	hfc_fifo_mem_read(fifo, &stat, sizeof(stat));
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 	if(debug_level == 3) {
 		hfc_debug_fifo(fifo, 3, "RX len %2d: ", frame_size);
 	} else if(debug_level >= 4) {

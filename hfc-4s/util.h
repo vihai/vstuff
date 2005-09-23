@@ -13,7 +13,7 @@
 #ifndef _HFC_UTIL_H
 #define _HFC_UTIL_H
 
-#ifdef DEBUG
+#ifdef DEBUG_CODE
 #define hfc_debug(dbglevel, format, arg...)		\
 	if (debug_level >= dbglevel)			\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX format, ## arg)

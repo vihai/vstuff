@@ -2,6 +2,27 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-23 20:28:45 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-181
+
+    Summary:
+      Improved the debugging infrastructure
+    Revision:
+      isdn--devel--0.1--patch-181
+
+    
+    
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c configure.ac
+     hfc-4s/Makefile.in hfc-4s/card.h hfc-4s/chan.c hfc-4s/chan.h
+     hfc-4s/fifo.c hfc-4s/fifo.h hfc-4s/hfc-4s_main.c
+     hfc-4s/pcm_port.h hfc-4s/st_port.h hfc-4s/util.h
+     hfc-e1/Makefile.in hfc-pci/Makefile.in hfc-pci/card.h
+     hfc-pci/chan.h hfc-pci/fifo.c hfc-pci/fifo.h
+     hfc-pci/hfc-pci_main.c hfc-pci/pcm_port.h hfc-pci/st_port.h
+     hfc-pci/util.h
+
+
 2005-09-23 19:33:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-180
 
     Summary:
