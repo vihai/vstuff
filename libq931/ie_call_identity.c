@@ -103,10 +103,7 @@ void q931_ie_call_identity_dump(
 	char sane_str[10];
 	char hex_str[20];
 	int i;
-	for(i=0; i<sizeof(sane_str); i++) {
-		if (!ie->data[i])
-			break;
-
+	for(i=0; i<sizeof(sane_str) && i<ie->data_len; i++) {
 		sane_str[i] = isprint(ie->data[i]) ? ie->data[i] : '.';
 		snprintf(hex_str + (i*2), sizeof(hex_str)-(i*2),
 				"%02x ", ie->data[i]);

@@ -16,7 +16,7 @@
 #define Q931_PRIVATE
 
 #include <libq931/lib.h>
-#include <libq931/ie_hlc.h>
+#include <libq931/ie_high_layer_compatibility.h>
 
 static const struct q931_ie_type *ie_type;
 

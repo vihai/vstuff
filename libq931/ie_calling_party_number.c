@@ -16,7 +16,7 @@
 #define Q931_PRIVATE
 
 #include <libq931/lib.h>
-#include <libq931/ie_cgpn.h>
+#include <libq931/ie_calling_party_number.h>
 
 static const struct q931_ie_type *ie_type;
 

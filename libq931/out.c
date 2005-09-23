@@ -37,17 +37,6 @@
 #include <libq931/proto.h>
 #include <libq931/callref.h>
 
-#include <libq931/ie_sending_complete.h>
-#include <libq931/ie_bearercap.h>
-#include <libq931/ie_cdpn.h>
-#include <libq931/ie_cgpn.h>
-#include <libq931/ie_chanid.h>
-#include <libq931/ie_progind.h>
-#include <libq931/ie_cause.h>
-#include <libq931/ie_call_state.h>
-#include <libq931/ie_hlc.h>
-#include <libq931/ie_restind.h>
-
 static int q931_prepare_header(
 	const struct q931_call *call,
 	__u8 *frame,

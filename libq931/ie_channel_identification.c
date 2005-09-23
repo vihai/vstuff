@@ -17,7 +17,7 @@
 
 #include <libq931/lib.h>
 #include <libq931/logging.h>
-#include <libq931/ie_chanid.h>
+#include <libq931/ie_channel_identification.h>
 #include <libq931/intf.h>
 #include <libq931/message.h>
 #include <libq931/chanset.h>

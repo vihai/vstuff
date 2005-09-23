@@ -1,3 +1,15 @@
+/*
+ * vISDN DSSS-1/q.931 signalling library
+ *
+ * Copyright (C) 2004-2005 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU Lesser General Public License.
+ *
+ */
+
 #ifndef _LIBQ931_CALL_H
 #define _LIBQ931_CALL_H
 
@@ -206,6 +218,7 @@ void q931_resume_reject_request(
 
 void q931_resume_response(
 	struct q931_call *call,
+	struct q931_channel *channel,
 	const struct q931_ies *ies);
 void q931_setup_complete_request(
 	struct q931_call *call,

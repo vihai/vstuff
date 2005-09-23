@@ -1,3 +1,14 @@
+/*
+ * vISDN DSSS-1/q.931 signalling library
+ *
+ * Copyright (C) 2004-2005 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU Lesser General Public License.
+ *
+ */
 
 #ifndef _LIBQ931_IE_CALL_IDENTITY_H
 #define _LIBQ931_IE_CALL_IDENTITY_H

@@ -21,6 +21,7 @@
 #include <libq931/logging.h>
 #include <libq931/channel.h>
 #include <libq931/intf.h>
+#include <libq931/lib.h>
 
 struct q931_channel *q931_channel_select(struct q931_call *call)
 {
@@ -92,3 +93,81 @@ const char *q931_channel_state_to_text(enum q931_channel_state state)
 
 	assert(0);
 }
+
+void q931_channel_connect(
+	struct q931_channel *channel)
+{
+	assert(channel);
+
+	if (channel->state != Q931_CHANSTATE_CONNECTED) {
+		channel->state = Q931_CHANSTATE_CONNECTED;
+
+		q931_channel_primitive(channel, connect_channel);
+	}
+}
+
+void q931_channel_control(
+	struct q931_channel *channel)
+{
+	assert(channel);
+
+	if (channel->state != Q931_CHANSTATE_CONNECTED) {
+		channel->state = Q931_CHANSTATE_CONNECTED;
+
+		q931_channel_primitive(channel, connect_channel);
+	}
+}
+
+void q931_channel_disconnect(
+	struct q931_channel *channel)
+{
+	// We may be called with channel == NULL when the channel has not
+	// even been selected
+
+	if (!channel)
+		return;
+
+	assert(channel->call);
+
+	if (channel->state == Q931_CHANSTATE_CONNECTED) {
+		channel->state = Q931_CHANSTATE_DISCONNECTED;
+
+		q931_channel_primitive(channel, disconnect_channel);
+	}
+}
+
+void q931_channel_release(
+	struct q931_channel *channel)
+{
+	// We may be called with channel == NULL when the channel has not
+	// even been selected
+
+	if (!channel)
+		return;
+
+	if (channel->state == Q931_CHANSTATE_CONNECTED) {
+		// Is this an unexpected state?
+
+		q931_channel_primitive(channel, disconnect_channel);
+	}
+
+	channel->state = Q931_CHANSTATE_AVAILABLE;
+}
+
+void q931_channel_start_tone(
+	struct q931_channel *channel,
+	enum q931_tone_type tone)
+{
+	assert(channel);
+
+	q931_channel_primitive(channel, start_tone, tone);
+}
+
+void q931_channel_stop_tone(
+	struct q931_channel *channel)
+{
+	assert(channel);
+
+	q931_channel_primitive(channel, stop_tone);
+}
+

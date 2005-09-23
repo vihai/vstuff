@@ -26,10 +26,10 @@
 #include <libq931/out.h>
 #include <libq931/chanset.h>
 
-#include <libq931/ie_chanid.h>
 #include <libq931/ie_call_state.h>
-#include <libq931/ie_restind.h>
 #include <libq931/ie_cause.h>
+#include <libq931/ie_channel_identification.h>
+#include <libq931/ie_restart_indicator.h>
 
 static const char *q931_global_state_to_text(enum q931_global_state state)
 {

@@ -109,6 +109,5 @@ void q931_ie_display_dump(
 		strp++;
 	}
 
-	report(LOG_DEBUG, "%sDisplay = %s (%d)\n", prefix,
-		sane_str);
+	report(LOG_DEBUG, "%sDisplay = %s\n", prefix, sane_str);
 }

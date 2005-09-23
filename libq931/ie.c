@@ -19,18 +19,19 @@
 #define Q931_PRIVATE
 
 #include <libq931/ie.h>
-#include <libq931/ie_sending_complete.h>
-#include <libq931/ie_bearercap.h>
-#include <libq931/ie_cdpn.h>
-#include <libq931/ie_cgpn.h>
-#include <libq931/ie_chanid.h>
+#include <libq931/ie_bearer_capability.h>
 #include <libq931/ie_call_identity.h>
-#include <libq931/ie_display.h>
-#include <libq931/ie_progind.h>
-#include <libq931/ie_cause.h>
 #include <libq931/ie_call_state.h>
-#include <libq931/ie_hlc.h>
-#include <libq931/ie_restind.h>
+#include <libq931/ie_called_party_number.h>
+#include <libq931/ie_calling_party_number.h>
+#include <libq931/ie_cause.h>
+#include <libq931/ie_channel_identification.h>
+#include <libq931/ie_display.h>
+#include <libq931/ie_high_layer_compatibility.h>
+#include <libq931/ie_notification_indicator.h>
+#include <libq931/ie_progress_indicator.h>
+#include <libq931/ie_restart_indicator.h>
+#include <libq931/ie_sending_complete.h>
 
 static struct q931_ie_type q931_ie_types[] =
 {
@@ -201,6 +202,11 @@ static struct q931_ie_type q931_ie_types[] =
 		.network_type	= Q931_NT_ETSI,
 		.id		= Q931_IE_NOTIFICATION_INDICATOR,
 		.name		= "Notification Indicator",
+		.init		= q931_ie_notification_indicator_register,
+		.alloc		= q931_ie_notification_indicator_alloc_abstract,
+		.read_from_buf	= q931_ie_notification_indicator_read_from_buf,
+		.write_to_buf   = q931_ie_notification_indicator_write_to_buf,
+		.dump		= q931_ie_notification_indicator_dump,
 	},
 	{
 		.max_len	= 82,

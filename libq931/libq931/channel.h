@@ -1,3 +1,15 @@
+/*
+ * vISDN DSSS-1/q.931 signalling library
+ *
+ * Copyright (C) 2004-2005 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU Lesser General Public License.
+ *
+ */
+
 #ifndef _LIBQ931_CHANNEL_H
 #define _LIBQ931_CHANNEL_H
 
@@ -41,5 +53,20 @@ struct q931_channel *get_channel_by_id(
 	int chan_id);
 
 const char *q931_channel_state_to_text(enum q931_channel_state state);
+
+void q931_channel_connect(struct q931_channel *channel);
+void q931_channel_control(struct q931_channel *channel);
+void q931_channel_disconnect(struct q931_channel *channel);
+void q931_channel_release(struct q931_channel *channel);
+
+#ifdef Q931_PRIVATE
+
+void q931_channel_start_tone(
+	struct q931_channel *channel,
+	enum q931_tone_type tone);
+void q931_channel_stop_tone(
+	struct q931_channel *channel);
+
+#endif
 
 #endif

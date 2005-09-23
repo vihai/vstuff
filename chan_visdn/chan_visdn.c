@@ -22,6 +22,7 @@
 #include <sys/ioctl.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <ctype.h>
 
 #include <asm/types.h>
 #include <linux/netlink.h>
@@ -47,6 +48,7 @@
 #include <asterisk/callerid.h>
 #include <asterisk/indications.h>
 #include <asterisk/cli.h>
+#include <asterisk/musiconhold.h>
 
 #include <streamport.h>
 #include <lapd.h>
@@ -57,7 +59,6 @@
 //#include "echo.h"
 
 #include "../config.h"
-#include "chan_visdn.h"
 
 #define FRAME_SIZE 160
 
@@ -79,6 +80,37 @@ static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
 #define VISDN_DESCRIPTION "VISDN Channel For Asterisk"
 #define VISDN_CHAN_TYPE "VISDN"
 #define VISDN_CONFIG_FILE "visdn.conf"
+
+struct visdn_suspended_call
+{
+	struct list_head node;
+
+	struct ast_channel *ast_chan;
+	struct q931_channel *q931_chan;
+
+	char call_identity[10];
+	int call_identity_len;
+
+	time_t old_when_to_hangup;
+};
+
+struct visdn_chan {
+	struct ast_channel *ast_chan;
+	struct q931_call *q931_call;
+	struct visdn_suspended_call *suspended_call;
+
+	int channel_fd;
+
+	char calling_number[21];
+	char called_number[21];
+	int sending_complete;
+
+	char visdn_chanid[30];
+
+//	echo_can_state_t *ec;
+};
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 enum poll_info_type
 {
@@ -127,6 +159,8 @@ struct visdn_interface
 	int overlap_receiving;
 	char national_prefix[10];
 	char international_prefix[10];
+
+	struct list_head suspended_calls;
 
 	struct q931_interface *q931_intf;
 };
@@ -183,8 +217,6 @@ struct visdn_state
 
 static void visdn_set_socket_debug(int on)
 {
-	int i;
-
 	struct visdn_interface *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 		if (!intf->q931_intf)
@@ -323,7 +355,6 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
-	int i;
 	struct visdn_interface *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
@@ -335,7 +366,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 						"NT" : "TE") :
 					"UNUSED!");
 
-		ast_cli(fd, 
+		ast_cli(fd,
 			"Network role              : %s\n"
 			"Type of number            : %s\n"
 			"Local type of number      : %s\n"
@@ -344,7 +375,9 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Default inbound caller ID : %s\n"
 			"Force inbound caller ID   : %s\n"
 			"Overlap Sending           : %s\n"
-			"Overlap Receiving         : %s\n",
+			"Overlap Receiving         : %s\n"
+			"National prefix           : %s\n"
+			"International prefix      : %s\n",
 			visdn_interface_network_role_to_string(
 				intf->network_role),
 			visdn_type_of_number_to_string(
@@ -361,8 +394,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			intf->international_prefix);
 
 		if (intf->q931_intf) {
-			ast_cli(fd,
-				"DLCs                      : ");
+			ast_cli(fd, "DLCs                      : ");
 
 			struct q931_dlc *dlc;
 			list_for_each_entry(dlc, &intf->q931_intf->dlcs,
@@ -371,6 +403,34 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			}
 
 			ast_cli(fd, "\n");
+		}
+
+		ast_cli(fd, "Parked calls:\n");
+		struct visdn_suspended_call *suspended_call;
+		list_for_each_entry(suspended_call, &intf->suspended_calls, node) {
+
+			char sane_str[10];
+			char hex_str[20];
+			int i;
+			for(i=0;
+			    i<sizeof(sane_str) &&
+				i<suspended_call->call_identity_len;
+			    i++) {
+				sane_str[i] =
+					 isprint(suspended_call->call_identity[i]) ?
+						suspended_call->call_identity[i] : '.';
+
+				snprintf(hex_str + (i*2),
+					sizeof(hex_str)-(i*2),
+					"%02x ",
+					suspended_call->call_identity[i]);
+			}
+			sane_str[i] = '\0';
+			hex_str[i*2] = '\0';
+
+			ast_cli(fd, "    %s (%s)\n",
+				sane_str,
+				hex_str);
 		}
 	}
 
@@ -535,6 +595,7 @@ static void visdn_reload_config(void)
 		if (!found) {
 			intf = malloc(sizeof(*intf));
 
+			INIT_LIST_HEAD(&intf->suspended_calls);
 			intf->q931_intf = NULL;
 			intf->open_pending = FALSE;
 			strncpy(intf->name, cat, sizeof(intf->name));
@@ -560,9 +621,7 @@ static void visdn_reload_config(void)
 	ast_mutex_unlock(&visdn.lock);
 
 	ast_destroy(cfg);
-
 }
-
 
 static int do_visdn_reload(int fd, int argc, char *argv[])
 {
@@ -597,21 +656,11 @@ static int do_show_visdn_channels(int fd, int argc, char *argv[])
 	return 0;
 }
 
-/*
-#define list_for_each_entry(pos, head, member)				\
-	for (pos = list_entry((head)->next, typeof(*pos), member)	\
-		     ;			\
-	     &pos->member != (head); 					\
-	     pos = list_entry(pos->member.next, typeof(*pos), member)	\
-		     )
-*/
-
 static int visdn_cli_print_call_list(
 	int fd,
 	struct q931_interface *filter_intf)
 {
 	int first_call;
-	int i;
 
 	ast_mutex_lock(&visdn.lock);
 
@@ -943,6 +992,8 @@ static enum q931_ie_called_party_number_type_of_number
 	case VISDN_TYPE_OF_NUMBER_ABBREVIATED:
 		return Q931_IE_CDPN_TON_ABBREVIATED;
 	}
+
+	assert(0);
 }
 
 static enum q931_ie_calling_party_number_type_of_number
@@ -1041,6 +1092,7 @@ static int visdn_call(
 	q931_call = q931_call_alloc_out(intf->q931_intf);
 	if (!q931_call) {
 		ast_log(LOG_WARNING, "Cannot allocate outbound call\n");
+		err = -1;
 		goto err_call_alloc;
 	}
 
@@ -1180,7 +1232,14 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	}
 
 	ast_mutex_lock(&visdn.lock);
-	q931_setup_response(visdn_chan->q931_call, NULL);
+	if (visdn_chan->q931_call->state == U6_CALL_PRESENT ||
+	    visdn_chan->q931_call->state == U7_CALL_RECEIVED ||
+	    visdn_chan->q931_call->state == U9_INCOMING_CALL_PROCEEDING ||
+	    visdn_chan->q931_call->state == U25_OVERLAP_RECEIVING ||
+	    visdn_chan->q931_call->state == N2_OVERLAP_SENDING ||
+	    visdn_chan->q931_call->state == N4_CALL_DELIVERED) {
+		q931_setup_response(visdn_chan->q931_call, NULL);
+	}
 	ast_mutex_unlock(&visdn.lock);
 
 	return 0;
@@ -1579,15 +1638,10 @@ static struct visdn_chan *visdn_alloc()
 
 static int visdn_hangup(struct ast_channel *ast_chan)
 {
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
-
 	if (visdn.debug)
 		ast_log(LOG_NOTICE, "visdn_hangup %s\n", ast_chan->name);
 
-	if (!visdn_chan) {
-		ast_log(LOG_WARNING, "Asked to hangup channel not connected\n");
-		return 0;
-	}
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
 	if (visdn_chan->q931_call) {
 		/*
@@ -1608,13 +1662,12 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		visdn_chan->q931_call->pvt = NULL;
 
-		if (visdn_chan->q931_call->state == N15_SUSPEND_REQUEST) {
-			q931_suspend_response(visdn_chan->q931_call, NULL);
-		} else if (
+		if (
 		    visdn_chan->q931_call->state != N0_NULL_STATE &&
 		    visdn_chan->q931_call->state != N1_CALL_INITIATED &&
 		    visdn_chan->q931_call->state != N11_DISCONNECT_REQUEST &&
 		    visdn_chan->q931_call->state != N12_DISCONNECT_INDICATION &&
+		    visdn_chan->q931_call->state != N15_SUSPEND_REQUEST &&
 		    visdn_chan->q931_call->state != N17_RESUME_REQUEST &&
 		    visdn_chan->q931_call->state != N19_RELEASE_REQUEST &&
 		    visdn_chan->q931_call->state != N22_CALL_ABORT &&
@@ -1643,32 +1696,43 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->q931_call = NULL;
 	}
 
+	if (visdn_chan->suspended_call) {
+		// We are responsible for the channel
+		q931_channel_release(visdn_chan->suspended_call->q931_chan);
+
+		list_del(&visdn_chan->suspended_call->node);
+		free(visdn_chan->suspended_call);
+		visdn_chan->suspended_call = NULL;
+	}
+
 	// Make sure the generator is stopped
 	if (!ast_chan->pbx)
 		visdn_generator_stop(ast_chan);
 
-	if (visdn_chan->channel_fd > 0) {
-		// Disconnect the softport since we cannot rely on
-		// libq931 (see above)
-		if (ioctl(visdn_chan->channel_fd,
-				VISDN_IOC_DISCONNECT, NULL) < 0) {
-			ast_log(LOG_ERROR,
-				"ioctl(VISDN_IOC_DISCONNECT): %s\n",
-				strerror(errno));
+	if (visdn_chan) {
+		if (visdn_chan->channel_fd > 0) {
+			// Disconnect the softport since we cannot rely on
+			// libq931 (see above)
+			if (ioctl(visdn_chan->channel_fd,
+					VISDN_IOC_DISCONNECT, NULL) < 0) {
+				ast_log(LOG_ERROR,
+					"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+					strerror(errno));
+			}
+
+			if (close(visdn_chan->channel_fd) < 0) {
+				ast_log(LOG_ERROR,
+					"close(visdn_chan->channel_fd): %s\n",
+					strerror(errno));
+			}
+
+			visdn_chan->channel_fd = -1;
 		}
 
-		if (close(visdn_chan->channel_fd) < 0) {
-			ast_log(LOG_ERROR,
-				"close(visdn_chan->channel_fd): %s\n",
-				strerror(errno));
-		}
+		visdn_destroy(visdn_chan);
 
-		visdn_chan->channel_fd = -1;
+		ast_chan->pvt->pvt = NULL;
 	}
-
-	visdn_destroy(visdn_chan);
-
-	ast_chan->pvt->pvt = NULL;
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
@@ -1985,6 +2049,7 @@ static void visdn_add_interface(const char *name)
 	if (!found) {
 		intf = malloc(sizeof(*intf));
 
+		INIT_LIST_HEAD(&intf->suspended_calls);
 		intf->q931_intf = NULL;
 		intf->configured = FALSE;
 		intf->open_pending = FALSE;
@@ -2571,7 +2636,98 @@ static void visdn_q931_resume_indication(
 {
 	FUNC_DEBUG();
 
-	q931_resume_response(q931_call, NULL);
+	enum q931_ie_cause_value cause;
+
+	if (callpvt_to_astchan(q931_call)) {
+		ast_log(LOG_WARNING, "Unexpexted ast_chan\n");
+		cause = Q931_IE_C_CV_RESOURCES_UNAVAILABLE;
+		goto err_ast_chan;
+	}
+
+	struct q931_ie_call_identity *ci = NULL;
+
+	int i;
+	for (i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_CALL_IDENTITY) {
+			ci = container_of(ies->ies[i],
+				struct q931_ie_call_identity, ie);
+		}
+	}
+
+	struct visdn_interface *intf = q931_call->intf->pvt;
+	struct visdn_suspended_call *suspended_call;
+
+	int found = FALSE;
+	list_for_each_entry(suspended_call, &intf->suspended_calls, node) {
+		if ((!ci && suspended_call->call_identity_len == 0) ||
+		    (suspended_call->call_identity_len == ci->data_len &&
+		     !memcmp(suspended_call->call_identity, ci->data,
+					ci->data_len))) {
+
+			found = TRUE;
+
+			break;
+		}
+	}
+
+	if (!found) {
+		ast_log(LOG_NOTICE, "Unable to find suspended call\n");
+
+		if (list_empty(&intf->suspended_calls))
+			cause = Q931_IE_C_CV_SUSPENDED_CALL_EXISTS_BUT_NOT_THIS;
+		else
+			cause = Q931_IE_C_CV_NO_CALL_SUSPENDED;
+
+		goto err_call_not_found;
+	}
+
+	assert(suspended_call->ast_chan);
+
+	struct visdn_chan *visdn_chan = suspended_call->ast_chan->pvt->pvt;
+
+	q931_call->pvt = suspended_call->ast_chan;
+	visdn_chan->q931_call = q931_call;
+	visdn_chan->suspended_call = NULL;
+
+	if (!strcmp(suspended_call->ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
+		// Wow, the remote channel is ISDN too, let's notify it!
+
+		struct q931_ies response_ies = Q931_IES_INIT;
+
+		struct visdn_chan *remote_visdn_chan =
+				suspended_call->ast_chan->bridge->pvt->pvt;
+
+		struct q931_call *remote_call = remote_visdn_chan->q931_call;
+
+		struct q931_ie_notification_indicator *notify =
+			q931_ie_notification_indicator_alloc();
+		notify->description = Q931_IE_NI_D_USER_RESUMED;
+		q931_ies_add_put(&response_ies, &notify->ie);
+
+		q931_notify_request(remote_call, &response_ies);
+	}
+
+	ast_moh_stop(suspended_call->ast_chan->bridge);
+	q931_resume_response(q931_call, suspended_call->q931_chan, NULL);
+
+	list_del(&suspended_call->node);
+	free(suspended_call);
+
+	return;
+
+err_call_not_found:
+err_ast_chan:
+	;
+	struct q931_ies resp_ies = Q931_IES_INIT;
+	struct q931_ie_cause *c = q931_ie_cause_alloc();
+	c->coding_standard = Q931_IE_C_CS_CCITT;
+	c->location = q931_ie_cause_location_call(q931_call);
+	c->value = cause;
+	q931_ies_add_put(&resp_ies, &c->ie);
+
+	q931_resume_reject_request(q931_call, &resp_ies);
+
+	return;
 }
 
 static void visdn_q931_setup_complete_indication(
@@ -2880,115 +3036,6 @@ struct visdn_dual {
 	struct ast_channel *chan2;
 };
 
-static void *visdn_park_thread(void *stuff)
-{
-	struct ast_channel *chan1, *chan2;
-	struct visdn_dual *d;
-
-	int ext;
-	int res;
-
-	d = stuff;
-	chan1 = d->chan1;
-	chan2 = d->chan2;
-	free(d);
-
-	ast_mutex_lock(&chan1->lock);
-	ast_do_masquerade(chan1);
-	ast_mutex_unlock(&chan1->lock);
-
-	res = ast_park_call(chan1, chan2, 0, &ext);
-	/* Then hangup */
-	ast_hangup(chan2);
-
-	ast_log(LOG_NOTICE, "Parked on extension '%d'\n", ext);
-
-	return NULL;
-}
-
-static int visdn_park(
-	struct ast_channel *chan1,
-	struct ast_channel *chan2)
-{
-	struct ast_channel *chan1m, *chan2m;
-	pthread_t th;
-
-	chan1m = ast_channel_alloc(0);
-	if (!chan1m) {
-		ast_log(LOG_WARNING, "Cannot allocate masquerade channel 1\n");
-		goto err_chan_alloc_1;
-	}
-
-	chan2m = ast_channel_alloc(0);
-	if (!chan2m) {
-		ast_log(LOG_WARNING, "Cannot allocate masquerade channel 2\n");
-		goto err_chan_alloc_2;
-	}
-
-	snprintf(chan1m->name, sizeof(chan1m->name), "Parking/%s", chan1->name);
-	/* Make formats okay */
-	chan1m->readformat = chan1->readformat;
-	chan1m->writeformat = chan1->writeformat;
-
-	ast_channel_masquerade(chan1m, chan1);
-
-	/* Setup the extensions and such */
-	strncpy(chan1m->context, chan1->context, sizeof(chan1m->context) - 1);
-	strncpy(chan1m->exten, chan1->exten, sizeof(chan1m->exten) - 1);
-	chan1m->priority = chan1->priority;
-
-	/* We make a clone of the peer channel too, so we can play
-	   back the announcement */
-	snprintf(chan2m->name, sizeof (chan2m->name), "VISDNPeer/%s",chan2->name);
-	/* Make formats okay */
-	chan2m->readformat = chan2->readformat;
-	chan2m->writeformat = chan2->writeformat;
-
-	ast_channel_masquerade(chan2m, chan2);
-
-	/* Setup the extensions and such */
-	strncpy(chan2m->context, chan2->context, sizeof(chan2m->context) - 1);
-	strncpy(chan2m->exten, chan2->exten, sizeof(chan2m->exten) - 1);
-	chan2m->priority = chan2->priority;
-
-	ast_mutex_lock(&chan2m->lock);
-	if (ast_do_masquerade(chan2m)) {
-		ast_log(LOG_WARNING, "Masquerade failed :(\n");
-		goto err_masquerade;
-	}
-	ast_mutex_unlock(&chan2m->lock);
-
-	struct visdn_dual *d = malloc(sizeof(struct visdn_dual));
-	if (!d) {
-		ast_log(LOG_WARNING, "Cannot allocate aux struct\n");
-		goto err_malloc;
-	}
-
-	memset(d, 0, sizeof(*d));
-
-	d->chan1 = chan1m;
-	d->chan2 = chan2m;
-	if (ast_pthread_create(&th, NULL, visdn_park_thread, d)) {
-		ast_log(LOG_WARNING, "Cannot spawn thread\n");
-		goto err_pthread_create;
-	}
-
-	return 0;
-
-err_pthread_create:
-	free(d);
-err_malloc:
-err_masquerade:
-	ast_mutex_unlock(&chan2m->lock);
-	ast_hangup(chan2m);
-err_chan_alloc_2:
-	ast_hangup(chan1m);
-err_chan_alloc_1:
-
-	return -1;
-}
-
-
 static void visdn_q931_suspend_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
@@ -2997,36 +3044,109 @@ static void visdn_q931_suspend_indication(
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
+	enum q931_ie_cause_value cause;
+
 	if (!ast_chan) {
-		ast_log(LOG_WARNING, "Unexpexted !ast_chan\n");
-		return; // Shouldn't happen
+		ast_log(LOG_WARNING, "Unexpexted ast_chan\n");
+		cause = Q931_IE_C_CV_RESOURCES_UNAVAILABLE;
+		goto err_ast_chan;
 	}
 
+	struct q931_ie_call_identity *ci = NULL;
 
 	int i;
 	for (i=0; i<ies->count; i++) {
 		if (ies->ies[i]->type->id == Q931_IE_CALL_IDENTITY) {
-			struct q931_ie_call_identity *ci;
 			ci = container_of(ies->ies[i],
 				struct q931_ie_call_identity, ie);
 		}
 	}
 
-	if (visdn_park(ast_chan->bridge, ast_chan) < 0) {
-		ast_log(LOG_WARNING, "Cannot park call\n");
+	struct visdn_interface *intf = q931_call->intf->pvt;
+	struct visdn_suspended_call *suspended_call;
+	list_for_each_entry(suspended_call, &intf->suspended_calls, node) {
+		if ((!ci && suspended_call->call_identity_len == 0) ||
+		    (ci && suspended_call->call_identity_len == ci->data_len &&
+		     !memcmp(suspended_call->call_identity,
+					ci->data, ci->data_len))) {
 
-		struct q931_ies ies = Q931_IES_INIT;
+			cause = Q931_IE_C_CV_CALL_IDENITY_IN_USE;
 
-		struct q931_ie_cause *cause = q931_ie_cause_alloc();
-		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(q931_call);
-		cause->value = Q931_IE_C_CV_RESOURCES_UNAVAILABLE; // Check this cause#
-		q931_ies_add_put(&ies, &cause->ie);
-
-		q931_suspend_reject_request(q931_call, &ies);
+			goto err_call_identity_in_use;
+		}
 	}
 
-//	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	suspended_call = malloc(sizeof(*suspended_call));
+	if (!suspended_call) {
+		cause = Q931_IE_C_CV_RESOURCES_UNAVAILABLE;
+		goto err_suspend_alloc;
+	}
+
+	suspended_call->ast_chan = ast_chan;
+	suspended_call->q931_chan = q931_call->channel;
+
+	if (ci) {
+		suspended_call->call_identity_len = ci->data_len;
+		memcpy(suspended_call->call_identity, ci->data, ci->data_len);
+	} else {
+		suspended_call->call_identity_len = 0;
+	}
+
+	suspended_call->old_when_to_hangup = ast_chan->whentohangup;
+
+	list_add_tail(&suspended_call->node, &intf->suspended_calls);
+
+	q931_suspend_response(q931_call, NULL);
+
+	assert(ast_chan->bridge);
+
+	ast_moh_start(ast_chan->bridge, NULL);
+
+	if (!strcmp(ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
+		// Wow, the remote channel is ISDN too, let's notify it!
+
+		struct q931_ies response_ies = Q931_IES_INIT;
+
+		struct visdn_chan *remote_visdn_chan =
+					ast_chan->bridge->pvt->pvt;
+
+		struct q931_call *remote_call = remote_visdn_chan->q931_call;
+
+		struct q931_ie_notification_indicator *notify =
+			q931_ie_notification_indicator_alloc();
+		notify->description = Q931_IE_NI_D_USER_SUSPENDED;
+		q931_ies_add_put(&response_ies, &notify->ie);
+
+		q931_notify_request(remote_call, &response_ies);
+	}
+
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+
+	if (!ast_chan->whentohangup ||
+	    time(NULL) + 45 < ast_chan->whentohangup)
+		ast_channel_setwhentohangup(ast_chan, 45); // T307
+
+	q931_call->pvt = NULL;
+	visdn_chan->q931_call = NULL;
+	visdn_chan->suspended_call = suspended_call;
+	q931_call_put(q931_call);
+
+	return;
+
+err_suspend_alloc:
+err_call_identity_in_use:
+err_ast_chan:
+	;
+	struct q931_ies resp_ies = Q931_IES_INIT;
+	struct q931_ie_cause *c = q931_ie_cause_alloc();
+	c->coding_standard = Q931_IE_C_CS_CCITT;
+	c->location = q931_ie_cause_location_call(q931_call);
+	c->value = cause;
+	q931_ies_add_put(&resp_ies, &c->ie);
+
+	q931_suspend_reject_request(q931_call, &resp_ies);
+
+	return;
 }
 
 static void visdn_q931_timeout_indication(
@@ -3057,7 +3177,7 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
 		"/sys/class/net/%s/visdn_channel/connected/../B%d",
-		channel->call->intf->name,
+		channel->intf->name,
 		channel->id+1);
 
 	memset(dest, 0x00, sizeof(dest));

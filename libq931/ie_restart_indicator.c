@@ -20,7 +20,7 @@
 #include <libq931/intf.h>
 #include <libq931/message.h>
 
-#include <libq931/ie_restind.h>
+#include <libq931/ie_restart_indicator.h>
 
 static const struct q931_ie_type *ie_type;
 

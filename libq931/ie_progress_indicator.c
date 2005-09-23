@@ -16,7 +16,7 @@
 #define Q931_PRIVATE
 
 #include <libq931/lib.h>
-#include <libq931/ie_progind.h>
+#include <libq931/ie_progress_indicator.h>
 
 static const struct q931_ie_type *ie_type;
 
