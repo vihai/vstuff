@@ -56,6 +56,7 @@
 
 #include <visdn.h>
 
+#include "chan_visdn.h"
 //#include "echo.h"
 
 #include "../config.h"
@@ -80,35 +81,6 @@ static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
 #define VISDN_DESCRIPTION "VISDN Channel For Asterisk"
 #define VISDN_CHAN_TYPE "VISDN"
 #define VISDN_CONFIG_FILE "visdn.conf"
-
-struct visdn_suspended_call
-{
-	struct list_head node;
-
-	struct ast_channel *ast_chan;
-	struct q931_channel *q931_chan;
-
-	char call_identity[10];
-	int call_identity_len;
-
-	time_t old_when_to_hangup;
-};
-
-struct visdn_chan {
-	struct ast_channel *ast_chan;
-	struct q931_call *q931_call;
-	struct visdn_suspended_call *suspended_call;
-
-	int channel_fd;
-
-	char calling_number[21];
-	char called_number[21];
-	int sending_complete;
-
-	char visdn_chanid[30];
-
-//	echo_can_state_t *ec;
-};
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
