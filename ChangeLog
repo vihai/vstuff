@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-23 21:49:39 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-185
+
+    Summary:
+      Fixed wrong reference to cxc_int
+    Revision:
+      isdn--devel--0.1--patch-185
+
+    
+    
+
+    modified files:
+     ChangeLog visdn-core/Makefile.in
+
+
 2005-09-23 21:32:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-184
 
     Summary:

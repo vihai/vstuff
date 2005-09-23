@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = visdn-core
-DIST_SOURCES = chan.c core_main.c port.c timer.c cxc.c cxc_int.c
-DIST_HEADERS = chan.h port.h timer.h visdn.h visdn_mod.h cxc.h cxc_int.h
+DIST_SOURCES = chan.c core_main.c port.c timer.c cxc.c
+DIST_HEADERS = chan.h port.h timer.h visdn.h visdn_mod.h cxc.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
