@@ -1,6 +1,6 @@
 
 astmod_LTLIBRARIES = chan_visdn.la
-chan_visdn_la_SOURCES = chan_visdn.c
+chan_visdn_la_SOURCES = chan_visdn.c chan_visdn.h
 
 INCLUDES =					\
 	-I$(top_builddir)			\
