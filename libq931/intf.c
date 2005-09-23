@@ -203,7 +203,6 @@ struct q931_interface *q931_open_interface(
 
 	return intf;
 
-err_fcntl:
 err_getsockopt:
 err_setsockopt:
 	close(s);

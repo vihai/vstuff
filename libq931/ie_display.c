@@ -12,6 +12,7 @@
 
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 
 #define Q931_PRIVATE
 

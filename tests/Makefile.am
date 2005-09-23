@@ -1,4 +1,6 @@
 
+M_CFLAGS = -D_REENTRANT -Wall
+
 bin_PROGRAMS = connect jitter sniffer traffic demoswitch
 
 INCLUDES = \

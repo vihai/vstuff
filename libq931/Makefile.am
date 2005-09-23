@@ -1,3 +1,4 @@
+AM_CFLAGS = -D_REENTRANT -Wall
 
 lib_LTLIBRARIES = libq931.la
 

@@ -12,6 +12,8 @@
  *
  */
 
+#include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -25,11 +27,7 @@
 
 #include <visdn.h>
 
-static int visdn_accept = 0;
-static bool llc_encaps = 0;
-static bool vc_encaps = 0;
 static int device_got_set = 0;
-static int visdn_max_mtu, visdn_max_mru;
 
 char pppd_version[] = VERSION;
 extern int new_style_driver;	/* From sys-linux.c */
@@ -134,16 +132,6 @@ static int visdn_connect(void)
 	return fd;
 }
 
-static void post_open_setup_visdn(void)
-{
-		    /* NOTHING */
-}
-
-static void pre_close_restore_visdn(void)
-{
-		    /* NOTHING */
-}
-
 static void visdn_disconnect(void)
 {
 	/* NOTHING */
@@ -151,8 +139,8 @@ static void visdn_disconnect(void)
 
 static void visdn_send_config(int mtu, u_int32_t asyncmap, int pcomp, int accomp)
 {
-	int sock;
-	struct ifreq ifr;
+//	int sock;
+//	struct ifreq ifr;
 /*
 	if (mtu > visdn_max_mtu)
 		error("Couldn't increase MTU to %d", mtu);
@@ -172,34 +160,13 @@ static void visdn_recv_config(int mru, u_int32_t asyncmap, int pcomp, int accomp
 //		error("Couldn't increase MRU to %d", mru);
 }
 
-static void set_xaccm_visdn(int unit, ext_accm accm)
-{
-	/* NOTHING */
-}
-
 void plugin_init(void)
 {
-
-	static char *bad_options[] = {
-		"noaccomp", "-ac",
-		"default-asyncmap", "-am", "asyncmap", "-as", "escape",
-		"receive-all",
-		"crtscts", "-crtscts", "nocrtscts",
-		"cdtrcts", "nocdtrcts",
-		"xonxoff",
-		"modem", "local", "sync",
-		NULL };
-
 	if (!ppp_available() && !new_style_driver)
 		fatal("Kernel doesn't support ppp_generic - needed for PPP over vISDN");
 
 	add_options(visdn_options);
 	info("VISDN plugin_init");
-//  {
-//    char **a;
-//    for (a = bad_options; *a != NULL; a++)
-//      remove_option(*a);
-//  }
 }
 
 struct channel visdn_channel = {
