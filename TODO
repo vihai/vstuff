@@ -33,8 +33,6 @@ chan_visdn:
 - Call bumbing
 - Handle ULAW
 - Handle caller id presentation informations
-- Call parking isn't working correctly. Asterisk isn't able to return back
-  the parked call. Maybe it's a bug in  asterisk. We need to investigate.
 
 - Call parking (SUSPEND/RESUME) does not use the call parking "infrastructure"
   in Asterisk. All my attempts to use ast_park_call() failed as:
@@ -54,13 +52,9 @@ chan_visdn:
      up by a non-vISDN channel. No provision exists in * to notify other
      channel drivers for such events.
 
-
-     to notify another channel driver when the parked call
-
 libq931:
 --------
 
-- Implement: 5.9 User notification procedure
 - Restart Procedure is completely untested, test it.
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 - Call bumbing

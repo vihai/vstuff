@@ -368,7 +368,6 @@ static int __init vsp_init_module(void)
 		"streamport");
 	vsp_class_dev.class = &visdn_system_class;
 	vsp_class_dev.dev = NULL;
-
 #ifdef HAVE_CLASS_DEV_DEVT
 	vsp_class_dev.devt = vsp_first_dev;
 #endif

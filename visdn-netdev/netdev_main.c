@@ -719,7 +719,7 @@ static int __init vnd_init_module(void)
 	visdn_port_init(&vnd_port);
 	vnd_port.ops = &vnd_port_ops;
 	vnd_port.device = &visdn_system_device;
-	strncpy(vnd_port.name, "netdev", sizeof(vnd_port.name));;
+	strncpy(vnd_port.name, "netdev", sizeof(vnd_port.name));
 	err = visdn_port_register(&vnd_port);
 	if (err < 0)
 		goto err_visdn_port_register;
@@ -798,11 +798,8 @@ static void __exit vnd_module_exit(void)
 #endif
 
 	class_device_del(&vnd_control_class_dev);
-
 	cdev_del(&vnd_cdev);
-
 	unregister_chrdev_region(vnd_first_dev, 1);
-
 	visdn_port_unregister(&vnd_port);
 
 	printk(KERN_INFO vnd_MODULE_DESCR " unloaded\n");

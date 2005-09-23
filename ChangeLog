@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-23 21:18:10 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-182
+
+    Summary:
+      Ported visdn-ppp which was left behind
+    Revision:
+      isdn--devel--0.1--patch-182
+
+    
+    
+
+    modified files:
+     ChangeLog Makefile.am TODO visdn-netdev/netdev_main.c
+     visdn-ppp/ppp_main.c visdn-streamport/streamport_main.c
+
+
 2005-09-23 20:28:45 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-181
 
     Summary:
