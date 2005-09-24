@@ -59,8 +59,8 @@ int q931_ie_bearer_capability_read_from_buf(
 
 	int nextoct = 0;
 
-	if (len < 3) {
-		report_msg(msg, LOG_WARNING, "IE size < 3\n");
+	if (len < 2) {
+		report_msg(msg, LOG_WARNING, "IE size < 2\n");
 		return FALSE;
 	}
 
