@@ -28,5 +28,7 @@ tla commit --seal -s "Version set and tree sealed"
 tla cacherev isdn--devel--0.1--patch-xxx
 tla cacherev visdn--release--VERSION--base-0
 
+./boostrap
+./configure
 make release
 

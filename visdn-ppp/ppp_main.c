@@ -187,9 +187,15 @@ static int vppp_ppp_start_xmit(
 
 	printk(KERN_INFO "vppp_ppp_start_xmit()\n");
 
-	return visdn_pass_frame_xmit(&chan->visdn_chan, skb);
+	int res;
+	res = visdn_pass_frame_xmit(&chan->visdn_chan, skb);
 
-	return -ENOTSUPP;
+	if (res == NETDEV_TX_OK)
+		return 1;
+	else
+		return 0;
+
+	// What should we do when res == NETDEV_TX_LOCKED ??
 }
 
 static int vppp_ppp_ioctl(

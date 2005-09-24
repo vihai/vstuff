@@ -1,15 +1,3 @@
-/*
- * Asterisk -- A telephony toolkit for Linux.
- *
- * Echo application -- play back what you hear to evaluate latency
- *
- * Copyright (C) 1999, Mark Spencer
- *
- * Mark Spencer <markster@linux-support.net>
- *
- * This program is free software, distributed under the terms of
- * the GNU General Public License
- */
 
 #include <asterisk/lock.h>
 #include <asterisk/file.h>
@@ -34,7 +22,7 @@ static char *app = "vISDNppp";
 static char *synopsis = "Runs pppd and connects channel to visdn-ppp gateway";
 
 static char *descrip = 
-"  ZapRAS(args): Executes a RAS server using pppd on the given channel.\n"
+"  vISDNppp(args): Executes a RAS server using pppd on the given channel.\n"
 "The channel must be a clear channel (i.e. PRI source) and a Zaptel\n"
 "channel to be able to use this function (No modem emulation is included).\n"
 "Your pppd must be patched to be zaptel aware. Arguments should be\n"
@@ -76,7 +64,7 @@ static pid_t spawn_ppp(
 
 	int i;
 	int max_fds = get_max_fds();
-	for (i=STDERR_FILENO + 1; i < max_fds; i++) 
+	for (i=STDERR_FILENO + 1; i < max_fds; i++)
 		close(i);
 
 	/* Restore original signal handlers */
