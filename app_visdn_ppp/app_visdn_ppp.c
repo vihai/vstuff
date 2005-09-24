@@ -131,6 +131,8 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 		ast_log(LOG_NOTICE, "Arg %d: %s\n", i, argv[i]);
 	}*/
 
+	signal(SIGCHLD, SIG_IGN);
+
 	pid_t pid = spawn_ppp(chan, argv, argc);
 	if (pid < 0) {
 		ast_log(LOG_WARNING, "Failed to spawn pppd\n");
@@ -139,56 +141,54 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	int status;
 	int signalled;
-	for (;;) {
-		while(ast_waitfor(chan, -1) > -1) {
-			res = wait4(pid, &status, WNOHANG, NULL);
-			if (!res) {
-				/* Check for hangup */
-				if (chan->_softhangup && !signalled) {
-					ast_log(LOG_NOTICE,
-						"Channel '%s' hungup."
-						" Signalling PPP at %d to die...\n",
-						chan->name, pid);
 
-					kill(pid, SIGTERM);
-					signalled = 1;
-				}
+	while(ast_waitfor(chan, -1) > -1) {
+		res = wait4(pid, &status, WNOHANG, NULL);
+		if (res == 0) {
+			/* Check for hangup */
+			if (chan->_softhangup && !signalled) {
+				ast_log(LOG_NOTICE,
+					"Channel '%s' hungup."
+					" Signalling PPP at %d to die...\n",
+					chan->name, pid);
 
-				/* Try again */
-				sleep(1);
-				continue;
+				kill(pid, SIGTERM);
+				signalled = 1;
 			}
 
-			f = ast_read(chan);
-			if (!f)
-				break;
-
-			ast_frfree(f);
-		}
-
-
-		if (res < 0) {
+			/* Try again */
+			sleep(1);
+			continue;
+		} else if (res < 0) {
 			ast_log(LOG_WARNING,
 				"wait4 returned %d: %s\n",
 				res, strerror(errno));
-		}
 
-		if (option_verbose > 2) {
-			if (WIFEXITED(status)) {
-				ast_verbose(VERBOSE_PREFIX_3
-					"PPP on %s terminated with status %d\n",
-					chan->name, WEXITSTATUS(status));
-			} else if (WIFSIGNALED(status)) {
-				ast_verbose(VERBOSE_PREFIX_3
-					"PPP on %s terminated with signal %d\n", 
-					chan->name, WTERMSIG(status));
-			} else {
-				ast_verbose(VERBOSE_PREFIX_3
-					"PPP on %s terminated weirdly.\n", chan->name);
+			break;
+		} else {
+			if (option_verbose > 2) {
+				if (WIFEXITED(status)) {
+					ast_verbose(VERBOSE_PREFIX_3
+						"PPP on %s terminated with status %d\n",
+						chan->name, WEXITSTATUS(status));
+				} else if (WIFSIGNALED(status)) {
+					ast_verbose(VERBOSE_PREFIX_3
+						"PPP on %s terminated with signal %d\n", 
+						chan->name, WTERMSIG(status));
+				} else {
+					ast_verbose(VERBOSE_PREFIX_3
+						"PPP on %s terminated weirdly.\n", chan->name);
+				}
 			}
+
+			break;
 		}
 
-		break;
+		f = ast_read(chan);
+		if (!f)
+			break;
+
+		ast_frfree(f);
 	}
 
 	LOCAL_USER_REMOVE(u);
