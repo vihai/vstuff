@@ -64,6 +64,10 @@ int q931_ie_bearer_capability_read_from_buf(
 		return FALSE;
 	}
 
+	ie->user_information_layer_1_protocol = Q931_IE_BC_UIL1P_UNUSED;
+	ie->user_information_layer_2_protocol = Q931_IE_BC_UIL2P_UNUSED;
+	ie->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
+
 	struct q931_ie_bearer_capability_onwire_3 *oct_3 =
 		(struct q931_ie_bearer_capability_onwire_3 *)
 		(msg->rawies + pos + (nextoct++));
