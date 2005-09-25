@@ -80,13 +80,13 @@ struct visdn_chan {
 	struct q931_call *q931_call;
 	struct visdn_suspended_call *suspended_call;
 
+	char visdn_chanid[30];
+	int is_voice;
 	int channel_fd;
 
 	char calling_number[21];
 	char called_number[21];
 	int sending_complete;
-
-	char visdn_chanid[30];
 
 //	echo_can_state_t *ec;
 };

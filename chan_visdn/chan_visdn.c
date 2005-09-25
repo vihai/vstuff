@@ -196,7 +196,7 @@ struct visdn_state
 #ifdef DEBUG_CODE
 #define visdn_debug(format, arg...)			\
 	if (visdn.debug)				\
-		ast_log(LOG_DEBUG,			\
+		ast_log(LOG_NOTICE,			\
 			format,				\
 			## arg)
 #else
@@ -1225,6 +1225,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	    visdn_chan->q931_call->state == U9_INCOMING_CALL_PROCEEDING ||
 	    visdn_chan->q931_call->state == U25_OVERLAP_RECEIVING ||
 	    visdn_chan->q931_call->state == N2_OVERLAP_SENDING ||
+	    visdn_chan->q931_call->state == N3_OUTGOING_CALL_PROCEEDING ||
 	    visdn_chan->q931_call->state == N4_CALL_DELIVERED) {
 		q931_setup_response(visdn_chan->q931_call, NULL);
 	}
@@ -1419,6 +1420,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 			pi->progress_description = Q931_IE_PI_PD_CALL_NOT_END_TO_END;
 			q931_ies_add_put(&ies, &pi->ie);
 		}
+
+		ast_setstate(ast_chan, AST_STATE_RINGING);
 
 		ast_mutex_lock(&visdn.lock);
 		q931_alerting_request(visdn_chan->q931_call, &ies);
@@ -2796,6 +2799,7 @@ static void visdn_q931_setup_indication(
 			if (bc->information_transfer_capability ==
 				Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL) {
 
+				visdn_chan->is_voice = FALSE;
 				q931_call->tones_option = FALSE;
 
 			} else  if (bc->information_transfer_capability ==
@@ -2803,6 +2807,7 @@ static void visdn_q931_setup_indication(
 				    bc->information_transfer_capability ==
 					Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
 
+				visdn_chan->is_voice = TRUE;
 				q931_call->tones_option = intf->tones_option;
 			} else {
 		                struct q931_ies ies = Q931_IES_INIT;
@@ -2858,7 +2863,7 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
-			ast_setstate(ast_chan, AST_STATE_RINGING);
+			ast_setstate(ast_chan, AST_STATE_RING);
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
@@ -2935,7 +2940,7 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number,
 				sizeof(ast_chan->exten)-1);
 
-			ast_setstate(ast_chan, AST_STATE_RINGING);
+			ast_setstate(ast_chan, AST_STATE_RING);
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
@@ -2963,8 +2968,6 @@ static void visdn_q931_setup_indication(
 				q931_proceeding_request(q931_call, &ies_proc);
 				q931_disconnect_request(q931_call, &ies_disc);
 			} else {
-				ast_setstate(ast_chan, AST_STATE_RING);
-
 				if (!ast_matchmore_extension(NULL, intf->context,
 						visdn_chan->called_number, 1,
 						visdn_chan->calling_number)) {
@@ -3167,25 +3170,27 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 	strncpy(visdn_chan->visdn_chanid, chanid + 1,
 		sizeof(visdn_chan->visdn_chanid));
 
-	visdn_debug("Connecting streamport to chan %s\n",
+	if (visdn_chan->is_voice) {
+		visdn_debug("Connecting streamport to chan %s\n",
+				visdn_chan->visdn_chanid);
+
+		visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
+		if (visdn_chan->channel_fd < 0) {
+			ast_log(LOG_ERROR, "Cannot open streamport: %s\n", strerror(errno));
+			goto err_open;
+		}
+
+		struct visdn_connect vc;
+		strcpy(vc.src_chanid, "");
+		snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s",
 			visdn_chan->visdn_chanid);
+		vc.flags = 0;
 
-	visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
-	if (visdn_chan->channel_fd < 0) {
-		ast_log(LOG_ERROR, "Cannot open streamport: %s\n", strerror(errno));
-		goto err_open;
-	}
-
-	struct visdn_connect vc;
-	strcpy(vc.src_chanid, "");
-	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s",
-		visdn_chan->visdn_chanid);
-	vc.flags = 0;
-
-	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
-	    (caddr_t) &vc) < 0) {
-		ast_log(LOG_ERROR, "ioctl(VISDN_CONNECT): %s\n", strerror(errno));
-		goto err_ioctl;
+		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
+		    (caddr_t) &vc) < 0) {
+			ast_log(LOG_ERROR, "ioctl(VISDN_CONNECT): %s\n", strerror(errno));
+			goto err_ioctl;
+		}
 	}
 
 	ast_mutex_unlock(&ast_chan->lock);

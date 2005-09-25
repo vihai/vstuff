@@ -88,18 +88,23 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
 
+	ast_mutex_lock(&chan->lock);
+
 	if (strcmp(chan->type, "VISDN")) {
 		ast_log(LOG_WARNING,
 			"Only VISDN channels may be connected to"
 			" this application\n");
 
+		ast_mutex_unlock(&chan->lock);
 		return -1;
 	}
 
 	struct visdn_chan *visdn_chan = chan->pvt->pvt;
+
 	if (!strlen(visdn_chan->visdn_chanid)) {
 		ast_log(LOG_WARNING,
 			"vISDN crossconnector channel ID not present\n");
+		ast_mutex_unlock(&chan->lock);
 		return -1;
 	}
 
@@ -126,12 +131,14 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 	argv[argc++] = "visdn.so";
 	argv[argc++] = visdn_chan->visdn_chanid;
 
+	ast_mutex_unlock(&chan->lock);
+
 /*	int i;
 	for (i=0;i<argc;i++) {
 		ast_log(LOG_NOTICE, "Arg %d: %s\n", i, argv[i]);
 	}*/
 
-	signal(SIGCHLD, SIG_IGN);
+	signal(SIGCHLD, SIG_DFL);
 
 	pid_t pid = spawn_ppp(chan, argv, argc);
 	if (pid < 0) {
@@ -140,7 +147,7 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 	}
 
 	int status;
-	int signalled;
+	int signalled = 0;
 
 	while(ast_waitfor(chan, -1) > -1) {
 		res = wait4(pid, &status, WNOHANG, NULL);

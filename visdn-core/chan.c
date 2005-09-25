@@ -232,14 +232,14 @@ int visdn_connect(
 	tmp_chan = visdn_cxc_get_by_src(cxc, chan1);
 	if (tmp_chan) {
 		visdn_chan_put(tmp_chan);
-		err = -EALREADY;
+		err = -EBUSY;
 		goto err_already_connected;
 	}
 
 	tmp_chan = visdn_cxc_get_by_src(cxc, chan2);
 	if (tmp_chan) {
 		visdn_chan_put(tmp_chan);
-		err = -EALREADY;
+		err = -EBUSY;
 		goto err_already_connected;
 	}
 #endif

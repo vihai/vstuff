@@ -1,3 +1,4 @@
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
 astmod_LTLIBRARIES = app_visdn_ppp.la
 app_visdn_ppp_la_SOURCES = app_visdn_ppp.c
