@@ -1035,20 +1035,16 @@ EXPORT_SYMBOL(visdn_open);
 
 int visdn_close(struct visdn_chan *chan)
 {
-	int err = 0;
-
-	if (!test_and_clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
-		WARN_ON(1);
-		return -EBUSY;
+	if (test_and_clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
+		if (chan->ops->close) {
+			int err = 0;
+			err = chan->ops->close(chan);
+			if (err < 0)
+				return err;
+		}
 	}
 
-	if (chan->ops->close) {
-		err = chan->ops->close(chan);
-		if (err < 0)
-			return err;
-	}
-
-	return err;
+	return 0;
 }
 EXPORT_SYMBOL(visdn_close);
 
