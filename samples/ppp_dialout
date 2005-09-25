@@ -4,4 +4,4 @@ MaxRetries: 2
 RetryTime: 60
 WaitTime: 30
 Application: visdnPPP
-Data: call|uli702
+Data: debug|call|uli702

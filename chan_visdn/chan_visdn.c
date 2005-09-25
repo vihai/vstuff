@@ -1694,7 +1694,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_generator_stop(ast_chan);
 
 	if (visdn_chan) {
-		if (visdn_chan->channel_fd > 0) {
+		if (visdn_chan->channel_fd >= 0) {
 			// Disconnect the softport since we cannot rely on
 			// libq931 (see above)
 			if (ioctl(visdn_chan->channel_fd,
@@ -3222,19 +3222,21 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 
 	ast_mutex_lock(&ast_chan->lock);
 
-	if (ioctl(visdn_chan->channel_fd, VISDN_IOC_DISCONNECT, NULL) < 0) {
-		ast_log(LOG_ERROR,
-			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
-			strerror(errno));
-	}
+	if (visdn_chan->channel_fd >= 0) {
+		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_DISCONNECT, NULL) < 0) {
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+				strerror(errno));
+		}
 
-	if (close(visdn_chan->channel_fd) < 0) {
-		ast_log(LOG_ERROR,
-			"close(visdn_chan->channel_fd): %s\n",
-			strerror(errno));
-	}
+		if (close(visdn_chan->channel_fd) < 0) {
+			ast_log(LOG_ERROR,
+				"close(visdn_chan->channel_fd): %s\n",
+				strerror(errno));
+		}
 
-	visdn_chan->channel_fd = -1;
+		visdn_chan->channel_fd = -1;
+	}
 
 	ast_mutex_unlock(&ast_chan->lock);
 }
