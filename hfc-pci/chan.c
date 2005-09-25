@@ -185,13 +185,9 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_invalid_chan;
 	}
 
-	hfc_outb(card, hfc_FIFO_EN, chan->port->card->regs.fifo_en);
-	hfc_outb(card, hfc_INT_M1, chan->port->card->regs.m1);
-	hfc_outb(card, hfc_CONNECT, chan->port->card->regs.connect);
-	hfc_outb(card, hfc_CTMT, chan->port->card->regs.ctmt);
-	hfc_outb(card, hfc_TRM, chan->port->card->regs.trm);
-
 	if (chan->rx.fifo) {
+		hfc_fifo_reset(chan->rx.fifo);
+
 		hfc_fifo_set_bit_order(
 			chan->rx.fifo,
 			chan->visdn_chan.pars.bitorder ==
@@ -199,11 +195,19 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	}
 
 	if (chan->tx.fifo) {
+		hfc_fifo_reset(chan->tx.fifo);
+
 		hfc_fifo_set_bit_order(
 			chan->tx.fifo,
 			chan->visdn_chan.pars.bitorder ==
 				VISDN_CHAN_BITORDER_MSB);
 	}
+
+	hfc_outb(card, hfc_FIFO_EN, chan->port->card->regs.fifo_en);
+	hfc_outb(card, hfc_INT_M1, chan->port->card->regs.m1);
+	hfc_outb(card, hfc_CONNECT, chan->port->card->regs.connect);
+	hfc_outb(card, hfc_CTMT, chan->port->card->regs.ctmt);
+	hfc_outb(card, hfc_TRM, chan->port->card->regs.trm);
 
 	hfc_st_port_update_sctrl(chan->port);
 	hfc_st_port_update_sctrl_r(chan->port);
@@ -275,11 +279,15 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_outb(card, hfc_TRM, chan->port->card->regs.trm);
 
 	if (chan->rx.fifo) {
+		hfc_fifo_reset(chan->rx.fifo);
+
 		chan->rx.fifo->connected_chan = NULL;
 		chan->rx.fifo = NULL;
 	}
 
 	if (chan->tx.fifo) {
+		hfc_fifo_reset(chan->tx.fifo);
+
 		chan->tx.fifo->connected_chan = NULL;
 		chan->tx.fifo = NULL;
 	}

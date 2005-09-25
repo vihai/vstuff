@@ -17,7 +17,7 @@
 #include "fifo.h"
 #include "fifo_inline.h"
 
-void hfc_fifo_clear_rx(struct hfc_fifo *fifo)
+void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
 	*fifo->f2 = *fifo->f1;
 	*Z2_F2(fifo) = *Z1_F2(fifo);
