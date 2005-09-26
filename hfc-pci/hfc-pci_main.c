@@ -166,8 +166,6 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 {
-printk(KERN_DEBUG "hfc_handle_fifo_rx_interrupt()\n");
-
 	if (fifo->connected_chan)
 		schedule_work(&fifo->work);
 }
