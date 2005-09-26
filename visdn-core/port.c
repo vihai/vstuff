@@ -125,7 +125,7 @@ int visdn_port_register(struct visdn_port *port)
 	BUG_ON(!port->ops);
 	BUG_ON(!port->ops->owner);
 
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_register() called\n");
+	visdn_debug(3, "visdn_port_register()\n");
 
 	if (!visdn_port_get(port)) {
 		err  = -EINVAL;
@@ -205,7 +205,7 @@ void visdn_port_del_device(
 void visdn_port_unregister(
 	struct visdn_port *port)
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_unregister called\n");
+	visdn_debug(3, "visdn_port_unregister called\n");
 
 /*
 	if (port->device.parent) { // FIXME
@@ -297,14 +297,14 @@ static struct sysfs_ops visdn_port_sysfs_ops = {
 
 static void visdn_port_release(struct kobject *kobj)
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_port_release called\n");
+	visdn_debug(3, "visdn_port_release()\n");
 
 	struct visdn_port *port = to_visdn_port(kobj);
 
 	if (port->ops->release)
 		port->ops->release(port);
 	else {
-		printk(KERN_ERR "vISDN port '%s' does not have a release()"
+		visdn_msg(KERN_ERR, "vISDN port '%s' does not have a release()"
 			" function, it is broken and must be fixed.\n",
 			port->name);
 		WARN_ON(1);

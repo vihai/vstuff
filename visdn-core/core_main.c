@@ -28,6 +28,10 @@
 #include "port.h"
 #include "timer.h"
 
+#ifdef DEBUG_CODE
+int debug_level = 0;
+#endif
+
 dev_t visdn_first_dev;
 EXPORT_SYMBOL(visdn_first_dev);
 
@@ -147,9 +151,9 @@ struct file_operations visdn_ctl_fops =
 static int visdn_hotplug(struct class_device *cd, char **envp,
 	int num_envp, char *buf, int size)
 {
-	envp[0] = NULL;
+	visdn_debug(3, "visdn_hotplug()\n");
 
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_hotplug called\n");
+	envp[0] = NULL;
 
 	return 0;
 }
@@ -190,7 +194,7 @@ static int __init visdn_init_module(void)
 {
 	int err;
 
-	printk(KERN_INFO visdn_MODULE_DESCR " loading\n");
+	visdn_msg(KERN_INFO, "loading\n");
 
 	err = alloc_chrdev_region(&visdn_first_dev, 0, 2, visdn_MODULE_NAME);
 	if (err < 0)
@@ -303,10 +307,16 @@ static void __exit visdn_module_exit(void)
 	cdev_del(&visdn_ctl_cdev);
 	unregister_chrdev_region(visdn_first_dev, 2);
 
-	printk(KERN_INFO visdn_MODULE_DESCR " unloaded\n");
+	visdn_msg(KERN_INFO, "unloaded\n");
 }
 module_exit(visdn_module_exit);
 
 MODULE_DESCRIPTION(visdn_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
 MODULE_LICENSE("GPL");
+
+#ifdef DEBUG_CODE
+module_param(debug_level, int, 0444);
+MODULE_PARM(debug_level,"i");
+MODULE_PARM_DESC(debug_level, "Initial debug level");
+#endif

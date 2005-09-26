@@ -2,6 +2,28 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-26 23:57:30 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-200
+
+    Summary:
+      Cleaned up module debug
+    Revision:
+      isdn--devel--0.1--patch-200
+
+    
+    
+
+    modified files:
+     ChangeLog hfc-pci/chan.c lapd/af_lapd.c visdn-core/Makefile.in
+     visdn-core/chan.c visdn-core/core_main.c visdn-core/cxc.c
+     visdn-core/port.c visdn-core/timer.c visdn-core/visdn.h
+     visdn-netdev/Makefile.in visdn-netdev/netdev.h
+     visdn-netdev/netdev_main.c visdn-ppp/Makefile.in
+     visdn-ppp/ppp.h visdn-ppp/ppp_main.c
+     visdn-streamport/Makefile.in visdn-streamport/streamport.h
+     visdn-streamport/streamport_main.c
+     visdn-timer-system/timer-system_main.c
+
+
 2005-09-26 21:28:36 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-199
 
     Summary:

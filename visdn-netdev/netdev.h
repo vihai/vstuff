@@ -53,6 +53,21 @@ struct vnd_netdevice
 	struct work_struct promiscuity_change_work;
 };
 
+#if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
+#define vnd_debug(dbglevel, format, arg...)			\
+	if (debug_level > dbglevel)				\
+		printk(KERN_DEBUG vnd_MODULE_DESCR		\
+			format,					\
+			## arg)
+#else
+#define vnd_debug(format, arg...) do {} while (0)
+#endif
+
+#define vnd_msg(level, format, arg...)				\
+	printk(level vnd_MODULE_DESCR				\
+		format,						\
+		## arg)
+
 #endif
 
 #endif

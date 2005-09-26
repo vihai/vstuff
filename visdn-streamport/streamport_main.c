@@ -22,6 +22,10 @@
 
 #include "streamport.h"
 
+#ifdef DEBUG_CODE
+int debug_level = 0;
+#endif
+
 static dev_t vsp_first_dev;
 static struct cdev vsp_cdev;
 static struct class_device vsp_class_dev;
@@ -58,23 +62,23 @@ static int vsp_chan_new_index(void)
 	}
 }
 
-static struct visdn_port vsp_visdn_port;
+static struct visdn_port vsp_port;
 
 static void vsp_chan_release(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_DEBUG "vsp_chan_release()\n");
+	vsp_debug(3, "vsp_chan_release()\n");
 }
 
 static int vsp_chan_open(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_DEBUG "vsp_chan_open()\n");
+	vsp_debug(3, "vsp_chan_open()\n");
 
 	return 0;
 }
 
 static int vsp_chan_close(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vsp_chan_close()\n");
+	vsp_debug(3, "vsp_chan_close()\n");
 
 	return 0;
 }
@@ -84,7 +88,7 @@ static int vsp_chan_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
-	printk(KERN_INFO "Streamport %s connected to %s\n",
+	vsp_debug(2, "Streamport %s connected to %s\n",
 		visdn_chan->cxc_id,
 		visdn_chan2->cxc_id);
 
@@ -93,7 +97,7 @@ static int vsp_chan_connect_to(
 
 static int vsp_chan_disconnect(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "Streamport %s disconnected\n",
+	vsp_debug(2, "Streamport %s disconnected\n",
 		visdn_chan->cxc_id);
 
 	return 0;
@@ -134,7 +138,7 @@ static int vsp_cdev_open(
 	chan->index = vsp_chan_new_index();
 
 	chan->visdn_chan.ops = &vsp_chan_ops;
-	chan->visdn_chan.port = &vsp_visdn_port;
+	chan->visdn_chan.port = &vsp_port;
 	chan->visdn_chan.cxc = &visdn_int_cxc.cxc;
 	chan->visdn_chan.name[0] = '\0';
 	chan->visdn_chan.driver_data = chan;
@@ -154,7 +158,7 @@ static int vsp_cdev_open(
 
 	file->private_data = chan;
 
-	printk(KERN_WARNING "Streamport %d opened\n", chan->index);
+	vsp_debug(2, "Streamport %d opened\n", chan->index);
 
 	return 0;
 
@@ -169,7 +173,7 @@ err_kmalloc:
 static int vsp_cdev_release(
 	struct inode *inode, struct file *file)
 {
-	printk(KERN_DEBUG "vsp_cdev_release()\n");
+	vsp_debug(3, "vsp_cdev_release()\n");
 
 	BUG_ON(!file->private_data);
 
@@ -226,7 +230,7 @@ static inline int vsp_cdev_do_ioctl_connect(
 		goto err_copy_from_user;
 	}
 
-	printk(KERN_DEBUG "ioctl(IOC_CONNECT, '%s', '%s')\n",
+	vsp_debug(2, "ioctl(IOC_CONNECT, '%s', '%s')\n",
 		connect.src_chanid,
 		connect.dst_chanid);
 
@@ -276,7 +280,7 @@ static inline int vsp_cdev_do_ioctl_disconnect(
 {
 	struct vsp_chan *chan = file->private_data;
 
-	printk(KERN_DEBUG "ioctl(IOC_DISCONNECT)\n");
+	vsp_debug(2, "ioctl(IOC_DISCONNECT)\n");
 
 	visdn_disconnect(&chan->visdn_chan);
 
@@ -322,6 +326,37 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
+#ifdef DEBUG_CODE
+static ssize_t vsp_show_debug_level(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", debug_level);
+}
+
+static ssize_t vsp_store_debug_level(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	unsigned int value;
+	if (sscanf(buf, "%01x", &value) < 1)
+		return -EINVAL;
+
+	debug_level = value;
+
+	vsp_msg(KERN_INFO, "Debug level set to '%d'\n", debug_level);
+
+	return count;
+}
+
+VISDN_PORT_ATTR(debug_level, S_IRUGO | S_IWUSR,
+	vsp_show_debug_level,
+	vsp_store_debug_level);
+#endif
+
 /******************************************
  * Module stuff
  ******************************************/
@@ -336,21 +371,27 @@ static int __init vsp_init_module(void)
 {
 	int err;
 
-	printk(KERN_INFO vsp_MODULE_DESCR " loading\n");
+	vsp_msg(KERN_INFO, "loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vsp_chan_index_hash); i++) {
 		INIT_HLIST_HEAD(&vsp_chan_index_hash[i]);
 	}
 
-	visdn_port_init(&vsp_visdn_port);
-	vsp_visdn_port.ops = &vsp_port_ops;
-	vsp_visdn_port.device = &visdn_system_device;
-	strncpy(vsp_visdn_port.name, vsp_MODULE_NAME, sizeof(vsp_visdn_port.name));
+	visdn_port_init(&vsp_port);
+	vsp_port.ops = &vsp_port_ops;
+	vsp_port.device = &visdn_system_device;
+	strncpy(vsp_port.name, vsp_MODULE_NAME, sizeof(vsp_port.name));
 
-	err = visdn_port_register(&vsp_visdn_port);
+	err = visdn_port_register(&vsp_port);
 	if (err < 0)
 		goto err_visdn_port_register;
+
+	err = visdn_port_create_file(
+		&vsp_port,
+		&visdn_port_attr_debug_level);
+	if (err < 0)
+		goto err_create_file_debug_level;
 
 	err = alloc_chrdev_region(&vsp_first_dev, 0, 1, vsp_MODULE_NAME);
 	if (err < 0)
@@ -385,12 +426,16 @@ static int __init vsp_init_module(void)
 
 	return 0;
 
-	visdn_port_unregister(&vsp_visdn_port);
-err_visdn_port_register:
 	cdev_del(&vsp_cdev);
 err_cdev_add:
 	unregister_chrdev_region(vsp_first_dev, 1);
 err_register_chrdev:
+	visdn_port_remove_file(
+		&vsp_port,
+		&visdn_port_attr_debug_level);
+err_create_file_debug_level:
+	visdn_port_unregister(&vsp_port);
+err_visdn_port_register:
 
 	return err;
 }
@@ -408,17 +453,21 @@ static void __exit vsp_module_exit(void)
 #endif
 
 	class_device_unregister(&vsp_class_dev);
-	visdn_port_unregister(&vsp_visdn_port);
+	visdn_port_unregister(&vsp_port);
 	cdev_del(&vsp_cdev);
 	unregister_chrdev_region(vsp_first_dev, 1);
 
-	printk(KERN_INFO vsp_MODULE_DESCR " unloaded\n");
+	vsp_msg(KERN_INFO, "unloaded\n");
 }
 
 module_exit(vsp_module_exit);
 
 MODULE_DESCRIPTION(vsp_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+
+#ifdef DEBUG_CODE
+module_param(debug_level, int, 0444);
+MODULE_PARM(debug_level,"i");
+MODULE_PARM_DESC(debug_level, "Initial debug level");
 #endif

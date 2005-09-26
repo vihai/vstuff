@@ -26,6 +26,10 @@
 
 #include "netdev.h"
 
+#ifdef DEBUG_CODE
+int debug_level = 0;
+#endif
+
 static dev_t vnd_first_dev;
 static struct cdev vnd_cdev;
 static struct class_device vnd_control_class_dev;
@@ -74,7 +78,7 @@ static inline void vnd_netdevice_put(
 	struct vnd_netdevice *netdevice)
 {
 #if 0
-	printk(KERN_INFO "vnd_netdevice_put ref=%d\n",
+	vnd_msg(KERN_INFO, "vnd_netdevice_put ref=%d\n",
 		atomic_read(&netdevice->refcnt) - 1);
 	dump_stack();
 #endif
@@ -92,21 +96,21 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
-	printk(KERN_DEBUG "vnd_chan_release()\n");
+	vnd_debug(3, "vnd_chan_release()\n");
 
 	vnd_netdevice_put(netdevice);
 }
 
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_DEBUG "vnd_chan_open()\n");
+	vnd_debug(3, "vnd_chan_open()\n");
 
 	return 0;
 }
 
 static int vnd_chan_close(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_DEBUG "vnd_chan_close()\n");
+	vnd_debug(3, "vnd_chan_close()\n");
 
 	return 0;
 }
@@ -137,7 +141,7 @@ static int vnd_chan_connect_to(
 {
 //	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
-	printk(KERN_DEBUG "%s connected to %s\n",
+	vnd_debug(2, "%s connected to %s\n",
 		visdn_chan->cxc_id,
 		visdn_chan2->cxc_id);
 
@@ -148,7 +152,7 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 {
 //	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
-	printk(KERN_DEBUG "%s disconnected\n",
+	vnd_debug(2, "%s disconnected\n",
 		visdn_chan->cxc_id);
 
 	return 0;
@@ -231,7 +235,7 @@ static int vnd_netdev_open(struct net_device *netdev)
 	struct visdn_chan *chan = &netdevice->visdn_chan;
 	int err;
 
-	printk(KERN_DEBUG "vnd_netdev_open()\n");
+	vnd_debug(3, "vnd_netdev_open()\n");
 
 	/* we may be going to call visdn_negotiate_parameters(),
 	   which calls vnd_chan_update_parameters() and, in turn,
@@ -255,7 +259,7 @@ static int vnd_netdev_open(struct net_device *netdev)
 			goto err_no_dst;
 		}
 
-		printk(KERN_DEBUG "Driver asked to renegotiate parameters\n");
+		vnd_debug(2, "Driver asked to renegotiate parameters\n");
 
 		visdn_negotiate_parameters(chan, dst);
 
@@ -275,7 +279,7 @@ static int vnd_netdev_stop(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
-	printk(KERN_DEBUG "vnd_netdev_stop()\n");
+	vnd_debug(3, "vnd_netdev_stop()\n");
 
 	visdn_pass_close(&netdevice->visdn_chan_e);
 
@@ -551,8 +555,7 @@ static int vnd_create_request(
 	netdevice->state = 0;
 	netdevice->netdev = alloc_netdev(0, ifname, setup_func);
 	if(!netdevice->netdev) {
-		printk(KERN_CRIT
-			"net_device alloc failed, abort.\n");
+		vnd_msg(KERN_ERR, "net_device alloc failed, abort.\n");
 		err = -ENOMEM;
 		goto err_alloc_netdev;
 	}
@@ -579,8 +582,7 @@ static int vnd_create_request(
 
 	err = register_netdev(netdevice->netdev);
 	if (err < 0) {
-		printk(KERN_CRIT
-			"Cannot register net device %s, aborting.\n",
+		vnd_msg(KERN_ERR, "Cannot register net device %s, aborting.\n",
 			netdevice->netdev->name);
 		goto err_register_netdev;
 	}
@@ -730,11 +732,42 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
+#ifdef DEBUG_CODE
+static ssize_t vnd_show_debug_level(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", debug_level);
+}
+
+static ssize_t vnd_store_debug_level(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	unsigned int value;
+	if (sscanf(buf, "%01x", &value) < 1)
+		return -EINVAL;
+
+	debug_level = value;
+
+	vnd_msg(KERN_INFO, "Debug level set to '%d'\n", debug_level);
+
+	return count;
+}
+
+VISDN_PORT_ATTR(debug_level, S_IRUGO | S_IWUSR,
+	vnd_show_debug_level,
+	vnd_store_debug_level);
+#endif
+
 static int __init vnd_init_module(void)
 {
 	int err;
 
-	printk(KERN_INFO vnd_MODULE_DESCR " loading\n");
+	vnd_msg(KERN_INFO, " loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vnd_netdevice_index_hash); i++) {
@@ -745,9 +778,16 @@ static int __init vnd_init_module(void)
 	vnd_port.ops = &vnd_port_ops;
 	vnd_port.device = &visdn_system_device;
 	strncpy(vnd_port.name, "netdev", sizeof(vnd_port.name));
+
 	err = visdn_port_register(&vnd_port);
 	if (err < 0)
 		goto err_visdn_port_register;
+
+	err = visdn_port_create_file(
+		&vnd_port,
+		&visdn_port_attr_debug_level);
+	if (err < 0)
+		goto err_create_file_debug_level;
 
 	err = alloc_chrdev_region(&vnd_first_dev, 0, 1, vnd_MODULE_NAME);
 	if (err < 0)
@@ -789,6 +829,10 @@ err_control_class_device_register:
 err_cdev_add:
 	unregister_chrdev_region(vnd_first_dev, 1);
 err_register_chrdev:
+	visdn_port_remove_file(
+		&vnd_port,
+		&visdn_port_attr_debug_level);
+err_create_file_debug_level:
 	visdn_port_unregister(&vnd_port);
 err_visdn_port_register:
 
@@ -830,7 +874,7 @@ static void __exit vnd_module_exit(void)
 				schedule_timeout((50 * HZ) / 1000);
 
 				while(atomic_read(&netdevice->refcnt) > 1) {
-					printk(KERN_DEBUG "Waiting for netdevice"
+					vnd_msg(KERN_WARNING, "Waiting for netdevice"
 							" refcnt to become 1"
 							" (now %d)\n",
 						atomic_read(&netdevice->refcnt));
@@ -853,9 +897,14 @@ static void __exit vnd_module_exit(void)
 	class_device_del(&vnd_control_class_dev);
 	cdev_del(&vnd_cdev);
 	unregister_chrdev_region(vnd_first_dev, 1);
+
+	visdn_port_remove_file(
+		&vnd_port,
+		&visdn_port_attr_debug_level);
+
 	visdn_port_unregister(&vnd_port);
 
-	printk(KERN_INFO vnd_MODULE_DESCR " unloaded\n");
+	vnd_msg(KERN_INFO, "unloaded\n");
 }
 
 module_exit(vnd_module_exit);
@@ -863,3 +912,9 @@ module_exit(vnd_module_exit);
 MODULE_DESCRIPTION(vnd_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
 MODULE_LICENSE("GPL");
+
+#ifdef DEBUG_CODE
+module_param(debug_level, int, 0444);
+MODULE_PARM(debug_level,"i");
+MODULE_PARM_DESC(debug_level, "Initial debug level");
+#endif

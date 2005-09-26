@@ -178,7 +178,7 @@ EXPORT_SYMBOL(visdn_negotiate_parameters);
 int visdn_disconnect(
 	struct visdn_chan *chan)
 {
-	printk(KERN_DEBUG "visdn_disconnect()\n");
+	visdn_debug(3, "visdn_disconnect()\n");
 
 	struct visdn_chan *chan2;
 	chan2 = visdn_cxc_get_by_src(chan->cxc, chan);
@@ -244,7 +244,7 @@ int visdn_connect(
 	}
 #endif
 
-	printk(KERN_DEBUG "Connecting chan '%s' to chan '%s'\n",
+	visdn_debug(2, "Connecting chan '%s' to chan '%s'\n",
 		chan1->cxc_id,
 		chan2->cxc_id);
 
@@ -907,8 +907,7 @@ EXPORT_SYMBOL(visdn_chan_register);
 void visdn_chan_unregister(
 	struct visdn_chan *chan)
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX
-		"visdn_chan_unregister(%s) called\n",
+	visdn_debug(3, "visdn_chan_unregister(%s) called\n",
 		chan->cxc_id);
 
 	visdn_disconnect(chan);
@@ -934,8 +933,8 @@ void visdn_chan_unregister(
 		schedule_timeout((50 * HZ) / 1000);
 
 		while(atomic_read(&chan->kobj.kref.refcount) > 1) {
-			printk(KERN_DEBUG "Waiting for %s refcnt to become 1"
-					" (now %d)\n",
+			visdn_msg(KERN_WARNING, "Waiting for %s refcnt to"
+					" become 1 (now %d)\n",
 				chan->cxc_id,
 				atomic_read(&chan->kobj.kref.refcount));
 
@@ -1097,15 +1096,16 @@ static struct sysfs_ops visdn_chan_sysfs_ops = {
 
 static void visdn_chan_release(struct kobject *kobj)
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_chan_release called\n");
+	visdn_debug(3, "visdn_chan_release called\n");
 
 	struct visdn_chan *chan = to_visdn_chan(kobj);
 
 	if (chan->ops->release)
 		chan->ops->release(chan);
 	else {
-		printk(KERN_ERR "vISDN channel '%s' does not have a release()"
-			" function, it is broken and must be fixed.\n",
+		visdn_msg(KERN_ERR, "vISDN channel '%s' does not have a"
+			" release() function, it is broken and must be"
+			" fixed.\n",
 			chan->cxc_id);
 		WARN_ON(1);
 	}

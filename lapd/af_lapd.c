@@ -1285,7 +1285,7 @@ static void lapd_unhash_timer(unsigned long data)
 
 	lapd_debug_sk(sk, "Unhash timer\n");
 
-	BUG_ON(sk->sk_state != TCP_CLOSING);
+	WARN_ON(sk->sk_state != TCP_CLOSING);
 
 	write_lock_bh(&lapd_hash_lock);
 	sk_del_node_init(sk);

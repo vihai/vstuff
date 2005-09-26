@@ -37,7 +37,24 @@ struct vppp_chan
 	struct visdn_chan visdn_chan;
 
 	struct ppp_channel ppp_chan;
+
+	struct work_struct retry_work;
 };
+
+#if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
+#define vppp_debug(dbglevel, format, arg...)			\
+	if (debug_level > dbglevel)				\
+		printk(KERN_DEBUG vppp_MODULE_DESCR		\
+			format,					\
+			## arg)
+#else
+#define vppp_debug(format, arg...) do {} while (0)
+#endif
+
+#define vppp_msg(level, format, arg...)				\
+	printk(level vppp_MODULE_DESCR				\
+		format,						\
+		## arg)
 
 #ifndef TRUE
 #define TRUE 1
@@ -46,6 +63,8 @@ struct vppp_chan
 #ifndef FALSE
 #define FALSE 0
 #endif
+
+extern int debug_level;
 
 #endif
 

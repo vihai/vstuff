@@ -105,6 +105,4 @@ module_exit(vts_module_exit);
 
 MODULE_DESCRIPTION(vts_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif

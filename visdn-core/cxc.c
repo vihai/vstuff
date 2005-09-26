@@ -270,14 +270,14 @@ static struct sysfs_ops visdn_cxc_sysfs_ops = {
 
 static void visdn_cxc_release(struct kobject *kobj)
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_cxc_release called\n");
+	visdn_debug(3, "visdn_cxc_release()\n");
 
 	struct visdn_cxc *cxc = to_visdn_cxc(kobj);
 
 	if (cxc->ops->release)
 		cxc->ops->release(cxc);
 	else {
-		printk(KERN_ERR "vISDN cxc '%s' does not have a release()"
+		visdn_msg(KERN_ERR, "vISDN cxc '%s' does not have a release()"
 			" function, it is broken and must be fixed.\n",
 			cxc->name);
 		WARN_ON(1);

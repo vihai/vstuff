@@ -28,6 +28,10 @@
 
 #include "ppp.h"
 
+#ifdef DEBUG_CODE
+int debug_level = 0;
+#endif
+
 static dev_t vppp_first_dev;
 static struct cdev vppp_cdev;
 static struct class_device vppp_control_class_dev;
@@ -68,21 +72,21 @@ static struct visdn_port vppp_port;
 
 static void vppp_chan_release(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vppp_chan_release()\n");
+	vppp_debug(3, "vppp_chan_release()\n");
 
 	kfree(to_vppp_chan(visdn_chan));
 }
 
 static int vppp_chan_open(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vppp_open()\n");
+	vppp_debug(3, "vppp_open()\n");
 
 	return 0;
 }
 
 static int vppp_chan_close(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "vppp_close()\n");
+	vppp_debug(3, "vppp_close()\n");
 
 	return 0;
 }
@@ -91,7 +95,7 @@ static int vppp_chan_frame_xmit(struct visdn_chan *visdn_chan, struct sk_buff *s
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
 
-	printk(KERN_INFO "vppp_chan_frame_xmit()\n");
+	vppp_debug(3, "vppp_chan_frame_xmit()\n");
 
 	ppp_input(&chan->ppp_chan, skb);
 
@@ -102,7 +106,7 @@ static void vppp_chan_frame_input_error(struct visdn_chan *visdn_chan, int code)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
 
-	printk(KERN_INFO "vppp_chan_frame_input_error()\n");
+	vppp_debug(3, "vppp_chan_frame_input_error()\n");
 
 	ppp_input_error(&chan->ppp_chan, code);
 }
@@ -112,7 +116,7 @@ static int vppp_chan_connect_to(
 	struct visdn_chan *visdn_chan2,
 	int flags)
 {
-	printk(KERN_INFO "PPP gateway channel %s connected to %s\n",
+	vppp_debug(2, "PPP gateway channel %s connected to %s\n",
 		visdn_chan->cxc_id,
 		visdn_chan2->cxc_id);
 
@@ -121,7 +125,7 @@ static int vppp_chan_connect_to(
 
 static int vppp_chan_disconnect(struct visdn_chan *visdn_chan)
 {
-	printk(KERN_INFO "PPP gateway %s disconnected\n",
+	vppp_debug(2, "PPP gateway %s disconnected\n",
 		visdn_chan->cxc_id);
 
 	return 0;
@@ -151,7 +155,7 @@ static void vppp_chan_wake_queue(struct visdn_chan *visdn_chan)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
 
-	printk(KERN_INFO "vppp_chan_wake_queue()\n");
+	vppp_debug(3, "vppp_chan_wake_queue()\n");
 
 	ppp_output_wakeup(&chan->ppp_chan);
 }
@@ -185,17 +189,25 @@ static int vppp_ppp_start_xmit(
 {
 	struct vppp_chan *chan = container_of(ppp_chan, struct vppp_chan, ppp_chan);
 
-	printk(KERN_INFO "vppp_ppp_start_xmit()\n");
+	vppp_debug(3, "vppp_ppp_start_xmit()\n");
 
 	int res;
 	res = visdn_pass_frame_xmit(&chan->visdn_chan, skb);
 
 	if (res == NETDEV_TX_OK)
 		return 1;
-	else
+	else if (res == NETDEV_TX_LOCKED) {
+		schedule_work(&chan->retry_work);
 		return 0;
+	} else
+		return 0;
+}
 
-	// What should we do when res == NETDEV_TX_LOCKED ??
+static void vppp_retry_work(void *data)
+{
+	struct vppp_chan *chan = data;
+
+	ppp_output_wakeup(&chan->ppp_chan);
 }
 
 static int vppp_ppp_ioctl(
@@ -203,7 +215,7 @@ static int vppp_ppp_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	printk(KERN_INFO "vppp_ppp_ioctl()\n");
+	vppp_debug(3, "vppp_ppp_ioctl()\n");
 
 	return -EINVAL;
 }
@@ -220,7 +232,7 @@ int vppp_cdev_open(
 {
 	int err;
 
-	printk(KERN_INFO "vppp_cdev_open()\n");
+	vppp_debug(3, "vppp_cdev_open()\n");
 
 	nonseekable_open(inode, file);
 
@@ -230,6 +242,10 @@ int vppp_cdev_open(
 		err = -EFAULT;
 		goto err_kmalloc;
 	}
+
+	INIT_WORK(&chan->retry_work,
+		vppp_retry_work,
+		chan);
 
 	visdn_chan_init(&chan->visdn_chan);
 
@@ -266,7 +282,7 @@ int vppp_cdev_open(
 
 	file->private_data = chan;
 
-	printk(KERN_WARNING "ppp channel %d opened\n", chan->index);
+	vppp_debug(2, "ppp channel %d opened\n", chan->index);
 
 	return 0;
 
@@ -285,7 +301,7 @@ int vppp_cdev_release(
 {
 	BUG_ON(!file->private_data);
 
-	printk(KERN_INFO "vppp_cdev_release()\n");
+	vppp_debug(3, "vppp_cdev_release()\n");
 
 	struct vppp_chan *chan = file->private_data;
 
@@ -306,7 +322,7 @@ ssize_t vppp_cdev_read(
 	BUG_ON(!file->private_data);
 
 //	struct vppp_chan *chan = file->private_data;
-	printk(KERN_INFO "vppp_cdev_read()\n");
+	vppp_debug(3, "vppp_cdev_read()\n");
 
 	return -ENOTSUPP;
 }
@@ -320,7 +336,7 @@ ssize_t vppp_cdev_write(
 	BUG_ON(!file->private_data);
 
 //	struct vppp_chan *chan = file->private_data;
-	printk(KERN_INFO "vppp_cdev_write()\n");
+	vppp_debug(3, "vppp_cdev_write()\n");
 
 	return -ENOTSUPP;
 }
@@ -342,7 +358,7 @@ static inline int visdn_cdev_do_ioctl_connect(
 		goto err_copy_from_user;
 	}
 
-	printk(KERN_DEBUG "ioctl(IOC_CONNECT, '%s', '%s')\n",
+	vppp_debug(2, "ioctl(IOC_CONNECT, '%s', '%s')\n",
 		connect.src_chanid,
 		connect.dst_chanid);
 
@@ -413,7 +429,7 @@ int vppp_cdev_ioctl(
 	break;
 
 	default:
-		printk(KERN_ERR "IOCTL(%d,%ld)\n", cmd, arg);
+		vppp_debug(2, "IOCTL(%d,%ld)\n", cmd, arg);
 		return -EINVAL;
 	}
 
@@ -449,11 +465,42 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
+#ifdef DEBUG_CODE
+static ssize_t vppp_show_debug_level(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", debug_level);
+}
+
+static ssize_t vppp_store_debug_level(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	unsigned int value;
+	if (sscanf(buf, "%01x", &value) < 1)
+		return -EINVAL;
+
+	debug_level = value;
+
+	vppp_msg(KERN_INFO, "Debug level set to '%d'\n", debug_level);
+
+	return count;
+}
+
+VISDN_PORT_ATTR(debug_level, S_IRUGO | S_IWUSR,
+	vppp_show_debug_level,
+	vppp_store_debug_level);
+#endif
+
 static int __init vppp_init_module(void)
 {
 	int err;
 
-	printk(KERN_INFO vppp_MODULE_DESCR " loading\n");
+	vppp_msg(KERN_INFO, "loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vppp_chan_index_hash); i++) {
@@ -464,9 +511,16 @@ static int __init vppp_init_module(void)
 	vppp_port.ops = &vppp_port_ops;
 	vppp_port.device = &visdn_system_device;
 	strncpy(vppp_port.name, "ppp", sizeof(vppp_port.name));
+
 	err = visdn_port_register(&vppp_port);
 	if (err < 0)
 		goto err_visdn_port_register;
+
+	err = visdn_port_create_file(
+		&vppp_port,
+		&visdn_port_attr_debug_level);
+	if (err < 0)
+		goto err_create_file_debug_level;
 
 	err = alloc_chrdev_region(&vppp_first_dev, 0, 1, vppp_MODULE_NAME);
 	if (err < 0)
@@ -503,12 +557,16 @@ static int __init vppp_init_module(void)
 
 	class_device_unregister(&vppp_control_class_dev);
 err_class_device_register:
-	visdn_port_unregister(&vppp_port);
-err_visdn_port_register:
 	cdev_del(&vppp_cdev);
 err_cdev_add:
 	unregister_chrdev_region(vppp_first_dev, 1);
 err_register_chrdev:
+	visdn_port_remove_file(
+		&vppp_port,
+		&visdn_port_attr_debug_level);
+err_create_file_debug_level:
+	visdn_port_unregister(&vppp_port);
+err_visdn_port_register:
 
 	return err;
 }
@@ -525,17 +583,26 @@ static void __exit vppp_module_exit(void)
 #endif
 
 	class_device_unregister(&vppp_control_class_dev);
-	visdn_port_unregister(&vppp_port);
 	cdev_del(&vppp_cdev);
 	unregister_chrdev_region(vppp_first_dev, 1);
 
-	printk(KERN_INFO vppp_MODULE_DESCR " unloaded\n");
+	visdn_port_remove_file(
+		&vppp_port,
+		&visdn_port_attr_debug_level);
+
+	visdn_port_unregister(&vppp_port);
+
+	vppp_msg(KERN_INFO, " unloaded\n");
 }
 
 module_exit(vppp_module_exit);
 
 MODULE_DESCRIPTION(vppp_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
+
+#ifdef DEBUG_CODE
+module_param(debug_level, int, 0444);
+MODULE_PARM(debug_level,"i");
+MODULE_PARM_DESC(debug_level, "Initial debug level");
 #endif

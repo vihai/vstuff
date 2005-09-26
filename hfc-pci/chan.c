@@ -314,16 +314,22 @@ static int hfc_chan_frame_xmit(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
+printk(KERN_DEBUG "A\n");
+
 	// Should we lock at all?
 	if (hfc_card_trylock(card)) {
 		// Mmmh... the card is locked and we may be in interrupt
 		// context. We must defer the transmission.
 
+printk(KERN_DEBUG "A2\n");
 		return NETDEV_TX_LOCKED;
 	}
 
+printk(KERN_DEBUG "B\n");
+
 	hfc_st_port_check_l1_up(chan->port);
 
+printk(KERN_DEBUG "C\n");
 	struct hfc_fifo *fifo = chan->tx.fifo;
 
 	if (!hfc_fifo_free_frames(fifo)) {
@@ -337,6 +343,7 @@ static int hfc_chan_frame_xmit(
 		goto err_no_free_frames;
 	}
 
+printk(KERN_DEBUG "D\n");
 	if (hfc_fifo_free_tx(fifo) < skb->len) {
 		hfc_debug_chan(chan, 3, "TX FIFO full, throttling\n");
 
@@ -366,6 +373,7 @@ static int hfc_chan_frame_xmit(
 	}
 #endif
 
+printk(KERN_DEBUG "E\n");
 	hfc_fifo_mem_write(fifo, skb->data, skb->len);
 
 	// Move Z1 and jump to next frame
@@ -374,6 +382,7 @@ static int hfc_chan_frame_xmit(
 	*fifo->f1 = F_inc(fifo, *fifo->f1, 1);
 	*Z1_F1(fifo) = newz1;
 
+printk(KERN_DEBUG "F\n");
 	chan->stats.tx_packets++;
 	chan->stats.tx_bytes += skb->len + 2;
 

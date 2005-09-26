@@ -35,6 +35,21 @@ struct vsp_chan
 	struct visdn_chan visdn_chan;
 };
 
+#if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
+#define vsp_debug(dbglevel, format, arg...)			\
+	if (debug_level > dbglevel)				\
+		printk(KERN_DEBUG vsp_MODULE_DESCR		\
+			format,					\
+			## arg)
+#else
+#define vsp_debug(format, arg...) do {} while (0)
+#endif
+
+#define vsp_msg(level, format, arg...)				\
+	printk(level vsp_MODULE_DESCR				\
+		format,						\
+		## arg)
+
 #ifndef TRUE
 #define TRUE 1
 #endif

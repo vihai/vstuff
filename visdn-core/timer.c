@@ -29,7 +29,7 @@ int visdn_timer_cdev_open(
 	struct inode *inode,
 	struct file *file)
 {
-	printk(KERN_DEBUG "visdn_timer_cdev_open()\n");
+	visdn_debug(3, "visdn_timer_cdev_open()\n");
 
 	nonseekable_open(inode, file);
 
@@ -50,7 +50,7 @@ int visdn_timer_cdev_open(
 int visdn_timer_cdev_release(
 	struct inode *inode, struct file *file)
 {
-	printk(KERN_DEBUG "visdn_timer_cdev_release()\n");
+	visdn_debug(3, "visdn_timer_cdev_release()\n");
 
 	return 0;
 }
@@ -61,7 +61,7 @@ int visdn_timer_cdev_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	printk(KERN_DEBUG "visdn_timer_cdev_ioctl()\n");
+	visdn_debug(3, "visdn_timer_cdev_ioctl()\n");
 
 	switch(cmd) {
 	}
@@ -119,16 +119,16 @@ static int visdn_timer_hotplug(struct class_device *device, char **envp,
 {
 //	struct visdn_timer *visdn_timer = to_visdn_timer(cd);
 
-	envp[0] = NULL;
+	visdn_debug(3, "visdn_timer_hotplug()\n");
 
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_hotplug called\n");
+	envp[0] = NULL;
 
 	return 0;
 }
 
 static void visdn_timer_release(struct class_device *device)
 {
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_release called\n");
+	visdn_debug(3, "visdn_timer_release()\n");
 
 	struct visdn_timer *timer = to_visdn_timer(device);
 
@@ -188,7 +188,7 @@ int visdn_timer_register(
 	BUG_ON(!timer);
 	BUG_ON(!name);
 
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_register(%s) called\n", name);
+	visdn_debug(3, "visdn_timer_register(%s)\n", name);
 
 	struct class_device *class_dev = &timer->class_dev;
 
@@ -233,7 +233,7 @@ void visdn_timer_unregister(
 {
 	struct class_device *class_dev = &visdn_timer->class_dev;
 
-	printk(KERN_DEBUG visdn_MODULE_PREFIX "visdn_timer_unregister called\n");
+	visdn_debug(3, "visdn_timer_unregister()\n");
 
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
