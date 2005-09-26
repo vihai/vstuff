@@ -36,6 +36,18 @@ function connect_channels()
 	echo "$CHAN1,$CHAN2" > /sys/visdn_tdm/internal-cxc/connect
 }
 
+function set_attribute()
+{
+	local NAME=$1
+	local VALUE=$2
+
+	if [ ! -f "$NAME" ]; then
+		echo "Attribute $NAME does not exist"
+		return
+	fi
+
+	echo "$VALUE" > "$NAME"
+}
 
 function read_netdev_block
 {
@@ -48,8 +60,6 @@ function read_netdev_block
 		if [[ $LINE =~ '</(.*)>' ]]; then
 			if [ "${BASH_REMATCH[1]}" == 'netdev' ]; then
 				if [ -e "/sys/class/net/$NETDEV_REQ_DEVNAME" ]; then
-					echo "Netdev $NETDEV_REQ_DEVNAME exists already"
-
 					NETDEV_DEVNAME=$NETDEV_REQ_DEVNAME
 					NETDEV_CHAN_D=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel\``
 					NETDEV_CHAN_E=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel_e\``
@@ -93,8 +103,6 @@ function handle_netdev_connectmodule
 {
 	local CHANNEL=$1
 	local PARAMETERS=$2
-
-	echo "handle netdev connectmodule $PARAMETERS"
 
 	if [[ ! "$PARAMETERS" =~ '^([-_0-9a-z.]+)[ 	]*(.*)$' ]]; then
 		echo "Invalid parameters for directive connectmodule"
@@ -217,9 +225,9 @@ function read_port_block
 				continue
 			fi
 
-			echo "$PORT_NAME: ${BASH_REMATCH[1]} = ${BASH_REMATCH[2]}"
-
-			echo "${BASH_REMATCH[2]}" > "$SYSFS_CARD_OBJ/$PORT_NAME/${BASH_REMATCH[1]}"
+			set_attribute	\
+				"$SYSFS_CARD_OBJ/$PORT_NAME/${BASH_REMATCH[1]}" \
+				"${BASH_REMATCH[2]}"
 
 		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
 			case "${BASH_REMATCH[1]}" in
@@ -274,9 +282,9 @@ for CARD in `ls $VISDN_DIR`; do
 				continue
 			fi
 
-			echo "${BASH_REMATCH[1]} = ${BASH_REMATCH[2]}"
-
-			echo "${BASH_REMATCH[2]}" > "$SYSFS_CARD_OBJ/${BASH_REMATCH[1]}"
+			set_attribute	\
+				"$SYSFS_CARD_OBJ/${BASH_REMATCH[1]}" \
+				"${BASH_REMATCH[2]}"
 		fi
 
 	done
@@ -285,8 +293,7 @@ for CARD in `ls $VISDN_DIR`; do
 
 	declare -i i
 
-	for (( i=0 ; i<$NETDEVS_CNT; i++)); do
-
-		echo "Name: ${NETDEVS_DEVNAME[$i]} D:${NETDEVS_CHAN_D[$i]} E:${NETDEVS_CHAN_E[$i]} Role:${NETDEVS_ROLE[$i]}"
-	done
+#	for (( i=0 ; i<$NETDEVS_CNT; i++)); do
+#		echo "Name: ${NETDEVS_DEVNAME[$i]} D:${NETDEVS_CHAN_D[$i]} E:${NETDEVS_CHAN_E[$i]} Role:${NETDEVS_ROLE[$i]}"
+#	done
 done

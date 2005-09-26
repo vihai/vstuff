@@ -81,7 +81,7 @@ attribute bert_mode 7
 
 #---------------------- pcm -----------------------
 <port pcm>
-  attribute mode master
+  attribute master 1
   attribute bitrate 8000
 </port>
 
