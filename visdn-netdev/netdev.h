@@ -27,6 +27,11 @@
 #define VND_CHAN_HASHBITS 8
 #define VND_CHAN_HASHSIZE (1 << VND_CHAN_HASHBITS)
 
+enum vnd_netdevice_state
+{
+        VND_NETDEVICE_STATE_RTNL_HELD = 0,
+};
+
 struct vnd_netdevice
 {
 	int index;
@@ -34,6 +39,8 @@ struct vnd_netdevice
 
 	struct net_device *netdev;
 	int type;
+
+	unsigned long state;
 
 	atomic_t refcnt;
 

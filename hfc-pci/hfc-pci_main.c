@@ -166,6 +166,8 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 {
+printk(KERN_DEBUG "hfc_handle_fifo_rx_interrupt()\n");
+
 	if (fifo->connected_chan)
 		schedule_work(&fifo->work);
 }
@@ -241,7 +243,7 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		// B1 chan RX (bit 3)
 		if (s1 & hfc_INT_S1_B1REC)
-			hfc_handle_fifo_rx_interrupt(&card->fifos[B2][RX]);
+			hfc_handle_fifo_rx_interrupt(&card->fifos[B1][RX]);
 
 		// B2 chan RX (bit 4)
 		if (s1 & hfc_INT_S1_B2REC)

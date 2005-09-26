@@ -345,6 +345,27 @@ static int hfc_chan_frame_xmit(
 		goto err_no_free_tx;
 	}
 
+#ifdef DEBUG_CODE
+	if (debug_level == 3) {
+		hfc_debug_fifo(fifo, 3, "TX len %2d: ", skb->len);
+
+	} else if (debug_level >= 4) {
+		hfc_debug_fifo(fifo, 4,
+			"TX (f1=%02x, f2=%02x, z1=%04x z2=%04x) len %2d: ",
+			*fifo->f1, *fifo->f2,
+			*Z1_F1(fifo), *Z2_F1(fifo),
+			skb->len);
+	}
+
+	if (debug_level >= 3) {
+		int i;
+		for (i=0; i<skb->len; i++)
+			printk("%02x",((u8 *)skb->data)[i]);
+
+		printk("\n");
+	}
+#endif
+
 	hfc_fifo_mem_write(fifo, skb->data, skb->len);
 
 	// Move Z1 and jump to next frame

@@ -186,7 +186,8 @@ void hfc_fifo_rx_work(void *data)
 {
 	struct hfc_fifo *fifo = data;
 
-	WARN_ON(!fifo->connected_chan);
+printk(KERN_DEBUG "hfc_fifo_rx_work()\n");
+
 	if (!fifo->connected_chan)
 		return;
 

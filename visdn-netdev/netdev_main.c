@@ -177,7 +177,14 @@ static int vnd_chan_update_parameters(
 
 		visdn_chan->pars.mtu = pars->mtu;
 
-		dev_set_mtu(netdevice->netdev, pars->mtu);
+		if (!test_bit(VND_NETDEVICE_STATE_RTNL_HELD,
+					&netdevice->state)) {
+			rtnl_lock();
+			dev_set_mtu(netdevice->netdev, pars->mtu);
+			rtnl_unlock();
+		} else {
+			dev_set_mtu(netdevice->netdev, pars->mtu);
+		}
 	}
 
         memcpy(&visdn_chan->pars, pars, sizeof(visdn_chan->pars));
@@ -237,6 +244,18 @@ static int vnd_netdev_open(struct net_device *netdev)
 
 	printk(KERN_DEBUG "vnd_netdev_open()\n");
 
+	/* we may be going to call visdn_negotiate_parameters(),
+	   which calls vnd_chan_update_parameters() and, in turn,
+	   calls dev_set_mtu() which requires rtnl lock.
+
+	   Here vnd_netdev_open is called with rtnl_lock held however
+ 	   visdn_negotiate_paramenters may be called elsewhere so,
+	   we use a flag to tell vnd_chan_update_parameters() if the
+	   lock is owned by us.
+	*/
+
+	set_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
+
 	err = visdn_pass_open(chan);
 
 	if (err == VISDN_CHAN_OPEN_RENEGOTIATE) {
@@ -257,6 +276,8 @@ static int vnd_netdev_open(struct net_device *netdev)
 err_no_dst:
 		;
 	}
+
+	clear_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
 	return err;
 }
@@ -536,6 +557,7 @@ static int vnd_create_request(
 	snprintf(ifname, sizeof(ifname), name, netdevice->index);
 
 	netdevice->type = type;
+	netdevice->state = 0;
 	netdevice->netdev = alloc_netdev(0, ifname, setup_func);
 	if(!netdevice->netdev) {
 		printk(KERN_CRIT

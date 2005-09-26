@@ -42,7 +42,7 @@ static ssize_t hfc_show_fifo_state(
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			"%2d     %02x %02x %04x %04x %4d   %02x %02x %04x %04x %4d",
-			i,
+			fifo_rx->hw_index,
 			*fifo_rx->f1,
 			*fifo_rx->f2,
 			*Z1_F2(fifo_rx),
