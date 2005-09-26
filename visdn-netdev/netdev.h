@@ -24,6 +24,9 @@
 #define vnd_MODULE_PREFIX sb_MODULE_NAME ": "
 #define vnd_MODULE_DESCR "Netdevice gateway"
 
+#define VND_CHANNEL_SYMLINK "visdn_channel"
+#define VND_CHANNEL_SYMLINK_E "visdn_channel_e"
+
 #define VND_CHAN_HASHBITS 8
 #define VND_CHAN_HASHSIZE (1 << VND_CHAN_HASHBITS)
 

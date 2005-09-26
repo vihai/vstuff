@@ -940,7 +940,7 @@ void visdn_chan_unregister(
 				atomic_read(&chan->kobj.kref.refcount));
 
 			set_current_state(TASK_UNINTERRUPTIBLE);
-			schedule_timeout((1000 * HZ) / 1000);
+			schedule_timeout(1 * HZ);
 		}
 	}
 }

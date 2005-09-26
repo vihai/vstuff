@@ -80,6 +80,7 @@ static inline void vnd_netdevice_put(
 #endif
 
 	if (atomic_dec_and_test(&netdevice->refcnt)) {
+
 		if (netdevice->netdev)
 			free_netdev(netdevice->netdev);
 
@@ -92,18 +93,6 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
 	printk(KERN_DEBUG "vnd_chan_release()\n");
-
-	if (visdn_chan == &netdevice->visdn_chan) {
-		sysfs_remove_link(
-			&netdevice->netdev->class_dev.kobj,
-			"visdn_channel");
-
-		sysfs_remove_link(
-			&netdevice->netdev->class_dev.kobj,
-			"visdn_channel_e");
-
-		unregister_netdev(netdevice->netdev);
-	}
 
 	vnd_netdevice_put(netdevice);
 }
@@ -317,6 +306,7 @@ static void vnd_netdev_set_multicast_list(
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
 
+	vnd_netdevice_get(netdevice);
 	schedule_work(&netdevice->promiscuity_change_work);
 }
 
@@ -336,7 +326,7 @@ static void vnd_promiscuity_change_work(void *data)
 			&visdn_int_cxc.cxc,
 			&netdevice->visdn_chan_e);
 	if (!dst)
-		return;
+		goto err_dest_not_found;
 
 	if((netdevice->netdev->flags & IFF_PROMISC) &&
 	   !test_bit(VISDN_CHAN_STATE_OPEN, &dst->state)) {
@@ -349,7 +339,8 @@ static void vnd_promiscuity_change_work(void *data)
 		visdn_close(dst);
 	}
 
-	visdn_chan_put(dst);
+err_dest_not_found:
+	vnd_netdevice_put(netdevice);
 }
 
 static int vnd_netdev_do_ioctl(
@@ -587,22 +578,26 @@ static int vnd_create_request(
 	netdevice->netdev->base_addr = 0;
 
 	err = register_netdev(netdevice->netdev);
-	if(err) {
+	if (err < 0) {
 		printk(KERN_CRIT
 			"Cannot register net device %s, aborting.\n",
 			netdevice->netdev->name);
 		goto err_register_netdev;
 	}
 
-	sysfs_create_link(
+	err = sysfs_create_link(
 		&netdevice->netdev->class_dev.kobj,
 		&netdevice->visdn_chan.kobj,
-			"visdn_channel");
+			VND_CHANNEL_SYMLINK);
+	if (err < 0)
+		goto err_create_symlink;
 
-	sysfs_create_link(
+	err = sysfs_create_link(
 		&netdevice->netdev->class_dev.kobj,
 		&netdevice->visdn_chan_e.kobj,
-			"visdn_channel_e");
+			VND_CHANNEL_SYMLINK_E);
+	if (err < 0)
+		goto err_create_symlink_e;
 
 	vnd_request->output_len =
 		snprintf(vnd_request->output,
@@ -616,6 +611,14 @@ static int vnd_create_request(
 
 	return 0;
 
+	sysfs_remove_link(
+		&netdevice->netdev->class_dev.kobj,
+		VND_CHANNEL_SYMLINK_E);
+err_create_symlink_e:
+	sysfs_remove_link(
+		&netdevice->netdev->class_dev.kobj,
+		VND_CHANNEL_SYMLINK);
+err_create_symlink:
 	unregister_netdev(netdevice->netdev);
 err_register_netdev:
 	visdn_chan_unregister(&netdevice->visdn_chan_e);
@@ -796,18 +799,46 @@ module_init(vnd_init_module);
 
 static void __exit vnd_module_exit(void)
 {
-	struct hlist_node *t;
+	struct hlist_node *t, *n;
 	struct vnd_netdevice *netdevice;
 
 	int i;
 	for (i=0; i<ARRAY_SIZE(vnd_netdevice_index_hash); i++) {
-		hlist_for_each_entry(netdevice, t, &vnd_netdevice_index_hash[i],
+		hlist_for_each_entry_safe(netdevice, t, n,
+				&vnd_netdevice_index_hash[i],
 				index_hlist_node) {
+
+			sysfs_remove_link(
+				&netdevice->netdev->class_dev.kobj,
+				VND_CHANNEL_SYMLINK_E);
+
+			sysfs_remove_link(
+				&netdevice->netdev->class_dev.kobj,
+				VND_CHANNEL_SYMLINK);
+
+			unregister_netdev(netdevice->netdev);
 
 			visdn_chan_unregister(&netdevice->visdn_chan);
 			visdn_chan_put(&netdevice->visdn_chan);
 			visdn_chan_unregister(&netdevice->visdn_chan_e);
 			visdn_chan_put(&netdevice->visdn_chan_e);
+
+			if (atomic_read(&netdevice->refcnt) > 1) {
+
+				/* Usually 50ms are enough */
+				set_current_state(TASK_UNINTERRUPTIBLE);
+				schedule_timeout((50 * HZ) / 1000);
+
+				while(atomic_read(&netdevice->refcnt) > 1) {
+					printk(KERN_DEBUG "Waiting for netdevice"
+							" refcnt to become 1"
+							" (now %d)\n",
+						atomic_read(&netdevice->refcnt));
+
+					set_current_state(TASK_UNINTERRUPTIBLE);
+					schedule_timeout(5 * HZ);
+				}
+			}
 
 			vnd_netdevice_put(netdevice);
 		}
@@ -831,6 +862,4 @@ module_exit(vnd_module_exit);
 
 MODULE_DESCRIPTION(vnd_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
-#ifdef MODULE_LICENSE
 MODULE_LICENSE("GPL");
-#endif
