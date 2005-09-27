@@ -532,7 +532,7 @@ static int vnd_create_request(
 
 	snprintf(netdevice->visdn_chan_e.name,
 		sizeof(netdevice->visdn_chan_e.name),
-		"%d",
+		"%dE",
 		netdevice->index);
 
 	netdevice->visdn_chan_e.driver_data = netdevice;

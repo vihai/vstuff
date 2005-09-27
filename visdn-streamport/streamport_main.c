@@ -140,7 +140,10 @@ static int vsp_cdev_open(
 	chan->visdn_chan.ops = &vsp_chan_ops;
 	chan->visdn_chan.port = &vsp_port;
 	chan->visdn_chan.cxc = &visdn_int_cxc.cxc;
-	chan->visdn_chan.name[0] = '\0';
+
+	snprintf(chan->visdn_chan.name, sizeof(chan->visdn_chan.name),
+		"%d", chan->index);
+
 	chan->visdn_chan.driver_data = chan;
 	chan->visdn_chan.autoopen = FALSE;
 
