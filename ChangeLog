@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-27 02:50:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-203
+
+    Summary:
+      Oops... left again debugging stuff
+    Revision:
+      isdn--devel--0.1--patch-203
+
+    
+    
+
+    modified files:
+     ChangeLog hfc-pci/chan.c
+
+
 2005-09-27 02:40:37 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-202
 
     Summary:
