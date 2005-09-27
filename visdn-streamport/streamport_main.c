@@ -376,7 +376,7 @@ static int __init vsp_init_module(void)
 {
 	int err;
 
-	vsp_msg(KERN_INFO, "loading\n");
+	vsp_msg(KERN_INFO, vsp_MODULE_DESCR " loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vsp_chan_index_hash); i++) {
@@ -392,11 +392,13 @@ static int __init vsp_init_module(void)
 	if (err < 0)
 		goto err_visdn_port_register;
 
+#ifdef DEBUG_CODE
 	err = visdn_port_create_file(
 		&vsp_port,
 		&visdn_port_attr_debug_level);
 	if (err < 0)
 		goto err_create_file_debug_level;
+#endif
 
 	err = alloc_chrdev_region(&vsp_first_dev, 0, 1, vsp_MODULE_NAME);
 	if (err < 0)
@@ -435,10 +437,12 @@ static int __init vsp_init_module(void)
 err_cdev_add:
 	unregister_chrdev_region(vsp_first_dev, 1);
 err_register_chrdev:
+#ifdef DEBUG_CODE
 	visdn_port_remove_file(
 		&vsp_port,
 		&visdn_port_attr_debug_level);
 err_create_file_debug_level:
+#endif
 	visdn_port_unregister(&vsp_port);
 err_visdn_port_register:
 
@@ -462,7 +466,13 @@ static void __exit vsp_module_exit(void)
 	cdev_del(&vsp_cdev);
 	unregister_chrdev_region(vsp_first_dev, 1);
 
-	vsp_msg(KERN_INFO, "unloaded\n");
+#ifdef DEBUG_CODE
+	visdn_port_remove_file(
+		&vsp_port,
+		&visdn_port_attr_debug_level);
+#endif
+
+	vsp_msg(KERN_INFO, vsp_MODULE_DESCR " unloaded\n");
 }
 
 module_exit(vsp_module_exit);

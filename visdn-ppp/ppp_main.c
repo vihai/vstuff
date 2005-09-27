@@ -500,7 +500,7 @@ static int __init vppp_init_module(void)
 {
 	int err;
 
-	vppp_msg(KERN_INFO, "loading\n");
+	vppp_msg(KERN_INFO, vppp_MODULE_DESCR " loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vppp_chan_index_hash); i++) {
@@ -516,11 +516,13 @@ static int __init vppp_init_module(void)
 	if (err < 0)
 		goto err_visdn_port_register;
 
+#ifdef DEBUG_CODE
 	err = visdn_port_create_file(
 		&vppp_port,
 		&visdn_port_attr_debug_level);
 	if (err < 0)
 		goto err_create_file_debug_level;
+#endif
 
 	err = alloc_chrdev_region(&vppp_first_dev, 0, 1, vppp_MODULE_NAME);
 	if (err < 0)
@@ -561,10 +563,12 @@ err_class_device_register:
 err_cdev_add:
 	unregister_chrdev_region(vppp_first_dev, 1);
 err_register_chrdev:
+#ifdef DEBUG_CODE
 	visdn_port_remove_file(
 		&vppp_port,
 		&visdn_port_attr_debug_level);
 err_create_file_debug_level:
+#endif
 	visdn_port_unregister(&vppp_port);
 err_visdn_port_register:
 
@@ -586,13 +590,15 @@ static void __exit vppp_module_exit(void)
 	cdev_del(&vppp_cdev);
 	unregister_chrdev_region(vppp_first_dev, 1);
 
+#ifdef DEBUG_CODE
 	visdn_port_remove_file(
 		&vppp_port,
 		&visdn_port_attr_debug_level);
+#endif
 
 	visdn_port_unregister(&vppp_port);
 
-	vppp_msg(KERN_INFO, " unloaded\n");
+	vppp_msg(KERN_INFO, vppp_MODULE_DESCR " unloaded\n");
 }
 
 module_exit(vppp_module_exit);

@@ -776,7 +776,7 @@ static int __init vnd_init_module(void)
 {
 	int err;
 
-	vnd_msg(KERN_INFO, " loading\n");
+	vnd_msg(KERN_INFO, vnd_MODULE_DESCR " loading\n");
 
 	int i;
 	for (i=0; i< ARRAY_SIZE(vnd_netdevice_index_hash); i++) {
@@ -792,11 +792,13 @@ static int __init vnd_init_module(void)
 	if (err < 0)
 		goto err_visdn_port_register;
 
+#ifdef DEBUG_CODE
 	err = visdn_port_create_file(
 		&vnd_port,
 		&visdn_port_attr_debug_level);
 	if (err < 0)
 		goto err_create_file_debug_level;
+#endif
 
 	err = alloc_chrdev_region(&vnd_first_dev, 0, 1, vnd_MODULE_NAME);
 	if (err < 0)
@@ -837,10 +839,12 @@ err_control_class_device_register:
 err_cdev_add:
 	unregister_chrdev_region(vnd_first_dev, 1);
 err_register_chrdev:
+#ifdef DEBUG_CODE
 	visdn_port_remove_file(
 		&vnd_port,
 		&visdn_port_attr_debug_level);
 err_create_file_debug_level:
+#endif
 	visdn_port_unregister(&vnd_port);
 err_visdn_port_register:
 
@@ -906,13 +910,15 @@ static void __exit vnd_module_exit(void)
 	cdev_del(&vnd_cdev);
 	unregister_chrdev_region(vnd_first_dev, 1);
 
+#ifdef DEBUG_CODE
 	visdn_port_remove_file(
 		&vnd_port,
 		&visdn_port_attr_debug_level);
+#endif
 
 	visdn_port_unregister(&vnd_port);
 
-	vnd_msg(KERN_INFO, "unloaded\n");
+	vnd_msg(KERN_INFO, vnd_MODULE_DESCR " unloaded\n");
 }
 
 module_exit(vnd_module_exit);

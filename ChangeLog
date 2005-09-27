@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-27 16:18:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-208
+
+    Summary:
+      Fixed compilation bugs and channel connection
+    Revision:
+      isdn--devel--0.1--patch-208
+
+    
+    
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c visdn-netdev/netdev_main.c
+     visdn-ppp/ppp_main.c visdn-streamport/streamport_main.c
+
+
 2005-09-27 15:01:25 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-207
 
     Summary:

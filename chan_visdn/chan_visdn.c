@@ -1045,11 +1045,14 @@ static int visdn_call(
 	enum q931_ie_bearer_capability_user_information_layer_1_protocol bc_l1p =
 		Q931_IE_BC_UIL1P_G711_ALAW;
 
+	visdn_chan->is_voice = TRUE;
+
 	const char *options = strsep(&stringp, "/");
 	if (options) {
 		if (strchr(options, 'D')) {
 			bc_itc = Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
 			bc_l1p = Q931_IE_BC_UIL1P_UNUSED;
+			visdn_chan->is_voice = FALSE;
 		}
 	}
 
