@@ -13,7 +13,6 @@
 #ifndef _LAPD_PROTO_H
 #define _LAPD_PROTO_H
 
-
 #ifdef __KERNEL__
 
 struct lapd_u_frame
@@ -229,24 +228,36 @@ static inline enum lapd_frame_type lapd_frame_type(u8 control)
 static inline enum lapd_uframe_function lapd_uframe_function(u8 control)
 {
 	switch (control & LAPD_UFRAME_FUNCTIONS_MASK) {
-	case LAPD_UFRAME_FUNC_SABME: return LAPD_UFRAME_FUNC_SABME;
-	case LAPD_UFRAME_FUNC_DM:    return LAPD_UFRAME_FUNC_DM;
-	case LAPD_UFRAME_FUNC_UI:    return LAPD_UFRAME_FUNC_UI;
-	case LAPD_UFRAME_FUNC_DISC:  return LAPD_UFRAME_FUNC_DISC;
-	case LAPD_UFRAME_FUNC_UA:    return LAPD_UFRAME_FUNC_UA;
-	case LAPD_UFRAME_FUNC_FRMR:  return LAPD_UFRAME_FUNC_FRMR;
-	case LAPD_UFRAME_FUNC_XID:   return LAPD_UFRAME_FUNC_XID;
-	default: return LAPD_UFRAME_FUNC_INVALID;
+	case LAPD_UFRAME_FUNC_SABME:
+		return LAPD_UFRAME_FUNC_SABME;
+	case LAPD_UFRAME_FUNC_DM:
+		return LAPD_UFRAME_FUNC_DM;
+	case LAPD_UFRAME_FUNC_UI:
+		return LAPD_UFRAME_FUNC_UI;
+	case LAPD_UFRAME_FUNC_DISC:
+		return LAPD_UFRAME_FUNC_DISC;
+	case LAPD_UFRAME_FUNC_UA:
+		return LAPD_UFRAME_FUNC_UA;
+	case LAPD_UFRAME_FUNC_FRMR:
+		return LAPD_UFRAME_FUNC_FRMR;
+	case LAPD_UFRAME_FUNC_XID:
+		return LAPD_UFRAME_FUNC_XID;
+	default:
+		return LAPD_UFRAME_FUNC_INVALID;
 	}
 }
 
 static inline enum lapd_sframe_function lapd_sframe_function(u8 control)
 {
 	switch (control & LAPD_SFRAME_FUNCTIONS_MASK) {
-	case LAPD_SFRAME_FUNC_RR:  return LAPD_SFRAME_FUNC_RR;
-	case LAPD_SFRAME_FUNC_RNR: return LAPD_SFRAME_FUNC_RNR;
-	case LAPD_SFRAME_FUNC_REJ: return LAPD_SFRAME_FUNC_REJ;
-	default: return LAPD_SFRAME_FUNC_INVALID;
+	case LAPD_SFRAME_FUNC_RR:
+		return LAPD_SFRAME_FUNC_RR;
+	case LAPD_SFRAME_FUNC_RNR:
+		return LAPD_SFRAME_FUNC_RNR;
+	case LAPD_SFRAME_FUNC_REJ:
+		return LAPD_SFRAME_FUNC_REJ;
+	default:
+		return LAPD_SFRAME_FUNC_INVALID;
 	}
 }
 
@@ -254,10 +265,14 @@ static inline const char *lapd_sframe_function_name(
 	enum lapd_sframe_function func)
 {
 	switch (func) {
-	case LAPD_SFRAME_FUNC_RR:      return "RR";
-	case LAPD_SFRAME_FUNC_RNR:     return "RNR";
-	case LAPD_SFRAME_FUNC_REJ:     return "REJ";
-	case LAPD_SFRAME_FUNC_INVALID: return "INVALID";
+	case LAPD_SFRAME_FUNC_RR:
+		return "RR";
+	case LAPD_SFRAME_FUNC_RNR:
+		return "RNR";
+	case LAPD_SFRAME_FUNC_REJ:
+		return "REJ";
+	case LAPD_SFRAME_FUNC_INVALID:
+		return "INVALID";
 	}
 }
 

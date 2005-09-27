@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-27 20:24:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-209
+
+    Summary:
+      Generic code cleanup in lapd
+    Revision:
+      isdn--devel--0.1--patch-209
+
+    
+    
+
+    modified files:
+     ChangeLog lapd/af_lapd.c lapd/lapd_proto.h
+
+
 2005-09-27 16:18:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-208
 
     Summary:

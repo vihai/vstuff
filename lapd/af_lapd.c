@@ -139,7 +139,6 @@ static __inline__ char *get_lapd_sock(struct sock *sp, char *tmpbuf, int i)
 	return tmpbuf;
 }
 
-
 static int lapd_seq_show(struct seq_file *seq, void *v)
 {
 	char tmpbuf[129];
@@ -185,6 +184,7 @@ out:
 	return rc;
 out_kfree:
 	kfree(s);
+
 	goto out;
 }
 
@@ -212,19 +212,26 @@ void __exit lapd_proc_exit(void)
 
 static int lapd_change_mtu(struct net_device *dev, int mtu)
 {
+	lapd_debug_sk(sk, "lapd_change_mtu()\n");
+
 	return -EINVAL;
 }
 
 static int lapd_mac_addr(struct net_device *dev, void *addr)
 {
+	lapd_debug_sk(sk, "lapd_mac_addr()\n");
+
 	return -EINVAL;
 }
 
 static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
 {
-	if(!skb->dev) return 0;
+	lapd_debug_sk(sk, "lapd_hard_header_parse()\n");
 
-	haddr[0]=skb->dev->dev_addr[0];
+	if(!skb->dev)
+		return 0;
+
+	haddr[0] = skb->dev->dev_addr[0];
 
 	return 1;
 }
@@ -252,11 +259,12 @@ EXPORT_SYMBOL(setup_lapd);
 
 static void lapd_sock_destruct(struct sock *sk)
 {
-	lapd_debug_sk(sk, "Socket destruct\n");
+	lapd_debug_sk(sk, "lapd_sock_destruct()\n");
 
 	if (!sock_flag(sk, SOCK_DEAD)) {
 		lapd_printk_sk(KERN_CRIT, sk,
 			"Attempt to release alive socket %p\n", sk);
+
 		return;
 	}
 
@@ -336,10 +344,10 @@ static int lapd_release(struct socket *sock)
 	struct sock *sk = sock->sk;
 	struct lapd_opt *lo = lapd_sk(sk);
 
+	lapd_debug_sk(sk, "lapd_release()\n");
+
 	if (!sk)
 		return 0;
-
-	lapd_debug_sk(sk, "Socket release\n");
 
 	lock_sock(sk);
 	sk->sk_shutdown = SHUTDOWN_MASK;
@@ -398,10 +406,6 @@ static int lapd_release(struct socket *sock)
 	return 0;
 }
 
-#define VISDN_SET_BEARER_PPP  SIOCDEVPRIVATE
-#define VISDN_PPP_GET_CHAN  (SIOCDEVPRIVATE+1)
-#define VISDN_PPP_GET_UNIT  (SIOCDEVPRIVATE+2)
-
 static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	int rc = -EINVAL;
@@ -418,8 +422,8 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if (amount < 0)
 			amount = 0;
 		rc = put_user(amount, (int __user *)argp);
-	break;
 	}
+	break;
 
 	case SIOCINQ: {
 		spin_lock_bh(&sk->sk_receive_queue.lock);
@@ -438,16 +442,17 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
 		rc = put_user(size, (int __user *)argp);
-	break;
 	}
+	break;
+
 	case SIOCGSTAMP:
 		rc = sock_get_timestamp(sk, argp);
-		break;
+	break;
 	/* Routing */
 	case SIOCADDRT:
 	case SIOCDELRT:
 		rc = -ENOSYS;
-		break;
+	break;
 	/* Interface */
 	case SIOCGIFADDR:
 	case SIOCSIFADDR:
@@ -455,11 +460,8 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCDIFADDR:
 	case SIOCSARP:		/* proxy AARP */
 	case SIOCDARP:		/* proxy AARP */
-//		rtnl_lock();
-// FIXME		rc = isdnif_ioctl(cmd, argp);
-//		rtnl_unlock();
-		rc = -ENOSYS;
-		break;
+		rc = -EOPNOTSUPP;
+	break;
 	/* Physical layer ioctl calls */
 	case SIOCSIFLINK:
 	case SIOCGIFHWADDR:
@@ -474,66 +476,6 @@ static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCGIFINDEX:
 	case SIOCGIFNAME:
 		rc = dev_ioctl(cmd, argp);
-	break;
-
-	case 12345678:
-		{
-		struct ifreq ifreq;
-
-		if (copy_from_user(&ifreq, argp, sizeof(ifreq)))
-			return -EFAULT;
-
-lapd_printk_sk(KERN_DEBUG, sk, "IOCTL 12345678 %s\n", ifreq.ifr_name);
-
-			struct net_device *dev = dev_get_by_name(ifreq.ifr_name);
-
-			if (!dev)
-				return -ENODEV;
-
-			lo->ppp_master_dev = dev;
-
-			rc = dev_ioctl(VISDN_SET_BEARER_PPP, argp);
-			}
-	break;
-
-	case PPPIOCGCHAN:
-		{
-lapd_printk_sk(KERN_DEBUG, sk, "IOCTL PPPIOCGCHAN\n");
-
-		if (!lo->ppp_master_dev)
-			return -ENODEV;
-
-		struct ifreq ifreq;
-		strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
-			sizeof(ifreq.ifr_name));
-
-		ifreq.ifr_data = argp;
-
-		return lo->ppp_master_dev->do_ioctl(
-			lo->ppp_master_dev,
-			&ifreq,
-			VISDN_PPP_GET_CHAN);
-		}
-	break;
-
-	case PPPIOCGUNIT:
-		{
-lapd_printk_sk(KERN_DEBUG, sk, "IOCTL PPPIOCGUNIT\n");
-
-		if (!lo->ppp_master_dev)
-			return -ENODEV;
-
-		struct ifreq ifreq;
-		strlcpy(ifreq.ifr_name, lo->ppp_master_dev->name,
-			sizeof(ifreq.ifr_name));
-
-		ifreq.ifr_data = argp;
-
-		return lo->ppp_master_dev->do_ioctl(
-			lo->ppp_master_dev,
-			&ifreq,
-			VISDN_PPP_GET_UNIT);
-		}
 	break;
 	}
 
@@ -733,7 +675,6 @@ err_shutting_down:
 err_not_established:
 
 	release_sock(sk);
-
 
 	return err;
 }
@@ -1080,7 +1021,8 @@ err_invalid_optval:
 	return err;
 }
 
-static int lapd_getsockopt(struct socket *sock, int level, int optname,
+static int lapd_getsockopt(
+	struct socket *sock, int level, int optname,
 	char __user *optval_u, int __user *optlen_u)
 {
 	int err = 0;
@@ -1969,8 +1911,6 @@ static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops) = {
 #include <linux/smp_lock.h>
 SOCKOPS_WRAP(lapd_dgram, PF_LAPD);
 
-
-
 static int lapd_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -2064,8 +2004,6 @@ err_no_cap:
 	return err;
 }
 
-
-
 static struct notifier_block lapd_notifier = {
 	.notifier_call	= lapd_device_event,
 };
@@ -2154,5 +2092,5 @@ module_exit(lapd_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Daniele Orlandi <daniele@orlandi.com>");
-MODULE_DESCRIPTION("LAPD 0.0.0\n");
+MODULE_DESCRIPTION("LAPD protocol stack\n");
 MODULE_ALIAS_NETPROTO(PF_LAPD);
