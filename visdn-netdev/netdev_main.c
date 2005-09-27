@@ -77,16 +77,11 @@ static inline void vnd_netdevice_get(
 static inline void vnd_netdevice_put(
 	struct vnd_netdevice *netdevice)
 {
-	vnd_debug(3, "vnd_netdev_put()\n");
-
-#if 0
-	vnd_msg(KERN_INFO, "vnd_netdevice_put ref=%d\n",
+	vnd_debug(3, "vnd_netdevice_put() refcnt=%d\n",
 		atomic_read(&netdevice->refcnt) - 1);
-	dump_stack();
-#endif
 
 	if (atomic_dec_and_test(&netdevice->refcnt)) {
-		vnd_debug(3, "vnd_netdev_put(): releasing\n");
+		vnd_debug(3, "vnd_netdevice_put(): releasing\n");
 
 		if (netdevice->netdev)
 			free_netdev(netdevice->netdev);
@@ -314,7 +309,8 @@ static void vnd_netdev_set_multicast_list(
 	struct vnd_netdevice *netdevice = netdev->priv;
 
 	vnd_netdevice_get(netdevice);
-	schedule_work(&netdevice->promiscuity_change_work);
+	if (!schedule_work(&netdevice->promiscuity_change_work))
+		vnd_netdevice_put(netdevice);
 }
 
 /* set_multicast_list is called in atomic context, so, we need a deferred
