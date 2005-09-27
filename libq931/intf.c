@@ -35,7 +35,7 @@
 #include <libq931/call.h>
 #include <libq931/intf.h>
 
-q931_callref q931_intf_first_free_call_reference(struct q931_interface *interface)
+q931_callref q931_intf_take_call_reference(struct q931_interface *interface)
 {
 	assert(interface);
 
@@ -88,7 +88,6 @@ struct q931_interface *q931_open_interface(
 
 	intf->lib = lib;
 	intf->name = strdup(name);
-	intf->next_call_reference = 1;
 
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
 	if (socket < 0)
@@ -188,6 +187,9 @@ struct q931_interface *q931_open_interface(
 		intf->call_reference_len = 2;
 	break;
 	}
+
+	intf->next_call_reference = (rand() + 1) &
+	    ((1 << ((intf->call_reference_len * 8) - 1)) - 1);
 
 	int i;
 	for (i=0; i<intf->n_channels; i++) {

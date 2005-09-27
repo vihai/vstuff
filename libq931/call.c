@@ -280,7 +280,7 @@ struct q931_call *q931_call_alloc_out(
 
 	call->direction = Q931_CALL_DIRECTION_OUTBOUND;
 	call->call_reference =
-		q931_intf_first_free_call_reference(call->intf);
+		q931_intf_take_call_reference(call->intf);
 
 	if (call->call_reference < 0) {
 		report_call(call, LOG_ERR,
