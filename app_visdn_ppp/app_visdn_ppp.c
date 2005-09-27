@@ -1,4 +1,15 @@
 
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+
 #include <asterisk/lock.h>
 #include <asterisk/file.h>
 #include <asterisk/logger.h>
@@ -7,13 +18,6 @@
 #include <asterisk/module.h>
 #include <asterisk/options.h>
 #include <asterisk/logger.h>
-
-#include <signal.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
 
 #include <chan_visdn.h>
 
@@ -116,7 +120,7 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	char *stringp = strdup(data);
 	char *arg;
-	while(arg = strsep(&stringp, "|")) {
+	while((arg = strsep(&stringp, "|"))) {
 
 		if (!strlen(arg))
 			break;
@@ -133,10 +137,12 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	ast_mutex_unlock(&chan->lock);
 
-/*	int i;
+#if 0
+	int i;
 	for (i=0;i<argc;i++) {
 		ast_log(LOG_NOTICE, "Arg %d: %s\n", i, argv[i]);
-	}*/
+	}
+#endif
 
 	signal(SIGCHLD, SIG_DFL);
 
@@ -146,33 +152,31 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 		return -1;
 	}
 
-	int status;
-	int signalled = 0;
-
 	while(ast_waitfor(chan, -1) > -1) {
+
+		f = ast_read(chan);
+		if (!f) {
+			ast_log(LOG_NOTICE,
+				"Channel '%s' hungup."
+				" Signalling PPP at %d to die...\n",
+				chan->name, pid);
+
+			kill(pid, SIGTERM);
+
+			break;
+		}
+
+		ast_frfree(f);
+
+		int status;
 		res = wait4(pid, &status, WNOHANG, NULL);
-		if (res == 0) {
-			/* Check for hangup */
-			if (chan->_softhangup && !signalled) {
-				ast_log(LOG_NOTICE,
-					"Channel '%s' hungup."
-					" Signalling PPP at %d to die...\n",
-					chan->name, pid);
-
-				kill(pid, SIGTERM);
-				signalled = 1;
-			}
-
-			/* Try again */
-			sleep(1);
-			continue;
-		} else if (res < 0) {
+		if (res < 0) {
 			ast_log(LOG_WARNING,
 				"wait4 returned %d: %s\n",
 				res, strerror(errno));
 
 			break;
-		} else {
+		} else if (res > 0) {
 			if (option_verbose > 2) {
 				if (WIFEXITED(status)) {
 					ast_verbose(VERBOSE_PREFIX_3
@@ -190,12 +194,6 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 			break;
 		}
-
-		f = ast_read(chan);
-		if (!f)
-			break;
-
-		ast_frfree(f);
 	}
 
 	LOCAL_USER_REMOVE(u);

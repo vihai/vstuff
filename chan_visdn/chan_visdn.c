@@ -1510,7 +1510,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		   strcmp(ast_chan->dialed->type, VISDN_CHAN_TYPE)) {
 			pi->progress_description =
 				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
-		} else {
+		} else if (visdn_chan->is_voice) {
 			pi->progress_description =
 				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 		}
@@ -2574,10 +2574,15 @@ static void visdn_q931_release_confirm(
 	if (!ast_chan)
 		return;
 
-	if (ast_chan->pbx)
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+
+	if (visdn_chan->pbx_started) {
+		ast_log(LOG_WARNING, "softhangup\n");
 		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
-	else
+	} else {
+		ast_log(LOG_WARNING, "softhangup\n");
 		ast_hangup(ast_chan);
+	}
 }
 
 static void visdn_q931_release_indication(
@@ -2591,7 +2596,9 @@ static void visdn_q931_release_indication(
 	if (!ast_chan)
 		return;
 
-	if (ast_chan->pbx)
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+
+	if (visdn_chan->pbx_started)
 		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 	else
 		ast_hangup(ast_chan);
@@ -2881,6 +2888,8 @@ static void visdn_q931_setup_indication(
 
 				q931_reject_request(q931_call, &ies);
 			} else {
+				visdn_chan->pbx_started = TRUE;
+
 				q931_proceeding_request(q931_call, NULL);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
@@ -2917,14 +2926,16 @@ static void visdn_q931_setup_indication(
 			q931_ies_add_put(&ies_proc, &cause->ie);
 
                         struct q931_ies ies_disc = Q931_IES_INIT;
-			struct q931_ie_progress_indicator *pi =
-				q931_ie_progress_indicator_alloc();
-			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = q931_ie_progress_indicator_location(
-						visdn_chan->q931_call);
-			pi->progress_description =
-				Q931_IE_PI_PD_IN_BAND_INFORMATION;
-			q931_ies_add_put(&ies_disc, &pi->ie);
+			if (visdn_chan->is_voice) {
+				struct q931_ie_progress_indicator *pi =
+					q931_ie_progress_indicator_alloc();
+				pi->coding_standard = Q931_IE_PI_CS_CCITT;
+				pi->location = q931_ie_progress_indicator_location(
+							visdn_chan->q931_call);
+				pi->progress_description =
+					Q931_IE_PI_PD_IN_BAND_INFORMATION;
+				q931_ies_add_put(&ies_disc, &pi->ie);
+			}
 
 			q931_proceeding_request(q931_call, &ies_proc);
 			q931_disconnect_request(q931_call, &ies_disc);
@@ -2956,18 +2967,22 @@ static void visdn_q931_setup_indication(
 				q931_ies_add_put(&ies_proc, &cause->ie);
 
                                 struct q931_ies ies_disc = Q931_IES_INIT;
-				struct q931_ie_progress_indicator *pi =
-					q931_ie_progress_indicator_alloc();
-				pi->coding_standard = Q931_IE_PI_CS_CCITT;
-				pi->location = q931_ie_progress_indicator_location(
-							visdn_chan->q931_call);
-				pi->progress_description =
-					Q931_IE_PI_PD_IN_BAND_INFORMATION;
-				q931_ies_add_put(&ies_disc, &pi->ie);
+				if (visdn_chan->is_voice) {
+					struct q931_ie_progress_indicator *pi =
+						q931_ie_progress_indicator_alloc();
+					pi->coding_standard = Q931_IE_PI_CS_CCITT;
+					pi->location = q931_ie_progress_indicator_location(
+								visdn_chan->q931_call);
+					pi->progress_description =
+						Q931_IE_PI_PD_IN_BAND_INFORMATION;
+					q931_ies_add_put(&ies_disc, &pi->ie);
+				}
 
 				q931_proceeding_request(q931_call, &ies_proc);
 				q931_disconnect_request(q931_call, &ies_disc);
 			} else {
+				visdn_chan->pbx_started = TRUE;
+
 				if (!ast_matchmore_extension(NULL, intf->context,
 						visdn_chan->called_number, 1,
 						visdn_chan->calling_number)) {
