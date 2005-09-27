@@ -39,7 +39,6 @@ struct vsp_chan
 #define vsp_debug(dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG vsp_MODULE_PREFIX		\
-			": "					\
 			format,					\
 			## arg)
 #else
@@ -48,7 +47,6 @@ struct vsp_chan
 
 #define vsp_msg(level, format, arg...)				\
 	printk(level vsp_MODULE_PREFIX				\
-		": "						\
 		format,						\
 		## arg)
 

@@ -2576,13 +2576,10 @@ static void visdn_q931_release_confirm(
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	if (visdn_chan->pbx_started) {
-		ast_log(LOG_WARNING, "softhangup\n");
+	if (visdn_chan->pbx_started)
 		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
-	} else {
-		ast_log(LOG_WARNING, "softhangup\n");
+	else
 		ast_hangup(ast_chan);
-	}
 }
 
 static void visdn_q931_release_indication(

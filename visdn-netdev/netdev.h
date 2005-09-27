@@ -57,7 +57,6 @@ struct vnd_netdevice
 #define vnd_debug(dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG vnd_MODULE_PREFIX		\
-			": "					\
 			format,					\
 			## arg)
 #else
@@ -66,7 +65,6 @@ struct vnd_netdevice
 
 #define vnd_msg(level, format, arg...)				\
 	printk(level vnd_MODULE_PREFIX				\
-		": "						\
 		format,						\
 		## arg)
 

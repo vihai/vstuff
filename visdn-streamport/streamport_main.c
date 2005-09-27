@@ -133,6 +133,8 @@ static int vsp_cdev_open(
 		goto err_kmalloc;
 	}
 
+	memset(chan, 0, sizeof(*chan));
+
 	visdn_chan_init(&chan->visdn_chan);
 
 	chan->index = vsp_chan_new_index();
@@ -258,7 +260,7 @@ static inline int vsp_cdev_do_ioctl_connect(
 	if (err < 0)
 		goto err_open;
 
-	// Release reference returned by visdn_search_chan()
+	// Release reference returned by visdn_cxc_search_chan()
 	visdn_chan_put(visdn_chan2);
 
 	return 0;

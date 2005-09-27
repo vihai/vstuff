@@ -118,7 +118,6 @@ struct visdn_chan
 {
 	struct kobject kobj;
 
-	struct list_head port_channels_node;
 	struct list_head cxc_channels_node;
 	struct hlist_node index_node;
 	char cxc_id[KOBJ_NAME_LEN];

@@ -828,7 +828,6 @@ void visdn_chan_init(struct visdn_chan *chan)
 
 	kobj_set_kset_s(chan, visdn_channels_subsys);
 	kobject_init(&chan->kobj);
-	INIT_LIST_HEAD(&chan->port_channels_node);
 	INIT_LIST_HEAD(&chan->cxc_channels_node);
 	INIT_HLIST_NODE(&chan->index_node);
 
@@ -872,10 +871,6 @@ int visdn_chan_register(struct visdn_chan *chan)
 	err = visdn_cxc_add(chan->cxc, chan);
 	if (err < 0)
 		goto err_cxc_add;
-
-	down_write(&chan->cxc->subsys.rwsem);
-	list_add_tail(&chan->port_channels_node, &chan->port->channels);
-	up_write(&chan->cxc->subsys.rwsem);
 
 	err = sysfs_create_link(
 		&visdn_channels_subsys.kset.kobj,
@@ -926,7 +921,6 @@ void visdn_chan_unregister(
 	visdn_cxc_del(chan->cxc, chan);
 	kobject_del(&chan->kobj);
 	visdn_port_put(chan->port);
-	visdn_chan_put(chan);
 
 	/* RCU (and other?) may still have references to this object.
 	 * Sleep until everyone has put his reference back.
@@ -944,6 +938,8 @@ void visdn_chan_unregister(
 					" become 1 (now %d)\n",
 				chan->cxc_id,
 				atomic_read(&chan->kobj.kref.refcount));
+
+			dump_stack();
 
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout(1 * HZ);
@@ -1103,7 +1099,7 @@ static struct sysfs_ops visdn_chan_sysfs_ops = {
 
 static void visdn_chan_release(struct kobject *kobj)
 {
-	visdn_debug(3, "visdn_chan_release called\n");
+	visdn_debug(3, "visdn_chan_release()\n");
 
 	struct visdn_chan *chan = to_visdn_chan(kobj);
 
