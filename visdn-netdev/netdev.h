@@ -21,7 +21,7 @@
 #include <visdn.h>
 
 #define vnd_MODULE_NAME "visdn-netdev"
-#define vnd_MODULE_PREFIX sb_MODULE_NAME ": "
+#define vnd_MODULE_PREFIX vnd_MODULE_NAME ": "
 #define vnd_MODULE_DESCR "Netdevice gateway"
 
 #define VND_CHANNEL_SYMLINK "visdn_channel"
@@ -55,8 +55,9 @@ struct vnd_netdevice
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
 #define vnd_debug(dbglevel, format, arg...)			\
-	if (debug_level > dbglevel)				\
-		printk(KERN_DEBUG vnd_MODULE_DESCR		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG vnd_MODULE_PREFIX		\
+			": "					\
 			format,					\
 			## arg)
 #else
@@ -64,7 +65,8 @@ struct vnd_netdevice
 #endif
 
 #define vnd_msg(level, format, arg...)				\
-	printk(level vnd_MODULE_DESCR				\
+	printk(level vnd_MODULE_PREFIX				\
+		": "						\
 		format,						\
 		## arg)
 

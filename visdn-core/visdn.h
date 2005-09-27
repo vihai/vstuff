@@ -47,8 +47,9 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
 #define visdn_debug(dbglevel, format, arg...)			\
-	if (debug_level > dbglevel)				\
-		printk(KERN_DEBUG visdn_MODULE_DESCR		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG visdn_MODULE_PREFIX		\
+			": "					\
 			format,					\
 			## arg)
 #else
@@ -56,7 +57,8 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 #endif
 
 #define visdn_msg(level, format, arg...)			\
-	printk(level visdn_MODULE_DESCR				\
+	printk(level visdn_MODULE_PREFIX			\
+		": "						\
 		format,						\
 		## arg)
 

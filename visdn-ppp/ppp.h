@@ -43,8 +43,9 @@ struct vppp_chan
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
 #define vppp_debug(dbglevel, format, arg...)			\
-	if (debug_level > dbglevel)				\
-		printk(KERN_DEBUG vppp_MODULE_DESCR		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG vppp_MODULE_PREFIX		\
+			": "					\
 			format,					\
 			## arg)
 #else
@@ -52,7 +53,8 @@ struct vppp_chan
 #endif
 
 #define vppp_msg(level, format, arg...)				\
-	printk(level vppp_MODULE_DESCR				\
+	printk(level vppp_MODULE_PREFIX				\
+		": "						\
 		format,						\
 		## arg)
 

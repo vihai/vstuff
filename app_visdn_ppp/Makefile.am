@@ -12,5 +12,3 @@ INCLUDES =					\
 
 app_visdn_ppp_la_LIBADD = 
 app_visdn_ppp_la_LDFLAGS = -module -avoid-version -no-undefined
-
-AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE

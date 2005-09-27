@@ -877,20 +877,28 @@ int visdn_chan_register(struct visdn_chan *chan)
 	list_add_tail(&chan->port_channels_node, &chan->port->channels);
 	up_write(&chan->cxc->subsys.rwsem);
 
-	sysfs_create_link(
+	err = sysfs_create_link(
 		&visdn_channels_subsys.kset.kobj,
 		&chan->kobj,
 		chan->cxc_id);
+	if (err < 0)
+		goto err_create_link_cxc_id;
 
-        visdn_chan_put(chan);
-
-	sysfs_create_link(
+	err = sysfs_create_link(
 		&chan->port->kobj,
 		&chan->kobj,
 		chan->name);
+	if (err < 0)
+		goto err_create_link_chan_name;
+
+        visdn_chan_put(chan);
 
 	return 0;
 
+	sysfs_remove_link(&chan->port->kobj, chan->name);
+err_create_link_chan_name:
+	sysfs_remove_link(&visdn_channels_subsys.kset.kobj, chan->cxc_id);
+err_create_link_cxc_id:
 	visdn_cxc_del(chan->cxc, chan);
 err_cxc_add:
 	kobject_del(&chan->kobj);
@@ -912,9 +920,8 @@ void visdn_chan_unregister(
 
 	visdn_disconnect(chan);
 
-	sysfs_remove_link(
-		&visdn_channels_subsys.kset.kobj,
-		chan->cxc_id);
+	sysfs_remove_link(&chan->port->kobj, chan->name);
+	sysfs_remove_link(&visdn_channels_subsys.kset.kobj, chan->cxc_id);
 
 	visdn_cxc_del(chan->cxc, chan);
 	kobject_del(&chan->kobj);

@@ -77,6 +77,8 @@ static inline void vnd_netdevice_get(
 static inline void vnd_netdevice_put(
 	struct vnd_netdevice *netdevice)
 {
+	vnd_debug(3, "vnd_netdev_put()\n");
+
 #if 0
 	vnd_msg(KERN_INFO, "vnd_netdevice_put ref=%d\n",
 		atomic_read(&netdevice->refcnt) - 1);
@@ -84,6 +86,7 @@ static inline void vnd_netdevice_put(
 #endif
 
 	if (atomic_dec_and_test(&netdevice->refcnt)) {
+		vnd_debug(3, "vnd_netdev_put(): releasing\n");
 
 		if (netdevice->netdev)
 			free_netdev(netdevice->netdev);
@@ -501,7 +504,12 @@ static int vnd_create_request(
 	netdevice->visdn_chan.ops = &vnd_chan_ops;
 	netdevice->visdn_chan.port = &vnd_port;
 	netdevice->visdn_chan.cxc = &visdn_int_cxc.cxc;
-	netdevice->visdn_chan.name[0] = '\0';
+
+	snprintf(netdevice->visdn_chan.name,
+		sizeof(netdevice->visdn_chan.name),
+		"%d",
+		netdevice->index);
+
 	netdevice->visdn_chan.driver_data = netdevice;
 	netdevice->visdn_chan.autoopen = FALSE;
 	netdevice->visdn_chan.max_mtu = 0;
@@ -521,7 +529,12 @@ static int vnd_create_request(
 	netdevice->visdn_chan_e.ops = &vnd_chan_ops;
 	netdevice->visdn_chan_e.port = &vnd_port;
 	netdevice->visdn_chan_e.cxc = &visdn_int_cxc.cxc;
-	netdevice->visdn_chan_e.name[0] = '\0';
+
+	snprintf(netdevice->visdn_chan_e.name,
+		sizeof(netdevice->visdn_chan_e.name),
+		"%d",
+		netdevice->index);
+
 	netdevice->visdn_chan_e.driver_data = netdevice;
 	netdevice->visdn_chan_e.autoopen = FALSE;
 	netdevice->visdn_chan_e.max_mtu = 0;
@@ -629,8 +642,8 @@ err_visdn_chan_e_register:
 err_visdn_chan_register:
 	free_netdev(netdevice->netdev);
 err_alloc_netdev:
+	hlist_del(&netdevice->index_hlist_node);
 	kfree(netdevice);
-//	hlist_del(); FIXME
 err_kmalloc:
 err_unsupported_protocol:
 err_missing_protocol:
@@ -800,7 +813,6 @@ static int __init vnd_init_module(void)
 	if (err < 0)
 		goto err_cdev_add;
 
-	class_device_initialize(&vnd_control_class_dev);
 	vnd_control_class_dev.class = &visdn_system_class;
 	vnd_control_class_dev.class_data = NULL;
 	vnd_control_class_dev.dev = vnd_port.device;
