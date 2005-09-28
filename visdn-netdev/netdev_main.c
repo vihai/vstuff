@@ -376,8 +376,11 @@ struct vnd_request
 
 	int type;
 	char name[KOBJ_NAME_LEN];
+	char input[100];
 	char output[100];
 	int output_len;
+
+	int accomplished;
 };
 
 static int vnd_cdev_open(
@@ -394,6 +397,7 @@ static int vnd_cdev_open(
 	memset(vnd_request, 0x00, sizeof(*vnd_request));
 
 	init_MUTEX(&vnd_request->sem);
+	vnd_request->accomplished = FALSE;
 
 	file->private_data = vnd_request;
 
@@ -420,8 +424,15 @@ static ssize_t vnd_cdev_read(
 
 	struct vnd_request *vnd_request = file->private_data;
 
-	if (down_interruptible(&vnd_request->sem))
-		return -ERESTARTSYS;
+	if (down_interruptible(&vnd_request->sem)) {
+		err = -ERESTARTSYS;
+		goto err_down;
+	}
+
+	if (!vnd_request->accomplished) {
+		err = -EINVAL;
+		goto err_not_accomplished;
+	}
 
 	int copied_bytes = 0;
 
@@ -445,13 +456,14 @@ static ssize_t vnd_cdev_read(
 	return copied_bytes;
 
 err_copy_to_user:
-
+err_not_accomplished:
 	up(&vnd_request->sem);
+err_down:
 
 	return err;
 }
 
-static int vnd_create_request(
+static int vnd_create(
 	struct vnd_request *vnd_request,
 	char *reqp)
 {
@@ -647,7 +659,7 @@ err_missing_protocol:
 	return err;
 }
 
-static int vnd_destroy_request(
+static int vnd_destroy(
 	struct vnd_request *vnd_request,
 	char *reqp)
 {
@@ -661,42 +673,56 @@ static ssize_t vnd_cdev_write(
 	loff_t *offp)
 {
 	int err;
-	char request[50];
-
 	struct vnd_request *vnd_request = file->private_data;
 
-	if (down_interruptible(&vnd_request->sem))
-		return -ERESTARTSYS;
+	if (down_interruptible(&vnd_request->sem)) {
+		err = -ERESTARTSYS;
+		goto err_down;
+	}
 
-	if (copy_from_user(request, buf, min(count, (sizeof(request) - 1)))) {
+	if (count > (sizeof(vnd_request->input) - *offp - 1)) {
+		err = -ENOSPC;
+		goto err_nospace;
+	}
+
+	if (vnd_request->accomplished) {
+		err = -EINVAL;
+		goto err_already_accomplished;
+	}
+
+	if (copy_from_user(vnd_request->input + *offp, buf, count)) {
                 err = -EFAULT;
                 goto err_copy_from_user;
         }
 
-	request[sizeof(request) - 1] = '\0';
+	vnd_request->input[*offp + count] = '\0';
+	*offp += count;
 
-	char *reqp = request;
+	if (strchr(vnd_request->input, '\n')) {
+		vnd_request->accomplished = TRUE;
+		*offp = 0;
 
-	const char *command = strsep(&reqp, " ");
-	if (!command) {
-		err = -EINVAL;
-		goto err_missing_command;
+		char *reqp = vnd_request->input;
+
+		const char *command = strsep(&reqp, " ");
+		if (!command) {
+			err = -EINVAL;
+			goto err_missing_command;
+		}
+
+		if (!strcmp(command, "create")) {
+			err = vnd_create(vnd_request, reqp);
+			if (err < 0)
+				goto err_command;
+		} else if (!strcmp(command, "destroy")) {
+			err = vnd_destroy(vnd_request, reqp);
+			if (err < 0)
+				goto err_command;
+		} else {
+			err = -EINVAL;
+			goto err_invalid_command;
+		}
 	}
-
-	if (!strcmp(command, "create")) {
-		err = vnd_create_request(vnd_request, reqp);
-		if (err < 0)
-			goto err_command;
-	} else if (!strcmp(command, "destroy")) {
-		err = vnd_destroy_request(vnd_request, reqp);
-		if (err < 0)
-			goto err_command;
-	} else {
-		err = -EINVAL;
-		goto err_invalid_command;
-	}
-
-	*offp = 0;
 
 	up(&vnd_request->sem);
 
@@ -706,8 +732,10 @@ err_command:
 err_invalid_command:
 err_missing_command:
 err_copy_from_user:
-
+err_already_accomplished:
+err_nospace:
 	up(&vnd_request->sem);
+err_down:
 
 	return err;
 }
