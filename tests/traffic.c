@@ -31,7 +31,7 @@
 
 enum working_mode
 {
-	MODE_GENERATOR,
+	MODE_SOURCE,
 	MODE_SINK,
 	MODE_LOOPBACK,
 	MODE_NULL,
@@ -89,8 +89,12 @@ void send_broadcast(int s, const char *prefix, struct opts *opts)
 	if(len < 0) {
 		if (errno == ECONNRESET) {
 			printf("%sDL-RELEASE-INDICATION\n", prefix);
-		} else if (errno == EISCONN) {
+		} else if (errno == EALREADY) {
 			printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+		} else if (errno == ENOTCONN) {
+			printf("%sDL-RELEASE-CONFIRM\n", prefix);
+		} else if (errno == EISCONN) {
+			printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 		} else {
 			printf("%ssendmsg: %s\n", prefix, strerror(errno));
 		}
@@ -141,10 +145,12 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 		if(len < 0) {
 			if (errno == ECONNRESET) {
 				printf("%sDL-RELEASE-INDICATION\n", prefix);
-				continue;
-			} else if (errno == EISCONN) {
+			} else if (errno == EALREADY) {
 				printf("%sDL-ESTABLISH-INDICATION\n", prefix);
-				continue;
+			} else if (errno == ENOTCONN) {
+				printf("%sDL-RELEASE-CONFIRM\n", prefix);
+			} else if (errno == EISCONN) {
+				printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 			} else {
 				printf("%srecvmsg: %s\n", prefix, strerror(errno));
 				break;
@@ -158,8 +164,14 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 			if (errno == ECONNRESET) {
 				printf("%sDL-RELEASE-INDICATION\n", prefix);
 				continue;
-			} else if (errno == EISCONN) {
+			} else if (errno == EALREADY) {
 				printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+				continue;
+			} else if (errno == ENOTCONN) {
+				printf("%sDL-RELEASE-CONFIRM\n", prefix);
+				continue;
+			} else if (errno == EISCONN) {
+				printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 				continue;
 			} else {
 				printf("%ssendmsg: %s\n", prefix, strerror(errno));
@@ -188,10 +200,13 @@ void start_null(int s, const char *prefix, struct opts *opts)
 {
 	if (opts->frame_type == FRAME_TYPE_IFRAME) {
 		printf("%sConnecting...", prefix);
+
 		if (connect(s, NULL, 0) < 0) {
-			printf("%sconnect: %s\n", prefix, strerror(errno));
+			printf("%sconnect: %s %d\n", prefix,
+				strerror(errno), errno);
 			exit(1);
 		}
+
 		printf("OK\n");
 	}
 
@@ -261,7 +276,8 @@ void start_source(int s, const char *prefix, struct opts *opts)
 	if (opts->frame_type == FRAME_TYPE_IFRAME) {
 		printf("%sConnecting...", prefix);
 		if (connect(s, NULL, 0) < 0) {
-			printf("%sconnect: %s\n", prefix, strerror(errno));
+			printf("%sconnect: %s %d\n", prefix,
+				strerror(errno), errno);
 			exit(1);
 		}
 		printf("OK\n");
@@ -309,8 +325,14 @@ void start_source(int s, const char *prefix, struct opts *opts)
 				if (errno == ECONNRESET) {
 					printf("%sDL-RELEASE-INDICATION\n", prefix);
 					break;
-				} else if (errno == EISCONN) {
+				} else if (errno == EALREADY) {
 					printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+					continue;
+				} else if (errno == ENOTCONN) {
+					printf("%sDL-RELEASE-CONFIRM\n", prefix);
+					break;
+				} else if (errno == EISCONN) {
+					printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 					continue;
 				} else {
 					printf("%srecvmsg: %s\n", prefix, strerror(errno));
@@ -425,8 +447,14 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 				if (errno == ECONNRESET) {
 					printf("%sDL-RELEASE-INDICATION\n", prefix);
 					continue;
-				} else if (errno == EISCONN) {
+				} else if (errno == EALREADY) {
 					printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+					continue;
+				} else if (errno == ENOTCONN) {
+					printf("%sDL-RELEASE-CONFIRM\n", prefix);
+					continue;
+				} else if (errno == EISCONN) {
+					printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 					continue;
 				} else {
 					printf("%srecvmsg: %s\n", prefix, strerror(errno));
@@ -474,13 +502,13 @@ void print_usage(const char *progname)
 {
 	fprintf(stderr,
 		"%s: <interface>\n"
-		"	--mode (sink|source|loopback)\n"
+		"	(--sink|--source|--loopback|--null)\n"
 		"\n"
 		"	sink:      Eat frames\n"
 		"	source: Generate frames\n"
-		"	[-l|--length <length>]      Frame length\n"
-		"	[-i|--interval <interval>]  Inter-frame delay interval\n"
-		"	[-u|--uframe]               Send U-Frames instead of I-Frames\n"
+		"		[-l|--length <length>]      Frame length\n"
+		"		[-i|--interval <interval>]  Inter-frame delay interval\n"
+		"		[-u|--uframe]               Send U-Frames instead of I-Frames\n"
 		"	loopback:  Receive and loopback frames\n"
 		"	null:      Doesn't do anything\n"
 		"	[-d|--debug]                Enable socket debug mode\n",
@@ -543,7 +571,7 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 			if (pid > 0) {
 				if (opts->mode == MODE_LOOPBACK)
 					start_loopback(s, prefix, opts);
-				else if (opts->mode == MODE_GENERATOR)
+				else if (opts->mode == MODE_SOURCE)
 					start_source(s, prefix, opts);
 				else if (opts->mode == MODE_SINK)
 					start_sink(s, prefix, opts);
@@ -572,7 +600,10 @@ int main(int argc, char *argv[])
 	struct option options[] = {
 		{ "length", required_argument, 0, 0 },
 		{ "interval", required_argument, 0, 0 },
-		{ "mode", required_argument, 0, 0 },
+		{ "sink", no_argument, 0, 0 },
+		{ "source", no_argument, 0, 0 },
+		{ "loopback", no_argument, 0, 0 },
+		{ "null", no_argument, 0, 0 },
 		{ "uframe", no_argument, 0, 0 },
 		{ "bcast", no_argument, 0, 0 },
 		{ "debug", no_argument, 0, 0 },
@@ -583,7 +614,7 @@ int main(int argc, char *argv[])
 	int optidx;
 
 	for(;;) {
-		c = getopt_long(argc, argv, "l:i:m:ud", options,
+		c = getopt_long(argc, argv, "l:i:ud", options,
 			&optidx);
 
 		if (c == -1)
@@ -595,20 +626,18 @@ int main(int argc, char *argv[])
 		} else if (c == 'i' || (c == 0 &&
 		    !strcmp(options[optidx].name, "interval"))) {
 			opts.interval = atoi(optarg);
-		} else if (c == 'm' || (c == 0 &&
-		    !strcmp(options[optidx].name, "mode"))) {
-			if (!strcasecmp(optarg,"loopback"))
-				opts.mode = MODE_LOOPBACK;
-			else if (!strcasecmp(optarg,"source"))
-				opts.mode = MODE_GENERATOR;
-			else if (!strcasecmp(optarg,"sink"))
+		} else if (c == 0 &&
+		    !strcmp(options[optidx].name, "sink")) {
 				opts.mode = MODE_SINK;
-			else if (!strcasecmp(optarg,"null"))
+		} else if (c == 0 &&
+		    !strcmp(options[optidx].name, "source")) {
+				opts.mode = MODE_SOURCE;
+		} else if (c == 0 &&
+		    !strcmp(options[optidx].name, "loopback")) {
+				opts.mode = MODE_LOOPBACK;
+		} else if (c == 0 &&
+		    !strcmp(options[optidx].name, "null")) {
 				opts.mode = MODE_NULL;
-			else {
-				fprintf(stderr,"Unknown mode\n");
-				print_usage(argv[0]);
-			}
 		} else if (c == 'd' || (c == 0 &&
 		    !strcmp(options[optidx].name, "debug"))) {
 			opts.socket_debug = 1;
@@ -674,7 +703,7 @@ int main(int argc, char *argv[])
 
 		if (opts.mode == MODE_LOOPBACK)
 			start_loopback(s, "", &opts);
-		else if (opts.mode == MODE_GENERATOR)
+		else if (opts.mode == MODE_SOURCE)
 			start_source(s, "", &opts);
 		else if (opts.mode == MODE_SINK)
 			start_sink(s, "", &opts);

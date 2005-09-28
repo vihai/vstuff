@@ -145,7 +145,19 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 	}
 
 	if (sendmsg(dlc->socket, &msg, 0) < 0) {
-		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",strerror(errno));
+		if (errno == ECONNRESET) {
+			q931_dl_release_indication(dlc);
+		} else if (errno == EALREADY) {
+			q931_dl_establish_indication(dlc);
+		} else if (errno == ENOTCONN) {
+			q931_dl_release_confirm(dlc);
+		} else if (errno == EISCONN) {
+			q931_dl_establish_confirm(dlc);
+		} else {
+			report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",
+				strerror(errno));
+		}
+
 		return errno;
 	} else {
 	}
@@ -177,7 +189,19 @@ static int q931_send_uframe(struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_len = size;
 
 	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0) {
-		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",strerror(errno));
+		if (errno == ECONNRESET) {
+			q931_dl_release_indication(dlc);
+		} else if (errno == EALREADY) {
+			q931_dl_establish_indication(dlc);
+		} else if (errno == ENOTCONN) {
+			q931_dl_release_confirm(dlc);
+		} else if (errno == EISCONN) {
+			q931_dl_establish_confirm(dlc);
+		} else {
+			report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",
+				strerror(errno));
+		}
+
 		return errno;
 	}
 

@@ -140,6 +140,9 @@ struct q931_dlc *q931_accept(
 typedef char BOOL;
 
 void q931_dl_establish_confirm(struct q931_dlc *dlc);
+void q931_dl_establish_indication(struct q931_dlc *dlc);
+void q931_dl_release_confirm(struct q931_dlc *dlc);
+void q931_dl_release_indication(struct q931_dlc *dlc);
 
 #endif
 

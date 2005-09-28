@@ -75,35 +75,6 @@ void q931_leave(struct q931_lib *lib)
 	free(lib);
 }
 
-void q931_dl_establish_indication(struct q931_dlc *dlc)
-{
-	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-INDICATION\n");
-
-	dlc->status = DLC_CONNECTED;
-
-	struct q931_call *call, *callt;
-	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
-		struct q931_ces *ces, *cest;
-		list_for_each_entry_safe(ces, cest, &call->ces, node) {
-
-			if (ces->dlc == dlc) {
-				if (ces == call->selected_ces) {
-					q931_ces_dl_establish_indication(ces);
-
-					break;
-				} else {
-					q931_ces_dl_establish_indication(ces);
-
-					return;
-				}
-			}
-		}
-
-		if (call->dlc == dlc)
-			q931_call_dl_establish_indication(call);
-	}
-}
-
 void q931_dl_establish_confirm(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-CONFIRM\n");
@@ -133,11 +104,11 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 	}
 }
 
-void q931_dl_release_indication(struct q931_dlc *dlc)
+void q931_dl_establish_indication(struct q931_dlc *dlc)
 {
-	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-INDICATION\n");
+	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-INDICATION\n");
 
-	dlc->status = DLC_DISCONNECTED;
+	dlc->status = DLC_CONNECTED;
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
@@ -146,11 +117,11 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 
 			if (ces->dlc == dlc) {
 				if (ces == call->selected_ces) {
-					q931_ces_dl_release_indication(ces);
+					q931_ces_dl_establish_indication(ces);
 
 					break;
 				} else {
-					q931_ces_dl_release_indication(ces);
+					q931_ces_dl_establish_indication(ces);
 
 					return;
 				}
@@ -158,7 +129,7 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 		}
 
 		if (call->dlc == dlc)
-			q931_call_dl_release_indication(call);
+			q931_call_dl_establish_indication(call);
 	}
 }
 
@@ -188,6 +159,35 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 
 		if (call->dlc == dlc)
 			q931_call_dl_release_confirm(call);
+	}
+}
+
+void q931_dl_release_indication(struct q931_dlc *dlc)
+{
+	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-INDICATION\n");
+
+	dlc->status = DLC_DISCONNECTED;
+
+	struct q931_call *call, *callt;
+	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
+		struct q931_ces *ces, *cest;
+		list_for_each_entry_safe(ces, cest, &call->ces, node) {
+
+			if (ces->dlc == dlc) {
+				if (ces == call->selected_ces) {
+					q931_ces_dl_release_indication(ces);
+
+					break;
+				} else {
+					q931_ces_dl_release_indication(ces);
+
+					return;
+				}
+			}
+		}
+
+		if (call->dlc == dlc)
+			q931_call_dl_release_indication(call);
 	}
 }
 
@@ -679,13 +679,17 @@ int q931_receive(struct q931_dlc *dlc)
 	msg.dlc = dlc;
 	msg.rawlen = recvmsg(dlc->socket, &skmsg, 0);
 	if(msg.rawlen < 0) {
-		if (errno == ECONNRESET)
+		if (errno == ECONNRESET) {
 			q931_dl_release_indication(dlc);
-		else if (errno == EISCONN)
+		} else if (errno == EALREADY) {
 			q931_dl_establish_indication(dlc);
-		else {
-			report_dlc(dlc, LOG_ERR,
-				"recvmsg: %s\n", strerror(errno));
+		} else if (errno == ENOTCONN) {
+			q931_dl_release_confirm(dlc);
+		} else if (errno == EISCONN) {
+			q931_dl_establish_confirm(dlc);
+		} else {
+			report_dlc(dlc, LOG_ERR, "recvmsg error: %s\n",
+				strerror(errno));
 
 			list_del(&dlc->intf_node);
 

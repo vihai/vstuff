@@ -1310,7 +1310,7 @@ void lapd_dl_establish_indication(struct lapd_sock *lapd_sock)
 	lapd_debug_ls(lapd_sock,
 		"DL-ESTABLISH-INDICATION: Multiple frame mode established\n");
 
-	lapd_sock->sk.sk_err = EISCONN;
+	lapd_sock->sk.sk_err = EALREADY;
 	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
 }
 
@@ -1330,20 +1330,15 @@ void lapd_dl_release_indication(struct lapd_sock *lapd_sock)
 
 	lapd_sock->sk.sk_err = ECONNRESET;
 	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
-
-	if (lapd_sock->sk.sk_state == TCP_CLOSING) {
-		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
-		// Defers unhash
-		sk_reset_timer(&lapd_sock->sk,
-			&lapd_sock->sk.sk_timer,
-			jiffies + 10 * HZ);
-	}
 }
 
 void lapd_dl_release_confirm(struct lapd_sock *lapd_sock)
 {
 	lapd_debug_ls(lapd_sock,
 		"DL-RELEASE-CONFIRM: Multiple frame mode released\n");
+
+	lapd_sock->sk.sk_err = ENOTCONN;
+	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
 
 	if (lapd_sock->sk.sk_state == TCP_CLOSING) {
 		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
@@ -1449,9 +1444,8 @@ static int lapd_connect(
 
 	err = lapd_multiframe_wait_for_establishment(
 				lapd_sock, flags & O_NONBLOCK);
-	if (err) {
+	if (err != -EISCONN)
 		goto err_multiframe_wait_for_establishment;
-	}
 
 	lapd_release_sock(lapd_sock);
 
@@ -1647,7 +1641,7 @@ static int lapd_shutdown(struct socket *sock, int how)
 
 	err = lapd_multiframe_wait_for_release(
 			lapd_sock, 1 /* FIXME: get socket NONBLOCK flag */);
-	if (err)
+	if (err != -ENOTCONN)
 		goto err_multiframe_wait_for_release;
 
 	lapd_release_sock(lapd_sock);
