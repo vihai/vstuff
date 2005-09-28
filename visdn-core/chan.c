@@ -73,6 +73,8 @@ int visdn_negotiate_parameters(
 		pars.mtu = chan1->max_mtu;
 	else if (chan2->max_mtu)
 		pars.mtu = chan2->max_mtu;
+	else
+		pars.mtu = 65536;
 
 	if (chan1->bitrate_selection ==
 			VISDN_CHAN_BITRATE_SELECTION_MAX &&
