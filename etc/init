@@ -64,7 +64,10 @@ function read_netdev_block
 					NETDEV_CHAN_D=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel\``
 					NETDEV_CHAN_E=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel_e\``
 				else
-					create_netdev "$NETDEV_PROTOCOL" "$NETDEV_REQ_DEVNAME" "$NETDEV_TEI"
+					create_netdev \
+						"$NETDEV_PROTOCOL" \
+						"$NETDEV_REQ_DEVNAME" \
+						"$NETDEV_TEI"
 				fi
 
 				if [ "$NETDEV_ROLE" = "NT" ] ; then
@@ -172,7 +175,10 @@ function read_chan_block
 						exit 1
 					fi
 
-					handle_connectmodule "$CHANNEL" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+					handle_connectmodule \
+						"$CHANNEL" \
+						"${BASH_REMATCH[1]}" \
+						"${BASH_REMATCH[2]}"
 				;;
 				*)
 					echo "Unknown directive ${BASH_REMATCH[1]}"

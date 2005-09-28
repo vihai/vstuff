@@ -110,7 +110,7 @@ void lapd_ntme_T201_timer(unsigned long data)
 	struct lapd_ntme *tme =
 		(struct lapd_ntme *)data;
 
-	lapd_printk(KERN_DEBUG, "tei_mgmt T201\n");
+	lapd_msg(KERN_DEBUG, "tei_mgmt T201\n");
 
 	spin_lock(&tme->lock);
 
@@ -183,11 +183,11 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk_tme(KERN_INFO, skb->dev,
+	lapd_msg_tme(KERN_INFO, skb->dev,
 		"TEI request\n");
 
 	if (tm->hdr.addr.c_r) {
-		lapd_printk_tme(KERN_WARNING, skb->dev,
+		lapd_msg_tme(KERN_WARNING, skb->dev,
 			"TEI request with C/R=1 ?\n");
 	}
 
@@ -223,7 +223,7 @@ static void lapd_ntme_recv_tei_request(struct sk_buff *skb)
 		goto found;
 	}
 
-	lapd_printk_tme(KERN_WARNING, skb->dev,
+	lapd_msg_tme(KERN_WARNING, skb->dev,
 		"Missing TEI management entity\n");
 
 	found:
@@ -236,11 +236,11 @@ static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk_dev(KERN_INFO, skb->dev,
+	lapd_msg_dev(skb->dev, KERN_INFO,
 		"TEI check response\n");
 
 	if (tm->hdr.addr.c_r) {
-		lapd_printk_dev(KERN_WARNING, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_WARNING,
 			"TEI request with C/R=0 ?\n");
 	}
 
@@ -257,7 +257,7 @@ static void lapd_ntme_recv_tei_check_response(struct sk_buff *skb)
 		}
 
 		if (!tme->tei_check_outstanding) {
-			lapd_printk_dev(KERN_WARNING, skb->dev,
+			lapd_msg_dev(skb->dev, KERN_WARNING,
 				"unexpected/late check response\n");
 			spin_unlock(&tme->lock);
 			break;
@@ -276,17 +276,17 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk_tme(KERN_INFO, skb->dev,
+	lapd_msg_tme(KERN_INFO, skb->dev,
 		"TEI verify received: tei=%d\n",
 		tm->body.ai);
 
 	if (tm->hdr.addr.c_r) {
-		lapd_printk_dev(KERN_WARNING, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_WARNING,
 			"TEI verify with C/R=1 ?\n");
 	}
 
 	if (tm->body.ai == LAPD_BROADCAST_TEI) {
-		lapd_printk_dev(KERN_INFO, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_INFO,
 			"received invalid verify"
 			" request with tei=127\n");
 		return;
@@ -304,7 +304,7 @@ static void lapd_ntme_recv_tei_verify(struct sk_buff *skb)
 			continue;
 		}
 
-		lapd_printk_dev(KERN_INFO, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_INFO,
 			"starting TEI check\n");
 
 		// We're not going any futher in the list
@@ -324,7 +324,7 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	if (skb->len < sizeof(struct lapd_tei_mgmt_frame)) {
-		lapd_printk_dev(KERN_ERR, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_ERR,
 			"frame too small (%d bytes)\n",
 			skb->len);
 
@@ -332,7 +332,7 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	}
 
 	if (lapd_frame_type(tm->hdr.control) != LAPD_FRAME_TYPE_UFRAME) {
-		lapd_printk_dev(KERN_ERR, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_ERR,
 			"not an U-Frame (%u%u)\n",
 			tm->hdr.ft2,
 			tm->hdr.ft1);
@@ -341,7 +341,7 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	}
 
 	if (lapd_uframe_function(tm->hdr.control) != LAPD_UFRAME_FUNC_UI) {
-		lapd_printk_dev(KERN_ERR, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_ERR,
 			"not an Unnumbered Information"
 			" (%u%u)\n",
 			tm->hdr.u.m3,
@@ -354,7 +354,7 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 // FIXME answer with F bit! :)
 
 	if (tm->body.entity != 0x0f) {
-		lapd_printk_dev(KERN_ERR, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_ERR,
 			"invalid entity %u\n",
 			tm->body.entity);
 
@@ -378,13 +378,13 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_ASSIGNED:
 	case LAPD_TEI_MT_DENIED:
 	case LAPD_TEI_MT_CHK_REQ:
-		lapd_printk_dev(KERN_INFO, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_INFO,
 			"TEI Management TE message (%u) in NT mode\n",
 			tm->body.message_type);
 	break;
 
 	default:
-		lapd_printk_dev(KERN_INFO, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_INFO,
 			"unknown/unimplemented message_type %u\n",
 			tm->body.message_type);
 	}

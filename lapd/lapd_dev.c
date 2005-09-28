@@ -65,9 +65,9 @@ static void lapd_kill_by_device(struct net_device *dev)
 
 	write_lock_bh(&lapd_hash_lock);
 	sk_for_each(sk, node, lapd_get_hash(dev)) {
-		struct lapd_opt *lo = lapd_sk(sk);
+		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-		if (lo->dev == dev) {
+		if (lapd_sock->dev == dev) {
 			sk->sk_state = TCP_CLOSING;
 			sk->sk_shutdown = SHUTDOWN_MASK;
 			sk->sk_err = ENETDOWN;
@@ -114,21 +114,21 @@ int lapd_device_event(struct notifier_block *this, unsigned long event,
 
 	switch (event) {
 	case NETDEV_UP:
-		lapd_printk(KERN_DEBUG, "NETDEV_UP %s\n", dev->name);
+		lapd_msg(KERN_DEBUG, "NETDEV_UP %s\n", dev->name);
 		lapd_device_up(dev);
 	break;
 
 	case NETDEV_DOWN:
-		lapd_printk(KERN_DEBUG, "NETDEV_DOWN %s\n", dev->name);
+		lapd_msg(KERN_DEBUG, "NETDEV_DOWN %s\n", dev->name);
 		lapd_device_down(dev);
 	break;
 
 	case NETDEV_UNREGISTER:
-		lapd_printk(KERN_DEBUG, "NETDEV_UNREGISTER %s\n", dev->name);
+		lapd_msg(KERN_DEBUG, "NETDEV_UNREGISTER %s\n", dev->name);
 	break;
 
 	case NETDEV_CHANGE:
-		lapd_printk(KERN_DEBUG, "NETDEV_CHANGE %s\n", dev->name);
+		lapd_msg(KERN_DEBUG, "NETDEV_CHANGE %s\n", dev->name);
 
 		// PH-ACTIVATE-INDICATION
 		// PH-DEACTIVATE-INDICATION

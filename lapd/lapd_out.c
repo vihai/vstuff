@@ -24,7 +24,7 @@ inline int lapd_send_frame(struct sk_buff *skb)
 
 	if((err = dev_queue_xmit(skb)) < 0) {
 
-		lapd_printk_dev(KERN_ERR, skb->dev,
+		lapd_msg_dev(skb->dev, KERN_ERR,
 			"dev_queue_xmit: %d\n", err);
 
 		kfree_skb(skb);
@@ -40,18 +40,18 @@ int lapd_prepare_uframe(struct sock *sk,
 	enum lapd_uframe_function function,
 	int p_f)
 {
-	struct lapd_opt *lo = lapd_sk(sk);
+	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-	BUG_ON(!lo->dev);
+	BUG_ON(!lapd_sock->dev);
 
-	skb->dev = lo->dev;
+	skb->dev = lapd_sock->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 	struct lapd_hdr *hdr =
 		(struct lapd_hdr *)skb_put(skb, sizeof(struct lapd_hdr));
 
-	hdr->addr.sapi = lo->sapi;
+	hdr->addr.sapi = lapd_sock->sapi;
 
 	enum lapd_cr cr = LAPD_COMMAND;
 	switch (function) {
@@ -62,19 +62,19 @@ int lapd_prepare_uframe(struct sock *sk,
 		case LAPD_UFRAME_FUNC_UA:    cr = LAPD_RESPONSE; break;
 		case LAPD_UFRAME_FUNC_FRMR:  cr = LAPD_RESPONSE; break;
 		case LAPD_UFRAME_FUNC_XID:
-			lapd_printk_sk(KERN_ERR, sk,
+			lapd_msg_ls(lapd_sock, KERN_ERR,
 				"XID unsupported\n");
 		break;
 		case LAPD_UFRAME_FUNC_INVALID: BUG(); break;
 	}
 
-	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lo->nt_mode)?1:0;
+	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lapd_sock->nt_mode)?1:0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 
-	hdr->addr.tei = lo->state == LAPD_DLS_LISTENING ?
+	hdr->addr.tei = lapd_sock->state == LAPD_DLS_LISTENING ?
 				LAPD_BROADCAST_TEI :
-				lo->tei;
+				lapd_sock->tei;
 
 	hdr->control = lapd_uframe_make_control(function, p_f);
 
@@ -116,16 +116,7 @@ void lapd_queue_completed_uframe(
 	struct sk_buff *skb)
 {
 	skb->sk = sk;
-	skb_queue_tail(&lapd_sk(sk)->u_queue, skb);
-}
-
-void lapd_flush_uqueue(struct sock *sk)
-{
-	struct sk_buff *skb;
-
-	while ((skb = skb_dequeue(&lapd_sk(sk)->u_queue))) {
-		lapd_send_frame(skb);
-	}
+	skb_queue_tail(&to_lapd_sock(sk)->u_queue, skb);
 }
 
 int lapd_send_completed_uframe(struct sk_buff *skb)

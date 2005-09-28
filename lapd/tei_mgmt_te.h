@@ -90,6 +90,6 @@ static inline void lapd_utme_state_changed(
 
 struct lapd_utme *lapd_utme_alloc(struct net_device *dev);
 int lapd_utme_handle_frame(struct sk_buff *skb);
-void lapd_utme_start_tei_request(struct lapd_utme *tme);
+void lapd_utme_mdl_assign_indication(struct lapd_utme *tme);
 
 #endif

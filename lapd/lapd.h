@@ -89,37 +89,52 @@ struct sockaddr_lapd {
 
 #define LAPD_BROADCAST_TEI	127
 
-#define LAPD_HASHBITS		5
+#define LAPD_HASHBITS		8
 #define LAPD_HASHSIZE		((1 << LAPD_HASHBITS) - 1)
 
 #ifdef SOCK_DEBUGGING
-#define lapd_debug_sk(sk, format, arg...)		\
-		SOCK_DEBUG(sk,				\
+#define lapd_debug(format, arg...)			\
+		printk(KERN_DEBUG			\
 			"lapd: "			\
-			"%s "				\
 			format,				\
-			lapd_sk(sk)->dev?lapd_sk(sk)->dev->name:"",	\
+			## arg)
+
+#define lapd_debug_ls(ls, format, arg...)			\
+		SOCK_DEBUG(&ls->sk,				\
+			"lapd: "				\
+			"%s "					\
+			format,					\
+			(ls)->dev ? (ls)->dev->name : "",	\
+			## arg)
+
+#define lapd_debug_dev(dev, format, arg...)			\
+		printk(KERN_DEBUG				\
+			"lapd: "				\
+			"%s "					\
+			format,					\
+			(dev)->name ? (dev)->name : "",		\
 			## arg)
 #else
-#define lapd_debug_sk(sk, format, arg...)		\
-		do { } while (0)
+#define lapd_debug(ls, format, arg...) do { } while (0)
+#define lapd_debug_ls(ls, format, arg...) do { } while (0)
+#define lapd_debug_dev(ls, format, arg...) do { } while (0)
 #endif
 
-#define lapd_printk(lvl, format, arg...)		\
+#define lapd_msg(lvl, format, arg...)			\
 	printk(lvl "lapd: "				\
 		format,					\
 		## arg)
 
-#define lapd_printk_sk(lvl, sk, format, arg...)		\
+#define lapd_msg_ls(ls, lvl, format, arg...)		\
 	printk(lvl "lapd: "				\
-		"%s "					\
+		"%s: "					\
 		format,					\
-		lapd_sk(sk)->dev?lapd_sk(sk)->dev->name:"",	\
+		(ls)->dev ? (ls)->dev->name : "",	\
 		## arg)
 
-#define lapd_printk_dev(lvl, dev, format, arg...)	\
+#define lapd_msg_dev(dev, lvl, format, arg...)		\
 	printk(lvl "lapd: "				\
-		"%s "					\
+		"%s: "					\
 		format,					\
 		(dev)->name,				\
 		## arg)
@@ -136,16 +151,34 @@ enum {
 enum lapd_datalink_state
 {
 	LAPD_DLS_NULL					= 0,
-	LAPD_DLS_TEI_UNASSIGNED				= 1,
-	LAPD_DLS_AWAITING_TEI				= 2,
-	LAPD_DLS_ESTABLISH_AWAITING_TEI			= 3,
-	LAPD_DLS_TEI_ASSIGNED				= 4,
-	LAPD_DLS_AWAITING_ESTABLISH			= 50,
-	LAPD_DLS_AWAITING_REESTABLISH			= 51,
-	LAPD_DLS_AWAITING_ESTABLISH_PENDING_RELEASE	= 52,
-	LAPD_DLS_AWAITING_RELEASE			= 6,
-	LAPD_DLS_LINK_CONNECTION_ESTABLISHED		= 7,
+	LAPD_DLS_1_TEI_UNASSIGNED			= 10,
+	LAPD_DLS_2_AWAITING_TEI				= 20,
+	LAPD_DLS_3_ESTABLISH_AWAITING_TEI		= 30,
+	LAPD_DLS_4_TEI_ASSIGNED				= 40,
+	LAPD_DLS_5_AWAITING_ESTABLISH			= 50,
+	LAPD_DLS_6_AWAITING_RELEASE			= 60,
+	LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED		= 70,
+	LAPD_DLS_8_TIMER_RECOVERY			= 80,
 	LAPD_DLS_LISTENING				= 100,
+};
+
+enum lapd_mdl_error_indications
+{
+	LAPD_MDL_ERROR_INDICATION_A,
+	LAPD_MDL_ERROR_INDICATION_B,
+	LAPD_MDL_ERROR_INDICATION_C,
+	LAPD_MDL_ERROR_INDICATION_D,
+	LAPD_MDL_ERROR_INDICATION_E,
+	LAPD_MDL_ERROR_INDICATION_F,
+	LAPD_MDL_ERROR_INDICATION_G,
+	LAPD_MDL_ERROR_INDICATION_H,
+	LAPD_MDL_ERROR_INDICATION_I,
+	LAPD_MDL_ERROR_INDICATION_J,
+	LAPD_MDL_ERROR_INDICATION_K,
+	LAPD_MDL_ERROR_INDICATION_L,
+	LAPD_MDL_ERROR_INDICATION_M,
+	LAPD_MDL_ERROR_INDICATION_N,
+	LAPD_MDL_ERROR_INDICATION_O,
 };
 
 enum lapd_format_errors
@@ -188,7 +221,7 @@ static inline struct lapd_device *lapd_dev(struct net_device *dev)
 struct lapd_new_dlc
 {
 	struct hlist_node node;
-	struct sock *sk;
+	struct lapd_sock *lapd_sock;
 };
 
 static inline struct lapd_sap *lapd_sap_alloc(void)
@@ -209,8 +242,10 @@ static inline void lapd_sap_put(
 		kfree(entity);
 }
 
-struct lapd_opt
+struct lapd_sock
 {
+	struct sock sk;
+
 	struct net_device *dev;
 
 	int nt_mode;
@@ -219,8 +254,8 @@ struct lapd_opt
 
 	int retrans_cnt;
 
-	struct timer_list T200_timer;
-	struct timer_list T203_timer;
+	struct timer_list timer_T200;
+	struct timer_list timer_T203;
 
 	u8 v_s;
 	u8 v_r;
@@ -228,10 +263,11 @@ struct lapd_opt
 
 	enum lapd_datalink_state state;
 
-	int peer_busy;
-	int me_busy;
-	int rejection_exception;
-	int in_timer_recovery;
+	int peer_receiver_busy;
+	int own_receiver_busy;
+	int reject_exception;
+	int acknowledge_pending;
+	int layer_3_initiated;
 	// ------------------
 
 	struct lapd_sap *sap;
@@ -244,12 +280,6 @@ struct lapd_opt
 	struct hlist_head new_dlcs;
 
 	struct net_device *ppp_master_dev;
-};
-
-/* WARNING: don't change the layout of the members in lapd_sock! */
-struct lapd_sock {
-	struct sock sk;
-	struct lapd_opt lapd;
 };
 
 enum lapd_int_msg_type
@@ -265,34 +295,60 @@ struct lapd_internal_msg
 	int param;
 };
 
-static inline struct lapd_opt *lapd_sk(const struct sock *__sk)
-{
-	return &((struct lapd_sock *)__sk)->lapd;
-}
+#define to_lapd_sock(obj) container_of(obj, struct lapd_sock, sk)
 
 extern void setup_lapd(struct net_device *netdev);
 
-struct sock *lapd_new_sock(struct sock *parent_sk, u8 tei, int sapi);
+struct lapd_sock *lapd_new_sock(
+	struct lapd_sock *parent_lapd_sock,
+	u8 tei, int sapi);
 
-int lapd_device_event(struct notifier_block *this,
- 		unsigned long event, void *ptr);
-void lapd_frame_reject(struct sock *sk, struct sk_buff *skb,
- enum lapd_format_errors error);
-int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
-void lapd_change_state(struct sock *sk, enum lapd_datalink_state newstate);
-void lapd_mdl_error_response(struct sock *sk);
-void lapd_mdl_assign_request(struct sock *sk, int tei);
-void lapd_mdl_remove_request(struct sock *sk);
-const char *lapd_state_to_text(enum lapd_datalink_state state);
 void lapd_deliver_internal_message(
-	struct sock *sk,
+	struct lapd_sock *lapd_sock,
 	enum lapd_int_msg_type type,
 	int param);
+
+void lapd_dl_establish_indication(struct lapd_sock *lapd_sock);
+void lapd_dl_establish_confirm(struct lapd_sock *lapd_sock);
+void lapd_dl_release_indication(struct lapd_sock *lapd_sock);
+void lapd_dl_release_confirm(struct lapd_sock *lapd_sock);
+
+void lapd_mdl_error_indication(
+	struct lapd_sock *lapd_sock,
+	unsigned long indication);
+
+int lapd_dl_unit_data_indication(
+	struct lapd_sock *lapd_sock,
+	struct sk_buff *skb);
+void lapd_dl_data_indication(
+	struct lapd_sock *lapd_sock,
+	struct sk_buff *skb);
 
 static inline struct hlist_head *lapd_get_hash(struct net_device *dev)
 {
 	return &lapd_hash[dev->ifindex & (LAPD_HASHSIZE - 1)];
 }
+
+static inline void lapd_bh_lock_sock(struct lapd_sock *lapd_sock)
+{
+	bh_lock_sock(&lapd_sock->sk);
+}
+
+static inline void lapd_bh_unlock_sock(struct lapd_sock *lapd_sock)
+{
+	bh_unlock_sock(&lapd_sock->sk);
+}
+
+static inline void lapd_lock_sock(struct lapd_sock *lapd_sock)
+{
+	lock_sock(&lapd_sock->sk);
+}
+
+static inline void lapd_release_sock(struct lapd_sock *lapd_sock)
+{
+	release_sock(&lapd_sock->sk);
+}
+
 
 #endif
 #endif

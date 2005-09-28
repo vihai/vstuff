@@ -2,6 +2,37 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-28 16:03:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-210
+
+    Summary:
+      Rewrite most of lapd to be much more similar to the ETSI state-machine model
+    Revision:
+      isdn--devel--0.1--patch-210
+
+    
+    
+
+    new files:
+     lapd/.arch-ids/lapd_dev.h.id lapd/lapd_dev.h
+
+    modified files:
+     ChangeLog README etc/init lapd/Makefile.in lapd/af_lapd.c
+     lapd/datalink.c lapd/datalink.h lapd/lapd.h lapd/lapd_dev.c
+     lapd/lapd_in.c lapd/lapd_in.h lapd/lapd_out.c lapd/lapd_out.h
+     lapd/tei_mgmt.h lapd/tei_mgmt_nt.c lapd/tei_mgmt_te.c
+     lapd/tei_mgmt_te.h libq931/intf.c
+
+    renamed files:
+     lapd/.arch-ids/multiframe.c.id
+       ==> lapd/.arch-ids/datalink.c.id
+     lapd/.arch-ids/multiframe.h.id
+       ==> lapd/.arch-ids/datalink.h.id
+     lapd/multiframe.c
+       ==> lapd/datalink.c
+     lapd/multiframe.h
+       ==> lapd/datalink.h
+
+
 2005-09-27 20:24:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-209
 
     Summary:

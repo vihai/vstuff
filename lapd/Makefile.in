@@ -4,9 +4,9 @@
 @SET_MAKE@
 
 subdir = lapd
-DIST_SOURCES = af_lapd.c lapd_dev.c lapd_in.c lapd_out.c multiframe.c \
+DIST_SOURCES = af_lapd.c lapd_dev.c lapd_in.c lapd_out.c datalink.c \
 	tei_mgmt.c tei_mgmt_nt.c tei_mgmt_te.c
-DIST_HEADERS = lapd.h lapd_in.h lapd_out.h lapd_proto.h multiframe.h  \
+DIST_HEADERS = lapd.h lapd_in.h lapd_out.h lapd_proto.h lapd_dev.h datalink.h  \
 	tei_mgmt.h tei_mgmt_nt.h tei_mgmt_te.h
 DIST_COMMON = $(srcdir)/Makefile.in
 
@@ -94,7 +94,7 @@ EXTRA_CFLAGS=-I $(abssrcdir)/../lapd/ -I $(abssrcdir)/../visdn-core/ -I$(abssrcd
 obj-m	:= lapd.o
 
 lapd-y	:= af_lapd.o lapd_in.o lapd_out.o lapd_dev.o \
-	multiframe.o tei_mgmt.o tei_mgmt_nt.o tei_mgmt_te.o
+	datalink.o tei_mgmt.o tei_mgmt_nt.o tei_mgmt_te.o
 # end Kbuild
 
 all:

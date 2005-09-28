@@ -10,5 +10,11 @@
   sometimes forever.
 
 
+
+Requirements:
+
+udev >= 051
+kernel >= 2.6.8
+
 Read TODO for more detailed list of bugs or missing features.
 

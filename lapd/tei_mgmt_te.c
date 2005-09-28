@@ -29,7 +29,7 @@ static void lapd_utme_send_to_socket(
 		struct sk_buff *skb;
 		skb = alloc_skb(sizeof(struct lapd_internal_msg), GFP_ATOMIC);
 		if (!skb) {
-			lapd_printk(KERN_ERR,
+			lapd_msg(KERN_ERR,
 				"Cannot send message %d to socket\n",
 				type);
 
@@ -101,7 +101,7 @@ static inline int lapd_utme_send_tei_verify(
  * deadlock when passing messages to the socket (timer/rcv softirq context).
  */
 
-void lapd_utme_start_tei_request(
+void lapd_utme_mdl_assign_indication(
 	struct lapd_utme *tme)
 {
 	// Disable BHs in order to avoid responses coming thru until we
@@ -129,7 +129,7 @@ void lapd_utme_T202_timer(unsigned long data)
 	struct lapd_utme *tme =
 		(struct lapd_utme *)data;
 
-	lapd_printk_tme(KERN_DEBUG, tme->dev,
+	lapd_msg_tme(KERN_DEBUG, tme->dev,
 		"tei_mgmt T202\n");
 
 	spin_lock(&tme->lock);
@@ -147,8 +147,8 @@ void lapd_utme_T202_timer(unsigned long data)
 			struct hlist_node *node;
 
 			sk_for_each(sk, node, &lapd_hash[i]) {
-				if (!lapd_sk(sk)->nt_mode &&
-				    lapd_sk(sk)->usr_tme == tme) {
+				if (!to_lapd_sock(sk)->nt_mode &&
+				    to_lapd_sock(sk)->usr_tme == tme) {
 					lapd_utme_send_to_socket(sk,
 						LAPD_INT_MDL_ERROR_RESPONSE,
 						0);
@@ -191,10 +191,10 @@ static void lapd_utme_recv_tei_assigned(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk(KERN_INFO, "TEI assigned\n");
+	lapd_msg(KERN_INFO, "TEI assigned\n");
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_printk_tme(KERN_WARNING, skb->dev,
+		lapd_msg_tme(KERN_WARNING, skb->dev,
 			"TEI assigned with C/R=0 ?\n");
 	}
 
@@ -227,7 +227,7 @@ static void lapd_utme_recv_tei_assigned(struct sk_buff *skb)
 			// We're not going further in the list
 			read_unlock_bh(&lapd_utme_hash_lock);
 
-			lapd_printk_tme(KERN_INFO, skb->dev,
+			lapd_msg_tme(KERN_INFO, skb->dev,
 				"TEI %u assigned\n",
 				tm->body.ai);
 
@@ -246,8 +246,8 @@ static void lapd_utme_recv_tei_assigned(struct sk_buff *skb)
 				struct hlist_node *node;
 
 				sk_for_each(sk, node, &lapd_hash[i]) {
-					if (!lapd_sk(sk)->nt_mode &&
-					    lapd_sk(sk)->usr_tme == tme) {
+					if (!to_lapd_sock(sk)->nt_mode &&
+					    to_lapd_sock(sk)->usr_tme == tme) {
 						lapd_utme_send_to_socket(sk,
 							LAPD_INT_MDL_ASSIGN_REQUEST,
 							tme->tei);
@@ -275,12 +275,12 @@ static void lapd_utme_recv_tei_denied(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk_tme(KERN_INFO, skb->dev,
+	lapd_msg_tme(KERN_INFO, skb->dev,
 		"TEI %u denied\n",
 		tm->body.ai);
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_printk_tme(KERN_WARNING, skb->dev,
+		lapd_msg_tme(KERN_WARNING, skb->dev,
 			"TEI denied with C/R=0 ?\n");
 	}
 }
@@ -300,12 +300,12 @@ static void lapd_utme_recv_tei_check_request(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk_tme(KERN_INFO, skb->dev,
+	lapd_msg_tme(KERN_INFO, skb->dev,
 		"TEI %u check request\n",
 		tm->body.ai);
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_printk_tme(KERN_WARNING, skb->dev,
+		lapd_msg_tme(KERN_WARNING, skb->dev,
 			"TEI request with C/R=0 ?\n");
 	}
 
@@ -323,7 +323,7 @@ static void lapd_utme_recv_tei_check_request(struct sk_buff *skb)
 		if (tme->status != TEI_UNASSIGNED &&
 		    (tm->body.ai == LAPD_BROADCAST_TEI ||
 		     tm->body.ai == tme->tei)) {
-			lapd_printk_tme(KERN_INFO, skb->dev,
+			lapd_msg_tme(KERN_INFO, skb->dev,
 				"responding to TEI check request\n");
 
 			lapd_utme_send_tei_check_response(tme, tme->tei);
@@ -340,12 +340,12 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_printk_tme(KERN_INFO, skb->dev,
+	lapd_msg_tme(KERN_INFO, skb->dev,
 		"TEI remove: tei=%d\n",
 		tm->body.ai);
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_printk_tme(KERN_WARNING, skb->dev,
+		lapd_msg_tme(KERN_WARNING, skb->dev,
 			"TEI request with C/R=0 ?\n");
 	}
 
@@ -363,7 +363,7 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 		if (tme->status != TEI_UNASSIGNED &&
 		    (tm->body.ai == LAPD_BROADCAST_TEI ||
 		     tm->body.ai == tme->tei)) {
-			lapd_printk_tme(KERN_INFO, skb->dev,
+			lapd_msg_tme(KERN_INFO, skb->dev,
 				"TEI %u removed by net request\n",
 				tm->body.ai);
 
@@ -379,8 +379,8 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 				struct sock *sk;
 				struct hlist_node *t2;
 				sk_for_each(sk, t2, &lapd_hash[i]) {
-					if (!lapd_sk(sk)->nt_mode &&
-					    lapd_sk(sk)->usr_tme == tme) {
+					if (!to_lapd_sock(sk)->nt_mode &&
+					    to_lapd_sock(sk)->usr_tme == tme) {
 						lapd_utme_send_to_socket(sk,
 							LAPD_INT_MDL_REMOVE_REQUEST,
 							0);
@@ -405,7 +405,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	if (skb->len < sizeof(struct lapd_tei_mgmt_frame)) {
-		lapd_printk_tme(KERN_ERR, skb->dev,
+		lapd_msg_tme(KERN_ERR, skb->dev,
 			"frame too small (%d bytes)\n",
 			skb->len);
 
@@ -413,7 +413,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	}
 
 	if (lapd_frame_type(tm->hdr.control) != LAPD_FRAME_TYPE_UFRAME) {
-		lapd_printk_tme(KERN_ERR, skb->dev,
+		lapd_msg_tme(KERN_ERR, skb->dev,
 			"not an U-Frame (%u%u)\n",
 			tm->hdr.ft2,
 			tm->hdr.ft1);
@@ -422,7 +422,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	}
 
 	if (lapd_uframe_function(tm->hdr.control) != LAPD_UFRAME_FUNC_UI) {
-		lapd_printk_tme(KERN_ERR, skb->dev,
+		lapd_msg_tme(KERN_ERR, skb->dev,
 			"not an Unnumbered Information"
 			" (%u%u)\n",
 			tm->hdr.u.m3,
@@ -434,7 +434,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 // TODO what to do with P bit ? AFAIK it should be ignored...
 
 	if (tm->body.entity != 0x0f) {
-		lapd_printk_tme(KERN_ERR, skb->dev,
+		lapd_msg_tme(KERN_ERR, skb->dev,
 			"invalid entity %u\n",
 			tm->body.entity);
 
@@ -461,13 +461,13 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_VERIFY:
 	case LAPD_TEI_MT_CHK_RES:
 	case LAPD_TEI_MT_REQUEST:
-		lapd_printk_tme(KERN_INFO, skb->dev,
+		lapd_msg_tme(KERN_INFO, skb->dev,
 			"TEI management NT message (%u) in TE mode\n",
 			tm->body.message_type);
 	break;
 
 	default:
-		lapd_printk_tme(KERN_INFO, skb->dev,
+		lapd_msg_tme(KERN_INFO, skb->dev,
 			"unknown/unimplemented message_type %u\n",
 			tm->body.message_type);
 	}
