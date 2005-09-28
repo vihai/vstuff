@@ -421,18 +421,27 @@ static int __init vsp_init_module(void)
 #endif
 
 	err = class_device_register(&vsp_class_dev);
-	if (err < 0) {
-		// TODO FIXME
-	}
+	if (err < 0)
+		goto err_class_device_register;
 
 #ifndef HAVE_CLASS_DEV_DEVT
-	class_device_create_file(
+	err = class_device_create_file(
 		&vsp_class_dev,
 		&class_device_attr_dev);
+	if (err < 0)
+		goto err_class_device_create_file;
 #endif
 
 	return 0;
 
+	class_device_unregister(&vsp_class_dev);
+err_class_device_register:
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+		&vsp_class_dev,
+		&class_device_attr_dev);
+err_class_device_create_file:
+#endif
 	cdev_del(&vsp_cdev);
 err_cdev_add:
 	unregister_chrdev_region(vsp_first_dev, 1);
@@ -462,7 +471,7 @@ static void __exit vsp_module_exit(void)
 #endif
 
 	class_device_unregister(&vsp_class_dev);
-	visdn_port_unregister(&vsp_port);
+
 	cdev_del(&vsp_cdev);
 	unregister_chrdev_region(vsp_first_dev, 1);
 
@@ -471,6 +480,8 @@ static void __exit vsp_module_exit(void)
 		&vsp_port,
 		&visdn_port_attr_debug_level);
 #endif
+
+	visdn_port_unregister(&vsp_port);
 
 	vsp_msg(KERN_INFO, vsp_MODULE_DESCR " unloaded\n");
 }

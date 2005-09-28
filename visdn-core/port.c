@@ -218,8 +218,6 @@ void visdn_port_unregister(
 
 	if (port->device)
 		put_device(port->device);
-
-	visdn_port_put(port);
 }
 EXPORT_SYMBOL(visdn_port_unregister);
 
