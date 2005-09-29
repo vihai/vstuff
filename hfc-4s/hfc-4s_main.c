@@ -448,12 +448,9 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct hfc_card *card = dev_id;
 
 	u8 status = hfc_inb(card, hfc_R_STATUS);
-	u8 irq_sci = hfc_inb(card, hfc_R_SCI);
-
 	if (unlikely(
 		!(status & (hfc_R_STATUS_V_MISC_IRQSTA |
-		            hfc_R_STATUS_V_FR_IRQSTA)) &&
-	    !irq_sci)) {
+		            hfc_R_STATUS_V_FR_IRQSTA)))) {
 		// probably we are sharing the irq
 		return IRQ_NONE;
 	}
@@ -477,6 +474,7 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 	}
 
+	u8 irq_sci = hfc_inb(card, hfc_R_SCI);
 	if (irq_sci) {
 		int i;
 		for (i=0; i<card->num_st_ports; i++) {
