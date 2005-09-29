@@ -156,7 +156,6 @@ struct q931_call
 	struct q931_timer T304;
 	struct q931_timer T305;
 	struct q931_timer T306;
-	struct q931_timer T307;
 	struct q931_timer T308;
 	struct q931_timer T309;
 	struct q931_timer T310;

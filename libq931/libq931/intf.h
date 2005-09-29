@@ -96,7 +96,6 @@ struct q931_interface
 	longtime_t T304;
 	longtime_t T305;
 	longtime_t T306;
-	longtime_t T307;
 	longtime_t T308;
 	longtime_t T309;
 	longtime_t T310;

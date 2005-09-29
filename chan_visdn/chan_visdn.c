@@ -133,6 +133,27 @@ struct visdn_interface
 	char international_prefix[10];
 	int dlc_autorelease_time;
 
+	int T301;
+	int T302;
+	int T303;
+	int T304;
+	int T305;
+	int T306;
+	int T307;
+	int T308;
+	int T309;
+	int T310;
+	int T312;
+	int T313;
+	int T314;
+	int T316;
+	int T317;
+	int T318;
+	int T319;
+	int T320;
+	int T321;
+	int T322;
+
 	struct list_head suspended_calls;
 
 	struct q931_interface *q931_intf;
@@ -192,6 +213,7 @@ struct visdn_state
 		.national_prefix = "0",
 		.international_prefix = "00",
 		.dlc_autorelease_time = 10,
+		.T307 = 180,
 	}
 };
 
@@ -387,15 +409,107 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			intf->dlc_autorelease_time);
 
 		if (intf->q931_intf) {
-			ast_cli(fd, "DLCs                      : ");
+			if (intf->q931_intf->role == LAPD_ROLE_NT) {
+				ast_cli(fd, "DLCs                      : ");
 
-			struct q931_dlc *dlc;
-			list_for_each_entry(dlc, &intf->q931_intf->dlcs,
-					intf_node) {
-				ast_cli(fd, "%d ", dlc->tei);
+				struct q931_dlc *dlc;
+				list_for_each_entry(dlc, &intf->q931_intf->dlcs,
+						intf_node) {
+					ast_cli(fd, "%d ", dlc->tei);
+
+				}
+
+				ast_cli(fd, "\n");
+
+#define TIMER_CONFIG(timer)					\
+	ast_cli(fd, #timer ": %lld%s\n",			\
+		intf->q931_intf->timer / 1000000LL,		\
+		intf->timer ? " (Non-default)" : "");
+
+
+				TIMER_CONFIG(T301);
+				TIMER_CONFIG(T301);
+				TIMER_CONFIG(T302);
+				TIMER_CONFIG(T303);
+				TIMER_CONFIG(T304);
+				TIMER_CONFIG(T305);
+				TIMER_CONFIG(T306);
+				ast_cli(fd, "T307: %d\n", intf->T307);
+				TIMER_CONFIG(T308);
+				TIMER_CONFIG(T309);
+				TIMER_CONFIG(T310);
+				TIMER_CONFIG(T312);
+				TIMER_CONFIG(T314);
+				TIMER_CONFIG(T316);
+				TIMER_CONFIG(T317);
+				TIMER_CONFIG(T320);
+				TIMER_CONFIG(T321);
+				TIMER_CONFIG(T322);
+			} else {
+				TIMER_CONFIG(T301);
+				TIMER_CONFIG(T302);
+				TIMER_CONFIG(T303);
+				TIMER_CONFIG(T304);
+				TIMER_CONFIG(T305);
+				TIMER_CONFIG(T306);
+				ast_cli(fd, "T307: %d\n", intf->T307);
+				TIMER_CONFIG(T308);
+				TIMER_CONFIG(T309);
+				TIMER_CONFIG(T310);
+				TIMER_CONFIG(T312);
+				TIMER_CONFIG(T313);
+				TIMER_CONFIG(T314);
+				TIMER_CONFIG(T316);
+				TIMER_CONFIG(T317);
+				TIMER_CONFIG(T318);
+				TIMER_CONFIG(T319);
+				TIMER_CONFIG(T320);
+				TIMER_CONFIG(T321);
+				TIMER_CONFIG(T322);
 			}
 
-			ast_cli(fd, "\n");
+		} else {
+			ast_cli(fd,
+				"T301: %d\n"
+				"T302: %d\n"
+				"T303: %d\n"
+				"T304: %d\n"
+				"T305: %d\n"
+				"T306: %d\n"
+				"T307: %d\n"
+				"T308: %d\n"
+				"T309: %d\n"
+				"T310: %d\n"
+				"T312: %d\n"
+				"T313: %d\n"
+				"T314: %d\n"
+				"T316: %d\n"
+				"T317: %d\n"
+				"T318: %d\n"
+				"T319: %d\n"
+				"T320: %d\n"
+				"T321: %d\n"
+				"T322: %d\n",
+				intf->T301,
+				intf->T302,
+				intf->T303,
+				intf->T304,
+				intf->T305,
+				intf->T306,
+				intf->T307,
+				intf->T308,
+				intf->T309,
+				intf->T310,
+				intf->T312,
+				intf->T313,
+				intf->T314,
+				intf->T316,
+				intf->T317,
+				intf->T318,
+				intf->T319,
+				intf->T320,
+				intf->T321,
+				intf->T322);
 		}
 
 		ast_cli(fd, "Parked calls:\n");
@@ -513,6 +627,46 @@ static int visdn_intf_from_var(
 			sizeof(intf->international_prefix));
 	} else if (!strcasecmp(var->name, "autorelease_dlc")) {
 		intf->dlc_autorelease_time = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t301")) {
+		intf->T301 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t302")) {
+		intf->T302 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t303")) {
+		intf->T303 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t304")) {
+		intf->T304 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t305")) {
+		intf->T305 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t306")) {
+		intf->T306 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t307")) {
+		intf->T307 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t308")) {
+		intf->T308 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t309")) {
+		intf->T309 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t310")) {
+		intf->T310 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t312")) {
+		intf->T312 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t313")) {
+		intf->T313 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t314")) {
+		intf->T314 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t316")) {
+		intf->T316 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t317")) {
+		intf->T317 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t318")) {
+		intf->T318 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t319")) {
+		intf->T319 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t320")) {
+		intf->T320 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t321")) {
+		intf->T321 = atoi(var->value);
+	} else if (!strcasecmp(var->name, "t322")) {
+		intf->T322 = atoi(var->value);
 	} else {
 		return -1;
 	}
@@ -540,6 +694,26 @@ static void visdn_copy_interface_config(
 	strncpy(dst->international_prefix, src->international_prefix,
 		sizeof(dst->international_prefix));
 	dst->dlc_autorelease_time = src->dlc_autorelease_time;
+	dst->T301 = src->T301;
+	dst->T302 = src->T302;
+	dst->T303 = src->T303;
+	dst->T304 = src->T304;
+	dst->T305 = src->T305;
+	dst->T306 = src->T306;
+	dst->T307 = src->T307;
+	dst->T308 = src->T308;
+	dst->T309 = src->T309;
+	dst->T310 = src->T310;
+	dst->T312 = src->T312;
+	dst->T313 = src->T313;
+	dst->T314 = src->T314;
+	dst->T316 = src->T316;
+	dst->T317 = src->T317;
+	dst->T318 = src->T318;
+	dst->T319 = src->T319;
+	dst->T320 = src->T320;
+	dst->T321 = src->T321;
+	dst->T322 = src->T322;
 }
 
 static void visdn_reload_config(void)
@@ -577,7 +751,8 @@ static void visdn_reload_config(void)
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
 
-		if (!strcasecmp(cat, "global"))
+		if (!strcasecmp(cat, "general") ||
+		    !strcasecmp(cat, "global"))
 			continue;
 
 		int found = FALSE;
@@ -738,7 +913,6 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 	if (call->T304.pending) ast_cli(fd, "T304 ");
 	if (call->T305.pending) ast_cli(fd, "T305 ");
 	if (call->T306.pending) ast_cli(fd, "T306 ");
-	if (call->T307.pending) ast_cli(fd, "T307 ");
 	if (call->T308.pending) ast_cli(fd, "T308 ");
 	if (call->T309.pending) ast_cli(fd, "T309 ");
 	if (call->T310.pending) ast_cli(fd, "T310 ");
@@ -2011,6 +2185,26 @@ static int visdn_open_interface(
 	intf->q931_intf->network_role = intf->network_role;
 	intf->q931_intf->dlc_autorelease_time = intf->dlc_autorelease_time;
 
+	if (intf->T301) intf->q931_intf->T301 = intf->T301 * 1000000LL;
+	if (intf->T302) intf->q931_intf->T302 = intf->T302 * 1000000LL;
+	if (intf->T303) intf->q931_intf->T303 = intf->T303 * 1000000LL;
+	if (intf->T304) intf->q931_intf->T304 = intf->T304 * 1000000LL;
+	if (intf->T305) intf->q931_intf->T305 = intf->T305 * 1000000LL;
+	if (intf->T306) intf->q931_intf->T306 = intf->T306 * 1000000LL;
+	if (intf->T308) intf->q931_intf->T308 = intf->T308 * 1000000LL;
+	if (intf->T309) intf->q931_intf->T309 = intf->T309 * 1000000LL;
+	if (intf->T310) intf->q931_intf->T310 = intf->T310 * 1000000LL;
+	if (intf->T312) intf->q931_intf->T312 = intf->T312 * 1000000LL;
+	if (intf->T313) intf->q931_intf->T313 = intf->T313 * 1000000LL;
+	if (intf->T314) intf->q931_intf->T314 = intf->T314 * 1000000LL;
+	if (intf->T316) intf->q931_intf->T316 = intf->T316 * 1000000LL;
+	if (intf->T317) intf->q931_intf->T317 = intf->T317 * 1000000LL;
+	if (intf->T318) intf->q931_intf->T318 = intf->T318 * 1000000LL;
+	if (intf->T319) intf->q931_intf->T319 = intf->T319 * 1000000LL;
+	if (intf->T320) intf->q931_intf->T320 = intf->T320 * 1000000LL;
+	if (intf->T321) intf->q931_intf->T321 = intf->T321 * 1000000LL;
+	if (intf->T322) intf->q931_intf->T322 = intf->T322 * 1000000LL;
+
 	if (intf->q931_intf->role == LAPD_ROLE_NT) {
 		if (listen(intf->q931_intf->master_socket, 100) < 0) {
 			ast_log(LOG_ERROR,
@@ -3122,7 +3316,7 @@ static void visdn_q931_suspend_indication(
 
 	if (!ast_chan->whentohangup ||
 	    time(NULL) + 45 < ast_chan->whentohangup)
-		ast_channel_setwhentohangup(ast_chan, 45); // T307
+		ast_channel_setwhentohangup(ast_chan, intf->T307);
 
 	q931_call->pvt = NULL;
 	visdn_chan->q931_call = NULL;
