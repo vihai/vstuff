@@ -270,6 +270,8 @@ err_invalid_frame:
 no_frames:
 all_went_well:
 
+	hfc_fifo_refresh_fz_cache(fifo);
+
 	if (hfc_fifo_has_frames(fifo))
 		schedule_work(&fifo->work);
 
