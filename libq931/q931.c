@@ -79,7 +79,7 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-CONFIRM\n");
 
-	dlc->status = DLC_CONNECTED;
+	dlc->status = Q931_DLC_STATUS_CONNECTED;
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
@@ -102,13 +102,21 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 		if (call->dlc == dlc)
 			q931_call_dl_establish_confirm(call);
 	}
+
+	struct q931_message *msg, *n;
+	list_for_each_entry_safe(msg, n, &dlc->outgoing_queue,
+					outgoing_queue_node) {
+		q931_send_frame(dlc, msg->raw, msg->rawlen);
+
+		list_del(&msg->outgoing_queue_node);
+
+		q931_message_put(msg);
+	}
 }
 
 void q931_dl_establish_indication(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-INDICATION\n");
-
-	dlc->status = DLC_CONNECTED;
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
@@ -131,13 +139,14 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 		if (call->dlc == dlc)
 			q931_call_dl_establish_indication(call);
 	}
+
 }
 
 void q931_dl_release_confirm(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-CONFIRM\n");
 
-	dlc->status = DLC_DISCONNECTED;
+	dlc->status = Q931_DLC_STATUS_DISCONNECTED;
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
@@ -165,8 +174,6 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 void q931_dl_release_indication(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-INDICATION\n");
-
-	dlc->status = DLC_DISCONNECTED;
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
@@ -657,16 +664,20 @@ err_malloc:
 
 int q931_receive(struct q931_dlc *dlc)
 {
-	struct q931_message msg;
-	memset(&msg, 0x00, sizeof(msg));
+	struct q931_message *msg;
+	msg = malloc(sizeof(*msg));
+	if (!msg)
+		return -EFAULT;
+
+	q931_message_init(msg, dlc);
 
 	struct msghdr skmsg;
 	struct sockaddr_lapd sal;
 	struct cmsghdr cmsg;
 	struct iovec iov;
 
-	iov.iov_base = msg.raw;
-	iov.iov_len = sizeof(msg.raw);
+	iov.iov_base = msg->raw;
+	iov.iov_len = sizeof(msg->raw);
 
 	skmsg.msg_name = &sal;
 	skmsg.msg_namelen = sizeof(sal);
@@ -676,9 +687,9 @@ int q931_receive(struct q931_dlc *dlc)
 	skmsg.msg_controllen = sizeof(cmsg);
 	skmsg.msg_flags = 0;
 
-	msg.dlc = dlc;
-	msg.rawlen = recvmsg(dlc->socket, &skmsg, 0);
-	if(msg.rawlen < 0) {
+	msg->dlc = dlc;
+	msg->rawlen = recvmsg(dlc->socket, &skmsg, 0);
+	if(msg->rawlen < 0) {
 		if (errno == ECONNRESET) {
 			q931_dl_release_indication(dlc);
 		} else if (errno == EALREADY) {
@@ -699,15 +710,15 @@ int q931_receive(struct q931_dlc *dlc)
 		return Q931_RECEIVE_OK;
 	}
 
-	if (msg.rawlen < sizeof(struct q931_header)) {
+	if (msg->rawlen < sizeof(struct q931_header)) {
 		report_dlc(dlc, LOG_DEBUG,
 			"Message to small (%d bytes), ignoring\n",
-			msg.rawlen);
+			msg->rawlen);
 
 		return -EBADMSG;
 	}
 
-	struct q931_header *hdr = (struct q931_header *)msg.raw;
+	struct q931_header *hdr = (struct q931_header *)msg->raw;
 
 	if (hdr->protocol_discriminator != Q931_PROTOCOL_DISCRIMINATOR_Q931) {
 		report_dlc(dlc, LOG_DEBUG,
@@ -743,9 +754,9 @@ int q931_receive(struct q931_dlc *dlc)
 		return -EBADMSG;
 	}
 
-	msg.callref = 0;
-	msg.callref_direction = Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE;
-	msg.callref_len = hdr->call_reference_len;
+	msg->callref = 0;
+	msg->callref_direction = Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE;
+	msg->callref_len = hdr->call_reference_len;
 
 	int i;
 	for(i=0; i<hdr->call_reference_len; i++) {
@@ -755,14 +766,14 @@ int q931_receive(struct q931_dlc *dlc)
 		if (i==0 && val & 0x80) {
 			val &= 0x7f;
 
-			msg.callref_direction =
+			msg->callref_direction =
 				Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE;
 		}
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-		msg.callref |= val << ((hdr->call_reference_len-i-1) * 8);
+		msg->callref |= val << ((hdr->call_reference_len-i-1) * 8);
 #else
-		msg.callref |= val << (hdr->i * 8);
+		msg->callref |= val << (hdr->i * 8);
 #endif
 	}
 
@@ -771,23 +782,23 @@ int q931_receive(struct q931_dlc *dlc)
 	report_dlc(dlc, LOG_DEBUG,
 		"  call reference = %u %lu %c\n",
 		hdr->call_reference_len,
-		msg.callref,
-		msg.callref_direction?'O':'I');
+		msg->callref,
+		msg->callref_direction?'O':'I');
 
-	msg.message_type = *(__u8 *)(msg.raw + sizeof(struct q931_header) +
+	msg->message_type = *(__u8 *)(msg->raw + sizeof(struct q931_header) +
 		hdr->call_reference_len);
 
 	report_dlc(dlc, LOG_DEBUG, "  message_type = %s (%u)\n",
-		q931_message_type_to_text(msg.message_type),
-		msg.message_type);
+		q931_message_type_to_text(msg->message_type),
+		msg->message_type);
 
-	msg.rawies = msg.raw + sizeof(struct q931_header) + msg.callref_len + 1;
-	msg.rawies_len = msg.rawlen - (sizeof(struct q931_header) + msg.callref_len + 1);
+	msg->rawies = msg->raw + sizeof(struct q931_header) + msg->callref_len + 1;
+	msg->rawies_len = msg->rawlen - (sizeof(struct q931_header) + msg->callref_len + 1);
 
-	if (msg.callref == 0x00) { // FIXME CHECKME
-		if (q931_decode_information_elements(NULL, &msg))
+	if (msg->callref == 0x00) { // FIXME CHECKME
+		if (q931_decode_information_elements(NULL, msg))
 			q931_dispatch_global_message(
-				&dlc->intf->global_call, &msg);
+				&dlc->intf->global_call, msg);
 
 		return -EBADMSG;
 	}
@@ -795,17 +806,17 @@ int q931_receive(struct q931_dlc *dlc)
 	struct q931_call *call =
 		q931_get_call_by_reference(
 			dlc->intf,
-			msg.callref_direction ==
+			msg->callref_direction ==
 				Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE
 				? Q931_CALL_DIRECTION_INBOUND
 				: Q931_CALL_DIRECTION_OUTBOUND,
-			msg.callref);
+			msg->callref);
 
 	if (!call) {
 
 		call = q931_call_alloc_in(
 			dlc->intf, dlc,
-			msg.callref,
+			msg->callref,
 			skmsg.msg_flags & MSG_OOB);
 		if (!call) {
 			report_dlc(dlc, LOG_ERR,
@@ -814,7 +825,7 @@ int q931_receive(struct q931_dlc *dlc)
 			return -EFAULT;
 		}
 
-		switch (msg.message_type) {
+		switch (msg->message_type) {
 		case Q931_MT_RELEASE:
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE for an unknown callref\n");
@@ -847,7 +858,7 @@ int q931_receive(struct q931_dlc *dlc)
 
 		case Q931_MT_SETUP:
 		case Q931_MT_RESUME:
-			if (msg.callref_direction ==
+			if (msg->callref_direction ==
 			      Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE) {
 
 				report_call(call, LOG_DEBUG,
@@ -891,18 +902,18 @@ int q931_receive(struct q931_dlc *dlc)
 		}
 	}
 
-	if (q931_decode_information_elements(call, &msg)) {
+	if (q931_decode_information_elements(call, msg)) {
 		struct q931_ces *ces, *tces;
 		list_for_each_entry_safe(ces, tces, &call->ces, node) {
 
 			if (ces->dlc == dlc) {
 				// selected_ces may change after "dispatch_message"
 				if (ces == call->selected_ces) {
-					q931_ces_dispatch_message(ces, &msg);
+					q931_ces_dispatch_message(ces, msg);
 
 					break;
 				} else {
-					q931_ces_dispatch_message(ces, &msg);
+					q931_ces_dispatch_message(ces, msg);
 					q931_call_put(call);
 
 					return Q931_RECEIVE_OK;
@@ -910,9 +921,10 @@ int q931_receive(struct q931_dlc *dlc)
 			}
 		}
 
-		q931_dispatch_message(call, &msg);
+		q931_dispatch_message(call, msg);
 	}
 
+	q931_message_put(msg);
 	q931_call_put(call);
 
 	return Q931_RECEIVE_OK;

@@ -15,6 +15,8 @@
 
 #include <libq931/call.h>
 
+int q931_send_frame(struct q931_dlc *dlc, void *frame, int size);
+
 int q931_send_message(
 	struct q931_call *call,
 	struct q931_dlc *dlc,

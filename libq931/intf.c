@@ -130,7 +130,7 @@ struct q931_interface *q931_open_interface(
 
 		q931_dlc_init(&intf->dlc, intf, s);
 
-		intf->dlc.status = DLC_DISCONNECTED;
+		intf->dlc.status = Q931_DLC_STATUS_DISCONNECTED;
 
 		intf->T301 = 180 * 1000000LL;
 		intf->T302 =  15 * 1000000LL;
@@ -151,8 +151,8 @@ struct q931_interface *q931_open_interface(
 	} else {
 		intf->master_socket = s;
 
-		intf->bc_dlc.socket = -1;
-		intf->bc_dlc.intf = NULL;
+		intf->bc_dlc.socket = s;
+		intf->bc_dlc.intf = intf;
 
 		q931_dlc_init(&intf->dlc, NULL, -1);
 

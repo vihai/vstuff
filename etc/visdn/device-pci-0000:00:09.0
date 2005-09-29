@@ -1,6 +1,6 @@
 
 attribute clock_source_config auto
-attribute ram_size 128
+attribute ram_size 32
 attribute bert_mode 7
 
 #---------------------- st0 -----------------------

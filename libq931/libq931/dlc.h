@@ -27,10 +27,10 @@
 
 enum q931_dlc_status
 {
-	DLC_DISCONNECTED,
-	DLC_AWAITING_CONNECTION,
-	DLC_AWAITING_DISCONNECTION,
-	DLC_CONNECTED,
+	Q931_DLC_STATUS_DISCONNECTED,
+	Q931_DLC_STATUS_AWAITING_CONNECTION,
+	Q931_DLC_STATUS_AWAITING_DISCONNECTION,
+	Q931_DLC_STATUS_CONNECTED,
 };
 
 struct q931_interface;
@@ -46,6 +46,8 @@ struct q931_dlc
 	int tei;
 
 	struct q931_timer autorelease_timer;
+
+	struct list_head outgoing_queue;
 };
 
 struct q931_broadcast_dlc

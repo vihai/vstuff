@@ -116,38 +116,26 @@ static int q931_global_prepare_header(
 	return size;
 }
 
-static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
+int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 {
 	assert(dlc);
 	assert(frame);
 	assert(size > 0);
 
-	struct msghdr msg;
+	struct msghdr msghdr;
 	struct iovec iov;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
+	msghdr.msg_name = NULL;
+	msghdr.msg_namelen = 0;
+	msghdr.msg_iov = &iov;
+	msghdr.msg_iovlen = 1;
+	msghdr.msg_control = NULL;
+	msghdr.msg_controllen = 0;
+	msghdr.msg_flags = 0;
 
 	iov.iov_base = frame;
 	iov.iov_len = size;
 
-	if (dlc->status != DLC_CONNECTED) {
-		if (connect(dlc->socket, NULL, 0) < 0) {
-			if (errno != EAGAIN) {
-				report_dlc(dlc, LOG_ERR, "connect: %s\n",
-					strerror(errno));
-				return errno;
-			}
-		}
-
-		q931_dl_establish_confirm(dlc);
-	}
-
-	if (sendmsg(dlc->socket, &msg, 0) < 0) {
+	if (sendmsg(dlc->socket, &msghdr, 0) < 0) {
 		if (errno == ECONNRESET) {
 			q931_dl_release_indication(dlc);
 		} else if (errno == EALREADY) {
@@ -162,7 +150,6 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 		}
 
 		return errno;
-	} else {
 	}
 
 	return 0;
@@ -177,10 +164,14 @@ int q931_send_message(
 	assert(call);
 	assert(dlc);
 
-	__u8 buf[260];
-	int size = 0;
+	struct q931_message *msg;
+	msg = malloc(sizeof(*msg));
+	if (!msg)
+		return -EFAULT;
 
-	size += q931_prepare_header(call, buf, mt);
+	q931_message_init(msg, dlc);
+
+	msg->rawlen += q931_prepare_header(call, msg->raw, mt);
 
 	if (user_ies) {
 		struct q931_ies ies = Q931_IES_INIT;
@@ -192,9 +183,9 @@ int q931_send_message(
 			assert(ies.ies[i]->type->write_to_buf);
 
 			int ie_len = ies.ies[i]->type->write_to_buf(ies.ies[i],
-					buf + size,
-					sizeof(buf) - size);
-			size += ie_len;
+					msg->raw + msg->rawlen,
+					sizeof(msg->raw) - msg->rawlen);
+			msg->rawlen += ie_len;
 
 			report_call(call, LOG_DEBUG,
 				"VS IE %d ===> %u (%s) -- length %u\n",
@@ -210,7 +201,31 @@ int q931_send_message(
 		}
 	}
 
-	return q931_send_frame(dlc, buf, size);
+	// AWAITING_DISCONNECTION ??
+
+	if (dlc->status == Q931_DLC_STATUS_DISCONNECTED) {
+		if (connect(dlc->socket, NULL, 0) < 0) {
+			if (errno != EAGAIN) {
+				report_dlc(dlc, LOG_ERR, "connect: %s\n",
+					strerror(errno));
+				return errno;
+			}
+		}
+
+		dlc->status == Q931_DLC_STATUS_AWAITING_CONNECTION;
+	}
+
+	if (dlc->status == Q931_DLC_STATUS_AWAITING_CONNECTION) {
+		list_add_tail(
+			&q931_message_get(msg)->outgoing_queue_node,
+			&dlc->outgoing_queue);
+	}
+
+	int res = q931_send_frame(dlc, msg->raw, msg->rawlen);
+
+	q931_message_put(msg);
+
+	return res;
 }
 
 int q931_send_message_bc(

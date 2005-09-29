@@ -13,6 +13,7 @@
 #ifndef _LIBQ931_MESSAGE_H
 #define _LIBQ931_MESSAGE_H
 
+#include <libq931/list.h>
 #include <libq931/call.h>
 #include <libq931/dlc.h>
 #include <libq931/ies.h>
@@ -20,6 +21,8 @@
 struct q931_ie;
 struct q931_message
 {
+	int refcnt;
+
 	__u8 raw[512];
 	int rawlen;
 
@@ -33,6 +36,8 @@ struct q931_message
 	int rawies_len;
 
 	struct q931_ies ies;
+
+	struct list_head outgoing_queue_node;
 };
 
 #ifdef Q931_PRIVATE
@@ -40,12 +45,12 @@ struct q931_message
 #define report_msg(msg, lvl, format, arg...)				\
 	(msg)->dlc->intf->lib->report((lvl), format, ## arg)
 
-static inline void q931_message_clone(
-	struct q931_message *dst,
-	struct q931_message *src)
-{
-	memcpy(dst, src, sizeof(*dst));
-}
+struct q931_message *q931_message_get(struct q931_message *message);
+void q931_message_put(struct q931_message *message);
+void q931_message_init(
+	struct q931_message *message,
+	struct q931_dlc *dlc);
 
 #endif
+
 #endif

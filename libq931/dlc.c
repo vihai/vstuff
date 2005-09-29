@@ -81,7 +81,9 @@ void q931_dlc_init(
 
 	dlc->socket = socket;
 	dlc->intf = intf;
-	dlc->status = DLC_DISCONNECTED;
+	dlc->status = Q931_DLC_STATUS_DISCONNECTED;
 	dlc->tei = 0;
+
+	INIT_LIST_HEAD(&dlc->outgoing_queue);
 }
 
