@@ -259,6 +259,8 @@ struct q931_call *q931_call_alloc_in(
 		return NULL;
 
 	call->dlc = dlc;
+	q931_dlc_get(call->dlc);
+
 	call->broadcast_setup = broadcast_setup;
 	call->direction = Q931_CALL_DIRECTION_INBOUND;
 	call->call_reference = call_reference;
@@ -290,9 +292,10 @@ struct q931_call *q931_call_alloc_out(
 		return NULL;
 	}
 
-	if (intf->role == LAPD_ROLE_TE)
+	if (intf->role == LAPD_ROLE_TE) {
 		call->dlc = &intf->dlc;
-	else
+		q931_dlc_get(call->dlc);
+	} else
 		call->dlc = NULL;
 
 	q931_intf_add_call(intf, q931_call_get(call));
@@ -317,6 +320,11 @@ void q931_call_put(struct q931_call *call)
 
 	if (!call->refcnt) {
 		report_call(call, LOG_DEBUG, "Freeing call\n");
+
+		if (call->dlc) {
+			q931_dlc_put(call->dlc);
+			call->dlc = NULL;
+		}
 
 		q931_intf_del_call(call);
 
@@ -1713,6 +1721,7 @@ void q931_setup_complete_request(
 		if (call->broadcast_setup) {
 			call->selected_ces = call->preselected_ces;
 			call->dlc = call->preselected_ces->dlc;
+			q931_dlc_get(call->dlc);
 
 			q931_call_send_connect_acknowledge(call, user_ies);
 			q931_ces_free(call->selected_ces);

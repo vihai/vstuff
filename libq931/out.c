@@ -137,8 +137,11 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 
 	if (dlc->status != DLC_CONNECTED) {
 		if (connect(dlc->socket, NULL, 0) < 0) {
-			report_dlc(dlc, LOG_ERR, "connect: %s\n", strerror(errno));
-			return errno;
+			if (errno != EAGAIN) {
+				report_dlc(dlc, LOG_ERR, "connect: %s\n",
+					strerror(errno));
+				return errno;
+			}
 		}
 
 		q931_dl_establish_confirm(dlc);
@@ -160,49 +163,6 @@ static int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 
 		return errno;
 	} else {
-	}
-
-	return 0;
-}
-
-static int q931_send_uframe(struct q931_dlc *dlc, void *frame, int size)
-{
-	assert(dlc);
-	assert(frame);
-	assert(size > 0);
-
-	struct msghdr msg;
-	struct iovec iov;
-	struct sockaddr_lapd sal;
-
-	msg.msg_name = &sal;
-	msg.msg_namelen = sizeof(sal);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-
-	sal.sal_bcast = 0;
-
-	iov.iov_base = frame;
-	iov.iov_len = size;
-
-	if (sendmsg(dlc->socket, &msg, MSG_OOB) < 0) {
-		if (errno == ECONNRESET) {
-			q931_dl_release_indication(dlc);
-		} else if (errno == EALREADY) {
-			q931_dl_establish_indication(dlc);
-		} else if (errno == ENOTCONN) {
-			q931_dl_release_confirm(dlc);
-		} else if (errno == EISCONN) {
-			q931_dl_establish_confirm(dlc);
-		} else {
-			report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",
-				strerror(errno));
-		}
-
-		return errno;
 	}
 
 	return 0;
@@ -255,12 +215,12 @@ int q931_send_message(
 
 int q931_send_message_bc(
 	struct q931_call *call,
-	struct q931_dlc *dlc,
+	struct q931_broadcast_dlc *bc_dlc,
 	enum q931_message_type mt,
 	const struct q931_ies *user_ies)
 {
 	assert(call);
-	assert(dlc);
+	assert(bc_dlc);
 
 	__u8 buf[260];
 	int size = 0;
@@ -287,7 +247,31 @@ int q931_send_message_bc(
 		}
 	}
 
-	return q931_send_uframe(dlc, buf, size);
+	struct msghdr msg;
+	struct iovec iov;
+	struct sockaddr_lapd sal;
+
+	msg.msg_name = &sal;
+	msg.msg_namelen = sizeof(sal);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+
+	sal.sal_bcast = 0;
+
+	iov.iov_base = buf;
+	iov.iov_len = size;
+
+	if (sendmsg(bc_dlc->socket, &msg, MSG_OOB) < 0) {
+		report_call(call, LOG_ERR, "sendmsg error: %s\n",
+			strerror(errno));
+
+		return errno;
+	}
+
+	return 0;
 }
 
 int q931_global_send_message(

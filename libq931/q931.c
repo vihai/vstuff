@@ -619,13 +619,13 @@ struct q931_dlc *q931_accept(
 	if (!dlc)
 		goto err_malloc;
 
-	dlc->socket = accept(accept_socket, NULL, 0);
+	int socket = accept(accept_socket, NULL, 0);
 	if (dlc->socket < 0)
 		goto err_accept;
 
-	dlc->intf = intf;
+	q931_dlc_init(dlc, intf, socket);
 
-	int optlen=sizeof(dlc->tei);
+	int optlen = sizeof(dlc->tei);
 	if (getsockopt(dlc->socket, SOL_LAPD, LAPD_TEI,
 		&dlc->tei, &optlen) < 0) {
 		report_intf(intf, LOG_ERR,
@@ -802,6 +802,7 @@ int q931_receive(struct q931_dlc *dlc)
 			msg.callref);
 
 	if (!call) {
+
 		call = q931_call_alloc_in(
 			dlc->intf, dlc,
 			msg.callref,

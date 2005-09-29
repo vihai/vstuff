@@ -131,6 +131,7 @@ struct visdn_interface
 	int overlap_receiving;
 	char national_prefix[10];
 	char international_prefix[10];
+	int dlc_autorelease_time;
 
 	struct list_head suspended_calls;
 
@@ -190,6 +191,7 @@ struct visdn_state
 		.overlap_receiving = FALSE,
 		.national_prefix = "0",
 		.international_prefix = "00",
+		.dlc_autorelease_time = 10,
 	}
 };
 
@@ -366,7 +368,8 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Overlap Sending           : %s\n"
 			"Overlap Receiving         : %s\n"
 			"National prefix           : %s\n"
-			"International prefix      : %s\n",
+			"International prefix      : %s\n"
+			"Autorelease time          : %d\n",
 			visdn_interface_network_role_to_string(
 				intf->network_role),
 			visdn_type_of_number_to_string(
@@ -380,7 +383,8 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			intf->overlap_sending ? "Yes" : "No",
 			intf->overlap_receiving ? "Yes" : "No",
 			intf->national_prefix,
-			intf->international_prefix);
+			intf->international_prefix,
+			intf->dlc_autorelease_time);
 
 		if (intf->q931_intf) {
 			ast_cli(fd, "DLCs                      : ");
@@ -507,6 +511,8 @@ static int visdn_intf_from_var(
 	} else if (!strcasecmp(var->name, "international_prefix")) {
 		strncpy(intf->international_prefix, var->value,
 			sizeof(intf->international_prefix));
+	} else if (!strcasecmp(var->name, "autorelease_dlc")) {
+		intf->dlc_autorelease_time = atoi(var->value);
 	} else {
 		return -1;
 	}
@@ -533,6 +539,7 @@ static void visdn_copy_interface_config(
 		sizeof(dst->national_prefix));
 	strncpy(dst->international_prefix, src->international_prefix,
 		sizeof(dst->international_prefix));
+	dst->dlc_autorelease_time = src->dlc_autorelease_time;
 }
 
 static void visdn_reload_config(void)
@@ -2002,6 +2009,7 @@ static int visdn_open_interface(
 
 	intf->q931_intf->pvt = intf;
 	intf->q931_intf->network_role = intf->network_role;
+	intf->q931_intf->dlc_autorelease_time = intf->dlc_autorelease_time;
 
 	if (intf->q931_intf->role == LAPD_ROLE_NT) {
 		if (listen(intf->q931_intf->master_socket, 100) < 0) {

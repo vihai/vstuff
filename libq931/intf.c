@@ -33,6 +33,7 @@
 #include <libq931/out.h>
 #include <libq931/ces.h>
 #include <libq931/call.h>
+#include <libq931/dlc.h>
 #include <libq931/intf.h>
 
 q931_callref q931_intf_take_call_reference(struct q931_interface *interface)
@@ -124,9 +125,10 @@ struct q931_interface *q931_open_interface(
 
 	if (intf->role == LAPD_ROLE_TE) {
 		intf->master_socket = -1;
+		intf->bc_dlc.socket = -1;
+		intf->bc_dlc.intf = NULL;
 
-		q931_init_dlc(&intf->bc_dlc, NULL, -1);
-		q931_init_dlc(&intf->dlc, intf, s);
+		q931_dlc_init(&intf->dlc, intf, s);
 
 		intf->dlc.status = DLC_DISCONNECTED;
 
@@ -149,8 +151,10 @@ struct q931_interface *q931_open_interface(
 	} else {
 		intf->master_socket = s;
 
-		q931_init_dlc(&intf->bc_dlc, intf, s);
-		q931_init_dlc(&intf->dlc, NULL, -1);
+		intf->bc_dlc.socket = -1;
+		intf->bc_dlc.intf = NULL;
+
+		q931_dlc_init(&intf->dlc, NULL, -1);
 
 		intf->T301 = 180 * 1000000LL;
 		intf->T302 =  12 * 1000000LL;

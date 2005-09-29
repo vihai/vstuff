@@ -18,6 +18,7 @@ libq931_la_SOURCES =			\
 	global.c			\
 	chanset.c			\
 	callref.c			\
+	dlc.c				\
 	ie_bearer_capability.c		\
 	ie_call_identity.c		\
 	ie_call_state.c			\

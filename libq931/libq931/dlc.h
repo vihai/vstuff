@@ -14,6 +14,7 @@
 #define _LIBQ931_DLC_H
 
 #include <libq931/list.h>
+#include <libq931/timer.h>
 
 #define report_dlc(dlc, lvl, format, arg...)				\
 	(dlc)->intf->lib->report(					\
@@ -35,25 +36,33 @@ enum q931_dlc_status
 struct q931_interface;
 struct q931_dlc
 {
+	int refcnt;
+
 	struct list_head intf_node;
 
 	int socket;
 	struct q931_interface *intf;
 	enum q931_dlc_status status;
 	int tei;
+
+	struct q931_timer autorelease_timer;
 };
 
-static inline void q931_init_dlc(
+struct q931_broadcast_dlc
+{
+	int socket;
+	struct q931_interface *intf;
+};
+
+#ifdef Q931_PRIVATE
+
+void q931_dlc_init(
 	struct q931_dlc *dlc,
 	struct q931_interface *intf,
-	int socket)
-{
-	INIT_LIST_HEAD(&dlc->intf_node);
+	int socket);
+void q931_dlc_get(struct q931_dlc *dlc);
+void q931_dlc_put(struct q931_dlc *dlc);
 
-	dlc->socket = socket;
-	dlc->intf = intf;
-	dlc->status = DLC_DISCONNECTED;
-	dlc->tei = 0;
-}
+#endif
 
 #endif

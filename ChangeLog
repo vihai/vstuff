@@ -2,6 +2,27 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-29 02:42:05 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-216
+
+    Summary:
+      Addedd support for dlc autorelease
+    Revision:
+      isdn--devel--0.1--patch-216
+
+    
+    
+
+    new files:
+     libq931/.arch-ids/dlc.c.id libq931/dlc.c
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c etc/asterisk/visdn.conf
+     lapd/datalink.c lapd/lapd_in.h lapd/tei_mgmt_te.c
+     libq931/Makefile.am libq931/call.c libq931/intf.c
+     libq931/libq931/dlc.h libq931/libq931/intf.h
+     libq931/libq931/out.h libq931/out.c libq931/q931.c
+
+
 2005-09-28 23:02:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-215
 
     Summary:

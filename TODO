@@ -22,7 +22,6 @@ chan_visdn:
 - Communication errors are badly handled
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
-- Close DLCs after defined amount of inactivity
 - Fix autocompletion in cli commands
 - Implement "allowed_caller_ids" which may eventually replace
   force_inbound_caller_id

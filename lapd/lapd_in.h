@@ -13,11 +13,6 @@
 #ifndef _LAPD_IN_H
 #define _LAPD_IN_H
 
-/*
-void lapd_frame_reject(struct lapd_sock *lapd_sock, struct sk_buff *skb,
-	enum lapd_format_errors error);
-*/
-
 int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 
 int lapd_rcv(struct sk_buff *skb, struct net_device *dev,

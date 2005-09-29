@@ -232,8 +232,6 @@ static inline int lapd_is_valid_nr(struct lapd_sock *lapd_sock, int n_r)
 			<= (lapd_sock->v_s - lapd_sock->v_a + 128) % 128;
 }
 
-
-
 static void lapd_run_ui_queue(struct lapd_sock *lapd_sock)
 {
 	struct sk_buff *skb;
@@ -405,7 +403,6 @@ void lapd_mdl_error_response(struct lapd_sock *lapd_sock)
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
 		lapd_dl_release_indication(lapd_sock);
 	break;
-
 
 	default:
 		lapd_unexpected_primitive(lapd_sock);
@@ -782,7 +779,6 @@ static int lapd_socket_handle_iframe(
 
 		return FALSE;
 	}
-
 
 	// Move this in af_lapd.c:recvmsg ??
 	if (atomic_read(&lapd_sock->sk.sk_rmem_alloc) <
@@ -1412,7 +1408,6 @@ static inline int lapd_socket_handle_uframe_frmr(
 	return FALSE;
 }
 
-
 static int lapd_socket_handle_uframe_dm(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
@@ -1724,7 +1719,6 @@ int lapd_dl_establish_request(
 
 	return 0;
 }
-
 
 int lapd_dl_release_request(
 	struct lapd_sock *lapd_sock)

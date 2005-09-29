@@ -20,12 +20,13 @@ struct hlist_head lapd_utme_hash = HLIST_HEAD_INIT;
 rwlock_t lapd_utme_hash_lock = RW_LOCK_UNLOCKED;
 
 static void lapd_utme_send_to_socket(
-	struct sock *sk,
+	struct lapd_sock *lapd_sock,
 	enum lapd_int_msg_type type,
 	int param)
 {
-	bh_lock_sock(sk);
-	if (sock_owned_by_user(sk)) {
+	lapd_bh_lock_sock(lapd_sock);
+
+	if (sock_owned_by_user(&lapd_sock->sk)) {
 		struct sk_buff *skb;
 		skb = alloc_skb(sizeof(struct lapd_internal_msg), GFP_ATOMIC);
 		if (!skb) {
@@ -43,12 +44,12 @@ static void lapd_utme_send_to_socket(
 		msg->type = type;
 		msg->param = param;
 
-		sk_add_backlog(sk, skb);
+		sk_add_backlog(&lapd_sock->sk, skb);
 	} else {
-		lapd_deliver_internal_message(sk, type, param);
+		lapd_deliver_internal_message(lapd_sock, type, param);
 	}
 
-	bh_unlock_sock(sk);
+	lapd_bh_unlock_sock(lapd_sock);
 }
 
 /*
@@ -147,9 +148,13 @@ void lapd_utme_T202_timer(unsigned long data)
 			struct hlist_node *node;
 
 			sk_for_each(sk, node, &lapd_hash[i]) {
-				if (!to_lapd_sock(sk)->nt_mode &&
-				    to_lapd_sock(sk)->usr_tme == tme) {
-					lapd_utme_send_to_socket(sk,
+				struct lapd_sock *lapd_sock =
+					to_lapd_sock(sk);
+
+				if (!lapd_sock->nt_mode &&
+				    lapd_sock->usr_tme == tme) {
+
+					lapd_utme_send_to_socket(lapd_sock,
 						LAPD_INT_MDL_ERROR_RESPONSE,
 						0);
 				}
@@ -246,9 +251,12 @@ static void lapd_utme_recv_tei_assigned(struct sk_buff *skb)
 				struct hlist_node *node;
 
 				sk_for_each(sk, node, &lapd_hash[i]) {
-					if (!to_lapd_sock(sk)->nt_mode &&
-					    to_lapd_sock(sk)->usr_tme == tme) {
-						lapd_utme_send_to_socket(sk,
+					struct lapd_sock *lapd_sock =
+						to_lapd_sock(sk);
+
+					if (!lapd_sock->nt_mode &&
+					    lapd_sock->usr_tme == tme) {
+						lapd_utme_send_to_socket(lapd_sock,
 							LAPD_INT_MDL_ASSIGN_REQUEST,
 							tme->tei);
 					}
@@ -379,9 +387,12 @@ static void lapd_utme_recv_tei_remove(struct sk_buff *skb)
 				struct sock *sk;
 				struct hlist_node *t2;
 				sk_for_each(sk, t2, &lapd_hash[i]) {
-					if (!to_lapd_sock(sk)->nt_mode &&
-					    to_lapd_sock(sk)->usr_tme == tme) {
-						lapd_utme_send_to_socket(sk,
+					struct lapd_sock *lapd_sock =
+						to_lapd_sock(sk);
+
+					if (!lapd_sock->nt_mode &&
+					    lapd_sock->usr_tme == tme) {
+						lapd_utme_send_to_socket(lapd_sock,
 							LAPD_INT_MDL_REMOVE_REQUEST,
 							0);
 					}
