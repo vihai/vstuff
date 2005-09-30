@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-30 22:27:48 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-224
+
+    Summary:
+      Fixed first call reference randomization routine
+    Revision:
+      isdn--devel--0.1--patch-224
+
+    
+    
+
+    modified files:
+     ChangeLog libq931/intf.c
+
+
 2005-09-30 17:16:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-223
 
     Summary:

@@ -189,8 +189,8 @@ struct q931_interface *q931_open_interface(
 	break;
 	}
 
-	intf->next_call_reference = (rand() + 1) &
-	    ((1 << ((intf->call_reference_len * 8) - 1)) - 1);
+	intf->next_call_reference = (rand() &
+	    ((1 << ((intf->call_reference_len * 8) - 1)) - 2)) + 1;
 
 	int i;
 	for (i=0; i<intf->n_channels; i++) {
