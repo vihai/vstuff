@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-30 23:04:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-225
+
+    Summary:
+      Fixed handling of DL-RELEASE-INDICATION in libq931
+    Revision:
+      isdn--devel--0.1--patch-225
+
+    
+    
+
+    modified files:
+     ChangeLog libq931/call.c
+
+
 2005-09-30 22:27:48 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-224
 
     Summary:

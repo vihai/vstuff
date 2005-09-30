@@ -2619,7 +2619,7 @@ static void q931_timer_T303(void *data)
 	break;
 
 	case U1_CALL_INITIATED:
-		if (call->T303_fired) {
+		if (!call->T303_fired) {
 			q931_call_send_setup(call, &call->setup_ies);
 			q931_call_start_timer(call, T303);
 		} else {
@@ -5458,7 +5458,6 @@ void q931_call_dl_release_indication(struct q931_call *call)
 
 	switch (call->state) {
 	case N0_NULL_STATE:
-	case U0_NULL_STATE:
 		// Do nothing
 	break;
 
@@ -5482,7 +5481,15 @@ void q931_call_dl_release_indication(struct q931_call *call)
 			q931_channel_release(call->channel);
 			q931_call_set_state(call, N0_NULL_STATE);
 			q931_call_release_reference(call);
-			q931_call_primitive(call, release_indication, NULL);
+
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+			q931_ies_add_put(&ies, &cause->ie);
+
+			q931_call_primitive(call, release_indication, &ies);
 		}
 	break;
 
@@ -5491,24 +5498,34 @@ void q931_call_dl_release_indication(struct q931_call *call)
 			q931_call_stop_timer(call, T309);
 			q931_channel_release(call->channel);
 			q931_call_set_state(call, N0_NULL_STATE);
-			q931_call_primitive(call, release_indication, NULL);
+			q931_call_release_reference(call);
+
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+			q931_ies_add_put(&ies, &cause->ie);
+
+			q931_call_primitive(call, release_indication, &ies);
 		} else {
 			q931_call_start_timer(call, T309);
 
-			// FIXME: Connect is blocking
 			if (connect(call->dlc->socket, NULL, 0) < 0) {
 				report_call(call, LOG_WARNING,
 					"Cannot reconnect: %s\n",
 					strerror(errno));
 				return;
 			}
-			sleep(1);
-
-			q931_dl_establish_confirm(call->dlc);
 		}
 	break;
 
+	case U0_NULL_STATE:
+		// Do nothing
+	break;
+
 	case U1_CALL_INITIATED:
+	case U2_OVERLAP_SENDING:
 	case U3_OUTGOING_CALL_PROCEEDING:
 	case U4_CALL_DELIVERED:
 	case U6_CALL_PRESENT:
@@ -5520,32 +5537,47 @@ void q931_call_dl_release_indication(struct q931_call *call)
 	case U15_SUSPEND_REQUEST:
 	case U17_RESUME_REQUEST:
 	case U19_RELEASE_REQUEST:
+	case U25_OVERLAP_RECEIVING:
 		q931_call_stop_any_timer(call);
 		q931_channel_release(call->channel);
 		q931_call_set_state(call, U0_NULL_STATE);
 		q931_call_release_reference(call);
-		q931_call_primitive(call, error_indication, NULL);
-	break;
 
-	case U2_OVERLAP_SENDING:
-		q931_call_stop_timer(call, T304);
-		q931_channel_release(call->channel);
-		q931_call_set_state(call, U0_NULL_STATE);
-		q931_call_release_reference(call);
-		q931_call_primitive(call, setup_confirm, NULL,
-			Q931_SETUP_CONFIRM_ERROR);
+		struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(call);
+		cause->value = Q931_IE_C_CV_NETWORK_OUT_OF_ORDER;
+		q931_ies_add_put(&ies, &cause->ie);
+
+		q931_call_primitive(call, release_indication, &ies);
 	break;
 
 	case U10_ACTIVE:
+		if (q931_call_timer_running(call, T309)) {
+			q931_call_stop_timer(call, T309);
+			q931_channel_release(call->channel);
+			q931_call_set_state(call, N0_NULL_STATE);
+			q931_call_release_reference(call);
 
-	break;
+			struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value = Q931_IE_C_CV_NETWORK_OUT_OF_ORDER;
+			q931_ies_add_put(&ies, &cause->ie);
 
-	case U25_OVERLAP_RECEIVING:
-		q931_call_stop_timer(call, T302);
-		q931_channel_release(call->channel);
-		q931_call_set_state(call, U0_NULL_STATE);
-		q931_call_release_reference(call);
-		q931_call_primitive(call, release_indication, NULL); // ERROR???
+			q931_call_primitive(call, release_indication, &ies);
+		} else {
+			q931_call_start_timer(call, T309);
+
+			if (connect(call->dlc->socket, NULL, 0) < 0) {
+				report_call(call, LOG_WARNING,
+					"Cannot reconnect: %s\n",
+					strerror(errno));
+				return;
+			}
+		}
 	break;
 	}
 }
