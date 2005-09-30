@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-09-30 23:29:41 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-227
+
+    Summary:
+      Fixed the COPYING file
+    Revision:
+      isdn--devel--0.1--patch-227
+
+    
+    
+
+    modified files:
+     COPYING ChangeLog
+
+
 2005-09-30 23:05:50 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-226
 
     Summary:
