@@ -3,6 +3,16 @@
 
 #include <linux/version.h>
 
+#ifndef NETDEV_TX_OK
+#define NETDEV_TX_OK 0
+#define NETDEV_TX_BUSY 1
+#define NETDEV_TX_LOCKED -1
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9)
+#define HAVE_KREF
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
 #define HAVE_CLASS_DEV_DEVT
 #define HAVE_SK_PROT

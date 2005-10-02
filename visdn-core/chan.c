@@ -611,7 +611,7 @@ static ssize_t visdn_chan_show_refcnt(
 	char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		atomic_read(&chan->kobj.kref.refcount));
+			visdn_chan_refcount(chan));
 }
 
 static VISDN_CHAN_ATTR(refcnt, S_IRUGO,
@@ -929,17 +929,17 @@ void visdn_chan_unregister(
 	 * Maybe there's a better way to handle this.
 	 */
 
-	if (atomic_read(&chan->kobj.kref.refcount) > 1) {
+	if (visdn_chan_refcount(chan) > 1) {
 
 		/* Usually 50ms are enough */
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((50 * HZ) / 1000);
 
-		while(atomic_read(&chan->kobj.kref.refcount) > 1) {
+		while(visdn_chan_refcount(chan) > 1) {
 			visdn_msg(KERN_WARNING, "Waiting for %s refcnt to"
 					" become 1 (now %d)\n",
 				chan->cxc_id,
-				atomic_read(&chan->kobj.kref.refcount));
+				visdn_chan_refcount(chan));
 
 			dump_stack();
 

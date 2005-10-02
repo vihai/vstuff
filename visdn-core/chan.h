@@ -13,6 +13,8 @@
 #ifndef _VISDN_CHAN_H
 #define _VISDN_CHAN_H
 
+#include <kernel_config.h>
+
 #define VISDN_IOC_CONNECT	_IOR(0xd0, 2, unsigned int)
 #define VISDN_IOC_DISCONNECT	_IOR(0xd0, 3, unsigned int)
 
@@ -214,6 +216,16 @@ static inline void visdn_chan_unlock(
 	struct visdn_chan *chan)
 {
 	up(&chan->sem);
+}
+
+static inline int visdn_chan_refcount(
+	struct visdn_chan *chan)
+{
+#ifdef HAVE_KREF
+	return atomic_read(&chan->kobj.kref.refcount);
+#else
+	return atomic_read(&chan->kobj.refcount);
+#endif
 }
 
 enum visdn_chan_state
