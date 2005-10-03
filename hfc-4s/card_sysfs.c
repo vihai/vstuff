@@ -19,6 +19,89 @@
 #include "fifo.h"
 #include "fifo_inline.h"
 
+static ssize_t hfc_show_double_clock(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", card->double_clock ? 1 : 0);
+}
+
+static ssize_t hfc_store_double_clock(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	const char *buf,
+	size_t count)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	int value;
+	if (sscanf(buf, "%d", &value) < 1)
+		return -EINVAL;
+
+	if (hfc_card_lock_interruptible(card))
+		return -ERESTARTSYS;
+	card->double_clock = !!value;
+	card->quartz_49 = !!value;
+	hfc_update_r_ctrl(card);
+	hfc_softreset(card);
+	hfc_initialize_hw(card);
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static DEVICE_ATTR(double_clock, S_IRUGO | S_IWUSR,
+		hfc_show_double_clock,
+		hfc_store_double_clock);
+
+//----------------------------------------------------------------------------
+
+static ssize_t hfc_show_quartz_49(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", card->quartz_49 ? 1 : 0);
+}
+
+static ssize_t hfc_store_quartz_49(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	const char *buf,
+	size_t count)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	int value;
+	if (sscanf(buf, "%d", &value) < 1)
+		return -EINVAL;
+
+	if (hfc_card_lock_interruptible(card))
+		return -ERESTARTSYS;
+	card->quartz_49 = !!value;
+	hfc_update_r_brg_pcm_cfg(card);
+	hfc_softreset(card);
+	hfc_initialize_hw(card);
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static DEVICE_ATTR(quartz_49, S_IRUGO | S_IWUSR,
+		hfc_show_quartz_49,
+		hfc_store_quartz_49);
+
+//----------------------------------------------------------------------------
+
 static ssize_t hfc_show_output_level(
 	struct device *device,
 	DEVICE_ATTR_COMPAT
@@ -247,29 +330,20 @@ static ssize_t hfc_store_ram_size(
 		if (hfc_card_lock_interruptible(card))
 			return -ERESTARTSYS;
 
-		card->regs.ctrl &= ~hfc_R_CTRL_V_EXT_RAM;
-		card->regs.ram_misc &= ~hfc_R_RAM_MISC_V_RAM_SZ_MASK;
-
-		if (value == 32) {
-			card->regs.ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_32K;
+		if (value == 32)
 			hfc_configure_fifos(card, 0, 0, 0);
-		} else if (value == 128) {
-			card->regs.ctrl |= hfc_R_CTRL_V_EXT_RAM;
-			card->regs.ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_128K;
+		else if (value == 128)
 			hfc_configure_fifos(card, 1, 0, 0);
-		} else if (value == 512) {
-			card->regs.ctrl |= hfc_R_CTRL_V_EXT_RAM;
-			card->regs.ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_512K;
+		else if (value == 512)
 			hfc_configure_fifos(card, 2, 0, 0);
-		}
 
-		hfc_outb(card, hfc_R_CTRL, card->regs.ctrl);
-		hfc_outb(card, hfc_R_RAM_MISC, card->regs.ram_misc);
+		card->ram_size = value;
+
+		hfc_update_r_ram_misc(card);
+		hfc_update_r_ctrl(card);
 
 		hfc_softreset(card);
 		hfc_initialize_hw(card);
-
-		card->ram_size = value;
 
 		hfc_card_unlock(card);
 
@@ -455,6 +529,18 @@ int hfc_card_sysfs_create_files(
 
 	err = device_create_file(
 		&card->pcidev->dev,
+		&dev_attr_double_clock);
+	if (err < 0)
+		goto err_device_create_file_double_clock;
+
+	err = device_create_file(
+		&card->pcidev->dev,
+		&dev_attr_quartz_49);
+	if (err < 0)
+		goto err_device_create_file_quartz_49;
+
+	err = device_create_file(
+		&card->pcidev->dev,
 		&dev_attr_clock_source_config);
 	if (err < 0)
 		goto err_device_create_file_clock_source_config;
@@ -551,6 +637,10 @@ err_device_create_file_dip_switches:
 err_device_create_file_clock_source_current:
 	device_remove_file(&card->pcidev->dev, &dev_attr_clock_source_config);
 err_device_create_file_clock_source_config:
+	device_remove_file(&card->pcidev->dev, &dev_attr_quartz_49);
+err_device_create_file_quartz_49:
+	device_remove_file(&card->pcidev->dev, &dev_attr_double_clock);
+err_device_create_file_double_clock:
 
 	return err;
 }
@@ -573,4 +663,6 @@ void hfc_card_sysfs_delete_files(
 	device_remove_file(&card->pcidev->dev, &dev_attr_dip_switches);
 	device_remove_file(&card->pcidev->dev, &dev_attr_clock_source_current);
 	device_remove_file(&card->pcidev->dev, &dev_attr_clock_source_config);
+	device_remove_file(&card->pcidev->dev, &dev_attr_quartz_49);
+	device_remove_file(&card->pcidev->dev, &dev_attr_double_clock);
 }

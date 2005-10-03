@@ -41,11 +41,35 @@
 int debug_level = 0;
 #endif
 
+struct hfc_card_config
+{
+	int double_clock;
+	int quartz_49;
+	int ram_size;
+};
+
 static struct pci_device_id hfc_pci_ids[] = {
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+		PCI_ANY_ID, 0xb520, 0, 0,
+		(unsigned long)&(struct hfc_card_config) {
+			.double_clock = 0,
+			.quartz_49 = 1,
+			.ram_size = 32,
+			 }},
+	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		(unsigned long)&(struct hfc_card_config) {
+			.double_clock = 0,
+			.quartz_49 = 0,
+			.ram_size = 32,
+			 }},
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_8S,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		(unsigned long)&(struct hfc_card_config) {
+			.double_clock = 0,
+			.quartz_49 = 0,
+			.ram_size = 32,
+			 }},
 	{0,}
 };
 
@@ -228,18 +252,57 @@ void hfc_configure_fifos(
 	}
 }
 
+void hfc_update_r_ctrl(struct hfc_card *card)
+{
+	u8 r_ctrl = 0;
+
+	if (card->double_clock)
+		r_ctrl |= hfc_R_CTRL_V_ST_CLK_DIV_4;
+	else
+		r_ctrl |= hfc_R_CTRL_V_ST_CLK_DIV_8;
+
+	if (card->ram_size == 128 ||
+	    card->ram_size == 512)
+		r_ctrl |= hfc_R_CTRL_V_EXT_RAM;
+
+	hfc_outb(card, hfc_R_CTRL, r_ctrl);
+}
+
+void hfc_update_r_brg_pcm_cfg(struct hfc_card *card)
+{
+	if (card->quartz_49)
+		hfc_outb(card, hfc_R_BRG_PCM_CFG,
+			hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_1_5 |
+			hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS);
+	else
+		hfc_outb(card, hfc_R_BRG_PCM_CFG,
+			hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_3_0 |
+			hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS);
+}
+
+void hfc_update_r_ram_misc(struct hfc_card *card)
+{
+	u8 ram_misc = 0;
+
+	if (card->ram_size == 32)
+		ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_32K;
+	else if (card->ram_size == 128)
+		ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_128K;
+	else if (card->ram_size == 512)
+		ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_512K;
+
+	hfc_outb(card, hfc_R_RAM_MISC, ram_misc);
+}
+
 static void hfc_initialize_hw_nonsoft(struct hfc_card *card)
 {
 	// FIFO RAM configuration
-	card->ram_size = 32;
-	card->regs.ram_misc = hfc_R_RAM_MISC_V_RAM_SZ_32K;
+	hfc_update_r_ram_misc(card);
 
-	hfc_outb(card, hfc_R_RAM_MISC, card->regs.ram_misc);
-
-	card->regs.fifo_md = hfc_R_FIFO_MD_V_FIFO_MD_00 |
-				hfc_R_FIFO_MD_V_DF_MD_FSM |
-				hfc_R_FIFO_MD_V_FIFO_SZ_00;
-	hfc_outb(card, hfc_R_FIFO_MD, card->regs.fifo_md);
+	hfc_outb(card, hfc_R_FIFO_MD,
+			hfc_R_FIFO_MD_V_FIFO_MD_00 |
+			hfc_R_FIFO_MD_V_DF_MD_FSM |
+			hfc_R_FIFO_MD_V_FIFO_SZ_00);
 
 	hfc_configure_fifos(card, 0, 0, 0);
 
@@ -247,13 +310,8 @@ static void hfc_initialize_hw_nonsoft(struct hfc_card *card)
 	card->regs.irqmsk_misc = 0;
 	hfc_outb(card, hfc_R_IRQMSK_MISC, card->regs.irqmsk_misc);
 
-	// Normal clock mode
-	card->regs.ctrl = hfc_R_CTRL_V_ST_CLK_DIV_4;
-	hfc_outb(card, hfc_R_CTRL, card->regs.ctrl);
-
-	hfc_outb(card, hfc_R_BRG_PCM_CFG,
-		hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_1_5 |
-		hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS);
+	hfc_update_r_ctrl(card);
+	hfc_update_r_brg_pcm_cfg(card);
 
 	// Here is the place to configure:
 	// R_CIRM
@@ -494,7 +552,7 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static int __devinit hfc_probe(
 	struct pci_dev *pci_dev,
-	const struct pci_device_id *ent)
+	const struct pci_device_id *device_id_entry)
 {
 	int err;
 
@@ -512,6 +570,13 @@ static int __devinit hfc_probe(
 
 	card->pcidev = pci_dev;
 	pci_set_drvdata(pci_dev, card);
+
+	struct hfc_card_config *card_config =
+		(struct hfc_card_config *)device_id_entry->driver_data;
+
+	card->double_clock = card_config->double_clock;
+	card->quartz_49 = card_config->quartz_49;
+	card->ram_size = card_config->ram_size;
 
 	// From here on hfc_msg_card may be used
 

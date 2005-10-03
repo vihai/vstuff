@@ -53,13 +53,13 @@ struct hfc_card {
 	// changed independently.
 	struct
 	{
-		u8 ram_misc;
-		u8 ctrl;
-		u8 fifo_md;
 		u8 irqmsk_misc;
 	} regs;
 
 	struct pci_dev *pcidev;
+
+	int double_clock;
+	int quartz_49;
 
 	int num_st_ports;
 	struct hfc_st_port st_ports[8];
@@ -98,5 +98,8 @@ void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits);
 void hfc_update_pcm_md1(struct hfc_card *card);
 void hfc_update_st_sync(struct hfc_card *card);
 void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits);
+void hfc_update_r_ctrl(struct hfc_card *card);
+void hfc_update_r_brg_pcm_cfg(struct hfc_card *card);
+void hfc_update_r_ram_misc(struct hfc_card *card);
 
 #endif
