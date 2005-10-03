@@ -46,14 +46,34 @@ AC_CHECK_FUNCS([gettimeofday memset select socket strcasecmp strchr strdup strer
 
 #-----------------------------------------------------------------------------
 
+AC_MSG_CHECKING([kernel sources])
+
+if [[ -d "/usr/src/linux" ]]; then
+	ksrcdir="/usr/src/linux"
+fi
+
 AC_ARG_WITH(
 	[kernel-sources],
 	AC_HELP_STRING(
 		[--with-kernel-sources],
 		[Specify kernel sourcetree to compile modules]),
-	[ksrcdir=$withval],
-	[ksrcdir="/usr/src/linux"])
+	[ksrcdir=$withval],)
 AC_SUBST(ksrcdir)
+
+if [[ ! -d "$ksrcdir" ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Cannot locate kernel sources])
+fi
+
+if [[ ! -f "$ksrcdir/.config" ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Kernel has not been configured (missing .config)])
+fi
+
+if [[ ! -f "$ksrcdir/include/linux/autoconf.h" ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Kernel has not been compiled (missing include/linux/autoconf.h)])
+fi
 
 AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
 
@@ -76,37 +96,72 @@ AC_ARG_WITH(
 
 AM_CONDITIONAL(asterisk, test "$with_asterisk" = yes)
 
+AC_MSG_CHECKING([asterisk modules])
+
+if [[ -d "/usr/lib/asterisk/modules" ]]; then
+	astmoddir="/usr/lib/asterisk/modules"
+fi
+
 AC_ARG_WITH(
 	[asterisk-modules],
 	AC_HELP_STRING(
 		[--with-asterisk-modules],
 		[Specify asterisk modules directory]),
-	[astmoddir=$withval],
-	[astmoddir="/usr/lib/asterisk/modules/"])
+	[astmoddir=$withval],)
 
-test $prefix != "NONE" && astmoddir="$prefix/$astmoddir"
+if [[ ! -d "$astmoddir" ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Cannot locate asterisk modules directory])
+fi
 
 AC_SUBST(astmoddir)
+AC_MSG_RESULT([$astmoddir])
+
+#----------------
+
+AC_MSG_CHECKING([asterisk includes])
+
+if [[ -d "/usr/include/asterisk" ]]; then
+	astincdir="/usr/include/"
+fi
 
 AC_ARG_WITH(
 	[asterisk-includes],
 	AC_HELP_STRING(
 		[--with-asterisk-includes],
-		[Specify asterisk includes directory]),
-	[astincdir=$withval],
-	[astincdir="/usr/include/"])
+		[Specify asterisk includes directory (the prefix before asterisk/)]),
+	[astincdir=$withval],)
+
+if [[ ! -d "$astincdir/asterisk" ]]; then
+	echo $astincdir
+
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Cannot locate asterisk includes directory])
+fi
+
 AC_SUBST(astincdir)
+AC_MSG_RESULT([$astincdir])
+
+#---------------
+
+AC_MSG_CHECKING([asterisk configuration directory])
+if [[ -d "/etc/asterisk" ]]; then
+	astconfdir="/etc/asterisk"
+fi
 
 AC_ARG_WITH(
 	[asterisk-config],
 	AC_HELP_STRING(
 		[--with-asterisk-config],
 		[Specify asterisk configuration directory]),
-	[astconfdir=$withval],
-	[astconfdir="/etc/asterisk/"])
+	[astconfdir=$withval],)
 
-test $prefix != "NONE" && astconfdir="$prefix/$astconfdir"
+if [[ ! -d $astconfdir ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Cannot locate asterisk config directory])
+fi
 
+AC_MSG_RESULT([$astconfdir])
 AC_SUBST(astconfdir)
 
 #-----------------------------------------------------------------------------
@@ -121,40 +176,75 @@ AC_ARG_WITH(
 
 AM_CONDITIONAL(pppd, test "$with_pppd" = yes)
 
+AC_MSG_CHECKING([pppd plugins directory])
+
+if [[ -d "/usr/lib/pppd/" ]]; then
+	pppdpluginsdir="/usr/lib/pppd/`/bin/ls -Ar1 /usr/lib/pppd/ | head -1`"
+fi
+
 AC_ARG_WITH(
 	[pppd-plugins],
 	AC_HELP_STRING(
 		[--with-pppd-plugins],
 		[Specify PPPD plugins directory]),
-	[pppdpluginsdir=$withval],
-	[pppdpluginsdir="/usr/lib/pppd/2.4.2"])
+	[pppdpluginsdir=$withval],)
 
-test $prefix != "NONE" && pppdpluginsdir="$prefix/$pppdpluginsdir"
+if [[ ! -d $pppdpluginsdir ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Cannot locate pppd plugins directory])
+fi
 
 AC_SUBST(pppdpluginsdir)
+AC_MSG_RESULT([$pppdpluginsdir])
+
+#----------
+
+AC_MSG_CHECKING([pppd includes directory])
+
+if [[ -d "/usr/include/pppd/" ]]; then
+	pppdincdir="/usr/include/pppd/"
+fi
 
 AC_ARG_WITH(
 	[pppd-includes],
 	AC_HELP_STRING(
 		[--with-pppd-includes],
 		[Specify pppd includes directory]),
-	[pppdincdir=$withval],
-	[pppdincdir="/usr/include/pppd"])
+	[pppdincdir=$withval],)
 AC_SUBST(pppdincdir)
 
-################ CHECK HEADERS EXISTANCE
+if [[ ! -d "$pppdincdir/" -o \
+      ! -f "$pppdincdir/pppd.h" -o \
+      ! -f "$pppdincdir/fsm.h" -o \
+      ! -f "$pppdincdir/lcp.h" ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Missing pppd headers])
+fi
+
+AC_MSG_RESULT([$pppdincdir])
+
+#------------
+
+AC_MSG_CHECKING([pppd config directory])
+
+if [[ -d "/etc/ppp/" ]]; then
+	pppdconfdir="/usr/include/pppd/"
+fi
 
 AC_ARG_WITH(
 	[pppd-config],
 	AC_HELP_STRING(
 		[--with-pppd-config],
 		[Specify pppd configuration directory]),
-	[pppdconfdir=$withval],
-	[pppdconfdir="/etc/ppp"])
+	[pppdconfdir=$withval],)
 
-test $prefix != "NONE" && pppdconfdir="$prefix/$pppdconfdir"
+if [[ ! -d $pppdconfdir ]]; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([Cannot locate pppd configuration directory])
+fi
 
 AC_SUBST(pppdconfdir)
+AC_MSG_RESULT([$pppdconfdir])
 
 #-----------------------------------------------------------------------------
 

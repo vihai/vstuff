@@ -21,7 +21,6 @@
 #include <sys/ioctl.h>
 
 #include "pppd.h"
-#include "pathnames.h"
 #include "fsm.h"
 #include "lcp.h"
 
