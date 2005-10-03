@@ -1194,6 +1194,8 @@ static int visdn_call(
 	int err;
 	char dest[256];
 
+	visdn_chan->pbx_started = TRUE;
+
 	strncpy(dest, orig_dest, sizeof(dest));
 
 	// Parse destination and obtain interface name + number
