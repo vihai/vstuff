@@ -258,9 +258,9 @@ void hfc_update_r_ctrl(struct hfc_card *card)
 	u8 r_ctrl = 0;
 
 	if (card->double_clock)
-		r_ctrl |= hfc_R_CTRL_V_ST_CLK_DIV_4;
-	else
 		r_ctrl |= hfc_R_CTRL_V_ST_CLK_DIV_8;
+	else
+		r_ctrl |= hfc_R_CTRL_V_ST_CLK_DIV_4;
 
 	if (card->ram_size == 128 ||
 	    card->ram_size == 512)

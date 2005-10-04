@@ -104,17 +104,29 @@ struct q931_interface *q931_open_interface(
 	}
 
 	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
-			name, strlen(name)+1) < 0)
+			name, strlen(name)+1) < 0) {
+
+      		report_intf(intf, LOG_ERR,
+			"setsockopt(SO_BINDTODEVICE): %s\n",
+			strerror(errno));
+
 		goto err_setsockopt;
+	}
 
 	int oldflags;
       	if (fcntl(s, F_GETFL, &oldflags) < 0) {
-      		report_intf(intf, LOG_ERR, "fcntl: %s\n", strerror(errno));
+      		report_intf(intf, LOG_ERR,
+			"fcntl(F_GETFL): %s\n",
+			strerror(errno));
+
       		goto err_fcntl_getfl;
       	}
 
       	if (fcntl(s, F_SETFL, oldflags | O_NONBLOCK) < 0) {
-      		report_intf(intf, LOG_ERR, "fcntl: %s\n", strerror(errno));
+      		report_intf(intf, LOG_ERR,
+			"fcntl(F_SETFL): %s\n",
+			strerror(errno));
+
       		goto err_fcntl_setfl;
       	}
 
