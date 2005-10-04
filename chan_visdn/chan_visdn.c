@@ -1239,6 +1239,7 @@ static int visdn_call(
 		}
 	}
 
+	ast_mutex_unlock(&ast_chan->lock);
 	ast_mutex_lock(&visdn.lock);
 
 	int found = FALSE;
@@ -1375,6 +1376,7 @@ static int visdn_call(
 	q931_setup_request(q931_call, &ies);
 
 	ast_mutex_unlock(&visdn.lock);
+	ast_mutex_lock(&ast_chan->lock);
 
 	q931_call_put(q931_call);
 
@@ -1386,6 +1388,7 @@ err_channel_not_down:
 err_call_alloc:
 err_intf_not_found:
 	ast_mutex_unlock(&visdn.lock);
+	ast_mutex_lock(&ast_chan->lock);
 err_invalid_format:
 err_invalid_destination:
 
@@ -1405,6 +1408,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 		return -1;
 	}
 
+	ast_mutex_unlock(&ast_chan->lock);
 	ast_mutex_lock(&visdn.lock);
 	if (visdn_chan->q931_call->state == U6_CALL_PRESENT ||
 	    visdn_chan->q931_call->state == U7_CALL_RECEIVED ||
@@ -1416,6 +1420,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 		q931_setup_response(visdn_chan->q931_call, NULL);
 	}
 	ast_mutex_unlock(&visdn.lock);
+	ast_mutex_lock(&ast_chan->lock);
 
 	return 0;
 }
@@ -1609,9 +1614,11 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		ast_setstate(ast_chan, AST_STATE_RINGING);
 
+		ast_mutex_unlock(&ast_chan->lock);
 		ast_mutex_lock(&visdn.lock);
 		q931_alerting_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
+		ast_mutex_lock(&ast_chan->lock);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "ring");
@@ -1644,9 +1651,11 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->value = Q931_IE_C_CV_USER_BUSY;
 		q931_ies_add_put(&ies, &cause->ie);
 
+		ast_mutex_unlock(&ast_chan->lock);
 		ast_mutex_lock(&visdn.lock);
 		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
+		ast_mutex_lock(&ast_chan->lock);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
@@ -1666,9 +1675,11 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 		q931_ies_add_put(&ies, &cause->ie);
 
+		ast_mutex_unlock(&ast_chan->lock);
 		ast_mutex_lock(&visdn.lock);
 		q931_disconnect_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
+		ast_mutex_lock(&ast_chan->lock);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
@@ -1703,18 +1714,22 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		q931_ies_add_put(&ies, &pi->ie);
 
+		ast_mutex_unlock(&ast_chan->lock);
 		ast_mutex_lock(&visdn.lock);
 		q931_progress_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
+		ast_mutex_lock(&ast_chan->lock);
 
 		return 0;
 	}
 	break;
 
 	case AST_CONTROL_PROCEEDING:
+		ast_mutex_unlock(&ast_chan->lock);
 		ast_mutex_lock(&visdn.lock);
 		q931_proceeding_request(visdn_chan->q931_call, NULL);
 		ast_mutex_unlock(&visdn.lock);
+		ast_mutex_lock(&ast_chan->lock);
 
 		return 0;
 	break;
@@ -1768,9 +1783,11 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	cdpn->number[1] = '\0';
 	q931_ies_add_put(&ies, &cdpn->ie);
 
+	ast_mutex_unlock(&ast_chan->lock);
 	ast_mutex_lock(&visdn.lock);
 	q931_info_request(q931_call, &ies);
 	ast_mutex_unlock(&visdn.lock);
+	ast_mutex_lock(&ast_chan->lock);
 
 	return 1;
 }
@@ -2162,9 +2179,7 @@ static void visdn_accept(
 			newdlc->tei,
 			intf->name);
 
-	ast_mutex_lock(&visdn.lock);
 	refresh_polls_list();
-	ast_mutex_unlock(&visdn.lock);
 }
 
 static int visdn_open_interface(
@@ -3128,14 +3143,7 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number, 1,
 				visdn_chan->calling_number)) {
 
-		        struct q931_ies ies_proc = Q931_IES_INIT;
-			struct q931_ie_cause *cause = q931_ie_cause_alloc();
-			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
-			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
-			q931_ies_add_put(&ies_proc, &cause->ie);
-
-                        struct q931_ies ies_disc = Q931_IES_INIT;
+                        struct q931_ies ies_proc = Q931_IES_INIT;
 			if (visdn_chan->is_voice) {
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
@@ -3144,8 +3152,16 @@ static void visdn_q931_setup_indication(
 							visdn_chan->q931_call);
 				pi->progress_description =
 					Q931_IE_PI_PD_IN_BAND_INFORMATION;
-				q931_ies_add_put(&ies_disc, &pi->ie);
+				q931_ies_add_put(&ies_proc, &pi->ie);
 			}
+
+		        struct q931_ies ies_disc = Q931_IES_INIT;
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(q931_call);
+			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
+			cause->value = Q931_IE_C_CV_NETWORK_OUT_OF_ORDER;
+			q931_ies_add_put(&ies_disc, &cause->ie);
 
 			q931_proceeding_request(q931_call, &ies_proc);
 			q931_disconnect_request(q931_call, &ies_disc);
