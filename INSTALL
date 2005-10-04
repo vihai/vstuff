@@ -5,7 +5,9 @@ Installing vISDN is not strightforward. I've made my best to keep it as
 self-contained and unintrusive as possible but, after all, this is a
 complete ISDN architecture which involves and hooks to many subsystems.
 
+-------------------------------------
 Step 1: Configure the build system
+-------------------------------------
 
 cd into the untarred package tree and run ./configure
 
@@ -16,18 +18,48 @@ you have compiled at least once.
 Usually "make modules_prepare" should be enough but I prefer to do
 "make cloneconfig" and "make" to have full symbol versions.
 
-NOTE: Fedora Core 3's 2.6.11 kernel has some 2.6.12 patches which introduce
-incompatible interface changes. Since they offer no way to know what
-changes have been introduced, if you're using that kernel you will probably
-need to add --with-kernel-have-sk-prot flag to configure invocation.
+NOTE: Fedora Core 3's 2.6.11 kernel has some of the 2.6.12's patches
+which introduce incompatible interface changes. Since they offer no way to
+know what changes have been introduced, if you're using that kernel you will
+probably need to add --with-kernel-have-sk-prot flag to configure invocation.
 
+-------------------------------------
 Step 2: Compile everything
+-------------------------------------
 
 Run "make" and check that everything gets compiled correctly.
 
+-------------------------------------
 Step 3: Install
+-------------------------------------
 
-Run "make install"
+Run "make install", if you "configure"d it correctly, kernel modules will
+be installed in the appropriate /lib/modules/ subdirectory, asterisk
+modules will be installed in Asterisk's modules directory and so on for
+pppd plugin, configurations, etc.
 
+udev
+----
+
+vISDN infrastructure and modules make use of several character devices
+which should be created in /dev.
+A udev ruleset is available as etc/udev/30-visdn.rules, it should be
+installed in /etc/udev/rules.d or equivalent, before attempting to
+load the modules.
+
+hotplug
+-------
+
+Some distribution's (notably SuSE) net hotplug scripts may interfere
+with the initialization of vISDN, you may see the interfaces go
+down when you register them. I addedd an exception for visdn* interfaces
+in /etc/hotplug.d/net/50-ifup.hotplug to avoid it.
+
+-------------------------------------
 Step 4: Configuration
+-------------------------------------
 
+A proper hotplug script is still missing, a manual configurator has been
+included.
+
+The configurator is installed

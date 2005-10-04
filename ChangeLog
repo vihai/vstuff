@@ -2,6 +2,39 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-04 09:46:58 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-234
+
+    Summary:
+      Improved initscripts
+    Revision:
+      isdn--devel--0.1--patch-234
+
+
+    new files:
+     scripts/.arch-ids/=id
+
+    modified files:
+     .arch-inventory ChangeLog INSTALL Makefile.am
+     scripts/visdn_configurator
+
+    renamed files:
+     etc/.arch-ids/init.id
+       ==> scripts/.arch-ids/visdn_configurator.id
+     etc/.arch-ids/visdn_connect.id
+       ==> scripts/.arch-ids/visdn_connect.id
+     etc/.arch-ids/visdn_create_netdev.id
+       ==> scripts/.arch-ids/visdn_create_netdev.id
+     etc/init
+       ==> scripts/visdn_configurator
+     etc/visdn_connect
+       ==> scripts/visdn_connect
+     etc/visdn_create_netdev
+       ==> scripts/visdn_create_netdev
+
+    new directories:
+     scripts scripts/.arch-ids
+
+
 2005-10-03 21:40:44 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-233
 
     Summary:

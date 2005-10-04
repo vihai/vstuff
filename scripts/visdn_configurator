@@ -42,8 +42,14 @@ function set_attribute()
 	local VALUE=$2
 
 	if [ ! -f "$NAME" ]; then
-		echo "Attribute $NAME does not exist"
-		return
+		echo "Waiting for attribute $NAME..."
+
+		sleep 3
+
+		if [ ! -f "$NAME" ]; then
+			echo "Attribute $NAME does not exist"
+			return
+		fi
 	fi
 
 	echo "$VALUE" > "$NAME"
@@ -116,9 +122,13 @@ function handle_netdev_connectmodule
 		if [ "${NETDEVS_DEVNAME[$i]}" = "${BASH_REMATCH[1]}" ]; then
 
 			if [ "${BASH_REMATCH[2]}" = "echo" ]; then
-				connect_channels "$CHANNEL" "${NETDEVS_CHAN_E[$i]}"
+				connect_channels	\
+					"$CHANNEL"	\
+					"${NETDEVS_CHAN_E[$i]}"
 			else
-				connect_channels "$CHANNEL" "${NETDEVS_CHAN_D[$i]}"
+				connect_channels	\
+					"$CHANNEL"	\
+					"${NETDEVS_CHAN_D[$i]}"
 			fi
 
 			ip link set ${NETDEVS_DEVNAME[$i]} up

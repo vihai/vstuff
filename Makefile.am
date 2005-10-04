@@ -1,28 +1,15 @@
 
-#AUX_DIST =					\
-#	$(ac_aux_dir)/config.guess		\
-#	$(ac_aux_dir)/config.sub		\
-#	$(ac_aux_dir)/install-sh		\
-#	$(ac_aux_dir)/ltconfig			\
-#	$(ac_aux_dir)/ltmain.sh			\
-#	$(ac_aux_dir)/mdate-sh			\
-#	$(ac_aux_dir)/missing			\
-#	$(ac_aux_dir)/mkinstalldirs		\
-#
-
-#
-#MAINTAINERCLEANFILES =				\
-#	Makefile.in aclocal.m4			\
-#	configure config-h.in stamp-h.in	\
-#	$(AUX_DIST)
-
-sysconf_DATA =					\
+nobase_sysconf_DATA =				\
 	etc/udev/30-visdn.rules			\
-	etc/visdn/*				\
-	etc/init
+	etc/visdn/*
 
 astconf_DATA =					\
 	etc/asterisk/visdn.conf
+
+dist_sbin_SCRIPTS =				\
+	scripts/visdn_configurator		\
+	scripts/visdn_connect			\
+	scripts/visdn_create_netdev
 
 EXTRA_DIST =					\
 	$(sysconf_DATA)				\
