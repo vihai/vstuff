@@ -243,7 +243,8 @@ void hfc_configure_fifos(
 		hfc_configure_fifo(&card->fifos[i][RX], fcfg, fzcfg);
 		hfc_configure_fifo(&card->fifos[i][TX], fcfg, fzcfg);
 
-		hfc_debug_card(card, 3, "FIFO %d zmin=%04x zmax=%04x fmin=%02x fmax=%02x\n",
+		hfc_debug_card(card, 3,
+			"FIFO %d zmin=%04x zmax=%04x fmin=%02x fmax=%02x\n",
 		i,
 		fzcfg->z_min,
 		fzcfg->z_max,
@@ -272,11 +273,11 @@ void hfc_update_r_brg_pcm_cfg(struct hfc_card *card)
 {
 	if (card->quartz_49)
 		hfc_outb(card, hfc_R_BRG_PCM_CFG,
-			hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_1_5 |
+			hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_3_0 |
 			hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS);
 	else
 		hfc_outb(card, hfc_R_BRG_PCM_CFG,
-			hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_3_0 |
+			hfc_R_BRG_PCM_CFG_V_PCM_CLK_DIV_1_5 |
 			hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS);
 }
 
@@ -604,7 +605,8 @@ static int __devinit hfc_probe(
 	card->io_bus_mem = pci_resource_start(pci_dev,1);
 	if (!card->io_bus_mem) {
 		hfc_msg_card(card, KERN_CRIT,
-			"PCI device does not have an assigned IO memory area!\n");
+			"PCI device does not have an assigned"
+			" IO memory area!\n");
 		err = -ENODEV;
 		goto err_noiobase;
 	}
@@ -642,10 +644,13 @@ static int __devinit hfc_probe(
 		goto err_unsupported_revision;
 
 	hfc_msg_card(card, KERN_ERR,
-		"HFC-%cS chip rev. %02x detected\n",
+		"HFC-%cS chip rev. %02x detected, "
+		"using quartz=%d MHz, doubleclock=%d\n",
 			chip_type == hfc_R_CHIP_ID_V_CHIP_ID_HFC_4S ?
 				'4' : '8',
-			revision);
+			revision,
+			card->quartz_49 ? 49 : 24,
+			card->double_clock ? 1 : 0);
 
 	// Initialize all the card's components
 
