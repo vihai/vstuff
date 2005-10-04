@@ -906,7 +906,6 @@ MODULE_LICENSE("GPL");
 
 #ifdef DEBUG
 module_param(debug_level, int, 0444);
-MODULE_PARM(debug_level,"i");
 MODULE_PARM_DESC(debug_level, "Initial debug level");
 #endif
 
