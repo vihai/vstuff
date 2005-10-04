@@ -290,7 +290,7 @@ AC_ARG_ENABLE(
 	[drivers],
 	AC_HELP_STRING(
 		[--enable-drivers=<list>],
-		[Enable drivers (comma separated list of driver names), currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1, fake-isdn]),
+		[Enable drivers (comma separated list of driver names), currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1]),
 	drivers="$enableval")
 
 AM_CONDITIONAL(driver_hfc_usb,
@@ -301,8 +301,6 @@ AM_CONDITIONAL(driver_hfc_4s,
 	test -n "`echo $drivers | grep hfc-4s`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_hfc_e1,
 	test -n "`echo $drivers | grep hfc-e1`" || test "$drivers" = "all")
-AM_CONDITIONAL(driver_fake_isdn,
-	test -n "`echo $drivers | grep fake_isdn`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
                  libq931/Makefile
@@ -311,7 +309,6 @@ AC_CONFIG_FILES([Makefile
                  pppd_plugin/Makefile
                  tests/Makefile
 		 kernel_config.h
-                 fake_isdn/Makefile
                  hfc-4s/Makefile
                  hfc-e1/Makefile
                  hfc-pci/Makefile

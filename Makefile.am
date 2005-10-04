@@ -42,10 +42,6 @@ if driver_hfc_e1
 SUBDIRS += hfc-e1
 endif
 
-if driver_fake_isdn
-SUBDIRS += fake_isdn
-endif
-
 endif
 
 SUBDIRS += libq931
