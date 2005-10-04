@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-04 12:25:11 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-239
+
+    Summary:
+      Fixed missing setting of pbx_started in chan_visdn
+    Revision:
+      isdn--devel--0.1--patch-239
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2005-10-04 11:23:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-238
 
     Summary:

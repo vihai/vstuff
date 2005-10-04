@@ -2627,6 +2627,8 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 
 			ast_setstate(ast_chan, AST_STATE_RINGING);
 
+			visdn_chan->pbx_started = TRUE;
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -2685,6 +2687,8 @@ ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
 				sizeof(ast_chan->exten)-1);
 
 			ast_setstate(ast_chan, AST_STATE_RINGING);
+
+			visdn_chan->pbx_started = TRUE;
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
@@ -3076,6 +3080,8 @@ static void visdn_q931_setup_indication(
 
 			ast_setstate(ast_chan, AST_STATE_RING);
 
+			visdn_chan->pbx_started = TRUE;
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -3092,8 +3098,6 @@ static void visdn_q931_setup_indication(
 
 				q931_reject_request(q931_call, &ies);
 			} else {
-				visdn_chan->pbx_started = TRUE;
-
 				q931_proceeding_request(q931_call, NULL);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
@@ -3159,6 +3163,8 @@ static void visdn_q931_setup_indication(
 
 			ast_setstate(ast_chan, AST_STATE_RING);
 
+			visdn_chan->pbx_started = TRUE;
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
@@ -3187,8 +3193,6 @@ static void visdn_q931_setup_indication(
 				q931_proceeding_request(q931_call, &ies_proc);
 				q931_disconnect_request(q931_call, &ies_disc);
 			} else {
-				visdn_chan->pbx_started = TRUE;
-
 				if (!ast_matchmore_extension(NULL, intf->context,
 						visdn_chan->called_number, 1,
 						visdn_chan->calling_number)) {
