@@ -1302,8 +1302,6 @@ static int visdn_call(
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-	ast_mutex_unlock(&ast_chan->lock);
-
 	struct q931_ies ies = Q931_IES_INIT;
 
 	struct q931_ie_bearer_capability *bc =
