@@ -3105,6 +3105,8 @@ static void visdn_q931_setup_indication(
 				visdn_chan->called_number,
 				intf->context);
 
+			ast_hangup(ast_chan);
+
 	                struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
