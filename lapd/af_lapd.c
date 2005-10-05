@@ -41,7 +41,7 @@ rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
 
 #ifdef HAVE_SK_PROT
 static struct proto lapd_proto = {
-	.name = "lapd",
+	.name = lapd_MODULE_NAME,
 	.owner = THIS_MODULE,
 	.obj_size = sizeof(struct lapd_sock),
 };
@@ -50,7 +50,8 @@ static kmem_cache_t *lapd_sk_cachep;
 #endif
 
 #ifdef CONFIG_PROC_FS
-struct lapd_iter_state {
+struct lapd_iter_state
+{
 	int bucket;
 };
 
@@ -58,12 +59,24 @@ struct lapd_iter_state {
 
 static struct sock *lapd_get_first(struct seq_file *seq)
 {
-	return hlist_entry(lapd_hash[0].first, struct sock, sk_node);
+	struct lapd_iter_state *state = seq->private;
+
+	for (state->bucket = 0;
+	     state->bucket < ARRAY_SIZE(lapd_hash);
+	     state->bucket++) {
+		struct sock *sk = sk_head(&lapd_hash[state->bucket]);
+		if (sk)
+			return sk;
+	}
+
+	return NULL;
 }
 
 static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 {
 	struct lapd_iter_state *state = seq->private;
+
+	printk(KERN_DEBUG "B\n");
 
 	do {
 		sk = sk_next(sk);
@@ -81,8 +94,9 @@ static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 
 static struct sock *lapd_get_idx(struct seq_file *seq, loff_t pos)
 {
-	struct sock *sk = lapd_get_first(seq);
+	printk(KERN_DEBUG "C\n");
 
+	struct sock *sk = lapd_get_first(seq);
 	if (sk) {
 		while (pos && (sk = lapd_get_next(seq, sk)) != NULL)
 			--pos;
@@ -94,17 +108,27 @@ static struct sock *lapd_get_idx(struct seq_file *seq, loff_t pos)
 static void *lapd_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	read_lock(&lapd_hash_lock);
+
+	printk(KERN_DEBUG "D\n");
+
 	return *pos ? lapd_get_idx(seq, *pos - 1) : SEQ_START_TOKEN;
 }
 
-static void *lapd_seq_next(struct seq_file *seq, void *v, loff_t *pos)
+static void *lapd_seq_next(struct seq_file *seq, void *data, loff_t *pos)
 {
 	struct sock *sk;
 
-	if (v == SEQ_START_TOKEN)
+	printk(KERN_DEBUG "E\n");
+
+	if (data == SEQ_START_TOKEN) {
+	printk(KERN_DEBUG "E11\n");
 		sk = lapd_get_first(seq);
-	else
-		sk = lapd_get_next(seq, v);
+	printk(KERN_DEBUG "E12\n");
+	} else {
+	printk(KERN_DEBUG "E21\n");
+		sk = lapd_get_next(seq, data);
+	printk(KERN_DEBUG "E22\n");
+	}
 
 	++*pos;
 
@@ -113,47 +137,46 @@ static void *lapd_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 
 static void lapd_seq_stop(struct seq_file *seq, void *v)
 {
+	printk(KERN_DEBUG "F\n");
+
 	read_unlock(&lapd_hash_lock);
 }
 
-static __inline__ char *get_lapd_sock(struct sock *sp, char *tmpbuf, int i)
+static int lapd_seq_show(struct seq_file *seq, void *data)
 {
-	struct lapd_sock *lapd_sock = to_lapd_sock(sp);
+	printk(KERN_DEBUG "H\n");
 
-	sprintf(tmpbuf, "%4d: %02X %02X:%02X"
-		" %02X %02X %02X %c%c%c  %08X:%08X %5d %5lu %3d %p",
-		i,
-		lapd_sock->state,
-		lapd_sock->sapi,
-		lapd_sock->tei,
-		lapd_sock->v_s,
-		lapd_sock->v_a,
-		lapd_sock->v_r,
-		lapd_sock->own_receiver_busy ? 'B' : ' ',
-		lapd_sock->peer_receiver_busy ? 'M' : ' ',
-		lapd_sock->reject_exception ? 'R' : ' ',
-		atomic_read(&sp->sk_wmem_alloc),
-		atomic_read(&sp->sk_rmem_alloc),
-		sock_i_uid(sp), sock_i_ino(sp),
-		atomic_read(&sp->sk_refcnt), sp);
-	return tmpbuf;
-}
-
-static int lapd_seq_show(struct seq_file *seq, void *v)
-{
-	char tmpbuf[129];
-
-	if (v == SEQ_START_TOKEN) {
+	if (data == SEQ_START_TOKEN) {
 		seq_printf(seq, "%-127s\n",
 			"  sl  st sa:te vs va vr ecxpt"
 			" tx_queue rx_queue   uid inode ref"
 			);
-	} else {
-		struct lapd_iter_state *state = lapd_seq_private(seq);
 
-		seq_printf(seq, "%-127s\n",
-			get_lapd_sock(v, tmpbuf, state->bucket));
+		return 0;
 	}
+
+	struct lapd_iter_state *state = lapd_seq_private(seq);
+
+	struct sock *sk = data;
+	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+	printk(KERN_DEBUG "J\n");
+	seq_printf(seq, "%4d: %02X %02X:%02X"
+			" %02X %02X %02X %c%c%c  %08X:%08X %5d %5lu %3d %p",
+			state->bucket,
+			lapd_sock->state,
+			lapd_sock->sapi,
+			lapd_sock->tei,
+			lapd_sock->v_s,
+			lapd_sock->v_a,
+			lapd_sock->v_r,
+			lapd_sock->own_receiver_busy ? 'B' : ' ',
+			lapd_sock->peer_receiver_busy ? 'M' : ' ',
+			lapd_sock->reject_exception ? 'R' : ' ',
+			atomic_read(&sk->sk_wmem_alloc),
+			atomic_read(&sk->sk_rmem_alloc),
+			sock_i_uid(sk), sock_i_ino(sk),
+			atomic_read(&sk->sk_refcnt), sk);
 
 	return 0;
 }
@@ -168,24 +191,30 @@ static struct seq_operations lapd_seq_ops = {
 static int lapd_seq_open(struct inode *inode, struct file *file)
 {
 	struct seq_file *seq;
-	int rc = -ENOMEM;
-	struct lapd_iter_state *s = kmalloc(sizeof(*s), GFP_KERNEL);
+	int err;
 
-	if (!s)
-		goto out;
-	rc = seq_open(file, &lapd_seq_ops);
-	if (rc)
-		goto out_kfree;
+	struct lapd_iter_state *iter_state;
+	iter_state = kmalloc(sizeof(*iter_state), GFP_KERNEL);
+	if (!iter_state) {
+		err = -ENOMEM;
+		goto err_kmalloc;
+	}
+
+	err = seq_open(file, &lapd_seq_ops);
+	if (err)
+		goto err_seq_open;
 
 	seq = file->private_data;
-	seq->private = s;
-	memset(s, 0, sizeof(*s));
-out:
-	return rc;
-out_kfree:
-	kfree(s);
+	seq->private = iter_state;
+	memset(iter_state, 0, sizeof(*iter_state));
 
-	goto out;
+	return 0;
+
+err_seq_open:
+	kfree(iter_state);
+err_kmalloc:
+
+	return err;
 }
 
 static struct file_operations lapd_seq_fops = {
@@ -198,14 +227,14 @@ static struct file_operations lapd_seq_fops = {
 
 int __init lapd_proc_init(void)
 {
-	if (!proc_net_fops_create("lapd", S_IRUGO, &lapd_seq_fops))
+	if (!proc_net_fops_create(lapd_MODULE_NAME, S_IRUGO, &lapd_seq_fops))
 		return -ENOMEM;
 	return 0;
 }
 
 void __exit lapd_proc_exit(void)
 {
-	proc_net_remove("lapd");
+	proc_net_remove(lapd_MODULE_NAME);
 }
 
 #endif

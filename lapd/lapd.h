@@ -79,6 +79,8 @@ struct sockaddr_lapd {
 #include <linux/version.h>
 #include <net/sock.h>
 
+#define lapd_MODULE_NAME "lapd"
+
 #ifndef TRUE
 #define TRUE 1
 #endif
