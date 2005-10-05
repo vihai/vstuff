@@ -76,8 +76,6 @@ static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 {
 	struct lapd_iter_state *state = seq->private;
 
-	printk(KERN_DEBUG "B\n");
-
 	do {
 		sk = sk_next(sk);
  try_again:
@@ -94,8 +92,6 @@ static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 
 static struct sock *lapd_get_idx(struct seq_file *seq, loff_t pos)
 {
-	printk(KERN_DEBUG "C\n");
-
 	struct sock *sk = lapd_get_first(seq);
 	if (sk) {
 		while (pos && (sk = lapd_get_next(seq, sk)) != NULL)
@@ -109,8 +105,6 @@ static void *lapd_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	read_lock(&lapd_hash_lock);
 
-	printk(KERN_DEBUG "D\n");
-
 	return *pos ? lapd_get_idx(seq, *pos - 1) : SEQ_START_TOKEN;
 }
 
@@ -118,17 +112,10 @@ static void *lapd_seq_next(struct seq_file *seq, void *data, loff_t *pos)
 {
 	struct sock *sk;
 
-	printk(KERN_DEBUG "E\n");
-
-	if (data == SEQ_START_TOKEN) {
-	printk(KERN_DEBUG "E11\n");
+	if (data == SEQ_START_TOKEN)
 		sk = lapd_get_first(seq);
-	printk(KERN_DEBUG "E12\n");
-	} else {
-	printk(KERN_DEBUG "E21\n");
+	else
 		sk = lapd_get_next(seq, data);
-	printk(KERN_DEBUG "E22\n");
-	}
 
 	++*pos;
 
@@ -137,15 +124,11 @@ static void *lapd_seq_next(struct seq_file *seq, void *data, loff_t *pos)
 
 static void lapd_seq_stop(struct seq_file *seq, void *v)
 {
-	printk(KERN_DEBUG "F\n");
-
 	read_unlock(&lapd_hash_lock);
 }
 
 static int lapd_seq_show(struct seq_file *seq, void *data)
 {
-	printk(KERN_DEBUG "H\n");
-
 	if (data == SEQ_START_TOKEN) {
 		seq_printf(seq, "%-127s\n",
 			"  sl  st sa:te vs va vr ecxpt"
@@ -160,7 +143,6 @@ static int lapd_seq_show(struct seq_file *seq, void *data)
 	struct sock *sk = data;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-	printk(KERN_DEBUG "J\n");
 	seq_printf(seq, "%4d: %02X %02X:%02X"
 			" %02X %02X %02X %c%c%c  %08X:%08X %5d %5lu %3d %p",
 			state->bucket,
@@ -331,11 +313,6 @@ static void lapd_sock_destruct(struct sock *sk)
 	if (lapd_sock->dev) {
 		dev_put(lapd_sock->dev);
 		lapd_sock->dev = NULL;
-	}
-
-	if (lapd_sock->ppp_master_dev) {
-		dev_put(lapd_sock->ppp_master_dev);
-		lapd_sock->ppp_master_dev = NULL;
 	}
 
 	__skb_queue_purge(&sk->sk_write_queue);
@@ -877,7 +854,8 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 		devname[sizeof(devname)-1] = '\0';
 
 		err = lapd_bind_to_device(sk, devname);
-		if (err < 0) goto err_bind_to_device;
+		if (err < 0)
+			goto err_bind_to_device;
 	}
 	break;
 
@@ -1379,7 +1357,7 @@ void lapd_dl_release_confirm(struct lapd_sock *lapd_sock)
 		// Defers unhash
 		sk_reset_timer(&lapd_sock->sk,
 			&lapd_sock->sk.sk_timer,
-			jiffies + 10 * HZ);
+			jiffies + 1 * HZ);
 	}
 }
 

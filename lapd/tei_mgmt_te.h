@@ -56,8 +56,6 @@ static inline void lapd_utme_reset_timer(
 	struct timer_list *timer,
 	unsigned long expires)
 {
-	printk(KERN_DEBUG "reset_timer %p\n", tme);
-
 	if (!mod_timer(timer, expires))
 		lapd_utme_get(tme);
 }
@@ -66,8 +64,6 @@ static inline void lapd_utme_stop_timer(
 	struct lapd_utme *tme,
 	struct timer_list *timer)
 {
-	printk(KERN_DEBUG "stop_timer %p\n", tme);
-
 	if (timer_pending(timer) && del_timer(timer))
 		lapd_utme_put(tme);
 }

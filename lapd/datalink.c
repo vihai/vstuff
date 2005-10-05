@@ -483,7 +483,7 @@ void lapd_dump_queue(struct lapd_sock *lapd_sock)
 		lapd_debug_multiframe(lapd_sock, "");
 
 		if (sk->sk_send_head)
-		printk("HEAD ");
+			printk("HEAD ");
 
 		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
 		printk("V(S) = %d\n", hdr->i.n_s);
@@ -1777,6 +1777,7 @@ void lapd_dl_data_request(
 	break;
 
 	default:
+		kfree_skb(skb);
 		lapd_unexpected_primitive(lapd_sock);
 	break;
 	}

@@ -94,7 +94,7 @@ struct sockaddr_lapd {
 #define LAPD_HASHBITS		8
 #define LAPD_HASHSIZE		((1 << LAPD_HASHBITS) - 1)
 
-#ifdef SOCK_DEBUGGING
+#ifdef DEBUG_CODE
 #define lapd_debug(format, arg...)			\
 		printk(KERN_DEBUG			\
 			"lapd: "			\
@@ -280,8 +280,6 @@ struct lapd_sock
 	int sapi;
 
 	struct hlist_head new_dlcs;
-
-	struct net_device *ppp_master_dev;
 };
 
 enum lapd_int_msg_type

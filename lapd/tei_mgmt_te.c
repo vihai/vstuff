@@ -137,8 +137,6 @@ void lapd_utme_T202_timer(unsigned long data)
 	struct lapd_utme *tme =
 		(struct lapd_utme *)data;
 
-	printk(KERN_DEBUG "timer %p %s\n", tme, tme->dev->name);
-
 	lapd_msg_tme(KERN_DEBUG, tme->dev,
 		"tei_mgmt T202\n");
 
@@ -509,20 +507,13 @@ void lapd_utme_set_static_tei(
 void lapd_utme_get(
 	struct lapd_utme *tme)
 {
-	printk(KERN_DEBUG "utme %p %s get\n", tme, tme->dev->name);
-
 	atomic_inc(&tme->refcnt);
 }
 
 void lapd_utme_put(
 	struct lapd_utme *tme)
 {
-	printk(KERN_DEBUG "utme %p %s put\n", tme, tme->dev->name);
-	dump_stack();
-
 	if (atomic_dec_and_test(&tme->refcnt)) {
-		printk(KERN_DEBUG "utme released\n");
-
 		lapd_utme_stop_timer(tme, &tme->T202_timer);
 
 		dev_put(tme->dev);

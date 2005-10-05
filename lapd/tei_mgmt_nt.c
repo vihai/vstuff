@@ -146,15 +146,6 @@ void lapd_ntme_T201_timer(unsigned long data)
 	lapd_ntme_put(tme);
 }
 
-/*
- * Must be called holding tme->lock
- */
-
-static u8 _lapd_ntme_find_available_tei(
-	struct lapd_ntme *tme)
-{
-}
-
 static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 {
 	struct lapd_tei_mgmt_frame *tm =
@@ -386,15 +377,25 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	return 0;
 }
 
-void lapd_ntme_release(struct lapd_ntme *tme)
+void lapd_ntme_get(
+	struct lapd_ntme *tme)
 {
-	lapd_ntme_stop_timer(tme, &tme->T201_timer);
-
-	dev_put(tme->dev);
-	tme->dev = NULL;
-
-	kfree(tme);
+	atomic_inc(&tme->refcnt);
 }
+
+void lapd_ntme_put(
+	struct lapd_ntme *tme)
+{
+	if (atomic_dec_and_test(&tme->refcnt)) {
+		lapd_ntme_stop_timer(tme, &tme->T201_timer);
+
+		dev_put(tme->dev);
+		tme->dev = NULL;
+
+		kfree(tme);
+	}
+}
+
 
 struct lapd_ntme *lapd_ntme_alloc(struct net_device *dev)
 {
@@ -404,8 +405,6 @@ struct lapd_ntme *lapd_ntme_alloc(struct net_device *dev)
 		return NULL;
 
 	memset(tme, 0, sizeof(*tme));
-
-	tme->release = lapd_ntme_release;
 
 	atomic_set(&tme->refcnt, 1);
 

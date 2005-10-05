@@ -29,12 +29,13 @@ static void lapd_device_up(struct net_device *dev)
 	// TODO FIXME use the correct pointer
 	dev->atalk_ptr = lapd_device;
 
-	lapd_device->dev = dev;
 	dev_hold(dev);
+	lapd_device->dev = dev;
 
 	if (dev->flags & IFF_ALLMULTI) {
 		lapd_device->net_tme = lapd_ntme_alloc(dev);
 
+		lapd_ntme_get(lapd_device->net_tme);
 		hlist_add_head(&lapd_device->net_tme->node, &lapd_ntme_hash);
 	} else {
 		lapd_device->net_tme = NULL;
@@ -97,9 +98,9 @@ static void lapd_device_down(struct net_device *dev)
 			lapd_device->net_tme = NULL;
 		}
 
+		dev->atalk_ptr = NULL;
 		dev_put(dev);
 		kfree(lapd_device);
-		dev->atalk_ptr = NULL;
 	}
 }
 
