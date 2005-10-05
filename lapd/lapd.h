@@ -274,7 +274,7 @@ struct lapd_sock
 
 	struct lapd_sap *sap;
 	struct lapd_utme *usr_tme;
-	struct lapd_ntme *net_tme;
+//	struct lapd_ntme *net_tme;
 
 	int tei; // Only valid in NT mode
 	int sapi;

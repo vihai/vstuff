@@ -38,30 +38,15 @@ struct lapd_utme
 	struct timer_list T202_timer;
 	int retrans_cnt;
 
-	enum lapd_tei_status status;
+	enum lapd_tei_state state;
 
 	u8 tei;
 	u16 tei_request_ri;
 	int tei_request_pending;
-
-	void (*destroy)(struct lapd_utme *tme);
 };
 
-static inline void lapd_utme_hold(
-	struct lapd_utme *tme)
-{
-	atomic_inc(&tme->refcnt);
-}
-
-static inline void lapd_utme_put(
-	struct lapd_utme *tme)
-{
-	if (atomic_dec_and_test(&tme->refcnt)) {
-		if (tme->destroy) tme->destroy(tme);
-
-		kfree(tme);
-	}
-}
+void lapd_utme_get(struct lapd_utme *tme);
+void lapd_utme_put(struct lapd_utme *tme);
 
 extern void lapd_utme_set_static_tei(
 	struct lapd_utme *tme, u8 tei);
@@ -71,21 +56,20 @@ static inline void lapd_utme_reset_timer(
 	struct timer_list *timer,
 	unsigned long expires)
 {
+	printk(KERN_DEBUG "reset_timer %p\n", tme);
+
 	if (!mod_timer(timer, expires))
-		lapd_utme_hold(tme);
+		lapd_utme_get(tme);
 }
 
 static inline void lapd_utme_stop_timer(
 	struct lapd_utme *tme,
 	struct timer_list *timer)
 {
+	printk(KERN_DEBUG "stop_timer %p\n", tme);
+
 	if (timer_pending(timer) && del_timer(timer))
 		lapd_utme_put(tme);
-}
-
-static inline void lapd_utme_state_changed(
-	struct lapd_utme *tme)
-{
 }
 
 struct lapd_utme *lapd_utme_alloc(struct net_device *dev);

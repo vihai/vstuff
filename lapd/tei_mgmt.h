@@ -26,10 +26,10 @@
 		(dev)->name,				\
 		## arg)
 
-enum lapd_tei_status
+enum lapd_tei_state
 {
-	TEI_UNASSIGNED,
-	TEI_ASSIGNED,
+	LAPD_TME_TEI_UNASSIGNED,
+	LAPD_TME_TEI_ASSIGNED,
 };
 
 #define LAPD_SAPI_TEI_MGMT	0x3f

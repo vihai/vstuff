@@ -391,9 +391,9 @@ static int lapd_release(struct socket *sock)
 		switch (lapd_sock->state) {
 
 		case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
-			lapd_dl_release_request(lapd_sock);
-
+		case LAPD_DLS_8_TIMER_RECOVERY:
 			sk->sk_state = TCP_CLOSING;
+			lapd_dl_release_request(lapd_sock);
 		break;
 
 		default:
@@ -764,7 +764,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 		lapd_sock->usr_tme = lapd_utme_alloc(dev);
 
-		lapd_utme_hold(lapd_sock->usr_tme);
+		lapd_utme_get(lapd_sock->usr_tme);
 		hlist_add_head(&lapd_sock->usr_tme->node, &lapd_utme_hash);
 	}
 
@@ -915,7 +915,10 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		lapd_sock->net_tme->T201 = intoptval * HZ / 1000;
+		struct lapd_device *lapd_device =
+			lapd_dev(lapd_sock->dev);
+
+		lapd_device->net_tme->T201 = intoptval * HZ / 1000;
 	break;
 
 	case LAPD_TEI_MGMT_N202:
@@ -1115,7 +1118,7 @@ static int lapd_getsockopt(
 			goto err_invalid_request;
 		}
 
-		val = lapd_sock->usr_tme->status;
+		val = lapd_sock->usr_tme->state;
 	break;
 
 	case LAPD_TEI_MGMT_T201:
@@ -1129,8 +1132,10 @@ static int lapd_getsockopt(
 			goto err_invalid_request;
 		}
 
-		// Locking?
-		val = lapd_sock->net_tme->T201;
+		struct lapd_device *lapd_device =
+			lapd_dev(lapd_sock->dev);
+
+		val = lapd_device->net_tme->T201;
 	break;
 
 	case LAPD_TEI_MGMT_N202:

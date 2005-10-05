@@ -24,7 +24,7 @@ static void lapd_device_up(struct net_device *dev)
 	if (!lapd_device)
 		return;
 
-	memset(lapd_device, 0x00, sizeof(*lapd_device));
+	memset(lapd_device, 0, sizeof(*lapd_device));
 
 	// TODO FIXME use the correct pointer
 	dev->atalk_ptr = lapd_device;
@@ -36,7 +36,6 @@ static void lapd_device_up(struct net_device *dev)
 		lapd_device->net_tme = lapd_ntme_alloc(dev);
 
 		hlist_add_head(&lapd_device->net_tme->node, &lapd_ntme_hash);
-		lapd_ntme_hold(lapd_device->net_tme);
 	} else {
 		lapd_device->net_tme = NULL;
 	}
@@ -129,9 +128,6 @@ int lapd_device_event(struct notifier_block *this, unsigned long event,
 
 	case NETDEV_CHANGE:
 		lapd_msg(KERN_DEBUG, "NETDEV_CHANGE %s\n", dev->name);
-
-		// PH-ACTIVATE-INDICATION
-		// PH-DEACTIVATE-INDICATION
 	break;
 	}
 

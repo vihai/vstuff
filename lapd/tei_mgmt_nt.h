@@ -47,13 +47,13 @@ struct lapd_ntme
 
 	u8 teis[LAPD_NUM_DYN_TEIS];
 
-	void (*destroy)(struct lapd_ntme *tme);
+	void (*release)(struct lapd_ntme *tme);
 };
 
 struct lapd_ntme *lapd_ntme_alloc(struct net_device *net);
 
 
-static inline void lapd_ntme_hold(
+static inline void lapd_ntme_get(
 	struct lapd_ntme *tme)
 {
 	atomic_inc(&tme->refcnt);
@@ -63,7 +63,8 @@ static inline void lapd_ntme_put(
 	struct lapd_ntme *tme)
 {
 	if (atomic_dec_and_test(&tme->refcnt)) {
-		if (tme->destroy) tme->destroy(tme);
+		if (tme->release)
+			tme->release(tme);
 
 		kfree(tme);
 	}
@@ -75,7 +76,7 @@ static inline void lapd_ntme_reset_timer(
 	unsigned long expires)
 {
 	if (!mod_timer(timer, expires))
-		lapd_ntme_hold(tme);
+		lapd_ntme_get(tme);
 }
 
 static inline void lapd_ntme_stop_timer(
