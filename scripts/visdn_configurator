@@ -14,13 +14,53 @@ declare -a NETDEVS_DEVNAME
 declare -a NETDEVS_CHAN_D
 declare -a NETDEVS_CHAN_E
 
+NETDEV_CONTROL_DEVICE="/dev/visdn/netdev-control"
+CXC_CONNECT_FILE="/sys/visdn_tdm/internal-cxc/connect"
+
+function check_device()
+{
+	if [ ! -c "$FILENAME" ]; then
+		echo "File $FILENAME is not a character device";
+		exit 1
+	fi
+}
+
+function wait_for_device()
+{
+	local FILENAME=$1
+
+	if [ ! -e "$FILENAME" ]; then
+		echo -n "Waiting for device file $FILENAME to appear..."
+
+		for I in 1 2 3 4 5 6 7 8 9 10; do
+			sleep 2
+
+			echo -n "."
+
+			if [ -e "$FILENAME" ]; then
+				check_device "$FILENAME"
+
+				echo "done"
+				return
+			fi
+		done
+
+		echo "timeout"
+		exit 1
+	fi
+
+	check_device "$FILENAME"
+}
+
 function create_netdev()
 {
 	local NETDEV_PROTOCOL=$1
 	local NETDEV_REQ_DEVNAME=$2
 	local NETDEV_TEI=$3
 
-	exec 6<>/dev/visdn/netdev-control
+	wait_for_device $NETDEV_CONTROL_DEVICE
+
+	exec 6<>$NETDEV_CONTROL_DEVICE
 	echo "create $NETDEV_PROTOCOL $NETDEV_DEVNAME" >&6
 	read -u 6 NETDEV_DEVNAME
 	read -u 6 NETDEV_CHAN_D
@@ -33,7 +73,7 @@ function connect_channels()
 	local CHAN1=$1
 	local CHAN2=$2
 
-	echo "$CHAN1,$CHAN2" > /sys/visdn_tdm/internal-cxc/connect
+	echo "$CHAN1,$CHAN2" > $CXC_CONNECT_FILE
 }
 
 function set_attribute()

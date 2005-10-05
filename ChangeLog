@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-05 13:11:07 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-249
+
+    Summary:
+      Added code to visdn_configurator to wait for character devices
+    Revision:
+      isdn--devel--0.1--patch-249
+
+
+    modified files:
+     ChangeLog scripts/visdn_configurator
+
+
 2005-10-05 13:09:08 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-248
 
     Summary:
