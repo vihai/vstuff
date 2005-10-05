@@ -148,6 +148,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 				continue;
 			}
 
+
 			if (lapd_sock->sapi == hdr->addr.sapi &&
 		 	    lapd_sock->tei == hdr->addr.tei) {
 
@@ -255,6 +256,16 @@ static inline int lapd_pass_frame_to_socket_te(
 			struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
 			if (lapd_sock->dev == skb->dev &&
+			    (lapd_sock->state ==
+				LAPD_DLS_4_TEI_ASSIGNED ||
+			     lapd_sock->state ==
+				LAPD_DLS_5_AWAITING_ESTABLISH ||
+			     lapd_sock->state ==
+				LAPD_DLS_6_AWAITING_RELEASE ||
+			     lapd_sock->state ==
+				LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED ||
+			     lapd_sock->state ==
+				LAPD_DLS_8_TIMER_RECOVERY) &&
 			    lapd_sock->sapi == hdr->addr.sapi &&
 			    lapd_sock->usr_tme->tei == hdr->addr.tei) {
 

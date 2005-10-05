@@ -940,7 +940,7 @@ static int lapd_socket_handle_iframe(
 	break;
 
 	default:
-		lapd_unexpected_message(lapd_sock);
+		// Ignore message
 	break;
 	}
 
@@ -1037,7 +1037,7 @@ static inline int lapd_socket_handle_sframe_rr(
 	break;
 
 	default:
-		lapd_unexpected_message(lapd_sock);
+		// Ignore message
 	break;
 	}
 
@@ -1127,7 +1127,7 @@ static inline int lapd_socket_handle_sframe_rnr(
 	break;
 
 	default:
-		lapd_unexpected_message(lapd_sock);
+		// Ignore message
 	break;
 	}
 
@@ -1218,7 +1218,7 @@ static inline int lapd_socket_handle_sframe_rej(
 	break;
 
 	default:
-		lapd_unexpected_message(lapd_sock);
+		// Ignore message
 	break;
 	}
 

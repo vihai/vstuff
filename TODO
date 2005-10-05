@@ -17,7 +17,6 @@ Build system:
 chan_visdn:
 -----------
 
-- Communication errors are badly handled
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
@@ -93,8 +92,6 @@ lapd:
 
 - Implement SOCK_RAW sockets (?)
 
-- DL_DATA-REQUEST in AWAITING shoud put the frame in queue
-
 - Lock accesses to TME and make tei atomic_t  (?)
 
 - Implement socket closure after timeout and T203
@@ -122,10 +119,9 @@ lapd:
 
 - Add ARPHRD_LAPD to linux/include/linux/if_arp.h
 - Add ETH_P_LAPD to linux/include/linux/if_ether.h
-- See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL number
+- See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL numbers
 
-- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag.
-  - A specific flag would be better.
+- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag, a specific flag would be better.
 
 visdn-netdev:
 -------------
