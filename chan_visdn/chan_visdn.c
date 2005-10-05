@@ -1610,10 +1610,21 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 			q931_ies_add_put(&ies, &pi->ie);
 		}
 
+		pi = q931_ie_progress_indicator_alloc();
+		pi->coding_standard = Q931_IE_PI_CS_CCITT;
+		pi->location = q931_ie_progress_indicator_location(
+					visdn_chan->q931_call);
+		pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+		q931_ies_add_put(&ies, &pi->ie);
+
 		ast_setstate(ast_chan, AST_STATE_RINGING);
 
 		ast_mutex_unlock(&ast_chan->lock);
 		ast_mutex_lock(&visdn.lock);
+
+		if (visdn_chan->q931_call->state == N1_CALL_INITIATED)
+			q931_proceeding_request(visdn_chan->q931_call, NULL);
+
 		q931_alerting_request(visdn_chan->q931_call, &ies);
 		ast_mutex_unlock(&visdn.lock);
 		ast_mutex_lock(&ast_chan->lock);
