@@ -39,12 +39,12 @@ static inline void hfc_card_unlock(struct hfc_card *card)
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)
 {
-	return readb(card->io_mem + offset);
+	return ioread8(card->io_mem + offset);
 }
 
 static inline void hfc_outb(struct hfc_card *card, int offset, u8 value)
 {
-	writeb(value, card->io_mem + offset);
+	iowrite8(value, card->io_mem + offset);
 }
 
 #endif
