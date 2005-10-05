@@ -14,7 +14,6 @@ dist_sbin_SCRIPTS =				\
 EXTRA_DIST =					\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)				\
-	bootstrap				\
 	visdn.spec				\
 	samples/ethereal_coloring_rules		\
 	samples/ppp_dialout			\

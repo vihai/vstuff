@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-05 08:43:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-244
+
+    Summary:
+      Removed bootstrap from distribution
+    Revision:
+      isdn--devel--0.1--patch-244
+
+
+    modified files:
+     ChangeLog Makefile.am
+
+
 2005-10-04 22:41:24 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-243
 
     Summary:
