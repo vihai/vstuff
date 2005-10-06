@@ -42,8 +42,7 @@ static ssize_t hfc_store_role(
 	if (count < 2)
 		return count;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
 		port->nt_mode = TRUE;
@@ -101,8 +100,7 @@ static ssize_t hfc_store_l1_state(
 	struct hfc_card *card = port->card;
 	int err;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
 		hfc_outb(card, hfc_STATES,
@@ -174,8 +172,7 @@ static ssize_t hfc_store_st_clock_delay(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	port->clock_delay = value;
 	hfc_st_port_update_st_clk_dly(port);
 	hfc_card_unlock(card);
@@ -214,8 +211,7 @@ static ssize_t hfc_store_st_sampling_comp(
 	if (value > 0x7)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	port->sampling_comp = value;
 	hfc_st_port_update_st_clk_dly(port);
 	hfc_card_unlock(card);

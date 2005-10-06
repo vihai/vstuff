@@ -18,7 +18,7 @@
 
 void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 	u8 sctrl = 0;
 
@@ -44,7 +44,7 @@ void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 
 void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 	u8 sctrl_r = 0;
 
@@ -59,7 +59,7 @@ void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 	hfc_outb(port->card, hfc_CLKDEL,
 		hfc_CLKDEL_ST_CLK_DLY(port->clock_delay) |

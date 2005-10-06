@@ -321,7 +321,7 @@ static int __devinit hfc_probe(struct pci_dev *pci_dev,
 
 	memset(card, 0x00, sizeof(*card));
 
-	init_MUTEX(&card->sem);
+	spin_lock_init(&card->lock);
 
 	card->pcidev = pci_dev;
 	pci_set_drvdata(pci_dev, card);

@@ -46,7 +46,7 @@
 		## arg)
 
 typedef struct hfc_card {
-	struct semaphore sem;
+	spinlock_t lock;
 
 	struct pci_dev *pcidev;
 

@@ -90,8 +90,7 @@ static ssize_t hfc_store_sq_enabled(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	port->sq_enabled = !!value;
 	hfc_st_port_update_sctrl(port),
 	hfc_card_unlock(card);

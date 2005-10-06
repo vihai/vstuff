@@ -193,7 +193,7 @@ void hfc_fifo_rx_work(void *data)
 	struct hfc_chan_duplex *fdchan = chan->chan;
 	struct hfc_card *card = fdchan->port->card;
 
-	down(&card->sem);
+	hfc_card_lock(card);
 
 	if (!hfc_fifo_has_frames(fifo))
 		goto no_frames;
@@ -318,7 +318,7 @@ all_went_well:
 	if (hfc_fifo_has_frames(fifo))
 		schedule_work(&fifo->work);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 }
 
 void hfc_fifo_init(

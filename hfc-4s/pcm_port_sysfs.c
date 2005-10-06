@@ -59,8 +59,7 @@ static ssize_t hfc_store_bitrate(
 		port->bitrate = 2;
 	return -EINVAL;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_outb(card, hfc_R_CIRM, hfc_R_CIRM_V_PCM_RES);
 	mb();
 	hfc_outb(card, hfc_R_CIRM, 0);
@@ -105,8 +104,7 @@ static ssize_t hfc_store_master(
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	port->master = value;
 	hfc_update_pcm_md0(card, 0);
 	hfc_card_unlock(card);
@@ -129,8 +127,7 @@ static ssize_t hfc_show_f0io_counter(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	u16 counter;
 
 	counter = hfc_inb(card, hfc_R_F0_CNTL);
@@ -161,8 +158,7 @@ static ssize_t hfc_show_slots_state(
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"Slot    Chan\n");
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	int i;
 	for (i=0; i<port->num_slots; i++) {

@@ -19,7 +19,7 @@
 
 static inline void hfc_st_port_select(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 /*	card->st_port_selected = port;
 	card->fifo_selected = NULL;

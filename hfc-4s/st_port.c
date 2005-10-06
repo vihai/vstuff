@@ -18,7 +18,7 @@
 
 void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 	u8 st_ctrl_0 = 0;
 
@@ -41,7 +41,7 @@ void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
 
 void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 	u8 st_ctrl_2 = 0;
 
@@ -56,7 +56,7 @@ void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
 
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 {
-	WARN_ON(atomic_read(&port->card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(port->card));
 
 	hfc_outb(port->card, hfc_A_ST_CLK_DLY,
 		hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
@@ -139,8 +139,7 @@ static int hfc_st_port_enable(
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
 	hfc_card_unlock(card);
@@ -156,8 +155,7 @@ static int hfc_st_port_disable(
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|

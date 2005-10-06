@@ -59,8 +59,7 @@ static ssize_t hfc_store_master(
 	if (value != 0 && value != 1)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	port->master = value;
 //	hfc_update_pcm_md0(card, 0);
 	// FIXME TODO
@@ -88,8 +87,7 @@ static ssize_t hfc_show_slots_state(
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"Slot    Chan\n");
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	int i;
 	for (i=0; i<port->num_slots; i++) {

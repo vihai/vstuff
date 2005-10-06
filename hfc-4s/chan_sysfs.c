@@ -27,8 +27,7 @@ static int hfc_bert_enable(struct hfc_chan_duplex *chan)
 
 	int err;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	if (chan->status != HFC_CHAN_STATUS_FREE) {
 		err = -EBUSY;
@@ -110,8 +109,7 @@ static int hfc_bert_disable(
 {
 	struct hfc_card *card = chan->port->card;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	if (chan->status == HFC_CHAN_STATUS_OPEN_BERT) {
 		chan->status = HFC_CHAN_STATUS_FREE;
@@ -203,8 +201,7 @@ static ssize_t hfc_show_sq_bits(
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	hfc_st_port_select(port);
 
@@ -234,8 +231,7 @@ static ssize_t hfc_store_sq_bits(
 	if (value > 0x0f)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_st_port_select(port);
 	hfc_outb(card, hfc_A_ST_SQ_WR, value);
 	hfc_card_unlock(card);
@@ -275,8 +271,7 @@ static ssize_t hfc_store_sq_enabled(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	port->sq_enabled = !!value;
 

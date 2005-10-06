@@ -65,6 +65,7 @@ libq931:
 - Implement Signal IE
 - Implement Transit Network Selection IE
 - Implement User-User Information IE
+- Implement ETS 300 125 Appendix III (Optional basic access deactivation procedures)
 
 app_visdn_ppp:
 --------------
@@ -92,10 +93,6 @@ lapd:
 
 - Implement SOCK_RAW sockets (?)
 
-- Lock accesses to TME and make tei atomic_t  (?)
-
-- Implement socket closure after timeout and T203
-
 - Implement listen backlog maximum size
 
 - Implement frame acknowledging throught outgoing i-frames instead of specific RR
@@ -122,6 +119,9 @@ lapd:
 - See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL numbers
 
 - The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag, a specific flag would be better.
+
+- Implement ETS 300 125 Appendix III (Optional basic access deactivation procedures)
+
 
 visdn-netdev:
 -------------

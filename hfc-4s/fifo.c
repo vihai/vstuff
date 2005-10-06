@@ -160,7 +160,7 @@ void hfc_fifo_rx_work(void *data)
 	struct hfc_chan_duplex *fdchan = chan->chan;
 	struct hfc_card *card = fdchan->port->card;
 
-	down(&card->sem);
+	hfc_card_lock(card);
 
 	// FIFO selection has to be done for each frame to clear
 	// internal buffer (see specs 4.4.4).
@@ -275,15 +275,15 @@ all_went_well:
 	if (hfc_fifo_has_frames(fifo))
 		schedule_work(&fifo->work);
 
-	up(&card->sem);
+	hfc_card_unlock(card);
 }
 
 void hfc_fifo_configure(
 	struct hfc_fifo *fifo)
 {
-	WARN_ON(atomic_read(&fifo->card->sem.count) > 0);
-
 	struct hfc_card *card = fifo->card;
+
+	WARN_ON(!hfc_card_locked(card));
 
 	u8 subch_bits;
 	switch (fifo->bitrate) {

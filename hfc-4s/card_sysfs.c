@@ -43,8 +43,7 @@ static ssize_t hfc_store_double_clock(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	card->double_clock = !!value;
 	card->quartz_49 = !!value;
 	hfc_update_r_ctrl(card);
@@ -85,8 +84,7 @@ static ssize_t hfc_store_quartz_49(
 	if (sscanf(buf, "%d", &value) < 1)
 		return -EINVAL;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	card->quartz_49 = !!value;
 	hfc_update_r_brg_pcm_cfg(card);
 	hfc_softreset(card);
@@ -130,8 +128,7 @@ static ssize_t hfc_store_output_level(
 		return -EINVAL;
 
 	// Uhm... this should be safe without locks, indagate
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_outb(card, hfc_R_PWM1, value);
 	hfc_card_unlock(card);
 
@@ -167,8 +164,7 @@ static ssize_t hfc_store_bert_mode(
 	int mode;
 	sscanf(buf, "%d", &mode);
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	card->bert_mode = mode;
 	hfc_update_bert_wd_md(card, 0);
 	hfc_card_unlock(card);
@@ -199,8 +195,7 @@ static ssize_t hfc_store_bert_err(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_update_bert_wd_md(card, hfc_R_BERT_WD_MD_V_BERT_ERR);
 	hfc_card_unlock(card);
 
@@ -260,8 +255,7 @@ static ssize_t hfc_show_bert_cnt(
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
 	int cnt;
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	cnt = hfc_inb(card, hfc_R_BERT_ECL);
 	cnt += hfc_inb(card, hfc_R_BERT_ECH) << 8;
 	hfc_card_unlock(card);
@@ -327,8 +321,7 @@ static ssize_t hfc_store_ram_size(
 		return -EINVAL;
 
 	if (value != card->ram_size) {
-		if (hfc_card_lock_interruptible(card))
-			return -ERESTARTSYS;
+		hfc_card_lock(card);
 
 		if (value == 32)
 			hfc_configure_fifos(card, 0, 0, 0);
@@ -381,8 +374,7 @@ static ssize_t hfc_store_clock_source_config(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	if (count >= 4 && !strncmp(buf, "auto", 4)) {
 		card->clock_source = -1;
@@ -458,8 +450,7 @@ static ssize_t hfc_show_fifo_state(
 		"\n      Receive                 Transmit\n"
 		"FIFO#  F1 F2   Z1   Z2 Used   F1 F2   Z1   Z2 Used Connected\n");
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	int i;
 	for (i=0; i<card->num_fifos; i++) {

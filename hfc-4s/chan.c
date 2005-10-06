@@ -45,10 +45,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_visdn_chan_lock;
 	}
 
-	if (hfc_card_lock_interruptible(card)) {
-		err = -ERESTARTSYS;
-		goto err_card_lock;
-	}
+	hfc_card_lock(card);
 
 	if (chan->status != HFC_CHAN_STATUS_FREE) {
 		hfc_debug_chan(chan, 1, "open failed: channel busy\n");
@@ -139,7 +136,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 	hfc_st_port_update_st_ctrl_0(chan->port);
 	hfc_st_port_update_st_ctrl_2(chan->port);
 
-	memset(&chan->stats, 0x00, sizeof(chan->stats));
+	memset(&chan->stats, 0, sizeof(chan->stats));
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
@@ -161,7 +158,6 @@ err_channel_busy:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
 	hfc_card_unlock(card);
-err_card_lock:
 
 	return err;
 }
@@ -177,10 +173,7 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 		goto err_visdn_chan_lock;
 	}
 
-	if (hfc_card_lock_interruptible(card)) {
-		err = -ERESTARTSYS;
-		goto err_card_lock;
-	}
+	hfc_card_lock(card);
 
 	chan->status = HFC_CHAN_STATUS_FREE;
 
@@ -239,7 +232,7 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
 
-	hfc_debug_chan(chan, 1, KERN_INFO, "channel closed.\n");
+	hfc_debug_chan(chan, 1, "channel closed.\n");
 
 	return 0;
 
@@ -258,7 +251,7 @@ static int hfc_chan_frame_xmit(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
-	if (hfc_card_trylock(card)) {
+	if (!hfc_card_trylock(card)) {
 		// Mmmh... the card is locked and we may be in interrupt
 		// context. We must defer the transmission.
 
@@ -352,8 +345,7 @@ static ssize_t hfc_chan_samples_read(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	hfc_fifo_select(chan->rx.fifo);
 	hfc_fifo_refresh_fz_cache(chan->rx.fifo);
@@ -379,8 +371,7 @@ static ssize_t hfc_chan_samples_write(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	hfc_fifo_select(chan->tx.fifo);
 	hfc_fifo_refresh_fz_cache(chan->tx.fifo);
@@ -407,8 +398,7 @@ static int hfc_bridge(
 	struct hfc_card *card = chan->port->card;
 	int err;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	if (chan->id != B1 && chan->id != B2)
 		return -ENOTSUPP;
@@ -466,7 +456,7 @@ static int hfc_bridge(
 		goto err_allocate_slot_2_tx;
 	}
 
-	chan->rx.fifo = fifo_1_rx;;
+	chan->rx.fifo = fifo_1_rx;
 	chan->rx.fifo->connected_chan = &chan->rx;
 	chan->rx.fifo->bitrate = 64000;
 	chan->rx.fifo->framing = VISDN_CHAN_FRAMING_TRANS;
@@ -699,7 +689,8 @@ void hfc_chan_init(
 	chan->visdn_chan.max_mtu = 0;
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_LIST;
 
-	memcpy(chan->visdn_chan.bitrates, bitrates, sizeof(*bitrates) * bitrates_cnt);
+	memcpy(chan->visdn_chan.bitrates, bitrates,
+		sizeof(*bitrates) * bitrates_cnt);
 	chan->visdn_chan.bitrates_cnt = bitrates_cnt;
 	chan->visdn_chan.framing_supported = VISDN_CHAN_FRAMING_TRANS |
 					     VISDN_CHAN_FRAMING_HDLC;

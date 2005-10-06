@@ -2,6 +2,27 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-06 15:15:29 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-258
+
+    Summary:
+      Locking method change festival. Now the drivers use a spinlock again.
+    Revision:
+      isdn--devel--0.1--patch-258
+
+
+    modified files:
+     ChangeLog INSTALL TODO hfc-4s/card.h hfc-4s/card_inline.h
+     hfc-4s/card_sysfs.c hfc-4s/chan.c hfc-4s/chan_sysfs.c
+     hfc-4s/fifo.c hfc-4s/fifo_inline.h hfc-4s/hfc-4s_main.c
+     hfc-4s/pcm_port.c hfc-4s/pcm_port_inline.h
+     hfc-4s/pcm_port_sysfs.c hfc-4s/st_port.c
+     hfc-4s/st_port_inline.h hfc-4s/st_port_sysfs.c hfc-pci/card.h
+     hfc-pci/card_inline.h hfc-pci/chan.c hfc-pci/chan_sysfs.c
+     hfc-pci/fifo.c hfc-pci/hfc-pci_main.c hfc-pci/pcm_port.c
+     hfc-pci/pcm_port_sysfs.c hfc-pci/st_port.c
+     hfc-pci/st_port_sysfs.c lapd/lapd.h
+
+
 2005-10-06 12:36:37 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-257
 
     Summary:

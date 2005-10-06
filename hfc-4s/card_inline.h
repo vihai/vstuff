@@ -20,17 +20,12 @@
 
 static inline void hfc_card_lock(struct hfc_card *card)
 {
-	down(&card->sem);
+	spin_lock(&card->lock);
 }
 
 static inline int hfc_card_trylock(struct hfc_card *card)
 {
-	return down_trylock(&card->sem);
-}
-
-static inline int hfc_card_lock_interruptible(struct hfc_card *card)
-{
-	return down_interruptible(&card->sem);
+	return spin_trylock(&card->lock);
 }
 
 static inline void hfc_card_unlock(struct hfc_card *card)
@@ -40,7 +35,12 @@ static inline void hfc_card_unlock(struct hfc_card *card)
 	card->pcm_multireg = -1;
 	card->pcm_slot_selected = NULL;*/
 
-	up(&card->sem);
+	spin_unlock(&card->lock);
+}
+
+static inline int hfc_card_locked(struct hfc_card *card)
+{
+	return card->lock.lock;
 }
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)

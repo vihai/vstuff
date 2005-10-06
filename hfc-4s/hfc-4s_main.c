@@ -179,7 +179,7 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 
 void hfc_softreset(struct hfc_card *card)
 {
-	WARN_ON(atomic_read(&card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(card));
 
 	hfc_msg_card(card, KERN_INFO, "resetting\n");
 
@@ -329,7 +329,7 @@ void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits)
 
 void hfc_update_pcm_md1(struct hfc_card *card)
 {
-	WARN_ON(atomic_read(&card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(card));
 
 	u8 pcm_md1 = 0;
 	if (card->pcm_port.bitrate == 0) {
@@ -367,7 +367,7 @@ void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
 
 void hfc_initialize_hw(struct hfc_card *card)
 {
-	WARN_ON(atomic_read(&card->sem.count) > 0);
+	WARN_ON(!hfc_card_locked(card));
 
 	card->output_level = 0x19;
 	card->clock_source = -1;
@@ -497,8 +497,9 @@ static inline void hfc_handle_fifo_block_interrupt(
 /*
  * Interrupt handling routine.
  *
- * NOTE: We must be careful to not change port/fifo/slot selection register,
- *       otherwise we may race with code protected only by semaphores.
+ * NOTE: We must not change fifo/port/slot selection registers or else
+ * we will race with other code. Using spin_lock_irq instead of spin_lock
+ * elsewere is not a possibility.
  *
  */
 
@@ -567,7 +568,7 @@ static int __devinit hfc_probe(
 
 	memset(card, 0x00, sizeof(*card));
 
-	init_MUTEX(&card->sem);
+	spin_lock_init(&card->lock);
 
 	card->pcidev = pci_dev;
 	pci_set_drvdata(pci_dev, card);

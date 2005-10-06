@@ -38,6 +38,12 @@ be installed in the appropriate /lib/modules/ subdirectory, asterisk
 modules will be installed in Asterisk's modules directory and so on for
 pppd plugin, configurations, etc.
 
+Run:
+
+depmod -a
+
+In order to update the modules dependencies
+
 udev
 ----
 

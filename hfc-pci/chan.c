@@ -42,10 +42,7 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 		goto err_visdn_chan_lock;
 	}
 
-	if (hfc_card_lock_interruptible(card)) {
-		err = -ERESTARTSYS;
-		goto err_card_lock;
-	}
+	hfc_card_lock(card);
 
 	if (chan->status != HFC_CHAN_STATUS_FREE) {
 		hfc_debug_chan(chan, 1, "open failed: channel busy\n");
@@ -232,7 +229,6 @@ err_channel_busy:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
 	hfc_card_unlock(card);
-err_card_lock:
 
 	return err;
 }
@@ -249,27 +245,27 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 		goto err_visdn_chan_lock;
 	}
 
-	if (hfc_card_lock_interruptible(card)) {
-		err = -ERESTARTSYS;
-		goto err_card_lock;
-	}
+	hfc_card_lock(card);
 
 	chan->status = HFC_CHAN_STATUS_FREE;
 
 	if (chan->id == B1 || chan->id == B2) {
 		if (chan->id == B1) {
 			chan->port->card->regs.fifo_en &= ~hfc_FIFO_EN_B1;
-			chan->port->card->regs.m1 &= ~(hfc_INT_M1_B1REC | hfc_INT_M1_B1TRANS);
+			chan->port->card->regs.m1 &=
+				~(hfc_INT_M1_B1REC | hfc_INT_M1_B1TRANS);
 		} else if (chan->id == B2) {
 			chan->port->card->regs.fifo_en &= ~hfc_FIFO_EN_B2;
-			chan->port->card->regs.m1 &= ~(hfc_INT_M1_B2REC | hfc_INT_M1_B2TRANS);
+			chan->port->card->regs.m1 &=
+				~(hfc_INT_M1_B2REC | hfc_INT_M1_B2TRANS);
 		}
 
 		hfc_st_port_update_sctrl(chan->port);
 		hfc_st_port_update_sctrl_r(chan->port);
 	} else if (chan->id == D) {
 		chan->port->card->regs.fifo_en &= ~hfc_FIFO_EN_DTX;
-		chan->port->card->regs.m1 &= ~(hfc_INT_M1_DREC | hfc_INT_M1_DTRANS);
+		chan->port->card->regs.m1 &=
+				~(hfc_INT_M1_DREC | hfc_INT_M1_DTRANS);
 	} else if (chan->id == E) {
 		port->chans[B2].status = HFC_CHAN_STATUS_FREE;
 		card->regs.trm &= ~hfc_TRM_ECHO;
@@ -296,12 +292,11 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
 
-	hfc_debug_chan(chan, 1, KERN_INFO, "channel closed.\n");
+	hfc_debug_chan(chan, 1, "channel closed.\n");
 
 	return 0;
 
 	hfc_card_unlock(card);
-err_card_lock:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
 
@@ -409,9 +404,7 @@ static ssize_t hfc_chan_samples_read(
 
 	int err;
 
-	// Should we lock?
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	int copied_octets = hfc_fifo_used_rx(chan->rx.fifo);
 	if (copied_octets > count)
@@ -447,8 +440,7 @@ static ssize_t hfc_chan_samples_write(
 
 	int err = 0;
 
-	if (hfc_card_lock_interruptible(card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 
 	int copied_octets = hfc_fifo_free_tx(chan->tx.fifo);
 	if (copied_octets > count)

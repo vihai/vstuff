@@ -35,8 +35,7 @@ static int hfc_pcm_port_enable(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_card_unlock(card);
 
 	hfc_debug_pcm_port(port, 2, "enabled\n");
@@ -50,8 +49,7 @@ static int hfc_pcm_port_disable(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	if (hfc_card_lock_interruptible(port->card))
-		return -ERESTARTSYS;
+	hfc_card_lock(card);
 	hfc_card_unlock(card);
 
 	hfc_debug_pcm_port(port, 2, "disabled\n");
