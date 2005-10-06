@@ -80,9 +80,9 @@ struct q931_interface *q931_open_interface(
 
 	intf = malloc(sizeof(*intf));
 	if (!intf)
-		abort();
+		return NULL;
 
-	memset(intf, 0x00, sizeof(*intf));
+	memset(intf, 0, sizeof(*intf));
 
 	INIT_LIST_HEAD(&intf->calls);
 	INIT_LIST_HEAD(&intf->dlcs);
@@ -114,7 +114,8 @@ struct q931_interface *q931_open_interface(
 	}
 
 	int oldflags;
-      	if (fcntl(s, F_GETFL, &oldflags) < 0) {
+	oldflags = fcntl(s, F_GETFL, 0);
+      	if (oldflags < 0) {
       		report_intf(intf, LOG_ERR,
 			"fcntl(F_GETFL): %s\n",
 			strerror(errno));
@@ -130,7 +131,7 @@ struct q931_interface *q931_open_interface(
       		goto err_fcntl_setfl;
       	}
 
-	int optlen=sizeof(intf->role);
+	int optlen = sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
 		&intf->role, &optlen)<0)
 		goto err_getsockopt;

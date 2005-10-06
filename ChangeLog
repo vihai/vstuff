@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-06 12:36:37 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-257
+
+    Summary:
+      Fixed fcntl(F_SETFL) invocation in libq931
+    Revision:
+      isdn--devel--0.1--patch-257
+
+
+    modified files:
+     ChangeLog lapd/af_lapd.c libq931/intf.c
+
+
 2005-10-06 10:31:06 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-256
 
     Summary:

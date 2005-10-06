@@ -1762,7 +1762,7 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	return 0;
 
-//	sk_free(sk);
+	sk_free(sk);
 err_sk_alloc:
 err_invalid_protocol:
 err_no_type:
