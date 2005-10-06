@@ -237,7 +237,6 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	return 0;
 
 	hfc_card_unlock(card);
-err_card_lock:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
 
