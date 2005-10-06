@@ -76,6 +76,7 @@ if [[ ! -f "$ksrcdir/include/linux/autoconf.h" ]]; then
 fi
 
 AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
+AC_MSG_RESULT([$ksrcdir])
 
 AC_ARG_WITH(
 	[kernel-have-sk-prot],
