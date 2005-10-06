@@ -63,7 +63,8 @@ static int q931_prepare_header(
 
 	// Call reference
 	assert(call->call_reference > 0 &&
-	       call->call_reference < (1 << ((hdr->call_reference_len * 8) - 1)));
+	       call->call_reference < 
+			(1 << ((hdr->call_reference_len * 8) - 1)));
 
 	q931_make_callref(frame + size,
 		hdr->call_reference_len,
@@ -217,6 +218,9 @@ int q931_send_message(
 
 	int res = 0;
 	if (dlc->status == Q931_DLC_STATUS_AWAITING_CONNECTION) {
+		report_dlc(dlc, LOG_DEBUG,
+			"DLC is awaiting connection: message queued\n");
+
 		list_add_tail(
 			&q931_message_get(msg)->outgoing_queue_node,
 			&dlc->outgoing_queue);

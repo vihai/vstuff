@@ -118,6 +118,8 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-INDICATION\n");
 
+	dlc->status = Q931_DLC_STATUS_CONNECTED;
+
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 		struct q931_ces *ces, *cest;
@@ -174,6 +176,8 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 void q931_dl_release_indication(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-RELEASE-INDICATION\n");
+
+	dlc->status = Q931_DLC_STATUS_DISCONNECTED;
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
