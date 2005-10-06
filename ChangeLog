@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-06 10:31:06 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-256
+
+    Summary:
+      A bug in generator-thread was using 100% CPU + style cleanup
+    Revision:
+      isdn--devel--0.1--patch-256
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2005-10-06 10:14:44 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-255
 
     Summary:

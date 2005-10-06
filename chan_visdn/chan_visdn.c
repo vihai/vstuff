@@ -546,9 +546,11 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 	return 0;
 }
 
-static enum visdn_type_of_number visdn_string_to_type_of_number(const char *str)
+static enum visdn_type_of_number
+		visdn_string_to_type_of_number(const char *str)
 {
-	 enum visdn_type_of_number type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN;
+	 enum visdn_type_of_number type_of_number =
+				VISDN_TYPE_OF_NUMBER_UNKNOWN;
 
 	if (!strcasecmp(str, "unknown"))
 		type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN;
@@ -600,11 +602,14 @@ static int visdn_intf_from_var(
 	struct ast_variable *var)
 {
 	if (!strcasecmp(var->name, "network_role")) {
-		intf->network_role = visdn_string_to_network_role(var->value);
+		intf->network_role =
+			visdn_string_to_network_role(var->value);
 	} else if (!strcasecmp(var->name, "type_of_number")) {
-		intf->type_of_number = visdn_string_to_type_of_number(var->value);
+		intf->type_of_number =
+			visdn_string_to_type_of_number(var->value);
 	} else if (!strcasecmp(var->name, "local_type_of_number")) {
-		intf->local_type_of_number = visdn_string_to_type_of_number(var->value);
+		intf->local_type_of_number =
+			visdn_string_to_type_of_number(var->value);
 	} else if (!strcasecmp(var->name, "tones_option")) {
 		intf->tones_option = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "context")) {
@@ -855,8 +860,9 @@ static int visdn_cli_print_call_list(
 				}
 
 				ast_cli(fd, "  %c %5ld %s\n",
-					(call->direction == Q931_CALL_DIRECTION_INBOUND)
-						? 'I' : 'O',
+					(call->direction ==
+						Q931_CALL_DIRECTION_INBOUND)
+							? 'I' : 'O',
 					call->call_reference,
 					q931_call_state_to_text(call->state));
 
@@ -980,11 +986,13 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 			struct q931_call *call;
 
 			if (callpos[0] == 'i' || callpos[0] == 'I') {
-				call = q931_get_call_by_reference(filter_intf->q931_intf,
+				call = q931_get_call_by_reference(
+							filter_intf->q931_intf,
 					Q931_CALL_DIRECTION_INBOUND,
 					atoi(callpos + 1));
 			} else if (callpos[0] == 'o' || callpos[0] == 'O') {
-				call = q931_get_call_by_reference(filter_intf->q931_intf,
+				call = q931_get_call_by_reference(
+							filter_intf->q931_intf,
 					Q931_CALL_DIRECTION_OUTBOUND,
 					atoi(callpos + 1));
 			} else {
@@ -1344,7 +1352,8 @@ static int visdn_call(
 				q931_ie_calling_party_number_alloc();
 
 			cgpn->type_of_number =
-				visdn_type_of_number_to_cgpn(intf->local_type_of_number);
+				visdn_type_of_number_to_cgpn(
+						intf->local_type_of_number);
 			cgpn->numbering_plan_identificator =
 				Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
 			cgpn->presentation_indicator =
@@ -1447,7 +1456,7 @@ static int visdn_bridge(
 		visdn_chan1->q931_call->intf->name,
 		visdn_chan1->q931_call->channel->id+1);
 
-	memset(dest1, 0x00, sizeof(dest1));
+	memset(dest1, 0, sizeof(dest1));
 	if (readlink(path, dest1, sizeof(dest1) - 1) < 0) {
 		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
 		return -2;
@@ -1455,7 +1464,9 @@ static int visdn_bridge(
 
 	char *chanid1 = strrchr(dest1, '/');
 	if (!chanid1 || !strlen(chanid1 + 1)) {
-		ast_log(LOG_ERROR, "Invalid chanid found in symlink %s\n", dest1);
+		ast_log(LOG_ERROR,
+			"Invalid chanid found in symlink %s\n",
+			dest1);
 		return -2;
 	}
 
@@ -1466,7 +1477,7 @@ static int visdn_bridge(
 		visdn_chan2->q931_call->intf->name,
 		visdn_chan2->q931_call->channel->id+1);
 
-	memset(dest2, 0x00, sizeof(dest2));
+	memset(dest2, 0, sizeof(dest2));
 	if (readlink(path, dest2, sizeof(dest2) - 1) < 0) {
 		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
 		return -2;
@@ -1474,7 +1485,9 @@ static int visdn_bridge(
 
 	char *chanid2 = strrchr(dest2, '/');
 	if (!chanid2 || !strlen(chanid2 + 1)) {
-		ast_log(LOG_ERROR, "Invalid chanid found in symlink %s\n", dest2);
+		ast_log(LOG_ERROR,
+			"Invalid chanid found in symlink %s\n",
+			dest2);
 		return -2;
 	}
 
@@ -1489,7 +1502,9 @@ static int visdn_bridge(
 
 	if (ioctl(visdn.control_fd, VISDN_IOC_CONNECT,
 	    (caddr_t) &vc) < 0) {
-		ast_log(LOG_ERROR, "ioctl(VISDN_CONNECT): %s\n", strerror(errno));
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_CONNECT): %s\n",
+			strerror(errno));
 		return -2;
 	}
 
@@ -1606,7 +1621,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
 			pi->location = q931_ie_progress_indicator_location(
 						visdn_chan->q931_call);
-			pi->progress_description = Q931_IE_PI_PD_CALL_NOT_END_TO_END;
+			pi->progress_description =
+				Q931_IE_PI_PD_CALL_NOT_END_TO_END;
 			q931_ies_add_put(&ies, &pi->ie);
 		}
 
@@ -1656,7 +1672,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(visdn_chan->q931_call);
+		cause->location = q931_ie_cause_location_call(
+							visdn_chan->q931_call);
 		cause->value = Q931_IE_C_CV_USER_BUSY;
 		q931_ies_add_put(&ies, &cause->ie);
 
@@ -1680,7 +1697,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(visdn_chan->q931_call);
+		cause->location = q931_ie_cause_location_call(
+							visdn_chan->q931_call);
 		cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 		q931_ies_add_put(&ies, &cause->ie);
 
@@ -1747,7 +1765,9 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	return 1;
 }
 
-static int visdn_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
+static int visdn_fixup(
+	struct ast_channel *oldchan,
+	struct ast_channel *newchan)
 {
 	struct visdn_chan *chan = newchan->pvt->pvt;
 
@@ -1762,14 +1782,20 @@ static int visdn_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 	return 0;
 }
 
-static int visdn_setoption(struct ast_channel *ast_chan, int option, void *data, int datalen)
+static int visdn_setoption(
+	struct ast_channel *ast_chan,
+	int option,
+	void *data,
+	int datalen)
 {
 	ast_log(LOG_ERROR, "%s\n", __FUNCTION__);
 
 	return -1;
 }
 
-static int visdn_transfer(struct ast_channel *ast, char *dest)
+static int visdn_transfer(
+	struct ast_channel *ast,
+	char *dest)
 {
 	ast_log(LOG_ERROR, "%s\n", __FUNCTION__);
 
@@ -1786,7 +1812,8 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
-	cdpn->type_of_number = visdn_type_of_number_to_cdpn(intf->type_of_number);
+	cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+							intf->type_of_number);
 	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 	cdpn->number[0] = digit;
 	cdpn->number[1] = '\0';
@@ -1820,11 +1847,11 @@ static struct visdn_chan *visdn_alloc()
 {
 	struct visdn_chan *visdn_chan;
 
-	visdn_chan = malloc(sizeof(struct visdn_chan));
+	visdn_chan = malloc(sizeof(*visdn_chan));
 	if (!visdn_chan)
 		return NULL;
 
-	memset(visdn_chan, 0x00, sizeof(struct visdn_chan));
+	memset(visdn_chan, 0, sizeof(*visdn_chan));
 
 	visdn_chan->channel_fd = -1;
 
@@ -1879,7 +1906,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(visdn_chan->q931_call);
+			cause->location = q931_ie_cause_location_call(
+							visdn_chan->q931_call);
 			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 			q931_ies_add_put(&ies, &cause->ie);
 
@@ -3087,7 +3115,8 @@ static void visdn_q931_setup_indication(
 	ast_mutex_unlock(&usecnt_lock);
 	ast_update_use_count();
 
-	if (strlen(visdn_chan->calling_number) && !intf->force_inbound_caller_id)
+	if (strlen(visdn_chan->calling_number) &&
+	    !intf->force_inbound_caller_id)
 		ast_chan->callerid = strdup(visdn_chan->calling_number);
 	else
 		ast_chan->callerid = strdup(intf->default_inbound_caller_id);
@@ -3405,7 +3434,7 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 		channel->intf->name,
 		channel->id+1);
 
-	memset(dest, 0x00, sizeof(dest));
+	memset(dest, 0, sizeof(dest));
 	if (readlink(path, dest, sizeof(dest) - 1) < 0) {
 		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
 		goto err_readlink;
@@ -3413,7 +3442,9 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 	char *chanid = strrchr(dest, '/');
 	if (!chanid || !strlen(chanid + 1)) {
-		ast_log(LOG_ERROR, "Invalid chanid found in symlink %s\n", dest);
+		ast_log(LOG_ERROR,
+			"Invalid chanid found in symlink %s\n",
+			dest);
 		goto err_invalid_chanid;
 	}
 
@@ -3426,7 +3457,9 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 		visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
 		if (visdn_chan->channel_fd < 0) {
-			ast_log(LOG_ERROR, "Cannot open streamport: %s\n", strerror(errno));
+			ast_log(LOG_ERROR,
+				"Cannot open streamport: %s\n",
+				strerror(errno));
 			goto err_open;
 		}
 
@@ -3438,7 +3471,9 @@ static void visdn_q931_connect_channel(struct q931_channel *channel)
 
 		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
 		    (caddr_t) &vc) < 0) {
-			ast_log(LOG_ERROR, "ioctl(VISDN_CONNECT): %s\n", strerror(errno));
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_CONNECT): %s\n",
+				strerror(errno));
 			goto err_ioctl;
 		}
 	}
@@ -3473,7 +3508,8 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 	ast_mutex_lock(&ast_chan->lock);
 
 	if (visdn_chan->channel_fd >= 0) {
-		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_DISCONNECT, NULL) < 0) {
+		if (ioctl(visdn_chan->channel_fd,
+				VISDN_IOC_DISCONNECT, NULL) < 0) {
 			ast_log(LOG_ERROR,
 				"ioctl(VISDN_IOC_DISCONNECT): %s\n",
 				strerror(errno));
@@ -3512,16 +3548,10 @@ static void *visdn_generator_thread_main(void *aaa)
 	f.delivery.tv_sec = 0;
 	f.delivery.tv_usec = 0;
 
-	int ms = 500;
-
 	visdn_debug("Generator thread started\n");
 
 	while (gen_chans_num) {
 		struct ast_channel *chan;
-
-		// Uhm... we're going to sleep with mutex held... this will
-		// produce lots of contention and big sleeps for other
-		// threads who need to access generator structures
 
 		struct ast_channel *gen_chans_copy[256];
 		int gen_chans_copy_num = 0;
@@ -3532,6 +3562,7 @@ static void *visdn_generator_thread_main(void *aaa)
 			sizeof(*gen_chans_copy) * gen_chans_copy_num);
 		ast_mutex_unlock(&visdn_generator_lock);
 
+		int ms = 500;
 		chan = ast_waitfor_n(gen_chans_copy, gen_chans_copy_num, &ms);
 		if (chan) {
 			void *tmp;
@@ -3547,7 +3578,8 @@ static void *visdn_generator_thread_main(void *aaa)
 				chan->generatordata = tmp;
 				if (res) {
 				        ast_log(LOG_DEBUG,
-						"Auto-deactivating generator\n");
+						"Auto-deactivating"
+						" generator\n");
 				        ast_deactivate_generator(chan);
 				}
 			}
@@ -3586,7 +3618,8 @@ static int visdn_generator_start(struct ast_channel *chan)
 	if (visdn_generator_thread == AST_PTHREADT_NULL) {
 		if (ast_pthread_create(&visdn_generator_thread, NULL,
 				visdn_generator_thread_main, NULL)) {
-			ast_log(LOG_WARNING, "Unable to create autoservice thread :(\n");
+			ast_log(LOG_WARNING,
+				"Unable to create autoservice thread :(\n");
 		} else
 			pthread_kill(visdn_generator_thread, SIGURG);
 	}
@@ -3639,9 +3672,6 @@ err_chan_not_found:
 	return 0;
 }
 
-
-
-
 static void visdn_q931_start_tone(struct q931_channel *channel,
 	enum q931_tone_type tone)
 {
@@ -3673,8 +3703,6 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 	default:;
 	}
 }
-
-
 
 static void visdn_q931_stop_tone(struct q931_channel *channel)
 {
@@ -3722,13 +3750,24 @@ static void visdn_logger(int level, const char *format, ...)
 			ast_verbose(VERBOSE_PREFIX_3 "%s", msg);
 	break;
 
-	case Q931_LOG_INFO: ast_verbose(VERBOSE_PREFIX_3  "%s", msg); break;
-	case Q931_LOG_NOTICE: ast_log(__LOG_NOTICE, "libq931", 0, "", "%s", msg); break;
-	case Q931_LOG_WARNING: ast_log(__LOG_WARNING, "libq931", 0, "", "%s", msg); break;
+	case Q931_LOG_INFO:
+		ast_verbose(VERBOSE_PREFIX_3  "%s", msg);
+	break;
+
+	case Q931_LOG_NOTICE:
+		ast_log(__LOG_NOTICE, "libq931", 0, "", "%s", msg);
+	break;
+
+	case Q931_LOG_WARNING:
+		ast_log(__LOG_WARNING, "libq931", 0, "", "%s", msg);
+	break;
+
 	case Q931_LOG_ERR:
 	case Q931_LOG_CRIT:
 	case Q931_LOG_ALERT:
-	case Q931_LOG_EMERG: ast_log(__LOG_ERROR, "libq931", 0, "", "%s", msg); break;
+	case Q931_LOG_EMERG:
+		ast_log(__LOG_ERROR, "libq931", 0, "", "%s", msg);
+	break;
 	}
 }
 
@@ -3867,8 +3906,12 @@ int load_module()
 
 	for (ifaddr = ifaddrs ; ifaddr; ifaddr = ifaddr->ifa_next) {
 		struct ifreq ifreq;
-		memset(&ifreq, 0x00, sizeof(ifreq));
-		strncpy(ifreq.ifr_name, ifaddr->ifa_name, sizeof(ifreq.ifr_name));
+
+		memset(&ifreq, 0, sizeof(ifreq));
+
+		strncpy(ifreq.ifr_name,
+			ifaddr->ifa_name,
+			sizeof(ifreq.ifr_name));
 
 		if (ioctl(fd, SIOCGIFHWADDR, &ifreq) < 0) {
 			ast_log(LOG_ERROR, "ioctl (%s): %s\n",
