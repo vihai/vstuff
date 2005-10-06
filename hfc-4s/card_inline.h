@@ -38,11 +38,6 @@ static inline void hfc_card_unlock(struct hfc_card *card)
 	spin_unlock(&card->lock);
 }
 
-static inline int hfc_card_locked(struct hfc_card *card)
-{
-	return card->lock.lock;
-}
-
 static inline u8 hfc_inb(struct hfc_card *card, int offset)
 {
 	return ioread8(card->io_mem + offset);

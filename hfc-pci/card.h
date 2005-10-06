@@ -45,7 +45,7 @@
 		(card)->pcidev->dev.bus_id,		\
 		## arg)
 
-typedef struct hfc_card {
+struct hfc_card {
 	spinlock_t lock;
 
 	struct pci_dev *pcidev;
@@ -81,7 +81,7 @@ typedef struct hfc_card {
 	struct hfc_fifo fifos[3][2];
 
 	int debug_event;
-} hfc_card;
+};
 
 void hfc_softreset(struct hfc_card *card);
 void hfc_initialize_hw(struct hfc_card *card);

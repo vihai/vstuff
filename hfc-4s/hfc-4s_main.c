@@ -179,8 +179,6 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 
 void hfc_softreset(struct hfc_card *card)
 {
-	WARN_ON(!hfc_card_locked(card));
-
 	hfc_msg_card(card, KERN_INFO, "resetting\n");
 
 	mb();
@@ -329,8 +327,6 @@ void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits)
 
 void hfc_update_pcm_md1(struct hfc_card *card)
 {
-	WARN_ON(!hfc_card_locked(card));
-
 	u8 pcm_md1 = 0;
 	if (card->pcm_port.bitrate == 0) {
 		pcm_md1 |= hfc_R_PCM_MD1_V_PCM_DR_2MBIT;
@@ -367,8 +363,6 @@ void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
 
 void hfc_initialize_hw(struct hfc_card *card)
 {
-	WARN_ON(!hfc_card_locked(card));
-
 	card->output_level = 0x19;
 	card->clock_source = -1;
 	card->bert_mode = 0;

@@ -20,8 +20,6 @@
 
 static inline void hfc_pcm_slot_select(struct hfc_card *card, u8 id)
 {
-	WARN_ON(!hfc_card_locked(card));
-
 /*	card->st_port_selected = NULL;
 	card->fifo_selected = NULL;
 	card->pcm_slot_selected = slot;
@@ -35,8 +33,6 @@ static inline void hfc_pcm_slot_select(struct hfc_card *card, u8 id)
 
 static inline void hfc_pcm_multireg_select(struct hfc_card *card, u8 id)
 {
-	WARN_ON(!hfc_card_locked(card));
-
 /*	card->st_port_selected = NULL;
 	card->fifo_selected = NULL;
 	card->pcm_slot_selected = NULL;

@@ -18,8 +18,6 @@
 
 void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 	u8 st_ctrl_0 = 0;
 
 	if (port->nt_mode)
@@ -41,8 +39,6 @@ void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
 
 void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 	u8 st_ctrl_2 = 0;
 
 	if (port->chans[B1].status != HFC_CHAN_STATUS_FREE)
@@ -56,8 +52,6 @@ void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
 
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 	hfc_outb(port->card, hfc_A_ST_CLK_DLY,
 		hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
 		hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));

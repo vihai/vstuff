@@ -283,8 +283,6 @@ void hfc_fifo_configure(
 {
 	struct hfc_card *card = fifo->card;
 
-	WARN_ON(!hfc_card_locked(card));
-
 	u8 subch_bits;
 	switch (fifo->bitrate) {
 		case  8000: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_1; break;

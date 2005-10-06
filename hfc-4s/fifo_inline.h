@@ -129,8 +129,6 @@ static inline void hfc_fifo_refresh_fz_cache(struct hfc_fifo *fifo)
 // in interrupt handler or inside a spin_lock_irq* protected section
 static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 {
-	WARN_ON(!hfc_card_locked(fifo->card));
-
 	struct hfc_card *card = fifo->card;
 
 	hfc_outb(card, hfc_R_FIFO,
@@ -148,8 +146,6 @@ static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 
 static inline void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
-	WARN_ON(!hfc_card_locked(fifo->card));
-
 	struct hfc_card *card = fifo->card;
 
 //	hfc_outb(card, hfc_A_INC_RES_FIFO,

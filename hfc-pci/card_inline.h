@@ -13,7 +13,8 @@
 #ifndef _HFC_CARD_INLINE_H
 #define _HFC_CARD_INLINE_H
 
-#include <linux/pci.h>
+#include <linux/spinlock.h>
+#include <asm/io.h>
 
 #include "card.h"
 
@@ -30,11 +31,6 @@ static inline int hfc_card_trylock(struct hfc_card *card)
 static inline void hfc_card_unlock(struct hfc_card *card)
 {
 	spin_unlock(&card->lock);
-}
-
-static inline int hfc_card_locked(struct hfc_card *card)
-{
-	return card->lock.lock;
 }
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)

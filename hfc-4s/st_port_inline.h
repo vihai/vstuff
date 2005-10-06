@@ -19,8 +19,6 @@
 
 static inline void hfc_st_port_select(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 /*	card->st_port_selected = port;
 	card->fifo_selected = NULL;
 	card->pcm_slot_selected = NULL;

@@ -18,8 +18,6 @@
 
 void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 	u8 sctrl = 0;
 
 	// Select the non-capacitive line mode for the S/T interface */
@@ -44,8 +42,6 @@ void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 
 void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 	u8 sctrl_r = 0;
 
 	if (port->chans[B1].status != HFC_CHAN_STATUS_FREE)
@@ -59,8 +55,6 @@ void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 {
-	WARN_ON(!hfc_card_locked(port->card));
-
 	hfc_outb(port->card, hfc_CLKDEL,
 		hfc_CLKDEL_ST_CLK_DLY(port->clock_delay) |
 		hfc_CLKDEL_ST_SMPL(port->sampling_comp));

@@ -11,6 +11,15 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9)
 #define HAVE_KREF
+#else
+
+#define ioread8 readb
+#define ioread16 readw
+#define ioread32 readl
+
+#define iowrite8 writeb
+#define iowrite16 writew
+#define iowrite32 writel
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)

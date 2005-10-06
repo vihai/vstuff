@@ -2,6 +2,24 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-06 16:12:54 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-260
+
+    Summary:
+      
+    Revision:
+      isdn--devel--0.1--patch-260
+
+    
+    
+
+    modified files:
+     ChangeLog TODO hfc-4s/card_inline.h hfc-4s/fifo.c
+     hfc-4s/fifo_inline.h hfc-4s/hfc-4s_main.c
+     hfc-4s/pcm_port_inline.h hfc-4s/st_port.c
+     hfc-4s/st_port_inline.h hfc-pci/card.h hfc-pci/card_inline.h
+     hfc-pci/st_port.c kernel_config.h.in
+
+
 2005-10-06 15:30:08 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-259
 
     Summary:
