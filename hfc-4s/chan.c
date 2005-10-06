@@ -163,8 +163,6 @@ err_visdn_chan_lock:
 	hfc_card_unlock(card);
 err_card_lock:
 
-	hfc_debug_chan(chan, 1, "Open failed: %d\n", err);
-
 	return err;
 }
 
@@ -241,7 +239,7 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
 
-	hfc_msg_chan(chan, KERN_INFO, "channel closed.\n");
+	hfc_debug_chan(chan, 1, KERN_INFO, "channel closed.\n");
 
 	return 0;
 

@@ -115,7 +115,8 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 				hfc_CONNECT_B1_GCI_from_HFC;
 
 			chan->port->card->regs.fifo_en |= hfc_FIFO_EN_B1;
-			chan->port->card->regs.m1 |= hfc_INT_M1_B1REC | hfc_INT_M1_B1TRANS;
+			chan->port->card->regs.m1 |=
+				hfc_INT_M1_B1REC | hfc_INT_M1_B1TRANS;
 		} else {
 			chan->rx.fifo = &card->fifos[B2][RX];
 			chan->rx.fifo->connected_chan = &chan->rx;
@@ -141,7 +142,8 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 				hfc_CONNECT_B2_ST_from_HFC |
 				hfc_CONNECT_B2_GCI_from_HFC;
 
-			chan->port->card->regs.m1 |= hfc_INT_M1_B2REC | hfc_INT_M1_B2TRANS;
+			chan->port->card->regs.m1 |=
+				hfc_INT_M1_B2REC | hfc_INT_M1_B2TRANS;
 			chan->port->card->regs.fifo_en |= hfc_FIFO_EN_B2;
 		}
 	} else if (chan->id == E) {
@@ -172,7 +174,8 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			goto err_busy;
 
 		} else {
-			hfc_debug_chan(chan, 1, "No B channel available for E AUX\n");
+			hfc_debug_chan(chan, 1,
+				"No B channel available for E AUX\n");
 
 			err = -EBUSY;
 			goto err_busy;
@@ -230,8 +233,6 @@ err_channel_busy:
 err_visdn_chan_lock:
 	hfc_card_unlock(card);
 err_card_lock:
-
-	hfc_debug_chan(chan, 1, "Open failed: %d\n", err);
 
 	return err;
 }
@@ -295,7 +296,7 @@ static int hfc_chan_close(struct visdn_chan *visdn_chan)
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
 
-	hfc_msg_chan(chan, KERN_INFO, "channel closed.\n");
+	hfc_debug_chan(chan, 1, KERN_INFO, "channel closed.\n");
 
 	return 0;
 
