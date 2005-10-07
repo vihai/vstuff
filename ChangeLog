@@ -2,6 +2,34 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-07 15:25:52 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-265
+
+    Summary:
+      Some code for echo cancellation put in
+    Revision:
+      isdn--devel--0.1--patch-265
+
+
+    new files:
+     visdn-ec-kb/.arch-ids/.arch-inventory.id
+     visdn-ec-kb/.arch-ids/=id visdn-ec-kb/.arch-ids/Makefile.in.id
+     visdn-ec-kb/.arch-ids/arith.h.id
+     visdn-ec-kb/.arch-ids/ec-kb.h.id
+     visdn-ec-kb/.arch-ids/ec-kb_main.c.id
+     visdn-ec-kb/.arch-ids/kb1ec.c.id
+     visdn-ec-kb/.arch-ids/kb1ec_const.h.id
+     visdn-ec-kb/.arch-inventory visdn-ec-kb/Makefile.in
+     visdn-ec-kb/arith.h visdn-ec-kb/ec-kb.h
+     visdn-ec-kb/ec-kb_main.c visdn-ec-kb/kb1ec.c
+     visdn-ec-kb/kb1ec_const.h
+
+    modified files:
+     ChangeLog
+
+    new directories:
+     visdn-ec-kb visdn-ec-kb/.arch-ids
+
+
 2005-10-07 15:22:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-264
 
     Summary:
