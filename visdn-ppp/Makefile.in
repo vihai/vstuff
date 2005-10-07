@@ -75,7 +75,7 @@ sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 
-ksrcdir = @ksrcdir@
+kblddir = @kblddir@
 
 # Use $(src) when we are run inside Kbuild
 ifdef src
@@ -106,11 +106,11 @@ visdn-ppp-y	:= ppp_main.o
 # end Kbuild
 
 all:
-	$(MAKE) -C $(ksrcdir) modules M=${abssrcdir}
+	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
 install:
-	$(MAKE) -C $(ksrcdir) modules_install M=${abssrcdir}
+	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
 clean:
-	$(MAKE) -C $(ksrcdir) clean M=${abssrcdir}
+	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
 
 tags:
 ctags:

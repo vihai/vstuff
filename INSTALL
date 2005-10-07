@@ -11,13 +11,6 @@ Step 1: Configure the build system
 
 cd into the untarred package tree and run ./configure
 
-If you are (and you probably are) compiling kernel modules, make sure
-you have the current running kernel sourcetree in /usr/src/linux that
-you have compiled at least once.
-
-Usually "make modules_prepare" should be enough but I prefer to do
-"make cloneconfig" and "make" to have full symbol versions.
-
 NOTE: Fedora Core 3's 2.6.11 kernel has some of the 2.6.12's patches
 which introduce incompatible interface changes. Since they offer no way to
 know what changes have been introduced, if you're using that kernel you will

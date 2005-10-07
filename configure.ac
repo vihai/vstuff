@@ -46,10 +46,12 @@ AC_CHECK_FUNCS([gettimeofday memset select socket strcasecmp strchr strdup strer
 
 #-----------------------------------------------------------------------------
 
-AC_MSG_CHECKING([kernel sources])
+AC_MSG_CHECKING([kernel build directory])
 
-if [[ -d "/usr/src/linux" ]]; then
-	ksrcdir="/usr/src/linux"
+if [[ -d "/lib/modules/`uname -r`/build" ]]; then
+	kblddir="/lib/modules/`uname -r`/build"
+elif [[ -d "/usr/src/linux" ]]; then
+        kblddir="/usr/src/linux"
 fi
 
 AC_ARG_WITH(
@@ -57,26 +59,26 @@ AC_ARG_WITH(
 	AC_HELP_STRING(
 		[--with-kernel-sources],
 		[Specify kernel sourcetree to compile modules]),
-	[ksrcdir=$withval],)
-AC_SUBST(ksrcdir)
+	[kblddir=$withval],)
+AC_SUBST(kblddir)
 
-if [[ ! -d "$ksrcdir" ]]; then
+if [[ ! -d "$kblddir" ]]; then
 	AC_MSG_RESULT([failed!])
 	AC_MSG_ERROR([Cannot locate kernel sources])
 fi
 
-if [[ ! -f "$ksrcdir/.config" ]]; then
+if [[ ! -f "$kblddir/.config" ]]; then
 	AC_MSG_RESULT([failed!])
 	AC_MSG_ERROR([Kernel has not been configured (missing .config)])
 fi
 
-if [[ ! -f "$ksrcdir/include/linux/autoconf.h" ]]; then
+if [[ ! -f "$kblddir/include/linux/autoconf.h" ]]; then
 	AC_MSG_RESULT([failed!])
 	AC_MSG_ERROR([Kernel has not been compiled (missing include/linux/autoconf.h)])
 fi
 
-AM_CONDITIONAL(kernel_modules, test "$ksrcdir" != no)
-AC_MSG_RESULT([$ksrcdir])
+AM_CONDITIONAL(kernel_modules, test "$kblddir" != no)
+AC_MSG_RESULT([$kblddir])
 
 AC_ARG_WITH(
 	[kernel-have-sk-prot],
@@ -321,6 +323,7 @@ AC_CONFIG_FILES([Makefile
                  visdn-timer-system/Makefile
                  visdn-netdev/Makefile
                  visdn-ppp/Makefile
+                 visdn-ec-kb/Makefile
                  visdn.spec])
 
 AC_OUTPUT
