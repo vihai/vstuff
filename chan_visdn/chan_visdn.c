@@ -1438,10 +1438,6 @@ static int visdn_bridge(
 	int flags, struct ast_frame **fo,
 	struct ast_channel **rc)
 {
-	ast_log(LOG_WARNING, "visdn_bridge\n");
-
-	return -2;
-
 	/* if need DTMF, cant native bridge (at least not yet...) */
 	if (flags & (AST_BRIDGE_DTMF_CHANNEL_0 | AST_BRIDGE_DTMF_CHANNEL_1))
 		return -2;

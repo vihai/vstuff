@@ -413,6 +413,12 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_st_port_update_st_clk_dly(&card->st_ports[i]);
 	}
 
+	if (card->num_st_ports == 4) {
+		hfc_outb(card, hfc_R_GPIO_SEL,
+			hfc_R_GPIO_SEL_V_GPIO_SEL4 |
+			hfc_R_GPIO_SEL_V_GPIO_SEL5);
+	}
+
 	// Enable interrupts
 	hfc_outb(card, hfc_R_IRQ_CTRL,
 		hfc_R_IRQ_CTRL_V_FIFO_IRQ|
@@ -438,6 +444,70 @@ struct hfc_fifo *hfc_allocate_fifo(
 void hfc_deallocate_fifo(struct hfc_fifo *fifo)
 {
 	fifo->used = FALSE;
+}
+
+static void hfc_leds_work(void *data)
+{
+	struct hfc_card *card = data;
+
+	u8 gpio_out = 0;
+	u8 gpio_en = 0;
+
+	int flashing = FALSE;
+
+	int i;
+	for (i=0; i<card->num_st_ports; i++) {
+
+		struct hfc_st_port *port = &card->st_ports[i];
+
+		if (port->led_state != HFC_LED_OFF || 
+		    ((port->led_state == HFC_LED_RED_FLASHING ||
+		      port->led_state == HFC_LED_GREEN_FLASHING) &&
+		     (jiffies % (HZ / 10)) < 5)) {
+			switch(card->st_ports[i].id) {
+			case 0:
+				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN8;
+			break;
+			case 1:
+				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN9;
+			break;
+			case 2:
+				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN10;
+			break;
+			case 3:
+				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN11;
+			}
+		}
+
+		if (port->led_state == HFC_LED_GREEN || 
+		    (port->led_state == HFC_LED_RED_GREEN_FLASHING &&
+		     (jiffies % (HZ / 10)) < 5)) {
+			switch(card->st_ports[i].id) {
+			case 0:
+				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT8;
+			break;
+			case 1:
+				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT9;
+			break;
+			case 2:
+				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT10;
+			break;
+			case 3:
+				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT11;
+			}
+		}
+
+		if (port->led_state == HFC_LED_RED_FLASHING ||
+		    port->led_state == HFC_LED_GREEN_FLASHING ||
+		    port->led_state == HFC_LED_RED_GREEN_FLASHING)
+			flashing = TRUE;
+	}
+
+	hfc_outb(card, hfc_R_GPIO_EN1, gpio_en);
+	hfc_outb(card, hfc_R_GPIO_OUT1, gpio_out);
+
+	if (flashing)
+		schedule_delayed_work(&card->leds_work, HZ / 10);
 }
 
 /******************************************
@@ -573,6 +643,10 @@ static int __devinit hfc_probe(
 	card->double_clock = card_config->double_clock;
 	card->quartz_49 = card_config->quartz_49;
 	card->ram_size = card_config->ram_size;
+
+	INIT_WORK(&card->leds_work,
+		hfc_leds_work,
+		card);
 
 	// From here on hfc_msg_card may be used
 

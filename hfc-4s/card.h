@@ -78,6 +78,8 @@ struct hfc_card {
 	int ram_size;
 	int bert_mode;
 	int output_level;
+
+	struct work_struct leds_work;
 };
 
 struct hfc_fifo *hfc_allocate_fifo(

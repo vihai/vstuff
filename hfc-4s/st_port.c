@@ -57,6 +57,52 @@ void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 		hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
 }
 
+static void hfc_update_leds(struct hfc_card *card)
+{
+	if (card->num_st_ports != 4)
+		return;
+
+	int flashing = FALSE;
+
+	int i;
+	for (i=0; i<card->num_st_ports; i++) {
+
+		struct hfc_st_port *port = &card->st_ports[i]; 
+		if (port->visdn_port.enabled) {
+			if ((port->nt_mode &&
+			     port->l1_state == 3) ||
+			    (!port->nt_mode &&
+			     port->l1_state == 7)) {
+
+				port->led_state = HFC_LED_RED;
+
+			} else if ((port->nt_mode &&
+			            port->l1_state == 2) ||
+			           (!port->nt_mode &&
+			            port->l1_state == 3)) {
+
+				port->led_state = HFC_LED_GREEN;
+
+			} else {
+				port->led_state = HFC_LED_RED_GREEN_FLASHING;
+			}
+		} else {
+			port->led_state = HFC_LED_OFF;
+		}
+
+		if (port->led_state == HFC_LED_RED_FLASHING ||
+		    port->led_state == HFC_LED_GREEN_FLASHING ||
+		    port->led_state == HFC_LED_RED_GREEN_FLASHING) {
+
+			flashing = TRUE;
+		}
+
+	}
+
+	if (flashing)
+		schedule_delayed_work(&card->leds_work, HZ / 10);
+}
+
 static void hfc_st_port_state_change_work(void *data)
 {
 	struct hfc_st_port *port = data;
@@ -98,6 +144,8 @@ static void hfc_st_port_state_change_work(void *data)
 
 	port->l1_state = new_state;
 
+	hfc_update_leds(card);
+
 	hfc_card_unlock(card);
 }
 
@@ -136,6 +184,9 @@ static int hfc_st_port_enable(
 	hfc_card_lock(card);
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
+
+	hfc_update_leds(card);
+
 	hfc_card_unlock(card);
 
 	hfc_debug_port(port, 2, "enabled\n");
@@ -154,6 +205,9 @@ static int hfc_st_port_disable(
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
+
+	hfc_update_leds(card);
+
 	hfc_card_unlock(card);
 
 	hfc_debug_port(port, 2, "disabled\n");
@@ -184,6 +238,8 @@ void hfc_st_port_init(
 	port->nt_mode = FALSE;
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+
+	port->led_state = HFC_LED_OFF;
 
 	visdn_port_init(&port->visdn_port);
 	port->visdn_port.ops = &hfc_st_port_ops;
