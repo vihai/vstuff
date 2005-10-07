@@ -193,7 +193,8 @@ void hfc_st_port_init(
 
 	// Note: Bitrates must be in increasing order
 	int bitrates_d[] = { 16000 };
-	int bitrates_b[] = { 8000, 16000, 24000, 32000, 40000, 48000, 56000, 64000 };
+	int bitrates_b[] = { 8000, 16000, 24000, 32000,
+			     40000, 48000, 56000, 64000 };
 	int bitrates_s[] = { 4000 };
 
 	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF + id*4,
