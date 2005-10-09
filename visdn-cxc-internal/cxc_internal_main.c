@@ -19,21 +19,21 @@
 
 #include "cxc_internal.h"
 
-struct visdn_cxc_internal visdn_int_cxc;
+struct vicxc_internal visdn_int_cxc;
 EXPORT_SYMBOL(visdn_int_cxc);
 
-static void visdn_int_cxc_release(struct visdn_cxc *cxc)
+static void vicxc_release(struct visdn_cxc *cxc)
 {
-	printk(KERN_DEBUG "visdn_int_cxc_release()\n");
+	printk(KERN_DEBUG "vicxc_release()\n");
 }
 
-struct visdn_cxc_ops visdn_int_cxc_ops =
+struct visdn_cxc_ops vicxc_ops =
 {
 	.owner		= THIS_MODULE,
-	.release	= visdn_int_cxc_release,
+	.release	= vicxc_release,
 };
 
-static int __init visdn_int_cxc_init_module(void)
+static int __init vicxc_init_module(void)
 {
 	int err;
 
@@ -41,7 +41,7 @@ static int __init visdn_int_cxc_init_module(void)
 
 	visdn_cxc_init(&visdn_int_cxc.cxc);
 
-	visdn_int_cxc.cxc.ops = &visdn_int_cxc_ops;
+	visdn_int_cxc.cxc.ops = &vicxc_ops;
 	visdn_int_cxc.cxc.name = "internal-cxc";
 
 	err = visdn_cxc_register(&visdn_int_cxc.cxc);
@@ -55,14 +55,14 @@ err_cxc_register:
 
 	return err;
 }
-module_init(visdn_int_cxc_init_module);
+module_init(vicxc_init_module);
 
-static void __exit visdn_int_cxc_modexit(void)
+static void __exit vicxc_modexit(void)
 {
 	visdn_cxc_unregister(&visdn_int_cxc.cxc);
 }
-module_exit(visdn_int_cxc_modexit);
+module_exit(vicxc_modexit);
 
-MODULE_DESCRIPTION(visdn_MODULE_DESCR);
+MODULE_DESCRIPTION(vicxc_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
 MODULE_LICENSE("GPL");

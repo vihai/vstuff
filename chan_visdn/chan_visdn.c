@@ -57,11 +57,13 @@
 #include <visdn.h>
 
 #include "chan_visdn.h"
-//#include "echo.h"
 
 #include "../config.h"
 
-#define FRAME_SIZE 160
+#define VISDN_DESCRIPTION "VISDN Channel For Asterisk"
+#define VISDN_CHAN_TYPE "VISDN"
+#define VISDN_CONFIG_FILE "visdn.conf"
+
 
 #define assert(cond)							\
 	do {								\
@@ -77,10 +79,6 @@ AST_MUTEX_DEFINE_STATIC(usecnt_lock);
 // static char context[AST_MAX_EXTENSION] = "default";
 
 static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
-
-#define VISDN_DESCRIPTION "VISDN Channel For Asterisk"
-#define VISDN_CHAN_TYPE "VISDN"
-#define VISDN_CONFIG_FILE "visdn.conf"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -1469,7 +1467,7 @@ static int visdn_bridge(
 	chanid1++;
 
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/visdn_channel/../B%d",
+		"/sys/class/net/%s/visdn_channel/connected/../B%d",
 		visdn_chan2->q931_call->intf->name,
 		visdn_chan2->q931_call->channel->id+1);
 
@@ -1491,27 +1489,59 @@ static int visdn_bridge(
 
 	visdn_debug("Connecting chan %s to chan %s\n", chanid1, chanid2);
 
-	struct visdn_connect vc;
-	snprintf(vc.src_chanid, sizeof(vc.src_chanid), "%s", chanid1);
-	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s", chanid2);
-	vc.flags = 0;
-
-	if (ioctl(visdn.control_fd, VISDN_IOC_CONNECT,
-	    (caddr_t) &vc) < 0) {
+	int fd = open("/sys/visdn_tdm/internal-cxc/connect", O_WRONLY);
+	if (fd < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT): %s\n",
+			"Cannot open /sys/visdn_tdm/internal-cxc/connect: %s\n",
 			strerror(errno));
 		return -2;
 	}
 
-	struct ast_channel *cs[3];
+	if (ioctl(visdn_chan1->channel_fd,
+			VISDN_IOC_DISCONNECT, NULL) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+			strerror(errno));
+	}
+
+	close(visdn_chan1->channel_fd);
+	visdn_chan1->channel_fd = -1;
+
+	if (ioctl(visdn_chan2->channel_fd,
+			VISDN_IOC_DISCONNECT, NULL) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+			strerror(errno));
+	}
+
+	close(visdn_chan2->channel_fd);
+	visdn_chan2->channel_fd = -1;
+
+	char command[256];
+	snprintf(command, sizeof(command),
+		"%s\n%s\n",
+		chanid1,
+		chanid2);
+
+	if (write(fd, command, strlen(command)) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot write to /sys/visdn_tdm/internal-cxc/connect: %s\n",
+			strerror(errno));
+
+		close(fd);
+
+		return -2;
+	}
+
+	close(fd);
+
+	struct ast_channel *cs[2];
 	cs[0] = c0;
 	cs[1] = c1;
-	cs[2] = NULL;
 
+	struct ast_channel *who = NULL;
 	for (;;) {
-		struct ast_channel *who;
-		int to;
+		int to = -1;
 		who = ast_waitfor_n(cs, 2, &to);
 		if (!who) {
 			ast_log(LOG_DEBUG, "Ooh, empty read...\n");
@@ -1520,14 +1550,38 @@ static int visdn_bridge(
 
 		struct ast_frame *f;
 		f = ast_read(who);
-		if (!f) {
-			return 0;
+		if (!f)
+			break;
+
+		if (f->frametype == AST_FRAME_DTMF) {
+			if (((who == c0) && (flags & AST_BRIDGE_DTMF_CHANNEL_0)) ||
+			    ((who == c1) && (flags & AST_BRIDGE_DTMF_CHANNEL_1))) {
+
+				*fo = f;
+				*rc = who;
+
+				// Disconnect channels
+				return 0;
+			}
+
+			if (who == c0)
+				ast_write(c1, f);
+			else
+				ast_write(c0, f);
 		}
 
-		printf("Frame %s\n", who->name);
-
 		ast_frfree(f);
+
+		// Braindead anyone?
+		struct ast_channel *t;
+		t = cs[0];
+		cs[0] = cs[1];
+		cs[1] = t;
 	}
+
+	// Really braindead
+	*fo = NULL;
+	*rc = who;
 
 	return 0;
 }

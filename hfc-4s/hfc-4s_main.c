@@ -460,10 +460,10 @@ static void hfc_leds_work(void *data)
 
 		struct hfc_st_port *port = &card->st_ports[i];
 
-		if (port->led_state != HFC_LED_OFF || 
+		if (port->led_state != HFC_LED_OFF ||
 		    ((port->led_state == HFC_LED_RED_FLASHING ||
 		      port->led_state == HFC_LED_GREEN_FLASHING) &&
-		     (jiffies % (HZ / 10)) < 5)) {
+		     (jiffies % (HZ / 10)) < (HZ / 5))) {
 			switch(card->st_ports[i].id) {
 			case 0:
 				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN8;
@@ -479,9 +479,9 @@ static void hfc_leds_work(void *data)
 			}
 		}
 
-		if (port->led_state == HFC_LED_GREEN || 
+		if (port->led_state == HFC_LED_GREEN ||
 		    (port->led_state == HFC_LED_RED_GREEN_FLASHING &&
-		     (jiffies % (HZ / 10)) < 5)) {
+		     (jiffies % (HZ / 10)) < (HZ / 5))) {
 			switch(card->st_ports[i].id) {
 			case 0:
 				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT8;

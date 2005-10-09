@@ -1,5 +1,5 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * vISDN software crossconnector
  *
  * Copyright (C) 2004-2005 Daniele Orlandi
  *
@@ -15,15 +15,15 @@
 
 #include <cxc.h>
 
-#define visdn_MODULE_NAME "cxc-internal"
-#define visdn_MODULE_PREFIX visdn_MODULE_NAME ": "
-#define visdn_MODULE_DESCR "vISDN internal crossconnector"
+#define vicxc_MODULE_NAME "cxc-internal"
+#define vicxc_MODULE_PREFIX vicxc_MODULE_NAME ": "
+#define vicxc_MODULE_DESCR "vISDN internal crossconnector"
 
-struct visdn_cxc_internal
+struct vicxc_internal
 {
 	struct visdn_cxc cxc;
 };
 
-extern struct visdn_cxc_internal visdn_int_cxc;
+extern struct vicxc_internal visdn_int_cxc;
 
 #endif

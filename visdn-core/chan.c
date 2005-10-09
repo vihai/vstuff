@@ -1164,12 +1164,6 @@ int visdn_chan_modinit(void)
 err_subsystem_register:
 
 	return err;
-/*
-	err = bus_create_file(&visdn_bus_type, &bus_attr_connect);
-	if (err < 0)
-		goto err_bus_create_file;*/
-//	bus_remove_file(&visdn_bus_type, &bus_attr_connect);
-//err_bus_create_file:
 }
 
 void visdn_chan_modexit(void)
