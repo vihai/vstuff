@@ -160,7 +160,7 @@
 
 #define hfc_STATUS		0x70
 #define hfc_STATUS_PCI_PROC		(1 << 1)
-#define hfc_STATUS_NBUSY		(1 << 2)
+#define hfc_STATUS_BUSY			(1 << 2)
 #define hfc_STATUS_TIMER_ELAP		(1 << 4)
 #define hfc_STATUS_STATINT		(1 << 5)
 #define hfc_STATUS_FRAMEINT		(1 << 6)

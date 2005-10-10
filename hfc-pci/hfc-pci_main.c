@@ -96,6 +96,20 @@ struct pci_driver hfc_driver = {
  * HW routines
  ******************************************/
 
+static inline void hfc_wait_busy(struct hfc_card *card)
+{
+	int i;
+	for (i=0; i<100; i++) {
+		if (!(hfc_inb(card, hfc_STATUS) & hfc_STATUS_BUSY))
+			return;
+
+		udelay(5);
+	}
+
+	hfc_msg_card(card, KERN_ERR, hfc_DRIVER_PREFIX
+		"Stuck in busy state...\n");
+}
+
 void hfc_softreset(struct hfc_card *card)
 {
 	hfc_msg_card(card, KERN_INFO,
@@ -107,8 +121,7 @@ void hfc_softreset(struct hfc_card *card)
 	hfc_outb(card, hfc_CIRM, 0);	// softreset off
 	mb();
 
-	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout((hfc_RESET_DELAY * HZ) / 1000);	// wait 20 ms
+	hfc_wait_busy(card);
 }
 
 void hfc_initialize_hw(struct hfc_card *card)
