@@ -121,4 +121,13 @@ void visdn_cxc_remove_file(
 extern int visdn_cxc_modinit(void);
 extern void visdn_cxc_modexit(void);
 
+static inline struct hlist_head *visdn_cxc_get_hash(
+	struct visdn_cxc *cxc,
+	struct visdn_chan *chan)
+{
+	return &cxc->connections_hash[
+			(unsigned long)chan &
+			((1 << VISDN_CXC_HASHBITS) - 1)];
+}
+
 #endif

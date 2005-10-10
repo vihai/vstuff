@@ -342,9 +342,9 @@ static struct net_device_stats *hfc_chan_get_stats(struct visdn_chan *visdn_chan
 	return &chan->stats;
 }
 
-static ssize_t hfc_chan_samples_read(
+static ssize_t hfc_chan_read(
 	struct visdn_chan *visdn_chan,
-	char __user *buf, size_t count)
+	void *buf, size_t count)
 {
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
@@ -359,7 +359,7 @@ static ssize_t hfc_chan_samples_read(
 
 	copied_octets = available_octets < count ? available_octets : count;
 
-	hfc_fifo_mem_read_to_user(chan->rx.fifo, buf, copied_octets);
+	hfc_fifo_mem_read(chan->rx.fifo, buf, copied_octets);
 
 	chan->stats.rx_bytes += copied_octets;
 
@@ -368,9 +368,9 @@ static ssize_t hfc_chan_samples_read(
 	return copied_octets;
 }
 
-static ssize_t hfc_chan_samples_write(
+static ssize_t hfc_chan_write(
 	struct visdn_chan *visdn_chan,
-	const char __user *buf, size_t count)
+	const void *buf, size_t count)
 {
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
@@ -386,7 +386,7 @@ static ssize_t hfc_chan_samples_write(
 	if (copied_octets > available_octets)
 		copied_octets = available_octets;
 
-	hfc_fifo_mem_write_from_user(chan->rx.fifo, buf, copied_octets);
+	hfc_fifo_mem_write(chan->rx.fifo, buf, copied_octets);
 
 	chan->stats.rx_bytes += copied_octets;
 
@@ -612,14 +612,14 @@ static int hfc_chan_connect_to(
 	if (visdn_chan->port->device ==
 			visdn_chan2->port->device) {
 
-		hfc_debug_chan(chan, 2,
+/*		hfc_debug_chan(chan, 2,
 			"and %s: Both channels belong to the me,"
 			" attempting private bridge\n",
 			visdn_chan2->cxc_id);
 
 		struct hfc_chan_duplex *chan2 = to_chan_duplex(visdn_chan2);
 
-		return hfc_bridge(chan, chan2);
+		return hfc_bridge(chan, chan2);*/
 	}
 
 	return VISDN_CONNECT_OK;
@@ -657,8 +657,8 @@ struct visdn_chan_ops hfc_chan_ops = {
 
 	.update_parameters	= hfc_chan_update_parameters,
 
-	.samples_read		= hfc_chan_samples_read,
-	.samples_write		= hfc_chan_samples_write,
+	.read			= hfc_chan_read,
+	.write			= hfc_chan_write,
 };
 
 void hfc_chan_init(
@@ -689,7 +689,7 @@ void hfc_chan_init(
 	chan->visdn_chan.cxc = &visdn_int_cxc.cxc;
 	strncpy(chan->visdn_chan.name, name, sizeof(chan->visdn_chan.name));
 	chan->visdn_chan.driver_data = chan;
-	chan->visdn_chan.autoopen = TRUE;
+	chan->visdn_chan.externally_managed = FALSE;
 	chan->visdn_chan.max_mtu = 0;
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_LIST;
 

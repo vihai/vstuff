@@ -22,6 +22,8 @@
 struct vicxc_internal
 {
 	struct visdn_cxc cxc;
+
+	u8 buf[1024];
 };
 
 extern struct vicxc_internal visdn_int_cxc;

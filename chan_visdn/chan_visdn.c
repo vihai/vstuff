@@ -176,7 +176,6 @@ struct visdn_state
 
 	int usecnt;
 	int timer_fd;
-	int control_fd;
 	int netlink_socket;
 
 	int debug;
@@ -187,7 +186,6 @@ struct visdn_state
 } visdn = {
 	.usecnt = 0,
 	.timer_fd = -1,
-	.control_fd = -1,
 #ifdef DEBUG_DEFAULTS
 	.debug = TRUE,
 	.debug_q921 = FALSE,
@@ -2036,7 +2034,7 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return &f;
 	}
 
-	int nread = read(visdn_chan->channel_fd, buf, 512);
+	int nread = read(visdn_chan->channel_fd, buf, 80);
 	if (nread < 0) {
 		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
 		return &f;
@@ -2055,7 +2053,9 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 struct timeval tv;
 gettimeofday(&tv, NULL);
 unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d %d\n", t/1000000.0, visdn_chan->channel_fd, r);*/
+ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d\n",
+	t/1000000.0,
+	visdn_chan->channel_fd);
 #endif
 
 	f.frametype = AST_FRAME_VOICE;
@@ -3911,13 +3911,6 @@ int load_module()
 		return -1;
 	}
 
-	visdn.control_fd = open("/dev/visdn/control", O_RDONLY);
-	if (visdn.control_fd < 0) {
-		ast_log(LOG_ERROR, "Unable to open control: %s\n",
-			strerror(errno));
-		return -1;
-	}
-
 	visdn.netlink_socket = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	if(visdn.netlink_socket < 0) {
 		ast_log(LOG_ERROR, "Unable to open netlink socket: %s\n",
@@ -4029,7 +4022,6 @@ int unload_module(void)
 	ast_channel_unregister(VISDN_CHAN_TYPE);
 
 	close(visdn.timer_fd);
-	close(visdn.control_fd);
 
 	if (visdn.libq931)
 		q931_leave(visdn.libq931);

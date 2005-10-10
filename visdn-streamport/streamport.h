@@ -15,6 +15,8 @@
 
 #ifdef __KERNEL__
 
+#include <linux/kfifo.h>
+
 #include <visdn.h>
 
 #define vsp_MODULE_NAME "visdn-streamport"
@@ -33,6 +35,11 @@ struct vsp_chan
 	struct hlist_node index_hlist_node;
 
 	struct visdn_chan visdn_chan;
+
+	struct kfifo *rx_fifo;
+	spinlock_t rx_fifo_lock;
+	struct kfifo *tx_fifo;
+	spinlock_t tx_fifo_lock;
 };
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)

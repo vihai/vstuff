@@ -157,8 +157,8 @@ static int vnd_chan_disconnect(struct visdn_chan *visdn_chan)
 }
 
 static int vnd_chan_update_parameters(
-        struct visdn_chan *visdn_chan,
-        struct visdn_chan_pars *pars)
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_pars *pars)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
@@ -178,9 +178,9 @@ static int vnd_chan_update_parameters(
 		}
 	}
 
-        memcpy(&visdn_chan->pars, pars, sizeof(visdn_chan->pars));
+	memcpy(&visdn_chan->pars, pars, sizeof(visdn_chan->pars));
 
-        return 0;
+	return 0;
 }
 
 static void vnd_chan_stop_queue(struct visdn_chan *visdn_chan)
@@ -214,13 +214,10 @@ struct visdn_chan_ops vnd_chan_ops = {
 	.frame_input_error	= NULL,
 	.get_stats		= NULL,
 
-	.connect_to     	= vnd_chan_connect_to,
+	.connect_to	  	= vnd_chan_connect_to,
 	.disconnect		= vnd_chan_disconnect,
 
 	.update_parameters	= vnd_chan_update_parameters,
-
-	.samples_read   	= NULL,
-	.samples_write  	= NULL,
 
 	.stop_queue		= vnd_chan_stop_queue,
 	.start_queue		= vnd_chan_start_queue,
@@ -519,7 +516,7 @@ static int vnd_create(
 		netdevice->index);
 
 	netdevice->visdn_chan.driver_data = netdevice;
-	netdevice->visdn_chan.autoopen = FALSE;
+	netdevice->visdn_chan.externally_managed = TRUE;
 	netdevice->visdn_chan.max_mtu = 0;
 	netdevice->visdn_chan.bitrate_selection =
 					 VISDN_CHAN_BITRATE_SELECTION_MAX;
@@ -544,13 +541,13 @@ static int vnd_create(
 		netdevice->index);
 
 	netdevice->visdn_chan_e.driver_data = netdevice;
-	netdevice->visdn_chan_e.autoopen = FALSE;
+	netdevice->visdn_chan_e.externally_managed = TRUE;
 	netdevice->visdn_chan_e.max_mtu = 0;
 	netdevice->visdn_chan_e.bitrate_selection =
 					 VISDN_CHAN_BITRATE_SELECTION_MAX;
 	netdevice->visdn_chan_e.bitrates_cnt = 0;
 	netdevice->visdn_chan_e.framing_supported = VISDN_CHAN_FRAMING_HDLC |
-					     VISDN_CHAN_FRAMING_MTP;
+						VISDN_CHAN_FRAMING_MTP;
 	netdevice->visdn_chan_e.framing_preferred = 0;
 	netdevice->visdn_chan_e.bitorder_supported = VISDN_CHAN_BITORDER_LSB;
 	netdevice->visdn_chan_e.bitorder_preferred = 0;
@@ -691,9 +688,9 @@ static ssize_t vnd_cdev_write(
 	}
 
 	if (copy_from_user(vnd_request->input + *offp, buf, count)) {
-                err = -EFAULT;
-                goto err_copy_from_user;
-        }
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
 
 	vnd_request->input[*offp + count] = '\0';
 	*offp += count;
@@ -930,8 +927,8 @@ static void __exit vnd_module_exit(void)
 
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
-        	&vnd_control_class_dev,
-	        &class_device_attr_dev);
+	&vnd_control_class_dev,
+	&class_device_attr_dev);
 #endif
 
 	class_device_del(&vnd_control_class_dev);

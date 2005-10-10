@@ -30,6 +30,27 @@ void hfc_fifo_reset(struct hfc_fifo *fifo)
 }
 
 void hfc_fifo_mem_read(struct hfc_fifo *fifo,
+	void *data,
+	int size)
+{
+	int octets_to_boundary = fifo->z_max - *Z2_F2(fifo) + 1;
+	if (octets_to_boundary >= size) {
+		memcpy(data,
+			fifo->z_base + *Z2_F2(fifo),
+			size);
+	} else {
+		// Buffer wrap
+		memcpy(data,
+			fifo->z_base + *Z2_F2(fifo),
+			octets_to_boundary);
+
+		memcpy(data + octets_to_boundary,
+			fifo->fifo_base,
+			size - octets_to_boundary);
+	}
+}
+
+void hfc_fifo_mem_read_z(struct hfc_fifo *fifo,
 	int z_start,
 	void *data,
 	int size)
@@ -239,13 +260,13 @@ void hfc_fifo_rx_work(void *data)
 
 	// We cannot use hfc_fifo_get because of different semantic of
 	// "available bytes" and to avoid useless increment of Z2
-	hfc_fifo_mem_read(fifo, *Z2_F2(fifo),
+	hfc_fifo_mem_read(fifo,
 		skb_put(skb, frame_size - 3),
 		frame_size - 3);
 
 	struct { u8 crc[2], stat; } __attribute((packed)) stat;
 
-	hfc_fifo_mem_read(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 3),
+	hfc_fifo_mem_read_z(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 3),
 		&stat, sizeof(stat));
 
 #ifdef DEBUG_CODE

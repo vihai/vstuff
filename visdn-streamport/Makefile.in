@@ -87,8 +87,8 @@ endif
 EXTRA_CFLAGS=					\
 	-I $(abssrcdir)/../visdn-core/		\
 	-I $(abssrcdir)/../visdn-cxc-internal/	\
-	-I$(abssrcdir)/../			\
-	-std=gnu99
+	-I $(abssrcdir)/../			\
+	-I $(abssrcdir)/../linux_compat/
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
@@ -102,7 +102,7 @@ endif
 
 # Kbuild:
 obj-m	:= visdn-streamport.o
-visdn-streamport-y	:= streamport_main.o
+visdn-streamport-y	:= streamport_main.o kfifo.o
 # end Kbuild
 
 all:

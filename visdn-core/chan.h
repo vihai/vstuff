@@ -76,10 +76,10 @@ struct visdn_chan_ops
 				struct visdn_chan *chan2);
 	int (*unbridge)(struct visdn_chan *chan);
 
-	ssize_t (*samples_read)(struct visdn_chan *chan,
-		char __user *buf, size_t count);
-	ssize_t (*samples_write)(struct visdn_chan *chan,
-		const char __user *buf, size_t count);
+	ssize_t (*read)(struct visdn_chan *chan,
+		void *buf, size_t count);
+	ssize_t (*write)(struct visdn_chan *chan,
+		const void *buf, size_t count);
 
 	void (*stop_queue)(struct visdn_chan *chan);
 	void (*start_queue)(struct visdn_chan *chan);
@@ -138,7 +138,7 @@ struct visdn_chan
 
 	unsigned long state;
 
-	int autoopen;
+	int externally_managed;
 
 	struct visdn_chan_pars pars;
 
@@ -247,13 +247,13 @@ extern int visdn_pass_frame_xmit(
 	struct sk_buff *skb);
 extern struct net_device_stats *visdn_pass_get_stats(
 	struct visdn_chan *chan);
-extern ssize_t visdn_pass_samples_read(
+extern ssize_t visdn_pass_read(
 	struct visdn_chan *chan,
-	char __user *buf,
+	void *buf,
 	size_t count);
-extern ssize_t visdn_pass_samples_write(
+extern ssize_t visdn_pass_write(
 	struct visdn_chan *chan,
-	const char __user *buf,
+	const void *buf,
 	size_t count);
 
 int visdn_chan_lock2(

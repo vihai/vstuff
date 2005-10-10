@@ -263,14 +263,14 @@ int visdn_connect(
 	if (err < 0)
 		goto err_cxc_add_chan2;
 
-	if (chan1->autoopen && chan2->autoopen) {
+	if (!chan1->externally_managed && !chan2->externally_managed) {
 		err = visdn_open(chan1);
 		if (err < 0)
 			goto err_open;
 
 		if (err == VISDN_CHAN_OPEN_RENEGOTIATE)
 			visdn_negotiate_parameters(chan1, chan2);
-			// What if negotiation fails??
+			// What if negotiation fails?? TODO
 
 		visdn_open(chan2);
 		if (err < 0) {
@@ -280,7 +280,7 @@ int visdn_connect(
 
 		if (err == VISDN_CHAN_OPEN_RENEGOTIATE)
 			visdn_negotiate_parameters(chan1, chan2);
-			// What if negotiation fails??
+			// What if negotiation fails?? TODO
 	}
 
 	sysfs_create_link(
@@ -537,9 +537,9 @@ err_no_dst:
 }
 EXPORT_SYMBOL(visdn_pass_frame_input_error);
 
-ssize_t visdn_pass_samples_read(
+ssize_t visdn_pass_read(
 	struct visdn_chan *chan,
-	char __user *buf,
+	void *buf,
 	size_t count)
 {
 	int err;
@@ -555,8 +555,8 @@ ssize_t visdn_pass_samples_read(
 		goto err_module_get;
 	}
 
-	if (dst->ops->samples_read)
-		err = dst->ops->samples_read(dst, buf, count);
+	if (dst->ops->read)
+		err = dst->ops->read(dst, buf, count);
 	else
 		err = -ENOTSUPP;
 
@@ -567,11 +567,11 @@ err_no_dst:
 
 	return err;
 }
-EXPORT_SYMBOL(visdn_pass_samples_read);
+EXPORT_SYMBOL(visdn_pass_read);
 
-ssize_t visdn_pass_samples_write(
+ssize_t visdn_pass_write(
 	struct visdn_chan *chan,
-	const char __user *buf,
+	const void *buf,
 	size_t count)
 {
 	int err;
@@ -587,8 +587,8 @@ ssize_t visdn_pass_samples_write(
 		goto err_module_get;
 	}
 
-	if (dst->ops->samples_write)
-		err = dst->ops->samples_write(dst, buf, count);
+	if (dst->ops->write)
+		err = dst->ops->write(dst, buf, count);
 	else
 		err = -ENOTSUPP;
 
@@ -599,7 +599,7 @@ err_no_dst:
 
 	return err;
 }
-EXPORT_SYMBOL(visdn_pass_samples_write);
+EXPORT_SYMBOL(visdn_pass_write);
 
 
 
@@ -754,7 +754,7 @@ static VISDN_CHAN_ATTR(bitorder, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
-static ssize_t visdn_chan_show_autoopen(
+static ssize_t visdn_chan_show_externally_managed(
 	struct visdn_chan *chan,
 	struct visdn_chan_attribute *attr,
 	char *buf)
@@ -763,15 +763,15 @@ static ssize_t visdn_chan_show_autoopen(
 		return -ERESTARTSYS;
 
 	int len = snprintf(buf, PAGE_SIZE, "%d\n",
-			chan->autoopen ? 1 : 0);
+			chan->externally_managed ? 1 : 0);
 
 	visdn_chan_unlock(chan);
 
 	return len;
 }
 
-static VISDN_CHAN_ATTR(autoopen, S_IRUGO,
-		visdn_chan_show_autoopen,
+static VISDN_CHAN_ATTR(externally_managed, S_IRUGO,
+		visdn_chan_show_externally_managed,
 		NULL);
 
 //----------------------------------------------------------------------------
@@ -784,7 +784,7 @@ static struct attribute *visdn_chan_default_attrs[] =
 	&visdn_chan_attr_bitrate.attr,
 	&visdn_chan_attr_framing.attr,
 	&visdn_chan_attr_bitorder.attr,
-	&visdn_chan_attr_autoopen.attr,
+	&visdn_chan_attr_externally_managed.attr,
 	NULL,
 };
 

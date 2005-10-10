@@ -18,15 +18,6 @@
 #include "cxc.h"
 #include "visdn_mod.h"
 
-static inline struct hlist_head *visdn_cxc_get_hash(
-	struct visdn_cxc *cxc,
-	struct visdn_chan *chan)
-{
-	return &cxc->connections_hash[
-			(unsigned long)chan &
-			((1 << VISDN_CXC_HASHBITS) - 1)];
-}
-
 static void visdn_cxc_delete_rcu(struct rcu_head *head)
 {
 	struct visdn_cxc_connection *entry =

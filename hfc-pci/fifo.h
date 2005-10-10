@@ -91,7 +91,6 @@ void hfc_fifo_init(
 void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed);
 
 void hfc_fifo_mem_read(struct hfc_fifo *fifo,
-	int z_start,
 	void *data,
 	int size);
 int hfc_fifo_mem_read_user(

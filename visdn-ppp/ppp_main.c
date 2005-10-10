@@ -132,8 +132,8 @@ static int vppp_chan_disconnect(struct visdn_chan *visdn_chan)
 }
 
 static int vppp_chan_update_parameters(
-        struct visdn_chan *visdn_chan,
-        struct visdn_chan_pars *pars)
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_pars *pars)
 {
 	//struct vppp_chan *chan = to_vppp_chan(visdn_chan);
 
@@ -146,9 +146,9 @@ static int vppp_chan_update_parameters(
 		//dev_set_mtu(netdevice->netdev, pars->mtu);
 	}
 
-        memcpy(&visdn_chan->pars, pars, sizeof(visdn_chan->pars));
+	memcpy(&visdn_chan->pars, pars, sizeof(visdn_chan->pars));
 
-        return 0;
+	return 0;
 }
 
 static void vppp_chan_wake_queue(struct visdn_chan *visdn_chan)
@@ -174,9 +174,6 @@ static struct visdn_chan_ops vppp_chan_ops = {
 	.disconnect		= vppp_chan_disconnect,
 
 	.update_parameters	= vppp_chan_update_parameters,
-
-	.samples_read		= NULL,
-	.samples_write		= NULL,
 
 	.stop_queue		= NULL,
 	.start_queue		= NULL,
@@ -255,7 +252,7 @@ int vppp_cdev_open(
 	chan->visdn_chan.cxc = &visdn_int_cxc.cxc;
 	chan->visdn_chan.name[0] = '\0';
 	chan->visdn_chan.driver_data = chan;
-	chan->visdn_chan.autoopen = FALSE;
+	chan->visdn_chan.externally_managed = TRUE;
 	chan->visdn_chan.max_mtu = 200; // FIXME
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_MAX;
 	chan->visdn_chan.bitrates_cnt = 0;

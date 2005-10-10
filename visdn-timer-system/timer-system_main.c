@@ -24,17 +24,13 @@ static wait_queue_head_t timerwait;
 static struct timer_list timer;
 static int timer_fired = 0;
 static struct visdn_timer vts_timer;
-static unsigned long vts_next_expiration;
 
 static void vts_timer_func(unsigned long data)
 {
 	timer_fired = 1;
 	wake_up(&timerwait);
 
-	vts_next_expiration += HZ/100;
-	timer.expires = vts_next_expiration;
-
-	//printk(KERN_DEBUG "%lu %lu", jiffies, vts_next_expiration);
+	timer.expires += HZ/100;
 
 	add_timer(&timer);
 }
@@ -66,8 +62,6 @@ static int __init vts_init_module(void)
 {
 	int err;
 
-	vts_next_expiration = jiffies;
-
 	visdn_timer_init(&vts_timer, &vts_timer_ops);
 	err = visdn_timer_register(&vts_timer, "system");
 	if (err < 0)
@@ -76,7 +70,7 @@ static int __init vts_init_module(void)
 	init_waitqueue_head(&timerwait);
 	init_timer(&timer);
 
-	timer.expires = vts_next_expiration + HZ/100;
+	timer.expires = jiffies + HZ/100;
 	timer.function = vts_timer_func;
 	timer.data = 0;
 

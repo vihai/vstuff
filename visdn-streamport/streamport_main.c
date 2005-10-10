@@ -83,6 +83,25 @@ static int vsp_chan_close(struct visdn_chan *visdn_chan)
 	return 0;
 }
 
+static ssize_t vsp_chan_read(
+	struct visdn_chan *visdn_chan,
+	void *buf, size_t count)
+{
+	struct vsp_chan *chan = to_vsp_chan(visdn_chan);
+
+	return __kfifo_get(chan->tx_fifo, buf, count);
+}
+
+static ssize_t vsp_chan_write(
+	struct visdn_chan *visdn_chan,
+	const void *buf, size_t count)
+
+{
+	struct vsp_chan *chan = to_vsp_chan(visdn_chan);
+
+	return __kfifo_put(chan->rx_fifo, (void *)buf, count);
+}
+
 static int vsp_chan_connect_to(
 	struct visdn_chan *visdn_chan,
 	struct visdn_chan *visdn_chan2,
@@ -111,11 +130,11 @@ static struct visdn_chan_ops vsp_chan_ops = {
 	.frame_xmit	= NULL,
 	.get_stats	= NULL,
 
-        .connect_to     = vsp_chan_connect_to,
+        .connect_to	= vsp_chan_connect_to,
 	.disconnect	= vsp_chan_disconnect,
 
-	.samples_read   = NULL, // This should be implemented for user<=>user
-	.samples_write  = NULL,
+	.read		= vsp_chan_read,
+	.write		= vsp_chan_write,
 };
 
 static int vsp_cdev_open(
@@ -135,6 +154,20 @@ static int vsp_cdev_open(
 
 	memset(chan, 0, sizeof(*chan));
 
+	spin_lock_init(&chan->rx_fifo_lock);
+	chan->rx_fifo = kfifo_alloc(10240, GFP_KERNEL, &chan->rx_fifo_lock);
+	if (!chan->rx_fifo) {
+		err = -EFAULT;
+		goto err_fifo_rx_alloc;
+	}
+
+	spin_lock_init(&chan->tx_fifo_lock);
+	chan->tx_fifo = kfifo_alloc(10240, GFP_KERNEL, &chan->tx_fifo_lock);
+	if (!chan->tx_fifo) {
+		err = -EFAULT;
+		goto err_fifo_tx_alloc;
+	}
+
 	visdn_chan_init(&chan->visdn_chan);
 
 	chan->index = vsp_chan_new_index();
@@ -147,7 +180,7 @@ static int vsp_cdev_open(
 		"%d", chan->index);
 
 	chan->visdn_chan.driver_data = chan;
-	chan->visdn_chan.autoopen = FALSE;
+	chan->visdn_chan.externally_managed = TRUE;
 
 	chan->visdn_chan.max_mtu = 0;
 	chan->visdn_chan.bitrate_selection = VISDN_CHAN_BITRATE_SELECTION_MAX;
@@ -169,6 +202,10 @@ static int vsp_cdev_open(
 
 	visdn_chan_unregister(&chan->visdn_chan);
 err_chan_register:
+	kfifo_free(chan->tx_fifo);
+err_fifo_tx_alloc:
+	kfifo_free(chan->rx_fifo);
+err_fifo_rx_alloc:
 	kfree(chan);
 err_kmalloc:
 
@@ -198,11 +235,41 @@ static ssize_t vsp_cdev_read(
 	size_t count,
 	loff_t *offp)
 {
+	int err;
+
 	BUG_ON(!file->private_data);
 
 	struct vsp_chan *chan = file->private_data;
 
-	return visdn_pass_samples_read(&chan->visdn_chan, buf, count);
+	if (count > 10240)
+		count = 10240;
+
+	u8 *kbuf;
+	kbuf = kmalloc(10240, GFP_ATOMIC);
+	if (!buf) {
+		err = -EFAULT;
+		goto err_kmalloc;
+	}
+
+	// No locking needed as there is only one reader
+	int copied = __kfifo_get(chan->rx_fifo, kbuf, count);
+
+	if (copy_to_user(buf, kbuf, copied)) {
+		err = -EFAULT;
+		goto err_copy_to_user;
+	}
+
+	kfree(kbuf);
+
+	return copied;
+
+//	return visdn_pass_samples_read(&chan->visdn_chan, buf, count);
+
+err_copy_to_user:
+	kfree(kbuf);
+err_kmalloc:
+
+	return err;
 }
 
 static ssize_t vsp_cdev_write(
@@ -211,11 +278,41 @@ static ssize_t vsp_cdev_write(
 	size_t count,
 	loff_t *offp)
 {
+	int err;
+
 	BUG_ON(!file->private_data);
 
 	struct vsp_chan *chan = file->private_data;
 
-	return visdn_pass_samples_write(&chan->visdn_chan, buf, count);
+	if (count > 10240)
+		count = 10240;
+
+	u8 *kbuf;
+	kbuf = kmalloc(10240, GFP_ATOMIC);
+	if (!buf) {
+		err = -EFAULT;
+		goto err_kmalloc;
+	}
+
+	if (copy_from_user(kbuf, buf, count)) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
+
+	// No locking needed as there is only one reader
+	int nwrote = __kfifo_put(chan->tx_fifo, kbuf, count);
+
+	kfree(kbuf);
+
+	return nwrote;
+
+//	return visdn_pass_samples_write(&chan->visdn_chan, buf, count);
+
+err_copy_from_user:
+	kfree(kbuf);
+err_kmalloc:
+
+	return err;
 }
 
 static inline int vsp_cdev_do_ioctl_connect(

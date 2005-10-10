@@ -35,7 +35,7 @@ void hfc_upload_fsm_entry(
 	struct hfc_fifo *next_fifo,
 	int index)
 {
-	hfc_debug_card(card, 2,
+	hfc_debug_card(card, 3,
 		"Seq #%d fifo [%d,%s] <=> chan [%d,%s] (%d:%s) ",
 		index,
 		fifo->hw_index,
@@ -62,7 +62,7 @@ void hfc_upload_fsm_entry(
 			hfc_A_FIFO_SEQ_V_NEXT_FIFO_NUM(
 				next_fifo->hw_index));
 
-		hfc_debug_cont(2, "=> fifo [%d,%s]\n",
+		hfc_debug_cont(3, "=> fifo [%d,%s]\n",
 			next_fifo->hw_index,
 			next_fifo->direction == RX ? "RX" : "TX");
 
@@ -70,7 +70,7 @@ void hfc_upload_fsm_entry(
 		hfc_outb(card, hfc_A_FIFO_SEQ,
 			hfc_A_FIFO_SEQ_V_SEQ_END);
 
-		hfc_debug_cont(2, "END!\n");
+		hfc_debug_cont(3, "END!\n");
 	}
 }
 

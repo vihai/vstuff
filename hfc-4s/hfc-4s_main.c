@@ -242,7 +242,8 @@ void hfc_configure_fifos(
 		hfc_configure_fifo(&card->fifos[i][TX], fcfg, fzcfg);
 
 		hfc_debug_card(card, 3,
-			"FIFO %d zmin=%04x zmax=%04x fmin=%02x fmax=%02x\n",
+			"FIFO %d zmin=%04x zmax=%04x"
+			" fmin=%02x fmax=%02x\n",
 		i,
 		fzcfg->z_min,
 		fzcfg->z_max,
