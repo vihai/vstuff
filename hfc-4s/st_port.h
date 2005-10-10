@@ -60,16 +60,6 @@
 #define HFC_DEF_TE_CLK_DLY 0x0E
 #define HFC_DEF_TE_SAMPL_COMP 0x6
 
-enum hfc_led_state
-{
-	HFC_LED_OFF,
-	HFC_LED_RED,
-	HFC_LED_GREEN,
-	HFC_LED_RED_GREEN_FLASHING,
-	HFC_LED_RED_FLASHING,
-	HFC_LED_GREEN_FLASHING,
-};
-
 struct hfc_st_port
 {
 	struct hfc_card *card;
@@ -88,8 +78,6 @@ struct hfc_st_port
 	// changed independently.
 
 	struct work_struct state_change_work;
-
-	enum hfc_led_state led_state;
 
 	struct visdn_port visdn_port;
 };

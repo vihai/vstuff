@@ -446,68 +446,71 @@ void hfc_deallocate_fifo(struct hfc_fifo *fifo)
 	fifo->used = FALSE;
 }
 
-static void hfc_leds_work(void *data)
+void hfc_update_led(struct hfc_led *led)
 {
-	struct hfc_card *card = data;
+	struct hfc_card *card = led->card;
+	enum hfc_led_color color;
 
-	u8 gpio_out = 0;
-	u8 gpio_en = 0;
+	if (led->flashing_freq &&
+	    (jiffies % led->flashing_freq) > (led->flashing_freq / 2) &&
+	    led->flashes != 0)
+		color = led->alt_color;
+	else
+		color = led->color;
 
-	int flashing = FALSE;
+//		del_timer
 
-	int i;
-	for (i=0; i<card->num_st_ports; i++) {
+	u8 en_bit;
+	u8 out_bit;
 
-		struct hfc_st_port *port = &card->st_ports[i];
-
-		if (port->led_state != HFC_LED_OFF ||
-		    ((port->led_state == HFC_LED_RED_FLASHING ||
-		      port->led_state == HFC_LED_GREEN_FLASHING) &&
-		     (jiffies % (HZ / 10)) < (HZ / 5))) {
-			switch(card->st_ports[i].id) {
-			case 0:
-				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN8;
-			break;
-			case 1:
-				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN9;
-			break;
-			case 2:
-				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN10;
-			break;
-			case 3:
-				gpio_en |= hfc_R_GPIO_EN1_V_GPIO_EN11;
-			}
-		}
-
-		if (port->led_state == HFC_LED_GREEN ||
-		    (port->led_state == HFC_LED_RED_GREEN_FLASHING &&
-		     (jiffies % (HZ / 10)) < (HZ / 5))) {
-			switch(card->st_ports[i].id) {
-			case 0:
-				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT8;
-			break;
-			case 1:
-				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT9;
-			break;
-			case 2:
-				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT10;
-			break;
-			case 3:
-				gpio_out |= hfc_R_GPIO_OUT1_V_GPIO_OUT11;
-			}
-		}
-
-		if (port->led_state == HFC_LED_RED_FLASHING ||
-		    port->led_state == HFC_LED_GREEN_FLASHING ||
-		    port->led_state == HFC_LED_RED_GREEN_FLASHING)
-			flashing = TRUE;
+	switch(led->id) {
+	case 0:
+		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN8;
+		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT8;
+	break;
+	case 1:
+		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN9;
+		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT9;
+	break;
+	case 2:
+		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN10;
+		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT10;
+	break;
+	case 3:
+		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN11;
+		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT11;
+	break;
 	}
 
-	hfc_outb(card, hfc_R_GPIO_EN1, gpio_en);
-	hfc_outb(card, hfc_R_GPIO_OUT1, gpio_out);
+	if (color != HFC_LED_OFF) {
+		card->gpio_en |= en_bit;
 
-	if (flashing)
-		schedule_delayed_work(&card->leds_work, HZ / 10);
+		if (color == HFC_LED_GREEN)
+			card->gpio_out |= out_bit;
+		else
+			card->gpio_out &= ~out_bit;
+	} else {
+		card->gpio_en &= ~en_bit;
+	}
+
+	hfc_outb(card, hfc_R_GPIO_EN1, card->gpio_en);
+	hfc_outb(card, hfc_R_GPIO_OUT1, card->gpio_out);
+
+	if (led->flashing_freq && led->flashes != 0) {
+		led->timer.expires = jiffies + led->flashing_freq / 2;
+		add_timer(&led->timer);
+	}
+}
+
+static void hfc_led_timer(unsigned long data)
+{
+	struct hfc_led *led = (struct hfc_led *)data;
+	struct hfc_card *card = led->card;
+
+	hfc_card_lock(card);
+	led->flashes--;
+	hfc_update_led(led);
+	hfc_card_unlock(card);
 }
 
 /******************************************
@@ -630,7 +633,7 @@ static int __devinit hfc_probe(
 		goto err_alloc_hfccard;
 	}
 
-	memset(card, 0x00, sizeof(*card));
+	memset(card, 0, sizeof(*card));
 
 	spin_lock_init(&card->lock);
 
@@ -644,9 +647,19 @@ static int __devinit hfc_probe(
 	card->quartz_49 = card_config->quartz_49;
 	card->ram_size = card_config->ram_size;
 
-	INIT_WORK(&card->leds_work,
-		hfc_leds_work,
-		card);
+	int i;
+	for(i=0; i<4; i++) {
+		card->leds[i].card = card;
+		card->leds[i].id = i;
+		card->leds[i].color = HFC_LED_OFF;
+		card->leds[i].alt_color = HFC_LED_OFF;
+		card->leds[i].flashing_freq = 0;
+		card->leds[i].flashes = 0;
+
+		init_timer(&card->leds[i].timer);
+		card->leds[i].timer.function = hfc_led_timer;
+		card->leds[i].timer.data = &card->leds[i];
+	}
 
 	// From here on hfc_msg_card may be used
 
@@ -723,7 +736,6 @@ static int __devinit hfc_probe(
 
 	// Initialize all the card's components
 
-	int i;
 	for (i=0; i<sizeof(card->fifos)/sizeof(*card->fifos); i++) {
 		hfc_fifo_init(&card->fifos[i][RX], card, i, RX);
 		hfc_fifo_init(&card->fifos[i][TX], card, i, TX);
@@ -788,13 +800,18 @@ static int __devinit hfc_probe(
 
 	return 0;
 
-	visdn_port_unregister(&card->st_ports[3].visdn_port);
-	visdn_port_unregister(&card->st_ports[2].visdn_port);
-	visdn_port_unregister(&card->st_ports[1].visdn_port);
-	visdn_port_unregister(&card->st_ports[0].visdn_port);
-
 	hfc_card_sysfs_delete_files(card);
 err_card_sysfs_create_files:
+	visdn_port_unregister(&card->pcm_port.visdn_port);
+
+	for (i=card->num_st_ports - 1; i>=0; i--) {
+		visdn_chan_unregister(&card->st_ports[i].chans[SQ].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[E].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[B2].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[B1].visdn_chan);
+		visdn_chan_unregister(&card->st_ports[i].chans[D].visdn_chan);
+		visdn_port_unregister(&card->st_ports[i].visdn_port);
+	}
 err_unsupported_revision:
 err_unknown_chip:
 	free_irq(pci_dev->irq, card);
@@ -819,11 +836,15 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 		"shutting down card at %p.\n",
 		card->io_mem);
 
+	int i;
+	for(i=0; i<ARRAY_SIZE(card->leds); i++) {
+		del_timer_sync(&card->leds[i].timer);
+	}
+
 	hfc_card_sysfs_delete_files(card);
 
 	visdn_port_unregister(&card->pcm_port.visdn_port);
 
-	int i;
 	for (i=card->num_st_ports - 1; i>=0; i--) {
 		visdn_chan_unregister(&card->st_ports[i].chans[SQ].visdn_chan);
 		visdn_chan_unregister(&card->st_ports[i].chans[E].visdn_chan);

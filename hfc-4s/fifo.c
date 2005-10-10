@@ -258,6 +258,11 @@ void hfc_fifo_rx_work(void *data)
 
 	visdn_frame_rx(&fdchan->visdn_chan, skb);
 
+	card->leds[fdchan->port->id].alt_color = HFC_LED_OFF;
+	card->leds[fdchan->port->id].flashing_freq = HZ / 10;
+	card->leds[fdchan->port->id].flashes = 1;
+	hfc_update_led(&card->leds[fdchan->port->id]);
+
 	goto all_went_well;
 
 err_crc_error:

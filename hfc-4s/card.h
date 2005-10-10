@@ -46,6 +46,27 @@
 		(card)->pcidev->dev.bus_id,		\
 		## arg)
 
+enum hfc_led_color
+{
+	HFC_LED_OFF,
+	HFC_LED_RED,
+	HFC_LED_GREEN,
+};
+
+struct hfc_led
+{
+	struct hfc_card *card;
+
+	int id;
+
+	enum hfc_led_color color;
+	enum hfc_led_color alt_color;
+	int flashing_freq;
+	int flashes;
+
+	struct timer_list timer;
+};
+
 struct hfc_card {
 	spinlock_t lock;
 
@@ -71,6 +92,10 @@ struct hfc_card {
 	struct hfc_fifo fifos[32][2];
 	struct hfc_fifo *fifo_selected;
 
+	struct hfc_led leds[4];
+	u8 gpio_out;
+	u8 gpio_en;
+
 	unsigned long io_bus_mem;
 	void *io_mem;
 
@@ -78,8 +103,6 @@ struct hfc_card {
 	int ram_size;
 	int bert_mode;
 	int output_level;
-
-	struct work_struct leds_work;
 };
 
 struct hfc_fifo *hfc_allocate_fifo(
@@ -103,5 +126,7 @@ void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits);
 void hfc_update_r_ctrl(struct hfc_card *card);
 void hfc_update_r_brg_pcm_cfg(struct hfc_card *card);
 void hfc_update_r_ram_misc(struct hfc_card *card);
+
+void hfc_update_led(struct hfc_led *led);
 
 #endif

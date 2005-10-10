@@ -57,50 +57,42 @@ void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 		hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
 }
 
-static void hfc_update_leds(struct hfc_card *card)
+static void hfc_update_port_led(struct hfc_st_port *port)
 {
-	if (card->num_st_ports != 4)
-		return;
+	struct hfc_card *card = port->card;
+	struct hfc_led *led = &card->leds[port->id];
 
-	int flashing = FALSE;
+	if (port->visdn_port.enabled) {
+		if ((port->nt_mode &&
+		     port->l1_state == 3) ||
+		    (!port->nt_mode &&
+		     port->l1_state == 7)) {
 
-	int i;
-	for (i=0; i<card->num_st_ports; i++) {
+			led->color = HFC_LED_RED;
+			led->flashing_freq = 0;
+			led->flashes = 0;
 
-		struct hfc_st_port *port = &card->st_ports[i]; 
-		if (port->visdn_port.enabled) {
-			if ((port->nt_mode &&
-			     port->l1_state == 3) ||
-			    (!port->nt_mode &&
-			     port->l1_state == 7)) {
+		} else if ((port->nt_mode &&
+		            port->l1_state == 1) ||
+		           (!port->nt_mode &&
+		            port->l1_state == 3)) {
 
-				port->led_state = HFC_LED_RED;
-
-			} else if ((port->nt_mode &&
-			            port->l1_state == 2) ||
-			           (!port->nt_mode &&
-			            port->l1_state == 3)) {
-
-				port->led_state = HFC_LED_GREEN;
-
-			} else {
-				port->led_state = HFC_LED_RED_GREEN_FLASHING;
-			}
+			led->color = HFC_LED_GREEN;
+			led->flashing_freq = 0;
+			led->flashes = 0;
 		} else {
-			port->led_state = HFC_LED_OFF;
+			led->color = HFC_LED_GREEN;
+			led->alt_color = HFC_LED_RED;
+			led->flashing_freq = HZ / 10;
+			led->flashes = -1;
 		}
-
-		if (port->led_state == HFC_LED_RED_FLASHING ||
-		    port->led_state == HFC_LED_GREEN_FLASHING ||
-		    port->led_state == HFC_LED_RED_GREEN_FLASHING) {
-
-			flashing = TRUE;
-		}
-
+	} else {
+		led->color = HFC_LED_OFF;
+		led->flashing_freq = 0;
+		led->flashes = 0;
 	}
 
-	if (flashing)
-		schedule_delayed_work(&card->leds_work, HZ / 10);
+	hfc_update_led(led);
 }
 
 static void hfc_st_port_state_change_work(void *data)
@@ -144,7 +136,7 @@ static void hfc_st_port_state_change_work(void *data)
 
 	port->l1_state = new_state;
 
-	hfc_update_leds(card);
+	hfc_update_port_led(port);
 
 	hfc_card_unlock(card);
 }
@@ -185,7 +177,7 @@ static int hfc_st_port_enable(
 	hfc_st_port_select(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
 
-	hfc_update_leds(card);
+	hfc_update_port_led(port);
 
 	hfc_card_unlock(card);
 
@@ -206,7 +198,7 @@ static int hfc_st_port_disable(
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
 
-	hfc_update_leds(card);
+	hfc_update_port_led(port);
 
 	hfc_card_unlock(card);
 
@@ -239,8 +231,6 @@ void hfc_st_port_init(
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 
-	port->led_state = HFC_LED_OFF;
-
 	visdn_port_init(&port->visdn_port);
 	port->visdn_port.ops = &hfc_st_port_ops;
 	port->visdn_port.driver_data = port;
@@ -264,4 +254,3 @@ void hfc_st_port_init(
 	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
 		bitrates_s, ARRAY_SIZE(bitrates_s));
 }
-

@@ -320,6 +320,11 @@ static int hfc_chan_frame_xmit(
 
 	visdn_kfree_skb(skb);
 
+	card->leds[chan->port->id].alt_color = HFC_LED_OFF;
+	card->leds[chan->port->id].flashing_freq = HZ / 10;
+	card->leds[chan->port->id].flashes = 1;
+	hfc_update_led(&card->leds[chan->port->id]);
+
 	return NETDEV_TX_OK;
 
 err_no_free_tx:
