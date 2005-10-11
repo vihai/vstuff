@@ -11,12 +11,16 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/spinlock.h>
 #include <linux/list.h>
 
 #include "visdn.h"
 #include "chan.h"
 #include "cxc.h"
 #include "visdn_mod.h"
+
+struct list_head visdn_cxc_list = LIST_HEAD_INIT(visdn_cxc_list);
+static spinlock_t visdn_cxc_list_lock;
 
 static void visdn_cxc_delete_rcu(struct rcu_head *head)
 {
@@ -364,6 +368,7 @@ void visdn_cxc_init(struct visdn_cxc *cxc)
 		INIT_HLIST_HEAD(&cxc->connections_hash[i]);
 
 	INIT_LIST_HEAD(&cxc->connections_list);
+	INIT_LIST_HEAD(&cxc->cxc_list_node);
 }
 EXPORT_SYMBOL(visdn_cxc_init);
 
@@ -380,6 +385,10 @@ int visdn_cxc_register(struct visdn_cxc *cxc)
 	err = subsystem_register(&cxc->subsys);
 	if (err < 0)
 		goto err_subsystem_register;
+
+	spin_lock(&visdn_cxc_list_lock);
+	list_add_tail(&cxc->cxc_list_node, &visdn_cxc_list);
+	spin_unlock(&visdn_cxc_list_lock);
 
 	return 0;
 
@@ -428,6 +437,8 @@ decl_subsys(visdn_tdm, &ktype_visdn_cxc, NULL);
 int visdn_cxc_modinit()
 {
 	int err;
+
+	spin_lock_init(&visdn_cxc_list_lock);
 
 	err = subsystem_register(&visdn_tdm_subsys);
 	if (err < 0)

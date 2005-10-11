@@ -20,6 +20,7 @@
 #define VISDN_CXC_HASHBITS 8
 
 extern struct subsystem visdn_tdm_subsys;
+extern struct list_head visdn_cxc_list;
 
 struct visdn_cxc;
 struct visdn_cxc_ops
@@ -27,10 +28,13 @@ struct visdn_cxc_ops
 	struct module *owner;
 
 	void (*release)(struct visdn_cxc *cxc);
+	void (*timer_func)(struct visdn_cxc *cxc);
 };
 
 struct visdn_cxc
 {
+	struct list_head cxc_list_node;
+
 	struct subsystem subsys;
 
 	struct visdn_cxc_ops *ops;

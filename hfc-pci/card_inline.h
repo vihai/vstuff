@@ -20,17 +20,12 @@
 
 static inline void hfc_card_lock(struct hfc_card *card)
 {
-	spin_lock(&card->lock);
-}
-
-static inline int hfc_card_trylock(struct hfc_card *card)
-{
-	return spin_trylock(&card->lock);
+	spin_lock_bh(&card->lock);
 }
 
 static inline void hfc_card_unlock(struct hfc_card *card)
 {
-	spin_unlock(&card->lock);
+	spin_unlock_bh(&card->lock);
 }
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)

@@ -310,13 +310,7 @@ static int hfc_chan_frame_xmit(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
-	// Should we lock at all?
-	if (hfc_card_trylock(card)) {
-		// Mmmh... the card is locked and we may be in interrupt
-		// context. We must defer the transmission.
-
-		return NETDEV_TX_LOCKED;
-	}
+	hfc_card_lock(card);
 
 	hfc_st_port_check_l1_up(chan->port);
 

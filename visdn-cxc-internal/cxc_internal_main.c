@@ -22,11 +22,11 @@
 struct vicxc_internal visdn_int_cxc;
 EXPORT_SYMBOL(visdn_int_cxc);
 
-static struct timer_list vsp_timer;
+#define to_vicxc_internal(visdn_cxc)	container_of((visdn_cxc), struct vicxc_internal, cxc)
 
-static void vsp_timer_func(unsigned long data)
+static void vicxc_timer_func(struct visdn_cxc *visdn_cxc)
 {
-	struct vicxc_internal *cxc = (struct vicxc_internal *)data;
+	struct vicxc_internal *cxc = to_vicxc_internal(visdn_cxc);
 
 	rcu_read_lock();
 
@@ -55,9 +55,6 @@ static void vsp_timer_func(unsigned long data)
 	}
 
 	rcu_read_unlock();
-
-	vsp_timer.expires += 1;
-	add_timer(&vsp_timer);
 }
 
 static void vicxc_release(struct visdn_cxc *cxc)
@@ -69,6 +66,7 @@ struct visdn_cxc_ops vicxc_ops =
 {
 	.owner		= THIS_MODULE,
 	.release	= vicxc_release,
+	.timer_func	= vicxc_timer_func,
 };
 
 static int __init vicxc_init_module(void)
@@ -86,13 +84,6 @@ static int __init vicxc_init_module(void)
 	if (err < 0)
 		goto err_cxc_register;
 
-	init_timer(&vsp_timer);
-	vsp_timer.expires = jiffies;
-	vsp_timer.function = vsp_timer_func;
-	vsp_timer.data = (unsigned long)&visdn_int_cxc;
-
-	add_timer(&vsp_timer);
-
 	return 0;
 
 	visdn_cxc_unregister(&visdn_int_cxc.cxc);
@@ -104,8 +95,6 @@ module_init(vicxc_init_module);
 
 static void __exit vicxc_modexit(void)
 {
-	del_timer_sync(&vsp_timer);
-
 	visdn_cxc_unregister(&visdn_int_cxc.cxc);
 }
 module_exit(vicxc_modexit);

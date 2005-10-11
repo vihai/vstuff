@@ -344,7 +344,6 @@ static ssize_t vsp_cdev_read(
 
 	struct vsp_chan *chan = file->private_data;
 
-printk(KERN_DEBUG "A=%d\n", kfifo_len(
 	// No locking needed as there is only one reader
 	int copied = __kfifo_get_user(chan->rx_fifo, buf, count);
 	if (copied < 0) {
@@ -353,8 +352,6 @@ printk(KERN_DEBUG "A=%d\n", kfifo_len(
 	}
 
 	return copied;
-
-//	return visdn_pass_samples_read(&chan->visdn_chan, buf, count);
 
 err_kfifo_get_user:
 
@@ -404,8 +401,6 @@ static ssize_t vsp_cdev_write(
 	}
 
 	return nwrote;
-
-//	return visdn_pass_samples_write(&chan->visdn_chan, buf, count);
 
 err_kfifo_put_user:
 

@@ -2,6 +2,22 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-11 23:15:29 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-274
+
+    Summary:
+      First somewhat working softconnector
+    Revision:
+      isdn--devel--0.1--patch-274
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c hfc-pci/card_inline.h
+     hfc-pci/chan.c visdn-core/chan.c visdn-core/cxc.c
+     visdn-core/cxc.h visdn-core/timer.c
+     visdn-cxc-internal/cxc_internal_main.c
+     visdn-streamport/streamport_main.c
+
+
 2005-10-11 17:11:21 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-273
 
     Summary:

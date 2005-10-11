@@ -254,15 +254,6 @@ int visdn_connect(
 	if (err < 0)
 		goto err_negotiate_parameters;
 
-	// Connect the channels -------------------------------------
-	err = visdn_cxc_connect(cxc, chan1, chan2);
-	if (err < 0)
-		goto err_cxc_add_chan1;
-
-	err = visdn_cxc_connect(cxc, chan2, chan1);
-	if (err < 0)
-		goto err_cxc_add_chan2;
-
 	if (!chan1->externally_managed && !chan2->externally_managed) {
 		err = visdn_open(chan1);
 		if (err < 0)
@@ -293,12 +284,20 @@ int visdn_connect(
 		&chan1->kobj,
 		"connected");
 
+	// Connect the channels -------------------------------------
+	err = visdn_cxc_connect(cxc, chan1, chan2);
+	if (err < 0)
+		goto err_cxc_add_chan1;
+
+	err = visdn_cxc_connect(cxc, chan2, chan1);
+	if (err < 0)
+		goto err_cxc_add_chan2;
+
 	return 0;
 
-err_open:
-	// cxc_del
 err_cxc_add_chan2:
 err_cxc_add_chan1:
+err_open:
 err_negotiate_parameters:
 err_already_connected:
 

@@ -2034,7 +2034,7 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return &f;
 	}
 
-	int nread = read(visdn_chan->channel_fd, buf, 80);
+	int nread = read(visdn_chan->channel_fd, buf, 512);
 	if (nread < 0) {
 		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
 		return &f;

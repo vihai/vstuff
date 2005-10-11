@@ -21,6 +21,7 @@
 #include "visdn.h"
 #include "visdn_mod.h"
 #include "timer.h"
+#include "cxc.h"
 
 static struct cdev visdn_timer_cdev;
 static struct class visdn_timer_class;
@@ -71,6 +72,14 @@ int visdn_timer_cdev_ioctl(
 
 void visdn_timer_tick(struct visdn_timer *timer)
 {
+	rcu_read_lock();
+	struct visdn_cxc *cxc;
+	list_for_each_entry_rcu(cxc, &visdn_cxc_list, cxc_list_node) {
+		if (cxc->ops->timer_func)
+			cxc->ops->timer_func(cxc);
+	}
+	rcu_read_unlock();
+
 	timer->poll_count++;
 	if (timer->poll_count >= timer->poll_divider) {
 		timer->poll_count = 0;
@@ -78,7 +87,6 @@ void visdn_timer_tick(struct visdn_timer *timer)
 
 		wake_up(&timer->wait_queue);
 	}
-		
 }
 EXPORT_SYMBOL(visdn_timer_tick);
 
@@ -190,7 +198,7 @@ int visdn_timer_register(
 	BUG_ON(!timer->ops);
 	BUG_ON(!timer->ops->owner);
 
-	visdn_debug(3, "visdn_timer_register(%s)\n", name);
+	visdn_debug(3, "visdn_timer_register(%s)\n", timer->name);
 
 	struct class_device *class_dev = &timer->class_dev;
 
