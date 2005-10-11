@@ -24,6 +24,9 @@ struct vicxc_internal
 	struct visdn_cxc cxc;
 
 	u8 buf[1024];
+
+	unsigned long long overhead_cycles;
+	unsigned long long overhead;
 };
 
 extern struct vicxc_internal visdn_int_cxc;

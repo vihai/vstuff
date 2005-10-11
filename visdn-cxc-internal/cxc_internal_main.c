@@ -26,47 +26,50 @@ static struct timer_list vsp_timer;
 
 static void vsp_timer_func(unsigned long data)
 {
+	unsigned long long start = get_cycles();
+
 	struct vicxc_internal *cxc = (struct vicxc_internal *)data;
 
-	int i;
-	for (i=0; i<ARRAY_SIZE(cxc->cxc.connections_hash); i++) {
-		struct hlist_node *tpos;
+	rcu_read_lock();
 
-		rcu_read_lock();
+	struct visdn_cxc_connection *cxc_entry;
+	list_for_each_entry_rcu(cxc_entry,
+			&cxc->cxc.connections_list,
+			list_node) {
 
-		struct visdn_cxc_connection *cxc_entry;
-		hlist_for_each_entry_rcu(cxc_entry, tpos,
-				&cxc->cxc.connections_hash[i],
-				node) {
+		if (cxc_entry->src->pars.framing ==
+				VISDN_CHAN_FRAMING_TRANS) {
+			int nread;
 
-			if (cxc_entry->src->pars.framing ==
-					VISDN_CHAN_FRAMING_TRANS) {
-				int nread;
+			if (cxc_entry->src->ops->read) {
+				nread = cxc_entry->src->ops->read(
+					cxc_entry->src,
+					cxc->buf, sizeof(cxc->buf));
 
-				if (cxc_entry->src->ops->read) {
-					nread = cxc_entry->src->ops->read(
-						cxc_entry->src,
-						cxc->buf, sizeof(cxc->buf));
-
-printk(KERN_INFO "%s => %s: %d\n",
-	cxc_entry->src->cxc_id,
-	cxc_entry->dst->cxc_id,
-	nread);
-
-					if (cxc_entry->dst->ops->write) {
-						cxc_entry->dst->ops->write(
-							cxc_entry->dst,
-							cxc->buf, nread);
-					}
+				if (cxc_entry->dst->ops->write) {
+					cxc_entry->dst->ops->write(
+						cxc_entry->dst,
+						cxc->buf, nread);
 				}
 			}
 		}
-
-		rcu_read_unlock();
 	}
 
-	vsp_timer.expires += HZ / 100;
+	rcu_read_unlock();
+
+	vsp_timer.expires += 10;
 	add_timer(&vsp_timer);
+
+	cxc->overhead_cycles += get_cycles() - start;
+	static int count;
+	count++;
+	if (!(count % (2 << 8))) {
+		printk(KERN_DEBUG "cxc overhead = %llu %llu\n",
+			cxc->overhead_cycles >> 8,
+			get_cycles());
+
+		cxc->overhead_cycles = 0;
+	}
 }
 
 static void vicxc_release(struct visdn_cxc *cxc)

@@ -39,12 +39,14 @@ struct visdn_cxc
 
 	struct list_head channels;
 	struct hlist_head connections_hash[1 << VISDN_CXC_HASHBITS];
+	struct list_head connections_list;
 	spinlock_t lock;
 };
 
 struct visdn_cxc_connection
 {
-	struct hlist_node node;
+	struct hlist_node hash_node;
+	struct list_head list_node;
 	struct rcu_head rcu;
 
 	struct visdn_chan *src;

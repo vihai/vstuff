@@ -52,8 +52,11 @@ int visdn_cxc_connect(
 	cxc_entry->dst = chan2;
 	visdn_chan_get(chan2);
 
-	hlist_add_head_rcu(&cxc_entry->node,
+	hlist_add_head_rcu(&cxc_entry->hash_node,
 			visdn_cxc_get_hash(cxc, chan1));
+
+	list_add_tail_rcu(&cxc_entry->list_node,
+			&cxc->connections_list);
 
 	spin_unlock(&cxc->lock);
 
@@ -87,7 +90,7 @@ retry:
 	struct hlist_node *tpos;
 	hlist_for_each_entry_rcu(entry, tpos,
 			visdn_cxc_get_hash(cxc, chan),
-			node) {
+			hash_node) {
 
 		if (entry->src == chan) {
 			rcu_read_unlock();
@@ -95,7 +98,8 @@ retry:
 			if (chan->ops->disconnect)
 				chan->ops->disconnect(chan);
 
-			hlist_del_rcu(&entry->node);
+			hlist_del_rcu(&entry->hash_node);
+			list_del_rcu(&entry->list_node);
 
 			call_rcu(&entry->rcu, visdn_cxc_delete_rcu);
 
@@ -194,7 +198,7 @@ struct visdn_chan *visdn_cxc_get_by_src(
 	struct hlist_node *tpos;
 	hlist_for_each_entry_rcu(cxc_entry, tpos,
 			visdn_cxc_get_hash(cxc, chan),
-			node) {
+			hash_node) {
 
 		if (cxc_entry->src == chan) {
 			visdn_chan_get(cxc_entry->dst);
@@ -358,6 +362,8 @@ void visdn_cxc_init(struct visdn_cxc *cxc)
 	int i;
  	for (i=0; i<ARRAY_SIZE(cxc->connections_hash); i++)
 		INIT_HLIST_HEAD(&cxc->connections_hash[i]);
+
+	INIT_LIST_HEAD(&cxc->connections_list);
 }
 EXPORT_SYMBOL(visdn_cxc_init);
 
