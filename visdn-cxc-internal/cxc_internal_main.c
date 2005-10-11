@@ -26,8 +26,6 @@ static struct timer_list vsp_timer;
 
 static void vsp_timer_func(unsigned long data)
 {
-	unsigned long long start = get_cycles();
-
 	struct vicxc_internal *cxc = (struct vicxc_internal *)data;
 
 	rcu_read_lock();
@@ -53,23 +51,13 @@ static void vsp_timer_func(unsigned long data)
 				}
 			}
 		}
+
 	}
 
 	rcu_read_unlock();
 
-	vsp_timer.expires += 10;
+	vsp_timer.expires += 1;
 	add_timer(&vsp_timer);
-
-	cxc->overhead_cycles += get_cycles() - start;
-	static int count;
-	count++;
-	if (!(count % (2 << 8))) {
-		printk(KERN_DEBUG "cxc overhead = %llu %llu\n",
-			cxc->overhead_cycles >> 8,
-			get_cycles());
-
-		cxc->overhead_cycles = 0;
-	}
 }
 
 static void vicxc_release(struct visdn_cxc *cxc)

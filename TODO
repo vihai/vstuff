@@ -75,7 +75,7 @@ app_visdn_ppp:
 timer:
 ------
 
--
+- Add open/release functions to disable the timer when no users are using it
 
 visdn_core:
 -----------

@@ -69,6 +69,18 @@ int visdn_timer_cdev_ioctl(
 	return -EOPNOTSUPP;
 }
 
+void visdn_timer_tick(struct visdn_timer *timer)
+{
+	timer->poll_count++;
+	if (timer->poll_count >= timer->poll_divider) {
+		timer->poll_count = 0;
+		timer->poll_reported = FALSE;
+
+		wake_up(&timer->wait_queue);
+	}
+		
+}
+EXPORT_SYMBOL(visdn_timer_tick);
 
 static unsigned int visdn_timer_cdev_poll(
 	struct file *file,
@@ -78,9 +90,14 @@ static unsigned int visdn_timer_cdev_poll(
 
 	struct visdn_timer *timer = file->private_data;
 
-	BUG_ON(!timer->ops);
+	poll_wait(file, &timer->wait_queue, wait);
 
-	return timer->ops->poll(timer, wait);
+	if (!timer->poll_reported) {
+		timer->poll_reported = TRUE; // Maybe change with an atomic
+		return POLLIN | POLLRDNORM;
+	} else {
+		return 0;
+	}
 }
 
 struct file_operations visdn_timer_fops =
@@ -144,30 +161,14 @@ static struct class visdn_timer_class = {
 	.hotplug = visdn_timer_hotplug,
 };
 
-struct visdn_timer *visdn_timer_alloc(void)
-{
-	struct visdn_timer *timer;
-
-	timer = kmalloc(sizeof(*timer), GFP_KERNEL);
-	if (!timer)
-		return NULL;
-
-	memset(timer, 0x00, sizeof(*timer));
-
-	return timer;
-}
-EXPORT_SYMBOL(visdn_timer_alloc);
-
 void visdn_timer_init(
-	struct visdn_timer *timer,
-	struct visdn_timer_ops *ops)
+	struct visdn_timer *timer)
 {
 	BUG_ON(!timer);
-	BUG_ON(!ops);
-	BUG_ON(!ops->owner);
 
-	memset(timer, 0x00, sizeof(*timer));
-	timer->ops = ops;
+	memset(timer, 0, sizeof(*timer));
+
+	init_waitqueue_head(&timer->wait_queue);
 }
 EXPORT_SYMBOL(visdn_timer_init);
 
@@ -180,19 +181,20 @@ static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
 int visdn_timer_register(
-	struct visdn_timer *timer,
-	const char *name)
+	struct visdn_timer *timer)
 {
 	int err;
 
 	BUG_ON(!timer);
-	BUG_ON(!name);
+	BUG_ON(!timer->name[0]);
+	BUG_ON(!timer->ops);
+	BUG_ON(!timer->ops->owner);
 
 	visdn_debug(3, "visdn_timer_register(%s)\n", name);
 
 	struct class_device *class_dev = &timer->class_dev;
 
-	memset(class_dev, 0x00, sizeof(class_dev));
+	memset(class_dev, 0, sizeof(class_dev));
 	class_dev->class = &visdn_timer_class;
 	class_dev->class_data = timer;
 #ifdef HAVE_CLASS_DEV_DEVT
@@ -200,7 +202,7 @@ int visdn_timer_register(
 #endif
 
 	snprintf(class_dev->class_id, sizeof(class_dev->class_id),
-		"%s", name);
+		"%s", timer->name);
 
 	err = class_device_register(class_dev);
 	if (err < 0)
@@ -217,6 +219,16 @@ int visdn_timer_register(
 			&class_device_attr_timer_freq);
 	if (err < 0)
 		goto err_class_device_create_file;
+
+#define TIMER_DIVIDER 100
+
+	timer->main_divider = timer->natural_frequency / TIMER_DIVIDER;
+	timer->poll_divider = TIMER_DIVIDER / 100;
+	timer->poll_count = 0;
+	timer->poll_reported = FALSE;
+
+	if (timer->ops->open)
+		timer->ops->open(timer);
 
 	return 0;
 

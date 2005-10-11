@@ -461,8 +461,8 @@ void hfc_update_led(struct hfc_led *led)
 
 //		del_timer
 
-	u8 en_bit;
-	u8 out_bit;
+	u8 en_bit = 0;
+	u8 out_bit = 0;
 
 	switch(led->id) {
 	case 0:
@@ -659,7 +659,7 @@ static int __devinit hfc_probe(
 
 		init_timer(&card->leds[i].timer);
 		card->leds[i].timer.function = hfc_led_timer;
-		card->leds[i].timer.data = &card->leds[i];
+		card->leds[i].timer.data = (unsigned long)&card->leds[i];
 	}
 
 	// From here on hfc_msg_card may be used

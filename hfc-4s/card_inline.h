@@ -20,7 +20,7 @@
 
 static inline void hfc_card_lock(struct hfc_card *card)
 {
-	spin_lock(&card->lock);
+	spin_lock_bh(&card->lock);
 }
 
 static inline int hfc_card_trylock(struct hfc_card *card)
@@ -35,7 +35,7 @@ static inline void hfc_card_unlock(struct hfc_card *card)
 	card->pcm_multireg = -1;
 	card->pcm_slot_selected = NULL;*/
 
-	spin_unlock(&card->lock);
+	spin_unlock_bh(&card->lock);
 }
 
 static inline u8 hfc_inb(struct hfc_card *card, int offset)
@@ -71,11 +71,11 @@ static inline void hfc_outl(struct hfc_card *card, int offset, u32 value)
 static inline void hfc_wait_busy(struct hfc_card *card)
 {
 	int i;
-	for (i=0; i<100; i++) {
+	for (i=0; i<5000; i++) {
 		if (!(hfc_inb(card, hfc_R_STATUS) & hfc_R_STATUS_V_BUSY))
 			return;
 
-		udelay(1);
+		cpu_relax();
 	}
 
 	hfc_msg_card(card, KERN_ERR, hfc_DRIVER_PREFIX

@@ -115,7 +115,7 @@ static inline void hfc_fifo_refresh_fz_cache(struct hfc_fifo *fifo)
 	struct hfc_card *card = card = fifo->card;
 
 	// Se hfc-8s-4s.pdf par 4.4.7 for an explanation of this:
-	u16 prev_f1f2 = hfc_inw(card, hfc_A_F12);;
+	u16 prev_f1f2 = hfc_inw(card, hfc_A_F12);
 	do {
 		fifo->f1f2 = hfc_inw(card, hfc_A_F12);
 	} while(fifo->f1f2 != prev_f1f2);
@@ -126,7 +126,7 @@ static inline void hfc_fifo_refresh_fz_cache(struct hfc_fifo *fifo)
 }
 
 // This function and all subsequent accesses to the selected FIFO must be done
-// in interrupt handler or inside a spin_lock_irq* protected section
+// in atomic context
 static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 {
 	struct hfc_card *card = fifo->card;
@@ -141,7 +141,13 @@ static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 	mb(); // Be sure actually select the FIFO before waiting
 
 	hfc_wait_busy(card);
-	hfc_fifo_refresh_fz_cache(fifo);
+
+	/* We may read the counters in a 125us frame after FIFO selection
+	 * without fearing of them being updated in the while as per
+	 * docs §4.4.7
+	 */
+	fifo->f1f2 = hfc_inw(card, hfc_A_F12);
+	fifo->z1z2 = hfc_inl(card, hfc_A_Z12);
 }
 
 static inline void hfc_fifo_reset(struct hfc_fifo *fifo)
@@ -152,6 +158,122 @@ static inline void hfc_fifo_reset(struct hfc_fifo *fifo)
 //		hfc_A_INC_RES_FIFO_V_RES_F);
 
         hfc_wait_busy(card);
+}
+
+static inline int hfc_fifo_mem_read(
+	struct hfc_fifo *fifo,
+	void *data, int size)
+{
+	struct hfc_card *card = fifo->card;
+
+#if 0
+	int i;
+	for (i=0; i<size; i++) {
+		((u8 *)data)[i] = hfc_inb(card, hfc_A_FIFO_DATA0);
+	}
+#endif
+
+	union { u32 l; u8 b[4]; } word;
+
+	// Would unaligned write be better?
+	int pos = 0;
+	while (pos < size - 3) {
+		word.l = hfc_inl(card, hfc_A_FIFO_DATA2);
+		memcpy(data + pos, word.b, 4);
+		pos += 4;
+	}
+
+	while (pos < size) {
+		*((u8 *)(data + pos)) = hfc_inb(card, hfc_A_FIFO_DATA0);
+		pos++;
+	}
+
+	return size;
+}
+
+static inline int hfc_fifo_mem_read_dword(
+	struct hfc_fifo *fifo,
+	void *data, int size)
+{
+	struct hfc_card *card = fifo->card;
+
+	union { u32 l; u8 b[4]; } word;
+
+	// Would unaligned write be better?
+	int pos = 0;
+	while (pos < size - 3) {
+		word.l = hfc_inl(card, hfc_A_FIFO_DATA2);
+		memcpy(data + pos, word.b, 4);
+		pos += 4;
+	}
+
+	return pos;
+}
+
+static inline int hfc_fifo_mem_read_to_user(
+	struct hfc_fifo *fifo,
+	void __user *data, int size)
+{
+	struct hfc_card *card = fifo->card;
+	int err;
+
+	int i;
+	for (i=0; i<size; i++) {
+		err = put_user(hfc_inb(card, hfc_A_FIFO_DATA0),
+				(u8 *)(data + i));
+
+		if (err < 0)
+			return err;
+	}
+
+	return size;
+}
+
+static inline void hfc_fifo_mem_write(
+	struct hfc_fifo *fifo,
+	const void *data, int size)
+{
+	struct hfc_card *card = fifo->card;
+
+#if 0
+	int i;
+	for (i=0; i<size; i++) {
+		hfc_outb(card,
+			hfc_A_FIFO_DATA0,
+			((u8 *)data)[i]);
+	}
+#endif
+
+	union { u32 l; u8 b[4]; } word;
+
+	int pos = 0;
+	while (pos < size - 3) {
+		memcpy(word.b, data + pos, 4);
+		hfc_outl(card, hfc_A_FIFO_DATA2, word.l);
+		pos += 4;
+	}
+
+	while (pos < size) {
+		hfc_outb(card, hfc_A_FIFO_DATA0, *((u8 *)data + pos));
+		pos++;
+	}
+}
+
+static inline void hfc_fifo_mem_write_from_user(
+	struct hfc_fifo *fifo,
+	const void __user *data, int size)
+{
+	struct hfc_card *card = fifo->card;
+
+	int i;
+	for (i=0; i<size; i++) {
+		u8 val;
+		get_user(val, (u8 *)(data + i));
+
+		hfc_outb(card,
+			hfc_A_FIFO_DATA0,
+			val);
+	}
 }
 
 #endif

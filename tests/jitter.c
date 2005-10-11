@@ -39,7 +39,7 @@ int main()
 
 //		printf("%02x\n", pollfd.revents);
 
-//		printf("%d ", i);
+		printf("%d ", i);
 	}
 
 	printf("%d\n", time(NULL));

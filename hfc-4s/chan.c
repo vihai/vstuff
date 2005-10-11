@@ -250,12 +250,15 @@ static int hfc_chan_frame_xmit(
 	struct hfc_chan_duplex *chan = to_chan_duplex(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
+
+	hfc_card_lock(card);
+/*
 	if (!hfc_card_trylock(card)) {
 		// Mmmh... the card is locked and we may be in interrupt
 		// context. We must defer the transmission.
 
 		return NETDEV_TX_LOCKED;
-	}
+	}*/
 
 	struct hfc_fifo *fifo = chan->tx.fifo;
 
@@ -352,7 +355,6 @@ static ssize_t hfc_chan_read(
 	hfc_card_lock(card);
 
 	hfc_fifo_select(chan->rx.fifo);
-	hfc_fifo_refresh_fz_cache(chan->rx.fifo);
 
 	int available_octets = hfc_fifo_used_rx(chan->rx.fifo);
 	int copied_octets;
@@ -378,7 +380,6 @@ static ssize_t hfc_chan_write(
 	hfc_card_lock(card);
 
 	hfc_fifo_select(chan->tx.fifo);
-	hfc_fifo_refresh_fz_cache(chan->tx.fifo);
 
 	int copied_octets = count;
 

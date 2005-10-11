@@ -51,7 +51,7 @@ struct hfc_card {
 	struct pci_dev *pcidev;
 
 	unsigned long io_bus_mem;
-	void *io_mem;
+	void __iomem *io_mem;
 
 	dma_addr_t fifo_bus_mem;
 	void *fifo_mem;

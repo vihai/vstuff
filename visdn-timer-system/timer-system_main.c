@@ -12,46 +12,49 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/delay.h>
-#include <linux/fs.h>
-#include <linux/poll.h>
 
 #include <visdn.h>
 
 #include "timer-system.h"
 
-static wait_queue_head_t timerwait;
 static struct timer_list timer;
-static int timer_fired = 0;
 static struct visdn_timer vts_timer;
 
 static void vts_timer_func(unsigned long data)
 {
-	timer_fired = 1;
-	wake_up(&timerwait);
+	timer.expires += vts_timer.main_divider;
 
-	timer.expires += HZ/100;
+	visdn_timer_tick(&vts_timer);
 
 	add_timer(&timer);
 }
 
-static unsigned int vts_poll(
-	struct visdn_timer *vts_timer,
-	poll_table *wait)
+static int vts_timer_open(
+	struct visdn_timer *visdn_timer)
 {
-	poll_wait(vts_timer->file, &timerwait, wait);
+	printk(KERN_INFO "vts_timer_open()\n");
 
-	if (timer_fired) {
-		timer_fired = 0;
-		return POLLIN | POLLRDNORM;
-	} else {
-		return 0;
-	}
+	timer.expires = jiffies;
+	timer.function = vts_timer_func;
+	timer.data = 0;
+
+	add_timer(&timer);
+
+	return 0;
+}
+
+static int vts_timer_close(
+	struct visdn_timer *visdn_timer)
+{
+	printk(KERN_INFO "vts_timer_close()\n");
+
+	return 0;
 }
 
 static struct visdn_timer_ops vts_timer_ops = {
-	.owner	= THIS_MODULE,
-	.poll	= vts_poll,
+	.owner			= THIS_MODULE,
+	.open			= vts_timer_open,
+	.close			= vts_timer_close,
 };
 
 /******************************************
@@ -62,19 +65,17 @@ static int __init vts_init_module(void)
 {
 	int err;
 
-	visdn_timer_init(&vts_timer, &vts_timer_ops);
-	err = visdn_timer_register(&vts_timer, "system");
-	if (err < 0)
-		goto err_visdn_timer_register;
-
-	init_waitqueue_head(&timerwait);
 	init_timer(&timer);
 
-	timer.expires = jiffies + HZ/100;
-	timer.function = vts_timer_func;
-	timer.data = 0;
+	visdn_timer_init(&vts_timer);
 
-	add_timer(&timer);
+	vts_timer.ops = &vts_timer_ops;
+	strncpy(vts_timer.name, "system", 6);
+	vts_timer.natural_frequency = HZ;
+
+	err = visdn_timer_register(&vts_timer);
+	if (err < 0)
+		goto err_visdn_timer_register;
 
 	return 0;
 
@@ -83,7 +84,6 @@ err_visdn_timer_register:
 
 	return err;
 }
-
 module_init(vts_init_module);
 
 static void __exit vts_module_exit(void)

@@ -97,7 +97,7 @@ struct hfc_card {
 	u8 gpio_en;
 
 	unsigned long io_bus_mem;
-	void *io_mem;
+	void __iomem *io_mem;
 
 	int clock_source;
 	int ram_size;

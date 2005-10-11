@@ -15,13 +15,16 @@
 
 #ifdef __KERNEL__
 
+#include <linux/delay.h>
+
 struct visdn_timer;
 struct visdn_timer_ops
 {
 	struct module *owner;
 
 	void (*release)(struct visdn_timer *timer);
-	unsigned int (*poll)(struct visdn_timer *timer, poll_table *wait);
+	int (*open)(struct visdn_timer *visdn_timer);
+	int (*close)(struct visdn_timer *visdn_timer);
 };
 
 struct visdn_timer
@@ -35,21 +38,29 @@ struct visdn_timer
 	struct visdn_timer_ops *ops;
 
 	struct file *file;
+
+	int fired;
+	wait_queue_head_t wait_queue;
+
+	int natural_frequency;
+	int main_divider;
+	int poll_divider;
+	int poll_count;
+	int poll_reported;
 };
+
 int visdn_timer_modinit(void);
 void visdn_timer_modexit(void);
 
 #define to_visdn_timer(class) container_of(class, struct visdn_timer, class_dev)
 
-extern void visdn_timer_init(
-	struct visdn_timer *visdn_timer,
-	struct visdn_timer_ops *ops);
+extern void visdn_timer_tick(struct visdn_timer *timer);
 
-extern struct visdn_timer *visdn_timer_alloc(void);
+extern void visdn_timer_init(
+	struct visdn_timer *visdn_timer);
 
 extern int visdn_timer_register(
-	struct visdn_timer *visdn_timer,
-	const char *name);
+	struct visdn_timer *visdn_timer);
 
 extern void visdn_timer_unregister(
 	struct visdn_timer *visdn_timer);
