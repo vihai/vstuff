@@ -839,9 +839,8 @@ void q931_ces_timer_T308(void *data)
 	if (!ces->T308_fired) {
 		q931_ces_send_release(ces, NULL);
 		q931_ces_start_timer(ces, T308);
-
-	} else {
 		ces->T308_fired = TRUE;
+	} else {
 		q931_int_release_complete_indication(ces->call, ces, NULL);
 	}
 }
