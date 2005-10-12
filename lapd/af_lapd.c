@@ -134,21 +134,19 @@ static int lapd_seq_show(struct seq_file *seq, void *data)
 {
 	if (data == SEQ_START_TOKEN) {
 		seq_printf(seq, "%-127s\n",
-			"  sl  st sa:te vs va vr ecxpt"
+			" interface   st sa:te vs va vr ecxpt"
 			" tx_queue rx_queue   uid inode ref"
 			);
 
 		return 0;
 	}
 
-	struct lapd_iter_state *state = lapd_seq_private(seq);
-
 	struct sock *sk = data;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-	seq_printf(seq, "%4d: %02X %02X:%02X"
+	seq_printf(seq, "%-12s %02X %02X:%02X"
 			" %02X %02X %02X %c%c%c   %08X:%08X %5d %5lu %3d\n",
-			state->bucket,
+			(lapd_sock->dev ? lapd_sock->dev->name : "NULL"),
 			lapd_sock->state,
 			lapd_sock->sapi,
 			lapd_sock->tei,
