@@ -78,14 +78,17 @@ static struct sock *lapd_get_next(struct seq_file *seq, struct sock *sk)
 
 	do {
 		sk = sk_next(sk);
- try_again:
-		;
-	} while (sk);
+		if (sk)
+			return sk;
 
-	if (!sk && ++state->bucket < ARRAY_SIZE(lapd_hash)) {
-		sk = sk_head(&lapd_hash[state->bucket]);
-		goto try_again;
-	}
+		do {
+			state->bucket++;
+			if (state->bucket >= ARRAY_SIZE(lapd_hash))
+				return NULL;
+
+			sk = sk_head(&lapd_hash[state->bucket]);
+		} while(!sk);
+	} while(!sk);
 
 	return sk;
 }
