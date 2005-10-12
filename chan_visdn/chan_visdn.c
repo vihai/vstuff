@@ -1198,8 +1198,6 @@ static int visdn_call(
 	int err;
 	char dest[256];
 
-	visdn_chan->pbx_started = TRUE;
-
 	strncpy(dest, orig_dest, sizeof(dest));
 
 	// Parse destination and obtain interface name + number
@@ -1591,9 +1589,6 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 	return NULL;
 }
 
-static int visdn_generator_start(struct ast_channel *chan);
-static int visdn_generator_stop(struct ast_channel *chan);
-
 /* We are called with chan->lock'ed */
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
@@ -1620,9 +1615,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case -1:
 		ast_playtones_stop(ast_chan);
 
-		if (!ast_chan->pbx)
-			visdn_generator_stop(ast_chan);
-
 		return 0;
 	break;
 
@@ -1631,9 +1623,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		tone = ast_get_indication_tone(ast_chan->zone, "dial");
 		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-			if (!ast_chan->pbx)
-				visdn_generator_start(ast_chan);
 		}
 
 		return 0;
@@ -1641,14 +1630,15 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_HANGUP: {
+		ast_mutex_lock(&ast_chan->lock);
+
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "congestion");
 		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-			if (!ast_chan->pbx)
-				visdn_generator_start(ast_chan);
 		}
+
+		ast_mutex_unlock(&ast_chan->lock);
 
 		return 0;
 	}
@@ -1697,9 +1687,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		tone = ast_get_indication_tone(ast_chan->zone, "ring");
 		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-			if (!ast_chan->pbx)
-				visdn_generator_start(ast_chan);
 		}
 
 		return 0;
@@ -1708,9 +1695,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 	case AST_CONTROL_ANSWER:
 		ast_playtones_stop(ast_chan);
-
-		if (!ast_chan->pbx);
-			visdn_generator_stop(ast_chan);
 
 		return 0;
 	break;
@@ -1760,9 +1744,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
 		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-			if (!ast_chan->pbx)
-				visdn_generator_start(ast_chan);
 		}
 
 		return 0;
@@ -1977,10 +1958,6 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->suspended_call = NULL;
 	}
 
-	// Make sure the generator is stopped
-	if (!ast_chan->pbx)
-		visdn_generator_stop(ast_chan);
-
 	if (visdn_chan) {
 		if (visdn_chan->channel_fd >= 0) {
 			// Disconnect the softport since we cannot rely on
@@ -2072,7 +2049,9 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d\n",
 	return &f;
 }
 
-static int visdn_write(struct ast_channel *ast_chan, struct ast_frame *frame)
+static int visdn_write(
+	struct ast_channel *ast_chan,
+	struct ast_frame *frame)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
@@ -2633,29 +2612,6 @@ static void visdn_q931_error_indication(
 	FUNC_DEBUG();
 }
 
-static int visdn_handle_called_number(
-	struct visdn_chan *visdn_chan,
-	const struct q931_ie_called_party_number *ie)
-{
-	if (strlen(visdn_chan->called_number) + strlen(ie->number) - 1 >
-			sizeof(visdn_chan->called_number)) {
-		ast_log(LOG_NOTICE,
-			"Called number overflow\n");
-
-		return FALSE;
-	}
-
-	if (ie->number[strlen(ie->number) - 1] == '#') {
-		visdn_chan->sending_complete = TRUE;
-		strncat(visdn_chan->called_number, ie->number,
-			strlen(ie->number)-1);
-	} else {
-		strcat(visdn_chan->called_number, ie->number);
-	}
-
-	return TRUE;
-}
-
 static void visdn_q931_info_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
@@ -2682,140 +2638,20 @@ static void visdn_q931_info_indication(
 	for(i=0; i<ies->count; i++) {
 		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
 			visdn_chan->sending_complete = TRUE;
-		} else if (ies->ies[i]->type->id == Q931_IE_CALLED_PARTY_NUMBER) {
+		} else if (ies->ies[i]->type->id ==
+					 Q931_IE_CALLED_PARTY_NUMBER) {
 			cdpn = container_of(ies->ies[i],
 				struct q931_ie_called_party_number, ie);
 		}
 	}
 
-	if (ast_chan->pbx) {
-		if (!cdpn)
-			return;
-
-ast_log(LOG_WARNING, "Trying to send DTMF FRAME\n");
-
-		for(i=0; cdpn->number[i]; i++) {
-			struct ast_frame f = { AST_FRAME_DTMF, cdpn->number[i] };
-			ast_queue_frame(ast_chan, &f);
-		}
-
+	if (!cdpn)
 		return;
-	}
 
-	if (!visdn_handle_called_number(visdn_chan, cdpn)) {
-                struct q931_ies ies = Q931_IES_INIT;
-
-		struct q931_ie_cause *cause = q931_ie_cause_alloc();
-		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(q931_call);
-		cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
-		q931_ies_add_put(&ies, &cause->ie);
-
-		q931_disconnect_request(q931_call, &ies);
-
-		return;
-	}
-
-	ast_setstate(ast_chan, AST_STATE_DIALING);
-
-	if (visdn_chan->sending_complete) {
-		if (ast_exists_extension(NULL, intf->context,
-				visdn_chan->called_number, 1,
-				visdn_chan->calling_number)) {
-
-			strncpy(ast_chan->exten,
-				visdn_chan->called_number,
-				sizeof(ast_chan->exten)-1);
-
-			ast_setstate(ast_chan, AST_STATE_RINGING);
-
-			visdn_chan->pbx_started = TRUE;
-
-			if (ast_pbx_start(ast_chan)) {
-				ast_log(LOG_ERROR,
-					"Unable to start PBX on %s\n",
-					ast_chan->name);
-				ast_hangup(ast_chan);
-
-		                struct q931_ies ies = Q931_IES_INIT;
-
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
-				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = q931_ie_cause_location_call(q931_call);
-				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
-				q931_ies_add_put(&ies, &cause->ie);
-
-				q931_disconnect_request(q931_call, &ies);
-			} else {
-				q931_proceeding_request(q931_call, NULL);
-
-				ast_setstate(ast_chan, AST_STATE_RING);
-			}
-		} else {
-	                struct q931_ies ies = Q931_IES_INIT;
-
-			struct q931_ie_cause *cause = q931_ie_cause_alloc();
-			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
-			cause->value = Q931_IE_C_CV_UNALLOCATED_NUMBER;
-			q931_ies_add_put(&ies, &cause->ie);
-
-			q931_disconnect_request(q931_call, &ies);
-		}
-	} else {
-		if (!ast_canmatch_extension(NULL, intf->context,
-				visdn_chan->called_number, 1,
-				visdn_chan->calling_number)) {
-
-	                struct q931_ies ies = Q931_IES_INIT;
-
-			struct q931_ie_cause *cause = q931_ie_cause_alloc();
-			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
-			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
-			q931_ies_add_put(&ies, &cause->ie);
-
-			q931_disconnect_request(q931_call, &ies);
-
-			return;
-		}
-
-		if (ast_exists_extension(NULL, intf->context,
-				visdn_chan->called_number, 1,
-				visdn_chan->calling_number)) {
-
-			strncpy(ast_chan->exten,
-				visdn_chan->called_number,
-				sizeof(ast_chan->exten)-1);
-
-			ast_setstate(ast_chan, AST_STATE_RINGING);
-
-			visdn_chan->pbx_started = TRUE;
-
-			if (ast_pbx_start(ast_chan)) {
-				ast_log(LOG_ERROR,
-					"Unable to start PBX on %s\n",
-					ast_chan->name);
-				ast_hangup(ast_chan);
-
-		                struct q931_ies ies = Q931_IES_INIT;
-
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
-				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = q931_ie_cause_location_call(q931_call);
-				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
-				q931_ies_add_put(&ies, &cause->ie);
-
-				q931_disconnect_request(q931_call, &ies);
-			}
-
-			if (!ast_matchmore_extension(NULL, intf->context,
-					visdn_chan->called_number, 1,
-					visdn_chan->calling_number)) {
-
-				q931_proceeding_request(q931_call, NULL);
-			}
-		}
+	for(i=0; cdpn->number[i]; i++) {
+		struct ast_frame f =
+			{ AST_FRAME_DTMF, cdpn->number[i] };
+		ast_queue_frame(ast_chan, &f);
 	}
 }
 
@@ -2889,10 +2725,7 @@ static void visdn_q931_release_confirm(
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	if (visdn_chan->pbx_started)
-		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
-	else
-		ast_hangup(ast_chan);
+	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 }
 
 static void visdn_q931_release_indication(
@@ -2908,10 +2741,7 @@ static void visdn_q931_release_indication(
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
-	if (visdn_chan->pbx_started)
-		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
-	else
-		ast_hangup(ast_chan);
+	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 }
 
 static void visdn_q931_resume_confirm(
@@ -3051,6 +2881,8 @@ static void visdn_q931_setup_indication(
 {
 	FUNC_DEBUG();
 
+	char called_number[32];
+
 	struct visdn_chan *visdn_chan;
 	visdn_chan = visdn_alloc();
 	if (!visdn_chan) {
@@ -3071,9 +2903,12 @@ static void visdn_q931_setup_indication(
 				container_of(ies->ies[i],
 					struct q931_ie_called_party_number, ie);
 
-			if (!visdn_handle_called_number(visdn_chan, cdpn)) {
+			if (strlen(called_number) + strlen(cdpn->number) - 1 >
+					sizeof(called_number)) {
+				ast_log(LOG_NOTICE,
+					"Called number overflow\n");
 
-		                struct q931_ies ies = Q931_IES_INIT;
+			        struct q931_ies ies = Q931_IES_INIT;
 
 				struct q931_ie_cause *cause = q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -3082,9 +2917,16 @@ static void visdn_q931_setup_indication(
 				q931_ies_add_put(&ies, &cause->ie);
 
 				q931_reject_request(q931_call, &ies);
-
-				return;
 			}
+
+			if (cdpn->number[strlen(cdpn->number) - 1] == '#') {
+				visdn_chan->sending_complete = TRUE;
+				strncat(called_number, cdpn->number,
+					strlen(cdpn->number)-1);
+			} else {
+				strcat(called_number, cdpn->number);
+			}
+
 		} else if (ies->ies[i]->type->id == Q931_IE_CALLING_PARTY_NUMBER) {
 			struct q931_ie_calling_party_number *cgpn =
 				container_of(ies->ies[i],
@@ -3174,16 +3016,14 @@ static void visdn_q931_setup_indication(
 	if (!intf->overlap_sending ||
 	    visdn_chan->sending_complete) {
 		if (ast_exists_extension(NULL, intf->context,
-				visdn_chan->called_number, 1,
+				called_number, 1,
 				visdn_chan->calling_number)) {
 
 			strncpy(ast_chan->exten,
-				visdn_chan->called_number,
+				called_number,
 				sizeof(ast_chan->exten)-1);
 
 			ast_setstate(ast_chan, AST_STATE_RING);
-
-			visdn_chan->pbx_started = TRUE;
 
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
@@ -3209,7 +3049,7 @@ static void visdn_q931_setup_indication(
 			ast_log(LOG_NOTICE,
 				"No extension '%s' in context '%s',"
 				" rejecting call\n",
-				visdn_chan->called_number,
+				called_number,
 				intf->context);
 
 			ast_hangup(ast_chan);
@@ -3224,14 +3064,25 @@ static void visdn_q931_setup_indication(
 
 			q931_reject_request(q931_call, &ies);
 		}
-
 	} else {
-		if (!ast_canmatch_extension(NULL,
-				intf->context,
-				visdn_chan->called_number, 1,
-				visdn_chan->calling_number)) {
 
-                        struct q931_ies ies_proc = Q931_IES_INIT;
+		strncpy(ast_chan->exten, "s",
+			sizeof(ast_chan->exten)-1);
+
+		if (ast_pbx_start(ast_chan)) {
+			ast_log(LOG_ERROR,
+				"Unable to start PBX on %s\n",
+				ast_chan->name);
+			ast_hangup(ast_chan);
+
+		        struct q931_ies ies_proc = Q931_IES_INIT;
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(q931_call);
+			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+			q931_ies_add_put(&ies_proc, &cause->ie);
+
+                        struct q931_ies ies_disc = Q931_IES_INIT;
 			if (visdn_chan->is_voice) {
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
@@ -3240,74 +3091,19 @@ static void visdn_q931_setup_indication(
 							visdn_chan->q931_call);
 				pi->progress_description =
 					Q931_IE_PI_PD_IN_BAND_INFORMATION;
-				q931_ies_add_put(&ies_proc, &pi->ie);
+				q931_ies_add_put(&ies_disc, &pi->ie);
 			}
-
-		        struct q931_ies ies_disc = Q931_IES_INIT;
-			struct q931_ie_cause *cause = q931_ie_cause_alloc();
-			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
-			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
-			cause->value = Q931_IE_C_CV_NETWORK_OUT_OF_ORDER;
-			q931_ies_add_put(&ies_disc, &cause->ie);
 
 			q931_proceeding_request(q931_call, &ies_proc);
 			q931_disconnect_request(q931_call, &ies_disc);
-
-			return;
-		}
-
-		if (ast_exists_extension(NULL, intf->context,
-				visdn_chan->called_number, 1,
-				visdn_chan->calling_number)) {
-
-			strncpy(ast_chan->exten,
-				visdn_chan->called_number,
-				sizeof(ast_chan->exten)-1);
-
-			ast_setstate(ast_chan, AST_STATE_RING);
-
-			visdn_chan->pbx_started = TRUE;
-
-			if (ast_pbx_start(ast_chan)) {
-				ast_log(LOG_ERROR,
-					"Unable to start PBX on %s\n",
-					ast_chan->name);
-				ast_hangup(ast_chan);
-
-		                struct q931_ies ies_proc = Q931_IES_INIT;
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
-				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = q931_ie_cause_location_call(q931_call);
-				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
-				q931_ies_add_put(&ies_proc, &cause->ie);
-
-                                struct q931_ies ies_disc = Q931_IES_INIT;
-				if (visdn_chan->is_voice) {
-					struct q931_ie_progress_indicator *pi =
-						q931_ie_progress_indicator_alloc();
-					pi->coding_standard = Q931_IE_PI_CS_CCITT;
-					pi->location = q931_ie_progress_indicator_location(
-								visdn_chan->q931_call);
-					pi->progress_description =
-						Q931_IE_PI_PD_IN_BAND_INFORMATION;
-					q931_ies_add_put(&ies_disc, &pi->ie);
-				}
-
-				q931_proceeding_request(q931_call, &ies_proc);
-				q931_disconnect_request(q931_call, &ies_disc);
-			} else {
-				if (!ast_matchmore_extension(NULL, intf->context,
-						visdn_chan->called_number, 1,
-						visdn_chan->calling_number)) {
-
-					q931_proceeding_request(q931_call, NULL);
-				} else {
-					q931_more_info_request(q931_call, NULL);
-				}
-			}
 		} else {
 			q931_more_info_request(q931_call, NULL);
+		}
+
+		for(i=0; called_number[i]; i++) {
+			struct ast_frame f =
+				{ AST_FRAME_DTMF, called_number[i] };
+			ast_queue_frame(ast_chan, &f);
 		}
 	}
 
@@ -3549,10 +3345,6 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 	if (!ast_chan)
 		return;
 
-	// FIXME
-	if (ast_chan->generator)
-		visdn_generator_stop(ast_chan);
-
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
 	ast_mutex_lock(&ast_chan->lock);
@@ -3575,151 +3367,6 @@ static void visdn_q931_disconnect_channel(struct q931_channel *channel)
 	}
 
 	ast_mutex_unlock(&ast_chan->lock);
-}
-
-static pthread_t visdn_generator_thread = AST_PTHREADT_NULL;
-AST_MUTEX_DEFINE_STATIC(visdn_generator_lock);
-static struct ast_channel *gen_chans[256];
-static int gen_chans_num = 0;
-
-static void *visdn_generator_thread_main(void *aaa)
-{
-	struct ast_frame f;
-	__u8 buf[256];
-
-	f.frametype = AST_FRAME_VOICE;
-	f.subclass = AST_FORMAT_ALAW;
-	f.samples = 80;
-	f.datalen = 80;
-	f.data = buf;
-	f.offset = 0;
-	f.src = VISDN_CHAN_TYPE;
-	f.mallocd = 0;
-	f.delivery.tv_sec = 0;
-	f.delivery.tv_usec = 0;
-
-	visdn_debug("Generator thread started\n");
-
-	while (gen_chans_num) {
-		struct ast_channel *chan;
-
-		struct ast_channel *gen_chans_copy[256];
-		int gen_chans_copy_num = 0;
-
-		ast_mutex_lock(&visdn_generator_lock);
-		gen_chans_copy_num = gen_chans_num;
-		memcpy(gen_chans_copy, gen_chans,
-			sizeof(*gen_chans_copy) * gen_chans_copy_num);
-		ast_mutex_unlock(&visdn_generator_lock);
-
-		int ms = 500;
-		chan = ast_waitfor_n(gen_chans_copy, gen_chans_copy_num, &ms);
-		if (chan) {
-			void *tmp;
-			int res;
-
-			ast_mutex_lock(&chan->lock);
-
-			if (chan->generator) {
-				tmp = chan->generatordata;
-				chan->generatordata = NULL;
-				res = chan->generator->generate(
-					chan, tmp, f.datalen, f.samples);
-				chan->generatordata = tmp;
-				if (res) {
-				        ast_log(LOG_DEBUG,
-						"Auto-deactivating"
-						" generator\n");
-				        ast_deactivate_generator(chan);
-				}
-			}
-
-			ast_mutex_unlock(&chan->lock);
-		}
-	}
-
-	visdn_generator_thread = AST_PTHREADT_NULL;
-
-	visdn_debug("Generator thread stopped\n");
-
-	return NULL;
-}
-
-static int visdn_generator_start(struct ast_channel *chan)
-{
-	int res = -1;
-
-	ast_mutex_lock(&visdn_generator_lock);
-
-	int i;
-	for (i=0; i<gen_chans_num; i++) {
-		if (gen_chans[i] == chan)
-			goto already_generating;
-	}
-
-	if (gen_chans_num > sizeof(gen_chans)) {
-		ast_log(LOG_WARNING, "MAX 256 chans in dialtone generation\n");
-		goto err_too_many_channels;
-	}
-
-	gen_chans[gen_chans_num] = chan;
-	gen_chans_num++;
-
-	if (visdn_generator_thread == AST_PTHREADT_NULL) {
-		if (ast_pthread_create(&visdn_generator_thread, NULL,
-				visdn_generator_thread_main, NULL)) {
-			ast_log(LOG_WARNING,
-				"Unable to create autoservice thread :(\n");
-		} else
-			pthread_kill(visdn_generator_thread, SIGURG);
-	}
-
-err_too_many_channels:
-already_generating:
-	ast_mutex_unlock(&visdn_generator_lock);
-
-	return res;
-}
-
-static int visdn_generator_stop(struct ast_channel *chan)
-{
-	ast_mutex_lock(&visdn_generator_lock);
-
-	int i;
-	for (i=0; i<gen_chans_num; i++) {
-		if (gen_chans[i] == chan) {
-			int j;
-			for (j=i; j<gen_chans_num-1; j++)
-				gen_chans[j] = gen_chans[j+1];
-
-			break;
-		}
-	}
-
-	if (i == gen_chans_num)
-		goto err_chan_not_found;
-
-	gen_chans_num--;
-
-
-	if (gen_chans_num == 0 &&
-	    visdn_generator_thread != AST_PTHREADT_NULL) {
-		pthread_kill(visdn_generator_thread, SIGURG);
-	}
-
-	ast_mutex_unlock(&visdn_generator_lock);
-
-	/* Wait for it to un-block */
-	while(chan->blocking)
-		usleep(1000);
-
-	return 0;
-
-err_chan_not_found:
-
-	ast_mutex_unlock(&visdn_generator_lock);
-
-	return 0;
 }
 
 static void visdn_q931_start_tone(struct q931_channel *channel,
@@ -3825,6 +3472,68 @@ void visdn_q931_timer_update(struct q931_lib *lib)
 {
 	pthread_kill(visdn_q931_thread, SIGURG);
 }
+
+STANDARD_LOCAL_USER;
+
+LOCAL_USER_DECL;
+
+static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
+{
+	struct localuser *u;
+	LOCAL_USER_ADD(u);
+
+	char called_number[64] = "";
+
+	while(ast_waitfor(chan, -1) > -1) {
+		struct ast_frame *f;
+		f = ast_read(chan);
+		if (!f)
+			break;
+
+		if (f->frametype == AST_FRAME_DTMF) {
+			ast_setstate(chan, AST_STATE_DIALING);
+
+			if(strlen(called_number) >= sizeof(called_number)-1)
+				break;
+
+			called_number[strlen(called_number)] = f->subclass;
+
+			if (!ast_canmatch_extension(NULL,
+					chan->context,
+					called_number, 1,
+					chan->callerid)) {
+
+				ast_indicate(chan, AST_CONTROL_CONGESTION);
+				ast_safe_sleep(chan, 30000);
+				return -1;
+			}
+
+			if (ast_exists_extension(NULL,
+					chan->context,
+					called_number, 1,
+					chan->callerid)) {
+
+				ast_indicate(chan, AST_CONTROL_PROCEEDING);
+				ast_setstate(chan, AST_STATE_RINGING);
+
+				chan->priority = 0;
+				strncpy(chan->exten, called_number,
+						sizeof(chan->exten));
+
+				ast_frfree(f);
+				return 0;
+			}
+		}
+
+		ast_frfree(f);
+	}
+
+	LOCAL_USER_REMOVE(u);
+	return -1;
+}
+
+static char *visdn_overlap_dial_descr =
+"  vISDNDialtone():\n";
 
 int load_module()
 {
@@ -4003,11 +3712,19 @@ int load_module()
 	ast_cli_register(&show_visdn_interfaces);
 	ast_cli_register(&show_visdn_calls);
 
+	ast_register_application(
+		"VISDNOverlapDial",
+		visdn_exec_overlap_dial,
+		"Plays dialtone and waits for digits",
+		visdn_overlap_dial_descr);
+
 	return res;
 }
 
 int unload_module(void)
 {
+	ast_unregister_application("VISDNOverlapDial");
+
 	ast_cli_unregister(&show_visdn_calls);
 	ast_cli_unregister(&show_visdn_interfaces);
 	ast_cli_unregister(&show_visdn_channels);
