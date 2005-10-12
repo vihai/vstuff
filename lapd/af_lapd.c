@@ -144,7 +144,7 @@ static int lapd_seq_show(struct seq_file *seq, void *data)
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
 	seq_printf(seq, "%4d: %02X %02X:%02X"
-			" %02X %02X %02X %c%c%c  %08X:%08X %5d %5lu %3d %p",
+			" %02X %02X %02X %c%c%c   %08X:%08X %5d %5lu %3d\n",
 			state->bucket,
 			lapd_sock->state,
 			lapd_sock->sapi,
@@ -158,7 +158,7 @@ static int lapd_seq_show(struct seq_file *seq, void *data)
 			atomic_read(&sk->sk_wmem_alloc),
 			atomic_read(&sk->sk_rmem_alloc),
 			sock_i_uid(sk), sock_i_ino(sk),
-			atomic_read(&sk->sk_refcnt), sk);
+			atomic_read(&sk->sk_refcnt));
 
 	return 0;
 }
