@@ -2624,7 +2624,6 @@ static void visdn_q931_info_indication(
 		return;
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
-	struct visdn_interface *intf = q931_call->intf->pvt;
 
 	if (q931_call->state != U2_OVERLAP_SENDING &&
 	    q931_call->state != N2_OVERLAP_SENDING) {
@@ -2723,8 +2722,6 @@ static void visdn_q931_release_confirm(
 	if (!ast_chan)
 		return;
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
-
 	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 }
 
@@ -2738,8 +2735,6 @@ static void visdn_q931_release_indication(
 
 	if (!ast_chan)
 		return;
-
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 
 	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 }
@@ -3497,6 +3492,8 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 				break;
 
 			called_number[strlen(called_number)] = f->subclass;
+
+printf("MATCHING %s %s\n", chan->context, called_number);
 
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
