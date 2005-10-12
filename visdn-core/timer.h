@@ -37,16 +37,15 @@ struct visdn_timer
 
 	struct visdn_timer_ops *ops;
 
-	struct file *file;
-
-	int fired;
 	wait_queue_head_t wait_queue;
+
+	struct list_head users_list;
+	spinlock_t users_list_lock;
 
 	int natural_frequency;
 	int main_divider;
 	int poll_divider;
 	int poll_count;
-	int poll_reported;
 };
 
 int visdn_timer_modinit(void);

@@ -26,10 +26,23 @@
 static struct cdev visdn_timer_cdev;
 static struct class visdn_timer_class;
 
+struct visdn_timer_user
+{
+	struct list_head users_list_node;
+
+	struct visdn_timer *timer;
+	struct file *file;
+
+	int poll_reported;
+};
+
 int visdn_timer_cdev_open(
 	struct inode *inode,
 	struct file *file)
 {
+	int err;
+	struct visdn_timer *timer = NULL;
+
 	visdn_debug(3, "visdn_timer_cdev_open()\n");
 
 	nonseekable_open(inode, file);
@@ -39,19 +52,48 @@ int visdn_timer_cdev_open(
 	struct class_device *device;
 	down_write(&visdn_timer_class.subsys.rwsem);
 	list_for_each_entry(device, &visdn_timer_class.children, node) {
-		file->private_data = to_visdn_timer(device);
-		to_visdn_timer(device)->file = file;
+		timer = to_visdn_timer(device);
 		break;
 	}
 	up_write(&visdn_timer_class.subsys.rwsem);
 
+	struct visdn_timer_user *timer_user;
+	timer_user = kmalloc(sizeof(*timer_user), GFP_KERNEL);
+	if (!timer_user) {
+		err = -EFAULT;
+		goto err_kmalloc;
+	}
+
+	memset(timer_user, 0, sizeof(*timer_user));
+	timer_user->timer = timer;
+	timer_user->file = file;
+
+	file->private_data = timer_user;
+
+	spin_lock_bh(&timer->users_list_lock);
+	list_add_tail(&timer_user->users_list_node, &timer->users_list);
+	spin_unlock_bh(&timer->users_list_lock);
+
 	return 0;
+
+	kfree(timer_user);
+err_kmalloc:
+
+	return err;
 }
 
 int visdn_timer_cdev_release(
 	struct inode *inode, struct file *file)
 {
 	visdn_debug(3, "visdn_timer_cdev_release()\n");
+
+	struct visdn_timer_user *timer_user = file->private_data;
+
+	spin_lock_bh(&timer_user->timer->users_list_lock);
+	list_del(&timer_user->users_list_node);
+	spin_unlock_bh(&timer_user->timer->users_list_lock);
+
+	kfree(timer_user);
 
 	return 0;
 }
@@ -80,10 +122,16 @@ void visdn_timer_tick(struct visdn_timer *timer)
 	}
 	rcu_read_unlock();
 
+	spin_lock_bh(&timer->users_list_lock);
+	struct visdn_timer_user *timer_user;
+	list_for_each_entry(timer_user, &timer->users_list, users_list_node) {
+		timer_user->poll_reported = FALSE;
+	}
+	spin_unlock_bh(&timer->users_list_lock);
+
 	timer->poll_count++;
 	if (timer->poll_count >= timer->poll_divider) {
 		timer->poll_count = 0;
-		timer->poll_reported = FALSE;
 
 		wake_up(&timer->wait_queue);
 	}
@@ -96,12 +144,17 @@ static unsigned int visdn_timer_cdev_poll(
 {
 	BUG_ON(!file->private_data);
 
-	struct visdn_timer *timer = file->private_data;
+	struct visdn_timer_user *timer_user = file->private_data;
 
-	poll_wait(file, &timer->wait_queue, wait);
+	poll_wait(file, &timer_user->timer->wait_queue, wait);
 
-	if (!timer->poll_reported) {
-		timer->poll_reported = TRUE; // Maybe change with an atomic
+	if (wait)
+		return 0;
+	else
+		return POLLIN | POLLRDNORM;
+
+	if (!timer_user->poll_reported) {
+		timer_user->poll_reported = TRUE;
 		return POLLIN | POLLRDNORM;
 	} else {
 		return 0;
@@ -142,7 +195,7 @@ static CLASS_DEVICE_ATTR(timer_freq, S_IRUGO,
 static int visdn_timer_hotplug(struct class_device *device, char **envp,
 	int num_envp, char *buf, int size)
 {
-//	struct visdn_timer *visdn_timer = to_visdn_timer(cd);
+//	struct visdn_timer *timer = to_visdn_timer(cd);
 
 	visdn_debug(3, "visdn_timer_hotplug()\n");
 
@@ -230,10 +283,11 @@ int visdn_timer_register(
 
 #define TIMER_DIVIDER 100
 
+	INIT_LIST_HEAD(&timer->users_list);
+	spin_lock_init(&timer->users_list_lock);
 	timer->main_divider = timer->natural_frequency / TIMER_DIVIDER;
 	timer->poll_divider = TIMER_DIVIDER / 100;
 	timer->poll_count = 0;
-	timer->poll_reported = FALSE;
 
 	if (timer->ops->open)
 		timer->ops->open(timer);
@@ -249,9 +303,9 @@ err_class_device_register:
 EXPORT_SYMBOL(visdn_timer_register);
 
 void visdn_timer_unregister(
-	struct visdn_timer *visdn_timer)
+	struct visdn_timer *timer)
 {
-	struct class_device *class_dev = &visdn_timer->class_dev;
+	struct class_device *class_dev = &timer->class_dev;
 
 	visdn_debug(3, "visdn_timer_unregister()\n");
 

@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-12 16:31:24 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-276
+
+    Summary:
+      Fixed poll behaviour with more than one opener
+    Revision:
+      isdn--devel--0.1--patch-276
+
+
+    modified files:
+     ChangeLog visdn-core/timer.c visdn-core/timer.h
+
+
 2005-10-12 14:45:40 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-275
 
     Summary:
