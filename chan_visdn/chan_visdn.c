@@ -1432,6 +1432,8 @@ static int visdn_bridge(
 	int flags, struct ast_frame **fo,
 	struct ast_channel **rc)
 {
+	return -2;
+
 	/* if need DTMF, cant native bridge (at least not yet...) */
 	if (flags & (AST_BRIDGE_DTMF_CHANNEL_0 | AST_BRIDGE_DTMF_CHANNEL_1))
 		return -2;
@@ -1630,15 +1632,11 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_HANGUP: {
-		ast_mutex_lock(&ast_chan->lock);
-
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "congestion");
 		if (tone) {
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
 		}
-
-		ast_mutex_unlock(&ast_chan->lock);
 
 		return 0;
 	}
