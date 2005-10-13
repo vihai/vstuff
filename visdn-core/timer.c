@@ -28,8 +28,12 @@ static struct class visdn_timer_class;
 
 struct visdn_timer_user
 {
+	struct list_head users_list_node;
+
 	struct visdn_timer *timer;
 	struct file *file;
+
+	int poll_reported;
 };
 
 int visdn_timer_cdev_open(
@@ -66,6 +70,10 @@ int visdn_timer_cdev_open(
 
 	file->private_data = timer_user;
 
+	spin_lock_bh(&timer->users_list_lock);
+	list_add_tail(&timer_user->users_list_node, &timer->users_list);
+	spin_unlock_bh(&timer->users_list_lock);
+
 	return 0;
 
 	kfree(timer_user);
@@ -80,6 +88,10 @@ int visdn_timer_cdev_release(
 	visdn_debug(3, "visdn_timer_cdev_release()\n");
 
 	struct visdn_timer_user *timer_user = file->private_data;
+
+	spin_lock_bh(&timer_user->timer->users_list_lock);
+	list_del(&timer_user->users_list_node);
+	spin_unlock_bh(&timer_user->timer->users_list_lock);
 
 	kfree(timer_user);
 
@@ -110,6 +122,13 @@ void visdn_timer_tick(struct visdn_timer *timer)
 	}
 	rcu_read_unlock();
 
+	spin_lock_bh(&timer->users_list_lock);
+	struct visdn_timer_user *timer_user;
+	list_for_each_entry(timer_user, &timer->users_list, users_list_node) {
+		timer_user->poll_reported = FALSE;
+	}
+	spin_unlock_bh(&timer->users_list_lock);
+
 	timer->poll_count++;
 	if (timer->poll_count >= timer->poll_divider) {
 		timer->poll_count = 0;
@@ -129,10 +148,12 @@ static unsigned int visdn_timer_cdev_poll(
 
 	poll_wait(file, &timer_user->timer->wait_queue, wait);
 
-	if (wait)
-		return 0;
-	else
+	if (!timer_user->poll_reported) {
+		timer_user->poll_reported = TRUE;
 		return POLLIN | POLLRDNORM;
+	} else {
+		return 0;
+	}
 }
 
 struct file_operations visdn_timer_fops =
@@ -257,6 +278,8 @@ int visdn_timer_register(
 
 #define TIMER_DIVIDER 100
 
+	INIT_LIST_HEAD(&timer->users_list);
+	spin_lock_init(&timer->users_list_lock);
 	timer->main_divider = timer->natural_frequency / TIMER_DIVIDER;
 	timer->poll_divider = TIMER_DIVIDER / 100;
 	timer->poll_count = 0;

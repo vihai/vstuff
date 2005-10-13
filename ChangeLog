@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-13 22:35:28 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-284
+
+    Summary:
+      The timer cleanup was not really working
+    Revision:
+      isdn--devel--0.1--patch-284
+
+
+    modified files:
+     ChangeLog visdn-core/timer.c
+
+
 2005-10-13 13:30:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-283
 
     Summary:
