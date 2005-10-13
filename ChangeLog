@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-13 13:29:19 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-282
+
+    Summary:
+      Missing inizialization of called number in chan_visdn
+    Revision:
+      isdn--devel--0.1--patch-282
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2005-10-12 22:45:13 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-281
 
     Summary:

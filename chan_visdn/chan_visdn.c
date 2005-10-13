@@ -2876,7 +2876,7 @@ static void visdn_q931_setup_indication(
 {
 	FUNC_DEBUG();
 
-	char called_number[32];
+	char called_number[32] = "";
 
 	struct visdn_chan *visdn_chan;
 	visdn_chan = visdn_alloc();
@@ -3492,8 +3492,6 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 				break;
 
 			called_number[strlen(called_number)] = f->subclass;
-
-printf("MATCHING %s %s\n", chan->context, called_number);
 
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
