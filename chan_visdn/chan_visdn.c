@@ -1022,7 +1022,7 @@ static char debug_visdn_generic_help[] =
 
 static struct ast_cli_entry debug_visdn_generic =
 {
-        { "debug", "visdn", "generic", NULL },
+	{ "debug", "visdn", "generic", NULL },
 	do_debug_visdn_generic,
 	"Enables generic vISDN debugging",
 	debug_visdn_generic_help,
@@ -1031,7 +1031,7 @@ static struct ast_cli_entry debug_visdn_generic =
 
 static struct ast_cli_entry no_debug_visdn_generic =
 {
-        { "no", "debug", "visdn", "generic", NULL },
+	{ "no", "debug", "visdn", "generic", NULL },
 	do_no_debug_visdn_generic,
 	"Disables generic vISDN debugging",
 	NULL,
@@ -1044,7 +1044,7 @@ static char debug_visdn_q921_help[] =
 
 static struct ast_cli_entry debug_visdn_q921 =
 {
-        { "debug", "visdn", "q921", NULL },
+	{ "debug", "visdn", "q921", NULL },
 	do_debug_visdn_q921,
 	"Enables q.921 tracing",
 	debug_visdn_q921_help,
@@ -1053,7 +1053,7 @@ static struct ast_cli_entry debug_visdn_q921 =
 
 static struct ast_cli_entry no_debug_visdn_q921 =
 {
-        { "no", "debug", "visdn", "q921", NULL },
+	{ "no", "debug", "visdn", "q921", NULL },
 	do_no_debug_visdn_q921,
 	"Disables q.921 tracing",
 	NULL,
@@ -1066,7 +1066,7 @@ static char debug_visdn_q931_help[] =
 
 static struct ast_cli_entry debug_visdn_q931 =
 {
-        { "debug", "visdn", "q931", NULL },
+	{ "debug", "visdn", "q931", NULL },
 	do_debug_visdn_q931,
 	"Enables q.931 tracing",
 	debug_visdn_q931_help,
@@ -1075,7 +1075,7 @@ static struct ast_cli_entry debug_visdn_q931 =
 
 static struct ast_cli_entry no_debug_visdn_q931 =
 {
-        { "no", "debug", "visdn", "q931", NULL },
+	{ "no", "debug", "visdn", "q931", NULL },
 	do_no_debug_visdn_q931,
 	"Disables q.931 tracing",
 	NULL,
@@ -1088,7 +1088,7 @@ static char show_visdn_interfaces_help[] =
 
 static struct ast_cli_entry show_visdn_interfaces =
 {
-        { "show", "visdn", "interfaces", NULL },
+	{ "show", "visdn", "interfaces", NULL },
 	do_show_visdn_interfaces,
 	"Displays vISDN interface information",
 	show_visdn_interfaces_help,
@@ -1101,7 +1101,7 @@ static char visdn_visdn_reload_help[] =
 
 static struct ast_cli_entry visdn_reload =
 {
-        { "visdn", "reload", NULL },
+	{ "visdn", "reload", NULL },
 	do_visdn_reload,
 	"Reloads vISDN configuration",
 	visdn_visdn_reload_help,
@@ -1114,7 +1114,7 @@ static char visdn_show_visdn_channels_help[] =
 
 static struct ast_cli_entry show_visdn_channels =
 {
-        { "show", "visdn", "channels", NULL },
+	{ "show", "visdn", "channels", NULL },
 	do_show_visdn_channels,
 	"Displays vISDN channel information",
 	visdn_show_visdn_channels_help,
@@ -1127,7 +1127,7 @@ static char show_visdn_calls_help[] =
 
 static struct ast_cli_entry show_visdn_calls =
 {
-        { "show", "visdn", "calls", NULL },
+	{ "show", "visdn", "calls", NULL },
 	do_show_visdn_calls,
 	"Lists vISDN calls",
 	show_visdn_calls_help,
@@ -1257,13 +1257,13 @@ static int visdn_call(
 	if (!found) {
 		ast_log(LOG_WARNING, "Interface %s not found\n", intf_name);
 		err = -1;
-                goto err_intf_not_found;
+		goto err_intf_not_found;
 	}
 
 	if (!intf->q931_intf) {
 		ast_log(LOG_WARNING, "Interface %s not present\n", intf_name);
 		err = -1;
-                goto err_intf_not_found;
+		goto err_intf_not_found;
 	}
 
 	struct q931_call *q931_call;
@@ -1643,7 +1643,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_RINGING: {
-                struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ies ies = Q931_IES_INIT;
 
 		struct q931_ie_progress_indicator *pi = NULL;
 
@@ -1698,7 +1698,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_BUSY: {
-                struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ies ies = Q931_IES_INIT;
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -1723,7 +1723,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_CONGESTION: {
-                struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ies ies = Q931_IES_INIT;
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -1749,7 +1749,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_PROGRESS: {
-                struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ies ies = Q931_IES_INIT;
 
 		struct q931_ie_progress_indicator *pi =
 			q931_ie_progress_indicator_alloc();
@@ -1924,7 +1924,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		    visdn_chan->q931_call->state != U17_RESUME_REQUEST &&
 		    visdn_chan->q931_call->state != U19_RELEASE_REQUEST) {
 
-                        struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -2884,7 +2884,7 @@ static void visdn_q931_setup_indication(
 				ast_log(LOG_NOTICE,
 					"Called number overflow\n");
 
-			        struct q931_ies ies = Q931_IES_INIT;
+				struct q931_ies ies = Q931_IES_INIT;
 
 				struct q931_ie_cause *cause = q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -2945,7 +2945,7 @@ static void visdn_q931_setup_indication(
 				visdn_chan->is_voice = TRUE;
 				q931_call->tones_option = intf->tones_option;
 			} else {
-		                struct q931_ies ies = Q931_IES_INIT;
+				struct q931_ies ies = Q931_IES_INIT;
 
 				struct q931_ie_cause *cause = q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -3007,7 +3007,7 @@ static void visdn_q931_setup_indication(
 					ast_chan->name);
 				ast_hangup(ast_chan);
 
-		                struct q931_ies ies = Q931_IES_INIT;
+				struct q931_ies ies = Q931_IES_INIT;
 
 				struct q931_ie_cause *cause = q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -3030,7 +3030,7 @@ static void visdn_q931_setup_indication(
 
 			ast_hangup(ast_chan);
 
-	                struct q931_ies ies = Q931_IES_INIT;
+			struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -3051,14 +3051,14 @@ static void visdn_q931_setup_indication(
 				ast_chan->name);
 			ast_hangup(ast_chan);
 
-		        struct q931_ies ies_proc = Q931_IES_INIT;
+			struct q931_ies ies_proc = Q931_IES_INIT;
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
 			cause->location = q931_ie_cause_location_call(q931_call);
 			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 			q931_ies_add_put(&ies_proc, &cause->ie);
 
-                        struct q931_ies ies_disc = Q931_IES_INIT;
+			struct q931_ies ies_disc = Q931_IES_INIT;
 			if (visdn_chan->is_voice) {
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
@@ -3489,14 +3489,12 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 					called_number, 1,
 					chan->callerid)) {
 
-				ast_indicate(chan, AST_CONTROL_PROCEEDING);
-				ast_setstate(chan, AST_STATE_RINGING);
-
 				chan->priority = 0;
 				strncpy(chan->exten, called_number,
 						sizeof(chan->exten));
 
 				ast_frfree(f);
+
 				return 0;
 			}
 		}
