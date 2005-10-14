@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <sys/poll.h>
+#include <string.h>
 #include <errno.h>
 #include <math.h>
 #include <getopt.h>
@@ -79,8 +80,9 @@ int main(int argc, char *argv[])
 
 	int fd;
 	fd = open("/dev/visdn/timer", O_RDONLY);
-	if (!fd) {
-		printf("open; %s\n", strerror(errno));
+	if (fd < 0) {
+		printf("cannot open /dev/visdn/timer: %s\n", strerror(errno));
+
 		return 1;
 	}
 
@@ -107,7 +109,7 @@ int main(int argc, char *argv[])
 	double prepoll = double_now();
 	for (i=0; i < count; i++) {
 		if (poll(&pollfd, 1, -1) < 0) {
-			printf("poll; %s\n", strerror(errno));
+			printf("poll: %s\n", strerror(errno));
 			return 1;
 		}
 
