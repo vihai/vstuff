@@ -39,6 +39,4 @@ struct visdn_chan {
 
 	char calling_number[21];
 	int sending_complete;
-
-//	echo_can_state_t *ec;
 };

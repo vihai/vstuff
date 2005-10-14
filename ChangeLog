@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-14 01:34:13 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-287
+
+    Summary:
+      Minor cleanup in chan_visdn
+    Revision:
+      isdn--devel--0.1--patch-287
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c chan_visdn/chan_visdn.h
+
+
 2005-10-14 01:30:39 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-286
 
     Summary:

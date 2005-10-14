@@ -1987,7 +1987,12 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 	static struct ast_frame f;
-	static char buf[512];
+	char buf[512];
+
+	f.src = VISDN_CHAN_TYPE;
+	f.mallocd = 0;
+	f.delivery.tv_sec = 0;
+	f.delivery.tv_usec = 0;
 
 	if (visdn_chan->channel_fd < 0) {
 		f.frametype = AST_FRAME_NULL;
@@ -1996,28 +2001,15 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		f.datalen = 0;
 		f.data = NULL;
 		f.offset = 0;
-		f.src = VISDN_CHAN_TYPE;
-		f.mallocd = 0;
-		f.delivery.tv_sec = 0;
-		f.delivery.tv_usec = 0;
 
 		return &f;
 	}
 
-	int nread = read(visdn_chan->channel_fd, buf, 512);
+	int nread = read(visdn_chan->channel_fd, buf, sizeof(buf));
 	if (nread < 0) {
 		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
 		return &f;
 	}
-
-/*
-	for (i=0; i<nread; i++) {
-		buf[i] = linear_to_alaw(
-				echo_can_update(visdn_chan->ec,
-					alaw_to_linear(txbuf[i]),
-					alaw_to_linear(buf[i])));
-	}
-*/
 
 #if 0
 struct timeval tv;
@@ -2034,10 +2026,6 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d\n",
 	f.datalen = nread;
 	f.data = buf;
 	f.offset = 0;
-	f.src = VISDN_CHAN_TYPE;
-	f.mallocd = 0;
-	f.delivery.tv_sec = 0;
-	f.delivery.tv_usec = 0;
 
 	return &f;
 }
