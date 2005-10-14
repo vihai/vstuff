@@ -12,11 +12,13 @@
 
 #include <stdio.h>
 #include <fcntl.h>
-#include <sys/poll.h>
 #include <string.h>
 #include <errno.h>
 #include <math.h>
 #include <getopt.h>
+#include <stdlib.h>
+#include <sys/poll.h>
+#include <sys/time.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -142,4 +144,6 @@ int main(int argc, char *argv[])
 			(i * class_step + class_start) * 1000,
 			frequencies[i]);
 	printf("\n");
+
+	return 0;
 }
