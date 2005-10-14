@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-14 01:24:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-285
+
+    Summary:
+      Now tests/jitter does output something useful
+    Revision:
+      isdn--devel--0.1--patch-285
+
+
+    modified files:
+     ChangeLog tests/Makefile.am tests/jitter.c
+
+
 2005-10-13 22:35:28 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-284
 
     Summary:

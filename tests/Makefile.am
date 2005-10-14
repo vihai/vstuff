@@ -11,6 +11,7 @@ INCLUDES = \
 connect_SOURCES = connect.c
 
 jitter_SOURCES = jitter.c
+jitter_LDADD = -lm
 
 sniffer_SOURCES = sniffer.c
 sniffer_LDADD = -lasound
