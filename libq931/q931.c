@@ -142,6 +142,15 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 			q931_call_dl_establish_indication(call);
 	}
 
+	struct q931_message *msg, *n;
+	list_for_each_entry_safe(msg, n, &dlc->outgoing_queue,
+					outgoing_queue_node) {
+		q931_send_frame(dlc, msg->raw, msg->rawlen);
+
+		list_del(&msg->outgoing_queue_node);
+
+		q931_message_put(msg);
+	}
 }
 
 void q931_dl_release_confirm(struct q931_dlc *dlc)

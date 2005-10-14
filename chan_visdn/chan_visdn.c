@@ -1864,9 +1864,6 @@ static int visdn_sendtext(struct ast_channel *ast, char *text)
 
 static void visdn_destroy(struct visdn_chan *visdn_chan)
 {
-//	if (visdn_chan->ec)
-//		echo_can_free(visdn_chan->ec);
-
 	free(visdn_chan);
 }
 
@@ -1881,8 +1878,6 @@ static struct visdn_chan *visdn_alloc()
 	memset(visdn_chan, 0, sizeof(*visdn_chan));
 
 	visdn_chan->channel_fd = -1;
-
-//	visdn_chan->ec = echo_can_create(256, 0);
 
 	return visdn_chan;
 }
@@ -2103,7 +2098,7 @@ static struct ast_channel *visdn_new(
 		return NULL;
 	}
 
-        ast_chan->type = VISDN_CHAN_TYPE;
+	ast_chan->type = VISDN_CHAN_TYPE;
 
 	ast_chan->fds[0] = visdn.timer_fd;
 

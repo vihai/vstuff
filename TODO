@@ -17,6 +17,8 @@ Build system:
 chan_visdn:
 -----------
 
+- Move all q931-related stuff in a separate process and use a communication
+  protocol between that and *
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
