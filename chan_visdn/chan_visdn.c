@@ -185,7 +185,6 @@ struct visdn_state
 	int open_pending_nextcheck;
 
 	int usecnt;
-	int timer_fd;
 	int netlink_socket;
 
 	int debug;
@@ -195,7 +194,6 @@ struct visdn_state
 	struct visdn_interface default_intf;
 } visdn = {
 	.usecnt = 0,
-	.timer_fd = -1,
 #ifdef DEBUG_DEFAULTS
 	.debug = TRUE,
 	.debug_q921 = FALSE,
@@ -1980,6 +1978,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->suspended_call = NULL;
 	}
 
+	close(ast_chan->fds[0]);
+
 	if (visdn_chan) {
 		if (visdn_chan->channel_fd >= 0) {
 			// Disconnect the softport since we cannot rely on
@@ -2117,8 +2117,12 @@ static struct ast_channel *visdn_new(
 
 	ast_chan->type = VISDN_CHAN_TYPE;
 
-	ast_chan->fds[0] = visdn.timer_fd;
 	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
+	if (ast_chan->fds[0] < 0) {
+		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
+			strerror(errno));
+		return NULL;
+	}
 
 	if (state == AST_STATE_RING)
 		ast_chan->rings = 1;
@@ -3803,13 +3807,6 @@ int load_module()
 
 	visdn_reload_config();
 
-	visdn.timer_fd = open("/dev/visdn/timer", O_RDONLY);
-	if (visdn.timer_fd < 0) {
-		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
-			strerror(errno));
-		return -1;
-	}
-
 	visdn.netlink_socket = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	if(visdn.netlink_socket < 0) {
 		ast_log(LOG_ERROR, "Unable to open netlink socket: %s\n",
@@ -3927,8 +3924,6 @@ int unload_module(void)
 	ast_cli_unregister(&debug_visdn_generic);
 
 	ast_channel_unregister(VISDN_CHAN_TYPE);
-
-	close(visdn.timer_fd);
 
 	if (visdn.libq931)
 		q931_leave(visdn.libq931);
