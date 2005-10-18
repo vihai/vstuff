@@ -51,7 +51,7 @@ AC_MSG_CHECKING([kernel build directory])
 if [[ -d "/lib/modules/`uname -r`/build" ]]; then
 	kblddir="/lib/modules/`uname -r`/build"
 elif [[ -d "/usr/src/linux" ]]; then
-        kblddir="/usr/src/linux"
+	kblddir="/usr/src/linux"
 fi
 
 AC_ARG_WITH(
@@ -89,15 +89,17 @@ AC_SUBST(with_kernel_have_sk_prot)
 
 #-----------------------------------------------------------------------------
 
-with_asterisk=yes
-
 AC_ARG_WITH(
 	[asterisk],
 	AC_HELP_STRING(
 		[--with-asterisk],
-		[Enable asterisk module compilation]),)
+		[Enable asterisk module compilation]),
+		with_asterisk=$withval,
+		with_asterisk="yes")
 
 AM_CONDITIONAL(asterisk, test "$with_asterisk" = yes)
+
+if [[ "$with_asterisk" = "yes" ]] ; then
 
 AC_MSG_CHECKING([asterisk modules])
 
@@ -166,6 +168,8 @@ fi
 
 AC_MSG_RESULT([$astconfdir])
 AC_SUBST(astconfdir)
+
+fi
 
 #-----------------------------------------------------------------------------
 
