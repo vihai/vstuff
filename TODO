@@ -17,15 +17,13 @@ Build system:
 chan_visdn:
 -----------
 
-- Move all q931-related stuff in a separate process and use a communication
-  protocol between that and *
 - Implement groups in visdn.conf
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
 - Implement "allowed_caller_ids" which may eventually replace
   force_inbound_caller_id
 - MWI on ISDN phones
-- Asterisk's design forbids me to implement some sort of parameter negotiation
+- Asterisk's design makes difficult to implement some sort of parameter negotiation
   so it is impossible to know what bearer capabilities are accepted by a
   destination, if it supports overlap dialing and so on...
 - Call bumbing

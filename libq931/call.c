@@ -1216,7 +1216,7 @@ void q931_info_request(
 	break;
 
 	case N6_CALL_PRESENT:
-		// Save event until completion of a transition???
+		// Save event until completion of a transition??? FIXME TODO XXX
 	break;
 
 	case N7_CALL_RECEIVED:

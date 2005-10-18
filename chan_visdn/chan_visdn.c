@@ -1862,22 +1862,34 @@ static int visdn_transfer(
 
 static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 {
+	ast_log(LOG_NOTICE, "%s %c\n", __FUNCTION__, digit);
+
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
-	struct q931_ies ies = Q931_IES_INIT;
+	if (visdn_chan->may_send_digits) {
+		visdn_debug("Not ready to send digits, queuing\n");
 
-	struct q931_ie_called_party_number *cdpn =
-		q931_ie_called_party_number_alloc();
-	cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+		struct q931_ies ies = Q931_IES_INIT;
+
+		struct q931_ie_called_party_number *cdpn =
+			q931_ie_called_party_number_alloc();
+		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
 							intf->type_of_number);
-	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
-	cdpn->number[0] = digit;
-	cdpn->number[1] = '\0';
-	q931_ies_add_put(&ies, &cdpn->ie);
+		cdpn->numbering_plan_identificator =
+			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 
-	q931_send_primitive(visdn_chan->q931_call, Q931_CCB_INFO_REQUEST, &ies);
+		cdpn->number[0] = digit;
+		cdpn->number[1] = '\0';
+		q931_ies_add_put(&ies, &cdpn->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_INFO_REQUEST, &ies);
+	} else {
+		visdn_chan->queued_digits[
+			strlen(visdn_chan->queued_digits)] = digit;
+	}
 
 	return 1;
 }
@@ -2727,9 +2739,43 @@ static void visdn_q931_info_indication(
 
 static void visdn_q931_more_info_indication(
 	struct q931_call *q931_call,
-	const struct q931_ies *ies)
+	const struct q931_ies *user_ies)
 {
 	FUNC_DEBUG();
+
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan)
+		return;
+
+	ast_mutex_lock(&ast_chan->lock);
+
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_interface *intf = q931_call->intf->pvt;
+
+	visdn_chan->may_send_digits = TRUE;
+
+	if (strlen(visdn_chan->queued_digits)) {
+		visdn_debug("more-info-indication received, flushing"
+			" digits queue\n");
+
+		struct q931_ies ies = Q931_IES_INIT;
+
+		struct q931_ie_called_party_number *cdpn =
+			q931_ie_called_party_number_alloc();
+		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+							intf->type_of_number);
+		cdpn->numbering_plan_identificator =
+			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+
+		strcpy(cdpn->number, visdn_chan->queued_digits);
+		q931_ies_add_put(&ies, &cdpn->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_INFO_REQUEST, &ies);
+	}
+
+	ast_mutex_unlock(&ast_chan->lock);
 }
 
 static void visdn_q931_notify_indication(
@@ -2749,6 +2795,11 @@ static void visdn_q931_proceeding_indication(
 
 	if (!ast_chan)
 		return;
+
+	ast_mutex_lock(&ast_chan->lock);
+	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	visdn_chan->may_send_digits = TRUE;
+	ast_mutex_unlock(&ast_chan->lock);
 
 	ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
 }
@@ -2985,7 +3036,8 @@ static void visdn_q931_setup_indication(
 				cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
 				q931_ies_add_put(&ies, &cause->ie);
 
-				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
+				q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_REJECT_REQUEST, &ies);
 			}
 
 			if (cdpn->number[strlen(cdpn->number) - 1] == '#') {
@@ -3048,7 +3100,8 @@ static void visdn_q931_setup_indication(
 					Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED;
 				q931_ies_add_put(&ies, &cause->ie);
 
-				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
+				q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_REJECT_REQUEST, &ies);
 
 				return;
 			}
@@ -3102,15 +3155,21 @@ static void visdn_q931_setup_indication(
 
 				struct q931_ies ies = Q931_IES_INIT;
 
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				struct q931_ie_cause *cause =
+					q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = q931_ie_cause_location_call(q931_call);
-				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+				cause->location =
+					q931_ie_cause_location_call(q931_call);
+				cause->value =
+					Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+
 				q931_ies_add_put(&ies, &cause->ie);
 
-				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
+				q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_REJECT_REQUEST, &ies);
 			} else {
-				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_NOTIFY_REQUEST, NULL);
+				q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_NOTIFY_REQUEST, NULL);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
 			}
@@ -3127,11 +3186,14 @@ static void visdn_q931_setup_indication(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
+			cause->location =
+				q931_ie_cause_location_call(q931_call);
+
 			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
 			q931_ies_add_put(&ies, &cause->ie);
 
-			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_REJECT_REQUEST, &ies);
 		}
 	} else {
 
@@ -3147,7 +3209,9 @@ static void visdn_q931_setup_indication(
 			struct q931_ies ies_proc = Q931_IES_INIT;
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(q931_call);
+			cause->location =
+				q931_ie_cause_location_call(q931_call);
+
 			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 			q931_ies_add_put(&ies_proc, &cause->ie);
 
@@ -3156,17 +3220,21 @@ static void visdn_q931_setup_indication(
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
 				pi->coding_standard = Q931_IE_PI_CS_CCITT;
-				pi->location = q931_ie_progress_indicator_location(
+				pi->location =
+					q931_ie_progress_indicator_location(
 							visdn_chan->q931_call);
 				pi->progress_description =
 					Q931_IE_PI_PD_IN_BAND_INFORMATION;
 				q931_ies_add_put(&ies_disc, &pi->ie);
 			}
 
-			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROCEEDING_REQUEST, &ies_proc);
-			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies_disc);
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_PROCEEDING_REQUEST, &ies_proc);
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_DISCONNECT_REQUEST, &ies_disc);
 		} else {
-			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_MORE_INFO_REQUEST, NULL);
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_MORE_INFO_REQUEST, NULL);
 		}
 
 		for(i=0; called_number[i]; i++) {

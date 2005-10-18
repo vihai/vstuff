@@ -39,4 +39,7 @@ struct visdn_chan {
 
 	char calling_number[21];
 	int sending_complete;
+
+	int may_send_digits;
+	char queued_digits[21];
 };
