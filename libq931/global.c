@@ -31,6 +31,13 @@
 #include <libq931/ie_channel_identification.h>
 #include <libq931/ie_restart_indicator.h>
 
+#define q931_global_primitive(gc, primitive)		\
+		(gc)->intf->lib->queue_primitive(NULL, (primitive), NULL,\
+				(unsigned long)(gc), 0);
+#define q931_global_primitive1(gc, primitive, par1)		\
+		(gc)->intf->lib->queue_primitive(NULL, (primitive), NULL,\
+				(unsigned long)(gc), (unsigned long)(par1));
+
 static const char *q931_global_state_to_text(enum q931_global_state state)
 {
 	switch (state) {
@@ -159,7 +166,7 @@ void q931_global_restart_confirm(
 					&gc->restart_acked_chans);
 
 				q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
-				q931_global_primitive(gc, management_restart_confirm, &cs);
+				q931_global_primitive1(gc, Q931_CCB_MANAGEMENT_RESTART_CONFIRM, &cs);
 			} else {
 				gc->restart_responded = TRUE;
 			}
@@ -247,7 +254,7 @@ inline static void q931_global_handle_status(
 		if (cs->value == q931_global_state_to_ie_state(gc->state)) {
 			// Implementation dependent
 		} else {
-			q931_global_primitive(gc, status_management_indication);
+			q931_global_primitive(gc, Q931_CCB_STATUS_MANAGEMENT_INDICATION);
 			// WITH ERROR
 		}
 	}
@@ -346,7 +353,7 @@ inline static void q931_global_handle_restart_acknowledge(
 				&gc->restart_reqd_chans,
 				&gc->restart_acked_chans);
 
-			q931_global_primitive(gc, management_restart_confirm, &cs);
+			q931_global_primitive1(gc, Q931_CCB_MANAGEMENT_RESTART_CONFIRM, &cs);
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 		} else if (!gc->T317_expired) {
 
@@ -400,7 +407,7 @@ void q931_global_timer_T316(void *data)
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 
 			// Indicate that restart has failed
-			q931_global_primitive(gc, management_restart_confirm, NULL);
+			q931_global_primitive1(gc, Q931_CCB_MANAGEMENT_RESTART_CONFIRM, NULL);
 		} else {
 			struct q931_ies ies = Q931_IES_INIT;
 
@@ -462,7 +469,7 @@ void q931_global_timer_T317(void *data)
 
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 
-			q931_global_primitive(gc, management_restart_confirm, &cs);
+			q931_global_primitive1(gc, Q931_CCB_MANAGEMENT_RESTART_CONFIRM, &cs);
 		} else {
 			gc->T317_expired = TRUE;
 		}
@@ -493,7 +500,7 @@ void q931_global_timer_T317(void *data)
 		}
 
 		q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
-		q931_global_primitive(gc, timeout_management_indication);
+		q931_global_primitive(gc, Q931_CCB_TIMEOUT_MANAGEMENT_INDICATION);
 	break;
 	}
 }

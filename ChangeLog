@@ -2,6 +2,25 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-18 14:00:12 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-292
+
+    Summary:
+      First step in separation of q931 thread from the client. Now, q.931 primitives and callbacks are asynchronous.
+    Revision:
+      isdn--devel--0.1--patch-292
+
+
+    removed files:
+     libq931/.arch-ids/user.c.id libq931/user.c
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c libq931/Makefile.am
+     libq931/call.c libq931/ces.c libq931/channel.c
+     libq931/global.c libq931/libq931/call.h
+     libq931/libq931/channel.h libq931/libq931/global.h
+     libq931/libq931/lib.h libq931/libq931/q931.h
+
+
 2005-10-17 09:50:57 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-291
 
     Summary:

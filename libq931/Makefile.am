@@ -20,6 +20,7 @@ libq931_la_SOURCES =			\
 	callref.c			\
 	dlc.c				\
 	message.c			\
+	ccb.c				\
 	ie_bearer_capability.c		\
 	ie_call_identity.c		\
 	ie_call_state.c			\
@@ -48,6 +49,7 @@ nobase_include_HEADERS =			\
 	libq931/chanset.h			\
 	libq931/dlc.h				\
 	libq931/global.h			\
+	libq931/ccb.h				\
 	libq931/ie.h				\
 	libq931/ie_bearer_capability.h		\
 	libq931/ie_call_identity.h		\

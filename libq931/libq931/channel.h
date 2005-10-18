@@ -13,12 +13,6 @@
 #ifndef _LIBQ931_CHANNEL_H
 #define _LIBQ931_CHANNEL_H
 
-#define q931_channel_primitive(channel, primitive, arg...)			\
-	do {									\
-		if ((channel)->intf->lib->primitive)				\
-			(channel)->intf->lib->primitive(channel, ## arg);	\
-	} while(0);
-
 enum q931_channel_state
 {
 	Q931_CHANSTATE_MAINTAINANCE,

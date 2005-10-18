@@ -732,7 +732,7 @@ static inline void q931_ces_handle_status(
 
 			q931_ces_start_timer(ces, T308);
 			q931_ces_set_state(ces, I19_RELEASE_REQUEST);
-			q931_call_primitive(ces->call, status_indication,
+			q931_call_primitive1(ces->call, Q931_CCB_STATUS_INDICATION,
 				&msg->ies, Q931_STATUS_INDICATION_ERROR);
 			q931_int_release_indication(ces->call, ces, &msg->ies);
 		}

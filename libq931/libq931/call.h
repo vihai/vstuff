@@ -176,75 +176,11 @@ struct q931_call *q931_call_alloc_in(
 	int call_reference,
 	int broadcast_setup);
 
+//--------------------------------- TO BE REMOVED
 struct q931_call *q931_call_alloc_out(
 	struct q931_interface *intf);
 
-void q931_free_call(struct q931_call *call);
-
-void q931_alerting_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_disconnect_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_info_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_more_info_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_notify_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_proceeding_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_progress_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_reject_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_release_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_resume_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_resume_reject_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-
-void q931_resume_response(
-	struct q931_call *call,
-	struct q931_channel *channel,
-	const struct q931_ies *ies);
-void q931_setup_complete_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_setup_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_setup_response(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_status_enquiry_request(
-	struct q931_call *call,
-	struct q931_ces *ces,
-	const struct q931_ies *ies);
-void q931_suspend_reject_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-
-void q931_suspend_response(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_suspend_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
-void q931_restart_request(
-	struct q931_call *call,
-	const struct q931_ies *ies);
+//--------------------------------- TO BE REMOVED
 
 const char *q931_call_state_to_text(enum q931_call_state state);
 
@@ -298,11 +234,14 @@ void _q931_call_stop_timer(
 #define q931_call_timer_running(call, timer)		\
 		q931_timer_pending(&(call)->timer)	\
 
-#define q931_call_primitive(call, primitive, ies, arg...)			\
-	do {									\
-		if ((call)->intf->lib->primitive)				\
-			(call)->intf->lib->primitive(call, ies, ## arg);	\
-	} while(0);
+#define q931_call_primitive(call, primitive, ies)	\
+	(call)->intf->lib->queue_primitive(call, primitive, ies, 0, 0)
+
+#define q931_call_primitive1(call, primitive, ies, par1)	\
+	(call)->intf->lib->queue_primitive(call, primitive, ies, par1, 0)
+
+#define q931_call_primitive2(call, primitive, ies, par1, par2)	\
+	(call)->intf->lib->queue_primitive(call, primitive, ies, par1, par2)
 
 
 void q931_dispatch_message(
@@ -347,6 +286,70 @@ void q931_int_progress_indication(
 void q931_int_release_indication( 
 	struct q931_call *call,
 	struct q931_ces *ces,
+	const struct q931_ies *ies);
+
+void q931_alerting_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_disconnect_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_info_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_more_info_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_notify_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_proceeding_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_progress_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_reject_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_release_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_resume_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_resume_reject_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+
+void q931_resume_response(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_setup_complete_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_setup_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_setup_response(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_status_enquiry_request(
+	struct q931_call *call,
+	struct q931_ces *ces,
+	const struct q931_ies *ies);
+void q931_suspend_reject_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+
+void q931_suspend_response(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_suspend_request(
+	struct q931_call *call,
+	const struct q931_ies *ies);
+void q931_restart_request(
+	struct q931_call *call,
 	const struct q931_ies *ies);
 
 #endif

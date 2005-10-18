@@ -76,8 +76,6 @@
 
 AST_MUTEX_DEFINE_STATIC(usecnt_lock);
 
-// static char context[AST_MAX_EXTENSION] = "default";
-
 static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -87,6 +85,8 @@ enum poll_info_type
 	POLL_INFO_TYPE_INTERFACE,
 	POLL_INFO_TYPE_DLC,
 	POLL_INFO_TYPE_NETLINK,
+	POLL_INFO_TYPE_CCB_Q931,
+	POLL_INFO_TYPE_Q931_CCB,
 };
 
 struct poll_info
@@ -164,6 +164,16 @@ struct visdn_state
 	struct q931_lib *libq931;
 
 	int have_to_exit;
+
+	struct list_head ccb_q931_queue;
+	ast_mutex_t ccb_q931_queue_lock;
+	int ccb_q931_queue_pipe_read;
+	int ccb_q931_queue_pipe_write;
+
+	struct list_head q931_ccb_queue;
+	ast_mutex_t q931_ccb_queue_lock;
+	int q931_ccb_queue_pipe_read;
+	int q931_ccb_queue_pipe_write;
 
 	struct list_head ifs;
 
@@ -1189,6 +1199,67 @@ static enum q931_ie_calling_party_number_type_of_number
 	}
 }
 
+void q931_send_primitive(
+	struct q931_call *call,
+	enum q931_primitive primitive,
+	struct q931_ies *ies)
+{
+	struct q931_ccb_message *msg;
+	msg = malloc(sizeof(*msg));
+	if (!msg)
+		return;
+
+	msg->call = call;
+	msg->primitive = primitive;
+
+	if (ies) {
+		q931_ies_init(&msg->ies);
+		q931_ies_copy(&msg->ies, ies);
+	}
+
+	ast_mutex_lock(&visdn.ccb_q931_queue_lock);
+	list_add_tail(&msg->node, &visdn.ccb_q931_queue);
+	ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
+
+	if (write(visdn.ccb_q931_queue_pipe_write, " ", 1) < 0) {
+		ast_log(LOG_WARNING,
+			"Cannot write on ccb_q931_pipe_write\n");
+	}
+}
+
+void visdn_queue_primitive(
+	struct q931_call *call,
+	enum q931_primitive primitive,
+	const struct q931_ies *ies,
+	unsigned long par1,
+	unsigned long par2)
+{
+	struct q931_ccb_message *msg;
+	msg = malloc(sizeof(*msg));
+	if (!msg)
+		return;
+
+	msg->call = call;
+	msg->primitive = primitive;
+	msg->par1 = par1;
+	msg->par2 = par2;
+
+	if (ies) {
+		q931_ies_init(&msg->ies);
+		q931_ies_copy(&msg->ies, ies);
+	}
+
+	ast_mutex_lock(&visdn.q931_ccb_queue_lock);
+	list_add_tail(&msg->node, &visdn.q931_ccb_queue);
+	ast_mutex_unlock(&visdn.q931_ccb_queue_lock);
+
+	if (write(visdn.q931_ccb_queue_pipe_write, " ", 1) < 0) {
+		ast_log(LOG_WARNING,
+			"Cannot write on q931_ccb_pipe_write\n");
+	}
+}
+
+
 static int visdn_call(
 	struct ast_channel *ast_chan,
 	char *orig_dest,
@@ -1240,9 +1311,6 @@ static int visdn_call(
 			visdn_chan->is_voice = FALSE;
 		}
 	}
-
-	ast_mutex_unlock(&ast_chan->lock);
-	ast_mutex_lock(&visdn.lock);
 
 	int found = FALSE;
 	struct visdn_interface *intf;
@@ -1374,12 +1442,7 @@ static int visdn_call(
 	hlc->presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
 	hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
 
-	q931_setup_request(q931_call, &ies);
-
-	ast_mutex_unlock(&visdn.lock);
-	ast_mutex_lock(&ast_chan->lock);
-
-	q931_call_put(q931_call);
+	q931_send_primitive(q931_call, Q931_CCB_SETUP_REQUEST, &ies);
 
 	return 0;
 
@@ -1388,8 +1451,6 @@ err_channel_not_down:
 	q931_call_put(q931_call);
 err_call_alloc:
 err_intf_not_found:
-	ast_mutex_unlock(&visdn.lock);
-	ast_mutex_lock(&ast_chan->lock);
 err_invalid_format:
 err_invalid_destination:
 
@@ -1409,8 +1470,6 @@ static int visdn_answer(struct ast_channel *ast_chan)
 		return -1;
 	}
 
-	ast_mutex_unlock(&ast_chan->lock);
-	ast_mutex_lock(&visdn.lock);
 	if (visdn_chan->q931_call->state == U6_CALL_PRESENT ||
 	    visdn_chan->q931_call->state == U7_CALL_RECEIVED ||
 	    visdn_chan->q931_call->state == U9_INCOMING_CALL_PROCEEDING ||
@@ -1418,10 +1477,8 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	    visdn_chan->q931_call->state == N2_OVERLAP_SENDING ||
 	    visdn_chan->q931_call->state == N3_OUTGOING_CALL_PROCEEDING ||
 	    visdn_chan->q931_call->state == N4_CALL_DELIVERED) {
-		q931_setup_response(visdn_chan->q931_call, NULL);
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_SETUP_RESPONSE, NULL);
 	}
-	ast_mutex_unlock(&visdn.lock);
-	ast_mutex_lock(&ast_chan->lock);
 
 	return 0;
 }
@@ -1671,16 +1728,10 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		ast_setstate(ast_chan, AST_STATE_RINGING);
 
-		ast_mutex_unlock(&ast_chan->lock);
-		ast_mutex_lock(&visdn.lock);
-
 		if (visdn_chan->q931_call->state == N1_CALL_INITIATED)
-			q931_proceeding_request(visdn_chan->q931_call, NULL);
+			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROCEEDING_REQUEST, NULL);
 
-		q931_alerting_request(visdn_chan->q931_call, &ies);
-		ast_mutex_unlock(&visdn.lock);
-		ast_mutex_lock(&ast_chan->lock);
-
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_ALERTING_REQUEST, &ies);
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "ring");
 		if (tone) {
@@ -1707,11 +1758,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->value = Q931_IE_C_CV_USER_BUSY;
 		q931_ies_add_put(&ies, &cause->ie);
 
-		ast_mutex_unlock(&ast_chan->lock);
-		ast_mutex_lock(&visdn.lock);
-		q931_disconnect_request(visdn_chan->q931_call, &ies);
-		ast_mutex_unlock(&visdn.lock);
-		ast_mutex_lock(&ast_chan->lock);
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
@@ -1732,11 +1779,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 		q931_ies_add_put(&ies, &cause->ie);
 
-		ast_mutex_unlock(&ast_chan->lock);
-		ast_mutex_lock(&visdn.lock);
-		q931_disconnect_request(visdn_chan->q931_call, &ies);
-		ast_mutex_unlock(&visdn.lock);
-		ast_mutex_lock(&ast_chan->lock);
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
@@ -1768,22 +1811,14 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		q931_ies_add_put(&ies, &pi->ie);
 
-		ast_mutex_unlock(&ast_chan->lock);
-		ast_mutex_lock(&visdn.lock);
-		q931_progress_request(visdn_chan->q931_call, &ies);
-		ast_mutex_unlock(&visdn.lock);
-		ast_mutex_lock(&ast_chan->lock);
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROGRESS_REQUEST, &ies);
 
 		return 0;
 	}
 	break;
 
 	case AST_CONTROL_PROCEEDING:
-		ast_mutex_unlock(&ast_chan->lock);
-		ast_mutex_lock(&visdn.lock);
-		q931_proceeding_request(visdn_chan->q931_call, NULL);
-		ast_mutex_unlock(&visdn.lock);
-		ast_mutex_lock(&ast_chan->lock);
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_NOTIFY_REQUEST, NULL);
 
 		return 0;
 	break;
@@ -1846,11 +1881,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	cdpn->number[1] = '\0';
 	q931_ies_add_put(&ies, &cdpn->ie);
 
-	ast_mutex_unlock(&ast_chan->lock);
-	ast_mutex_lock(&visdn.lock);
-	q931_info_request(q931_call, &ies);
-	ast_mutex_unlock(&visdn.lock);
-	ast_mutex_lock(&ast_chan->lock);
+	q931_send_primitive(visdn_chan->q931_call, Q931_CCB_INFO_REQUEST, &ies);
 
 	return 1;
 }
@@ -1933,9 +1964,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 			q931_ies_add_put(&ies, &cause->ie);
 
-			ast_mutex_lock(&visdn.lock);
-			q931_disconnect_request(visdn_chan->q931_call, &ies);
-			ast_mutex_unlock(&visdn.lock);
+			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies);
 		}
 
 		q931_call_put(visdn_chan->q931_call);
@@ -2089,6 +2118,7 @@ static struct ast_channel *visdn_new(
 	ast_chan->type = VISDN_CHAN_TYPE;
 
 	ast_chan->fds[0] = visdn.timer_fd;
+	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 
 	if (state == AST_STATE_RING)
 		ast_chan->rings = 1;
@@ -2168,6 +2198,18 @@ static struct ast_channel *visdn_request(char *type, int format, void *data)
 static void refresh_polls_list()
 {
 	visdn.npolls = 0;
+
+	visdn.polls[visdn.npolls].fd = visdn.q931_ccb_queue_pipe_read;
+	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_Q931_CCB;
+	visdn.poll_infos[visdn.npolls].interface = NULL;
+	(visdn.npolls)++;
+
+	visdn.polls[visdn.npolls].fd = visdn.ccb_q931_queue_pipe_read;
+	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_CCB_Q931;
+	visdn.poll_infos[visdn.npolls].interface = NULL;
+	(visdn.npolls)++;
 
 	visdn.polls[visdn.npolls].fd = visdn.netlink_socket;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
@@ -2370,7 +2412,7 @@ static void visdn_netlink_receive()
 		return;
 	}
 
-	// Implement multipar messages FIXME FIXME TODO
+	// Implement multipart messages FIXME FIXME TODO
 
 	if (hdr->nlmsg_type == RTM_NEWLINK) {
 		struct ifinfomsg *ifi = NLMSG_DATA(hdr);
@@ -2409,6 +2451,32 @@ static void visdn_netlink_receive()
 	}
 }
 
+static void visdn_ccb_q931_receive()
+{
+	struct q931_ccb_message *msg;
+
+	while(1) {
+		ast_mutex_lock(&visdn.ccb_q931_queue_lock);
+
+		msg = list_entry(visdn.ccb_q931_queue.next,
+				struct q931_ccb_message, node);
+		if (&msg->node == &visdn.ccb_q931_queue) {
+			ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
+			break;
+		}
+
+		char buf[1];
+		read(visdn.ccb_q931_queue_pipe_read, buf, 1);
+
+		list_del_init(&msg->node);
+		ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
+
+		q931_ccb_dispatch(msg);
+	}
+}
+
+static void visdn_q931_ccb_receive();
+
 static int visdn_q931_thread_do_poll()
 {
 	longtime_t usec_to_wait = q931_run_timers(visdn.libq931);
@@ -2436,7 +2504,6 @@ static int visdn_q931_thread_do_poll()
 	}
 
 	ast_mutex_lock(&visdn.lock);
-
 	if (time(NULL) > visdn.open_pending_nextcheck) {
 
 		struct visdn_interface *intf;
@@ -2447,12 +2514,14 @@ static int visdn_q931_thread_do_poll()
 						intf->name);
 
 				if (visdn_open_interface(intf) < 0)
-					visdn.open_pending_nextcheck = time(NULL) + 2;
+					visdn.open_pending_nextcheck =
+							time(NULL) + 2;
 			}
 		}
 
 		refresh_polls_list();
 	}
+	ast_mutex_unlock(&visdn.lock);
 
 	int i;
 	for(i = 0; i < visdn.npolls; i++) {
@@ -2463,13 +2532,27 @@ static int visdn_q931_thread_do_poll()
 				visdn_netlink_receive();
 				break; // polls list may have been changed
 			}
+		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_Q931_CCB) {
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
+				visdn_q931_ccb_receive();
+			}
+		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_CCB_Q931) {
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
+				visdn_ccb_q931_receive();
+			}
 		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_INTERFACE) {
 			if (visdn.polls[i].revents &
 					(POLLIN | POLLPRI | POLLERR |
 					 POLLHUP | POLLNVAL)) {
+				ast_mutex_lock(&visdn.lock);
 				visdn_accept(
 					visdn.poll_infos[i].interface,
 					visdn.polls[i].fd);
+				ast_mutex_unlock(&visdn.lock);
 				break; // polls list may have been changed
 			}
 		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_DLC) {
@@ -2478,17 +2561,21 @@ static int visdn_q931_thread_do_poll()
 					 POLLHUP | POLLNVAL)) {
 
 				int err;
+				ast_mutex_lock(&visdn.lock);
 				err = q931_receive(visdn.poll_infos[i].dlc);
 
 				if (err == Q931_RECEIVE_REFRESH) {
 					refresh_polls_list();
+					ast_mutex_unlock(&visdn.lock);
 
 					break;
 				}
+				ast_mutex_unlock(&visdn.lock);
 			}
 		}
 	}
 
+	ast_mutex_lock(&visdn.lock);
 	int active_calls_cnt = 0;
 	if (visdn.have_to_exit) {
 		active_calls_cnt = 0;
@@ -2508,7 +2595,6 @@ static int visdn_q931_thread_do_poll()
 			"There are still %d active calls, waiting...\n",
 			active_calls_cnt);
 	}
-
 	ast_mutex_unlock(&visdn.lock);
 
 	return (!visdn.have_to_exit || active_calls_cnt > 0);
@@ -2561,7 +2647,7 @@ static void visdn_q931_connect_indication(
 {
 	FUNC_DEBUG();
 
-	q931_setup_complete_request(q931_call, NULL);
+	q931_send_primitive(q931_call, Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
@@ -2583,7 +2669,7 @@ static void visdn_q931_disconnect_indication(
 		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
 	}
 
-	q931_release_request(q931_call, NULL);
+	q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
 }
 
 static void visdn_q931_error_indication(
@@ -2802,11 +2888,14 @@ static void visdn_q931_resume_indication(
 		notify->description = Q931_IE_NI_D_USER_RESUMED;
 		q931_ies_add_put(&response_ies, &notify->ie);
 
-		q931_notify_request(remote_call, &response_ies);
+		q931_send_primitive(remote_call, Q931_CCB_NOTIFY_REQUEST, &response_ies);
 	}
 
 	ast_moh_stop(suspended_call->ast_chan->bridge);
-	q931_resume_response(q931_call, suspended_call->q931_chan, NULL);
+
+	// FIXME: Transform suspended_call->q931_chan to IE and pass it
+	assert(0);
+	q931_send_primitive(q931_call, Q931_CCB_RESUME_RESPONSE, NULL);
 
 	list_del(&suspended_call->node);
 	free(suspended_call);
@@ -2823,7 +2912,7 @@ err_ast_chan:
 	c->value = cause;
 	q931_ies_add_put(&resp_ies, &c->ie);
 
-	q931_resume_reject_request(q931_call, &resp_ies);
+	q931_send_primitive(visdn_chan->q931_call, Q931_CCB_RESUME_REJECT_REQUEST, &resp_ies);
 
 	return;
 }
@@ -2892,7 +2981,7 @@ static void visdn_q931_setup_indication(
 				cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
 				q931_ies_add_put(&ies, &cause->ie);
 
-				q931_reject_request(q931_call, &ies);
+				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
 			}
 
 			if (cdpn->number[strlen(cdpn->number) - 1] == '#') {
@@ -2955,7 +3044,7 @@ static void visdn_q931_setup_indication(
 					Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED;
 				q931_ies_add_put(&ies, &cause->ie);
 
-				q931_reject_request(q931_call, &ies);
+				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
 
 				return;
 			}
@@ -3015,9 +3104,9 @@ static void visdn_q931_setup_indication(
 				cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 				q931_ies_add_put(&ies, &cause->ie);
 
-				q931_reject_request(q931_call, &ies);
+				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
 			} else {
-				q931_proceeding_request(q931_call, NULL);
+				q931_send_primitive(visdn_chan->q931_call, Q931_CCB_NOTIFY_REQUEST, NULL);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
 			}
@@ -3038,7 +3127,7 @@ static void visdn_q931_setup_indication(
 			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
 			q931_ies_add_put(&ies, &cause->ie);
 
-			q931_reject_request(q931_call, &ies);
+			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_REJECT_REQUEST, &ies);
 		}
 	} else {
 
@@ -3070,10 +3159,10 @@ static void visdn_q931_setup_indication(
 				q931_ies_add_put(&ies_disc, &pi->ie);
 			}
 
-			q931_proceeding_request(q931_call, &ies_proc);
-			q931_disconnect_request(q931_call, &ies_disc);
+			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROCEEDING_REQUEST, &ies_proc);
+			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies_disc);
 		} else {
-			q931_more_info_request(q931_call, NULL);
+			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_MORE_INFO_REQUEST, NULL);
 		}
 
 		for(i=0; called_number[i]; i++) {
@@ -3172,7 +3261,7 @@ static void visdn_q931_suspend_indication(
 
 	list_add_tail(&suspended_call->node, &intf->suspended_calls);
 
-	q931_suspend_response(q931_call, NULL);
+	q931_send_primitive(q931_call, Q931_CCB_SUSPEND_RESPONSE, NULL);
 
 	assert(ast_chan->bridge);
 
@@ -3193,7 +3282,7 @@ static void visdn_q931_suspend_indication(
 		notify->description = Q931_IE_NI_D_USER_SUSPENDED;
 		q931_ies_add_put(&response_ies, &notify->ie);
 
-		q931_notify_request(remote_call, &response_ies);
+		q931_send_primitive(remote_call, Q931_CCB_NOTIFY_REQUEST, &response_ies);
 	}
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
@@ -3220,7 +3309,7 @@ err_ast_chan:
 	c->value = cause;
 	q931_ies_add_put(&resp_ies, &c->ie);
 
-	q931_suspend_reject_request(q931_call, &resp_ies);
+	q931_send_primitive(visdn_chan->q931_call, Q931_CCB_SUSPEND_REJECT_REQUEST, &resp_ies);
 
 	return;
 }
@@ -3232,13 +3321,12 @@ static void visdn_q931_timeout_indication(
 	FUNC_DEBUG();
 }
 
-static void visdn_q931_connect_channel(struct q931_channel *channel)
+static void visdn_q931_connect_channel(
+	struct q931_channel *channel)
 {
 	FUNC_DEBUG();
 
-	assert(channel);
 	assert(channel->call);
-
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
 	if (!ast_chan)
@@ -3312,7 +3400,8 @@ err_readlink:
 	ast_mutex_unlock(&ast_chan->lock);
 }
 
-static void visdn_q931_disconnect_channel(struct q931_channel *channel)
+static void visdn_q931_disconnect_channel(
+	struct q931_channel *channel)
 {
 	FUNC_DEBUG();
 
@@ -3449,6 +3538,158 @@ void visdn_q931_timer_update(struct q931_lib *lib)
 	pthread_kill(visdn_q931_thread, SIGURG);
 }
 
+static void visdn_q931_ccb_receive()
+{
+	struct q931_ccb_message *msg;
+
+	while(1) {
+		ast_mutex_lock(&visdn.q931_ccb_queue_lock);
+
+		msg = list_entry(visdn.q931_ccb_queue.next,
+				struct q931_ccb_message, node);
+		if (&msg->node == &visdn.q931_ccb_queue) {
+			ast_mutex_unlock(&visdn.q931_ccb_queue_lock);
+			break;
+		}
+
+		char buf[1];
+		read(visdn.q931_ccb_queue_pipe_read, buf, 1);
+
+		list_del_init(&msg->node);
+		ast_mutex_unlock(&visdn.q931_ccb_queue_lock);
+
+		switch (msg->primitive) {
+		case Q931_CCB_ALERTING_INDICATION:
+			visdn_q931_alerting_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_CONNECT_INDICATION:
+			visdn_q931_connect_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_DISCONNECT_INDICATION:
+			visdn_q931_disconnect_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_ERROR_INDICATION:
+			visdn_q931_error_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_INFO_INDICATION:
+			visdn_q931_info_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_MORE_INFO_INDICATION:
+			visdn_q931_more_info_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_NOTIFY_INDICATION:
+			visdn_q931_notify_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_PROCEEDING_INDICATION:
+			visdn_q931_proceeding_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_PROGRESS_INDICATION:
+			visdn_q931_progress_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_REJECT_INDICATION:
+			visdn_q931_reject_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_RELEASE_CONFIRM:
+			visdn_q931_release_confirm(msg->call, &msg->ies,
+								msg->par1);
+		break;
+
+		case Q931_CCB_RELEASE_INDICATION:
+			visdn_q931_release_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_RESUME_CONFIRM:
+			visdn_q931_resume_confirm(msg->call, &msg->ies,
+							msg->par1);
+		break;
+
+		case Q931_CCB_RESUME_INDICATION:
+			visdn_q931_resume_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_SETUP_COMPLETE_INDICATION:
+			visdn_q931_setup_complete_indication(msg->call,
+						&msg->ies, msg->par1);
+		break;
+
+		case Q931_CCB_SETUP_CONFIRM:
+			visdn_q931_setup_confirm(msg->call, &msg->ies, msg->par1);
+		break;
+
+		case Q931_CCB_SETUP_INDICATION:
+			visdn_q931_setup_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_STATUS_INDICATION:
+			visdn_q931_status_indication(msg->call, &msg->ies,
+						msg->par1);
+		break;
+
+		case Q931_CCB_SUSPEND_CONFIRM:
+			visdn_q931_suspend_confirm(msg->call, &msg->ies,
+						msg->par1);
+		break;
+
+		case Q931_CCB_SUSPEND_INDICATION:
+			visdn_q931_suspend_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_TIMEOUT_INDICATION:
+			visdn_q931_timeout_indication(msg->call, &msg->ies);
+		break;
+
+		case Q931_CCB_TIMEOUT_MANAGEMENT_INDICATION:
+			visdn_q931_timeout_management_indication(
+				(struct q931_global_call *)msg->par1);
+		break;
+
+		case Q931_CCB_STATUS_MANAGEMENT_INDICATION:
+			visdn_q931_status_management_indication(
+				(struct q931_global_call *)msg->par1);
+		break;
+
+		case Q931_CCB_MANAGEMENT_RESTART_CONFIRM:
+			visdn_q931_management_restart_confirm(
+				(struct q931_global_call *)msg->par1,
+				(struct q931_chanset *)msg->par2);
+		break;
+
+		case Q931_CCB_CONNECT_CHANNEL:
+			visdn_q931_connect_channel(
+				(struct q931_channel *)msg->par1);
+		break;
+
+		case Q931_CCB_DISCONNECT_CHANNEL:
+			visdn_q931_disconnect_channel(
+				(struct q931_channel *)msg->par1);
+		break;
+
+		case Q931_CCB_START_TONE:
+			visdn_q931_start_tone(
+				(struct q931_channel *)msg->par1, msg->par2);
+		break;
+
+		case Q931_CCB_STOP_TONE:
+			visdn_q931_stop_tone((struct q931_channel *)msg->par1);
+		break;
+
+		default:
+			ast_log(LOG_WARNING, "Unexpected primitive %d\n",
+				msg->primitive);
+		}
+	}
+}
+
 STANDARD_LOCAL_USER;
 
 LOCAL_USER_DECL;
@@ -3489,6 +3730,16 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 					called_number, 1,
 					chan->callerid)) {
 
+				if (!ast_matchmore_extension(NULL,
+					chan->context,
+					called_number, 1,
+					chan->callerid)) {
+
+					ast_setstate(chan, AST_STATE_RINGING);
+					ast_queue_control(chan,
+						AST_CONTROL_PROCEEDING);
+				}
+
 				chan->priority = 0;
 				strncpy(chan->exten, called_number,
 						sizeof(chan->exten));
@@ -3507,7 +3758,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 }
 
 static char *visdn_overlap_dial_descr =
-"  vISDNDialtone():\n";
+"  vISDNOverlapDial():\n";
 
 int load_module()
 {
@@ -3517,73 +3768,38 @@ int load_module()
 	// No worries, internal structures are read-only and thread safe
 	ast_mutex_init(&visdn.lock);
 
+	INIT_LIST_HEAD(&visdn.ccb_q931_queue);
+	ast_mutex_init(&visdn.ccb_q931_queue_lock);
+
+	INIT_LIST_HEAD(&visdn.q931_ccb_queue);
+	ast_mutex_init(&visdn.q931_ccb_queue_lock);
+
+	int filedes[2];
+	if (pipe(filedes) < 0) {
+		ast_log(LOG_ERROR, "Unable to create pipe: %s\n",
+			strerror(errno));
+		return -1;
+	}
+
+	visdn.ccb_q931_queue_pipe_read = filedes[0];
+	visdn.ccb_q931_queue_pipe_write = filedes[1];
+
+	if (pipe(filedes) < 0) {
+		ast_log(LOG_ERROR, "Unable to create pipe: %s\n",
+			strerror(errno));
+		return -1;
+	}
+
+	visdn.q931_ccb_queue_pipe_read = filedes[0];
+	visdn.q931_ccb_queue_pipe_write = filedes[1];
+
 	INIT_LIST_HEAD(&visdn.ifs);
 
 	visdn.libq931 = q931_init();
 	q931_set_logger_func(visdn.libq931, visdn_logger);
 
-	visdn.libq931->pvt =
 	visdn.libq931->timer_update = visdn_q931_timer_update;
-
-	// Setup all callbacks for libq931 primitives
-	visdn.libq931->alerting_indication =
-		visdn_q931_alerting_indication;
-	visdn.libq931->connect_indication =
-		visdn_q931_connect_indication;
-	visdn.libq931->disconnect_indication =
-		visdn_q931_disconnect_indication;
-	visdn.libq931->error_indication =
-		visdn_q931_error_indication;
-	visdn.libq931->info_indication =
-		visdn_q931_info_indication;
-	visdn.libq931->more_info_indication =
-		visdn_q931_more_info_indication;
-	visdn.libq931->notify_indication =
-		visdn_q931_notify_indication;
-	visdn.libq931->proceeding_indication =
-		visdn_q931_proceeding_indication;
-	visdn.libq931->progress_indication =
-		visdn_q931_progress_indication;
-	visdn.libq931->reject_indication =
-		visdn_q931_reject_indication;
-	visdn.libq931->release_confirm =
-		visdn_q931_release_confirm;
-	visdn.libq931->release_indication =
-		visdn_q931_release_indication;
-	visdn.libq931->resume_confirm =
-		visdn_q931_resume_confirm;
-	visdn.libq931->resume_indication =
-		visdn_q931_resume_indication;
-	visdn.libq931->setup_complete_indication =
-		visdn_q931_setup_complete_indication;
-	visdn.libq931->setup_confirm =
-		visdn_q931_setup_confirm;
-	visdn.libq931->setup_indication =
-		visdn_q931_setup_indication;
-	visdn.libq931->status_indication =
-		visdn_q931_status_indication;
-	visdn.libq931->suspend_confirm =
-		visdn_q931_suspend_confirm;
-	visdn.libq931->suspend_indication =
-		visdn_q931_suspend_indication;
-	visdn.libq931->timeout_indication =
-		visdn_q931_timeout_indication;
-
-	visdn.libq931->connect_channel =
-		visdn_q931_connect_channel;
-	visdn.libq931->disconnect_channel =
-		visdn_q931_disconnect_channel;
-	visdn.libq931->start_tone =
-		visdn_q931_start_tone;
-	visdn.libq931->stop_tone =
-		visdn_q931_stop_tone;
-
-	visdn.libq931->management_restart_confirm =
-		visdn_q931_management_restart_confirm;
-	visdn.libq931->timeout_management_indication =
-		visdn_q931_timeout_management_indication;
-	visdn.libq931->status_management_indication =
-		visdn_q931_status_management_indication;
+	visdn.libq931->queue_primitive = visdn_queue_primitive;
 
 	visdn_reload_config();
 

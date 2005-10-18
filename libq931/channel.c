@@ -23,6 +23,14 @@
 #include <libq931/intf.h>
 #include <libq931/lib.h>
 
+#define q931_channel_primitive(channel, primitive)	\
+	(channel)->intf->lib->queue_primitive(NULL, primitive, NULL,	\
+		(unsigned long)channel, 0)
+
+#define q931_channel_primitive1(channel, primitive, par1)	\
+	(channel)->intf->lib->queue_primitive(NULL, primitive, NULL,	\
+		(unsigned long)channel, par1)
+
 struct q931_channel *q931_channel_select(struct q931_call *call)
 {
 	assert(call);
@@ -98,11 +106,12 @@ void q931_channel_connect(
 	struct q931_channel *channel)
 {
 	assert(channel);
+	assert(channel->call);
 
 	if (channel->state != Q931_CHANSTATE_CONNECTED) {
 		channel->state = Q931_CHANSTATE_CONNECTED;
 
-		q931_channel_primitive(channel, connect_channel);
+		q931_channel_primitive(channel, Q931_CCB_CONNECT_CHANNEL);
 	}
 }
 
@@ -110,11 +119,12 @@ void q931_channel_control(
 	struct q931_channel *channel)
 {
 	assert(channel);
+	assert(channel->call);
 
 	if (channel->state != Q931_CHANSTATE_CONNECTED) {
 		channel->state = Q931_CHANSTATE_CONNECTED;
 
-		q931_channel_primitive(channel, connect_channel);
+		q931_channel_primitive(channel, Q931_CCB_CONNECT_CHANNEL);
 	}
 }
 
@@ -132,7 +142,7 @@ void q931_channel_disconnect(
 	if (channel->state == Q931_CHANSTATE_CONNECTED) {
 		channel->state = Q931_CHANSTATE_DISCONNECTED;
 
-		q931_channel_primitive(channel, disconnect_channel);
+		q931_channel_primitive(channel, Q931_CCB_DISCONNECT_CHANNEL);
 	}
 }
 
@@ -148,7 +158,7 @@ void q931_channel_release(
 	if (channel->state == Q931_CHANSTATE_CONNECTED) {
 		// Is this an unexpected state?
 
-		q931_channel_primitive(channel, disconnect_channel);
+		q931_channel_primitive(channel, Q931_CCB_DISCONNECT_CHANNEL);
 	}
 
 	channel->state = Q931_CHANSTATE_AVAILABLE;
@@ -160,7 +170,7 @@ void q931_channel_start_tone(
 {
 	assert(channel);
 
-	q931_channel_primitive(channel, start_tone, tone);
+	q931_channel_primitive1(channel, Q931_CCB_START_TONE, tone);
 }
 
 void q931_channel_stop_tone(
@@ -168,6 +178,6 @@ void q931_channel_stop_tone(
 {
 	assert(channel);
 
-	q931_channel_primitive(channel, stop_tone);
+	q931_channel_primitive(channel, Q931_CCB_STOP_TONE);
 }
 

@@ -20,6 +20,7 @@
 #include <libq931/call.h>
 #include <libq931/intf.h>
 #include <libq931/ces.h>
+#include <libq931/ccb.h>
 
 #include <libq931/ie.h>
 #include <libq931/ie_bearer_capability.h>

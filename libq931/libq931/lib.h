@@ -6,7 +6,7 @@
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
- * under the terms and conditions of the GNU Lesser General Public License.
+ * under the terms and conditions of the GNU General Public License.
  *
  */
 
@@ -18,6 +18,7 @@
 #include <libq931/logging.h>
 #include <libq931/call.h>
 #include <libq931/intf.h>
+#include <libq931/ccb.h>
 
 enum q931_mode
 {
@@ -35,7 +36,14 @@ struct q931_lib
 
 	void (*report)(int level, const char *format, ...);
 	void (*timer_update)(struct q931_lib *lib);
+	void (*queue_primitive)(
+		struct q931_call *call,
+		enum q931_primitive primitive,
+		const struct q931_ies *ies,
+		unsigned long par1,
+		unsigned long par2);
 
+/*
 	void (*alerting_indication)(
 		struct q931_call *call,
 		const struct q931_ies *ies);
@@ -116,6 +124,7 @@ struct q931_lib
 	void (*status_management_indication)(struct q931_global_call *gc);
 	void (*management_restart_confirm)(struct q931_global_call *gc,
 		const struct q931_chanset *chanset);
+*/
 };
 
 static inline void q931_set_logger_func(
