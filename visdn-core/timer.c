@@ -33,7 +33,7 @@ struct visdn_timer_user
 	struct visdn_timer *timer;
 	struct file *file;
 
-	int poll_reported;
+	int timer_reported;
 };
 
 int visdn_timer_cdev_open(
@@ -106,8 +106,8 @@ int visdn_timer_cdev_ioctl(
 {
 	visdn_debug(3, "visdn_timer_cdev_ioctl()\n");
 
-	switch(cmd) {
-	}
+/*	switch(cmd) {
+	}*/
 
 	return -EOPNOTSUPP;
 }
@@ -125,9 +125,11 @@ void visdn_timer_tick(struct visdn_timer *timer)
 	spin_lock_bh(&timer->users_list_lock);
 	struct visdn_timer_user *timer_user;
 	list_for_each_entry(timer_user, &timer->users_list, users_list_node) {
-		timer_user->poll_reported = FALSE;
+		timer_user->timer_reported = FALSE;
 	}
 	spin_unlock_bh(&timer->users_list_lock);
+
+	timer->users_left = timer->total_users;
 
 	timer->poll_count++;
 	if (timer->poll_count >= timer->poll_divider) {
@@ -148,21 +150,33 @@ static unsigned int visdn_timer_cdev_poll(
 
 	poll_wait(file, &timer_user->timer->wait_queue, wait);
 
-	if (!timer_user->poll_reported) {
-		timer_user->poll_reported = TRUE;
+	if (!timer_user->timer_reported)
 		return POLLIN | POLLRDNORM;
-	} else {
+	else
 		return 0;
-	}
+}
+
+static ssize_t visdn_timer_cdev_read(
+	struct file *file,
+	char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
+	struct visdn_timer_user *timer_user = file->private_data;
+
+	timer_user->timer_reported = TRUE;
+
+	return count;
 }
 
 struct file_operations visdn_timer_fops =
 {
 	.owner		= THIS_MODULE,
-	.ioctl		= visdn_timer_cdev_ioctl,
 	.open		= visdn_timer_cdev_open,
 	.release	= visdn_timer_cdev_release,
 	.poll		= visdn_timer_cdev_poll,
+	.ioctl		= visdn_timer_cdev_ioctl,
+	.read		= visdn_timer_cdev_read,
 	.llseek		= no_llseek,
 };
 

@@ -46,6 +46,9 @@ struct visdn_timer
 	int main_divider;
 	int poll_divider;
 	int poll_count;
+
+	int total_users;
+	int users_left;
 };
 
 int visdn_timer_modinit(void);

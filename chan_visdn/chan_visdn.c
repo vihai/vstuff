@@ -1475,7 +1475,8 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	    visdn_chan->q931_call->state == N2_OVERLAP_SENDING ||
 	    visdn_chan->q931_call->state == N3_OUTGOING_CALL_PROCEEDING ||
 	    visdn_chan->q931_call->state == N4_CALL_DELIVERED) {
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_SETUP_RESPONSE, NULL);
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_SETUP_RESPONSE, NULL);
 	}
 
 	return 0;
@@ -1678,9 +1679,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case AST_CONTROL_OFFHOOK: {
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "dial");
-		if (tone) {
+		if (tone)
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-		}
 
 		return 0;
 	}
@@ -1689,9 +1689,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case AST_CONTROL_HANGUP: {
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "congestion");
-		if (tone) {
+		if (tone)
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-		}
 
 		return 0;
 	}
@@ -1724,17 +1723,17 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
 		q931_ies_add_put(&ies, &pi->ie);
 
-		ast_setstate(ast_chan, AST_STATE_RINGING);
-
 		if (visdn_chan->q931_call->state == N1_CALL_INITIATED)
-			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROCEEDING_REQUEST, NULL);
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_PROCEEDING_REQUEST, NULL);
 
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_ALERTING_REQUEST, &ies);
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_ALERTING_REQUEST, &ies);
+
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "ring");
-		if (tone) {
+		if (tone)
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-		}
 
 		return 0;
 	}
@@ -1781,9 +1780,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
-		if (tone) {
+		if (tone)
 			ast_playtones_start(ast_chan, 0, tone->data, 1);
-		}
 
 		return 0;
 	}
@@ -2017,6 +2015,8 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
 	static struct ast_frame f;
 	char buf[512];
+
+	read(ast_chan->fds[0], buf, 1);
 
 	f.src = VISDN_CHAN_TYPE;
 	f.mallocd = 0;
@@ -3739,7 +3739,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 					called_number, 1,
 					chan->callerid)) {
 
-					ast_setstate(chan, AST_STATE_RINGING);
+					ast_setstate(chan, AST_STATE_RING);
 					ast_queue_control(chan,
 						AST_CONTROL_PROCEEDING);
 				}
