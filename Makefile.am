@@ -25,6 +25,8 @@ if kernel_modules
 SUBDIRS += visdn-core lapd visdn-timer-system visdn-streamport	\
 	visdn-netdev visdn-cxc-internal visdn-ppp visdn-ec-kb
 
+SUBDIRS += kfifo
+
 if driver_hfc_usb
 SUBDIRS += hfc-usb
 endif

@@ -2,6 +2,36 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-18 23:09:52 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-298
+
+    Summary:
+      Make kfifo a separate module
+    Revision:
+      isdn--devel--0.1--patch-298
+
+
+    new files:
+     kfifo/.arch-ids/.arch-inventory.id kfifo/.arch-ids/=id
+     kfifo/.arch-ids/Makefile.in.id kfifo/.arch-inventory
+     kfifo/Makefile.in
+
+    removed files:
+     visdn-streamport/.arch-ids/kfifo.c.id visdn-streamport/kfifo.c
+
+    modified files:
+     ChangeLog Makefile.am configure.ac
+     visdn-streamport/Makefile.in
+
+    renamed files:
+     linux_compat/.arch-ids/kfifo.c.id
+       ==> kfifo/.arch-ids/kfifo.c.id
+     linux_compat/kfifo.c
+       ==> kfifo/kfifo.c
+
+    new directories:
+     kfifo kfifo/.arch-ids
+
+
 2005-10-18 22:17:43 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-297
 
     Summary:

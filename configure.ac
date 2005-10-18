@@ -310,24 +310,25 @@ AM_CONDITIONAL(driver_hfc_e1,
 	test -n "`echo $drivers | grep hfc-e1`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
-                 libq931/Makefile
-                 chan_visdn/Makefile
-                 app_visdn_ppp/Makefile
-                 pppd_plugin/Makefile
-                 tests/Makefile
-		 kernel_config.h
-                 hfc-4s/Makefile
-                 hfc-e1/Makefile
-                 hfc-pci/Makefile
-                 hfc-usb/Makefile
-                 lapd/Makefile
-                 visdn-cxc-internal/Makefile
-                 visdn-core/Makefile
-                 visdn-streamport/Makefile
-                 visdn-timer-system/Makefile
-                 visdn-netdev/Makefile
-                 visdn-ppp/Makefile
-                 visdn-ec-kb/Makefile
-                 visdn.spec])
+		libq931/Makefile
+		chan_visdn/Makefile
+		app_visdn_ppp/Makefile
+		pppd_plugin/Makefile
+		tests/Makefile
+		kernel_config.h
+		hfc-4s/Makefile
+		hfc-e1/Makefile
+		hfc-pci/Makefile
+		hfc-usb/Makefile
+		lapd/Makefile
+		kfifo/Makefile
+		visdn-cxc-internal/Makefile
+		visdn-core/Makefile
+		visdn-streamport/Makefile
+		visdn-timer-system/Makefile
+		visdn-netdev/Makefile
+		visdn-ppp/Makefile
+		visdn-ec-kb/Makefile
+		visdn.spec])
 
 AC_OUTPUT
