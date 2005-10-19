@@ -1814,7 +1814,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_PROCEEDING:
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_NOTIFY_REQUEST, NULL);
+		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROCEEDING_REQUEST, NULL);
 
 		return 0;
 	break;
@@ -3808,7 +3808,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 					chan->callerid)) {
 
 					ast_setstate(chan, AST_STATE_RING);
-					ast_queue_control(chan,
+					ast_indicate(chan,
 						AST_CONTROL_PROCEEDING);
 				}
 

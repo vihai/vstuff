@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-19 21:52:48 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-302
+
+    Summary:
+      Fixed indication of proceeding to the channel
+    Revision:
+      isdn--devel--0.1--patch-302
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2005-10-19 21:37:29 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-301
 
     Summary:
