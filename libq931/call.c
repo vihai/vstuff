@@ -735,7 +735,7 @@ static struct q931_channel *q931_channel_select_setup(
 	int i;
 	for(i=0; i<setup_ies->count; i++) {
 		if (setup_ies->ies[i]->type->id == Q931_IE_CHANNEL_IDENTIFICATION) {
-			ci = container_of(ies->ies[i],
+			ci = container_of(setup_ies->ies[i],
 				struct q931_ie_channel_identification, ie);
 
 			break;
@@ -851,6 +851,10 @@ void q931_alerting_request(
 			// Could this happen?
 			assert(0);
 		}
+
+		call->channel = chan;
+		chan->call = call;
+		call->channel->state = Q931_CHANSTATE_SELECTED;
 
 		if (send_chanid_in_response) {
 			struct q931_ie_channel_identification *ci =
@@ -3449,7 +3453,7 @@ static inline void q931_handle_alerting(
 	}
 }
 
-inline static void q931_handle_call_proceeding(
+static void q931_handle_call_proceeding(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -3629,7 +3633,7 @@ inline static void q931_handle_call_proceeding(
 	}
 }
 
-inline static void q931_handle_connect(
+static void q931_handle_connect(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -3841,7 +3845,7 @@ inline static void q931_handle_connect(
 	}
 }
 
-inline static void q931_handle_connect_acknowledge(
+static void q931_handle_connect_acknowledge(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -3868,7 +3872,7 @@ inline static void q931_handle_connect_acknowledge(
 	}
 }
 
-inline static void q931_handle_progress(
+static void q931_handle_progress(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -3941,7 +3945,7 @@ inline static void q931_handle_progress(
 }
 
 
-inline static void q931_handle_setup(
+static void q931_handle_setup(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -3973,6 +3977,8 @@ inline static void q931_handle_setup(
 			return;
 		}
 
+		call->proposed_channel = chan;
+
 		q931_ies_copy(&call->setup_ies, &msg->ies);
 
 		q931_call_set_state(call, N1_CALL_INITIATED);
@@ -3991,6 +3997,8 @@ inline static void q931_handle_setup(
 			q931_call_release_reference(call);
 		}
 
+		call->proposed_channel = chan;
+
 		q931_ies_copy(&call->setup_ies, &msg->ies);
 
 		q931_call_set_state(call, U6_CALL_PRESENT);
@@ -4004,7 +4012,7 @@ inline static void q931_handle_setup(
 	}
 }
 
-inline static void q931_handle_setup_acknowledge(
+static void q931_handle_setup_acknowledge(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -4170,7 +4178,7 @@ inline static void q931_handle_setup_acknowledge(
 	}
 }
 
-inline static void q931_handle_disconnect(
+static void q931_handle_disconnect(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -4390,7 +4398,7 @@ inline static void q931_handle_disconnect(
 	}
 }
 
-inline static void q931_handle_release(
+static void q931_handle_release(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -4623,7 +4631,7 @@ inline static void q931_handle_release(
 
 }
 
-inline static void q931_handle_release_complete(
+static void q931_handle_release_complete(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -4836,7 +4844,7 @@ inline static void q931_handle_release_complete(
 	}
 }
 
-inline static void q931_handle_status(
+static void q931_handle_status(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -4989,7 +4997,7 @@ inline static void q931_handle_status(
 	}
 }
 
-inline static void q931_handle_status_enquiry(
+static void q931_handle_status_enquiry(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5007,7 +5015,7 @@ inline static void q931_handle_status_enquiry(
 	q931_call_send_status(call, &ies);
 }
 
-inline static void q931_handle_user_information(
+static void q931_handle_user_information(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5017,7 +5025,7 @@ inline static void q931_handle_user_information(
 
 }
 
-inline static void q931_handle_segment(
+static void q931_handle_segment(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5026,7 +5034,7 @@ inline static void q931_handle_segment(
 
 }
 
-inline static void q931_handle_congestion_control(
+static void q931_handle_congestion_control(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5035,7 +5043,7 @@ inline static void q931_handle_congestion_control(
 
 }
 
-inline static void q931_handle_info(
+static void q931_handle_info(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5120,7 +5128,7 @@ inline static void q931_handle_info(
 	}
 }
 
-inline static void q931_handle_facility(
+static void q931_handle_facility(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5129,7 +5137,7 @@ inline static void q931_handle_facility(
 
 }
 
-inline static void q931_handle_notify(
+static void q931_handle_notify(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5153,7 +5161,7 @@ inline static void q931_handle_notify(
 	}
 }
 
-inline static void q931_handle_hold(
+static void q931_handle_hold(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5162,7 +5170,7 @@ inline static void q931_handle_hold(
 
 }
 
-inline static void q931_handle_hold_acknowledge(
+static void q931_handle_hold_acknowledge(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5171,7 +5179,7 @@ inline static void q931_handle_hold_acknowledge(
 
 }
 
-inline static void q931_handle_hold_reject(
+static void q931_handle_hold_reject(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5180,7 +5188,7 @@ inline static void q931_handle_hold_reject(
 
 }
 
-inline static void q931_handle_retrieve(
+static void q931_handle_retrieve(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5189,7 +5197,7 @@ inline static void q931_handle_retrieve(
 
 }
 
-inline static void q931_handle_retrieve_acknowledge(
+static void q931_handle_retrieve_acknowledge(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5198,7 +5206,7 @@ inline static void q931_handle_retrieve_acknowledge(
 
 }
 
-inline static void q931_handle_retrieve_reject(
+static void q931_handle_retrieve_reject(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5207,7 +5215,7 @@ inline static void q931_handle_retrieve_reject(
 
 }
 
-inline static void q931_handle_resume(
+static void q931_handle_resume(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5240,7 +5248,7 @@ inline static void q931_handle_resume(
 	}
 }
 
-inline static void q931_handle_resume_acknowledge(
+static void q931_handle_resume_acknowledge(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5263,7 +5271,7 @@ inline static void q931_handle_resume_acknowledge(
 	}
 }
 
-inline static void q931_handle_resume_reject(
+static void q931_handle_resume_reject(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5285,7 +5293,7 @@ inline static void q931_handle_resume_reject(
 	}
 }
 
-inline static void q931_handle_suspend(
+static void q931_handle_suspend(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5317,7 +5325,7 @@ inline static void q931_handle_suspend(
 	}
 }
 
-inline static void q931_handle_suspend_acknowledge(
+static void q931_handle_suspend_acknowledge(
 	struct q931_call *call,
 	struct q931_message *msg)
 {
@@ -5340,7 +5348,7 @@ inline static void q931_handle_suspend_acknowledge(
 	}
 }
 
-inline static void q931_handle_suspend_reject(
+static void q931_handle_suspend_reject(
 	struct q931_call *call,
 	struct q931_message *msg)
 {

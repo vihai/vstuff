@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-19 21:37:00 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-300
+
+    Summary:
+      Fixed channel selection with alerting-request after setup-indication
+    Revision:
+      isdn--devel--0.1--patch-300
+
+
+    modified files:
+     ChangeLog libq931/call.c
+
+
 2005-10-19 00:54:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-299
 
     Summary:
