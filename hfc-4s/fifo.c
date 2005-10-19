@@ -57,8 +57,6 @@ void hfc_fifo_rx_work(void *data)
 	// internal buffer (see specs 4.4.4).
 	hfc_fifo_select(fifo);
 
-	hfc_fifo_refresh_fz_cache(fifo);
-
 	if (!hfc_fifo_has_frames(fifo))
 		goto no_frames;
 

@@ -154,10 +154,10 @@ static inline void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
 	struct hfc_card *card = fifo->card;
 
-//	hfc_outb(card, hfc_A_INC_RES_FIFO,
-//		hfc_A_INC_RES_FIFO_V_RES_F);
+	hfc_outb(card, hfc_A_INC_RES_FIFO,
+		hfc_A_INC_RES_FIFO_V_RES_F);
 
-        hfc_wait_busy(card);
+	hfc_wait_busy(card);
 }
 
 static inline int hfc_fifo_mem_read(

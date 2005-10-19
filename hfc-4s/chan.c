@@ -89,27 +89,24 @@ static int hfc_chan_open(struct visdn_chan *visdn_chan)
 			VISDN_CHAN_BITORDER_MSB;
 	chan->rx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
 
-	if (chan->id != E) {
-		struct hfc_fifo *fifo_tx;
-		fifo_tx = hfc_allocate_fifo(card, TX);
-		if (!fifo_tx) {
-			err = -ENOMEM;
-			goto err_allocate_fifo_tx;
-		}
-
-		chan->tx.fifo = fifo_tx;
-		chan->tx.fifo->connected_chan = &chan->tx;
-		chan->tx.fifo->bitrate = chan->visdn_chan.pars.bitrate;
-		chan->tx.fifo->framing = chan->visdn_chan.pars.framing;
-		chan->tx.fifo->bit_reversed =
-			chan->visdn_chan.pars.bitorder ==
-				VISDN_CHAN_BITORDER_MSB;
-		chan->tx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
-
-		chan->visdn_chan.max_mtu = fifo_tx->fifo_size;
-
-		res = VISDN_CHAN_OPEN_RENEGOTIATE;
+	struct hfc_fifo *fifo_tx;
+	fifo_tx = hfc_allocate_fifo(card, TX);
+	if (!fifo_tx) {
+		err = -ENOMEM;
+		goto err_allocate_fifo_tx;
 	}
+
+	chan->tx.fifo = fifo_tx;
+	chan->tx.fifo->connected_chan = &chan->tx;
+	chan->tx.fifo->bitrate = chan->visdn_chan.pars.bitrate;
+	chan->tx.fifo->framing = chan->visdn_chan.pars.framing;
+	chan->tx.fifo->bit_reversed =
+		chan->visdn_chan.pars.bitorder ==
+			VISDN_CHAN_BITORDER_MSB;
+	chan->tx.fifo->connect_to = HFC_FIFO_CONNECT_TO_ST;
+
+	chan->visdn_chan.max_mtu = fifo_tx->fifo_size;
+	res = VISDN_CHAN_OPEN_RENEGOTIATE;
 
 	hfc_upload_fsm(card);
 
