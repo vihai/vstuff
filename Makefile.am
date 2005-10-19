@@ -1,5 +1,5 @@
 
-nobase_sysconf_DATA =				\
+sysconf_DATA =					\
 	etc/udev/30-visdn.rules			\
 	etc/visdn/*
 

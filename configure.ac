@@ -179,9 +179,13 @@ AC_ARG_WITH(
 	[pppd],
 	AC_HELP_STRING(
 		[--with-pppd],
-		[Enable PPPD plugin compilation]),)
+		[Enable PPPD plugin compilation]),
+		with_pppd=$withval,
+		with_pppd="yes")
 
 AM_CONDITIONAL(pppd, test "$with_pppd" = yes)
+
+if [[ "$with_pppd" = "yes" ]] ; then
 
 AC_MSG_CHECKING([pppd plugins directory])
 
@@ -252,6 +256,8 @@ fi
 
 AC_SUBST(pppdconfdir)
 AC_MSG_RESULT([$pppdconfdir])
+
+fi
 
 #-----------------------------------------------------------------------------
 

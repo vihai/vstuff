@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = kfifo
-DIST_SOURCES = kfifo.c kfifo_mod.c
-DIST_HEADERS = kfifo.h
+DIST_SOURCES = kfifo.c
+DIST_HEADERS =
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
