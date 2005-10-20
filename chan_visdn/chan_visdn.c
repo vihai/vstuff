@@ -1210,10 +1210,10 @@ void q931_send_primitive(
 	msg->call = call;
 	msg->primitive = primitive;
 
-	if (ies) {
-		q931_ies_init(&msg->ies);
+	q931_ies_init(&msg->ies);
+
+	if (ies)
 		q931_ies_copy(&msg->ies, ies);
-	}
 
 	ast_mutex_lock(&visdn.ccb_q931_queue_lock);
 	list_add_tail(&msg->node, &visdn.ccb_q931_queue);
