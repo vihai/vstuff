@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VISDN_DIR=/etc/visdn
+VISDN_DIR=${prefix}/etc/visdn
 
 modprobe visdn-netdev
 modprobe visdn-streamport
@@ -116,10 +116,17 @@ function read_netdev_block
 						"$NETDEV_TEI"
 				fi
 
+				# Older versions of "ip" did not support
+				# allmulticast
+
 				if [ "$NETDEV_ROLE" = "NT" ] ; then
-					ip link set $NETDEV_DEVNAME allmulticast on
+#					ip link set $NETDEV_DEVNAME \
+#						allmulticast on
+					ifconfig $NETDEV_DEVNAME allmulti
 				else
-					ip link set $NETDEV_DEVNAME allmulticast off
+#					ip link set $NETDEV_DEVNAME \
+#						 allmulticast off
+					ifconfig $NETDEV_DEVNAME -allmulti
 				fi
 
 				NETDEVS_DEVNAME[$NETDEVS_CNT]=$NETDEV_DEVNAME
