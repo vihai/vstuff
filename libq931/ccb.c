@@ -101,7 +101,7 @@ void q931_ccb_dispatch(struct q931_ccb_message *msg)
 		q931_suspend_request(msg->call, &msg->ies);
 	break;
 
-	default:
+	default:;
 		// Unexpected primitive
 	}
 }
