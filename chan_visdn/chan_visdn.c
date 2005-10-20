@@ -3169,7 +3169,7 @@ static void visdn_q931_setup_indication(
 					Q931_CCB_REJECT_REQUEST, &ies);
 			} else {
 				q931_send_primitive(visdn_chan->q931_call,
-					Q931_CCB_NOTIFY_REQUEST, NULL);
+					Q931_CCB_PROCEEDING_REQUEST, NULL);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
 			}
