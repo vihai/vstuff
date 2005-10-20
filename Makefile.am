@@ -1,25 +1,21 @@
-
-sysconf_DATA =					\
-	etc/udev/30-visdn.rules			\
-	etc/visdn/*
-
-astconf_DATA =					\
-	etc/asterisk/visdn.conf
-
-dist_sbin_SCRIPTS =				\
-	scripts/visdn_configurator		\
-	scripts/visdn_connect			\
-	scripts/visdn_create_netdev
+noinst_DATA =					\
+	samples/visdn.conf			\
+	samples/extensions.conf			\
+	samples/ethereal_coloring_rules		\
+	samples/ppp_dialout			\
+	samples/30-visdn.rules-oldudev
 
 EXTRA_DIST =					\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)				\
+	$(noinst_DATA)				\
 	visdn.spec				\
-	samples/ethereal_coloring_rules		\
-	samples/ppp_dialout			\
+	linux_compat/linux/kfifo.h		\
 	kernel_config.h.in
 
 SUBDIRS =
+
+SUBDIRS += etc scripts
 
 if kernel_modules
 SUBDIRS += visdn-core lapd visdn-timer-system visdn-streamport	\

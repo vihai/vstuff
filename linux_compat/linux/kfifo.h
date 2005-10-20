@@ -18,6 +18,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  */
+#include <linux/version.h>
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
+
 #ifndef _LINUX_KFIFO_H
 #define _LINUX_KFIFO_H
 
@@ -154,4 +157,6 @@ static inline unsigned int kfifo_len(struct kfifo *fifo)
 #else
 #warning "don't include kernel headers in userspace"
 #endif /* __KERNEL__ */
+#endif
+
 #endif

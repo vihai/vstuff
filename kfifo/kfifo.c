@@ -19,6 +19,9 @@
  *
  */
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -55,6 +58,13 @@ struct kfifo *kfifo_init(unsigned char *buffer, unsigned int size,
 	return fifo;
 }
 EXPORT_SYMBOL(kfifo_init);
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,8)
+static inline unsigned long __attribute_const__ roundup_pow_of_two(unsigned long x)
+{
+	return (1UL << fls(x - 1));
+}
+#endif
 
 /*
  * kfifo_alloc - allocates a new FIFO and its internal buffer
@@ -166,3 +176,5 @@ unsigned int __kfifo_get(struct kfifo *fifo,
 	return len;
 }
 EXPORT_SYMBOL(__kfifo_get);
+
+#endif

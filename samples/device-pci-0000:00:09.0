@@ -1,3 +1,14 @@
+#
+# Sample configuration file for a HFC-4S board.
+#
+# The four ports are configured respectively in NT/NT/TE/TE mode and
+# four netdev interfaces are created with names visdn1.0, visdn1.1, visdn1.2
+# and visdn1.3
+#
+# If your card has an external RAM you may set the "ram_size" attribute to
+# 128 or 512 according to the installed memory. Note that setting the
+# wrong memory size will produce undefined results and may hang your
+# machine.
 
 attribute clock_source_config auto
 attribute ram_size 32

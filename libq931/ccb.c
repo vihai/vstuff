@@ -102,7 +102,6 @@ void q931_ccb_dispatch(struct q931_ccb_message *msg)
 	break;
 
 	default:
-		printf("Unexpected primitive %d\n",
-				msg->primitive);
+		// Unexpected primitive
 	}
 }

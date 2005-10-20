@@ -44,6 +44,9 @@ AC_TYPE_SIGNAL
 AC_FUNC_VPRINTF
 AC_CHECK_FUNCS([gettimeofday memset select socket strcasecmp strchr strdup strerror strncasecmp strrchr strstr])
 
+visdnhwconfdir="$sysconfdir/visdn"
+AC_SUBST(visdnhwconfdir)
+
 #-----------------------------------------------------------------------------
 
 AC_MSG_CHECKING([kernel build directory])
@@ -318,6 +321,7 @@ AM_CONDITIONAL(driver_hfc_e1,
 AC_CONFIG_FILES([Makefile
 		etc/Makefile
 		scripts/Makefile
+		scripts/visdn_configurator
 		libq931/Makefile
 		chan_visdn/Makefile
 		app_visdn_ppp/Makefile

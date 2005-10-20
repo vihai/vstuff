@@ -13,6 +13,7 @@ Build system:
 - Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and complain
   about non-standard directory location
 - Avoid modpost complaining about undefined symbols in other modules
+- Conditionally build kfifo!
 
 chan_visdn:
 -----------
@@ -90,6 +91,10 @@ lapd:
 
 - Implement automatic TEI check for TEIs that are presumably unused and could
   be released
+
+- When allmulti flag is changed while the interface is UP, Tei Mgmt entities
+  are not release/allocated correctly. The interface needs to be put down and
+  than up to make it work
 
 - Implement SOCK_RAW sockets (?)
 

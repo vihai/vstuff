@@ -4,8 +4,8 @@
 @SET_MAKE@
 
 subdir = visdn-ec-kb
-DIST_SOURCES = ec-kb_main.c
-DIST_HEADERS = ec-kb.h
+DIST_SOURCES = ec-kb_main.c kb1ec.c
+DIST_HEADERS = ec-kb.h arith.h kb1ec_const.h
 
 DIST_COMMON = $(srcdir)/Makefile.in
 

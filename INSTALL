@@ -37,6 +37,10 @@ depmod -a
 
 In order to update the modules dependencies
 
+ldconfig
+
+In order to update libraries cache
+
 udev
 ----
 
@@ -58,7 +62,86 @@ in /etc/hotplug.d/net/50-ifup.hotplug to avoid it.
 Step 4: Configuration
 -------------------------------------
 
-A proper hotplug script is still missing, a manual configurator has been
-included.
+First of all you need to configure your hardware.
 
-The configurator is installed
+You want to persistently identify the same board across reboots, however,
+ISDN cards don't usually have a unique identificator, like the MAC address or
+a serial number. The only way to uniquely and persistently reference the cards
+is by using their PCI location. The PCI location is an identificator that
+locates a PCI device amongs all the PCI buses connected to your host.
+
+Of course, if you move a card from one slot to another, its PCI location
+will change and you will have to update the configuration accordingly.
+
+Find the PCI location of your ISDN card(s) using lspci:
+
+# lspci
+[...]
+0000:00:07.0 Network controller: Cologne Chip Designs GmbH ISDN networki
+	controller [HFC-PCI] (rev 02)
+0000:00:09.0 ISDN controller: Cologne Chip Designs GmbH: Unknown device 08b4
+	(rev 01)
+[...]
+
+The PCI location is the first sequence of digits, 0000:00:07.0 and 0000:00:09.0.
+
+Make /etc/visdn directory if missing and create one file for each PCI device.
+Name those files 'device-pci-PCILOCATION', so, in the former example you will
+create two files:
+
+device-pci-0000:00:07.0
+device-pci-0000:00:09.0
+
+In samples/ there are two device configuration files to copy from; one is a
+sample for a HFC-S PCI A card, the other is for a HFC-4S card.
+
+A proper hotplug script is still missing, a manual configurator has been
+included, it is called 'visdn_configurator' and it is distributed in 'scripts/'.
+visdn_configurator gets installed in /usr/sbin
+
+If you correctly configured everything, including udev, running
+'visdn_configurator' will load the modules, configure the cards and connect
+the channels.
+
+The next stage consists in configuring Asterisk to interact with vISDN.
+
+In 'samples/' you will find examples for visdn.conf and extensions.conf
+configuration files to be put in asterisk configuration directory. Edit
+them according to your configuration.
+
+
+-------------------------------------
+Troubleshooting
+-------------------------------------
+
+--- TO BE WRITTEN ---
+
+Check that the devices are created in /dev/visdn
+Check that the sysfs device object gets populated with vISDN-specific
+attributes.
+
+/sys/bus/pci/devices/0000:00:07.0 should look like:
+
+lrwxrwxrwx   1 root root    0 Oct 19 21:40 bus -> ../../../bus/pci
+-r--r--r--   1 root root 4096 Oct 19 21:40 class
+-rw-r--r--   1 root root  256 Oct 19 21:40 config
+-rw-r--r--   1 root root 4096 Oct 19 21:40 detach_state
+-r--r--r--   1 root root 4096 Oct 19 21:40 device
+lrwxrwxrwx   1 root root    0 Oct 19 21:40 driver -> ../../../bus/pci/drivers/hfc-pci
+                                                                      ^^^^^^^^^^^^^^^
+-r--r--r--   1 root root 4096 Oct 19 21:40 fifo_state
+                                          ^^^^^^^^^^^^
+-r--r--r--   1 root root 4096 Oct 19 21:40 irq
+-r--r--r--   1 root root 4096 Oct 19 21:40 local_cpus
+drwxr-xr-x   2 root root    0 Oct 19 21:37 pcm
+                                          ^^^^^
+drwxr-xr-x   2 root root    0 Oct 19 20:49 power
+-r--r--r--   1 root root 4096 Oct 19 21:40 resource
+-rw-------   1 root root    8 Oct 19 21:40 resource0
+-rw-------   1 root root  256 Oct 19 21:40 resource1
+drwxr-xr-x   7 root root    0 Oct 19 21:37 st0
+                                          ^^^^^
+-r--r--r--   1 root root 4096 Oct 19 21:40 subsystem_device
+-r--r--r--   1 root root 4096 Oct 19 21:40 subsystem_vendor
+-r--r--r--   1 root root 4096 Oct 19 21:40 vendor
+

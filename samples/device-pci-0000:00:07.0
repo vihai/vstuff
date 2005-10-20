@@ -1,3 +1,8 @@
+#
+# Sample configuration file for a HFC-S PCI board in TE mode with the netdev
+# interface being named visdn0.
+#
+
 <netdev visdn0>
   protocol lapd
   role TE

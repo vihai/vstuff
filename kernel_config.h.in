@@ -21,6 +21,14 @@
 #define iowrite32 writel
 #endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,8)
+#define __iomem
+#endif
+
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,8)) && (CONFIG_SUSE_KERNEL)
+#define HAVE_KREF
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,12)
 #define HAVE_CLASS_DEV_DEVT
 #define HAVE_SK_PROT

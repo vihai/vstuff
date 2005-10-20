@@ -1,0 +1,10 @@
+# Rules to create vISDN associated devices
+# For older udev which does not provide SUBSYSTEM
+#
+# WARNING: Names are not unique!
+#
+
+KERNEL="streamport", NAME="visdn/streamport"
+KERNEL="netdev-control", NAME="visdn/netdev-control"
+KERNEL="ppp", NAME="visdn/ppp"
+KERNEL="system", NAME="visdn/timers/system", SYMLINK="visdn/timer"
