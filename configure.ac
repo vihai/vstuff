@@ -316,6 +316,8 @@ AM_CONDITIONAL(driver_hfc_e1,
 	test -n "`echo $drivers | grep hfc-e1`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
+		etc/Makefile
+		scripts/Makefile
 		libq931/Makefile
 		chan_visdn/Makefile
 		app_visdn_ppp/Makefile
