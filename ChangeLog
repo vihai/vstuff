@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-22 19:44:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-313
+
+    Summary:
+      Some minor cleanup
+    Revision:
+      isdn--devel--0.1--patch-313
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c visdn-core/Makefile.in
+
+
 2005-10-22 17:47:46 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-312
 
     Summary:

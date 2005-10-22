@@ -85,8 +85,7 @@ else
 endif
 
 EXTRA_CFLAGS=	\
-	-I$(abssrcdir)/../	\
-	-std=gnu99
+	-I$(abssrcdir)/../
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
