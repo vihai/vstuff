@@ -3,7 +3,8 @@ noinst_DATA =					\
 	samples/extensions.conf			\
 	samples/ethereal_coloring_rules		\
 	samples/ppp_dialout			\
-	samples/30-visdn.rules-oldudev
+	samples/30-visdn.rules-oldudev		\
+	samples/device-pci-*
 
 EXTRA_DIST =					\
 	$(sysconf_DATA)				\
