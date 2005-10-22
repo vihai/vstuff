@@ -2675,10 +2675,6 @@ static void visdn_q931_disconnect_indication(
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
-	if (ast_chan) {
-		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
-	}
-
 	q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
 }
 
