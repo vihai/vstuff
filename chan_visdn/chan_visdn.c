@@ -1926,58 +1926,50 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	visdn_debug("visdn_hangup %s\n", ast_chan->name);
 
 	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct q931_call *q931_call = visdn_chan->q931_call;
 
-	if (visdn_chan->q931_call) {
-		/*
-		After we return from visdn_hangup() the ast_channel is not
-		valid anymore. On the other way, q.931 "hangup" is a long
-		process, we can only invoke a DISCONNECT-REQ primitive and
-		leave libq931 handle the disconnection process.
-		Unfortunately the consequence is that we cannot rely on
-		libq931's disconnect_channel to actually disconnect the
-		streamport channel. We also cannot generate the disconnection
-		tones.
-
-		Asterisk is very lacky in this respect. A better
-		implementation would have used a reference counter to allow
-		the channel driver to hold a channel until it's not needed
-		anymore
-		*/
-
-		visdn_chan->q931_call->pvt = NULL;
+	ast_mutex_lock(&visdn.lock);
+	if (q931_call) {
+		q931_call->pvt = NULL;
 
 		if (
-		    visdn_chan->q931_call->state != N0_NULL_STATE &&
-		    visdn_chan->q931_call->state != N1_CALL_INITIATED &&
-		    visdn_chan->q931_call->state != N11_DISCONNECT_REQUEST &&
-		    visdn_chan->q931_call->state != N12_DISCONNECT_INDICATION &&
-		    visdn_chan->q931_call->state != N15_SUSPEND_REQUEST &&
-		    visdn_chan->q931_call->state != N17_RESUME_REQUEST &&
-		    visdn_chan->q931_call->state != N19_RELEASE_REQUEST &&
-		    visdn_chan->q931_call->state != N22_CALL_ABORT &&
-		    visdn_chan->q931_call->state != U0_NULL_STATE &&
-		    visdn_chan->q931_call->state != U6_CALL_PRESENT &&
-		    visdn_chan->q931_call->state != U11_DISCONNECT_REQUEST &&
-		    visdn_chan->q931_call->state != U12_DISCONNECT_INDICATION &&
-		    visdn_chan->q931_call->state != U15_SUSPEND_REQUEST &&
-		    visdn_chan->q931_call->state != U17_RESUME_REQUEST &&
-		    visdn_chan->q931_call->state != U19_RELEASE_REQUEST) {
+		    q931_call->state != N0_NULL_STATE &&
+		    q931_call->state != N1_CALL_INITIATED &&
+		    q931_call->state != N11_DISCONNECT_REQUEST &&
+		    q931_call->state != N12_DISCONNECT_INDICATION &&
+		    q931_call->state != N15_SUSPEND_REQUEST &&
+		    q931_call->state != N17_RESUME_REQUEST &&
+		    q931_call->state != N19_RELEASE_REQUEST &&
+		    q931_call->state != N22_CALL_ABORT &&
+		    q931_call->state != U0_NULL_STATE &&
+		    q931_call->state != U6_CALL_PRESENT &&
+		    q931_call->state != U11_DISCONNECT_REQUEST &&
+		    q931_call->state != U12_DISCONNECT_INDICATION &&
+		    q931_call->state != U15_SUSPEND_REQUEST &&
+		    q931_call->state != U17_RESUME_REQUEST &&
+		    q931_call->state != U19_RELEASE_REQUEST) {
 
 			struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
 			cause->location = q931_ie_cause_location_call(
-							visdn_chan->q931_call);
+							q931_call);
 			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 			q931_ies_add_put(&ies, &cause->ie);
 
-			q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies);
+			q931_send_primitive(q931_call,
+				Q931_CCB_DISCONNECT_REQUEST, &ies);
 		}
 
-		q931_call_put(visdn_chan->q931_call);
-		visdn_chan->q931_call = NULL;
+		q931_call_put(q931_call);
 	}
+
+	ast_mutex_unlock(&visdn.lock);
+
+	ast_mutex_lock(&ast_chan->lock);
+
+	visdn_chan->q931_call = NULL;
 
 	if (visdn_chan->suspended_call) {
 		// We are responsible for the channel
@@ -2016,6 +2008,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	}
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
+
+	ast_mutex_unlock(&ast_chan->lock);
 
 	visdn_debug("visdn_hangup complete\n");
 
