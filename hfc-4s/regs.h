@@ -497,7 +497,7 @@
 #define hfc_R_CHIP_ID_V_PNP_IRQ(chipid)		(((chipid) & 0x0f) >> 0)
 #define hfc_R_CHIP_ID_V_CHIP_ID(chipid)		(((chipid) & 0xf0) >> 4)
 #define hfc_R_CHIP_ID_V_CHIP_ID_HFC_4S		0xc
-#define hfc_R_CHIP_ID_V_CHIP_ID_HFC_8S		0xd
+#define hfc_R_CHIP_ID_V_CHIP_ID_HFC_8S		0x8
 
 #define hfc_R_BERT_STA		0x17
 #define hfc_R_BERT_STA_V_RD_SYNC_SRC_MASK	(0x0f << 0)
