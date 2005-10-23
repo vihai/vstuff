@@ -19,8 +19,8 @@ SUBDIRS =
 SUBDIRS += etc scripts
 
 if kernel_modules
-SUBDIRS += visdn-core lapd visdn-timer-system visdn-streamport	\
-	visdn-netdev visdn-cxc-internal visdn-ppp visdn-ec-kb
+SUBDIRS += visdn-core lapd visdn-cxc-internal visdn-timer-system \
+	visdn-streamport visdn-netdev visdn-ppp visdn-ec-kb
 
 SUBDIRS += kfifo
 

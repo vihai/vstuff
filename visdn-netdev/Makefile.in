@@ -88,8 +88,7 @@ EXTRA_CFLAGS=					\
 	-I$(abssrcdir)/../visdn-core/		\
 	-I$(abssrcdir)/../visdn-cxc-internal/	\
 	-I$(abssrcdir)/../lapd/			\
-	-I$(abssrcdir)/../			\
-	-std=gnu99
+	-I$(abssrcdir)/../
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
@@ -107,6 +106,11 @@ visdn-netdev-y	:= netdev_main.o
 # end Kbuild
 
 all:
+	@mkdir -p .tmp_versions
+	@cp ../visdn-core/.tmp_versions/visdn-core.mod .tmp_versions/
+	@cp ../lapd/.tmp_versions/lapd.mod .tmp_versions/
+	@cp ../visdn-cxc-internal/.tmp_versions/visdn-cxc-internal.mod \
+							.tmp_versions/
 	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
 install:
 	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}

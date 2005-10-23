@@ -84,7 +84,9 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS=-I$(abssrcdir)/../visdn-core/ -I$(abssrcdir)/../ -std=gnu99
+EXTRA_CFLAGS=	\
+	-I$(abssrcdir)/../visdn-core/	\
+	-I$(abssrcdir)/../
 
 ########################## Targets #################################
 
@@ -94,6 +96,8 @@ visdn-cxc-internal-y	:= cxc_internal_main.o
 # end Kbuild
 
 all:
+	@mkdir -p .tmp_versions
+	@cp ../visdn-core/.tmp_versions/visdn-core.mod .tmp_versions/
 	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
 install:
 	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
