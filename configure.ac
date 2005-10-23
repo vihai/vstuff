@@ -65,6 +65,8 @@ AC_ARG_WITH(
 	[kblddir=$withval],)
 AC_SUBST(kblddir)
 
+if [[ $kblddir = "yes" ]]; then
+
 if [[ ! -d "$kblddir" ]]; then
 	AC_MSG_RESULT([failed!])
 	AC_MSG_ERROR([Cannot locate kernel sources])
@@ -89,6 +91,8 @@ AC_ARG_WITH(
 		[--with-kernel-have-sk-prot],
 		[Fedora kernel have sk_prot before 2.6.12]),)
 AC_SUBST(with_kernel_have_sk_prot)
+
+fi
 
 #-----------------------------------------------------------------------------
 
