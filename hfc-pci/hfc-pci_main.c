@@ -566,6 +566,7 @@ err_noirq:
 err_pci_request_regions:
 err_pci_set_dma_mask:
 err_pci_enable_device:
+	pci_set_drvdata(pci_dev, NULL);
 	kfree(card);
 err_alloc_hfccard:
 
@@ -575,6 +576,9 @@ err_alloc_hfccard:
 static void __devexit hfc_remove(struct pci_dev *pci_dev)
 {
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	if (!card)
+		return;
 
 	hfc_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n",

@@ -824,6 +824,7 @@ err_noirq:
 	pci_release_regions(pci_dev);
 err_pci_request_regions:
 err_pci_enable_device:
+	pci_set_drvdata(pci_dev, NULL);
 	kfree(card);
 err_alloc_hfccard:
 	return err;
@@ -833,19 +834,28 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 {
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
+	if (!card)
+		return;
+
+printk(KERN_DEBUG "A\n");
+
 	hfc_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n",
 		card->io_mem);
 
+printk(KERN_DEBUG "B\n");
 	int i;
 	for(i=0; i<ARRAY_SIZE(card->leds); i++) {
 		del_timer_sync(&card->leds[i].timer);
 	}
 
+printk(KERN_DEBUG "C\n");
 	hfc_card_sysfs_delete_files(card);
 
+printk(KERN_DEBUG "D\n");
 	visdn_port_unregister(&card->pcm_port.visdn_port);
 
+printk(KERN_DEBUG "E\n");
 	for (i=card->num_st_ports - 1; i>=0; i--) {
 		visdn_chan_unregister(&card->st_ports[i].chans[SQ].visdn_chan);
 		visdn_chan_unregister(&card->st_ports[i].chans[E].visdn_chan);
@@ -855,18 +865,25 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 		visdn_port_unregister(&card->st_ports[i].visdn_port);
 	}
 
+printk(KERN_DEBUG "F\n");
 	// softreset clears all pending interrupts
 	hfc_card_lock(card);
 	hfc_softreset(card);
 	hfc_card_unlock(card);
 
+printk(KERN_DEBUG "G\n");
 	// There should be no interrupt from here on
 
 	pci_write_config_word(pci_dev, PCI_COMMAND, 0);
+printk(KERN_DEBUG "H\n");
 	free_irq(pci_dev->irq, card);
+printk(KERN_DEBUG "I\n");
 	iounmap(card->io_mem);
+printk(KERN_DEBUG "J\n");
 	pci_release_regions(pci_dev);
+printk(KERN_DEBUG "K\n");
 	pci_disable_device(pci_dev);
+printk(KERN_DEBUG "L\n");
 	kfree(card);
 }
 
