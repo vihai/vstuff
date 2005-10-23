@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-10-23 21:36:55 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-317
+
+    Summary:
+      Made chan_visdn.c use ast_chan->bridge instead of ->dialed
+    Revision:
+      isdn--devel--0.1--patch-317
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2005-10-23 21:35:57 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-316
 
     Summary:

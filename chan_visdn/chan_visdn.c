@@ -1701,8 +1701,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		struct q931_ie_progress_indicator *pi = NULL;
 
-		if (ast_chan->dialed &&
-		   strcmp(ast_chan->dialed->type, VISDN_CHAN_TYPE)) {
+		if (ast_chan->bridge &&
+		   strcmp(ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
 
 			visdn_debug("Channel is not VISDN, sending"
 					" progress indicator\n");
@@ -1796,8 +1796,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		pi->location = q931_ie_progress_indicator_location(
 					visdn_chan->q931_call);
 
-		if (ast_chan->dialed &&
-		   strcmp(ast_chan->dialed->type, VISDN_CHAN_TYPE)) {
+		if (ast_chan->bridge &&
+		   strcmp(ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
 			pi->progress_description =
 				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
 		} else if (visdn_chan->is_voice) {
