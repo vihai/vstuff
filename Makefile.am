@@ -44,12 +44,12 @@ endif
 
 SUBDIRS += libq931
 
-if asterisk
+if asterisk_modules
 SUBDIRS += chan_visdn
 SUBDIRS += app_visdn_ppp
 endif
 
-if pppd
+if pppd_plugin
 SUBDIRS += pppd_plugin
 endif
 

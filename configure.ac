@@ -49,40 +49,52 @@ AC_SUBST(visdnhwconfdir)
 
 #-----------------------------------------------------------------------------
 
+AC_ARG_ENABLE(
+	[kernel-modules],
+	AC_HELP_STRING(
+		[--enable-kernel-modules],
+		[Enable kernel modules]),
+	[enable_kernel_modules="$enableval"],
+	[enable_kernel_modules="auto"])
+
+if [[ "$enable_kernel_modules" != "no" ]]; then
+
 AC_MSG_CHECKING([kernel build directory])
 
-if [[ -d "/lib/modules/`uname -r`/build" ]]; then
-	kblddir="/lib/modules/`uname -r`/build"
-elif [[ -d "/usr/src/linux" ]]; then
-	kblddir="/usr/src/linux"
-fi
-
 AC_ARG_WITH(
-	[kernel-sources],
+	[kernel],
 	AC_HELP_STRING(
-		[--with-kernel-sources],
+		[--with-kernel],
 		[Specify kernel sourcetree to compile modules]),
-	[kblddir=$withval],)
+	[kblddir=$withval],
+	[
+		if [[ -d "/lib/modules/`uname -r`/build" ]]; then
+			kblddir="/lib/modules/`uname -r`/build"
+		elif [[ -d "/usr/src/linux" ]]; then
+			kblddir="/usr/src/linux"
+		fi
+	])
+
+if [[ "$enable_kernel_modules" = "yes" ]]; then
+	if [[ ! -d "$kblddir" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate kernel sources])
+	fi
+
+	if [[ ! -f "$kblddir/.config" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Kernel has not been configured \
+				(missing .config)])
+	fi
+
+	if [[ ! -f "$kblddir/include/linux/autoconf.h" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Kernel has not been compiled (missing \
+				include/linux/autoconf.h)])
+	fi
+fi
+
 AC_SUBST(kblddir)
-
-if [[ $kblddir = "yes" ]]; then
-
-if [[ ! -d "$kblddir" ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Cannot locate kernel sources])
-fi
-
-if [[ ! -f "$kblddir/.config" ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Kernel has not been configured (missing .config)])
-fi
-
-if [[ ! -f "$kblddir/include/linux/autoconf.h" ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Kernel has not been compiled (missing include/linux/autoconf.h)])
-fi
-
-AM_CONDITIONAL(kernel_modules, test "$kblddir" != no)
 AC_MSG_RESULT([$kblddir])
 
 AC_ARG_WITH(
@@ -94,36 +106,41 @@ AC_SUBST(with_kernel_have_sk_prot)
 
 fi
 
+AM_CONDITIONAL(kernel_modules, test "$enable_kernel_modules" != "no")
+
 #-----------------------------------------------------------------------------
 
-AC_ARG_WITH(
-	[asterisk],
+AC_ARG_ENABLE(
+	[asterisk-modules],
 	AC_HELP_STRING(
-		[--with-asterisk],
-		[Enable asterisk module compilation]),
-		with_asterisk=$withval,
-		with_asterisk="yes")
+		[--enable-asterisk-modules],
+		[Enable asterisk modules]),
+	[enable_asterisk_modules="$enableval"],
+	[enable_asterisk_modules="auto"])
 
-AM_CONDITIONAL(asterisk, test "$with_asterisk" = yes)
+if [[ "$enable_asterisk_modules" != "no" ]]; then
 
-if [[ "$with_asterisk" = "yes" ]] ; then
-
-AC_MSG_CHECKING([asterisk modules])
-
-if [[ -d "/usr/lib/asterisk/modules" ]]; then
-	astmoddir="/usr/lib/asterisk/modules"
-fi
+AC_MSG_CHECKING([asterisk modules directory])
 
 AC_ARG_WITH(
 	[asterisk-modules],
 	AC_HELP_STRING(
 		[--with-asterisk-modules],
 		[Specify asterisk modules directory]),
-	[astmoddir=$withval],)
+	[astmoddir=$withval],
+	[
+		if [[ -d "/usr/lib/asterisk/modules" ]]; then
+			astmoddir="/usr/lib/asterisk/modules"
+		else
+			enable_asterisk_modules="no"
+		fi
+	])
 
-if [[ ! -d "$astmoddir" ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Cannot locate asterisk modules directory])
+if [[ "$enable_asterisk_modules" = "yes" ]]; then
+	if [[ ! -d "$astmoddir" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate asterisk modules directory])
+	fi
 fi
 
 AC_SUBST(astmoddir)
@@ -133,22 +150,26 @@ AC_MSG_RESULT([$astmoddir])
 
 AC_MSG_CHECKING([asterisk includes])
 
-if [[ -d "/usr/include/asterisk" ]]; then
-	astincdir="/usr/include/"
-fi
-
 AC_ARG_WITH(
 	[asterisk-includes],
 	AC_HELP_STRING(
 		[--with-asterisk-includes],
-		[Specify asterisk includes directory (the prefix before asterisk/)]),
-	[astincdir=$withval],)
+		[Specify asterisk includes directory (the prefix before \
+							asterisk/)]),
+	[astincdir=$withval],
+	[
+		if [[ -d "/usr/include/asterisk" ]]; then
+			astincdir="/usr/include/"
+		else
+			enable_asterisk_modules="no"
+		fi
+	])
 
-if [[ ! -d "$astincdir/asterisk" ]]; then
-	echo $astincdir
-
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Cannot locate asterisk includes directory])
+if [[ "$enable_asterisk_modules" = "yes" ]]; then
+	if [[ ! -d "$astincdir/asterisk" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate asterisk includes directory])
+	fi
 fi
 
 AC_SUBST(astincdir)
@@ -157,20 +178,26 @@ AC_MSG_RESULT([$astincdir])
 #---------------
 
 AC_MSG_CHECKING([asterisk configuration directory])
-if [[ -d "/etc/asterisk" ]]; then
-	astconfdir="/etc/asterisk"
-fi
 
 AC_ARG_WITH(
 	[asterisk-config],
 	AC_HELP_STRING(
 		[--with-asterisk-config],
 		[Specify asterisk configuration directory]),
-	[astconfdir=$withval],)
+	[astconfdir=$withval],
+	[
+		if [[ -d "/etc/asterisk" ]]; then
+			astconfdir="/etc/asterisk"
+		else
+			enable_asterisk_modules="no"
+		fi
+	])
 
-if [[ ! -d $astconfdir ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Cannot locate asterisk config directory])
+if [[ "$enable_asterisk_modules" = "yes" ]]; then
+	if [[ ! -d "$astconfdir" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate asterisk config directory])
+	fi
 fi
 
 AC_MSG_RESULT([$astconfdir])
@@ -178,38 +205,44 @@ AC_SUBST(astconfdir)
 
 fi
 
+AM_CONDITIONAL(asterisk_modules, test "$enable_asterisk_modules" != "no")
+
 #-----------------------------------------------------------------------------
 
-with_pppd=yes
-
-AC_ARG_WITH(
-	[pppd],
+AC_ARG_ENABLE(
+	[pppd-plugin],
 	AC_HELP_STRING(
-		[--with-pppd],
-		[Enable PPPD plugin compilation]),
-		with_pppd=$withval,
-		with_pppd="yes")
+		[--enable-pppd-plugin],
+		[Enable pppd plugin]),
+	[enable_pppd="$enableval"],
+	[enable_pppd="auto"])
 
-AM_CONDITIONAL(pppd, test "$with_pppd" = yes)
-
-if [[ "$with_pppd" = "yes" ]] ; then
+if [[ "$enable_pppd" != "no" ]]; then
 
 AC_MSG_CHECKING([pppd plugins directory])
-
-if [[ -d "/usr/lib/pppd/" ]]; then
-	pppdpluginsdir="/usr/lib/pppd/`/bin/ls -Ar1 /usr/lib/pppd/ | head -1`"
-fi
 
 AC_ARG_WITH(
 	[pppd-plugins],
 	AC_HELP_STRING(
 		[--with-pppd-plugins],
 		[Specify PPPD plugins directory]),
-	[pppdpluginsdir=$withval],)
+	[pppdpluginsdir="$withval"],
+	[
+		if [[ -d "/usr/lib/pppd/" -a \
+		      -d "/usr/lib/pppd/`/bin/ls -Ar1 /usr/lib/pppd/ \
+						| head -1`" ]]; then
+			pppdpluginsdir="/usr/lib/pppd/`/bin/ls -Ar1 \
+						/usr/lib/pppd/ | head -1`"
+		else
+			enable_pppd="no"
+		fi
+	])
 
-if [[ ! -d $pppdpluginsdir ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Cannot locate pppd plugins directory])
+if [[ "$enable_pppd" = "yes" ]]; then
+	if [[ ! -d "$pppdpluginsdir" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate pppd plugins directory])
+	fi
 fi
 
 AC_SUBST(pppdpluginsdir)
@@ -219,52 +252,70 @@ AC_MSG_RESULT([$pppdpluginsdir])
 
 AC_MSG_CHECKING([pppd includes directory])
 
-if [[ -d "/usr/include/pppd/" ]]; then
-	pppdincdir="/usr/include/pppd/"
-fi
-
 AC_ARG_WITH(
 	[pppd-includes],
 	AC_HELP_STRING(
 		[--with-pppd-includes],
 		[Specify pppd includes directory]),
-	[pppdincdir=$withval],)
-AC_SUBST(pppdincdir)
+	[pppdincdir=$withval],
+	[
+		if [[ -d "/usr/include/pppd/" ]]; then
+			pppdincdir="/usr/include/pppd/"
+		else
+			enable_pppd="no"
+		fi
+	])
 
-if [[ ! -d "$pppdincdir/" -o \
-      ! -f "$pppdincdir/pppd.h" -o \
-      ! -f "$pppdincdir/fsm.h" -o \
-      ! -f "$pppdincdir/lcp.h" ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Missing pppd headers])
+if [[ "$enable_pppd" = "yes" ]]; then
+	if [[ ! -d "$pppdincdir" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate pppd includes directory])
+	fi
 fi
 
 AC_MSG_RESULT([$pppdincdir])
+AC_SUBST(pppdincdir)
 
 #------------
 
 AC_MSG_CHECKING([pppd config directory])
-
-if [[ -d "/etc/ppp/" ]]; then
-	pppdconfdir="/usr/include/pppd/"
-fi
 
 AC_ARG_WITH(
 	[pppd-config],
 	AC_HELP_STRING(
 		[--with-pppd-config],
 		[Specify pppd configuration directory]),
-	[pppdconfdir=$withval],)
+	[pppdconfdir=$withval],
+	[
+		if [[ -d "/etc/ppp/" ]]; then
+			pppdconfdir="/etc/ppp/"
+		else
+			enable_pppd="no"
+		fi
+	]
+	)
 
-if [[ ! -d $pppdconfdir ]]; then
-	AC_MSG_RESULT([failed!])
-	AC_MSG_ERROR([Cannot locate pppd configuration directory])
+if [[ "$enable_pppd" = "yes" ]]; then
+	if [ ! -d $pppdconfdir ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Cannot locate pppd configuration directory])
+	fi
+
+	if [[ ! -d "$pppdincdir/" -o \
+	      ! -f "$pppdincdir/pppd.h" -o \
+	      ! -f "$pppdincdir/fsm.h" -o \
+	      ! -f "$pppdincdir/lcp.h" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Missing pppd headers])
+	fi
 fi
 
 AC_SUBST(pppdconfdir)
 AC_MSG_RESULT([$pppdconfdir])
 
 fi
+
+AM_CONDITIONAL(pppd_plugin, test "$enable_pppd" = "yes")
 
 #-----------------------------------------------------------------------------
 
