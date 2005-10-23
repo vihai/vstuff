@@ -16,7 +16,7 @@
 #include "tei_mgmt_nt.h"
 #include "tei_mgmt_te.h"
 
-inline int lapd_send_frame(struct sk_buff *skb)
+int lapd_send_frame(struct sk_buff *skb)
 {
 	int err;
 
@@ -68,7 +68,7 @@ int lapd_prepare_uframe(struct sock *sk,
 		case LAPD_UFRAME_FUNC_INVALID: BUG(); break;
 	}
 
-	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lapd_sock->nt_mode)?1:0;
+	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lapd_sock->nt_mode) ? 1 : 0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 

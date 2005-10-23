@@ -12,7 +12,6 @@ Build system:
 
 - Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and complain
   about non-standard directory location
-- Avoid modpost complaining about undefined symbols in other modules
 - Conditionally build kfifo!
 
 chan_visdn:

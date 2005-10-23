@@ -16,7 +16,7 @@
 #include "lapd_out.h"
 #include "tei_mgmt.h"
 
-inline int lapd_tm_send(
+int lapd_tm_send(
 	struct net_device *dev,
 	u8 message_type, u16 ri, u8 ai)
 {

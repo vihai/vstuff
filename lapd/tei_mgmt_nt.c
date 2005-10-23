@@ -107,35 +107,36 @@ void lapd_ntme_T201_timer(unsigned long data)
 	BUG_TRAP(tme->tei_check_outstanding);
 
 	if (tme->tei_check_count == 0) {
-		// End of first T201 window
+		/* End of first T201 window */
 		if (tme->tei_check_responses[0] > 1) {
-			// Multiple TEIs assigned
+			/* Multiple TEIs assigned */
 
 			tme->tei_check_outstanding = FALSE;
 			lapd_ntme_send_tei_remove(tme, tme->tei_check_tei);
 		} else {
-			// We need to try a second time
+			/* We need to try a second time */
 
 			tme->tei_check_count++;
 
-			lapd_ntme_send_tei_check_request(tme, tme->tei_check_tei);
+			lapd_ntme_send_tei_check_request(tme,
+						tme->tei_check_tei);
 		        lapd_ntme_reset_timer(tme, &tme->T201_timer,
 				jiffies + tme->T201);
 		}
 	} else {
 		tme->tei_check_outstanding = FALSE;
 
-		// End of second T201 window
+		/* End of second T201 window */
 		if (tme->tei_check_responses[0] == 0 &&
 		    tme->tei_check_responses[1] == 0) {
-			// TEI is unused
+			/* TEI is unused */
 
 			tme->teis[tme->tei_check_tei] = LAPD_TEI_UNASSIGNED;
 		} else if (tme->tei_check_responses[1] == 1 ||
 		           tme->tei_check_responses[1] == 1) {
-			// TEI in use
+			/* TEI in use */
 		} else {
-			// Multiple TEIs assigned
+			/* Multiple TEIs assigned */
 
 			lapd_ntme_send_tei_remove(tme, tme->tei_check_tei);
 		}
@@ -292,7 +293,7 @@ static void lapd_ntme_handle_tei_verify(struct sk_buff *skb)
 		lapd_msg_dev(skb->dev, KERN_INFO,
 			"starting TEI check\n");
 
-		// We're not going any futher in the list
+		/* We're not going any futher in the list */
 		read_unlock_bh(&lapd_ntme_hash_lock);
 
 		_lapd_ntme_start_tei_check(tme, tm->body.ai);
@@ -334,9 +335,6 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 
 		return 0;
 	}
-
-// TODO what to do with P bit ?
-// FIXME answer with F bit! :)
 
 	if (tm->body.entity != 0x0f) {
 		lapd_msg_dev(skb->dev, KERN_ERR,
@@ -395,7 +393,6 @@ void lapd_ntme_put(
 		kfree(tme);
 	}
 }
-
 
 struct lapd_ntme *lapd_ntme_alloc(struct net_device *dev)
 {

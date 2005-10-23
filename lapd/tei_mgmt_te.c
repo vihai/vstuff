@@ -112,8 +112,9 @@ static inline int lapd_utme_send_tei_verify(
 void lapd_utme_mdl_assign_indication(
 	struct lapd_utme *tme)
 {
-	// Disable BHs in order to avoid responses coming thru until we
-	// have finished
+	/* Disable BHs in order to avoid responses coming thru until we
+	 * have finished
+	 */
 	spin_lock_bh(&tme->lock);
 
 	BUG_TRAP(tme->T202 > 0);
@@ -178,7 +179,7 @@ void lapd_utme_T202_timer(unsigned long data)
 
 	lapd_utme_send_tei_request(tme);
 
-        lapd_utme_reset_timer(tme, &tme->T202_timer,
+	lapd_utme_reset_timer(tme, &tme->T202_timer,
 		jiffies + tme->T202);
 
 retransmit_expired:
@@ -211,13 +212,19 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 			"TEI assigned with C/R=0 ?\n");
 	}
 
-//A user side layer management entity receiving this identity assigned message
-//shall compare the TEI value in the Ai field to its own TEI value(s) (if any) to
-//see if it is already allocated if an identity request message is outstanding.
-//Additionally, the TEI value in the Ai field may be compared to its TEI(s) on the
-//receipt of all identity assigned messages. If there is a match, the management
-//entity shall either: - initiate TEI removal; or - initiate the TEI identity
-//verify procedures. TODO
+/* TODO FIXME TODO FIXME TODO FIXME TODO FIXME
+ *
+ * A user side layer management entity receiving this identity assigned
+ * message shall compare the TEI value in the Ai field to its own TEI
+ * value(s) (if any) to see if it is already allocated if an identity
+ * request message is outstanding.
+ * Additionally, the TEI value in the Ai field may be compared to its
+ * TEI(s) on the receipt of all identity assigned messages. If there is
+ * a match, the management entity shall either:
+ * - initiate TEI removal; or
+ * - initiate the TEI identity verify procedures.
+ */
+
 	struct hlist_node *node;
 	struct lapd_utme *tme;
 	read_lock_bh(&lapd_utme_hash_lock);
@@ -237,7 +244,7 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 		} else if (tme->tei_request_pending &&
 		           tm->body.ri == tme->tei_request_ri) {
 
-			// We're not going further in the list
+			/* We're not going further in the list */
 			read_unlock_bh(&lapd_utme_hash_lock);
 
 			lapd_msg_tme(KERN_INFO, skb->dev,
@@ -265,7 +272,8 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 
 					if (!lapd_sock->nt_mode &&
 					    lapd_sock->usr_tme == tme) {
-						lapd_utme_send_to_socket(lapd_sock,
+						lapd_utme_send_to_socket(
+							lapd_sock,
 							LAPD_INT_MDL_ASSIGN_REQUEST,
 							tme->tei);
 					}
@@ -400,7 +408,8 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 
 					if (!lapd_sock->nt_mode &&
 					    lapd_sock->usr_tme == tme) {
-						lapd_utme_send_to_socket(lapd_sock,
+						lapd_utme_send_to_socket(
+							lapd_sock,
 							LAPD_INT_MDL_REMOVE_REQUEST,
 							0);
 					}
@@ -409,8 +418,9 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 
 			read_unlock_bh(&lapd_hash_lock);
 
-			// FIXME TODO Shall we inform the upper layer that a
-			// static TEI has been removed?
+			/* FIXME TODO Shall we inform the upper layer that a
+			 * static TEI has been removed?
+			 */
 		}
 
 		spin_unlock_bh(&tme->lock);
@@ -449,8 +459,6 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 
 		return 0;
 	}
-
-// TODO what to do with P bit ? AFAIK it should be ignored...
 
 	if (tm->body.entity != 0x0f) {
 		lapd_msg_tme(KERN_ERR, skb->dev,

@@ -254,7 +254,7 @@ void setup_lapd(struct net_device *netdev)
 	netdev->set_mac_address    = lapd_mac_addr;
 	netdev->hard_header_cache  = NULL;
 	netdev->header_cache_update= NULL;
-        netdev->hard_header_parse  = lapd_hard_header_parse;
+	netdev->hard_header_parse  = lapd_hard_header_parse;
 
 	netdev->type               = ARPHRD_LAPD;
 	netdev->hard_header_len    = 0;
@@ -286,7 +286,8 @@ static void lapd_sock_destruct(struct sock *sk)
 		struct lapd_new_dlc *new_dlc;
 		struct hlist_node *pos, *t;
 
-		hlist_for_each_entry_safe(new_dlc, pos, t, &lapd_sock->new_dlcs, node) {
+		hlist_for_each_entry_safe(new_dlc, pos, t,
+					&lapd_sock->new_dlcs, node) {
 			struct sock *newsk = &new_dlc->lapd_sock->sk;
 
 			WARN_ON(sk_unhashed(newsk));
@@ -335,7 +336,8 @@ static void lapd_sock_destruct(struct sock *sk)
 
 	list_for_each_entry_safe(te, n, &lapd_sock->nt.tes, hash_list) {
 
-		lapd_msg_ls(lapd_sock, KERN_ERR, "List del %p\n", &te->hash_list);
+		lapd_msg_ls(lapd_sock, KERN_ERR, "List del %p\n",
+			&te->hash_list);
 
 		list_del(&te->hash_list);
 		kfree(te);
@@ -387,10 +389,10 @@ static int lapd_release(struct socket *sock)
 	lapd_release_sock(lapd_sock);
 
 	local_bh_disable();
-        lapd_bh_lock_sock(lapd_sock);
-        WARN_ON(sock_owned_by_user(sk));
+	lapd_bh_lock_sock(lapd_sock);
+	WARN_ON(sock_owned_by_user(sk));
 
-        sock_orphan(sk);
+	sock_orphan(sk);
 
 	sock->sk = NULL;
 
@@ -402,7 +404,10 @@ static int lapd_release(struct socket *sock)
 	return 0;
 }
 
-static int lapd_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
+static int lapd_ioctl(
+	struct socket *sock,
+	unsigned int cmd,
+	unsigned long arg)
 {
 	int rc = -EINVAL;
 	struct sock *sk = sock->sk;
@@ -512,8 +517,8 @@ static int lapd_sendmsg(
 		goto err_over_mtu;
 	}
 
-	// TODO, finish async operation
-	/* This should be in poll */
+	/* TODO, finish async operation
+	 * This should be in poll */
 	clear_bit(SOCK_ASYNC_NOSPACE, &sk->sk_socket->flags);
 
 	struct sk_buff *skb;
@@ -521,7 +526,7 @@ static int lapd_sendmsg(
 
 		lapd_release_sock(lapd_sock);
 		skb = sock_alloc_send_skb(sk,
-        		sizeof(struct lapd_hdr_e) + len,
+			sizeof(struct lapd_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
 		lapd_lock_sock(lapd_sock);
 		if (!skb) {
@@ -529,7 +534,8 @@ static int lapd_sendmsg(
 			goto err_sock_alloc_send_skb;
 		}
 
-		err = lapd_prepare_uframe(lapd_sock, skb, LAPD_UFRAME_FUNC_UI, 0);
+		err = lapd_prepare_uframe(lapd_sock, skb,
+					LAPD_UFRAME_FUNC_UI, 0);
 		if(err < 0)
 			goto err_prepare_frame;
 
@@ -540,13 +546,15 @@ static int lapd_sendmsg(
 		lapd_dl_unit_data_request(lapd_sock, skb);
 
 	} else {
-		// FIXME TODO
-		// sock_alloc_send_skb may sleep, sleeping with sk lock
-		// no new frames may be received, including acks that may
-		// free the output queue
+		/* FIXME TODO
+		 * sock_alloc_send_skb may sleep, sleeping with sk lock
+		 * no new frames may be received, including acks that may
+		 * free the output queue
+		 */
+
 		lapd_release_sock(lapd_sock);
 		skb = sock_alloc_send_skb(sk,
-        		sizeof(struct lapd_hdr_e) + len,
+			sizeof(struct lapd_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
 		lapd_lock_sock(lapd_sock);
 		if (!skb)
@@ -644,10 +652,10 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (!skb)
 		goto err_recv_datagram;
 
-        struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 	int hdrsize;
 
-        if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
+	if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
 		msg->msg_flags |= MSG_OOB;
 		hdrsize = sizeof(struct lapd_hdr);
 	} else {
@@ -707,8 +715,9 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 		struct sock *othersk = NULL;
 		struct hlist_node *node;
-		// Do not allow binding more than one socket to the
-		// same interface.
+		/* Do not allow binding more than one socket to the
+		 * same interface.
+		 */
 
 		read_lock_bh(&lapd_hash_lock);
 
@@ -746,9 +755,9 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		hlist_add_head(&lapd_sock->usr_tme->node, &lapd_utme_hash);
 	}
 
-	// No need to dev_hold() since we already held dev by calling
-	// dev_get_by_name() and "dev" is thrown away
 	sk->sk_bound_dev_if = dev->ifindex;
+
+	/* The reference is passed to lapd_sock->dev */
 	lapd_sock->dev = dev;
 
 	if (lapd_sock->sapi == LAPD_SAPI_Q931) {
@@ -851,7 +860,7 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			goto err_copy_from_user;
 		}
 
-		// Is this really needed?
+		/* Is this really needed? */
 		devname[sizeof(devname)-1] = '\0';
 
 		err = lapd_bind_to_device(sk, devname);
@@ -861,15 +870,17 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 	break;
 
 	case LAPD_TEI:
-		// release TEI?
-		// check static TEI?
+		/* TODO
+		 * release TEI?
+		 * check static TEI?
+		 */
 
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
-		// Static TEIs are 0-63
+		/* Static TEIs are 0-63 */
 		if (intoptval < 0 || intoptval > 63) {
 			err = -EINVAL;
 			goto err_invalid_optval;
@@ -1039,7 +1050,7 @@ static int lapd_getsockopt(
 		goto err_get_user;
 	}
 
-	// By default use an int
+	/* By default use an int */
 	int val = 0;
 	void *optval = (void *)&val;
 	int length = min_t(unsigned int, optlen, sizeof(int));
@@ -1355,7 +1366,7 @@ void lapd_dl_release_confirm(struct lapd_sock *lapd_sock)
 
 	if (lapd_sock->sk.sk_state == TCP_CLOSING) {
 		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
-		// Defers unhash
+		/* Defers unhash */
 		sk_reset_timer(&lapd_sock->sk,
 			&lapd_sock->sk.sk_timer,
 			jiffies + 1 * HZ);
@@ -1390,7 +1401,7 @@ int lapd_multiframe_wait_for_establishment(
 	int nonblock)
 {
 	DEFINE_WAIT(wait);
-        int err = 0;
+	int err = 0;
 	int timeout = 60 * HZ;
 
 	if (lapd_sock->state != LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED &&
@@ -1402,7 +1413,7 @@ int lapd_multiframe_wait_for_establishment(
 			TASK_INTERRUPTIBLE);
 
 		lapd_release_sock(lapd_sock);
-		// Timeout is used only to detect abnormal cases
+		/* Timeout is used only to detect abnormal cases */
 		timeout = schedule_timeout(timeout);
 		lapd_lock_sock(lapd_sock);
 
@@ -1533,7 +1544,8 @@ static int lapd_accept(struct socket *sock,
 
 	struct lapd_new_dlc *new_dlc;
 
-	new_dlc = hlist_entry(lapd_sock->new_dlcs.first, struct lapd_new_dlc, node);
+	new_dlc = hlist_entry(lapd_sock->new_dlcs.first,
+				struct lapd_new_dlc, node);
 
 	sock_graft(&new_dlc->lapd_sock->sk, newsock);
 
@@ -1596,7 +1608,7 @@ int lapd_multiframe_wait_for_release(
 	int nonblock)
 {
 	DEFINE_WAIT(wait);
-        int err = 0;
+	int err = 0;
 	int timeout = 60 * HZ;
 
 	if (lapd_sock->state != LAPD_DLS_4_TEI_ASSIGNED &&
@@ -1608,7 +1620,7 @@ int lapd_multiframe_wait_for_release(
 			TASK_INTERRUPTIBLE);
 
 		lapd_release_sock(lapd_sock);
-		// Timeout is used only to detect abnormal cases
+		/* Timeout is used only to detect abnormal cases */
 		timeout = schedule_timeout(timeout);
 		lapd_lock_sock(lapd_sock);
 
@@ -1697,7 +1709,7 @@ static int lapd_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	int err;
 
-	// LAPD is a privileged socket
+	/* LAPD is a privileged socket */
 	if (!capable(CAP_NET_BIND_SERVICE)) {
 		err = -EPERM;
 		goto err_no_cap;
@@ -1748,13 +1760,12 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	skb_queue_head_init(&lapd_sock->u_queue);
 
-	// We use ->sapi as a temporary until SO_BINDTODEVICE
+	/* We use ->sapi as a temporary until SO_BINDTODEVICE */
 	lapd_sock->sapi = protocol;
 
-	// TE mode section
+	/* TE mode section */
 
 	lapd_sock->nt_mode = FALSE;
-
 	lapd_sock->usr_tme = NULL;
 
 	lapd_datalink_state_init(lapd_sock);
@@ -1838,8 +1849,6 @@ module_init(lapd_init);
 
 static void __exit lapd_exit(void)
 {
-	// Free device structures
-
 	lapd_proc_exit();
 
 	BUG_TRAP(hlist_empty(&lapd_ntme_hash));

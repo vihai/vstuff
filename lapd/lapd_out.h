@@ -34,9 +34,4 @@ int lapd_send_uframe(struct lapd_sock *lapd_sock,
 
 int lapd_send_frame(struct sk_buff *skb);
 
-int lapd_send_sframe(struct lapd_sock *lapd_sock,
-	enum lapd_cr c_r,
-	enum lapd_uframe_function function, int p_f);
-//void lapd_retransmit_from(struct lapd_sock *lapd_sock, int n_s);
-
 #endif

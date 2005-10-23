@@ -26,7 +26,7 @@ static void lapd_device_up(struct net_device *dev)
 
 	memset(lapd_device, 0, sizeof(*lapd_device));
 
-	// TODO FIXME use the correct pointer
+	/* TODO FIXME use the correct pointer XXX */
 	dev->atalk_ptr = lapd_device;
 
 	dev_hold(dev);
@@ -41,7 +41,7 @@ static void lapd_device_up(struct net_device *dev)
 		lapd_device->net_tme = NULL;
 	}
 
-	// q.931 SAP
+	/* q.931 SAP */
 
 	lapd_device->q931.k = 7;
 	lapd_device->q931.N200 = 3;
@@ -49,7 +49,7 @@ static void lapd_device_up(struct net_device *dev)
 	lapd_device->q931.T200 = 1 * HZ;
 	lapd_device->q931.T203 = 10 * HZ;
 
-	// x.25 SAP
+	/* x.25 SAP */
 
 	lapd_device->x25.k = 7;
 	lapd_device->x25.N200 = 3;
@@ -104,8 +104,10 @@ static void lapd_device_down(struct net_device *dev)
 	}
 }
 
-int lapd_device_event(struct notifier_block *this, unsigned long event,
-			    void *ptr)
+int lapd_device_event(
+	struct notifier_block *this,
+	unsigned long event,
+	void *ptr)
 {
 	struct net_device *dev = (struct net_device *)ptr;
 

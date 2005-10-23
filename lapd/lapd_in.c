@@ -60,7 +60,7 @@ static int lapd_pass_frame_to_socket(
 {
 	int queued;
 
-	// Ensure serialization within a socket
+	/* Ensure serialization within a socket */
 	lapd_bh_lock_sock(lapd_sock);
 
 	if (!sock_owned_by_user(&lapd_sock->sk)) {
@@ -165,7 +165,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 	}
 
 	if (listening_lapd_sock) {
-		// A socket has not been found
+		/* A socket has not been found */
 		struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 
 		if (hdr->addr.sapi != LAPD_SAPI_Q931 &&
@@ -195,7 +195,6 @@ static inline int lapd_pass_frame_to_socket_nt(
 			return FALSE;
 
 		new_dlc->lapd_sock = new_lapd_sock;
-		// sock_hold(new_dlc->sk);
 
 		hlist_add_head(&new_dlc->node, &listening_lapd_sock->new_dlcs);
 
@@ -205,7 +204,6 @@ static inline int lapd_pass_frame_to_socket_nt(
 			listening_lapd_sock->sk.sk_data_ready(
 				&listening_lapd_sock->sk, skb->len);
 
-		// sock_put(newsk);
 	} else {
 		lapd_handle_socketless_frame(skb);
 
@@ -303,19 +301,19 @@ int lapd_rcv(
 	struct net_device *dev,
 	struct packet_type *pt)
 {
-	// Ignore frames not destined to us
+	/* Ignore frames not destined to us */
 	if (skb->pkt_type != PACKET_HOST)
 		goto not_ours;
 
-	// Don't mangle buffer if shared
+	/* Don't mangle buffer if shared */
 	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
 		goto err_share_check;
 
-	// Minimum frame is header + 2 CRC <- not sent yet by driver
-	if (skb->len < sizeof(struct lapd_hdr)) // + 2)
+	/* Minimum frame is header + 2 CRC <- not sent by driver */
+	if (skb->len < sizeof(struct lapd_hdr)) /* + 2) */
 		goto err_small_frame;
 
-	// Size check and make sure header is contiguous
+	/* Size check and make sure header is contiguous */
 	if (!pskb_may_pull(skb, sizeof(struct lapd_hdr)))
 		goto err_pskb_may_pull;
 
