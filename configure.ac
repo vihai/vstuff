@@ -230,9 +230,9 @@ AC_ARG_WITH(
 	[
 		if [[ -d "/usr/lib/pppd/" -a \
 		      -d "/usr/lib/pppd/`/bin/ls -Ar1 /usr/lib/pppd/ \
-						| head -1`" ]]; then
+						| head -n 1`" ]]; then
 			pppdpluginsdir="/usr/lib/pppd/`/bin/ls -Ar1 \
-						/usr/lib/pppd/ | head -1`"
+						/usr/lib/pppd/ | head -n 1`"
 		else
 			enable_pppd="no"
 		fi
