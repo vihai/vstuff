@@ -32,10 +32,6 @@
 #define PF_LAPD AF_LAPD
 #endif
 
-#ifndef ETH_P_LAPD
-#define ETH_P_LAPD 0x0030
-#endif
-
 #ifndef SOL_LAPD
 #define SOL_LAPD 300
 #endif

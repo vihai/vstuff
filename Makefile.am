@@ -69,4 +69,4 @@ release: distdir
 	gpg --sign -ab $(distdir).tar.bz2
 	scp $(distdir).tar.gz $(distdir).tar.gz.asc \
 	    $(distdir).tar.bz2 $(distdir).tar.bz2.asc \
-	    root@aj.uli.it:/www/www.orlandi.com/htdocs/visdn/download/
+	    root@aj.uli.it:/www/www.visdn.org/htdocs/download/

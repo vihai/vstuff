@@ -1,5 +1,5 @@
 # Rules to create vISDN associated devices
-# For older udev which does not provide SUBSYSTEM
+# For older udev which does not provide SUBSYSTEM (pre udev-046)
 #
 # WARNING: Names are not unique!
 #
