@@ -1242,10 +1242,10 @@ void visdn_queue_primitive(
 	msg->par1 = par1;
 	msg->par2 = par2;
 
-	if (ies) {
-		q931_ies_init(&msg->ies);
+	q931_ies_init(&msg->ies);
+
+	if (ies)
 		q931_ies_copy(&msg->ies, ies);
-	}
 
 	ast_mutex_lock(&visdn.q931_ccb_queue_lock);
 	list_add_tail(&msg->node, &visdn.q931_ccb_queue);
