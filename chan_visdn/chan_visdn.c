@@ -836,6 +836,12 @@ static int do_show_visdn_channels(int fd, int argc, char *argv[])
 	return 0;
 }
 
+static inline struct ast_channel *callpvt_to_astchan(
+	struct q931_call *call)
+{
+	return (struct ast_channel *)call->pvt;
+}
+
 static int visdn_cli_print_call_list(
 	int fd,
 	struct q931_interface *filter_intf)
@@ -855,19 +861,29 @@ static int visdn_cli_print_call_list(
 
 		list_for_each_entry(call, &intf->q931_intf->calls, calls_node) {
 
-			if (!intf || call->intf == filter_intf) {
+			if (!filter_intf || call->intf == filter_intf) {
 
 				if (first_call) {
 					ast_cli(fd, "Interface: %s\n", intf->q931_intf->name);
-					ast_cli(fd, "  Ref#    Caller       Called       State\n");
+					ast_cli(fd, "  Ref#    Caller       State\n");
 					first_call = FALSE;
 				}
 
-				ast_cli(fd, "  %c %5ld %s\n",
+				struct ast_channel *ast_chan =
+						callpvt_to_astchan(call);
+
+				struct visdn_chan *visdn_chan = NULL;
+				if (ast_chan)
+					visdn_chan = ast_chan->pvt->pvt;
+
+				ast_cli(fd, "  %c %5ld %-12s %s\n",
 					(call->direction ==
 						Q931_CALL_DIRECTION_INBOUND)
 							? 'I' : 'O',
 					call->call_reference,
+					visdn_chan ?
+						visdn_chan->calling_number :
+						"",
 					q931_call_state_to_text(call->state));
 
 /*				ast_cli(fd, "  %c %5ld %-12s %-12s %s\n",
@@ -1149,12 +1165,6 @@ static int visdn_devicestate(void *data)
 	// not sure what this should do xxx
 	res = AST_DEVICE_UNKNOWN;
 	return res;
-}
-
-static inline struct ast_channel *callpvt_to_astchan(
-	struct q931_call *call)
-{
-	return (struct ast_channel *)call->pvt;
 }
 
 static enum q931_ie_called_party_number_type_of_number
