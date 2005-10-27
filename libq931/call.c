@@ -3474,6 +3474,8 @@ static void q931_handle_call_proceeding(
 				q931_call_primitive(call, Q931_CCB_PROCEEDING_INDICATION,
 					&msg->ies);
 				q931_ces_call_proceeding_request(ces, &msg->ies);
+				q931_call_set_state(call,
+					 N9_INCOMING_CALL_PROCEEDING);
 			} else {
 				q931_ces_release_request(ces, &causes);
 			}
