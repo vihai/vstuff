@@ -107,9 +107,9 @@ visdn-netdev-y	:= netdev_main.o
 
 all:
 	@mkdir -p .tmp_versions
-	@cp ../visdn-core/.tmp_versions/visdn-core.mod .tmp_versions/
-	@cp ../lapd/.tmp_versions/lapd.mod .tmp_versions/
-	@cp ../visdn-cxc-internal/.tmp_versions/visdn-cxc-internal.mod \
+	-@cp ../visdn-core/.tmp_versions/visdn-core.mod .tmp_versions/
+	-@cp ../lapd/.tmp_versions/lapd.mod .tmp_versions/
+	-@cp ../visdn-cxc-internal/.tmp_versions/visdn-cxc-internal.mod \
 							.tmp_versions/
 	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
 install:
