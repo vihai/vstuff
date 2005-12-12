@@ -51,9 +51,36 @@ static int do_connect(const char *chan1_str, const char *chan2_str)
 	}
 
 	struct visdn_connect connect;
+
+	/* Make sure both endpoints are disconnected */
+	connect.src_chan_id = chan1_id;
+	connect.dst_chan_id = 0;
+	connect.flags = 0;
+
+	if (ioctl(fd, VISDN_IOC_DISCONNECT_PATH, &connect) < 0) {
+		fprintf(stderr, "ioctl(IOC_DISCONNECT_PATH) failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	}
+
+	connect.src_chan_id = chan2_id;
+	connect.dst_chan_id = 0;
+	connect.flags = 0;
+
+	if (ioctl(fd, VISDN_IOC_DISCONNECT_PATH, &connect) < 0) {
+		fprintf(stderr, "ioctl(IOC_DISCONNECT_PATH) failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	}
+
+	/* Now make the connection */
 	connect.src_chan_id = chan1_id;
 	connect.dst_chan_id = chan2_id;
-	connect.flags = VISDN_CONNECT_FLAG_PERMANENT;
+	connect.flags =
+		VISDN_CONNECT_FLAG_PERMANENT |
+		VISDN_CONNECT_FLAG_OVERRIDE;
 
 	if (ioctl(fd, VISDN_IOC_CONNECT_PATH, &connect) < 0) {
 		fprintf(stderr, "ioctl(IOC_CONNECT_PATH) failed: %s\n",

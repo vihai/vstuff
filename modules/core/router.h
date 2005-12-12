@@ -55,12 +55,14 @@ struct visdn_chan;
 extern int visdn_connect_path(
 	struct visdn_chan *src_chan,
 	struct visdn_chan *dst_chan,
-	struct file *bound_to_file);
+	struct file *file,
+	unsigned long flags);
 
 extern int visdn_connect_path_with_id(
 	int chan1_id,
 	int chan2_id,
-	struct file *bound_to_file);
+	struct file *file,
+	unsigned long flags);
 
 extern int visdn_disconnect_path(
 	struct visdn_chan *src_chan);

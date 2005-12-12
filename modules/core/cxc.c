@@ -33,37 +33,64 @@ static void visdn_cxc_delete_rcu(struct rcu_head *head)
 	struct visdn_cxc_connection *conn =
 		container_of(head, struct visdn_cxc_connection, rcu);
 
-	visdn_chan_put(conn->src->chan);
-	visdn_chan_put(conn->dst->chan);
+	visdn_leg_put(conn->src);
+	visdn_leg_put(conn->dst);
 
 	kfree(conn);
 }
 
-/*
- *
- * cxc may be spinlocked only in user context, while may be read anywhere
- */
+static void _visdn_cxc_disconnect_simplex(
+	struct visdn_cxc_connection *conn);
 
 static int visdn_cxc_connect_simplex(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *src,
 	struct visdn_leg *dst,
-	struct file *bound_to_file)
+	struct file *file,
+	unsigned long flags)
 {
 	int err;
 	struct visdn_cxc_connection *conn;
-	struct visdn_leg *tmp_leg;
+	struct hlist_node *pos, *n;
 
-	visdn_debug(2, "Simplex connect %s with %s through %s\n",
-		src->chan->kobj.name, dst->chan->kobj.name,
-		cxc->name);
+	visdn_debug(2,
+		"Simplex connect '%06d' with '%06d' through CXC '%d'\n",
+		src->chan->id, dst->chan->id,
+		cxc->id);
 
-	tmp_leg = visdn_cxc_get_leg_by_src(cxc, src);
-	if (tmp_leg) {
-		visdn_leg_put(tmp_leg);
-		err = -EBUSY;
-		goto err_already_connected;
+	down(&cxc->sem);
+
+	hlist_for_each_entry_safe(conn, pos, n,
+			visdn_cxc_get_hash(cxc, src),
+			hash_node) {
+
+		if (conn->cxc == cxc &&
+		    conn->src == src) {
+			if (flags & VISDN_CONNECT_FLAG_OVERRIDE)
+				_visdn_cxc_disconnect_simplex(conn);
+			else {
+				err = -EALREADY;
+				goto err_already_connected;
+			}	
+		}
 	}
+
+	hlist_for_each_entry_safe(conn, pos, n,
+			visdn_cxc_get_hash(cxc, src),
+			hash_node) {
+
+		if (conn->cxc == cxc &&
+		    conn->dst == dst) {
+			if (flags & VISDN_CONNECT_FLAG_OVERRIDE)
+				_visdn_cxc_disconnect_simplex(conn);
+			else {
+				err = -EALREADY;
+				goto err_already_connected;
+			}	
+		}
+	}
+
+	up(&cxc->sem);
 
 	conn = kmalloc(sizeof(*conn), GFP_KERNEL);
 	if (!conn) {
@@ -71,15 +98,19 @@ static int visdn_cxc_connect_simplex(
 		goto err_kmalloc;
 	}
 
-	conn->cxc = cxc;
+	memset(conn, 0, sizeof(*conn));
+
 	INIT_RCU_HEAD(&conn->rcu);
+	conn->cxc = cxc;
+	conn->src = visdn_leg_get(src);
+	conn->dst = visdn_leg_get(dst);
+
+	if (flags & VISDN_CONNECT_FLAG_PERMANENT)
+		conn->file = file;
+	else
+		conn->file = NULL;
 
 	down(&cxc->sem);
-
-	conn->src = src;
-	visdn_chan_get(src->chan);
-	conn->dst = dst;
-	visdn_chan_get(dst->chan);
 
 	hlist_add_head_rcu(&conn->hash_node,
 			visdn_cxc_get_hash(cxc, src));
@@ -120,6 +151,11 @@ err_already_connected:
 static void _visdn_cxc_disconnect_simplex(
 	struct visdn_cxc_connection *conn)
 {
+	visdn_debug(2,
+		"Simplex disconnect '%06d' with '%06d' through CXC '%d'\n",
+		conn->src->chan->id, conn->dst->chan->id,
+		conn->cxc->id);
+
 	visdn_chan_disable(conn->src->chan);
 	visdn_chan_disable(conn->dst->chan);
 
@@ -150,7 +186,8 @@ static void _visdn_cxc_disconnect_simplex_by_src_dst(
 			visdn_cxc_get_hash(cxc, src),
 			hash_node) {
 
-		if (conn->src == src &&
+		if (conn->cxc == cxc &&
+		    conn->src == src &&
 		    conn->dst == dst) {
 
 			_visdn_cxc_disconnect_simplex(conn);
@@ -174,7 +211,8 @@ int visdn_cxc_connect(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2,
-	struct file *bound_to_file)
+	struct file *file,
+	unsigned long flags)
 {
 	int err;
 
@@ -188,17 +226,17 @@ int visdn_cxc_connect(
 		leg1->chan->kobj.name,
 		leg2->chan->kobj.name);
 
-	if (cxc->ops->connect)
-		cxc->ops->connect(cxc, leg1, leg2);
-
 	// Connect the channels -------------------------------------
-	err = visdn_cxc_connect_simplex(cxc, leg1, leg2, bound_to_file);
+	err = visdn_cxc_connect_simplex(cxc, leg1, leg2, file, flags);
 	if (err < 0)
 		goto err_cxc_add_leg1;
 
-	err = visdn_cxc_connect_simplex(cxc, leg2, leg1, bound_to_file);
+	err = visdn_cxc_connect_simplex(cxc, leg2, leg1, file, flags);
 	if (err < 0)
 		goto err_cxc_add_leg2;
+
+	if (cxc->ops->connect)
+		cxc->ops->connect(cxc, leg1, leg2);
 
 	if (!(leg1->framing_avail &
 	      leg2->framing_avail)) {
@@ -267,8 +305,6 @@ int visdn_cxc_disconnect_leg(struct visdn_leg *leg)
 
 		if (conn->src == leg) {
 			_visdn_cxc_disconnect_simplex(conn);
-
-			break;
 		}
 	}
 	}
@@ -282,8 +318,6 @@ int visdn_cxc_disconnect_leg(struct visdn_leg *leg)
 
 		if (conn->dst == leg) {
 			_visdn_cxc_disconnect_simplex(conn);
-
-			break;
 		}
 	}
 	}
@@ -308,7 +342,7 @@ int visdn_cxc_disconnect_by_file(struct file *file)
 		list_for_each_entry_safe(conn, n, &cxc->connections_list,
 								list_node) {
 
-			if (conn->bound_to_file == file) {
+			if (conn->file == file) {
 				_visdn_cxc_disconnect_simplex(conn);
 
 				break;
@@ -603,7 +637,9 @@ static ssize_t visdn_cxc_connect_store(
 		goto err_chan2_inval;
 	}
 
-	err = visdn_cxc_connect_with_id(chan1_id, chan2_id, NULL);
+	err = visdn_cxc_connect_with_id(chan1_id, chan2_id, NULL,
+					VISDN_CONNECT_FLAG_PERMANENT |
+					VISDN_CONNECT_FLAG_OVERRIDE);
 	if (err < 0)
 		goto err_connect;
 
@@ -773,7 +809,8 @@ static int visdn_cxc_cdev_release(
 int visdn_cxc_connect_with_id(
 	int chan1_id,
 	int chan2_id,
-	struct file *bound_to_file)
+	struct file *file,
+	unsigned long flags)
 {
 	struct visdn_chan *chan1;
 	struct visdn_chan *chan2;
@@ -826,7 +863,7 @@ int visdn_cxc_connect_with_id(
 		goto err_not_same_cxc;
 	}
 
-	err = visdn_cxc_connect(cxc, leg1, leg2, bound_to_file);
+	err = visdn_cxc_connect(cxc, leg1, leg2, file, flags);
 	if (err < 0)
 		goto err_connect;
 
@@ -873,14 +910,14 @@ static int visdn_cxc_cdev_do_connect(
 		err = visdn_connect_path_with_id(
 			connect.src_chan_id,
 			connect.dst_chan_id,
-			(connect.flags & VISDN_CONNECT_FLAG_PERMANENT) ?
-				NULL : file);
+			file,
+			connect.flags);
 	} else {
 		err = visdn_cxc_connect_with_id(
 			connect.src_chan_id,
 			connect.dst_chan_id,
-			(connect.flags & VISDN_CONNECT_FLAG_PERMANENT) ?
-				NULL : file);
+			file,
+			connect.flags);
 	}
 
 	if (err < 0)

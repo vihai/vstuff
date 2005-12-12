@@ -23,6 +23,7 @@
 #define VISDN_IOC_DISABLE_PATH		_IOR(0xd0, 7, unsigned int)
 
 #define VISDN_CONNECT_FLAG_PERMANENT	(1 << 0)
+#define VISDN_CONNECT_FLAG_OVERRIDE	(1 << 1)
 
 #define VISDN_CXCID_SIZE 32
 
@@ -118,7 +119,7 @@ struct visdn_cxc_connection
 	struct visdn_leg *src;
 	struct visdn_leg *dst;
 
-	struct file *bound_to_file;
+	struct file *file;
 };
 
 struct visdn_cxc_attribute {
@@ -155,7 +156,8 @@ extern int visdn_cxc_connect(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2,
-	struct file *bound_to_file);
+	struct file *file,
+	unsigned long flags);
 
 extern int visdn_cxc_disconnect(
 	struct visdn_cxc *cxc,
@@ -185,7 +187,8 @@ extern void visdn_cxc_remove_file(
 extern int visdn_cxc_connect_with_id(
 	int chan1_id,
 	int chan2_id,
-	struct file *bound_to_file);
+	struct file *file,
+	unsigned long flags);
 extern int visdn_cxc_disconnect_with_id(
 	int chan1_id,
 	int chan2_id);

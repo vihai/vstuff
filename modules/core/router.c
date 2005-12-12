@@ -166,10 +166,9 @@ void visdn_router_run(
 int visdn_connect_path(
 	struct visdn_chan *src_chan,
 	struct visdn_chan *dst_chan,
-	struct file *bound_to_file)
+	struct file *file,
+	unsigned long flags)
 {
-	struct visdn_router_arch *prev_arch = NULL, *next_arch = NULL;
-	struct visdn_router_node *node;
 	int done_entries = 0;
 	int err;
 
@@ -188,7 +187,9 @@ int visdn_connect_path(
 	down(&visdn_router_sem);
 	visdn_router_run(&src_chan->router_node);
 
-	node = &dst_chan->router_node;
+	{
+	struct visdn_router_arch *prev_arch = NULL, *next_arch = NULL;
+	struct visdn_router_node *node = &dst_chan->router_node;
 	while(node) {
 		visdn_router_print_node_name(node);
 
@@ -207,7 +208,8 @@ int visdn_connect_path(
 							router_node),
 				next_arch->src_leg->other_leg,
 				prev_arch->src_leg,
-				bound_to_file);
+				file,
+				flags);
 			if (err < 0)
 				goto err_router_connect;
 
@@ -218,6 +220,7 @@ int visdn_connect_path(
 
 		node = node->prev;
 	}
+	}
 
 	verbose("\n");
 
@@ -227,8 +230,9 @@ int visdn_connect_path(
 
 err_router_connect:
 	{
+	struct visdn_router_arch *prev_arch = NULL, *next_arch = NULL;
+	struct visdn_router_node *node = &dst_chan->router_node;
 	int i = 0;
-	node = &dst_chan->router_node;
 	while(node) {
 		if (!node->prev_thru)
 			break;
@@ -247,6 +251,10 @@ err_router_connect:
 
 			i++;
 		}
+
+		prev_arch = node->prev_thru;
+
+		node = node->prev;
 	}
 	}
 
@@ -258,7 +266,8 @@ err_router_connect:
 int visdn_connect_path_with_id(
 	int chan1_id,
 	int chan2_id,
-	struct file *bound_to_file)
+	struct file *file,
+	unsigned long flags)
 {
 	struct visdn_chan *chan1;
 	struct visdn_chan *chan2;
@@ -287,7 +296,7 @@ int visdn_connect_path_with_id(
 		goto err_connect_self;
 	}
 
-	err = visdn_connect_path(chan1, chan2, bound_to_file);
+	err = visdn_connect_path(chan1, chan2, file, flags);
 	if (err < 0)
 		goto err_connect;
 

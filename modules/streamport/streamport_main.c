@@ -399,8 +399,8 @@ static int vsp_cdev_do_connect(
 	err = visdn_connect_path_with_id(
 		chan->visdn_chan.id,
 		connect.dst_chan_id,
-		(connect.flags & VISDN_CONNECT_FLAG_PERMANENT) ?
-			NULL : file);
+		file,
+		connect.flags);
 	if (err < 0)
 		goto err_cxc_disconnect;
 
