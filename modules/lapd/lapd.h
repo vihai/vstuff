@@ -69,10 +69,6 @@ struct sockaddr_lapd {
 
 #ifdef __KERNEL__
 
-#if defined(DEBUG_CODE) && !defined(SOCK_DEBUGGING)
-#define SOCK_DEBUGGING
-#endif
-
 #include <asm/atomic.h>
 #include <linux/types.h>
 #include <linux/netdevice.h>

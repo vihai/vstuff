@@ -10,6 +10,10 @@
  *
  */
 
+#if defined(DEBUG_CODE) && !defined(SOCK_DEBUGGING)
+#define SOCK_DEBUGGING
+#endif
+
 #include <linux/skbuff.h>
 #include <linux/tcp.h>
 
@@ -372,9 +376,10 @@ static void lapd_invoke_retransmission_procedure(
 {
 	struct sock *sk = &lapd_sock->sk;
 
-	if (!skb_queue_empty(&sk->sk_write_queue)) {
+	if (!skb_queue_empty(&sk->sk_write_queue))
 		sk->sk_send_head = sk->sk_write_queue.next;
-	}
+
+	lapd_sock->v_s = lapd_sock->v_a;
 
 	lapd_run_i_queue(lapd_sock);
 }
@@ -865,6 +870,9 @@ static int lapd_socket_handle_iframe(
 					lapd_send_sframe(lapd_sock,
 						LAPD_RESPONSE,
 						LAPD_SFRAME_FUNC_REJ, hdr->i.p);
+
+					lapd_sock->acknowledge_pending
+							= FALSE;
 				}
 			}
 		}

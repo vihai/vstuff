@@ -10,6 +10,10 @@
  *
  */
 
+#if defined(DEBUG_CODE) && !defined(SOCK_DEBUGGING)
+#define SOCK_DEBUGGING
+#endif
+
 #include <linux/kernel.h>
 #include <linux/tcp.h>
 
