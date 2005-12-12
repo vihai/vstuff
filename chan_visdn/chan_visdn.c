@@ -3130,7 +3130,9 @@ static void visdn_q931_setup_indication(
 	for(i=0; i<ies->count; i++) {
 		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
 			visdn_chan->sending_complete = TRUE;
-		} else if (ies->ies[i]->type->id == Q931_IE_CALLED_PARTY_NUMBER) {
+		} else if (ies->ies[i]->type->id ==
+				Q931_IE_CALLED_PARTY_NUMBER) {
+
 			struct q931_ie_called_party_number *cdpn =
 				container_of(ies->ies[i],
 					struct q931_ie_called_party_number, ie);
@@ -3142,10 +3144,13 @@ static void visdn_q931_setup_indication(
 
 				struct q931_ies ies = Q931_IES_INIT;
 
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				struct q931_ie_cause *cause =
+						q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = q931_ie_cause_location_call(q931_call);
-				cause->value = Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
+				cause->location =
+					q931_ie_cause_location_call(q931_call);
+				cause->value =
+					Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
 				q931_ies_add_put(&ies, &cause->ie);
 
 				q931_send_primitive(visdn_chan->q931_call,
@@ -3160,10 +3165,12 @@ static void visdn_q931_setup_indication(
 				strcat(called_number, cdpn->number);
 			}
 
-		} else if (ies->ies[i]->type->id == Q931_IE_CALLING_PARTY_NUMBER) {
+		} else if (ies->ies[i]->type->id ==
+				Q931_IE_CALLING_PARTY_NUMBER) {
+
 			struct q931_ie_calling_party_number *cgpn =
 				container_of(ies->ies[i],
-					struct q931_ie_calling_party_number, ie);
+				struct q931_ie_calling_party_number, ie);
 
 			const char *prefix = "";
 			if (cgpn->type_of_number ==
@@ -3204,7 +3211,8 @@ static void visdn_q931_setup_indication(
 			} else {
 				struct q931_ies ies = Q931_IES_INIT;
 
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				struct q931_ie_cause *cause =
+					q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
 				cause->location =
 					q931_ie_cause_location_call(q931_call);
@@ -3294,8 +3302,6 @@ static void visdn_q931_setup_indication(
 				called_number,
 				intf->context);
 
-			ast_hangup(ast_chan);
-
 			struct q931_ies ies = Q931_IES_INIT;
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
@@ -3308,6 +3314,8 @@ static void visdn_q931_setup_indication(
 
 			q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_REJECT_REQUEST, &ies);
+
+			ast_hangup(ast_chan);
 		}
 	} else {
 
