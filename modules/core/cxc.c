@@ -105,8 +105,8 @@ static int visdn_cxc_connect_simplex(
 		src->ops->disconnect(src, dst);
 err_connect:
 	down(&cxc->sem);
-	hlist_del(&conn->hash_node);
-	list_del(&conn->list_node);
+	hlist_del_rcu(&conn->hash_node);
+	list_del_rcu(&conn->list_node);
 	up(&cxc->sem);
 
 	visdn_leg_put(dst);

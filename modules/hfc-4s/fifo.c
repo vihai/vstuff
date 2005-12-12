@@ -12,7 +12,6 @@
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
-#include <linux/netdevice.h>
 
 #include "fifo.h"
 #include "fifo_inline.h"

@@ -523,14 +523,14 @@ static int hfc_sys_chan_frame_xmit(
 		hfc_update_led(led);
 	}
 
-	return NETDEV_TX_OK;
+	return VISDN_TX_OK;
 
 err_no_free_tx:
 err_no_free_frames:
 
 	hfc_card_unlock(card);
 
-	return NETDEV_TX_BUSY;
+	return VISDN_TX_BUSY;
 }
 
 static ssize_t hfc_sys_chan_read(

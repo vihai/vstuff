@@ -41,6 +41,13 @@ enum visdn_leg_tx_error_code
 	VISDN_TX_ERROR_FIFO_FULL,
 };
 
+enum visdn_frame_xmit_return_codes
+{
+	VISDN_TX_OK,
+	VISDN_TX_BUSY,
+	VISDN_TX_LOCKED,
+};
+
 struct visdn_chan;
 struct visdn_leg;
 

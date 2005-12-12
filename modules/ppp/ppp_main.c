@@ -152,13 +152,16 @@ static int vppp_ppp_start_xmit(
 	vppp_debug(3, "vppp_ppp_start_xmit()\n");
 
 	res = visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
-	if (res == NETDEV_TX_OK)
+	switch(res) {
+	case VISDN_TX_OK:
 		return 1;
-	else if (res == NETDEV_TX_LOCKED) {
+	case VISDN_TX_BUSY:
+	case VISDN_TX_LOCKED:
 		schedule_work(&chan->retry_work);
 		return 0;
-	} else
+	default:
 		return 0;
+	}
 }
 
 static void vppp_retry_work(void *data)

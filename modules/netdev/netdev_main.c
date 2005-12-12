@@ -366,13 +366,24 @@ static int vnd_netdev_frame_xmit(
 	struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
+	int res;
 
 	netdev->trans_start = jiffies;
 
 	netdevice->stats.tx_packets++;
 	netdevice->stats.tx_bytes += skb->len + 2;
 
-	return visdn_leg_frame_xmit(&netdevice->visdn_chan.leg_a, skb);
+	res = visdn_leg_frame_xmit(&netdevice->visdn_chan.leg_a, skb);
+	switch(res) {
+	case VISDN_TX_OK:
+		return NETDEV_TX_OK;
+	case VISDN_TX_BUSY:
+		return NETDEV_TX_BUSY;
+	case VISDN_TX_LOCKED:
+		return NETDEV_TX_LOCKED;
+	default:
+		return NETDEV_TX_OK;
+	}
 }
 
 static struct net_device_stats *vnd_netdev_get_stats(
@@ -672,6 +683,9 @@ err_invalid_sizeof_create:
 
 static void vnd_do_destroy(struct vnd_netdevice *netdevice)
 {
+	//visdn_disconnect_path_with_id(netdevice->visdn_chan.id);
+	//visdn_disconnect_path_with_id(netdevice->visdn_chan_e.id);
+
 	sysfs_remove_link(
 		&netdevice->netdev->class_dev.kobj,
 		VND_CHANNEL_SYMLINK_E);
@@ -689,7 +703,7 @@ static void vnd_do_destroy(struct vnd_netdevice *netdevice)
 	visdn_chan_put(&netdevice->visdn_chan_e);
 
 	spin_lock(&vnd_netdevices_list_lock);
-	list_del(&netdevice->list_node);
+	list_del_init(&netdevice->list_node);
 	vnd_netdevice_put(netdevice);
 	spin_unlock(&vnd_netdevices_list_lock);
 }
@@ -904,7 +918,7 @@ static void __exit vnd_module_exit(void)
 	cdev_del(&vnd_cdev);
 	unregister_chrdev_region(vnd_first_dev, 1);
 
-	/* Noone else can access vnd_netdevices_list, so, no locking */
+	/* No one else can access vnd_netdevices_list, so, no locking */
 	list_for_each_entry_safe(netdevice, t,
 			&vnd_netdevices_list, list_node) {
 
