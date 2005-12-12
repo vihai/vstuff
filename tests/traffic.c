@@ -159,6 +159,7 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 		if(len < 0) {
 			if (errno == ECONNRESET) {
 				printf("%sDL-RELEASE-INDICATION\n", prefix);
+				break;
 			} else if (errno == EALREADY) {
 				printf("%sDL-ESTABLISH-INDICATION\n", prefix);
 			} else if (errno == ENOTCONN) {
@@ -179,7 +180,7 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 		if(len < 0) {
 			if (errno == ECONNRESET) {
 				printf("%sDL-RELEASE-INDICATION\n", prefix);
-				continue;
+				break;
 			} else if (errno == EALREADY) {
 				printf("%sDL-ESTABLISH-INDICATION\n", prefix);
 				continue;
@@ -214,18 +215,6 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 
 void start_null(int s, const char *prefix, struct opts *opts)
 {
-	if (opts->frame_type == FRAME_TYPE_IFRAME) {
-		printf("%sConnecting...", prefix);
-
-		if (connect(s, NULL, 0) < 0) {
-			printf("%sconnect: %s %d\n", prefix,
-				strerror(errno), errno);
-			exit(1);
-		}
-
-		printf("OK\n");
-	}
-
 	for (;;) {
 		int in_size;
 		if(ioctl(s, SIOCINQ, &in_size) < 0) {
@@ -289,17 +278,8 @@ void start_source(int s, const char *prefix, struct opts *opts)
 
 	memset(out_frame, 0x5a, sizeof(out_frame));
 
-	if (opts->frame_type == FRAME_TYPE_IFRAME) {
-		printf("%sConnecting...", prefix);
-		if (connect(s, NULL, 0) < 0) {
-			printf("%sconnect: %s %d\n", prefix,
-				strerror(errno), errno);
-			exit(1);
-		}
-		printf("OK\n");
-	} else {
+	if (opts->frame_type == FRAME_TYPE_UFRAME)
 		out_flags |= MSG_OOB;
-	}
 
 	struct pollfd polls;
 
@@ -462,7 +442,7 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 			if(len < 0) {
 				if (errno == ECONNRESET) {
 					printf("%sDL-RELEASE-INDICATION\n", prefix);
-					continue;
+					break;
 				} else if (errno == EALREADY) {
 					printf("%sDL-ESTABLISH-INDICATION\n", prefix);
 					continue;
@@ -716,6 +696,16 @@ int main(int argc, char *argv[])
 	printf("Role... ");
 	if (role == LAPD_ROLE_TE) {
 		printf("TE\n");
+
+		if (opts.frame_type == FRAME_TYPE_IFRAME) {
+			printf("Connecting...");
+			if (connect(s, NULL, 0) < 0) {
+				printf("connect: %s %d\n",
+					strerror(errno), errno);
+				exit(1);
+			}
+			printf("OK\n");
+		}
 
 		if (opts.mode == MODE_LOOPBACK)
 			start_loopback(s, "", &opts);
