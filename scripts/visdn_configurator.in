@@ -1,9 +1,12 @@
 #!/bin/bash
 
-VISDN_DIR=${prefix}/etc/visdn
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+
+VISDN_DIR=@prefix@/etc/visdn
 
 #VISDNCTL="echo visdnctl"
-VISDNCTL=visdnctl
+VISDNCTL=@sbindir@/visdnctl
 
 modprobe visdn-netdev
 modprobe visdn-streamport

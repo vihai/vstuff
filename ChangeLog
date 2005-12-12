@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-12 17:38:12 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-332
+
+    Summary:
+      Made visdn_configurator more location-independent
+    Revision:
+      isdn--devel--0.1--patch-332
+
+
+    modified files:
+     ChangeLog scripts/visdn_configurator.in
+
+
 2005-12-12 17:26:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-331
 
     Summary:
