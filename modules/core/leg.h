@@ -72,6 +72,11 @@ struct visdn_leg_ops
 		enum visdn_leg_tx_error_code code);
 };
 
+enum visdn_leg_status
+{
+	VISDN_LEG_STATUS_QUEUE_STOPPED,
+};
+
 struct visdn_leg
 {
 	struct kobject kobj;
@@ -93,6 +98,9 @@ struct visdn_leg
 	int mtu;
 
 	struct visdn_router_arch router_arch;
+
+	spinlock_t queue_stopped_lock;
+	unsigned long status;
 };
 
 #define to_visdn_leg(obj) container_of(obj, struct visdn_leg, kobj)
@@ -144,6 +152,11 @@ extern void visdn_leg_init(struct visdn_leg *leg);
 
 extern struct visdn_leg *visdn_leg_get(struct visdn_leg *leg);
 extern void visdn_leg_put(struct visdn_leg *leg);
+
+static inline int visdn_leg_queue_stopped(struct visdn_leg *leg)
+{
+	return test_bit(VISDN_LEG_STATUS_QUEUE_STOPPED, &leg->status);
+}
 
 #endif
 

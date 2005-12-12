@@ -467,20 +467,18 @@ static int hfc_sys_chan_frame_xmit(
 		visdn_leg_tx_error(&chan->visdn_chan.leg_b,
 				VISDN_TX_ERROR_FIFO_FULL);
 
-		chan->queue_stopped = TRUE;
-
 		goto err_no_free_frames;
 	}
 
 	if (hfc_fifo_free_tx(fifo) < skb->len) {
-		hfc_debug_sys_chan(chan, 3, "TX FIFO full, throttling\n");
+		hfc_debug_sys_chan(chan, 3,
+			"TX FIFO full (%d < %d), throttling\n",
+			hfc_fifo_free_tx(fifo), skb->len);
 
 		visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
 
 		visdn_leg_tx_error(&chan->visdn_chan.leg_b,
 				VISDN_TX_ERROR_FIFO_FULL);
-
-		chan->queue_stopped = TRUE;
 
 		goto err_no_free_tx;
 	}
@@ -493,8 +491,9 @@ static int hfc_sys_chan_frame_xmit(
 	} else if (debug_level >= 4) {
 		hfc_fifo_refresh_fz_cache(fifo);
 		hfc_debug_sys_chan(chan, 4,
-			"TX (f1=%02x, f2=%02x, z1=N/A, z2=%04x) len %2d: ",
-			fifo->f1, fifo->f2, fifo->z2,
+			"TX (f1=%02x, f2=%02x, z1(f1)=%04x, z2(f2)=%04x)"
+			" len %2d: ",
+			fifo->f1, fifo->f2, fifo->z1, fifo->z2,
 			skb->len);
 	}
 
@@ -645,7 +644,8 @@ void hfc_sys_chan_rx_work(void *data)
 		hfc_debug_sys_chan(chan, 3, "RX len %2d: ", frame_size);
 	} else if(debug_level >= 4) {
 		hfc_debug_sys_chan(chan, 4,
-			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
+			"RX (f1=%02x, f2=%02x, z1(f1)=%04x, z2(f1)=%04x)"
+			" len %2d: ",
 			fifo->f1, fifo->f2, fifo->z1, fifo->z2,
 			frame_size);
 	}

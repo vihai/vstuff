@@ -42,36 +42,51 @@ EXPORT_SYMBOL(visdn_leg_frame_xmit);
 void visdn_leg_start_queue(
 	struct visdn_leg *leg)
 {
+	unsigned long flags;
+
 	if (!leg->cxc->ops || !leg->cxc->ops->start_queue) {
 		WARN_ON(1);
 		return;
 	}
 
+	spin_lock_irqsave(&leg->queue_stopped_lock, flags);
 	leg->cxc->ops->start_queue(leg->cxc, leg);
+	clear_bit(VISDN_LEG_STATUS_QUEUE_STOPPED, &leg->status);
+	spin_unlock_irqrestore(&leg->queue_stopped_lock, flags);
 }
 EXPORT_SYMBOL(visdn_leg_start_queue);
 
 void visdn_leg_stop_queue(
 	struct visdn_leg *leg)
 {
+	unsigned long flags;
+
 	if (!leg->cxc->ops || !leg->cxc->ops->stop_queue) {
 		WARN_ON(1);
 		return;
 	}
 
+	spin_lock_irqsave(&leg->queue_stopped_lock, flags);
 	leg->cxc->ops->stop_queue(leg->cxc, leg);
+	set_bit(VISDN_LEG_STATUS_QUEUE_STOPPED, &leg->status);
+	spin_unlock_irqrestore(&leg->queue_stopped_lock, flags);
 }
 EXPORT_SYMBOL(visdn_leg_stop_queue);
 
 void visdn_leg_wake_queue(
 	struct visdn_leg *leg)
 {
+	unsigned long flags;
+
 	if (!leg->cxc->ops || !leg->cxc->ops->wake_queue) {
 		WARN_ON(1);
 		return;
 	}
 
+	spin_lock_irqsave(&leg->queue_stopped_lock, flags);
 	leg->cxc->ops->wake_queue(leg->cxc, leg);
+	clear_bit(VISDN_LEG_STATUS_QUEUE_STOPPED, &leg->status);
+	spin_unlock_irqrestore(&leg->queue_stopped_lock, flags);
 }
 EXPORT_SYMBOL(visdn_leg_wake_queue);
 
@@ -326,6 +341,8 @@ void visdn_leg_init(struct visdn_leg *leg)
 	leg->kobj.ktype = &ktype_visdn_leg;
 
 	INIT_LIST_HEAD(&leg->cxc_legs_node);
+
+	spin_lock_init(&leg->queue_stopped_lock);
 }
 EXPORT_SYMBOL(visdn_leg_init);
 

@@ -87,9 +87,9 @@ have been performed on each simplex channel independently, however, some
 hardware does not support etherogeneous channel configuration which, in turn,
 is often unneeded. So, i
 
-
-
-
+start_queue, stop_queue, wake_queue
+These callbacks may be called with interrupts disabled, must not sleep and
+must not call each other.
 
 HISTORY:
 

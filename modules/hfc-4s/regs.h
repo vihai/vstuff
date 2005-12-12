@@ -60,6 +60,9 @@
 #define hfc_R_RAM_MISC_V_RAM_SZ_128K		(0x1 << 0)
 #define hfc_R_RAM_MISC_V_RAM_SZ_512K		(0x2 << 0)
 #define hfc_R_RAM_MISC_V_RAM_SZ_MASK		(0x3 << 0)
+#define hfc_R_RAM_MISC_V_PWM0_16KHZ		(1 << 5)
+#define hfc_R_RAM_MISC_V_PWM1_16KHZ		(1 << 6)
+#define hfc_R_RAM_MISC_V_FZ_MD			(1 << 7)
 
 #define hfc_R_FIFO_MD		0x0D
 #define hfc_R_FIFO_MD_V_FIFO_MD_00		(0x0 << 0)

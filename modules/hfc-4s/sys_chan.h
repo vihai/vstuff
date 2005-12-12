@@ -42,8 +42,6 @@ struct hfc_sys_chan {
 	struct hfc_pcm_chan *connected_pcm_chan;
 
 	struct work_struct rx_work;
-
-	int queue_stopped;
 };
 
 void hfc_sys_chan_init(

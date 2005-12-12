@@ -81,6 +81,9 @@ static inline u16 hfc_fifo_free_rx(struct hfc_fifo *fifo)
 		return free_bytes + fifo->size;
 }
 
+/* Note: This function requires z2 to be z2(f2) which chan be
+ * accomplished by setting V_FZ_MD in R_RAM_MISC */
+
 static inline u16 hfc_fifo_free_tx(struct hfc_fifo *fifo)
 {
 	u16 free_bytes=fifo->z2 - fifo->z1;

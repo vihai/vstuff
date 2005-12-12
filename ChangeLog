@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-12 17:08:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-330
+
+    Summary:
+      Fixed FIFO full and queue full handling
+    Revision:
+      isdn--devel--0.1--patch-330
+
+
+    modified files:
+     ChangeLog NOTES modules/core/leg.c modules/core/leg.h
+     modules/hfc-4s/card.c modules/hfc-4s/fifo_inline.h
+     modules/hfc-4s/regs.h modules/hfc-4s/sys_chan.c
+     modules/hfc-4s/sys_chan.h
+
+
 2005-12-12 10:48:58 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-329
 
     Summary:

@@ -550,7 +550,7 @@ void hfc_update_r_brg_pcm_cfg(struct hfc_card *card)
 
 void hfc_update_r_ram_misc(struct hfc_card *card)
 {
-	u8 ram_misc = 0;
+	u8 ram_misc = hfc_R_RAM_MISC_V_FZ_MD;
 
 	if (card->ram_size == 32)
 		ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_32K;
@@ -700,8 +700,13 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_sys_chan *chan)
 {
-	if (chan->queue_stopped)
-		visdn_leg_wake_queue(&chan->visdn_chan.leg_a);
+	if (visdn_leg_queue_stopped(&chan->visdn_chan.leg_b)) {
+		hfc_fifo_select(&chan->tx_fifo);
+
+		if (hfc_fifo_free_frames(&chan->tx_fifo) &&
+		    hfc_fifo_free_tx(&chan->tx_fifo) > 20)
+			visdn_leg_wake_queue(&chan->visdn_chan.leg_b);
+	}
 }
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_sys_chan *chan)
