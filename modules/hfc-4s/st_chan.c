@@ -555,12 +555,10 @@ static int hfc_st_chan_connect(
 
 	if (visdn_leg2->chan->chan_class == &hfc_sys_chan_class) {
 		chan->connected_sys_chan = to_sys_chan(visdn_leg2->chan);
-printk(KERN_DEBUG "(ST) SYS_CHAN connected\n");
 	} else if (visdn_leg2->chan->chan_class == &hfc_pcm_chan_class) {
 		chan->connected_pcm_chan = to_pcm_chan(visdn_leg2->chan);
-printk(KERN_DEBUG "(ST) PCM_CHAN connected\n");
 	} else {
-printk(KERN_DEBUG "What the hell are you doing?\n");
+		WARN_ON(1);
 	}
 
 	hfc_card_unlock(card);
@@ -571,7 +569,6 @@ printk(KERN_DEBUG "What the hell are you doing?\n");
 	return 0;
 
 	chan->status = HFC_ST_CHAN_STATUS_FREE;
-//err_invalid_l1_proto:
 err_invalid_chan:
 err_channel_busy:
 	visdn_chan_unlock(visdn_leg->chan);
@@ -585,20 +582,7 @@ static void hfc_st_chan_disconnect(
 	struct visdn_leg *visdn_leg1,
 	struct visdn_leg *visdn_leg2)
 {
-printk(KERN_INFO "hfc-4s chan %s disconnected\n",
-		visdn_leg1->chan->kobj.name);
 }
-
-/*static int hfc_st_chan_update_parameters(
-	struct visdn_chan *chan,
-	struct visdn_chan_pars *pars)
-{
-	// TODO: Complain if someone tryies to change l1_proto mode or bitrate
-
-	memcpy(&chan->pars, pars, sizeof(chan->pars));
-
-	return 0;
-}*/
 
 static struct visdn_chan_ops hfc_st_chan_ops = {
 	.owner			= THIS_MODULE,

@@ -388,20 +388,17 @@ static int hfc_sys_chan_leg_a_connect(
 
 	if (visdn_leg2->chan->chan_class == &hfc_st_chan_class) {
 		chan->connected_st_chan = to_st_chan(visdn_leg2->chan);
-printk(KERN_DEBUG "ST_CHAN connected\n");
 	} else if (visdn_leg2->chan->chan_class == &hfc_pcm_chan_class) {
 		chan->connected_pcm_chan = to_pcm_chan(visdn_leg2->chan);
-printk(KERN_DEBUG "PCM_CHAN connected\n");
-	} else
+	} else {
 		WARN_ON(1);
+	}
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_leg->chan);
 
 	return 0;
 
-//err_invalid_l1_proto:
-//err_invalid_chan:
 	visdn_chan_unlock(visdn_leg->chan);
 err_visdn_chan_lock:
 	hfc_card_unlock(card);
@@ -425,16 +422,12 @@ static void hfc_sys_chan_leg_a_disconnect(
 	struct visdn_leg *visdn_leg,
 	struct visdn_leg *visdn_leg2)
 {
-printk(KERN_INFO "hfc-4s leg_a chan %s disconnected\n",
-		visdn_leg->chan->kobj.name);
 }
 
 static void hfc_sys_chan_leg_b_disconnect(
 	struct visdn_leg *visdn_leg,
 	struct visdn_leg *visdn_leg2)
 {
-printk(KERN_INFO "hfc-4s leg_b chan %s disconnected\n",
-		visdn_leg->chan->kobj.name);
 }
 
 static int hfc_sys_chan_frame_xmit(

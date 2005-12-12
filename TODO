@@ -150,6 +150,7 @@ hfc-4s:
 
 - Finish PCM bus support
 - Use memcpy_toio
+- Reintegrate BERT support
 
 hfc-pci:
 -------

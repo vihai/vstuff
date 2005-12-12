@@ -80,6 +80,7 @@ int hfc_fifo_get(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_put(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_drop(struct hfc_fifo *fifo, int size);
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo);
+int hfc_fifo_is_running(struct hfc_fifo *fifo);
 void hfc_fifo_configure(
 	struct hfc_fifo *fifo);
 void hfc_fifo_init(

@@ -28,8 +28,6 @@ static int hfc_cxc_connect(
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2)
 {
-	printk(KERN_DEBUG "############# hfc_cxc_connect\n");
-
 	return 0;
 }
 
@@ -38,7 +36,6 @@ static void hfc_cxc_disconnect(
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2)
 {
-	printk(KERN_DEBUG "############# hfc_cxc_disconnect\n");
 }
 
 static struct visdn_cxc_ops hfc_cxc_ops =

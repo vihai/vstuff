@@ -140,8 +140,8 @@ static ssize_t hfc_show_fifo_state(
 	int i;
 
 	len += snprintf(buf + len, PAGE_SIZE - len,
-		"\n       Receive                     Transmit\n"
-		"FIFO#  F1 F2   Z1   Z2 Used Mode   F1 F2   Z1   Z2"
+		"\n       Receive                      Transmit\n"
+		"FIFO#  F1 F2   Z1   Z2 Used Mode    F1 F2   Z1   Z2"
 		" Used Mode Connected\n");
 
 	hfc_card_lock(card);
@@ -165,11 +165,12 @@ static ssize_t hfc_show_fifo_state(
 		z.z1z2 = hfc_inl(card, hfc_A_Z12);
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
-			" %02x %02x %04x %04x %4d %c%c  ",
+			" %02x %02x %04x %04x %4d %c%c%c  ",
 			f.f1, f.f2, z.z1, z.z2,
 			hfc_fifo_used_rx(fifo_rx),
+			fifo_rx->framer_enabled ? 'H' : ' ',
 			fifo_rx->enabled ? 'E' : ' ',
-			fifo_rx->framer_enabled ? 'H' : ' ');
+			hfc_fifo_is_running(fifo_rx) ? 'R' : ' ');
 
 		hfc_fifo_select(fifo_tx);
 
@@ -177,11 +178,12 @@ static ssize_t hfc_show_fifo_state(
 		z.z1z2 = hfc_inl(card, hfc_A_Z12);
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
-			"   %02x %02x %04x %04x %4d %c%c  ",
+			"   %02x %02x %04x %04x %4d %c%c%c  ",
 			f.f1, f.f2, z.z1, z.z2,
 			hfc_fifo_used_tx(fifo_tx),
+			fifo_tx->framer_enabled ? 'H' : ' ',
 			fifo_tx->enabled ? 'E' : ' ',
-			fifo_tx->framer_enabled ? 'H' : ' ');
+			hfc_fifo_is_running(fifo_tx) ? 'R' : ' ');
 
 		if (fifo_rx->chan->connected_st_chan) {
 			len += snprintf(buf + len, PAGE_SIZE - len,

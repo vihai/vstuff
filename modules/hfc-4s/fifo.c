@@ -66,13 +66,27 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 	hfc_fifo_next_frame(fifo);
 }
 
+int hfc_fifo_is_running(struct hfc_fifo *fifo)
+{
+	if (!fifo->enabled ||
+	    (fifo->chan->connected_st_chan &&
+	     ((fifo->chan->connected_st_chan->port->nt_mode &&
+	      fifo->chan->connected_st_chan->port->l1_state != 3) ||
+	     ((!fifo->chan->connected_st_chan->port->nt_mode &&
+	      fifo->chan->connected_st_chan->port->l1_state != 7))))) {
+		return FALSE;
+	} else {
+		return TRUE;
+	}
+}
+
 void hfc_fifo_configure(
 	struct hfc_fifo *fifo)
 {
 	struct hfc_card *card = fifo->chan->port->card;
 	u8 con_hdlc = 0;
 
-	if (!fifo->enabled) {
+	if (!hfc_fifo_is_running(fifo)) {
 		hfc_outb(card, hfc_A_CON_HDLC,
 				hfc_A_CON_HDCL_V_HDLC_TRP_HDLC |
 				hfc_A_CON_HDCL_V_TRP_IRQ_FIFO_DISABLED);

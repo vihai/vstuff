@@ -16,6 +16,7 @@
 #include "st_port_inline.h"
 #include "st_chan.h"
 #include "card.h"
+#include "fifo_inline.h"
 
 #ifdef DEBUG_CODE
 #define hfc_debug_st_port(port, dbglevel, format, arg...)		\
@@ -335,6 +336,7 @@ static void hfc_st_port_state_change_work(void *data)
 	struct hfc_st_port *port = data;
 	struct hfc_card *card = port->card;
 	u8 new_state;
+	int active;
 
 	hfc_card_lock(card);
 
@@ -349,30 +351,62 @@ static void hfc_st_port_state_change_work(void *data)
 		new_state);
 
 	if (port->nt_mode) {
-		// NT mode
+
+		active = 3;
 
 		if (new_state == 2) {
-			// Allows transition from G2 to G3
+			/* Allow transition from G2 to G3 */
 			hfc_outb(card, hfc_A_ST_WR_STA,
 				hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
 				hfc_A_ST_WR_STA_V_SET_G2_G3);
 		}
 	} else {
-		if (new_state == 7 && port->l1_state != 7) {
-			// TE is now active, schedule FIFO activation after
-			// some time, otherwise the first frames are lost
+		active = 7;
+	}
 
-//			card->regs.ctmt |= hfc_CTMT_TIMER_50 | hfc_CTMT_TIMER_CLEAR;
-//			hfc_outb(card, hfc_CTMT, card->regs.ctmt);
+	if (new_state == active && port->l1_state != active) {
+		/* Layer 1 is now active, schedule FIFO activation after
+		 * 50ms, otherwise the first frame gets corrupted. This is
+		 * not documented on Cologne Chip's specs.
+		 */
 
-			// Activating the timer firest an interrupt immediately, we
-			// obviously need to ignore it
-		}
+		schedule_delayed_work(&port->fifo_activation_work,
+							HZ/50);
+
+	} else if (new_state != active && port->l1_state == active) {
+
+		schedule_work(&port->fifo_activation_work);
 	}
 
 	port->l1_state = new_state;
 
 	hfc_update_port_led(port);
+
+	hfc_card_unlock(card);
+}
+
+static void hfc_st_port_fifo_activation_work(void *data)
+{
+	struct hfc_st_port *port = data;
+	struct hfc_card *card = port->card;
+	int i;
+
+	hfc_card_lock(card);
+
+	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
+		struct hfc_sys_chan *sys_chan =
+				port->chans[i].connected_sys_chan;
+
+		if (sys_chan) {
+			// RX
+			hfc_fifo_select(&sys_chan->rx_fifo);
+			hfc_fifo_configure(&sys_chan->rx_fifo);
+
+			// TX
+			hfc_fifo_select(&sys_chan->tx_fifo);
+			hfc_fifo_configure(&sys_chan->tx_fifo);
+		}
+	}
 
 	hfc_card_unlock(card);
 }
@@ -461,6 +495,10 @@ void hfc_st_port_init(
 
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
+		port);
+
+	INIT_WORK(&port->fifo_activation_work,
+		hfc_st_port_fifo_activation_work,
 		port);
 
 	port->nt_mode = FALSE;

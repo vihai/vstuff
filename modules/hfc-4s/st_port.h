@@ -54,6 +54,7 @@ struct hfc_st_port
 	// changed independently.
 
 	struct work_struct state_change_work;
+	struct work_struct fifo_activation_work;
 
 	struct visdn_port visdn_port;
 };

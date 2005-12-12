@@ -27,7 +27,7 @@
 			"chan[%s] "					\
 			format,						\
 			(chan)->port->card->pci_dev->dev.bus->name,	\
-			(chan)->port->card->pci_dev->dev.bus_id,		\
+			(chan)->port->card->pci_dev->dev.bus_id,	\
 			(chan)->visdn_chan.name,			\
 			## arg)
 
@@ -43,7 +43,7 @@
 		"chan[%s] "						\
 		format,							\
 		(chan)->port->card->pci_dev->dev.bus->name,		\
-		(chan)->port->card->pci_dev->dev.bus_id,			\
+		(chan)->port->card->pci_dev->dev.bus_id,		\
 		(chan)->visdn_chan.name,				\
 		## arg)
 
@@ -153,12 +153,10 @@ static int hfc_pcm_chan_connect(
 
 	if (visdn_leg2->chan->chan_class == &hfc_sys_chan_class) {
 		chan->connected_sys_chan = to_sys_chan(visdn_leg2->chan);
-printk(KERN_DEBUG "(PCM) SYS_CHAN connected\n");
 	} else if (visdn_leg2->chan->chan_class == &hfc_st_chan_class) {
 		chan->connected_st_chan = to_st_chan(visdn_leg2->chan);
-printk(KERN_DEBUG "(PCM) ST_CHAN connected\n");
 	} else {
-printk(KERN_DEBUG "What the hell are you doing?\n");
+		WARN_ON(1);
 	}
 
 	hfc_card_unlock(card);
