@@ -27,7 +27,7 @@
 
 #include <getopt.h>
 
-#include <lapd.h>
+#include <linux/lapd.h>
 
 enum working_mode
 {
@@ -121,27 +121,41 @@ void send_broadcast(int s, const char *prefix, struct opts *opts)
 
 void start_loopback(int s, const char *prefix, struct opts *opts)
 {
-	struct msghdr msg;
-	struct cmsghdr cmsg;
-	struct sockaddr_lapd sal;
-	struct iovec iov;
+	struct msghdr msg_in;
+	struct cmsghdr cmsg_in;
+	struct iovec iov_in;
+	struct sockaddr_lapd sal_in;
+
+	struct msghdr msg_out;
+	struct cmsghdr cmsg_out;
+	struct iovec iov_out;
 
 	__u8 frame[65536];
 
-	iov.iov_base = frame;
-	iov.iov_len = sizeof(frame);
+	iov_in.iov_base = frame;
+	iov_in.iov_len = sizeof(frame);
 
-	msg.msg_name = &sal;
-	msg.msg_namelen = sizeof(sal);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	msg.msg_control = &cmsg;
-	msg.msg_controllen = sizeof(cmsg);
-	msg.msg_flags = 0;
+	msg_in.msg_name = &sal_in;
+	msg_in.msg_namelen = sizeof(sal_in);
+	msg_in.msg_iov = &iov_in;
+	msg_in.msg_iovlen = 1;
+	msg_in.msg_control = &cmsg_in;
+	msg_in.msg_controllen = sizeof(cmsg_in);
+	msg_in.msg_flags = 0;
+
+	iov_out.iov_base = frame;
+
+	msg_out.msg_name = NULL;
+	msg_out.msg_namelen = 0;
+	msg_out.msg_iov = &iov_out;
+	msg_out.msg_iovlen = 1;
+	msg_out.msg_control = &cmsg_out;
+	msg_out.msg_controllen = sizeof(cmsg_out);
+	msg_out.msg_flags = 0;
 
 	for (;;) {
 		int len;
-		len = recvmsg(s, &msg, 0);
+		len = recvmsg(s, &msg_in, 0);
 		if(len < 0) {
 			if (errno == ECONNRESET) {
 				printf("%sDL-RELEASE-INDICATION\n", prefix);
@@ -155,11 +169,13 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 				printf("%srecvmsg: %s\n", prefix, strerror(errno));
 				break;
 			}
+
+			continue;
 		}
 
-		iov.iov_len = len;
+		iov_out.iov_len = len;
 
-		len = sendmsg(s, &msg, 0);
+		len = sendmsg(s, &msg_out, 0);
 		if(len < 0) {
 			if (errno == ECONNRESET) {
 				printf("%sDL-RELEASE-INDICATION\n", prefix);

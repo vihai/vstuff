@@ -29,6 +29,7 @@ chan_visdn:
 - Call bumbing
 - Handle ULAW
 - Handle caller id presentation informations
+- Check DTMF handling
 
 - Call parking (SUSPEND/RESUME) does not use the call parking "infrastructure"
   in Asterisk. All my attempts to use ast_park_call() failed as:
@@ -142,6 +143,7 @@ visdn-streamport:
 -----------------
 
 - Reallocate channel ID from the beginning instead of incrementing every time
+- Fix fifo jitter buffer
 
 hfc-4s:
 -------

@@ -22,7 +22,7 @@
 #include <assert.h>
 #include <stdarg.h>
 
-#include <lapd.h>
+#include <linux/lapd.h>
 
 #define Q931_PRIVATE
 

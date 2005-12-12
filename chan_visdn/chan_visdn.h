@@ -11,7 +11,11 @@
  */
 
 #include <asterisk/channel.h>
+
+#ifdef AST10
 #include <asterisk/channel_pvt.h>
+#else
+#endif
 
 #include <libq931/list.h>
 
@@ -33,7 +37,7 @@ struct visdn_chan {
 	struct q931_call *q931_call;
 	struct visdn_suspended_call *suspended_call;
 
-	char visdn_chanid[30];
+	int visdn_chan_id;
 	int is_voice;
 	int channel_fd;
 
@@ -43,3 +47,22 @@ struct visdn_chan {
 	int may_send_digits;
 	char queued_digits[21];
 };
+
+#ifdef AST10
+
+#define ast_config_load ast_load
+#define ast_config_destroy ast_destroy
+
+static inline struct visdn_chan *to_visdn_chan(struct ast_channel *ast_chan)
+{
+	return ast_chan->pvt->pvt;
+}
+
+#else
+
+static inline struct visdn_chan *to_visdn_chan(struct ast_channel *ast_chan)
+{
+	return ast_chan->tech_pvt;
+}
+
+#endif

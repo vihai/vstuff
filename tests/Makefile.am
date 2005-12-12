@@ -4,8 +4,7 @@ AM_CFLAGS = -D_REENTRANT -Wall
 bin_PROGRAMS = jitter sniffer traffic demoswitch
 
 INCLUDES = \
-	 -I$(top_srcdir)/visdn-core/	\
-	 -I$(top_srcdir)/lapd/		\
+	 -I$(top_srcdir)/modules/include/	\
 	 -I$(top_srcdir)/libq931/
 
 jitter_SOURCES = jitter.c

@@ -1,7 +1,5 @@
 
-dist_sbin_SCRIPTS =			\
-	visdn_connect			\
-	visdn_create_netdev
+dist_sbin_SCRIPTS =
 
 nodist_sbin_SCRIPTS =			\
 	visdn_configurator

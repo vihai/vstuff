@@ -2,20 +2,18 @@
 
 VISDN_DIR=${prefix}/etc/visdn
 
+#VISDNCTL="echo visdnctl"
+VISDNCTL=visdnctl
+
 modprobe visdn-netdev
 modprobe visdn-streamport
 modprobe visdn-ppp
 modprobe visdn-timer-system
-modprobe hfc-4s
-modprobe hfc-pci
-
-declare -i NETDEVS_CNT=0
-declare -a NETDEVS_DEVNAME
-declare -a NETDEVS_CHAN_D
-declare -a NETDEVS_CHAN_E
+modprobe visdn-hfc-4s
+modprobe visdn-hfc-pci
 
 NETDEV_CONTROL_DEVICE="/dev/visdn/netdev-control"
-CXC_CONNECT_FILE="/sys/visdn_tdm/internal-cxc/connect"
+CXC_CONTROL_DEVICE="/dev/visdn/cxc-control"
 
 function check_device()
 {
@@ -45,35 +43,11 @@ function wait_for_device()
 			fi
 		done
 
-		echo "timeout"
+		echo "timeout (ensure udev is configured correctly)"
 		exit 1
 	fi
 
 	check_device "$FILENAME"
-}
-
-function create_netdev()
-{
-	local NETDEV_PROTOCOL=$1
-	local NETDEV_REQ_DEVNAME=$2
-	local NETDEV_TEI=$3
-
-	wait_for_device $NETDEV_CONTROL_DEVICE
-
-	exec 6<>$NETDEV_CONTROL_DEVICE
-	echo "create $NETDEV_PROTOCOL $NETDEV_DEVNAME" >&6
-	read -u 6 NETDEV_DEVNAME
-	read -u 6 NETDEV_CHAN_D
-	read -u 6 NETDEV_CHAN_E
-	exec 6<&-
-}
-
-function connect_channels()
-{
-	local CHAN1=$1
-	local CHAN2=$2
-
-	echo "$CHAN1,$CHAN2" > $CXC_CONNECT_FILE
 }
 
 function set_attribute()
@@ -105,34 +79,17 @@ function read_netdev_block
 	while read -u 10 LINE; do
 		if [[ $LINE =~ '</(.*)>' ]]; then
 			if [ "${BASH_REMATCH[1]}" == 'netdev' ]; then
-				if [ -e "/sys/class/net/$NETDEV_REQ_DEVNAME" ]; then
-					NETDEV_DEVNAME=$NETDEV_REQ_DEVNAME
-					NETDEV_CHAN_D=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel\``
-					NETDEV_CHAN_E=`basename \`readlink /sys/class/net/$NETDEV_REQ_DEVNAME/visdn_channel_e\``
-				else
-					create_netdev \
-						"$NETDEV_PROTOCOL" \
-						"$NETDEV_REQ_DEVNAME" \
-						"$NETDEV_TEI"
-				fi
-
-				# Older versions of "ip" did not support
-				# allmulticast
+				$VISDNCTL netdev create \
+					"$NETDEV_REQ_DEVNAME" \
+					"$NETDEV_PROTOCOL" || return
 
 				if [ "$NETDEV_ROLE" = "NT" ] ; then
-#					ip link set $NETDEV_DEVNAME \
-#						allmulticast on
-					ifconfig $NETDEV_DEVNAME allmulti
+					$VISDNCTL netdev \
+						set $NETDEV_DEVNAME role nt
 				else
-#					ip link set $NETDEV_DEVNAME \
-#						 allmulticast off
-					ifconfig $NETDEV_DEVNAME -allmulti
+					$VISDNCTL netdev \
+						set $NETDEV_DEVNAME role te
 				fi
-
-				NETDEVS_DEVNAME[$NETDEVS_CNT]=$NETDEV_DEVNAME
-				NETDEVS_CHAN_D[$NETDEVS_CNT]=$NETDEV_CHAN_D
-				NETDEVS_CHAN_E[$NETDEVS_CNT]=$NETDEV_CHAN_E
-				NETDEVS_CNT=$((NETDEVS_CNT+1))
 
 				return
 			else
@@ -141,13 +98,13 @@ function read_netdev_block
 			fi
 		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
 			case "${BASH_REMATCH[1]}" in
-				protocol) NETDEV_PROTOCOL=${BASH_REMATCH[2]} ;;
-				role) NETDEV_ROLE=${BASH_REMATCH[2]} ;;
-				tei) NETDEV_TEI=${BASH_REMATCH[2]} ;;
-				*)
-					echo "Unknown directive ${BASH_REMATCH[1]}"
-					continue
-				;;
+			protocol) NETDEV_PROTOCOL=${BASH_REMATCH[2]} ;;
+			role) NETDEV_ROLE=${BASH_REMATCH[2]} ;;
+			tei) NETDEV_TEI=${BASH_REMATCH[2]} ;;
+			*)
+				echo "Unknown directive ${BASH_REMATCH[1]}"
+				continue
+			;;
 			esac
 		fi
 	done
@@ -165,24 +122,19 @@ function handle_netdev_connectmodule
 		exit 1
 	fi
 
-	for (( i=0 ; i<$NETDEVS_CNT; i++)); do
-		if [ "${NETDEVS_DEVNAME[$i]}" = "${BASH_REMATCH[1]}" ]; then
+	if [ "${BASH_REMATCH[2]}" = "echo" ]; then
+		$VISDNCTL connect \
+			"$CHANNEL" \
+			"/sys/class/net/${BASH_REMATCH[1]}/visdn_channel_e" ||
+				return
+	else
+		$VISDNCTL connect \
+			"$CHANNEL" \
+			"/sys/class/net/${BASH_REMATCH[1]}/visdn_channel" ||
+				return
+	fi
 
-			if [ "${BASH_REMATCH[2]}" = "echo" ]; then
-				connect_channels	\
-					"$CHANNEL"	\
-					"${NETDEVS_CHAN_E[$i]}"
-			else
-				connect_channels	\
-					"$CHANNEL"	\
-					"${NETDEVS_CHAN_D[$i]}"
-			fi
-
-			ip link set ${NETDEVS_DEVNAME[$i]} up
-
-			break
-		fi
-	done
+	$VISDNCTL netdev set "${BASH_REMATCH[1]}" up
 }
 
 function handle_connectmodule
@@ -192,11 +144,11 @@ function handle_connectmodule
 	local PARAMETERS=$3
 
 	case "$MODULE" in
-		netdev) handle_netdev_connectmodule "$CHANNEL" "$PARAMETERS" ;;
-		*)
-			echo "Unsupported module $MODULE"
-			exit 1
-		;;
+	netdev) handle_netdev_connectmodule "$CHANNEL" "$PARAMETERS" ;;
+	*)
+		echo "Unsupported module $MODULE"
+		exit 1
+	;;
 	esac
 }
 
@@ -226,21 +178,21 @@ function read_chan_block
 
 		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
 			case "${BASH_REMATCH[1]}" in
-				connectmodule)
-					if [[ ! ${BASH_REMATCH[2]} =~ '^([-a-z0-9_]+)[	 ]+(.*)$' ]]; then
-						echo "Invalid connectmodule directive parameters"
-						exit 1
-					fi
+			connectmodule)
+				if [[ ! ${BASH_REMATCH[2]} =~ '^([-a-z0-9_]+)[	 ]+(.*)$' ]]; then
+					echo "Invalid connectmodule directive parameters"
+					exit 1
+				fi
 
-					handle_connectmodule \
-						"$CHANNEL" \
-						"${BASH_REMATCH[1]}" \
-						"${BASH_REMATCH[2]}"
-				;;
-				*)
-					echo "Unknown directive ${BASH_REMATCH[1]}"
-					continue
-				;;
+				handle_connectmodule \
+					"$CHANNEL" \
+					"${BASH_REMATCH[1]}" \
+					"${BASH_REMATCH[2]}"
+			;;
+			*)
+				echo "Unknown directive ${BASH_REMATCH[1]}"
+				continue
+			;;
 			esac
 		fi
 	done
@@ -294,17 +246,20 @@ function read_port_block
 
 		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
 			case "${BASH_REMATCH[1]}" in
-				xxx) XXX=${BASH_REMATCH[2]} ;;
-				*)
-					echo "Unknown directive ${BASH_REMATCH[1]}"
-					continue
-				;;
+			xxx) XXX=${BASH_REMATCH[2]} ;;
+			*)
+				echo "Unknown directive ${BASH_REMATCH[1]}"
+				continue
+			;;
 			esac
 		fi
 	done
 
 	echo "Unexpected EOF in netdev block"
 }
+
+wait_for_device $NETDEV_CONTROL_DEVICE
+wait_for_device $CXC_CONTROL_DEVICE
 
 for CARD in `ls $VISDN_DIR`; do
 	if [[ ! "$CARD" =~ '^device-([a-z0-9]+)-(.*)$' ]]; then
@@ -355,8 +310,4 @@ for CARD in `ls $VISDN_DIR`; do
 	exec 10<&-
 
 	declare -i i
-
-#	for (( i=0 ; i<$NETDEVS_CNT; i++)); do
-#		echo "Name: ${NETDEVS_DEVNAME[$i]} D:${NETDEVS_CHAN_D[$i]} E:${NETDEVS_CHAN_E[$i]} Role:${NETDEVS_ROLE[$i]}"
-#	done
 done

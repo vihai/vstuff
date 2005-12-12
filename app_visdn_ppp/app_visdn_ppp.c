@@ -1,4 +1,5 @@
 
+#include <stdio.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -103,9 +104,9 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 		return -1;
 	}
 
-	struct visdn_chan *visdn_chan = chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(chan);
 
-	if (!strlen(visdn_chan->visdn_chanid)) {
+	if (!visdn_chan->visdn_chan_id) {
 		ast_log(LOG_WARNING,
 			"vISDN crossconnector channel ID not present\n");
 		ast_mutex_unlock(&chan->lock);
@@ -131,9 +132,13 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 		argv[argc++] = arg;
 	}
 
+	char chan_id_arg[10];
+	snprintf(chan_id_arg, sizeof(chan_id_arg),
+		"%06d", visdn_chan->visdn_chan_id);
+
 	argv[argc++] = "plugin";
 	argv[argc++] = "visdn.so";
-	argv[argc++] = visdn_chan->visdn_chanid;
+	argv[argc++] = chan_id_arg;
 
 	ast_mutex_unlock(&chan->lock);
 

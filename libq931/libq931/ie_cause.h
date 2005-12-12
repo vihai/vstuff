@@ -14,7 +14,6 @@
 #define _LIBQ931_IE_CAUSE_H
 
 #include <sys/socket.h>
-#include <lapd.h>
 
 #include <libq931/ie.h>
 #include <libq931/ies.h>

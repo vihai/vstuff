@@ -4,45 +4,27 @@ noinst_DATA =					\
 	samples/ethereal_coloring_rules		\
 	samples/ppp_dialout			\
 	samples/30-visdn.rules-oldudev		\
-	samples/device-pci-*
+	samples/device-pci-*			\
+	include/list.h
 
 EXTRA_DIST =					\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)				\
 	$(noinst_DATA)				\
 	visdn.spec				\
-	linux_compat/linux/kfifo.h		\
-	kernel_config.h.in
+	modules/linux_compat/linux/kfifo.h	\
+	modules/include/kernel_config.h.in	\
+	modules/include/linux/lapd.h		\
+	modules/include/linux/visdn/*.h
 
 SUBDIRS =
 
-SUBDIRS += etc scripts
-
 if kernel_modules
-SUBDIRS += visdn-core lapd visdn-cxc-internal visdn-timer-system \
-	visdn-streamport visdn-netdev visdn-ppp visdn-ec-kb
-
-SUBDIRS += kfifo
-
-if driver_hfc_usb
-SUBDIRS += hfc-usb
-endif
-
-if driver_hfc_pci
-SUBDIRS += hfc-pci
-endif
-
-if driver_hfc_4s
-SUBDIRS += hfc-4s
-endif
-
-if driver_hfc_e1
-SUBDIRS += hfc-e1
-endif
-
+SUBDIRS += modules
 endif
 
 SUBDIRS += libq931
+SUBDIRS += etc scripts visdnctl
 
 if asterisk_modules
 SUBDIRS += chan_visdn

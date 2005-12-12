@@ -14,7 +14,8 @@
 #define _LIBQ931_INTF_H
 
 #include <netinet/in.h>
-#include <lapd.h>
+
+#include <linux/lapd.h>
 
 #include <libq931/list.h>
 #include <libq931/channel.h>

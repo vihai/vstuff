@@ -23,7 +23,7 @@
 #include <stdarg.h>
 #include <fcntl.h>
 
-#include <lapd.h>
+#include <linux/lapd.h>
 
 #define Q931_PRIVATE
 

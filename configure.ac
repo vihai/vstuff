@@ -380,22 +380,25 @@ AC_CONFIG_FILES([Makefile
 		libq931/Makefile
 		chan_visdn/Makefile
 		app_visdn_ppp/Makefile
+		visdnctl/Makefile
 		pppd_plugin/Makefile
 		tests/Makefile
-		kernel_config.h
-		hfc-4s/Makefile
-		hfc-e1/Makefile
-		hfc-pci/Makefile
-		hfc-usb/Makefile
-		lapd/Makefile
-		kfifo/Makefile
-		visdn-cxc-internal/Makefile
-		visdn-core/Makefile
-		visdn-streamport/Makefile
-		visdn-timer-system/Makefile
-		visdn-netdev/Makefile
-		visdn-ppp/Makefile
-		visdn-ec-kb/Makefile
+		modules/include/kernel_config.h
+		modules/Makefile
+		modules/hfc-4s/Makefile
+		modules/hfc-pci/Makefile
+		modules/hfc-usb/Makefile
+		modules/lapd/Makefile
+		modules/kfifo/Makefile
+		modules/softcxc/Makefile
+		modules/core/Makefile
+		modules/streamport/Makefile
+		modules/timer-system/Makefile
+		modules/netdev/Makefile
+		modules/ppp/Makefile
+		modules/ec-kb/Makefile
 		visdn.spec])
+
+#		modules/hfc-e1/Makefile
 
 AC_OUTPUT

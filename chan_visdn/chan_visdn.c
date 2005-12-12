@@ -30,7 +30,7 @@
 
 #include <ifaddrs.h>
 #include <netinet/in.h>
-#include <net/if.h>
+#include <linux/if.h>
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
 
@@ -38,7 +38,6 @@
 
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
-#include <asterisk/channel_pvt.h>
 #include <asterisk/config.h>
 #include <asterisk/logger.h>
 #include <asterisk/module.h>
@@ -50,11 +49,25 @@
 #include <asterisk/cli.h>
 #include <asterisk/musiconhold.h>
 
-#include <streamport.h>
-#include <lapd.h>
-#include <libq931/q931.h>
+//#define AST10
 
-#include <visdn.h>
+#ifdef AST10
+#include <asterisk/channel_pvt.h>
+#define _bridge bridge
+#define caller_id_number callerid
+#define AST_BRIDGE_COMPLETE 0
+#define AST_BRIDGE_FAILED -1
+#define AST_BRIDGE_FAILED_NOWARN -2
+#else
+#define caller_id_number cid.cid_num
+#endif
+
+#include <linux/lapd.h>
+#include <linux/visdn/netdev.h>
+#include <linux/visdn/streamport.h>
+#include <linux/visdn/cxc.h>
+
+#include <libq931/q931.h>
 
 #include "chan_visdn.h"
 
@@ -155,6 +168,8 @@ struct visdn_interface
 	struct list_head suspended_calls;
 
 	struct q931_interface *q931_intf;
+
+	char remote_port[PATH_MAX];
 };
 
 struct visdn_state
@@ -728,7 +743,7 @@ static void visdn_copy_interface_config(
 static void visdn_reload_config(void)
 {
 	struct ast_config *cfg;
-	cfg = ast_load(VISDN_CONFIG_FILE);
+	cfg = ast_config_load(VISDN_CONFIG_FILE);
 	if (!cfg) {
 		ast_log(LOG_WARNING,
 			"Unable to load config %s, VISDN disabled\n",
@@ -800,7 +815,7 @@ static void visdn_reload_config(void)
 
 	ast_mutex_unlock(&visdn.lock);
 
-	ast_destroy(cfg);
+	ast_config_destroy(cfg);
 }
 
 static int do_visdn_reload(int fd, int argc, char *argv[])
@@ -874,7 +889,7 @@ static int visdn_cli_print_call_list(
 
 				struct visdn_chan *visdn_chan = NULL;
 				if (ast_chan)
-					visdn_chan = ast_chan->pvt->pvt;
+					visdn_chan = to_visdn_chan(ast_chan);
 
 				ast_cli(fd, "  %c %5ld %-12s %s\n",
 					(call->direction ==
@@ -1158,15 +1173,6 @@ static struct ast_cli_entry show_visdn_calls =
 	NULL
 };
 
-static int visdn_devicestate(void *data)
-{
-	int res = AST_DEVICE_INVALID;
-
-	// not sure what this should do xxx
-	res = AST_DEVICE_UNKNOWN;
-	return res;
-}
-
 static enum q931_ie_called_party_number_type_of_number
 	visdn_type_of_number_to_cdpn(enum visdn_type_of_number type_of_number)
 {
@@ -1273,7 +1279,7 @@ static int visdn_call(
 	char *orig_dest,
 	int timeout)
 {
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	int err;
 	char dest[256];
 
@@ -1409,28 +1415,27 @@ static int visdn_call(
 		q931_ies_add_put(&ies, &sc->ie);
 	}
 
-	if (ast_chan->callerid && strlen(ast_chan->callerid)) {
+	if (ast_chan->caller_id_number && strlen(ast_chan->caller_id_number)) {
 
+		struct q931_ie_calling_party_number *cgpn =
+			q931_ie_calling_party_number_alloc();
+
+		cgpn->type_of_number =
+			visdn_type_of_number_to_cgpn(
+					intf->local_type_of_number);
+		cgpn->numbering_plan_identificator =
+			Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
+		cgpn->presentation_indicator =
+			Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+		cgpn->screening_indicator =
+			Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
+
+#ifdef AST10
 		char callerid[255];
 		char *name, *number;
-
 		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
 		ast_callerid_parse(callerid, &name, &number);
-
 		if (number) {
-			struct q931_ie_calling_party_number *cgpn =
-				q931_ie_calling_party_number_alloc();
-
-			cgpn->type_of_number =
-				visdn_type_of_number_to_cgpn(
-						intf->local_type_of_number);
-			cgpn->numbering_plan_identificator =
-				Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
-			cgpn->presentation_indicator =
-				Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-			cgpn->screening_indicator =
-				Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
-
 			strncpy(cgpn->number, number, sizeof(cgpn->number));
 
 			q931_ies_add_put(&ies, &cgpn->ie);
@@ -1440,6 +1445,12 @@ static int visdn_call(
 				" into CallerID name & number\n",
 				callerid);
 		}
+#else
+		strncpy(cgpn->number, ast_chan->cid.cid_num,
+			sizeof(cgpn->number));
+
+		q931_ies_add_put(&ies, &cgpn->ie);
+#endif
 	}
 
 	struct q931_ie_high_layer_compatibility *hlc =
@@ -1467,7 +1478,7 @@ err_invalid_destination:
 
 static int visdn_answer(struct ast_channel *ast_chan)
 {
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	visdn_debug("visdn_answer\n");
 
@@ -1492,20 +1503,30 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	return 0;
 }
 
+#ifdef AST10
 static int visdn_bridge(
 	struct ast_channel *c0,
 	struct ast_channel *c1,
 	int flags, struct ast_frame **fo,
 	struct ast_channel **rc)
+#else
+static int visdn_bridge(
+	struct ast_channel *c0,
+	struct ast_channel *c1,
+	int flags, struct ast_frame **fo,
+	struct ast_channel **rc,
+	int timeoutms)
+#endif
 {
-	return -2;
+	return AST_BRIDGE_FAILED_NOWARN;
 
+#if 0
 	/* if need DTMF, cant native bridge (at least not yet...) */
 	if (flags & (AST_BRIDGE_DTMF_CHANNEL_0 | AST_BRIDGE_DTMF_CHANNEL_1))
-		return -2;
+		return AST_BRIDGE_FAILED;
 
-	struct visdn_chan *visdn_chan1 = c0->pvt->pvt;
-	struct visdn_chan *visdn_chan2 = c1->pvt->pvt;
+	struct visdn_chan *visdn_chan1 = to_visdn_chan(c0);
+	struct visdn_chan *visdn_chan2 = to_visdn_chan(c1);
 
 	char path[100], dest1[100], dest2[100];
 
@@ -1517,7 +1538,7 @@ static int visdn_bridge(
 	memset(dest1, 0, sizeof(dest1));
 	if (readlink(path, dest1, sizeof(dest1) - 1) < 0) {
 		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
-		return -2;
+		return AST_BRIDGE_FAILED;
 	}
 
 	char *chanid1 = strrchr(dest1, '/');
@@ -1525,7 +1546,7 @@ static int visdn_bridge(
 		ast_log(LOG_ERROR,
 			"Invalid chanid found in symlink %s\n",
 			dest1);
-		return -2;
+		return AST_BRIDGE_FAILED;
 	}
 
 	chanid1++;
@@ -1538,7 +1559,7 @@ static int visdn_bridge(
 	memset(dest2, 0, sizeof(dest2));
 	if (readlink(path, dest2, sizeof(dest2) - 1) < 0) {
 		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
-		return -2;
+		return AST_BRIDGE_FAILED;
 	}
 
 	char *chanid2 = strrchr(dest2, '/');
@@ -1546,7 +1567,7 @@ static int visdn_bridge(
 		ast_log(LOG_ERROR,
 			"Invalid chanid found in symlink %s\n",
 			dest2);
-		return -2;
+		return AST_BRIDGE_FAILED;
 	}
 
 	chanid2++;
@@ -1558,7 +1579,7 @@ static int visdn_bridge(
 		ast_log(LOG_ERROR,
 			"Cannot open /sys/visdn_tdm/internal-cxc/connect: %s\n",
 			strerror(errno));
-		return -2;
+		return AST_BRIDGE_FAILED;
 	}
 
 	if (ioctl(visdn_chan1->channel_fd,
@@ -1594,7 +1615,7 @@ static int visdn_bridge(
 
 		close(fd);
 
-		return -2;
+		return AST_BRIDGE_FAILED;
 	}
 
 	close(fd);
@@ -1625,7 +1646,7 @@ static int visdn_bridge(
 				*rc = who;
 
 				// Disconnect channels
-				return 0;
+				return AST_BRIDGE_COMPLETE;
 			}
 
 			if (who == c0)
@@ -1647,7 +1668,9 @@ static int visdn_bridge(
 	*fo = NULL;
 	*rc = who;
 
-	return 0;
+#endif
+
+	return AST_BRIDGE_COMPLETE;
 }
 
 struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
@@ -1660,7 +1683,7 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 /* We are called with chan->lock'ed */
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	if (!visdn_chan) {
 		ast_log(LOG_ERROR, "NO VISDN_CHAN!!\n");
@@ -1711,8 +1734,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		struct q931_ie_progress_indicator *pi = NULL;
 
-		if (ast_chan->bridge &&
-		   strcmp(ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
+		if (ast_chan->_bridge &&
+		   strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
 
 			visdn_debug("Channel is not VISDN, sending"
 					" progress indicator\n");
@@ -1765,7 +1788,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->value = Q931_IE_C_CV_USER_BUSY;
 		q931_ies_add_put(&ies, &cause->ie);
 
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies);
+		q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_DISCONNECT_REQUEST, &ies);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
@@ -1786,7 +1810,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 		q931_ies_add_put(&ies, &cause->ie);
 
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_DISCONNECT_REQUEST, &ies);
+		q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_DISCONNECT_REQUEST, &ies);
 
 		const struct tone_zone_sound *tone;
 		tone = ast_get_indication_tone(ast_chan->zone, "busy");
@@ -1806,8 +1831,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		pi->location = q931_ie_progress_indicator_location(
 					visdn_chan->q931_call);
 
-		if (ast_chan->bridge &&
-		   strcmp(ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
+		if (ast_chan->_bridge &&
+		   strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
 			pi->progress_description =
 				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
 		} else if (visdn_chan->is_voice) {
@@ -1837,7 +1862,7 @@ static int visdn_fixup(
 	struct ast_channel *oldchan,
 	struct ast_channel *newchan)
 {
-	struct visdn_chan *chan = newchan->pvt->pvt;
+	struct visdn_chan *chan = to_visdn_chan(newchan);
 
 	if (chan->ast_chan != oldchan) {
 		ast_log(LOG_WARNING, "old channel wasn't %p but was %p\n",
@@ -1861,9 +1886,15 @@ static int visdn_setoption(
 	return -1;
 }
 
+#ifdef AST10
 static int visdn_transfer(
 	struct ast_channel *ast,
 	char *dest)
+#else
+static int visdn_transfer(
+	struct ast_channel *ast,
+	const char *dest)
+#endif
 {
 	ast_log(LOG_ERROR, "%s\n", __FUNCTION__);
 
@@ -1874,7 +1905,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 {
 	ast_log(LOG_NOTICE, "%s %c\n", __FUNCTION__, digit);
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
@@ -1904,7 +1935,11 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	return 1;
 }
 
+#ifdef AST10
 static int visdn_sendtext(struct ast_channel *ast, char *text)
+#else
+static int visdn_sendtext(struct ast_channel *ast, const char *text)
+#endif
 {
 	ast_log(LOG_WARNING, "%s\n", __FUNCTION__);
 
@@ -1935,7 +1970,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 {
 	visdn_debug("visdn_hangup %s\n", ast_chan->name);
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
 	ast_mutex_lock(&visdn.lock);
@@ -1997,7 +2032,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			// Disconnect the softport since we cannot rely on
 			// libq931 (see above)
 			if (ioctl(visdn_chan->channel_fd,
-					VISDN_IOC_DISCONNECT, NULL) < 0) {
+					VISDN_IOC_DISCONNECT_PATH, NULL) < 0) {
 				ast_log(LOG_ERROR,
 					"ioctl(VISDN_IOC_DISCONNECT): %s\n",
 					strerror(errno));
@@ -2014,7 +2049,11 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		visdn_destroy(visdn_chan);
 
+#ifdef AST10
 		ast_chan->pvt->pvt = NULL;
+#else
+		ast_chan->tech_pvt = NULL;
+#endif
 	}
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
@@ -2028,7 +2067,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 {
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	static struct ast_frame f;
 	char buf[512];
 
@@ -2079,7 +2118,7 @@ static int visdn_write(
 	struct ast_channel *ast_chan,
 	struct ast_frame *frame)
 {
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	if (frame->frametype != AST_FRAME_VOICE) {
 		ast_log(LOG_WARNING,
@@ -2120,6 +2159,7 @@ ast_verbose(VERBOSE_PREFIX_3 "W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn
 	return 0;
 }
 
+static const struct ast_channel_tech visdn_tech;
 static struct ast_channel *visdn_new(
 	struct visdn_chan *visdn_chan,
 	int state)
@@ -2131,8 +2171,6 @@ static struct ast_channel *visdn_new(
 		return NULL;
 	}
 
-	ast_chan->type = VISDN_CHAN_TYPE;
-
 	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 	if (ast_chan->fds[0] < 0) {
 		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
@@ -2143,19 +2181,22 @@ static struct ast_channel *visdn_new(
 	if (state == AST_STATE_RING)
 		ast_chan->rings = 1;
 
-	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
+	visdn_chan->ast_chan = ast_chan;
 
-	ast_chan->nativeformats = AST_FORMAT_ALAW;
-	ast_chan->pvt->rawreadformat = AST_FORMAT_ALAW;
-	ast_chan->readformat = AST_FORMAT_ALAW;
-	ast_chan->pvt->rawwriteformat = AST_FORMAT_ALAW;
-	ast_chan->writeformat = AST_FORMAT_ALAW;
+	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
 
 //	ast_chan->language[0] = '\0';
 //	ast_set_flag(ast_chan, AST_FLAG_DIGITAL);
 
-	visdn_chan->ast_chan = ast_chan;
-	ast_chan->pvt->pvt = visdn_chan;
+	ast_chan->nativeformats = AST_FORMAT_ALAW;
+	ast_chan->readformat = AST_FORMAT_ALAW;
+	ast_chan->writeformat = AST_FORMAT_ALAW;
+
+#ifdef AST10
+	ast_chan->pvt->rawreadformat = AST_FORMAT_ALAW;
+	ast_chan->pvt->rawwriteformat = AST_FORMAT_ALAW;
+
+	ast_chan->type = VISDN_CHAN_TYPE;
 
 	ast_chan->pvt->call = visdn_call;
 	ast_chan->pvt->hangup = visdn_hangup;
@@ -2171,12 +2212,28 @@ static struct ast_channel *visdn_new(
 	ast_chan->pvt->transfer = visdn_transfer;
 	ast_chan->pvt->send_digit = visdn_send_digit;
 
+	ast_chan->pvt->pvt = visdn_chan;
+#else
+	ast_chan->rawreadformat = AST_FORMAT_ALAW;
+	ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+
+	ast_chan->tech = &visdn_tech;
+
+	ast_chan->tech_pvt = visdn_chan;
+#endif
+
 	ast_setstate(ast_chan, state);
 
 	return ast_chan;
 }
 
-static struct ast_channel *visdn_request(char *type, int format, void *data)
+#ifdef AST10
+static struct ast_channel *visdn_request(
+	char *type, int format, void *data)
+#else
+static struct ast_channel *visdn_request(
+	const char *type, int format, void *data, int *cause)
+#endif
 {
 	struct visdn_chan *visdn_chan;
 	char *dest = NULL;
@@ -2213,6 +2270,27 @@ static struct ast_channel *visdn_request(char *type, int format, void *data)
 
 	return ast_chan;
 }
+
+#ifndef AST10
+static const struct ast_channel_tech visdn_tech = {
+	.type		= VISDN_CHAN_TYPE,
+	.description	= VISDN_DESCRIPTION,
+	.capabilities	= AST_FORMAT_ALAW,
+	.requester	= visdn_request,
+	.call		= visdn_call,
+	.hangup		= visdn_hangup,
+	.answer		= visdn_answer,
+	.read		= visdn_read,
+	.write		= visdn_write,
+	.indicate	= visdn_indicate,
+	.transfer	= visdn_transfer,
+	.fixup		= visdn_fixup,
+	.send_digit	= visdn_send_digit,
+	.bridge		= visdn_bridge,
+	.send_text	= visdn_sendtext,
+	.setoption	= visdn_setoption,
+};
+#endif
 
 // Must be called with visdn.lock acquired
 static void refresh_polls_list()
@@ -2339,6 +2417,40 @@ static int visdn_open_interface(
 
 			return -1;
 		}
+	}
+
+	char path[PATH_MAX];
+	char goodpath[PATH_MAX];
+	snprintf(path, sizeof(path),
+		"/sys/class/net/%s/visdn_channel/leg_a/",
+		intf->name);
+
+	struct stat st;
+	for(;;) {
+		if (stat(path, &st) < 0) {
+			if (errno == ENOENT)
+				break;
+
+			ast_log(LOG_ERROR,
+				"cannot stat(%s): %s\n",
+				path,
+				strerror(errno));
+
+			return -1;
+		}
+
+		strcpy(goodpath, path);
+
+		strncat(path, "connected/other_leg/", sizeof(path));
+	}
+
+	strncat(goodpath, "../..", sizeof(goodpath));
+
+	if (realpath(goodpath, intf->remote_port) < 0) {
+		ast_log(LOG_ERROR,
+			"cannot find realpath(%s): %s\n",
+			goodpath,
+			strerror(errno));
 	}
 
 	intf->open_pending = FALSE;
@@ -2704,7 +2816,7 @@ static void visdn_q931_info_indication(
 	if (!ast_chan)
 		return;
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	if (q931_call->state != U2_OVERLAP_SENDING &&
 	    q931_call->state != N2_OVERLAP_SENDING) {
@@ -2748,7 +2860,7 @@ static void visdn_q931_more_info_indication(
 
 	ast_mutex_lock(&ast_chan->lock);
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
 	visdn_chan->may_send_digits = TRUE;
@@ -2795,7 +2907,7 @@ static void visdn_q931_proceeding_indication(
 		return;
 
 	ast_mutex_lock(&ast_chan->lock);
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	visdn_chan->may_send_digits = TRUE;
 	ast_mutex_unlock(&ast_chan->lock);
 
@@ -2920,19 +3032,19 @@ static void visdn_q931_resume_indication(
 
 	assert(suspended_call->ast_chan);
 
-	struct visdn_chan *visdn_chan = suspended_call->ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(suspended_call->ast_chan);
 
 	q931_call->pvt = suspended_call->ast_chan;
 	visdn_chan->q931_call = q931_call;
 	visdn_chan->suspended_call = NULL;
 
-	if (!strcmp(suspended_call->ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
+	if (!strcmp(suspended_call->ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
 		// Wow, the remote channel is ISDN too, let's notify it!
 
 		struct q931_ies response_ies = Q931_IES_INIT;
 
 		struct visdn_chan *remote_visdn_chan =
-				suspended_call->ast_chan->bridge->pvt->pvt;
+			to_visdn_chan(suspended_call->ast_chan->_bridge);
 
 		struct q931_call *remote_call = remote_visdn_chan->q931_call;
 
@@ -2941,10 +3053,11 @@ static void visdn_q931_resume_indication(
 		notify->description = Q931_IE_NI_D_USER_RESUMED;
 		q931_ies_add_put(&response_ies, &notify->ie);
 
-		q931_send_primitive(remote_call, Q931_CCB_NOTIFY_REQUEST, &response_ies);
+		q931_send_primitive(remote_call,
+			Q931_CCB_NOTIFY_REQUEST, &response_ies);
 	}
 
-	ast_moh_stop(suspended_call->ast_chan->bridge);
+	ast_moh_stop(suspended_call->ast_chan->_bridge);
 
 	// FIXME: Transform suspended_call->q931_chan to IE and pass it
 	assert(0);
@@ -2965,7 +3078,8 @@ err_ast_chan:
 	c->value = cause;
 	q931_ies_add_put(&resp_ies, &c->ie);
 
-	q931_send_primitive(visdn_chan->q931_call, Q931_CCB_RESUME_REJECT_REQUEST, &resp_ies);
+	q931_send_primitive(visdn_chan->q931_call,
+		Q931_CCB_RESUME_REJECT_REQUEST, &resp_ies);
 
 	return;
 }
@@ -3129,9 +3243,11 @@ static void visdn_q931_setup_indication(
 
 	if (strlen(visdn_chan->calling_number) &&
 	    !intf->force_inbound_caller_id)
-		ast_chan->callerid = strdup(visdn_chan->calling_number);
+		ast_chan->caller_id_number =
+			strdup(visdn_chan->calling_number);
 	else
-		ast_chan->callerid = strdup(intf->default_inbound_caller_id);
+		ast_chan->caller_id_number =
+			strdup(intf->default_inbound_caller_id);
 
 	if (!intf->overlap_sending ||
 	    visdn_chan->sending_complete) {
@@ -3333,17 +3449,17 @@ static void visdn_q931_suspend_indication(
 
 	q931_send_primitive(q931_call, Q931_CCB_SUSPEND_RESPONSE, NULL);
 
-	assert(ast_chan->bridge);
+	assert(ast_chan->_bridge);
 
-	ast_moh_start(ast_chan->bridge, NULL);
+	ast_moh_start(ast_chan->_bridge, NULL);
 
-	if (!strcmp(ast_chan->bridge->type, VISDN_CHAN_TYPE)) {
+	if (!strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
 		// Wow, the remote channel is ISDN too, let's notify it!
 
 		struct q931_ies response_ies = Q931_IES_INIT;
 
 		struct visdn_chan *remote_visdn_chan =
-					ast_chan->bridge->pvt->pvt;
+					to_visdn_chan(ast_chan->_bridge);
 
 		struct q931_call *remote_call = remote_visdn_chan->q931_call;
 
@@ -3352,10 +3468,11 @@ static void visdn_q931_suspend_indication(
 		notify->description = Q931_IE_NI_D_USER_SUSPENDED;
 		q931_ies_add_put(&response_ies, &notify->ie);
 
-		q931_send_primitive(remote_call, Q931_CCB_NOTIFY_REQUEST, &response_ies);
+		q931_send_primitive(remote_call,
+			Q931_CCB_NOTIFY_REQUEST, &response_ies);
 	}
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	if (!ast_chan->whentohangup ||
 	    time(NULL) + 45 < ast_chan->whentohangup)
@@ -3379,7 +3496,8 @@ err_ast_chan:
 	c->value = cause;
 	q931_ies_add_put(&resp_ies, &c->ie);
 
-	q931_send_primitive(visdn_chan->q931_call, Q931_CCB_SUSPEND_REJECT_REQUEST, &resp_ies);
+	q931_send_primitive(visdn_chan->q931_call,
+		Q931_CCB_SUSPEND_REJECT_REQUEST, &resp_ies);
 
 	return;
 }
@@ -3403,15 +3521,14 @@ static void visdn_q931_connect_channel(
 		return;
 
 	ast_mutex_lock(&ast_chan->lock);
-	assert(ast_chan->pvt);
-	assert(ast_chan->pvt->pvt);
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+	struct visdn_interface *visdn_intf = channel->intf->pvt;
 
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/visdn_channel/connected/../B%d",
-		channel->intf->name,
+		"%s/B%d",
+		visdn_intf->remote_port,
 		channel->id+1);
 
 	memset(dest, 0, sizeof(dest));
@@ -3428,12 +3545,11 @@ static void visdn_q931_connect_channel(
 		goto err_invalid_chanid;
 	}
 
-	strncpy(visdn_chan->visdn_chanid, chanid + 1,
-		sizeof(visdn_chan->visdn_chanid));
+	visdn_chan->visdn_chan_id = atoi(chanid + 1);
 
 	if (visdn_chan->is_voice) {
-		visdn_debug("Connecting streamport to chan %s\n",
-				visdn_chan->visdn_chanid);
+		visdn_debug("Connecting streamport to chan '%06d'\n",
+				visdn_chan->visdn_chan_id);
 
 		visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
 		if (visdn_chan->channel_fd < 0) {
@@ -3444,15 +3560,22 @@ static void visdn_q931_connect_channel(
 		}
 
 		struct visdn_connect vc;
-		strcpy(vc.src_chanid, "");
-		snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s",
-			visdn_chan->visdn_chanid);
+		vc.src_chan_id = 0;
+		vc.dst_chan_id = visdn_chan->visdn_chan_id;
 		vc.flags = 0;
 
-		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT,
+		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_CONNECT_PATH,
 		    (caddr_t) &vc) < 0) {
 			ast_log(LOG_ERROR,
-				"ioctl(VISDN_CONNECT): %s\n",
+				"ioctl(VISDN_ENABLE_PATH): %s\n",
+				strerror(errno));
+			goto err_ioctl;
+		}
+
+		if (ioctl(visdn_chan->channel_fd, VISDN_IOC_ENABLE_PATH,
+							 NULL) < 0) {
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_ENABLE_PATH): %s\n",
 				strerror(errno));
 			goto err_ioctl;
 		}
@@ -3480,13 +3603,13 @@ static void visdn_q931_disconnect_channel(
 	if (!ast_chan)
 		return;
 
-	struct visdn_chan *visdn_chan = ast_chan->pvt->pvt;
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	ast_mutex_lock(&ast_chan->lock);
 
 	if (visdn_chan->channel_fd >= 0) {
 		if (ioctl(visdn_chan->channel_fd,
-				VISDN_IOC_DISCONNECT, NULL) < 0) {
+				VISDN_IOC_DISCONNECT_PATH, NULL) < 0) {
 			ast_log(LOG_ERROR,
 				"ioctl(VISDN_IOC_DISCONNECT): %s\n",
 				strerror(errno));
@@ -3788,7 +3911,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
 					called_number, 1,
-					chan->callerid)) {
+					chan->caller_id_number)) {
 
 				ast_indicate(chan, AST_CONTROL_CONGESTION);
 				ast_safe_sleep(chan, 30000);
@@ -3798,12 +3921,12 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 			if (ast_exists_extension(NULL,
 					chan->context,
 					called_number, 1,
-					chan->callerid)) {
+					chan->caller_id_number)) {
 
 				if (!ast_matchmore_extension(NULL,
 					chan->context,
 					called_number, 1,
-					chan->callerid)) {
+					chan->caller_id_number)) {
 
 					ast_setstate(chan, AST_STATE_RING);
 					ast_indicate(chan,
@@ -3829,6 +3952,13 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 
 static char *visdn_overlap_dial_descr =
 "  vISDNOverlapDial():\n";
+
+#ifdef AST10
+static int visdn_devicestate(void *data)
+{
+	return AST_DEVICE_UNKNOWN;
+}
+#endif
 
 int load_module()
 {
@@ -3946,6 +4076,7 @@ int load_module()
 		return -1;
 	}
 
+#ifdef AST10
 	if (ast_channel_register_ex(VISDN_CHAN_TYPE, VISDN_DESCRIPTION,
 			 AST_FORMAT_ALAW,
 			 visdn_request, visdn_devicestate)) {
@@ -3953,6 +4084,13 @@ int load_module()
 			VISDN_CHAN_TYPE);
 		return -1;
 	}
+#else
+	if (ast_channel_register(&visdn_tech)) {
+		ast_log(LOG_ERROR, "Unable to register channel class %s\n",
+			VISDN_CHAN_TYPE);
+		return -1;
+	}
+#endif
 
 	ast_cli_register(&debug_visdn_generic);
 	ast_cli_register(&no_debug_visdn_generic);
@@ -3989,7 +4127,11 @@ int unload_module(void)
 	ast_cli_unregister(&no_debug_visdn_generic);
 	ast_cli_unregister(&debug_visdn_generic);
 
+#ifdef AST10
 	ast_channel_unregister(VISDN_CHAN_TYPE);
+#else
+	ast_channel_unregister(&visdn_tech);
+#endif
 
 	if (visdn.libq931)
 		q931_leave(visdn.libq931);

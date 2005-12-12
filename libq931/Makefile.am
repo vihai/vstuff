@@ -2,7 +2,7 @@ AM_CFLAGS = -D_REENTRANT -Wall
 
 lib_LTLIBRARIES = libq931.la
 
-INCLUDES = -I$(top_srcdir)/lapd/
+INCLUDES = -I$(top_srcdir)/modules/include/
 
 libq931_la_SOURCES =			\
 	q931.c				\

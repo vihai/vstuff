@@ -1,6 +1,91 @@
 
-Be careful writing hotplug script. Device's attributes and symlinks may get
-created after the hotplug event.
+
+How to write a vISDN driver:
+
+The ISDN is a complex environment. On the same physical interface there are
+several multiplexed channels, from three channels on basic rate interfaces
+up to 30 channels on primary rate interfaces.
+
+The role of a vISDN driver is analougue to that of a network driver but with
+much more architectural complexity.
+
+The increased complexity begins with the need to handle multiple channels,
+each one with its role, bitrate, framing and type of payload. For example,
+a bearer (B) channel is a full-duplex, fixed bitrate, synchronous and
+point-to-point bitstream, however, it may transport streamed voice, video,
+packets, asynchronous data, etc... and the far-end point will be connected
+by means of a complex signalling protocol.
+
+Luckilly your driver will not be involved with much of that complexity,
+however, since most hardware provides helpers for handling some type of
+payload, your driver may want to make use of them.
+
+
+- Initialize the port(s)
+- Register the port(s)
+
+- For each channel
+  - Initialize
+  - Register
+
+Your driver will export a series of callbacks:
+
+connect()
+disconnect()
+open()
+close()
+
+Before a channel il your driver is going to be used it must be connected.
+When the connection command comes from the user, vISDN core will invoke the
+visdn_cxc_connect() function for the crossconnector. The CXC in turn will
+invoke the connect() callback so that you can do the real stuff.
+
+In the connect() function you may allocate the resources on the hardware.
+
+When the entity responsible for the channel management decides it is time
+to start moving stuff on the channel, it will call open() and your driver
+may thus configure the hardware for the actual transfer.
+
+No transfer request will be sent to the driver and no request should be made
+by the driver before open() returns successfully.
+
+Nothing forces you to allocate the resources in connect(), you may do all
+the work in open(). On the other side, you may find out that certain
+constraints become known just after you allocate the resources on the hardware.
+For example, on HFC-4S/8S/E1 based boards the MTU depends on the FIFO size but
+the FIFO may not be all of the same size, so, you only know the actual
+MTU after the FIFO has been allocated.
+By allocating the hardware resource in the connect() phase you have a chance of
+re-negotiating the parameters before the channel is actually opened (which
+may be too late).
+
+Negotiation
+-----------
+
+When connecting two channels together, absolutely no sort of payload adaptation
+is performed by the crossconnector. The crossconnector's duty is to move the
+channel's payload from one channel to another as fast as it can.
+
+The consequence is that the channels must agree on what the payload is, how
+it is formatted, how it should be moved and so on. Therefore, the
+crossconnector arbitrates a negotiation of such parameters between the channels
+until an agreement can be found.
+
+To date, the following parameters have been identified:
+
+- Layer 1 protocol
+- Bitrate
+- Bit-order
+
+Furthermore, when the Layer 1 protocol is a framed protocol, we need to know
+the maximum frame size supported by the channels and (more importantly) the
+maximum frame size along the path in either direction.
+
+It is important to understand that each channel is full-duplex, thus, it is
+actually comprised of two simplex channels. Parameters negotiation could
+have been performed on each simplex channel independently, however, some
+hardware does not support etherogeneous channel configuration which, in turn,
+is often unneeded. So, i
 
 
 
@@ -153,32 +238,6 @@ lapd_pass_frame_to_socket_te
 	bh_lock_sock(sk); (in lapd_pass_frame_to_socket())
 
 
-Sep  1 17:59:39 bastard kernel: ip            D 00000000     0  7037   6765                     (NOTLB)
-Sep  1 17:59:39 bastard kernel: da753e18 00000082 ddb88040 00000000 00000000 00000000 4611a340 000f4214 
-Sep  1 17:59:39 bastard kernel:        c03b58c8 dd972060 dd9721b4 c033f9e0 dd972060 00000246 c033f9e8 c02d050e 
-Sep  1 17:59:39 bastard kernel:        00000001 dd972060 c01171a0 c033f9e8 c033f9e8 ffffff66 00000246 c03b620a 
-Sep  1 17:59:39 bastard kernel: Call Trace:
-Sep  1 17:59:39 bastard kernel:  [<c02d050e>] __down+0x6e/0xd0
-Sep  1 17:59:39 bastard kernel:  [<c01171a0>] default_wake_function+0x0/0x10
-Sep  1 17:59:39 bastard kernel:  [<c02d0673>] __down_failed+0x7/0xc
-Sep  1 17:59:39 bastard kernel:  [<c0270117>] .text.lock.rtnetlink+0xb/0x54
-Sep  1 17:59:39 bastard kernel:  [<c026a868>] unregister_netdev+0x8/0x15
-Sep  1 17:59:39 bastard kernel:  [<e1415181>] vnd_chan_disconnect+0x41/0x50 [visdn_netdev]
-Sep  1 17:59:39 bastard kernel:  [<e141d83c>] visdn_disconnect+0xdc/0x120 [visdn_core]
-Sep  1 17:59:39 bastard kernel:  [<e141d4b7>] visdn_negotiate_parameters+0x1b7/0x1c0 [visdn_core]
-Sep  1 17:59:39 bastard kernel:  [<e14431bd>] hfc_chan_open+0xbd/0x580 [hfc_4s]
-Sep  1 17:59:39 bastard kernel:  [<e14152c9>] vnd_netdev_open+0x69/0x70 [visdn_netdev]
-Sep  1 17:59:39 bastard kernel:  [<c02683f8>] dev_open+0x58/0x70
-Sep  1 17:59:39 bastard kernel:  [<c026982c>] dev_change_flags+0x4c/0x110
-Sep  1 17:59:39 bastard kernel:  [<c02a620e>] devinet_ioctl+0x4ae/0x550
-Sep  1 17:59:39 bastard kernel:  [<c02a7d96>] inet_ioctl+0x66/0x90
-Sep  1 17:59:39 bastard kernel:  [<c02604d0>] sock_ioctl+0x160/0x210
-Sep  1 17:59:39 bastard kernel:  [<c0260370>] sock_ioctl+0x0/0x210
-Sep  1 17:59:39 bastard kernel:  [<c01611b6>] do_ioctl+0x46/0x60
-Sep  1 17:59:39 bastard kernel:  [<c0161345>] vfs_ioctl+0x55/0x1c0
-Sep  1 17:59:39 bastard kernel:  [<c01614f0>] sys_ioctl+0x40/0x70
-Sep  1 17:59:39 bastard kernel:  [<c0102c49>] sysenter_past_esp+0x52/0x79
-
 
 
 
@@ -186,12 +245,6 @@ Sep  1 17:59:39 bastard kernel:  [<c0102c49>] sysenter_past_esp+0x52/0x79
 
 
 Some ideas for me...
-
-[00:50] <fsck> - una breve introduzione a come caricare i moduli, attivare le interfacce
-[00:50] <fsck> - una breve intro a chan_visdn
-[00:50] <fsck> - la faccenda del crash (che da una cattiva impressione, visto che al primo colpo uno dimentica qualcosa :)
-[00:51] <fsck> - un buildscript anche molto rozzo, che faccia aclocal/automake/autoconf e i make necessari
-
 
 [01:18] <fsck> uhm l'ecocancel?
 [01:19] <vihai> E' da configurare per ogni interfaccia? In che casi non va messo?

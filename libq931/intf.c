@@ -21,7 +21,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#include <lapd.h>
+#include <linux/lapd.h>
 
 #define Q931_PRIVATE
 

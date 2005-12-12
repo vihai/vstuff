@@ -2,6 +2,512 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-12 02:05:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-327
+
+    Summary:
+      Committed huge architectural change
+    Revision:
+      isdn--devel--0.1--patch-327
+
+    This commit implements multi-crossconnectors architecture with a least-cost
+    router using Dijkstra algorithm. Drivers has been adapted to the new
+    architecture.
+    
+    A new controlling program named 'visdnctl' has been added.
+    
+    chan_visdn now supports asterisk 1.2
+    
+    support for kernel 2.6.14.x has been added
+    
+
+    new files:
+     include/.arch-ids/=id include/.arch-ids/list.h.id
+     include/list.h modules/.arch-ids/.arch-inventory.id
+     modules/.arch-ids/=id modules/.arch-ids/Makefile.am.id
+     modules/.arch-inventory modules/Makefile.am
+     modules/core/.arch-ids/leg.c.id
+     modules/core/.arch-ids/leg.h.id
+     modules/core/.arch-ids/router.c.id
+     modules/core/.arch-ids/router.h.id modules/core/leg.c
+     modules/core/leg.h modules/core/router.c modules/core/router.h
+     modules/hfc-4s/.arch-ids/card.c.id
+     modules/hfc-4s/.arch-ids/cxc.c.id
+     modules/hfc-4s/.arch-ids/cxc.h.id
+     modules/hfc-4s/.arch-ids/led.c.id
+     modules/hfc-4s/.arch-ids/led.h.id
+     modules/hfc-4s/.arch-ids/pcm_chan.c.id
+     modules/hfc-4s/.arch-ids/pcm_chan.h.id
+     modules/hfc-4s/.arch-ids/sys_chan.c.id
+     modules/hfc-4s/.arch-ids/sys_chan.h.id
+     modules/hfc-4s/.arch-ids/sys_port.c.id
+     modules/hfc-4s/.arch-ids/sys_port.h.id modules/hfc-4s/card.c
+     modules/hfc-4s/cxc.c modules/hfc-4s/cxc.h modules/hfc-4s/led.c
+     modules/hfc-4s/led.h modules/hfc-4s/pcm_chan.c
+     modules/hfc-4s/pcm_chan.h modules/hfc-4s/sys_chan.c
+     modules/hfc-4s/sys_chan.h modules/hfc-4s/sys_port.c
+     modules/hfc-4s/sys_port.h
+     modules/include/.arch-ids/.arch-inventory.id
+     modules/include/.arch-ids/=id modules/include/.arch-inventory
+     modules/include/linux/.arch-ids/=id
+     modules/include/linux/.arch-ids/lapd.h.id
+     modules/include/linux/lapd.h
+     modules/include/linux/visdn/.arch-ids/=id
+     modules/include/linux/visdn/.arch-ids/chan.h.id
+     modules/include/linux/visdn/.arch-ids/core.h.id
+     modules/include/linux/visdn/.arch-ids/cxc.h.id
+     modules/include/linux/visdn/.arch-ids/ec-kb.h.id
+     modules/include/linux/visdn/.arch-ids/lapd.h.id
+     modules/include/linux/visdn/.arch-ids/leg.h.id
+     modules/include/linux/visdn/.arch-ids/netdev.h.id
+     modules/include/linux/visdn/.arch-ids/port.h.id
+     modules/include/linux/visdn/.arch-ids/ppp.h.id
+     modules/include/linux/visdn/.arch-ids/router.h.id
+     modules/include/linux/visdn/.arch-ids/softcxc.h.id
+     modules/include/linux/visdn/.arch-ids/streamport.h.id
+     modules/include/linux/visdn/.arch-ids/timer.h.id
+     modules/include/linux/visdn/chan.h
+     modules/include/linux/visdn/core.h
+     modules/include/linux/visdn/cxc.h
+     modules/include/linux/visdn/ec-kb.h
+     modules/include/linux/visdn/lapd.h
+     modules/include/linux/visdn/leg.h
+     modules/include/linux/visdn/netdev.h
+     modules/include/linux/visdn/port.h
+     modules/include/linux/visdn/ppp.h
+     modules/include/linux/visdn/router.h
+     modules/include/linux/visdn/softcxc.h
+     modules/include/linux/visdn/streamport.h
+     modules/include/linux/visdn/timer.h
+     visdnctl/.arch-ids/.arch-inventory.id visdnctl/.arch-ids/=id
+     visdnctl/.arch-ids/Makefile.am.id
+     visdnctl/.arch-ids/connect.c.id
+     visdnctl/.arch-ids/connect.h.id
+     visdnctl/.arch-ids/disable_path.c.id
+     visdnctl/.arch-ids/disable_path.h.id
+     visdnctl/.arch-ids/disconnect.c.id
+     visdnctl/.arch-ids/disconnect.h.id
+     visdnctl/.arch-ids/enable_path.c.id
+     visdnctl/.arch-ids/enable_path.h.id
+     visdnctl/.arch-ids/netdev.c.id visdnctl/.arch-ids/netdev.h.id
+     visdnctl/.arch-ids/visdnctl.c.id
+     visdnctl/.arch-ids/visdnctl.h.id visdnctl/.arch-inventory
+     visdnctl/Makefile.am visdnctl/connect.c visdnctl/connect.h
+     visdnctl/disable_path.c visdnctl/disable_path.h
+     visdnctl/disconnect.c visdnctl/disconnect.h
+     visdnctl/enable_path.c visdnctl/enable_path.h
+     visdnctl/netdev.c visdnctl/netdev.h visdnctl/visdnctl.c
+     visdnctl/visdnctl.h
+
+    removed files:
+     hfc-4s/.arch-ids/card_sysfs.c.id
+     hfc-4s/.arch-ids/card_sysfs.h.id
+     hfc-4s/.arch-ids/chan_sysfs.c.id
+     hfc-4s/.arch-ids/chan_sysfs.h.id hfc-4s/.arch-ids/fsm.c.id
+     hfc-4s/.arch-ids/fsm.h.id hfc-4s/.arch-ids/pcm_port_sysfs.c.id
+     hfc-4s/.arch-ids/pcm_port_sysfs.h.id
+     hfc-4s/.arch-ids/st_port_sysfs.c.id
+     hfc-4s/.arch-ids/st_port_sysfs.h.id hfc-4s/card_sysfs.c
+     hfc-4s/card_sysfs.h hfc-4s/chan_sysfs.c hfc-4s/chan_sysfs.h
+     hfc-4s/fsm.c hfc-4s/fsm.h hfc-4s/pcm_port_sysfs.c
+     hfc-4s/pcm_port_sysfs.h hfc-4s/st_port_sysfs.c
+     hfc-4s/st_port_sysfs.h hfc-e1/.arch-ids/.arch-inventory.id
+     hfc-e1/.arch-ids/=id hfc-e1/.arch-ids/Makefile.in.id
+     hfc-e1/.arch-ids/card.h.id hfc-e1/.arch-ids/card_inline.h.id
+     hfc-e1/.arch-ids/card_sysfs.c.id
+     hfc-e1/.arch-ids/card_sysfs.h.id hfc-e1/.arch-ids/chan.c.id
+     hfc-e1/.arch-ids/chan.h.id hfc-e1/.arch-ids/chan_sysfs.c.id
+     hfc-e1/.arch-ids/chan_sysfs.h.id hfc-e1/.arch-ids/e1_port.c.id
+     hfc-e1/.arch-ids/e1_port.h.id
+     hfc-e1/.arch-ids/e1_port_inline.h.id
+     hfc-e1/.arch-ids/e1_port_sysfs.c.id
+     hfc-e1/.arch-ids/e1_port_sysfs.h.id hfc-e1/.arch-ids/fifo.c.id
+     hfc-e1/.arch-ids/fifo.h.id hfc-e1/.arch-ids/fifo_inline.h.id
+     hfc-e1/.arch-ids/fsm.c.id hfc-e1/.arch-ids/fsm.h.id
+     hfc-e1/.arch-ids/hfc-e1_main.c.id hfc-e1/.arch-ids/module.h.id
+     hfc-e1/.arch-ids/pcm_port.c.id hfc-e1/.arch-ids/pcm_port.h.id
+     hfc-e1/.arch-ids/pcm_port_inline.h.id
+     hfc-e1/.arch-ids/pcm_port_sysfs.c.id
+     hfc-e1/.arch-ids/pcm_port_sysfs.h.id
+     hfc-e1/.arch-ids/regs.h.id hfc-e1/.arch-ids/util.h.id
+     hfc-e1/.arch-inventory hfc-e1/Makefile.in hfc-e1/card.h
+     hfc-e1/card_inline.h hfc-e1/card_sysfs.c hfc-e1/card_sysfs.h
+     hfc-e1/chan.c hfc-e1/chan.h hfc-e1/chan_sysfs.c
+     hfc-e1/chan_sysfs.h hfc-e1/e1_port.c hfc-e1/e1_port.h
+     hfc-e1/e1_port_inline.h hfc-e1/e1_port_sysfs.c
+     hfc-e1/e1_port_sysfs.h hfc-e1/fifo.c hfc-e1/fifo.h
+     hfc-e1/fifo_inline.h hfc-e1/fsm.c hfc-e1/fsm.h
+     hfc-e1/hfc-e1_main.c hfc-e1/module.h hfc-e1/pcm_port.c
+     hfc-e1/pcm_port.h hfc-e1/pcm_port_inline.h
+     hfc-e1/pcm_port_sysfs.c hfc-e1/pcm_port_sysfs.h hfc-e1/regs.h
+     hfc-e1/util.h hfc-pci/.arch-ids/card_sysfs.c.id
+     hfc-pci/.arch-ids/card_sysfs.h.id
+     hfc-pci/.arch-ids/chan_sysfs.c.id
+     hfc-pci/.arch-ids/chan_sysfs.h.id
+     hfc-pci/.arch-ids/pcm_port_sysfs.c.id
+     hfc-pci/.arch-ids/pcm_port_sysfs.h.id
+     hfc-pci/.arch-ids/st_port_sysfs.c.id
+     hfc-pci/.arch-ids/st_port_sysfs.h.id hfc-pci/card_sysfs.c
+     hfc-pci/card_sysfs.h hfc-pci/chan_sysfs.c hfc-pci/chan_sysfs.h
+     hfc-pci/pcm_port_sysfs.c hfc-pci/pcm_port_sysfs.h
+     hfc-pci/st_port_sysfs.c hfc-pci/st_port_sysfs.h
+     scripts/.arch-ids/visdn_connect.id
+     scripts/.arch-ids/visdn_create_netdev.id scripts/visdn_connect
+     scripts/visdn_create_netdev
+
+    modified files:
+     AUTHORS ChangeLog Makefile.am NOTES TODO
+     app_visdn_ppp/app_visdn_ppp.c chan_visdn/.arch-inventory
+     chan_visdn/Makefile.am chan_visdn/chan_visdn.c
+     chan_visdn/chan_visdn.h configure.ac libq931/Makefile.am
+     libq931/call.c libq931/intf.c libq931/libq931/ie_cause.h
+     libq931/libq931/intf.h libq931/libq931/util.h libq931/out.c
+     libq931/q931.c modules/core/Makefile.in modules/core/chan.c
+     modules/core/chan.h modules/core/core.h
+     modules/core/core_main.c modules/core/cxc.c modules/core/cxc.h
+     modules/core/port.c modules/core/port.h modules/core/timer.c
+     modules/core/timer.h modules/ec-kb/Makefile.in
+     modules/ec-kb/ec-kb_main.c modules/hfc-4s/Makefile.in
+     modules/hfc-4s/card.h modules/hfc-4s/fifo.c
+     modules/hfc-4s/fifo.h modules/hfc-4s/fifo_inline.h
+     modules/hfc-4s/hfc-4s_main.c modules/hfc-4s/pcm_port.c
+     modules/hfc-4s/pcm_port.h modules/hfc-4s/st_chan.c
+     modules/hfc-4s/st_chan.h modules/hfc-4s/st_port.c
+     modules/hfc-4s/st_port.h modules/hfc-4s/st_port_inline.h
+     modules/hfc-pci/Makefile.in modules/hfc-pci/card.h
+     modules/hfc-pci/chan.c modules/hfc-pci/chan.h
+     modules/hfc-pci/fifo.c modules/hfc-pci/hfc-pci_main.c
+     modules/hfc-pci/pcm_port.c modules/hfc-pci/pcm_port.h
+     modules/hfc-pci/regs.h modules/hfc-pci/st_port.c
+     modules/hfc-pci/st_port.h modules/hfc-usb/Makefile.in
+     modules/kfifo/Makefile.in modules/lapd/Makefile.in
+     modules/lapd/af_lapd.c modules/lapd/datalink.c
+     modules/lapd/lapd_in.c modules/lapd/lapd_in.h
+     modules/lapd/lapd_out.c modules/lapd/tei_mgmt.c
+     modules/lapd/tei_mgmt_nt.c modules/lapd/tei_mgmt_te.c
+     modules/netdev/Makefile.in modules/netdev/netdev.h
+     modules/netdev/netdev_main.c modules/ppp/Makefile.in
+     modules/ppp/ppp.h modules/ppp/ppp_main.c
+     modules/softcxc/Makefile.in modules/softcxc/softcxc.h
+     modules/softcxc/softcxc_main.c modules/streamport/Makefile.in
+     modules/streamport/streamport.h
+     modules/streamport/streamport_main.c
+     modules/timer-system/Makefile.in
+     modules/timer-system/timer-system_main.c scripts/Makefile.am
+     scripts/visdn_configurator.in tests/Makefile.am
+     tests/traffic.c
+
+    renamed files:
+     .arch-ids/kernel_config.h.in.id
+       ==> modules/include/.arch-ids/kernel_config.h.in.id
+     hfc-4s/.arch-ids/.arch-inventory.id
+       ==> modules/hfc-4s/.arch-ids/.arch-inventory.id
+     hfc-4s/.arch-ids/=id
+       ==> modules/hfc-4s/.arch-ids/=id
+     hfc-4s/.arch-ids/Makefile.in.id
+       ==> modules/hfc-4s/.arch-ids/Makefile.in.id
+     hfc-4s/.arch-ids/card.h.id
+       ==> modules/hfc-4s/.arch-ids/card.h.id
+     hfc-4s/.arch-ids/card_inline.h.id
+       ==> modules/hfc-4s/.arch-ids/card_inline.h.id
+     hfc-4s/.arch-ids/chan.c.id
+       ==> modules/hfc-4s/.arch-ids/st_chan.c.id
+     hfc-4s/.arch-ids/chan.h.id
+       ==> modules/hfc-4s/.arch-ids/st_chan.h.id
+     hfc-4s/.arch-ids/fifo.c.id
+       ==> modules/hfc-4s/.arch-ids/fifo.c.id
+     hfc-4s/.arch-ids/fifo.h.id
+       ==> modules/hfc-4s/.arch-ids/fifo.h.id
+     hfc-4s/.arch-ids/fifo_inline.h.id
+       ==> modules/hfc-4s/.arch-ids/fifo_inline.h.id
+     hfc-4s/.arch-ids/hfc-4s_main.c.id
+       ==> modules/hfc-4s/.arch-ids/hfc-4s_main.c.id
+     hfc-4s/.arch-ids/module.h.id
+       ==> modules/hfc-4s/.arch-ids/module.h.id
+     hfc-4s/.arch-ids/pcm_port.c.id
+       ==> modules/hfc-4s/.arch-ids/pcm_port.c.id
+     hfc-4s/.arch-ids/pcm_port.h.id
+       ==> modules/hfc-4s/.arch-ids/pcm_port.h.id
+     hfc-4s/.arch-ids/pcm_port_inline.h.id
+       ==> modules/hfc-4s/.arch-ids/pcm_port_inline.h.id
+     hfc-4s/.arch-ids/regs.h.id
+       ==> modules/hfc-4s/.arch-ids/regs.h.id
+     hfc-4s/.arch-ids/st_port.c.id
+       ==> modules/hfc-4s/.arch-ids/st_port.c.id
+     hfc-4s/.arch-ids/st_port.h.id
+       ==> modules/hfc-4s/.arch-ids/st_port.h.id
+     hfc-4s/.arch-ids/st_port_inline.h.id
+       ==> modules/hfc-4s/.arch-ids/st_port_inline.h.id
+     hfc-4s/.arch-ids/util.h.id
+       ==> modules/hfc-4s/.arch-ids/util.h.id
+     hfc-4s/chan.c
+       ==> modules/hfc-4s/st_chan.c
+     hfc-4s/chan.h
+       ==> modules/hfc-4s/st_chan.h
+     hfc-pci/.arch-ids/.arch-inventory.id
+       ==> modules/hfc-pci/.arch-ids/.arch-inventory.id
+     hfc-pci/.arch-ids/=id
+       ==> modules/hfc-pci/.arch-ids/=id
+     hfc-pci/.arch-ids/Makefile.in.id
+       ==> modules/hfc-pci/.arch-ids/Makefile.in.id
+     hfc-pci/.arch-ids/TODO.id
+       ==> modules/hfc-pci/.arch-ids/TODO.id
+     hfc-pci/.arch-ids/card.h.id
+       ==> modules/hfc-pci/.arch-ids/card.h.id
+     hfc-pci/.arch-ids/card_inline.h.id
+       ==> modules/hfc-pci/.arch-ids/card_inline.h.id
+     hfc-pci/.arch-ids/chan.c.id
+       ==> modules/hfc-pci/.arch-ids/chan.c.id
+     hfc-pci/.arch-ids/chan.h.id
+       ==> modules/hfc-pci/.arch-ids/chan.h.id
+     hfc-pci/.arch-ids/fifo.c.id
+       ==> modules/hfc-pci/.arch-ids/fifo.c.id
+     hfc-pci/.arch-ids/fifo.h.id
+       ==> modules/hfc-pci/.arch-ids/fifo.h.id
+     hfc-pci/.arch-ids/fifo_inline.h.id
+       ==> modules/hfc-pci/.arch-ids/fifo_inline.h.id
+     hfc-pci/.arch-ids/hfc-pci_main.c.id
+       ==> modules/hfc-pci/.arch-ids/hfc-pci_main.c.id
+     hfc-pci/.arch-ids/module.h.id
+       ==> modules/hfc-pci/.arch-ids/module.h.id
+     hfc-pci/.arch-ids/pcm_port.c.id
+       ==> modules/hfc-pci/.arch-ids/pcm_port.c.id
+     hfc-pci/.arch-ids/pcm_port.h.id
+       ==> modules/hfc-pci/.arch-ids/pcm_port.h.id
+     hfc-pci/.arch-ids/regs.h.id
+       ==> modules/hfc-pci/.arch-ids/regs.h.id
+     hfc-pci/.arch-ids/st_port.c.id
+       ==> modules/hfc-pci/.arch-ids/st_port.c.id
+     hfc-pci/.arch-ids/st_port.h.id
+       ==> modules/hfc-pci/.arch-ids/st_port.h.id
+     hfc-pci/.arch-ids/util.h.id
+       ==> modules/hfc-pci/.arch-ids/util.h.id
+     hfc-usb/.arch-ids/.arch-inventory.id
+       ==> modules/hfc-usb/.arch-ids/.arch-inventory.id
+     hfc-usb/.arch-ids/=id
+       ==> modules/hfc-usb/.arch-ids/=id
+     hfc-usb/.arch-ids/Makefile.in.id
+       ==> modules/hfc-usb/.arch-ids/Makefile.in.id
+     hfc-usb/.arch-ids/fifo.c.id
+       ==> modules/hfc-usb/.arch-ids/fifo.c.id
+     hfc-usb/.arch-ids/fifo.h.id
+       ==> modules/hfc-usb/.arch-ids/fifo.h.id
+     hfc-usb/.arch-ids/hfc-usb.h.id
+       ==> modules/hfc-usb/.arch-ids/hfc-usb.h.id
+     hfc-usb/.arch-ids/hfc-usb_main.c.id
+       ==> modules/hfc-usb/.arch-ids/hfc-usb_main.c.id
+     hfc-usb/.arch-ids/regs.h.id
+       ==> modules/hfc-usb/.arch-ids/regs.h.id
+     kernel_config.h.in
+       ==> modules/include/kernel_config.h.in
+     kfifo/.arch-ids/.arch-inventory.id
+       ==> modules/kfifo/.arch-ids/.arch-inventory.id
+     kfifo/.arch-ids/=id
+       ==> modules/kfifo/.arch-ids/=id
+     kfifo/.arch-ids/Makefile.in.id
+       ==> modules/kfifo/.arch-ids/Makefile.in.id
+     kfifo/.arch-ids/kfifo.c.id
+       ==> modules/kfifo/.arch-ids/kfifo_main.c.id
+     kfifo/kfifo.c
+       ==> modules/kfifo/kfifo_main.c
+     lapd/.arch-ids/.arch-inventory.id
+       ==> modules/lapd/.arch-ids/.arch-inventory.id
+     lapd/.arch-ids/=id
+       ==> modules/lapd/.arch-ids/=id
+     lapd/.arch-ids/Makefile.in.id
+       ==> modules/lapd/.arch-ids/Makefile.in.id
+     lapd/.arch-ids/af_lapd.c.id
+       ==> modules/lapd/.arch-ids/af_lapd.c.id
+     lapd/.arch-ids/datalink.c.id
+       ==> modules/lapd/.arch-ids/datalink.c.id
+     lapd/.arch-ids/datalink.h.id
+       ==> modules/lapd/.arch-ids/datalink.h.id
+     lapd/.arch-ids/lapd.h.id
+       ==> modules/lapd/.arch-ids/lapd.h.id
+     lapd/.arch-ids/lapd_dev.c.id
+       ==> modules/lapd/.arch-ids/lapd_dev.c.id
+     lapd/.arch-ids/lapd_dev.h.id
+       ==> modules/lapd/.arch-ids/lapd_dev.h.id
+     lapd/.arch-ids/lapd_in.c.id
+       ==> modules/lapd/.arch-ids/lapd_in.c.id
+     lapd/.arch-ids/lapd_in.h.id
+       ==> modules/lapd/.arch-ids/lapd_in.h.id
+     lapd/.arch-ids/lapd_out.c.id
+       ==> modules/lapd/.arch-ids/lapd_out.c.id
+     lapd/.arch-ids/lapd_out.h.id
+       ==> modules/lapd/.arch-ids/lapd_out.h.id
+     lapd/.arch-ids/lapd_proto.h.id
+       ==> modules/lapd/.arch-ids/lapd_proto.h.id
+     lapd/.arch-ids/tei_mgmt.c.id
+       ==> modules/lapd/.arch-ids/tei_mgmt.c.id
+     lapd/.arch-ids/tei_mgmt.h.id
+       ==> modules/lapd/.arch-ids/tei_mgmt.h.id
+     lapd/.arch-ids/tei_mgmt_nt.c.id
+       ==> modules/lapd/.arch-ids/tei_mgmt_nt.c.id
+     lapd/.arch-ids/tei_mgmt_nt.h.id
+       ==> modules/lapd/.arch-ids/tei_mgmt_nt.h.id
+     lapd/.arch-ids/tei_mgmt_te.c.id
+       ==> modules/lapd/.arch-ids/tei_mgmt_te.c.id
+     lapd/.arch-ids/tei_mgmt_te.h.id
+       ==> modules/lapd/.arch-ids/tei_mgmt_te.h.id
+     linux_compat/.arch-ids/=id
+       ==> modules/linux_compat/.arch-ids/=id
+     linux_compat/linux/.arch-ids/=id
+       ==> modules/linux_compat/linux/.arch-ids/=id
+     linux_compat/linux/.arch-ids/kfifo.h.id
+       ==> modules/linux_compat/linux/.arch-ids/kfifo.h.id
+     visdn-core/.arch-ids/.arch-inventory.id
+       ==> modules/core/.arch-ids/.arch-inventory.id
+     visdn-core/.arch-ids/=id
+       ==> modules/core/.arch-ids/=id
+     visdn-core/.arch-ids/Makefile.in.id
+       ==> modules/core/.arch-ids/Makefile.in.id
+     visdn-core/.arch-ids/chan.c.id
+       ==> modules/core/.arch-ids/chan.c.id
+     visdn-core/.arch-ids/chan.h.id
+       ==> modules/core/.arch-ids/chan.h.id
+     visdn-core/.arch-ids/core_main.c.id
+       ==> modules/core/.arch-ids/core_main.c.id
+     visdn-core/.arch-ids/cxc.c.id
+       ==> modules/core/.arch-ids/cxc.c.id
+     visdn-core/.arch-ids/cxc.h.id
+       ==> modules/core/.arch-ids/cxc.h.id
+     visdn-core/.arch-ids/port.c.id
+       ==> modules/core/.arch-ids/port.c.id
+     visdn-core/.arch-ids/port.h.id
+       ==> modules/core/.arch-ids/port.h.id
+     visdn-core/.arch-ids/timer.c.id
+       ==> modules/core/.arch-ids/timer.c.id
+     visdn-core/.arch-ids/timer.h.id
+       ==> modules/core/.arch-ids/timer.h.id
+     visdn-core/.arch-ids/visdn.h.id
+       ==> modules/core/.arch-ids/core.h.id
+     visdn-core/.arch-ids/visdn_mod.h.id
+       ==> modules/core/.arch-ids/visdn_mod.h.id
+     visdn-core/visdn.h
+       ==> modules/core/core.h
+     visdn-cxc-internal/.arch-ids/.arch-inventory.id
+       ==> modules/softcxc/.arch-ids/.arch-inventory.id
+     visdn-cxc-internal/.arch-ids/=id
+       ==> modules/softcxc/.arch-ids/=id
+     visdn-cxc-internal/.arch-ids/Makefile.in.id
+       ==> modules/softcxc/.arch-ids/Makefile.in.id
+     visdn-cxc-internal/.arch-ids/cxc_internal.h.id
+       ==> modules/softcxc/.arch-ids/softcxc.h.id
+     visdn-cxc-internal/.arch-ids/cxc_internal_main.c.id
+       ==> modules/softcxc/.arch-ids/softcxc_main.c.id
+     visdn-cxc-internal/cxc_internal.h
+       ==> modules/softcxc/softcxc.h
+     visdn-cxc-internal/cxc_internal_main.c
+       ==> modules/softcxc/softcxc_main.c
+     visdn-ec-kb/.arch-ids/.arch-inventory.id
+       ==> modules/ec-kb/.arch-ids/.arch-inventory.id
+     visdn-ec-kb/.arch-ids/=id
+       ==> modules/ec-kb/.arch-ids/=id
+     visdn-ec-kb/.arch-ids/Makefile.in.id
+       ==> modules/ec-kb/.arch-ids/Makefile.in.id
+     visdn-ec-kb/.arch-ids/arith.h.id
+       ==> modules/ec-kb/.arch-ids/arith.h.id
+     visdn-ec-kb/.arch-ids/ec-kb.h.id
+       ==> modules/ec-kb/.arch-ids/ec-kb.h.id
+     visdn-ec-kb/.arch-ids/ec-kb_main.c.id
+       ==> modules/ec-kb/.arch-ids/ec-kb_main.c.id
+     visdn-ec-kb/.arch-ids/kb1ec.c.id
+       ==> modules/ec-kb/.arch-ids/kb1ec.c.id
+     visdn-ec-kb/.arch-ids/kb1ec_const.h.id
+       ==> modules/ec-kb/.arch-ids/kb1ec_const.h.id
+     visdn-netdev/.arch-ids/.arch-inventory.id
+       ==> modules/netdev/.arch-ids/.arch-inventory.id
+     visdn-netdev/.arch-ids/=id
+       ==> modules/netdev/.arch-ids/=id
+     visdn-netdev/.arch-ids/Makefile.in.id
+       ==> modules/netdev/.arch-ids/Makefile.in.id
+     visdn-netdev/.arch-ids/netdev.h.id
+       ==> modules/netdev/.arch-ids/netdev.h.id
+     visdn-netdev/.arch-ids/netdev_main.c.id
+       ==> modules/netdev/.arch-ids/netdev_main.c.id
+     visdn-ppp/.arch-ids/.arch-inventory.id
+       ==> modules/ppp/.arch-ids/.arch-inventory.id
+     visdn-ppp/.arch-ids/=id
+       ==> modules/ppp/.arch-ids/=id
+     visdn-ppp/.arch-ids/Makefile.in.id
+       ==> modules/ppp/.arch-ids/Makefile.in.id
+     visdn-ppp/.arch-ids/ppp.h.id
+       ==> modules/ppp/.arch-ids/ppp.h.id
+     visdn-ppp/.arch-ids/ppp_main.c.id
+       ==> modules/ppp/.arch-ids/ppp_main.c.id
+     visdn-streamport/.arch-ids/.arch-inventory.id
+       ==> modules/streamport/.arch-ids/.arch-inventory.id
+     visdn-streamport/.arch-ids/=id
+       ==> modules/streamport/.arch-ids/=id
+     visdn-streamport/.arch-ids/Makefile.in.id
+       ==> modules/streamport/.arch-ids/Makefile.in.id
+     visdn-streamport/.arch-ids/streamport.h.id
+       ==> modules/streamport/.arch-ids/streamport.h.id
+     visdn-streamport/.arch-ids/streamport_main.c.id
+       ==> modules/streamport/.arch-ids/streamport_main.c.id
+     visdn-timer-system/.arch-ids/.arch-inventory.id
+       ==> modules/timer-system/.arch-ids/.arch-inventory.id
+     visdn-timer-system/.arch-ids/=id
+       ==> modules/timer-system/.arch-ids/=id
+     visdn-timer-system/.arch-ids/Makefile.in.id
+       ==> modules/timer-system/.arch-ids/Makefile.in.id
+     visdn-timer-system/.arch-ids/timer-system.h.id
+       ==> modules/timer-system/.arch-ids/timer-system.h.id
+     visdn-timer-system/.arch-ids/timer-system_main.c.id
+       ==> modules/timer-system/.arch-ids/timer-system_main.c.id
+
+    new directories:
+     include include/.arch-ids modules modules/.arch-ids
+     modules/core/.arch-ids modules/ec-kb/.arch-ids
+     modules/hfc-4s/.arch-ids modules/hfc-pci/.arch-ids
+     modules/hfc-usb/.arch-ids modules/include
+     modules/include/.arch-ids modules/include/linux
+     modules/include/linux/.arch-ids modules/include/linux/visdn
+     modules/include/linux/visdn/.arch-ids modules/kfifo/.arch-ids
+     modules/lapd/.arch-ids modules/linux_compat/.arch-ids
+     modules/linux_compat/linux/.arch-ids modules/netdev/.arch-ids
+     modules/ppp/.arch-ids modules/softcxc/.arch-ids
+     modules/streamport/.arch-ids modules/timer-system/.arch-ids
+     visdnctl visdnctl/.arch-ids
+
+    removed directories:
+     hfc-4s/.arch-ids hfc-e1 hfc-e1/.arch-ids hfc-pci/.arch-ids
+     hfc-usb/.arch-ids kfifo/.arch-ids lapd/.arch-ids
+     linux_compat/.arch-ids linux_compat/linux/.arch-ids
+     visdn-core/.arch-ids visdn-cxc-internal/.arch-ids
+     visdn-ec-kb/.arch-ids visdn-netdev/.arch-ids
+     visdn-ppp/.arch-ids visdn-streamport/.arch-ids
+     visdn-timer-system/.arch-ids
+
+    renamed directories:
+     hfc-4s
+       ==> modules/hfc-4s
+     hfc-pci
+       ==> modules/hfc-pci
+     hfc-usb
+       ==> modules/hfc-usb
+     kfifo
+       ==> modules/kfifo
+     lapd
+       ==> modules/lapd
+     linux_compat
+       ==> modules/linux_compat
+     visdn-core
+       ==> modules/core
+     visdn-cxc-internal
+       ==> modules/softcxc
+     visdn-ec-kb
+       ==> modules/ec-kb
+     visdn-netdev
+       ==> modules/netdev
+     visdn-ppp
+       ==> modules/ppp
+     visdn-streamport
+       ==> modules/streamport
+     visdn-timer-system
+       ==> modules/timer-system
+
+
 2005-10-30 19:04:47 GMT	Matteo Brancaleoni <mbrancaleoni@espia.it>	patch-326
 
     Summary:
