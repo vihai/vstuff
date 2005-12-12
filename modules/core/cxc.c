@@ -51,7 +51,6 @@ static int visdn_cxc_connect_simplex(
 {
 	int err;
 	struct visdn_cxc_connection *conn;
-	struct hlist_node *pos, *n;
 
 	visdn_debug(2,
 		"Simplex connect '%06d' with '%06d' through CXC '%d'\n",
@@ -60,34 +59,22 @@ static int visdn_cxc_connect_simplex(
 
 	down(&cxc->sem);
 
-	hlist_for_each_entry_safe(conn, pos, n,
-			visdn_cxc_get_hash(cxc, src),
-			hash_node) {
+	{
+	struct visdn_cxc_connection *conn, *n;
+	list_for_each_entry_safe(conn, n,
+			&cxc->connections_list,
+			list_node) {
 
-		if (conn->cxc == cxc &&
-		    conn->src == src) {
-			if (flags & VISDN_CONNECT_FLAG_OVERRIDE)
+		if (conn->src != src &&
+		    conn->dst == dst) {
+			if (flags & VISDN_CONNECT_FLAG_OVERRIDE) {
 				_visdn_cxc_disconnect_simplex(conn);
-			else {
+			} else {
 				err = -EALREADY;
 				goto err_already_connected;
 			}	
 		}
 	}
-
-	hlist_for_each_entry_safe(conn, pos, n,
-			visdn_cxc_get_hash(cxc, src),
-			hash_node) {
-
-		if (conn->cxc == cxc &&
-		    conn->dst == dst) {
-			if (flags & VISDN_CONNECT_FLAG_OVERRIDE)
-				_visdn_cxc_disconnect_simplex(conn);
-			else {
-				err = -EALREADY;
-				goto err_already_connected;
-			}	
-		}
 	}
 
 	up(&cxc->sem);
@@ -106,9 +93,9 @@ static int visdn_cxc_connect_simplex(
 	conn->dst = visdn_leg_get(dst);
 
 	if (flags & VISDN_CONNECT_FLAG_PERMANENT)
-		conn->file = file;
-	else
 		conn->file = NULL;
+	else
+		conn->file = file;
 
 	down(&cxc->sem);
 
@@ -342,11 +329,8 @@ int visdn_cxc_disconnect_by_file(struct file *file)
 		list_for_each_entry_safe(conn, n, &cxc->connections_list,
 								list_node) {
 
-			if (conn->file == file) {
+			if (conn->file == file)
 				_visdn_cxc_disconnect_simplex(conn);
-
-				break;
-			}
 		}
 
 		up(&cxc->sem);
