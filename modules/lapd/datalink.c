@@ -678,8 +678,6 @@ static int lapd_queue_completed_iframe(
 	if (!lapd_sock->sk.sk_send_head)
 		lapd_sock->sk.sk_send_head = skb;
 
-	lapd_run_i_queue(lapd_sock);
-
 	return 0;
 }
 
@@ -1004,7 +1002,7 @@ static int lapd_socket_handle_sframe_rr(
 				if (hdr->s.n_r != lapd_sock->v_a) {
 					lapd_ack_frames(lapd_sock, hdr->s.n_r);
 					lapd_sock->v_a = hdr->s.n_r;
-					lapd_start_timer(lapd_sock, T203);
+					lapd_start_timer(lapd_sock, T200);
 				}
 			}
 		} else {
@@ -1026,11 +1024,11 @@ static int lapd_socket_handle_sframe_rr(
 					lapd_stop_timer(lapd_sock, T200);
 					lapd_start_timer(lapd_sock, T203);
 
+					lapd_change_state(lapd_sock,
+						LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED);
 					lapd_invoke_retransmission_procedure(
 								lapd_sock);
 
-					lapd_change_state(lapd_sock,
-						LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED);
 				} else {
 					lapd_nr_error_recovery_procedure(
 						lapd_sock);
@@ -1119,11 +1117,10 @@ static int lapd_socket_handle_sframe_rnr(
 
 					lapd_start_timer(lapd_sock, T200);
 
-					lapd_invoke_retransmission_procedure(
-								lapd_sock);
-
 					lapd_change_state(lapd_sock,
 						LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED);
+					lapd_invoke_retransmission_procedure(
+								lapd_sock);
 				} else {
 					lapd_nr_error_recovery_procedure(lapd_sock);
 					lapd_change_state(lapd_sock,
@@ -1212,11 +1209,12 @@ static int lapd_socket_handle_sframe_rej(
 					lapd_stop_timer(lapd_sock, T200);
 					lapd_start_timer(lapd_sock, T203);
 
+					lapd_change_state(lapd_sock,
+						LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED);
+
 					lapd_invoke_retransmission_procedure(
 								lapd_sock);
 
-					lapd_change_state(lapd_sock,
-						LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED);
 				} else {
 					lapd_nr_error_recovery_procedure(
 								lapd_sock);
@@ -1334,6 +1332,7 @@ static int lapd_socket_handle_uframe_ua(
 
 			if (lapd_sock->layer_3_initiated) {
 				lapd_dl_establish_confirm(lapd_sock);
+				lapd_run_i_queue(lapd_sock);
 			} else {
 				if (lapd_sock->v_s != lapd_sock->v_a) {
 					lapd_discard_i_queue(lapd_sock);
@@ -1819,9 +1818,12 @@ void lapd_dl_data_request(
 	break;
 
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
-	case LAPD_DLS_8_TIMER_RECOVERY:
 		lapd_queue_completed_iframe(lapd_sock, skb);
 		lapd_run_i_queue(lapd_sock);
+	break;
+
+	case LAPD_DLS_8_TIMER_RECOVERY:
+		lapd_queue_completed_iframe(lapd_sock, skb);
 	break;
 
 	default:
