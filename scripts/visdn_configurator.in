@@ -1,9 +1,9 @@
 #!/bin/bash
 
-prefix = @prefix@
-exec_prefix = @exec_prefix@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
 
-VISDN_DIR=@prefix@/etc/visdn
+VISDN_DIR=@visdnhwconfdir@
 
 #VISDNCTL="echo visdnctl"
 VISDNCTL=@sbindir@/visdnctl
