@@ -246,7 +246,7 @@ void start_source(int s, const char *prefix, struct opts *opts)
 	__u8 in_frame[65536];
 
 	in_iov.iov_base = in_frame;
-	in_iov.iov_len = opts->frame_size;
+	in_iov.iov_len = sizeof(in_frame);
 
 	in_msg.msg_name = &in_sal;
 	in_msg.msg_namelen = sizeof(in_sal);
@@ -276,7 +276,7 @@ void start_source(int s, const char *prefix, struct opts *opts)
 	out_msg.msg_controllen = sizeof(out_cmsg);
 	out_msg.msg_flags = 0;
 
-	memset(out_frame, 0x5a, sizeof(out_frame));
+	memset(out_frame, 0x5a, opts->frame_size);
 
 	if (opts->frame_type == FRAME_TYPE_UFRAME)
 		out_flags |= MSG_OOB;
@@ -409,7 +409,7 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 	__u8 in_frame[65536];
 
 	in_iov.iov_base = in_frame;
-	in_iov.iov_len = opts->frame_size;
+	in_iov.iov_len = sizeof(in_frame);
 
 	in_msg.msg_name = &in_sal;
 	in_msg.msg_namelen = sizeof(in_sal);
