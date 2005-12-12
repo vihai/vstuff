@@ -329,8 +329,10 @@ AM_CONDITIONAL(tests, test "$enable_tests" = yes)
 
 #-----------------------------------------------------------------------------
 
+enable_debug_code="yes"
+
 AC_ARG_ENABLE(
-	[debug],
+	[debug-code],
 	AC_HELP_STRING(
 		[--enable-debug],
 		[Debugging code]))

@@ -197,6 +197,7 @@ EXPORT_SYMBOL(visdn_chan_init);
 
 int visdn_chan_register(struct visdn_chan *chan)
 {
+	char chanid_str[16];
 	int err;
 
 	BUG_ON(!chan);
@@ -299,7 +300,6 @@ int visdn_chan_register(struct visdn_chan *chan)
 	if (err < 0)
 		goto err_create_link_other_leg_b_a;
 
-	char chanid_str[16];
 	snprintf(chanid_str, sizeof(chanid_str), "%06d", chan->id);
 
 	err = sysfs_create_link(

@@ -1253,7 +1253,8 @@ static void lapd_unhash_timer(unsigned long data)
 	struct sock *sk = (struct sock *)data;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-	lapd_debug_ls(lapd_sock, "Unhash timer\n");
+	if (lapd_sock)
+		lapd_debug_ls(lapd_sock, "Unhash timer\n");
 
 	WARN_ON(sk->sk_state != TCP_CLOSING);
 
