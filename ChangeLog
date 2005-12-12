@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-12 19:11:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-335
+
+    Summary:
+      Improved and fixed queue handling in hfc-4s
+    Revision:
+      isdn--devel--0.1--patch-335
+
+
+    modified files:
+     ChangeLog NOTES TODO modules/hfc-4s/fifo_inline.h
+     modules/hfc-4s/sys_chan.c modules/lapd/af_lapd.c
+
+
 2005-12-12 18:03:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-334
 
     Summary:

@@ -86,9 +86,9 @@ static inline u16 hfc_fifo_free_rx(struct hfc_fifo *fifo)
 
 static inline u16 hfc_fifo_free_tx(struct hfc_fifo *fifo)
 {
-	u16 free_bytes=fifo->z2 - fifo->z1;
+	int free_bytes=fifo->z2 - fifo->z1 - 1;
 
-	if (free_bytes > 0)
+	if (free_bytes >= 0)
 		return free_bytes;
 	else
 		return free_bytes + fifo->size;
@@ -106,8 +106,8 @@ static inline u8 hfc_fifo_used_frames(struct hfc_fifo *fifo)
 
 static inline u8 hfc_fifo_free_frames(struct hfc_fifo *fifo)
 {
-	u8 free_frames = fifo->f2 - fifo->f1;
-	if (free_frames > 0)
+	int free_frames = fifo->f2 - fifo->f1 - 1;
+	if (free_frames >= 0)
 		return free_frames;
 	else
 		return free_frames + fifo->f_num;

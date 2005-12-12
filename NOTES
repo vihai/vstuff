@@ -90,6 +90,7 @@ is often unneeded. So, i
 start_queue, stop_queue, wake_queue
 These callbacks may be called with interrupts disabled, must not sleep and
 must not call each other.
+See Documentation/networking/netdevices.txt for a template
 
 HISTORY:
 

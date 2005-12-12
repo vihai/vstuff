@@ -515,8 +515,6 @@ static int lapd_sendmsg(
 	}
 
 	if (len > lapd_sock->dev->mtu) {
-printk(KERN_DEBUG "MTU MTU MTU MTU MTU MTU %d > %d\n", len, lapd_sock->dev->mtu);
-
 		err = -EMSGSIZE;
 		goto err_over_mtu;
 	}

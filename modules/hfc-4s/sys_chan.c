@@ -458,16 +458,11 @@ static int hfc_sys_chan_frame_xmit(
 	 * size calculations are allowed
 	 */
 
-	if (!hfc_fifo_free_frames(fifo)) {
+	if (hfc_fifo_free_frames(fifo) <= 1) {
 		hfc_debug_sys_chan(chan, 3,
 			"TX FIFO frames full, throttling\n");
 
 		visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
-
-		visdn_leg_tx_error(&chan->visdn_chan.leg_b,
-				VISDN_TX_ERROR_FIFO_FULL);
-
-		goto err_no_free_frames;
 	}
 
 	if (hfc_fifo_free_tx(fifo) < skb->len) {
@@ -526,8 +521,6 @@ static int hfc_sys_chan_frame_xmit(
 	return VISDN_TX_OK;
 
 err_no_free_tx:
-err_no_free_frames:
-
 	hfc_card_unlock(card);
 
 	return VISDN_TX_BUSY;

@@ -154,6 +154,7 @@ hfc-4s:
 hfc-pci:
 -------
 
+- FIX FIFO free calculation and queue handling
 - Finish PCM bus support
 
 hfc-e1:
