@@ -702,7 +702,7 @@ void hfc_st_chan_init(
 	chan->visdn_chan.leg_b.framing = VISDN_LEG_FRAMING_NONE;
 	chan->visdn_chan.leg_b.framing_avail = VISDN_LEG_FRAMING_NONE |
 						VISDN_LEG_FRAMING_HDLC;
-	chan->visdn_chan.leg_b.mtu = chan->tx_fifo.size;
+	chan->visdn_chan.leg_b.mtu = 0;
 
 	strncpy(chan->visdn_chan.name, name, sizeof(chan->visdn_chan.name));
 	chan->visdn_chan.driver_data = chan;

@@ -479,6 +479,19 @@ void hfc_st_port_init(
 		0x00, 0x1F,
 		0x6180, 0x6181);
 
+	hfc_fifo_init(
+		&port->chans[B2].tx_fifo,
+		&port->chans[B2], hfc_FIFO_B2, TX,
+		0x2200,
+		0x2000,
+		0x2100, 0x2102,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x2180, 0x2181);
+
+	port->chans[D].visdn_chan.leg_b.mtu = port->chans[D].tx_fifo.size;
+	port->chans[B1].visdn_chan.leg_b.mtu = port->chans[B1].tx_fifo.size;
+	port->chans[B2].visdn_chan.leg_b.mtu = port->chans[B2].tx_fifo.size;
 }
 
 int hfc_st_port_register(struct hfc_st_port *port)
@@ -520,6 +533,8 @@ int hfc_st_port_register(struct hfc_st_port *port)
 		attr++;
 	}
 	}
+
+	return 0;
 
 	hfc_st_chan_unregister(&port->chans[SQ]);
 err_chan_register_SQ:

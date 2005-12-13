@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-13 13:04:37 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-345
+
+    Summary:
+      Fixed bugs introduced with hfc-pci cleanup
+    Revision:
+      isdn--devel--0.1--patch-345
+
+
+    modified files:
+     ChangeLog modules/hfc-pci/card.c modules/hfc-pci/st_chan.c
+     modules/hfc-pci/st_port.c
+
+
 2005-12-13 03:47:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-344
 
     Summary:

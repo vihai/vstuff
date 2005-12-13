@@ -453,12 +453,12 @@ int __devinit hfc_card_probe(
 
 	return 0;
 
+	hfc_card_sysfs_delete_files(card);
+err_card_sysfs_create_files:
 	hfc_pcm_port_unregister(&card->pcm_port);
 err_pcm_port_register:
 	hfc_st_port_unregister(&card->st_port);
 err_st_port_register:
-	hfc_card_sysfs_delete_files(card);
-err_card_sysfs_create_files:
 	free_irq(pci_dev->irq, card);
 err_request_irq:
 	pci_free_consistent(pci_dev, hfc_FIFO_SIZE,
@@ -487,14 +487,8 @@ void __devexit hfc_card_remove(struct hfc_card *card)
 
 	hfc_card_sysfs_delete_files(card);
 
-	visdn_port_unregister(&card->pcm_port.visdn_port);
-
-	visdn_chan_unregister(&card->st_port.chans[SQ].visdn_chan);
-	visdn_chan_unregister(&card->st_port.chans[E].visdn_chan);
-	visdn_chan_unregister(&card->st_port.chans[B2].visdn_chan);
-	visdn_chan_unregister(&card->st_port.chans[B1].visdn_chan);
-	visdn_chan_unregister(&card->st_port.chans[D].visdn_chan);
-	visdn_port_unregister(&card->st_port.visdn_port);
+	hfc_pcm_port_unregister(&card->pcm_port);
+	hfc_st_port_unregister(&card->st_port);
 
 	hfc_card_lock(card);
 	hfc_softreset(card);
