@@ -361,9 +361,12 @@ static const char *visdn_interface_network_role_to_string(
 	case Q931_INTF_NET_INTERNATIONAL:
 		return "International Network";
 	}
+
+	return "*UNKNOWN*";
 }
 
-static const char *visdn_type_of_number_to_string(enum visdn_type_of_number type_of_number)
+static const char *visdn_type_of_number_to_string(
+	enum visdn_type_of_number type_of_number)
 {
 	switch(type_of_number) {
 	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
@@ -378,9 +381,9 @@ static const char *visdn_type_of_number_to_string(enum visdn_type_of_number type
 		return "subscriber";
 	case VISDN_TYPE_OF_NUMBER_ABBREVIATED:
 		return "private";
-	default:
-		return "INVALID!";
 	}
+
+	return "*UNKNOWN*";
 }
 
 static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
