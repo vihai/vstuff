@@ -44,14 +44,14 @@ struct hfc_sys_chan {
 	struct work_struct rx_work;
 };
 
-void hfc_sys_chan_init(
+extern void hfc_sys_chan_init(
 	struct hfc_sys_chan *chan,
 	struct hfc_sys_port *port,
 	const char *name,
 	int id);
-int hfc_sys_chan_register(
+extern int hfc_sys_chan_register(
 	struct hfc_sys_chan *chan);
-void hfc_sys_chan_unregister(
+extern void hfc_sys_chan_unregister(
 	struct hfc_sys_chan *chan);
 
 #endif

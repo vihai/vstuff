@@ -15,7 +15,7 @@
 
 #include <linux/visdn/port.h>
 
-#include "chan.h"
+#include "st_chan.h"
 
 #define to_st_port(port) container_of(port, struct hfc_st_port, visdn_port)
 
@@ -26,8 +26,8 @@
 			"%s-%s:"				\
 			"st:"					\
 			format,					\
-			(port)->card->pcidev->dev.bus->name,	\
-			(port)->card->pcidev->dev.bus_id,	\
+			(port)->card->pci_dev->dev.bus->name,	\
+			(port)->card->pci_dev->dev.bus_id,	\
 			## arg)
 #else
 #define hfc_debug_port(port, dbglevel, format, arg...) do {} while (0)
@@ -38,8 +38,8 @@
 		"%s-%s:"					\
 		"st:"						\
 		format,						\
-		(port)->card->pcidev->dev.bus->name,		\
-		(port)->card->pcidev->dev.bus_id,		\
+		(port)->card->pci_dev->dev.bus->name,		\
+		(port)->card->pci_dev->dev.bus_id,		\
 		## arg)
 
 #define D 0
@@ -63,11 +63,12 @@ struct hfc_st_port
 	int clock_delay;
 	int sampling_comp;
 
-	struct hfc_chan_duplex chans[5];
+	struct hfc_st_chan chans[5];
 
 	int echo_enabled;
 
 	struct work_struct state_change_work;
+	struct work_struct fifo_activation_work;
 
 	struct visdn_port visdn_port;
 };
@@ -82,7 +83,7 @@ extern void hfc_st_port_init(
 	struct hfc_card *card,
 	const char *name);
 
-extern int hfc_st_port_sysfs_create_files(struct hfc_st_port *port);
-extern void hfc_st_port_sysfs_delete_files(struct hfc_st_port *port);
+extern int hfc_st_port_register(struct hfc_st_port *port);
+extern void hfc_st_port_unregister(struct hfc_st_port *port);
 
 #endif

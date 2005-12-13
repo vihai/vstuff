@@ -222,73 +222,14 @@ static VISDN_PORT_ATTR(st_sampling_comp, S_IRUGO | S_IWUSR,
 		hfc_show_st_sampling_comp,
 		hfc_store_st_sampling_comp);
 
-int hfc_st_port_sysfs_create_files(
-	struct hfc_st_port *port)
+static struct visdn_port_attribute *hfc_st_port_attributes[] =
 {
-	int err;
-
-	err = visdn_port_create_file(
-		&port->visdn_port,
-		&visdn_port_attr_role);
-	if (err < 0)
-		goto err_create_file_role;
-
-	err = visdn_port_create_file(
-		&port->visdn_port,
-		&visdn_port_attr_l1_state);
-	if (err < 0)
-		goto err_create_file_l1_state;
-
-	err = visdn_port_create_file(
-		&port->visdn_port,
-		&visdn_port_attr_st_clock_delay);
-	if (err < 0)
-		goto err_create_file_st_clock_delay;
-
-	err = visdn_port_create_file(
-		&port->visdn_port,
-		&visdn_port_attr_st_sampling_comp);
-	if (err < 0)
-		goto err_create_file_st_sampling_comp;
-
-	return 0;
-
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_role);
-err_create_file_role:
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_st_sampling_comp);
-err_create_file_st_sampling_comp:
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_st_clock_delay);
-err_create_file_st_clock_delay:
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_l1_state);
-err_create_file_l1_state:
-
-	return err;
-}
-
-void hfc_st_port_sysfs_delete_files(
-	struct hfc_st_port *port)
-{
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_role);
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_st_sampling_comp);
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_st_clock_delay);
-	visdn_port_remove_file(
-		&port->visdn_port,
-		&visdn_port_attr_l1_state);
-}
+	&visdn_port_attr_role,
+	&visdn_port_attr_l1_state,
+	&visdn_port_attr_st_clock_delay,
+	&visdn_port_attr_st_sampling_comp,
+	NULL
+};
 
 void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 {
@@ -338,10 +279,12 @@ static void hfc_st_port_state_change_work(void *data)
 {
 	struct hfc_st_port *port = data;
 	struct hfc_card *card = port->card;
+	u8 new_state;
+	int active;
 
 	hfc_card_lock(card);
 
-	u8 new_state = hfc_inb(card, hfc_STATES) & hfc_STATES_STATE_MASK;
+	new_state = hfc_inb(card, hfc_STATES) & hfc_STATES_STATE_MASK;
 
 	hfc_debug_port(port, 1,
 			"layer 1 state = %c%d\n",
@@ -349,48 +292,51 @@ static void hfc_st_port_state_change_work(void *data)
 			new_state);
 
 	if (port->nt_mode) {
-		// NT mode
+
+		active = 3;
 
 		if (new_state == 2) {
-			// Allows transition from G2 to G3
+			/* Allow transition from G2 to G3 */
 			hfc_outb(card, hfc_STATES,
 				hfc_STATES_ACTIVATE |
 				hfc_STATES_NT_G2_G3);
-		} else if (new_state == 3) {
-			// fix to G3 state (see specs)
-			hfc_outb(card, hfc_STATES, hfc_STATES_LOAD_STATE | 3);
-		}
-
-		if (new_state == 3 && port->l1_state != 3) {
-			//hfc_resume_fifo(card);
-		}
-
-		if (new_state != 3 && port->l1_state == 3) {
-			//hfc_suspend_fifo(card);
 		}
 	} else {
-		if (new_state == 3) {
-		}
+		active = 7;
+	}
 
-		if (new_state == 7 && port->l1_state != 7) {
-			// TE is now active, schedule FIFO activation after
-			// some time, otherwise the first frames are lost
+	if (new_state == active && port->l1_state != active) {
+		/* Layer 1 is now active, schedule FIFO activation after
+		 * 50ms, otherwise the first frame gets corrupted. This is
+		 * not documented on Cologne Chip's specs.
+		 */
 
-			card->regs.ctmt |= hfc_CTMT_TIMER_50 | hfc_CTMT_TIMER_CLEAR;
-			hfc_outb(card, hfc_CTMT, card->regs.ctmt);
+		schedule_delayed_work(&port->fifo_activation_work, HZ/50);
 
-			// Activating the timer firest an interrupt immediately, we
-			// obviously need to ignore it
-			card->ignore_first_timer_interrupt = TRUE;
-		}
+	} else if (new_state != active && port->l1_state == active) {
 
-		if (new_state != 7 && port->l1_state == 7) {
-			// TE has become inactive, disable FIFO
-			//hfc_suspend_fifo(card);
-		}
+		schedule_work(&port->fifo_activation_work);
 	}
 
 	port->l1_state = new_state;
+
+	hfc_card_unlock(card);
+}
+
+static void hfc_st_port_fifo_activation_work(void *data)
+{
+	struct hfc_st_port *port = data;
+	struct hfc_card *card = port->card;
+	int i;
+
+	hfc_card_lock(card);
+
+	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
+		if (port->chans[i].has_real_fifo) {
+			hfc_fifo_configure(&port->chans[i].rx_fifo);
+			hfc_fifo_configure(&port->chans[i].tx_fifo);
+		}
+	}
 
 	hfc_card_unlock(card);
 }
@@ -406,8 +352,8 @@ void hfc_st_port_check_l1_up(struct hfc_st_port *port)
 		hfc_debug_port(port, 1,
 			"L1 is down, bringing up L1.\n");
 
-       		hfc_outb(card, hfc_STATES, hfc_STATES_ACTIVATE);
-       	}
+		hfc_outb(card, hfc_STATES, hfc_STATES_ACTIVATE);
+	}
 }
 
 static void hfc_st_port_release(
@@ -463,6 +409,10 @@ void hfc_st_port_init(
 		hfc_st_port_state_change_work,
 		port);
 
+	INIT_WORK(&port->fifo_activation_work,
+		hfc_st_port_fifo_activation_work,
+		port);
+
 	port->nt_mode = FALSE;
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
@@ -470,23 +420,140 @@ void hfc_st_port_init(
 	visdn_port_init(&port->visdn_port);
 	port->visdn_port.ops = &hfc_st_port_ops;
 	port->visdn_port.driver_data = port;
-	port->visdn_port.device = &card->pcidev->dev;
-	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));;
+	port->visdn_port.device = &card->pci_dev->dev;
+	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
-	// Note: Bitrates must be in increasing order
-	int bitrates_d[] = { 16000 };
-	int bitrates_b[] = { 64000 };
-	int bitrates_s[] = { 4000 };
+	hfc_st_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF, 1);
+	hfc_st_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF, 1);
+	hfc_st_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF, 1);
+	hfc_st_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF, 0);
+	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ, 0, 0);
 
-	hfc_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF,
-		bitrates_d, ARRAY_SIZE(bitrates_d));
-	hfc_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF,
-		bitrates_b, ARRAY_SIZE(bitrates_b));
-	hfc_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF,
-		bitrates_b, ARRAY_SIZE(bitrates_b));
-	hfc_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF,
-		bitrates_d, ARRAY_SIZE(bitrates_d));
-	hfc_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
-		bitrates_s, ARRAY_SIZE(bitrates_s));
+	hfc_fifo_init(
+		&port->chans[D].rx_fifo,
+		&port->chans[D], hfc_FIFO_D, RX,
+		0x4000,
+		0x4000,
+		0x6080, 0x6082,
+		0x0000, 0x01FF,
+		0x10, 0x1F,
+		0x60a0, 0x60a1);
+
+	hfc_fifo_init(
+		&port->chans[D].tx_fifo,
+		&port->chans[D], hfc_FIFO_D, TX,
+		0x0000,
+		0x0000,
+		0x2080, 0x2082,
+		0x0000, 0x01FF,
+		0x10, 0x1F,
+		0x20a0, 0x20a1);
+
+	hfc_fifo_init(
+		&port->chans[B1].rx_fifo,
+		&port->chans[B1], hfc_FIFO_B1, RX,
+		0x4200,
+		0x4000,
+		0x6000, 0x6002,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x6080, 0x6081);
+
+	hfc_fifo_init(
+		&port->chans[B1].tx_fifo,
+		&port->chans[B1], hfc_FIFO_B1, TX,
+		0x0200,
+		0x0000,
+		0x2000, 0x2002,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x2080, 0x2081);
+
+	hfc_fifo_init(
+		&port->chans[B2].rx_fifo,
+		&port->chans[B2], hfc_FIFO_B2, RX,
+		0x6200,
+		0x6000,
+		0x6100, 0x6102,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x6180, 0x6181);
+
 }
 
+int hfc_st_port_register(struct hfc_st_port *port)
+{
+	int err;
+
+	err = visdn_port_register(&port->visdn_port);
+	if (err < 0)
+		goto err_port_register;
+
+	err = hfc_st_chan_register(&port->chans[D]);
+	if (err < 0)
+		goto err_chan_register_D;
+
+	err = hfc_st_chan_register(&port->chans[B1]);
+	if (err < 0)
+		goto err_chan_register_B1;
+
+	err = hfc_st_chan_register(&port->chans[B2]);
+	if (err < 0)
+		goto err_chan_register_B2;
+
+	err = hfc_st_chan_register(&port->chans[E]);
+	if (err < 0)
+		goto err_chan_register_E;
+
+	err = hfc_st_chan_register(&port->chans[SQ]);
+	if (err < 0)
+		goto err_chan_register_SQ;
+
+	{
+	struct visdn_port_attribute **attr = hfc_st_port_attributes;
+
+	while(*attr) {
+		visdn_port_create_file(
+			&port->visdn_port,
+			*attr);
+
+		attr++;
+	}
+	}
+
+	hfc_st_chan_unregister(&port->chans[SQ]);
+err_chan_register_SQ:
+	hfc_st_chan_unregister(&port->chans[E]);
+err_chan_register_E:
+	hfc_st_chan_unregister(&port->chans[B2]);
+err_chan_register_B2:
+	hfc_st_chan_unregister(&port->chans[B1]);
+err_chan_register_B1:
+	hfc_st_chan_unregister(&port->chans[D]);
+err_chan_register_D:
+	visdn_port_unregister(&port->visdn_port);
+err_port_register:
+
+	return err;
+}
+
+void hfc_st_port_unregister(struct hfc_st_port *port)
+{
+	struct visdn_port_attribute **attr = hfc_st_port_attributes;
+
+	while(*attr) {
+		visdn_port_remove_file(
+			&port->visdn_port,
+			*attr);
+
+		attr++;
+	}
+
+	hfc_st_chan_unregister(&port->chans[SQ]);
+	hfc_st_chan_unregister(&port->chans[E]);
+	hfc_st_chan_unregister(&port->chans[B2]);
+	hfc_st_chan_unregister(&port->chans[B1]);
+	hfc_st_chan_unregister(&port->chans[D]);
+
+	visdn_port_unregister(&port->visdn_port);
+}

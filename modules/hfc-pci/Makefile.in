@@ -6,14 +6,29 @@
 subdir = modules/hfc-pci
 MODULE = visdn-hfc-pci
 
-SOURCES = chan.c fifo.c hfc-pci_main.c \
-	pcm_port.c st_port.c
+SOURCES = \
+	hfc-pci_main.c	\
+	card.c		\
+	fifo.c		\
+	st_port.c	\
+	st_chan.c	\
+	pcm_port.c
+
 OBJS = ${SOURCES:.c=.o}
 
 DIST_SOURCES = $(SOURCES)
-DIST_HEADERS = card.h card_inline.h chan.h fifo.h \
-	fifo_inline.h module.h pcm_port.h regs.h st_port.h \
-	util.h
+DIST_HEADERS = \
+	module.h	\
+	regs.h		\
+	card.h		\
+	card_inline.h	\
+	fifo.h		\
+	fifo_inline.h	\
+	st_port.h	\
+	st_chan.h	\
+	util.h		\
+	pcm_port.h
+
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@

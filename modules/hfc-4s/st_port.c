@@ -19,7 +19,7 @@
 #include "fifo_inline.h"
 
 #ifdef DEBUG_CODE
-#define hfc_debug_st_port(port, dbglevel, format, arg...)		\
+#define hfc_debug_st_port(port, dbglevel, format, arg...)	\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
 			"%s-%s:"				\
@@ -370,8 +370,7 @@ static void hfc_st_port_state_change_work(void *data)
 		 * not documented on Cologne Chip's specs.
 		 */
 
-		schedule_delayed_work(&port->fifo_activation_work,
-							HZ/50);
+		schedule_delayed_work(&port->fifo_activation_work, HZ/50);
 
 	} else if (new_state != active && port->l1_state == active) {
 
@@ -398,11 +397,9 @@ static void hfc_st_port_fifo_activation_work(void *data)
 				port->chans[i].connected_sys_chan;
 
 		if (sys_chan) {
-			// RX
 			hfc_fifo_select(&sys_chan->rx_fifo);
 			hfc_fifo_configure(&sys_chan->rx_fifo);
 
-			// TX
 			hfc_fifo_select(&sys_chan->tx_fifo);
 			hfc_fifo_configure(&sys_chan->tx_fifo);
 		}

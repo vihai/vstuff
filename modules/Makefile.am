@@ -12,7 +12,7 @@ SUBDIRS += hfc-usb
 endif
 
 if driver_hfc_pci
-#SUBDIRS += hfc-pci
+SUBDIRS += hfc-pci
 endif
 
 if driver_hfc_4s

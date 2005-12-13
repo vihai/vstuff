@@ -11,13 +11,39 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/netdevice.h>
 
 #include <linux/visdn/core.h>
 
 #include "card.h"
 #include "fifo.h"
 #include "fifo_inline.h"
+
+#ifdef DEBUG_CODE
+#define hfc_debug_fifo(fifo, dbglevel, format, arg...)		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
+			"%s-%s:"				\
+			"fifo[%d,%s]:"				\
+			format,					\
+			(fifo)->chan->port->card->pci_dev->dev.bus->name, \
+			(fifo)->chan->port->card->pci_dev->dev.bus_id,	\
+			(fifo)->hw_index,			\
+			(fifo)->direction == RX ? "RX" : "TX",	\
+			## arg)
+#else
+#define hfc_debug_fifo(chan, dbglevel, format, arg...) do {} while (0)
+#endif
+
+#define hfc_msg_fifo(fifo, level, format, arg...)	\
+	printk(level hfc_DRIVER_PREFIX			\
+		"%s-%s:"				\
+		"fifo[%d,%s]:"				\
+		format,					\
+		(fifo)->chan->port->card->pci_dev->dev.bus->name, \
+		(fifo)->chan->port->card->pci_dev->dev.bus_id,	\
+		(fifo)->hw_index,			\
+		(fifo)->direction == RX ? "RX" : "TX",	\
+		## arg)
 
 void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
@@ -47,7 +73,7 @@ void hfc_fifo_mem_read(struct hfc_fifo *fifo,
 			octets_to_boundary);
 
 		memcpy(data + octets_to_boundary,
-			fifo->fifo_base,
+			fifo->mem_base,
 			size - octets_to_boundary);
 	}
 }
@@ -69,7 +95,7 @@ void hfc_fifo_mem_read_z(struct hfc_fifo *fifo,
 			octets_to_boundary);
 
 		memcpy(data + octets_to_boundary,
-			fifo->fifo_base,
+			fifo->mem_base,
 			size - octets_to_boundary);
 	}
 }
@@ -90,7 +116,7 @@ void hfc_fifo_mem_write(
 			data,
 			octets_to_boundary);
 
-		memcpy(fifo->fifo_base,
+		memcpy(fifo->mem_base,
 			data + octets_to_boundary,
 			size - octets_to_boundary);
 	}
@@ -112,7 +138,7 @@ int hfc_fifo_mem_read_user(
 			return -EFAULT;
 
 		if (copy_to_user(buf + octets_to_boundary,
-				fifo->fifo_base,
+				fifo->mem_base,
 				size - octets_to_boundary))
 			return -EFAULT;
 	}
@@ -137,7 +163,7 @@ int hfc_fifo_mem_write_user(
 				octets_to_boundary))
 			return -EFAULT;
 
-		if (copy_from_user(fifo->fifo_base,
+		if (copy_from_user(fifo->mem_base,
 				buf + octets_to_boundary,
 				size - octets_to_boundary))
 			return -EFAULT;
@@ -186,16 +212,14 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
 {
-	struct hfc_card *card = fifo->card;
+	struct hfc_card *card = fifo->chan->port->card;
 
-	BUG_ON(!fifo->connected_chan);
-
-	if (fifo->connected_chan->chan->id == B1) {
+	if (fifo->chan->id == B1) {
 		if (reversed)
 			card->regs.cirm |= hfc_CIRM_B1_REV;
 		else
 			card->regs.cirm &= ~hfc_CIRM_B1_REV;
-	} else if (fifo->connected_chan->chan->id == B2) {
+	} else if (fifo->chan->id == B2) {
 		if (reversed)
 			card->regs.cirm |= hfc_CIRM_B2_REV;
 		else
@@ -205,153 +229,115 @@ void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
 	hfc_outb(card, hfc_CIRM, card->regs.cirm);
 }
 
-void hfc_fifo_rx_work(void *data)
+
+int hfc_fifo_is_running(struct hfc_fifo *fifo)
 {
-	struct hfc_fifo *fifo = data;
+	if (!fifo->enabled ||
+	    (((fifo->chan->port->nt_mode &&
+	      fifo->chan->port->l1_state != 3) ||
+	     (!fifo->chan->port->nt_mode &&
+	      fifo->chan->port->l1_state != 7)))) {
+		return FALSE;
+	} else {
+		return TRUE;
+	}
+}
 
-	if (!fifo->connected_chan)
-		return;
+void hfc_fifo_configure(
+	struct hfc_fifo *fifo)
+{
+	struct hfc_card *card = fifo->chan->port->card;
 
-	struct hfc_chan_simplex *chan = fifo->connected_chan;
-	struct hfc_chan_duplex *fdchan = chan->chan;
-	struct hfc_card *card = fdchan->port->card;
+	switch(fifo->hw_index) {
+	case D:
+		card->regs.mst_emod &= ~hfc_MST_EMOD_D_MASK;
+		card->regs.mst_emod |=
+			hfc_MST_EMOD_D_HFC_from_ST |
+			hfc_MST_EMOD_D_ST_from_HFC |
+			hfc_MST_EMOD_D_GCI_from_HFC;
 
-	hfc_card_lock(card);
+		hfc_outb(card, hfc_MST_EMOD, card->regs.mst_emod);
 
-	if (!hfc_fifo_has_frames(fifo))
-		goto no_frames;
+		card->regs.fifo_en |= hfc_FIFO_EN_D;
+		card->regs.m1 |= hfc_INT_M1_DREC | hfc_INT_M1_DTRANS;
+	break;
 
-	// frame_size includes CRC+CRC+STAT
-	int frame_size = hfc_fifo_get_frame_size(fifo);
+	case B1:
+		if (fifo->framer_enabled)
+			card->regs.ctmt |= hfc_CTMT_TRANSB1;
+		else
+			card->regs.ctmt &= ~hfc_CTMT_TRANSB1;
 
-	if (frame_size < 3) {
-		hfc_debug_fifo(fifo, 3,
-			"invalid frame received, just %d octets\n",
-			frame_size);
+		card->regs.connect &= hfc_CONNECT_B1_MASK;
+		card->regs.connect |=
+			hfc_CONNECT_B1_HFC_from_ST |
+			hfc_CONNECT_B1_ST_from_HFC |
+			hfc_CONNECT_B1_GCI_from_HFC;
 
-		visdn_leg_rx_error(&fdchan->visdn_chan.leg_b,
-			VISDN_RX_ERROR_LENGTH);
+		card->regs.fifo_en |= hfc_FIFO_EN_B1;
 
-		goto err_invalid_frame;
+		if (hfc_fifo_is_running(fifo))
+			card->regs.fifo_en |= hfc_FIFO_EN_B1;
+		else
+			card->regs.fifo_en &= ~hfc_FIFO_EN_B1;
+	break;
 
-	} else if(frame_size == 3) {
-		hfc_debug_fifo(fifo, 3,
-			"empty frame received\n");
+	case B2:
+		if (fifo->framer_enabled)
+			card->regs.ctmt |= hfc_CTMT_TRANSB2;
+		else
+			card->regs.ctmt &= ~hfc_CTMT_TRANSB2;
 
-		visdn_leg_rx_error(&fdchan->visdn_chan.leg_b,
-			VISDN_RX_ERROR_LENGTH);
+		card->regs.connect &= hfc_CONNECT_B2_MASK;
+		card->regs.connect |=
+			hfc_CONNECT_B2_HFC_from_ST |
+			hfc_CONNECT_B2_ST_from_HFC |
+			hfc_CONNECT_B2_GCI_from_HFC;
 
-		goto err_empty_frame;
+		if (hfc_fifo_is_running(fifo))
+			card->regs.fifo_en |= hfc_FIFO_EN_B2;
+		else
+			card->regs.fifo_en &= ~hfc_FIFO_EN_B2;
+	break;
 	}
 
-	struct sk_buff *skb =
-		visdn_alloc_skb(frame_size - 3);
+	hfc_outb(card, hfc_FIFO_EN, card->regs.fifo_en);
+	hfc_outb(card, hfc_CONNECT, card->regs.connect);
+	hfc_outb(card, hfc_CTMT, card->regs.ctmt);
+//	hfc_outb(card, hfc_TRM, card->regs.trm);
 
-	if (!skb) {
-		hfc_msg_fifo(fifo, KERN_ERR,
-			"cannot allocate skb: frame dropped\n");
-
-		visdn_leg_rx_error(&fdchan->visdn_chan.leg_b,
-			VISDN_RX_ERROR_DROPPED);
-
-		goto err_alloc_skb;
-	}
-
-	// Calculate beginning of the next frame
-	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
-
-	// We cannot use hfc_fifo_get because of different semantic of
-	// "available bytes" and to avoid useless increment of Z2
-	hfc_fifo_mem_read(fifo,
-		skb_put(skb, frame_size - 3),
-		frame_size - 3);
-
-	struct { u8 crc[2], stat; } __attribute((packed)) stat;
-
-	hfc_fifo_mem_read_z(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 3),
-		&stat, sizeof(stat));
-
-#ifdef DEBUG_CODE
-	if(debug_level == 3) {
-		hfc_msg_fifo(fifo, KERN_DEBUG,
-			"RX len %2d: ",
-			frame_size);
-	} else if(debug_level >= 4) {
-		hfc_msg_fifo(fifo, KERN_DEBUG,
-			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			*fifo->f1, *fifo->f2, *Z1_F2(fifo), *Z2_F2(fifo),
-			frame_size);
-	}
-
-	if(debug_level >= 3) {
-		int i;
-		for (i=0; i < frame_size; i++) {
-			printk("%02x", hfc_fifo_u8(fifo,
-				Z_inc(fifo, *Z2_F2(fifo), i)));
-		}
-
-		printk("\n");
-	}
-#endif
-
-	if (stat.stat == 0xff) {
-		// Frame abort detected
-
-		hfc_debug_fifo(fifo, 3, "Frame abort detected\n");
-
-		visdn_leg_rx_error(&fdchan->visdn_chan.leg_b,
-			VISDN_RX_ERROR_FR_ABORT);
-
-		goto err_frame_abort;
-
-	} else if (stat.stat != 0x00) {
-		// CRC not ok, frame broken, skipping
-
-		hfc_debug_fifo(fifo, 2, "Received frame with wrong CRC\n");
-
-		visdn_leg_rx_error(&fdchan->visdn_chan.leg_b,
-			VISDN_RX_ERROR_CRC);
-
-		goto err_crc_error;
-	}
-
-	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
-
-	// Set Z2 for the next frame we're going to receive
-	*Z2_F2(fifo) = newz2;
-
-	visdn_leg_frame_xmit(&fdchan->visdn_chan.leg_b, skb);
-
-	goto all_went_well;
-
-err_crc_error:
-err_frame_abort:
-	kfree_skb(skb);
-err_alloc_skb:
-err_empty_frame:
-err_invalid_frame:
-	hfc_fifo_drop_frame(fifo);
-no_frames:
-all_went_well:
-
-	if (hfc_fifo_has_frames(fifo))
-		schedule_work(&fifo->work);
-
-	hfc_card_unlock(card);
+	hfc_st_port_update_sctrl(fifo->chan->port);
+	hfc_st_port_update_sctrl_r(fifo->chan->port);
 }
 
 void hfc_fifo_init(
 	struct hfc_fifo *fifo,
-	struct hfc_card *card,
+	struct hfc_st_chan *chan,
 	int hw_index,
-	enum hfc_direction direction)
+	enum hfc_direction direction,
+	int base_off,
+	int z_off,
+	int z1_off, int z2_off,
+	int z_min, int z_max,
+	int f_min, int f_max,
+	int f1_off, int f2_off)
 {
+	struct hfc_card *card = chan->port->card;
+
 	fifo->hw_index = hw_index;
 	fifo->direction = direction;
-	fifo->card = card;
+	fifo->chan = chan;
 
-	if (fifo->direction == RX)
-		INIT_WORK(&fifo->work,
-			hfc_fifo_rx_work,
-			fifo);
+	fifo->mem_base	= card->fifo_mem + base_off;
+	fifo->z_base    = card->fifo_mem + z_off;
+	fifo->z1_base   = card->fifo_mem + z1_off;
+	fifo->z2_base   = card->fifo_mem + z2_off;
+	fifo->z_min 	= z_min;
+	fifo->z_max 	= z_max;
+	fifo->f_min	= f_min;
+	fifo->f_max	= f_max;
+	fifo->f1	= card->fifo_mem + f1_off;
+	fifo->f2	= card->fifo_mem + f2_off;
+	fifo->size	= fifo->z_max - fifo->z_min + 1;
+	fifo->f_num	= fifo->f_max - fifo->f_min + 1;
 }

@@ -341,12 +341,10 @@ static int hfc_sys_chan_close(struct visdn_chan *visdn_chan)
 	chan->rx_fifo.enabled = FALSE;
 	chan->tx_fifo.enabled = FALSE;
 
-	// RX
 	hfc_fifo_select(&chan->rx_fifo);
 	hfc_fifo_reset(&chan->rx_fifo);
 	hfc_fifo_configure(&chan->rx_fifo);
 
-	// TX
 	hfc_fifo_select(&chan->tx_fifo);
 	hfc_fifo_reset(&chan->tx_fifo);
 	hfc_fifo_configure(&chan->tx_fifo);

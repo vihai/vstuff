@@ -88,6 +88,7 @@ static ssize_t hfc_show_slots_state(
 
 	hfc_card_lock(card);
 
+#if 0
 	int i;
 	for (i=0; i<port->num_slots; i++) {
 		len += snprintf(buf + len, PAGE_SIZE - len,
@@ -120,6 +121,7 @@ static ssize_t hfc_show_slots_state(
 
 		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 	}
+#endif
 
 	hfc_card_unlock(card);
 
@@ -269,7 +271,7 @@ void hfc_pcm_port_init(
 	port->card = card;
 	visdn_port_init(&port->visdn_port);
 	port->visdn_port.ops = &hfc_pcm_port_ops;
-	port->visdn_port.device = &card->pcidev->dev;
+	port->visdn_port.device = &card->pci_dev->dev;
 	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));;
 
 	int i;
@@ -279,3 +281,42 @@ void hfc_pcm_port_init(
 	}
 }
 
+int hfc_pcm_port_register(struct hfc_pcm_port *port)
+{
+	int err;
+//	int i;
+
+	err = visdn_port_register(&port->visdn_port);
+	if (err < 0)
+		goto err_port_register;
+
+/*
+	for (i=0; i<port->num_chans; i++) {
+		err = hfc_pcm_chan_register(&port->chans[i]);
+		if (err < 0)
+			goto err_chan_register;
+	}*/
+
+	hfc_pcm_port_sysfs_create_files(port);
+
+	return 0;
+
+/*err_chan_register:
+	visdn_port_unregister(&port->visdn_port);*/
+err_port_register:
+
+	return err;
+}
+
+void hfc_pcm_port_unregister(struct hfc_pcm_port *port)
+{
+//	int i;
+
+	hfc_pcm_port_sysfs_delete_files(port);
+
+/*	for (i=0; i<port->num_chans; i++) {
+		hfc_pcm_chan_unregister(&port->chans[i]);
+	}*/
+
+	visdn_port_unregister(&port->visdn_port);
+}

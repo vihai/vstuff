@@ -2,6 +2,39 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-13 03:47:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-344
+
+    Summary:
+      Big cleanup of hfc-pci
+    Revision:
+      isdn--devel--0.1--patch-344
+
+
+    new files:
+     modules/hfc-pci/.arch-ids/card.c.id modules/hfc-pci/card.c
+
+    modified files:
+     ChangeLog modules/Makefile.am modules/hfc-4s/fifo.c
+     modules/hfc-4s/st_port.c modules/hfc-4s/sys_chan.c
+     modules/hfc-4s/sys_chan.h modules/hfc-pci/Makefile.in
+     modules/hfc-pci/card.h modules/hfc-pci/fifo.c
+     modules/hfc-pci/fifo.h modules/hfc-pci/fifo_inline.h
+     modules/hfc-pci/hfc-pci_main.c modules/hfc-pci/pcm_port.c
+     modules/hfc-pci/pcm_port.h modules/hfc-pci/st_chan.c
+     modules/hfc-pci/st_chan.h modules/hfc-pci/st_port.c
+     modules/hfc-pci/st_port.h
+
+    renamed files:
+     modules/hfc-pci/.arch-ids/chan.c.id
+       ==> modules/hfc-pci/.arch-ids/st_chan.c.id
+     modules/hfc-pci/.arch-ids/chan.h.id
+       ==> modules/hfc-pci/.arch-ids/st_chan.h.id
+     modules/hfc-pci/chan.c
+       ==> modules/hfc-pci/st_chan.c
+     modules/hfc-pci/chan.h
+       ==> modules/hfc-pci/st_chan.h
+
+
 2005-12-13 00:41:24 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-343
 
     Summary:

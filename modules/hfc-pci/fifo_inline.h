@@ -40,7 +40,7 @@ static inline u16 Z_inc(struct hfc_fifo *fifo, u16 z, u16 inc)
 	// declared as u32 in order to manage overflows
 	u32 newz = z + inc;
 	if (newz > fifo->z_max)
-		newz -= fifo->fifo_size;
+		newz -= fifo->size;
 
 	return newz;
 }
@@ -57,7 +57,7 @@ static inline u8 F_inc(struct hfc_fifo *fifo, u8 f, u8 inc)
 
 static inline u16 hfc_fifo_used_rx(struct hfc_fifo *fifo)
 {
-	return (*Z1_F2(fifo) - *Z2_F2(fifo) + fifo->fifo_size) % fifo->fifo_size;
+	return (*Z1_F2(fifo) - *Z2_F2(fifo) + fifo->size) % fifo->size;
 }
 
 static inline u16 hfc_fifo_get_frame_size(struct hfc_fifo *fifo)
@@ -77,27 +77,18 @@ static inline u8 hfc_fifo_u8(struct hfc_fifo *fifo, u16 z)
 
 static inline u16 hfc_fifo_used_tx(struct hfc_fifo *fifo)
 {
-	return (*Z1_F1(fifo) - *Z2_F1(fifo) + fifo->fifo_size) % fifo->fifo_size;
-}
-
-static inline u16 hfc_fifo_free_rx(struct hfc_fifo *fifo)
-{
-	u16 free_bytes=*Z2_F1(fifo) - *Z1_F1(fifo);
-
-	if (free_bytes > 0)
-		return free_bytes;
-	else
-		return free_bytes + fifo->fifo_size;
+	return (*Z1_F1(fifo) - *Z2_F1(fifo) + fifo->size) %
+			fifo->size;
 }
 
 static inline u16 hfc_fifo_free_tx(struct hfc_fifo *fifo)
 {
-	u16 free_bytes=*Z2_F1(fifo) - *Z1_F1(fifo);
+	int free_bytes = *Z2_F1(fifo) - *Z1_F1(fifo) - 1;
 
-	if (free_bytes > 0)
+	if (free_bytes >= 0)
 		return free_bytes;
 	else
-		return free_bytes + fifo->fifo_size;
+		return free_bytes + fifo->size;
 }
 
 static inline int hfc_fifo_has_frames(struct hfc_fifo *fifo)
@@ -105,16 +96,11 @@ static inline int hfc_fifo_has_frames(struct hfc_fifo *fifo)
 	return *fifo->f1 != *fifo->f2;
 }
 
-static inline u8 hfc_fifo_used_frames(struct hfc_fifo *fifo)
-{
-	return (*fifo->f1 - *fifo->f2 + fifo->f_num) % fifo->f_num;
-}
-
 static inline u8 hfc_fifo_free_frames(struct hfc_fifo *fifo)
 {
-	u8 free_frames = *fifo->f2 - *fifo->f1;
+	int free_frames = *fifo->f2 - *fifo->f1 - 1;
 
-	if (free_frames > 0)
+	if (free_frames >= 0)
 		return free_frames;
 	else
 		return free_frames + fifo->f_num;

@@ -26,8 +26,8 @@
 			"%s-%s:"				\
 			"pcm%d:"				\
 			format,					\
-			(port)->card->pcidev->dev.bus->name,	\
-			(port)->card->pcidev->dev.bus_id,	\
+			(port)->card->pci_dev->dev.bus->name,	\
+			(port)->card->pci_dev->dev.bus_id,	\
 			(port)->hw_index,			\
 			## arg)
 #else
@@ -39,8 +39,8 @@
 		"%s-%s:"				\
 		"pcm%d:"				\
 		format,					\
-		(port)->card->pcidev->dev.bus->name,	\
-		(port)->card->pcidev->dev.bus_id,	\
+		(port)->card->pci_dev->dev.bus->name,	\
+		(port)->card->pci_dev->dev.bus_id,	\
 		(port)->hw_index,			\
 		## arg)
 
@@ -52,7 +52,7 @@ struct hfc_pcm_slot
 	int hw_index;
 	enum hfc_direction direction;
 
-	struct hfc_chan_simplex *connected_chan;
+	struct hfc_chan *connected_chan;
 
 	int used;
 };
@@ -89,7 +89,7 @@ extern void hfc_pcm_port_init(
 	struct hfc_card *card,
 	const char *name);
 
-extern int hfc_pcm_port_sysfs_create_files(struct hfc_pcm_port *port);
-extern void hfc_pcm_port_sysfs_delete_files(struct hfc_pcm_port *port);
+extern int hfc_pcm_port_register(struct hfc_pcm_port *port);
+extern void hfc_pcm_port_unregister(struct hfc_pcm_port *port);
 
 #endif

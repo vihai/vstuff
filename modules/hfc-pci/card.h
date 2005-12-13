@@ -27,8 +27,8 @@
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX	\
 			"%s-%s: "			\
 			format,				\
-			(card)->pcidev->dev.bus->name,	\
-			(card)->pcidev->dev.bus_id,	\
+			(card)->pci_dev->dev.bus->name,	\
+			(card)->pci_dev->dev.bus_id,	\
 			## arg)
 #else
 #define hfc_debug_card(card, dbglevel, format, arg...)	\
@@ -39,14 +39,14 @@
 	printk(level hfc_DRIVER_PREFIX			\
 		"%s-%s: "				\
 		format,					\
-		(card)->pcidev->dev.bus->name,		\
-		(card)->pcidev->dev.bus_id,		\
+		(card)->pci_dev->dev.bus->name,		\
+		(card)->pci_dev->dev.bus_id,		\
 		## arg)
 
 struct hfc_card {
 	spinlock_t lock;
 
-	struct pci_dev *pcidev;
+	struct pci_dev *pci_dev;
 
 	unsigned long io_bus_mem;
 	void __iomem *io_mem;
@@ -55,9 +55,6 @@ struct hfc_card {
 	void *fifo_mem;
 
 	int sync_loss_reported;
-	int late_irqs;
-
-	int ignore_first_timer_interrupt;
 
 	struct {
 		u8 m1;
@@ -76,12 +73,16 @@ struct hfc_card {
 
 	struct hfc_st_port st_port;
 	struct hfc_pcm_port pcm_port;
-	struct hfc_fifo fifos[3][2];
 
 	int debug_event;
 };
 
-void hfc_softreset(struct hfc_card *card);
-void hfc_initialize_hw(struct hfc_card *card);
+extern void hfc_softreset(struct hfc_card *card);
+extern void hfc_initialize_hw(struct hfc_card *card);
+
+extern int __devinit hfc_card_probe(
+	struct pci_dev *pci_dev,
+	const struct pci_device_id *device_id_entry);
+extern void __devexit hfc_card_remove(struct hfc_card *card);
 
 #endif
