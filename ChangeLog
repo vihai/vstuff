@@ -2,6 +2,33 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-14 00:39:11 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-346
+
+    Summary:
+      Implemented Date/Time information element in libq931
+    Revision:
+      isdn--devel--0.1--patch-346
+
+
+    new files:
+     libq931/.arch-ids/ie_datetime.c.id libq931/ie_datetime.c
+     libq931/libq931/.arch-ids/ie_datetime.h.id
+     libq931/libq931/ie_datetime.h
+
+    modified files:
+     ChangeLog libq931/Makefile.am libq931/call.c libq931/ie.c
+     libq931/libq931/ie.h libq931/libq931/ie_call_identity.h
+     libq931/libq931/ie_called_party_number.h
+     libq931/libq931/ie_calling_party_number.h
+     libq931/libq931/ie_channel_identification.h
+     libq931/libq931/ie_display.h
+     libq931/libq931/ie_high_layer_compatibility.h
+     libq931/libq931/ie_notification_indicator.h
+     libq931/libq931/ie_progress_indicator.h
+     libq931/libq931/ie_restart_indicator.h
+     libq931/libq931/ie_sending_complete.h
+
+
 2005-12-13 13:04:37 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-345
 
     Summary:

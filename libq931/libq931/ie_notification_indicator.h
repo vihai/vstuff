@@ -39,7 +39,7 @@ struct q931_ie *q931_ie_notification_indicator_alloc_abstract(void);
 struct q931_ie_notification_indicator_onwire_3
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
-        __u8 ext:1;
+	__u8 ext:1;
 	__u8 description:7;
 #elif __BYTE_ORDER == __LITTLE_ENDIAN
 	__u8 description:7;
@@ -60,7 +60,7 @@ int q931_ie_notification_indicator_read_from_buf(
 
 int q931_ie_notification_indicator_write_to_buf(
 	const struct q931_ie *generic_ie,
-        void *buf,
+	void *buf,
 	int max_size);
 
 void q931_ie_notification_indicator_dump(

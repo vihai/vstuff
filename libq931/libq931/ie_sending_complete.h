@@ -35,9 +35,9 @@ int q931_ie_sending_complete_read_from_buf(
 	int len);
 
 int q931_ie_sending_complete_write_to_buf(
-        const struct q931_ie *generic_ie,
-        void *buf,
-        int max_size);
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size);
 
 void q931_ie_sending_complete_dump(
 	const struct q931_ie *ie,

@@ -27,6 +27,7 @@
 #include <libq931/ie_cause.h>
 #include <libq931/ie_channel_identification.h>
 #include <libq931/ie_display.h>
+#include <libq931/ie_datetime.h>
 #include <libq931/ie_high_layer_compatibility.h>
 #include <libq931/ie_notification_indicator.h>
 #include <libq931/ie_progress_indicator.h>
@@ -224,8 +225,13 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 8,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
-		.id		= Q931_IE_DATE_TIME,
+		.id		= Q931_IE_DATETIME,
 		.name		= "Date Time",
+		.init		= q931_ie_datetime_register,
+		.alloc		= q931_ie_datetime_alloc_abstract,
+		.read_from_buf	= q931_ie_datetime_read_from_buf,
+		.write_to_buf   = q931_ie_datetime_write_to_buf,
+		.dump		= q931_ie_datetime_dump,
 	},
 	{
 		.max_len	= 34,
@@ -580,7 +586,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_DATE_TIME,
+		Q931_IE_DATETIME,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -937,7 +943,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_DATE_TIME,
+		Q931_IE_DATETIME,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},

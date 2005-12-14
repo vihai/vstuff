@@ -124,7 +124,7 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 
 int q931_ie_high_layer_compatibility_write_to_buf(
 	const struct q931_ie *generic_ie,
-        void *buf,
+	void *buf,
 	int max_size);
 
 void q931_ie_high_layer_compatibility_dump(

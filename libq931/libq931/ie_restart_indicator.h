@@ -62,7 +62,7 @@ int q931_ie_restart_indicator_read_from_buf(
 
 int q931_ie_restart_indicator_write_to_buf(
 	const struct q931_ie *generic_ie,
-        void *buf,
+	void *buf,
 	int max_size);
 
 void q931_ie_restart_indicator_dump(

@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include <time.h>
 
 #include <linux/lapd.h>
 
@@ -48,6 +49,7 @@
 #include <libq931/ie_cause.h>
 #include <libq931/ie_call_state.h>
 #include <libq931/ie_high_layer_compatibility.h>
+#include <libq931/ie_datetime.h>
 
 #include "call_inline.h"
 
@@ -862,7 +864,8 @@ void q931_alerting_request(
 
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 			ci->interface_type =
-				q931_ie_channel_identification_intftype(call->intf);
+				q931_ie_channel_identification_intftype(
+								call->intf);
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->channel);
@@ -914,12 +917,15 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = q931_ie_progress_indicator_location(call);
-			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+			pi->location =
+				q931_ie_progress_indicator_location(call);
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
-			q931_channel_start_tone(call->channel, Q931_TONE_HANGUP);
+			q931_channel_start_tone(call->channel,
+				Q931_TONE_HANGUP);
 			q931_call_start_timer(call, T306);
 		} else {
 			q931_channel_disconnect(call->channel);
@@ -936,12 +942,15 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = q931_ie_progress_indicator_location(call);
-			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+			pi->location =
+				q931_ie_progress_indicator_location(call);
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
-			q931_channel_start_tone(call->channel, Q931_TONE_HANGUP);
+			q931_channel_start_tone(call->channel,
+				Q931_TONE_HANGUP);
 			q931_call_start_timer(call, T306);
 		} else {
 			q931_channel_disconnect(call->channel);
@@ -963,12 +972,16 @@ void q931_disconnect_request(struct q931_call *call,
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
 				pi->coding_standard = Q931_IE_PI_CS_CCITT;
-				pi->location = q931_ie_progress_indicator_location(call);
-				pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+				pi->location =
+					q931_ie_progress_indicator_location(
+									call);
+				pi->progress_description =
+					Q931_IE_PI_PD_IN_BAND_INFORMATION;
 				q931_ies_add_put(&ies, &pi->ie);
 
 				q931_call_send_disconnect(call, &ies);
-				q931_channel_start_tone(call->channel, Q931_TONE_HANGUP);
+				q931_channel_start_tone(call->channel,
+					Q931_TONE_HANGUP);
 				q931_call_start_timer(call, T306);
 			} else {
 				q931_channel_disconnect(call->channel);
@@ -999,7 +1012,8 @@ void q931_disconnect_request(struct q931_call *call,
 					q931_ces_release_request(ces, user_ies);
 				}
 
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					user_ies);
 
 				/* If we do del call the CES will not be able
@@ -1035,7 +1049,8 @@ void q931_disconnect_request(struct q931_call *call,
 					q931_ces_release_request(ces, user_ies);
 				}
 
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					NULL);
 			}
 		} else {
@@ -1067,7 +1082,8 @@ void q931_disconnect_request(struct q931_call *call,
 					q931_ces_release_request(ces, user_ies);
 				}
 
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					NULL);
 			}
 		} else {
@@ -1083,12 +1099,15 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = q931_ie_progress_indicator_location(call);
-			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+			pi->location =
+				q931_ie_progress_indicator_location(call);
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
-			q931_channel_start_tone(call->channel, Q931_TONE_HANGUP);
+			q931_channel_start_tone(call->channel,
+				Q931_TONE_HANGUP);
 			q931_call_start_timer(call, T306);
 		} else {
 			q931_channel_disconnect(call->channel);
@@ -1104,12 +1123,15 @@ void q931_disconnect_request(struct q931_call *call,
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = q931_ie_progress_indicator_location(call);
-			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+			pi->location =
+				q931_ie_progress_indicator_location(call);
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 			q931_ies_add_put(&ies, &pi->ie);
 
 			q931_call_send_disconnect(call, &ies);
-			q931_channel_start_tone(call->channel, Q931_TONE_HANGUP);
+			q931_channel_start_tone(call->channel,
+							 Q931_TONE_HANGUP);
 			q931_call_start_timer(call, T306);
 		} else {
 			q931_channel_disconnect(call->channel);
@@ -1142,7 +1164,8 @@ void q931_disconnect_request(struct q931_call *call,
 					q931_ces_release_request(ces, user_ies);
 				}
 
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					NULL);
 			}
 		} else {
@@ -1306,8 +1329,10 @@ void q931_more_info_request(
 			struct q931_ie_progress_indicator *pi =
 				q931_ie_progress_indicator_alloc();
 			pi->coding_standard = Q931_IE_PI_CS_CCITT;
-			pi->location = q931_ie_progress_indicator_location(call);
-			pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+			pi->location =
+				q931_ie_progress_indicator_location(call);
+			pi->progress_description =
+				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 			q931_ies_add_put(&ies, &pi->ie);
 		}
 
@@ -1362,7 +1387,8 @@ void q931_more_info_request(
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 			ci->interface_type =
-				q931_ie_channel_identification_intftype(call->intf);
+				q931_ie_channel_identification_intftype(
+								call->intf);
 			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
@@ -1487,7 +1513,8 @@ void q931_proceeding_request(
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 			ci->interface_type =
-				q931_ie_channel_identification_intftype(call->intf);
+				q931_ie_channel_identification_intftype(
+								call->intf);
 			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
@@ -1695,7 +1722,7 @@ void q931_resume_response(
 
 		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 		ci->interface_type =
-                	q931_ie_channel_identification_intftype(call->intf);
+			q931_ie_channel_identification_intftype(call->intf);
 		ci->coding_standard = Q931_IE_CI_CS_CCITT;
 		q931_chanset_init(&ci->chanset);
 //		q931_chanset_add(&ci->chanset, channel);
@@ -1769,7 +1796,8 @@ void q931_setup_request(
 	case N0_NULL_STATE: {
 		call->proposed_channel = q931_channel_select(call);
 		if (!call->proposed_channel) {
-			q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION, user_ies);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, user_ies);
 		} else {
 			q931_call_start_timer(call, T303);
 
@@ -1779,12 +1807,18 @@ void q931_setup_request(
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 			ci->interface_type =
-				q931_ie_channel_identification_intftype(call->intf);
+				q931_ie_channel_identification_intftype(
+								call->intf);
 			ci->preferred_exclusive = Q931_IE_CI_PE_PREFERRED;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->proposed_channel);
 			q931_ies_add_put(&call->setup_ies, &ci->ie);
+
+			struct q931_ie_datetime *dt =
+				q931_ie_datetime_alloc();
+			dt->time = time(NULL);
+			q931_ies_add_put(&call->setup_ies, &dt->ie);
 
 			if (call->intf->config ==
 			      Q931_INTF_CONFIG_MULTIPOINT) {
@@ -1824,28 +1858,36 @@ void q931_setup_response(
 
 	report_call(call, LOG_DEBUG, "SETUP-RESP\n");
 
+	struct q931_ies ies = Q931_IES_INIT;
+
+	q931_ies_merge(&ies, user_ies);
+
 	switch (call->state) {
-	case N2_OVERLAP_SENDING:
+	case N2_OVERLAP_SENDING: {
+		struct q931_ie_datetime *dt =
+			q931_ie_datetime_alloc();
+		dt->time = time(NULL);
+		q931_ies_add_put(&ies, &dt->ie);
+
 		q931_call_stop_timer(call, T302);
-		q931_call_send_connect(call, user_ies);
+		q931_call_send_connect(call, &ies);
 		q931_call_set_state(call, N10_ACTIVE);
+	}
 	break;
 
 	case N3_OUTGOING_CALL_PROCEEDING:
-		q931_call_send_connect(call, user_ies);
-		q931_call_set_state(call, N10_ACTIVE);
-	break;
+	case N4_CALL_DELIVERED: {
+		struct q931_ie_datetime *dt =
+			q931_ie_datetime_alloc();
+		dt->time = time(NULL);
+		q931_ies_add_put(&ies, &dt->ie);
 
-	case N4_CALL_DELIVERED:
-		q931_call_send_connect(call, user_ies);
+		q931_call_send_connect(call, &ies);
 		q931_call_set_state(call, N10_ACTIVE);
+	}
 	break;
 
 	case U6_CALL_PRESENT: {
-		struct q931_ies ies = Q931_IES_INIT;
-
-		q931_ies_merge(&ies, user_ies);
-
 		int send_chanid_in_response = FALSE;
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &call->setup_ies,
@@ -1865,7 +1907,8 @@ void q931_setup_response(
 				q931_ie_channel_identification_alloc();
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 			ci->interface_type =
-				q931_ie_channel_identification_intftype(call->intf);
+				q931_ie_channel_identification_intftype(
+								call->intf);
 			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);

@@ -29,6 +29,7 @@ libq931_la_SOURCES =			\
 	ie_cause.c			\
 	ie_channel_identification.c	\
 	ie_display.c			\
+	ie_datetime.c			\
 	ie_high_layer_compatibility.c	\
 	ie_notification_indicator.c	\
 	ie_progress_indicator.c		\
@@ -59,6 +60,7 @@ nobase_include_HEADERS =			\
 	libq931/ie_cause.h			\
 	libq931/ie_channel_identification.h	\
 	libq931/ie_display.h			\
+	libq931/ie_datetime.h			\
 	libq931/ie_high_layer_compatibility.h	\
 	libq931/ie_notification_indicator.h	\
 	libq931/ie_progress_indicator.h		\
