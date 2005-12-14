@@ -148,7 +148,7 @@ visdn-streamport:
 hfc-4s:
 -------
 
-- Finish PCM bus support
+- Finish PCM bus support (and remove workaround for too big kmalloc)
 - Use memcpy_toio
 - Reintegrate BERT support
 

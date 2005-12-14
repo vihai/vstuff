@@ -74,11 +74,14 @@ static ssize_t hfc_store_bitrate(
 	hfc_update_pcm_md0(card, 0);
 	hfc_update_pcm_md1(card);
 
-	switch(port->bitrate) {
+// Temporary workaround for too big kmalloc
+hfc_pcm_port_configure(port, 1);
+
+/*	switch(port->bitrate) {
 	case 0: hfc_pcm_port_configure(port, 32); break;
 	case 1: hfc_pcm_port_configure(port, 64); break;
 	case 2: hfc_pcm_port_configure(port, 128); break;
-	}
+	}*/
 
 	hfc_card_unlock(card);
 
