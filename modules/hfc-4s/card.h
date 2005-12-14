@@ -55,7 +55,8 @@ struct hfc_card_config
 	int ram_size;
 };
 
-struct hfc_card {
+struct hfc_card
+{
 	spinlock_t lock;
 
 	// This struct contains a copy of some registers whose bits may be

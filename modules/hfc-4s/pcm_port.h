@@ -61,7 +61,7 @@ struct hfc_pcm_port
 	int bitrate;
 
 	int num_chans;
-	struct hfc_pcm_chan chans[128];
+	struct hfc_pcm_chan chans[1]; // Temporary workaroud for too big kmalloc
 
 	struct visdn_port visdn_port;
 };

@@ -13,6 +13,7 @@
 #ifndef _HFC_CARD_INLINE_H
 #define _HFC_CARD_INLINE_H
 
+#include <linux/interrupt.h>
 #include <linux/spinlock.h>
 #include <asm/io.h>
 

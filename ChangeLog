@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-14 23:56:10 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-348
+
+    Summary:
+      Fixed compilation problems in hfc-pci and hfc-4s on x86-64
+    Revision:
+      isdn--devel--0.1--patch-348
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/card.c modules/hfc-4s/card.h
+     modules/hfc-4s/card_inline.h modules/hfc-4s/pcm_port.h
+     modules/hfc-pci/card_inline.h
+
+
 2005-12-14 02:29:54 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-347
 
     Summary:

@@ -13,7 +13,7 @@
 #ifndef _HFC_CARD_INLINE_H
 #define _HFC_CARD_INLINE_H
 
-#include <linux/pci.h>
+#include <linux/interrupt.h>
 
 #include "card.h"
 #include "module.h"

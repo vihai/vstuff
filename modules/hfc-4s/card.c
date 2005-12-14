@@ -820,14 +820,14 @@ int __devinit hfc_card_probe(
 	struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry)
 {
-	struct hfc_card *card = NULL;
+	struct hfc_card *card;
 	struct hfc_card_config *card_config;
 	int chip_type;
 	int revision;
 	int i;
 	int err;
 
-	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
+	card = kmalloc(sizeof(*card), GFP_KERNEL);
 	if (!card) {
 		hfc_msg(KERN_CRIT, "unable to kmalloc!\n");
 		err = -ENOMEM;
