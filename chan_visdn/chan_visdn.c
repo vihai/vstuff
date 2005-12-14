@@ -49,9 +49,13 @@
 #include <asterisk/cli.h>
 #include <asterisk/musiconhold.h>
 
-//#define AST10
+#include "../config.h"
 
-#ifdef AST10
+#ifdef HAVE_ASTERISK_VERSION_H
+#include <asterisk/version.h>
+#endif
+
+#ifndef ASTERISK_VERSION_NUM
 #include <asterisk/channel_pvt.h>
 #define _bridge bridge
 #define caller_id_number callerid
@@ -1433,7 +1437,7 @@ static int visdn_call(
 		cgpn->screening_indicator =
 			Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 		char callerid[255];
 		char *name, *number;
 		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
@@ -1506,7 +1510,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	return 0;
 }
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 static int visdn_bridge(
 	struct ast_channel *c0,
 	struct ast_channel *c1,
@@ -1889,7 +1893,7 @@ static int visdn_setoption(
 	return -1;
 }
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 static int visdn_transfer(
 	struct ast_channel *ast,
 	char *dest)
@@ -1938,7 +1942,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	return 1;
 }
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 static int visdn_sendtext(struct ast_channel *ast, char *text)
 #else
 static int visdn_sendtext(struct ast_channel *ast, const char *text)
@@ -2052,7 +2056,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		visdn_destroy(visdn_chan);
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 		ast_chan->pvt->pvt = NULL;
 #else
 		ast_chan->tech_pvt = NULL;
@@ -2195,7 +2199,7 @@ static struct ast_channel *visdn_new(
 	ast_chan->readformat = AST_FORMAT_ALAW;
 	ast_chan->writeformat = AST_FORMAT_ALAW;
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 	ast_chan->pvt->rawreadformat = AST_FORMAT_ALAW;
 	ast_chan->pvt->rawwriteformat = AST_FORMAT_ALAW;
 
@@ -2230,7 +2234,7 @@ static struct ast_channel *visdn_new(
 	return ast_chan;
 }
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 static struct ast_channel *visdn_request(
 	char *type, int format, void *data)
 #else
@@ -2274,7 +2278,7 @@ static struct ast_channel *visdn_request(
 	return ast_chan;
 }
 
-#ifndef AST10
+#ifdef ASTERISK_VERSION_NUM
 static const struct ast_channel_tech visdn_tech = {
 	.type		= VISDN_CHAN_TYPE,
 	.description	= VISDN_DESCRIPTION,
@@ -3964,7 +3968,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 static char *visdn_overlap_dial_descr =
 "  vISDNOverlapDial():\n";
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 static int visdn_devicestate(void *data)
 {
 	return AST_DEVICE_UNKNOWN;
@@ -4087,7 +4091,7 @@ int load_module()
 		return -1;
 	}
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 	if (ast_channel_register_ex(VISDN_CHAN_TYPE, VISDN_DESCRIPTION,
 			 AST_FORMAT_ALAW,
 			 visdn_request, visdn_devicestate)) {
@@ -4138,7 +4142,7 @@ int unload_module(void)
 	ast_cli_unregister(&no_debug_visdn_generic);
 	ast_cli_unregister(&debug_visdn_generic);
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 	ast_channel_unregister(VISDN_CHAN_TYPE);
 #else
 	ast_channel_unregister(&visdn_tech);

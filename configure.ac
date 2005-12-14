@@ -155,7 +155,7 @@ AC_ARG_WITH(
 	AC_HELP_STRING(
 		[--with-asterisk-includes],
 		[Specify asterisk includes directory (the prefix before \
-							asterisk/)]),
+		asterisk/)]),
 	[astincdir=$withval],
 	[
 		if [[ -d "/usr/include/asterisk" ]]; then
@@ -172,8 +172,12 @@ if [[ "$enable_asterisk_modules" = "yes" ]]; then
 	fi
 fi
 
+CPPFLAGS="$CPPFLAGS -I$astincdir"
+
 AC_SUBST(astincdir)
 AC_MSG_RESULT([$astincdir])
+
+AC_CHECK_HEADERS(asterisk/version.h)
 
 #---------------
 

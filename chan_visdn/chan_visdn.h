@@ -10,11 +10,16 @@
  *
  */
 
+#include "../config.h"
+
 #include <asterisk/channel.h>
 
-#ifdef AST10
+#ifdef HAVE_ASTERISK_VERSION_H
+#include <asterisk/version.h>
+#endif
+
+#ifndef ASTERISK_VERSION_NUM
 #include <asterisk/channel_pvt.h>
-#else
 #endif
 
 #include <libq931/list.h>
@@ -48,7 +53,7 @@ struct visdn_chan {
 	char queued_digits[21];
 };
 
-#ifdef AST10
+#ifndef ASTERISK_VERSION_NUM
 
 #define ast_config_load ast_load
 #define ast_config_destroy ast_destroy
