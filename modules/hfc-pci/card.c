@@ -36,26 +36,36 @@ static ssize_t hfc_show_fifo_state(
 	int len = 0;
 
 	len += snprintf(buf + len, PAGE_SIZE - len,
-		"       Receive                Transmit\n"
-		"Fifo#  F1 F2   Z1   Z2 Used   F1 F2   Z1   Z2 Used Connected\n");
+		"       Receive                   Transmit\n"
+		"Fifo#  F1 F2   Z1   Z2 Used      F1 F2   Z1   Z2 Used Connected\n");
 	int i;
-	for (i=0; i<3; i++) {
+	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
+		if (!card->st_port.chans[i].has_real_fifo)
+			continue;
+
 		struct hfc_fifo *fifo_rx = &card->st_port.chans[i].rx_fifo;
 		struct hfc_fifo *fifo_tx = &card->st_port.chans[i].tx_fifo;
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
-			"%2d     %02x %02x %04x %04x %4d   %02x %02x %04x %04x %4d",
-			fifo_rx->hw_index,
+			"%2d     %02x %02x %04x %04x %4d %c%c%c"
+			"        %02x %02x %04x %04x %4d %c%c%c",
+			fifo_rx->id,
 			*fifo_rx->f1,
 			*fifo_rx->f2,
 			*Z1_F2(fifo_rx),
 			*Z2_F2(fifo_rx),
 			hfc_fifo_used_rx(fifo_rx),
+			fifo_rx->framer_enabled ? 'H' : ' ',
+			fifo_rx->enabled ? 'E' : ' ',
+			hfc_fifo_is_running(fifo_rx) ? 'R' : ' ',
 			*fifo_tx->f1,
 			*fifo_tx->f2,
 			*Z1_F1(fifo_tx),
 			*Z2_F1(fifo_tx),
-			hfc_fifo_used_tx(fifo_tx));
+			hfc_fifo_used_tx(fifo_tx),
+			fifo_tx->framer_enabled ? 'H' : ' ',
+			fifo_tx->enabled ? 'E' : ' ',
+			hfc_fifo_is_running(fifo_tx) ? 'R' : ' ');
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			" st:%s",
@@ -157,7 +167,6 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 	/* bit order */
 	card->regs.cirm = 0;
-	hfc_outb(card, hfc_CIRM, card->regs.cirm);
 
 	/* Enable D-rx FIFO. At least one FIFO must be enabled (by specs) */
 	card->regs.fifo_en = hfc_FIFO_EN_DRX;

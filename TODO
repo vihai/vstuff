@@ -157,6 +157,7 @@ hfc-pci:
 
 - FIX FIFO free calculation and queue handling
 - Finish PCM bus support
+- Reintegrate E-channel sniffing
 
 hfc-e1:
 -------

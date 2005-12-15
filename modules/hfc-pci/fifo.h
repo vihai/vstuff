@@ -17,15 +17,11 @@
 #include "util.h"
 #include "module.h"
 
-#define hfc_FIFO_D	2
-#define hfc_FIFO_B1	0
-#define hfc_FIFO_B2	1
-
 struct hfc_fifo
 {
 	struct hfc_st_chan *chan;
 
-	int hw_index;
+	int id;
 	enum hfc_direction direction;
 
 	int enabled;
@@ -49,8 +45,6 @@ extern void hfc_fifo_reset(struct hfc_fifo *fifo);
 extern int hfc_fifo_get(struct hfc_fifo *fifo, void *data, int size);
 extern void hfc_fifo_drop(struct hfc_fifo *fifo, int size);
 extern void hfc_fifo_drop_frame(struct hfc_fifo *fifo);
-
-extern void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed);
 
 extern void hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	void *data,

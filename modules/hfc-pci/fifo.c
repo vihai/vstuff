@@ -27,7 +27,7 @@
 			format,					\
 			(fifo)->chan->port->card->pci_dev->dev.bus->name, \
 			(fifo)->chan->port->card->pci_dev->dev.bus_id,	\
-			(fifo)->hw_index,			\
+			(fifo)->id,				\
 			(fifo)->direction == RX ? "RX" : "TX",	\
 			## arg)
 #else
@@ -41,7 +41,7 @@
 		format,					\
 		(fifo)->chan->port->card->pci_dev->dev.bus->name, \
 		(fifo)->chan->port->card->pci_dev->dev.bus_id,	\
-		(fifo)->hw_index,			\
+		(fifo)->id,			\
 		(fifo)->direction == RX ? "RX" : "TX",	\
 		## arg)
 
@@ -210,26 +210,6 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 	*Z2_F2(fifo) = newz2;
 }
 
-void hfc_fifo_set_bit_order(struct hfc_fifo *fifo, int reversed)
-{
-	struct hfc_card *card = fifo->chan->port->card;
-
-	if (fifo->chan->id == B1) {
-		if (reversed)
-			card->regs.cirm |= hfc_CIRM_B1_REV;
-		else
-			card->regs.cirm &= ~hfc_CIRM_B1_REV;
-	} else if (fifo->chan->id == B2) {
-		if (reversed)
-			card->regs.cirm |= hfc_CIRM_B2_REV;
-		else
-			card->regs.cirm &= ~hfc_CIRM_B2_REV;
-	}
-
-	hfc_outb(card, hfc_CIRM, card->regs.cirm);
-}
-
-
 int hfc_fifo_is_running(struct hfc_fifo *fifo)
 {
 	if (!fifo->enabled ||
@@ -248,7 +228,7 @@ void hfc_fifo_configure(
 {
 	struct hfc_card *card = fifo->chan->port->card;
 
-	switch(fifo->hw_index) {
+	switch(fifo->id) {
 	case D:
 		card->regs.mst_emod &= ~hfc_MST_EMOD_D_MASK;
 		card->regs.mst_emod |=
@@ -258,15 +238,20 @@ void hfc_fifo_configure(
 
 		hfc_outb(card, hfc_MST_EMOD, card->regs.mst_emod);
 
-		card->regs.fifo_en |= hfc_FIFO_EN_D;
+		if (hfc_fifo_is_running(fifo))
+			card->regs.fifo_en |= hfc_FIFO_EN_D;
+		else
+			card->regs.fifo_en &= ~hfc_FIFO_EN_D;
+
+		card->regs.fifo_en |= hfc_FIFO_EN_DRX;
 		card->regs.m1 |= hfc_INT_M1_DREC | hfc_INT_M1_DTRANS;
 	break;
 
 	case B1:
 		if (fifo->framer_enabled)
-			card->regs.ctmt |= hfc_CTMT_TRANSB1;
-		else
 			card->regs.ctmt &= ~hfc_CTMT_TRANSB1;
+		else
+			card->regs.ctmt |= hfc_CTMT_TRANSB1;
 
 		card->regs.connect &= hfc_CONNECT_B1_MASK;
 		card->regs.connect |=
@@ -274,7 +259,10 @@ void hfc_fifo_configure(
 			hfc_CONNECT_B1_ST_from_HFC |
 			hfc_CONNECT_B1_GCI_from_HFC;
 
-		card->regs.fifo_en |= hfc_FIFO_EN_B1;
+		if (fifo->bit_reversed)
+			card->regs.cirm |= hfc_CIRM_B1_REV;
+		else
+			card->regs.cirm &= ~hfc_CIRM_B1_REV;
 
 		if (hfc_fifo_is_running(fifo))
 			card->regs.fifo_en |= hfc_FIFO_EN_B1;
@@ -284,15 +272,20 @@ void hfc_fifo_configure(
 
 	case B2:
 		if (fifo->framer_enabled)
-			card->regs.ctmt |= hfc_CTMT_TRANSB2;
-		else
 			card->regs.ctmt &= ~hfc_CTMT_TRANSB2;
+		else
+			card->regs.ctmt |= hfc_CTMT_TRANSB2;
 
 		card->regs.connect &= hfc_CONNECT_B2_MASK;
 		card->regs.connect |=
 			hfc_CONNECT_B2_HFC_from_ST |
 			hfc_CONNECT_B2_ST_from_HFC |
 			hfc_CONNECT_B2_GCI_from_HFC;
+
+		if (fifo->bit_reversed)
+			card->regs.cirm |= hfc_CIRM_B2_REV;
+		else
+			card->regs.cirm &= ~hfc_CIRM_B2_REV;
 
 		if (hfc_fifo_is_running(fifo))
 			card->regs.fifo_en |= hfc_FIFO_EN_B2;
@@ -301,9 +294,11 @@ void hfc_fifo_configure(
 	break;
 	}
 
+	hfc_outb(card, hfc_CTMT, card->regs.ctmt);
+	hfc_outb(card, hfc_CIRM, card->regs.cirm);
+
 	hfc_outb(card, hfc_FIFO_EN, card->regs.fifo_en);
 	hfc_outb(card, hfc_CONNECT, card->regs.connect);
-	hfc_outb(card, hfc_CTMT, card->regs.ctmt);
 //	hfc_outb(card, hfc_TRM, card->regs.trm);
 
 	hfc_st_port_update_sctrl(fifo->chan->port);
@@ -313,7 +308,7 @@ void hfc_fifo_configure(
 void hfc_fifo_init(
 	struct hfc_fifo *fifo,
 	struct hfc_st_chan *chan,
-	int hw_index,
+	int id,
 	enum hfc_direction direction,
 	int base_off,
 	int z_off,
@@ -324,7 +319,7 @@ void hfc_fifo_init(
 {
 	struct hfc_card *card = chan->port->card;
 
-	fifo->hw_index = hw_index;
+	fifo->id = id;
 	fifo->direction = direction;
 	fifo->chan = chan;
 

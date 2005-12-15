@@ -237,12 +237,6 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	if (chan->status != HFC_CHAN_STATUS_FREE) {
-		hfc_debug_chan(chan, 1, "open failed: channel busy\n");
-		err = -EBUSY;
-		goto err_channel_busy;
-	}
-
 	chan->rx_fifo.enabled = TRUE;
 	chan->tx_fifo.enabled = TRUE;
 
@@ -263,6 +257,12 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		err = -EINVAL;
 		goto err_invalid_framing;
 	}
+
+	hfc_fifo_reset(&chan->rx_fifo);
+	hfc_fifo_configure(&chan->rx_fifo);
+
+	hfc_fifo_reset(&chan->tx_fifo);
+	hfc_fifo_configure(&chan->tx_fifo);
 
 /*
 	switch(chan->id) {
@@ -305,20 +305,6 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 	}
 */
 
-	hfc_fifo_reset(&chan->rx_fifo);
-
-	hfc_fifo_set_bit_order(
-		&chan->rx_fifo,
-		chan->visdn_chan.leg_b.framing ==
-			VISDN_LEG_FRAMING_HDLC ? 1 : 0);
-
-	hfc_fifo_reset(&chan->tx_fifo);
-
-	hfc_fifo_set_bit_order(
-		&chan->tx_fifo,
-		chan->visdn_chan.leg_b.framing ==
-			VISDN_LEG_FRAMING_HDLC ? 1 : 0);
-
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
 
@@ -326,9 +312,7 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 
 	return 0;
 
-	chan->status = HFC_CHAN_STATUS_FREE;
 err_invalid_framing:
-err_channel_busy:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
 	hfc_card_unlock(card);
@@ -349,8 +333,6 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 	}
 
 	hfc_card_lock(card);
-
-	chan->status = HFC_CHAN_STATUS_FREE;
 
 	chan->rx_fifo.enabled = FALSE;
 	chan->tx_fifo.enabled = FALSE;
@@ -676,13 +658,10 @@ void hfc_st_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	int hw_index,
 	int has_real_fifo)
 {
 	chan->port = port;
-	chan->status = HFC_CHAN_STATUS_FREE;
 	chan->id = id;
-	chan->hw_index = hw_index;
 
 	chan->has_real_fifo = has_real_fifo;
 

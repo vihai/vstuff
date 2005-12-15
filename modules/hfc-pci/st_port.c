@@ -246,10 +246,10 @@ void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 	if (port->sq_enabled)
 		sctrl |= hfc_SCTRL_SQ_ENA;
 
-	if (port->chans[B1].status != HFC_CHAN_STATUS_FREE)
+	if (port->chans[B1].tx_fifo.enabled)
 		sctrl |= hfc_SCTRL_B1_ENA;
 
-	if (port->chans[B2].status != HFC_CHAN_STATUS_FREE)
+	if (port->chans[B2].tx_fifo.enabled)
 		sctrl |= hfc_SCTRL_B2_ENA;
 
 	hfc_outb(port->card, hfc_SCTRL, sctrl);
@@ -259,10 +259,10 @@ void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 {
 	u8 sctrl_r = 0;
 
-	if (port->chans[B1].status != HFC_CHAN_STATUS_FREE)
+	if (port->chans[B1].rx_fifo.enabled)
 		sctrl_r |= hfc_SCTRL_R_B1_ENA;
 
-	if (port->chans[B2].status != HFC_CHAN_STATUS_FREE)
+	if (port->chans[B2].rx_fifo.enabled)
 		sctrl_r |= hfc_SCTRL_R_B2_ENA;
 
 	hfc_outb(port->card, hfc_SCTRL_R, sctrl_r);
@@ -423,15 +423,15 @@ void hfc_st_port_init(
 	port->visdn_port.device = &card->pci_dev->dev;
 	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
-	hfc_st_chan_init(&port->chans[D], port, "D", D, hfc_D_CHAN_OFF, 1);
-	hfc_st_chan_init(&port->chans[B1], port, "B1", B1, hfc_B1_CHAN_OFF, 1);
-	hfc_st_chan_init(&port->chans[B2], port, "B2", B2, hfc_B2_CHAN_OFF, 1);
-	hfc_st_chan_init(&port->chans[E], port, "E", E, hfc_E_CHAN_OFF, 0);
-	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ, 0, 0);
+	hfc_st_chan_init(&port->chans[D], port, "D", D, 1);
+	hfc_st_chan_init(&port->chans[B1], port, "B1", B1, 1);
+	hfc_st_chan_init(&port->chans[B2], port, "B2", B2, 1);
+	hfc_st_chan_init(&port->chans[E], port, "E", E, 0);
+	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ, 0);
 
 	hfc_fifo_init(
 		&port->chans[D].rx_fifo,
-		&port->chans[D], hfc_FIFO_D, RX,
+		&port->chans[D], D, RX,
 		0x4000,
 		0x4000,
 		0x6080, 0x6082,
@@ -441,7 +441,7 @@ void hfc_st_port_init(
 
 	hfc_fifo_init(
 		&port->chans[D].tx_fifo,
-		&port->chans[D], hfc_FIFO_D, TX,
+		&port->chans[D], D, TX,
 		0x0000,
 		0x0000,
 		0x2080, 0x2082,
@@ -451,7 +451,7 @@ void hfc_st_port_init(
 
 	hfc_fifo_init(
 		&port->chans[B1].rx_fifo,
-		&port->chans[B1], hfc_FIFO_B1, RX,
+		&port->chans[B1], B1, RX,
 		0x4200,
 		0x4000,
 		0x6000, 0x6002,
@@ -461,7 +461,7 @@ void hfc_st_port_init(
 
 	hfc_fifo_init(
 		&port->chans[B1].tx_fifo,
-		&port->chans[B1], hfc_FIFO_B1, TX,
+		&port->chans[B1], B1, TX,
 		0x0200,
 		0x0000,
 		0x2000, 0x2002,
@@ -471,7 +471,7 @@ void hfc_st_port_init(
 
 	hfc_fifo_init(
 		&port->chans[B2].rx_fifo,
-		&port->chans[B2], hfc_FIFO_B2, RX,
+		&port->chans[B2], B2, RX,
 		0x6200,
 		0x6000,
 		0x6100, 0x6102,
@@ -481,7 +481,7 @@ void hfc_st_port_init(
 
 	hfc_fifo_init(
 		&port->chans[B2].tx_fifo,
-		&port->chans[B2], hfc_FIFO_B2, TX,
+		&port->chans[B2], B2, TX,
 		0x2200,
 		0x2000,
 		0x2100, 0x2102,
