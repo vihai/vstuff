@@ -73,6 +73,18 @@ static ssize_t vsp_chan_write(
 	return __kfifo_put(chan->rx_fifo, (void *)buf, count);
 }
 
+static void vsp_chan_rx_error(
+	struct visdn_leg *visdn_leg,
+	enum visdn_leg_rx_error_code code)
+{
+}
+
+static void vsp_chan_tx_error(
+	struct visdn_leg *visdn_leg,
+	enum visdn_leg_tx_error_code code)
+{
+}
+
 static int vsp_chan_connect(
 	struct visdn_leg *visdn_leg1,
 	struct visdn_leg *visdn_leg2)
@@ -109,6 +121,9 @@ static struct visdn_leg_ops vsp_leg_ops = {
 
 	.read		= vsp_chan_read,
 	.write		= vsp_chan_write,
+
+	.rx_error	= vsp_chan_rx_error,
+	.tx_error	= vsp_chan_tx_error,
 };
 
 /*---------------------------------------------------------------------------*/
