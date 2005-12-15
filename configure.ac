@@ -300,7 +300,7 @@ AC_ARG_WITH(
 	)
 
 if [[ "$enable_pppd" = "yes" ]]; then
-	if [ ! -d $pppdconfdir ]]; then
+	if [[ ! -d $pppdconfdir ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Cannot locate pppd configuration directory])
 	fi
