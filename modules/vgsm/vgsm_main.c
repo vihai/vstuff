@@ -325,7 +325,6 @@ static struct pci_driver vgsm_driver =
 	.id_table = 	vgsm_ids,
 	.probe = 	vgsm_probe,
 	.remove =	vgsm_remove,
-
 };
 
 static void vgsm_class_release(struct class_device *device)

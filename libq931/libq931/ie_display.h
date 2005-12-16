@@ -21,7 +21,7 @@ struct q931_ie_display
 {
 	struct q931_ie ie;
 
-	__u8 text[83];
+	char text[83];
 };
 
 struct q931_ie_display *q931_ie_display_alloc(void);

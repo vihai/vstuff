@@ -645,7 +645,7 @@ struct q931_dlc *q931_accept(
 
 	q931_dlc_init(dlc, intf, socket);
 
-	int optlen = sizeof(dlc->tei);
+	socklen_t optlen = sizeof(dlc->tei);
 	if (getsockopt(dlc->socket, SOL_LAPD, LAPD_TEI,
 		&dlc->tei, &optlen) < 0) {
 		report_intf(intf, LOG_ERR,

@@ -311,9 +311,9 @@ static irqreturn_t vgsm_interrupt(int irq,
 	void *dev_id, 
 	struct pt_regs *regs)
 {
-	/* Interrupt handling */
-
 	struct vgsm_card *card = dev_id;
+	u8 int0stat;
+	u8 int1stat;
 	
 	if (unlikely(!card)) {
 		vgsm_msg(KERN_CRIT,
@@ -325,9 +325,9 @@ static irqreturn_t vgsm_interrupt(int irq,
 	/* When reading this register, immediately write back the value
 	* that has been read for correct operation. Cfr. Tiger 320 spec. p.23 */
 
-	u8 int0stat = vgsm_inb(card, VGSM_INT0STAT) & card->regs.mask0;
+	int0stat = vgsm_inb(card, VGSM_INT0STAT) & card->regs.mask0;
 	/* consider only AUX0 and AUX1 */
-	u8 int1stat = vgsm_inb(card, VGSM_INT1STAT) & 0x03;
+	int1stat = vgsm_inb(card, VGSM_INT1STAT) & 0x03;
 	mb();
 	vgsm_outb(card, VGSM_INT0STAT, int0stat);
 	//vgsm_outb(card, VGSM_INT1STAT, int1stat);
@@ -348,13 +348,15 @@ static irqreturn_t vgsm_interrupt(int irq,
 		vgsm_msg(KERN_CRIT, "DMA IRQ\n");
 
 		printk(KERN_CRIT "R: ");
+
+		{
 		int j;
 		// stampo 32 byte di dati
 		for (j=0; j<0x20; j++) {
 			printk("%02x", *(volatile u8 *)(card->readdma_mem+j*4));
 		}
 		printk("\n");
-
+		}
 
 /*		struct vgsm_micro_message msg;
 		vgsm_send_codec_getreg(card, 0x22);
@@ -595,10 +597,12 @@ int vgsm_card_probe(
 	
 	memset(card->readdma_mem, 0x55, (vgsm_DMA_SINGLE_CHUNK * 4));
 
+	{
 	u8 khz[] = { 0x34, 0x21, 0x21, 0x34, 0xb4, 0xa1, 0xa1, 0xb4 };
 
 	for (i=0; i<vgsm_DMA_SINGLE_CHUNK * 4; i++) {
 		*(u8 *)(card->writedma_mem + i) = khz[(i/4) % 8];
+	}
 	}
 
 	for (i=0; i<card->num_modules; i++) {

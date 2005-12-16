@@ -97,8 +97,8 @@ int main(int argc, char *argv[])
 		if (c == 'v' || (c == 0 &&
 		    !strcmp(options[optidx].name, "verbose"))) {
 			verbosity++;
-		} else if (c == 'm' || (c == 0 &&
-		    !strcmp(options[optidx].name, "module"))) {
+		} else if (c == 'd' || (c == 0 &&
+		    !strcmp(options[optidx].name, "device"))) {
 			device = optarg;
 		} else {
 			print_usage("Unknow option %s\n",

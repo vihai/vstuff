@@ -274,6 +274,8 @@ static inline const char *lapd_sframe_function_name(
 	case LAPD_SFRAME_FUNC_INVALID:
 		return "INVALID";
 	}
+
+	return "*UNKNOWN*";
 }
 
 static inline u8 lapd_uframe_make_control(

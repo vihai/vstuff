@@ -131,7 +131,7 @@ struct q931_interface *q931_open_interface(
       		goto err_fcntl_setfl;
       	}
 
-	int optlen = sizeof(intf->role);
+	socklen_t optlen = sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
 		&intf->role, &optlen)<0)
 		goto err_getsockopt;
