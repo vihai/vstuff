@@ -131,8 +131,12 @@ int main(int argc, char *argv[])
 		    !strcmp(options[optidx].name, "verbose"))) {
 			verbosity++;
 		} else {
-			print_usage("Unknow option %s\n",
-				options[optidx].name);
+			if (c) {
+				print_usage("Unknow option '%c'\n", c);
+			} else {
+				print_usage("Unknow option %s\n",
+					options[optidx].name);
+			}
 		}
 	}
 

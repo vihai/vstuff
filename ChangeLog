@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-16 13:53:53 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-356
+
+    Summary:
+      Fixed parameter handling in visdnctl
+    Revision:
+      isdn--devel--0.1--patch-356
+
+
+    removed files:
+     vgsmctl/.arch-ids/vgsmctl.id vgsmctl/vgsmctl
+
+    modified files:
+     ChangeLog vgsmctl/.arch-inventory visdnctl/visdnctl.c
+
+
 2005-12-16 13:49:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-355
 
     Summary:
