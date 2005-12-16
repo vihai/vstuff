@@ -73,6 +73,25 @@ static void vgsm_module_send_msg(
 		vgsm_send_msg(module->card, 1, msg);
 }
 
+void vgsm_send_set_padding_timeout(
+	struct vgsm_module *module,
+	u8 timeout)
+{
+	struct vgsm_micro_message msg = { };
+	
+	msg.cmd = VGSM_CMD_MAINT;
+	msg.cmd_dep = VGSM_CMD_MAINT_TIMEOUT_SET;
+
+	if (module->id == 0 || module->id == 2)
+		msg.numbytes = 0;
+	else
+		msg.numbytes = 1;
+
+	msg.payload[0] = timeout;
+	
+	vgsm_module_send_msg(module, &msg);
+}
+
 void vgsm_module_send_string(
 	struct vgsm_module *module,
 	u8 *buf,

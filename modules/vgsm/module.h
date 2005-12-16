@@ -75,6 +75,9 @@ void vgsm_module_send_ack(
 void vgsm_module_send_onoff(
 	struct vgsm_module *module,
 	int onoff_cmd);
+void vgsm_send_set_padding_timeout(
+	struct vgsm_module *module,
+	u8 timeout);
 
 void vgsm_module_init(
 	struct vgsm_module *module,

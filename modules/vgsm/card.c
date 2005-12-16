@@ -88,13 +88,13 @@ static void vgsm_write_msg(
 
 static inline void vgsm_wait_e0(struct vgsm_card *card)
 {
-	int j;
-	for (j=0; j<100; j++) {
-		if (vgsm_inb(card, VGSM_PIB_E0) == 0)
-			break;
+	int i;
 
-		printk(KERN_DEBUG "Uhuh... waiting %d for buf\n", j);
-		udelay(100);
+	for (i=0; i<100 && vgsm_inb(card, VGSM_PIB_E0); i++) {
+		udelay(10);
+
+		if (i>10)
+			printk(KERN_WARNING "Uhuh... waiting %d for buffer\n", i);
 	}
 }
 
@@ -144,6 +144,19 @@ static void vgsm_send_codec_getreg(
 	msg.payload[0] = reg_address | 0x80 | 0x40;
 
 	vgsm_send_msg(card, 0, &msg);
+}
+
+static void vgsm_send_firmware_req(
+	struct vgsm_card *card,
+	int micro)
+{
+	struct vgsm_micro_message msg = { };
+	
+	msg.cmd = VGSM_CMD_MAINT;
+	msg.cmd_dep = VGSM_CMD_MAINT_GET_FW_VER;
+	msg.numbytes = 0;
+	
+	vgsm_send_msg(card, micro, &msg);
 }
 	
 void vgsm_update_mask0(struct vgsm_card *card)
@@ -436,6 +449,16 @@ static irqreturn_t vgsm_interrupt(int irq,
 		struct vgsm_micro_message msg;
 		struct vgsm_module *module;
 
+		int micro;
+		if (int1stat == 0x01)
+			micro = 0;
+		else if (int1stat == 0x02)
+			micro = 1;
+		else {
+			WARN_ON(1);
+			goto err_unexpected_micro;
+		}
+
 		vgsm_outb(card, VGSM_PIB_E0, 0x1); /* Acquire buffer, E0 = 1 */
 		mb();
 		vgsm_read_msg(card, &msg); /* Read message */
@@ -443,19 +466,16 @@ static irqreturn_t vgsm_interrupt(int irq,
 		vgsm_outb(card, VGSM_PIB_E0, 0x0); /* Release buffer E0 = 0 */
 
 		if (msg.cmd == VGSM_CMD_S0 || msg.cmd == VGSM_CMD_S1) {
-			if (int1stat == 0x01) {
+			if (micro == 0) {
 				if (msg.cmd == VGSM_CMD_S0)
 					module = &card->modules[0];
 				else
 					module = &card->modules[1];
-			} else if (int1stat == 0x02) {
+			} else {
 				if (msg.cmd == VGSM_CMD_S0)
 					module = &card->modules[2];
 				else
 					module = &card->modules[3];
-			} else {
-				WARN_ON(1);
-				goto err_unexpected_int1stat;
 			}
 
 printk(KERN_CRIT "Received string message from module %d\n", module->id);
@@ -485,19 +505,16 @@ printk(KERN_CRIT "ASCII_MSG: %c%c%c%c%c%c%c\n",
 
 		} else if (msg.cmd == VGSM_CMD_MAINT) {
 			if (msg.cmd_dep == VGSM_CMD_MAINT_ACK) {
-				if (int1stat == 0x01) {
+				if (micro == 0) {
 					if (msg.numbytes == 0)
 						module = &card->modules[0];
 					else
 						module = &card->modules[1];
-				} else if (int1stat == 0x02) {
+				} else {
 					if (msg.numbytes == 0)
 						module = &card->modules[2];
 					else
 						module = &card->modules[3];
-				} else {
-					WARN_ON(1);
-					goto err_unexpected_int1stat;
 				}
 
 printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
@@ -507,13 +524,23 @@ printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 
 			tasklet_schedule(&card->tx_tasklet);
 		} else if (msg.cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
-			printk("CODEC RESP: %02x = %02x\n",
+			printk(KERN_INFO "CODEC RESP: %02x = %02x\n",
 				msg.payload[0], msg.payload[1]);
+		} else if (msg.cmd_dep == VGSM_CMD_MAINT_GET_FW_VER) {
+			printk(KERN_INFO "Micro %d firmware version %c%c%c%c%c%c%c\n",
+				micro,
+				msg.payload[0],
+				msg.payload[1],
+				msg.payload[2],
+				msg.payload[3],
+				msg.payload[4],
+				msg.payload[5],
+				msg.payload[6]);
 		}
 	}
 	}
 
-err_unexpected_int1stat:
+err_unexpected_micro:
 
 	return IRQ_HANDLED;
 }
@@ -679,11 +706,18 @@ int vgsm_card_probe(
 	/* Enable interrupts */
 	card->regs.mask0 = 0x00;
 	vgsm_outb(card, VGSM_MASK0, card->regs.mask0);
-
 	vgsm_outb(card, VGSM_MASK1, 0x03);
 
 	/* Start DMA */
 	vgsm_outb(card, VGSM_OPER, 0x01);
+
+	vgsm_send_set_padding_timeout(&card->modules[0], 10);
+	vgsm_send_set_padding_timeout(&card->modules[1], 10);
+	vgsm_send_set_padding_timeout(&card->modules[2], 10);
+	vgsm_send_set_padding_timeout(&card->modules[3], 10);
+
+	vgsm_send_firmware_req(card, 0);
+	vgsm_send_firmware_req(card, 1);
 
 	/* Reset codec */
 	vgsm_send_codec_setreg(card,
