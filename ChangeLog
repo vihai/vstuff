@@ -2,6 +2,30 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-16 20:52:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-360
+
+    Summary:
+      Added new commands to vgsmctl
+    Revision:
+      isdn--devel--0.1--patch-360
+
+
+    new files:
+     vgsmctl/.arch-ids/fw_update.c.id
+     vgsmctl/.arch-ids/fw_update.h.id
+     vgsmctl/.arch-ids/fw_version.c.id
+     vgsmctl/.arch-ids/fw_version.h.id
+     vgsmctl/.arch-ids/pad_timeout.c.id
+     vgsmctl/.arch-ids/pad_timeout.h.id
+     vgsmctl/.arch-ids/power.c.id vgsmctl/.arch-ids/power.h.id
+     vgsmctl/fw_update.c vgsmctl/fw_update.h vgsmctl/fw_version.c
+     vgsmctl/fw_version.h vgsmctl/pad_timeout.c
+     vgsmctl/pad_timeout.h vgsmctl/power.c vgsmctl/power.h
+
+    modified files:
+     ChangeLog
+
+
 2005-12-16 20:51:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-359
 
     Summary:
