@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 	const char *device = NULL;
 
 	for(;;) {
-		c = getopt_long(argc, argv, "", options,
+		c = getopt_long(argc, argv, "vd:", options,
 			&optidx);
 
 		if (c == -1)
@@ -101,8 +101,13 @@ int main(int argc, char *argv[])
 		    !strcmp(options[optidx].name, "device"))) {
 			device = optarg;
 		} else {
-			print_usage("Unknow option %s\n",
-				options[optidx].name);
+			if (c) {
+				print_usage("Unknow option '%c'\n",
+					c);
+			} else {
+				print_usage("Unknow option %s\n",
+					options[optidx].name);
+			}
 		}
 	}
 

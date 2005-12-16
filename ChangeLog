@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-16 13:49:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-355
+
+    Summary:
+      Fixed vgsmctl parameter handling
+    Revision:
+      isdn--devel--0.1--patch-355
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c vgsmctl/vgsmctl
+     vgsmctl/vgsmctl.c
+
+
 2005-12-16 13:37:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-354
 
     Summary:

@@ -1218,6 +1218,8 @@ static enum q931_ie_calling_party_number_type_of_number
 	case VISDN_TYPE_OF_NUMBER_ABBREVIATED:
 		return Q931_IE_CGPN_TON_ABBREVIATED;
 	}
+
+	return 0;
 }
 
 void q931_send_primitive(
