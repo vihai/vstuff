@@ -168,3 +168,10 @@ hfc-usb:
 --------
 
 - Rewrite using new model
+
+vgsm:
+-----
+
+- Implement pin changing command
+- Implement network listing command
+- Implement CACM, CAMM,  command

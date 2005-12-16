@@ -2,6 +2,60 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-16 13:09:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-353
+
+    Summary:
+      Integrated VoiSmart GSM board drivers
+    Revision:
+      isdn--devel--0.1--patch-353
+
+
+    new files:
+     chan_vgsm/.arch-ids/.arch-inventory.id chan_vgsm/.arch-ids/=id
+     chan_vgsm/.arch-ids/Makefile.am.id
+     chan_vgsm/.arch-ids/chan_vgsm.c.id
+     chan_vgsm/.arch-ids/chan_vgsm.h.id chan_vgsm/.arch-inventory
+     chan_vgsm/Makefile.am chan_vgsm/chan_vgsm.c
+     chan_vgsm/chan_vgsm.h
+     modules/include/linux/.arch-ids/vgsm.h.id
+     modules/include/linux/vgsm.h
+     modules/vgsm/.arch-ids/.arch-inventory.id
+     modules/vgsm/.arch-ids/=id
+     modules/vgsm/.arch-ids/Makefile.in.id
+     modules/vgsm/.arch-ids/card.c.id
+     modules/vgsm/.arch-ids/card.h.id
+     modules/vgsm/.arch-ids/card_inline.h.id
+     modules/vgsm/.arch-ids/codec.h.id
+     modules/vgsm/.arch-ids/module.c.id
+     modules/vgsm/.arch-ids/module.h.id
+     modules/vgsm/.arch-ids/regs.h.id
+     modules/vgsm/.arch-ids/vgsm.h.id
+     modules/vgsm/.arch-ids/vgsm_main.c.id
+     modules/vgsm/.arch-inventory modules/vgsm/Makefile.in
+     modules/vgsm/card.c modules/vgsm/card.h
+     modules/vgsm/card_inline.h modules/vgsm/codec.h
+     modules/vgsm/module.c modules/vgsm/module.h
+     modules/vgsm/regs.h modules/vgsm/vgsm.h
+     modules/vgsm/vgsm_main.c samples/.arch-ids/vgsm.conf.id
+     samples/vgsm.conf vgsmctl/.arch-ids/.arch-inventory.id
+     vgsmctl/.arch-ids/=id vgsmctl/.arch-ids/Makefile.am.id
+     vgsmctl/.arch-ids/codec.c.id vgsmctl/.arch-ids/codec.h.id
+     vgsmctl/.arch-ids/vgsmctl.c.id vgsmctl/.arch-ids/vgsmctl.h.id
+     vgsmctl/.arch-ids/vgsmctl.id vgsmctl/.arch-inventory
+     vgsmctl/Makefile.am vgsmctl/codec.c vgsmctl/codec.h
+     vgsmctl/vgsmctl vgsmctl/vgsmctl.c vgsmctl/vgsmctl.h
+
+    modified files:
+     .arch-inventory ChangeLog Makefile.am NOTES TODO
+     chan_visdn/Makefile.am configure.ac modules/Makefile.am
+     modules/core/cxc.h modules/hfc-4s/hfc-4s_main.c
+     modules/hfc-4s/st_port.c
+
+    new directories:
+     chan_vgsm chan_vgsm/.arch-ids modules/vgsm
+     modules/vgsm/.arch-ids vgsmctl vgsmctl/.arch-ids
+
+
 2005-12-15 20:41:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-352
 
     Summary:

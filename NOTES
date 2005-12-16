@@ -325,3 +325,24 @@ La trasmissione unacknowledged (simile a SOCK_DGRAM) e acknowledged
 (analoga a SOCK_SEQPACKET) sono MODALITA' di trasmissione all'interno della stessa
 Data Link Connection, quindi ho deciso di implementarle all'interno della stessa
 socket.
+
+
+VGSM
+---------------------------------------
+
+Initialization:
+
+AT<cr>
+Wait OK
+(if not, wait 200ms and retry)
+
+AT+IPR=38400
+
+Extended error codes:
+AT+CMEE=1
+
+AT+CPIN
+
+AT+CPIN=****
+
++++ IMPOSTARE OROLOGIO

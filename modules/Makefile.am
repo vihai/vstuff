@@ -22,3 +22,7 @@ endif
 #if driver_hfc_e1
 #SUBDIRS += hfc-e1
 #endif
+
+if driver_vgsm
+SUBDIRS += vgsm
+endif

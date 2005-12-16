@@ -214,6 +214,9 @@ static inline struct hlist_head *visdn_cxc_get_hash(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg)
 {
+	/* FIXME: Hashing the last pointer byte leads to non-uniform
+	   hash distribution */
+
 	return &cxc->connections_hash[
 			(unsigned long)leg &
 			((1 << VISDN_CXC_HASHBITS) - 1)];

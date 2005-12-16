@@ -508,7 +508,6 @@ void hfc_st_port_init(
 	port->visdn_port.device = &card->pci_dev->dev;
 	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
-	{
 	hfc_st_chan_init(&port->chans[D], port, "D", D,
 		hfc_D_CHAN_OFF + id*4, 2, 0, 16000);
 	hfc_st_chan_init(&port->chans[B1], port, "B1", B1,
@@ -519,7 +518,6 @@ void hfc_st_port_init(
 		hfc_E_CHAN_OFF + id*4, 2, 0, 16000);
 	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ,
 		0, 0, 0, 4000);
-	}
 }
 
 int hfc_st_port_register(

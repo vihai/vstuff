@@ -367,7 +367,8 @@ AC_ARG_ENABLE(
 	[drivers],
 	AC_HELP_STRING(
 		[--enable-drivers=<list>],
-		[Enable drivers (comma separated list of driver names), currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1]),
+		[Enable drivers (comma separated list of driver names), \
+		currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1, vgsm]),
 	drivers="$enableval")
 
 AM_CONDITIONAL(driver_hfc_usb,
@@ -378,6 +379,8 @@ AM_CONDITIONAL(driver_hfc_4s,
 	test -n "`echo $drivers | grep hfc-4s`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_hfc_e1,
 	test -n "`echo $drivers | grep hfc-e1`" || test "$drivers" = "all")
+AM_CONDITIONAL(driver_vgsm,
+	test -n "`echo $drivers | grep vgsm`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
 		etc/Makefile
@@ -385,8 +388,10 @@ AC_CONFIG_FILES([Makefile
 		scripts/visdn_configurator
 		libq931/Makefile
 		chan_visdn/Makefile
+		chan_vgsm/Makefile
 		app_visdn_ppp/Makefile
 		visdnctl/Makefile
+		vgsmctl/Makefile
 		pppd_plugin/Makefile
 		tests/Makefile
 		modules/include/kernel_config.h
@@ -394,6 +399,7 @@ AC_CONFIG_FILES([Makefile
 		modules/hfc-4s/Makefile
 		modules/hfc-pci/Makefile
 		modules/hfc-usb/Makefile
+		modules/vgsm/Makefile
 		modules/lapd/Makefile
 		modules/kfifo/Makefile
 		modules/softcxc/Makefile

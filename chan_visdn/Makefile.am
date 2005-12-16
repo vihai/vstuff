@@ -6,11 +6,9 @@ INCLUDES =					\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\
-	-I$(top_builddir)/libvisdn/		\
 	-I$(top_builddir)/libq931/		\
 	-I$(astincdir)
 
-#chan_visdn_la_LIBADD = ../libvisdn/libvisdn.la ../libq931/libq931.la
 chan_visdn_la_LIBADD = ../libq931/libq931.la
 chan_visdn_la_LDFLAGS = -module -avoid-version -no-undefined
 

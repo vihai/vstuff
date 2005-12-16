@@ -24,10 +24,11 @@ SUBDIRS += modules
 endif
 
 SUBDIRS += libq931
-SUBDIRS += etc scripts visdnctl
+SUBDIRS += etc scripts visdnctl vgsmctl
 
 if asterisk_modules
 SUBDIRS += chan_visdn
+SUBDIRS += chan_vgsm
 SUBDIRS += app_visdn_ppp
 endif
 

@@ -67,17 +67,6 @@ static struct pci_device_id hfc_pci_ids[] = {
 
 MODULE_DEVICE_TABLE(pci, hfc_pci_ids);
 
-static int __devinit hfc_probe(struct pci_dev *dev
-			, const struct pci_device_id *ent);
-static void __devexit hfc_remove(struct pci_dev *dev);
-
-static struct pci_driver hfc_driver = {
-	.name     = hfc_DRIVER_NAME,
-	.id_table = hfc_pci_ids,
-	.probe    = hfc_probe,
-	.remove   = hfc_remove,
-};
-
 static int __devinit hfc_probe(
 	struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry)
@@ -104,6 +93,14 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 
 	hfc_card_remove(card);
 }
+
+static struct pci_driver hfc_driver = {
+	.name     = hfc_DRIVER_NAME,
+	.id_table = hfc_pci_ids,
+	.probe    = hfc_probe,
+	.remove   = hfc_remove,
+};
+
 
 #ifdef DEBUG_CODE
 static ssize_t hfc_show_debug_level(
