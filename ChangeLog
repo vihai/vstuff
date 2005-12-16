@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-16 20:51:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-359
+
+    Summary:
+      Added new ioctls to vgsm
+    Revision:
+      isdn--devel--0.1--patch-359
+
+
+    modified files:
+     ChangeLog modules/vgsm/card.c modules/vgsm/card.h
+     modules/vgsm/module.c modules/vgsm/module.h
+     modules/vgsm/vgsm.h modules/vgsm/vgsm_main.c
+     vgsmctl/Makefile.am vgsmctl/codec.c vgsmctl/vgsmctl.c
+
+
 2005-12-16 20:13:36 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-358
 
     Summary:

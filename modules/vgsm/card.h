@@ -115,6 +115,9 @@ void vgsm_send_msg(
 	struct vgsm_card *card,
 	int micro,
 	struct vgsm_micro_message *msg);
+void vgsm_send_get_fw_ver(
+	struct vgsm_card *card,
+	int micro);
 
 void vgsm_update_mask0(struct vgsm_card *card);
 void vgsm_update_codec(struct vgsm_module *module);

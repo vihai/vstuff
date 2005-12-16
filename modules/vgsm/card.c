@@ -146,7 +146,7 @@ static void vgsm_send_codec_getreg(
 	vgsm_send_msg(card, 0, &msg);
 }
 
-static void vgsm_send_firmware_req(
+void vgsm_send_get_fw_ver(
 	struct vgsm_card *card,
 	int micro)
 {
@@ -691,16 +691,6 @@ int vgsm_card_probe(
 	}
 	}
 
-	for (i=0; i<card->num_modules; i++) {
-		err = vgsm_module_register(&card->modules[i], card);
-		if (err < 0)
-			goto err_module_register;
-	}
-
-	spin_lock(&vgsm_cards_list_lock);
-	list_add_tail(&card->cards_list_node, &vgsm_cards_list);
-	spin_unlock(&vgsm_cards_list_lock);
-
 	vgsm_initialize_hw(card);
 
 	/* Enable interrupts */
@@ -711,13 +701,13 @@ int vgsm_card_probe(
 	/* Start DMA */
 	vgsm_outb(card, VGSM_OPER, 0x01);
 
-	vgsm_send_set_padding_timeout(&card->modules[0], 10);
-	vgsm_send_set_padding_timeout(&card->modules[1], 10);
-	vgsm_send_set_padding_timeout(&card->modules[2], 10);
-	vgsm_send_set_padding_timeout(&card->modules[3], 10);
+	vgsm_module_send_set_padding_timeout(&card->modules[0], 10);
+	vgsm_module_send_set_padding_timeout(&card->modules[1], 10);
+	vgsm_module_send_set_padding_timeout(&card->modules[2], 10);
+	vgsm_module_send_set_padding_timeout(&card->modules[3], 10);
 
-	vgsm_send_firmware_req(card, 0);
-	vgsm_send_firmware_req(card, 1);
+	vgsm_send_get_fw_ver(card, 0);
+	vgsm_send_get_fw_ver(card, 1);
 
 	/* Reset codec */
 	vgsm_send_codec_setreg(card,
@@ -796,6 +786,16 @@ int vgsm_card_probe(
 		vgsm_module_send_onoff(&card->modules[i],
 			VGSM_CMD_MAINT_ONOFF_POWER_ON);
 	}
+
+	for (i=0; i<card->num_modules; i++) {
+		err = vgsm_module_register(&card->modules[i], card);
+		if (err < 0)
+			goto err_module_register;
+	}
+
+	spin_lock(&vgsm_cards_list_lock);
+	list_add_tail(&card->cards_list_node, &vgsm_cards_list);
+	spin_unlock(&vgsm_cards_list_lock);
 
 	return 0;
 

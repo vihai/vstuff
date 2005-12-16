@@ -96,7 +96,14 @@ static void usage(int argc, char *argv[])
 {
 	fprintf(stderr,
 		"  codec <parameter> <value>\n"
-		"\n");
+		"\n"
+		"    Available parameters are:\n"
+		"    rxgain: RX-gain (0-255)\n"
+		"    txgain: TX gain (0-255)\n"
+		"    rxpre: RX preamplifier (enabled=1/disabled=0)\n"
+		"    rxpre: TX preamplifier (enabled=1/disabled=0)\n"
+		"    dig_loop: Digital loop (enabled=1/disabled=0)\n"
+		"    anal_loop: Analog loop (enabled=1/disabled=0)\n");
 }
 
 struct module module_codec =

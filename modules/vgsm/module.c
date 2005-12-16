@@ -73,7 +73,7 @@ static void vgsm_module_send_msg(
 		vgsm_send_msg(module->card, 1, msg);
 }
 
-void vgsm_send_set_padding_timeout(
+void vgsm_module_send_set_padding_timeout(
 	struct vgsm_module *module,
 	u8 timeout)
 {

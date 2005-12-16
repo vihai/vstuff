@@ -282,6 +282,72 @@ err_copy_from_user:
 	return err;
 }
 
+static int vgsm_cdev_do_power(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module = file->private_data;
+
+	if (arg == 0) {
+		vgsm_card_lock(module->card);
+		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_ON);
+		vgsm_card_unlock(module->card);
+
+		ssleep(1);
+	} else if (arg == 1) {
+		vgsm_card_lock(module->card);
+		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);
+		vgsm_card_unlock(module->card);
+
+		msleep(200);
+
+	}
+
+	vgsm_card_lock(module->card);
+	vgsm_module_send_onoff(module, 0);
+	vgsm_card_unlock(module->card);
+
+	return 0;
+}
+
+static int vgsm_cdev_do_pad_timeout(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module = file->private_data;
+
+	if (arg < 0 || arg > 0xFF)
+		return -EINVAL;
+
+	vgsm_card_lock(module->card);
+	vgsm_module_send_set_padding_timeout(module, arg);
+	vgsm_card_unlock(module->card);
+
+	return 0;
+}
+
+static int vgsm_cdev_do_fw_version(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module = file->private_data;
+
+	vgsm_card_lock(module->card);
+	if (module->id == 0 || module->id == 1)
+		vgsm_send_get_fw_ver(module->card, 0);
+	else
+		vgsm_send_get_fw_ver(module->card, 1);
+	vgsm_card_unlock(module->card);
+
+	return -EOPNOTSUPP;
+}
+
 static int vgsm_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
@@ -291,6 +357,18 @@ static int vgsm_cdev_ioctl(
 	switch(cmd) {
 	case VGSM_IOC_CODEC_SET:
 		return vgsm_cdev_do_codec_set(inode, file, cmd, arg);
+	break;
+
+	case VGSM_IOC_POWER:
+		return vgsm_cdev_do_power(inode, file, cmd, arg);
+	break;
+
+	case VGSM_IOC_PAD_TIMEOUT:
+		return vgsm_cdev_do_pad_timeout(inode, file, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_VERSION:
+		return vgsm_cdev_do_fw_version(inode, file, cmd, arg);
 	break;
 	}
 
