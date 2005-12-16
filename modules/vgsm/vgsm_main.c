@@ -72,6 +72,9 @@ static int vgsm_cdev_open(
 	if (!module)
 		return -ENODEV;
 
+	if (module->is_open)
+		return -EBUSY;
+
 	file->private_data = module;
 
 	return 0;
@@ -81,7 +84,34 @@ static int vgsm_cdev_release(
 	struct inode *inode,
 	struct file *file)
 {
+	struct vgsm_module *module = file->private_data;
+
+	module->is_open = FALSE;
+
 	return 0;
+}
+
+ssize_t __kfifo_get_user(
+	struct kfifo *fifo,
+	void __user *buffer,
+	ssize_t len)
+{
+	ssize_t l;
+
+	len = min(len, (ssize_t)(fifo->in - fifo->out));
+
+	/* first get the data from fifo->out until the end of the buffer */
+	l = min(len, (ssize_t)(fifo->size - (fifo->out & (fifo->size - 1))));
+	if (copy_to_user(buffer, fifo->buffer + (fifo->out & (fifo->size - 1)), l))
+		return -EFAULT;
+
+	/* then get the rest (if any) from the beginning of the buffer */
+	if (copy_to_user(buffer + l, fifo->buffer, len - l))
+		return -EFAULT;
+
+	fifo->out += len;
+
+	return len;
 }
 
 static ssize_t vgsm_cdev_read(
@@ -91,34 +121,45 @@ static ssize_t vgsm_cdev_read(
 	loff_t *offp)
 {
 	struct vgsm_module *module = file->private_data;
-	int copied_bytes = 0;
 
 	DEFINE_WAIT(wait);
 
-	u8 tmpbuf[256];
-
-printk(KERN_CRIT "a\n");
 	while(!kfifo_len(module->kfifo_rx)) {
 		
-printk(KERN_CRIT "b\n");
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
-printk(KERN_CRIT "c\n");
 		if (wait_event_interruptible(module->rx_wait_queue,
 				(kfifo_len(module->kfifo_rx))))
 			return -ERESTARTSYS;
 	}
-printk(KERN_CRIT "d\n");
 
-//out:
+	/* No locking is needed as we are the only FIFO reader */
 
-	copied_bytes = kfifo_get(module->kfifo_rx, tmpbuf, count);
+	return __kfifo_get_user(module->kfifo_rx, user_buf, count);
+}
 
-	if (copy_to_user(user_buf, tmpbuf, copied_bytes))
+ssize_t __kfifo_put_user(
+	struct kfifo *fifo,
+	const void __user *buffer,
+	ssize_t len)
+{
+	ssize_t l;
+
+	len = min(len, (ssize_t)(fifo->size - fifo->in + fifo->out));
+
+	/* first put the data starting from fifo->in to buffer end */
+	l = min(len, (ssize_t)(fifo->size - (fifo->in & (fifo->size - 1))));
+	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)), buffer, l))
 		return -EFAULT;
 
-	return copied_bytes;
+	/* then put the rest (if any) at the beginning of the buffer */
+	if (copy_from_user(fifo->buffer, buffer + l, len - l))
+		return -EFAULT;
+
+	fifo->in += len;
+
+	return len;
 }
 
 static ssize_t vgsm_cdev_write(
@@ -129,61 +170,34 @@ static ssize_t vgsm_cdev_write(
 {
 	struct vgsm_module *module = file->private_data;
 	struct vgsm_card *card = module->card;
-	u8 buf[7];
 	int copied_bytes = 0;
-	int bytes_to_send;
-	int err;
 
-	DEFINE_WAIT(wait);
+	if (count >= module->kfifo_tx->size)
+		return -E2BIG;
 
-	while(copied_bytes < count) {
-		int timeout;
+	while(module->kfifo_tx->size - kfifo_len(module->kfifo_tx) < count) {
+		DEFINE_WAIT(wait);
 
-		/* Acquire buffer */
-		for (;;) {
-			vgsm_card_lock(card);
-			if (vgsm_inb(card, VGSM_PIB_E0) == 0)
-				break;
-
-			vgsm_card_unlock(card);
-			schedule();
-			/* TODO: timeout after being unable to acquire
-			   buffer for too much time */
-		}
-
-		bytes_to_send = min(sizeof(buf), count - copied_bytes);
-		if (copy_from_user(buf, user_buf, bytes_to_send)) {
-			vgsm_card_unlock(card);
-			return -EFAULT;
-		}
-
-		vgsm_module_send_string(module, buf, bytes_to_send);
-
-		vgsm_card_unlock(card);
+		if (file->f_flags & O_NONBLOCK)
+			return -EAGAIN;
 
 		prepare_to_wait(&module->tx_wait_queue, &wait,
 			TASK_UNINTERRUPTIBLE);
 
-		timeout = schedule_timeout(2 * HZ);
-		if (!timeout) {
-			// TIMEOUT!!! FIXME XXX
-			vgsm_module_send_ack(module);
-			err = -ETIMEDOUT;
-			goto err_timeout;
-		}
+		if (module->kfifo_tx->size - kfifo_len(module->kfifo_tx) < count)
+			schedule();
 
-		copied_bytes += bytes_to_send;
+		finish_wait(&module->tx_wait_queue, &wait);
+
+		if (signal_pending(current))
+			return -ERESTARTSYS;
 	}
 
-	finish_wait(&module->tx_wait_queue, &wait);
+	copied_bytes = __kfifo_put_user(module->kfifo_tx, user_buf, count);
+
+	tasklet_schedule(&card->tx_tasklet);
 
 	return copied_bytes;
-
-err_timeout:
-
-	finish_wait(&module->tx_wait_queue, &wait);
-
-	return err;
 }
 
 static unsigned int vgsm_cdev_poll(
@@ -191,14 +205,18 @@ static unsigned int vgsm_cdev_poll(
 	poll_table *wait)
 {
 	struct vgsm_module *module = file->private_data;
+	unsigned int res = 0;
 
 	poll_wait(file, &module->rx_wait_queue, wait);
 	poll_wait(file, &module->tx_wait_queue, wait);
 
 	if (kfifo_len(module->kfifo_rx))
-		return POLLIN | POLLRDNORM | POLLOUT;
-	else
-		return POLLOUT;
+		res |= POLLIN | POLLRDNORM;
+
+	if (module->kfifo_tx->size - kfifo_len(module->kfifo_tx) > 0)
+		res |= POLLOUT;
+
+	return res;
 }
 
 static int vgsm_cdev_do_codec_set(

@@ -40,12 +40,12 @@ static inline void vgsm_outl(struct vgsm_card *card, int offset, u32 value)
 
 static inline void vgsm_card_lock(struct vgsm_card *card)
 {
-	spin_lock(&card->lock);
+	spin_lock_bh(&card->lock);
 }
 
 static inline void vgsm_card_unlock(struct vgsm_card *card)
 {
-	spin_unlock(&card->lock);
+	spin_unlock_bh(&card->lock);
 }
 
 #endif

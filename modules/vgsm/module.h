@@ -20,6 +20,12 @@
 #include <linux/visdn/port.h>
 #include <linux/visdn/chan.h>
 
+enum vgsm_module_status
+{
+	VGSM_MODULE_STATUS_RX_ACK_PENDING,
+	VGSM_MODULE_STATUS_TX_ACK_PENDING,
+};
+
 struct vgsm_card;
 struct vgsm_module
 {
@@ -28,6 +34,7 @@ struct vgsm_module
 	int id;
 
 	dev_t devt;
+	BOOL is_open;
 
 	struct class_device class_device;
 	
@@ -46,6 +53,8 @@ struct vgsm_module
 
 	/* One channel per port */
 	struct visdn_chan visdn_chan;
+
+	unsigned long status;
 
 	u8 rx_gain;
 	u8 tx_gain;

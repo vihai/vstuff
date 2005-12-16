@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
+#include <linux/bitops.h>
 
 #include "vgsm.h"
 #include "card.h"
@@ -85,11 +86,24 @@ static void vgsm_write_msg(
 	iowrite8(msg->raw[7], card->io_mem + VGSM_PIB_DC);
 }
 
+static inline void vgsm_wait_e0(struct vgsm_card *card)
+{
+	int j;
+	for (j=0; j<100; j++) {
+		if (vgsm_inb(card, VGSM_PIB_E0) == 0)
+			break;
+
+		printk(KERN_DEBUG "Uhuh... waiting %d for buf\n", j);
+		udelay(100);
+	}
+}
+
 void vgsm_send_msg(
 	struct vgsm_card *card,
 	int micro,
 	struct vgsm_micro_message *msg)
 {
+	vgsm_wait_e0(card);
 	vgsm_write_msg(card, msg);
 
 	if (micro == 0)
@@ -214,6 +228,66 @@ void vgsm_update_codec(struct vgsm_module *module)
 	vgsm_send_codec_setreg(card, VGSM_CODEC_LOOPB, card->regs.codec_loop);
 }
 
+static inline char escape_unprintable(char c)
+{
+	if (isprint(c))
+		return c;
+	else
+		return ' ';
+}
+
+static void vgsm_card_rx_tasklet(unsigned long data)
+{
+	struct vgsm_card *card = (struct vgsm_card *)data;
+	int i;
+
+	vgsm_card_lock(card);
+
+	for(i=0; i<card->num_modules; i++) {
+		struct vgsm_module *module;
+
+		module = &card->modules[i];
+
+		if (module->kfifo_rx->size - kfifo_len(module->kfifo_rx) > 8 &&
+		    test_and_clear_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
+							&module->status)) {
+			vgsm_module_send_ack(module);
+		}
+	}
+
+	vgsm_card_unlock(card);
+}
+
+static void vgsm_card_tx_tasklet(unsigned long data)
+{
+	struct vgsm_card *card = (struct vgsm_card *)data;
+	int i;
+
+	vgsm_card_lock(card);
+	for(i=0; i<card->num_modules; i++) {
+		struct vgsm_module *module;
+
+		card->rr_last_module++;
+
+		if (card->rr_last_module >= card->num_modules)
+			card->rr_last_module = 0;
+
+		module = &card->modules[card->rr_last_module];
+
+		if (kfifo_len(module->kfifo_tx) &&
+		    !test_and_set_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
+							&module->status)) {
+
+			u8 buf[7];
+			int bytes_to_send = __kfifo_get(module->kfifo_tx, buf, 7);
+
+			wake_up(&module->tx_wait_queue);
+
+			vgsm_module_send_string(module, buf, bytes_to_send);
+		}
+	}
+	vgsm_card_unlock(card);
+}
 
 /* HW initialization */
 
@@ -299,14 +373,6 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 
 }
 
-static inline char escape_unprintable(char c)
-{
-	if (isprint(c))
-		return c;
-	else
-		return ' ';
-}
-
 static irqreturn_t vgsm_interrupt(int irq, 
 	void *dev_id, 
 	struct pt_regs *regs)
@@ -330,13 +396,9 @@ static irqreturn_t vgsm_interrupt(int irq,
 	int1stat = vgsm_inb(card, VGSM_INT1STAT) & 0x03;
 	mb();
 	vgsm_outb(card, VGSM_INT0STAT, int0stat);
-	//vgsm_outb(card, VGSM_INT1STAT, int1stat);
 
 	if (!int0stat && !int1stat)
 		return IRQ_NONE;
-
-	printk(KERN_CRIT "%02x %02x %02x\n", int0stat, int1stat,
-		vgsm_inb(card, VGSM_AUXD));
 
 	if (int0stat &
 		(VGSM_INT1STAT_WR_REACH_INT |
@@ -371,26 +433,16 @@ static irqreturn_t vgsm_interrupt(int irq,
 		vgsm_msg(KERN_WARNING, "PCI target abort\n");
 
 	if (int1stat) {
-		struct vgsm_module *module;
 		struct vgsm_micro_message msg;
+		struct vgsm_module *module;
 
-		/* Reading message */
-		printk(KERN_DEBUG "int1stat = %02x\n", int1stat);
-
-		/* Locking buffer, E0 = 1 */
-		vgsm_outb(card, VGSM_PIB_E0, 0x1);
+		vgsm_outb(card, VGSM_PIB_E0, 0x1); /* Acquire buffer, E0 = 1 */
 		mb();
-		
-		/* Reading message */
-		vgsm_read_msg(card, &msg);
-
+		vgsm_read_msg(card, &msg); /* Read message */
 		mb();
-		
-		/* Freeing buffer E0 = 0 */
-		vgsm_outb(card, VGSM_PIB_E0, 0x0);
+		vgsm_outb(card, VGSM_PIB_E0, 0x0); /* Release buffer E0 = 0 */
 
 		if (msg.cmd == VGSM_CMD_S0 || msg.cmd == VGSM_CMD_S1) {
-			
 			if (int1stat == 0x01) {
 				if (msg.cmd == VGSM_CMD_S0)
 					module = &card->modules[0];
@@ -402,35 +454,34 @@ static irqreturn_t vgsm_interrupt(int irq,
 				else
 					module = &card->modules[3];
 			} else {
-				printk(KERN_ERR "Unexpected int1stat == '%d'\n", int1stat);
+				WARN_ON(1);
 				goto err_unexpected_int1stat;
 			}
 
 printk(KERN_CRIT "Received string message from module %d\n", module->id);
 
-			printk(KERN_CRIT "ASCII_MSG: %c%c%c%c%c%c%c\n",
-				escape_unprintable(msg.payload[0]),
-				escape_unprintable(msg.payload[1]),
-				escape_unprintable(msg.payload[2]),
-				escape_unprintable(msg.payload[3]),
-				escape_unprintable(msg.payload[4]),
-				escape_unprintable(msg.payload[5]),
-				escape_unprintable(msg.payload[6]));
+printk(KERN_CRIT "ASCII_MSG: %c%c%c%c%c%c%c\n",
+	escape_unprintable(msg.payload[0]),
+	escape_unprintable(msg.payload[1]),
+	escape_unprintable(msg.payload[2]),
+	escape_unprintable(msg.payload[3]),
+	escape_unprintable(msg.payload[4]),
+	escape_unprintable(msg.payload[5]),
+	escape_unprintable(msg.payload[6]));
 
-			/* Got msg from micro, now send ACK */
-			
+		/* Got msg from micro, now send ACK */
+		
 			if (msg.cmd_dep != 0)
 				printk(KERN_ERR "cmd_dep != 0 ????\n");
 
-			/* Check E0 status - See Seletech spec. */
-			if (vgsm_inb(card, VGSM_PIB_E0))
-				printk(KERN_ERR "E0 != 0 ohhhhhhh\n");
-
-			vgsm_module_send_ack(module);
-
 			__kfifo_put(module->kfifo_rx, msg.payload, msg.numbytes);
 
+			set_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
+				&module->status);
+
 			wake_up(&module->rx_wait_queue);
+
+			tasklet_schedule(&card->rx_tasklet);
 
 		} else if (msg.cmd == VGSM_CMD_MAINT) {
 			if (msg.cmd_dep == VGSM_CMD_MAINT_ACK) {
@@ -445,19 +496,21 @@ printk(KERN_CRIT "Received string message from module %d\n", module->id);
 					else
 						module = &card->modules[3];
 				} else {
-					printk(KERN_ERR
-						"Unexpected int1stat == '%d'\n",
-						int1stat);
+					WARN_ON(1);
 					goto err_unexpected_int1stat;
 				}
+
 printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 
-				wake_up(&module->tx_wait_queue);
-			} else if (msg.cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
-				printk("CODEC RESP: %02x = %02x\n",
-					msg.payload[0], msg.payload[1]);
-			}
+			clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
+				&module->status);
+
+			tasklet_schedule(&card->tx_tasklet);
+		} else if (msg.cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
+			printk("CODEC RESP: %02x = %02x\n",
+				msg.payload[0], msg.payload[1]);
 		}
+	}
 	}
 
 err_unexpected_int1stat:
@@ -485,6 +538,12 @@ int vgsm_card_probe(
 	memset(card, 0, sizeof(*card));
 
 	spin_lock_init(&card->lock);
+
+	tasklet_init(&card->rx_tasklet, vgsm_card_rx_tasklet,
+			(unsigned long)card);
+
+	tasklet_init(&card->tx_tasklet, vgsm_card_tx_tasklet,
+			(unsigned long)card);
 
 	card->id = numcards++;
 
@@ -678,6 +737,19 @@ int vgsm_card_probe(
 	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG32,
 		VGSM_CODEC_RXG32_2_0 | VGSM_CODEC_RXG32_3_0);
 
+	/* Ensure the modules are turned off */
+	for(i=0; i<card->num_modules; i++) {
+		vgsm_module_send_onoff(&card->modules[i],
+			VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);
+	}
+
+	msleep(200);
+
+	for(i=0; i<card->num_modules; i++)
+		vgsm_module_send_onoff(&card->modules[i], 0);
+
+	ssleep(5);
+
 	for(i=0; i<card->num_modules; i++) {
 		vgsm_module_send_onoff(&card->modules[i],
 			VGSM_CMD_MAINT_ONOFF_POWER_ON |
@@ -733,8 +805,28 @@ void vgsm_card_remove(struct vgsm_card *card)
 
 	for(i=0; i<card->num_modules; i++) {
 		vgsm_module_send_onoff(&card->modules[i],
+			VGSM_CMD_MAINT_ONOFF_POWER_ON |
+			VGSM_CMD_MAINT_ONOFF_ON);
+	}
+
+	ssleep(1);
+
+	for(i=0; i<card->num_modules; i++) {
+		vgsm_module_send_onoff(&card->modules[i],
+			VGSM_CMD_MAINT_ONOFF_POWER_ON);
+	}
+
+	ssleep(5); /* Leave 5s to the modules for shoutdown */
+
+	for(i=0; i<card->num_modules; i++) {
+		vgsm_module_send_onoff(&card->modules[i],
 			VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);
 	}
+
+	msleep(200);
+
+	for(i=0; i<card->num_modules; i++)
+		vgsm_module_send_onoff(&card->modules[i], 0);
 
 	/* Disable IRQs */
 	vgsm_outb(card, VGSM_MASK0, 0x00);

@@ -77,6 +77,10 @@ struct vgsm_card
 		u8 mask0;
 		u8 codec_loop;
 	} regs;
+
+	struct tasklet_struct rx_tasklet;
+	struct tasklet_struct tx_tasklet;
+	int rr_last_module;
 };
 
 struct vgsm_micro_message
