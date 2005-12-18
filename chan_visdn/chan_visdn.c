@@ -3087,7 +3087,7 @@ err_ast_chan:
 	c->value = cause;
 	q931_ies_add_put(&resp_ies, &c->ie);
 
-	q931_send_primitive(visdn_chan->q931_call,
+	q931_send_primitive(q931_call,
 		Q931_CCB_RESUME_REJECT_REQUEST, &resp_ies);
 
 	return;
@@ -3411,6 +3411,7 @@ static void visdn_q931_suspend_indication(
 	FUNC_DEBUG();
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	enum q931_ie_cause_value cause;
 
@@ -3488,8 +3489,6 @@ static void visdn_q931_suspend_indication(
 		q931_send_primitive(remote_call,
 			Q931_CCB_NOTIFY_REQUEST, &response_ies);
 	}
-
-	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	if (!ast_chan->whentohangup ||
 	    time(NULL) + 45 < ast_chan->whentohangup)
