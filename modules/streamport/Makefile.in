@@ -90,8 +90,8 @@ else
 endif
 
 EXTRA_CFLAGS=					\
-	-I $(abssrcdir)/../include/		\
-	-I $(abssrcdir)/../linux_compat/
+	-I$(abssrcdir)/../include/		\
+	-I$(abssrcdir)/../linux_compat/
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
@@ -111,7 +111,7 @@ $(MODULE)-y	:= $(OBJS)
 all:
 	-@mkdir -p ../.tmp_versions
 	@ln -sf ../.tmp_versions .
-	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
+	$(MAKE) -C $(kblddir) modules M=${abssrcdir} KBUILD_VERBOSE=1
 install: $(MODULE).ko
 	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
 clean:

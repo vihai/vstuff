@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-18 15:40:50 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-361
+
+    Summary:
+      Fixed compilation errors caused by a whitespace between -I and the include path
+    Revision:
+      isdn--devel--0.1--patch-361
+
+
+    modified files:
+     ChangeLog modules/ppp/Makefile.in
+     modules/streamport/Makefile.in
+
+
 2005-12-16 20:52:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-360
 
     Summary:

@@ -89,7 +89,7 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS= -I $(abssrcdir)/../include/
+EXTRA_CFLAGS= -I$(abssrcdir)/../include/
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
