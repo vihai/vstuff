@@ -188,6 +188,7 @@ void hfc_fifo_drop(struct hfc_fifo *fifo, int size)
 
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 {
+	int available_octets;
 
 	if (*fifo->f1 == *fifo->f2) {
 		// nothing received, strange eh?
@@ -199,8 +200,9 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 //	fifo->drops++;
 
-	int available_octets = hfc_fifo_used_rx(fifo) + 1;
+	available_octets = hfc_fifo_used_rx(fifo) + 1;
 
+	{
 	// Calculate beginning of the next frame
 	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), available_octets);
 
@@ -208,6 +210,7 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 	// Set Z2 for the next frame we're going to receive
 	*Z2_F2(fifo) = newz2;
+	}
 }
 
 int hfc_fifo_is_running(struct hfc_fifo *fifo)

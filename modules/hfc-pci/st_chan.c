@@ -363,12 +363,11 @@ static int hfc_st_chan_frame_xmit(
 {
 	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
+	struct hfc_fifo *fifo = &chan->tx_fifo;
 
 	hfc_card_lock(card);
 
 	hfc_st_port_check_l1_up(chan->port);
-
-	struct hfc_fifo *fifo = &chan->tx_fifo;
 
 	if (!hfc_fifo_free_frames(fifo) <= 1) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
@@ -410,11 +409,13 @@ static int hfc_st_chan_frame_xmit(
 
 	hfc_fifo_mem_write(fifo, skb->data, skb->len);
 
+	{
 	// Move Z1 and jump to next frame
 	u16 newz1 = Z_inc(fifo, *Z1_F1(fifo), skb->len);
 	*Z1_F1(fifo) = newz1;
 	*fifo->f1 = F_inc(fifo, *fifo->f1, 1);
 	*Z1_F1(fifo) = newz1;
+	}
 
 	hfc_card_unlock(card);
 
@@ -434,6 +435,10 @@ void hfc_st_chan_rx_work(void *data)
 	struct hfc_st_chan *chan = data;
 	struct hfc_card *card = chan->port->card;
 	struct hfc_fifo *fifo = &chan->rx_fifo;
+	struct sk_buff *skb;
+	int frame_size;
+	u16 newz2;
+	struct { u8 crc[2], stat; } __attribute((packed)) stat;
 
 	hfc_card_lock(card);
 
@@ -441,7 +446,7 @@ void hfc_st_chan_rx_work(void *data)
 		goto no_frames;
 
 	// frame_size includes CRC+CRC+STAT
-	int frame_size = hfc_fifo_get_frame_size(fifo);
+	frame_size = hfc_fifo_get_frame_size(fifo);
 
 	if (frame_size < 3) {
 		hfc_debug_chan(chan, 3,
@@ -463,9 +468,7 @@ void hfc_st_chan_rx_work(void *data)
 		goto err_empty_frame;
 	}
 
-	struct sk_buff *skb =
-		visdn_alloc_skb(frame_size - 3);
-
+	skb = visdn_alloc_skb(frame_size - 3);
 	if (!skb) {
 		hfc_msg_chan(chan, KERN_ERR,
 			"cannot allocate skb: frame dropped\n");
@@ -477,15 +480,13 @@ void hfc_st_chan_rx_work(void *data)
 	}
 
 	// Calculate beginning of the next frame
-	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
+	newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
 
 	// We cannot use hfc_fifo_get because of different semantic of
 	// "available bytes" and to avoid useless increment of Z2
 	hfc_fifo_mem_read(fifo,
 		skb_put(skb, frame_size - 3),
 		frame_size - 3);
-
-	struct { u8 crc[2], stat; } __attribute((packed)) stat;
 
 	hfc_fifo_mem_read_z(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 3),
 		&stat, sizeof(stat));
@@ -567,10 +568,11 @@ static ssize_t hfc_st_chan_read(
 {
 	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
+	int copied_octets;
 
 	hfc_card_lock(card);
 
-	int copied_octets = hfc_fifo_used_rx(&chan->rx_fifo);
+	copied_octets = hfc_fifo_used_rx(&chan->rx_fifo);
 	if (copied_octets > count)
 		copied_octets = count;
 
@@ -591,10 +593,11 @@ static ssize_t hfc_st_chan_write(
 {
 	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
+	int copied_octets;
 
 	hfc_card_lock(card);
 
-	int copied_octets = hfc_fifo_free_tx(&chan->tx_fifo);
+	copied_octets = hfc_fifo_free_tx(&chan->tx_fifo);
 	if (copied_octets > count)
 		copied_octets = count;
 

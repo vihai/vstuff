@@ -43,7 +43,8 @@
 		(card)->pci_dev->dev.bus_id,		\
 		## arg)
 
-struct hfc_card {
+struct hfc_card
+{
 	spinlock_t lock;
 
 	struct pci_dev *pci_dev;

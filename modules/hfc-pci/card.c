@@ -32,19 +32,19 @@ static ssize_t hfc_show_fifo_state(
 {
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
-
+	int i;
 	int len = 0;
 
 	len += snprintf(buf + len, PAGE_SIZE - len,
 		"       Receive                   Transmit\n"
 		"Fifo#  F1 F2   Z1   Z2 Used      F1 F2   Z1   Z2 Used Connected\n");
-	int i;
-	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
-		if (!card->st_port.chans[i].has_real_fifo)
-			continue;
 
+	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
 		struct hfc_fifo *fifo_rx = &card->st_port.chans[i].rx_fifo;
 		struct hfc_fifo *fifo_tx = &card->st_port.chans[i].tx_fifo;
+
+		if (!card->st_port.chans[i].has_real_fifo)
+			continue;
 
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			"%2d     %02x %02x %04x %04x %4d %c%c%c"
@@ -227,6 +227,9 @@ static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
 static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct hfc_card *card = dev_id;
+	u8 status;
+	u8 s1;
+	u8 s2;
 
 	if (unlikely(!card)) {
 		hfc_msg(KERN_CRIT,
@@ -235,7 +238,7 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		return IRQ_NONE;
 	}
 
-	u8 status = hfc_inb(card, hfc_STATUS);
+	status = hfc_inb(card, hfc_STATUS);
 	if (!(status & hfc_STATUS_ANYINT)) {
 		// maybe we are sharing the irq
 		return IRQ_NONE;
@@ -260,8 +263,8 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * > to access data in the memory window during this time.
 	 */
 
-	u8 s1 = hfc_inb(card, hfc_INT_S1);
-	u8 s2 = hfc_inb(card, hfc_INT_S2);
+	s1 = hfc_inb(card, hfc_INT_S1);
+	s2 = hfc_inb(card, hfc_INT_S2);
 
 	if (s1 != 0) {
 		if (s1 & hfc_INT_S1_TIMER)
@@ -349,7 +352,7 @@ int __devinit hfc_card_probe(
 		goto err_alloc_hfccard;
 	}
 
-	memset(card, 0x00, sizeof(*card));
+	memset(card, 0, sizeof(*card));
 
 	spin_lock_init(&card->lock);
 
