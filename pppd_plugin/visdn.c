@@ -24,7 +24,7 @@
 #include "fsm.h"
 #include "lcp.h"
 
-#include <visdn.h>
+#include <linux/visdn/cxc.h>
 
 static int device_got_set = 0;
 
@@ -100,12 +100,12 @@ static int visdn_connect(void)
 	dbglog("PPPovISDN - control device opened successfully");
 
 	struct visdn_connect vc;
-	strcpy(vc.src_chanid, "");
-	snprintf(vc.dst_chanid, sizeof(vc.dst_chanid), "%s", devnam);
+	vc.src_chan_id = 0;
+	vc.dst_chan_id = atoi(devnam);
 	vc.flags = 0;
 
-	if (ioctl(fd, VISDN_IOC_CONNECT, (caddr_t)&vc) < 0) {
-		fatal("ioctl(VISDN_CONNECT): %m\n");
+	if (ioctl(fd, VISDN_IOC_CONNECT_PATH, (caddr_t)&vc) < 0) {
+		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");
 	}
 
 	dbglog("PPPovISDN - channel connected to ppp device");

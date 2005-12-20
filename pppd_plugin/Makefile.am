@@ -6,8 +6,7 @@ visdn_la_SOURCES = visdn.c
 
 INCLUDES =					\
 	-I$(top_builddir)			\
-	-I$(top_builddir)/visdn-core/		\
-	-I$(top_builddir)/visdn-ppp/		\
+	-I$(top_builddir)/modules/include/	\
 	-I$(pppdincdir)
 
 visdn_la_LIBADD =

@@ -299,7 +299,7 @@ AC_ARG_WITH(
 	]
 	)
 
-if [[ "$enable_pppd" = "yes" ]]; then
+if [[ "$enable_pppd" = "yes" -o "$enable_pppd" = "auto" ]]; then
 	if [[ ! -d $pppdconfdir ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Cannot locate pppd configuration directory])
@@ -312,6 +312,8 @@ if [[ "$enable_pppd" = "yes" ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Missing pppd headers])
 	fi
+
+	enable_pppd="yes"
 fi
 
 AC_SUBST(pppdconfdir)
