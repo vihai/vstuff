@@ -1,6 +1,6 @@
 
 astmod_LTLIBRARIES = chan_vgsm.la
-chan_vgsm_la_SOURCES = chan_vgsm.c chan_vgm.h
+chan_vgsm_la_SOURCES = chan_vgsm.c chan_vgsm.h
 
 INCLUDES =					\
 	-I$(top_builddir)			\
