@@ -19,7 +19,7 @@ vgsmctl_LDADD =
 
 noinst_HEADERS = \
 	vgsmctl.h	\
-	codec.h
+	codec.h		\
 	power.h		\
 	pad_timeout.h	\
 	fw_version.h	\
