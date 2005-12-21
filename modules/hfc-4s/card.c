@@ -637,7 +637,7 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 	card->pcm_port.master = TRUE;
 	card->pcm_port.bitrate = 0;
-	hfc_pcm_port_configure(&card->pcm_port, 32);
+	card->pcm_port.num_chans = 0;
 
 	hfc_outb(card, hfc_R_PWM_MD,
 		hfc_R_PWM_MD_V_PWM0_MD_PUSH |

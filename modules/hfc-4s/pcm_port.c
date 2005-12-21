@@ -75,7 +75,7 @@ static ssize_t hfc_store_bitrate(
 	hfc_update_pcm_md1(card);
 
 // Temporary workaround for too big kmalloc
-hfc_pcm_port_configure(port, 1);
+	hfc_pcm_port_configure(port, 0);
 
 /*	switch(port->bitrate) {
 	case 0: hfc_pcm_port_configure(port, 32); break;
@@ -280,7 +280,7 @@ err_create_file_master:
 }
 
 void hfc_pcm_port_sysfs_delete_files(
-        struct hfc_pcm_port *port)
+	struct hfc_pcm_port *port)
 {
 	visdn_port_remove_file(
 		&port->visdn_port,
@@ -367,6 +367,9 @@ int hfc_pcm_port_register(
 	err = visdn_port_register(&port->visdn_port);
 	if (err < 0)
 		goto err_port_register;
+
+printk(KERN_DEBUG "NUM CHANS: %d\n", port->num_chans);
+	port->num_chans = 0;
 
 	for (i=0; i<port->num_chans; i++) {
 		err = hfc_pcm_chan_register(&port->chans[i]);
