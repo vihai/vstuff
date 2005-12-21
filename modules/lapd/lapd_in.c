@@ -285,7 +285,7 @@ static inline int lapd_pass_frame_to_socket_te(
 			     lapd_sock->state ==
 				LAPD_DLS_8_TIMER_RECOVERY) &&
 			    lapd_sock->sapi == hdr->addr.sapi &&
-			    lapd_sock->usr_tme->tei == hdr->addr.tei) {
+			    lapd_sock->tei == hdr->addr.tei) {
 
 				skb->sk = sk;
 

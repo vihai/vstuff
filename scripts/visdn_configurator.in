@@ -94,6 +94,9 @@ function read_netdev_block
 						set $NETDEV_DEVNAME role te
 				fi
 
+				$VISDNCTL netdev \
+					set $NETDEV_DEVNAME tei $NETDEV_TEI
+
 				return
 			else
 				echo "Invalid block closing tag '$BASH_REMATCH'"

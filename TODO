@@ -87,13 +87,11 @@ visdn_core:
 lapd:
 -----
 
-- Implement point-to-point and static TEIs
-
 - Implement automatic TEI check for TEIs that are presumably unused and could
   be released
 
 - When allmulti flag is changed while the interface is UP, Tei Mgmt entities
-  are not release/allocated correctly. The interface needs to be put down and
+  are not released/allocated correctly. The interface needs to be put down and
   than up to make it work
 
 - Implement SOCK_RAW sockets (?)
@@ -102,14 +100,7 @@ lapd:
 
 - Implement frame acknowledging throught outgoing i-frames instead of specific RR
 
-- Indagate whether it is possiblle to strictly serialize frames coming from the
-  same device (and thus going to the same socket). Currently netif_rx spreads the
-  load on per-CPU queues and frames may get analyzed concurrently.
-
 - Check what happens when 64 sockets are open (every dynamic TEIs)
-
-- Should we add incoming interface, interface role and packet_type to ethereal's
-  frame?
 
 - Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
   safe, since ISDN interfaces will never run AppleTalk, however it is an ugly

@@ -19,6 +19,7 @@
 #include "tei_mgmt.h"
 
 extern struct hlist_head lapd_utme_hash;
+extern rwlock_t lapd_utme_hash_lock;
 
 struct lapd_utme
 {

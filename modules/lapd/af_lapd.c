@@ -226,51 +226,6 @@ void __exit lapd_proc_exit(void)
 
 #endif
 
-static int lapd_change_mtu(struct net_device *dev, int mtu)
-{
-	lapd_debug_dev(dev, "lapd_change_mtu()\n");
-
-	return -EINVAL;
-}
-
-static int lapd_mac_addr(struct net_device *dev, void *addr)
-{
-	lapd_debug_dev(dev, "lapd_mac_addr()\n");
-
-	return -EINVAL;
-}
-
-static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
-{
-	if(!skb->dev)
-		return 0;
-
-	haddr[0] = skb->dev->dev_addr[0];
-
-	return 1;
-}
-
-void setup_lapd(struct net_device *netdev)
-{
-	netdev->change_mtu         = lapd_change_mtu;
-	netdev->hard_header        = NULL;
-	netdev->rebuild_header     = NULL;
-	netdev->set_mac_address    = lapd_mac_addr;
-	netdev->hard_header_cache  = NULL;
-	netdev->header_cache_update= NULL;
-	netdev->hard_header_parse  = lapd_hard_header_parse;
-
-	netdev->type               = ARPHRD_LAPD;
-	netdev->hard_header_len    = 0;
-	netdev->addr_len           = 1;
-	netdev->tx_queue_len       = 10;
-
-	memset(netdev->broadcast, 0x00, sizeof(netdev->broadcast));
-
-	netdev->flags              = IFF_NOARP;
-}
-EXPORT_SYMBOL(setup_lapd);
-
 static void lapd_sock_destruct(struct sock *sk)
 {
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
@@ -471,6 +426,7 @@ static int lapd_ioctl(
 	case SIOCSIFLINK:
 	case SIOCGIFHWADDR:
 	case SIOCSIFHWADDR:
+	case SIOCSIFHWBROADCAST:
 	case SIOCGIFFLAGS:
 	case SIOCSIFFLAGS:
 	case SIOCGIFMTU:
@@ -696,8 +652,10 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 {
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 	int err = 0;
+	int bound_socket_present = FALSE;
+	struct net_device *dev;
 
-	struct net_device *dev = dev_get_by_name(devname);
+	dev = dev_get_by_name(devname);
 	if (dev == NULL) {
 		err = -ENODEV;
 		goto err_nodev;
@@ -718,50 +676,64 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_dev_not_up;
 	}
 
+	{
+	int i;
+	struct sock *othersk = NULL;
+	struct hlist_node *node;
+
+	read_lock_bh(&lapd_hash_lock);
+	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+		sk_for_each(othersk, node, &lapd_hash[i]) {
+			if (to_lapd_sock(othersk)->nt_mode &&
+			    to_lapd_sock(othersk)->dev == dev) {
+
+				bound_socket_present = TRUE;
+
+				break;
+			}
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+	}
+
 	if (dev->flags & IFF_ALLMULTI) {
-		struct sock *othersk = NULL;
-		struct hlist_node *node;
-		int i;
+
+		if (bound_socket_present) {
+			err = -EBUSY;
+			goto err_socket_already_present;
+		}
 
 		lapd_sock->nt_mode = TRUE;
 
-		/* Do not allow binding more than one socket to the
-		 * same interface.
-		 */
-
-		read_lock_bh(&lapd_hash_lock);
-
-		for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
-			sk_for_each(othersk, node, &lapd_hash[i]) {
-				if (to_lapd_sock(othersk)->nt_mode &&
-				    to_lapd_sock(othersk)->dev == dev) {
-					read_unlock_bh(&lapd_hash_lock);
-					err = -EBUSY;
-					goto err_socket_already_present;
-				}
-			}
-		}
-		read_unlock_bh(&lapd_hash_lock);
-
 		sk->sk_state = TCP_SYN_SENT;
-	} else {
-		lapd_sock->nt_mode = FALSE;
 
-		if (dev->flags & IFF_POINTOPOINT)
-			lapd_utme_set_static_tei(lapd_sock->usr_tme, 0);
-
-		sk->sk_state = TCP_ESTABLISHED;
-	}
-
-	if (lapd_sock->nt_mode) {
+		lapd_sock->tei = dev->broadcast[0];
 		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
 	} else {
-		lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
+		if (dev->flags & IFF_NOARP &&
+		    bound_socket_present) {
+			err = -EBUSY;
+			goto err_socket_already_present;
+		}
 
-		lapd_sock->usr_tme = lapd_utme_alloc(dev);
+		lapd_sock->nt_mode = FALSE;
 
-		lapd_utme_get(lapd_sock->usr_tme);
-		hlist_add_head(&lapd_sock->usr_tme->node, &lapd_utme_hash);
+		sk->sk_state = TCP_ESTABLISHED;
+
+		if (dev->flags & IFF_NOARP) {
+			lapd_sock->usr_tme = NULL; 
+			lapd_sock->tei = dev->broadcast[0];
+			lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
+		} else {
+			lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
+
+			lapd_sock->usr_tme = lapd_utme_alloc(dev);
+			lapd_utme_get(lapd_sock->usr_tme);
+
+			read_lock_bh(&lapd_utme_hash_lock);
+			hlist_add_head(&lapd_sock->usr_tme->node, &lapd_utme_hash);
+			read_unlock_bh(&lapd_utme_hash_lock);
+		}
 	}
 
 	sk->sk_bound_dev_if = dev->ifindex;
@@ -879,23 +851,48 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 	break;
 
 	case LAPD_TEI:
-		/* TODO
-		 * release TEI?
-		 * check static TEI?
-		 */
 
 		if (optlen != sizeof(int)) {
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
 
+		if (!lapd_sock->dev) {
+			err = -EINVAL;
+			goto err_invalid_optlen;
+		}
+
 		/* Static TEIs are 0-63 */
-		if (intoptval < 0 || intoptval > 63) {
+		if (intoptval >= 0 && intoptval <= 63) {
+
+			if (lapd_sock->usr_tme) {
+				read_lock_bh(&lapd_utme_hash_lock);
+				hlist_del(&lapd_sock->usr_tme->node);
+				lapd_utme_put(lapd_sock->usr_tme);
+
+				lapd_utme_put(lapd_sock->usr_tme);
+				read_unlock_bh(&lapd_utme_hash_lock);
+
+				lapd_sock->usr_tme = NULL;
+			}
+
+			lapd_sock->tei = intoptval;
+			lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
+		} else if (intoptval == 64) {
+			if (!lapd_sock->usr_tme) {
+				lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
+				lapd_utme_get(lapd_sock->usr_tme);
+
+				read_lock_bh(&lapd_utme_hash_lock);
+				hlist_add_head(&lapd_sock->usr_tme->node, &lapd_utme_hash);
+				read_unlock_bh(&lapd_utme_hash_lock);
+			}
+
+			lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
+		} else {
 			err = -EINVAL;
 			goto err_invalid_optval;
 		}
-
-		lapd_utme_set_static_tei(lapd_sock->usr_tme, intoptval);
 	break;
 
 	case LAPD_TEI_MGMT_T201:
@@ -1104,10 +1101,7 @@ static int lapd_getsockopt(
 			goto err_invalid_optlen;
 		}
 
-		if (lapd_sock->nt_mode)
-			val = lapd_sock->tei;
-		else
-			val = lapd_sock->usr_tme->tei;
+		val = lapd_sock->tei;
 	break;
 
 	case LAPD_TEI_MGMT_STATUS:

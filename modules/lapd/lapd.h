@@ -270,9 +270,8 @@ struct lapd_sock
 
 	struct lapd_sap *sap;
 	struct lapd_utme *usr_tme;
-//	struct lapd_ntme *net_tme;
 
-	int tei; // Only valid in NT mode
+	int tei;
 	int sapi;
 
 	struct hlist_head new_dlcs;
@@ -292,8 +291,6 @@ struct lapd_internal_msg
 };
 
 #define to_lapd_sock(obj) container_of(obj, struct lapd_sock, sk)
-
-extern void setup_lapd(struct net_device *netdev);
 
 struct lapd_sock *lapd_new_sock(
 	struct lapd_sock *parent_lapd_sock,

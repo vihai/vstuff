@@ -202,6 +202,63 @@ static int handle_netdev_set_role(
 	}
 }
 
+static int do_set_static_tei(const char *devname, int tei)
+{
+	if (set_flags(devname, IFF_NOARP, IFF_NOARP))
+		return 1;
+
+	int fd = socket(PF_LAPD, SOCK_SEQPACKET, 0);
+	if (fd < 0) {
+		fprintf(stderr, "Cannot create socket: %s\n",
+			strerror(errno));
+		return 1;
+	}
+
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, devname, IFNAMSIZ);
+
+	if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+		close(fd);
+		fprintf(stderr, "ioctl(SIOCGIFHWADDR): %s\n",
+			strerror(errno));
+		return 1;
+	}
+
+	ifr.ifr_hwaddr.sa_data[0] = tei;
+
+	if (ioctl(fd, SIOCSIFHWBROADCAST, &ifr) < 0) {
+		close(fd);
+		fprintf(stderr, "ioctl(SIOCSIFHWBROADCAST): %s\n",
+			strerror(errno));
+		return 1;
+	}
+
+	close(fd);
+
+	return 0;
+}
+
+static int handle_netdev_set_tei(
+	int argc, char *argv[], int optind,
+	const char *devname)
+{
+	if (argc <= optind + 4) {
+		print_usage("Missing netdev's parameter value\n");
+		return 1;
+	}
+
+	const char *value = argv[optind + 4];
+
+	if (!strcasecmp(value, "dynamic"))
+		return set_flags(devname, 0, IFF_NOARP);
+	else {
+		return do_set_static_tei(devname, atoi(value));
+	}
+
+	return 0;
+}
+
 static int handle_netdev_set(int argc, char *argv[], int optind)
 {
 	if (argc <= optind + 2) {
@@ -224,7 +281,8 @@ static int handle_netdev_set(int argc, char *argv[], int optind)
 		return set_flags(devname, 0, IFF_UP);
 	} else if (!strcasecmp(parameter, "role")) {
 		return handle_netdev_set_role(argc, argv, optind, devname);
-//	} else if (!strcasecmp(protocol_name, "tei")) {
+	} else if (!strcasecmp(parameter, "tei")) {
+		return handle_netdev_set_tei(argc, argv, optind, devname);
 	} else {
 		print_usage("Unknown parameter '%s'\n",
 			parameter);
@@ -257,17 +315,19 @@ static int show_any()
 
 		if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
 			close(fd);
-			fprintf(stderr, "ioctl(SIOCGIFHWADDR): %s\n",
+			fprintf(stderr, "ioctl(SIOCSIFHWBROADCAST): %s\n",
 				strerror(errno));
+			break;
 		}
 
 		if (ifr.ifr_hwaddr.sa_family != ARPHRD_LAPD)
 			continue;
 
-		printf("%s: %s %s\n",
+		printf("%s: %s %s %s\n",
 			ifr.ifr_name,
 			(ifaddr->ifa_flags & IFF_UP) ? "UP" : "DOWN",
-			(ifaddr->ifa_flags & IFF_ALLMULTI) ? "NT" : "TE");
+			(ifaddr->ifa_flags & IFF_ALLMULTI) ? "NT" : "TE",
+			(ifaddr->ifa_flags & IFF_NOARP) ? "PtP" : "PtMP");
 	}
 
 	close(fd);

@@ -462,6 +462,41 @@ static int vnd_cdev_release(
 	return 0;
 }
 
+static int lapd_mac_addr(struct net_device *dev, void *addr)
+{
+	return 0;
+}
+
+static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
+{
+	if(!skb->dev)
+		return 0;
+
+	haddr[0] = skb->dev->dev_addr[0];
+
+	return 1;
+}
+
+static void setup_lapd(struct net_device *netdev)
+{
+	netdev->change_mtu = NULL;
+	netdev->hard_header = NULL;
+	netdev->rebuild_header = NULL;
+	netdev->set_mac_address = lapd_mac_addr;
+	netdev->hard_header_cache = NULL;
+	netdev->header_cache_update= NULL;
+	netdev->hard_header_parse = lapd_hard_header_parse;
+
+	netdev->type = ARPHRD_LAPD;
+	netdev->hard_header_len = 0;
+	netdev->addr_len = 1;
+	netdev->tx_queue_len = 10;
+
+	memset(netdev->broadcast, 0, sizeof(netdev->broadcast));
+
+	netdev->flags = 0;
+}
+
 static int vnd_cdev_ioctl_do_create(
 	struct inode *inode,
 	struct file *file,
