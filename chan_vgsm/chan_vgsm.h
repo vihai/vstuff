@@ -29,6 +29,8 @@
 struct vgsm_chan {
 	struct ast_channel *ast_chan;
 
+	struct vgsm_interface *intf;
+
 	char vgsm_chanid[30];
 	int channel_fd;
 

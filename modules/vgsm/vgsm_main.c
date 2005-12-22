@@ -72,10 +72,12 @@ static int vgsm_cdev_open(
 	if (!module)
 		return -ENODEV;
 
-	if (module->is_open)
+	if (test_and_set_bit(VGSM_MODULE_STATUS_OPEN, &module->status))
 		return -EBUSY;
 
 	file->private_data = module;
+
+	set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
 
 	return 0;
 }
@@ -86,7 +88,29 @@ static int vgsm_cdev_release(
 {
 	struct vgsm_module *module = file->private_data;
 
-	module->is_open = FALSE;
+	clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+
+	while(kfifo_len(module->kfifo_tx)) {
+		DEFINE_WAIT(wait);
+
+		/*if (file->f_flags & O_NONBLOCK)
+			return -EAGAIN;*/
+
+		prepare_to_wait(&module->tx_wait_queue, &wait,
+			TASK_UNINTERRUPTIBLE);
+
+		if (kfifo_len(module->kfifo_tx))
+			schedule();
+
+		finish_wait(&module->tx_wait_queue, &wait);
+
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+	}
+
+	kfifo_reset(module->kfifo_rx);
+	
+	clear_bit(VGSM_MODULE_STATUS_OPEN, &module->status);
 
 	return 0;
 }
@@ -121,6 +145,7 @@ static ssize_t vgsm_cdev_read(
 	loff_t *offp)
 {
 	struct vgsm_module *module = file->private_data;
+	int copied_bytes;
 
 	DEFINE_WAIT(wait);
 
@@ -136,7 +161,11 @@ static ssize_t vgsm_cdev_read(
 
 	/* No locking is needed as we are the only FIFO reader */
 
-	return __kfifo_get_user(module->kfifo_rx, user_buf, count);
+	copied_bytes = __kfifo_get_user(module->kfifo_rx, user_buf, count);
+
+	schedule_tasklet(&module->rx_tasklet);
+
+	return copied_bytes;
 }
 
 ssize_t __kfifo_put_user(

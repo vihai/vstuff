@@ -261,10 +261,11 @@ static void vgsm_card_rx_tasklet(unsigned long data)
 
 		module = &card->modules[i];
 
-		if (module->kfifo_rx->size - kfifo_len(module->kfifo_rx) > 8 &&
-		    test_and_clear_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
+		if (module->kfifo_rx->size - kfifo_len(module->kfifo_rx) > 8) {
+			if (test_and_clear_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
 							&module->status)) {
-			vgsm_module_send_ack(module);
+				vgsm_module_send_ack(module);
+			}
 		}
 	}
 
@@ -287,16 +288,17 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 
 		module = &card->modules[card->rr_last_module];
 
-		if (kfifo_len(module->kfifo_tx) &&
-		    !test_and_set_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
+		if (kfifo_len(module->kfifo_tx)) {
+			if (!test_and_set_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
 							&module->status)) {
 
-			u8 buf[7];
-			int bytes_to_send = __kfifo_get(module->kfifo_tx, buf, 7);
+				u8 buf[7];
+				int bytes_to_send = __kfifo_get(module->kfifo_tx, buf, 7);
 
-			wake_up(&module->tx_wait_queue);
+				wake_up(&module->tx_wait_queue);
 
-			vgsm_module_send_string(module, buf, bytes_to_send);
+				vgsm_module_send_string(module, buf, bytes_to_send);
+			}
 		}
 	}
 	vgsm_card_unlock(card);
@@ -494,7 +496,10 @@ printk(KERN_CRIT "ASCII_MSG: %c%c%c%c%c%c%c\n",
 			if (msg.cmd_dep != 0)
 				printk(KERN_ERR "cmd_dep != 0 ????\n");
 
-			__kfifo_put(module->kfifo_rx, msg.payload, msg.numbytes);
+			if (test_bit(VGSM_MODULE_STATUS_RUNNING,
+						&module->status))
+				__kfifo_put(module->kfifo_rx, msg.payload,
+								msg.numbytes);
 
 			set_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
 				&module->status);

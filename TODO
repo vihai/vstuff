@@ -166,3 +166,5 @@ vgsm:
 - Implement pin changing command
 - Implement network listing command
 - Implement CACM, CAMM,  command
+- Implement SMS/CB handling
+- Implement network survey

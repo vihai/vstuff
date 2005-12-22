@@ -2177,14 +2177,14 @@ static struct ast_channel *visdn_new(
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
-		return NULL;
+		goto err_channel_alloc;
 	}
 
 	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
 	if (ast_chan->fds[0] < 0) {
 		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
 			strerror(errno));
-		return NULL;
+		goto err_open_timer;
 	}
 
 	if (state == AST_STATE_RING)
@@ -2234,6 +2234,13 @@ static struct ast_channel *visdn_new(
 	ast_setstate(ast_chan, state);
 
 	return ast_chan;
+
+	close(ast_chan->fds[0]);
+err_open_timer:
+	ast_hangup(ast_chan);
+err_channel_alloc:
+
+	return NULL;
 }
 
 #ifndef ASTERISK_VERSION_NUM
@@ -2245,30 +2252,29 @@ static struct ast_channel *visdn_request(
 #endif
 {
 	struct visdn_chan *visdn_chan;
-	char *dest = NULL;
 
 	if (!(format & AST_FORMAT_ALAW)) {
 		ast_log(LOG_NOTICE,
 			"Asked to get a channel of unsupported format '%d'\n",
 			format);
-		return NULL;
+		goto err_unsupported_format;
 	}
 
-	if (data) {
-		dest = ast_strdupa((char *)data);
-	} else {
+	if (!data) {
 		ast_log(LOG_WARNING, "Channel requested with no data\n");
-		return NULL;
+		goto err_no_data;
 	}
 
 	visdn_chan = visdn_alloc();
 	if (!visdn_chan) {
 		ast_log(LOG_ERROR, "Cannot allocate visdn_chan\n");
-		return NULL;
+		goto err_visdn_alloc;
 	}
 
 	struct ast_channel *ast_chan;
 	ast_chan = visdn_new(visdn_chan, AST_STATE_DOWN);
+	if (!ast_chan)
+		goto err_visdn_new;
 
 	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/null");
 
@@ -2278,6 +2284,13 @@ static struct ast_channel *visdn_request(
 	ast_update_use_count();
 
 	return ast_chan;
+
+err_vgsm_new:
+	vgsm_destroy(vgsm_chan);
+err_vgsm_alloc:
+err_unsupported_format:
+
+	return NULL;
 }
 
 #ifdef ASTERISK_VERSION_NUM

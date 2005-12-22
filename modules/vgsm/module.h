@@ -22,6 +22,8 @@
 
 enum vgsm_module_status
 {
+	VGSM_MODULE_STATUS_OPEN,
+	VGSM_MODULE_STATUS_RUNNING,
 	VGSM_MODULE_STATUS_RX_ACK_PENDING,
 	VGSM_MODULE_STATUS_TX_ACK_PENDING,
 };
@@ -34,7 +36,6 @@ struct vgsm_module
 	int id;
 
 	dev_t devt;
-	BOOL is_open;
 
 	struct class_device class_device;
 	
