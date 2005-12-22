@@ -508,10 +508,10 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 				intf->net.cells[0].pwr);
 
 			ast_cli(fd, "  --- %d adjacent cells\n",
-				intf->net.ncells);
+				intf->net.ncells - 1);
 
 			int i;
-			for (i=0; i<intf->net.ncells; i++) {
+			for (i=1; i<intf->net.ncells; i++) {
 				ast_cli(fd,
 					"  %d: LAC: 0x%04x"
 					" ID: 0x%04x"

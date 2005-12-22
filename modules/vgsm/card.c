@@ -372,7 +372,6 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		cpu_to_le32(card->readdma_bus_mem +
 			(vgsm_DMA_SINGLE_CHUNK * 4) -4 ));
 
-
 	/* Clear DMA interrupts */
 	vgsm_outb(card, VGSM_INT0STAT, 0x3F);
 
@@ -385,7 +384,6 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_msg(KERN_DEBUG, "VGSM card initialized\n");
 
 	return 0;
-
 }
 
 static irqreturn_t vgsm_interrupt(int irq, 
