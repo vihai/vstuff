@@ -311,7 +311,7 @@ static void hfc_st_port_state_change_work(void *data)
 		 * not documented on Cologne Chip's specs.
 		 */
 
-		schedule_delayed_work(&port->fifo_activation_work, HZ/50);
+		schedule_delayed_work(&port->fifo_activation_work, 50 / HZ);
 
 	} else if (new_state != active && port->l1_state == active) {
 

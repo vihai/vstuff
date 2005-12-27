@@ -319,7 +319,7 @@ static void hfc_update_port_led(struct hfc_st_port *port)
 		} else {
 			led->color = HFC_LED_GREEN;
 			led->alt_color = HFC_LED_RED;
-			led->flashing_freq = HZ / 10;
+			led->flashing_freq = 100 / HZ;
 			led->flashes = -1;
 		}
 	} else {
@@ -370,7 +370,7 @@ static void hfc_st_port_state_change_work(void *data)
 		 * not documented on Cologne Chip's specs.
 		 */
 
-		schedule_delayed_work(&port->fifo_activation_work, HZ/50);
+		schedule_delayed_work(&port->fifo_activation_work, 50 / HZ);
 
 	} else if (new_state != active && port->l1_state == active) {
 

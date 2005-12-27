@@ -504,7 +504,7 @@ static int hfc_sys_chan_frame_xmit(
 			&card->leds[chan->connected_st_chan->port->id];
 
 		led->alt_color = HFC_LED_OFF;
-		led->flashing_freq = HZ / 10;
+		led->flashing_freq = 100 / HZ;
 		led->flashes = 1;
 		hfc_update_led(led);
 	}
@@ -567,7 +567,7 @@ static ssize_t hfc_sys_chan_write(
 	return copied_octets;
 }
 
-void hfc_sys_chan_rx_work(void *data)
+static void hfc_sys_chan_rx_work(void *data)
 {
 	struct hfc_sys_chan *chan = data;
 	struct hfc_card *card = chan->port->card;
@@ -674,7 +674,7 @@ void hfc_sys_chan_rx_work(void *data)
 			&card->leds[chan->connected_st_chan->port->id];
 
 		led->alt_color = HFC_LED_OFF;
-		led->flashing_freq = HZ / 10;
+		led->flashing_freq = 100 / HZ;
 		led->flashes = 1;
 		hfc_update_led(led);
 	}

@@ -128,8 +128,12 @@ static inline void hfc_fifo_refresh_fz_cache(struct hfc_fifo *fifo)
 	rmb(); // Is this barrier really needed?
 }
 
-// This function and all subsequent accesses to the selected FIFO must be done
-// in atomic context
+/*
+ * This function and all subsequent accesses to the selected FIFO must be
+ * done in atomic context, otherwise, other threads may select another
+ * fifo in beteen
+ */
+
 static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 {
 	struct hfc_card *card = fifo->chan->port->card;
