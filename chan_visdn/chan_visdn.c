@@ -2260,11 +2260,6 @@ static struct ast_channel *visdn_request(
 		goto err_unsupported_format;
 	}
 
-	if (!data) {
-		ast_log(LOG_WARNING, "Channel requested with no data\n");
-		goto err_no_data;
-	}
-
 	visdn_chan = visdn_alloc();
 	if (!visdn_chan) {
 		ast_log(LOG_ERROR, "Cannot allocate visdn_chan\n");
@@ -2285,9 +2280,9 @@ static struct ast_channel *visdn_request(
 
 	return ast_chan;
 
-err_vgsm_new:
-	vgsm_destroy(vgsm_chan);
-err_vgsm_alloc:
+err_visdn_new:
+	visdn_destroy(visdn_chan);
+err_visdn_alloc:
 err_unsupported_format:
 
 	return NULL;
