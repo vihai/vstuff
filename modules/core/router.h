@@ -78,6 +78,7 @@ extern int visdn_disable_path(
 	struct visdn_chan *src_chan);
 extern int visdn_disable_path_with_id(
 	int chan1_id);
+extern int visdn_find_lowest_mtu(struct visdn_leg *leg);
 
 #endif
 

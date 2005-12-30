@@ -14,6 +14,7 @@ modprobe visdn-ppp
 modprobe visdn-timer-system
 modprobe visdn-hfc-4s
 modprobe visdn-hfc-pci
+modprobe visdn-hfc-usb
 
 NETDEV_CONTROL_DEVICE="/dev/visdn/netdev-control"
 CXC_CONTROL_DEVICE="/dev/visdn/cxc-control"

@@ -535,3 +535,34 @@ err_search_src:
 	return err;
 }
 EXPORT_SYMBOL(visdn_disable_path_with_id);
+
+int visdn_find_lowest_mtu(struct visdn_leg *leg)
+{
+	struct visdn_leg *cur_leg;
+	struct visdn_leg *next_leg;
+	int min_mtu = 65536;
+
+	cur_leg = visdn_leg_get(leg);
+
+	while(cur_leg->cxc) {
+		next_leg = visdn_cxc_get_leg_by_src(cur_leg->cxc, cur_leg);
+		if (!next_leg) {
+			printk(KERN_ERR
+				"vnd_find_lowest_mtu on unconnected leg?\n");
+			break;
+		}
+
+		if (next_leg->mtu != -1 &&
+		    next_leg->mtu < min_mtu)
+			min_mtu = next_leg->mtu;
+
+		visdn_leg_put(cur_leg);
+		cur_leg = visdn_leg_get(next_leg->other_leg);
+		visdn_leg_put(next_leg);
+	}
+
+	visdn_leg_put(cur_leg);
+
+	return min_mtu;
+}
+EXPORT_SYMBOL(visdn_find_lowest_mtu);

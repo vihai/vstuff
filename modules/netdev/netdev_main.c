@@ -112,43 +112,13 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 	vnd_netdevice_put(netdevice);
 }
 
-static int vnd_find_lowest_mtu(struct visdn_leg *leg)
-{
-	struct visdn_leg *cur_leg;
-	struct visdn_leg *next_leg;
-	int min_mtu = 65536;
-
-	cur_leg = visdn_leg_get(leg);
-
-	while(cur_leg->cxc) {
-		next_leg = visdn_cxc_get_leg_by_src(cur_leg->cxc, cur_leg);
-		if (!next_leg) {
-			printk(KERN_ERR
-				"vnd_find_lowest_mtu on unconnected leg?\n");
-			break;
-		}
-
-		if (next_leg->mtu != -1 &&
-		    next_leg->mtu < min_mtu)
-			min_mtu = next_leg->mtu;
-
-		visdn_leg_put(cur_leg);
-		cur_leg = visdn_leg_get(next_leg->other_leg);
-		visdn_leg_put(next_leg);
-	}
-
-	visdn_leg_put(cur_leg);
-
-	return min_mtu;
-}
-
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
 
 	vnd_debug(3, "vnd_chan_open()\n");
 
-	netdevice->mtu = vnd_find_lowest_mtu(&visdn_chan->leg_a);
+	netdevice->mtu = visdn_find_lowest_mtu(&visdn_chan->leg_a);
 
 	if (!test_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state)) {
 		rtnl_lock();
@@ -191,7 +161,7 @@ static int vnd_chan_connect(
 	struct visdn_leg *visdn_leg1,
 	struct visdn_leg *visdn_leg2)
 {
-	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
+	struct vnd_netdevice *netdevice = visdn_leg1->chan->driver_data;
 
 	vnd_debug(2, "%06d connected to %06d\n",
 		visdn_leg1->chan->id,

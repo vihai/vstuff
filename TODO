@@ -129,7 +129,6 @@ visdn-netdev:
 visdn-ppp:
 ----------
 
-- Handle MTU
 - Reallocate channel ID from the beginning instead of incrementing every time
 
 visdn-streamport:

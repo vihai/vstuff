@@ -2201,11 +2201,11 @@ static struct ast_channel *visdn_new(
 	ast_chan->readformat = AST_FORMAT_ALAW;
 	ast_chan->writeformat = AST_FORMAT_ALAW;
 
+	ast_chan->type = VISDN_CHAN_TYPE;
+
 #ifndef ASTERISK_VERSION_NUM
 	ast_chan->pvt->rawreadformat = AST_FORMAT_ALAW;
 	ast_chan->pvt->rawwriteformat = AST_FORMAT_ALAW;
-
-	ast_chan->type = VISDN_CHAN_TYPE;
 
 	ast_chan->pvt->call = visdn_call;
 	ast_chan->pvt->hangup = visdn_hangup;

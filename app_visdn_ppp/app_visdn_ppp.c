@@ -22,16 +22,25 @@
 
 #include <chan_visdn.h>
 
+#include "../config.h"
+
+#ifdef HAVE_ASTERISK_VERSION_H
+#include <asterisk/version.h>
+#endif
+
+#ifndef ASTERISK_VERSION_NUM
+#include <asterisk/channel_pvt.h>
+#endif
+
 static char *tdesc = "vISDN";
 static char *app = "vISDNppp";
 static char *synopsis = "Runs pppd and connects channel to visdn-ppp gateway";
 
 static char *descrip = 
-"  vISDNppp(args): Executes a RAS server using pppd on the given channel.\n"
-"The channel must be a clear channel (i.e. PRI source) and a Zaptel\n"
-"channel to be able to use this function (No modem emulation is included).\n"
-"Your pppd must be patched to be zaptel aware. Arguments should be\n"
-"separated by | characters.  Always returns -1.\n";
+"  vISDNppp(args): Spawns pppd and connects the channel to a newly created\n"
+" visdn-ppp channel. pppd must support visdn.so plugin.\n"
+"Arguments are passed to pppd and should be separated by | characters.\n"
+"Always returns -1.\n";
 
 STANDARD_LOCAL_USER;
 
@@ -95,7 +104,11 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	ast_mutex_lock(&chan->lock);
 
+#ifdef ASTERISK_VERSION_NUM
+	if (strcmp(chan->tech->type, "VISDN")) {
+#else
 	if (strcmp(chan->type, "VISDN")) {
+#endif
 		ast_log(LOG_WARNING,
 			"Only VISDN channels may be connected to"
 			" this application\n");

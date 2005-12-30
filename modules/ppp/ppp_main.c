@@ -38,6 +38,53 @@ static struct class_device vppp_control_class_dev;
 
 static struct visdn_port vppp_port;
 
+static int vppp_ppp_start_xmit(
+	struct ppp_channel *ppp_chan,
+	struct sk_buff *skb)
+{
+	struct vppp_chan *chan =
+		container_of(ppp_chan, struct vppp_chan, ppp_chan);
+	int res;
+
+	vppp_debug(3, "vppp_ppp_start_xmit()\n");
+
+	res = visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
+	switch(res) {
+	case VISDN_TX_OK:
+		return 1;
+	case VISDN_TX_BUSY:
+	case VISDN_TX_LOCKED:
+		schedule_work(&chan->retry_work);
+		return 0;
+	default:
+		return 0;
+	}
+}
+
+static void vppp_retry_work(void *data)
+{
+	struct vppp_chan *chan = data;
+
+	ppp_output_wakeup(&chan->ppp_chan);
+}
+
+static int vppp_ppp_ioctl(
+	struct ppp_channel *ppp_chan,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	vppp_debug(3, "vppp_ppp_ioctl()\n");
+
+	return -EINVAL;
+}
+
+static struct ppp_channel_ops vppp_ppp_ops =
+{
+	start_xmit:	vppp_ppp_start_xmit,
+	ioctl:		vppp_ppp_ioctl,
+};
+
+
 static void vppp_chan_release(struct visdn_chan *visdn_chan)
 {
 	vppp_debug(3, "vppp_chan_release()\n");
@@ -47,14 +94,35 @@ static void vppp_chan_release(struct visdn_chan *visdn_chan)
 
 static int vppp_chan_open(struct visdn_chan *visdn_chan)
 {
+	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
+	int err;
+
 	vppp_debug(3, "vppp_open()\n");
 
+	chan->ppp_chan.private = chan;
+	chan->ppp_chan.ops = &vppp_ppp_ops;
+	chan->ppp_chan.mtu = visdn_find_lowest_mtu(&visdn_chan->leg_a);
+	chan->ppp_chan.hdrlen = 2;
+
+	err = ppp_register_channel(&chan->ppp_chan);
+	if (err < 0)
+		goto err_ppp_register_channel;
+
 	return 0;
+
+	ppp_unregister_channel(&chan->ppp_chan);
+err_ppp_register_channel:
+
+	return err;
 }
 
 static int vppp_chan_close(struct visdn_chan *visdn_chan)
 {
+	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
+
 	vppp_debug(3, "vppp_close()\n");
+
+	ppp_unregister_channel(&chan->ppp_chan);
 
 	return 0;
 }
@@ -141,52 +209,6 @@ static struct visdn_leg_ops vppp_leg_ops = {
 	.tx_error		= vppp_chan_tx_error,
 };
 
-static int vppp_ppp_start_xmit(
-	struct ppp_channel *ppp_chan,
-	struct sk_buff *skb)
-{
-	struct vppp_chan *chan =
-		container_of(ppp_chan, struct vppp_chan, ppp_chan);
-	int res;
-
-	vppp_debug(3, "vppp_ppp_start_xmit()\n");
-
-	res = visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
-	switch(res) {
-	case VISDN_TX_OK:
-		return 1;
-	case VISDN_TX_BUSY:
-	case VISDN_TX_LOCKED:
-		schedule_work(&chan->retry_work);
-		return 0;
-	default:
-		return 0;
-	}
-}
-
-static void vppp_retry_work(void *data)
-{
-	struct vppp_chan *chan = data;
-
-	ppp_output_wakeup(&chan->ppp_chan);
-}
-
-static int vppp_ppp_ioctl(
-	struct ppp_channel *ppp_chan,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	vppp_debug(3, "vppp_ppp_ioctl()\n");
-
-	return -EINVAL;
-}
-
-static struct ppp_channel_ops vppp_ppp_ops =
-{
-	start_xmit:	vppp_ppp_start_xmit,
-	ioctl:		vppp_ppp_ioctl,
-};
-
 int vppp_cdev_open(
 	struct inode *inode,
 	struct file *file)
@@ -228,15 +250,6 @@ int vppp_cdev_open(
 
 	chan->visdn_chan.driver_data = chan;
 
-	chan->ppp_chan.private = chan;
-	chan->ppp_chan.ops = &vppp_ppp_ops;
-	chan->ppp_chan.mtu = 200; //FIXME
-	chan->ppp_chan.hdrlen = 2;
-
-	err = ppp_register_channel(&chan->ppp_chan);
-	if (err < 0)
-		goto err_ppp_register_channel;
-
 	err = visdn_chan_register(&chan->visdn_chan);
 	if (err < 0)
 		goto err_chan_register;
@@ -249,8 +262,6 @@ int vppp_cdev_open(
 
 	visdn_chan_unregister(&chan->visdn_chan);
 err_chan_register:
-	ppp_unregister_channel(&chan->ppp_chan);
-err_ppp_register_channel:
 	kfree(chan);
 err_kmalloc:
 
@@ -268,7 +279,6 @@ int vppp_cdev_release(
 
 	// Disable channels
 
-	ppp_unregister_channel(&chan->ppp_chan);
 	visdn_chan_unregister(&chan->visdn_chan);
 
 	return 0;
