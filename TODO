@@ -125,7 +125,6 @@ visdn-netdev:
 -------------
 
 - Reallocate channel ID from the beginning instead of incrementing every time
-- Wake/Start queue/bring interface down on disconnect/connect
 
 visdn-ppp:
 ----------

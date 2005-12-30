@@ -191,9 +191,14 @@ static int vnd_chan_connect(
 	struct visdn_leg *visdn_leg1,
 	struct visdn_leg *visdn_leg2)
 {
+	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
+
 	vnd_debug(2, "%06d connected to %06d\n",
 		visdn_leg1->chan->id,
 		visdn_leg2->chan->id);
+
+	/* Ensure the queue status is restored */
+	netif_wake_queue(netdevice->netdev);
 
 	return 0;
 }
