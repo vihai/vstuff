@@ -55,15 +55,15 @@ static ssize_t visdn_port_store_enabled(
 		return -ERESTARTSYS;
 
 	if (enabled && !port->enabled) {
+		port->enabled = enabled;
+
 		if (port->ops->enable)
 			port->ops->enable(port);
-
-		port->enabled = enabled;
 	} else if (!enabled && port->enabled) {
+		port->enabled = enabled;
+
 		if (port->ops->disable)
 			port->ops->disable(port);
-
-		port->enabled = enabled;
 	}
 
 	visdn_port_unlock(port);

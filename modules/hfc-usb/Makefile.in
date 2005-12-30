@@ -4,13 +4,29 @@
 @SET_MAKE@
 
 subdir = modules/hfc-usb
-MODULE = hfc-usb
+MODULE = visdn-hfc-usb
 
-SOURCES = hfc-usb_main.c fifo.c
+SOURCES = \
+	hfc-usb_main.c	\
+	led.c		\
+	fifo.c		\
+	st_port.c	\
+	st_chan.c
+
 OBJS = ${SOURCES:.c=.o}
 
 DIST_SOURCES = $(SOURCES)
-DIST_HEADERS = fifo.h hfc-usb.h regs.h
+DIST_HEADERS = \
+	module.h	\
+	regs.h		\
+	card.h		\
+	card_inline.h	\
+	fifo.h		\
+	fifo_inline.h	\
+	st_port.h	\
+	st_chan.h	\
+	util.h
+
 DIST_COMMON = $(srcdir)/Makefile.in
 
 srcdir = @srcdir@
@@ -89,7 +105,15 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-EXTRA_CFLAGS= -I$(abssrcdir)/../includes/
+EXTRA_CFLAGS= -I$(abssrcdir)/../include/
+
+ifeq (@enable_debug_code@,yes)
+EXTRA_CFLAGS+=-DDEBUG_CODE
+endif
+
+ifeq (@enable_debug_defaults@,yes)
+EXTRA_CFLAGS+=-DDEBUG_DEFAULTS
+endif
 
 ########################## Targets #################################
 
@@ -102,7 +126,7 @@ all:
 	-@mkdir -p ../.tmp_versions
 	@ln -sf ../.tmp_versions .
 	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
-install:
+install: $(MODULE).ko
 	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
 clean:
 	$(MAKE) -C $(kblddir) clean M=${abssrcdir}

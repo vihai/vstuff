@@ -36,12 +36,12 @@ attribute bert_mode 7
 #---------------------- st1 -----------------------
 <netdev visdn1.1>
   protocol lapd
-  role TE
-  tei 0
+  role NT
+  tei dynamic
 </netdev>
 
 <port st1>
-  attribute role TE
+  attribute role NT
 
   <chan D>
     connectmodule netdev visdn1.1

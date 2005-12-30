@@ -26,12 +26,10 @@
 #define HFC_REG_CIRM_AUX_TRISTATE	(0 << 4)
 #define HFC_REG_CIRM_AUX_FIXED		(1 << 4)
 
-// int length register
 #define HFC_REG_USB_SIZE		0x07
 #define HFC_REG_USB_SIZE_OUT(val)	(((val)/8) << 0)
 #define HFC_REG_USB_SIZE_IN(val)	(((val)/8) << 4)
 
-// iso length register
 #define HFC_REG_USB_SIZE_I		0x06
 #define HFC_REG_USB_SIZE_I_VAL(val)	((val) << 0)
 
@@ -151,7 +149,6 @@
 #define HFC_REG_CON_PCM_from_FIFO	(0 << 7)
 #define HFC_REG_CON_PCM_from_ST		(1 << 7)
 
-// ID value of HFC-USB
 #define HFC_REG_CHIP_ID			0x16
 
 #define HFC_REG_STATUS			0x1c
@@ -191,8 +188,8 @@
 #define HFC_REG_MST_MODE0_CODECB_F1B_AUX2	(0x3 << 6)
 
 #define HFC_REG_MST_MODE1		0x15
-#define HFC_REG_MST_MODE1_AUX1_MIRROR	(0 << 0)
-#define HFC_REG_MST_MODE1_AUX2_MIRROR	(0 << 1)
+#define HFC_REG_MST_MODE1_AUX1_MIRROR	(1 << 0)
+#define HFC_REG_MST_MODE1_AUX2_MIRROR	(1 << 1)
 #define HFC_REG_MST_MODE1_DPLL_4	(0x0 << 2)
 #define HFC_REG_MST_MODE1_DPLL_2	(0x1 << 2)
 #define HFC_REG_MST_MODE1_DPLL_3	(0x2 << 2)
@@ -224,13 +221,14 @@
 
 #define HFC_REG_STATES			0x30
 #define HFC_REG_STATES_STATE_VAL(val)	((val) << 0)
+#define HFC_REG_STATES_STATE_READVAL(val)	(((val) & 0x07) << 0)
 #define HFC_REG_STATES_FRAME_SYNC	(1 << 4)
 #define HFC_REG_STATES_T2_EXPIRED	(1 << 5)
 #define HFC_REG_STATES_INFO0		(1 << 6)
 #define HFC_REG_STATES_LOAD_STATE	(1 << 4)
 #define HFC_REG_STATES_START_DEACTIVATION	(0x2 << 5)
 #define HFC_REG_STATES_START_ACTIVATION		(0x3 << 5)
-#define HFC_REG_STATES_G2_G3		(1 << 7)
+#define HFC_REG_STATES_NT_G2_G3		(1 << 7)
 
 // S-bus control register (tx)
 #define HFC_REG_SCTRL			0x31
@@ -264,6 +262,8 @@
 
 // bit delay register
 #define HFC_REG_CLKDEL			0x37
+#define HFC_REG_CLKDEL_ST_CLK_DLY(num)	((num) << 0)
+#define HFC_REG_CLKDEL_ST_SMPL(num)	((num) << 4)
 
 #define HFC_B1_REC			0x3c
 #define HFC_B1_SEND			0x3c

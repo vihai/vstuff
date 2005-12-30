@@ -1,7 +1,7 @@
 /*
- * Cologne Chip's HFC-4S and HFC-8S vISDN driver
+ * Cologne Chip's HFC-S USB vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2005 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -12,36 +12,52 @@
 
 #include <linux/kernel.h>
 
+#include "card_inline.h"
 #include "st_port.h"
-#include "st_port_inline.h"
 #include "st_chan.h"
-#include "card.h"
 #include "fifo_inline.h"
 
-#ifdef DEBUG_CODE
-#define hfc_debug_st_port(port, dbglevel, format, arg...)	\
-	if (debug_level >= dbglevel)				\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
-			"%s-%s:"				\
-			"st%d:"					\
-			format,					\
-			(port)->card->pci_dev->dev.bus->name,	\
-			(port)->card->pci_dev->dev.bus_id,	\
-			(port)->id,				\
-			## arg)
-#else
-#define hfc_debug_st_port(port, dbglevel, format, arg...) do {} while (0)
-#endif
+static void hfc_st_port_update_led(struct hfc_st_port *port)
+{
+	struct hfc_card *card = port->card;
+	struct hfc_led *usb_led = &card->leds[HFC_LED_USB];
+	struct hfc_led *isdn_led = &card->leds[HFC_LED_ISDN];
 
-#define hfc_msg_st_port(port, level, format, arg...)		\
-	printk(level hfc_DRIVER_PREFIX				\
-		"%s-%s:"					\
-		"st%d:"						\
-		format,						\
-		(port)->card->pci_dev->dev.bus->name,		\
-		(port)->card->pci_dev->dev.bus_id,		\
-		(port)->id,					\
-		## arg)
+	if (port->visdn_port.enabled) {
+		usb_led->color = HFC_LED_ON;
+		usb_led->flashing_freq = 0;
+
+		if ((port->nt_mode &&
+		     port->l1_state == 3) ||
+		    (!port->nt_mode &&
+		     port->l1_state == 7)) {
+
+			isdn_led->color = HFC_LED_ON;
+			isdn_led->flashing_freq = 0;
+
+		} else if ((port->nt_mode &&
+		            port->l1_state == 1) ||
+		           (!port->nt_mode &&
+		            port->l1_state == 3)) {
+
+			isdn_led->color = HFC_LED_OFF;
+			isdn_led->flashing_freq = 0;
+		} else {
+			isdn_led->color = HFC_LED_ON;
+			isdn_led->flashing_freq = HZ / 100;
+			isdn_led->flashes = -1;
+		}
+	} else {
+		usb_led->color = HFC_LED_OFF;
+		usb_led->flashing_freq = 0;
+
+		isdn_led->color = HFC_LED_OFF;
+		isdn_led->flashing_freq = 0;
+	}
+
+	hfc_led_update(usb_led);
+	hfc_led_update(isdn_led);
+}
 
 //----------------------------------------------------------------------------
 
@@ -53,7 +69,7 @@ static ssize_t hfc_show_role(
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
 	return snprintf(buf, PAGE_SIZE, "%s\n",
-		port->nt_mode? "NT" : "TE");
+		port->nt_mode ? "NT" : "TE");
 }
 
 static ssize_t hfc_store_role(
@@ -70,22 +86,28 @@ static ssize_t hfc_store_role(
 
 	hfc_card_lock(card);
 
-	hfc_st_port_select(port);
-
 	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
 		port->nt_mode = TRUE;
 		port->clock_delay = HFC_DEF_NT_CLK_DLY;
 		port->sampling_comp = HFC_DEF_NT_SAMPL_COMP;
+
+		hfc_st_port_update_sctrl(port);
+		hfc_st_port_update_st_clk_dly(port);
+
 	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
 		port->nt_mode = FALSE;
 		port->clock_delay = HFC_DEF_TE_CLK_DLY;
 		port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+
+		hfc_st_port_update_sctrl(port);
+		hfc_st_port_update_st_clk_dly(port);
 	}
 
-	hfc_st_port_update_st_ctrl_0(port);
-	hfc_st_port_update_st_clk_dly(port);
-
 	hfc_card_unlock(card);
+
+	hfc_debug_port(port, 1,
+		"role set to %s\n",
+		port->nt_mode ? "NT" : "TE");
 
 	return count;
 }
@@ -103,9 +125,12 @@ static ssize_t hfc_show_l1_state(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
+	u8 l1_state = HFC_REG_STATES_STATE_READVAL(
+			hfc_read(port->card, HFC_REG_STATES));
+
 	return snprintf(buf, PAGE_SIZE, "%c%d\n",
-		port->nt_mode?'G':'F',
-		port->l1_state);
+		port->nt_mode ? 'G' : 'F',
+		l1_state);
 }
 
 static ssize_t hfc_store_l1_state(
@@ -120,16 +145,13 @@ static ssize_t hfc_store_l1_state(
 
 	hfc_card_lock(card);
 
-	hfc_st_port_select(port);
-
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
-			hfc_A_ST_WR_STA_V_SET_G2_G3);
+		hfc_write(card, HFC_REG_STATES,
+			HFC_REG_STATES_START_ACTIVATION|
+			HFC_REG_STATES_NT_G2_G3);
 	} else if (count >= 10 && !strncmp(buf, "deactivate", 10)) {
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION|
-			hfc_A_ST_WR_STA_V_SET_G2_G3);
+		hfc_write(card, HFC_REG_STATES,
+			HFC_REG_STATES_START_DEACTIVATION);
 	} else {
 		int state;
 		if (sscanf(buf, "%d", &state) < 1) {
@@ -144,8 +166,9 @@ static ssize_t hfc_store_l1_state(
 			goto err_invalid_state;
 		}
 
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_SET_STA(state));
+		hfc_write(card, HFC_REG_STATES,
+			HFC_REG_STATES_STATE_VAL(state) |
+			HFC_REG_STATES_LOAD_STATE);
 	}
 
 	hfc_card_unlock(card);
@@ -243,92 +266,120 @@ static VISDN_PORT_ATTR(st_sampling_comp, S_IRUGO | S_IWUSR,
 		hfc_show_st_sampling_comp,
 		hfc_store_st_sampling_comp);
 
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_fifo_state(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
+	int len = 0;
+	int i;
+
+
+	len += snprintf(buf + len, PAGE_SIZE - len,
+		"\n       Receive                      Transmit\n"
+		"FIFO#  F1 F2 Z1 Z2 Used Mode    F1 F2 Z1 Z2"
+		" Used Mode Connected\n");
+
+	hfc_card_lock(card);
+
+	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
+
+		u8 rx_f1, rx_f2, rx_z1, rx_z2;
+		u8 tx_f1, tx_f2, tx_z1, tx_z2;
+
+		if (!card->st_port.chans[i].has_real_fifo)
+			continue;
+
+		len += snprintf(buf + len, PAGE_SIZE - len,
+			"%2d     ", i);
+
+		hfc_fifo_select(&card->st_port.chans[i].rx_fifo);
+
+		rx_f1 = hfc_read(card, HFC_REG_FIF_F1);
+		rx_f2 = hfc_read(card, HFC_REG_FIF_F2);
+		rx_z1 = hfc_read(card, HFC_REG_FIF_Z1);
+		rx_z2 = hfc_read(card, HFC_REG_FIF_Z2);
+
+		hfc_fifo_select(&card->st_port.chans[i].tx_fifo);
+
+		tx_f1 = hfc_read(card, HFC_REG_FIF_F1);
+		tx_f2 = hfc_read(card, HFC_REG_FIF_F2);
+		tx_z1 = hfc_read(card, HFC_REG_FIF_Z1);
+		tx_z2 = hfc_read(card, HFC_REG_FIF_Z2);
+
+		len += snprintf(buf + len, PAGE_SIZE - len,
+			"%02x %02x %02x %02x        "
+			"%02x %02x %02x %02x\n",
+			rx_f1, rx_f2, rx_z1, rx_z2,
+			tx_f1, tx_f2, tx_z1, tx_z2);
+	}
+
+	hfc_card_unlock(card);
+
+	return len;
+}
+
+static VISDN_PORT_ATTR(fifo_state, S_IRUGO,
+	hfc_show_fifo_state,
+	NULL);
+
+
 static struct visdn_port_attribute *hfc_st_port_attributes[] =
 {
 	&visdn_port_attr_role,
 	&visdn_port_attr_l1_state,
 	&visdn_port_attr_st_clock_delay,
 	&visdn_port_attr_st_sampling_comp,
+	&visdn_port_attr_fifo_state,
 	NULL
 };
 
-void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
+void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 {
-	u8 st_ctrl_0 = 0;
+	u8 sctrl = 0;
+
+	/* Select the non-capacitive line mode for the S/T interface */ 
+	sctrl = HFC_REG_SCTRL_NON_CAPACITIVE;
 
 	if (port->nt_mode)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_ST_MD_NT;
+		sctrl |= HFC_REG_SCTRL_NT;
 	else
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_ST_MD_TE;
+		sctrl |= HFC_REG_SCTRL_TE;
 
 	if (port->sq_enabled)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_SQ_EN;
+		sctrl |= HFC_REG_SCTRL_SQ_ENA;
 
-	if (port->chans[B1].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_B1_EN;
+	if (hfc_fifo_is_running(&port->chans[B1].tx_fifo))
+		sctrl |= HFC_REG_SCTRL_B1_ENA;
 
-	if (port->chans[B2].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_B2_EN;
+	if (hfc_fifo_is_running(&port->chans[B2].tx_fifo))
+		sctrl |= HFC_REG_SCTRL_B2_ENA;
 
-	hfc_outb(port->card, hfc_A_ST_CTRL0, st_ctrl_0);
+	hfc_write(port->card, HFC_REG_SCTRL, sctrl);
 }
 
-void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
+void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 {
-	u8 st_ctrl_2 = 0;
+	u8 sctrl_r = 0;
 
-	if (port->chans[B1].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_2 |= hfc_A_ST_CTRL2_V_B1_RX_EN;
+	if (hfc_fifo_is_running(&port->chans[B1].rx_fifo))
+		sctrl_r |= HFC_REG_SCTRL_R_B1_ENA;
 
-	if (port->chans[B2].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_2 |= hfc_A_ST_CTRL2_V_B2_RX_EN;
+	if (hfc_fifo_is_running(&port->chans[B2].rx_fifo))
+		sctrl_r |= HFC_REG_SCTRL_R_B2_ENA;
 
-	hfc_outb(port->card, hfc_A_ST_CTRL2, st_ctrl_2);
+	hfc_write(port->card, HFC_REG_SCTRL_R, sctrl_r);
 }
 
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 {
-	hfc_outb(port->card, hfc_A_ST_CLK_DLY,
-		hfc_A_ST_CLK_DLY_V_ST_CLK_DLY(port->clock_delay) |
-		hfc_A_ST_CLK_DLY_V_ST_SMPL(port->sampling_comp));
-}
-
-static void hfc_st_port_update_led(struct hfc_st_port *port)
-{
-	struct hfc_card *card = port->card;
-	struct hfc_led *led = &card->leds[port->id];
-
-	if (port->visdn_port.enabled) {
-		if ((port->nt_mode &&
-		     port->l1_state == 3) ||
-		    (!port->nt_mode &&
-		     port->l1_state == 7)) {
-
-			led->color = HFC_LED_RED;
-			led->flashing_freq = 0;
-			led->flashes = 0;
-
-		} else if ((port->nt_mode &&
-		            port->l1_state == 1) ||
-		           (!port->nt_mode &&
-		            port->l1_state == 3)) {
-
-			led->color = HFC_LED_GREEN;
-			led->flashing_freq = 0;
-			led->flashes = 0;
-		} else {
-			led->color = HFC_LED_GREEN;
-			led->alt_color = HFC_LED_RED;
-			led->flashing_freq = 100 / HZ;
-			led->flashes = -1;
-		}
-	} else {
-		led->color = HFC_LED_OFF;
-		led->flashing_freq = 0;
-		led->flashes = 0;
-	}
-
-	hfc_led_update(led);
+	hfc_write(port->card, HFC_REG_CLKDEL,
+		HFC_REG_CLKDEL_ST_CLK_DLY(port->clock_delay) |
+		HFC_REG_CLKDEL_ST_SMPL(port->sampling_comp));
 }
 
 static void hfc_st_port_state_change_work(void *data)
@@ -340,26 +391,21 @@ static void hfc_st_port_state_change_work(void *data)
 
 	hfc_card_lock(card);
 
-	hfc_st_port_select(port);
+	new_state = HFC_REG_STATES_STATE_READVAL(hfc_read(card,
+						HFC_REG_STATES));
 
-	new_state = hfc_A_ST_RD_STA_V_ST_STA(
-				hfc_inb(card, hfc_A_ST_RD_STA));
-
-	hfc_debug_st_port(port, 1,
-		"layer 1 state = %c%d\n",
-		port->nt_mode ? 'G' : 'F',
-		new_state);
+	hfc_debug_port(port, 1,
+			"layer 1 state = %c%d\n",
+			port->nt_mode?'G':'F',
+			new_state);
 
 	if (port->nt_mode) {
 
 		active = 3;
 
-		if (new_state == 2) {
-			/* Allow transition from G2 to G3 */
-			hfc_outb(card, hfc_A_ST_WR_STA,
-				hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
-				hfc_A_ST_WR_STA_V_SET_G2_G3);
-		}
+		if (new_state == 2)
+			hfc_write(card, HFC_REG_STATES,
+				HFC_REG_STATES_NT_G2_G3);
 	} else {
 		active = 7;
 	}
@@ -393,36 +439,36 @@ static void hfc_st_port_fifo_activation_work(void *data)
 	hfc_card_lock(card);
 
 	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
-		struct hfc_sys_chan *sys_chan =
-				port->chans[i].connected_sys_chan;
+		if (port->chans[i].has_real_fifo) {
+			hfc_fifo_select(&port->chans[i].rx_fifo);
+			hfc_fifo_configure(&port->chans[i].rx_fifo);
 
-		if (sys_chan) {
-			hfc_fifo_select(&sys_chan->rx_fifo);
-			hfc_fifo_configure(&sys_chan->rx_fifo);
-
-			hfc_fifo_select(&sys_chan->tx_fifo);
-			hfc_fifo_configure(&sys_chan->tx_fifo);
+			hfc_fifo_select(&port->chans[i].tx_fifo);
+			hfc_fifo_configure(&port->chans[i].tx_fifo);
 		}
 	}
 
 	hfc_card_unlock(card);
 }
 
+static void hfc_st_port_activate_request_work(void *data)
+{
+	struct hfc_st_port *port = data;
+
+	hfc_write(port->card, HFC_REG_STATES,
+		HFC_REG_STATES_START_ACTIVATION);
+}
+
 void hfc_st_port_check_l1_up(struct hfc_st_port *port)
 {
-	struct hfc_card *card = port->card;
-
 	if (port->visdn_port.enabled &&
 		((!port->nt_mode && port->l1_state != 7) ||
 		(port->nt_mode && port->l1_state != 3))) {
 
-		hfc_debug_st_port(port, 1,
+		hfc_debug_port(port, 1,
 			"L1 is down, bringing up L1.\n");
 
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
-			hfc_A_ST_WR_STA_V_SET_G2_G3);
-
+		schedule_work(&port->activate_request_work);
 	}
 }
 
@@ -438,17 +484,13 @@ static int hfc_st_port_enable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
-	struct hfc_card *card = port->card;
 
-	hfc_card_lock(card);
-	hfc_st_port_select(port);
-	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
+	hfc_write(port->card, HFC_REG_STATES,
+		HFC_REG_STATES_STATE_VAL(0));
 
 	hfc_st_port_update_led(port);
 
-	hfc_card_unlock(card);
-
-	hfc_debug_st_port(port, 2, "enabled\n");
+	hfc_debug_port(port, 2, "enabled\n");
 
 	return 0;
 }
@@ -457,19 +499,14 @@ static int hfc_st_port_disable(
 	struct visdn_port *visdn_port)
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
-	struct hfc_card *card = port->card;
 
-	hfc_card_lock(card);
-	hfc_st_port_select(port);
-	hfc_outb(port->card, hfc_A_ST_WR_STA,
-		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
-		hfc_A_ST_WR_STA_V_ST_LD_STA);
+	hfc_write(port->card, HFC_REG_STATES,
+		HFC_REG_STATES_STATE_VAL(0) |
+		HFC_REG_STATES_LOAD_STATE);
 
 	hfc_st_port_update_led(port);
 
-	hfc_card_unlock(card);
-
-	hfc_debug_st_port(port, 2, "disabled\n");
+	hfc_debug_port(port, 2, "disabled\n");
 
 	return 0;
 }
@@ -484,11 +521,9 @@ struct visdn_port_ops hfc_st_port_ops = {
 void hfc_st_port_init(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
-	const char *name,
-	int id)
+	const char *name)
 {
 	port->card = card;
-	port->id = id;
 
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
@@ -498,6 +533,10 @@ void hfc_st_port_init(
 		hfc_st_port_fifo_activation_work,
 		port);
 
+	INIT_WORK(&port->activate_request_work,
+		hfc_st_port_activate_request_work,
+		port);
+
 	port->nt_mode = FALSE;
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;
 	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
@@ -505,23 +544,22 @@ void hfc_st_port_init(
 	visdn_port_init(&port->visdn_port);
 	port->visdn_port.ops = &hfc_st_port_ops;
 	port->visdn_port.driver_data = port;
-	port->visdn_port.device = &card->pci_dev->dev;
+	port->visdn_port.device = &card->usb_dev->dev;
 	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
-	hfc_st_chan_init(&port->chans[D], port, "D", D,
-		hfc_D_CHAN_OFF + id*4, 2, 0, 16000);
-	hfc_st_chan_init(&port->chans[B1], port, "B1", B1,
-		hfc_B1_CHAN_OFF + id*4, 8, 0, 64000);
-	hfc_st_chan_init(&port->chans[B2], port, "B2", B2,
-		hfc_B2_CHAN_OFF + id*4, 8, 0, 64000);
-	hfc_st_chan_init(&port->chans[E], port, "E", E,
-		hfc_E_CHAN_OFF + id*4, 2, 0, 16000);
-	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ,
-		0, 0, 0, 4000);
+	hfc_st_chan_init(&port->chans[D], port, "D", D, 1,
+			&card->leds[HFC_LED_ISDN], 2);
+	hfc_st_chan_init(&port->chans[B1], port, "B1", B1, 1,
+			&card->leds[HFC_LED_B1], 8);
+	hfc_st_chan_init(&port->chans[B2], port, "B2", B2, 1,
+			&card->leds[HFC_LED_B2], 8);
+	hfc_st_chan_init(&port->chans[E], port, "E", E, 0,
+			&card->leds[HFC_LED_ISDN], 2);
+	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
+			&card->leds[HFC_LED_ISDN], 0);
 }
 
-int hfc_st_port_register(
-	struct hfc_st_port *port)
+int hfc_st_port_register(struct hfc_st_port *port)
 {
 	int err;
 
@@ -579,8 +617,7 @@ err_port_register:
 	return err;
 }
 
-void hfc_st_port_unregister(
-	struct hfc_st_port *port)
+void hfc_st_port_unregister(struct hfc_st_port *port)
 {
 	struct visdn_port_attribute **attr = hfc_st_port_attributes;
 

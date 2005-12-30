@@ -363,7 +363,7 @@ fi
 
 #-----------------------------------------------------------------------------
 
-drivers="hfc-pci, hfc-4s"
+drivers="hfc-pci, hfc-4s, hfc-usb"
 
 AC_ARG_ENABLE(
 	[drivers],

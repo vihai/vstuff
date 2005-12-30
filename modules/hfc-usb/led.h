@@ -16,8 +16,7 @@
 enum hfc_led_color
 {
 	HFC_LED_OFF,
-	HFC_LED_RED,
-	HFC_LED_GREEN,
+	HFC_LED_ON,
 };
 
 struct hfc_led
@@ -27,7 +26,6 @@ struct hfc_led
 	int id;
 
 	enum hfc_led_color color;
-	enum hfc_led_color alt_color;
 	int flashing_freq;
 	int flashes;
 
@@ -35,6 +33,7 @@ struct hfc_led
 };
 
 extern void hfc_led_update(struct hfc_led *led);
+extern void hfc_led_update_work(void *data);
 
 extern void hfc_led_init(
 	struct hfc_led *led,

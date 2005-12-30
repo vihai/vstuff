@@ -549,7 +549,7 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 				exit(1);
 			}
 
-			int optlen=sizeof(opts->tei);
+			socklen_t optlen = sizeof(opts->tei);
 			if (getsockopt(s, SOL_LAPD, LAPD_TEI,
 			    &opts->tei, &optlen)<0) {
 				printf("getsockopt: %s\n", strerror(errno));
@@ -601,7 +601,7 @@ int main(int argc, char *argv[])
 		{ "loopback", no_argument, 0, 0 },
 		{ "null", no_argument, 0, 0 },
 		{ "uframe", no_argument, 0, 0 },
-		{ "bcast", no_argument, 0, 0 },
+		{ "broadcast", no_argument, 0, 0 },
 		{ "debug", no_argument, 0, 0 },
 		{ }
 	};
@@ -610,7 +610,7 @@ int main(int argc, char *argv[])
 	int optidx;
 
 	for(;;) {
-		c = getopt_long(argc, argv, "l:i:ud", options,
+		c = getopt_long(argc, argv, "l:i:udb", options,
 			&optidx);
 
 		if (c == -1)
@@ -640,11 +640,15 @@ int main(int argc, char *argv[])
 		} else if (c == 'u' || (c == 0 &&
 		    !strcmp(options[optidx].name, "uframe"))) {
 			opts.frame_type = FRAME_TYPE_UFRAME;
-		} else if (c == 0 &&
-		    !strcmp(options[optidx].name, "bcast")) {
+		} else if (c == 'b' || (c == 0 &&
+		    !strcmp(options[optidx].name, "broadcast"))) {
 			opts.frame_type = FRAME_TYPE_UFRAME_BROADCAST;
 		} else {
-			fprintf(stderr,"Unknow option %s\n", options[optidx].name);
+			if (c)
+				fprintf(stderr,"Unknow option -%c\n", c);
+			else
+				fprintf(stderr,"Unknow option %s\n", options[optidx].name);
+
 			print_usage(argv[0]);
 			return 1;
 		}
@@ -686,7 +690,7 @@ int main(int argc, char *argv[])
 	printf("OK\n");
 
 	int role;
-	int optlen=sizeof(role);
+	socklen_t optlen = sizeof(role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
 	    &role, &optlen)<0) {
 		printf("getsockopt: %s\n", strerror(errno));

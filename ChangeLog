@@ -2,6 +2,41 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-30 05:04:02 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-374
+
+    Summary:
+      HFC-S USB driver rewritten while still not functional
+    Revision:
+      isdn--devel--0.1--patch-374
+
+
+    new files:
+     modules/hfc-usb/.arch-ids/card.h.id
+     modules/hfc-usb/.arch-ids/card_inline.h.id
+     modules/hfc-usb/.arch-ids/fifo_inline.h.id
+     modules/hfc-usb/.arch-ids/led.c.id
+     modules/hfc-usb/.arch-ids/led.h.id
+     modules/hfc-usb/.arch-ids/st_chan.c.id
+     modules/hfc-usb/.arch-ids/st_chan.h.id
+     modules/hfc-usb/.arch-ids/st_port.c.id
+     modules/hfc-usb/.arch-ids/st_port.h.id modules/hfc-usb/card.h
+     modules/hfc-usb/card_inline.h modules/hfc-usb/fifo_inline.h
+     modules/hfc-usb/led.c modules/hfc-usb/led.h
+     modules/hfc-usb/st_chan.c modules/hfc-usb/st_chan.h
+     modules/hfc-usb/st_port.c modules/hfc-usb/st_port.h
+     samples/.arch-ids/device-usb-2-2.id samples/device-usb-2-2
+
+    modified files:
+     ChangeLog NOTES TODO configure.ac modules/core/port.c
+     modules/hfc-4s/led.c modules/hfc-4s/led.h
+     modules/hfc-4s/st_port.c modules/hfc-4s/sys_chan.c
+     modules/hfc-usb/Makefile.in modules/hfc-usb/fifo.c
+     modules/hfc-usb/fifo.h modules/hfc-usb/hfc-usb.h
+     modules/hfc-usb/hfc-usb_main.c modules/hfc-usb/regs.h
+     modules/netdev/netdev_main.c samples/device-pci-0000:00:09.0
+     tests/traffic.c {arch}/=tagging-method
+
+
 2005-12-27 16:55:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-373
 
     Summary:

@@ -2,6 +2,7 @@
 General:
 --------
 
+- IMPORTANT: >>>>>> There is a memory corruption during rmmod/insmod somewhere <<<<<
 - Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
 - Check all input data in ioctls/setsockopt for security bugs
 - Document functions (with doxygen?)
@@ -83,6 +84,7 @@ visdn_core:
 
 - Channel bundling
 - Allocate a single major number for control devices?
+- Reconnection does not work
 
 lapd:
 -----
@@ -123,6 +125,7 @@ visdn-netdev:
 -------------
 
 - Reallocate channel ID from the beginning instead of incrementing every time
+- Wake/Start queue/bring interface down on disconnect/connect
 
 visdn-ppp:
 ----------
@@ -142,6 +145,7 @@ hfc-4s:
 - Finish PCM bus support (and remove workaround for too big kmalloc)
 - Use memcpy_toio
 - Reintegrate BERT support
+- Implement T1, T2, T3, T4 timers
 
 hfc-pci:
 -------
@@ -149,6 +153,7 @@ hfc-pci:
 - FIX FIFO free calculation and queue handling
 - Finish PCM bus support
 - Reintegrate E-channel sniffing
+- Implement T1, T2, T3, T4 timers
 
 hfc-e1:
 -------
@@ -159,6 +164,7 @@ hfc-usb:
 --------
 
 - Rewrite using new model
+- Implement T1, T2, T3, T4 timers
 
 vgsm:
 -----

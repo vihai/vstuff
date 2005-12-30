@@ -506,7 +506,7 @@ static int hfc_sys_chan_frame_xmit(
 		led->alt_color = HFC_LED_OFF;
 		led->flashing_freq = 100 / HZ;
 		led->flashes = 1;
-		hfc_update_led(led);
+		hfc_led_update(led);
 	}
 
 	return VISDN_TX_OK;
@@ -676,7 +676,7 @@ static void hfc_sys_chan_rx_work(void *data)
 		led->alt_color = HFC_LED_OFF;
 		led->flashing_freq = 100 / HZ;
 		led->flashes = 1;
-		hfc_update_led(led);
+		hfc_led_update(led);
 	}
 
 	goto all_went_well;

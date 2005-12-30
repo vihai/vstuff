@@ -327,22 +327,234 @@ Data Link Connection, quindi ho deciso di implementarle all'interno della stessa
 socket.
 
 
-VGSM
----------------------------------------
 
-Initialization:
+[17193223.096000] usbcore: registered new driver hfc-usb
+[17193229.844000] visdn-netdev: Cannot register net device visdn0, aborting.
+[17193229.844000] visdn: visdn_chan_unregister(000081) called
+[17193229.844000] visdn: visdn_chan_unregister(000080) called
+[17193229.876000] visdn: visdn_cxc_disconnect()
+[17193229.876000] visdn: Simplex disconnect '000053' with '000063' through CXC '0'
+[17193229.876000] visnd_chan_disable(000053)
+[17193229.876000] visnd_chan_disable(000063)
+[17193229.876000] visdn: Simplex disconnect '000063' with '000053' through CXC '0'
+[17193229.876000] visnd_chan_disable(000063)
+[17193229.876000] visnd_chan_disable(000053)
+[17193229.876000] Connecting '000053' to '000063' mode=1
+[17193229.876000] visdn: Connecting chan '000053' to chan '000063'
+[17193229.876000] visdn: Simplex connect '000053' with '000063' through CXC '0'
+[17193229.876000] visdn: Simplex connect '000063' with '000053' through CXC '0'
+[17193229.876000]
+[17193229.896000] visdn: visdn_cxc_disconnect()
+[17193229.896000] visdn: Simplex disconnect '000056' with '000064' through CXC '0'
+[17193229.896000] visnd_chan_disable(000056)
+[17193229.896000] visnd_chan_disable(000064)
+[17193229.896000] visdn: Simplex disconnect '000064' with '000056' through CXC '0'
+[17193229.896000] visnd_chan_disable(000064)
+[17193229.896000] visnd_chan_disable(000056)
+[17193229.896000] Connecting '000056' to '000064' mode=1
+[17193229.900000] visdn: Connecting chan '000056' to chan '000064'
+[17193229.900000] visdn: Simplex connect '000056' with '000064' through CXC '0'
+[17193229.900000] visdn: Simplex connect '000064' with '000056' through CXC '0'
+[17193229.900000]
+[17193229.928000] visdn-netdev: Cannot register net device visdn1.0, aborting.
+[17193229.928000] visdn: visdn_chan_unregister(000083) called
+[17193229.928000] visdn: visdn_chan_unregister(000082) called
+[17193229.948000] visdn: visdn_cxc_disconnect()
+[17193229.948000] visdn: Simplex disconnect '000033' with '000001' through CXC '1'
+[17193229.948000] visnd_chan_disable(000033)
+[17193229.948000] visnd_chan_disable(000001)
+[17193229.948000] visdn: Simplex disconnect '000001' with '000033' through CXC '1'
+[17193229.948000] visnd_chan_disable(000001)
+[17193229.952000] visnd_chan_disable(000033)
+[17193229.952000] visdn: visdn_cxc_disconnect()
+[17193229.952000] visdn: Simplex disconnect '000001' with '000065' through CXC '0'
+[17193229.952000] visnd_chan_disable(000001)
+[17193229.952000] visnd_chan_disable(000065)
+[17193229.952000] visdn: Simplex disconnect '000065' with '000001' through CXC '0'
+[17193229.952000] visnd_chan_disable(000065)
+[17193229.952000] visnd_chan_disable(000001)
+[17193229.952000] Connecting '000033' to '000065' mode=1
+[17193229.952000] visdn: Connecting chan '000001' to chan '000065'
+[17193229.952000] visdn: Simplex connect '000001' with '000065' through CXC '0'
+[17193229.952000] visdn: Simplex connect '000065' with '000001' through CXC '0'
+[17193229.952000] visdn: Connecting chan '000033' to chan '000001'
+[17193229.952000] visdn: Simplex connect '000033' with '000001' through CXC '1'
+[17193229.952000] visdn: Simplex connect '000001' with '000033' through CXC '1'
+[17193229.952000]
+[17193229.972000] visdn: visdn_cxc_disconnect()
+[17193229.972000] visdn: Simplex disconnect '000036' with '000002' through CXC '1'
+[17193229.972000] visnd_chan_disable(000036)
+[17193229.972000] visnd_chan_disable(000002)
+[17193229.972000] visdn: Simplex disconnect '000002' with '000036' through CXC '1'
+[17193229.972000] visnd_chan_disable(000002)
+[17193229.972000] visnd_chan_disable(000036)
+[17193229.972000] visdn: visdn_cxc_disconnect()
+[17193229.972000] visdn: Simplex disconnect '000002' with '000066' through CXC '0'
+[17193229.972000] visnd_chan_disable(000002)
+[17193229.972000] visnd_chan_disable(000066)
+[17193229.972000] visdn: Simplex disconnect '000066' with '000002' through CXC '0'
+[17193229.972000] visnd_chan_disable(000066)
+[17193229.972000] visnd_chan_disable(000002)
+[17193229.976000] Connecting '000036' to '000066' mode=1
+[17193229.976000] visdn: Connecting chan '000002' to chan '000066'
+[17193229.976000] visdn: Simplex connect '000002' with '000066' through CXC '0'
+[17193229.976000] visdn: Simplex connect '000066' with '000002' through CXC '0'
+[17193229.976000] visdn: Connecting chan '000036' to chan '000002'
+[17193229.976000] visdn: Simplex connect '000036' with '000002' through CXC '1'
+[17193229.976000] visdn: Simplex connect '000002' with '000036' through CXC '1'
+[17193229.976000]
+[17193229.984000] visdn-netdev: Cannot register net device visdn1.1, aborting.
+[17193229.984000] visdn: visdn_chan_unregister(000085) called
+[17193229.984000] visdn: visdn_chan_unregister(000084) called
+[17193230.008000] visdn: visdn_cxc_disconnect()
+[17193230.008000] visdn: Simplex disconnect '000038' with '000003' through CXC '1'
+[17193230.008000] visnd_chan_disable(000038)
+[17193230.008000] visnd_chan_disable(000003)
+[17193230.008000] visdn: Simplex disconnect '000003' with '000038' through CXC '1'
+[17193230.008000] visnd_chan_disable(000003)
+[17193230.008000] visnd_chan_disable(000038)
+[17193230.008000] visdn: visdn_cxc_disconnect()
+[17193230.008000] visdn: Simplex disconnect '000003' with '000067' through CXC '0'
+[17193230.008000] visnd_chan_disable(000003)
+[17193230.008000] visnd_chan_disable(000067)
+[17193230.008000] visdn: Simplex disconnect '000067' with '000003' through CXC '0'
+[17193230.008000] visnd_chan_disable(000067)
+[17193230.008000] visnd_chan_disable(000003)
+[17193230.008000] Connecting '000038' to '000067' mode=1
+[17193230.008000] visdn: Connecting chan '000003' to chan '000067'
+[17193230.008000] visdn: Simplex connect '000003' with '000067' through CXC '0'
+[17193230.008000] visdn: Simplex connect '000067' with '000003' through CXC '0'
+[17193230.008000] visdn: Connecting chan '000038' to chan '000003'
+[17193230.008000] visdn: Simplex connect '000038' with '000003' through CXC '1'
+[17193230.008000] visdn: Simplex connect '000003' with '000038' through CXC '1'
+[17193230.008000]
+[17193230.028000] visdn: visdn_cxc_disconnect()
+[17193230.028000] visdn: Simplex disconnect '000041' with '000004' through CXC '1'
+[17193230.028000] visnd_chan_disable(000041)
+[17193230.028000] visnd_chan_disable(000004)
+[17193230.028000] visdn: Simplex disconnect '000004' with '000041' through CXC '1'
+[17193230.028000] visnd_chan_disable(000004)
+[17193230.028000] visnd_chan_disable(000041)
+[17193230.028000] visdn: visdn_cxc_disconnect()
+[17193230.028000] visdn: Simplex disconnect '000004' with '000068' through CXC '0'
+[17193230.028000] visnd_chan_disable(000004)
+[17193230.028000] visnd_chan_disable(000068)
+[17193230.028000] visdn: Simplex disconnect '000068' with '000004' through CXC '0'
+[17193230.028000] visnd_chan_disable(000068)
+[17193230.028000] visnd_chan_disable(000004)
+[17193230.032000] Connecting '000041' to '000068' mode=1
+[17193230.032000] visdn: Connecting chan '000004' to chan '000068'
+[17193230.032000] visdn: Simplex connect '000004' with '000068' through CXC '0'
+[17193230.032000] visdn: Simplex connect '000068' with '000004' through CXC '0'
+[17193230.032000] visdn: Connecting chan '000041' to chan '000004'
+[17193230.032000] visdn: Simplex connect '000041' with '000004' through CXC '1'
+[17193230.032000] visdn: Simplex connect '000004' with '000041' through CXC '1'
+[17193230.032000]
+[17193230.044000] visdn-netdev: Cannot register net device visdn1.2, aborting.
+[17193230.044000] visdn: visdn_chan_unregister(000087) called
+[17193230.044000] visdn: visdn_chan_unregister(000086) called
+[17193230.064000] visdn: visdn_cxc_disconnect()
+[17193230.064000] visdn: Simplex disconnect '000043' with '000005' through CXC '1'
+[17193230.064000] visnd_chan_disable(000043)
+[17193230.064000] visnd_chan_disable(000005)
+[17193230.064000] visdn: Simplex disconnect '000005' with '000043' through CXC '1'
+[17193230.064000] visnd_chan_disable(000005)
+[17193230.064000] visnd_chan_disable(000043)
+[17193230.064000] visdn: visdn_cxc_disconnect()
+[17193230.064000] visdn: Simplex disconnect '000005' with '000069' through CXC '0'
+[17193230.064000] visnd_chan_disable(000005)
+[17193230.064000] visnd_chan_disable(000069)
+[17193230.064000] visdn: Simplex disconnect '000069' with '000005' through CXC '0'
+[17193230.064000] visnd_chan_disable(000069)
+[17193230.064000] visnd_chan_disable(000005)
+[17193230.064000] Connecting '000043' to '000069' mode=1
+[17193230.064000] visdn: Connecting chan '000005' to chan '000069'
+[17193230.064000] visdn: Simplex connect '000005' with '000069' through CXC '0'
+[17193230.064000] visdn: Simplex connect '000069' with '000005' through CXC '0'
+[17193230.064000] visdn: Connecting chan '000043' to chan '000005'
+[17193230.064000] visdn: Simplex connect '000043' with '000005' through CXC '1'
+[17193230.064000] visdn: Simplex connect '000005' with '000043' through CXC '1'
+[17193230.064000]
+[17193230.084000] visdn: visdn_cxc_disconnect()
+[17193230.084000] visdn: Simplex disconnect '000046' with '000006' through CXC '1'
+[17193230.084000] visnd_chan_disable(000046)
+[17193230.084000] visnd_chan_disable(000006)
+[17193230.084000] visdn: Simplex disconnect '000006' with '000046' through CXC '1'
+[17193230.084000] visnd_chan_disable(000006)
+[17193230.084000] visnd_chan_disable(000046)
+[17193230.084000] visdn: visdn_cxc_disconnect()
+[17193230.084000] visdn: Simplex disconnect '000006' with '000070' through CXC '0'
+[17193230.084000] visnd_chan_disable(000006)
+[17193230.084000] visnd_chan_disable(000070)
+[17193230.084000] visdn: Simplex disconnect '000070' with '000006' through CXC '0'
+[17193230.084000] visnd_chan_disable(000070)
+[17193230.084000] visnd_chan_disable(000006)
+[17193230.088000] Connecting '000046' to '000070' mode=1
+[17193230.088000] visdn: Connecting chan '000006' to chan '000070'
+[17193230.088000] visdn: Simplex connect '000006' with '000070' through CXC '0'
+[17193230.088000] visdn: Simplex connect '000070' with '000006' through CXC '0'
+[17193230.088000] visdn: Connecting chan '000046' to chan '000006'
+[17193230.088000] visdn: Simplex connect '000046' with '000006' through CXC '1'
+[17193230.088000] visdn: Simplex connect '000006' with '000046' through CXC '1'
+[17193230.088000]
+[17193230.100000] visdn-netdev: Cannot register net device visdn1.3, aborting.
+[17193230.100000] visdn: visdn_chan_unregister(000089) called
+[17193230.100000] visdn: visdn_chan_unregister(000088) called
+[17193230.120000] visdn: visdn_cxc_disconnect()
+[17193230.120000] visdn: Simplex disconnect '000048' with '000007' through CXC '1'
+[17193230.120000] visnd_chan_disable(000048)
+[17193230.120000] visnd_chan_disable(000007)
+[17193230.120000] visdn: Simplex disconnect '000007' with '000048' through CXC '1'
+[17193230.120000] visnd_chan_disable(000007)
+[17193230.120000] visnd_chan_disable(000048)
+[17193230.120000] visdn: visdn_cxc_disconnect()
+[17193230.120000] visdn: Simplex disconnect '000007' with '000071' through CXC '0'
+[17193230.120000] visnd_chan_disable(000007)
+[17193230.120000] visnd_chan_disable(000071)
+[17193230.120000] visdn: Simplex disconnect '000071' with '000007' through CXC '0'
+[17193230.120000] visnd_chan_disable(000071)
+[17193230.120000] visnd_chan_disable(000007)
+[17193230.120000] Connecting '000048' to '000071' mode=1
+[17193230.120000] visdn: Connecting chan '000007' to chan '000071'
+[17193230.120000] visdn: Simplex connect '000007' with '000071' through CXC '0'
+[17193230.120000] visdn: Simplex connect '000071' with '000007' through CXC '0'
+[17193230.120000] visdn: Connecting chan '000048' to chan '000007'
+[17193230.120000] visdn: Simplex connect '000048' with '000007' through CXC '1'
+[17193230.120000] visdn: Simplex connect '000007' with '000048' through CXC '1'
+[17193230.120000]
+[17193230.140000] visdn: visdn_cxc_disconnect()
+[17193230.140000] visdn: Simplex disconnect '000051' with '000008' through CXC '1'
+[17193230.140000] visnd_chan_disable(000051)
+[17193230.140000] visnd_chan_disable(000008)
+[17193230.140000] visdn: Simplex disconnect '000008' with '000051' through CXC '1'
+[17193230.140000] visnd_chan_disable(000008)
+[17193230.140000] visnd_chan_disable(000051)
+[17193230.140000] visdn: visdn_cxc_disconnect()
+[17193230.140000] visdn: Simplex disconnect '000008' with '000072' through CXC '0'
+[17193230.140000] visnd_chan_disable(000008)
+[17193230.140000] visnd_chan_disable(000072)
+[17193230.140000] visdn: Simplex disconnect '000072' with '000008' through CXC '0'
+[17193230.140000] visnd_chan_disable(000072)
+[17193230.140000] visnd_chan_disable(000008)
+[17193230.144000] Connecting '000051' to '000072' mode=1
+[17193230.144000] visdn: Connecting chan '000008' to chan '000072'
+[17193230.144000] visdn: Simplex connect '000008' with '000072' through CXC '0'
+[17193230.144000] visdn: Simplex connect '000072' with '000008' through CXC '0'
+[17193230.144000] visdn: Connecting chan '000051' to chan '000008'
+[17193230.144000] visdn: Simplex connect '000051' with '000008' through CXC '1'
+[17193230.144000] visdn: Simplex connect '000008' with '000051' through CXC '1'
+[17193230.144000]
+[17193230.160000] visdn-netdev: Cannot register net device visdn2, aborting.
+[17193230.160000] visdn: visdn_chan_unregister(000091) called
+[17193230.160000] visdn: visdn_chan_unregister(000090) called
+[17193230.180000] Connecting '000075' to '000073' mode=1
+[17193230.180000] visdn: Connecting chan '000075' to chan '000073'
+[17193230.180000] visdn: Simplex connect '000075' with '000073' through CXC '0'
+[17193230.180000] visdn: Simplex connect '000073' with '000075' through CXC '0'
+[17193230.180000]
+[17193230.204000] Connecting '000078' to '000074' mode=1
+[17193230.204000] visdn: Connecting chan '000078' to chan '000074'
+[17193230.204000] visdn: Simplex connect '000078' with '000074' through CXC '0'
+[17193230.204000] visdn: Simplex connect '000074' with '000078' through CXC '0'
+[17193230.204000]
 
-AT<cr>
-Wait OK
-(if not, wait 200ms and retry)
-
-AT+IPR=38400
-
-Extended error codes:
-AT+CMEE=1
-
-AT+CPIN
-
-AT+CPIN=****
-
-+++ IMPOSTARE OROLOGIO

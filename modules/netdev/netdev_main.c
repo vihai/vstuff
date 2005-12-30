@@ -177,12 +177,7 @@ static int vnd_chan_frame_xmit(
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-	if (visdn_leg->chan->chan_class == &vnd_class_dchan) {
-		skb->pkt_type = PACKET_HOST;
-	} else {
-		skb->pkt_type = PACKET_OTHERHOST;
-	}
+	skb->pkt_type = PACKET_HOST;
 
 	netdevice->netdev->last_rx = jiffies;
 
@@ -276,6 +271,25 @@ static void vnd_chan_tx_error(
 	}
 }
 
+static int vnd_chan_e_frame_xmit(
+	struct visdn_leg *visdn_leg,
+	struct sk_buff *skb)
+{
+	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
+
+	skb->protocol = htons(ETH_P_LAPD);
+	skb->dev = netdevice->netdev;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	skb->pkt_type = PACKET_OTHERHOST;
+
+	netdevice->netdev->last_rx = jiffies;
+
+	netdevice->stats.rx_packets++;
+	netdevice->stats.rx_bytes += skb->len;
+
+	return netif_rx(skb);
+}
+
 static void vnd_chan_e_rx_error(
 	struct visdn_leg *visdn_leg,
 	enum visdn_leg_rx_error_code code)
@@ -319,6 +333,8 @@ struct visdn_leg_ops vnd_chan_leg_e_ops = {
 
 	.rx_error		= vnd_chan_e_rx_error,
 	.tx_error		= vnd_chan_e_tx_error,
+
+	.frame_xmit		= vnd_chan_e_frame_xmit,
 };
 
 static int vnd_netdev_open(struct net_device *netdev)

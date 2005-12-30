@@ -1,0 +1,22 @@
+#
+# Sample configuration file for a HFC-S USB device in TE mode with the netdev
+# interface being named visdn2.
+#
+
+<netdev visdn2>
+  protocol lapd
+  role TE
+  tei dynamic
+</netdev>
+
+<port st0>
+  attribute role TE
+
+  <chan D>
+    connectmodule netdev visdn2
+  </chan>
+
+  <chan E>
+    connectmodule netdev visdn2 echo
+  </chan>
+</port>

@@ -22,67 +22,57 @@
 void hfc_led_update(struct hfc_led *led)
 {
 	struct hfc_card *card = led->card;
-	enum hfc_led_color color;
-	u8 en_bit = 0;
-	u8 out_bit = 0;
+	u8 new_leds = card->regs.p_data;
+	enum hfc_led_color actual_color;
 
-	if (led->flashing_freq &&
-	    (jiffies % led->flashing_freq) > (led->flashing_freq / 2) &&
-	    led->flashes != 0)
-		color = led->alt_color;
-	else
-		color = led->color;
-
-//		del_timer
-
-	switch(led->id) {
-	case 0:
-		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN8;
-		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT8;
-	break;
-	case 1:
-		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN9;
-		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT9;
-	break;
-	case 2:
-		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN10;
-		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT10;
-	break;
-	case 3:
-		en_bit = hfc_R_GPIO_EN1_V_GPIO_EN11;
-		out_bit = hfc_R_GPIO_OUT1_V_GPIO_OUT11;
-	break;
-	}
-
-	if (color != HFC_LED_OFF) {
-		card->gpio_en |= en_bit;
-
-		if (color == HFC_LED_GREEN)
-			card->gpio_out |= out_bit;
-		else
-			card->gpio_out &= ~out_bit;
-	} else {
-		card->gpio_en &= ~en_bit;
-	}
-
-	hfc_outb(card, hfc_R_GPIO_EN1, card->gpio_en);
-	hfc_outb(card, hfc_R_GPIO_OUT1, card->gpio_out);
+	actual_color = led->color;
 
 	if (led->flashing_freq && led->flashes != 0) {
+
 		led->timer.expires = jiffies + led->flashing_freq / 2;
 		add_timer(&led->timer);
+
+	    	if ((jiffies % led->flashing_freq) >= (led->flashing_freq / 2))
+			actual_color = HFC_LED_OFF;
 	}
+
+	if (actual_color == HFC_LED_ON) {
+		switch(led->id) {
+		case 0: new_leds &= ~0x08; break;
+		case 1: new_leds &= ~0x10; break;
+		case 2: new_leds &= ~0x20; break;
+		case 3: new_leds &= ~0x40; break;
+		case 4: new_leds |= 0x80; break;
+		}
+	} else {
+		switch(led->id) {
+		case 0: new_leds |= 0x08; break;
+		case 1: new_leds |= 0x10; break;
+		case 2: new_leds |= 0x20; break;
+		case 3: new_leds |= 0x40; break;
+		case 4: new_leds &= ~0x80; break;
+		}
+	}
+
+	if (new_leds != card->regs.p_data) {
+		card->regs.p_data = new_leds;
+		schedule_work(&card->led_update_work);
+	}
+}
+
+void hfc_led_update_work(void *data)
+{
+	struct hfc_card *card = data;
+
+	hfc_write(card, HFC_REG_P_DATA, card->regs.p_data);
 }
 
 static void hfc_led_timer(unsigned long data)
 {
 	struct hfc_led *led = (struct hfc_led *)data;
-	struct hfc_card *card = led->card;
 
-	hfc_card_lock(card);
 	led->flashes--;
 	hfc_led_update(led);
-	hfc_card_unlock(card);
 }
 
 void hfc_led_init(
@@ -93,7 +83,6 @@ void hfc_led_init(
 	led->card = card;
 	led->id = id;
 	led->color = HFC_LED_OFF;
-	led->alt_color = HFC_LED_OFF;
 	led->flashing_freq = 0;
 	led->flashes = 0;
 
