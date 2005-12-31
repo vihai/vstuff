@@ -111,7 +111,7 @@ int visdn_timer_cdev_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	visdn_debug(3, "visdn_timer_cdev_ioctl()\n");
+	visdn_debug(3, "visdn_timer_cdev_ioctl()  %d\n", current->pid);
 
 /*	switch(cmd) {
 	}*/
@@ -401,6 +401,8 @@ err_class_register:
 void visdn_timer_modexit(void)
 {
 	cdev_del(&visdn_timer_cdev);
+
+	unregister_chrdev_region(visdn_timer_first_dev, 256);
 
 	class_unregister(&visdn_timer_class);
 }
