@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2005-12-31 04:49:57 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-382
+
+    Summary:
+      Using pci_resource_len instead of a costant in hfc-pci registers space
+    Revision:
+      isdn--devel--0.1--patch-382
+
+
+    modified files:
+     ChangeLog modules/hfc-pci/card.c
+
+
 2005-12-31 04:48:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-381
 
     Summary:

@@ -345,7 +345,7 @@ int __devinit hfc_card_probe(
 	int err;
 
 	struct hfc_card *card;
-	card = kmalloc(sizeof(struct hfc_card), GFP_KERNEL);
+	card = kmalloc(sizeof(*card), GFP_KERNEL);
 	if (!card) {
 		hfc_msg(KERN_CRIT, "unable to kmalloc!\n");
 		err = -ENOMEM;
@@ -391,7 +391,7 @@ int __devinit hfc_card_probe(
 		goto err_noirq;
 	}
 
-	card->io_bus_mem = pci_resource_start(pci_dev,1);
+	card->io_bus_mem = pci_resource_start(pci_dev, 1);
 	if (!card->io_bus_mem) {
 		hfc_msg_card(card, KERN_CRIT,
 			"No IO memory assigned to card\n");
@@ -399,7 +399,7 @@ int __devinit hfc_card_probe(
 		goto err_noiobase;
 	}
 
-	card->io_mem = ioremap(card->io_bus_mem, hfc_PCI_MEM_SIZE);
+	card->io_mem = ioremap(card->io_bus_mem, pci_resource_len(pci_dev, 1));
 	if(!card->io_mem) {
 		hfc_msg_card(card, KERN_CRIT,
 			"Cannot ioremap I/O memory\n");
