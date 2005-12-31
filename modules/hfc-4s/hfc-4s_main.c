@@ -37,7 +37,11 @@
 #include "card_inline.h"
 
 #ifdef DEBUG_CODE
+#ifdef DEBUG_DEFAULTS
+int debug_level = 4;
+#else
 int debug_level = 0;
+#endif
 #endif
 
 static struct pci_device_id hfc_pci_ids[] = {

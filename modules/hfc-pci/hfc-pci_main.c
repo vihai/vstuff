@@ -27,7 +27,11 @@
 #include "st_port.h"
 
 #ifdef DEBUG_CODE
+#ifdef DEBUG_DEFAULTS
+int debug_level = 4;
+#else
 int debug_level = 0;
+#endif
 #endif
 
 static struct pci_device_id hfc_pci_ids[] = {
@@ -185,7 +189,6 @@ static void __exit hfc_module_exit(void)
 
 	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " unloaded\n");
 }
-
 module_exit(hfc_module_exit);
 
 MODULE_DESCRIPTION(hfc_DRIVER_DESCR);

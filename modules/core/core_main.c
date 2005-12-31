@@ -28,7 +28,11 @@
 #include "timer.h"
 
 #ifdef DEBUG_CODE
-int debug_level = 4;
+#ifdef DEBUG_DEFAULTS
+int debug_level = 3;
+#else
+int debug_level = 0;
+#endif
 #endif
 
 dev_t visdn_first_dev;

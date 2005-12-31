@@ -30,7 +30,11 @@
 #include "netdev.h"
 
 #ifdef DEBUG_CODE
+#ifdef DEBUG_DEFAULTS
+int debug_level = 3;
+#else
 int debug_level = 0;
+#endif
 #endif
 
 static dev_t vnd_first_dev;
@@ -936,8 +940,8 @@ static void __exit vnd_module_exit(void)
 	/* Ensure noone can open/ioctl cdevs before removing netdevices*/
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
-	&vnd_control_class_dev,
-	&class_device_attr_dev);
+		&vnd_control_class_dev,
+		&class_device_attr_dev);
 #endif
 
 	class_device_del(&vnd_control_class_dev);

@@ -26,7 +26,11 @@
 #include "streamport.h"
 
 #ifdef DEBUG_CODE
+#ifdef DEBUG_DEFAULTS
+int debug_level = 3;
+#else
 int debug_level = 0;
+#endif
 #endif
 
 static dev_t vsp_first_dev;

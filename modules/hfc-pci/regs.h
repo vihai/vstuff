@@ -15,8 +15,6 @@
 
 #define hfc_RESET_DELAY		20
 #define hfc_FIFO_SIZE		0x8000
-#define hfc_PCI_MEM_SIZE	0x0100
-
 
 #define hfc_PCI_MWBA		0x80
 

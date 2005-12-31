@@ -912,6 +912,11 @@ static int visdn_cxc_cdev_do_connect(
 err_cxc_connect:
 err_copy_from_user:
 
+	printk(KERN_DEBUG "Connection between '%06d' and '%06d' failed: %d\n",
+		connect.src_chan_id,
+		connect.dst_chan_id,
+		err);
+
 	return err;
 }
 

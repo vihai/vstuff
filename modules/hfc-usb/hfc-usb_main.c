@@ -34,7 +34,11 @@
 #define E_FIFO_OFF 3
 
 #ifdef DEBUG_CODE
+#ifdef DEBUG_DEFAULTS
+int debug_level = 4;
+#else
 int debug_level = 0;
+#endif
 #endif
 
 #define HFC_VENDOR_ID_COLOGNE	0x0959

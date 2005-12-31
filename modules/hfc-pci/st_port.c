@@ -403,6 +403,8 @@ void hfc_st_port_init(
 	struct hfc_card *card,
 	const char *name)
 {
+	memset(port, 0, sizeof(*port));
+
 	port->card = card;
 
 	INIT_WORK(&port->state_change_work,
