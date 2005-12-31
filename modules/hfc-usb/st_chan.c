@@ -313,6 +313,9 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
+	usb_kill_urb(chan->rx_fifo.urb);
+	usb_kill_urb(chan->tx_fifo.urb);
+
 	if (chan->id == B1) {
 		card->leds[HFC_LED_B1].color = HFC_LED_OFF;
 		hfc_led_update(&card->leds[HFC_LED_B1]);
