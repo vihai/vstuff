@@ -112,6 +112,10 @@ static int visdn_connect(void)
 		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");
 	}
 
+	if (ioctl(fd, VISDN_IOC_ENABLE_PATH, NULL) < 0) {
+		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");
+	}
+
 	dbglog("PPPovISDN - channel connected to ppp device");
 
 	strlcpy(ppp_devnam, devnam, sizeof(ppp_devnam));

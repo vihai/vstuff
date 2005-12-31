@@ -359,6 +359,9 @@ int vppp_cdev_ioctl(
 	case PPPIOCGCHAN: {
 		int __user *buf = (int __user *)arg;
 
+		if (!test_bit(VISDN_CHAN_STATE_OPEN, &chan->visdn_chan.state))
+			return -ENOTCONN;
+
 		if (put_user(ppp_channel_index(&chan->ppp_chan), buf))
 			return -EFAULT;
 	}
@@ -366,6 +369,9 @@ int vppp_cdev_ioctl(
 
 	case PPPIOCGUNIT: {
 		int __user *buf = (int __user *)arg;
+
+		if (!test_bit(VISDN_CHAN_STATE_OPEN, &chan->visdn_chan.state))
+			return -ENOTCONN;
 
 		if (put_user(ppp_unit_number(&chan->ppp_chan), buf))
 			return -EFAULT;
