@@ -1,7 +1,7 @@
-#Channel: VISDN/visdn1.3/7021003070
+#Channel: VISDN/visdn1.3/7021003070/D
 Channel: VISDN/visdn0/230/D
-MaxRetries: 2
+MaxRetries: 1
 RetryTime: 60
 WaitTime: 30
 Application: visdnPPP
-Data: debug|call|uli702
+Data: debug|172.16.0.1:172.16.0.2

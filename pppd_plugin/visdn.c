@@ -85,6 +85,8 @@ static void visdn_process_extra_options(void)
 	dbglog("visdn_process_extra_options");
 }
 
+#include <unistd.h>
+
 static int visdn_connect(void)
 {
 	int fd;
@@ -103,6 +105,8 @@ static int visdn_connect(void)
 	vc.src_chan_id = 0;
 	vc.dst_chan_id = atoi(devnam);
 	vc.flags = 0;
+
+	dbglog("PPPovISDN - MYPID = %d", getpid());
 
 	if (ioctl(fd, VISDN_IOC_CONNECT_PATH, (caddr_t)&vc) < 0) {
 		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");

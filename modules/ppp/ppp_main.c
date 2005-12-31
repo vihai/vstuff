@@ -29,7 +29,11 @@
 #include "ppp.h"
 
 #ifdef DEBUG_CODE
+#ifdef DEBUG_DEFAULTS
+int debug_level = 3;
+#else
 int debug_level = 0;
+#endif
 #endif
 
 static dev_t vppp_first_dev;
@@ -312,6 +316,37 @@ ssize_t vppp_cdev_write(
 	return -ENOTSUPP;
 }
 
+static int vppp_cdev_do_connect(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vppp_chan *chan = file->private_data;
+	struct visdn_connect connect;
+	int err;
+
+	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
+
+	err = visdn_connect_path_with_id(
+		chan->visdn_chan.id,
+		connect.dst_chan_id,
+		file,
+		connect.flags);
+	if (err < 0)
+		goto err_cxc_disconnect;
+
+	return 0;
+
+err_cxc_disconnect:
+err_copy_from_user:
+
+	return err;
+}
+
 int vppp_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
@@ -337,9 +372,27 @@ int vppp_cdev_ioctl(
 	}
 	break;
 
+	case VISDN_IOC_CONNECT_PATH:
+		return vppp_cdev_do_connect(inode, file, cmd, arg);
+	break;
+
+	case VISDN_IOC_DISCONNECT_PATH:
+		return visdn_disconnect_path_with_id(chan->visdn_chan.id);
+	break;
+
+	case VISDN_IOC_ENABLE_PATH:
+		return visdn_enable_path_with_id(chan->visdn_chan.id);
+	break;
+
+	case VISDN_IOC_DISABLE_PATH:
+		return visdn_disable_path_with_id(chan->visdn_chan.id);
+	break;
+
 	default:
-		vppp_debug(2, "IOCTL(%d,%ld)\n", cmd, arg);
-		return -EINVAL;
+		vppp_msg(KERN_WARNING, "Unsupported ioctl(%d, %ld)\n",
+			cmd, arg);
+
+		return -EOPNOTSUPP;
 	}
 
 	return 0;
