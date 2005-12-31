@@ -369,7 +369,7 @@ static int hfc_st_chan_frame_xmit(
 
 	hfc_st_port_check_l1_up(chan->port);
 
-	if (!hfc_fifo_free_frames(fifo) <= 1) {
+	if (hfc_fifo_free_frames(fifo) <= 1) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
 
 		visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
