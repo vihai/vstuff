@@ -229,6 +229,7 @@ int visdn_chan_register(struct visdn_chan *chan)
 
 	/*----------- LEG A -------*/
 
+	kobject_init(&chan->leg_a.kobj);
 	kobject_set_name(&chan->leg_a.kobj, "leg_a");
 	chan->leg_a.kobj.parent = &chan->kobj;
 
@@ -256,6 +257,7 @@ int visdn_chan_register(struct visdn_chan *chan)
 
 	/*----------- LEG B -------*/
 
+	kobject_init(&chan->leg_b.kobj);
 	kobject_set_name(&chan->leg_b.kobj, "leg_b");
 	chan->leg_b.kobj.parent = &chan->kobj;
 
