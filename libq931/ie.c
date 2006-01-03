@@ -23,6 +23,7 @@
 #include <libq931/ie_call_identity.h>
 #include <libq931/ie_call_state.h>
 #include <libq931/ie_called_party_number.h>
+#include <libq931/ie_connected_number.h>
 #include <libq931/ie_calling_party_number.h>
 #include <libq931/ie_cause.h>
 #include <libq931/ie_channel_identification.h>
@@ -351,6 +352,11 @@ static struct q931_ie_type q931_ie_types[] =
 		.network_type	= Q931_NT_UNKNOWN,
 		.id		= Q931_IE_CONNECTED_NUMBER,
 		.name		= "Connected Number",
+		.init		= q931_ie_connected_number_register,
+		.alloc		= q931_ie_connected_number_alloc_abstract,
+		.read_from_buf	= q931_ie_connected_number_read_from_buf,
+		.write_to_buf   = q931_ie_connected_number_write_to_buf,
+		.dump		= q931_ie_connected_number_dump,
 	},
 	{
 		.max_len	= 24,
@@ -608,7 +614,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
-	{ //??? Probably right, see ETS 300 097
+	{
 		Q931_MT_CONNECT,
 		Q931_IE_CONNECTED_NUMBER,
 		Q931_IE_DIR_BOTH,

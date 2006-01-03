@@ -25,6 +25,7 @@ libq931_la_SOURCES =			\
 	ie_call_identity.c		\
 	ie_call_state.c			\
 	ie_called_party_number.c	\
+	ie_connected_number.c		\
 	ie_calling_party_number.c	\
 	ie_cause.c			\
 	ie_channel_identification.c	\
@@ -56,6 +57,7 @@ nobase_include_HEADERS =			\
 	libq931/ie_call_identity.h		\
 	libq931/ie_call_state.h			\
 	libq931/ie_called_party_number.h	\
+	libq931/ie_connected_number.h		\
 	libq931/ie_calling_party_number.h	\
 	libq931/ie_cause.h			\
 	libq931/ie_channel_identification.h	\

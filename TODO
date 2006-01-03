@@ -2,8 +2,8 @@
 General:
 --------
 
-- IMPORTANT: >>>>>> There is a memory corruption during rmmod/insmod somewhere <<<<<
-- Check what headers/parts should be included by user-mode programs (#ifdef KERNEL)
+- Check what headers/parts should be included by user-mode programs
+  (#ifdef KERNEL)
 - Check all input data in ioctls/setsockopt for security bugs
 - Document functions (with doxygen?)
 - Create a libvisdn for channel manipulation functions?
@@ -15,8 +15,8 @@ General:
 Build system:
 -------------
 
-- Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and complain
-  about non-standard directory location
+- Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and
+  complain about non-standard directory location
 - Conditionally build kfifo!
 
 chan_visdn:
@@ -28,12 +28,10 @@ chan_visdn:
 - Implement "allowed_caller_ids" which may eventually replace
   force_inbound_caller_id
 - MWI on ISDN phones
-- Asterisk's design makes difficult to implement some sort of parameter negotiation
-  so it is impossible to know what bearer capabilities are accepted by a
-  destination, if it supports overlap dialing and so on...
+- Asterisk's design makes difficult to implement some sort of parameter
+  negotiation so it is impossible to know what bearer capabilities are
+  accepted by a destination, if it supports overlap dialing and so on...
 - Call bumbing
-- Handle ULAW
-- Handle caller id presentation informations
 - Check DTMF handling
 
 - Call parking (SUSPEND/RESUME) does not use the call parking "infrastructure"
