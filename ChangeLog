@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-03 14:13:58 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-391
+
+    Summary:
+      Fixed bootstrap to use automake-1.9 explicitly
+    Revision:
+      isdn--devel--0.1--patch-391
+
+
+    modified files:
+     ChangeLog bootstrap
+
+
 2006-01-03 13:46:24 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-390
 
     Summary:
