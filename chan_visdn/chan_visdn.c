@@ -126,6 +126,14 @@ enum visdn_type_of_number
 	VISDN_TYPE_OF_NUMBER_ABBREVIATED,
 };
 
+enum visdn_clir_mode
+{
+	VISDN_CLIR_MODE_OFF,
+	VISDN_CLIR_MODE_DEFAULT_ON,
+	VISDN_CLIR_MODE_DEFAULT_OFF,
+	VISDN_CLIR_MODE_ON,
+};
+
 struct visdn_interface
 {
 	struct list_head ifs_node;
@@ -140,8 +148,14 @@ struct visdn_interface
 	enum visdn_type_of_number local_type_of_number;
 	int tones_option;
 	char context[AST_MAX_EXTENSION];
-	char default_inbound_caller_id[128];
+
+	int clip_enabled;
+	int clip_override;
+	char clip_default_name[128];
+	char clip_default_number[32];
 	int force_inbound_caller_id;
+	int clip_special_arrangement;
+	enum visdn_clir_mode clir_mode;
 	int overlap_sending;
 	int overlap_receiving;
 	char national_prefix[10];
@@ -229,8 +243,13 @@ struct visdn_state
 		.local_type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN,
 		.tones_option = TRUE,
 		.context = "visdn",
-		.default_inbound_caller_id = "",
+		.clip_enabled = TRUE,
+		.clip_override = FALSE,
+		.clip_default_name = "",
+		.clip_default_number = "",
 		.force_inbound_caller_id = FALSE,
+		.clip_special_arrangement = FALSE,
+		.clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF,
 		.overlap_sending = TRUE,
 		.overlap_receiving = FALSE,
 		.national_prefix = "0",
@@ -390,6 +409,23 @@ static const char *visdn_type_of_number_to_string(
 	return "*UNKNOWN*";
 }
 
+static const char *visdn_clir_mode_to_text(
+	enum visdn_clir_mode mode)
+{
+	switch(mode) {
+	case VISDN_CLIR_MODE_OFF:
+		return "Off";
+	case VISDN_CLIR_MODE_DEFAULT_OFF:
+		return "Default off";
+	case VISDN_CLIR_MODE_DEFAULT_ON:
+		return "Default on";
+	case VISDN_CLIR_MODE_ON:
+		return "On";
+	}
+
+	return "*UNKNOWN*";
+}
+
 static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
@@ -411,8 +447,12 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Local type of number      : %s\n"
 			"Tones option              : %s\n"
 			"Context                   : %s\n"
-			"Default inbound caller ID : %s\n"
+			"CLIP enabled              : %s\n"
+			"CLIP override             : %s\n"
+			"CLIP default              : %s <%s>\n"
 			"Force inbound caller ID   : %s\n"
+			"CLIP special arrangement  : %s\n"
+			"CLIR mode                 : %s\n"
 			"Overlap Sending           : %s\n"
 			"Overlap Receiving         : %s\n"
 			"National prefix           : %s\n"
@@ -426,8 +466,13 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				intf->local_type_of_number),
 			intf->tones_option ? "Yes" : "No",
 			intf->context,
-			intf->default_inbound_caller_id,
+			intf->clip_enabled ? "Yes" : "No",
+			intf->clip_override ? "Yes" : "No",
+			intf->clip_default_name,
+			intf->clip_default_number,
 			intf->force_inbound_caller_id ? "Yes" : "No",
+			intf->clip_special_arrangement ? "Yes" : "No",
+			visdn_clir_mode_to_text(intf->clir_mode),
 			intf->overlap_sending ? "Yes" : "No",
 			intf->overlap_receiving ? "Yes" : "No",
 			intf->national_prefix,
@@ -623,6 +668,29 @@ static enum q931_interface_network_role
 	return role;
 }
 
+static enum visdn_clir_mode
+	visdn_string_to_clir_mode(const char *str)
+{
+	enum visdn_clir_mode mode;
+
+	if (!strcasecmp(str, "off"))
+		mode = VISDN_CLIR_MODE_OFF;
+	else if (!strcasecmp(str, "default_off"))
+		mode = VISDN_CLIR_MODE_DEFAULT_OFF;
+	else if (!strcasecmp(str, "default_on"))
+		mode = VISDN_CLIR_MODE_DEFAULT_ON;
+	else if (!strcasecmp(str, "on"))
+		mode = VISDN_CLIR_MODE_ON;
+	else {
+		ast_log(LOG_ERROR,
+			"Unknown clir_mode '%s'\n",
+			str);
+		mode = 0;
+	}
+
+	return mode;
+}
+
 static int visdn_intf_from_var(
 	struct visdn_interface *intf,
 	struct ast_variable *var)
@@ -641,11 +709,22 @@ static int visdn_intf_from_var(
 	} else if (!strcasecmp(var->name, "context")) {
 		strncpy(intf->context, var->value,
 			sizeof(intf->context));
-	} else if (!strcasecmp(var->name, "default_inbound_caller_id")) {
-		strncpy(intf->default_inbound_caller_id, var->value,
-			sizeof(intf->default_inbound_caller_id));
+	} else if (!strcasecmp(var->name, "clip_enabled")) {
+		intf->clip_enabled = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "clip_override")) {
+		intf->clip_override = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "clip_default_name")) {
+		strncpy(intf->clip_default_name, var->value,
+			sizeof(intf->clip_default_name));
+	} else if (!strcasecmp(var->name, "clip_default_number")) {
+		strncpy(intf->clip_default_number, var->value,
+			sizeof(intf->clip_default_number));
 	} else if (!strcasecmp(var->name, "force_inbound_caller_id")) {
 		intf->force_inbound_caller_id = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "clip_special_arrangement")) {
+		intf->clip_special_arrangement = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "clir_mode")) {
+		intf->clir_mode = visdn_string_to_clir_mode(var->value);
 	} else if (!strcasecmp(var->name, "overlap_sending")) {
 		intf->overlap_sending = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "overlap_receiving")) {
@@ -715,9 +794,15 @@ static void visdn_copy_interface_config(
 	dst->tones_option = src->tones_option;
 	strncpy(dst->context, src->context,
 		sizeof(dst->context));
-	strncpy(dst->default_inbound_caller_id, src->default_inbound_caller_id,
-		sizeof(dst->default_inbound_caller_id));
+	dst->clip_enabled = src->clip_enabled;
+	dst->clip_override = src->clip_override;
+	strncpy(dst->clip_default_name, src->clip_default_name,
+		sizeof(dst->clip_default_name));
+	strncpy(dst->clip_default_number, src->clip_default_number,
+		sizeof(dst->clip_default_number));
 	dst->force_inbound_caller_id = src->force_inbound_caller_id;
+	dst->clip_special_arrangement = src->clip_special_arrangement;
+	dst->clir_mode = src->clir_mode;
 	dst->overlap_sending = src->overlap_sending;
 	dst->overlap_receiving = src->overlap_receiving;
 	strncpy(dst->national_prefix, src->national_prefix,
@@ -1264,6 +1349,62 @@ void visdn_queue_primitive(
 	}
 }
 
+static void visdn_pres_to_pi_si(
+	int pres,
+	enum q931_ie_calling_party_number_presentation_indicator *pi,
+	enum q931_ie_calling_party_number_screening_indicator *si)
+{
+	switch(pres) {
+	case AST_PRES_ALLOWED_USER_NUMBER_NOT_SCREENED:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+	break;
+
+	case AST_PRES_ALLOWED_USER_NUMBER_PASSED_SCREEN:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
+	break;
+
+	case AST_PRES_ALLOWED_USER_NUMBER_FAILED_SCREEN:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED;
+	break;
+
+	case AST_PRES_ALLOWED_NETWORK_NUMBER:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+		*si = Q931_IE_CGPN_SI_NETWORK_PROVIDED;
+	break;
+
+	case AST_PRES_PROHIB_USER_NUMBER_NOT_SCREENED:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+	break;
+
+	case AST_PRES_PROHIB_USER_NUMBER_PASSED_SCREEN:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
+	break;
+
+	case AST_PRES_PROHIB_USER_NUMBER_FAILED_SCREEN:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED;
+	break;
+
+	case AST_PRES_PROHIB_NETWORK_NUMBER:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+		*si = Q931_IE_CGPN_SI_NETWORK_PROVIDED;
+	break;
+
+	case AST_PRES_NUMBER_NOT_AVAILABLE:
+		*pi = Q931_IE_CGPN_PI_NOT_AVAILABLE;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+	break;
+
+	default:
+		*pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+		*si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+	}
+}
 
 static int visdn_call(
 	struct ast_channel *ast_chan,
@@ -1406,114 +1547,79 @@ static int visdn_call(
 		q931_ies_add_put(&ies, &sc->ie);
 	}
 
+	if (intf->clip_enabled) {
+		struct q931_ie_calling_party_number *cgpn =
+			q931_ie_calling_party_number_alloc();
+
+		if (AST_CID_NUM(ast_chan) &&
+		    strlen(AST_CID_NUM(ast_chan))) {
+
+			if ((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
+					AST_PRES_ALLOWED ||
+			     intf->clip_override) {
+
+				/* Send subaddress if provided */
+
+				visdn_pres_to_pi_si(ast_chan->cid.cid_pres,
+					&cgpn->presentation_indicator,
+					&cgpn->screening_indicator);
+
+				cgpn->type_of_number =
+					visdn_type_of_number_to_cgpn(
+						intf->local_type_of_number);
+	       	       			/* Use ast_chan->cli.cli_ton ? */
+
+				cgpn->numbering_plan_identificator =
+					Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
+
 #ifdef ASTERISK_VERSION_NUM
-	if (ast_chan->cid.cid_num && strlen(ast_chan->cid.cid_num)) {
-
-		struct q931_ie_calling_party_number *cgpn =
-			q931_ie_calling_party_number_alloc();
-
-		cgpn->type_of_number =
-			visdn_type_of_number_to_cgpn(
-					intf->local_type_of_number);
-		cgpn->numbering_plan_identificator =
-			Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
-
-		enum q931_ie_calling_party_number_presentation_indicator pi;
-		enum q931_ie_calling_party_number_screening_indicator si;
-
-		switch(ast_chan->cid.cid_pres) {
-		case AST_PRES_ALLOWED_USER_NUMBER_NOT_SCREENED:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
-		break;
-
-		case AST_PRES_ALLOWED_USER_NUMBER_PASSED_SCREEN:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
-		break;
-
-		case AST_PRES_ALLOWED_USER_NUMBER_FAILED_SCREEN:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED;
-		break;
-
-		case AST_PRES_ALLOWED_NETWORK_NUMBER:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-			si = Q931_IE_CGPN_SI_NETWORK_PROVIDED;
-		break;
-
-		case AST_PRES_PROHIB_USER_NUMBER_NOT_SCREENED:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
-		break;
-
-		case AST_PRES_PROHIB_USER_NUMBER_PASSED_SCREEN:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
-		break;
-
-		case AST_PRES_PROHIB_USER_NUMBER_FAILED_SCREEN:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED;
-		break;
-
-		case AST_PRES_PROHIB_NETWORK_NUMBER:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
-			si = Q931_IE_CGPN_SI_NETWORK_PROVIDED;
-		break;
-
-		case AST_PRES_NUMBER_NOT_AVAILABLE:
-			pi = Q931_IE_CGPN_PI_NOT_AVAILABLE;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
-		break;
-
-		default:
-			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
-		}
-	
-		cgpn->presentation_indicator = si;
-		cgpn->screening_indicator = pi;
-
-		strncpy(cgpn->number, ast_chan->cid.cid_num,
-			sizeof(cgpn->number));
-
-		q931_ies_add_put(&ies, &cgpn->ie);
-	}
+				strncpy(cgpn->number, ast_chan->cid.cid_num,
+					sizeof(cgpn->number));
 #else
-	if (ast_chan->caller_id && strlen(ast_chan->caller_id)) {
-
-		struct q931_ie_calling_party_number *cgpn =
-			q931_ie_calling_party_number_alloc();
-
-		cgpn->type_of_number =
-			visdn_type_of_number_to_cgpn(
-					intf->local_type_of_number);
-		cgpn->numbering_plan_identificator =
-			Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
-		cgpn->presentation_indicator =
-			Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
-		cgpn->screening_indicator =
-			Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
-
-		char callerid[255];
-		char *name, *number;
-		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
-		ast_callerid_parse(callerid, &name, &number);
-		if (number) {
-			strncpy(cgpn->number, number, sizeof(cgpn->number));
-
-			q931_ies_add_put(&ies, &cgpn->ie);
+				char callerid[255];
+				char *name, *number;
+				strncpy(callerid, ast_chan->callerid,
+					       sizeof(callerid));
+				ast_callerid_parse(callerid, &name, &number);
+				if (number) {
+					strncpy(cgpn->number, number,
+						sizeof(cgpn->number));
+				} else {
+					ast_log(LOG_WARNING,
+						"Unable to parse '%s'"
+						" into CallerID name &"
+						" number\n",
+						callerid);
+				}
+#endif
+			} else {
+				cgpn->type_of_number =
+					Q931_IE_CGPN_TON_UNKNOWN;
+				cgpn->numbering_plan_identificator =
+					Q931_IE_CGPN_NPI_UNKNOWN;
+				cgpn->presentation_indicator =
+					Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+				cgpn->screening_indicator =
+					Q931_IE_CGPN_SI_NETWORK_PROVIDED;
+			}
 		} else {
-			ast_log(LOG_WARNING,
-				"Unable to parse '%s'"
-				" into CallerID name & number\n",
-				callerid);
+			cgpn->type_of_number =
+				Q931_IE_CGPN_TON_UNKNOWN;
+			cgpn->numbering_plan_identificator =
+				Q931_IE_CGPN_NPI_UNKNOWN;
+			cgpn->presentation_indicator =
+				Q931_IE_CGPN_PI_NOT_AVAILABLE;
+			cgpn->screening_indicator =
+				Q931_IE_CGPN_SI_NETWORK_PROVIDED;
 		}
 
 		q931_ies_add_put(&ies, &cgpn->ie);
+
+		/* NOTE: There is no provision for sending a second CGPN
+		 * if the caller is using the special arrangements, since
+		 * Asterisk does not support more than one CID
+		 */
 	}
-#endif
 
 	struct q931_ie_high_layer_compatibility *hlc =
 		q931_ie_high_layer_compatibility_alloc();
@@ -3177,13 +3283,31 @@ static void visdn_q931_setup_confirm(
 	ast_setstate(ast_chan, AST_STATE_UP);
 }
 
+static int visdn_cgpn_to_pres(
+	struct q931_ie_calling_party_number *cgpn)
+{
+	switch(cgpn->presentation_indicator) {
+	case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
+		return AST_PRES_ALLOWED;
+	break;
+
+	case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
+		return AST_PRES_RESTRICTED;
+	break;
+
+	case Q931_IE_CGPN_PI_NOT_AVAILABLE:
+		return AST_PRES_UNAVAILABLE;
+	break;
+	}
+
+	return 0;
+}
+
 static void visdn_q931_setup_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
 	FUNC_DEBUG();
-
-	char called_number[32] = "";
 
 	struct visdn_chan *visdn_chan;
 	visdn_chan = visdn_alloc();
@@ -3201,6 +3325,10 @@ static void visdn_q931_setup_indication(
 	if (!ast_chan)
 		goto err_visdn_new;
 
+	struct q931_ie_calling_party_number *cgpn = NULL;
+	struct q931_ie_called_party_number *cdpn = NULL;
+	struct q931_ie_bearer_capability *bc = NULL;
+
 	int i;
 	for(i=0; i<ies->count; i++) {
 		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
@@ -3208,152 +3336,63 @@ static void visdn_q931_setup_indication(
 		} else if (ies->ies[i]->type->id ==
 				Q931_IE_CALLED_PARTY_NUMBER) {
 
-			struct q931_ie_called_party_number *cdpn =
-				container_of(ies->ies[i],
-					struct q931_ie_called_party_number, ie);
-
-			if (strlen(called_number) + strlen(cdpn->number) - 1 >
-					sizeof(called_number)) {
-				ast_log(LOG_NOTICE,
-					"Called number overflow\n");
-
-				struct q931_ies ies = Q931_IES_INIT;
-
-				struct q931_ie_cause *cause =
-						q931_ie_cause_alloc();
-				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location =
-					q931_ie_cause_location_call(q931_call);
-				cause->value =
-					Q931_IE_C_CV_INVALID_NUMBER_FORMAT;
-				q931_ies_add_put(&ies, &cause->ie);
-
-				q931_send_primitive(visdn_chan->q931_call,
-					Q931_CCB_REJECT_REQUEST, &ies);
-			}
-
-			if (cdpn->number[strlen(cdpn->number) - 1] == '#') {
-				visdn_chan->sending_complete = TRUE;
-				strncat(called_number, cdpn->number,
-					strlen(cdpn->number)-1);
-			} else {
-				strcat(called_number, cdpn->number);
-			}
+			cdpn = container_of(ies->ies[i],
+				struct q931_ie_called_party_number, ie);
 
 		} else if (ies->ies[i]->type->id ==
 				Q931_IE_CALLING_PARTY_NUMBER) {
 
-			struct q931_ie_calling_party_number *cgpn =
-				container_of(ies->ies[i],
+			cgpn = container_of(ies->ies[i],
 				struct q931_ie_calling_party_number, ie);
 
-			const char *prefix;
-			switch(cgpn->type_of_number) {
-			case Q931_IE_CDPN_TON_INTERNATIONAL:
-				prefix = intf->international_prefix;
-			break;
-
-			case Q931_IE_CDPN_TON_NATIONAL:
-				prefix = intf->national_prefix;
-			break;
-
-			default:
-				prefix = "";
-			break;
-			}
-
-			ast_chan->cid.cid_pres = 0;
-			
-			switch(cgpn->presentation_indicator) {
-			case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_ALLOWED;
-			break;
-
-			case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_RESTRICTED;
-			break;
-
-			case Q931_IE_CGPN_PI_NOT_AVAILABLE:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_UNAVAILABLE;
-			break;
-			}
-
-			switch(cgpn->screening_indicator) {
-			case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_USER_NUMBER_UNSCREENED;
-			break;
-
-			case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_USER_NUMBER_PASSED_SCREEN;
-			break;
-
-			case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_USER_NUMBER_FAILED_SCREEN;
-			break;
-
-			case Q931_IE_CGPN_SI_NETWORK_PROVIDED:
-				ast_chan->cid.cid_pres |=
-					AST_PRES_NETWORK_NUMBER;
-			break;
-			}
-
-			/* They appear to have the same values :) */
-			ast_chan->cid.cid_ton = cgpn->type_of_number;
-
-			char full_cid[128];
-			snprintf(full_cid, sizeof(full_cid),
-				"%s%s", prefix, cgpn->number);
-			
-			AST_CID_NUM(ast_chan) = strdup(full_cid);
 		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
 
-			// We should check the destination bearer capability
-			// unfortunately we don't know if the destination is
-			// compatible until we start the PBX... this is a
-			// design flaw in Asterisk
-
-			struct q931_ie_bearer_capability *bc =
-				container_of(ies->ies[i],
-					struct q931_ie_bearer_capability, ie);
-
-			if (bc->information_transfer_capability ==
-				Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL) {
-
-				visdn_chan->is_voice = FALSE;
-				q931_call->tones_option = FALSE;
-
-			} else  if (bc->information_transfer_capability ==
-					Q931_IE_BC_ITC_SPEECH ||
-				    bc->information_transfer_capability ==
-					Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
-
-				visdn_chan->is_voice = TRUE;
-				q931_call->tones_option = intf->tones_option;
-			} else {
-				struct q931_ies ies = Q931_IES_INIT;
-
-				struct q931_ie_cause *cause =
-					q931_ie_cause_alloc();
-				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location =
-					q931_ie_cause_location_call(q931_call);
-				cause->value =
-					Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED;
-				q931_ies_add_put(&ies, &cause->ie);
-
-				q931_send_primitive(visdn_chan->q931_call,
-					Q931_CCB_REJECT_REQUEST, &ies);
-
-				goto err_unsupported_bearercap;
-			}
+			bc = container_of(ies->ies[i],
+				struct q931_ie_bearer_capability, ie);
 		}
 	}
+
+	if (!bc) {
+		ast_log(LOG_WARNING, "Unexpectedly missing BC\n");
+		goto err_no_bc;
+	}
+
+	/* ------ Handle Bearer Capability ------ */
+	
+	/* We should check the destination bearer capability
+	 * unfortunately we don't know if the destination is
+	 * compatible until we start the PBX... this is a
+	 * design flaw in Asterisk
+	 */
+
+	if (bc->information_transfer_capability ==
+		Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL) {
+
+		visdn_chan->is_voice = FALSE;
+		q931_call->tones_option = FALSE;
+
+	} else  if (bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_SPEECH ||
+		    bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
+
+		visdn_chan->is_voice = TRUE;
+		q931_call->tones_option = intf->tones_option;
+	} else {
+		struct q931_ies ies = Q931_IES_INIT;
+
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(q931_call);
+		cause->value = Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED;
+		q931_ies_add_put(&ies, &cause->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_REJECT_REQUEST, &ies);
+
+		goto err_unsupported_bearercap;
+	}
+	/* ------ ----------------------------- ------ */
 
 	q931_call->pvt = ast_chan;
 
@@ -3371,30 +3410,152 @@ static void visdn_q931_setup_indication(
 	ast_mutex_unlock(&usecnt_lock);
 	ast_update_use_count();
 
+	char called_number[32] = "";
+
+	if (cdpn) {
+		strncpy(called_number, cdpn->number, sizeof(called_number));
+
+	       	if (cdpn->number[strlen(cdpn->number) - 1] == '#')
+			visdn_chan->sending_complete = TRUE;
+	}
+
+	/* ------ Handle Calling Line Presentation/Restriction ------ */
+
+	assert(!ast_chan->cid.cid_name);
+	assert(!ast_chan->cid.cid_num);
+
+	ast_chan->cid.cid_pres = 0;
+
+	ast_chan->cid.cid_name = strdup(intf->clip_default_name);
+
+	if (!cgpn ||
+	    intf->force_inbound_caller_id) {
 #ifdef ASTERISK_VERSION_NUM
-	char *def_cid_copy = strdup(intf->default_inbound_caller_id);
-	char *cid_name;
-	char *cid_num;
-
-	ast_callerid_parse(def_cid_copy, &cid_name, &cid_num);
-
-	if (cid_name)
-		ast_chan->cid.cid_name = strdup(cid_name);
-
-	if (cid_num &&
-	    (!ast_chan->cid.cid_num ||
-	     intf->force_inbound_caller_id)) {
-		ast_chan->cid.cid_num = strdup(cid_num);
-	}
-
-	free(def_cid_copy);
-
+		ast_chan->cid.cid_num = strdup(intf->clip_default_number);
+		ast_chan->cid.cid_pres = AST_PRES_ALLOWED_NETWORK_NUMBER;
 #else
-	if (!ast_chan->callerid ||
-	     intf->force_inbound_caller_id) {
-		ast_chan->callerid = strdup(cid_num);
-	}
+		ast_chan->callerid = strdup(intf->clip_default_number);
 #endif
+		goto clip_end;
+	}
+
+	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+
+		/* If the numbering plan is incorrect ignore the information
+		 * element. ETS 300 092 Par. 9.3.1
+		 */
+
+		if (cgpn->numbering_plan_identificator !=
+				Q931_IE_CGPN_NPI_UNKNOWN &&
+		    cgpn->numbering_plan_identificator !=
+		    		Q931_IE_CGPN_NPI_ISDN_TELEPHONY) {
+#ifdef ASTERISK_VERSION_NUM
+			ast_chan->cid.cid_num =
+				strdup(intf->clip_default_number);
+			ast_chan->cid.cid_pres =
+				AST_PRES_ALLOWED_NETWORK_NUMBER;
+#else
+			ast_chan->callerid = strdup(intf->clip_default_number);
+#endif
+			goto clip_end;
+		}
+
+		if (intf->clip_special_arrangement) {
+			ast_chan->cid.cid_pres |=
+				AST_PRES_USER_NUMBER_UNSCREENED;
+		} else {
+			if (1) { /* Number is correct */
+				if (0) { /* Sequence is valid but incomplete */
+					/* Complete sequence */
+				}
+
+				ast_chan->cid.cid_pres |=
+					AST_PRES_USER_NUMBER_PASSED_SCREEN;
+			}
+		}
+
+		/* Handle CLIR */
+		if (intf->clir_mode == VISDN_CLIR_MODE_ON)
+			ast_chan->cid.cid_pres |= AST_PRES_RESTRICTED;
+		else if (intf->clir_mode == VISDN_CLIR_MODE_OFF)
+			ast_chan->cid.cid_pres |= AST_PRES_ALLOWED;
+		else {
+			if (cgpn)
+				ast_chan->cid.cid_pres |=
+					visdn_cgpn_to_pres(cgpn);
+			else if (intf->clir_mode == VISDN_CLIR_MODE_DEFAULT_ON)
+				ast_chan->cid.cid_pres |= AST_PRES_RESTRICTED;
+			else
+				ast_chan->cid.cid_pres |= AST_PRES_ALLOWED;
+		}
+
+	} else {
+		switch(cgpn->screening_indicator) {
+		case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_USER_NUMBER_UNSCREENED;
+		break;
+
+		case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_USER_NUMBER_PASSED_SCREEN;
+		break;
+
+		case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_USER_NUMBER_FAILED_SCREEN;
+		break;
+
+		case Q931_IE_CGPN_SI_NETWORK_PROVIDED:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_NETWORK_NUMBER;
+		break;
+		}
+	}
+
+	switch(cgpn->presentation_indicator) {
+	case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
+		ast_chan->cid.cid_pres |=
+			AST_PRES_ALLOWED;
+	break;
+
+	case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
+		ast_chan->cid.cid_pres |=
+			AST_PRES_RESTRICTED;
+	break;
+
+	case Q931_IE_CGPN_PI_NOT_AVAILABLE:
+		ast_chan->cid.cid_pres |=
+			AST_PRES_UNAVAILABLE;
+	break;
+	}
+
+	const char *prefix;
+	switch(cgpn->type_of_number) {
+	case Q931_IE_CDPN_TON_INTERNATIONAL:
+		prefix = intf->international_prefix;
+	break;
+
+	case Q931_IE_CDPN_TON_NATIONAL:
+		prefix = intf->national_prefix;
+	break;
+
+	default:
+		prefix = "";
+	break;
+	}
+
+	/* They appear to have the same values :) */
+	ast_chan->cid.cid_ton = cgpn->type_of_number;
+
+	char full_cid[128];
+	snprintf(full_cid, sizeof(full_cid),
+		"%s%s", prefix, cgpn->number);
+	
+	AST_CID_NUM(ast_chan) = strdup(full_cid);
+
+clip_end:
+	/* ------ ----------------------------- ------ */
 
 	if (!intf->overlap_sending ||
 	    visdn_chan->sending_complete) {
@@ -3508,6 +3669,7 @@ static void visdn_q931_setup_indication(
 	return;
 
 err_unsupported_bearercap:
+err_no_bc:
 	ast_hangup(ast_chan);
 err_visdn_new:
 	visdn_destroy(visdn_chan);
