@@ -52,24 +52,20 @@ static int vppp_ppp_start_xmit(
 
 	vppp_debug(3, "vppp_ppp_start_xmit()\n");
 
+	if (test_bit(VPPP_CHAN_STATUS_QUEUE_STOPPED, &chan->status))
+		return 0;
+
 	res = visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
 	switch(res) {
 	case VISDN_TX_OK:
 		return 1;
 	case VISDN_TX_BUSY:
 	case VISDN_TX_LOCKED:
-		schedule_work(&chan->retry_work);
+		tasklet_schedule(&chan->wakeup_tasklet);
 		return 0;
 	default:
 		return 0;
 	}
-}
-
-static void vppp_retry_work(void *data)
-{
-	struct vppp_chan *chan = data;
-
-	ppp_output_wakeup(&chan->ppp_chan);
 }
 
 static int vppp_ppp_ioctl(
@@ -136,13 +132,41 @@ static int vppp_chan_frame_xmit(
 	struct sk_buff *skb)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_leg->chan);
+	unsigned long flags;
 
 	vppp_debug(3, "vppp_chan_frame_xmit()\n");
 
-	ppp_input(&chan->ppp_chan, skb);
+	if (irqs_disabled()) {
+		spin_lock_irqsave(&chan->rx_queue_lock, flags);
+		skb_queue_tail(&chan->rx_queue, skb);
+		spin_unlock_irqrestore(&chan->rx_queue_lock, flags);
+
+		tasklet_schedule(&chan->rx_tasklet);
+	} else {
+		ppp_input(&chan->ppp_chan, skb);
+	}
 
 	return 0;
 }
+
+static void vppp_rx_tasklet(unsigned long data)
+{
+	struct vppp_chan *chan = (struct vppp_chan *)data;
+	unsigned long flags;
+	struct sk_buff *skb;
+
+	for(;;) {
+		spin_lock_irqsave(&chan->rx_queue_lock, flags);
+		skb = skb_dequeue(&chan->rx_queue);
+		spin_unlock_irqrestore(&chan->rx_queue_lock, flags);
+
+		if (!skb)
+			return;
+
+		ppp_input(&chan->ppp_chan, skb);
+	}
+}
+
 
 static int vppp_chan_connect(
 	struct visdn_leg *visdn_leg1,
@@ -164,12 +188,34 @@ static void vppp_chan_disconnect(
 		visdn_leg2->chan->id);
 }
 
+static void vppp_chan_stop_queue(
+	struct visdn_leg *visdn_leg)
+{
+	struct vppp_chan *chan = to_vppp_chan(visdn_leg->chan);
+
+	vppp_debug(3, "vppp_chan_stop_queue()\n");
+
+	set_bit(VPPP_CHAN_STATUS_QUEUE_STOPPED, &chan->status);
+}
+
 static void vppp_chan_wake_queue(
 	struct visdn_leg *visdn_leg)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_leg->chan);
 
 	vppp_debug(3, "vppp_chan_wake_queue()\n");
+
+	clear_bit(VPPP_CHAN_STATUS_QUEUE_STOPPED, &chan->status);
+
+	if (irqs_disabled())
+		tasklet_schedule(&chan->wakeup_tasklet);
+	else
+		ppp_output_wakeup(&chan->ppp_chan);
+}
+
+static void vppp_wakeup_tasklet(unsigned long data)
+{
+	struct vppp_chan *chan = (struct vppp_chan *)data;
 
 	ppp_output_wakeup(&chan->ppp_chan);
 }
@@ -179,6 +225,16 @@ static void vppp_chan_rx_error(
 	enum visdn_leg_rx_error_code code)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_leg->chan);
+
+	if (irqs_disabled())
+		tasklet_schedule(&chan->rx_error_tasklet);
+	else
+		ppp_input_error(&chan->ppp_chan, 0);
+}
+
+static void vppp_rx_error_tasklet(unsigned long data)
+{
+	struct vppp_chan *chan = (struct vppp_chan *)data;
 
 	ppp_input_error(&chan->ppp_chan, 0);
 }
@@ -205,7 +261,7 @@ static struct visdn_leg_ops vppp_leg_ops = {
 
 	.frame_xmit		= vppp_chan_frame_xmit,
 
-	.stop_queue		= NULL,
+	.stop_queue		= vppp_chan_stop_queue,
 	.start_queue		= NULL,
 	.wake_queue		= vppp_chan_wake_queue,
 
@@ -230,9 +286,20 @@ int vppp_cdev_open(
 		goto err_kmalloc;
 	}
 
-	INIT_WORK(&chan->retry_work,
-		vppp_retry_work,
-		chan);
+	tasklet_init(&chan->wakeup_tasklet,
+		vppp_wakeup_tasklet,
+		(unsigned long)chan);
+
+	tasklet_init(&chan->rx_tasklet,
+		vppp_rx_tasklet,
+		(unsigned long)chan);
+
+	tasklet_init(&chan->rx_error_tasklet,
+		vppp_rx_error_tasklet,
+		(unsigned long)chan);
+
+	skb_queue_head_init(&chan->rx_queue);
+	spin_lock_init(&chan->rx_queue_lock);
 
 	visdn_chan_init(&chan->visdn_chan);
 

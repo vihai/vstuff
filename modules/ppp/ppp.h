@@ -27,13 +27,25 @@
 
 #define to_vppp_chan(vchan) container_of(vchan, struct vppp_chan, visdn_chan)
 
+enum vppp_chan_status
+{
+	VPPP_CHAN_STATUS_QUEUE_STOPPED,
+};
+
 struct vppp_chan
 {
 	struct visdn_chan visdn_chan;
 
 	struct ppp_channel ppp_chan;
 
-	struct work_struct retry_work;
+	unsigned long status;
+
+	struct tasklet_struct wakeup_tasklet;
+	struct tasklet_struct rx_tasklet;
+	struct tasklet_struct rx_error_tasklet;
+
+	struct sk_buff_head rx_queue;
+	spinlock_t rx_queue_lock;
 };
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
