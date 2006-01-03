@@ -14,7 +14,12 @@
 #define _LAPD_H
 
 #include <linux/types.h>
+
+#ifdef __KERNEL__
 #include <linux/socket.h>
+#else
+#include <sys/socket.h>
+#endif
 
 #ifndef ARPHRD_LAPD
 #define ARPHRD_LAPD 1000
@@ -68,7 +73,6 @@ struct sockaddr_lapd {
 };
 
 #ifdef __KERNEL__
-
 #include <asm/atomic.h>
 #include <linux/types.h>
 #include <linux/netdevice.h>
