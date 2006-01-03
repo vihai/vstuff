@@ -3572,8 +3572,9 @@ static void visdn_q931_connect_channel(
 	visdn_chan->visdn_chan_id = atoi(chanid + 1);
 
 	if (visdn_chan->is_voice) {
-		visdn_debug("Connecting streamport to chan '%06d'\n",
-				visdn_chan->visdn_chan_id);
+		visdn_debug("Connecting streamport to chan '%06d' (%s)\n",
+				visdn_chan->visdn_chan_id,
+				dest);
 
 		visdn_chan->channel_fd = open("/dev/visdn/streamport", O_RDWR);
 		if (visdn_chan->channel_fd < 0) {
