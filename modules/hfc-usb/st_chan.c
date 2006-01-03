@@ -268,6 +268,9 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		hfc_led_update(&card->leds[HFC_LED_B2]);
 	}
 
+	hfc_st_port_update_sctrl(chan->port);
+	hfc_st_port_update_sctrl_r(chan->port);
+
 	hfc_fifo_select(&chan->rx_fifo);
 	hfc_fifo_reset(&chan->rx_fifo);
 	hfc_fifo_configure(&chan->rx_fifo);
@@ -334,6 +337,9 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 	hfc_fifo_select(&chan->tx_fifo);
 	hfc_fifo_reset(&chan->tx_fifo);
 	hfc_fifo_configure(&chan->tx_fifo);
+
+	hfc_st_port_update_sctrl(chan->port);
+	hfc_st_port_update_sctrl_r(chan->port);
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
