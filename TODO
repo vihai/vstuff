@@ -7,6 +7,10 @@ General:
 - Check all input data in ioctls/setsockopt for security bugs
 - Document functions (with doxygen?)
 - Create a libvisdn for channel manipulation functions?
+- Define in which contexts all the various functions may be called. For example
+  ppp needs ppp_input() to not be called in hard-irq context and we either must
+  force all vISDN xmit functions callers to not be in hard-irq context or queue
+  frames in visdn-ppp.ko and use a tasklet to pass them to ppp
 
 Build system:
 -------------

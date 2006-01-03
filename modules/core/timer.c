@@ -111,10 +111,7 @@ int visdn_timer_cdev_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	visdn_debug(3, "visdn_timer_cdev_ioctl()  %d\n", current->pid);
-
-/*	switch(cmd) {
-	}*/
+	visdn_debug(3, "visdn_timer_cdev_ioctl()\n");
 
 	return -EOPNOTSUPP;
 }

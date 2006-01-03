@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -54,16 +54,12 @@ struct channel visdn_channel;
  */
 static int visdn_setdevname(char *cmd, char **argv, int doit)
 {
-//	extern struct stat devstat;
-
-//	if (device_got_set)
-//		return 1;
+	if (device_got_set)
+		return 1;
 
 	dbglog("PPPovISDN visdn_setdevname %s", cmd);
 
 	strlcpy(devnam, cmd, sizeof(devnam));
-
-//	devstat.st_mode = S_IFSOCK;
 
 	device_got_set = 1;
 
@@ -106,14 +102,12 @@ static int visdn_connect(void)
 	vc.dst_chan_id = atoi(devnam);
 	vc.flags = 0;
 
-	dbglog("PPPovISDN - MYPID = %d", getpid());
-
 	if (ioctl(fd, VISDN_IOC_CONNECT_PATH, (caddr_t)&vc) < 0) {
 		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");
 	}
 
 	if (ioctl(fd, VISDN_IOC_ENABLE_PATH, NULL) < 0) {
-		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");
+		fatal("ioctl(VISDN_ENABLE_PATH): %m\n");
 	}
 
 	dbglog("PPPovISDN - channel connected to ppp device");
@@ -131,28 +125,11 @@ static void visdn_disconnect(void)
 static void visdn_send_config(int mtu, u_int32_t asyncmap, int pcomp, int accomp)
 {
 	dbglog("PPPovISDN - visdn_send_config");
-
-//	int sock;
-//	struct ifreq ifr;
-/*
-	if (mtu > visdn_max_mtu)
-		error("Couldn't increase MTU to %d", mtu);
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
-	if (sock < 0)
-		fatal("Couldn't create IP socket: %m");
-	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	ifr.ifr_mtu = mtu;
-	if (ioctl(sock, SIOCSIFMTU, (caddr_t) &ifr) < 0)
-		fatal("ioctl(SIOCSIFMTU): %m");
-	(void) close (sock);*/
 }
 
 static void visdn_recv_config(int mru, u_int32_t asyncmap, int pcomp, int accomp)
 {
 	dbglog("PPPovISDN - visdn_recv_config");
-
-//	if (mru > visdn_max_mru)
-//		error("Couldn't increase MRU to %d", mru);
 }
 
 void plugin_init(void)

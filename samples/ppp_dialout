@@ -4,4 +4,4 @@ MaxRetries: 1
 RetryTime: 60
 WaitTime: 30
 Application: visdnPPP
-Data: debug|172.16.0.1:172.16.0.2
+Data: debug|call|other_asterisk
