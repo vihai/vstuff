@@ -44,7 +44,6 @@ enum q931_ie_calling_party_number_presentation_indicator
 	Q931_IE_CGPN_PI_PRESENTATION_ALLOWED	= 0x0,
 	Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED	= 0x1,
 	Q931_IE_CGPN_PI_NOT_AVAILABLE		= 0x2,
-	Q931_IE_CGPN_PI_RESERVED		= 0x3,
 };
 
 enum q931_ie_calling_party_number_screening_indicator

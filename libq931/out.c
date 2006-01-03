@@ -189,7 +189,7 @@ int q931_send_message(
 			msg->rawlen += ie_len;
 
 			report_call(call, LOG_DEBUG,
-				"VS IE %d ===> %u (%s) -- length %u\n",
+				"IE %d ===> %u (%s) -- length %u\n",
 				i,
 				ies.ies[i]->type->id,
 				ies.ies[i]->type->name,
@@ -256,9 +256,18 @@ int q931_send_message_bc(
 		for (i=0; i<ies.count; i++) {
 			assert(ies.ies[i]->type->write_to_buf);
 
-			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
+			int ie_len =ies.ies[i]->type->write_to_buf(ies.ies[i],
 						buf + size,
 						sizeof(buf) - size);
+
+			size += ie_len;
+			
+			report_call(call, LOG_DEBUG,
+				"IE %d ===> %u (%s) -- length %u\n",
+				i,
+				ies.ies[i]->type->id,
+				ies.ies[i]->type->name,
+				ie_len);
 
 			if (ies.ies[i]->type->dump)
 				ies.ies[i]->type->dump(
@@ -317,9 +326,18 @@ int q931_global_send_message(
 		for (i=0; i<ies.count; i++) {
 			assert(ies.ies[i]->type->write_to_buf);
 
-			size += ies.ies[i]->type->write_to_buf(ies.ies[i],
+			int ie_len = ies.ies[i]->type->write_to_buf(ies.ies[i],
 					buf + size,
 					sizeof(buf) - size);
+
+			size += ie_len;
+
+			report_gc(gc, LOG_DEBUG,
+				"IE %d ===> %u (%s) -- length %u\n",
+				i,
+				ies.ies[i]->type->id,
+				ies.ies[i]->type->name,
+				ie_len);
 
 			if (ies.ies[i]->type->dump)
 				ies.ies[i]->type->dump(

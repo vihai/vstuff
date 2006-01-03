@@ -32,12 +32,12 @@ struct q931_ie_calling_party_number *q931_ie_calling_party_number_alloc()
 	ie = malloc(sizeof(*ie));
 	assert(ie);
 
-	memset(ie, 0x00, sizeof(*ie));
+	memset(ie, 0, sizeof(*ie));
 
 	ie->ie.refcnt = 1;
 	ie->ie.type = ie_type;
 
-	memset(ie->number, 0x0, sizeof(*ie->number));
+	memset(ie->number, 0, sizeof(*ie->number));
 
 	return ie;
 }
@@ -176,6 +176,39 @@ static const char *q931_ie_calling_party_number_numbering_plan_identificator_to_
 	}
 }
 
+static const char *q931_ie_calling_party_number_presentation_indicator_to_text(
+        enum q931_ie_calling_party_number_presentation_indicator
+                presentation_indicator)
+{
+        switch(presentation_indicator) {
+	case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
+		return "Presentation allowed";
+	case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
+		return "Presentation restricted";
+	case Q931_IE_CGPN_PI_NOT_AVAILABLE:
+		return "Not available";
+	default:
+		return "*INVALID*";
+	}
+}
+
+static const char *q931_ie_calling_party_number_screening_indicator_to_text(
+        enum q931_ie_calling_party_number_screening_indicator
+                screening_indicator)
+{
+        switch(screening_indicator) {
+	case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
+		return "User provided, not screened";
+	case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED:
+		return "User provided, verified and passed";
+	case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED:
+		return "User provided, verified and failed";
+	case Q931_IE_CGPN_SI_NETWORK_PROVIDED:
+		return "Network provided";
+	default:
+		return "*INVALID*";
+	}
+}
 
 void q931_ie_calling_party_number_dump(
 	const struct q931_ie *generic_ie,
@@ -194,6 +227,16 @@ void q931_ie_calling_party_number_dump(
 		q931_ie_calling_party_number_numbering_plan_identificator_to_text(
 			ie->numbering_plan_identificator),
 		ie->numbering_plan_identificator);
+
+	report(LOG_DEBUG, "%sPresentation indicator = %s (%d)\n", prefix,
+		q931_ie_calling_party_number_presentation_indicator_to_text(
+			ie->presentation_indicator),
+		ie->presentation_indicator);
+
+	report(LOG_DEBUG, "%sScreening indicator = %s (%d)\n", prefix,
+		q931_ie_calling_party_number_screening_indicator_to_text(
+			ie->screening_indicator),
+		ie->screening_indicator);
 
 	report(LOG_DEBUG, "%sNumber = %s\n", prefix,
 		ie->number);

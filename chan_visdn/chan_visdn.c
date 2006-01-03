@@ -57,13 +57,13 @@
 
 #ifndef ASTERISK_VERSION_NUM
 #include <asterisk/channel_pvt.h>
+#define AST_CID_NUM(c) ((c)->callerid)
 #define _bridge bridge
-#define caller_id_number callerid
 #define AST_BRIDGE_COMPLETE 0
 #define AST_BRIDGE_FAILED -1
 #define AST_BRIDGE_FAILED_NOWARN -2
 #else
-#define caller_id_number cid.cid_num
+#define AST_CID_NUM(c) ((c)->cid.cid_num)
 #endif
 
 #include <linux/lapd.h>
@@ -898,24 +898,12 @@ static int visdn_cli_print_call_list(
 				if (ast_chan)
 					visdn_chan = to_visdn_chan(ast_chan);
 
-				ast_cli(fd, "  %c %5ld %-12s %s\n",
+				ast_cli(fd, "  %c %5ld %s\n",
 					(call->direction ==
 						Q931_CALL_DIRECTION_INBOUND)
 							? 'I' : 'O',
 					call->call_reference,
-					visdn_chan ?
-						visdn_chan->calling_number :
-						"",
 					q931_call_state_to_text(call->state));
-
-/*				ast_cli(fd, "  %c %5ld %-12s %-12s %s\n",
-					(call->direction == Q931_CALL_DIRECTION_INBOUND)
-						? 'I' : 'O',
-					call->call_reference,
-					call->calling_number,
-					call->called_number,
-					q931_call_state_to_text(call->state));
-*/
 			}
 		}
 	}
@@ -940,12 +928,6 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 
 	ast_cli(fd, "State           : %s\n",
 		q931_call_state_to_text(call->state));
-
-//	ast_cli(fd, "Calling Number  : %s\n", call->calling_number);
-//	ast_cli(fd, "Called Number   : %s\n", call->called_number);
-
-//	ast_cli(fd, "Sending complete: %s\n",
-//		call->sending_complete ? "Yes" : "No");
 
 	ast_cli(fd, "Broadcast seutp : %s\n",
 		call->broadcast_setup ? "Yes" : "No");
@@ -1424,7 +1406,82 @@ static int visdn_call(
 		q931_ies_add_put(&ies, &sc->ie);
 	}
 
-	if (ast_chan->caller_id_number && strlen(ast_chan->caller_id_number)) {
+#ifdef ASTERISK_VERSION_NUM
+	if (ast_chan->cid.cid_num && strlen(ast_chan->cid.cid_num)) {
+
+		struct q931_ie_calling_party_number *cgpn =
+			q931_ie_calling_party_number_alloc();
+
+		cgpn->type_of_number =
+			visdn_type_of_number_to_cgpn(
+					intf->local_type_of_number);
+		cgpn->numbering_plan_identificator =
+			Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
+
+		enum q931_ie_calling_party_number_presentation_indicator pi;
+		enum q931_ie_calling_party_number_screening_indicator si;
+
+		switch(ast_chan->cid.cid_pres) {
+		case AST_PRES_ALLOWED_USER_NUMBER_NOT_SCREENED:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+		break;
+
+		case AST_PRES_ALLOWED_USER_NUMBER_PASSED_SCREEN:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
+		break;
+
+		case AST_PRES_ALLOWED_USER_NUMBER_FAILED_SCREEN:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED;
+		break;
+
+		case AST_PRES_ALLOWED_NETWORK_NUMBER:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+			si = Q931_IE_CGPN_SI_NETWORK_PROVIDED;
+		break;
+
+		case AST_PRES_PROHIB_USER_NUMBER_NOT_SCREENED:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+		break;
+
+		case AST_PRES_PROHIB_USER_NUMBER_PASSED_SCREEN:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
+		break;
+
+		case AST_PRES_PROHIB_USER_NUMBER_FAILED_SCREEN:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED;
+		break;
+
+		case AST_PRES_PROHIB_NETWORK_NUMBER:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED;
+			si = Q931_IE_CGPN_SI_NETWORK_PROVIDED;
+		break;
+
+		case AST_PRES_NUMBER_NOT_AVAILABLE:
+			pi = Q931_IE_CGPN_PI_NOT_AVAILABLE;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+		break;
+
+		default:
+			pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
+			si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
+		}
+	
+		cgpn->presentation_indicator = si;
+		cgpn->screening_indicator = pi;
+
+		strncpy(cgpn->number, ast_chan->cid.cid_num,
+			sizeof(cgpn->number));
+
+		q931_ies_add_put(&ies, &cgpn->ie);
+	}
+#else
+	if (ast_chan->caller_id && strlen(ast_chan->caller_id)) {
 
 		struct q931_ie_calling_party_number *cgpn =
 			q931_ie_calling_party_number_alloc();
@@ -1439,7 +1496,6 @@ static int visdn_call(
 		cgpn->screening_indicator =
 			Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED;
 
-#ifndef ASTERISK_VERSION_NUM
 		char callerid[255];
 		char *name, *number;
 		strncpy(callerid, ast_chan->callerid, sizeof(callerid));
@@ -1454,13 +1510,10 @@ static int visdn_call(
 				" into CallerID name & number\n",
 				callerid);
 		}
-#else
-		strncpy(cgpn->number, ast_chan->cid.cid_num,
-			sizeof(cgpn->number));
 
 		q931_ies_add_put(&ies, &cgpn->ie);
-#endif
 	}
+#endif
 
 	struct q931_ie_high_layer_compatibility *hlc =
 		q931_ie_high_layer_compatibility_alloc();
@@ -3143,6 +3196,11 @@ static void visdn_q931_setup_indication(
 
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
+	struct ast_channel *ast_chan;
+	ast_chan = visdn_new(visdn_chan, AST_STATE_OFFHOOK);
+	if (!ast_chan)
+		goto err_visdn_new;
+
 	int i;
 	for(i=0; i<ies->count; i++) {
 		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
@@ -3189,18 +3247,70 @@ static void visdn_q931_setup_indication(
 				container_of(ies->ies[i],
 				struct q931_ie_calling_party_number, ie);
 
-			const char *prefix = "";
-			if (cgpn->type_of_number ==
-					Q931_IE_CDPN_TON_NATIONAL)
-				prefix = intf->national_prefix;
-			else if (cgpn->type_of_number ==
-					Q931_IE_CDPN_TON_INTERNATIONAL)
+			const char *prefix;
+			switch(cgpn->type_of_number) {
+			case Q931_IE_CDPN_TON_INTERNATIONAL:
 				prefix = intf->international_prefix;
+			break;
 
-			snprintf(visdn_chan->calling_number,
-				sizeof(visdn_chan->calling_number),
-				"<%s%s>", prefix, cgpn->number);
+			case Q931_IE_CDPN_TON_NATIONAL:
+				prefix = intf->national_prefix;
+			break;
 
+			default:
+				prefix = "";
+			break;
+			}
+
+			ast_chan->cid.cid_pres = 0;
+			
+			switch(cgpn->presentation_indicator) {
+			case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_ALLOWED;
+			break;
+
+			case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_RESTRICTED;
+			break;
+
+			case Q931_IE_CGPN_PI_NOT_AVAILABLE:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_UNAVAILABLE;
+			break;
+			}
+
+			switch(cgpn->screening_indicator) {
+			case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_USER_NUMBER_UNSCREENED;
+			break;
+
+			case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_USER_NUMBER_PASSED_SCREEN;
+			break;
+
+			case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_FAILED:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_USER_NUMBER_FAILED_SCREEN;
+			break;
+
+			case Q931_IE_CGPN_SI_NETWORK_PROVIDED:
+				ast_chan->cid.cid_pres |=
+					AST_PRES_NETWORK_NUMBER;
+			break;
+			}
+
+			/* They appear to have the same values :) */
+			ast_chan->cid.cid_ton = cgpn->type_of_number;
+
+			char full_cid[128];
+			snprintf(full_cid, sizeof(full_cid),
+				"%s%s", prefix, cgpn->number);
+			
+			AST_CID_NUM(ast_chan) = strdup(full_cid);
 		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
 
 			// We should check the destination bearer capability
@@ -3240,15 +3350,10 @@ static void visdn_q931_setup_indication(
 				q931_send_primitive(visdn_chan->q931_call,
 					Q931_CCB_REJECT_REQUEST, &ies);
 
-				return;
+				goto err_unsupported_bearercap;
 			}
 		}
 	}
-
-	struct ast_channel *ast_chan;
-	ast_chan = visdn_new(visdn_chan, AST_STATE_OFFHOOK);
-	if (!ast_chan)
-		goto err_visdn_new;
 
 	q931_call->pvt = ast_chan;
 
@@ -3266,19 +3371,36 @@ static void visdn_q931_setup_indication(
 	ast_mutex_unlock(&usecnt_lock);
 	ast_update_use_count();
 
-	if (strlen(visdn_chan->calling_number) &&
-	    !intf->force_inbound_caller_id)
-		ast_chan->caller_id_number =
-			strdup(visdn_chan->calling_number);
-	else
-		ast_chan->caller_id_number =
-			strdup(intf->default_inbound_caller_id);
+#ifdef ASTERISK_VERSION_NUM
+	char *def_cid_copy = strdup(intf->default_inbound_caller_id);
+	char *cid_name;
+	char *cid_num;
+
+	ast_callerid_parse(def_cid_copy, &cid_name, &cid_num);
+
+	if (cid_name)
+		ast_chan->cid.cid_name = strdup(cid_name);
+
+	if (cid_num &&
+	    (!ast_chan->cid.cid_num ||
+	     intf->force_inbound_caller_id)) {
+		ast_chan->cid.cid_num = strdup(cid_num);
+	}
+
+	free(def_cid_copy);
+
+#else
+	if (!ast_chan->callerid ||
+	     intf->force_inbound_caller_id) {
+		ast_chan->callerid = strdup(cid_num);
+	}
+#endif
 
 	if (!intf->overlap_sending ||
 	    visdn_chan->sending_complete) {
 		if (ast_exists_extension(NULL, intf->context,
 				called_number, 1,
-				visdn_chan->calling_number)) {
+				AST_CID_NUM(ast_chan))) {
 
 			strncpy(ast_chan->exten,
 				called_number,
@@ -3385,8 +3507,10 @@ static void visdn_q931_setup_indication(
 
 	return;
 
+err_unsupported_bearercap:
+	ast_hangup(ast_chan);
 err_visdn_new:
-	// Free visdn_chan
+	visdn_destroy(visdn_chan);
 err_visdn_alloc:
 ;
 }
@@ -3936,7 +4060,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
 					called_number, 1,
-					chan->caller_id_number)) {
+					AST_CID_NUM(chan))) {
 
 				ast_indicate(chan, AST_CONTROL_CONGESTION);
 				ast_safe_sleep(chan, 30000);
@@ -3946,12 +4070,12 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 			if (ast_exists_extension(NULL,
 					chan->context,
 					called_number, 1,
-					chan->caller_id_number)) {
+					AST_CID_NUM(chan))) {
 
 				if (!ast_matchmore_extension(NULL,
 					chan->context,
 					called_number, 1,
-					chan->caller_id_number)) {
+					AST_CID_NUM(chan))) {
 
 					ast_setstate(chan, AST_STATE_RING);
 					ast_indicate(chan,
