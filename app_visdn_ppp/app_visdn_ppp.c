@@ -74,7 +74,7 @@ static pid_t spawn_ppp(
 	if (pid)
 		return pid;
 
-	dup2(chan->fds[0], STDIN_FILENO);
+	close(0);
 
 	int i;
 	int max_fds = get_max_fds();
