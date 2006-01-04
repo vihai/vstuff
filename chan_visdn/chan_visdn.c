@@ -971,8 +971,11 @@ static int visdn_cli_print_call_list(
 			if (!filter_intf || call->intf == filter_intf) {
 
 				if (first_call) {
-					ast_cli(fd, "Interface: %s\n", intf->q931_intf->name);
-					ast_cli(fd, "  Ref#    Caller       State\n");
+					ast_cli(fd,
+						"Interface: %s\n",
+						intf->q931_intf->name);
+					ast_cli(fd,
+						"  Ref#  State      refcnt\n");
 					first_call = FALSE;
 				}
 
@@ -983,12 +986,13 @@ static int visdn_cli_print_call_list(
 				if (ast_chan)
 					visdn_chan = to_visdn_chan(ast_chan);
 
-				ast_cli(fd, "  %c %5ld %s\n",
+				ast_cli(fd, "  %5ld.%c %s %d\n",
+					call->call_reference,
 					(call->direction ==
 						Q931_CALL_DIRECTION_INBOUND)
 							? 'I' : 'O',
-					call->call_reference,
-					q931_call_state_to_text(call->state));
+					q931_call_state_to_text(call->state),
+					call->refcnt);
 			}
 		}
 	}
@@ -1509,10 +1513,11 @@ static int visdn_call(
 	visdn_chan->q931_call = q931_call_get(q931_call);
 
 	char newname[40];
-	snprintf(newname, sizeof(newname), "VISDN/%s/%c%ld",
+	snprintf(newname, sizeof(newname), "VISDN/%s/%ld.%c",
 		q931_call->intf->name,
-		q931_call->direction == Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O',
-		q931_call->call_reference);
+		q931_call->call_reference,
+		q931_call->direction ==
+	       		Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
 
 	ast_change_name(ast_chan, newname);
 
@@ -3396,10 +3401,11 @@ static void visdn_q931_setup_indication(
 
 	q931_call->pvt = ast_chan;
 
-	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/%s/%c%ld",
+	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/%s/%ld.%c",
 		q931_call->intf->name,
-		q931_call->direction == Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O',
-		q931_call->call_reference);
+		q931_call->call_reference,
+		q931_call->direction ==
+			Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
 
 	strncpy(ast_chan->context,
 		intf->context,

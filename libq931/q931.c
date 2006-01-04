@@ -793,10 +793,10 @@ int q931_receive(struct q931_dlc *dlc)
 	report_dlc(dlc, LOG_DEBUG, "Received message:\n");
 
 	report_dlc(dlc, LOG_DEBUG,
-		"  call reference = %u %lu %c\n",
-		hdr->call_reference_len,
+		"  call reference = %lu.%c (len %d)\n",
 		msg->callref,
-		msg->callref_direction?'O':'I');
+		msg->callref_direction ? 'O' : 'I',
+		hdr->call_reference_len);
 
 	msg->message_type = *(__u8 *)(msg->raw + sizeof(struct q931_header) +
 		hdr->call_reference_len);
@@ -805,8 +805,10 @@ int q931_receive(struct q931_dlc *dlc)
 		q931_message_type_to_text(msg->message_type),
 		msg->message_type);
 
-	msg->rawies = msg->raw + sizeof(struct q931_header) + msg->callref_len + 1;
-	msg->rawies_len = msg->rawlen - (sizeof(struct q931_header) + msg->callref_len + 1);
+	msg->rawies = msg->raw + sizeof(struct q931_header) +
+			msg->callref_len + 1;
+	msg->rawies_len = msg->rawlen - (sizeof(struct q931_header) +
+			msg->callref_len + 1);
 
 	if (msg->callref == 0x00) { // FIXME CHECKME
 		if (q931_decode_information_elements(NULL, msg))
@@ -846,8 +848,10 @@ int q931_receive(struct q931_dlc *dlc)
 			struct q931_ies ies = Q931_IES_INIT;
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
 			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_release_complete(call, &ies);
@@ -872,7 +876,7 @@ int q931_receive(struct q931_dlc *dlc)
 		case Q931_MT_SETUP:
 		case Q931_MT_RESUME:
 			if (msg->callref_direction ==
-			      Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE) {
+				Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE) {
 
 				report_call(call, LOG_DEBUG,
 					"Received a SETUP/RESUME for an unknown"
@@ -893,8 +897,10 @@ int q931_receive(struct q931_dlc *dlc)
 			struct q931_ies ies = Q931_IES_INIT;
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
 			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_call_send_release(call, &ies);
@@ -920,7 +926,8 @@ int q931_receive(struct q931_dlc *dlc)
 		list_for_each_entry_safe(ces, tces, &call->ces, node) {
 
 			if (ces->dlc == dlc) {
-				// selected_ces may change after "dispatch_message"
+				// selected_ces may change after
+				// "dispatch_message"
 				if (ces == call->selected_ces) {
 					q931_ces_dispatch_message(ces, msg);
 

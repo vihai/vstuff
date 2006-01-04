@@ -204,7 +204,7 @@ struct q931_call *q931_call_alloc(struct q931_interface *intf)
 
 	call = malloc(sizeof(*call));
 	if (!call) abort();
-	memset(call, 0x00, sizeof(*call));
+	memset(call, 0, sizeof(*call));
 
 	call->refcnt = 1;
 
@@ -305,18 +305,36 @@ struct q931_call *q931_call_alloc_out(
 	return call;
 }
 
-struct q931_call *q931_call_get(struct q931_call *call)
+struct q931_call *_q931_call_get(struct q931_call *call,
+	const char *file,
+	int line)
 {
 	assert(call);
+
+#if 0
+	report_call(call, LOG_DEBUG, "%s:%d <<<<<<==== GET ==== %d\n",
+		file,
+		line,
+		call->refcnt);
+#endif
 
 	call->refcnt++;
 
 	return call;
 }
 
-void q931_call_put(struct q931_call *call)
+void _q931_call_put(struct q931_call *call,
+	const char *file,
+	int line)
 {
 	assert(call);
+
+#if 0
+	report_call(call, LOG_DEBUG, "%s:%d >>>>>>==== PUT ==== %d\n",
+		file,
+		line,
+		call->refcnt);
+#endif
 
 	call->refcnt--;
 
@@ -5650,7 +5668,7 @@ void q931_dispatch_message(
 	assert(msg);
 	assert(msg->dlc);
 
-	report_call(call, LOG_DEBUG, "%s dispatched to CALL %d%c\n",
+	report_call(call, LOG_DEBUG, "%s dispatched to CALL %d.%c\n",
 		q931_message_type_to_text(msg->message_type),
 		call->call_reference,
 		call->direction ==
