@@ -134,6 +134,12 @@ enum visdn_clir_mode
 	VISDN_CLIR_MODE_ON,
 };
 
+struct visdn_clip_number
+{
+	struct list_head node;
+	char number[32];
+};
+
 struct visdn_interface
 {
 	struct list_head ifs_node;
@@ -153,7 +159,7 @@ struct visdn_interface
 	int clip_override;
 	char clip_default_name[128];
 	char clip_default_number[32];
-	int force_inbound_caller_id;
+	struct list_head clip_numbers_list;
 	int clip_special_arrangement;
 	enum visdn_clir_mode clir_mode;
 	int overlap_sending;
@@ -247,7 +253,8 @@ struct visdn_state
 		.clip_override = FALSE,
 		.clip_default_name = "",
 		.clip_default_number = "",
-		.force_inbound_caller_id = FALSE,
+		.clip_numbers_list =
+			LIST_HEAD_INIT(visdn.default_intf.clip_numbers_list),
 		.clip_special_arrangement = FALSE,
 		.clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF,
 		.overlap_sending = TRUE,
@@ -452,17 +459,16 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Local type of number      : %s\n"
 			"Tones option              : %s\n"
 			"Context                   : %s\n"
-			"CLIP enabled              : %s\n"
-			"CLIP override             : %s\n"
-			"CLIP default              : %s <%s>\n"
-			"Force inbound caller ID   : %s\n"
-			"CLIP special arrangement  : %s\n"
-			"CLIR mode                 : %s\n"
 			"Overlap Sending           : %s\n"
 			"Overlap Receiving         : %s\n"
 			"National prefix           : %s\n"
 			"International prefix      : %s\n"
-			"Autorelease time          : %d\n",
+			"Autorelease time          : %d\n"
+			"CLIR mode                 : %s\n"
+			"CLIP enabled              : %s\n"
+			"CLIP override             : %s\n"
+			"CLIP default              : %s <%s>\n"
+			"CLIP special arrangement  : %s\n",
 			visdn_interface_network_role_to_string(
 				intf->network_role),
 			visdn_type_of_number_to_string(
@@ -471,18 +477,24 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				intf->local_type_of_number),
 			intf->tones_option ? "Yes" : "No",
 			intf->context,
-			intf->clip_enabled ? "Yes" : "No",
-			intf->clip_override ? "Yes" : "No",
-			intf->clip_default_name,
-			intf->clip_default_number,
-			intf->force_inbound_caller_id ? "Yes" : "No",
-			intf->clip_special_arrangement ? "Yes" : "No",
-			visdn_clir_mode_to_text(intf->clir_mode),
 			intf->overlap_sending ? "Yes" : "No",
 			intf->overlap_receiving ? "Yes" : "No",
 			intf->national_prefix,
 			intf->international_prefix,
-			intf->dlc_autorelease_time);
+			intf->dlc_autorelease_time,
+			visdn_clir_mode_to_text(intf->clir_mode),
+			intf->clip_enabled ? "Yes" : "No",
+			intf->clip_override ? "Yes" : "No",
+			intf->clip_default_name,
+			intf->clip_default_number,
+			intf->clip_special_arrangement ? "Yes" : "No");
+
+		ast_cli(fd, "CLIP Numbers              : ");
+		struct visdn_clip_number *num;
+		list_for_each_entry(num, &intf->clip_numbers_list, node) {
+			ast_cli(fd, "%s ", num->number);
+		}
+		ast_cli(fd, "\n");
 
 		if (intf->q931_intf) {
 			if (intf->q931_intf->role == LAPD_ROLE_NT) {
@@ -498,15 +510,19 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				ast_cli(fd, "\n");
 
 #define TIMER_CONFIG(timer)					\
-	ast_cli(fd, #timer ": %lld%s\n",			\
+	ast_cli(fd, #timer ": %3lld%-5s",			\
 		intf->q931_intf->timer / 1000000LL,		\
-		intf->timer ? " (Non-default)" : "");
+		intf->timer ? " (*)" : "");
 
+#define TIMER_CONFIG_LN(timer)					\
+	ast_cli(fd, #timer ": %3lld%-5s\n",			\
+		intf->q931_intf->timer / 1000000LL,		\
+		intf->timer ? " (*)" : "");
 
 				TIMER_CONFIG(T301);
 				TIMER_CONFIG(T301);
 				TIMER_CONFIG(T302);
-				TIMER_CONFIG(T303);
+				TIMER_CONFIG_LN(T303);
 				TIMER_CONFIG(T304);
 				TIMER_CONFIG(T305);
 				TIMER_CONFIG(T306);
@@ -514,83 +530,42 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				TIMER_CONFIG(T308);
 				TIMER_CONFIG(T309);
 				TIMER_CONFIG(T310);
-				TIMER_CONFIG(T312);
+				TIMER_CONFIG_LN(T312);
 				TIMER_CONFIG(T314);
 				TIMER_CONFIG(T316);
 				TIMER_CONFIG(T317);
-				TIMER_CONFIG(T320);
+				TIMER_CONFIG_LN(T320);
 				TIMER_CONFIG(T321);
-				TIMER_CONFIG(T322);
+				TIMER_CONFIG_LN(T322);
 			} else {
 				TIMER_CONFIG(T301);
 				TIMER_CONFIG(T302);
 				TIMER_CONFIG(T303);
-				TIMER_CONFIG(T304);
+				TIMER_CONFIG_LN(T304);
 				TIMER_CONFIG(T305);
 				TIMER_CONFIG(T306);
 				ast_cli(fd, "T307: %d\n", intf->T307);
-				TIMER_CONFIG(T308);
+				TIMER_CONFIG_LN(T308);
 				TIMER_CONFIG(T309);
 				TIMER_CONFIG(T310);
 				TIMER_CONFIG(T312);
-				TIMER_CONFIG(T313);
+				TIMER_CONFIG_LN(T313);
 				TIMER_CONFIG(T314);
 				TIMER_CONFIG(T316);
 				TIMER_CONFIG(T317);
 				TIMER_CONFIG(T318);
-				TIMER_CONFIG(T319);
+				TIMER_CONFIG_LN(T319);
 				TIMER_CONFIG(T320);
 				TIMER_CONFIG(T321);
-				TIMER_CONFIG(T322);
+				TIMER_CONFIG_LN(T322);
 			}
 
-		} else {
-			ast_cli(fd,
-				"T301: %d\n"
-				"T302: %d\n"
-				"T303: %d\n"
-				"T304: %d\n"
-				"T305: %d\n"
-				"T306: %d\n"
-				"T307: %d\n"
-				"T308: %d\n"
-				"T309: %d\n"
-				"T310: %d\n"
-				"T312: %d\n"
-				"T313: %d\n"
-				"T314: %d\n"
-				"T316: %d\n"
-				"T317: %d\n"
-				"T318: %d\n"
-				"T319: %d\n"
-				"T320: %d\n"
-				"T321: %d\n"
-				"T322: %d\n",
-				intf->T301,
-				intf->T302,
-				intf->T303,
-				intf->T304,
-				intf->T305,
-				intf->T306,
-				intf->T307,
-				intf->T308,
-				intf->T309,
-				intf->T310,
-				intf->T312,
-				intf->T313,
-				intf->T314,
-				intf->T316,
-				intf->T317,
-				intf->T318,
-				intf->T319,
-				intf->T320,
-				intf->T321,
-				intf->T322);
 		}
 
 		ast_cli(fd, "Parked calls:\n");
 		struct visdn_suspended_call *suspended_call;
-		list_for_each_entry(suspended_call, &intf->suspended_calls, node) {
+		list_for_each_entry(suspended_call, &intf->suspended_calls,
+			       					node) {
 
 			char sane_str[10];
 			char hex_str[20];
@@ -696,6 +671,41 @@ static enum visdn_clir_mode
 	return mode;
 }
 
+static void visdn_decode_clip_numbers(
+	struct visdn_interface *intf,
+	const char *value)
+{
+	char *str = strdup(value);
+	char *strpos = str;
+	char *tok;
+
+	struct visdn_clip_number *num, *t;
+	list_for_each_entry_safe(num, t,
+		       &intf->clip_numbers_list, node) {
+		list_del(&num->node);
+		free(num);
+	}
+
+	while ((tok = strsep(&strpos, ","))) {
+		while(*tok == ' ' || *tok == '\t')
+			tok++;
+
+		while(*(tok + strlen(tok) - 1) == ' ' ||
+			*(tok + strlen(tok) - 1) == '\t')
+			*(tok + strlen(tok) - 1) = '\0';
+
+		struct visdn_clip_number *num;
+		num = malloc(sizeof(*num));
+		memset(num, 0, sizeof(num));
+
+		strncpy(num->number, tok, sizeof(num->number));
+
+		list_add_tail(&num->node, &intf->clip_numbers_list);
+	}
+
+	free(str);
+}
+
 static int visdn_intf_from_var(
 	struct visdn_interface *intf,
 	struct ast_variable *var)
@@ -724,8 +734,8 @@ static int visdn_intf_from_var(
 	} else if (!strcasecmp(var->name, "clip_default_number")) {
 		strncpy(intf->clip_default_number, var->value,
 			sizeof(intf->clip_default_number));
-	} else if (!strcasecmp(var->name, "force_inbound_caller_id")) {
-		intf->force_inbound_caller_id = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "clip_numbers")) {
+		visdn_decode_clip_numbers(intf, var->value);
 	} else if (!strcasecmp(var->name, "clip_special_arrangement")) {
 		intf->clip_special_arrangement = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clir_mode")) {
@@ -805,7 +815,23 @@ static void visdn_copy_interface_config(
 		sizeof(dst->clip_default_name));
 	strncpy(dst->clip_default_number, src->clip_default_number,
 		sizeof(dst->clip_default_number));
-	dst->force_inbound_caller_id = src->force_inbound_caller_id;
+
+	struct visdn_clip_number *num, *t;
+	list_for_each_entry_safe(num, t,
+		       &dst->clip_numbers_list, node) {
+		list_del(&num->node);
+		free(num);
+	}
+
+	list_for_each_entry(num, &src->clip_numbers_list, node) {
+
+		struct visdn_clip_number *num2;
+
+		num2 = malloc(sizeof(*num2));
+		strcpy(num2->number, num->number);
+		list_add_tail(&num2->node, &dst->clip_numbers_list);
+	}
+	
 	dst->clip_special_arrangement = src->clip_special_arrangement;
 	dst->clir_mode = src->clir_mode;
 	dst->overlap_sending = src->overlap_sending;
@@ -835,6 +861,19 @@ static void visdn_copy_interface_config(
 	dst->T320 = src->T320;
 	dst->T321 = src->T321;
 	dst->T322 = src->T322;
+}
+
+static int visdn_clip_valid(
+	struct visdn_interface *intf,
+	const char *called_number)
+{
+	struct visdn_clip_number *num;
+	list_for_each_entry(num, &intf->clip_numbers_list, node) {
+		if (ast_extension_match(num->number, called_number))
+			return TRUE;
+	}
+
+	return FALSE;
 }
 
 static void visdn_reload_config(void)
@@ -887,7 +926,10 @@ static void visdn_reload_config(void)
 		if (!found) {
 			intf = malloc(sizeof(*intf));
 
+			memset(intf, 0, sizeof(*intf));
+
 			INIT_LIST_HEAD(&intf->suspended_calls);
+			INIT_LIST_HEAD(&intf->clip_numbers_list);
 			intf->q931_intf = NULL;
 			intf->open_pending = FALSE;
 			strncpy(intf->name, cat, sizeof(intf->name));
@@ -1560,6 +1602,8 @@ static int visdn_call(
 	if (intf->clip_enabled) {
 		struct q931_ie_calling_party_number *cgpn =
 			q931_ie_calling_party_number_alloc();
+
+ast_log(LOG_ERROR, "PREEEEEEEEEEEESENT %02x '%s'", ast_chan->cid.cid_pres, ast_chan->cid.cid_num);
 
 		if (AST_CID_NUM(ast_chan) &&
 		    strlen(AST_CID_NUM(ast_chan))) {
@@ -2643,6 +2687,26 @@ static int visdn_open_interface(
 
 	intf->open_pending = FALSE;
 
+	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+		if (list_empty(&intf->clip_numbers_list)) {
+			ast_log(LOG_NOTICE,
+				"Interface '%s' is configured in network"
+				" mode but clip_numbers is empty\n",
+				intf->name);
+		} else if (!strlen(intf->clip_default_number)) {
+			ast_log(LOG_NOTICE,
+				"Interface '%s' is configured in network"
+				" mode but clip_default_number is empty\n",
+				intf->name);
+		} else if (!visdn_clip_valid(intf, intf->clip_default_number)) {
+			ast_log(LOG_NOTICE,
+				"Interface '%s' clip_numbers should contain "
+				"clip_default_number (%s)\n",
+				intf->name,
+				intf->clip_default_number);
+		}
+	}
+
 	return 0;
 }
 
@@ -2662,6 +2726,7 @@ static void visdn_add_interface(const char *name)
 		intf = malloc(sizeof(*intf));
 
 		INIT_LIST_HEAD(&intf->suspended_calls);
+		INIT_LIST_HEAD(&intf->clip_numbers_list);
 		intf->q931_intf = NULL;
 		intf->configured = FALSE;
 		intf->open_pending = FALSE;
@@ -3308,6 +3373,72 @@ static int visdn_cgpn_to_pres(
 	return 0;
 }
 
+static void visdn_handle_clip_nt(
+	struct ast_channel *ast_chan,
+	struct visdn_interface *intf,
+	struct q931_ie_calling_party_number *cgpn,
+	const char *called_number)
+{
+
+	/* If the numbering plan is incorrect ignore the information
+	 * element. ETS 300 092 Par. 9.3.1
+	 */
+
+	if (!cgpn) {
+#ifdef ASTERISK_VERSION_NUM
+		ast_chan->cid.cid_num =
+			strdup(intf->clip_default_number);
+		ast_chan->cid.cid_pres =
+			AST_PRES_NETWORK_NUMBER;
+#else
+		ast_chan->callerid = strdup(intf->clip_default_number);
+#endif
+		return;
+	}
+	
+	if (cgpn->numbering_plan_identificator !=
+			Q931_IE_CGPN_NPI_UNKNOWN &&
+	    cgpn->numbering_plan_identificator !=
+	    		Q931_IE_CGPN_NPI_ISDN_TELEPHONY) {
+#ifdef ASTERISK_VERSION_NUM
+		ast_chan->cid.cid_num =
+			strdup(intf->clip_default_number);
+		ast_chan->cid.cid_pres =
+			AST_PRES_NETWORK_NUMBER;
+#else
+		ast_chan->callerid = strdup(intf->clip_default_number);
+#endif
+		return;
+	}
+
+	if (intf->clip_special_arrangement) {
+		ast_chan->cid.cid_pres |=
+			AST_PRES_USER_NUMBER_UNSCREENED;
+	} else {
+		if (visdn_clip_valid(intf, called_number)) {
+			if (0) { /* Sequence is valid but incomplete */
+				/* Complete sequence */
+			}
+
+			AST_CID_NUM(ast_chan) = strdup(called_number);
+
+			ast_chan->cid.cid_pres |=
+				AST_PRES_USER_NUMBER_PASSED_SCREEN;
+		} else {
+#ifdef ASTERISK_VERSION_NUM
+			ast_chan->cid.cid_num =
+				strdup(intf->clip_default_number);
+ast_log(LOG_ERROR, "====================> '%s'\n", intf->clip_default_number);
+			ast_chan->cid.cid_pres |=
+				AST_PRES_NETWORK_NUMBER;
+#else
+			ast_chan->callerid =
+			       strdup(intf->clip_default_number);
+#endif
+		}
+	}
+}
+
 static void visdn_q931_setup_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
@@ -3431,54 +3562,33 @@ static void visdn_q931_setup_indication(
 	assert(!ast_chan->cid.cid_num);
 
 	ast_chan->cid.cid_pres = 0;
-
 	ast_chan->cid.cid_name = strdup(intf->clip_default_name);
 
-	if (!cgpn ||
-	    intf->force_inbound_caller_id) {
-#ifdef ASTERISK_VERSION_NUM
-		ast_chan->cid.cid_num = strdup(intf->clip_default_number);
-		ast_chan->cid.cid_pres = AST_PRES_ALLOWED_NETWORK_NUMBER;
-#else
-		ast_chan->callerid = strdup(intf->clip_default_number);
-#endif
-		goto clip_end;
+#if 0
+	const char *prefix;
+	switch(cgpn->type_of_number) {
+	case Q931_IE_CDPN_TON_INTERNATIONAL:
+		prefix = intf->international_prefix;
+	break;
+
+	case Q931_IE_CDPN_TON_NATIONAL:
+		prefix = intf->national_prefix;
+	break;
+
+	default:
+		prefix = "";
+	break;
 	}
+
+	char full_cid[128];
+	snprintf(full_cid, sizeof(full_cid),
+		"%s%s", prefix, cgpn->number);
+	
+#endif
 
 	if (intf->q931_intf->role == LAPD_ROLE_NT) {
 
-		/* If the numbering plan is incorrect ignore the information
-		 * element. ETS 300 092 Par. 9.3.1
-		 */
-
-		if (cgpn->numbering_plan_identificator !=
-				Q931_IE_CGPN_NPI_UNKNOWN &&
-		    cgpn->numbering_plan_identificator !=
-		    		Q931_IE_CGPN_NPI_ISDN_TELEPHONY) {
-#ifdef ASTERISK_VERSION_NUM
-			ast_chan->cid.cid_num =
-				strdup(intf->clip_default_number);
-			ast_chan->cid.cid_pres =
-				AST_PRES_ALLOWED_NETWORK_NUMBER;
-#else
-			ast_chan->callerid = strdup(intf->clip_default_number);
-#endif
-			goto clip_end;
-		}
-
-		if (intf->clip_special_arrangement) {
-			ast_chan->cid.cid_pres |=
-				AST_PRES_USER_NUMBER_UNSCREENED;
-		} else {
-			if (1) { /* Number is correct */
-				if (0) { /* Sequence is valid but incomplete */
-					/* Complete sequence */
-				}
-
-				ast_chan->cid.cid_pres |=
-					AST_PRES_USER_NUMBER_PASSED_SCREEN;
-			}
-		}
+		visdn_handle_clip_nt(ast_chan, intf, cgpn, called_number);
 
 		/* Handle CLIR */
 		if (intf->clir_mode == VISDN_CLIR_MODE_ON)
@@ -3517,50 +3627,30 @@ static void visdn_q931_setup_indication(
 				AST_PRES_NETWORK_NUMBER;
 		break;
 		}
+
+		switch(cgpn->presentation_indicator) {
+		case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_ALLOWED;
+		break;
+
+		case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_RESTRICTED;
+		break;
+
+		case Q931_IE_CGPN_PI_NOT_AVAILABLE:
+			ast_chan->cid.cid_pres |=
+				AST_PRES_UNAVAILABLE;
+		break;
+		}
 	}
 
-	switch(cgpn->presentation_indicator) {
-	case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
-		ast_chan->cid.cid_pres |=
-			AST_PRES_ALLOWED;
-	break;
-
-	case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
-		ast_chan->cid.cid_pres |=
-			AST_PRES_RESTRICTED;
-	break;
-
-	case Q931_IE_CGPN_PI_NOT_AVAILABLE:
-		ast_chan->cid.cid_pres |=
-			AST_PRES_UNAVAILABLE;
-	break;
-	}
-
-	const char *prefix;
-	switch(cgpn->type_of_number) {
-	case Q931_IE_CDPN_TON_INTERNATIONAL:
-		prefix = intf->international_prefix;
-	break;
-
-	case Q931_IE_CDPN_TON_NATIONAL:
-		prefix = intf->national_prefix;
-	break;
-
-	default:
-		prefix = "";
-	break;
-	}
-
+ast_log(LOG_ERROR, "PREEEEES1 = %02x\n",  ast_chan->cid.cid_pres);
+	
 	/* They appear to have the same values :) */
 	ast_chan->cid.cid_ton = cgpn->type_of_number;
 
-	char full_cid[128];
-	snprintf(full_cid, sizeof(full_cid),
-		"%s%s", prefix, cgpn->number);
-	
-	AST_CID_NUM(ast_chan) = strdup(full_cid);
-
-clip_end:
 	/* ------ ----------------------------- ------ */
 
 	if (!intf->overlap_sending ||
