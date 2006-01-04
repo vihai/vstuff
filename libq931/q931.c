@@ -278,10 +278,11 @@ void q931_decode_so_ie(
 
 				if (ie->type->dump)
 					ie->type->dump(ie,
-						call->intf->lib->report, "  ");
+						call->intf->lib->report,
+						"<-    ");
 
-				report_msg(msg, LOG_DEBUG,
-					"SO IE %d ===> %u (%s)\n",
+				report_msg_cont(msg, LOG_DEBUG,
+					"<-  SO IE %d ===> %u (%s)\n",
 					ds->curie,
 					ds->ie_id,
 					ie_type->name);
@@ -289,8 +290,8 @@ void q931_decode_so_ie(
 				q931_ie_put(ie);
 			}
 		} else {
-			report_msg(msg, LOG_DEBUG,
-				"SO IE %d ===> %u (unknown)\n",
+			report_msg_cont(msg, LOG_DEBUG,
+				"<-  SO IE %d ===> %u (unknown)\n",
 				ds->curie,
 				ds->ie_id);
 		}
@@ -315,12 +316,14 @@ void q931_decode_vl_ie(
 
 		if (!ie_type) {
 			if (q931_ie_comprehension_required(ds->ie_id)) {
-				ds->unrecognized_ies[ds->unrecognized_ies_cnt++] =
+				ds->unrecognized_ies
+					[ds->unrecognized_ies_cnt++] =
 					ds->ie_id;
 
 				report_msg(msg, LOG_DEBUG,
-					"Unrecognized IE %d in message"
-					" for which comprehension is required\n",
+					"!! Unrecognized IE %d in message"
+					" for which comprehension is"
+					" required\n",
 					ds->ie_id);
 			}
 
@@ -332,8 +335,8 @@ void q931_decode_vl_ie(
 				msg->message_type, ds->ie_id);
 
 		if (!ie_type2) {
-			report_msg(msg, LOG_DEBUG,
-				"Unexpected IE %d in message type %s\n",
+			report_msg(msg, LOG_NOTICE,
+				"!! Unexpected IE %d in message type %s\n",
 				ds->ie_id,
 				q931_message_type_to_text(
 					msg->message_type));
@@ -342,8 +345,8 @@ void q931_decode_vl_ie(
 		}
 
 		if (!ie_has_content_errors(msg, ie_type, ie_len)) {
-			report_msg(msg, LOG_DEBUG,
-				"VL IE %d ===> %u (%s) -- length %u\n",
+			report_msg_cont(msg, LOG_DEBUG,
+				"<-  VL IE %d ===> %u (%s) -- length %u\n",
 				ds->curie,
 				ds->ie_id,
 				ie_type->name,
@@ -359,24 +362,25 @@ void q931_decode_vl_ie(
 
 				if (ie->type->dump)
 					ie->type->dump(ie,
-						call->intf->lib->report, "  ");
+						call->intf->lib->report,
+						"<-    ");
 			}
 		} else {
 			// If mandatory or comprension required
 			if (q931_ie_comprehension_required(ds->ie_id)) {
 				if (ds->invalid_mand_ies_cnt <
-				    sizeof(ds->invalid_mand_ies)/
-				    sizeof(*ds->invalid_mand_ies)) {
-					ds->invalid_mand_ies[ds->invalid_mand_ies_cnt]
+				    ARRAY_SIZE(ds->invalid_mand_ies)) {
+					ds->invalid_mand_ies
+						[ds->invalid_mand_ies_cnt]
 						= ds->ie_id;
 
 					ds->invalid_mand_ies_cnt++;
 				}
 			} else {
 				if (ds->invalid_opt_ies_cnt <
-				    sizeof(ds->invalid_opt_ies)/
-				    sizeof(*ds->invalid_opt_ies)) {
-					ds->invalid_opt_ies[ds->invalid_opt_ies_cnt]
+				    ARRAY_SIZE(ds->invalid_opt_ies)) {
+					ds->invalid_opt_ies
+						[ds->invalid_opt_ies_cnt]
 						= ds->ie_id;
 
 					ds->invalid_opt_ies_cnt++;
@@ -391,7 +395,7 @@ skip_this_ie:
 
 	if(ds->rawies_curpos > msg->rawies_len) {
 
-		report_msg(msg, LOG_ERR, "MALFORMED FRAME\n");
+		report_msg(msg, LOG_ERR, "<-  MALFORMED FRAME\n");
 		// FIXME
 		return;
 	}
@@ -406,7 +410,7 @@ void q931_decode_shift_ie(
 		// Locking shift
 
 		report_dlc(msg->dlc, LOG_DEBUG,
-			"Locked Switch from codeset %u to codeset %u\n",
+			"<-  Locked Switch from codeset %u to codeset %u\n",
 			ds->codeset,
 			q931_get_so_ie_type2_value(ds->ie_id) & 0x07);
 
@@ -416,7 +420,7 @@ void q931_decode_shift_ie(
 		// Non-Locking shift
 
 		report_dlc(msg->dlc, LOG_DEBUG,
-			"Non-Locked Switch from codeset %u to codeset %u\n",
+			"<-  Non-Locked Switch from codeset %u to codeset %u\n",
 			ds->codeset,
 			q931_get_so_ie_type2_value(ds->ie_id));
 
@@ -430,7 +434,7 @@ int q931_decode_information_elements(
 	struct q931_message *msg)
 {
 	struct q931_decode_status ds;
-	memset(&ds, 0x00, sizeof(ds));
+	memset(&ds, 0, sizeof(ds));
 
 	ds.rawies_curpos = 0;
 	ds.codeset = 0;
@@ -471,8 +475,10 @@ int q931_decode_information_elements(
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.invalid_mand_ies,
 				ds.invalid_mand_ies_cnt);
 			cause->diagnostics_len = ds.invalid_mand_ies_cnt;
@@ -487,8 +493,10 @@ int q931_decode_information_elements(
 		case Q931_MT_DISCONNECT: {
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.invalid_mand_ies,
 				ds.invalid_mand_ies_cnt);
 			cause->diagnostics_len = ds.invalid_mand_ies_cnt;
@@ -507,8 +515,10 @@ int q931_decode_information_elements(
 			cause = q931_ie_cause_alloc();
 
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.invalid_mand_ies,
 				ds.invalid_mand_ies_cnt);
 			cause->diagnostics_len = ds.invalid_mand_ies_cnt;
@@ -527,8 +537,10 @@ int q931_decode_information_elements(
 			cause = q931_ie_cause_alloc();
 
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
 			cause->diagnostics_len = ds.unrecognized_ies_cnt;
@@ -543,8 +555,10 @@ int q931_decode_information_elements(
 			cause = q931_ie_cause_alloc();
 
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
 			cause->diagnostics_len = ds.unrecognized_ies_cnt;
@@ -566,8 +580,10 @@ int q931_decode_information_elements(
 			cause = q931_ie_cause_alloc();
 
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
 			cause->diagnostics_len = ds.unrecognized_ies_cnt;
@@ -586,8 +602,10 @@ int q931_decode_information_elements(
 			cause = q931_ie_cause_alloc();
 
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INFORMATION_ELEMENT_NON_EXISTENT;
 			memcpy(cause->diagnostics, ds.unrecognized_ies,
 				ds.unrecognized_ies_cnt);
 			cause->diagnostics_len = ds.unrecognized_ies_cnt;
@@ -612,8 +630,10 @@ int q931_decode_information_elements(
 			cause = q931_ie_cause_alloc();
 
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			cause->value = Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
+			cause->location =
+				Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+			cause->value =
+				Q931_IE_C_CV_INVALID_INFORMATION_ELEMENT_CONTENTS;
 			memcpy(cause->diagnostics, ds.invalid_opt_ies,
 				ds.invalid_opt_ies_cnt);
 			cause->diagnostics_len = ds.invalid_opt_ies_cnt;
@@ -790,18 +810,18 @@ int q931_receive(struct q931_dlc *dlc)
 #endif
 	}
 
-	report_dlc(dlc, LOG_DEBUG, "Received message:\n");
+	msg->message_type = *(__u8 *)(msg->raw + sizeof(struct q931_header) +
+		hdr->call_reference_len);
 
-	report_dlc(dlc, LOG_DEBUG,
-		"  call reference = %lu.%c (len %d)\n",
+	report_msg(msg, LOG_DEBUG, "Received message:\n");
+
+	report_msg_cont(msg, LOG_DEBUG,
+		"<-  call reference = %lu.%c (len %d)\n",
 		msg->callref,
 		msg->callref_direction ? 'O' : 'I',
 		hdr->call_reference_len);
 
-	msg->message_type = *(__u8 *)(msg->raw + sizeof(struct q931_header) +
-		hdr->call_reference_len);
-
-	report_dlc(dlc, LOG_DEBUG, "  message_type = %s (%u)\n",
+	report_msg_cont(msg, LOG_DEBUG, "<-  message_type = %s (%u)\n",
 		q931_message_type_to_text(msg->message_type),
 		msg->message_type);
 
@@ -921,29 +941,35 @@ int q931_receive(struct q931_dlc *dlc)
 		}
 	}
 
-	if (q931_decode_information_elements(call, msg)) {
-		struct q931_ces *ces, *tces;
-		list_for_each_entry_safe(ces, tces, &call->ces, node) {
+	if (!q931_decode_information_elements(call, msg)) {
+		report_msg_cont(msg, LOG_DEBUG, "<--- invalid ---\n\n");
+		goto err_bad_ies;
+	}
+       
+	report_msg_cont(msg, LOG_DEBUG, "\n");
 
-			if (ces->dlc == dlc) {
-				// selected_ces may change after
-				// "dispatch_message"
-				if (ces == call->selected_ces) {
-					q931_ces_dispatch_message(ces, msg);
+	struct q931_ces *ces, *tces;
+	list_for_each_entry_safe(ces, tces, &call->ces, node) {
 
-					break;
-				} else {
-					q931_ces_dispatch_message(ces, msg);
-					q931_call_put(call);
+		if (ces->dlc == dlc) {
+			// selected_ces may change after
+			// "dispatch_message"
+			if (ces == call->selected_ces) {
+				q931_ces_dispatch_message(ces, msg);
 
-					return Q931_RECEIVE_OK;
-				}
+				break;
+			} else {
+				q931_ces_dispatch_message(ces, msg);
+				q931_call_put(call);
+
+				return Q931_RECEIVE_OK;
 			}
 		}
-
-		q931_dispatch_message(call, msg);
 	}
 
+	q931_dispatch_message(call, msg);
+
+err_bad_ies:
 	q931_message_put(msg);
 	q931_call_put(call);
 

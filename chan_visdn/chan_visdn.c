@@ -262,12 +262,17 @@ struct visdn_state
 #ifdef DEBUG_CODE
 #define visdn_debug(format, arg...)			\
 	if (visdn.debug)				\
-		ast_log(LOG_NOTICE,			\
+		ast_verbose(VERBOSE_PREFIX_3		\
 			format,				\
 			## arg)
+
+#define FUNC_DEBUG(format, arg...)	\
+	visdn_debug("%s " format "\n", __FUNCTION__, ## arg);
+
 #else
 #define visdn_debug(format, arg...)		\
 	do {} while(0);
+#define FUNC_DEBUG() do {} while(0)
 #endif
 
 static void visdn_set_socket_debug(int on)
@@ -595,8 +600,8 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				i<suspended_call->call_identity_len;
 			    i++) {
 				sane_str[i] =
-					 isprint(suspended_call->call_identity[i]) ?
-						suspended_call->call_identity[i] : '.';
+				isprint(suspended_call->call_identity[i]) ?
+					suspended_call->call_identity[i] : '.';
 
 				snprintf(hex_str + (i*2),
 					sizeof(hex_str)-(i*2),
@@ -975,7 +980,7 @@ static int visdn_cli_print_call_list(
 						"Interface: %s\n",
 						intf->q931_intf->name);
 					ast_cli(fd,
-						"  Ref#  State      refcnt\n");
+						"  CallRef  State\n");
 					first_call = FALSE;
 				}
 
@@ -1517,7 +1522,7 @@ static int visdn_call(
 		q931_call->intf->name,
 		q931_call->call_reference,
 		q931_call->direction ==
-	       		Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
+			Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
 
 	ast_change_name(ast_chan, newname);
 
@@ -1561,7 +1566,7 @@ static int visdn_call(
 
 			if ((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
 					AST_PRES_ALLOWED ||
-			     intf->clip_override) {
+			    intf->clip_override) {
 
 				/* Send subaddress if provided */
 
@@ -1572,7 +1577,7 @@ static int visdn_call(
 				cgpn->type_of_number =
 					visdn_type_of_number_to_cgpn(
 						intf->local_type_of_number);
-	       	       			/* Use ast_chan->cli.cli_ton ? */
+				/* Use ast_chan->cli.cli_ton ? */
 
 				cgpn->numbering_plan_identificator =
 					Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
@@ -1584,7 +1589,7 @@ static int visdn_call(
 				char callerid[255];
 				char *name, *number;
 				strncpy(callerid, ast_chan->callerid,
-					       sizeof(callerid));
+						sizeof(callerid));
 				ast_callerid_parse(callerid, &name, &number);
 				if (number) {
 					strncpy(cgpn->number, number,
@@ -1636,6 +1641,8 @@ static int visdn_call(
 
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_REQUEST, &ies);
 
+	q931_call_put(q931_call);
+
 	return 0;
 
 err_channel_not_down:
@@ -1653,7 +1660,7 @@ static int visdn_answer(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
-	visdn_debug("visdn_answer\n");
+	FUNC_DEBUG();
 
 	ast_indicate(ast_chan, -1);
 
@@ -1863,7 +1870,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		return 1;
 	}
 
-	visdn_debug("visdn_indicate %d\n", condition);
+	FUNC_DEBUG("%d", condition);
 
 	switch(condition) {
 	case AST_CONTROL_RING:
@@ -2076,7 +2083,7 @@ static int visdn_transfer(
 
 static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 {
-	ast_log(LOG_NOTICE, "%s %c\n", __FUNCTION__, digit);
+	FUNC_DEBUG("%c", digit);
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
@@ -2141,7 +2148,7 @@ static struct visdn_chan *visdn_alloc()
 
 static int visdn_hangup(struct ast_channel *ast_chan)
 {
-	visdn_debug("visdn_hangup %s\n", ast_chan->name);
+	FUNC_DEBUG("%s", ast_chan->name);
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
@@ -2233,7 +2240,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 	ast_mutex_unlock(&ast_chan->lock);
 
-	visdn_debug("visdn_hangup complete\n");
+	FUNC_DEBUG("%s DONE", ast_chan->name);
 
 	return 0;
 }
@@ -2522,7 +2529,7 @@ static void refresh_polls_list()
 		}
 
 		struct q931_dlc *dlc;
-		list_for_each_entry(dlc,  &intf->q931_intf->dlcs, intf_node) {
+		list_for_each_entry(dlc, &intf->q931_intf->dlcs, intf_node) {
 			visdn.polls[visdn.npolls].fd = dlc->socket;
 			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
@@ -2749,14 +2756,16 @@ static void visdn_netlink_receive()
 
 			if (ifi->ifi_flags & IFF_UP) {
 				visdn_debug("Netlink msg: %s UP %s\n",
-						ifname,
-						(ifi->ifi_flags & IFF_ALLMULTI) ? "NT": "TE");
+					ifname,
+					(ifi->ifi_flags & IFF_ALLMULTI) ?
+				 		"NT": "TE");
 
 				visdn_add_interface(ifname);
 			} else {
 				visdn_debug("Netlink msg: %s DOWN %s\n",
-						ifname,
-						(ifi->ifi_flags & IFF_ALLMULTI) ? "NT": "TE");
+					ifname,
+					(ifi->ifi_flags & IFF_ALLMULTI) ?
+						"NT": "TE");
 
 				visdn_rem_interface(ifname);
 			}
@@ -2805,7 +2814,7 @@ static int visdn_q931_thread_do_poll()
 		msec_to_wait = (msec_to_wait > 0 && msec_to_wait < 2001) ?
 				msec_to_wait : 2001;
 
-	visdn_debug("select timeout = %d\n", msec_to_wait);
+	visdn_debug("poll timeout = %d\n", msec_to_wait);
 
 	// Uhm... we should lock, copy polls and unlock before poll()
 	if (poll(visdn.polls, visdn.npolls, msec_to_wait) < 0) {
@@ -2929,15 +2938,6 @@ static void *visdn_q931_thread_main(void *data)
 
 	return NULL;
 }
-
-#ifdef DEBUG_CODE
-#define FUNC_DEBUG()					\
-	if (visdn.debug)				\
-		ast_verbose(VERBOSE_PREFIX_3		\
-			"%s\n", __FUNCTION__);
-#else
-#define FUNC_DEBUG() do {} while(0)
-#endif
 
 static void visdn_q931_alerting_indication(
 	struct q931_call *q931_call,
@@ -4019,11 +4019,11 @@ static void visdn_logger(int level, const char *format, ...)
 	switch(level) {
 	case Q931_LOG_DEBUG:
 		if (visdn.debug_q931)
-			ast_verbose(VERBOSE_PREFIX_3 "%s", msg);
+			ast_verbose("q931 %s", msg);
 	break;
 
 	case Q931_LOG_INFO:
-		ast_verbose(VERBOSE_PREFIX_3  "%s", msg);
+		ast_verbose(VERBOSE_PREFIX_2  "%s", msg);
 	break;
 
 	case Q931_LOG_NOTICE:

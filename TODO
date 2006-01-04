@@ -69,7 +69,8 @@ libq931:
 - Implement Signal IE
 - Implement Transit Network Selection IE
 - Implement User-User Information IE
-- Implement ETS 300 125 Appendix III (Optional basic access deactivation procedures)
+- Implement ETS 300 125 Appendix III (Optional basic access deactivation
+  procedures)
 
 app_visdn_ppp:
 --------------
@@ -102,7 +103,8 @@ lapd:
 
 - Implement listen backlog maximum size
 
-- Implement frame acknowledging throught outgoing i-frames instead of specific RR
+- Implement frame acknowledging throught outgoing i-frames instead of specific
+  RR
 
 - Check what happens when 64 sockets are open (every dynamic TEIs)
 
@@ -118,9 +120,11 @@ lapd:
 - Add ETH_P_LAPD to linux/include/linux/if_ether.h
 - See ioctl-number.txt and mail <mec@shout.net> and register an IOCTL numbers
 
-- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI flag, a specific flag would be better.
+- The interface role (in the ISDN network) is determined by the IFF_ALLMULTI
+  flag, a specific flag would be better.
 
-- Implement ETS 300 125 Appendix III (Optional basic access deactivation procedures)
+- Implement ETS 300 125 Appendix III (Optional basic access deactivation
+  procedures)
 
 
 visdn-netdev:

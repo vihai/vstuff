@@ -23,44 +23,44 @@
 
 static struct q931_message_type_name q931_message_type_names[] =
 {
-  { Q931_MT_ALERTING,			"Alerting" },
-  { Q931_MT_CALL_PROCEEDING,		"Call Proceeding" },
-  { Q931_MT_CONNECT,			"Connect" },
-  { Q931_MT_CONNECT_ACKNOWLEDGE,	"Connect Acknowledge" },
-  { Q931_MT_PROGRESS,			"Progress" },
-  { Q931_MT_SETUP,			"Setup" },
-  { Q931_MT_SETUP_ACKNOWLEDGE,		"Setup Acknowledge" },
-  { Q931_MT_DISCONNECT,			"Disconnect" },
-  { Q931_MT_RELEASE,			"Release" },
-  { Q931_MT_RELEASE_COMPLETE,		"Release Complete" },
-  { Q931_MT_RESTART,			"Restart" },
-  { Q931_MT_RESTART_ACKNOWLEDGE,	"Restart Acknowledge" },
-  { Q931_MT_STATUS,			"Status" },
-  { Q931_MT_STATUS_ENQUIRY,		"Status_enquiry" },
-  { Q931_MT_USER_INFORMATION,		"User Information" },
-  { Q931_MT_SEGMENT,			"Segment" },
-  { Q931_MT_CONGESTION_CONTROL,		"Congestion Control" },
-  { Q931_MT_INFORMATION,		"Information" },
-  { Q931_MT_FACILITY,			"Facility" },
-  { Q931_MT_NOTIFY,			"Notify" },
-  { Q931_MT_HOLD,			"Hold" },
-  { Q931_MT_HOLD_ACKNOWLEDGE,		"Hold Acknowledge" },
-  { Q931_MT_HOLD_REJECT,		"Hold Reject" },
-  { Q931_MT_RETRIEVE,			"Retrieve" },
-  { Q931_MT_RETRIEVE_ACKNOWLEDGE,	"Retrieve Acknowledge" },
-  { Q931_MT_RETRIEVE_REJECT,		"Retrieve Reject" },
-  { Q931_MT_RESUME,			"Resume" },
-  { Q931_MT_RESUME_ACKNOWLEDGE,		"Resume Acknowledge" },
-  { Q931_MT_RESUME_REJECT,		"Resume Reject" },
-  { Q931_MT_SUSPEND,			"Suspend" },
-  { Q931_MT_SUSPEND_ACKNOWLEDGE,	"Suspend Acknowledge" },
-  { Q931_MT_SUSPEND_REJECT,		"Suspend Reject" },
+	{ Q931_MT_ALERTING,		"ALERTING" },
+	{ Q931_MT_CALL_PROCEEDING,	"CALL PROCEEDING" },
+	{ Q931_MT_CONNECT,		"CONNECT" },
+	{ Q931_MT_CONNECT_ACKNOWLEDGE,	"CONNECT ACKNOWLEDGE" },
+	{ Q931_MT_PROGRESS,		"PROGRESS" },
+	{ Q931_MT_SETUP,		"SETUP" },
+	{ Q931_MT_SETUP_ACKNOWLEDGE,	"SETUP ACKNOWLEDGE" },
+	{ Q931_MT_DISCONNECT,		"DISCONNECT" },
+	{ Q931_MT_RELEASE,		"RELEASE" },
+	{ Q931_MT_RELEASE_COMPLETE,	"RELEASE COMPLETE" },
+	{ Q931_MT_RESTART,		"RESTART" },
+	{ Q931_MT_RESTART_ACKNOWLEDGE,	"RESTART ACKNOWLEDGE" },
+	{ Q931_MT_STATUS,		"STATUS" },
+	{ Q931_MT_STATUS_ENQUIRY,	"STATUS ENQUIRY" },
+	{ Q931_MT_USER_INFORMATION,	"USER INFORMATION" },
+	{ Q931_MT_SEGMENT,		"SEGMENT" },
+	{ Q931_MT_CONGESTION_CONTROL,	"CONGESTION CONTROL" },
+	{ Q931_MT_INFORMATION,		"INFORMATION" },
+	{ Q931_MT_FACILITY,		"FACILITY" },
+	{ Q931_MT_NOTIFY,		"NOTIFY" },
+	{ Q931_MT_HOLD,			"HOLD" },
+	{ Q931_MT_HOLD_ACKNOWLEDGE,	"HOLD ACKNOWLEDGE" },
+	{ Q931_MT_HOLD_REJECT,		"HOLD REJECT" },
+	{ Q931_MT_RETRIEVE,		"RETRIEVE" },
+	{ Q931_MT_RETRIEVE_ACKNOWLEDGE,	"RETRIEVE ACKNOWLEDGE" },
+	{ Q931_MT_RETRIEVE_REJECT,	"RETRIEVE REJECT" },
+	{ Q931_MT_RESUME,		"RESUME" },
+	{ Q931_MT_RESUME_ACKNOWLEDGE,	"RESUME ACKNOWLEDGE" },
+	{ Q931_MT_RESUME_REJECT,	"RESUME REJECT" },
+	{ Q931_MT_SUSPEND,		"SUSPEND" },
+	{ Q931_MT_SUSPEND_ACKNOWLEDGE,	"SUSPEND ACKNOWLEDGE" },
+	{ Q931_MT_SUSPEND_REJECT,	"SUSPEND REJECT" },
 };
 
 static int q931_message_type_id_compare(const void *a, const void *b)
 {
  return q931_intcmp(((struct q931_message_type_name *)a)->id,
-                    ((struct q931_message_type_name *)b)->id);
+			((struct q931_message_type_name *)b)->id);
 }
 
 const char *q931_message_type_to_text(int id)
@@ -71,24 +71,22 @@ const char *q931_message_type_to_text(int id)
  key.name = NULL;
 
  res = (struct q931_message_type_name *)
-       bsearch(&key,
-         q931_message_type_names,
-         sizeof(q931_message_type_names)/
-           sizeof(struct q931_message_type_name),
-         sizeof(struct q931_message_type_name),
-         q931_message_type_id_compare);
+	bsearch(&key,
+		q931_message_type_names,
+		ARRAY_SIZE(q931_message_type_names),
+		sizeof(struct q931_message_type_name),
+		q931_message_type_id_compare);
 
  if (res)
-   return res->name;
+	return res->name;
  else
-   return NULL;
+	return NULL;
 }
 
 void q931_message_types_init()
 {
- qsort(q931_message_type_names,
-       sizeof(q931_message_type_names)/
-         sizeof(struct q931_message_type_name),
-       sizeof(struct q931_message_type_name),
-       q931_message_type_id_compare);
+	qsort(q931_message_type_names,
+		ARRAY_SIZE(q931_message_type_names),
+		sizeof(struct q931_message_type_name),
+		q931_message_type_id_compare);
 }

@@ -16,9 +16,9 @@
 #include <stddef.h>
 
 #ifndef container_of
-#define container_of(ptr, type, member) ({                      \
-        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
-        (type *)( (char *)__mptr - offsetof(type,member) );})
+#define container_of(ptr, type, member) ({			\
+	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
+	(type *)( (char *)__mptr - offsetof(type,member) );})
 #endif
 
 #ifndef FALSE
@@ -29,11 +29,16 @@
 #define TRUE 1
 #endif
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
 static inline int q931_intcmp(int a, int b)
 {
- if (a==b) return 0;
- else if (a>b) return 1;
- else return -1;
+	if (a == b)
+		return 0;
+	else if (a > b)
+		return 1;
+	else
+		return -1;
 }
 
 #endif

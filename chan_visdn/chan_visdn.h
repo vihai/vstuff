@@ -46,7 +46,6 @@ struct visdn_chan {
 	int is_voice;
 	int channel_fd;
 
-	char calling_number[21];
 	int sending_complete;
 
 	int may_send_digits;

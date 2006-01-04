@@ -152,8 +152,7 @@ void q931_call_set_state(
 	assert(call);
 
 	report_call(call, LOG_DEBUG,
-		"Call %d changed state from %s to %s\n",
-		call->call_reference,
+		"%s ==to==> %s\n",
 		q931_call_state_to_text(call->state),
 		q931_call_state_to_text(state));
 
@@ -5668,11 +5667,8 @@ void q931_dispatch_message(
 	assert(msg);
 	assert(msg->dlc);
 
-	report_call(call, LOG_DEBUG, "%s dispatched to CALL %d.%c\n",
-		q931_message_type_to_text(msg->message_type),
-		call->call_reference,
-		call->direction ==
-			Q931_CALL_DIRECTION_OUTBOUND ? 'O' : 'I');
+	report_call(call, LOG_DEBUG, "Got %s\n",
+		q931_message_type_to_text(msg->message_type));
 
 	switch (msg->message_type) {
 	case Q931_MT_ALERTING:

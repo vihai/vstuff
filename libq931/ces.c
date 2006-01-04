@@ -64,8 +64,7 @@ static void q931_ces_set_state(
 	enum q931_ces_state state)
 {
 	report_ces(ces, LOG_DEBUG,
-		"CES %d changed state from %s to %s\n",
-		ces->dlc->tei,
+		"%s ==to==> %s\n",
 		q931_ces_state_to_text(ces->state),
 		q931_ces_state_to_text(state));
 
@@ -888,9 +887,8 @@ void q931_ces_dispatch_message(
 	struct q931_ces *ces,
 	struct q931_message *msg)
 {
-	report_ces(ces, LOG_DEBUG, "%s dispatched to CES %d\n",
-		q931_message_type_to_text(msg->message_type),
-		ces->dlc->tei);
+	report_ces(ces, LOG_DEBUG, "Got %s\n",
+		q931_message_type_to_text(msg->message_type));
 
 	switch (msg->message_type) {
 	case Q931_MT_ALERTING:

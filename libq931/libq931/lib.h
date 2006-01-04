@@ -42,89 +42,6 @@ struct q931_lib
 		const struct q931_ies *ies,
 		unsigned long par1,
 		unsigned long par2);
-
-/*
-	void (*alerting_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*connect_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*disconnect_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*error_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies); // TE
-	void (*info_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*more_info_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*notify_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*proceeding_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*progress_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*reject_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*release_confirm)(
-		struct q931_call *call,
-		const struct q931_ies *ies,
-		enum q931_release_confirm_status status);//TE
-	void (*release_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*resume_confirm)(
-		struct q931_call *call,
-		const struct q931_ies *ies,
-		enum q931_resume_confirm_status status);//TE
-	void (*resume_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*setup_complete_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies,
-		enum q931_setup_complete_indication_status status);//TE
-	void (*setup_confirm)(
-		struct q931_call *call,
-		const struct q931_ies *ies,
-		enum q931_setup_confirm_status status);
-	void (*setup_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*status_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies,
-		enum q931_status_indication_status status);
-	void (*suspend_confirm)(
-		struct q931_call *call,
-		const struct q931_ies *ies,
-		enum q931_suspend_confirm_status status);//TE
-	void (*suspend_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-	void (*timeout_indication)(
-		struct q931_call *call,
-		const struct q931_ies *ies);
-
-	void (*connect_channel)(struct q931_channel *chan);
-	void (*disconnect_channel)(struct q931_channel *chan);
-	void (*start_tone)(struct q931_channel *chan,
-		enum q931_tone_type tone);
-	void (*stop_tone)(struct q931_channel *chan);
-
-	void (*timeout_management_indication)(struct q931_global_call *gc);
-	void (*status_management_indication)(struct q931_global_call *gc);
-	void (*management_restart_confirm)(struct q931_global_call *gc,
-		const struct q931_chanset *chanset);
-*/
 };
 
 static inline void q931_set_logger_func(
@@ -145,6 +62,12 @@ struct q931_dlc *q931_accept(
 	int accept_socket);
 
 #ifdef Q931_PRIVATE
+
+#define report_lib(lib, lvl, format, arg...)		\
+	(lib)->report(					\
+		(lvl),					\
+		format,					\
+		## arg)
 
 typedef char BOOL;
 

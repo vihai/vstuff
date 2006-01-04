@@ -202,7 +202,10 @@ void q931_call_release_reference(struct q931_call *call);
 #ifdef Q931_PRIVATE
 
 #define report_call(call, lvl, format, arg...)				\
-	(call)->intf->lib->report((lvl), "call '%u.%c': " format,	\
+	(call)->intf->lib->report((lvl),				\
+		"%s:CALL[%u.%c]: "					\
+		format,							\
+		(call)->intf->name,					\
 		(call)->call_reference,					\
 		((call)->direction ==					\
 			Q931_CALL_DIRECTION_OUTBOUND ? 'O' : 'I'),	\

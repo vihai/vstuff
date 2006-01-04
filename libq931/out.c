@@ -44,26 +44,23 @@ static int q931_prepare_header(
 {
 	int size = 0;
 
-	report_call(call, LOG_DEBUG, "Sending %s\n",
-		q931_message_type_to_text(message_type));
-
 	struct q931_header *hdr = (struct q931_header *)(frame + size);
 	size += sizeof(struct q931_header);
 
-	memset(hdr, 0x00, sizeof(*hdr));
+	memset(hdr, 0, sizeof(*hdr));
 
 	hdr->protocol_discriminator = Q931_PROTOCOL_DISCRIMINATOR_Q931;
 
 	assert(call->intf);
 	assert(call->intf->call_reference_len >=1 &&
-	       call->intf->call_reference_len <= 4);
+		call->intf->call_reference_len <= 4);
 
 	hdr->call_reference_len =
 		call->intf->call_reference_len;
 
 	// Call reference
 	assert(call->call_reference > 0 &&
-	       call->call_reference < 
+		call->call_reference < 
 			(1 << ((hdr->call_reference_len * 8) - 1)));
 
 	q931_make_callref(frame + size,
@@ -92,13 +89,13 @@ static int q931_global_prepare_header(
 	struct q931_header *hdr = (struct q931_header *)(frame + size);
 	size += sizeof(struct q931_header);
 
-	memset(hdr, 0x00, sizeof(*hdr));
+	memset(hdr, 0, sizeof(*hdr));
 
 	hdr->protocol_discriminator = Q931_PROTOCOL_DISCRIMINATOR_Q931;
 
 	assert(gc->intf);
 	assert(gc->intf->call_reference_len >=1 &&
-	       gc->intf->call_reference_len <= 4);
+		gc->intf->call_reference_len <= 4);
 
 	hdr->call_reference_len =
 		gc->intf->call_reference_len;
@@ -172,6 +169,10 @@ int q931_send_message(
 
 	q931_message_init(msg, dlc);
 
+	report_call(call, LOG_DEBUG, "Sending message:\n");
+	report_msg_cont(msg, LOG_DEBUG, "->  message type: %s (%d)\n",
+		q931_message_type_to_text(mt), mt);
+
 	msg->rawlen += q931_prepare_header(call, msg->raw, mt);
 
 	if (user_ies) {
@@ -188,8 +189,8 @@ int q931_send_message(
 					sizeof(msg->raw) - msg->rawlen);
 			msg->rawlen += ie_len;
 
-			report_call(call, LOG_DEBUG,
-				"IE %d ===> %u (%s) -- length %u\n",
+			report_msg_cont(msg, LOG_DEBUG,
+				"->  IE %d ===> %u (%s) -- length %u\n",
 				i,
 				ies.ies[i]->type->id,
 				ies.ies[i]->type->name,
@@ -198,9 +199,11 @@ int q931_send_message(
 			if (ies.ies[i]->type->dump)
 				ies.ies[i]->type->dump(
 					ies.ies[i],
-					call->intf->lib->report, "  ");
+					call->intf->lib->report, "->    ");
 		}
 	}
+
+	report_msg_cont(msg, LOG_DEBUG, "\n");
 
 	// AWAITING_DISCONNECTION ??
 
@@ -256,14 +259,14 @@ int q931_send_message_bc(
 		for (i=0; i<ies.count; i++) {
 			assert(ies.ies[i]->type->write_to_buf);
 
-			int ie_len =ies.ies[i]->type->write_to_buf(ies.ies[i],
+			int ie_len = ies.ies[i]->type->write_to_buf(ies.ies[i],
 						buf + size,
 						sizeof(buf) - size);
 
 			size += ie_len;
 			
-			report_call(call, LOG_DEBUG,
-				"IE %d ===> %u (%s) -- length %u\n",
+			report_lib(call->intf->lib, LOG_DEBUG,
+				"->  IE %d ===> %u (%s) -- length %u\n",
 				i,
 				ies.ies[i]->type->id,
 				ies.ies[i]->type->name,
@@ -272,7 +275,7 @@ int q931_send_message_bc(
 			if (ies.ies[i]->type->dump)
 				ies.ies[i]->type->dump(
 					ies.ies[i],
-					call->intf->lib->report, "  ");
+					call->intf->lib->report, "->    ");
 		}
 	}
 
@@ -332,8 +335,8 @@ int q931_global_send_message(
 
 			size += ie_len;
 
-			report_gc(gc, LOG_DEBUG,
-				"IE %d ===> %u (%s) -- length %u\n",
+			report_lib(gc->intf->lib, LOG_DEBUG,
+				"->  IE %d ===> %u (%s) -- length %u\n",
 				i,
 				ies.ies[i]->type->id,
 				ies.ies[i]->type->name,
@@ -342,7 +345,7 @@ int q931_global_send_message(
 			if (ies.ies[i]->type->dump)
 				ies.ies[i]->type->dump(
 					ies.ies[i],
-					gc->intf->lib->report, "  ");
+					gc->intf->lib->report, "->    ");
 		}
 	}
 
