@@ -13,3 +13,43 @@ kernel >= 2.6.8
 
 Read TODO for more detailed list of bugs or missing features.
 
+
+~~~~~~~~~~~~~~~~~ Standards ~~~~~~~~~~~~~~~~~~~~~~~
+
+ETS 300 402 (Former ETS 300 125) Digital Subscriber Signalling System No.
+  one (DSS1) protocol;Data link layer
+
+ETS 300 403 (Former ETS 300 102) Digital Subscriber Signalling System No.
+  one (DSS1) protocol
+
+ETS 300 064 - DDI  - Direct Dialling In supplementary service
+EN  300 092 - CLIP - Calling Line Identification Presentation
+EN  300 093 - CLIR - Calling Line Identification Restriction
+ETS 300 052 - MSN  - Multiple Subscriber Number
+
+Not implemented:
+
+ETS 300 055 - TP   - Terminal Portability supplementary service
+EN  300 058 - CW   - Call Waiting supplementary service
+EN  300 061 - SUB  - Subaddressing supplementary service
+ETS 300 182 - AOC  - Advice of Charge 
+ETS 300 097 - COLP - Connected Line Presentation
+ETS 300 098 - COLR - Connected Line Presentation Restriction
+ETS 300 130 - MCID - Malicious call identification
+ETS 300 141 - HOLD - Call Hold
+ETS 300 185 - CONF - Conference call
+ETS 300 188 - 3PTY - Three Party
+EN  300 195 - Supplementary service interactions
+EN  300 196 - Generic functional protocol for the support of supplementary services
+EN  300 207 - Diversion supplementary services
+EN  300 210 - FPH  - Freephone supplementary service
+ETS 300 267 - Telephony 7 kHz and videotelephony teleservices
+EN  300 286 - UUS  - User-to-User Signalling supplementary service
+ETS 300 359 - CCBS - Completion of Calls to Busy Subscriber
+ETS 300 369 - ECT  - Explicit Call Transfer supplementary service
+EN  300 745 - MWI  - Message Waiting Indication supplementary service
+EN  301 001 - OCB  - Outgoing Call Barring supplementary services
+EN  301 002 - SET  - Security tools procedures
+EN  301 065 - CCNR - Completion of Calls on No Reply supplementary service
+EN  301 484 - LH   - Line Hunting supplementary service
+EN  302 094 - CFNR - Call Forwarding on Not Reachable supplementary service
