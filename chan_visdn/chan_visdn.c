@@ -1603,8 +1603,6 @@ static int visdn_call(
 		struct q931_ie_calling_party_number *cgpn =
 			q931_ie_calling_party_number_alloc();
 
-ast_log(LOG_ERROR, "PREEEEEEEEEEEESENT %02x '%s'", ast_chan->cid.cid_pres, ast_chan->cid.cid_num);
-
 		if (AST_CID_NUM(ast_chan) &&
 		    strlen(AST_CID_NUM(ast_chan))) {
 
@@ -3428,7 +3426,6 @@ static void visdn_handle_clip_nt(
 #ifdef ASTERISK_VERSION_NUM
 			ast_chan->cid.cid_num =
 				strdup(intf->clip_default_number);
-ast_log(LOG_ERROR, "====================> '%s'\n", intf->clip_default_number);
 			ast_chan->cid.cid_pres |=
 				AST_PRES_NETWORK_NUMBER;
 #else
@@ -3646,8 +3643,6 @@ static void visdn_q931_setup_indication(
 		}
 	}
 
-ast_log(LOG_ERROR, "PREEEEES1 = %02x\n",  ast_chan->cid.cid_pres);
-	
 	/* They appear to have the same values :) */
 	ast_chan->cid.cid_ton = cgpn->type_of_number;
 
