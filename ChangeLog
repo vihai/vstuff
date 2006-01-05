@@ -2,6 +2,34 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-05 04:13:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-404
+
+    Summary:
+      Addedd samples for passthru and renamed old samples
+    Revision:
+      isdn--devel--0.1--patch-404
+
+
+    new files:
+     samples/.arch-ids/extensions.conf.sample_passthru.id
+     samples/.arch-ids/visdn.conf.sample_passthru.id
+     samples/extensions.conf.sample_passthru
+     samples/visdn.conf.sample_passthru
+
+    modified files:
+     ChangeLog samples/visdn.conf.sample
+
+    renamed files:
+     samples/.arch-ids/extensions.conf.id
+       ==> samples/.arch-ids/extensions.conf.sample.id
+     samples/.arch-ids/visdn.conf.id
+       ==> samples/.arch-ids/visdn.conf.sample.id
+     samples/extensions.conf
+       ==> samples/extensions.conf.sample
+     samples/visdn.conf
+       ==> samples/visdn.conf.sample
+
+
 2006-01-05 03:29:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-403
 
     Summary:

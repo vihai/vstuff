@@ -1,0 +1,70 @@
+;
+; vISDN configuration file for Asterisk
+;
+; This sample visdn.conf implements bidirectional passthru between two ports
+; on a quadBRI board configured in TE mode and two ports on the same board
+; configured in NT mode.
+; 
+
+[general]
+
+[global]
+network_role = private
+type_of_number = unknown
+local_type_of_number = unknown
+tones_option = yes
+context = visdn0_in
+clir_mode = default_off
+overlap_sending = Yes
+overlap_receiving = No
+national_prefix = 0
+international_prefix = 00
+autorelease_dlc = 10
+
+; ---------------------------
+; visdn1.0 and visdn1.1 are configured in TE mode and are connected to the
+; TELCO lines. Incoming calls will be directed to visdn_telco_in context
+;
+
+[visdn1.0]
+network_role = private
+type_of_number = unknown
+local_type_of_number = unknown
+context = visdn_telco_in
+overlap_receiving = No
+
+[visdn1.1]
+network_role = private
+type_of_number = unknown
+local_type_of_number = unknown
+context = visdn_telco_in
+overlap_receiving = No
+
+; ---------------------------
+; visdn1.2 and visdn1.3 are configured in NT mode and are connected to the
+; PBX. Incoming calls will be directed to visdn_pbx_in context.
+; Note that clip_numbers contain a wildcard, meaning that any CLI coming
+; from the PBX is accepted and passed to the network.
+; clip_default_number should contain the TELCO line number, a valid MSN or
+; any random number if the PBX does correctly transmit CLI presentation for
+; every call.
+
+[visdn1.2]
+network_role = private
+type_of_number = unknown
+local_type_of_number = unknown
+tones_option = yes
+context = visdn_pbx_in
+clir_mode = default_off
+clip_default_number = 9999
+clip_numbers = _X.
+
+[visdn1.3]
+network_role = private
+type_of_number = unknown
+local_type_of_number = unknown
+tones_option = yes
+context = visdn_pbx_in
+clir_mode = default_off
+clip_default_number = 9999
+clip_numbers = _X.

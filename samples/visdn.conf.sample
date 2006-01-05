@@ -1,6 +1,21 @@
 ;
-; vISDN configuration file for Asterisk
+; vISDN configuration file for Asterisk's visdn_chan channel driver
 ;
+; The [general] section is reserved for parameters which are driver-wide
+;
+; The [global] section contains parameters definition which is applied by
+; default to all the interfaces but may be overridden in interface-specific
+; sections.
+;
+; All the other sections should be named with the vISDN interface names defined
+; in /etc/visdn/device-* configuration files.
+; If a section does not correspond to a real, live, interface it will be
+; read anyway but its status will be marked as "UNUSED" in
+; "show visdn interfaces" output, ready for when the interface comes up.
+;
+; Here follow the configuration directives available in [global] and
+; interface-specific sections. "role" indicates for which interface role
+; the directive is meaningful.
 ;
 ; network_role = private
 ;		(user | private | local | transit | international)
@@ -8,78 +23,66 @@
 ;	"private" to indicate a private branch. If you ever want to be seen as
 ;	the public operator you should use "local". "transit" and
 ;	"international" are mostly unused.
-;	Context: global, interface
-;	Role: Network, User
+;	## role: network, user
 ;
 ; type_of_number = unknown
 ;		(unknown | international | national | network_specific |
 ;		subscriber | abbreviated)
 ; 	Type of number used for called numbers (outbound calls)
-;	Context: global, interface
-;	Role: Network, User
+;	## role: network, user
 ;
 ; local_type_of_number = unknown
 ;		(unknown | international | national | network_specific |
 ;		subscriber | abbreviated)
 ; 	Type of number used for caller id. Some network require you to use a
 ;	specific type of network to correctly accept the caller_id.
-;	Context: global, interface
-;	Role: Network, User
+;	## role: network, user
 ;
 ; overlap_sending = Yes
 ;	Enables/disables overlap dialing. Disabiling overlap dialing means
 ;	that the called party number in the SETUP message is considered
 ;	complete. If existant it will be connected, otherwise the call will
 ;	be rejected. Note that "sending" means that the user is sending digits.
-;	Context: global, interface
-;	Role: Network, User
+;	## role: network, user
 ;
 ; overlap_receiving = No
 ;	Enables/disables overlap receiving on the interface. Overlap receiving
 ;	is used to implement DID thru PBXs.
-;	Context: global, interface
-;	Role: Network, User
+;	## role: network, user
 ;
 ; context = visdn
-;	Context in which to look for destination in inbound calls
-;	Context: global, interface
-;	Role: Network, User
+;	Context for incoming calls
+;	## role: network, user
 ;
 ; clip_enabled = Yes
 ;	Enabled Calling Line Identification Presentation service.
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;	
 ; clip_override = No
 ;	Override Calling Line Presentation Restriction and always present
 ;	the CLI.
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;	
 ; clip_default_name = ""
 ;	Name applied to CLIP information coming from the network
 ;	Default:
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;
 ; clip_default_number = ""
 ;	When the user doesn't specify the calling line identification or
 ;	specifies an invalid number, this CLI is taken.
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;
 ; clip_numbers =
 ;	Comma-separated list of numbers that will pass network screening.
 ;	Usual asterisk-style matching is supported. NOTE: clip_numbers should
 ;	contain clip_default_number.
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;
 ; clip_special_arrangement = No
 ;	Only meaningful in network mode. The user-specified CLI is passed
 ;	thru the network as user-provided, not-screened.
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;
 ; clir_mode = default_off
 ;		(off, default_on, default_off, on)
@@ -91,26 +94,31 @@
 ;	"default_off"	: Restriction is specified by the user, otherwise Off
 ;	"on"		: Restriction is always applied
 ;
-;	Context: global, interface
-;	Role: Network
+;	## role: network
 ;
 ; national_prefix = ""
 ;	Prefix to prepend when transforming numbers of type "national"
-;	Context: global, interface
+;	## role: network, user
 ;
 ; international_prefix = ""
 ;	Prefix to prepend when transforming numbers of type "international"
-;	Context: global, interface
+;	## role: network, user
+;
+; tones_option = Yes
+;	Enables tones generation for terminals (most of them) which do not
+;	generate tones by theirselves.
+;	## role: network
 ;
 ; autorelease_dlc = 10
 ;	Release the DLC after the specified timeout (in seconds).
-;	'0' disabled the autorelease mechanism.
-;	Context: global, interface
+;	A value of '0' disables the autorelease mechanism.
+;	## role: network, user
 ;
 ; T301 => T322
 ;	Configure Layer3/CCB timers. For a description of the timers meaning
 ;	refer to ETS 300 102 Table 9.1 and successive modifications.
 ;	Avoid to modify them if you don't know what you're doing.
+;	## role: timer dependent
 ;
 
 [general]

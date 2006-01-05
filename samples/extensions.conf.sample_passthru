@@ -1,0 +1,20 @@
+[general]
+writeprotect=yes
+autofallthrough=yes
+clearglobalvars=no
+priorityjumping=no
+
+;------------------------
+; Inbound contexts (referenced in visdn.conf):
+;
+
+[visdn_fastweb_in]
+exten => _X.,1,Dial(VISDN/visdn1.2/${EXTEN})
+exten => _X.,102,Dial(VISDN/visdn1.3/${EXTEN})
+exten => h,1,Congestion()
+
+[visdn_pbx_in]
+exten => s,1,VISDNOverlapDial()
+exten => _X.,1,Dial(VISDN/visdn1.0/${EXTEN})
+exten => _X.,102,Dial(VISDN/visdn1.1/${EXTEN})
+exten => h,1,Congestion()
