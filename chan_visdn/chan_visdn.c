@@ -2132,8 +2132,6 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
 	if (visdn_chan->may_send_digits) {
-		visdn_debug("Not ready to send digits, queuing\n");
-
 		struct q931_ies ies = Q931_IES_INIT;
 
 		struct q931_ie_called_party_number *cdpn =
@@ -2150,11 +2148,29 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_INFO_REQUEST, &ies);
 	} else {
+		visdn_debug("Not ready to send digits, queuing\n");
+
 		visdn_chan->queued_digits[
 			strlen(visdn_chan->queued_digits)] = digit;
 	}
 
-	return 1;
+	/* IMPORTANT: Since Asterisk is a bug made software, if there
+	 * are DTMF frames queued and we start generating DTMF tones
+	 * the queued frames are discarded and we fail completing
+	 * overlap dialling.
+	 */
+
+	if (q931_call->state != U1_CALL_INITIATED &&
+	    q931_call->state != U2_OVERLAP_SENDING &&
+	    q931_call->state != U6_CALL_PRESENT &&
+	    q931_call->state != U25_OVERLAP_RECEIVING &&
+	    q931_call->state != N1_CALL_INITIATED &&
+	    q931_call->state != N2_OVERLAP_SENDING &&
+	    q931_call->state != N6_CALL_PRESENT &&
+	    q931_call->state != N25_OVERLAP_RECEIVING)
+		return 1;
+	else
+		return 0;
 }
 
 #ifndef ASTERISK_VERSION_NUM
@@ -3603,6 +3619,14 @@ static void visdn_q931_setup_indication(
 		}
 
 	} else {
+		if (!cgpn) {
+			ast_chan->cid.cid_pres =
+				AST_PRES_UNAVAILABLE |
+				AST_PRES_NETWORK_NUMBER;
+
+			goto no_cgpn;
+		}
+
 		switch(cgpn->screening_indicator) {
 		case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
 			ast_chan->cid.cid_pres |=
@@ -3641,10 +3665,14 @@ static void visdn_q931_setup_indication(
 				AST_PRES_UNAVAILABLE;
 		break;
 		}
+
+no_cgpn:;
 	}
 
-	/* They appear to have the same values :) */
-	ast_chan->cid.cid_ton = cgpn->type_of_number;
+	if (cgpn) {
+		/* They appear to have the same values :) */
+		ast_chan->cid.cid_ton = cgpn->type_of_number;
+	}
 
 	/* ------ ----------------------------- ------ */
 
@@ -3753,6 +3781,7 @@ static void visdn_q931_setup_indication(
 		for(i=0; called_number[i]; i++) {
 			struct ast_frame f =
 				{ AST_FRAME_DTMF, called_number[i] };
+
 			ast_queue_frame(ast_chan, &f);
 		}
 	}
