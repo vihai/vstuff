@@ -1,10 +1,4 @@
 noinst_DATA =					\
-	samples/visdn.conf			\
-	samples/extensions.conf			\
-	samples/ethereal_coloring_rules		\
-	samples/ppp_dialout			\
-	samples/30-visdn.rules-oldudev		\
-	samples/device-pci-*			\
 	include/list.h
 
 EXTRA_DIST =					\
@@ -25,7 +19,7 @@ SUBDIRS += modules
 endif
 
 SUBDIRS += libq931
-SUBDIRS += etc scripts visdnctl vgsmctl
+SUBDIRS += etc scripts samples visdnctl vgsmctl
 
 if asterisk_modules
 SUBDIRS += chan_visdn

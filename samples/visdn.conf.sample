@@ -31,8 +31,14 @@
 ; 	Type of number used for called numbers (outbound calls)
 ;	## role: network, user
 ;
-; local_type_of_number = unknown
-;		(unknown | international | national | network_specific |
+; force_cli = ""
+;	If set, forces the outbound CLI number to the one specified. See also
+;	force_cli_type_of_number to set the corresponding ton, otherwise the
+;	one transported by Asterisk is used.
+;	## role: network, user
+;
+; force_cli_type_of_number = no
+;		(no | unknown | international | national | network_specific |
 ;		subscriber | abbreviated)
 ; 	Type of number used for caller id. Some network require you to use a
 ;	specific type of network to correctly accept the caller_id.
@@ -96,12 +102,29 @@
 ;
 ;	## role: network
 ;
+; cli_rewriting = no
+;	Change the type of number of incoming CLI to unknown and rewrite
+;	the number adding the corresponding prefix specified below.
+;	## role: network, user
+;
 ; national_prefix = ""
-;	Prefix to prepend when transforming numbers of type "national"
+;	Prefix to prepend when rewriting numbers of type "national"
 ;	## role: network, user
 ;
 ; international_prefix = ""
-;	Prefix to prepend when transforming numbers of type "international"
+;	Prefix to prepend when rewrtiting numbers of type "international"
+;	## role: network, user
+;
+; network_specific_prefix = ""
+;	Prefix to prepend when rewrtiting numbers of type "network_specific"
+;	## role: network, user
+;
+; subscriber_prefix = ""
+;	Prefix to prepend when rewrtiting numbers of type "subscriber"
+;	## role: network, user
+;
+; abbreviated_prefix = ""
+;	Prefix to prepend when rewrtiting numbers of type "abbreviated"
 ;	## role: network, user
 ;
 ; tones_option = Yes
@@ -130,10 +153,14 @@ local_type_of_number = unknown
 tones_option = yes
 context = visdn0_in
 clir_mode = default_off
-overlap_sending = Yes
-overlap_receiving = No
+cli_rewriting = No
 national_prefix = 0
 international_prefix = 00
+network_specific_prefix =
+subscriber_prefix =
+abbreviated_prefix =
+overlap_sending = Yes
+overlap_receiving = No
 autorelease_dlc = 10
 
 [visdn0]

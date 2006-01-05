@@ -118,6 +118,7 @@ struct poll_info
 
 enum visdn_type_of_number
 {
+	VISDN_TYPE_OF_NUMBER_UNSET,
 	VISDN_TYPE_OF_NUMBER_UNKNOWN,
 	VISDN_TYPE_OF_NUMBER_INTERNATIONAL,
 	VISDN_TYPE_OF_NUMBER_NATIONAL,
@@ -150,8 +151,17 @@ struct visdn_interface
 	int open_pending;
 
 	enum q931_interface_network_role network_role;
-	enum visdn_type_of_number type_of_number;
-	enum visdn_type_of_number local_type_of_number;
+	enum visdn_type_of_number outbound_type_of_number;
+	char force_cli[32];
+	enum visdn_type_of_number force_cli_type_of_number;
+
+	int cli_rewriting;
+	char national_prefix[10];
+	char international_prefix[10];
+	char network_specific_prefix[10];
+	char subscriber_prefix[10];
+	char abbreviated_prefix[10];
+
 	int tones_option;
 	char context[AST_MAX_EXTENSION];
 
@@ -164,8 +174,6 @@ struct visdn_interface
 	enum visdn_clir_mode clir_mode;
 	int overlap_sending;
 	int overlap_receiving;
-	char national_prefix[10];
-	char international_prefix[10];
 	int dlc_autorelease_time;
 
 	int T301;
@@ -245,8 +253,9 @@ struct visdn_state
 
 	.default_intf = {
 		.network_role = Q931_INTF_NET_PRIVATE,
-		.type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN,
-		.local_type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN,
+		.outbound_type_of_number = VISDN_TYPE_OF_NUMBER_UNKNOWN,
+		.force_cli = "",
+		.force_cli_type_of_number = VISDN_TYPE_OF_NUMBER_UNSET,
 		.tones_option = TRUE,
 		.context = "visdn",
 		.clip_enabled = TRUE,
@@ -259,8 +268,12 @@ struct visdn_state
 		.clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF,
 		.overlap_sending = TRUE,
 		.overlap_receiving = FALSE,
-		.national_prefix = "0",
-		.international_prefix = "00",
+		.cli_rewriting = FALSE,
+		.national_prefix = "",
+		.international_prefix = "",
+		.network_specific_prefix = "",
+		.subscriber_prefix = "",
+		.abbreviated_prefix = "",
 		.dlc_autorelease_time = 10,
 		.T307 = 180,
 	}
@@ -404,6 +417,8 @@ static const char *visdn_type_of_number_to_string(
 	enum visdn_type_of_number type_of_number)
 {
 	switch(type_of_number) {
+	case VISDN_TYPE_OF_NUMBER_UNSET:
+		return "unset";
 	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
 		return "unknown";
 	case VISDN_TYPE_OF_NUMBER_INTERNATIONAL:
@@ -455,14 +470,19 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 
 		ast_cli(fd,
 			"Network role              : %s\n"
-			"Type of number            : %s\n"
-			"Local type of number      : %s\n"
+			"Outbound type of number   : %s\n"
+			"Forced CLI                : %s\n"
+			"Forced CLI type of number : %s\n"
 			"Tones option              : %s\n"
 			"Context                   : %s\n"
 			"Overlap Sending           : %s\n"
 			"Overlap Receiving         : %s\n"
+			"CLI rewriting             : %s\n"
 			"National prefix           : %s\n"
 			"International prefix      : %s\n"
+			"Newtork specific prefix   : %s\n"
+			"Subscriber prefix         : %s\n"
+			"Abbreviated prefix        : %s\n"
 			"Autorelease time          : %d\n"
 			"CLIR mode                 : %s\n"
 			"CLIP enabled              : %s\n"
@@ -472,15 +492,20 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			visdn_interface_network_role_to_string(
 				intf->network_role),
 			visdn_type_of_number_to_string(
-				intf->type_of_number),
+				intf->outbound_type_of_number),
+			intf->force_cli,
 			visdn_type_of_number_to_string(
-				intf->local_type_of_number),
+				intf->force_cli_type_of_number),
 			intf->tones_option ? "Yes" : "No",
 			intf->context,
 			intf->overlap_sending ? "Yes" : "No",
 			intf->overlap_receiving ? "Yes" : "No",
+			intf->cli_rewriting ? "Yes" : "No",
 			intf->national_prefix,
 			intf->international_prefix,
+			intf->network_specific_prefix,
+			intf->subscriber_prefix,
+			intf->abbreviated_prefix,
 			intf->dlc_autorelease_time,
 			visdn_clir_mode_to_text(intf->clir_mode),
 			intf->clip_enabled ? "Yes" : "No",
@@ -713,17 +738,38 @@ static int visdn_intf_from_var(
 	if (!strcasecmp(var->name, "network_role")) {
 		intf->network_role =
 			visdn_string_to_network_role(var->value);
-	} else if (!strcasecmp(var->name, "type_of_number")) {
-		intf->type_of_number =
+	} else if (!strcasecmp(var->name, "outbound_type_of_number")) {
+		intf->outbound_type_of_number =
 			visdn_string_to_type_of_number(var->value);
-	} else if (!strcasecmp(var->name, "local_type_of_number")) {
-		intf->local_type_of_number =
-			visdn_string_to_type_of_number(var->value);
+	} else if (!strcasecmp(var->name, "force_cli")) {
+		strncpy(intf->force_cli, var->value, sizeof(intf->force_cli));
+	} else if (!strcasecmp(var->name, "force_cli_type_of_number")) {
+		if (!strlen(var->value) || strcasecmp(var->value, "no"))
+			intf->force_cli_type_of_number = VISDN_TYPE_OF_NUMBER_UNSET;
+		else
+			intf->force_cli_type_of_number =
+				visdn_string_to_type_of_number(var->value);
+	} else if (!strcasecmp(var->name, "cli_rewriting")) {
+		intf->cli_rewriting = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "national_prefix")) {
+		strncpy(intf->national_prefix, var->value,
+			sizeof(intf->national_prefix));
+	} else if (!strcasecmp(var->name, "international_prefix")) {
+		strncpy(intf->international_prefix, var->value,
+			sizeof(intf->international_prefix));
+	} else if (!strcasecmp(var->name, "network_specific_prefix")) {
+		strncpy(intf->network_specific_prefix, var->value,
+			sizeof(intf->network_specific_prefix));
+	} else if (!strcasecmp(var->name, "subscriber_prefix")) {
+		strncpy(intf->subscriber_prefix, var->value,
+			sizeof(intf->subscriber_prefix));
+	} else if (!strcasecmp(var->name, "abbreviated_prefix")) {
+		strncpy(intf->abbreviated_prefix, var->value,
+			sizeof(intf->abbreviated_prefix));
 	} else if (!strcasecmp(var->name, "tones_option")) {
 		intf->tones_option = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "context")) {
-		strncpy(intf->context, var->value,
-			sizeof(intf->context));
+		strncpy(intf->context, var->value, sizeof(intf->context));
 	} else if (!strcasecmp(var->name, "clip_enabled")) {
 		intf->clip_enabled = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clip_override")) {
@@ -744,12 +790,6 @@ static int visdn_intf_from_var(
 		intf->overlap_sending = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "overlap_receiving")) {
 		intf->overlap_receiving = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "national_prefix")) {
-		strncpy(intf->national_prefix, var->value,
-			sizeof(intf->national_prefix));
-	} else if (!strcasecmp(var->name, "international_prefix")) {
-		strncpy(intf->international_prefix, var->value,
-			sizeof(intf->international_prefix));
 	} else if (!strcasecmp(var->name, "autorelease_dlc")) {
 		intf->dlc_autorelease_time = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t301")) {
@@ -804,17 +844,15 @@ static void visdn_copy_interface_config(
 	const struct visdn_interface *src)
 {
 	dst->network_role = src->network_role;
-	dst->type_of_number = src->type_of_number;
-	dst->local_type_of_number = src->local_type_of_number;
+	dst->outbound_type_of_number = src->outbound_type_of_number;
+	strcpy(dst->force_cli, src->force_cli);
+	dst->force_cli_type_of_number = src->force_cli_type_of_number;
 	dst->tones_option = src->tones_option;
-	strncpy(dst->context, src->context,
-		sizeof(dst->context));
+	strcpy(dst->context, src->context);
 	dst->clip_enabled = src->clip_enabled;
 	dst->clip_override = src->clip_override;
-	strncpy(dst->clip_default_name, src->clip_default_name,
-		sizeof(dst->clip_default_name));
-	strncpy(dst->clip_default_number, src->clip_default_number,
-		sizeof(dst->clip_default_number));
+	strcpy(dst->clip_default_name, src->clip_default_name);
+	strcpy(dst->clip_default_number, src->clip_default_number);
 
 	struct visdn_clip_number *num, *t;
 	list_for_each_entry_safe(num, t,
@@ -836,10 +874,12 @@ static void visdn_copy_interface_config(
 	dst->clir_mode = src->clir_mode;
 	dst->overlap_sending = src->overlap_sending;
 	dst->overlap_receiving = src->overlap_receiving;
-	strncpy(dst->national_prefix, src->national_prefix,
-		sizeof(dst->national_prefix));
-	strncpy(dst->international_prefix, src->international_prefix,
-		sizeof(dst->international_prefix));
+	dst->cli_rewriting = src->cli_rewriting;
+	strcpy(dst->national_prefix, src->national_prefix);
+	strcpy(dst->international_prefix, src->international_prefix);
+	strcpy(dst->network_specific_prefix, src->network_specific_prefix);
+	strcpy(dst->subscriber_prefix, src->subscriber_prefix);
+	strcpy(dst->abbreviated_prefix, src->abbreviated_prefix);
 	dst->dlc_autorelease_time = src->dlc_autorelease_time;
 	dst->T301 = src->T301;
 	dst->T302 = src->T302;
@@ -1302,6 +1342,8 @@ static enum q931_ie_called_party_number_type_of_number
 	visdn_type_of_number_to_cdpn(enum visdn_type_of_number type_of_number)
 {
 	switch(type_of_number) {
+	case VISDN_TYPE_OF_NUMBER_UNSET:
+		assert(0);
 	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
 		return Q931_IE_CDPN_TON_UNKNOWN;
 	case VISDN_TYPE_OF_NUMBER_INTERNATIONAL:
@@ -1323,6 +1365,8 @@ static enum q931_ie_calling_party_number_type_of_number
 	visdn_type_of_number_to_cgpn(enum visdn_type_of_number type_of_number)
 {
 	switch(type_of_number) {
+	case VISDN_TYPE_OF_NUMBER_UNSET:
+		assert(0);
 	case VISDN_TYPE_OF_NUMBER_UNKNOWN:
 		return Q931_IE_CGPN_TON_UNKNOWN;
 	case VISDN_TYPE_OF_NUMBER_INTERNATIONAL:
@@ -1337,7 +1381,7 @@ static enum q931_ie_calling_party_number_type_of_number
 		return Q931_IE_CGPN_TON_ABBREVIATED;
 	}
 
-	return 0;
+	assert(0);
 }
 
 void q931_send_primitive(
@@ -1455,6 +1499,12 @@ static void visdn_pres_to_pi_si(
 		*pi = Q931_IE_CGPN_PI_PRESENTATION_ALLOWED;
 		*si = Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED;
 	}
+}
+
+static enum q931_ie_calling_party_number_type_of_number
+	visdn_ast_ton_to_cgpn(int ton)
+{
+	return ton; /* Ahhrgh */
 }
 
 static int visdn_call(
@@ -1586,7 +1636,7 @@ static int visdn_call(
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
 	cdpn->type_of_number =
-		visdn_type_of_number_to_cdpn(intf->type_of_number);
+		visdn_type_of_number_to_cdpn(intf->outbound_type_of_number);
 	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
 	q931_ies_add_put(&ies, &cdpn->ie);
@@ -1616,34 +1666,45 @@ static int visdn_call(
 					&cgpn->presentation_indicator,
 					&cgpn->screening_indicator);
 
-				cgpn->type_of_number =
-					visdn_type_of_number_to_cgpn(
-						intf->local_type_of_number);
-				/* Use ast_chan->cli.cli_ton ? */
+				if (intf->force_cli_type_of_number !=
+						VISDN_TYPE_OF_NUMBER_UNSET) {
+					cgpn->type_of_number =
+						visdn_type_of_number_to_cgpn(
+						intf->force_cli_type_of_number);
+				} else {
+					cgpn->type_of_number =
+						visdn_ast_ton_to_cgpn(
+							ast_chan->cid.cid_ton);
+				}
 
 				cgpn->numbering_plan_identificator =
 					Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
 
-#ifdef ASTERISK_VERSION_NUM
-				strncpy(cgpn->number, ast_chan->cid.cid_num,
-					sizeof(cgpn->number));
-#else
-				char callerid[255];
-				char *name, *number;
-				strncpy(callerid, ast_chan->callerid,
-						sizeof(callerid));
-				ast_callerid_parse(callerid, &name, &number);
-				if (number) {
-					strncpy(cgpn->number, number,
+				if (strlen(intf->force_cli))
+					strncpy(cgpn->number, intf->force_cli,
 						sizeof(cgpn->number));
-				} else {
-					ast_log(LOG_WARNING,
-						"Unable to parse '%s'"
-						" into CallerID name &"
-						" number\n",
-						callerid);
-				}
+				else {
+#ifdef ASTERISK_VERSION_NUM
+					strncpy(cgpn->number, ast_chan->cid.cid_num,
+						sizeof(cgpn->number));
+#else
+					char callerid[255];
+					char *name, *number;
+					strncpy(callerid, ast_chan->callerid,
+							sizeof(callerid));
+					ast_callerid_parse(callerid, &name, &number);
+					if (number) {
+						strncpy(cgpn->number, number,
+							sizeof(cgpn->number));
+					} else {
+						ast_log(LOG_WARNING,
+							"Unable to parse '%s'"
+							" into CallerID name &"
+							" number\n",
+							callerid);
+					}
 #endif
+				}
 			} else {
 				cgpn->type_of_number =
 					Q931_IE_CGPN_TON_UNKNOWN;
@@ -2137,7 +2198,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 		struct q931_ie_called_party_number *cdpn =
 			q931_ie_called_party_number_alloc();
 		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-							intf->type_of_number);
+						intf->outbound_type_of_number);
 		cdpn->numbering_plan_identificator =
 			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 
@@ -3134,7 +3195,7 @@ static void visdn_q931_more_info_indication(
 		struct q931_ie_called_party_number *cdpn =
 			q931_ie_called_party_number_alloc();
 		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-							intf->type_of_number);
+						intf->outbound_type_of_number);
 		cdpn->numbering_plan_identificator =
 			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 
@@ -3387,11 +3448,98 @@ static int visdn_cgpn_to_pres(
 	return 0;
 }
 
+static const char *visdn_get_prefix_by_cdpn_ton(
+	struct visdn_interface *intf,
+	enum q931_ie_called_party_number_type_of_number ton)
+{
+	switch(ton) {
+	case Q931_IE_CDPN_TON_UNKNOWN:
+	case Q931_IE_CDPN_TON_RESERVED_FOR_EXT:
+		return "";
+
+	case Q931_IE_CDPN_TON_INTERNATIONAL:
+		return intf->international_prefix;
+	break;
+
+	case Q931_IE_CDPN_TON_NATIONAL:
+		return intf->national_prefix;
+	break;
+
+	case Q931_IE_CDPN_TON_NETWORK_SPECIFIC:
+		return intf->network_specific_prefix;
+	break;
+
+	case Q931_IE_CDPN_TON_SUBSCRIBER:
+		return intf->subscriber_prefix;
+	break;
+
+	case Q931_IE_CDPN_TON_ABBREVIATED:
+		return intf->abbreviated_prefix;
+	break;
+	}
+
+	assert(0);
+}
+
+static const char *visdn_get_prefix_by_cgpn_ton(
+	struct visdn_interface *intf,
+	enum q931_ie_calling_party_number_type_of_number ton)
+{
+	switch(ton) {
+	case Q931_IE_CGPN_TON_UNKNOWN:
+	case Q931_IE_CGPN_TON_RESERVED_FOR_EXT:
+		return "";
+
+	case Q931_IE_CGPN_TON_INTERNATIONAL:
+		return intf->international_prefix;
+	break;
+
+	case Q931_IE_CGPN_TON_NATIONAL:
+		return intf->national_prefix;
+	break;
+
+	case Q931_IE_CGPN_TON_NETWORK_SPECIFIC:
+		return intf->network_specific_prefix;
+	break;
+
+	case Q931_IE_CGPN_TON_SUBSCRIBER:
+		return intf->subscriber_prefix;
+	break;
+
+	case Q931_IE_CGPN_TON_ABBREVIATED:
+		return intf->abbreviated_prefix;
+	break;
+	}
+
+	assert(0);
+}
+
+static void visdn_rewrite_and_assign_cli(
+	struct ast_channel *ast_chan,
+	struct visdn_interface *intf,
+	struct q931_ie_calling_party_number *cgpn)
+{
+	assert(!ast_chan->cid.cid_num);
+
+	if (intf->cli_rewriting) {
+		char rewritten_num[32];
+
+		snprintf(rewritten_num, sizeof(rewritten_num),
+			"%s%s",
+			visdn_get_prefix_by_cgpn_ton(intf,
+						cgpn->type_of_number),
+			cgpn->number);
+
+		ast_chan->cid.cid_num = strdup(rewritten_num);
+	} else {
+		ast_chan->cid.cid_num = strdup(cgpn->number);
+	}
+}
+
 static void visdn_handle_clip_nt(
 	struct ast_channel *ast_chan,
 	struct visdn_interface *intf,
-	struct q931_ie_calling_party_number *cgpn,
-	const char *called_number)
+	struct q931_ie_calling_party_number *cgpn)
 {
 
 	/* If the numbering plan is incorrect ignore the information
@@ -3429,12 +3577,12 @@ static void visdn_handle_clip_nt(
 		ast_chan->cid.cid_pres |=
 			AST_PRES_USER_NUMBER_UNSCREENED;
 	} else {
-		if (visdn_clip_valid(intf, called_number)) {
+		if (visdn_clip_valid(intf, cgpn->number)) {
 			if (0) { /* Sequence is valid but incomplete */
-				/* Complete sequence */
+				/* Complete sequence TODO FIXME */
 			}
 
-			AST_CID_NUM(ast_chan) = strdup(called_number);
+			visdn_rewrite_and_assign_cli(ast_chan, intf, cgpn);
 
 			ast_chan->cid.cid_pres |=
 				AST_PRES_USER_NUMBER_PASSED_SCREEN;
@@ -3560,10 +3708,14 @@ static void visdn_q931_setup_indication(
 	ast_mutex_unlock(&usecnt_lock);
 	ast_update_use_count();
 
-	char called_number[32] = "";
+	char called_number[32];
 
 	if (cdpn) {
-		strncpy(called_number, cdpn->number, sizeof(called_number));
+		snprintf(called_number, sizeof(called_number),
+			"%s%s",
+			visdn_get_prefix_by_cdpn_ton(intf,
+						cdpn->type_of_number),
+			cdpn->number);
 
 	       	if (cdpn->number[strlen(cdpn->number) - 1] == '#')
 			visdn_chan->sending_complete = TRUE;
@@ -3577,31 +3729,9 @@ static void visdn_q931_setup_indication(
 	ast_chan->cid.cid_pres = 0;
 	ast_chan->cid.cid_name = strdup(intf->clip_default_name);
 
-#if 0
-	const char *prefix;
-	switch(cgpn->type_of_number) {
-	case Q931_IE_CDPN_TON_INTERNATIONAL:
-		prefix = intf->international_prefix;
-	break;
-
-	case Q931_IE_CDPN_TON_NATIONAL:
-		prefix = intf->national_prefix;
-	break;
-
-	default:
-		prefix = "";
-	break;
-	}
-
-	char full_cid[128];
-	snprintf(full_cid, sizeof(full_cid),
-		"%s%s", prefix, cgpn->number);
-	
-#endif
-
 	if (intf->q931_intf->role == LAPD_ROLE_NT) {
 
-		visdn_handle_clip_nt(ast_chan, intf, cgpn, called_number);
+		visdn_handle_clip_nt(ast_chan, intf, cgpn);
 
 		/* Handle CLIR */
 		if (intf->clir_mode == VISDN_CLIR_MODE_ON)
@@ -3626,6 +3756,8 @@ static void visdn_q931_setup_indication(
 
 			goto no_cgpn;
 		}
+
+		visdn_rewrite_and_assign_cli(ast_chan, intf, cgpn);
 
 		switch(cgpn->screening_indicator) {
 		case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
@@ -3670,7 +3802,7 @@ no_cgpn:;
 	}
 
 	if (cgpn) {
-		/* They appear to have the same values :) */
+		/* They appear to have the same values (!) */
 		ast_chan->cid.cid_ton = cgpn->type_of_number;
 	}
 

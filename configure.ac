@@ -388,6 +388,7 @@ AC_CONFIG_FILES([Makefile
 		etc/Makefile
 		scripts/Makefile
 		scripts/visdn_configurator
+		samples/Makefile
 		libq931/Makefile
 		chan_visdn/Makefile
 		chan_vgsm/Makefile

@@ -1,0 +1,2 @@
+
+noinst_DATA = *

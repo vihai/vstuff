@@ -17,8 +17,12 @@ context = visdn0_in
 clir_mode = default_off
 overlap_sending = Yes
 overlap_receiving = No
+cli_rewriting = No
 national_prefix = 0
 international_prefix = 00
+network_specific_prefix =
+subscriber_prefix =
+abbreviated_prefix =
 autorelease_dlc = 10
 
 ; ---------------------------
