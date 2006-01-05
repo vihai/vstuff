@@ -1,0 +1,105 @@
+--- asterisk-1.2.0/asterisk.c	2005-11-14 20:00:38.000000000 +0100
++++ asterisk/asterisk.c	2005-12-01 17:20:42.000000000 +0100
+@@ -76,6 +76,25 @@
+ #include <sys/stat.h>
+ #include <regex.h>
+ 
++#include <sys/prctl.h>
++#include <linux/unistd.h>
++#include <linux/capability.h>
++
++typedef struct __user_cap_header_struct capheader_t;
++typedef struct __user_cap_data_struct capdata_t;
++
++int capget(capheader_t *header, capdata_t *data);
++int capset(capheader_t *header, capdata_t *data);
++
++_syscall2(int, capget, cap_user_header_t, header, cap_user_data_t, dataptr);
++_syscall2(int, capset, cap_user_header_t, header, cap_user_data_t, dataptr);
++
++void remove_all(capdata_t *data);
++void add_cap(capdata_t *data, int cap);
++void add_cap_eff(capdata_t *data, int cap);
++void cap_get(capheader_t *header, capdata_t *data);
++void cap_set(capheader_t *header, capdata_t *data);
++
+ #if  defined(__FreeBSD__) || defined( __NetBSD__ ) || defined(SOLARIS)
+ #include <netdb.h>
+ #endif
+@@ -1914,6 +1933,33 @@
+ 	ast_config_destroy(cfg);
+ }
+ 
++void remove_all(capdata_t *data) {
++  data->effective = 0;
++  data->permitted = 0;
++  data->inheritable = 0;
++}
++
++void add_cap(capdata_t *data, int cap) {
++  data->effective |= (1 << cap);
++  data->permitted |= (1 << cap);
++}
++
++void add_cap_eff(capdata_t *data, int cap) {
++  data->effective |= (1 << cap);
++}
++
++void cap_get(capheader_t *header, capdata_t *data) {
++  if (capget(header, data) == 0) return;
++  perror("capget");
++  exit(-1);
++}
++
++void cap_set(capheader_t *header, capdata_t *data) {
++  if (capset(header, data) == 0) return;
++  perror("capset");
++  exit(-1);
++}
++
+ int main(int argc, char *argv[])
+ {
+ 	int c;
+@@ -2105,10 +2151,42 @@
+ 			ast_log(LOG_WARNING, "No such user '%s'!\n", runuser);
+ 			exit(1);
+ 		}
++		/* MATTEO PRCTL */
++		capheader_t header;
++  		capdata_t data;
++		int caps;			
++
++	 	header.version = _LINUX_CAPABILITY_VERSION;
++  		header.pid = 0;
++  		data.effective = data.permitted = data.inheritable = 0;
++		cap_get(&header, &data);
++
++		caps = prctl(PR_GET_KEEPCAPS);
++		ast_log(LOG_NOTICE,"My GET_KEEPCAPS is %d\n",caps);
++		caps = prctl(PR_SET_KEEPCAPS,1);
++		if (!caps)
++			ast_log(LOG_NOTICE,"Ok keeped capabilities! %d\n",caps);
++		caps = prctl(PR_GET_KEEPCAPS);
++		ast_log(LOG_NOTICE,"My GET_KEEPCAPS (again) is %d\n",caps);
++
++		remove_all(&data);
++  		add_cap(&data, CAP_SETGID);
++  		add_cap(&data, CAP_SETUID);
++  		add_cap(&data, CAP_NET_BIND_SERVICE);
++  		cap_set(&header, &data);
++
++		/* END MATTEO*/
++
+ 		if (setuid(pw->pw_uid)) {
+ 			ast_log(LOG_WARNING, "Unable to setuid to %d (%s)\n", pw->pw_uid, runuser);
+ 			exit(1);
+ 		}
++		
++		/* MATTEO PRCTL */
++		add_cap_eff(&data, CAP_NET_BIND_SERVICE);
++  		cap_set(&header, &data);
++		/* END MATTEO*/
++		
+ 		setenv("ASTERISK_ALREADY_NONROOT","yes",1);
+ 		if (option_verbose)
+ 			ast_verbose("Running as user '%s'\n", runuser);
