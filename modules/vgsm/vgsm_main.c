@@ -147,8 +147,6 @@ static ssize_t vgsm_cdev_read(
 	struct vgsm_module *module = file->private_data;
 	int copied_bytes;
 
-	DEFINE_WAIT(wait);
-
 	while(!kfifo_len(module->kfifo_rx)) {
 		
 		if (file->f_flags & O_NONBLOCK)
