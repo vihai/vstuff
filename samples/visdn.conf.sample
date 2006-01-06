@@ -25,19 +25,19 @@
 ;	"international" are mostly unused.
 ;	## role: network, user
 ;
-; type_of_number = unknown
+; outbound_called_ton = unknown
 ;		(unknown | international | national | network_specific |
 ;		subscriber | abbreviated)
 ; 	Type of number used for called numbers (outbound calls)
 ;	## role: network, user
 ;
-; force_cli = ""
+; force_outbound_cli = ""
 ;	If set, forces the outbound CLI number to the one specified. See also
 ;	force_cli_type_of_number to set the corresponding ton, otherwise the
 ;	one transported by Asterisk is used.
 ;	## role: network, user
 ;
-; force_cli_type_of_number = no
+; force_outbound_cli_ton = no
 ;		(no | unknown | international | national | network_specific |
 ;		subscriber | abbreviated)
 ; 	Type of number used for caller id. Some network require you to use a
@@ -148,10 +148,10 @@
 
 [global]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
 tones_option = yes
-context = visdn0_in
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 cli_rewriting = No
 national_prefix = 0
@@ -163,12 +163,16 @@ overlap_sending = Yes
 overlap_receiving = No
 autorelease_dlc = 10
 
+[huntgroup:telco]
+mode = sequential
+
 [visdn0]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn0_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clip_default_name = vISDN
 clip_default_number = 300
 clip_numbers = 300
@@ -178,36 +182,43 @@ overlap_receiving = No
 
 [visdn1.0]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn1_0_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clip_default_name = QuadBRI Port 0 
 clip_default_number = 200
 clip_numbers = 200
 clir_mode = default_off
 overlap_sending = Yes
 overlap_receiving = No
+hunt_member_of = telco
+hunt_channels = all
 
 [visdn1.1]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn1_1_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 clip_default_name = QuadBRI Port 1
 clip_default_number = 201
 clip_numbers = 201
 overlap_sending = Yes
 overlap_receiving = No
+hunt_member_of = telco
+hunt_channels = all
 
 [visdn1.2]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn1_2_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 clip_default_name = QuadBRI Port 2
 clip_default_number = 202
@@ -217,10 +228,11 @@ overlap_receiving = No
 
 [visdn1.3]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn1_3_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 clip_default_name = QuadBRI Port 3
 clip_default_number = 203

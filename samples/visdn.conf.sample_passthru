@@ -10,10 +10,10 @@
 
 [global]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
 tones_option = yes
-context = visdn0_in
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 overlap_sending = Yes
 overlap_receiving = No
@@ -32,16 +32,18 @@ autorelease_dlc = 10
 
 [visdn1.0]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
 context = visdn_telco_in
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 overlap_receiving = No
 
 [visdn1.1]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
 context = visdn_telco_in
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 overlap_receiving = No
 
 ; ---------------------------
@@ -55,20 +57,22 @@ overlap_receiving = No
 
 [visdn1.2]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn_pbx_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 clip_default_number = 9999
 clip_numbers = _X.
 
 [visdn1.3]
 network_role = private
-type_of_number = unknown
-local_type_of_number = unknown
-tones_option = yes
 context = visdn_pbx_in
+tones_option = yes
+outbound_called_ton = unknown
+force_outbound_cli = no
+force_outbound_cli_ton = no
 clir_mode = default_off
 clip_default_number = 9999
 clip_numbers = _X.

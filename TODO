@@ -22,7 +22,10 @@ Build system:
 chan_visdn:
 -----------
 
-- Implement groups in visdn.conf
+- Complete hunt groups support, handle failed calls and failed interfaces
+- Record call failures and failure type in order to put an interface offline
+  if not working.
+- Make call parking feature enabling configurable
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
 - MWI on ISDN phones

@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-06 06:06:10 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-409
+
+    Summary:
+      Preliminary line hunting implementation
+    Revision:
+      isdn--devel--0.1--patch-409
+
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c
+     samples/visdn.conf.sample samples/visdn.conf.sample_passthru
+
+
 2006-01-06 06:05:15 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-408
 
     Summary:
