@@ -2041,7 +2041,6 @@ static int visdn_call(
 
 	return 0;
 
-err_channel_not_down:
 	q931_call_release_reference(q931_call);
 	q931_call_put(q931_call);
 err_call_alloc:
@@ -2050,6 +2049,7 @@ err_no_channel_available:
 err_huntgroup_not_found:
 err_invalid_format:
 err_invalid_destination:
+err_channel_not_down:
 
 	return err;
 }
