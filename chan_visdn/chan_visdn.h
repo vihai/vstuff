@@ -48,6 +48,8 @@ struct visdn_chan {
 
 	int sending_complete;
 
+	int inband_info;
+
 	int may_send_digits;
 	char queued_digits[21];
 };

@@ -1,0 +1,35 @@
+Only in asterisk-1.2.1-vihai/apps: app_db.so
+diff -ur asterisk-1.2.1/apps/app_dial.c asterisk-1.2.1-vihai/apps/app_dial.c
+--- asterisk-1.2.1/apps/app_dial.c	2005-11-30 18:39:36.000000000 +0100
++++ asterisk-1.2.1-vihai/apps/app_dial.c	2006-01-06 02:29:34.000000000 +0100
+@@ -612,6 +612,17 @@
+ 								ast_verbose(VERBOSE_PREFIX_3 "Call on %s left from hold\n", o->chan->name);
+ 							ast_indicate(in, AST_CONTROL_UNHOLD);
+ 							break;
++						case AST_CONTROL_INBAND_INFO:
++							if (option_verbose > 2)
++								ast_verbose(VERBOSE_PREFIX_3 "Inband information available\n", o->chan->name);
++							ast_indicate(in, AST_CONTROL_INBAND_INFO);
++							break;
++						case AST_CONTROL_DISCONNECT:
++							if (option_verbose > 2)
++								ast_verbose(VERBOSE_PREFIX_3 "Call disconnected\n", o->chan->name);
++							in->hangupcause = o->chan->hangupcause;
++							ast_indicate(in, AST_CONTROL_DISCONNECT);
++							break;
+ 						case AST_CONTROL_OFFHOOK:
+ 						case AST_CONTROL_FLASH:
+ 							/* Ignore going off hook and flash */
+diff -ur asterisk-1.2.1/include/asterisk/frame.h asterisk-1.2.1-vihai/include/asterisk/frame.h
+--- asterisk-1.2.1/include/asterisk/frame.h	2005-11-29 19:24:39.000000000 +0100
++++ asterisk-1.2.1-vihai/include/asterisk/frame.h	2006-01-06 02:17:16.000000000 +0100
+@@ -244,6 +244,9 @@
+ /*! Indicate video frame update */
+ #define AST_CONTROL_VIDUPDATE		18
+ 
++#define AST_CONTROL_INBAND_INFO		42
++#define AST_CONTROL_DISCONNECT		43
++
+ #define AST_SMOOTHER_FLAG_G729		(1 << 0)
+ 
+ /* Option identifiers and flags */

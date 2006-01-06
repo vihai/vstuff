@@ -48,6 +48,7 @@
 #include <asterisk/indications.h>
 #include <asterisk/cli.h>
 #include <asterisk/musiconhold.h>
+#include <asterisk/causes.h>
 
 #include "../config.h"
 
@@ -76,6 +77,14 @@
 #include "chan_visdn.h"
 
 #include "../config.h"
+
+#ifndef AST_CONTROL_INBAND_INFO
+#define AST_CONTROL_INBAND_INFO 42
+#endif
+
+#ifndef AST_CONTROL_DISCONNECT
+#define AST_CONTROL_DISCONNECT 43
+#endif
 
 #define VISDN_DESCRIPTION "VISDN Channel For Asterisk"
 #define VISDN_CHAN_TYPE "VISDN"
@@ -1967,11 +1976,8 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-
-	if (!visdn_chan) {
-		ast_log(LOG_ERROR, "NO VISDN_CHAN!!\n");
-		return 1;
-	}
+	const struct tone_zone_sound *tone = NULL;
+	int res = 0;
 
 	FUNC_DEBUG("%d", condition);
 
@@ -1983,32 +1989,50 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	case AST_CONTROL_OPTION:
 	case AST_CONTROL_RADIO_KEY:
 	case AST_CONTROL_RADIO_UNKEY:
-		return 1;
+		res = 1;
 	break;
 
 	case -1:
 		ast_playtones_stop(ast_chan);
-
-		return 0;
 	break;
 
-	case AST_CONTROL_OFFHOOK: {
-		const struct tone_zone_sound *tone;
-		tone = ast_get_indication_tone(ast_chan->zone, "dial");
-		if (tone)
-			ast_playtones_start(ast_chan, 0, tone->data, 1);
+	case AST_CONTROL_INBAND_INFO:
+		visdn_chan->inband_info = TRUE;
+	break;
 
-		return 0;
+	case AST_CONTROL_DISCONNECT: {
+		struct q931_ies ies = Q931_IES_INIT;
+
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(
+							visdn_chan->q931_call);
+
+		if (ast_chan->hangupcause)
+			cause->value = ast_chan->hangupcause;
+		else
+			cause->value = Q931_IE_C_CV_USER_BUSY;
+
+		q931_ies_add_put(&ies, &cause->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+					Q931_CCB_DISCONNECT_REQUEST, &ies);
+
+		if (!visdn_chan->inband_info)
+			tone = ast_get_indication_tone(ast_chan->zone, "busy");
+	break;
+	}
+
+	case AST_CONTROL_OFFHOOK: {
+		if (!visdn_chan->inband_info)
+			tone = ast_get_indication_tone(ast_chan->zone, "dial");
 	}
 	break;
 
 	case AST_CONTROL_HANGUP: {
-		const struct tone_zone_sound *tone;
-		tone = ast_get_indication_tone(ast_chan->zone, "congestion");
-		if (tone)
-			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-		return 0;
+		if (!visdn_chan->inband_info)
+			tone = ast_get_indication_tone(ast_chan->zone,
+								"congestion");
 	}
 	break;
 
@@ -2046,19 +2070,13 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_ALERTING_REQUEST, &ies);
 
-		const struct tone_zone_sound *tone;
-		tone = ast_get_indication_tone(ast_chan->zone, "ring");
-		if (tone)
-			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-		return 0;
+		if (!visdn_chan->inband_info)
+			tone = ast_get_indication_tone(ast_chan->zone, "ring");
 	}
 	break;
 
 	case AST_CONTROL_ANSWER:
 		ast_playtones_stop(ast_chan);
-
-		return 0;
 	break;
 
 	case AST_CONTROL_BUSY: {
@@ -2068,40 +2086,42 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
 		cause->location = q931_ie_cause_location_call(
 							visdn_chan->q931_call);
-		cause->value = Q931_IE_C_CV_USER_BUSY;
+
+		if (ast_chan->hangupcause)
+			cause->value = ast_chan->hangupcause;
+		else
+			cause->value = Q931_IE_C_CV_USER_BUSY;
+
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_send_primitive(visdn_chan->q931_call,
 					Q931_CCB_DISCONNECT_REQUEST, &ies);
 
-		const struct tone_zone_sound *tone;
-		tone = ast_get_indication_tone(ast_chan->zone, "busy");
-		if (tone)
-			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-		return 0;
+		if (!visdn_chan->inband_info)
+			tone = ast_get_indication_tone(ast_chan->zone, "busy");
 	}
 	break;
 
 	case AST_CONTROL_CONGESTION: {
-		struct q931_ies ies = Q931_IES_INIT;
 
+		struct q931_ies ies = Q931_IES_INIT;
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
 		cause->location = q931_ie_cause_location_call(
 							visdn_chan->q931_call);
-		cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+
+		if (ast_chan->hangupcause)
+			cause->value = ast_chan->hangupcause;
+		else
+			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_send_primitive(visdn_chan->q931_call,
 					Q931_CCB_DISCONNECT_REQUEST, &ies);
 
-		const struct tone_zone_sound *tone;
-		tone = ast_get_indication_tone(ast_chan->zone, "busy");
-		if (tone)
-			ast_playtones_start(ast_chan, 0, tone->data, 1);
-
-		return 0;
+		if (!visdn_chan->inband_info)
+			tone = ast_get_indication_tone(ast_chan->zone, "busy");
 	}
 	break;
 
@@ -2125,20 +2145,21 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		q931_ies_add_put(&ies, &pi->ie);
 
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROGRESS_REQUEST, &ies);
-
-		return 0;
+		q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_PROGRESS_REQUEST, &ies);
 	}
 	break;
 
 	case AST_CONTROL_PROCEEDING:
-		q931_send_primitive(visdn_chan->q931_call, Q931_CCB_PROCEEDING_REQUEST, NULL);
-
-		return 0;
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_PROCEEDING_REQUEST, NULL);
 	break;
 	}
 
-	return 1;
+	if (tone)
+		ast_playtones_start(ast_chan, 0, tone->data, 1);
+
+	return res;
 }
 
 static int visdn_fixup(
@@ -2276,34 +2297,73 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	if (q931_call) {
 		q931_call->pvt = NULL;
 
-		if (
-		    q931_call->state != N0_NULL_STATE &&
-		    q931_call->state != N1_CALL_INITIATED &&
-		    q931_call->state != N11_DISCONNECT_REQUEST &&
-		    q931_call->state != N12_DISCONNECT_INDICATION &&
-		    q931_call->state != N15_SUSPEND_REQUEST &&
-		    q931_call->state != N17_RESUME_REQUEST &&
-		    q931_call->state != N19_RELEASE_REQUEST &&
-		    q931_call->state != N22_CALL_ABORT &&
-		    q931_call->state != U0_NULL_STATE &&
-		    q931_call->state != U6_CALL_PRESENT &&
-		    q931_call->state != U11_DISCONNECT_REQUEST &&
-		    q931_call->state != U12_DISCONNECT_INDICATION &&
-		    q931_call->state != U15_SUSPEND_REQUEST &&
-		    q931_call->state != U17_RESUME_REQUEST &&
-		    q931_call->state != U19_RELEASE_REQUEST) {
+		struct q931_ies ies = Q931_IES_INIT;
 
-			struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(
+						q931_call);
 
-			struct q931_ie_cause *cause = q931_ie_cause_alloc();
-			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(
-							q931_call);
-			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
-			q931_ies_add_put(&ies, &cause->ie);
+		if (ast_chan->hangupcause)
+			cause->value = ast_chan->hangupcause;
+		else
+			cause->value =
+				Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 
+		q931_ies_add_put(&ies, &cause->ie);
+
+		switch(q931_call->state) {
+		case N0_NULL_STATE:
+		case U0_NULL_STATE:
+		break;
+
+		case U1_CALL_INITIATED:
+		case U2_OVERLAP_SENDING:
+		case U3_OUTGOING_CALL_PROCEEDING:
+		case U4_CALL_DELIVERED:
+		case U7_CALL_RECEIVED:
+		case U8_CONNECT_REQUEST:
+		case U9_INCOMING_CALL_PROCEEDING:
+		case U10_ACTIVE:
+		case U25_OVERLAP_RECEIVING:
+		case N2_OVERLAP_SENDING:
+		case N3_OUTGOING_CALL_PROCEEDING:
+		case N4_CALL_DELIVERED:
+		case N6_CALL_PRESENT:
+		case N7_CALL_RECEIVED:
+		case N8_CONNECT_REQUEST:
+		case N9_INCOMING_CALL_PROCEEDING:
+		case N10_ACTIVE:
+		case N15_SUSPEND_REQUEST:
+		case N25_OVERLAP_RECEIVING:
 			q931_send_primitive(q931_call,
 				Q931_CCB_DISCONNECT_REQUEST, &ies);
+		break;
+
+		case U15_SUSPEND_REQUEST:
+			/* Suspend reject and disconnect request ??? */
+		break;
+
+		case U6_CALL_PRESENT:
+		case U17_RESUME_REQUEST:
+		case N1_CALL_INITIATED:
+		case N17_RESUME_REQUEST:
+			/* No ast_chan has been created yet */
+		break;
+
+		case U11_DISCONNECT_REQUEST:
+		case N12_DISCONNECT_INDICATION:
+		case U19_RELEASE_REQUEST:
+		case N19_RELEASE_REQUEST:
+		case N22_CALL_ABORT:
+			/* Do nothing, already releasing */
+		break;
+
+		case U12_DISCONNECT_INDICATION:
+		case N11_DISCONNECT_REQUEST:
+			q931_send_primitive(q931_call,
+				Q931_CCB_RELEASE_REQUEST, &ies);
+		break;
 		}
 
 		q931_call_put(q931_call);
@@ -3110,13 +3170,63 @@ static void visdn_q931_connect_indication(
 	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 }
 
+static int visdn_ie_to_ast_hangupcause(
+	const struct q931_ie_cause *cause)
+{
+	/* Asterisk uses the same q931 causes. Is it guaranteed? */
+
+	return cause->value;
+}
+
+static void visdn_set_hangupcause_by_ies(
+	struct ast_channel *ast_chan,
+	const struct q931_ies *ies)
+{
+	int i;
+	for (i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_CAUSE) {
+			 ast_chan->hangupcause =
+				visdn_ie_to_ast_hangupcause(
+					container_of(ies->ies[i],
+						struct q931_ie_cause, ie));
+		}
+	}
+}
+
+
 static void visdn_q931_disconnect_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+	int inband_info = FALSE;
+
 	FUNC_DEBUG();
 
-	q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
+	int i;
+	for (i=0; i<ies->count; i++) {
+		if (ies->ies[i]->type->id == Q931_IE_PROGRESS_INDICATOR) {
+			struct q931_ie_progress_indicator *pi =
+				container_of(ies->ies[i],
+					struct q931_ie_progress_indicator, ie);
+
+			if (pi->progress_description ==
+					Q931_IE_PI_PD_IN_BAND_INFORMATION) {
+				inband_info = TRUE;
+			}
+		}
+	}
+
+	ast_mutex_lock(&ast_chan->lock);
+	visdn_set_hangupcause_by_ies(ast_chan, ies);
+	ast_mutex_unlock(&ast_chan->lock);
+
+	if (!inband_info)
+		q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
+	else
+		ast_queue_control(ast_chan, AST_CONTROL_INBAND_INFO);
+
+	ast_queue_control(ast_chan, AST_CONTROL_DISCONNECT);
 }
 
 static void visdn_q931_error_indication(
@@ -3260,7 +3370,10 @@ static void visdn_q931_reject_indication(
 	if (!ast_chan)
 		return;
 
-	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	ast_mutex_lock(&ast_chan->lock);
+	visdn_set_hangupcause_by_ies(ast_chan, ies);
+	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+	ast_mutex_unlock(&ast_chan->lock);
 }
 
 static void visdn_q931_release_confirm(
@@ -3275,7 +3388,10 @@ static void visdn_q931_release_confirm(
 	if (!ast_chan)
 		return;
 
-	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	ast_mutex_lock(&ast_chan->lock);
+	visdn_set_hangupcause_by_ies(ast_chan, ies);
+	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+	ast_mutex_unlock(&ast_chan->lock);
 }
 
 static void visdn_q931_release_indication(
@@ -3289,7 +3405,10 @@ static void visdn_q931_release_indication(
 	if (!ast_chan)
 		return;
 
-	ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	ast_mutex_lock(&ast_chan->lock);
+	visdn_set_hangupcause_by_ies(ast_chan, ies);
+	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+	ast_mutex_unlock(&ast_chan->lock);
 }
 
 static void visdn_q931_resume_confirm(
@@ -3708,7 +3827,7 @@ static void visdn_q931_setup_indication(
 	ast_mutex_unlock(&usecnt_lock);
 	ast_update_use_count();
 
-	char called_number[32];
+	char called_number[32] = "";
 
 	if (cdpn) {
 		snprintf(called_number, sizeof(called_number),
@@ -4455,7 +4574,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 	struct localuser *u;
 	LOCAL_USER_ADD(u);
 
-	char called_number[64] = "";
+	char called_number[32] = "";
 
 	while(ast_waitfor(chan, -1) > -1) {
 		struct ast_frame *f;
