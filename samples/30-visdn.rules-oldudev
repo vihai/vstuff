@@ -5,6 +5,7 @@
 #
 
 KERNEL="streamport", NAME="visdn/streamport"
+KERNEL="cxc-control", NAME="visdn/cxc-control"
 KERNEL="netdev-control", NAME="visdn/netdev-control"
 KERNEL="ppp", NAME="visdn/ppp"
 KERNEL="system", NAME="visdn/timers/system", SYMLINK="visdn/timer"
