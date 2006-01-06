@@ -1415,8 +1415,10 @@ int lapd_multiframe_wait_for_establishment(
 	int err = 0;
 	int timeout = 60 * HZ;
 
-	if (lapd_sock->state != LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED &&
-	    nonblock)
+	if (lapd_sock->state == LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED)
+		return -EISCONN;
+
+	if (nonblock)
 		return -EWOULDBLOCK;
 
 	for (;;) {
@@ -1447,7 +1449,7 @@ int lapd_multiframe_wait_for_establishment(
 			lapd_msg_ls(lapd_sock, KERN_ERR,
 				"Connect timed out?!?\n");
 
-			err = -EAGAIN;
+			err = -ETIMEDOUT;
 			break;
 		}
 	}
@@ -1620,15 +1622,19 @@ int lapd_multiframe_wait_for_release(
 	struct lapd_sock *lapd_sock,
 	int nonblock)
 {
-	DEFINE_WAIT(wait);
 	int err = 0;
-	int timeout = 60 * HZ;
+	int timeout = 10 * HZ;
+	DEFINE_WAIT(wait);
 
-	if (lapd_sock->state != LAPD_DLS_4_TEI_ASSIGNED &&
-	    nonblock)
-		return -EWOULDBLOCK;
+	if (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED ||
+	    lapd_sock->state == LAPD_DLS_1_TEI_UNASSIGNED)
+		return -ENOTCONN;
 
 	for (;;) {
+
+		if (nonblock)
+			return -EWOULDBLOCK;
+
 		prepare_to_wait_exclusive(lapd_sock->sk.sk_sleep, &wait,
 			TASK_INTERRUPTIBLE);
 
@@ -1642,7 +1648,8 @@ int lapd_multiframe_wait_for_release(
 			break;
 		}
 
-		if (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED)
+		if (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED ||
+		    lapd_sock->state == LAPD_DLS_1_TEI_UNASSIGNED)
 			break;
 
 		if (signal_pending(current)) {
@@ -1652,9 +1659,9 @@ int lapd_multiframe_wait_for_release(
 
 		if (!timeout) {
 			lapd_msg_ls(lapd_sock, KERN_ERR,
-				"Connect timed out?!?\n");
+				"Release timed out?!?\n");
 
-			err = -EAGAIN;
+			err = -ETIMEDOUT;
 			break;
 		}
 	}
@@ -1678,7 +1685,7 @@ static int lapd_shutdown(struct socket *sock, int how)
 	lapd_dl_release_request(lapd_sock);
 
 	err = lapd_multiframe_wait_for_release(
-			lapd_sock, 1 /* FIXME: get socket NONBLOCK flag */);
+			lapd_sock, sock->file->f_flags & O_NONBLOCK);
 	if (err != -ENOTCONN)
 		goto err_multiframe_wait_for_release;
 

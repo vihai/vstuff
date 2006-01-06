@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-06 06:52:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-410
+
+    Summary:
+      Fixed shutdown() syscall in lapd that was causing communication thread blocking in chan_visdn for 60 seconds
+    Revision:
+      isdn--devel--0.1--patch-410
+
+
+    modified files:
+     ChangeLog modules/lapd/af_lapd.c
+
+
 2006-01-06 06:06:10 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-409
 
     Summary:
