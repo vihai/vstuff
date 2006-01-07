@@ -318,6 +318,8 @@ int visdn_chan_register(struct visdn_chan *chan)
 	if (err < 0)
 		goto err_create_link_name;
 
+	visdn_call_notifiers(VISDN_NOTIFY_CHAN_REGISTERED, chan);
+
 	return 0;
 
 	sysfs_remove_link(&chan->port->kobj, chan->name);
@@ -362,6 +364,8 @@ void visdn_chan_unregister(
 {
 	visdn_debug(3, "visdn_chan_unregister(%06d) called\n",
 		chan->id);
+
+	visdn_call_notifiers(VISDN_NOTIFY_CHAN_UNREGISTERED, chan);
 
 	sysfs_remove_link(&chan->port->kobj, chan->name);
 
@@ -446,9 +450,11 @@ int visdn_chan_enable(struct visdn_chan *chan)
 		err = chan->ops->open(chan);
 		if (err < 0) {
 			clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state);
-	printk(KERN_DEBUG "visnd_chan_enable(%06d) FAILED!!!!!!!!!!!!!!!: %d\n", chan->id, err);
+			printk(KERN_INFO "visnd_chan_enable(%06d) FAILED: %d\n", chan->id, err);
 			return err;
 		}
+
+		visdn_call_notifiers(VISDN_NOTIFY_CHAN_ENABLED, chan);
 	}
 
 	return 0;
@@ -464,6 +470,8 @@ int visdn_chan_disable(struct visdn_chan *chan)
 		err = chan->ops->close(chan);
 		if (err < 0)
 			return err;
+
+		visdn_call_notifiers(VISDN_NOTIFY_CHAN_DISABLED, chan);
 	}
 
 	return 0;

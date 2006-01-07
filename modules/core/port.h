@@ -116,6 +116,13 @@ static inline void visdn_port_unlock(
 	up(&port->sem);
 }
 
+extern void visdn_port_connected(struct visdn_port *port);
+extern void visdn_port_disconnected(struct visdn_port *port);
+extern void visdn_port_enabled(struct visdn_port *port);
+extern void visdn_port_disabled(struct visdn_port *port);
+extern void visdn_port_activated(struct visdn_port *port);
+extern void visdn_port_deactivated(struct visdn_port *port);
+
 #endif
 
 #endif

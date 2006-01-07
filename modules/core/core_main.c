@@ -59,16 +59,32 @@ struct class visdn_system_class = {
 };
 EXPORT_SYMBOL(visdn_system_class);
 
-/******************************************
- * Module stuff
- ******************************************/
-
 static void visdn_system_device_release(struct device *cd)
 {
 }
 
 struct device visdn_system_device;
 EXPORT_SYMBOL(visdn_system_device);
+
+static struct notifier_block *visdn_notify_chain;
+
+int visdn_register_notifier(struct notifier_block *nb)
+{
+	return notifier_chain_register(&visdn_notify_chain, nb);
+}
+EXPORT_SYMBOL(visdn_register_notifier);
+
+int visdn_unregister_notifier(struct notifier_block *nb)
+{
+	return notifier_chain_unregister(&visdn_notify_chain, nb);
+}
+EXPORT_SYMBOL(visdn_unregister_notifier);
+
+int visdn_call_notifiers(unsigned long val, void *v)
+{
+	return notifier_call_chain(&visdn_notify_chain, val, v);
+}
+EXPORT_SYMBOL(visdn_call_notifiers);
 
 static int __init visdn_init_module(void)
 {

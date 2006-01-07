@@ -55,15 +55,22 @@ static ssize_t visdn_port_store_enabled(
 		return -ERESTARTSYS;
 
 	if (enabled && !port->enabled) {
-		port->enabled = enabled;
+
+		port->enabled = TRUE;
 
 		if (port->ops->enable)
 			port->ops->enable(port);
+
+		visdn_call_notifiers(VISDN_NOTIFY_PORT_ENABLED, port);
+
 	} else if (!enabled && port->enabled) {
-		port->enabled = enabled;
+
+		port->enabled = FALSE;
 
 		if (port->ops->disable)
 			port->ops->disable(port);
+
+		visdn_call_notifiers(VISDN_NOTIFY_PORT_DISABLED, port);
 	}
 
 	visdn_port_unlock(port);
@@ -103,6 +110,42 @@ static struct attribute *visdn_port_default_attrs[] =
 	&visdn_port_attr_port_id.attr,
 	NULL,
 };
+
+void visdn_port_connected(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_CONNECTED, port);
+}
+EXPORT_SYMBOL(visdn_port_connected);
+
+void visdn_port_disconnected(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_DISCONNECTED, port);
+}
+EXPORT_SYMBOL(visdn_port_disconnected);
+
+void visdn_port_enabled(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_ENABLED, port);
+}
+EXPORT_SYMBOL(visdn_port_enabled);
+
+void visdn_port_disabled(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_DISABLED, port);
+}
+EXPORT_SYMBOL(visdn_port_disabled);
+
+void visdn_port_activated(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_ACTIVATED, port);
+}
+EXPORT_SYMBOL(visdn_port_activated);
+
+void visdn_port_deactivated(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_DEACTIVATED, port);
+}
+EXPORT_SYMBOL(visdn_port_deactivated);
 
 void visdn_port_init(struct visdn_port *port)
 {
@@ -149,6 +192,8 @@ int visdn_port_register(struct visdn_port *port)
 	if (err < 0)
 		goto err_kobject_add;
 
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_REGISTERED, port);
+
 	return 0;
 
 	kobject_del(&port->kobj);
@@ -167,6 +212,8 @@ void visdn_port_unregister(
 	struct visdn_port *port)
 {
 	visdn_debug(3, "visdn_port_unregister called\n");
+
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_UNREGISTERED, port);
 
 	kobject_del(&port->kobj);
 

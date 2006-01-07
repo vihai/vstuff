@@ -57,6 +57,26 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 
 #endif
 
+enum visdn_notify
+{
+	VISDN_NOTIFY_PORT_REGISTERED,
+	VISDN_NOTIFY_PORT_UNREGISTERED,
+	VISDN_NOTIFY_PORT_ENABLED,
+	VISDN_NOTIFY_PORT_DISABLED,
+	VISDN_NOTIFY_PORT_CONNECTED,
+	VISDN_NOTIFY_PORT_DISCONNECTED,
+	VISDN_NOTIFY_PORT_ACTIVATED,
+	VISDN_NOTIFY_PORT_DEACTIVATED,
+	VISDN_NOTIFY_CHAN_REGISTERED,
+	VISDN_NOTIFY_CHAN_UNREGISTERED,
+	VISDN_NOTIFY_CHAN_ENABLED,
+	VISDN_NOTIFY_CHAN_DISABLED,
+};
+
+extern int visdn_register_notifier(struct notifier_block *nb);
+extern int visdn_unregister_notifier(struct notifier_block *nb);
+extern int visdn_call_notifiers(unsigned long val, void *v);
+
 extern int debug_level;
 
 #endif
