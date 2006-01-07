@@ -1561,6 +1561,7 @@ static enum q931_ie_calling_party_number_type_of_number
 	}
 
 	assert(0);
+	return 0;
 }
 
 void q931_send_primitive(
@@ -3884,6 +3885,7 @@ static const char *visdn_get_prefix_by_cdpn_ton(
 	}
 
 	assert(0);
+	return NULL;
 }
 
 static const char *visdn_get_prefix_by_cgpn_ton(
@@ -3917,6 +3919,7 @@ static const char *visdn_get_prefix_by_cgpn_ton(
 	}
 
 	assert(0);
+	return NULL;
 }
 
 static void visdn_rewrite_and_assign_cli(
