@@ -4,8 +4,8 @@
 # WARNING: Names are not unique!
 #
 
-KERNEL="streamport", NAME="visdn/streamport"
-KERNEL="cxc-control", NAME="visdn/cxc-control"
-KERNEL="netdev-control", NAME="visdn/netdev-control"
-KERNEL="ppp", NAME="visdn/ppp"
-KERNEL="system", NAME="visdn/timers/system", SYMLINK="visdn/timer"
+KERNEL="streamport", NAME="visdn/streamport" GROUP="pbx" MODE="0660"
+KERNEL="cxc-control", NAME="visdn/cxc-control" GROUP="pbx" MODE="0660"
+KERNEL="netdev-control", NAME="visdn/netdev-control" GROUP="pbx" MODE="0660"
+KERNEL="ppp", NAME="visdn/ppp" GROUP="pbx" MODE="0660"
+KERNEL="system", NAME="visdn/timers/system", SYMLINK="visdn/timer" GROUP="pbx" MODE="0660"
