@@ -165,8 +165,12 @@
 #define hfc_STATUS_ANYINT		(1 << 7)
 
 #define hfc_STATES		0xC0
-#define hfc_STATES_STATE(num)		((num) << 0)
 #define hfc_STATES_STATE_MASK		0x0F
+#define hfc_STATES_FRAME_SYNC		(1 << 4)
+#define hfc_STATES_T2_EXPIRED		(1 << 5)
+#define hfc_STATES_INFO0		(1 << 6)
+
+#define hfc_STATES_STATE(num)		((num) << 0)
 #define hfc_STATES_LOAD_STATE		(1 << 4)
 #define hfc_STATES_DEACTIVATE		(0x2 << 5)
 #define hfc_STATES_ACTIVATE		(0x3 << 5)

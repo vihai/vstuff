@@ -105,7 +105,7 @@ static ssize_t hfc_store_role(
 
 	hfc_card_unlock(card);
 
-	hfc_debug_port(port, 1,
+	hfc_debug_st_port(port, 1,
 		"role set to %s\n",
 		port->nt_mode ? "NT" : "TE");
 
@@ -186,6 +186,78 @@ err_invalid_state:
 static VISDN_PORT_ATTR(l1_state, S_IRUGO | S_IWUSR,
 		hfc_show_l1_state,
 		hfc_store_l1_state);
+
+//----------------------------------------------------------------------------
+
+static ssize_t hfc_show_timer_t1(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", port->timer_t1_value);
+}
+
+static ssize_t hfc_store_timer_t1(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
+
+	unsigned int value;
+	if (sscanf(buf, "%u", &value) < 1)
+		return -EINVAL;
+
+	hfc_card_lock(card);
+	port->timer_t1_value = value * HZ / 1000;
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static VISDN_PORT_ATTR(timer_t1, S_IRUGO | S_IWUSR,
+		hfc_show_timer_t1,
+		hfc_store_timer_t1);
+
+//----------------------------------------------------------------------------
+
+static ssize_t hfc_show_timer_t3(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", port->timer_t3_value);
+}
+
+static ssize_t hfc_store_timer_t3(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
+
+	unsigned int value;
+	if (sscanf(buf, "%u", &value) < 1)
+		return -EINVAL;
+
+	hfc_card_lock(card);
+	port->timer_t3_value = value * HZ / 1000;
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static VISDN_PORT_ATTR(timer_t3, S_IRUGO | S_IWUSR,
+		hfc_show_timer_t3,
+		hfc_store_timer_t3);
 
 //----------------------------------------------------------------------------
 
@@ -332,6 +404,8 @@ static struct visdn_port_attribute *hfc_st_port_attributes[] =
 {
 	&visdn_port_attr_role,
 	&visdn_port_attr_l1_state,
+	&visdn_port_attr_timer_t1,
+	&visdn_port_attr_timer_t3,
 	&visdn_port_attr_st_clock_delay,
 	&visdn_port_attr_st_sampling_comp,
 	&visdn_port_attr_fifo_state,
@@ -382,61 +456,9 @@ void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 		HFC_REG_CLKDEL_ST_SMPL(port->sampling_comp));
 }
 
-static void hfc_st_port_state_change_work(void *data)
+static void hfc_st_port_fifo_update(struct hfc_st_port *port)
 {
-	struct hfc_st_port *port = data;
-	struct hfc_card *card = port->card;
-	u8 new_state;
-	int active;
-
-	hfc_card_lock(card);
-
-	new_state = HFC_REG_STATES_STATE_READVAL(hfc_read(card,
-						HFC_REG_STATES));
-
-	hfc_debug_port(port, 1,
-			"layer 1 state = %c%d\n",
-			port->nt_mode?'G':'F',
-			new_state);
-
-	if (port->nt_mode) {
-
-		active = 3;
-
-		if (new_state == 2)
-			hfc_write(card, HFC_REG_STATES,
-				HFC_REG_STATES_NT_G2_G3);
-	} else {
-		active = 7;
-	}
-
-	if (new_state == active && port->l1_state != active) {
-		/* Layer 1 is now active, schedule FIFO activation after
-		 * 50ms, otherwise the first frame gets corrupted. This is
-		 * not documented on Cologne Chip's specs.
-		 */
-
-		schedule_delayed_work(&port->fifo_activation_work, 50 * HZ / 1000);
-
-	} else if (new_state != active && port->l1_state == active) {
-
-		schedule_work(&port->fifo_activation_work);
-	}
-
-	port->l1_state = new_state;
-
-	hfc_st_port_update_led(port);
-
-	hfc_card_unlock(card);
-}
-
-static void hfc_st_port_fifo_activation_work(void *data)
-{
-	struct hfc_st_port *port = data;
-	struct hfc_card *card = port->card;
 	int i;
-
-	hfc_card_lock(card);
 
 	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
 		if (port->chans[i].has_real_fifo) {
@@ -447,6 +469,181 @@ static void hfc_st_port_fifo_activation_work(void *data)
 			hfc_fifo_configure(&port->chans[i].tx_fifo);
 		}
 	}
+}
+
+static void hfc_st_port_state_change_nt(
+	struct hfc_st_port *port,
+	u8 old_state, u8 new_state)
+{
+	struct hfc_card *card = port->card;
+
+	hfc_debug_st_port(port, 1,
+		"layer 1 state = G%d => G%d\n",
+		old_state,
+		new_state);
+
+	switch (new_state) {
+	case 0:
+	case 1:
+		/* Do nothing */
+	break;
+
+	case 2:
+		/* Allow transition from G2 to G3 */
+		hfc_write(card, HFC_REG_STATES, HFC_REG_STATES_NT_G2_G3);
+
+		if (old_state == 3) {
+			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_deactivated(&port->visdn_port);
+
+			hfc_st_port_fifo_update(port);
+		}
+	break;
+
+	case 3:
+		visdn_port_activated(&port->visdn_port);
+
+		schedule_delayed_work(&port->fifo_activation_work, 50 * HZ / 1000);
+	break;
+
+	case 4:
+		visdn_port_deactivated(&port->visdn_port);
+		hfc_st_port_fifo_update(port);
+	break;
+	}
+
+	port->l1_state = new_state;
+}
+
+static void hfc_st_port_state_change_te(
+	struct hfc_st_port *port,
+	u8 old_state, u8 new_state)
+{
+	hfc_debug_st_port(port, 1,
+		"layer 1 state = F%d => F%d\n",
+		old_state,
+		new_state);
+
+	switch (new_state) {
+	case 0:
+	case 1:
+		visdn_port_deactivated(&port->visdn_port);
+
+		hfc_st_port_fifo_update(port);
+
+		if (old_state != 3)
+			visdn_port_disconnected(&port->visdn_port);
+	break;
+
+	case 2:
+	case 4:
+	case 5:
+		/* Do nothing */
+	break;
+
+	case 3:
+		visdn_port_deactivated(&port->visdn_port);
+
+		hfc_st_port_fifo_update(port);
+
+		if (old_state == 8)
+			visdn_port_error_indication(&port->visdn_port);
+	break;
+
+	case 6:
+	case 8:
+		visdn_port_error_indication(&port->visdn_port);
+	break;
+
+	case 7:
+		visdn_port_activated(&port->visdn_port);
+
+		schedule_delayed_work(&port->fifo_activation_work, 50 * HZ / 1000);
+
+		if (old_state == 6 || old_state == 8)
+			visdn_port_error_indication(&port->visdn_port);
+	break;
+	}
+
+	port->l1_state = new_state;
+}
+
+static void hfc_st_port_timer_t1(unsigned long data)
+{
+	struct hfc_st_port *port = (struct hfc_st_port *)data;
+	struct hfc_card *card = port->card;
+
+	hfc_card_lock(card);
+	hfc_write(card, HFC_REG_STATES,
+		HFC_REG_STATES_STATE_VAL(4) |
+		HFC_REG_STATES_LOAD_STATE);
+	udelay(6);
+	hfc_write(card, HFC_REG_STATES, 0);
+	hfc_card_unlock(card);
+}
+
+static void hfc_st_port_timer_t3(unsigned long data)
+{
+	struct hfc_st_port *port = (struct hfc_st_port *)data;
+	struct hfc_card *card = port->card;
+
+	hfc_card_lock(card);
+	hfc_write(card, HFC_REG_STATES,
+		HFC_REG_STATES_STATE_VAL(3) |
+		HFC_REG_STATES_LOAD_STATE);
+	udelay(6);
+	hfc_write(card, HFC_REG_STATES, 0);
+	hfc_card_unlock(card);
+}
+
+/* TODO: use a tasklet here, or better, add a queue of state changes, otherwise
+ * we may miss state changes.
+ */
+static void hfc_st_port_state_change_work(void *data)
+{
+	struct hfc_st_port *port = data;
+	struct hfc_card *card = port->card;
+	u8 states;
+	u8 new_state;
+
+	hfc_card_lock(card);
+
+	states = hfc_read(card, HFC_REG_STATES);
+	new_state =  HFC_REG_STATES_STATE_READVAL(states);
+
+	if (port->nt_mode) {
+		hfc_st_port_state_change_nt(port, port->l1_state, new_state);
+	} else {
+		if (port->l1_state == 7 && new_state == 6 &&
+		    states & HFC_REG_STATES_INFO0 &&
+		    !port->rechecking_f7_f6) {
+
+			port->rechecking_f7_f6 = TRUE;
+
+			schedule_delayed_work(&port->state_change_work, 1 * HZ / 1000);
+		} else {
+			if (port->rechecking_f7_f6 && new_state != 3)
+				hfc_st_port_state_change_te(port, 6, port->l1_state);
+
+			port->rechecking_f7_f6 = FALSE;
+
+			hfc_st_port_state_change_te(port, port->l1_state, new_state);
+		}
+	}
+
+	hfc_st_port_update_led(port);
+
+	hfc_card_unlock(card);
+}
+
+static void hfc_st_port_fifo_activation_work(void *data)
+{
+	struct hfc_st_port *port = data;
+	struct hfc_card *card = port->card;
+
+	hfc_card_lock(card);
+
+	hfc_st_port_fifo_update(port);
 
 	hfc_card_unlock(card);
 }
@@ -465,7 +662,7 @@ void hfc_st_port_check_l1_up(struct hfc_st_port *port)
 		((!port->nt_mode && port->l1_state != 7) ||
 		(port->nt_mode && port->l1_state != 3))) {
 
-		hfc_debug_port(port, 1,
+		hfc_debug_st_port(port, 1,
 			"L1 is down, bringing up L1.\n");
 
 		schedule_work(&port->activate_request_work);
@@ -490,7 +687,7 @@ static int hfc_st_port_enable(
 
 	hfc_st_port_update_led(port);
 
-	hfc_debug_port(port, 2, "enabled\n");
+	hfc_debug_st_port(port, 2, "enabled\n");
 
 	return 0;
 }
@@ -506,7 +703,7 @@ static int hfc_st_port_disable(
 
 	hfc_st_port_update_led(port);
 
-	hfc_debug_port(port, 2, "disabled\n");
+	hfc_debug_st_port(port, 2, "disabled\n");
 
 	return 0;
 }
@@ -536,6 +733,16 @@ void hfc_st_port_init(
 	INIT_WORK(&port->activate_request_work,
 		hfc_st_port_activate_request_work,
 		port);
+
+	init_timer(&port->timer_t1);
+	port->timer_t1.function = hfc_st_port_timer_t1;
+	port->timer_t1.data = (unsigned long)port;
+	port->timer_t1_value = 5 * HZ;
+
+	init_timer(&port->timer_t3);
+	port->timer_t3.function = hfc_st_port_timer_t3;
+	port->timer_t3.data = (unsigned long)port;
+	port->timer_t3_value = 5 * HZ;
 
 	port->nt_mode = FALSE;
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;

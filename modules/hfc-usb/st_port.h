@@ -21,7 +21,7 @@
 #define to_st_port(port) container_of(port, struct hfc_st_port, visdn_port)
 
 #ifdef DEBUG_CODE
-#define hfc_debug_port(port, dbglevel, format, arg...)		\
+#define hfc_debug_st_port(port, dbglevel, format, arg...)		\
 	if (debug_level >= dbglevel)				\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
 			"%s-%s:"				\
@@ -31,7 +31,7 @@
 			(port)->card->usb_dev->dev.bus_id,	\
 			## arg)
 #else
-#define hfc_debug_port(port, dbglevel, format, arg...) do {} while (0)
+#define hfc_debug_st_port(port, dbglevel, format, arg...) do {} while (0)
 #endif
 
 #define hfc_msg_port(port, level, format, arg...)		\
@@ -60,9 +60,18 @@ struct hfc_st_port
 
 	BOOL nt_mode;
 	BOOL sq_enabled;
-	u8 l1_state;
+
 	int clock_delay;
 	int sampling_comp;
+
+	u8 l1_state;
+	BOOL rechecking_f7_f6;
+
+	struct timer_list timer_t1;
+	unsigned int timer_t1_value;
+
+	struct timer_list timer_t3;
+	unsigned int timer_t3_value;
 
 	struct hfc_st_chan chans[5];
 

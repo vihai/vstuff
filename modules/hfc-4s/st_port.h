@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -44,14 +44,19 @@ struct hfc_st_port
 
 	BOOL nt_mode;
 	BOOL sq_enabled;
-	u8 l1_state;
 	int clock_delay;
 	int sampling_comp;
 
-	struct hfc_st_chan chans[5];
+	u8 l1_state;
+	BOOL rechecking_f7_f6;
 
-	// This struct contains a copy of some registers whose bits may be
-	// changed independently.
+	struct timer_list timer_t1;
+	unsigned int timer_t1_value;
+
+	struct timer_list timer_t3;
+	unsigned int timer_t3_value;
+
+	struct hfc_st_chan chans[5];
 
 	struct work_struct state_change_work;
 	struct work_struct fifo_activation_work;
