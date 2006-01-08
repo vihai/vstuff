@@ -1,4 +1,80 @@
 
+- Call parking (SUSPEND/RESUME) does not use the call parking "infrastructure"
+  in Asterisk. All my attempts to use ast_park_call() failed as:
+
+  1- We need to respond to a suspend_indication in no more than 4 seconds, thus
+     we may not have enough time to play the parking number by voice. The
+     standard seems to prevent announcements between SUSPEND and SUSPEND ACK.
+
+  2- Some phone even ignores the Display information element, so the user is
+     not able to know where his call has been parked.
+
+  3- ast_park_call() does sleep when saying the numbers, if we make it sleep
+     in another thread we have problems getting back the parking number
+
+  4- Since we don't release the B channel associated with the call we need
+     to know if the remote user cleared the call or the call has been picked
+     up by a non-vISDN channel. No provision exists in * to notify other
+     channel drivers for such events.
+
+Layer 1 States:
+
+State F1 (INACTIVE): in this inactive (powered-off) state, the TE is not
+transmitting and cannot detect the presence of any input signals. In the case of
+locally powered TEs, which cannot detect the appearance/disappearance of power
+source 1 or 2, this state is entered when local power is not present. For TEs
+that can detect power source 1 or power source 2, this state is entered whenever
+loss of power (required to support all TEI functions) is detected, or when the
+absence of power from source 1 or 2, whichever power source is used for
+determining the connection status, is detected.
+
+State F2 (SENSING): this state is entered after the TE has been powered on but
+has not determined the type of signal (if any) that the TE is receiving. When in
+this state, a TE may go to a low-power consumption mode as specified in
+subclause 6.1.8.
+
+State F3 (DEACTIVATED): this is the deactivated state of the physical protocol.
+Neither the NT nor the TE is transmitting. When in this state, a TE may go to a
+low-power consumption mode as specified in subclause 6.1.8.
+
+State F4 (AWAITING Signal): when the TE is requested to initiate activation by
+means of a PH-ACTIVATE REQUEST primitive, it transmits a signal (INFO 1) and
+waits for a response from the NT.
+
+State F5 (IDENTIFYING Input): at the first receipt of any signal from the NT,
+the TE ceases to transmit INFO 1 and awaits identification of signal INFO 2 or
+INFO 4.
+
+State F6 (SYNCHRONIZED): when the TE receives an activation signal (INFO 2) from
+the NT, it responds with a signal (INFO 3) and waits for normal frames (INFO 4)
+from the NT.
+
+State F7 (ACTIVATED): state F7 is the only state where B and D channel contain
+operational data. This is the normal activate state with the protocol activated
+in both directions.
+
+State F8 (LOST Framing): this is the condition when the TE has lost frame
+synchronization and is awaiting re-synchronization by receipt of INFO 2 or INFO
+4 or deactivation by receipt of INFO 0.
+
+State G1 (DEACTIVATED): in this deactivated state, the NT is not transmitting.
+When in this state, an NT may go to a low-power consumption mode as specified in
+subclause 6.1.8.
+
+State G2 (PENDING Activation): in this partially active state
+the NT sends INFO 2 while waiting for INFO 3. This state will be entered on
+request by higher layers, by means of a PH-ACTIVATE REQUEST primitive, or on the
+receipt of INFO 0 or lost framing while in the active state (G3). The choice to
+eventually deactivate is up to higher layers at the network side.
+
+State G3 (ACTIVE): this is the normal active state where the NT and TE are
+active with INFO 4 and INFO 3, respectively. A deactivation may be initiated by
+the NT system management, by means of an MPH-DEACTIVATE REQUEST primitive, or
+the NT may be the active state all the time, under non-fault conditions.
+
+State G4 (PENDING Deactivation): when the NT wishes to deactivate, it may wait
+for a timer to expire before returning to the deactive state.
+
 
 How to write a vISDN driver:
 
