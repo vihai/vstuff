@@ -31,6 +31,9 @@ struct visdn_port_ops
 
 	int (*enable)(struct visdn_port *port);
 	int (*disable)(struct visdn_port *port);
+
+	int (*activate)(struct visdn_port *port);
+	int (*deactivate)(struct visdn_port *port);
 };
 
 struct visdn_port
@@ -122,6 +125,7 @@ extern void visdn_port_enabled(struct visdn_port *port);
 extern void visdn_port_disabled(struct visdn_port *port);
 extern void visdn_port_activated(struct visdn_port *port);
 extern void visdn_port_deactivated(struct visdn_port *port);
+extern void visdn_port_error_indication(struct visdn_port *port);
 
 #endif
 

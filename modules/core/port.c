@@ -147,6 +147,12 @@ void visdn_port_deactivated(struct visdn_port *port)
 }
 EXPORT_SYMBOL(visdn_port_deactivated);
 
+void visdn_port_error_indication(struct visdn_port *port)
+{
+	visdn_call_notifiers(VISDN_NOTIFY_PORT_ERROR_INDICATION, port);
+}
+EXPORT_SYMBOL(visdn_port_error_indication);
+
 void visdn_port_init(struct visdn_port *port)
 {
 	BUG_ON(!port);
