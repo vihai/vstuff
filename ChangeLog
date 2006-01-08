@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-08 16:24:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-416
+
+    Summary:
+      Fixed HZ usage
+    Revision:
+      isdn--devel--0.1--patch-416
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/st_port.c modules/hfc-4s/sys_chan.c
+     modules/hfc-pci/st_port.c modules/hfc-usb/st_port.c
+     modules/lapd/datalink.c
+
+
 2006-01-07 02:49:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-415
 
     Summary:

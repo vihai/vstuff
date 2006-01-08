@@ -504,7 +504,7 @@ static int hfc_sys_chan_frame_xmit(
 			&card->leds[chan->connected_st_chan->port->id];
 
 		led->alt_color = HFC_LED_OFF;
-		led->flashing_freq = 100 / HZ;
+		led->flashing_freq = HZ / 10;
 		led->flashes = 1;
 		hfc_led_update(led);
 	}
@@ -674,7 +674,7 @@ static void hfc_sys_chan_rx_work(void *data)
 			&card->leds[chan->connected_st_chan->port->id];
 
 		led->alt_color = HFC_LED_OFF;
-		led->flashing_freq = 100 / HZ;
+		led->flashing_freq = HZ / 10;
 		led->flashes = 1;
 		hfc_led_update(led);
 	}

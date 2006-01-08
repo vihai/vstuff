@@ -1878,7 +1878,7 @@ static void lapd_timer_T200(unsigned long data)
 	if (sock_owned_by_user(&lapd_sock->sk)) {
 		/* Try again later. */
 		sk_reset_timer(&lapd_sock->sk, &lapd_sock->timer_T200,
-			jiffies + HZ/20);
+			jiffies + 20 * HZ / 1000);
 
 		goto socket_owned;
 	}
@@ -1964,7 +1964,7 @@ static void lapd_timer_T203(unsigned long data)
 	if (sock_owned_by_user(&lapd_sock->sk)) {
 		/* Try again later. */
 		sk_reset_timer(&lapd_sock->sk, &lapd_sock->timer_T200,
-			jiffies + HZ/20);
+			jiffies + 20 * HZ / 1000);
 
 		goto socket_owned;
 	}
