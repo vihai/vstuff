@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-09 01:44:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-420
+
+    Summary:
+      Updated ARPHDR_ constant using a randomly generated one
+    Revision:
+      isdn--devel--0.1--patch-420
+
+
+    modified files:
+     ChangeLog modules/lapd/lapd.h
+
+
 2006-01-08 22:52:19 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-419
 
     Summary:

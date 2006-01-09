@@ -22,7 +22,7 @@
 #endif
 
 #ifndef ARPHRD_LAPD
-#define ARPHRD_LAPD 1000
+#define ARPHRD_LAPD 8445
 #endif
 
 #ifndef ETH_P_LAPD
