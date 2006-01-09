@@ -102,11 +102,14 @@ struct q931_ie_channel_identification
 //	enum q931_ie_channel_identification_element_type
 };
 
-struct q931_ie_channel_identification *q931_ie_channel_identification_alloc(void);
-struct q931_ie *q931_ie_channel_identification_alloc_abstract(void);
+struct q931_ie_channel_identification *
+	q931_ie_channel_identification_alloc(void);
+struct q931_ie *
+	q931_ie_channel_identification_alloc_abstract(void);
 
 static inline enum q931_ie_channel_identification_interface_type
-	q931_ie_channel_identification_intftype(const struct q931_interface *intf)
+	q931_ie_channel_identification_intftype(
+		const struct q931_interface *intf)
 {
 	if (intf->type == Q931_INTF_TYPE_PRA)
 		return Q931_IE_CI_IT_PRIMARY;
