@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-09 02:45:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-422
+
+    Summary:
+      Fixed force_outbound_cli parameter in sample files. It incorrectly used 'no' as the CLI
+    Revision:
+      isdn--devel--0.1--patch-422
+
+
+    modified files:
+     ChangeLog samples/visdn.conf.sample
+     samples/visdn.conf.sample_passthru
+
+
 2006-01-09 02:37:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-421
 
     Summary:
