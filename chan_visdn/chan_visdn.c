@@ -2037,6 +2037,8 @@ static int visdn_call(
 	hlc->presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
 	hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
 
+	ast_channel_defer_dtmf(ast_chan);
+
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_REQUEST, &ies);
 
 	q931_call_put(q931_call);
@@ -2505,28 +2507,21 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
-	if (visdn_chan->may_send_digits) {
-		struct q931_ies ies = Q931_IES_INIT;
+	struct q931_ies ies = Q931_IES_INIT;
 
-		struct q931_ie_called_party_number *cdpn =
-			q931_ie_called_party_number_alloc();
-		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-						intf->outbound_called_ton);
-		cdpn->numbering_plan_identificator =
-			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+	struct q931_ie_called_party_number *cdpn =
+		q931_ie_called_party_number_alloc();
+	cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+					intf->outbound_called_ton);
+	cdpn->numbering_plan_identificator =
+		Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 
-		cdpn->number[0] = digit;
-		cdpn->number[1] = '\0';
-		q931_ies_add_put(&ies, &cdpn->ie);
+	cdpn->number[0] = digit;
+	cdpn->number[1] = '\0';
+	q931_ies_add_put(&ies, &cdpn->ie);
 
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_INFO_REQUEST, &ies);
-	} else {
-		visdn_debug("Not ready to send digits, queuing\n");
-
-		visdn_chan->queued_digits[
-			strlen(visdn_chan->queued_digits)] = digit;
-	}
+	q931_send_primitive(visdn_chan->q931_call,
+		Q931_CCB_INFO_REQUEST, &ies);
 
 	/* IMPORTANT: Since Asterisk is a bug made software, if there
 	 * are DTMF frames queued and we start generating DTMF tones
@@ -3595,27 +3590,7 @@ static void visdn_q931_more_info_indication(
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
-	visdn_chan->may_send_digits = TRUE;
-
-	if (strlen(visdn_chan->queued_digits)) {
-		visdn_debug("more-info-indication received, flushing"
-			" digits queue\n");
-
-		struct q931_ies ies = Q931_IES_INIT;
-
-		struct q931_ie_called_party_number *cdpn =
-			q931_ie_called_party_number_alloc();
-		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-						intf->outbound_called_ton);
-		cdpn->numbering_plan_identificator =
-			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
-
-		strcpy(cdpn->number, visdn_chan->queued_digits);
-		q931_ies_add_put(&ies, &cdpn->ie);
-
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_INFO_REQUEST, &ies);
-	}
+	ast_channel_undefer_dtmf(ast_chan);
 
 	ast_mutex_unlock(&ast_chan->lock);
 }
@@ -3638,10 +3613,7 @@ static void visdn_q931_proceeding_indication(
 	if (!ast_chan)
 		return;
 
-	ast_mutex_lock(&ast_chan->lock);
-	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-	visdn_chan->may_send_digits = TRUE;
-	ast_mutex_unlock(&ast_chan->lock);
+	ast_channel_undefer_dtmf(ast_chan);
 
 	ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
 }
@@ -4291,7 +4263,6 @@ no_cgpn:;
 			ast_hangup(ast_chan);
 		}
 	} else {
-
 		strncpy(ast_chan->exten, "s",
 			sizeof(ast_chan->exten)-1);
 
@@ -4327,10 +4298,12 @@ no_cgpn:;
 				Q931_CCB_PROCEEDING_REQUEST, &ies_proc);
 			q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_DISCONNECT_REQUEST, &ies_disc);
-		} else {
-			q931_send_primitive(visdn_chan->q931_call,
-				Q931_CCB_MORE_INFO_REQUEST, NULL);
+
+			return;
 		}
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_MORE_INFO_REQUEST, NULL);
 
 		for(i=0; called_number[i]; i++) {
 			struct ast_frame f =

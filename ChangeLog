@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-09 19:32:37 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-426
+
+    Summary:
+      Fixed DTMF detection and improved DTMF queueing (using asteris's digits queue)
+    Revision:
+      isdn--devel--0.1--patch-426
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2006-01-09 18:55:57 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-425
 
     Summary:
