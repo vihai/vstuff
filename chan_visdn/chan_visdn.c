@@ -53,7 +53,6 @@
 #include <asterisk/causes.h>
 #include <asterisk/dsp.h>
 #include <asterisk/version.h>
-#include <asterisk/channel_pvt.h>
 
 #include <linux/lapd.h>
 #include <linux/visdn/netdev.h>
@@ -3500,14 +3499,7 @@ static void visdn_q931_more_info_indication(
 	if (!ast_chan)
 		return;
 
-	ast_mutex_lock(&ast_chan->lock);
-
-	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-	struct visdn_interface *intf = q931_call->intf->pvt;
-
 	ast_channel_undefer_dtmf(ast_chan);
-
-	ast_mutex_unlock(&ast_chan->lock);
 }
 
 static void visdn_q931_notify_indication(
@@ -4774,7 +4766,7 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
 					called_number, 1,
-					AST_CID_NUM(chan))) {
+					chan->cid.cid_num)) {
 
 				ast_indicate(chan, AST_CONTROL_CONGESTION);
 				ast_safe_sleep(chan, 30000);
@@ -4784,12 +4776,12 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 			if (ast_exists_extension(NULL,
 					chan->context,
 					called_number, 1,
-					AST_CID_NUM(chan))) {
+					chan->cid.cid_num)) {
 
 				if (!ast_matchmore_extension(NULL,
 					chan->context,
 					called_number, 1,
-					AST_CID_NUM(chan))) {
+					chan->cid.cid_num)) {
 
 					ast_setstate(chan, AST_STATE_RING);
 					ast_indicate(chan,
