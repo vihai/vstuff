@@ -52,6 +52,8 @@ struct visdn_chan {
 
 	int may_send_digits;
 	char queued_digits[21];
+
+	struct ast_dsp *dsp;
 };
 
 #ifndef ASTERISK_VERSION_NUM

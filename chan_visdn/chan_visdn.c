@@ -49,6 +49,7 @@
 #include <asterisk/cli.h>
 #include <asterisk/musiconhold.h>
 #include <asterisk/causes.h>
+#include <asterisk/dsp.h>
 
 #include "../config.h"
 
@@ -2753,7 +2754,6 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d\n",
 	t/1000000.0,
 	visdn_chan->channel_fd);
 #endif
-
 	f.frametype = AST_FRAME_VOICE;
 	f.subclass = AST_FORMAT_ALAW;
 	f.samples = nread;
@@ -2761,7 +2761,9 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d\n",
 	f.data = buf;
 	f.offset = 0;
 
-	return &f;
+	struct ast_frame *f2 = ast_dsp_process(ast_chan, visdn_chan->dsp, &f);
+
+	return f2;
 }
 
 static int visdn_write(
@@ -2832,6 +2834,14 @@ static struct ast_channel *visdn_new(
 		ast_chan->rings = 1;
 
 	visdn_chan->ast_chan = ast_chan;
+
+	visdn_chan->dsp = ast_dsp_new();
+	ast_dsp_set_features(visdn_chan->dsp,
+		DSP_FEATURE_DTMF_DETECT |
+//		DSP_FEATURE_SILENCE_SUPPRESS |
+		DSP_FEATURE_BUSY_DETECT |
+		DSP_FEATURE_FAX_DETECT);
+	ast_dsp_digitmode(visdn_chan->dsp, DSP_DIGITMODE_DTMF);
 
 	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
 
