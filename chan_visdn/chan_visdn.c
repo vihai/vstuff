@@ -36,6 +36,8 @@
 
 #include <linux/rtc.h>
 
+#include "../config.h"
+
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
 #include <asterisk/config.h>
@@ -50,23 +52,8 @@
 #include <asterisk/musiconhold.h>
 #include <asterisk/causes.h>
 #include <asterisk/dsp.h>
-
-#include "../config.h"
-
-#ifdef HAVE_ASTERISK_VERSION_H
 #include <asterisk/version.h>
-#endif
-
-#ifndef ASTERISK_VERSION_NUM
 #include <asterisk/channel_pvt.h>
-#define AST_CID_NUM(c) ((c)->callerid)
-#define _bridge bridge
-#define AST_BRIDGE_COMPLETE 0
-#define AST_BRIDGE_FAILED -1
-#define AST_BRIDGE_FAILED_NOWARN -2
-#else
-#define AST_CID_NUM(c) ((c)->cid.cid_num)
-#endif
 
 #include <linux/lapd.h>
 #include <linux/visdn/netdev.h>
@@ -76,8 +63,6 @@
 #include <libq931/q931.h>
 
 #include "chan_visdn.h"
-
-#include "../config.h"
 
 #ifndef AST_CONTROL_INBAND_INFO
 #define AST_CONTROL_INBAND_INFO 42
@@ -1947,8 +1932,8 @@ static int visdn_call(
 		struct q931_ie_calling_party_number *cgpn =
 			q931_ie_calling_party_number_alloc();
 
-		if (AST_CID_NUM(ast_chan) &&
-		    strlen(AST_CID_NUM(ast_chan))) {
+		if (ast_chan->cid.cid_num &&
+		    strlen(ast_chan->cid.cid_num)) {
 
 			if ((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
 					AST_PRES_ALLOWED ||
@@ -1979,26 +1964,8 @@ static int visdn_call(
 					intf->force_outbound_cli,
 						sizeof(cgpn->number));
 				else {
-#ifdef ASTERISK_VERSION_NUM
 					strncpy(cgpn->number, ast_chan->cid.cid_num,
 						sizeof(cgpn->number));
-#else
-					char callerid[255];
-					char *name, *number;
-					strncpy(callerid, ast_chan->callerid,
-							sizeof(callerid));
-					ast_callerid_parse(callerid, &name, &number);
-					if (number) {
-						strncpy(cgpn->number, number,
-							sizeof(cgpn->number));
-					} else {
-						ast_log(LOG_WARNING,
-							"Unable to parse '%s'"
-							" into CallerID name &"
-							" number\n",
-							callerid);
-					}
-#endif
 				}
 			} else {
 				cgpn->type_of_number =
@@ -2085,20 +2052,12 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	return 0;
 }
 
-#ifndef ASTERISK_VERSION_NUM
-static int visdn_bridge(
-	struct ast_channel *c0,
-	struct ast_channel *c1,
-	int flags, struct ast_frame **fo,
-	struct ast_channel **rc)
-#else
 static int visdn_bridge(
 	struct ast_channel *c0,
 	struct ast_channel *c1,
 	int flags, struct ast_frame **fo,
 	struct ast_channel **rc,
 	int timeoutms)
-#endif
 {
 	return AST_BRIDGE_FAILED_NOWARN;
 
@@ -2484,15 +2443,9 @@ static int visdn_setoption(
 	return -1;
 }
 
-#ifndef ASTERISK_VERSION_NUM
-static int visdn_transfer(
-	struct ast_channel *ast,
-	char *dest)
-#else
 static int visdn_transfer(
 	struct ast_channel *ast,
 	const char *dest)
-#endif
 {
 	ast_log(LOG_ERROR, "%s\n", __FUNCTION__);
 
@@ -2542,11 +2495,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 		return 0;
 }
 
-#ifndef ASTERISK_VERSION_NUM
-static int visdn_sendtext(struct ast_channel *ast, char *text)
-#else
 static int visdn_sendtext(struct ast_channel *ast, const char *text)
-#endif
 {
 	ast_log(LOG_WARNING, "%s\n", __FUNCTION__);
 
@@ -2695,11 +2644,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		visdn_destroy(visdn_chan);
 
-#ifndef ASTERISK_VERSION_NUM
-		ast_chan->pvt->pvt = NULL;
-#else
 		ast_chan->tech_pvt = NULL;
-#endif
 	}
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
@@ -2846,36 +2791,13 @@ static struct ast_channel *visdn_new(
 	ast_chan->nativeformats = AST_FORMAT_ALAW;
 	ast_chan->readformat = AST_FORMAT_ALAW;
 	ast_chan->writeformat = AST_FORMAT_ALAW;
-
-	ast_chan->type = VISDN_CHAN_TYPE;
-
-#ifndef ASTERISK_VERSION_NUM
-	ast_chan->pvt->rawreadformat = AST_FORMAT_ALAW;
-	ast_chan->pvt->rawwriteformat = AST_FORMAT_ALAW;
-
-	ast_chan->pvt->call = visdn_call;
-	ast_chan->pvt->hangup = visdn_hangup;
-	ast_chan->pvt->answer = visdn_answer;
-	ast_chan->pvt->read = visdn_read;
-	ast_chan->pvt->write = visdn_write;
-	ast_chan->pvt->bridge = visdn_bridge;
-	ast_chan->pvt->exception = visdn_exception;
-	ast_chan->pvt->indicate = visdn_indicate;
-	ast_chan->pvt->fixup = visdn_fixup;
-	ast_chan->pvt->setoption = visdn_setoption;
-	ast_chan->pvt->send_text = visdn_sendtext;
-	ast_chan->pvt->transfer = visdn_transfer;
-	ast_chan->pvt->send_digit = visdn_send_digit;
-
-	ast_chan->pvt->pvt = visdn_chan;
-#else
 	ast_chan->rawreadformat = AST_FORMAT_ALAW;
 	ast_chan->rawwriteformat = AST_FORMAT_ALAW;
 
-	ast_chan->tech = &visdn_tech;
+	ast_chan->type = VISDN_CHAN_TYPE;
 
+	ast_chan->tech = &visdn_tech;
 	ast_chan->tech_pvt = visdn_chan;
-#endif
 
 	ast_setstate(ast_chan, state);
 
@@ -2889,13 +2811,8 @@ err_channel_alloc:
 	return NULL;
 }
 
-#ifndef ASTERISK_VERSION_NUM
-static struct ast_channel *visdn_request(
-	char *type, int format, void *data)
-#else
 static struct ast_channel *visdn_request(
 	const char *type, int format, void *data, int *cause)
-#endif
 {
 	struct visdn_chan *visdn_chan;
 
@@ -2934,7 +2851,6 @@ err_unsupported_format:
 	return NULL;
 }
 
-#ifdef ASTERISK_VERSION_NUM
 static const struct ast_channel_tech visdn_tech = {
 	.type		= VISDN_CHAN_TYPE,
 	.description	= VISDN_DESCRIPTION,
@@ -2953,7 +2869,6 @@ static const struct ast_channel_tech visdn_tech = {
 	.send_text	= visdn_sendtext,
 	.setoption	= visdn_setoption,
 };
-#endif
 
 // Must be called with visdn.lock acquired
 static void refresh_polls_list()
@@ -3941,14 +3856,11 @@ static void visdn_handle_clip_nt(
 	 */
 
 	if (!cgpn) {
-#ifdef ASTERISK_VERSION_NUM
 		ast_chan->cid.cid_num =
 			strdup(intf->clip_default_number);
 		ast_chan->cid.cid_pres =
 			AST_PRES_NETWORK_NUMBER;
-#else
-		ast_chan->callerid = strdup(intf->clip_default_number);
-#endif
+
 		return;
 	}
 	
@@ -3956,14 +3868,12 @@ static void visdn_handle_clip_nt(
 			Q931_IE_CGPN_NPI_UNKNOWN &&
 	    cgpn->numbering_plan_identificator !=
 	    		Q931_IE_CGPN_NPI_ISDN_TELEPHONY) {
-#ifdef ASTERISK_VERSION_NUM
+
 		ast_chan->cid.cid_num =
 			strdup(intf->clip_default_number);
 		ast_chan->cid.cid_pres =
 			AST_PRES_NETWORK_NUMBER;
-#else
-		ast_chan->callerid = strdup(intf->clip_default_number);
-#endif
+
 		return;
 	}
 
@@ -3981,15 +3891,10 @@ static void visdn_handle_clip_nt(
 			ast_chan->cid.cid_pres |=
 				AST_PRES_USER_NUMBER_PASSED_SCREEN;
 		} else {
-#ifdef ASTERISK_VERSION_NUM
 			ast_chan->cid.cid_num =
 				strdup(intf->clip_default_number);
 			ast_chan->cid.cid_pres |=
 				AST_PRES_NETWORK_NUMBER;
-#else
-			ast_chan->callerid =
-			       strdup(intf->clip_default_number);
-#endif
 		}
 	}
 }
@@ -4206,7 +4111,7 @@ no_cgpn:;
 	    visdn_chan->sending_complete) {
 		if (ast_exists_extension(NULL, intf->context,
 				called_number, 1,
-				AST_CID_NUM(ast_chan))) {
+				ast_chan->cid.cid_num)) {
 
 			strncpy(ast_chan->exten,
 				called_number,
@@ -4911,13 +4816,6 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 static char *visdn_overlap_dial_descr =
 "  vISDNOverlapDial():\n";
 
-#ifndef ASTERISK_VERSION_NUM
-static int visdn_devicestate(void *data)
-{
-	return AST_DEVICE_UNKNOWN;
-}
-#endif
-
 int load_module()
 {
 	int res = 0;
@@ -5035,21 +4933,11 @@ int load_module()
 		return -1;
 	}
 
-#ifndef ASTERISK_VERSION_NUM
-	if (ast_channel_register_ex(VISDN_CHAN_TYPE, VISDN_DESCRIPTION,
-			 AST_FORMAT_ALAW,
-			 visdn_request, visdn_devicestate)) {
-		ast_log(LOG_ERROR, "Unable to register channel class %s\n",
-			VISDN_CHAN_TYPE);
-		return -1;
-	}
-#else
 	if (ast_channel_register(&visdn_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n",
 			VISDN_CHAN_TYPE);
 		return -1;
 	}
-#endif
 
 	ast_cli_register(&debug_visdn_generic);
 	ast_cli_register(&no_debug_visdn_generic);
@@ -5087,11 +4975,7 @@ int unload_module(void)
 	ast_cli_unregister(&no_debug_visdn_generic);
 	ast_cli_unregister(&debug_visdn_generic);
 
-#ifndef ASTERISK_VERSION_NUM
-	ast_channel_unregister(VISDN_CHAN_TYPE);
-#else
 	ast_channel_unregister(&visdn_tech);
-#endif
 
 	if (visdn.libq931)
 		q931_leave(visdn.libq931);
