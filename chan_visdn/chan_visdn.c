@@ -2438,8 +2438,12 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_PROCEEDING:
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_PROCEEDING_REQUEST, NULL);
+		if (visdn_chan->q931_call->state == N1_CALL_INITIATED ||
+		    visdn_chan->q931_call->state == N2_OVERLAP_SENDING ||
+		    visdn_chan->q931_call->state == U6_CALL_PRESENT ||
+		    visdn_chan->q931_call->state == U25_OVERLAP_RECEIVING)
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_PROCEEDING_REQUEST, NULL);
 	break;
 	}
 

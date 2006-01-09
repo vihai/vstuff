@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-09 16:45:10 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-423
+
+    Summary:
+      PROCEEDING frame does not become a PROCEEDING-REQUEST if the call is not in the correct state
+    Revision:
+      isdn--devel--0.1--patch-423
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2006-01-09 02:45:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-422
 
     Summary:
