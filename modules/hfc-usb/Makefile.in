@@ -17,7 +17,7 @@ OBJS = ${SOURCES:.c=.o}
 
 DIST_SOURCES = $(SOURCES)
 DIST_HEADERS = \
-	module.h	\
+	hfc-usb.h	\
 	regs.h		\
 	card.h		\
 	card_inline.h	\
@@ -25,7 +25,7 @@ DIST_HEADERS = \
 	fifo_inline.h	\
 	st_port.h	\
 	st_chan.h	\
-	util.h
+	led.h
 
 DIST_COMMON = $(srcdir)/Makefile.in
 
