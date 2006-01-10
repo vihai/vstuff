@@ -1826,7 +1826,6 @@ void q931_setup_request(
 			ci->interface_type =
 				q931_ie_channel_identification_intftype(
 								call->intf);
-			ci->preferred_exclusive = Q931_IE_CI_PE_PREFERRED;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_add(&ci->chanset, call->proposed_channel);
@@ -1839,11 +1838,18 @@ void q931_setup_request(
 
 			if (call->intf->config ==
 			      Q931_INTF_CONFIG_MULTIPOINT) {
+
+				ci->preferred_exclusive =
+					Q931_IE_CI_PE_EXCLUSIVE;
+
 				call->broadcast_setup = TRUE;
 				q931_call_start_timer(call, T312);
 
 				q931_call_send_setup_bc(call, &call->setup_ies);
 			} else {
+				ci->preferred_exclusive =
+					Q931_IE_CI_PE_PREFERRED;
+
 				q931_call_send_setup(call,
 					&call->setup_ies);
 			}
@@ -2645,7 +2651,8 @@ static void q931_timer_T303(void *data)
 					q931_call_set_state(call,
 						N22_CALL_ABORT);
 					q931_call_primitive(call,
-						Q931_CCB_RELEASE_INDICATION, NULL);
+						Q931_CCB_RELEASE_INDICATION,
+						NULL);
 				} else {
 					q931_call_send_setup_bc(call,
 						&call->setup_ies);
