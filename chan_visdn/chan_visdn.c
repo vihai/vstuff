@@ -3431,10 +3431,10 @@ static void visdn_q931_disconnect_indication(
 	visdn_set_hangupcause_by_ies(ast_chan, ies);
 	ast_mutex_unlock(&ast_chan->lock);
 
-	if (!inband_info)
-		q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
-	else
+	if (inband_info)
 		ast_queue_control(ast_chan, AST_CONTROL_INBAND_INFO);
+	else
+		q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
 
 	ast_queue_control(ast_chan, AST_CONTROL_DISCONNECT);
 }
@@ -3679,9 +3679,22 @@ static void visdn_q931_resume_indication(
 
 	ast_moh_stop(suspended_call->ast_chan->_bridge);
 
-	// FIXME: Transform suspended_call->q931_chan to IE and pass it
-	assert(0);
-	q931_send_primitive(q931_call, Q931_CCB_RESUME_RESPONSE, NULL);
+	{
+	struct q931_ies response_ies = Q931_IES_INIT;
+
+	struct q931_ie_channel_identification *ci =
+		q931_ie_channel_identification_alloc();
+	ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+	ci->interface_type =
+		q931_ie_channel_identification_intftype(q931_call->intf);
+	ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
+	ci->coding_standard = Q931_IE_CI_CS_CCITT;
+	q931_chanset_init(&ci->chanset);
+	q931_chanset_add(&ci->chanset, suspended_call->q931_chan);
+	q931_ies_add_put(&response_ies, &ci->ie);
+
+	q931_send_primitive(q931_call, Q931_CCB_RESUME_RESPONSE, &response_ies);
+	}
 
 	list_del(&suspended_call->node);
 	free(suspended_call);
