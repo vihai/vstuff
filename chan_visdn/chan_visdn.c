@@ -3658,26 +3658,31 @@ static void visdn_q931_resume_indication(
 	visdn_chan->q931_call = q931_call;
 	visdn_chan->suspended_call = NULL;
 
-	if (!strcmp(suspended_call->ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
-		// Wow, the remote channel is ISDN too, let's notify it!
+	if (suspended_call->ast_chan->_bridge) {
+		if (!strcmp(suspended_call->ast_chan->_bridge->type,
+							VISDN_CHAN_TYPE)) {
+			// Wow, the remote channel is ISDN too, let's notify it!
 
-		struct q931_ies response_ies = Q931_IES_INIT;
+			struct q931_ies response_ies = Q931_IES_INIT;
 
-		struct visdn_chan *remote_visdn_chan =
-			to_visdn_chan(suspended_call->ast_chan->_bridge);
+			struct visdn_chan *remote_visdn_chan =
+				to_visdn_chan(
+					suspended_call->ast_chan->_bridge);
 
-		struct q931_call *remote_call = remote_visdn_chan->q931_call;
+			struct q931_call *remote_call =
+					remote_visdn_chan->q931_call;
 
-		struct q931_ie_notification_indicator *notify =
-			q931_ie_notification_indicator_alloc();
-		notify->description = Q931_IE_NI_D_USER_RESUMED;
-		q931_ies_add_put(&response_ies, &notify->ie);
+			struct q931_ie_notification_indicator *notify =
+				q931_ie_notification_indicator_alloc();
+			notify->description = Q931_IE_NI_D_USER_RESUMED;
+			q931_ies_add_put(&response_ies, &notify->ie);
 
-		q931_send_primitive(remote_call,
-			Q931_CCB_NOTIFY_REQUEST, &response_ies);
+			q931_send_primitive(remote_call,
+				Q931_CCB_NOTIFY_REQUEST, &response_ies);
+		}
+
+		ast_moh_stop(suspended_call->ast_chan->_bridge);
 	}
-
-	ast_moh_stop(suspended_call->ast_chan->_bridge);
 
 	{
 	struct q931_ies response_ies = Q931_IES_INIT;
@@ -4318,27 +4323,28 @@ static void visdn_q931_suspend_indication(
 
 	q931_send_primitive(q931_call, Q931_CCB_SUSPEND_RESPONSE, NULL);
 
-	assert(ast_chan->_bridge);
+	if (ast_chan->_bridge) {
+		ast_moh_start(ast_chan->_bridge, NULL);
 
-	ast_moh_start(ast_chan->_bridge, NULL);
+		if (!strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
+			// Wow, the remote channel is ISDN too, let's notify it!
 
-	if (!strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
-		// Wow, the remote channel is ISDN too, let's notify it!
+			struct q931_ies response_ies = Q931_IES_INIT;
 
-		struct q931_ies response_ies = Q931_IES_INIT;
-
-		struct visdn_chan *remote_visdn_chan =
+			struct visdn_chan *remote_visdn_chan =
 					to_visdn_chan(ast_chan->_bridge);
 
-		struct q931_call *remote_call = remote_visdn_chan->q931_call;
+			struct q931_call *remote_call =
+					remote_visdn_chan->q931_call;
 
-		struct q931_ie_notification_indicator *notify =
-			q931_ie_notification_indicator_alloc();
-		notify->description = Q931_IE_NI_D_USER_SUSPENDED;
-		q931_ies_add_put(&response_ies, &notify->ie);
+			struct q931_ie_notification_indicator *notify =
+				q931_ie_notification_indicator_alloc();
+			notify->description = Q931_IE_NI_D_USER_SUSPENDED;
+			q931_ies_add_put(&response_ies, &notify->ie);
 
-		q931_send_primitive(remote_call,
-			Q931_CCB_NOTIFY_REQUEST, &response_ies);
+			q931_send_primitive(remote_call,
+				Q931_CCB_NOTIFY_REQUEST, &response_ies);
+		}
 	}
 
 	if (!ast_chan->whentohangup ||
@@ -4684,7 +4690,8 @@ static void visdn_q931_ccb_receive()
 		break;
 
 		case Q931_CCB_SETUP_CONFIRM:
-			visdn_q931_setup_confirm(msg->call, &msg->ies, msg->par1);
+			visdn_q931_setup_confirm(msg->call, &msg->ies,
+						msg->par1);
 		break;
 
 		case Q931_CCB_SETUP_INDICATION:

@@ -1725,27 +1725,7 @@ void q931_resume_response(
 
 	switch (call->state) {
 	case N17_RESUME_REQUEST:
-
-		abort();
-		// FIXME XXX TODO XXX FIXME Use IE?
-//		call->channel = channel;
-
-		struct q931_ies ies = Q931_IES_INIT;
-
-		q931_ies_merge(&ies, user_ies);
-
-		struct q931_ie_channel_identification *ci =
-			q931_ie_channel_identification_alloc();
-
-		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-		ci->interface_type =
-			q931_ie_channel_identification_intftype(call->intf);
-		ci->coding_standard = Q931_IE_CI_CS_CCITT;
-		q931_chanset_init(&ci->chanset);
-//		q931_chanset_add(&ci->chanset, channel);
-		q931_ies_add_put(&ies, &ci->ie);
-
-		q931_call_send_resume_acknowledge(call, &ies);
+		q931_call_send_resume_acknowledge(call, user_ies);
 		q931_call_set_state(call, N10_ACTIVE);
 	break;
 
