@@ -272,12 +272,13 @@ static int q931_ie_channel_identification_write_to_buf_pra(
 
 int q931_ie_channel_identification_write_to_buf(
 	const struct q931_ie *abstract_ie,
-        void *buf,
+	void *buf,
 	int max_size)
 {
 	assert(abstract_ie->type == ie_type);
 	const struct q931_ie_channel_identification *ie =
-		container_of(abstract_ie, struct q931_ie_channel_identification, ie);
+		container_of(abstract_ie,
+			struct q931_ie_channel_identification, ie);
 
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
@@ -297,7 +298,7 @@ static const char *q931_ie_channel_identification_interface_id_present_to_text(
 	enum q931_ie_channel_identification_interface_id_present
 		interface_id_present)
 {
-        switch(interface_id_present) {
+	switch(interface_id_present) {
 	case Q931_IE_CI_IIP_IMPLICIT:
 		return "Implicit";
 	case Q931_IE_CI_IIP_EXPLICIT:
@@ -311,7 +312,7 @@ static const char *q931_ie_channel_identification_interface_type_to_text(
 	enum q931_ie_channel_identification_interface_type
 		interface_type)
 {
-        switch(interface_type) {
+	switch(interface_type) {
 	case Q931_IE_CI_IT_BASIC:
 		return "Basic";
 	case Q931_IE_CI_IT_PRIMARY:
@@ -325,7 +326,7 @@ static const char *q931_ie_channel_identification_preferred_exclusive_to_text(
 	enum q931_ie_channel_identification_preferred_exclusive
 		preferred_exclusive)
 {
-        switch(preferred_exclusive) {
+	switch(preferred_exclusive) {
 	case Q931_IE_CI_PE_PREFERRED:
 		return "Preferred";
 	case Q931_IE_CI_PE_EXCLUSIVE:
@@ -339,7 +340,7 @@ static const char *q931_ie_channel_identification_d_channel_indicator_to_text(
 	enum q931_ie_channel_identification_d_channel_indicator
 		d_channel_indicator)
 {
-        switch(d_channel_indicator) {
+	switch(d_channel_indicator) {
 	case Q931_IE_CI_DCI_IS_NOT_D_CHAN:
 		return "Is not D channel";
 	case Q931_IE_CI_DCI_IS_D_CHAN:
@@ -354,7 +355,7 @@ static const char *q931_ie_channel_identification_info_channel_selection_bra_to_
 	enum q931_ie_channel_identification_info_channel_selection_bra
 		info_channel_selection_bra)
 {
-        switch(info_channel_selection_bra) {
+	switch(info_channel_selection_bra) {
 	case Q931_IE_CI_ICS_BRA_NO_CHANNEL:
 		return "No channel";
 	case Q931_IE_CI_ICS_BRA_B1:
@@ -372,7 +373,7 @@ static const char *q931_ie_channel_identification_info_channel_selection_pra_to_
 	enum q931_ie_channel_identification_info_channel_selection_pra
 		info_channel_selection)
 {
-        switch(info_channel_selection) {
+	switch(info_channel_selection) {
 	case Q931_IE_CI_ICS_PRA_NO_CHANNEL:
 		return "No channel";
 	case Q931_IE_CI_ICS_PRA_INDICATED:
@@ -391,7 +392,7 @@ static const char *q931_ie_channel_identification_coding_standard_to_text(
 	enum q931_ie_channel_identification_coding_standard
 		coding_standard)
 {
-        switch(coding_standard) {
+	switch(coding_standard) {
 	case Q931_IE_CI_CS_CCITT:
 		return "CCITT";
 	case Q931_IE_CI_CS_RESERVED:

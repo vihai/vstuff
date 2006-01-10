@@ -1064,7 +1064,7 @@ static int q931_ie_mt_id_compare(const void *a, const void *b)
 	if (((struct q931_ie_type_per_mt *)a)->message_type ==
 	     ((struct q931_ie_type_per_mt *)b)->message_type)
 		return q931_intcmp(((struct q931_ie_type_per_mt *)a)->ie_id,
-                	    ((struct q931_ie_type_per_mt *)b)->ie_id);
+				((struct q931_ie_type_per_mt *)b)->ie_id);
 	else
 		return q931_intcmp(((struct q931_ie_type_per_mt *)a)->message_type,
 				((struct q931_ie_type_per_mt *)b)->message_type);
@@ -1081,8 +1081,7 @@ const struct q931_ie_type *q931_get_ie_type(
 	res = (struct q931_ie_type *)
 		bsearch(&key,
 			q931_ie_types,
-			sizeof(q931_ie_types)/
-				sizeof(struct q931_ie_type),
+			ARRAY_SIZE(q931_ie_types),
 			sizeof(struct q931_ie_type),
 			q931_ie_id_compare);
 
@@ -1101,8 +1100,7 @@ const struct q931_ie_type_per_mt *q931_get_ie_type_per_mt(
 	res = (struct q931_ie_type_per_mt *)
 		bsearch(&key,
 			q931_ie_types_per_mt,
-			sizeof(q931_ie_types_per_mt)/
-				sizeof(struct q931_ie_type_per_mt),
+			ARRAY_SIZE(q931_ie_types_per_mt),
 			sizeof(struct q931_ie_type_per_mt),
 			q931_ie_mt_id_compare);
 
@@ -1112,21 +1110,17 @@ const struct q931_ie_type_per_mt *q931_get_ie_type_per_mt(
 void q931_ie_types_init()
 {
 	qsort(q931_ie_types,
-		sizeof(q931_ie_types)/
-			sizeof(struct q931_ie_type),
+		ARRAY_SIZE(q931_ie_types),
 		sizeof(struct q931_ie_type),
 		q931_ie_id_compare);
 
 	qsort(q931_ie_types_per_mt,
-		sizeof(q931_ie_types_per_mt)/
-			sizeof(struct q931_ie_type_per_mt),
+		ARRAY_SIZE(q931_ie_types_per_mt),
 		sizeof(struct q931_ie_type_per_mt),
 		q931_ie_mt_id_compare);
 
 	int i;
-	for (i=0;
-	     i<sizeof(q931_ie_types)/
-		sizeof(struct q931_ie_type); i++) {
+	for (i=0; i<ARRAY_SIZE(q931_ie_types); i++) {
 
 		if (q931_ie_types[i].init)
 			q931_ie_types[i].init(&q931_ie_types[i]);

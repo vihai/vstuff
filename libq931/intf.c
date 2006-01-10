@@ -106,7 +106,7 @@ struct q931_interface *q931_open_interface(
 	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
 			name, strlen(name)+1) < 0) {
 
-      		report_intf(intf, LOG_ERR,
+		report_intf(intf, LOG_ERR,
 			"setsockopt(SO_BINDTODEVICE): %s\n",
 			strerror(errno));
 
@@ -115,21 +115,21 @@ struct q931_interface *q931_open_interface(
 
 	int oldflags;
 	oldflags = fcntl(s, F_GETFL, 0);
-      	if (oldflags < 0) {
-      		report_intf(intf, LOG_ERR,
+	if (oldflags < 0) {
+		report_intf(intf, LOG_ERR,
 			"fcntl(F_GETFL): %s\n",
 			strerror(errno));
 
-      		goto err_fcntl_getfl;
-      	}
+		goto err_fcntl_getfl;
+	}
 
-      	if (fcntl(s, F_SETFL, oldflags | O_NONBLOCK) < 0) {
-      		report_intf(intf, LOG_ERR,
+	if (fcntl(s, F_SETFL, oldflags | O_NONBLOCK) < 0) {
+		report_intf(intf, LOG_ERR,
 			"fcntl(F_SETFL): %s\n",
 			strerror(errno));
 
-      		goto err_fcntl_setfl;
-      	}
+		goto err_fcntl_setfl;
+	}
 
 	socklen_t optlen = sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,

@@ -26,7 +26,8 @@ void q931_ie_high_layer_compatibility_register(
 	ie_type = type;
 }
 
-struct q931_ie_high_layer_compatibility *q931_ie_high_layer_compatibility_alloc(void)
+struct q931_ie_high_layer_compatibility *
+	q931_ie_high_layer_compatibility_alloc(void)
 {
 	struct q931_ie_high_layer_compatibility *ie;
 	ie = malloc(sizeof(*ie));
@@ -107,7 +108,8 @@ int q931_ie_high_layer_compatibility_write_to_buf(
 	int max_size)
 {
 	struct q931_ie_high_layer_compatibility *ie =
-		container_of(generic_ie, struct q931_ie_high_layer_compatibility, ie);
+		container_of(generic_ie,
+			struct q931_ie_high_layer_compatibility, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_HIGH_LAYER_COMPATIBILITY;
@@ -115,7 +117,8 @@ int q931_ie_high_layer_compatibility_write_to_buf(
 
 	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_high_layer_compatibility_onwire_3 *oct_3 =
-	  (struct q931_ie_high_layer_compatibility_onwire_3 *)(&ieow->data[ieow->len]);
+	  (struct q931_ie_high_layer_compatibility_onwire_3 *)
+		(&ieow->data[ieow->len]);
 	oct_3->ext = 1;
 	oct_3->coding_standard = ie->coding_standard;
 	oct_3->interpretation = ie->interpretation;
@@ -124,7 +127,8 @@ int q931_ie_high_layer_compatibility_write_to_buf(
 
 	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_high_layer_compatibility_onwire_4 *oct_4 =
-	  (struct q931_ie_high_layer_compatibility_onwire_4 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_high_layer_compatibility_onwire_4 *)
+			(&ieow->data[ieow->len]);
 	oct_4->characteristics_identification =
 		ie->characteristics_identification;
 
@@ -138,7 +142,8 @@ int q931_ie_high_layer_compatibility_write_to_buf(
 
 		ieow->data[ieow->len] = 0x00;
 		struct q931_ie_high_layer_compatibility_onwire_4a *oct_4a =
-		  (struct q931_ie_high_layer_compatibility_onwire_4a *)(&ieow->data[ieow->len]);
+			(struct q931_ie_high_layer_compatibility_onwire_4a *)
+				(&ieow->data[ieow->len]);
 		oct_4a->ext = 1;
 		oct_4a->extended_characteristics_identification =
 			ie->extended_characteristics_identification;
@@ -155,7 +160,7 @@ static const char *q931_ie_high_layer_compatibility_coding_standard_to_text(
 	enum q931_ie_high_layer_compatibility_coding_standard
 		coding_standard)
 {
-        switch(coding_standard) {
+	switch(coding_standard) {
 	case Q931_IE_HLC_CS_CCITT:
 		return "CCITT";
 	case Q931_IE_HLC_CS_RESERVED:
@@ -169,11 +174,12 @@ static const char *q931_ie_high_layer_compatibility_coding_standard_to_text(
 	}
 }
 
-static const char *q931_ie_high_layer_compatibility_characteristics_identification_to_text(
+static const char *
+	q931_ie_high_layer_compatibility_characteristics_identification_to_text(
 	enum q931_ie_high_layer_compatibility_characteristics_identification
 		characteristics_identification)
 {
-        switch(characteristics_identification) {
+	switch(characteristics_identification) {
 	case Q931_IE_HLC_CI_TELEPHONY:
 		return "Telephony";
 	case Q931_IE_HLC_CI_FACSIMILE_G2_G3:
@@ -212,14 +218,16 @@ void q931_ie_high_layer_compatibility_dump(
 	const char *prefix)
 {
 	struct q931_ie_high_layer_compatibility *ie =
-		container_of(generic_ie, struct q931_ie_high_layer_compatibility, ie);
+		container_of(generic_ie,
+			struct q931_ie_high_layer_compatibility, ie);
 
 	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_high_layer_compatibility_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report(LOG_DEBUG, "%sCharacteristics identification = %s (%d)\n", prefix,
+	report(LOG_DEBUG, "%sCharacteristics identification = %s (%d)\n",
+		prefix,
 		q931_ie_high_layer_compatibility_characteristics_identification_to_text(
 			ie->characteristics_identification),
 		ie->characteristics_identification);

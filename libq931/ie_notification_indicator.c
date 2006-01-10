@@ -26,7 +26,8 @@ void q931_ie_notification_indicator_register(
 	ie_type = type;
 }
 
-struct q931_ie_notification_indicator *q931_ie_notification_indicator_alloc(void)
+struct q931_ie_notification_indicator *
+	q931_ie_notification_indicator_alloc(void)
 {
 	struct q931_ie_notification_indicator *ie;
 	ie = malloc(sizeof(*ie));
@@ -82,7 +83,8 @@ int q931_ie_notification_indicator_write_to_buf(
 	int max_size)
 {
 	struct q931_ie_notification_indicator *ie =
-		container_of(generic_ie, struct q931_ie_notification_indicator, ie);
+		container_of(generic_ie,
+			struct q931_ie_notification_indicator, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_NOTIFICATION_INDICATOR;
@@ -105,9 +107,9 @@ static const char *q931_ie_notification_indicator_description_to_text(
 	switch(description) {
 	case Q931_IE_NI_D_USER_SUSPENDED:
 		return "User suspended";
-        case Q931_IE_NI_D_USER_RESUMED:
+	case Q931_IE_NI_D_USER_RESUMED:
 		return "User resumed";
-        case Q931_IE_NI_D_BEARER_SERVICE_CHANGE:
+	case Q931_IE_NI_D_BEARER_SERVICE_CHANGE:
 	        return "Bearer service change";
 	default:
 		return "*INVALID*";
@@ -120,7 +122,8 @@ void q931_ie_notification_indicator_dump(
 	const char *prefix)
 {
 	struct q931_ie_notification_indicator *ie =
-		container_of(generic_ie, struct q931_ie_notification_indicator, ie);
+		container_of(generic_ie,
+			struct q931_ie_notification_indicator, ie);
 
 	report(LOG_DEBUG, "%sNotification Indicator = %s (%d)\n", prefix,
 		q931_ie_notification_indicator_description_to_text(

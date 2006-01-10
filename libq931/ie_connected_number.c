@@ -129,10 +129,9 @@ int q931_ie_connected_number_write_to_buf(
 }
 
 static const char *q931_ie_connected_number_type_of_number_to_text(
-        enum q931_ie_connected_number_type_of_number
-                type_of_number)
+	enum q931_ie_connected_number_type_of_number type_of_number)
 {
-        switch(type_of_number) {
+	switch(type_of_number) {
 	case Q931_IE_CN_TON_UNKNOWN:
 		return "Unknown";
 	case Q931_IE_CN_TON_INTERNATIONAL:
@@ -152,11 +151,12 @@ static const char *q931_ie_connected_number_type_of_number_to_text(
 	}
 }
 
-static const char *q931_ie_connected_number_numbering_plan_identificator_to_text(
-        enum q931_ie_connected_number_numbering_plan_identificator
-                numbering_plan_identificator)
+static const char *
+	q931_ie_connected_number_numbering_plan_identificator_to_text(
+	enum q931_ie_connected_number_numbering_plan_identificator
+		numbering_plan_identificator)
 {
-        switch(numbering_plan_identificator) {
+	switch(numbering_plan_identificator) {
 	case Q931_IE_CN_NPI_UNKNOWN:
 		return "Unknown";
 	case Q931_IE_CN_NPI_ISDN_TELEPHONY:
@@ -177,10 +177,10 @@ static const char *q931_ie_connected_number_numbering_plan_identificator_to_text
 }
 
 static const char *q931_ie_connected_number_presentation_indicator_to_text(
-        enum q931_ie_connected_number_presentation_indicator
-                presentation_indicator)
+	enum q931_ie_connected_number_presentation_indicator
+		presentation_indicator)
 {
-        switch(presentation_indicator) {
+	switch(presentation_indicator) {
 	case Q931_IE_CN_PI_PRESENTATION_ALLOWED:
 		return "Presentation allowed";
 	case Q931_IE_CN_PI_PRESENTATION_RESTRICTED:
@@ -193,10 +193,10 @@ static const char *q931_ie_connected_number_presentation_indicator_to_text(
 }
 
 static const char *q931_ie_connected_number_screening_indicator_to_text(
-        enum q931_ie_connected_number_screening_indicator
-                screening_indicator)
+	enum q931_ie_connected_number_screening_indicator
+		screening_indicator)
 {
-        switch(screening_indicator) {
+	switch(screening_indicator) {
 	case Q931_IE_CN_SI_USER_PROVIDED_NOT_SCREENED:
 		return "User provided, not screened";
 	case Q931_IE_CN_SI_USER_PROVIDED_VERIFIED_AND_PASSED:

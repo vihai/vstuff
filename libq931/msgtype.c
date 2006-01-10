@@ -59,28 +59,28 @@ static struct q931_message_type_name q931_message_type_names[] =
 
 static int q931_message_type_id_compare(const void *a, const void *b)
 {
- return q931_intcmp(((struct q931_message_type_name *)a)->id,
+	return q931_intcmp(((struct q931_message_type_name *)a)->id,
 			((struct q931_message_type_name *)b)->id);
 }
 
 const char *q931_message_type_to_text(int id)
 {
- struct q931_message_type_name key, *res;
+	struct q931_message_type_name key, *res;
 
- key.id = id;
- key.name = NULL;
+	key.id = id;
+	key.name = NULL;
 
- res = (struct q931_message_type_name *)
-	bsearch(&key,
-		q931_message_type_names,
-		ARRAY_SIZE(q931_message_type_names),
-		sizeof(struct q931_message_type_name),
-		q931_message_type_id_compare);
+	res = (struct q931_message_type_name *)
+		bsearch(&key,
+			q931_message_type_names,
+			ARRAY_SIZE(q931_message_type_names),
+			sizeof(struct q931_message_type_name),
+			q931_message_type_id_compare);
 
- if (res)
-	return res->name;
- else
-	return NULL;
+	if (res)
+		return res->name;
+	else
+		return NULL;
 }
 
 void q931_message_types_init()

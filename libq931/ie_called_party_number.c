@@ -83,7 +83,8 @@ int q931_ie_called_party_number_write_to_buf(
 	int max_size)
 {
 	struct q931_ie_called_party_number *ie =
-		container_of(generic_ie, struct q931_ie_called_party_number, ie);
+		container_of(generic_ie,
+			struct q931_ie_called_party_number, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	// Check max_size
@@ -93,7 +94,8 @@ int q931_ie_called_party_number_write_to_buf(
 
 	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_called_party_number_onwire_3 *oct_3 =
-	  (struct q931_ie_called_party_number_onwire_3 *)(&ieow->data[ieow->len]);
+	  (struct q931_ie_called_party_number_onwire_3 *)
+		(&ieow->data[ieow->len]);
 	oct_3->ext = 1;
 	oct_3->type_of_number = ie->type_of_number;
 	oct_3->numbering_plan_identificator = ie->numbering_plan_identificator;
@@ -106,10 +108,9 @@ int q931_ie_called_party_number_write_to_buf(
 }
 
 static const char *q931_ie_called_party_number_type_of_number_to_text(
-        enum q931_ie_called_party_number_type_of_number
-                type_of_number)
+	enum q931_ie_called_party_number_type_of_number type_of_number)
 {
-        switch(type_of_number) {
+	switch(type_of_number) {
 	case Q931_IE_CDPN_TON_UNKNOWN:
 		return "Unknown";
 	case Q931_IE_CDPN_TON_INTERNATIONAL:
@@ -129,11 +130,12 @@ static const char *q931_ie_called_party_number_type_of_number_to_text(
 	}
 }
 
-static const char *q931_ie_called_party_number_numbering_plan_identificator_to_text(
-        enum q931_ie_called_party_number_numbering_plan_identificator
-                numbering_plan_identificator)
+static const char *
+	q931_ie_called_party_number_numbering_plan_identificator_to_text(
+		enum q931_ie_called_party_number_numbering_plan_identificator
+			numbering_plan_identificator)
 {
-        switch(numbering_plan_identificator) {
+	switch(numbering_plan_identificator) {
 	case Q931_IE_CDPN_NPI_UNKNOWN:
 		return "Unknown";
 	case Q931_IE_CDPN_NPI_ISDN_TELEPHONY:

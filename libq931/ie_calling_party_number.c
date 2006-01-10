@@ -99,7 +99,8 @@ int q931_ie_calling_party_number_write_to_buf(
 	int max_size)
 {
 	struct q931_ie_calling_party_number *ie =
-		container_of(generic_ie, struct q931_ie_calling_party_number, ie);
+		container_of(generic_ie,
+			struct q931_ie_calling_party_number, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	// Check max_size
@@ -109,7 +110,8 @@ int q931_ie_calling_party_number_write_to_buf(
 
 	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_calling_party_number_onwire_3 *oct_3 =
-	  (struct q931_ie_calling_party_number_onwire_3 *)(&ieow->data[ieow->len]);
+	  (struct q931_ie_calling_party_number_onwire_3 *)
+		(&ieow->data[ieow->len]);
 	oct_3->ext = 0;
 	oct_3->type_of_number = ie->type_of_number;
 	oct_3->numbering_plan_identificator = ie->numbering_plan_identificator;
@@ -129,10 +131,9 @@ int q931_ie_calling_party_number_write_to_buf(
 }
 
 static const char *q931_ie_calling_party_number_type_of_number_to_text(
-        enum q931_ie_calling_party_number_type_of_number
-                type_of_number)
+	enum q931_ie_calling_party_number_type_of_number type_of_number)
 {
-        switch(type_of_number) {
+	switch(type_of_number) {
 	case Q931_IE_CGPN_TON_UNKNOWN:
 		return "Unknown";
 	case Q931_IE_CGPN_TON_INTERNATIONAL:
@@ -152,11 +153,12 @@ static const char *q931_ie_calling_party_number_type_of_number_to_text(
 	}
 }
 
-static const char *q931_ie_calling_party_number_numbering_plan_identificator_to_text(
-        enum q931_ie_calling_party_number_numbering_plan_identificator
-                numbering_plan_identificator)
+static const char *
+	q931_ie_calling_party_number_numbering_plan_identificator_to_text(
+		enum q931_ie_calling_party_number_numbering_plan_identificator
+			numbering_plan_identificator)
 {
-        switch(numbering_plan_identificator) {
+	switch(numbering_plan_identificator) {
 	case Q931_IE_CGPN_NPI_UNKNOWN:
 		return "Unknown";
 	case Q931_IE_CGPN_NPI_ISDN_TELEPHONY:
@@ -177,10 +179,10 @@ static const char *q931_ie_calling_party_number_numbering_plan_identificator_to_
 }
 
 static const char *q931_ie_calling_party_number_presentation_indicator_to_text(
-        enum q931_ie_calling_party_number_presentation_indicator
-                presentation_indicator)
+	enum q931_ie_calling_party_number_presentation_indicator
+		presentation_indicator)
 {
-        switch(presentation_indicator) {
+	switch(presentation_indicator) {
 	case Q931_IE_CGPN_PI_PRESENTATION_ALLOWED:
 		return "Presentation allowed";
 	case Q931_IE_CGPN_PI_PRESENTATION_RESTRICTED:
@@ -193,10 +195,10 @@ static const char *q931_ie_calling_party_number_presentation_indicator_to_text(
 }
 
 static const char *q931_ie_calling_party_number_screening_indicator_to_text(
-        enum q931_ie_calling_party_number_screening_indicator
-                screening_indicator)
+	enum q931_ie_calling_party_number_screening_indicator
+		screening_indicator)
 {
-        switch(screening_indicator) {
+	switch(screening_indicator) {
 	case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
 		return "User provided, not screened";
 	case Q931_IE_CGPN_SI_USER_PROVIDED_VERIFIED_AND_PASSED:
@@ -216,7 +218,8 @@ void q931_ie_calling_party_number_dump(
 	const char *prefix)
 {
 	struct q931_ie_calling_party_number *ie =
-		container_of(generic_ie, struct q931_ie_calling_party_number, ie);
+		container_of(generic_ie,
+			struct q931_ie_calling_party_number, ie);
 
 	report(LOG_DEBUG, "%sType of number = %s (%d)\n", prefix,
 		q931_ie_calling_party_number_type_of_number_to_text(

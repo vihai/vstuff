@@ -170,10 +170,10 @@ struct q931_ie_channel_identification_onwire_3c
 
 struct q931_ie_channel_identification_onwire_3d
 {
- union
-  {
-   struct
-    {
+	union
+	{
+	struct
+	{
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 channel_number:7;
@@ -181,10 +181,10 @@ struct q931_ie_channel_identification_onwire_3d
 	__u8 channel_number:7;
 	__u8 ext:1;
 #endif
-    };
+	};
 
 	__u8 slot_map;
-  };
+	};
 } __attribute__ ((__packed__));
 
 void q931_ie_channel_identification_register(

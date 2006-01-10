@@ -172,7 +172,7 @@ struct q931_ie_type_per_mt
 
 static inline int q931_is_so_ie(__u8 ie_id)
 {
- return ie_id & 0x80;
+	return ie_id & 0x80;
 }
 
 #define Q931_SOIE_TYPE1 1
@@ -180,7 +180,7 @@ static inline int q931_is_so_ie(__u8 ie_id)
 
 static inline int q931_get_so_ie_type(__u8 ie_id)
 {
- return ((ie_id & 0x70) == 0x20) ? Q931_SOIE_TYPE2 : Q931_SOIE_TYPE1;
+	return ((ie_id & 0x70) == 0x20) ? Q931_SOIE_TYPE2 : Q931_SOIE_TYPE1;
 }
 
 #define Q931_SINGLE_OCTET_ID_MASK 0xF0
@@ -188,21 +188,21 @@ static inline int q931_get_so_ie_type(__u8 ie_id)
 
 static inline int q931_get_so_ie_id(__u8 ie_id)
 {
- return (q931_get_so_ie_type(ie_id) == Q931_SOIE_TYPE1) ?
-          (ie_id & Q931_SINGLE_OCTET_ID_MASK) :
-	   ie_id;
+	return (q931_get_so_ie_type(ie_id) == Q931_SOIE_TYPE1) ?
+			(ie_id & Q931_SINGLE_OCTET_ID_MASK) :
+			ie_id;
 }
 
 static inline int q931_get_so_ie_type2_value(__u8 ie_id)
 {
- return ie_id & Q931_SINGLE_OCTET_VALUE_MASK;
+	return ie_id & Q931_SINGLE_OCTET_VALUE_MASK;
 }
 
 #define Q931_IE_COMPREHENSION_REQUIRED_MASK 0xF0
 
 static inline int q931_ie_comprehension_required(__u8 ie_id)
 {
- return ie_id & Q931_IE_COMPREHENSION_REQUIRED_MASK;
+	return ie_id & Q931_IE_COMPREHENSION_REQUIRED_MASK;
 }
 
 void q931_ie_types_init();
