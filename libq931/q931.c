@@ -684,6 +684,10 @@ struct q931_dlc *q931_accept(
 
 	list_add_tail(&dlc->intf_node, &intf->dlcs);
 
+	/* Force autorelease timer to start */
+	q931_dlc_get(dlc);
+	q931_dlc_put(dlc);
+
 	return dlc;
 
 err_getsockopt:
