@@ -2291,8 +2291,9 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		struct q931_ie_progress_indicator *pi = NULL;
 
-		if (ast_chan->_bridge &&
-		   strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
+		if (ast_bridged_channel(ast_chan) &&
+		   strcmp(ast_bridged_channel(ast_chan)->type,
+			  				VISDN_CHAN_TYPE)) {
 
 			visdn_debug("Channel is not VISDN, sending"
 					" progress indicator\n");
@@ -2384,8 +2385,9 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		pi->location = q931_ie_progress_indicator_location(
 					visdn_chan->q931_call);
 
-		if (ast_chan->_bridge &&
-		   strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
+		if (ast_bridged_channel(ast_chan) &&
+		   strcmp(ast_bridged_channel(ast_chan)->type,
+			   				VISDN_CHAN_TYPE)) {
 			pi->progress_description =
 				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
 		} else if (visdn_chan->is_voice) {
@@ -3660,8 +3662,8 @@ static void visdn_q931_resume_indication(
 	visdn_chan->q931_call = q931_call;
 	visdn_chan->suspended_call = NULL;
 
-	if (suspended_call->ast_chan->_bridge) {
-		if (!strcmp(suspended_call->ast_chan->_bridge->type,
+	if (ast_bridged_channel(suspended_call->ast_chan)) {
+		if (!strcmp(ast_bridged_channel(suspended_call->ast_chan)->type,
 							VISDN_CHAN_TYPE)) {
 			// Wow, the remote channel is ISDN too, let's notify it!
 
@@ -3669,7 +3671,8 @@ static void visdn_q931_resume_indication(
 
 			struct visdn_chan *remote_visdn_chan =
 				to_visdn_chan(
-					suspended_call->ast_chan->_bridge);
+					ast_bridged_channel(suspended_call->
+						ast_chan));
 
 			struct q931_call *remote_call =
 					remote_visdn_chan->q931_call;
@@ -3683,7 +3686,7 @@ static void visdn_q931_resume_indication(
 				Q931_CCB_NOTIFY_REQUEST, &response_ies);
 		}
 
-		ast_moh_stop(suspended_call->ast_chan->_bridge);
+		ast_moh_stop(ast_bridged_channel(suspended_call->ast_chan));
 	}
 
 	{
@@ -4325,16 +4328,17 @@ static void visdn_q931_suspend_indication(
 
 	q931_send_primitive(q931_call, Q931_CCB_SUSPEND_RESPONSE, NULL);
 
-	if (ast_chan->_bridge) {
-		ast_moh_start(ast_chan->_bridge, NULL);
+	if (ast_bridged_channel(ast_chan)) {
+		ast_moh_start(ast_bridged_channel(ast_chan), NULL);
 
-		if (!strcmp(ast_chan->_bridge->type, VISDN_CHAN_TYPE)) {
+		if (!strcmp(ast_bridged_channel(ast_chan)->type,
+							VISDN_CHAN_TYPE)) {
 			// Wow, the remote channel is ISDN too, let's notify it!
 
 			struct q931_ies response_ies = Q931_IES_INIT;
 
 			struct visdn_chan *remote_visdn_chan =
-					to_visdn_chan(ast_chan->_bridge);
+				to_visdn_chan(ast_bridged_channel(ast_chan));
 
 			struct q931_call *remote_call =
 					remote_visdn_chan->q931_call;
