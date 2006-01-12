@@ -46,6 +46,8 @@
 
 #include <linux/visdn/streamport.h>
 #include <linux/visdn/softcxc.h>
+#include <linux/visdn/cxc.h>
+#include <linux/visdn/router.h>
 
 #include "chan_vgsm.h"
 

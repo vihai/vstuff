@@ -58,6 +58,8 @@
 #include <linux/visdn/netdev.h>
 #include <linux/visdn/streamport.h>
 #include <linux/visdn/cxc.h>
+#include <linux/visdn/cxc.h>
+#include <linux/visdn/router.h>
 
 #include <libq931/q931.h>
 
