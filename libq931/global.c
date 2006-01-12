@@ -229,7 +229,7 @@ static __u8 q931_global_state_to_ie_state(enum q931_global_state state)
 	return 0;
 }
 
-inline static void q931_global_handle_status(
+static void q931_global_handle_status(
 	struct q931_global_call *gc,
 	struct q931_message *msg)
 {
@@ -262,7 +262,19 @@ inline static void q931_global_handle_status(
 	}
 }
 
-inline static void q931_global_handle_restart(
+static void q931_global_handle_notify(
+	struct q931_global_call *gc,
+	struct q931_message *msg)
+{
+}
+
+static void q931_global_handle_facility(
+	struct q931_global_call *gc,
+	struct q931_message *msg)
+{
+}
+
+static void q931_global_handle_restart(
 	struct q931_global_call *gc,
 	struct q931_message *msg)
 {
@@ -336,7 +348,7 @@ inline static void q931_global_handle_restart(
 	}
 }
 
-inline static void q931_global_handle_restart_acknowledge(
+static void q931_global_handle_restart_acknowledge(
 	struct q931_global_call *gc,
 	struct q931_message *msg)
 {
@@ -512,6 +524,14 @@ void q931_dispatch_global_message(
 	switch(msg->message_type) {
 	case Q931_MT_STATUS:
 		q931_global_handle_status(gc, msg);
+	break;
+
+	case Q931_MT_NOTIFY:
+		q931_global_handle_notify(gc, msg);
+	break;
+
+	case Q931_MT_FACILITY:
+		q931_global_handle_facility(gc, msg);
 	break;
 
 	case Q931_MT_RESTART:

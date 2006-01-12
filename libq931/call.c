@@ -5177,6 +5177,7 @@ static void q931_handle_info(
 	}
 }
 
+#if 0
 static void q931_handle_facility(
 	struct q931_call *call,
 	struct q931_message *msg)
@@ -5185,6 +5186,16 @@ static void q931_handle_facility(
 	assert(msg);
 
 }
+
+static void q931_handle_register(
+	struct q931_call *call,
+	struct q931_message *msg)
+{
+	assert(call);
+	assert(msg);
+
+}
+#endif
 
 static void q931_handle_notify(
 	struct q931_call *call,
@@ -5210,6 +5221,7 @@ static void q931_handle_notify(
 	}
 }
 
+#if 0
 static void q931_handle_hold(
 	struct q931_call *call,
 	struct q931_message *msg)
@@ -5263,6 +5275,7 @@ static void q931_handle_retrieve_reject(
 	assert(msg);
 
 }
+#endif
 
 static void q931_handle_resume(
 	struct q931_call *call,
@@ -5722,16 +5735,21 @@ void q931_dispatch_message(
 		q931_handle_info(call, msg);
 	break;
 
-	case Q931_MT_FACILITY:
+/*	case Q931_MT_FACILITY:
 		q931_handle_facility(call, msg);
 	break;
+
+	case Q931_MT_REGISTER:
+		q931_handle_register(call, msg);
+	break;
+	*/
 
 	case Q931_MT_NOTIFY:
 		q931_handle_notify(call, msg);
 	break;
 
 
-	case Q931_MT_HOLD:
+/*	case Q931_MT_HOLD:
 		q931_handle_hold(call, msg);
 	break;
 
@@ -5753,7 +5771,7 @@ void q931_dispatch_message(
 
 	case Q931_MT_RETRIEVE_REJECT:
 		q931_handle_retrieve_reject(call, msg);
-	break;
+	break;*/
 
 	case Q931_MT_RESUME:
 		q931_handle_resume(call, msg);

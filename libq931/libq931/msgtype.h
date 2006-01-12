@@ -38,6 +38,7 @@ enum q931_message_type
 	Q931_MT_CONGESTION_CONTROL	= 0x79,
 	Q931_MT_INFORMATION		= 0x7b,
 	Q931_MT_FACILITY		= 0x62,
+	Q931_MT_REGISTER		= 0x64,
 	Q931_MT_NOTIFY			= 0x6e,
 
 /* Call Management Messages */

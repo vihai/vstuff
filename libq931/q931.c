@@ -462,9 +462,11 @@ int q931_decode_information_elements(
 		ds.curie++;
 	}
 
-	 // TODO: Uhm... we should do some validity check for the global call too
+	 // TODO: Uhm... we should do some validity check for the global
+	 // call too
+
 	if (!call)
-		return TRUE;
+		return 0;
 
 //	if (mandatory ies missing)
 	if (ds.invalid_mand_ies_cnt) {
@@ -486,7 +488,7 @@ int q931_decode_information_elements(
 
 			q931_call_send_release_complete(call, &ies);
 
-			return FALSE;
+			return -1;
 		}
 		break;
 
@@ -526,7 +528,7 @@ int q931_decode_information_elements(
 
 			q931_call_send_status(call, &ies);
 
-			return FALSE;
+			return -1;
 		}
 		break;
 		}
@@ -566,7 +568,7 @@ int q931_decode_information_elements(
 
 			q931_call_send_release_complete(call, &ies);
 
-			return FALSE;
+			return -1;
 		}
 		break;
 
@@ -591,7 +593,7 @@ int q931_decode_information_elements(
 
 			q931_call_send_status(call, &ies);
 
-			return FALSE;
+			return -1;
 		}
 		break;
 		}
@@ -616,7 +618,7 @@ int q931_decode_information_elements(
 
 		case Q931_MT_RELEASE: {
 
-			return FALSE;
+			return -1;
 		}
 		break;
 
@@ -641,13 +643,13 @@ int q931_decode_information_elements(
 
 			q931_call_send_status(call, &ies);
 
-			return FALSE;
+			return -1;
 		}
 		break;
 		}
 	}
 
-	return TRUE;
+	return 0;
 }
 
 struct q931_dlc *q931_accept(
@@ -823,7 +825,7 @@ int q931_receive(struct q931_dlc *dlc)
 		"<-  call reference = %lu.%c (len %d)\n",
 		msg->callref,
 		msg->callref_direction ? 'O' : 'I',
-		hdr->call_reference_len);
+		msg->callref_len);
 
 	report_msg_cont(msg, LOG_DEBUG, "<-  message_type = %s (%u)\n",
 		q931_message_type_to_text(msg->message_type),
@@ -834,12 +836,14 @@ int q931_receive(struct q931_dlc *dlc)
 	msg->rawies_len = msg->rawlen - (sizeof(struct q931_header) +
 			msg->callref_len + 1);
 
-	if (msg->callref == 0x00) { // FIXME CHECKME
-		if (q931_decode_information_elements(NULL, msg))
-			q931_dispatch_global_message(
-				&dlc->intf->global_call, msg);
+	if (msg->callref == 0) {
+		if (q931_decode_information_elements(NULL, msg) < 0)
+			return -EBADMSG;
 
-		return -EBADMSG;
+		q931_dispatch_global_message(
+			&dlc->intf->global_call, msg);
+
+		return Q931_RECEIVE_OK;
 	}
 
 	struct q931_call *call =
@@ -945,7 +949,7 @@ int q931_receive(struct q931_dlc *dlc)
 		}
 	}
 
-	if (!q931_decode_information_elements(call, msg)) {
+	if (q931_decode_information_elements(call, msg) < 0) {
 		report_msg_cont(msg, LOG_DEBUG, "<--- invalid ---\n\n");
 		goto err_bad_ies;
 	}
