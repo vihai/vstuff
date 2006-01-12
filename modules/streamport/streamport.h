@@ -13,6 +13,9 @@
 #ifndef _VISDN_STREAMPORT_H
 #define _VISDN_STREAMPORT_H
 
+/* See core.h for IOC allocation */
+#define VISDN_SP_GET_CHANID	_IOR(0xd0, 10, unsigned int)
+
 #ifdef __KERNEL__
 
 #include <linux/kfifo.h>

@@ -27,6 +27,7 @@ chan_visdn:
 - Record call failures and failure type in order to put an interface offline
   if not working.
 - Make call parking feature enabling configurable
+- The network should be able to refuse certain bearer capabilities
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
 - MWI on ISDN phones

@@ -15,6 +15,12 @@
 
 #include <kernel_config.h>
 
+/* See core.h for IOC allocation */
+#define VISDN_IOC_CONNECT_PATH		_IOR(0xd0, 4, unsigned int)
+#define VISDN_IOC_DISCONNECT_PATH	_IOR(0xd0, 5, unsigned int)
+#define VISDN_IOC_ENABLE_PATH		_IOR(0xd0, 6, unsigned int)
+#define VISDN_IOC_DISABLE_PATH		_IOR(0xd0, 7, unsigned int)
+
 #ifdef __KERNEL__
 
 struct visdn_router_node;

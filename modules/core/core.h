@@ -17,6 +17,7 @@
 
 #include <linux/version.h>
 #include <linux/netdevice.h>
+#include <linux/ioctl.h>
 
 #ifndef TRUE
 #define TRUE 1
@@ -56,6 +57,25 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 		## arg)
 
 #endif
+
+/*
+ * IOC allocation:
+ * 0  - ?
+ * 1  - ?
+ * 2  - IOC_CONNECT
+ * 3  - IOC_DISCONNECT
+ * 4  - IOC_CONNECT_PATH
+ * 5  - IOC_DISCONNECT_PATH
+ * 6  - IOC_ENABLE_PATH
+ * 7  - IOC_DISABLE_PATH
+ * 8  - EC_GET_FAREND_CHANID
+ * 9  - EC_GET_NEAREND_CHANID
+ * 10 - SP_GET_CHANID
+ * 11 - PPP_GET_CHANID
+ * 12 - NETDEV_GET_CHANID
+ * 13 - NETDEV_GET_E_CHANID
+ *
+ */
 
 enum visdn_notify
 {

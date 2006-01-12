@@ -445,6 +445,10 @@ int vppp_cdev_ioctl(
 	}
 	break;
 
+	case VISDN_PPP_GET_CHANID:
+		return put_user(chan->visdn_chan.id, (unsigned int *)arg);
+	break;
+
 	case VISDN_IOC_CONNECT_PATH:
 		return vppp_cdev_do_connect(inode, file, cmd, arg);
 	break;

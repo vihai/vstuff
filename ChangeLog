@@ -2,6 +2,23 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-12 18:18:01 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-436
+
+    Summary:
+      Moved ioctl definitions in the respective header file
+    Revision:
+      isdn--devel--0.1--patch-436
+
+
+    modified files:
+     ChangeLog TODO modules/core/core.h modules/core/cxc.h
+     modules/core/router.h modules/ppp/ppp.h modules/ppp/ppp_main.c
+     modules/streamport/streamport.h
+     modules/streamport/streamport_main.c visdnctl/connect.c
+     visdnctl/disable_path.c visdnctl/disconnect.c
+     visdnctl/enable_path.c
+
+
 2006-01-12 18:13:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-435
 
     Summary:

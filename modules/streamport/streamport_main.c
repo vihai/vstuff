@@ -440,6 +440,10 @@ static int vsp_cdev_ioctl(
 	struct vsp_chan *chan = file->private_data;
 
 	switch(cmd) {
+	case VISDN_SP_GET_CHANID:
+		return put_user(chan->visdn_chan.id, (unsigned int *)arg);
+	break;
+
 	case VISDN_IOC_CONNECT_PATH:
 		return vsp_cdev_do_connect(inode, file, cmd, arg);
 	break;

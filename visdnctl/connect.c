@@ -27,6 +27,8 @@
 #include <list.h>
 
 #include <linux/visdn/softcxc.h>
+#include <linux/visdn/cxc.h>
+#include <linux/visdn/router.h>
 
 #include "visdnctl.h"
 #include "connect.h"
