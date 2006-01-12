@@ -3097,18 +3097,8 @@ static void q931_timer_T312(void *data)
 
 	break;
 
-	case N0_NULL_STATE: // Correct?
-	case N8_CONNECT_REQUEST:
-	case N10_ACTIVE:
-	case N11_DISCONNECT_REQUEST:
-	case N12_DISCONNECT_INDICATION:
-	case N15_SUSPEND_REQUEST:
-	case N19_RELEASE_REQUEST:
-		// Do nothing
-	break;
-
 	default:
-		q931_call_unexpected_timer(call);
+		// Do nothing
 	break;
 	}
 
