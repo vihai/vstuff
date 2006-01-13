@@ -22,12 +22,12 @@
 #include <libq931/message.h>
 #include <libq931/ie_cause.h>
 
-static const struct q931_ie_type *ie_type;
+static const struct q931_ie_class *my_class;
 
 void q931_ie_cause_register(
-	const struct q931_ie_type *type)
+	const struct q931_ie_class *ie_class)
 {
-	ie_type = type;
+	my_class = ie_class;
 
 	q931_ie_cause_value_infos_init();
 }
@@ -41,7 +41,7 @@ struct q931_ie_cause *q931_ie_cause_alloc(void)
 	memset(ie, 0x00, sizeof(*ie));
 
 	ie->ie.refcnt = 1;
-	ie->ie.type = ie_type;
+	ie->ie.cls = my_class;
 
 	return ie;
 }
@@ -58,7 +58,7 @@ int q931_ie_cause_read_from_buf(
 	void (*report_func)(int level, const char *format, ...),
 	struct q931_interface *intf)
 {
-	assert(abstract_ie->type == ie_type);
+	assert(abstract_ie->cls == my_class);
 
 	struct q931_ie_cause *ie =
 		container_of(abstract_ie,
@@ -156,7 +156,7 @@ int q931_ies_contain_cause(
 {
 	int i;
 	for (i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_CAUSE) {
+		if (ies->ies[i]->cls->id == Q931_IE_CAUSE) {
 			struct q931_ie_cause *cause =
 				container_of(ies->ies[i],
 					struct q931_ie_cause, ie);

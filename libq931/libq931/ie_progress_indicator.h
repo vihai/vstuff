@@ -95,7 +95,7 @@ struct q931_ie_progress_indicator_onwire_4
 #endif
 
 void q931_ie_progress_indicator_register(
-	const struct q931_ie_type *type);
+	const struct q931_ie_class *ie_class);
 
 int q931_ie_progress_indicator_read_from_buf(
 	struct q931_ie *abstract_ie,

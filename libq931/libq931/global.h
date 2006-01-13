@@ -27,6 +27,7 @@ struct q931_interface;
 struct q931_global_call
 {
 	struct q931_interface *intf;
+	struct q931_dlc dlc;
 
 	enum q931_global_state state;
 

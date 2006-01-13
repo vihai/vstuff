@@ -3398,7 +3398,7 @@ static void visdn_set_hangupcause_by_ies(
 {
 	int i;
 	for (i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_CAUSE) {
+		if (ies->ies[i]->cls->id == Q931_IE_CAUSE) {
 			 ast_chan->hangupcause =
 				visdn_ie_to_ast_hangupcause(
 					container_of(ies->ies[i],
@@ -3419,7 +3419,7 @@ static void visdn_q931_disconnect_indication(
 
 	int i;
 	for (i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_PROGRESS_INDICATOR) {
+		if (ies->ies[i]->cls->id == Q931_IE_PROGRESS_INDICATOR) {
 			struct q931_ie_progress_indicator *pi =
 				container_of(ies->ies[i],
 					struct q931_ie_progress_indicator, ie);
@@ -3473,9 +3473,9 @@ static void visdn_q931_info_indication(
 
 	int i;
 	for(i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
+		if (ies->ies[i]->cls->id == Q931_IE_SENDING_COMPLETE) {
 			visdn_chan->sending_complete = TRUE;
-		} else if (ies->ies[i]->type->id ==
+		} else if (ies->ies[i]->cls->id ==
 					 Q931_IE_CALLED_PARTY_NUMBER) {
 			cdpn = container_of(ies->ies[i],
 				struct q931_ie_called_party_number, ie);
@@ -3621,7 +3621,7 @@ static void visdn_q931_resume_indication(
 
 	int i;
 	for (i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_CALL_IDENTITY) {
+		if (ies->ies[i]->cls->id == Q931_IE_CALL_IDENTITY) {
 			ci = container_of(ies->ies[i],
 				struct q931_ie_call_identity, ie);
 		}
@@ -3942,21 +3942,21 @@ static void visdn_q931_setup_indication(
 
 	int i;
 	for(i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_SENDING_COMPLETE) {
+		if (ies->ies[i]->cls->id == Q931_IE_SENDING_COMPLETE) {
 			visdn_chan->sending_complete = TRUE;
-		} else if (ies->ies[i]->type->id ==
+		} else if (ies->ies[i]->cls->id ==
 				Q931_IE_CALLED_PARTY_NUMBER) {
 
 			cdpn = container_of(ies->ies[i],
 				struct q931_ie_called_party_number, ie);
 
-		} else if (ies->ies[i]->type->id ==
+		} else if (ies->ies[i]->cls->id ==
 				Q931_IE_CALLING_PARTY_NUMBER) {
 
 			cgpn = container_of(ies->ies[i],
 				struct q931_ie_calling_party_number, ie);
 
-		} else if (ies->ies[i]->type->id == Q931_IE_BEARER_CAPABILITY) {
+		} else if (ies->ies[i]->cls->id == Q931_IE_BEARER_CAPABILITY) {
 
 			bc = container_of(ies->ies[i],
 				struct q931_ie_bearer_capability, ie);
@@ -4286,7 +4286,7 @@ static void visdn_q931_suspend_indication(
 
 	int i;
 	for (i=0; i<ies->count; i++) {
-		if (ies->ies[i]->type->id == Q931_IE_CALL_IDENTITY) {
+		if (ies->ies[i]->cls->id == Q931_IE_CALL_IDENTITY) {
 			ci = container_of(ies->ies[i],
 				struct q931_ie_call_identity, ie);
 		}

@@ -23,7 +23,8 @@
 #include <libq931/intf.h>
 #include <libq931/logging.h>
 #include <libq931/global.h>
-#include <libq931/out.h>
+#include <libq931/input.h>
+#include <libq931/output.h>
 #include <libq931/chanset.h>
 
 #include <libq931/ie_call_state.h>
@@ -116,7 +117,7 @@ void q931_management_restart_request(
 			q931_ies_add_put(&ies, &ri->ie);
 		}
 
-		q931_send_message(NULL, &gc->intf->dlc, Q931_MT_RESTART, &ies);
+		q931_global_send_message(gc, &gc->dlc, Q931_MT_RESTART, &ies);
 
 		q931_global_start_timer(gc, T316);
 
@@ -240,11 +241,14 @@ static void q931_global_handle_status(
 
 	case Q931_GLOBAL_STATE_RESTART_REQUEST:
 	case Q931_GLOBAL_STATE_RESTART: {
+		if (q931_decode_information_elements(NULL, msg) < 0)
+			break;
+
 		struct q931_ie_call_state *cs = NULL;
 
 		int i;
 		for(i=0; i<msg->ies.count; i++) {
-			if (msg->ies.ies[i]->type->id == Q931_IE_CALL_STATE) {
+			if (msg->ies.ies[i]->cls->id == Q931_IE_CALL_STATE) {
 				cs = container_of(msg->ies.ies[i],
 					struct q931_ie_call_state, ie);
 				break;
@@ -262,6 +266,7 @@ static void q931_global_handle_status(
 	}
 }
 
+#if 0
 static void q931_global_handle_notify(
 	struct q931_global_call *gc,
 	struct q931_message *msg)
@@ -273,6 +278,7 @@ static void q931_global_handle_facility(
 	struct q931_message *msg)
 {
 }
+#endif
 
 static void q931_global_handle_restart(
 	struct q931_global_call *gc,
@@ -280,6 +286,9 @@ static void q931_global_handle_restart(
 {
 	switch(gc->state) {
 	case Q931_GLOBAL_STATE_NULL:
+		if (q931_decode_information_elements(NULL, msg) < 0)
+			break;
+
 		gc->T317_expired = FALSE;
 		gc->restart_retransmit_count = 0;
 		gc->restart_responded = FALSE;
@@ -291,7 +300,7 @@ static void q931_global_handle_restart(
 
 		int i;
 		for (i=0; i<msg->ies.count; i++) {
-			if (msg->ies.ies[i]->type->id ==
+			if (msg->ies.ies[i]->cls->id ==
 					Q931_IE_CHANNEL_IDENTIFICATION) {
 
 				struct q931_ie_channel_identification *ci =
@@ -354,6 +363,9 @@ static void q931_global_handle_restart_acknowledge(
 {
 	switch(gc->state) {
 	case Q931_GLOBAL_STATE_RESTART_REQUEST:
+		if (q931_decode_information_elements(NULL, msg) < 0)
+			break;
+
 		q931_global_stop_timer(gc, T316);
 
 		if (gc->restart_responded || gc->T317_expired) {
@@ -372,7 +384,7 @@ static void q931_global_handle_restart_acknowledge(
 			// Store channel id received in restart ack
 			int i;
 			for (i=0; i<msg->ies.count; i++) {
-				if (msg->ies.ies[i]->type->id ==
+				if (msg->ies.ies[i]->cls->id ==
 						Q931_IE_CHANNEL_IDENTIFICATION) {
 
 					struct q931_ie_channel_identification *ci =
@@ -507,7 +519,7 @@ void q931_global_timer_T317(void *data)
 			ri->restart_class = Q931_IE_RI_C_INDICATED;
 			q931_ies_add_put(&ies, &ri->ie);
 
-			q931_global_send_message(NULL, &gc->intf->dlc,
+			q931_global_send_message(gc, &gc->intf->dlc,
 				Q931_MT_RESTART, &ies);
 		}
 
@@ -526,6 +538,7 @@ void q931_dispatch_global_message(
 		q931_global_handle_status(gc, msg);
 	break;
 
+#if 0
 	case Q931_MT_NOTIFY:
 		q931_global_handle_notify(gc, msg);
 	break;
@@ -533,6 +546,7 @@ void q931_dispatch_global_message(
 	case Q931_MT_FACILITY:
 		q931_global_handle_facility(gc, msg);
 	break;
+#endif
 
 	case Q931_MT_RESTART:
 		q931_global_handle_restart(gc, msg);

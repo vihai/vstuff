@@ -30,7 +30,7 @@
 #include <libq931/logging.h>
 #include <libq931/msgtype.h>
 #include <libq931/ie.h>
-#include <libq931/out.h>
+#include <libq931/output.h>
 #include <libq931/ces.h>
 #include <libq931/call.h>
 #include <libq931/dlc.h>

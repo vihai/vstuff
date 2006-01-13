@@ -2,6 +2,65 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-13 23:27:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-442
+
+    Summary:
+      Huge refarming/fixing of IE interface and error conditions handling
+    Revision:
+      isdn--devel--0.1--patch-442
+
+
+    new files:
+     libq931/.arch-ids/lib.c.id libq931/lib.c
+     libq931/libq931/.arch-ids/input.h.id libq931/libq931/input.h
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c libq931/Makefile.am
+     libq931/call.c libq931/call_inline.h libq931/ces.c
+     libq931/ces_inline.h libq931/dlc.c libq931/global.c
+     libq931/ie.c libq931/ie_bearer_capability.c
+     libq931/ie_call_identity.c libq931/ie_call_state.c
+     libq931/ie_called_party_number.c
+     libq931/ie_calling_party_number.c libq931/ie_cause.c
+     libq931/ie_channel_identification.c
+     libq931/ie_connected_number.c libq931/ie_datetime.c
+     libq931/ie_display.c libq931/ie_high_layer_compatibility.c
+     libq931/ie_notification_indicator.c
+     libq931/ie_progress_indicator.c libq931/ie_restart_indicator.c
+     libq931/ie_sending_complete.c libq931/ies.c libq931/input.c
+     libq931/intf.c libq931/libq931/dlc.h libq931/libq931/global.h
+     libq931/libq931/ie.h libq931/libq931/ie_bearer_capability.h
+     libq931/libq931/ie_call_identity.h
+     libq931/libq931/ie_call_state.h
+     libq931/libq931/ie_called_party_number.h
+     libq931/libq931/ie_calling_party_number.h
+     libq931/libq931/ie_cause.h
+     libq931/libq931/ie_channel_identification.h
+     libq931/libq931/ie_connected_number.h
+     libq931/libq931/ie_datetime.h libq931/libq931/ie_display.h
+     libq931/libq931/ie_high_layer_compatibility.h
+     libq931/libq931/ie_notification_indicator.h
+     libq931/libq931/ie_progress_indicator.h
+     libq931/libq931/ie_restart_indicator.h
+     libq931/libq931/ie_sending_complete.h libq931/libq931/lib.h
+     libq931/libq931/message.h libq931/libq931/output.h
+     libq931/libq931/q931.h libq931/output.c modules/lapd/af_lapd.c
+
+    renamed files:
+     libq931/.arch-ids/out.c.id
+       ==> libq931/.arch-ids/output.c.id
+     libq931/.arch-ids/q931.c.id
+       ==> libq931/.arch-ids/input.c.id
+     libq931/libq931/.arch-ids/out.h.id
+       ==> libq931/libq931/.arch-ids/output.h.id
+     libq931/libq931/out.h
+       ==> libq931/libq931/output.h
+     libq931/out.c
+       ==> libq931/output.c
+     libq931/q931.c
+       ==> libq931/input.c
+
+
 2006-01-13 00:30:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-441
 
     Summary:

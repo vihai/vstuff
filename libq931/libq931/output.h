@@ -17,15 +17,9 @@
 
 int q931_send_frame(struct q931_dlc *dlc, void *frame, int size);
 
-int q931_send_message(
+int q931_call_send_message(
 	struct q931_call *call,
 	struct q931_dlc *dlc,
-	enum q931_message_type mt,
-	const struct q931_ies *ies);
-
-int q931_send_message_bc(
-	struct q931_call *call,
-	struct q931_broadcast_dlc *bc_dlc,
 	enum q931_message_type mt,
 	const struct q931_ies *user_ies);
 
@@ -34,5 +28,11 @@ int q931_global_send_message(
 	struct q931_dlc *dlc,
 	enum q931_message_type mt,
 	const struct q931_ies *ies);
+
+int q931_call_send_message_bc(
+	struct q931_call *call,
+	struct q931_broadcast_dlc *bc_dlc,
+	enum q931_message_type mt,
+	const struct q931_ies *user_ies);
 
 #endif

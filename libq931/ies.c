@@ -104,8 +104,8 @@ void q931_ies_copy(
 
 static int q931_ies_compare(const void *a, const void *b)
 {
-	return q931_intcmp((*((struct q931_ie **)a))->type->id,
-	                   (*((struct q931_ie **)b))->type->id);
+	return q931_intcmp((*((struct q931_ie **)a))->cls->id,
+	                   (*((struct q931_ie **)b))->cls->id);
 }
 
 void q931_ies_sort(

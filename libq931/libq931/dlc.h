@@ -62,7 +62,8 @@ void q931_dlc_init(
 	struct q931_dlc *dlc,
 	struct q931_interface *intf,
 	int socket);
-void q931_dlc_get(struct q931_dlc *dlc);
+
+struct q931_dlc *q931_dlc_get(struct q931_dlc *dlc);
 void q931_dlc_put(struct q931_dlc *dlc);
 
 #endif

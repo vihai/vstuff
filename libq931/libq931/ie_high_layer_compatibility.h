@@ -114,7 +114,7 @@ struct q931_ie_high_layer_compatibility_onwire_4a
 } __attribute__ ((__packed__));
 
 void q931_ie_high_layer_compatibility_register(
-	const struct q931_ie_type *type);
+	const struct q931_ie_class *ie_class);
 
 int q931_ie_high_layer_compatibility_read_from_buf(
 	struct q931_ie *abstract_ie,

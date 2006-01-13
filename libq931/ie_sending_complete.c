@@ -18,12 +18,12 @@
 #include <libq931/lib.h>
 #include <libq931/ie_sending_complete.h>
 
-static const struct q931_ie_type *ie_type;
+static const struct q931_ie_class *my_class;
 
 void q931_ie_sending_complete_register(
-	const struct q931_ie_type *type)
+	const struct q931_ie_class *ie_class)
 {
-	ie_type = type;
+	my_class = ie_class;
 }
 
 struct q931_ie_sending_complete *q931_ie_sending_complete_alloc(void)
@@ -34,7 +34,7 @@ struct q931_ie_sending_complete *q931_ie_sending_complete_alloc(void)
 
 	memset(ie, 0x00, sizeof(*ie));
 
-	ie->ie.type = ie_type;
+	ie->ie.cls = my_class;
 	ie->ie.refcnt = 1;
 
 	return ie;
@@ -52,7 +52,7 @@ int q931_ie_sending_complete_read_from_buf(
 	void (*report_func)(int level, const char *format, ...),
 	struct q931_interface *intf)
 {
-	assert(abstract_ie->type == ie_type);
+	assert(abstract_ie->cls == my_class);
 
 	return TRUE;
 }

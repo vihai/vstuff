@@ -226,7 +226,7 @@ struct q931_ie_cause_diag_1_2
 void q931_ie_cause_value_infos_init();
 
 void q931_ie_cause_register(
-	const struct q931_ie_type *type);
+	const struct q931_ie_class *ie_class);
 
 int q931_ie_cause_read_from_buf(
 	struct q931_ie *abstract_ie,

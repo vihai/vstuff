@@ -27,7 +27,7 @@
 				(lev),		\
 				"%s: "		\
 				fmt,		\
-				ie->type->name,	\
+				ie->cls->name,	\
 				## args)
 
 #define report_ie_dump(ie, fmt, args...)	\
@@ -36,11 +36,11 @@
 			fmt,		\
 			## args)
 
-struct q931_ie_type;
+struct q931_ie_class;
 
 struct q931_ie
 {
-	const struct q931_ie_type *type;
+	const struct q931_ie_class *cls;
 
 	int refcnt;
 };
@@ -137,15 +137,19 @@ enum q931_ie_id
 
 struct q931_call;
 struct q931_message;
-struct q931_ie_type
+struct q931_ie_class
 {
 	int max_len;
 	int max_occur;
 	int network_type;
+
+	__u8 codeset;
 	enum q931_ie_id id;
+
 	const char *name;
+
 	void (*init)(
-		const struct q931_ie_type *type);
+		const struct q931_ie_class *class);
 
 	struct q931_ie *(*alloc)(void);
 
@@ -180,13 +184,17 @@ enum q931_ie_presence
 	Q931_IE_MANDATORY,
 };
 
-struct q931_ie_type_per_mt
+struct q931_ie_usage
 {
 	enum q931_message_type message_type;
+	__u8 codeset;
 	enum q931_ie_id ie_id;
 	enum q931_ie_direction direction;
 	enum q931_ie_presence presence;
 };
+
+extern struct q931_ie_usage q931_ie_usages[];
+extern int q931_ie_usages_cnt;
 
 static inline int q931_is_so_ie(__u8 ie_id)
 {
@@ -220,14 +228,15 @@ static inline int q931_get_so_ie_type2_value(__u8 ie_id)
 
 static inline int q931_ie_comprehension_required(__u8 ie_id)
 {
-	return ie_id & Q931_IE_COMPREHENSION_REQUIRED_MASK;
+	return (ie_id & Q931_IE_COMPREHENSION_REQUIRED_MASK) == 0;
 }
 
-void q931_ie_types_init();
-const struct q931_ie_type *q931_get_ie_type(
-	enum q931_ie_id id);
-const struct q931_ie_type_per_mt *q931_get_ie_type_per_mt(
+void q931_ie_classes_init();
+const struct q931_ie_class *q931_get_ie_class(
+	__u8 codeset, enum q931_ie_id id);
+const struct q931_ie_usage *q931_get_ie_usage(
 	enum q931_message_type message_type,
+	__u8 codeset,
 	enum q931_ie_id ie_id);
 
 #endif

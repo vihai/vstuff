@@ -5,7 +5,8 @@ lib_LTLIBRARIES = libq931.la
 INCLUDES = -I$(top_srcdir)/modules/include/
 
 libq931_la_SOURCES =			\
-	q931.c				\
+	lib.c				\
+	input.c				\
 	call.c				\
 	ces.c				\
 	intf.c				\
@@ -14,7 +15,7 @@ libq931_la_SOURCES =			\
 	ies.c				\
 	timer.c				\
 	channel.c			\
-	out.c				\
+	output.c			\
 	global.c			\
 	chanset.c			\
 	callref.c			\
@@ -71,11 +72,12 @@ nobase_include_HEADERS =			\
 	libq931/ies.h				\
 	libq931/intf.h				\
 	libq931/lib.h				\
+	libq931/input.h				\
+	libq931/output.h			\
 	libq931/list.h				\
 	libq931/logging.h			\
 	libq931/message.h			\
 	libq931/msgtype.h			\
-	libq931/out.h				\
 	libq931/proto.h				\
 	libq931/q931.h				\
 	libq931/timer.h				\

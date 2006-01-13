@@ -21,7 +21,7 @@
 #include <libq931/logging.h>
 #include <libq931/dlc.h>
 
-void q931_dlc_get(
+struct q931_dlc *q931_dlc_get(
 	struct q931_dlc *dlc)
 {
 	q931_stop_timer(&dlc->autorelease_timer);
@@ -29,6 +29,8 @@ void q931_dlc_get(
 	report_dlc(dlc, LOG_DEBUG, "DLC autorelease timer stopped\n");
 
 	dlc->refcnt++;
+
+	return dlc;
 }
 
 void q931_dlc_put(

@@ -482,7 +482,7 @@ struct q931_ie_bearer_capability_onwire_7
 } __attribute__ ((__packed__));
 
 void q931_ie_bearer_capability_register(
-	const struct q931_ie_type *type);
+	const struct q931_ie_class *ie_class);
 
 int q931_ie_bearer_capability_read_from_buf(
 	struct q931_ie *abstract_ie,

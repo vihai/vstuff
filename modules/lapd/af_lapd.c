@@ -1481,7 +1481,7 @@ static int lapd_connect(
 
 	err = lapd_multiframe_wait_for_establishment(
 				lapd_sock, flags & O_NONBLOCK);
-	if (err != -EISCONN)
+	if (err < 0)
 		goto err_multiframe_wait_for_establishment;
 
 	lapd_release_sock(lapd_sock);

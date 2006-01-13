@@ -31,7 +31,8 @@
 #include <libq931/logging.h>
 #include <libq931/msgtype.h>
 #include <libq931/ie.h>
-#include <libq931/out.h>
+#include <libq931/output.h>
+#include <libq931/input.h>
 #include <libq931/call.h>
 #include <libq931/intf.h>
 #include <libq931/proto.h>
@@ -153,14 +154,16 @@ int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 	return 0;
 }
 
-int q931_send_message(
+static int q931_send_message(
 	struct q931_call *call,
+	struct q931_global_call *gc,
 	struct q931_dlc *dlc,
 	enum q931_message_type mt,
 	const struct q931_ies *user_ies)
 {
-	assert(call);
 	assert(dlc);
+	assert(call || gc);
+	assert(!call || !gc);
 
 	struct q931_message *msg;
 	msg = malloc(sizeof(*msg));
@@ -169,11 +172,18 @@ int q931_send_message(
 
 	q931_message_init(msg, dlc);
 
-	report_call(call, LOG_DEBUG, "Sending message:\n");
+	if (call) {
+		msg->rawlen += q931_prepare_header(call, msg->raw, mt);
+
+		report_call(call, LOG_DEBUG, "Sending message:\n");
+	} else {
+		msg->rawlen += q931_global_prepare_header(gc, msg->raw, mt);
+
+		report_gc(gc, LOG_DEBUG, "Sending message:\n");
+	}
+
 	report_msg_cont(msg, LOG_DEBUG, "->  message type: %s (%d)\n",
 		q931_message_type_to_text(mt), mt);
-
-	msg->rawlen += q931_prepare_header(call, msg->raw, mt);
 
 	if (user_ies) {
 		struct q931_ies ies = Q931_IES_INIT;
@@ -182,9 +192,9 @@ int q931_send_message(
 
 		int i;
 		for (i=0; i<ies.count; i++) {
-			assert(ies.ies[i]->type->write_to_buf);
+			assert(ies.ies[i]->cls->write_to_buf);
 
-			int ie_len = ies.ies[i]->type->write_to_buf(ies.ies[i],
+			int ie_len = ies.ies[i]->cls->write_to_buf(ies.ies[i],
 					msg->raw + msg->rawlen,
 					sizeof(msg->raw) - msg->rawlen);
 			msg->rawlen += ie_len;
@@ -192,14 +202,14 @@ int q931_send_message(
 			report_msg_cont(msg, LOG_DEBUG,
 				"->  IE %d ===> %u (%s) -- length %u\n",
 				i,
-				ies.ies[i]->type->id,
-				ies.ies[i]->type->name,
+				ies.ies[i]->cls->id,
+				ies.ies[i]->cls->name,
 				ie_len);
 
-			if (ies.ies[i]->type->dump)
-				ies.ies[i]->type->dump(
+			if (ies.ies[i]->cls->dump)
+				ies.ies[i]->cls->dump(
 					ies.ies[i],
-					call->intf->lib->report, "->    ");
+					dlc->intf->lib->report, "->    ");
 		}
 	}
 
@@ -208,15 +218,26 @@ int q931_send_message(
 	// AWAITING_DISCONNECTION ??
 
 	if (dlc->status == Q931_DLC_STATUS_DISCONNECTED) {
+		report_dlc(dlc, LOG_DEBUG,
+			"DLC is disconnected, requesting connection\n");
+
+		dlc->status = Q931_DLC_STATUS_AWAITING_CONNECTION;
+
 		if (connect(dlc->socket, NULL, 0) < 0) {
-			if (errno != EAGAIN) {
+			if (errno == ECONNRESET) {
+				q931_dl_release_indication(dlc);
+			} else if (errno == EALREADY) {
+				q931_dl_establish_indication(dlc);
+			} else if (errno == ENOTCONN) {
+				q931_dl_release_confirm(dlc);
+			} else if (errno == EISCONN) {
+				q931_dl_establish_confirm(dlc);
+			} else if (errno != EAGAIN) {
 				report_dlc(dlc, LOG_ERR, "connect: %s\n",
 					strerror(errno));
 				return errno;
 			}
 		}
-
-		dlc->status = Q931_DLC_STATUS_AWAITING_CONNECTION;
 	}
 
 	int res = 0;
@@ -236,7 +257,25 @@ int q931_send_message(
 	return res;
 }
 
-int q931_send_message_bc(
+int q931_call_send_message(
+	struct q931_call *call,
+	struct q931_dlc *dlc,
+	enum q931_message_type mt,
+	const struct q931_ies *user_ies)
+{
+	return q931_send_message(call, NULL, dlc, mt, user_ies);
+}
+
+int q931_global_send_message(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	enum q931_message_type mt,
+	const struct q931_ies *user_ies)
+{
+	return q931_send_message(NULL, gc, dlc, mt, user_ies);
+}
+
+int q931_call_send_message_bc(
 	struct q931_call *call,
 	struct q931_broadcast_dlc *bc_dlc,
 	enum q931_message_type mt,
@@ -248,6 +287,10 @@ int q931_send_message_bc(
 	__u8 buf[260];
 	int size = 0;
 
+	report_call(call, LOG_DEBUG, "Sending message:\n");
+	report_call(call, LOG_DEBUG, "->  message type: %s (%d)\n",
+		q931_message_type_to_text(mt), mt);
+
 	size += q931_prepare_header(call, buf, mt);
 
 	if (user_ies) {
@@ -257,9 +300,9 @@ int q931_send_message_bc(
 
 		int i;
 		for (i=0; i<ies.count; i++) {
-			assert(ies.ies[i]->type->write_to_buf);
+			assert(ies.ies[i]->cls->write_to_buf);
 
-			int ie_len = ies.ies[i]->type->write_to_buf(ies.ies[i],
+			int ie_len = ies.ies[i]->cls->write_to_buf(ies.ies[i],
 						buf + size,
 						sizeof(buf) - size);
 
@@ -268,12 +311,12 @@ int q931_send_message_bc(
 			report_lib(call->intf->lib, LOG_DEBUG,
 				"->  IE %d ===> %u (%s) -- length %u\n",
 				i,
-				ies.ies[i]->type->id,
-				ies.ies[i]->type->name,
+				ies.ies[i]->cls->id,
+				ies.ies[i]->cls->name,
 				ie_len);
 
-			if (ies.ies[i]->type->dump)
-				ies.ies[i]->type->dump(
+			if (ies.ies[i]->cls->dump)
+				ies.ies[i]->cls->dump(
 					ies.ies[i],
 					call->intf->lib->report, "->    ");
 		}
@@ -306,48 +349,3 @@ int q931_send_message_bc(
 	return 0;
 }
 
-int q931_global_send_message(
-	struct q931_global_call *gc,
-	struct q931_dlc *dlc,
-	enum q931_message_type mt,
-	const struct q931_ies *user_ies)
-{
-	assert(gc);
-	assert(dlc);
-
-	__u8 buf[260];
-	int size = 0;
-
-	size += q931_global_prepare_header(gc, buf, Q931_MT_STATUS);
-
-	if (user_ies) {
-		struct q931_ies ies = Q931_IES_INIT;
-		q931_ies_copy(&ies, user_ies);
-		q931_ies_sort(&ies);
-
-		int i;
-		for (i=0; i<ies.count; i++) {
-			assert(ies.ies[i]->type->write_to_buf);
-
-			int ie_len = ies.ies[i]->type->write_to_buf(ies.ies[i],
-					buf + size,
-					sizeof(buf) - size);
-
-			size += ie_len;
-
-			report_lib(gc->intf->lib, LOG_DEBUG,
-				"->  IE %d ===> %u (%s) -- length %u\n",
-				i,
-				ies.ies[i]->type->id,
-				ies.ies[i]->type->name,
-				ie_len);
-
-			if (ies.ies[i]->type->dump)
-				ies.ies[i]->type->dump(
-					ies.ies[i],
-					gc->intf->lib->report, "->    ");
-		}
-	}
-
-	return q931_send_frame(dlc, buf, size);
-}

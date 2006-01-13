@@ -35,33 +35,37 @@
 #include <libq931/ie_restart_indicator.h>
 #include <libq931/ie_sending_complete.h>
 
-static struct q931_ie_type q931_ie_types[] =
+static struct q931_ie_class q931_ie_classes[] =
 {
 	{
-		.max_len	= 0,
+		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_SHIFT,
 		.name		= "Shift",
 	},
 	{
-		.max_len	= 0,
+		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CONGESTION_LEVEL,
 		.name		= "Congestion Level",
 	},
 	{
-		.max_len	= 0,
+		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_MORE_DATA,
 		.name		= "More Data",
 	},
 	{
-		.max_len	= 0,
+		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_SENDING_COMPLETE,
 		.name		= "Sending Complete",
 		.init		= q931_ie_sending_complete_register,
@@ -74,6 +78,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_REPEAT_INDICATOR,
 		.name		= "Repeat Indicator",
 	},
@@ -81,34 +86,39 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_SEGMENTED_MESSAGE,
 		.name		= "Segmented Message",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_CHANGE_STATUS,
 		.name		= "Change Status",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_SPECIAL,
 		.name		= "Special",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_CONNECTED_ADDRESS,
 		.name		= "Connected Address",
 	},
 	{
-		.max_len	= -1,
-		.max_occur	= -1,
+		.max_len	= INT_MAX,
+		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_EXTENDED_FACILITY,
 		.name		= "Extended Facility",
 	},
@@ -116,6 +126,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 12,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_BEARER_CAPABILITY,
 		.name		= "Bearer Capability",
 		.init		= q931_ie_bearer_capability_register,
@@ -128,6 +139,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 32,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CAUSE,
 		.name		= "Cause",
 		.init		= q931_ie_cause_register,
@@ -140,6 +152,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 10,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CALL_IDENTITY,
 		.name		= "Call Identity",
 		.init		= q931_ie_call_identity_register,
@@ -152,6 +165,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CALL_STATE,
 		.name		= "Call State",
 		.init		= q931_ie_call_state_register,
@@ -161,9 +175,10 @@ static struct q931_ie_type q931_ie_types[] =
 		.dump		= q931_ie_call_state_dump,
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CHANNEL_IDENTIFICATION,
 		.name		= "Channel Identification",
 		.init		= q931_ie_channel_identification_register,
@@ -173,9 +188,10 @@ static struct q931_ie_type q931_ie_types[] =
 		.dump		= q931_ie_channel_identification_dump,
 	},
 	{
-		.max_len	= -1,
-		.max_occur	= -1,
+		.max_len	= INT_MAX,
+		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_FACILITY,
 		.name		= "Facility",
 	},
@@ -183,6 +199,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 4,
 		.max_occur	= 2,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_PROGRESS_INDICATOR,
 		.name		= "Progress Indicator",
 		.init		= q931_ie_progress_indicator_register,
@@ -192,16 +209,18 @@ static struct q931_ie_type q931_ie_types[] =
 		.dump		= q931_ie_progress_indicator_dump,
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 4,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_NETWORK_SPECIFIC_FACILITIES,
 		.name		= "Network Specific Facilities",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_ENDPOINT_ID,
 		.name		= "Endpoint ID",
 	},
@@ -209,6 +228,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_NOTIFICATION_INDICATOR,
 		.name		= "Notification Indicator",
 		.init		= q931_ie_notification_indicator_register,
@@ -221,6 +241,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 82,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_DISPLAY,
 		.name		= "Display",
 		.init		= q931_ie_display_register,
@@ -233,6 +254,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 8,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_DATETIME,
 		.name		= "Date Time",
 		.init		= q931_ie_datetime_register,
@@ -245,27 +267,31 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 34,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_KEYPAD_FACILITY,
 		.name		= "Keypad Facility",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_CALL_STATUS,
 		.name		= "Call Status",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_UPDATE,
 		.name		= "Update",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_INFO_REQUEST,
 		.name		= "Info Request",
 	},
@@ -273,6 +299,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_SIGNAL,
 		.name		= "Signal",
 	},
@@ -280,6 +307,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_SWITCHHOOK,
 		.name		= "Switchhook",
 	},
@@ -287,6 +315,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_FEATURE_ACTIVATION,
 		.name		= "Feature Activation",
 	},
@@ -294,6 +323,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 5,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_FEATURE_INDICATION,
 		.name		= "Feature Indication",
 	},
@@ -301,6 +331,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 6,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_INFORMATION_RATE,
 		.name		= "Information Rate",
 	},
@@ -308,6 +339,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 11,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_END_TO_END_TRANSIT_DELAY,
 		.name		= "End-to-End Transit Delay",
 	},
@@ -315,6 +347,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 5,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_TRANSIT_DELAY_SELECTION_AND_INDICATION,
 		.name		= "Transit Delay Selection And Indication",
 	},
@@ -322,6 +355,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_PACKET_LAYER_BINARY_PARAMETERS,
 		.name		= "Packet Layer Binary Parameters",
 	},
@@ -329,6 +363,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_PACKET_LAYER_WINDOW_SIZE,
 		.name		= "Packet Layer Window Size",
 	},
@@ -336,27 +371,31 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_PACKET_SIZE,
 		.name		= "Packet Size",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_CLOSED_USER_GROUP,
 		.name		= "Closed User Group",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_REVERSE_CHARGE_INDICATION,
 		.name		= "Reverse Charge Indication",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_CONNECTED_NUMBER,
 		.name		= "Connected Number",
 		.init		= q931_ie_connected_number_register,
@@ -369,6 +408,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 24,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CALLING_PARTY_NUMBER,
 		.name		= "Calling Party Number",
 		.init		= q931_ie_calling_party_number_register,
@@ -381,6 +421,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 23,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CALLING_PARTY_SUBADDRESS,
 		.name		= "Calling Party Subaddress",
 	},
@@ -388,6 +429,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 23,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CALLED_PARTY_NUMBER,
 		.name		= "Called Party Number",
 		.init		= q931_ie_called_party_number_register,
@@ -400,48 +442,55 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 23,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_CALLED_PARTY_SUBADDRESS,
 		.name		= "Called Party Subaddress",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_ORIGINAL_CALLED_NUMBER,
 		.name		= "Original Called Number",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_REDIRECTING_NUMBER,
 		.name		= "Redirecting Number",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_REDIRECTING_SUBADDRESS,
 		.name		= "Redirecting Subaddress",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_REDIRECTION_NUMBER,
 		.name		= "Redirection Number",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_REDIRECTION_SUBADDRESS,
 		.name		= "Redirection Subaddress",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_TRANSIT_NETWORK_SELECTION,
 		.name		= "Transit Network Selection",
 	},
@@ -449,6 +498,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_RESTART_INDICATOR,
 		.name		= "Restart Indicator",
 		.init		= q931_ie_restart_indicator_register,
@@ -458,9 +508,10 @@ static struct q931_ie_type q931_ie_types[] =
 		.dump		= q931_ie_restart_indicator_dump,
 	},
 	{
-		.max_len	= -1,
-		.max_occur	= -1,
+		.max_len	= INT_MAX,
+		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_USER_USER_FACILITY,
 		.name		= "User User Facility",
 	},
@@ -468,6 +519,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 16,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_LOW_LAYER_COMPATIBILITY,
 		.name		= "Low Layer Compatibility",
 	},
@@ -475,6 +527,7 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 5,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_HIGH_LAYER_COMPATIBILITY,
 		.name		= "High Layer Compatibility",
 	},
@@ -482,60 +535,62 @@ static struct q931_ie_type q931_ie_types[] =
 		.max_len	= 131,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
 		.id		= Q931_IE_USER_USER,
 		.name		= "User User",
 	},
 	{
-		.max_len	= -1,
+		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
+		.codeset	= 0,
 		.id		= Q931_IE_ESCAPE_FOR_EXTENSION,
 		.name		= "Escape For Extension",
 	},
 };
 
-static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
+struct q931_ie_usage q931_ie_usages[] =
 {
 	// ALERTING
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_BEARER_CAPABILITY,
+		0, Q931_IE_BEARER_CAPABILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_ALERTING,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -543,31 +598,31 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// CALL PROCEEDING
 	{
 		Q931_MT_CALL_PROCEEDING,
-		Q931_IE_BEARER_CAPABILITY,
+		0, Q931_IE_BEARER_CAPABILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CALL_PROCEEDING,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CALL_PROCEEDING,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CALL_PROCEEDING,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CALL_PROCEEDING,
-		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		0, Q931_IE_HIGH_LAYER_COMPATIBILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -575,67 +630,67 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// CONNECT
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_BEARER_CAPABILITY,
+		0, Q931_IE_BEARER_CAPABILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_DATETIME,
+		0, Q931_IE_DATETIME,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_LOW_LAYER_COMPATIBILITY,
+		0, Q931_IE_LOW_LAYER_COMPATIBILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		0, Q931_IE_HIGH_LAYER_COMPATIBILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONNECT,
-		Q931_IE_CONNECTED_NUMBER,
+		0, Q931_IE_CONNECTED_NUMBER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -643,19 +698,19 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// CONGESTION CONTROL
 	{
 		Q931_MT_CONGESTION_CONTROL,
-		Q931_IE_CONGESTION_LEVEL,
+		0, Q931_IE_CONGESTION_LEVEL,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_CONGESTION_CONTROL,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_CONGESTION_CONTROL,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -663,7 +718,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// CONNECT ACKNOWLEDGE
 	{
 		Q931_MT_CONNECT_ACKNOWLEDGE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -671,37 +726,37 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// DISCONNECT
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_DISCONNECT,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -709,31 +764,31 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// FACILITY
 	{
 		Q931_MT_FACILITY,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_FACILITY,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_FACILITY,
-		Q931_IE_CALLED_PARTY_NUMBER,
+		0, Q931_IE_CALLED_PARTY_NUMBER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_FACILITY,
-		Q931_IE_CALLED_PARTY_SUBADDRESS,
+		0, Q931_IE_CALLED_PARTY_SUBADDRESS,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_FACILITY,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -741,19 +796,19 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// REGISTER
 	{
 		Q931_MT_REGISTER,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_REGISTER,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_REGISTER,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -761,31 +816,31 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// INFORMATION
 	{
 		Q931_MT_INFORMATION,
-		Q931_IE_SENDING_COMPLETE,
+		0, Q931_IE_SENDING_COMPLETE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_INFORMATION,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_INFORMATION,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_INFORMATION,
-		Q931_IE_KEYPAD_FACILITY,
+		0, Q931_IE_KEYPAD_FACILITY,
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_INFORMATION,
-		Q931_IE_CALLED_PARTY_NUMBER,
+		0, Q931_IE_CALLED_PARTY_NUMBER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -793,13 +848,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// NOTIFY
 	{
 		Q931_MT_NOTIFY,
-		Q931_IE_NOTIFICATION_INDICATOR,
+		0, Q931_IE_NOTIFICATION_INDICATOR,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_NOTIFY,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -807,7 +862,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// HOLD
 	{
 		Q931_MT_HOLD,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -815,7 +870,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// HOLD ACKNOWLEDGE
 	{
 		Q931_MT_HOLD_ACKNOWLEDGE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -823,13 +878,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// HOLD REJECT
 	{
 		Q931_MT_HOLD_REJECT,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_HOLD_REJECT,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -837,13 +892,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RETRIEVE
 	{
 		Q931_MT_RETRIEVE,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RETRIEVE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -851,13 +906,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RETRIEVE ACKNOWLEDGE
 	{
 		Q931_MT_RETRIEVE_ACKNOWLEDGE,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RETRIEVE_ACKNOWLEDGE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -865,13 +920,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RETRIEVE_REJECT
 	{
 		Q931_MT_RETRIEVE_REJECT,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_RETRIEVE_REJECT,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -879,37 +934,37 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// PROGRESS
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_BEARER_CAPABILITY,
+		0, Q931_IE_BEARER_CAPABILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		0, Q931_IE_HIGH_LAYER_COMPATIBILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_PROGRESS,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -917,31 +972,31 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RELEASE
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -949,31 +1004,31 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RELEASE COMPLETE
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_RELEASE_COMPLETE,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
@@ -981,7 +1036,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RESUME
 	{
 		Q931_MT_RESUME,
-		Q931_IE_CALL_IDENTITY,
+		0, Q931_IE_CALL_IDENTITY,
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
@@ -989,13 +1044,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RESUME ACKNOWLEDGE
 	{
 		Q931_MT_RESUME_ACKNOWLEDGE,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_RESUME_ACKNOWLEDGE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1003,13 +1058,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// RESUME REJECT
 	{
 		Q931_MT_RESUME_REJECT,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_RESUME_REJECT,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1017,109 +1072,109 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// SETUP
 	{
 		Q931_MT_SETUP,
-		Q931_IE_SENDING_COMPLETE,
+		0, Q931_IE_SENDING_COMPLETE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_BEARER_CAPABILITY,
+		0, Q931_IE_BEARER_CAPABILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_CHANNEL_IDENTIFICATION,
-		Q931_IE_DIR_BOTH,
-		Q931_IE_MANDATORY,
-	},
-	{
-		Q931_MT_SETUP,
-		Q931_IE_FACILITY,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_EXTENDED_FACILITY,
+		0, Q931_IE_FACILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_EXTENDED_FACILITY,
 		Q931_IE_DIR_BOTH,
-		Q931_IE_MANDATORY,
+		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_NETWORK_SPECIFIC_FACILITIES,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
-		Q931_IE_MANDATORY,
+		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_NETWORK_SPECIFIC_FACILITIES,
+		Q931_IE_DIR_BOTH,
+		Q931_IE_OPTIONAL,
+	},
+	{
+		Q931_MT_SETUP,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_KEYPAD_FACILITY,
+		0, Q931_IE_KEYPAD_FACILITY,
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_CALLING_PARTY_NUMBER,
+		0, Q931_IE_CALLING_PARTY_NUMBER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_CALLING_PARTY_SUBADDRESS,
+		0, Q931_IE_CALLING_PARTY_SUBADDRESS,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_CALLED_PARTY_NUMBER,
+		0, Q931_IE_CALLED_PARTY_NUMBER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_CALLED_PARTY_SUBADDRESS,
+		0, Q931_IE_CALLED_PARTY_SUBADDRESS,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_TRANSIT_NETWORK_SELECTION,
+		0, Q931_IE_TRANSIT_NETWORK_SELECTION,
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_LOW_LAYER_COMPATIBILITY,
+		0, Q931_IE_LOW_LAYER_COMPATIBILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_HIGH_LAYER_COMPATIBILITY,
+		0, Q931_IE_HIGH_LAYER_COMPATIBILITY,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_DATETIME,
+		0, Q931_IE_DATETIME,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP,
-		Q931_IE_USER_USER, //???
+		0, Q931_IE_USER_USER, //???
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
@@ -1127,19 +1182,19 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// SETUP ACKNOWLEDGE
 	{
 		Q931_MT_SETUP_ACKNOWLEDGE,
-		Q931_IE_CHANNEL_IDENTIFICATION,
+		0, Q931_IE_CHANNEL_IDENTIFICATION,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP_ACKNOWLEDGE,
-		Q931_IE_PROGRESS_INDICATOR,
+		0, Q931_IE_PROGRESS_INDICATOR,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_SETUP_ACKNOWLEDGE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1147,19 +1202,19 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// STATUS
 	{
 		Q931_MT_STATUS,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_STATUS,
-		Q931_IE_CALL_STATE,
+		0, Q931_IE_CALL_STATE,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_STATUS,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1167,7 +1222,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// STATUS ENQUIRY
 	{
 		Q931_MT_STATUS_ENQUIRY,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1175,7 +1230,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// SUSPEND
 	{
 		Q931_MT_SUSPEND,
-		Q931_IE_CALL_IDENTITY,
+		0, Q931_IE_CALL_IDENTITY,
 		Q931_IE_DIR_U_TO_N,
 		Q931_IE_OPTIONAL,
 	},
@@ -1183,7 +1238,7 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// SUSPEND ACKNOWLEDGE
 	{
 		Q931_MT_SUSPEND_ACKNOWLEDGE,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1191,13 +1246,13 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// SUSPEND REJECT
 	{
 		Q931_MT_SUSPEND_REJECT,
-		Q931_IE_CAUSE,
+		0, Q931_IE_CAUSE,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_MANDATORY,
 	},
 	{
 		Q931_MT_SUSPEND_REJECT,
-		Q931_IE_DISPLAY,
+		0, Q931_IE_DISPLAY,
 		Q931_IE_DIR_N_TO_U,
 		Q931_IE_OPTIONAL,
 	},
@@ -1205,88 +1260,55 @@ static struct q931_ie_type_per_mt q931_ie_types_per_mt[] =
 	// USER INFORMATION
 	{
 		Q931_MT_USER_INFORMATION,
-		Q931_IE_MORE_DATA,
+		0, Q931_IE_MORE_DATA,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_OPTIONAL,
 	},
 	{
 		Q931_MT_USER_INFORMATION,
-		Q931_IE_USER_USER,
+		0, Q931_IE_USER_USER,
 		Q931_IE_DIR_BOTH,
 		Q931_IE_MANDATORY,
 	},
 };
 
-static int q931_ie_id_compare(const void *a, const void *b)
-{
-	return q931_intcmp(((struct q931_ie_type *)a)->id,
-			   ((struct q931_ie_type *)b)->id);
-}
+int q931_ie_usages_cnt = ARRAY_SIZE(q931_ie_usages);
 
-static int q931_ie_mt_id_compare(const void *a, const void *b)
-{
-	if (((struct q931_ie_type_per_mt *)a)->message_type ==
-	     ((struct q931_ie_type_per_mt *)b)->message_type)
-		return q931_intcmp(((struct q931_ie_type_per_mt *)a)->ie_id,
-				((struct q931_ie_type_per_mt *)b)->ie_id);
-	else
-		return q931_intcmp(((struct q931_ie_type_per_mt *)a)->message_type,
-				((struct q931_ie_type_per_mt *)b)->message_type);
-}
-
-const struct q931_ie_type *q931_get_ie_type(
+const struct q931_ie_class *q931_get_ie_class(
+	__u8 codeset,
 	enum q931_ie_id id)
 {
-	struct q931_ie_type key, *res;
+	int i;
+	for (i=0; i<ARRAY_SIZE(q931_ie_classes); i++) {
+		if(q931_ie_classes[i].codeset == codeset &&
+		   q931_ie_classes[i].id == id)
+			return &q931_ie_classes[i];
+	}
 
-	key.id = id;
-	key.name = NULL;
-
-	res = (struct q931_ie_type *)
-		bsearch(&key,
-			q931_ie_types,
-			ARRAY_SIZE(q931_ie_types),
-			sizeof(struct q931_ie_type),
-			q931_ie_id_compare);
-
-	return res;
+	return NULL;
 }
 
-const struct q931_ie_type_per_mt *q931_get_ie_type_per_mt(
+const struct q931_ie_usage *q931_get_ie_usage(
 	enum q931_message_type message_type,
+	__u8 codeset,
 	enum q931_ie_id ie_id)
 {
-	struct q931_ie_type_per_mt key, *res;
+	int i;
+	for (i=0; i<ARRAY_SIZE(q931_ie_usages); i++) {
+		if(q931_ie_usages[i].codeset == codeset &&
+		   q931_ie_usages[i].ie_id == ie_id)
+			return &q931_ie_usages[i];
+	}
 
-	key.message_type = message_type;
-	key.ie_id = ie_id;
-
-	res = (struct q931_ie_type_per_mt *)
-		bsearch(&key,
-			q931_ie_types_per_mt,
-			ARRAY_SIZE(q931_ie_types_per_mt),
-			sizeof(struct q931_ie_type_per_mt),
-			q931_ie_mt_id_compare);
-
-	return res;
+	return NULL;
 }
 
-void q931_ie_types_init()
+void q931_ie_classes_init()
 {
-	qsort(q931_ie_types,
-		ARRAY_SIZE(q931_ie_types),
-		sizeof(struct q931_ie_type),
-		q931_ie_id_compare);
-
-	qsort(q931_ie_types_per_mt,
-		ARRAY_SIZE(q931_ie_types_per_mt),
-		sizeof(struct q931_ie_type_per_mt),
-		q931_ie_mt_id_compare);
-
 	int i;
-	for (i=0; i<ARRAY_SIZE(q931_ie_types); i++) {
+	for (i=0; i<ARRAY_SIZE(q931_ie_classes); i++) {
 
-		if (q931_ie_types[i].init)
-			q931_ie_types[i].init(&q931_ie_types[i]);
+		if (q931_ie_classes[i].init)
+			q931_ie_classes[i].init(&q931_ie_classes[i]);
 	}
 }

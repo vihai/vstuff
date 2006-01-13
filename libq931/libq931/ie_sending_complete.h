@@ -26,7 +26,7 @@ struct q931_ie *q931_ie_sending_complete_alloc_abstract(void);
 #ifdef Q931_PRIVATE
 
 void q931_ie_sending_complete_register(
-	const struct q931_ie_type *type);
+	const struct q931_ie_class *ie_class);
 
 int q931_ie_sending_complete_read_from_buf(
 	struct q931_ie *abstract_ie,

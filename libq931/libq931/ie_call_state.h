@@ -92,7 +92,7 @@ struct q931_ie_call_state_onwire_3
 } __attribute__ ((__packed__));
 
 void q931_ie_call_state_register(
-	const struct q931_ie_type *type);
+	const struct q931_ie_class *ie_class);
 
 int q931_ie_call_state_read_from_buf(
 	struct q931_ie *abstract_ie,

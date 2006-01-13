@@ -23,12 +23,12 @@
 #include <libq931/message.h>
 #include <libq931/chanset.h>
 
-static const struct q931_ie_type *ie_type;
+static const struct q931_ie_class *my_class;
 
 void q931_ie_channel_identification_register(
-	const struct q931_ie_type *type)
+	const struct q931_ie_class *ie_class)
 {
-	ie_type = type;
+	my_class = ie_class;
 }
 
 struct q931_ie_channel_identification *
@@ -40,7 +40,7 @@ struct q931_ie_channel_identification *
 
 	memset(ie, 0x00, sizeof(*ie));
 
-	ie->ie.type = ie_type;
+	ie->ie.cls = my_class;
 	ie->ie.refcnt = 1;
 
 	q931_chanset_init(&ie->chanset);
@@ -60,7 +60,7 @@ int q931_ie_channel_identification_read_from_buf(
 	void (*report_func)(int level, const char *format, ...),
 	struct q931_interface *intf)
 {
-	assert(abstract_ie->type == ie_type);
+	assert(abstract_ie->cls == my_class);
 	assert(intf);
 
 	struct q931_ie_channel_identification *ie =
@@ -278,7 +278,7 @@ int q931_ie_channel_identification_write_to_buf(
 	void *buf,
 	int max_size)
 {
-	assert(abstract_ie->type == ie_type);
+	assert(abstract_ie->cls == my_class);
 	const struct q931_ie_channel_identification *ie =
 		container_of(abstract_ie,
 			struct q931_ie_channel_identification, ie);

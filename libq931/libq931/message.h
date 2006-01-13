@@ -27,7 +27,10 @@ struct q931_message
 	int rawlen;
 
 	struct q931_dlc *dlc;
+
+	__u8 raw_message_type;
 	enum q931_message_type message_type;
+
 	q931_callref callref;
 	int callref_len;
 	enum q931_callref_flag callref_direction;
