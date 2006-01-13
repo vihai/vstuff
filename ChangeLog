@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-13 00:30:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-441
+
+    Summary:
+      Fixed libq931 timers according to ETS 300 403
+    Revision:
+      isdn--devel--0.1--patch-441
+
+
+    modified files:
+     ChangeLog libq931/intf.c
+
+
 2006-01-13 00:14:46 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-440
 
     Summary:
