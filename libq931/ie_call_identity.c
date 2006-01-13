@@ -49,9 +49,10 @@ struct q931_ie *q931_ie_call_identity_alloc_abstract(void)
 
 int q931_ie_call_identity_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -60,29 +61,29 @@ int q931_ie_call_identity_read_from_buf(
 			struct q931_ie_call_identity, ie);
 
 	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE len < 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len < 1\n");
 		return FALSE;
 	}
 
 	if (len > 10) {
 		// Be reeeeally sure the IE is not > 10 octets
-		report_msg(msg, LOG_ERR, "IE len > 10\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len > 10\n");
 		return FALSE;
 	}
 
-	memcpy(ie->data, msg->rawies + pos, len);
+	memcpy(ie->data, buf, len);
 	ie->data_len = len;
 
 	return TRUE;
 }
 
 int q931_ie_call_identity_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_call_identity *ie =
-		container_of(generic_ie, struct q931_ie_call_identity, ie);
+		container_of(abstract_ie, struct q931_ie_call_identity, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_CALL_IDENTITY;
@@ -95,12 +96,12 @@ int q931_ie_call_identity_write_to_buf(
 }
 
 void q931_ie_call_identity_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_call_identity *ie =
-		container_of(generic_ie, struct q931_ie_call_identity, ie);
+		container_of(abstract_ie, struct q931_ie_call_identity, ie);
 
 	char sane_str[10];
 	char hex_str[20];
@@ -113,6 +114,6 @@ void q931_ie_call_identity_dump(
 	sane_str[i] = '\0';
 	hex_str[i*2] = '\0';
 
-	report(LOG_DEBUG, "%sIdentity = %s (%s)\n", prefix,
+	report_ie_dump(abstract_ie, "%sIdentity = %s (%s)\n", prefix,
 		sane_str, hex_str);
 }

@@ -48,9 +48,10 @@ struct q931_ie *q931_ie_display_alloc_abstract(void)
 
 int q931_ie_display_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -59,29 +60,29 @@ int q931_ie_display_read_from_buf(
 			struct q931_ie_display, ie);
 
 	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE len < 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len < 1\n");
 		return FALSE;
 	}
 
 	if (len > 82) {
 		// Be reeeeally sure the IE is not > 82 octets
-		report_msg(msg, LOG_ERR, "IE len > 82\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len > 82\n");
 		return FALSE;
 	}
 
-	memcpy(ie->text, msg->rawies + pos, len);
+	memcpy(ie->text, buf, len);
 	ie->text[len] = '\0';
 
 	return TRUE;
 }
 
 int q931_ie_display_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_display *ie =
-		container_of(generic_ie, struct q931_ie_display, ie);
+		container_of(abstract_ie, struct q931_ie_display, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_DISPLAY;
@@ -94,12 +95,12 @@ int q931_ie_display_write_to_buf(
 }
 
 void q931_ie_display_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_display *ie =
-		container_of(generic_ie, struct q931_ie_display, ie);
+		container_of(abstract_ie, struct q931_ie_display, ie);
 
 	char sane_str[82];
 	strncpy(sane_str, ie->text, sizeof(sane_str));
@@ -110,5 +111,6 @@ void q931_ie_display_dump(
 		strp++;
 	}
 
-	report(LOG_DEBUG, "%sDisplay = %s\n", prefix, sane_str);
+	report_ie_dump(abstract_ie,
+		"%sDisplay = %s\n", prefix, sane_str);
 }

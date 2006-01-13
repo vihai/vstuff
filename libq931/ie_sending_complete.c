@@ -47,9 +47,10 @@ struct q931_ie *q931_ie_sending_complete_alloc_abstract(void)
 
 int q931_ie_sending_complete_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -57,7 +58,7 @@ int q931_ie_sending_complete_read_from_buf(
 }
 
 int q931_ie_sending_complete_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
@@ -67,8 +68,8 @@ int q931_ie_sending_complete_write_to_buf(
 }
 
 void q931_ie_sending_complete_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 }

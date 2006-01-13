@@ -49,9 +49,10 @@ struct q931_ie *q931_ie_call_state_alloc_abstract(void)
 
 int q931_ie_call_state_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -62,16 +63,16 @@ int q931_ie_call_state_read_from_buf(
 	int nextoct = 0;
 
 	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 1\n");
 		return FALSE;
 	}
 
 	struct q931_ie_call_state_onwire_3 *oct_3 =
 		(struct q931_ie_call_state_onwire_3 *)
-		(msg->rawies + pos + (nextoct++));
+		(buf + (nextoct++));
 
 	if (oct_3->coding_standard != Q931_IE_CS_CS_CCITT) {
-		report_msg(msg, LOG_ERR, "coding stanrdard != CCITT\n");
+		report_ie(abstract_ie, LOG_ERR, "coding stanrdard != CCITT\n");
 		return FALSE;
 	}
 
@@ -82,12 +83,12 @@ int q931_ie_call_state_read_from_buf(
 }
 
 int q931_ie_call_state_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_call_state *ie =
-		container_of(generic_ie, struct q931_ie_call_state, ie);
+		container_of(abstract_ie, struct q931_ie_call_state, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_CALL_STATE;
@@ -168,19 +169,21 @@ static const char *q931_ie_call_state_value_to_text(
 }
 
 void q931_ie_call_state_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_call_state *ie =
-		container_of(generic_ie, struct q931_ie_call_state, ie);
+		container_of(abstract_ie, struct q931_ie_call_state, ie);
 
-	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_call_state_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report(LOG_DEBUG, "%sState value = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sState value = %s (%d)\n", prefix,
 		q931_ie_call_state_value_to_text(
 			ie->value),
 		ie->value);

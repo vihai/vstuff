@@ -109,7 +109,7 @@ struct q931_ie *
 
 static inline enum q931_ie_channel_identification_interface_type
 	q931_ie_channel_identification_intftype(
-		const struct q931_interface *intf)
+		struct q931_interface *intf)
 {
 	if (intf->type == Q931_INTF_TYPE_PRA)
 		return Q931_IE_CI_IT_PRIMARY;
@@ -191,10 +191,11 @@ void q931_ie_channel_identification_register(
 	const struct q931_ie_type *type);
 
 int q931_ie_channel_identification_read_from_buf(
-	struct q931_ie *ie,
-	const struct q931_message *msg,
-	int pos,
-	int len);
+	struct q931_ie *abstract_ie,
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf);
 
 int q931_ie_channel_identification_write_to_buf(
 	const struct q931_ie *generic_ie,

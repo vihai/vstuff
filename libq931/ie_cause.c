@@ -53,9 +53,10 @@ struct q931_ie *q931_ie_cause_alloc_abstract(void)
 
 int q931_ie_cause_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -66,37 +67,37 @@ int q931_ie_cause_read_from_buf(
 	int nextoct = 0;
 
 	if (len < 2) {
-		report_msg(msg, LOG_ERR, "IE size < 2\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 2\n");
 
 		return FALSE;
 	}
 
 	struct q931_ie_cause_onwire_3 *oct_3 =
 		(struct q931_ie_cause_onwire_3 *)
-		(msg->rawies + pos + nextoct);
+		(buf + nextoct);
 	nextoct++;
 
 	ie->coding_standard = oct_3->coding_standard;
 
 	if (oct_3->coding_standard != Q931_IE_C_CS_CCITT) {
 		// What should we do?
-		report_msg(msg, LOG_WARNING,
+		report_ie(abstract_ie, LOG_WARNING,
 			"What should we do if coding_standard != CCITT?\n");
 	}
 
 	if (oct_3->ext == 0) {
 		struct q931_ie_cause_onwire_3a *oct_3a =
 			(struct q931_ie_cause_onwire_3a *)
-			(msg->rawies + pos + nextoct);
+			(buf + nextoct);
 		nextoct++;
 
 		if (oct_3a->ext != 1) {
-			report_msg(msg, LOG_ERR, "Extension bit unexpectedly set to 0\n");
+			report_ie(abstract_ie, LOG_ERR, "Extension bit unexpectedly set to 0\n");
 			return FALSE;
 		}
 
 		if (oct_3a->recommendation != Q931_IE_C_R_Q931) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"Recommendation unexpectedly != Q.931\n");
 
 			return FALSE;
@@ -107,7 +108,7 @@ int q931_ie_cause_read_from_buf(
 
 	struct q931_ie_cause_onwire_4 *oct_4 =
 		(struct q931_ie_cause_onwire_4 *)
-		(msg->rawies + pos + nextoct);
+		(buf + nextoct);
 	nextoct++;
 
 	ie->value = oct_4->cause_value;
@@ -117,12 +118,12 @@ int q931_ie_cause_read_from_buf(
 
 
 int q931_ie_cause_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_cause *ie =
-		container_of(generic_ie, struct q931_ie_cause, ie);
+		container_of(abstract_ie, struct q931_ie_cause, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_CAUSE;
@@ -517,24 +518,27 @@ static const char *q931_ie_cause_cause_value_to_text(
 }
 
 void q931_ie_cause_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_cause *ie =
-		container_of(generic_ie, struct q931_ie_cause, ie);
+		container_of(abstract_ie, struct q931_ie_cause, ie);
 
-	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_cause_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report(LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sLocation = %s (%d)\n", prefix,
 		q931_ie_cause_location_to_text(
 			ie->location),
 		ie->location);
 
-	report(LOG_DEBUG, "%sCause value = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sCause value = %s (%d)\n", prefix,
 		q931_ie_cause_cause_value_to_text(
 			ie->value),
 		ie->value);

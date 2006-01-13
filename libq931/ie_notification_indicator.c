@@ -48,9 +48,10 @@ struct q931_ie *q931_ie_notification_indicator_alloc_abstract(void)
 
 int q931_ie_notification_indicator_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -59,16 +60,16 @@ int q931_ie_notification_indicator_read_from_buf(
 			struct q931_ie_notification_indicator, ie);
 
 	if (len < 2) {
-		report_msg(msg, LOG_ERR, "IE len < 2\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len < 2\n");
 		return FALSE;
 	}
 
 	struct q931_ie_notification_indicator_onwire_3 *oct_3 =
 		(struct q931_ie_notification_indicator_onwire_3 *)
-		(msg->rawies + pos);
+		(buf);
 
 	if (!oct_3->ext) {
-		report_msg(msg, LOG_WARNING, "IE oct 3 ext != 0\n");
+		report_ie(abstract_ie, LOG_WARNING, "IE oct 3 ext != 0\n");
 		return FALSE;
 	}
 
@@ -78,12 +79,12 @@ int q931_ie_notification_indicator_read_from_buf(
 }
 
 int q931_ie_notification_indicator_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_notification_indicator *ie =
-		container_of(generic_ie,
+		container_of(abstract_ie,
 			struct q931_ie_notification_indicator, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
@@ -117,15 +118,16 @@ static const char *q931_ie_notification_indicator_description_to_text(
 }
 
 void q931_ie_notification_indicator_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_notification_indicator *ie =
-		container_of(generic_ie,
+		container_of(abstract_ie,
 			struct q931_ie_notification_indicator, ie);
 
-	report(LOG_DEBUG, "%sNotification Indicator = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sNotification Indicator = %s (%d)\n", prefix,
 		q931_ie_notification_indicator_description_to_text(
 			ie->description),
 		ie->description);

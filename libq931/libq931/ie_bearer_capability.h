@@ -485,11 +485,12 @@ void q931_ie_bearer_capability_register(
 	const struct q931_ie_type *type);
 
 int q931_ie_bearer_capability_read_from_buf(
-	struct q931_ie *ie,
-	const struct q931_message *msg,
-	int pos,
-	int len);
-
+	struct q931_ie *abstract_ie,
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf);
+	
 int q931_ie_bearer_capability_write_to_buf(
 	const struct q931_ie *ie,
 	void *buf,

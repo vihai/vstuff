@@ -48,9 +48,10 @@ struct q931_ie *q931_ie_high_layer_compatibility_abstract(void)
 
 int q931_ie_high_layer_compatibility_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -59,7 +60,7 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 			struct q931_ie_high_layer_compatibility, ie);
 
 	if (len < 2) {
-		report_msg(msg, LOG_ERR, "IE size < 2\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 2\n");
 		return FALSE;
 	}
 
@@ -67,7 +68,7 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 
 	struct q931_ie_high_layer_compatibility_onwire_3 *oct_3 =
 		(struct q931_ie_high_layer_compatibility_onwire_3 *)
-		(msg->rawies + pos + (nextoct++));
+		(buf + (nextoct++));
 
 	ie->coding_standard = oct_3->coding_standard;
 	ie->interpretation = oct_3->interpretation;
@@ -75,26 +76,26 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 
 	struct q931_ie_high_layer_compatibility_onwire_4 *oct_4 =
 		(struct q931_ie_high_layer_compatibility_onwire_4 *)
-		(msg->rawies + pos + (nextoct++));
+		(buf + (nextoct++));
 
 	ie->characteristics_identification =
 		oct_4->characteristics_identification;
 
 	if (oct_4->ext) {
 		if (len < 3) {
-			report_msg(msg, LOG_ERR, "IE size < 3\n");
+			report_ie(abstract_ie, LOG_ERR, "IE size < 3\n");
 			return FALSE;
 		}
 
 		struct q931_ie_high_layer_compatibility_onwire_4a *oct_4a =
 			(struct q931_ie_high_layer_compatibility_onwire_4a *)
-			(msg->rawies + pos + (nextoct++));
+			(buf + (nextoct++));
 
 		ie->extended_characteristics_identification =
 			oct_4a->extended_characteristics_identification;
 
 		if (oct_4a->ext) {
-			report_msg(msg, LOG_ERR, "IE Oct 4a ext != 1\n");
+			report_ie(abstract_ie, LOG_ERR, "IE Oct 4a ext != 1\n");
 			return FALSE;
 		}
 	}
@@ -103,12 +104,12 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 }
 
 int q931_ie_high_layer_compatibility_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_high_layer_compatibility *ie =
-		container_of(generic_ie,
+		container_of(abstract_ie,
 			struct q931_ie_high_layer_compatibility, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
@@ -213,20 +214,22 @@ static const char *
 
 
 void q931_ie_high_layer_compatibility_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_high_layer_compatibility *ie =
-		container_of(generic_ie,
+		container_of(abstract_ie,
 			struct q931_ie_high_layer_compatibility, ie);
 
-	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_high_layer_compatibility_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report(LOG_DEBUG, "%sCharacteristics identification = %s (%d)\n",
+	report_ie_dump(abstract_ie,
+		"%sCharacteristics identification = %s (%d)\n",
 		prefix,
 		q931_ie_high_layer_compatibility_characteristics_identification_to_text(
 			ie->characteristics_identification),

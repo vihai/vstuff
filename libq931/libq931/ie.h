@@ -21,6 +21,21 @@
 #include <libq931/msgtype.h>
 #include <libq931/dlc.h>
 
+#define report_ie(ie, lev, fmt, args...)	\
+		if (report_func)		\
+			report_func(		\
+				(lev),		\
+				"%s: "		\
+				fmt,		\
+				ie->type->name,	\
+				## args)
+
+#define report_ie_dump(ie, fmt, args...)	\
+		report_func(		\
+			LOG_DEBUG,	\
+			fmt,		\
+			## args)
+
 struct q931_ie_type;
 
 struct q931_ie
@@ -136,13 +151,15 @@ struct q931_ie_type
 
 	int (*read_from_buf)(
 		struct q931_ie *ie,
-		const struct q931_message *msg,
-		int pos,
-		int len);
+		void *buf,
+		int len,
+		void (*report_func)(int level, const char *format, ...),
+		struct q931_interface *intf);
 
 	int (*write_to_buf)(
 		const struct q931_ie *ie,
-		void *buf, int max_size);
+		void *buf,
+		int max_size);
 
 	void (*dump)(
 		const struct q931_ie *ie,

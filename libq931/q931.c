@@ -39,6 +39,7 @@
 #include <libq931/proto.h>
 
 #include <libq931/ie_cause.h>
+#include <libq931/ie_channel_identification.h>
 
 #include "call_inline.h"
 
@@ -258,44 +259,159 @@ struct q931_decode_status
 	__u8 unrecognized_ies[32];
 };
 
+void q931_decode_so_ie_codeset_0(
+	const struct q931_call *call,
+	struct q931_message *msg,
+	struct q931_decode_status *ds)
+{
+	const struct q931_ie_type *ie_type =
+		q931_get_ie_type(ds->ie_id);
+
+	if (ie_type) {
+		if (ie_type->alloc) {
+			struct q931_ie *ie;
+			ie = ie_type->alloc();
+
+			if (ie->type->read_from_buf(ie,
+					msg->rawies + ds->rawies_curpos,
+					1, call->intf->lib->report,
+					call->intf))
+				q931_ies_add(&msg->ies, ie);
+
+			if (ie->type->dump)
+				ie->type->dump(ie,
+					call->intf->lib->report,
+					"<-    ");
+
+			report_msg_cont(msg, LOG_DEBUG,
+				"<-  SO IE %d ===> %u (%s)\n",
+				ds->curie,
+				ds->ie_id,
+				ie_type->name);
+
+			q931_ie_put(ie);
+		}
+	} else {
+		report_msg_cont(msg, LOG_DEBUG,
+			"<-  SO IE %d ===> %u (unknown)\n",
+			ds->curie,
+			ds->ie_id);
+	}
+}
+
 void q931_decode_so_ie(
 	const struct q931_call *call,
 	struct q931_message *msg,
 	struct q931_decode_status *ds)
 {
-	if (ds->codeset == 0) {
-		const struct q931_ie_type *ie_type =
-			q931_get_ie_type(ds->ie_id);
+	if (ds->codeset == 0)
+		q931_decode_so_ie(call, msg, ds);
+}
 
-		if (ie_type) {
-			if (ie_type->alloc) {
-				struct q931_ie *ie;
-				ie = ie_type->alloc();
+void q931_decode_vl_ie_codeset_0(
+	const struct q931_call *call,
+	struct q931_message *msg,
+	struct q931_decode_status *ds,
+	int ie_len)
+{
+	// Check out-of-sequence
+	// Check duplicated IEs
+	// Check missing mandatory IE
 
-				if (ie->type->read_from_buf(ie, msg,
-						ds->rawies_curpos, 1))
-					q931_ies_add(&msg->ies, ie);
+	const struct q931_ie_type *ie_type = q931_get_ie_type(ds->ie_id);
 
-				if (ie->type->dump)
-					ie->type->dump(ie,
-						call->intf->lib->report,
-						"<-    ");
+	if (!ie_type) {
+		if (q931_ie_comprehension_required(ds->ie_id)) {
+			ds->unrecognized_ies[ds->unrecognized_ies_cnt++] =
+				ds->ie_id;
 
-				report_msg_cont(msg, LOG_DEBUG,
-					"<-  SO IE %d ===> %u (%s)\n",
-					ds->curie,
-					ds->ie_id,
-					ie_type->name);
-
-				q931_ie_put(ie);
-			}
-		} else {
-			report_msg_cont(msg, LOG_DEBUG,
-				"<-  SO IE %d ===> %u (unknown)\n",
-				ds->curie,
+			report_msg(msg, LOG_DEBUG,
+				"!! Unrecognized IE %d in message"
+				" for which comprehension is"
+				" required\n",
 				ds->ie_id);
 		}
+
+		return;
 	}
+
+	const struct q931_ie_type_per_mt *ie_type2 =
+		q931_get_ie_type_per_mt(
+			msg->message_type, ds->ie_id);
+
+	if (!ie_type2) {
+		report_msg(msg, LOG_NOTICE,
+			"!! Unexpected IE %d in message type %s\n",
+			ds->ie_id,
+			q931_message_type_to_text(
+				msg->message_type));
+
+		return;
+	}
+
+	if (ie_has_content_errors(msg, ie_type, ie_len)) {
+		// If mandatory or comprension required
+		if (q931_ie_comprehension_required(ds->ie_id)) {
+			if (ds->invalid_mand_ies_cnt <
+			    ARRAY_SIZE(ds->invalid_mand_ies)) {
+				ds->invalid_mand_ies
+					[ds->invalid_mand_ies_cnt]
+					= ds->ie_id;
+
+				ds->invalid_mand_ies_cnt++;
+			}
+		} else {
+			if (ds->invalid_opt_ies_cnt <
+			    ARRAY_SIZE(ds->invalid_opt_ies)) {
+				ds->invalid_opt_ies
+					[ds->invalid_opt_ies_cnt]
+					= ds->ie_id;
+
+				ds->invalid_opt_ies_cnt++;
+			}
+		}
+
+		return;
+	}
+
+	report_msg_cont(msg, LOG_DEBUG,
+		"<-  VL IE %d ===> %u (%s) -- length %u\n",
+		ds->curie,
+		ds->ie_id,
+		ie_type->name,
+		ie_len);
+
+	if (!ie_type->alloc)
+       		return;
+
+	struct q931_ie *ie;
+	ie = ie_type->alloc();
+
+	if (!ie->type->read_from_buf(ie,
+			msg->rawies + ds->rawies_curpos,
+			ie_len,
+			call->intf->lib->report,
+			call->intf)) {
+
+		int i;
+		char hexdump[512];
+
+		for (i=0; i<ie_len; i++)
+			sprintf(hexdump + i * 2, "%02x",
+				*(msg->rawies + ds->rawies_curpos + i));
+
+		report_msg_cont(msg, LOG_WARNING,
+			"IE has content errors (%s)\n",
+			hexdump);
+
+		return;
+	}
+
+	q931_ies_add_put(&msg->ies, ie);
+
+	if (ie->type->dump)
+		ie->type->dump(ie, call->intf->lib->report, "<-    ");
+
 }
 
 void q931_decode_vl_ie(
@@ -306,90 +422,8 @@ void q931_decode_vl_ie(
 	int ie_len = *(__u8 *)(msg->rawies + ds->rawies_curpos);
 	ds->rawies_curpos++;
 
-	if (ds->codeset == 0) {
-		// Check out-of-sequence
-		// Check duplicated IEs
-		// Check missing mandatory IE
-
-		const struct q931_ie_type *ie_type =
-			q931_get_ie_type(ds->ie_id);
-
-		if (!ie_type) {
-			if (q931_ie_comprehension_required(ds->ie_id)) {
-				ds->unrecognized_ies
-					[ds->unrecognized_ies_cnt++] =
-					ds->ie_id;
-
-				report_msg(msg, LOG_DEBUG,
-					"!! Unrecognized IE %d in message"
-					" for which comprehension is"
-					" required\n",
-					ds->ie_id);
-			}
-
-			goto skip_this_ie;
-		}
-
-		const struct q931_ie_type_per_mt *ie_type2 =
-			q931_get_ie_type_per_mt(
-				msg->message_type, ds->ie_id);
-
-		if (!ie_type2) {
-			report_msg(msg, LOG_NOTICE,
-				"!! Unexpected IE %d in message type %s\n",
-				ds->ie_id,
-				q931_message_type_to_text(
-					msg->message_type));
-
-			goto skip_this_ie;
-		}
-
-		if (!ie_has_content_errors(msg, ie_type, ie_len)) {
-			report_msg_cont(msg, LOG_DEBUG,
-				"<-  VL IE %d ===> %u (%s) -- length %u\n",
-				ds->curie,
-				ds->ie_id,
-				ie_type->name,
-				ie_len);
-
-			if (ie_type->alloc) {
-				struct q931_ie *ie;
-				ie = ie_type->alloc();
-
-				if (ie->type->read_from_buf(ie, msg,
-						ds->rawies_curpos, ie_len))
-					q931_ies_add_put(&msg->ies, ie);
-
-				if (ie->type->dump)
-					ie->type->dump(ie,
-						call->intf->lib->report,
-						"<-    ");
-			}
-		} else {
-			// If mandatory or comprension required
-			if (q931_ie_comprehension_required(ds->ie_id)) {
-				if (ds->invalid_mand_ies_cnt <
-				    ARRAY_SIZE(ds->invalid_mand_ies)) {
-					ds->invalid_mand_ies
-						[ds->invalid_mand_ies_cnt]
-						= ds->ie_id;
-
-					ds->invalid_mand_ies_cnt++;
-				}
-			} else {
-				if (ds->invalid_opt_ies_cnt <
-				    ARRAY_SIZE(ds->invalid_opt_ies)) {
-					ds->invalid_opt_ies
-						[ds->invalid_opt_ies_cnt]
-						= ds->ie_id;
-
-					ds->invalid_opt_ies_cnt++;
-				}
-			}
-		}
-	}
-
-skip_this_ie:
+	if (ds->codeset == 0)
+		q931_decode_vl_ie_codeset_0(call, msg, ds, ie_len);
 
 	ds->rawies_curpos += ie_len;
 

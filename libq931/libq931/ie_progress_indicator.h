@@ -98,10 +98,11 @@ void q931_ie_progress_indicator_register(
 	const struct q931_ie_type *type);
 
 int q931_ie_progress_indicator_read_from_buf(
-	struct q931_ie *ie,
-	const struct q931_message *msg,
-	int pos,
-	int len);
+	struct q931_ie *abstract_ie,
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf);
 
 int q931_ie_progress_indicator_write_to_buf(
 	const struct q931_ie *generic_ie,

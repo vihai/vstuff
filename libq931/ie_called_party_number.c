@@ -49,9 +49,10 @@ struct q931_ie *q931_ie_called_party_number_alloc_abstract()
 
 int q931_ie_called_party_number_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -60,30 +61,30 @@ int q931_ie_called_party_number_read_from_buf(
 			struct q931_ie_called_party_number, ie);
 
 	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 1\n");
 		return FALSE;
 	}
 
 	struct q931_ie_called_party_number_onwire_3 *oct_3 =
 		(struct q931_ie_called_party_number_onwire_3 *)
-		(msg->rawies + pos + 0);
+		(buf + 0);
 
 	ie->type_of_number = oct_3->type_of_number;
 	ie->numbering_plan_identificator = oct_3->numbering_plan_identificator;
 
-	memcpy(ie->number, msg->rawies + pos + 1, len - 1);
+	memcpy(ie->number, buf + 1, len - 1);
 	ie->number[len] = '\0';
 
 	return TRUE;
 }
 
 int q931_ie_called_party_number_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_called_party_number *ie =
-		container_of(generic_ie,
+		container_of(abstract_ie,
 			struct q931_ie_called_party_number, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
@@ -157,23 +158,23 @@ static const char *
 
 
 void q931_ie_called_party_number_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_called_party_number *ie =
-		container_of(generic_ie, struct q931_ie_called_party_number, ie);
+		container_of(abstract_ie, struct q931_ie_called_party_number, ie);
 
-	report(LOG_DEBUG, "%sType of number = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,  "%sType of number = %s (%d)\n", prefix,
 		q931_ie_called_party_number_type_of_number_to_text(
 			ie->type_of_number),
 		ie->type_of_number);
 
-	report(LOG_DEBUG, "%sNumbering plan = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie, "%sNumbering plan = %s (%d)\n", prefix,
 		q931_ie_called_party_number_numbering_plan_identificator_to_text(
 			ie->numbering_plan_identificator),
 		ie->numbering_plan_identificator);
 
-	report(LOG_DEBUG, "%sNumber = %s\n", prefix,
+	report_ie_dump(abstract_ie, "%sNumber = %s\n", prefix,
 		ie->number);
 }

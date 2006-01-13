@@ -55,27 +55,29 @@ struct q931_ie *q931_ie_channel_identification_alloc_abstract(void)
 
 int q931_ie_channel_identification_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
+	assert(intf);
 
 	struct q931_ie_channel_identification *ie =
 		container_of(abstract_ie,
 			struct q931_ie_channel_identification, ie);
 
 	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 1\n");
 		return FALSE;
 	}
 
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
 		(struct q931_ie_channel_identification_onwire_3 *)
-		(msg->rawies + pos + 0);
+		(buf + 0);
 
 	if (oct_3->interface_id_present == Q931_IE_CI_IIP_EXPLICIT) {
-		report_msg(msg, LOG_ERR,
+		report_ie(abstract_ie, LOG_ERR,
 			"IE specifies interface ID thought it"
 			" is not supported by the ETSI\n");
 
@@ -85,7 +87,7 @@ int q931_ie_channel_identification_read_from_buf(
 	ie->interface_id_present = oct_3->interface_id_present;
 
 	if (oct_3->d_channel_indicator == Q931_IE_CI_DCI_IS_D_CHAN) {
-		report_msg(msg, LOG_ERR,
+		report_ie(abstract_ie, LOG_ERR,
 			"IE specifies D channel which"
 			" is not supported\n");
 
@@ -94,16 +96,17 @@ int q931_ie_channel_identification_read_from_buf(
 
 	ie->preferred_exclusive = oct_3->preferred_exclusive;
 	ie->d_channel_indicator = oct_3->d_channel_indicator;
+	ie->interface_type = oct_3->interface_type;
 
-	if (oct_3->interface_type == Q931_IE_CI_IT_PRIMARY) {
+	if (ie->interface_type == Q931_IE_CI_IT_PRIMARY) {
 		if (len < 2) {
-			report_msg(msg, LOG_ERR, "IE size < 2\n");
+			report_ie(abstract_ie, LOG_ERR, "IE size < 2\n");
 
 			return FALSE;
 		}
 
-		if (msg->dlc->intf->type == Q931_INTF_TYPE_BRA) {
-			report_msg(msg, LOG_ERR,
+		if (intf->type == Q931_INTF_TYPE_BRA) {
+			report_ie(abstract_ie, LOG_ERR,
 				"IE specifies BRI while interface is PRI\n");
 
 			return FALSE;
@@ -111,9 +114,9 @@ int q931_ie_channel_identification_read_from_buf(
 
 		struct q931_ie_channel_identification_onwire_3c *oct_3c =
 			(struct q931_ie_channel_identification_onwire_3c *)
-			(msg->rawies + pos + 1);
+			(buf + 1);
 		if (oct_3c->number_map == Q931_IE_CI_NM_MAP) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"IE specifies channel map, which"
 				" is not supported by DSSS-1\n");
 
@@ -121,7 +124,7 @@ int q931_ie_channel_identification_read_from_buf(
 		}
 
 		if (oct_3c->coding_standard != Q931_IE_CI_CS_CCITT) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"IE specifies unsupported coding type\n");
 
 			return FALSE;
@@ -131,7 +134,7 @@ int q931_ie_channel_identification_read_from_buf(
 		do {
 			oct_3d = (struct
 				q931_ie_channel_identification_onwire_3d *)
-					(msg->rawies + 2);
+					(buf + 2);
 
 			// FIXME
 
@@ -140,30 +143,30 @@ int q931_ie_channel_identification_read_from_buf(
 		return TRUE;
 
 	} else {
-		if (msg->dlc->intf->type == Q931_INTF_TYPE_PRA) {
-			report_msg(msg, LOG_ERR,
-				"IE specifies BRI while interface is PRI\n");
+		if (intf->type == Q931_INTF_TYPE_PRA) {
+			report_ie(abstract_ie, LOG_ERR,
+				"IE specifies PRI while interface is BRI\n");
 
 			return FALSE;
 		}
 
 		if (oct_3->info_channel_selection == Q931_IE_CI_ICS_BRA_B1) {
 			q931_chanset_add(&ie->chanset,
-					&msg->dlc->intf->channels[0]);
+					&intf->channels[0]);
 		} else if (oct_3->info_channel_selection ==
 						Q931_IE_CI_ICS_BRA_B2) {
 			q931_chanset_add(&ie->chanset,
-					&msg->dlc->intf->channels[1]);
+					&intf->channels[1]);
 		} else if (oct_3->info_channel_selection ==
 						Q931_IE_CI_ICS_BRA_ANY) {
 			q931_chanset_add(&ie->chanset,
-					&msg->dlc->intf->channels[0]);
+					&intf->channels[0]);
 			q931_chanset_add(&ie->chanset,
-					&msg->dlc->intf->channels[1]);
+					&intf->channels[1]);
 
 			if (oct_3->preferred_exclusive ==
 						Q931_IE_CI_PE_EXCLUSIVE) {
-				report_msg(msg, LOG_ERR,
+				report_ie(abstract_ie, LOG_ERR,
 					"IE specifies any channel with no"
 					" alternative, is this valid?\n");
 
@@ -173,7 +176,7 @@ int q931_ie_channel_identification_read_from_buf(
 					Q931_IE_CI_ICS_BRA_NO_CHANNEL) {
 			if (oct_3->preferred_exclusive ==
 					Q931_IE_CI_PE_EXCLUSIVE) {
-				report_msg(msg, LOG_ERR,
+				report_ie(abstract_ie, LOG_ERR,
 					"IE specifies no channel with no"
 					" alternative, is this valid?\n");
 
@@ -407,35 +410,40 @@ static const char *q931_ie_channel_identification_coding_standard_to_text(
 }
 
 void q931_ie_channel_identification_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_channel_identification *ie =
-		container_of(generic_ie,
+		container_of(abstract_ie,
 			struct q931_ie_channel_identification, ie);
 
-	report(LOG_DEBUG, "%sInterface id = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sInterface id = %s (%d)\n", prefix,
 		q931_ie_channel_identification_interface_id_present_to_text(
 			ie->interface_id_present),
 		ie->interface_id_present);
 
-	report(LOG_DEBUG, "%sInterface type = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sInterface type = %s (%d)\n", prefix,
 		q931_ie_channel_identification_interface_type_to_text(
 			ie->interface_type),
 		ie->interface_type);
 
-	report(LOG_DEBUG, "%sPref/Excl = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sPref/Excl = %s (%d)\n", prefix,
 		q931_ie_channel_identification_preferred_exclusive_to_text(
 			ie->preferred_exclusive),
 		ie->preferred_exclusive);
 
-	report(LOG_DEBUG, "%sD channel ident = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sD channel ident = %s (%d)\n", prefix,
 		q931_ie_channel_identification_d_channel_indicator_to_text(
 			ie->d_channel_indicator),
 		ie->d_channel_indicator);
 
-	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_channel_identification_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
@@ -449,7 +457,8 @@ void q931_ie_channel_identification_dump(
 			ie->chanset.chans[i]->id);
 	}
 
-	report(LOG_DEBUG, "%sChannels = %s\n",
+	report_ie_dump(abstract_ie,
+		"%sChannels = %s\n",
 		prefix,
 		chanlist);
 }

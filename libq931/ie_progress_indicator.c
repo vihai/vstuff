@@ -47,9 +47,10 @@ struct q931_ie *q931_ie_progress_indicator_alloc_abstract(void)
 
 int q931_ie_progress_indicator_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -60,16 +61,16 @@ int q931_ie_progress_indicator_read_from_buf(
 	int nextoct = 0;
 
 	if (len < 2) {
-		report_msg(msg, LOG_ERR, "IE size < 2\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 2\n");
 		return FALSE;
 	}
 
 	struct q931_ie_progress_indicator_onwire_3 *oct_3 =
 		(struct q931_ie_progress_indicator_onwire_3 *)
-		(msg->rawies + pos + (nextoct++));
+		(buf + (nextoct++));
 
 	if (oct_3->ext == 0) {
-		report_msg(msg, LOG_ERR, "IE oct-3 ext != 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE oct-3 ext != 1\n");
 		return FALSE;
 	}
 
@@ -78,10 +79,10 @@ int q931_ie_progress_indicator_read_from_buf(
 
 	struct q931_ie_progress_indicator_onwire_4 *oct_4 =
 		(struct q931_ie_progress_indicator_onwire_4 *)
-		(msg->rawies + pos + (nextoct++));
+		(buf + (nextoct++));
 
 	if (oct_4->ext == 0) {
-		report_msg(msg, LOG_ERR, "IE oct-4 ext != 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE oct-4 ext != 1\n");
 		return FALSE;
 	}
 
@@ -91,12 +92,12 @@ int q931_ie_progress_indicator_read_from_buf(
 }
 
 int q931_ie_progress_indicator_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_progress_indicator *ie =
-		container_of(generic_ie, struct q931_ie_progress_indicator, ie);
+		container_of(abstract_ie, struct q931_ie_progress_indicator, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_PROGRESS_INDICATOR;
@@ -219,24 +220,27 @@ static const char *q931_ie_progress_indicator_progress_description_to_text(
 }
 
 void q931_ie_progress_indicator_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_progress_indicator *ie =
-		container_of(generic_ie, struct q931_ie_progress_indicator, ie);
+		container_of(abstract_ie, struct q931_ie_progress_indicator, ie);
 
-	report(LOG_DEBUG, "%sCoding standard = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sCoding standard = %s (%d)\n", prefix,
 		q931_ie_progress_indicator_coding_standard_to_text(
 			ie->coding_standard),
 		ie->coding_standard);
 
-	report(LOG_DEBUG, "%sLocation = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sLocation = %s (%d)\n", prefix,
 		q931_ie_progress_indicator_location_to_text(
 			ie->location),
 		ie->location);
 
-	report(LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sDescription = %s (%d)\n", prefix,
 		q931_ie_progress_indicator_progress_description_to_text(
 			ie->progress_description),
 		ie->progress_description);

@@ -51,9 +51,10 @@ struct q931_ie *q931_ie_restart_indicator_alloc_abstract(void)
 
 int q931_ie_restart_indicator_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -62,23 +63,23 @@ int q931_ie_restart_indicator_read_from_buf(
 			struct q931_ie_restart_indicator, ie);
 
 	if (len < 1) {
-		report_msg(msg, LOG_ERR, "IE size < 1\n");
+		report_ie(abstract_ie, LOG_ERR, "IE size < 1\n");
 		return FALSE;
 	}
 
 	struct q931_ie_restart_indicator_onwire_3 *oct_3 =
 		(struct q931_ie_restart_indicator_onwire_3 *)
-		(msg->rawies + pos + 0);
+		(buf + 0);
 
 	if (oct_3->ext != 1) {
-		report_msg(msg, LOG_ERR, "Ext != 1\n");
+		report_ie(abstract_ie, LOG_ERR, "Ext != 1\n");
 		return FALSE;
 	}
 
 	if (oct_3->restart_class != Q931_IE_RI_C_INDICATED &&
 	    oct_3->restart_class != Q931_IE_RI_C_SINGLE_INTERFACE &&
 	    oct_3->restart_class != Q931_IE_RI_C_ALL_INTERFACES) {
-		report_msg(msg, LOG_ERR,
+		report_ie(abstract_ie, LOG_ERR,
 			"IE specifies invalid class\n");
 
 		return FALSE;
@@ -127,14 +128,15 @@ static const char *q931_ie_restart_indicator_restart_class_to_text(
 }
 
 void q931_ie_restart_indicator_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_restart_indicator *ie =
-		container_of(generic_ie, struct q931_ie_restart_indicator, ie);
+		container_of(abstract_ie, struct q931_ie_restart_indicator, ie);
 
-	report(LOG_DEBUG, "%sDescription = %s (%d)\n", prefix,
+	report_ie_dump(abstract_ie,
+		"%sDescription = %s (%d)\n", prefix,
 		q931_ie_restart_indicator_restart_class_to_text(
 			ie->restart_class),
 		ie->restart_class);

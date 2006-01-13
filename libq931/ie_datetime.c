@@ -49,9 +49,10 @@ struct q931_ie *q931_ie_datetime_alloc_abstract(void)
 
 int q931_ie_datetime_read_from_buf(
 	struct q931_ie *abstract_ie,
-	const struct q931_message *msg,
-	int pos,
-	int len)
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf)
 {
 	assert(abstract_ie->type == ie_type);
 
@@ -61,15 +62,15 @@ int q931_ie_datetime_read_from_buf(
 
 	struct q931_ie_datetime_onwire_3 *oct_3 =
 		(struct q931_ie_datetime_onwire_3 *)
-		(msg->rawies + pos);
+		(buf);
 
 	if (len < 2) {
-		report_msg(msg, LOG_ERR, "IE len < 2\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len < 2\n");
 		return FALSE;
 	}
 
 	if (len > 8) {
-		report_msg(msg, LOG_ERR, "IE len > 8\n");
+		report_ie(abstract_ie, LOG_ERR, "IE len > 8\n");
 		return FALSE;
 	}
 
@@ -77,17 +78,17 @@ int q931_ie_datetime_read_from_buf(
 
 	/* Year */
 	if (oct_3->year > 99) {
-		report_msg(msg, LOG_ERR,
+		report_ie(abstract_ie, LOG_ERR,
 			"Invalid year %d > 99\n", oct_3->year);
 		return FALSE;
 	}
 
-	tm.tm_year = *(msg->rawies + pos);
+	tm.tm_year = *(__u8 *)buf;
 
 	/* Month */
 	if (len >= 4) {
 		if (oct_3->month < 1 || oct_3->month > 12) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"Invalid month %d\n", oct_3->month);
 			return FALSE;
 		}
@@ -98,7 +99,7 @@ int q931_ie_datetime_read_from_buf(
 	/* Day */
 	if (len >= 5) {
 		if (oct_3->day < 1 || oct_3->day > 31) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"Invalid day %d\n", oct_3->day);
 			return FALSE;
 		}
@@ -109,7 +110,7 @@ int q931_ie_datetime_read_from_buf(
 	/* Hour */
 	if (len >= 6) {
 		if (oct_3->hour > 24) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"Invalid hour %d\n", oct_3->hour);
 			return FALSE;
 		}
@@ -120,7 +121,7 @@ int q931_ie_datetime_read_from_buf(
 	/* Minute */
 	if (len >= 7) {
 		if (oct_3->minute > 59) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"Invalid minute %d\n", oct_3->minute);
 			return FALSE;
 		}
@@ -131,7 +132,7 @@ int q931_ie_datetime_read_from_buf(
 	/* Second */
 	if (len >= 8) {
 		if (oct_3->second > 61) {
-			report_msg(msg, LOG_ERR,
+			report_ie(abstract_ie, LOG_ERR,
 				"Invalid second %d\n", oct_3->second);
 			return FALSE;
 		}
@@ -145,12 +146,12 @@ int q931_ie_datetime_read_from_buf(
 }
 
 int q931_ie_datetime_write_to_buf(
-	const struct q931_ie *generic_ie,
+	const struct q931_ie *abstract_ie,
 	void *buf,
 	int max_size)
 {
 	struct q931_ie_datetime *ie =
-		container_of(generic_ie, struct q931_ie_datetime, ie);
+		container_of(abstract_ie, struct q931_ie_datetime, ie);
 	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	ieow->id = Q931_IE_DATETIME;
@@ -175,12 +176,13 @@ int q931_ie_datetime_write_to_buf(
 }
 
 void q931_ie_datetime_dump(
-	const struct q931_ie *generic_ie,
-	void (*report)(int level, const char *format, ...),
+	const struct q931_ie *abstract_ie,
+	void (*report_func)(int level, const char *format, ...),
 	const char *prefix)
 {
 	struct q931_ie_datetime *ie =
-		container_of(generic_ie, struct q931_ie_datetime, ie);
+		container_of(abstract_ie, struct q931_ie_datetime, ie);
 
-	report(LOG_DEBUG, "%sDateTime = %s\n", prefix, ctime(&ie->time));
+	report_ie_dump(abstract_ie,
+		"%sDateTime = %s\n", prefix, ctime(&ie->time));
 }
