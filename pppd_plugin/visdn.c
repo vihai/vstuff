@@ -25,6 +25,7 @@
 #include "lcp.h"
 
 #include <linux/visdn/cxc.h>
+#include <linux/visdn/router.h>
 
 static int device_got_set = 0;
 
