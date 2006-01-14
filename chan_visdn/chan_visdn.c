@@ -1857,21 +1857,63 @@ static int visdn_call(
 
 	visdn_debug("Calling on interface '%s'\n", intf->name);
 
-	enum q931_ie_bearer_capability_information_transfer_capability bc_itc =
-		Q931_IE_BC_ITC_SPEECH;
-	enum q931_ie_bearer_capability_user_information_layer_1_protocol
-		bc_l1p = Q931_IE_BC_UIL1P_G711_ALAW;
+	struct q931_ies ies = Q931_IES_INIT;
 
-	visdn_chan->is_voice = TRUE;
+	/* ------------- Bearer Capability ---------------- */
+	char *raw_bc = pbx_builtin_getvar_helper(ast_chan, "BEARERCAP_RAW");
+	if (raw_bc) {
+		visdn_debug("Taking bearer capability from bridged channel\n");
 
-	const char *options = strsep(&stringp, "/");
-	if (options) {
-		if (strchr(options, 'D')) {
-			bc_itc = Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
-			bc_l1p = Q931_IE_BC_UIL1P_UNUSED;
-			visdn_chan->is_voice = FALSE;
+		struct q931_ie_bearer_capability *bc;
+		bc = q931_ie_bearer_capability_alloc();
+		char buf[20];
+		int len = strlen(raw_bc);
+
+		if (len > sizeof(buf) * 2) {
+			ast_log(LOG_WARNING, "BEARERCAP_RAW is too long\n");
+			goto bc_failure;
 		}
+
+		if (!q931_ie_bearer_capability_read_from_buf(&bc->ie,
+					buf, len, NULL, NULL)) {
+			ast_log(LOG_WARNING, "BEARERCAP_RAW is not valid\n");
+			goto bc_failure;
+		}
+
+		q931_ies_add_put(&ies, &bc->ie);
+
+	} else {
+bc_failure:;
+		struct q931_ie_bearer_capability *bc;
+		bc = q931_ie_bearer_capability_alloc();
+
+		bc->coding_standard = Q931_IE_BC_CS_CCITT;
+		bc->information_transfer_capability = Q931_IE_BC_ITC_SPEECH;
+		bc->transfer_mode = Q931_IE_BC_TM_CIRCUIT;
+		bc->information_transfer_rate = Q931_IE_BC_ITR_64;
+		bc->user_information_layer_1_protocol =
+			Q931_IE_BC_UIL1P_G711_ALAW;
+		bc->user_information_layer_2_protocol = Q931_IE_BC_UIL2P_UNUSED;
+		bc->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
+
+		visdn_chan->is_voice = TRUE;
+
+		const char *options = strsep(&stringp, "/");
+		if (options) {
+			if (strchr(options, 'D')) {
+				bc->information_transfer_capability =
+					Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
+				bc->user_information_layer_1_protocol =
+					Q931_IE_BC_UIL1P_UNUSED;
+
+				visdn_chan->is_voice = FALSE;
+			}
+		}
+
+		q931_ies_add_put(&ies, &bc->ie);
 	}
+
+	/* ------------- END Bearer Capability ---------------- */
 
 	struct q931_call *q931_call;
 	q931_call = q931_call_alloc_out(intf->q931_intf);
@@ -1900,18 +1942,6 @@ static int visdn_call(
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-	struct q931_ies ies = Q931_IES_INIT;
-
-	struct q931_ie_bearer_capability *bc =
-		q931_ie_bearer_capability_alloc();
-	bc->coding_standard = Q931_IE_BC_CS_CCITT;
-	bc->information_transfer_capability = bc_itc;
-	bc->transfer_mode = Q931_IE_BC_TM_CIRCUIT;
-	bc->information_transfer_rate = Q931_IE_BC_ITR_64;
-	bc->user_information_layer_1_protocol = bc_l1p;
-	bc->user_information_layer_2_protocol = Q931_IE_BC_UIL2P_UNUSED;
-	bc->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
-	q931_ies_add_put(&ies, &bc->ie);
 
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
@@ -3963,10 +3993,7 @@ static void visdn_q931_setup_indication(
 		}
 	}
 
-	if (!bc) {
-		ast_log(LOG_WARNING, "Unexpectedly missing BC\n");
-		goto err_no_bc;
-	}
+	assert(bc);
 
 	/* ------ Handle Bearer Capability ------ */
 	
@@ -3976,9 +4003,27 @@ static void visdn_q931_setup_indication(
 	 * design flaw in Asterisk
 	 */
 
+	{
+		__u8 buf[20];
+		char raw_bc_text[sizeof(buf) + 1];
+
+		assert(bc->ie.cls->write_to_buf);
+
+		int len = bc->ie.cls->write_to_buf(&bc->ie, buf, sizeof(buf));
+
+		for (i=0; i<len; i++)
+			sprintf(raw_bc_text + i * 2, "%02x", buf[i]);
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"BEARERCAP_RAW", raw_bc_text);
+	}
+
 	if (bc->information_transfer_capability ==
 		Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL) {
 
+		pbx_builtin_setvar_helper(ast_chan,
+			"BEARERCAP_CLASS", "data");
+	
 		visdn_chan->is_voice = FALSE;
 		q931_call->tones_option = FALSE;
 
@@ -3989,6 +4034,9 @@ static void visdn_q931_setup_indication(
 
 		visdn_chan->is_voice = TRUE;
 		q931_call->tones_option = intf->tones_option;
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"BEARERCAP_CLASS", "voice");
 	} else {
 		struct q931_ies ies = Q931_IES_INIT;
 
@@ -4222,8 +4270,15 @@ no_cgpn:;
 			return;
 		}
 
+#if 0 // Don't be tempted :^)
+		struct q931_ies ies = Q931_IES_INIT;
+		struct q931_ie_display *disp = q931_ie_display_alloc();
+		strcpy(disp->text, "Mark Spencer Sucks");
+		q931_ies_add_put(&ies, &disp->ie);
+#endif
+
 		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_MORE_INFO_REQUEST, NULL);
+			Q931_CCB_MORE_INFO_REQUEST, &ies);
 
 		for(i=0; called_number[i]; i++) {
 			struct ast_frame f =
@@ -4236,7 +4291,6 @@ no_cgpn:;
 	return;
 
 err_unsupported_bearercap:
-err_no_bc:
 	ast_hangup(ast_chan);
 err_visdn_new:
 	visdn_destroy(visdn_chan);
