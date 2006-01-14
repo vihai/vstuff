@@ -27,11 +27,6 @@ struct q931_ie_display
 struct q931_ie_display *q931_ie_display_alloc(void);
 struct q931_ie *q931_ie_display_alloc_abstract(void);
 
-#ifdef Q931_PRIVATE
-
-void q931_ie_display_register(
-	const struct q931_ie_class *ie_class);
-
 int q931_ie_display_read_from_buf(
 	struct q931_ie *abstract_ie,
 	void *buf,
@@ -48,6 +43,11 @@ void q931_ie_display_dump(
 	const struct q931_ie *ie,
 	void (*report)(int level, const char *format, ...),
 	const char *prefix);
+
+#ifdef Q931_PRIVATE
+
+void q931_ie_display_register(
+	const struct q931_ie_class *ie_class);
 
 #endif
 

@@ -78,22 +78,6 @@ struct q931_ie_call_state
 struct q931_ie_call_state *q931_ie_call_state_alloc(void);
 struct q931_ie *q931_ie_call_state_alloc_abstract(void);
 
-#ifdef Q931_PRIVATE
-
-struct q931_ie_call_state_onwire_3
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-	__u8 coding_standard:2;
-	__u8 value:6;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
-	__u8 value:6;
-	__u8 coding_standard:2;
-#endif
-} __attribute__ ((__packed__));
-
-void q931_ie_call_state_register(
-	const struct q931_ie_class *ie_class);
-
 int q931_ie_call_state_read_from_buf(
 	struct q931_ie *abstract_ie,
 	void *buf,
@@ -110,6 +94,22 @@ void q931_ie_call_state_dump(
 	const struct q931_ie *ie,
 	void (*report)(int level, const char *format, ...),
 	const char *prefix);
+
+#ifdef Q931_PRIVATE
+
+struct q931_ie_call_state_onwire_3
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	__u8 coding_standard:2;
+	__u8 value:6;
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+	__u8 value:6;
+	__u8 coding_standard:2;
+#endif
+} __attribute__ ((__packed__));
+
+void q931_ie_call_state_register(
+	const struct q931_ie_class *ie_class);
 
 #endif
 #endif

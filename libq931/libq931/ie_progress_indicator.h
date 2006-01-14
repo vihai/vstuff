@@ -64,6 +64,23 @@ enum q931_ie_progress_indicator_location
 	q931_ie_progress_indicator_location(
 		const struct q931_call *call);
 
+int q931_ie_progress_indicator_read_from_buf(
+	struct q931_ie *abstract_ie,
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf);
+
+int q931_ie_progress_indicator_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size);
+
+void q931_ie_progress_indicator_dump(
+	const struct q931_ie *ie,
+	void (*report)(int level, const char *format, ...),
+	const char *prefix);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_progress_indicator_onwire_3
@@ -96,22 +113,5 @@ struct q931_ie_progress_indicator_onwire_4
 
 void q931_ie_progress_indicator_register(
 	const struct q931_ie_class *ie_class);
-
-int q931_ie_progress_indicator_read_from_buf(
-	struct q931_ie *abstract_ie,
-	void *buf,
-	int len,
-	void (*report_func)(int level, const char *format, ...),
-	struct q931_interface *intf);
-
-int q931_ie_progress_indicator_write_to_buf(
-	const struct q931_ie *generic_ie,
-	void *buf,
-	int max_size);
-
-void q931_ie_progress_indicator_dump(
-	const struct q931_ie *ie,
-	void (*report)(int level, const char *format, ...),
-	const char *prefix);
 
 #endif

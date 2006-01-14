@@ -275,6 +275,24 @@ static inline enum q931_ie_bearer_capability_user_information_layer_ident
 	return (oct & Q931_IE_BC_IDENT_MASK) >> Q931_IE_BC_IDENT_SHIFT;
 }
 
+int q931_ie_bearer_capability_read_from_buf(
+	struct q931_ie *abstract_ie,
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf);
+	
+int q931_ie_bearer_capability_write_to_buf(
+	const struct q931_ie *ie,
+	void *buf,
+	int max_size);
+
+void q931_ie_bearer_capability_dump(
+	const struct q931_ie *ie,
+	void (*report)(int level, const char *format, ...),
+	const char *prefix);
+
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_bearer_capability_onwire_3
@@ -483,23 +501,6 @@ struct q931_ie_bearer_capability_onwire_7
 
 void q931_ie_bearer_capability_register(
 	const struct q931_ie_class *ie_class);
-
-int q931_ie_bearer_capability_read_from_buf(
-	struct q931_ie *abstract_ie,
-	void *buf,
-	int len,
-	void (*report_func)(int level, const char *format, ...),
-	struct q931_interface *intf);
-	
-int q931_ie_bearer_capability_write_to_buf(
-	const struct q931_ie *ie,
-	void *buf,
-	int max_size);
-
-void q931_ie_bearer_capability_dump(
-	const struct q931_ie *ie,
-	void (*report)(int level, const char *format, ...),
-	const char *prefix);
 
 #endif
 #endif

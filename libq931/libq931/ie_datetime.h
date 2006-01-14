@@ -27,21 +27,6 @@ struct q931_ie_datetime
 struct q931_ie_datetime *q931_ie_datetime_alloc(void);
 struct q931_ie *q931_ie_datetime_alloc_abstract(void);
 
-#ifdef Q931_PRIVATE
-
-struct q931_ie_datetime_onwire_3
-{
-	__u8 year;
-	__u8 month;
-	__u8 day;
-	__u8 hour;
-	__u8 minute;
-	__u8 second;
-} __attribute__ ((__packed__));
-
-void q931_ie_datetime_register(
-	const struct q931_ie_class *ie_class);
-
 int q931_ie_datetime_read_from_buf(
 	struct q931_ie *abstract_ie,
 	void *buf,
@@ -58,6 +43,21 @@ void q931_ie_datetime_dump(
 	const struct q931_ie *ie,
 	void (*report)(int level, const char *format, ...),
 	const char *prefix);
+
+#ifdef Q931_PRIVATE
+
+struct q931_ie_datetime_onwire_3
+{
+	__u8 year;
+	__u8 month;
+	__u8 day;
+	__u8 hour;
+	__u8 minute;
+	__u8 second;
+} __attribute__ ((__packed__));
+
+void q931_ie_datetime_register(
+	const struct q931_ie_class *ie_class);
 
 #endif
 

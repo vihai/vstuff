@@ -152,6 +152,27 @@ static inline enum q931_ie_cause_location q931_ie_cause_location_gc(
 			gc->intf->role);
 }
 
+int q931_ie_cause_read_from_buf(
+	struct q931_ie *abstract_ie,
+	void *buf,
+	int len,
+	void (*report_func)(int level, const char *format, ...),
+	struct q931_interface *intf);
+
+int q931_ie_cause_write_to_buf(
+	const struct q931_ie *generic_ie,
+	void *buf,
+	int max_size);
+
+void q931_ie_cause_dump(
+	const struct q931_ie *ie,
+	void (*report)(int level, const char *format, ...),
+	const char *prefix);
+
+int q931_ies_contain_cause(
+	const struct q931_ies *ies,
+	enum q931_ie_cause_value cause);
+
 #ifdef Q931_PRIVATE
 
 struct q931_ie_cause_value_info
@@ -227,27 +248,6 @@ void q931_ie_cause_value_infos_init();
 
 void q931_ie_cause_register(
 	const struct q931_ie_class *ie_class);
-
-int q931_ie_cause_read_from_buf(
-	struct q931_ie *abstract_ie,
-	void *buf,
-	int len,
-	void (*report_func)(int level, const char *format, ...),
-	struct q931_interface *intf);
-
-int q931_ie_cause_write_to_buf(
-	const struct q931_ie *generic_ie,
-	void *buf,
-	int max_size);
-
-void q931_ie_cause_dump(
-	const struct q931_ie *ie,
-	void (*report)(int level, const char *format, ...),
-	const char *prefix);
-
-int q931_ies_contain_cause(
-	const struct q931_ies *ies,
-	enum q931_ie_cause_value cause);
 
 #endif
 #endif
