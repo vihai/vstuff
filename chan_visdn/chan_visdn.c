@@ -4231,7 +4231,7 @@ no_cgpn:;
 			cause->location =
 				q931_ie_cause_location_call(q931_call);
 
-			cause->value = Q931_IE_C_CV_NO_ROUTE_TO_DESTINATION;
+			cause->value = Q931_IE_C_CV_INCOMPATIBLE_DESTINATION;
 			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_send_primitive(visdn_chan->q931_call,

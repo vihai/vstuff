@@ -22,6 +22,7 @@ Build system:
 chan_visdn:
 -----------
 
+- Implement filtering to determine bearer compatibility
 - Add more environment variables beside BEARERCAP_RAW
 - When the module fails initialization, forbid calls and report an error
 - Complete hunt groups support, handle failed calls and failed interfaces
