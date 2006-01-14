@@ -39,13 +39,13 @@ void q931_start_timer(
 	timer->expires = expires;
 
 	if (!timer->pending) {
-		list_add_tail(&timer->node, &lib->timers);
+		list_add_tail(&timer->node, &q931_timers);
 
 		timer->pending = TRUE;
 	}
 
-	if (lib->timer_update)
-		lib->timer_update(lib);
+	if (q931_timer_update)
+		q931_timer_update();
 }
 
 longtime_t q931_longtime_now()
@@ -82,7 +82,7 @@ longtime_t q931_run_timers(struct q931_lib *lib)
 	do {
 		struct q931_timer *timer, *t;
 retry:
-		list_for_each_entry_safe(timer, t, &lib->timers, node) {
+		list_for_each_entry_safe(timer, t, &q931_timers, node) {
 			if (timer->expires < now) {
 				list_del(&timer->node);
 				timer->pending = FALSE;

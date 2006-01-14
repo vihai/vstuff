@@ -252,7 +252,7 @@ static void q931_write_ies(
 		if (ies.ies[i]->cls->dump)
 			ies.ies[i]->cls->dump(
 				ies.ies[i],
-				msg->dlc->intf->lib->report, "->    ");
+				q931_report, "->    ");
 	}
 }
 

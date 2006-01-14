@@ -48,8 +48,8 @@ struct q931_global_call
 #ifdef Q931_PRIVATE
 
 #define report_gc(cr, lvl, format, arg...)		\
-	(cr)->intf->lib->report((lvl), "Global Call: " format,	\
-		## arg)
+	q931_report((lvl), "Global Call: " format,	\
+			## arg)
 
 #define q931_global_start_timer(cr, timer)		\
 	do {						\

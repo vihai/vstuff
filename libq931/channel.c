@@ -24,12 +24,12 @@
 #include <libq931/lib.h>
 
 #define q931_channel_primitive(channel, primitive)	\
-	(channel)->intf->lib->queue_primitive(NULL, primitive, NULL,	\
-		(unsigned long)channel, 0)
+		q931_queue_primitive(NULL, primitive, NULL,	\
+			(unsigned long)channel, 0)
 
 #define q931_channel_primitive1(channel, primitive, par1)	\
-	(channel)->intf->lib->queue_primitive(NULL, primitive, NULL,	\
-		(unsigned long)channel, par1)
+		q931_queue_primitive(NULL, primitive, NULL,	\
+			(unsigned long)channel, par1)
 
 struct q931_channel *q931_channel_select(struct q931_call *call)
 {

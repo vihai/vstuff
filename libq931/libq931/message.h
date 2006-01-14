@@ -46,12 +46,12 @@ struct q931_message
 #ifdef Q931_PRIVATE
 
 #define report_msg(msg, lvl, format, arg...)				\
-		report_dlc((msg)->dlc, (lvl),				\
+	report_dlc((msg)->dlc, (lvl),					\
 			format,						\
 			## arg)
 
 #define report_msg_cont(msg, lvl, format, arg...)			\
-		report_lib((msg)->dlc->intf->lib, (lvl),		\
+	q931_report((lvl),						\
 			format,						\
 			## arg)
 

@@ -208,7 +208,7 @@ struct q931_interface *q931_open_interface(
 
 	intf->global_call.intf = intf;
 
-	list_add(&intf->node, &lib->intfs);
+	list_add(&intf->node, &q931_interfaces);
 
 	return intf;
 

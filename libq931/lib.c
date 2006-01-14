@@ -44,7 +44,10 @@
 
 #include "call_inline.h"
 
-void q931_default_report(int level, const char *format, ...)
+struct list_head q931_timers;
+struct list_head q931_interfaces;
+
+static void q931_default_report(int level, const char *format, ...)
 {
 	va_list ap;
 	va_start(ap, format);
@@ -52,27 +55,47 @@ void q931_default_report(int level, const char *format, ...)
 	va_end(ap);
 }
 
-struct q931_lib *q931_init()
+void (*q931_report)(int level, const char *format, ...) = q931_default_report;
+void (*q931_timer_update)() = NULL;
+void (*q931_queue_primitive)(
+	struct q931_call *call,
+	enum q931_primitive primitive,
+	const struct q931_ies *ies,
+	unsigned long par1,
+	unsigned long par2) = NULL;
+
+void q931_set_report_func(
+	void (*report_func)(int level, const char *format, ...))
 {
-	struct q931_lib *lib;
+	q931_report = report_func;
+}
 
-	lib = malloc(sizeof(*lib));
-	if (!lib)
-		return NULL;
+void q931_set_timer_update_func(
+	void (*timer_update_func)(void))
+{
+	q931_timer_update = timer_update_func;
+}
 
-	lib->report = q931_default_report;
+void q931_set_queue_primitive_func(
+	void (*queue_primitive_func)(
+		struct q931_call *call,
+		enum q931_primitive primitive,
+		const struct q931_ies *ies,
+		unsigned long par1,
+		unsigned long par2))
+{
+	q931_queue_primitive = queue_primitive_func;
+}
 
-	// Non-reentrant, FIXME
+void q931_init()
+{
 	q931_ie_classes_init();
 	q931_message_types_init();
 
-	INIT_LIST_HEAD(&lib->timers);
-	INIT_LIST_HEAD(&lib->intfs);
-
-	return lib;
+	INIT_LIST_HEAD(&q931_timers);
+	INIT_LIST_HEAD(&q931_interfaces);
 }
 
-void q931_leave(struct q931_lib *lib)
+void q931_leave()
 {
-	free(lib);
 }

@@ -193,7 +193,7 @@ void q931_call_release_reference(struct q931_call *call);
 #ifdef Q931_PRIVATE
 
 #define report_call(call, lvl, format, arg...)				\
-	(call)->intf->lib->report((lvl),				\
+	q931_report((lvl),						\
 		"%s:CALL[%u.%c]: "					\
 		format,							\
 		(call)->intf->name,					\
@@ -242,13 +242,13 @@ void _q931_call_stop_timer(
 		q931_timer_pending(&(call)->timer)	\
 
 #define q931_call_primitive(call, primitive, ies)	\
-	(call)->intf->lib->queue_primitive(call, primitive, ies, 0, 0)
+		q931_queue_primitive(call, primitive, ies, 0, 0)
 
 #define q931_call_primitive1(call, primitive, ies, par1)	\
-	(call)->intf->lib->queue_primitive(call, primitive, ies, par1, 0)
+		q931_queue_primitive(call, primitive, ies, par1, 0)
 
 #define q931_call_primitive2(call, primitive, ies, par1, par2)	\
-	(call)->intf->lib->queue_primitive(call, primitive, ies, par1, par2)
+		q931_queue_primitive(call, primitive, ies, par1, par2)
 
 
 void q931_dispatch_message(

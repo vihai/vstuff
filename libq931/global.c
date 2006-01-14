@@ -33,10 +33,10 @@
 #include <libq931/ie_restart_indicator.h>
 
 #define q931_global_primitive(gc, primitive)		\
-		(gc)->intf->lib->queue_primitive(NULL, (primitive), NULL,\
+		q931_queue_primitive(NULL, (primitive), NULL,\
 				(unsigned long)(gc), 0);
 #define q931_global_primitive1(gc, primitive, par1)		\
-		(gc)->intf->lib->queue_primitive(NULL, (primitive), NULL,\
+		q931_queue_primitive(NULL, (primitive), NULL,\
 				(unsigned long)(gc), (unsigned long)(par1));
 
 static const char *q931_global_state_to_text(enum q931_global_state state)
@@ -167,7 +167,8 @@ void q931_global_restart_confirm(
 					&gc->restart_acked_chans);
 
 				q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
-				q931_global_primitive1(gc, Q931_CCB_MANAGEMENT_RESTART_CONFIRM, &cs);
+				q931_global_primitive1(gc,
+					Q931_CCB_MANAGEMENT_RESTART_CONFIRM, &cs);
 			} else {
 				gc->restart_responded = TRUE;
 			}

@@ -4672,7 +4672,7 @@ static void visdn_logger(int level, const char *format, ...)
 	}
 }
 
-void visdn_q931_timer_update(struct q931_lib *lib)
+void visdn_q931_timer_update()
 {
 	pthread_kill(visdn_q931_thread, SIGURG);
 }
@@ -4936,11 +4936,10 @@ int load_module()
 	INIT_LIST_HEAD(&visdn.ifs);
 	INIT_LIST_HEAD(&visdn.huntgroups_list);
 
-	visdn.libq931 = q931_init();
-	q931_set_logger_func(visdn.libq931, visdn_logger);
-
-	visdn.libq931->timer_update = visdn_q931_timer_update;
-	visdn.libq931->queue_primitive = visdn_queue_primitive;
+	q931_init();
+	q931_set_report_func(visdn_logger);
+	q931_set_timer_update_func(visdn_q931_timer_update);
+	q931_set_queue_primitive_func(visdn_queue_primitive);
 
 	visdn_reload_config();
 
@@ -5061,8 +5060,7 @@ int unload_module(void)
 
 	ast_channel_unregister(&visdn_tech);
 
-	if (visdn.libq931)
-		q931_leave(visdn.libq931);
+	q931_leave();
 
 	return 0;
 }

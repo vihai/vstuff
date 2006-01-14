@@ -26,11 +26,11 @@
 #include <libq931/global.h>
 
 #define report_intf(intf, lvl, format, arg...)		\
-	(intf)->lib->report((lvl),			\
-	"%s: "						\
-	format,						\
-	(intf)->name,					\
-	## arg)
+	q931_report((lvl),				\
+		"%s: "					\
+		format,					\
+		(intf)->name,				\
+		## arg)
 
 enum q931_interface_type
 {

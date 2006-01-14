@@ -1,7 +1,7 @@
 /*
  * vISDN DSSS-1/q.931 signalling library
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -196,7 +196,7 @@ static void q931_ieid_flush_list(struct list_head *list)
 static void q931_ieid_fill_diagnostic_from_list(
 	__u8 *diagnostics,
 	int *diagnostics_len,
-       struct list_head *list)
+	struct list_head *list)
 {
 	int max_len = *diagnostics_len;
 
@@ -335,7 +335,7 @@ static void q931_decode_ie(
 				codeset, ie_id);
 		}
 	
-       		return;
+		return;
 	}
 
 	if (q931_check_ie_size(msg, ie_class, len) < 0) {
@@ -359,11 +359,11 @@ static void q931_decode_ie(
 	}
 	
 	struct q931_ie *ie;
-       
+
 	ie = ie_class->alloc();
 
 	if (!ie->cls->read_from_buf(ie, buf, len,
-			call->intf->lib->report,
+			q931_report,
 			call->intf)) {
 
 		q931_ie_has_content_errors(msg, ds, ie_class, ie_usage);
@@ -397,7 +397,7 @@ static void q931_decode_ie(
 
 
 		if (ie->cls->dump)
-			ie->cls->dump(ie, call->intf->lib->report, "<-    ");
+			ie->cls->dump(ie, q931_report, "<-    ");
 
 
 		ds->previous_ie_id[ie_class->codeset] = ie_class->id;
@@ -608,7 +608,7 @@ int q931_decode_information_elements(
 		break;
 		}
 	}
-       
+
 	if (!list_empty(&ds.invalid_mand_ies)) {
 
 		struct q931_ie_cause *cause;
@@ -651,7 +651,7 @@ int q931_decode_information_elements(
 		break;
 		}
 	}
-       
+
 	if (!list_empty(&ds.invalid_access_ies)) {
 		struct q931_ies ies = Q931_IES_INIT;
 		struct q931_ie_cause *cause;
