@@ -54,7 +54,6 @@ void q931_message_init(
 	memset(message, 0, sizeof(*message));
 
 	message->refcnt = 1;
-
-	message->dlc = dlc;
+	message->dlc = q931_dlc_get(dlc);
 }
 

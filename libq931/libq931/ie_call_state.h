@@ -99,13 +99,15 @@ void q931_ie_call_state_dump(
 
 struct q931_ie_call_state_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 coding_standard:2;
 	__u8 value:6;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 value:6;
 	__u8 coding_standard:2;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 void q931_ie_call_state_register(

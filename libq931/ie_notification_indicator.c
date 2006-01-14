@@ -66,7 +66,7 @@ int q931_ie_notification_indicator_read_from_buf(
 
 	struct q931_ie_notification_indicator_onwire_3 *oct_3 =
 		(struct q931_ie_notification_indicator_onwire_3 *)
-		(buf);
+		(buf + 0);
 
 	if (!oct_3->ext) {
 		report_ie(abstract_ie, LOG_WARNING, "IE oct 3 ext != 0\n");
@@ -83,23 +83,20 @@ int q931_ie_notification_indicator_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_notification_indicator *ie =
 		container_of(abstract_ie,
 			struct q931_ie_notification_indicator, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_NOTIFICATION_INDICATOR;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_notification_indicator_onwire_3 *oct_3 =
 	  	(struct q931_ie_notification_indicator_onwire_3 *)
-		(&ieow->data[ieow->len]);
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->description = ie->description;
-	ieow->len += 1;
+	len++;
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 static const char *q931_ie_notification_indicator_description_to_text(

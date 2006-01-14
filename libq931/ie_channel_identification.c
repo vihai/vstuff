@@ -72,9 +72,11 @@ int q931_ie_channel_identification_read_from_buf(
 		return FALSE;
 	}
 
+	int nextoct = 0;
+	
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
 		(struct q931_ie_channel_identification_onwire_3 *)
-		(buf + 0);
+		(buf + nextoct++);
 
 	if (oct_3->interface_id_present == Q931_IE_CI_IIP_EXPLICIT) {
 		report_ie(abstract_ie, LOG_ERR,
@@ -114,7 +116,7 @@ int q931_ie_channel_identification_read_from_buf(
 
 		struct q931_ie_channel_identification_onwire_3c *oct_3c =
 			(struct q931_ie_channel_identification_onwire_3c *)
-			(buf + 1);
+			(buf + nextoct++);
 		if (oct_3c->number_map == Q931_IE_CI_NM_MAP) {
 			report_ie(abstract_ie, LOG_ERR,
 				"IE specifies channel map, which"
@@ -134,7 +136,7 @@ int q931_ie_channel_identification_read_from_buf(
 		do {
 			oct_3d = (struct
 				q931_ie_channel_identification_onwire_3d *)
-					(buf + 2);
+					(buf + nextoct++);
 
 			// FIXME
 
@@ -189,15 +191,16 @@ int q931_ie_channel_identification_read_from_buf(
 }
 
 int q931_ie_channel_identification_write_to_buf_bra(
-	struct q931_ie_onwire *ieow,
+	void *buf,
 	const struct q931_ie_channel_identification *ie,
 	int max_size)
 {
-	ieow->data[ieow->len] = 0x00;
-	struct q931_ie_channel_identification_onwire_3 *oct_3 =
-	  (struct q931_ie_channel_identification_onwire_3 *)
-		(&ieow->data[ieow->len]);
+	int len = 0;
 
+	struct q931_ie_channel_identification_onwire_3 *oct_3 =
+		(struct q931_ie_channel_identification_onwire_3 *)
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 	oct_3->interface_type = Q931_IE_CI_IT_BASIC;
@@ -224,53 +227,56 @@ int q931_ie_channel_identification_write_to_buf_bra(
 		assert(0);
 	}
 
-	ieow->len += 1;
+	len++;
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 static int q931_ie_channel_identification_write_to_buf_pra(
-	struct q931_ie_onwire *ieow,
+	void *buf,
 	const struct q931_ie_channel_identification *ie,
 	int max_size)
 {
-	ieow->data[ieow->len] = 0x00;
+	int len = 0;
+
 	struct q931_ie_channel_identification_onwire_3 *oct_3 =
 		(struct q931_ie_channel_identification_onwire_3 *)
-		(&ieow->data[ieow->len]);
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 	oct_3->interface_type = Q931_IE_CI_IT_PRIMARY;
 	oct_3->preferred_exclusive = ie->preferred_exclusive;
 	oct_3->d_channel_indicator = ie->d_channel_indicator;
 	oct_3->info_channel_selection = Q931_IE_CI_ICS_PRA_NO_CHANNEL; //FIXME
-	ieow->len += 1;
+	len++;
 
 	// Interface implicit, do not add Interface identifier
 
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_channel_identification_onwire_3c *oct_3c =
 		(struct q931_ie_channel_identification_onwire_3c *)
-		(&ieow->data[ieow->len]);
+		(buf + len);
+	oct_3c->raw = 0;
 	oct_3c->ext = 1;
 	oct_3c->coding_standard = Q931_IE_CI_CS_CCITT;
 	oct_3c->number_map = Q931_IE_CI_NM_NUMBER;
 	oct_3c->channel_type_map_identifier_type = Q931_IE_CI_ET_B;
-	ieow->len += 1;
+	len++;
 
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_channel_identification_onwire_3d *oct_3d =
 		(struct q931_ie_channel_identification_onwire_3d *)
-		(&ieow->data[ieow->len]);
+		(buf + len);
+	oct_3d->raw = 0;
 	oct_3d->ext = 1;
+	len++;
 
 	int i;
 	for (i=0; i<ie->chanset.nchans; i++) {
 		oct_3d->channel_number = ie->chanset.chans[i]->id;
-		ieow->len += 1;
+		len++;
 	}
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 int q931_ie_channel_identification_write_to_buf(
@@ -278,23 +284,22 @@ int q931_ie_channel_identification_write_to_buf(
 	void *buf,
 	int max_size)
 {
-	assert(abstract_ie->cls == my_class);
+	int len = 0;
 	const struct q931_ie_channel_identification *ie =
 		container_of(abstract_ie,
 			struct q931_ie_channel_identification, ie);
 
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
-
-	ieow->id = Q931_IE_CHANNEL_IDENTIFICATION;
-	ieow->len = 0;
+	assert(abstract_ie->cls == my_class);
 
 	if (ie->interface_type == Q931_IE_CI_IT_BASIC) {
-		return q931_ie_channel_identification_write_to_buf_bra(
-				ieow, ie, max_size);
+		len += q931_ie_channel_identification_write_to_buf_bra(
+				buf + len, ie, max_size);
 	} else {
-		return q931_ie_channel_identification_write_to_buf_pra(
-				ieow, ie, max_size);
+		len += q931_ie_channel_identification_write_to_buf_pra(
+				buf + len, ie, max_size);
 	}
+
+	return len;
 }
 
 static const char *q931_ie_channel_identification_interface_id_present_to_text(
@@ -454,7 +459,7 @@ void q931_ie_channel_identification_dump(
 	for (i=0; i<ie->chanset.nchans; i++) {
 		sprintf(chanlist + strlen(chanlist),
 			"B%d ",
-			ie->chanset.chans[i]->id);
+			ie->chanset.chans[i]->id + 1);
 	}
 
 	report_ie_dump(abstract_ie,

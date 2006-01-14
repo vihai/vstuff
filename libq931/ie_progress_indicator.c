@@ -67,7 +67,7 @@ int q931_ie_progress_indicator_read_from_buf(
 
 	struct q931_ie_progress_indicator_onwire_3 *oct_3 =
 		(struct q931_ie_progress_indicator_onwire_3 *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	if (oct_3->ext == 0) {
 		report_ie(abstract_ie, LOG_ERR, "IE oct-3 ext != 1\n");
@@ -79,7 +79,7 @@ int q931_ie_progress_indicator_read_from_buf(
 
 	struct q931_ie_progress_indicator_onwire_4 *oct_4 =
 		(struct q931_ie_progress_indicator_onwire_4 *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	if (oct_4->ext == 0) {
 		report_ie(abstract_ie, LOG_ERR, "IE oct-4 ext != 1\n");
@@ -96,29 +96,28 @@ int q931_ie_progress_indicator_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_progress_indicator *ie =
-		container_of(abstract_ie, struct q931_ie_progress_indicator, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
+		container_of(abstract_ie,
+			struct q931_ie_progress_indicator, ie);
 
-	ieow->id = Q931_IE_PROGRESS_INDICATOR;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_progress_indicator_onwire_3 *oct_3 =
-	  (struct q931_ie_progress_indicator_onwire_3 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_progress_indicator_onwire_3 *)
+		(buf + len);
 	oct_3->ext = 1;
 	oct_3->coding_standard = ie->coding_standard;
 	oct_3->location = ie->location;
-	ieow->len++;
+	len++;
 
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_progress_indicator_onwire_4 *oct_4 =
-	  (struct q931_ie_progress_indicator_onwire_4 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_progress_indicator_onwire_4 *)
+		(buf + len);
+	oct_4->raw = 0;
 	oct_4->ext = 1;
 	oct_4->progress_description = ie->progress_description;
-	ieow->len++;
+	len++;
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 enum q931_ie_progress_indicator_location

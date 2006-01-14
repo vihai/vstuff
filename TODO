@@ -22,6 +22,7 @@ Build system:
 chan_visdn:
 -----------
 
+- Add more environment variables beside BEARERCAP_RAW
 - When the module fails initialization, forbid calls and report an error
 - Complete hunt groups support, handle failed calls and failed interfaces
 - Record call failures and failure type in order to put an interface offline
@@ -115,6 +116,8 @@ lapd:
 visdn-netdev:
 -------------
 
+- Ignore frames from E channel when they are a copy of our just transmitted
+  frame.
 - Reallocate channel ID from the beginning instead of incrementing every time
 
 visdn-ppp:

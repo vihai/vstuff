@@ -97,3 +97,12 @@ void q931_dlc_init(
 	INIT_LIST_HEAD(&dlc->outgoing_queue);
 }
 
+void q931_broadcast_dlc_init(
+	struct q931_dlc *dlc,
+	struct q931_interface *intf,
+	int socket)
+{
+	dlc->socket = socket;
+	dlc->intf = intf;
+	dlc->tei = 127;
+}

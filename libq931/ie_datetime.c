@@ -62,7 +62,7 @@ int q931_ie_datetime_read_from_buf(
 
 	struct q931_ie_datetime_onwire_3 *oct_3 =
 		(struct q931_ie_datetime_onwire_3 *)
-		(buf);
+		(buf + 0);
 
 	if (len < 2) {
 		report_ie(abstract_ie, LOG_ERR, "IE len < 2\n");
@@ -83,7 +83,7 @@ int q931_ie_datetime_read_from_buf(
 		return FALSE;
 	}
 
-	tm.tm_year = *(__u8 *)buf;
+	tm.tm_year = oct_3->year;
 
 	/* Month */
 	if (len >= 4) {
@@ -150,18 +150,16 @@ int q931_ie_datetime_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_datetime *ie =
 		container_of(abstract_ie, struct q931_ie_datetime, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
-
-	ieow->id = Q931_IE_DATETIME;
-	ieow->len = 0;
 
 	struct tm *tm;
 	tm = localtime(&ie->time);
 
 	struct q931_ie_datetime_onwire_3 *oct_3 =
-	  (struct q931_ie_datetime_onwire_3 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_datetime_onwire_3 *)
+		(buf + len);
 
 	oct_3->year = tm->tm_year % 100;
 	oct_3->month = tm->tm_mon + 1;
@@ -170,9 +168,9 @@ int q931_ie_datetime_write_to_buf(
 	oct_3->minute = tm->tm_min;
 	oct_3->second = tm->tm_sec;
 
-	ieow->len += sizeof(*oct_3);
+	len += sizeof(*oct_3);
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 void q931_ie_datetime_dump(

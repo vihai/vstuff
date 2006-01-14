@@ -90,44 +90,44 @@ void q931_ie_high_layer_compatibility_dump(
 
 struct q931_ie_high_layer_compatibility_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 coding_standard:2;
 	__u8 presentation_method:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 presentation_method:2;
 	__u8 interpretation:3;
 	__u8 coding_standard:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_high_layer_compatibility_onwire_4
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 characteristics_identification:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 characteristics_identification:7;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_high_layer_compatibility_onwire_4a
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 extended_characteristics_identification:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 extended_characteristics_identification:7;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 void q931_ie_high_layer_compatibility_register(

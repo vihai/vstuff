@@ -55,17 +55,17 @@ void q931_ie_restart_indicator_dump(
 
 struct q931_ie_restart_indicator_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 :4;
 	__u8 restart_class:3;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 restart_class:3;
 	__u8 :4;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 void q931_ie_restart_indicator_register(

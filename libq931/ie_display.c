@@ -81,17 +81,14 @@ int q931_ie_display_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_display *ie =
 		container_of(abstract_ie, struct q931_ie_display, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_DISPLAY;
-	ieow->len = 0;
+	memcpy(buf + len, ie->text, strlen(ie->text));
+	len += strlen(ie->text);
 
-	memcpy(ieow->data, ie->text, strlen(ie->text));
-	ieow->len += strlen(ie->text);
-
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 void q931_ie_display_dump(

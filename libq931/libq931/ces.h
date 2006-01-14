@@ -40,7 +40,7 @@
 		q931_timer_pending(&(ces)->timer)	\
 
 #define report_ces(ces, lvl, format, arg...)		\
-		report_dlc((ces)->dlc, (lvl),		\
+		report_dlc((ces)->dlc, (lvl),	\
 		format,					\
 		## arg)
 

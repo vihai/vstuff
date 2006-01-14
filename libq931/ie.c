@@ -38,6 +38,7 @@
 static struct q931_ie_class q931_ie_classes[] =
 {
 	{
+		.type		= Q931_IE_TYPE_SO,
 		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -46,14 +47,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Shift",
 	},
 	{
-		.max_len	= 1,
-		.max_occur	= 1,
-		.network_type	= Q931_NT_ETSI,
-		.codeset	= 0,
-		.id		= Q931_IE_CONGESTION_LEVEL,
-		.name		= "Congestion Level",
-	},
-	{
+		.type		= Q931_IE_TYPE_SO,
 		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -62,6 +56,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "More Data",
 	},
 	{
+		.type		= Q931_IE_TYPE_SO,
 		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -75,6 +70,16 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_sending_complete_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_SO,
+		.max_len	= 1,
+		.max_occur	= 1,
+		.network_type	= Q931_NT_ETSI,
+		.codeset	= 0,
+		.id		= Q931_IE_CONGESTION_LEVEL,
+		.name		= "Congestion Level",
+	},
+	{
+		.type		= Q931_IE_TYPE_SO,
 		.max_len	= 1,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -83,6 +88,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Repeat Indicator",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -91,6 +97,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Segmented Message",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -99,6 +106,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Change Status",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -107,6 +115,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Special",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -115,6 +124,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Connected Address",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_ETSI,
@@ -123,6 +133,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Extended Facility",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 12,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -136,6 +147,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_bearer_capability_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 32,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -149,6 +161,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_cause_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 10,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -162,6 +175,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_call_identity_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -175,6 +189,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_call_state_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -188,6 +203,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_channel_identification_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_ETSI,
@@ -196,6 +212,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Facility",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 4,
 		.max_occur	= 2,
 		.network_type	= Q931_NT_ETSI,
@@ -209,6 +226,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_progress_indicator_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 4,
 		.network_type	= Q931_NT_ETSI,
@@ -217,6 +235,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Network Specific Facilities",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -225,6 +244,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Endpoint ID",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -238,6 +258,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_notification_indicator_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 82,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -251,6 +272,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_display_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 8,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -264,6 +286,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_datetime_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 34,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -272,6 +295,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Keypad Facility",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -280,6 +304,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Call Status",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -288,6 +313,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Update",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -296,6 +322,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Info Request",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -304,6 +331,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Signal",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -312,6 +340,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Switchhook",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -320,6 +349,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Feature Activation",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 5,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -328,6 +358,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Feature Indication",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 6,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -336,6 +367,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Information Rate",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 11,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -344,6 +376,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "End-to-End Transit Delay",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 5,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -352,6 +385,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Transit Delay Selection And Indication",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -360,6 +394,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Packet Layer Binary Parameters",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -368,6 +403,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Packet Layer Window Size",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 4,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -376,6 +412,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Packet Size",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -384,6 +421,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Closed User Group",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -392,6 +430,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Reverse Charge Indication",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -405,6 +444,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_connected_number_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 24,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -418,6 +458,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_calling_party_number_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 23,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -426,6 +467,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Calling Party Subaddress",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 23,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -439,6 +481,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_called_party_number_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 23,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -447,6 +490,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Called Party Subaddress",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -455,6 +499,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Original Called Number",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -463,6 +508,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Redirecting Number",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -471,6 +517,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Redirecting Subaddress",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -479,6 +526,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Redirection Number",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -487,6 +535,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Redirection Subaddress",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -495,6 +544,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Transit Network Selection",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 3,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -508,6 +558,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.dump		= q931_ie_restart_indicator_dump,
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_UNKNOWN,
@@ -516,6 +567,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "User User Facility",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 16,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -524,6 +576,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "Low Layer Compatibility",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 5,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -532,6 +585,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "High Layer Compatibility",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= 131,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_ETSI,
@@ -540,6 +594,7 @@ static struct q931_ie_class q931_ie_classes[] =
 		.name		= "User User",
 	},
 	{
+		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
 		.max_occur	= 1,
 		.network_type	= Q931_NT_UNKNOWN,

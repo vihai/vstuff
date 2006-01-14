@@ -69,7 +69,7 @@ int q931_ie_call_state_read_from_buf(
 
 	struct q931_ie_call_state_onwire_3 *oct_3 =
 		(struct q931_ie_call_state_onwire_3 *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	if (oct_3->coding_standard != Q931_IE_CS_CS_CCITT) {
 		report_ie(abstract_ie, LOG_ERR, "coding stanrdard != CCITT\n");
@@ -87,21 +87,19 @@ int q931_ie_call_state_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_call_state *ie =
 		container_of(abstract_ie, struct q931_ie_call_state, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_CALL_STATE;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_call_state_onwire_3 *oct_3 =
-	  (struct q931_ie_call_state_onwire_3 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_call_state_onwire_3 *)
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->coding_standard = ie->coding_standard;
 	oct_3->value = ie->value;
-	ieow->len += 1;
+	len++;
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 static const char *q931_ie_call_state_coding_standard_to_text(

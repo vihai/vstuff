@@ -68,7 +68,7 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 
 	struct q931_ie_high_layer_compatibility_onwire_3 *oct_3 =
 		(struct q931_ie_high_layer_compatibility_onwire_3 *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	ie->coding_standard = oct_3->coding_standard;
 	ie->interpretation = oct_3->interpretation;
@@ -89,7 +89,7 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 
 		struct q931_ie_high_layer_compatibility_onwire_4a *oct_4a =
 			(struct q931_ie_high_layer_compatibility_onwire_4a *)
-			(buf + (nextoct++));
+			(buf + nextoct++);
 
 		ie->extended_characteristics_identification =
 			oct_4a->extended_characteristics_identification;
@@ -108,28 +108,25 @@ int q931_ie_high_layer_compatibility_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_high_layer_compatibility *ie =
 		container_of(abstract_ie,
 			struct q931_ie_high_layer_compatibility, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_HIGH_LAYER_COMPATIBILITY;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_high_layer_compatibility_onwire_3 *oct_3 =
-	  (struct q931_ie_high_layer_compatibility_onwire_3 *)
-		(&ieow->data[ieow->len]);
+		(struct q931_ie_high_layer_compatibility_onwire_3 *)
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->coding_standard = ie->coding_standard;
 	oct_3->interpretation = ie->interpretation;
 	oct_3->presentation_method = ie->presentation_method;
-	ieow->len++;
+	len++;
 
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_high_layer_compatibility_onwire_4 *oct_4 =
 		(struct q931_ie_high_layer_compatibility_onwire_4 *)
-			(&ieow->data[ieow->len]);
+		(buf + len);
+	oct_4->raw = 0;
 	oct_4->characteristics_identification =
 		ie->characteristics_identification;
 
@@ -139,22 +136,22 @@ int q931_ie_high_layer_compatibility_write_to_buf(
 		Q931_IE_HLC_CI_RESERVED_FOR_MANAGEMENT) {
 
 		oct_4->ext = 0;
-		ieow->len++;
+		len++;
 
-		ieow->data[ieow->len] = 0x00;
 		struct q931_ie_high_layer_compatibility_onwire_4a *oct_4a =
 			(struct q931_ie_high_layer_compatibility_onwire_4a *)
-				(&ieow->data[ieow->len]);
+			(buf + len);
+		oct_4a->raw = 0;
 		oct_4a->ext = 1;
 		oct_4a->extended_characteristics_identification =
 			ie->extended_characteristics_identification;
-		ieow->len++;
+		len++;
 	} else {
 		oct_4->ext = 1;
-		ieow->len++;
+		len++;
 	}
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 static const char *q931_ie_high_layer_compatibility_coding_standard_to_text(

@@ -82,17 +82,14 @@ int q931_ie_call_identity_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_call_identity *ie =
 		container_of(abstract_ie, struct q931_ie_call_identity, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_CALL_IDENTITY;
-	ieow->len = 0;
+	memcpy(buf + len, ie->data, ie->data_len);
+	len += ie->data_len;
 
-	memcpy(ieow->data, ie->data, ie->data_len);
-	ieow->len += ie->data_len;
-
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 void q931_ie_call_identity_dump(

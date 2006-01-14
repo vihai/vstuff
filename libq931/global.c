@@ -202,7 +202,7 @@ void q931_global_restart_confirm(
 			ri->restart_class = Q931_IE_RI_C_INDICATED;
 			q931_ies_add_put(&ies, &ri->ie);
 
-			q931_global_send_message(NULL, &gc->intf->dlc,
+			q931_global_send_message(NULL, &gc->dlc,
 				Q931_MT_RESTART_ACKNOWLEDGE, &ies);
 		} else {
 			q931_chanset_add(&gc->restart_acked_chans,
@@ -458,7 +458,7 @@ void q931_global_timer_T316(void *data)
 				q931_ies_add_put(&ies, &ri->ie);
 			}
 
-			q931_global_send_message(NULL, &gc->intf->dlc,
+			q931_global_send_message(NULL, &gc->dlc,
 				Q931_MT_RESTART, &ies);
 
 			q931_global_start_timer(gc, T316);
@@ -519,7 +519,7 @@ void q931_global_timer_T317(void *data)
 			ri->restart_class = Q931_IE_RI_C_INDICATED;
 			q931_ies_add_put(&ies, &ri->ie);
 
-			q931_global_send_message(gc, &gc->intf->dlc,
+			q931_global_send_message(gc, &gc->dlc,
 				Q931_MT_RESTART, &ies);
 		}
 

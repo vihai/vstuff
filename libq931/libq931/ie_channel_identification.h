@@ -138,6 +138,7 @@ void q931_ie_channel_identification_dump(
 
 struct q931_ie_channel_identification_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 interface_id_present:1;
@@ -146,7 +147,7 @@ struct q931_ie_channel_identification_onwire_3
 	__u8 preferred_exclusive:1;
 	__u8 d_channel_indicator:1;
 	__u8 info_channel_selection:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 info_channel_selection:2;
 	__u8 d_channel_indicator:1;
 	__u8 preferred_exclusive:1;
@@ -154,53 +155,54 @@ struct q931_ie_channel_identification_onwire_3
 	__u8 interface_type:1;
 	__u8 interface_id_present:1;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_channel_identification_onwire_3b
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 interface_identifier:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 interface_identifier:7;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_channel_identification_onwire_3c
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 coding_standard:2;
 	__u8 number_map:1;
 	__u8 channel_type_map_identifier_type:4;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 channel_type_map_identifier_type:4;
 	__u8 number_map:1;
 	__u8 coding_standard:2;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_channel_identification_onwire_3d
 {
-	union
-	{
-	struct
-	{
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 channel_number:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 channel_number:7;
 	__u8 ext:1;
 #endif
 	};
 
 	__u8 slot_map;
+	__u8 raw;
 	};
 } __attribute__ ((__packed__));
 

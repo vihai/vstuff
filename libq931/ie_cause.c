@@ -122,32 +122,31 @@ int q931_ie_cause_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_cause *ie =
 		container_of(abstract_ie, struct q931_ie_cause, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_CAUSE;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_cause_onwire_3 *oct_3 =
-	  (struct q931_ie_cause_onwire_3 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_cause_onwire_3 *)
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->coding_standard = ie->coding_standard;
 	oct_3->location = ie->location;
-	ieow->len += 1;
+	len++;
 
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_cause_onwire_4 *oct_4 =
-	  (struct q931_ie_cause_onwire_4 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_cause_onwire_4 *)
+		(buf + len);
+	oct_4->raw = 0;
 	oct_4->ext = 1;
 	oct_4->cause_value = ie->value;
-	ieow->len += 1;
+	len++;
 
-	memcpy(&ieow->data[ieow->len], ie->diagnostics, ie->diagnostics_len);
-	ieow->len += ie->diagnostics_len;
+	memcpy(buf + len, ie->diagnostics, ie->diagnostics_len);
+	len += ie->diagnostics_len;
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 int q931_ies_contain_cause(

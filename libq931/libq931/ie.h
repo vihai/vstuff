@@ -21,6 +21,10 @@
 #include <libq931/msgtype.h>
 #include <libq931/dlc.h>
 
+#if __BYTE_ORDER != __BIG_ENDIAN && __BYTE_ORDER != __LITTLE_ENDIAN
+#error Unsupported byte order
+#endif
+
 #define report_ie(ie, lev, fmt, args...)	\
 		if (report_func)		\
 			report_func(		\
@@ -135,10 +139,18 @@ enum q931_ie_id
 #define Q931_NT_UNKNOWN	0
 #define Q931_NT_ETSI	(1 << 0)
 
+enum q931_ie_type
+{
+	Q931_IE_TYPE_SO,
+	Q931_IE_TYPE_VL,
+};
+
 struct q931_call;
 struct q931_message;
 struct q931_ie_class
 {
+	enum q931_ie_type type;
+
 	int max_len;
 	int max_occur;
 	int network_type;

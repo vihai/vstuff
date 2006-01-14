@@ -36,12 +36,13 @@ enum q931_dlc_status
 struct q931_interface;
 struct q931_dlc
 {
-	int refcnt;
-
 	struct list_head intf_node;
 
-	int socket;
 	struct q931_interface *intf;
+	int socket;
+
+	int refcnt;
+
 	enum q931_dlc_status status;
 	int tei;
 
@@ -50,15 +51,14 @@ struct q931_dlc
 	struct list_head outgoing_queue;
 };
 
-struct q931_broadcast_dlc
-{
-	int socket;
-	struct q931_interface *intf;
-};
-
 #ifdef Q931_PRIVATE
 
 void q931_dlc_init(
+	struct q931_dlc *dlc,
+	struct q931_interface *intf,
+	int socket);
+
+void q931_broadcast_dlc_init(
 	struct q931_dlc *dlc,
 	struct q931_interface *intf,
 	int socket);

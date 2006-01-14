@@ -85,28 +85,32 @@ void q931_ie_progress_indicator_dump(
 
 struct q931_ie_progress_indicator_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 coding_standard:2;
 	__u8 :1;
 	__u8 location:4;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 location:4;
 	__u8 :1;
 	__u8 coding_standard:2;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_progress_indicator_onwire_4
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 progress_description:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 progress_description:7;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 #endif

@@ -71,7 +71,7 @@ int q931_ie_bearer_capability_read_from_buf(
 
 	struct q931_ie_bearer_capability_onwire_3 *oct_3 =
 		(struct q931_ie_bearer_capability_onwire_3 *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	if (!oct_3->ext) {
 		report_ie(abstract_ie, LOG_WARNING, "IE oct 3 ext != 0\n");
@@ -85,7 +85,7 @@ int q931_ie_bearer_capability_read_from_buf(
 
 	struct q931_ie_bearer_capability_onwire_4 *oct_4 =
 		(struct q931_ie_bearer_capability_onwire_4 *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	ie->transfer_mode =
 		oct_4->transfer_mode;
@@ -97,7 +97,7 @@ int q931_ie_bearer_capability_read_from_buf(
 
 	struct q931_ie_bearer_capability_onwire_4a *oct_4a =
 		(struct q931_ie_bearer_capability_onwire_4a *)
-		(buf + (nextoct++));
+		(buf + nextoct++);
 
 	if (oct_4a->ext)
 		goto oct_4_end;
@@ -119,7 +119,7 @@ oct_4_end:
 
 		struct q931_ie_bearer_capability_onwire_5 *oct_5 =
 			(struct q931_ie_bearer_capability_onwire_5 *)
-			(buf + (nextoct++));
+			(buf + nextoct++);
 
 		ie->user_information_layer_1_protocol =
 			oct_5->user_information_layer_1_protocol;
@@ -129,7 +129,7 @@ oct_4_end:
 
 		struct q931_ie_bearer_capability_onwire_5a *oct_5a =
 			(struct q931_ie_bearer_capability_onwire_5a *)
-			(buf + (nextoct++));
+			(buf + nextoct++);
 
 		if (oct_5a->ext)
 			goto oct_5_end;
@@ -141,7 +141,7 @@ oct_4_end:
 
 			struct q931_ie_bearer_capability_onwire_5b1 *oct_5b1 =
 				(struct q931_ie_bearer_capability_onwire_5b1 *)
-				(buf + (nextoct++));
+				(buf + nextoct++);
 
 			oct_5b_ext = oct_5b1->ext;
 		} else if (oct_5->user_information_layer_1_protocol ==
@@ -149,7 +149,7 @@ oct_4_end:
 
 			struct q931_ie_bearer_capability_onwire_5b2 *oct_5b2 =
 				(struct q931_ie_bearer_capability_onwire_5b2 *)
-				(buf + (nextoct++));
+				(buf + nextoct++);
 
 			oct_5b_ext = oct_5b2->ext;
 		} else {
@@ -170,7 +170,7 @@ oct_4_end:
 
 		struct q931_ie_bearer_capability_onwire_5d *oct_5d =
 			(struct q931_ie_bearer_capability_onwire_5d *)
-			(buf + (nextoct++));
+			(buf + nextoct++);
 
 		if (oct_5d->ext) {
 			report_ie(abstract_ie, LOG_WARNING,
@@ -189,7 +189,7 @@ oct_5_end:;
 
 		struct q931_ie_bearer_capability_onwire_6 *oct_6 =
 			(struct q931_ie_bearer_capability_onwire_6 *)
-			(buf + (nextoct++));
+			(buf + nextoct++);
 
 		if (oct_6->ext) {
 			report_ie(abstract_ie, LOG_WARNING, "IE oct 6 ext != 0\n");
@@ -209,10 +209,11 @@ oct_5_end:;
 
 		struct q931_ie_bearer_capability_onwire_7 *oct_7 =
 			(struct q931_ie_bearer_capability_onwire_7 *)
-			(buf + (nextoct++));
+			(buf + nextoct++);
 
 		if (oct_7->ext) {
-			report_ie(abstract_ie, LOG_WARNING, "IE oct 7 ext != 0\n");
+			report_ie(abstract_ie, LOG_WARNING,
+				"IE oct 7 ext != 0\n");
 			return FALSE;
 		}
 
@@ -228,29 +229,28 @@ int q931_ie_bearer_capability_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_bearer_capability *ie =
 		container_of(abstract_ie, struct q931_ie_bearer_capability, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
-	ieow->id = Q931_IE_BEARER_CAPABILITY;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_bearer_capability_onwire_3 *oct_3 =
-	  (struct q931_ie_bearer_capability_onwire_3 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_bearer_capability_onwire_3 *)
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->coding_standard = ie->coding_standard;
 	oct_3->information_transfer_capability =
 		ie->information_transfer_capability;
-	ieow->len += 1;
+	len++;
 
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_bearer_capability_onwire_4 *oct_4 =
-	  (struct q931_ie_bearer_capability_onwire_4 *)(&ieow->data[ieow->len]);
+		(struct q931_ie_bearer_capability_onwire_4 *)
+		(buf + len);
+	oct_4->raw = 0;
 	oct_4->ext = 1;
 	oct_4->transfer_mode = ie->transfer_mode;
 	oct_4->information_transfer_rate = ie->information_transfer_rate;
-	ieow->len += 1;
+	len++;
 
 	if (!(ie->transfer_mode == Q931_IE_BC_TM_CIRCUIT &&
 	     (ie->information_transfer_capability ==
@@ -260,14 +260,15 @@ int q931_ie_bearer_capability_write_to_buf(
 	      ie->user_information_layer_1_protocol ==
 			Q931_IE_BC_UIL1P_UNUSED)) {
 
-		ieow->data[ieow->len] = 0x00;
 		struct q931_ie_bearer_capability_onwire_5 *oct_5 =
-		  (struct q931_ie_bearer_capability_onwire_5 *)(&ieow->data[ieow->len]);
+			(struct q931_ie_bearer_capability_onwire_5 *)
+			(buf + len);
+		oct_5->raw = 0;
 		oct_5->ext = 1;
 		oct_5->layer_1_ident = Q931_IE_BC_LAYER_1_IDENT;
 		oct_5->user_information_layer_1_protocol =
 			ie->user_information_layer_1_protocol;
-		ieow->len += 1;
+		len++;
 	}
 
 	if (ie->transfer_mode == Q931_IE_BC_TM_PACKET ||
@@ -283,7 +284,7 @@ int q931_ie_bearer_capability_write_to_buf(
 		assert(0);
 	}
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 static const char *q931_ie_bearer_capability_coding_standard_to_text(

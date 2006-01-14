@@ -2938,24 +2938,33 @@ static void refresh_polls_list()
 			continue;
 
 		if (intf->q931_intf->role == LAPD_ROLE_NT) {
-			visdn.polls[visdn.npolls].fd = intf->q931_intf->master_socket;
-			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_INTERFACE;
-			visdn.poll_infos[visdn.npolls].interface = intf->q931_intf;
-			(visdn.npolls)++;
+			visdn.polls[visdn.npolls].fd =
+					intf->q931_intf->master_socket;
+			visdn.polls[visdn.npolls].events =
+					POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+					POLL_INFO_TYPE_INTERFACE;
+			visdn.poll_infos[visdn.npolls].interface =
+					intf->q931_intf;
+			visdn.npolls++;
 		} else {
-			visdn.polls[visdn.npolls].fd = intf->q931_intf->dlc.socket;
-			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
-			visdn.poll_infos[visdn.npolls].dlc = &intf->q931_intf->dlc;
-			(visdn.npolls)++;
+			visdn.polls[visdn.npolls].fd =
+					intf->q931_intf->dlc.socket;
+			visdn.polls[visdn.npolls].events =
+					POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+					POLL_INFO_TYPE_DLC;
+			visdn.poll_infos[visdn.npolls].dlc =
+					&intf->q931_intf->dlc;
+			visdn.npolls++;
 		}
 
 		struct q931_dlc *dlc;
 		list_for_each_entry(dlc, &intf->q931_intf->dlcs, intf_node) {
 			visdn.polls[visdn.npolls].fd = dlc->socket;
 			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-			visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_DLC;
+			visdn.poll_infos[visdn.npolls].type =
+							POLL_INFO_TYPE_DLC;
 			visdn.poll_infos[visdn.npolls].dlc = dlc;
 			(visdn.npolls)++;
 		}
@@ -4275,10 +4284,13 @@ no_cgpn:;
 		struct q931_ie_display *disp = q931_ie_display_alloc();
 		strcpy(disp->text, "Mark Spencer Sucks");
 		q931_ies_add_put(&ies, &disp->ie);
-#endif
 
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_MORE_INFO_REQUEST, &ies);
+#endif
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_MORE_INFO_REQUEST, NULL);
 
 		for(i=0; called_number[i]; i++) {
 			struct ast_frame f =

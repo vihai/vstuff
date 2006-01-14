@@ -70,13 +70,13 @@ struct q931_interface
 	enum q931_interface_network_role network_role;
 	enum lapd_role role;
 
-	// Multipoint master_socket in NT mode
+	// Accept master_socket in NT mode
 	int master_socket;
 
 	// Broadcast DLC for multipoint interfaces in NT MODE
-	struct q931_broadcast_dlc bc_dlc;
+	struct q931_dlc bc_dlc;
 
-	// DLC for TE mode
+	// Interface's PTP DLC for TE mode
 	struct q931_dlc dlc;
 
 	int dlc_autorelease_time;

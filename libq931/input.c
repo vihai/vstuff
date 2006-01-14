@@ -44,20 +44,6 @@
 
 #include "call_inline.h"
 
-static void q931_flush_outgoing_queue(
-	struct q931_dlc *dlc)
-{
-	struct q931_message *msg, *n;
-	list_for_each_entry_safe(msg, n, &dlc->outgoing_queue,
-					outgoing_queue_node) {
-		q931_send_frame(dlc, msg->raw, msg->rawlen);
-
-		list_del(&msg->outgoing_queue_node);
-
-		q931_message_put(msg);
-	}
-}
-
 void q931_dl_establish_confirm(struct q931_dlc *dlc)
 {
 	report_dlc(dlc, LOG_DEBUG, "DL-ESTABLISH-CONFIRM\n");
@@ -66,6 +52,7 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -96,6 +83,7 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -118,6 +106,7 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -138,6 +127,7 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -236,7 +226,6 @@ static void q931_ieid_fill_diagnostic_from_list(
 
 struct q931_decoder_status
 {
-	int rawies_curpos;
 	int curie;
 
 	__u8 active_codeset;
@@ -273,8 +262,10 @@ static void q931_decode_ie(
 	const struct q931_call *call,
 	struct q931_message *msg,
 	struct q931_decoder_status *ds,
-	__u8 ie_id,
 	__u8 codeset,
+	__u8 ie_id,
+	__u8 *buf,
+	__u8 len,
 	BOOL is_vl)
 {
 	const struct q931_ie_class *ie_class;
@@ -295,32 +286,13 @@ static void q931_decode_ie(
 		return;
 	}
 
-	int ie_len;
-	__u8 *ie_buf;
-       
-	if (is_vl) {
-		ie_len = *(__u8 *)(msg->rawies + ds->rawies_curpos);
-		ie_buf = msg->rawies + ds->rawies_curpos + 1;
-		ds->rawies_curpos += ie_len + 1;
-	} else {
-		ie_len = 1;
-		ie_buf = msg->rawies + ds->rawies_curpos;
-	}
-
-	if(ds->rawies_curpos > msg->rawies_len) {
-
-		report_msg(msg, LOG_ERR, "<-  MALFORMED FRAME\n");
-		// FIXME
-		return;
-	}
-
 	report_msg_cont(msg, LOG_DEBUG,
-		"<-  %s IE %d ===> %u (%s) length=%d\n",
+		"<-  %s IE %d ===> %u (%s) length=(%d)\n",
 		is_vl ? "VL" : "SO",
 		ds->curie,
 		ie_class->id,
 		ie_class->name,
-		ie_len);
+		len);
 
 	const struct q931_ie_usage *ie_usage;
 	ie_usage = q931_get_ie_usage(msg->message_type, codeset, ie_id);
@@ -366,7 +338,7 @@ static void q931_decode_ie(
        		return;
 	}
 
-	if (q931_check_ie_size(msg, ie_class, ie_len) < 0) {
+	if (q931_check_ie_size(msg, ie_class, len) < 0) {
 
 		if (ie_class->id == Q931_IE_USER_USER ||
 		    ie_class->id == Q931_IE_LOW_LAYER_COMPATIBILITY ||
@@ -379,7 +351,7 @@ static void q931_decode_ie(
 			return;
 		} else if (ie_class->id == Q931_IE_CALL_IDENTITY) {
 			/* Truncate it */
-			ie_len = ie_class->max_len;
+			len = ie_class->max_len;
 		} else {
 			q931_ie_has_content_errors(msg, ds, ie_class, ie_usage);
 			return;
@@ -390,9 +362,7 @@ static void q931_decode_ie(
        
 	ie = ie_class->alloc();
 
-	if (!ie->cls->read_from_buf(ie,
-			ie_buf,
-			ie_len,
+	if (!ie->cls->read_from_buf(ie, buf, len,
 			call->intf->lib->report,
 			call->intf)) {
 
@@ -401,9 +371,9 @@ static void q931_decode_ie(
 		int i;
 		char hexdump[512];
 
-		for (i=0; i<ie_len; i++)
+		for (i=0; i<len; i++)
 			sprintf(hexdump + i * 2, "%02x",
-				*(ie_buf + i));
+				*(buf + i));
 
 		report_msg_cont(msg, LOG_WARNING,
 			"IE has content errors (%s)\n",
@@ -434,6 +404,8 @@ static void q931_decode_ie(
 	}
 
 	q931_ies_add_put(&msg->ies, ie);
+
+	return;
 }
 
 __u8 q931_decode_shift_ie(
@@ -514,13 +486,14 @@ int q931_decode_information_elements(
 		}
 	}
 
+	int rawies_curpos = 0;
+
 	/* Go through the IEs buffer and decode each of them */
 	__u8 codeset = ds.active_codeset;
-	while(ds.rawies_curpos < msg->rawies_len) {
+	while(rawies_curpos < msg->rawies_len) {
 
-		__u8 ie_id = *(__u8 *)(msg->rawies + ds.rawies_curpos);
+		__u8 ie_id = *(__u8 *)(msg->rawies + rawies_curpos);
 
-		ds.rawies_curpos++;
 		ds.curie++;
 
 		if (q931_is_so_ie(ie_id)) {
@@ -528,12 +501,34 @@ int q931_decode_information_elements(
 				codeset = q931_decode_shift_ie(
 						call, msg, &ds, ie_id);
 
+				rawies_curpos++;
+
 				continue;
 			}
 
-			q931_decode_ie(call, msg, &ds, ie_id, codeset, FALSE);
+			q931_decode_ie(call, msg, &ds, codeset,
+				q931_get_so_ie_id(ie_id),
+				msg->rawies + rawies_curpos, 1, FALSE);
+
+			rawies_curpos++;
 		} else {
-			q931_decode_ie(call, msg, &ds, ie_id, codeset, TRUE);
+			__u8 ie_len = 
+				*(__u8 *)(msg->rawies + rawies_curpos + 1);
+			
+			q931_decode_ie(call, msg, &ds, codeset, ie_id,
+				msg->rawies + rawies_curpos + 2,
+				ie_len,
+				TRUE);
+
+			rawies_curpos += ie_len + 2;
+
+			if(rawies_curpos > msg->rawies_len) {
+
+				report_msg(msg, LOG_ERR,
+					"<-  MALFORMED FRAME\n");
+
+				break;
+			}
 		}
 
 		/* Remove IE from mandatory IEs */
@@ -764,7 +759,7 @@ struct q931_dlc *q931_accept(
 		goto err_malloc;
 
 	int socket = accept(accept_socket, NULL, 0);
-	if (dlc->socket < 0)
+	if (socket < 0)
 		goto err_accept;
 
 	q931_dlc_init(dlc, intf, socket);
@@ -772,7 +767,7 @@ struct q931_dlc *q931_accept(
 	dlc->status = Q931_DLC_STATUS_DISCONNECTED;
 
 	socklen_t optlen = sizeof(dlc->tei);
-	if (getsockopt(dlc->socket, SOL_LAPD, LAPD_TEI,
+	if (getsockopt(socket, SOL_LAPD, LAPD_TEI,
 		&dlc->tei, &optlen) < 0) {
 		report_intf(intf, LOG_ERR,
 			"getsockopt: %s\n", strerror(errno));
@@ -782,7 +777,7 @@ struct q931_dlc *q931_accept(
 	if (intf->flags & Q931_INTF_FLAGS_DEBUG) {
 		int on = 1;
 
-		if (setsockopt(dlc->socket, SOL_SOCKET, SO_DEBUG,
+		if (setsockopt(socket, SOL_SOCKET, SO_DEBUG,
 						&on, sizeof(on)) < 0)
 			report_intf(intf, LOG_ERR,
 				"setsockopt: %s\n", strerror(errno));
@@ -793,7 +788,7 @@ struct q931_dlc *q931_accept(
 	return dlc;
 
 err_getsockopt:
-	close(dlc->socket);
+	close(socket);
 err_accept:
 	free(dlc);
 err_malloc:
@@ -826,7 +821,6 @@ int q931_receive(struct q931_dlc *dlc)
 	skmsg.msg_controllen = sizeof(cmsg);
 	skmsg.msg_flags = 0;
 
-	msg->dlc = dlc;
 	msg->rawlen = recvmsg(dlc->socket, &skmsg, 0);
 	if(msg->rawlen < 0) {
 		if (errno == ECONNRESET) {
@@ -850,7 +844,7 @@ int q931_receive(struct q931_dlc *dlc)
 	}
 
 	if (msg->rawlen < sizeof(struct q931_header)) {
-		report_dlc(dlc, LOG_DEBUG,
+		report_msg(msg, LOG_DEBUG,
 			"Message too short (%d bytes), ignoring\n",
 			msg->rawlen);
 
@@ -860,7 +854,7 @@ int q931_receive(struct q931_dlc *dlc)
 	struct q931_header *hdr = (struct q931_header *)msg->raw;
 
 	if (hdr->protocol_discriminator != Q931_PROTOCOL_DISCRIMINATOR_Q931) {
-		report_dlc(dlc, LOG_DEBUG,
+		report_msg(msg, LOG_DEBUG,
 			"Protocol discriminator %u not supported,"
 			" ignoring message\n",
 			hdr->protocol_discriminator);
@@ -869,14 +863,14 @@ int q931_receive(struct q931_dlc *dlc)
 	}
 
 	if (hdr->spare1 != 0) {
-		report_dlc(dlc, LOG_DEBUG,
+		report_msg(msg, LOG_DEBUG,
 			"Call reference size invalid, ignoring frame\n");
 
 		return -EBADMSG;
 	}
 
 	if (hdr->call_reference_len > 4) {
-		report_dlc(dlc, LOG_DEBUG,
+		report_msg(msg, LOG_DEBUG,
 			"Call reference length of %u bytes is too big"
 			" and not supported (max 4), ignoring frame\n",
 			hdr->call_reference_len);
@@ -958,7 +952,7 @@ int q931_receive(struct q931_dlc *dlc)
 			msg->callref,
 			skmsg.msg_flags & MSG_OOB);
 		if (!call) {
-			report_dlc(dlc, LOG_ERR,
+			report_msg(msg, LOG_ERR,
 				"Error allocating call\n");
 
 			return -EFAULT;

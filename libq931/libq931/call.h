@@ -170,17 +170,8 @@ struct q931_call
 	struct q931_timer T322;
 };
 
-struct q931_call *q931_call_alloc_in(
-	struct q931_interface *intf,
-	struct q931_dlc *dlc,
-	int call_reference,
-	int broadcast_setup);
-
-//--------------------------------- TO BE REMOVED
 struct q931_call *q931_call_alloc_out(
 	struct q931_interface *intf);
-
-//--------------------------------- TO BE REMOVED
 
 const char *q931_call_state_to_text(enum q931_call_state state);
 
@@ -210,6 +201,13 @@ void q931_call_release_reference(struct q931_call *call);
 		((call)->direction ==					\
 			Q931_CALL_DIRECTION_OUTBOUND ? 'O' : 'I'),	\
 		## arg)
+
+struct q931_call *q931_call_alloc_in(
+	struct q931_interface *intf,
+	struct q931_dlc *dlc,
+	int call_reference,
+	int broadcast_setup);
+
 
 void _q931_call_start_timer(
 	struct q931_call *call,

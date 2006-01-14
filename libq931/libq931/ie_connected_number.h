@@ -96,30 +96,34 @@ void q931_ie_connected_number_dump(
 
 struct q931_ie_connected_number_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 type_of_number:3;
 	__u8 numbering_plan_identificator:4;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 numbering_plan_identificator:4;
 	__u8 type_of_number:3;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_connected_number_onwire_3a
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 presentation_indicator:2;
 	__u8 :3;
 	__u8 screening_indicator:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 screening_indicator:2;
 	__u8 :3;
 	__u8 presentation_indicator:2;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 void q931_ie_connected_number_register(

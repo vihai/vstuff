@@ -65,9 +65,11 @@ int q931_ie_called_party_number_read_from_buf(
 		return FALSE;
 	}
 
+	int nextoct = 0;
+
 	struct q931_ie_called_party_number_onwire_3 *oct_3 =
 		(struct q931_ie_called_party_number_onwire_3 *)
-		(buf + 0);
+		(buf + nextoct++);
 
 	ie->type_of_number = oct_3->type_of_number;
 	ie->numbering_plan_identificator = oct_3->numbering_plan_identificator;
@@ -83,29 +85,26 @@ int q931_ie_called_party_number_write_to_buf(
 	void *buf,
 	int max_size)
 {
+	int len = 0;
 	struct q931_ie_called_party_number *ie =
 		container_of(abstract_ie,
 			struct q931_ie_called_party_number, ie);
-	struct q931_ie_onwire *ieow = (struct q931_ie_onwire *)buf;
 
 	// Check max_size
 
-	ieow->id = Q931_IE_CALLED_PARTY_NUMBER;
-	ieow->len = 0;
-
-	ieow->data[ieow->len] = 0x00;
 	struct q931_ie_called_party_number_onwire_3 *oct_3 =
-	  (struct q931_ie_called_party_number_onwire_3 *)
-		(&ieow->data[ieow->len]);
+		(struct q931_ie_called_party_number_onwire_3 *)
+		(buf + len);
+	oct_3->raw = 0;
 	oct_3->ext = 1;
 	oct_3->type_of_number = ie->type_of_number;
 	oct_3->numbering_plan_identificator = ie->numbering_plan_identificator;
-	ieow->len += 1;
+	len++;
 
-	memcpy(&ieow->data[ieow->len], ie->number, strlen(ie->number));
-	ieow->len += strlen(ie->number);
+	memcpy(buf + len, ie->number, strlen(ie->number));
+	len += strlen(ie->number);
 
-	return ieow->len + sizeof(struct q931_ie_onwire);
+	return len;
 }
 
 static const char *q931_ie_called_party_number_type_of_number_to_text(

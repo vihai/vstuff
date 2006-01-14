@@ -183,39 +183,45 @@ struct q931_ie_cause_value_info
 
 struct q931_ie_cause_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 coding_standard:2;
 	__u8 :1;
 	__u8 location:4;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 location:4;
 	__u8 :1;
 	__u8 coding_standard:2;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_cause_onwire_3a
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 recommendation:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 recommendation:7;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_cause_onwire_4
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 cause_value:7;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 cause_value:7;
 	__u8 ext:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 enum q931_ie_cause_diag_condition
@@ -227,6 +233,7 @@ enum q931_ie_cause_diag_condition
 
 struct q931_ie_cause_diag_1_2
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext1:1;
 	__u8 attribute_number:7;
@@ -234,7 +241,7 @@ struct q931_ie_cause_diag_1_2
 	__u8 ext2:1;
 	__u8 :5;
 	__u8 condition:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 condition:2;
 	__u8 :5;
 	__u8 ext2:1;
@@ -242,6 +249,7 @@ struct q931_ie_cause_diag_1_2
 	__u8 attribute_number:7;
 	__u8 ext1:1;
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 void q931_ie_cause_value_infos_init();

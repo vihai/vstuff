@@ -297,100 +297,101 @@ void q931_ie_bearer_capability_dump(
 
 struct q931_ie_bearer_capability_onwire_3
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 coding_standard:2;
 	__u8 information_transfer_capability:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 information_transfer_capability:5;
 	__u8 coding_standard:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_4
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 transfer_mode:2;
 	__u8 information_transfer_rate:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 information_transfer_rate:5;
 	__u8 transfer_mode:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_4a
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 structure:3;
 	__u8 configuration:2;
 	__u8 establishment:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 establishment:2;
 	__u8 configuration:2;
 	__u8 structure:3;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_4b
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 symmetry:2;
 	__u8 information_transfer_rate_dst_to_orig:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 information_transfer_rate_dst_to_orig:5;
 	__u8 symmetry:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_5
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 layer_1_ident:2;
 	__u8 user_information_layer_1_protocol:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 user_information_layer_1_protocol:5;
 	__u8 layer_1_ident:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_5a
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 sync_async:1;
 	__u8 negotiation:1;
 	__u8 user_rate:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 user_rate:5;
 	__u8 negotiation:1;
 	__u8 sync_async:1;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_5b1
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 intermediate_rate:2;
@@ -399,7 +400,7 @@ struct q931_ie_bearer_capability_onwire_5b1
 	__u8 flowcontrol_on_tx:1;
 	__u8 flowcontrol_on_rx:1;
 	__u8 :1;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 :1;
 	__u8 flowcontrol_on_rx:1;
 	__u8 flowcontrol_on_tx:1;
@@ -407,13 +408,13 @@ struct q931_ie_bearer_capability_onwire_5b1
 	__u8 nic_on_tx:1;
 	__u8 intermediate_rate:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_5b2
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 hdr_nohdr:1;
@@ -423,7 +424,7 @@ struct q931_ie_bearer_capability_onwire_5b2
 	__u8 assignor_assignee:1;
 	__u8 inband_outband_nego:1;
 	__u8 :1;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 :1;
 	__u8 inband_outband_nego:1;
 	__u8 assignor_assignee:1;
@@ -432,71 +433,70 @@ struct q931_ie_bearer_capability_onwire_5b2
 	__u8 multiframe_support:1;
 	__u8 hdr_nohdr:1;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_5c
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 number_of_stop_bits:2;
 	__u8 number_of_data_bits:2;
 	__u8 parity:3;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 parity:3;
 	__u8 number_of_data_bits:2;
 	__u8 number_of_stop_bits:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_5d
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 duplex_mode:1;
 	__u8 modem_type:6;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 modem_type:6;
 	__u8 duplex_mode:1;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_6
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 layer_2_ident:2;
 	__u8 user_information_layer_2_protocol:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 user_information_layer_2_protocol:5;
 	__u8 layer_2_ident:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 struct q931_ie_bearer_capability_onwire_7
 {
+	union { struct {
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 layer_3_ident:2;
 	__u8 user_information_layer_3_protocol:5;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
+#else
 	__u8 user_information_layer_3_protocol:5;
 	__u8 layer_3_ident:2;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
 #endif
+	}; __u8 raw; };
 } __attribute__ ((__packed__));
 
 void q931_ie_bearer_capability_register(
