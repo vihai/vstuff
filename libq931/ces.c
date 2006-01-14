@@ -92,7 +92,7 @@ struct q931_ces *q931_ces_alloc(
 	q931_call_get(call);
 	ces->call = call;
 	ces->state = I0_NULL_STATE;
-	ces->dlc = dlc;
+	ces->dlc = q931_dlc_get(dlc);
 
 	q931_init_timer(&ces->T304, q931_ces_timer_T304, ces);
 	q931_init_timer(&ces->T308, q931_ces_timer_T308, ces);
@@ -116,7 +116,12 @@ void q931_ces_free(struct q931_ces *ces)
 		ces->call->call_reference);
 
 	list_del(&ces->node);
+
+	q931_dlc_put(ces->dlc);
+	ces->dlc = NULL;
+	
 	q931_call_put(ces->call);
+	ces->call = NULL;
 
 	free(ces);
 }

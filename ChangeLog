@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-14 00:16:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-444
+
+    Summary:
+      Fixed missing q931_dlc_get in ces.c. DLC held by allocated CES would not stop autorelease timer
+    Revision:
+      isdn--devel--0.1--patch-444
+
+
+    modified files:
+     ChangeLog libq931/ces.c
+
+
 2006-01-14 00:02:54 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-443
 
     Summary:
