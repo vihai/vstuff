@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-15 15:26:52 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-454
+
+    Summary:
+      Samples were missing from the snapshots. FIxed
+    Revision:
+      isdn--devel--0.1--patch-454
+
+
+    modified files:
+     ChangeLog samples/Makefile.am
+
+
 2006-01-15 05:30:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-453
 
     Summary:
