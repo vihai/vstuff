@@ -687,8 +687,11 @@ static int q931_channel_select_response(
 				"but no indicated channel is unavailable\n");
 		}
 
-// FIXME			q931_ies_add_put(causeset,
-//				Q931_IE_C_CV_CHANNEL_UNACCEPTABLE);
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(call);
+		cause->value = Q931_IE_C_CV_CHANNEL_UNACCEPTABLE;
+		q931_ies_add_put(causes, &cause->ie);
 
 		return FALSE;
 	}
@@ -735,8 +738,12 @@ static int q931_channel_select_response(
 		// The other channel is not available too
 		// We're out of luck
 
-// FIXME	q931_causeset_add(causeset,
-// FIXME		Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE);
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(call);
+		cause->value =
+			Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE;
+		q931_ies_add_put(causes, &cause->ie);
 
 		return FALSE;
 	}
@@ -748,22 +755,20 @@ static int q931_channel_select_response(
 
 static struct q931_channel *q931_channel_select_setup(
 	struct q931_call *call,
-	struct q931_ies *setup_ies,
-	struct q931_ies *ies,
-	int *send_chanid_in_response)
+	const struct q931_ies *setup_ies,
+	struct q931_ies *causes)
 {
 	assert(call);
 	assert(setup_ies);
 	assert(call->intf);
 
-	if (send_chanid_in_response)
-		*send_chanid_in_response = FALSE;
-
 	struct q931_ie_channel_identification *ci = NULL;
 
 	int i;
 	for(i=0; i<setup_ies->count; i++) {
-		if (setup_ies->ies[i]->cls->id == Q931_IE_CHANNEL_IDENTIFICATION) {
+		if (setup_ies->ies[i]->cls->id ==
+				Q931_IE_CHANNEL_IDENTIFICATION) {
+
 			ci = container_of(setup_ies->ies[i],
 				struct q931_ie_channel_identification, ie);
 
@@ -789,8 +794,11 @@ static struct q931_channel *q931_channel_select_setup(
 			"No channel identification IE,"
 			" and no channel available\n");
 
-//		q931_causeset_add(causeset,
-//			Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE);
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(call);
+		cause->value = Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE;
+		q931_ies_add_put(causes, &cause->ie);
 
 		return NULL;
 	}
@@ -814,8 +822,12 @@ static struct q931_channel *q931_channel_select_setup(
 				"alternatives offered\n",
 				ci->chanset.chans[i]->id+1);
 
-//			q931_causeset_add(causeset,
-//				Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value =
+				Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE;
+			q931_ies_add_put(causes, &cause->ie);
 
 			return NULL;
 		}
@@ -831,17 +843,17 @@ static struct q931_channel *q931_channel_select_setup(
 				"alternative B%d is ok\n",
 				call->intf->channels[i].id+1);
 
-			if (send_chanid_in_response)
-				*send_chanid_in_response = TRUE;
-
 			return &call->intf->channels[i];
 		}
 	}
 
 	report_call(call, LOG_DEBUG, "No channel unavailable\n");
 
-//	q931_causeset_add(causeset,
-//		Q931_IE_C_CV_NO_CIRCUIT_CANNEL_AVAILABLE);
+	struct q931_ie_cause *cause = q931_ie_cause_alloc();
+	cause->coding_standard = Q931_IE_C_CS_CCITT;
+	cause->location = q931_ie_cause_location_call(call);
+	cause->value = Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE;
+	q931_ies_add_put(causes, &cause->ie);
 
 	return NULL;
 }
@@ -867,40 +879,23 @@ void q931_alerting_request(
 	break;
 
 	case U6_CALL_PRESENT: {
-		int send_chanid_in_response = FALSE;
 		Q931_DECLARE_IES(ies);
 
 		q931_ies_merge(&ies, user_ies);
 
-		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &call->setup_ies,
-				&ies, &send_chanid_in_response);
+		struct q931_ie_channel_identification *ci =
+			q931_ie_channel_identification_alloc();
 
-		if (!chan) {
-			// Could this happen?
-			assert(0);
-		}
+		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(
+							call->intf);
+		ci->coding_standard = Q931_IE_CI_CS_CCITT;
+		q931_chanset_init(&ci->chanset);
+		q931_chanset_add(&ci->chanset, call->channel);
+		q931_ies_add_put(&ies, &ci->ie);
 
-		call->channel = chan;
-		chan->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
-		if (send_chanid_in_response) {
-			struct q931_ie_channel_identification *ci =
-				q931_ie_channel_identification_alloc();
-
-			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			ci->interface_type =
-				q931_ie_channel_identification_intftype(
-								call->intf);
-			ci->coding_standard = Q931_IE_CI_CS_CCITT;
-			q931_chanset_init(&ci->chanset);
-			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add_put(&ies, &ci->ie);
-
-			q931_call_send_alerting(call, &ies);
-		} else
-			q931_call_send_alerting(call, user_ies);
+		q931_call_send_alerting(call, &ies);
 
 		q931_call_set_state(call, U7_CALL_RECEIVED);
 
@@ -1333,16 +1328,6 @@ void q931_more_info_request(
 
 		q931_ies_merge(&ies, user_ies);
 
-		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &call->setup_ies,
-				&ies, NULL);
-
-		assert(chan); // May there be a race condition? FIXME TODO BUG
-
-		call->channel = chan;
-		chan->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
 		q931_call_start_timer(call, T302);
 
 		struct q931_ie_channel_identification *ci =
@@ -1401,33 +1386,17 @@ void q931_more_info_request(
 
 		q931_ies_merge(&ies, user_ies);
 
-		int send_chanid_in_response = FALSE;
-		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &call->setup_ies,
-				&ies, &send_chanid_in_response);
-
-		if (!chan) {
-			// Could this happen?
-			assert(0);
-		}
-
-		call->channel = chan;
-		chan->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
-		if (send_chanid_in_response) {
-			struct q931_ie_channel_identification *ci =
-				q931_ie_channel_identification_alloc();
-			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			ci->interface_type =
-				q931_ie_channel_identification_intftype(
-								call->intf);
-			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
-			ci->coding_standard = Q931_IE_CI_CS_CCITT;
-			q931_chanset_init(&ci->chanset);
-			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add_put(&ies, &ci->ie);
-		}
+		struct q931_ie_channel_identification *ci =
+			q931_ie_channel_identification_alloc();
+		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(
+							call->intf);
+		ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
+		ci->coding_standard = Q931_IE_CI_CS_CCITT;
+		q931_chanset_init(&ci->chanset);
+		q931_chanset_add(&ci->chanset, call->channel);
+		q931_ies_add_put(&ies, &ci->ie);
 
 		q931_call_send_setup_acknowledge(call, &ies);
 
@@ -1486,19 +1455,6 @@ void q931_proceeding_request(
 
 		q931_ies_merge(&ies, user_ies);
 
-		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &call->setup_ies,
-				&ies, NULL);
-
-		if (!chan) {
-			// Could this happen?
-			assert(0);
-		}
-
-		call->channel = chan;
-		chan->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
 		struct q931_ie_channel_identification *ci =
 			q931_ie_channel_identification_alloc();
 		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
@@ -1531,33 +1487,17 @@ void q931_proceeding_request(
 
 		q931_ies_merge(&ies, user_ies);
 
-		int send_chanid_in_response = FALSE;
-		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &call->setup_ies,
-				&ies, &send_chanid_in_response);
-
-		if (!chan) {
-			// Could this happen?
-			assert(0);
-		}
-
-		call->channel = chan;
-		chan->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
-		if (send_chanid_in_response) {
-			struct q931_ie_channel_identification *ci =
-				q931_ie_channel_identification_alloc();
-			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			ci->interface_type =
-				q931_ie_channel_identification_intftype(
-								call->intf);
-			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
-			ci->coding_standard = Q931_IE_CI_CS_CCITT;
-			q931_chanset_init(&ci->chanset);
-			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add_put(&ies, &ci->ie);
-		}
+		struct q931_ie_channel_identification *ci =
+			q931_ie_channel_identification_alloc();
+		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(
+							call->intf);
+		ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
+		ci->coding_standard = Q931_IE_CI_CS_CCITT;
+		q931_chanset_init(&ci->chanset);
+		q931_chanset_add(&ci->chanset, call->channel);
+		q931_ies_add_put(&ies, &ci->ie);
 
 		q931_call_send_call_proceeding(call, &ies);
 
@@ -1624,6 +1564,8 @@ void q931_reject_request(
 	break;
 
 	case U6_CALL_PRESENT:
+		/* Release channel ?? */
+
 		q931_call_send_release_complete(call, user_ies);
 		q931_call_set_state(call, U0_NULL_STATE);
 		q931_call_release_reference(call);
@@ -1822,7 +1764,7 @@ void q931_setup_request(
 		call->proposed_channel = q931_channel_select(call);
 		if (!call->proposed_channel) {
 			q931_call_primitive(call,
-				Q931_CCB_RELEASE_INDICATION, user_ies);
+				Q931_CCB_RELEASE_INDICATION, NULL);
 		} else {
 			q931_call_start_timer(call, T303);
 
@@ -1845,7 +1787,7 @@ void q931_setup_request(
 			q931_ies_add_put(&call->setup_ies, &dt->ie);
 
 			if (call->intf->config ==
-			      Q931_INTF_CONFIG_MULTIPOINT) {
+					Q931_INTF_CONFIG_MULTIPOINT) {
 
 				ci->preferred_exclusive =
 					Q931_IE_CI_PE_EXCLUSIVE;
@@ -1919,33 +1861,17 @@ void q931_setup_response(
 	break;
 
 	case U6_CALL_PRESENT: {
-		int send_chanid_in_response = FALSE;
-		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &call->setup_ies,
-				&ies, &send_chanid_in_response);
-
-		if (!chan) {
-			// Could this happen?
-			assert(0);
-		}
-
-		call->channel = chan;
-		chan->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
-		if (send_chanid_in_response) {
-			struct q931_ie_channel_identification *ci =
-				q931_ie_channel_identification_alloc();
-			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			ci->interface_type =
-				q931_ie_channel_identification_intftype(
-								call->intf);
-			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
-			ci->coding_standard = Q931_IE_CI_CS_CCITT;
-			q931_chanset_init(&ci->chanset);
-			q931_chanset_add(&ci->chanset, call->channel);
-			q931_ies_add_put(&ies, &ci->ie);
-		}
+		struct q931_ie_channel_identification *ci =
+			q931_ie_channel_identification_alloc();
+		ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
+		ci->interface_type =
+			q931_ie_channel_identification_intftype(
+							call->intf);
+		ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
+		ci->coding_standard = Q931_IE_CI_CS_CCITT;
+		q931_chanset_init(&ci->chanset);
+		q931_chanset_add(&ci->chanset, call->channel);
+		q931_ies_add_put(&ies, &ci->ie);
 
 		q931_call_send_connect(call, &ies);
 
@@ -4197,14 +4123,15 @@ static void q931_handle_setup(
 
 		Q931_DECLARE_IES(ies);
 		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &msg->ies, &ies, NULL);
-
+			 q931_channel_select_setup(call, &msg->ies, &ies);
 
 		if (!chan) {
 			q931_call_send_release_complete(call, &ies);
 			q931_call_release_reference(call);
 		} else {
-			call->proposed_channel = chan;
+			call->channel = chan;
+			chan->call = call;
+			call->channel->state = Q931_CHANSTATE_SELECTED;
 
 			q931_ies_copy(&call->setup_ies, &msg->ies);
 
@@ -4222,7 +4149,7 @@ static void q931_handle_setup(
 
 		Q931_DECLARE_IES(ies);
 		struct q931_channel *chan =
-			q931_channel_select_setup(call, &msg->ies, &ies, NULL);
+			q931_channel_select_setup(call, &msg->ies, &ies);
 
 		if (!chan) {
 			q931_call_send_release_complete(call, &ies);
