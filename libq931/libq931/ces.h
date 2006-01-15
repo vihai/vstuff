@@ -18,7 +18,6 @@
 #define q931_ces_start_timer(ces, timer)		\
 	do {						\
 		q931_start_timer_delta(			\
-			(ces)->call->intf->lib,		\
 			&(ces)->timer,			\
 			(ces)->call->intf->timer);	\
 		report_ces(ces, LOG_DEBUG,		\

@@ -59,7 +59,6 @@ struct q931_interface
 	struct list_head node;
 
 	void *pvt;
-	struct q931_lib *lib;
 
 	char *name;
 
@@ -134,7 +133,6 @@ inline static void q931_intf_del_call(
 #define Q931_INTF_FLAGS_DEBUG (1 << 0)
 
 struct q931_interface *q931_open_interface(
-	struct q931_lib *lib,
 	const char *name,
 	int flags);
 void q931_close_interface(struct q931_interface *intf);

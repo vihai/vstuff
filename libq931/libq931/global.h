@@ -54,7 +54,6 @@ struct q931_global_call
 #define q931_global_start_timer(cr, timer)		\
 	do {						\
 		q931_start_timer_delta(			\
-			(cr)->intf->lib,		\
 			&(cr)->timer,			\
 			(cr)->intf->timer);		\
 		report_intf((cr)->intf, LOG_DEBUG,	\

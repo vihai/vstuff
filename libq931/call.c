@@ -362,7 +362,6 @@ void _q931_call_start_timer(
 		q931_call_get(call);
 
 		q931_start_timer_delta(
-			call->intf->lib,
 			timer,
 			delta);
 	}

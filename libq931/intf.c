@@ -70,7 +70,6 @@ try_again:
 }
 
 struct q931_interface *q931_open_interface(
-	struct q931_lib *lib,
 	const char *name,
 	int flags)
 {
@@ -87,7 +86,6 @@ struct q931_interface *q931_open_interface(
 	INIT_LIST_HEAD(&intf->calls);
 	INIT_LIST_HEAD(&intf->dlcs);
 
-	intf->lib = lib;
 	intf->name = strdup(name);
 
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);

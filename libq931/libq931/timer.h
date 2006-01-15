@@ -17,8 +17,6 @@
 
 typedef long long longtime_t;
 
-struct q931_lib;
-
 struct q931_timer
 {
 	struct list_head node;
@@ -31,7 +29,7 @@ struct q931_timer
 	void (*func)(void *data);
 };
 
-extern longtime_t q931_run_timers(struct q931_lib *lib);
+extern longtime_t q931_run_timers();
 
 #ifdef Q931_PRIVATE
 
@@ -41,14 +39,12 @@ extern void q931_init_timer(
 	void *data);
 
 extern void q931_start_timer(
-	struct q931_lib *lib,
 	struct q931_timer *timer,
 	longtime_t expires);
 
-extern longtime_t longtime_now();
+extern longtime_t longtime_now(void);
 
 extern void q931_start_timer_delta(
-	struct q931_lib *lib,
 	struct q931_timer *timer,
 	longtime_t delta);
 

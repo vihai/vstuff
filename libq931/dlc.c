@@ -45,7 +45,6 @@ void q931_dlc_put(
 	if (dlc->refcnt == 1 &&
 	    dlc->intf->dlc_autorelease_time) {
 		q931_start_timer_delta(
-			dlc->intf->lib,
 			&dlc->autorelease_timer,
 			dlc->intf->dlc_autorelease_time * 1000000LL);
 

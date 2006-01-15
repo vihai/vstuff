@@ -32,7 +32,6 @@ void q931_init_timer(
 }
 
 void q931_start_timer(
-	struct q931_lib *lib,
 	struct q931_timer *timer,
 	longtime_t expires)
 {
@@ -57,11 +56,10 @@ longtime_t q931_longtime_now()
 }
 
 void q931_start_timer_delta(
-	struct q931_lib *lib,
 	struct q931_timer *timer,
 	longtime_t delta)
 {
-	q931_start_timer(lib, timer, q931_longtime_now() + delta);
+	q931_start_timer(timer, q931_longtime_now() + delta);
 }
 
 void q931_stop_timer(struct q931_timer *timer)
@@ -73,7 +71,7 @@ void q931_stop_timer(struct q931_timer *timer)
 	}
 }
 
-longtime_t q931_run_timers(struct q931_lib *lib)
+longtime_t q931_run_timers(void)
 {
 	longtime_t now = q931_longtime_now();
 	longtime_t next_timer = -1;

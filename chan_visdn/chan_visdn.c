@@ -226,8 +226,6 @@ struct visdn_state
 {
 	ast_mutex_t lock;
 
-	struct q931_lib *libq931;
-
 	int have_to_exit;
 
 	struct list_head ccb_q931_queue;
@@ -3013,7 +3011,7 @@ static int visdn_open_interface(
 
 	intf->open_pending = TRUE;
 
-	intf->q931_intf = q931_open_interface(visdn.libq931, intf->name, 0);
+	intf->q931_intf = q931_open_interface(intf->name, 0);
 	if (!intf->q931_intf) {
 		ast_log(LOG_WARNING,
 			"Cannot open interface %s, skipping\n",
@@ -3271,7 +3269,7 @@ static void visdn_q931_ccb_receive();
 
 static int visdn_q931_thread_do_poll()
 {
-	longtime_t usec_to_wait = q931_run_timers(visdn.libq931);
+	longtime_t usec_to_wait = q931_run_timers();
 	int msec_to_wait;
 
 	if (usec_to_wait < 0) {
