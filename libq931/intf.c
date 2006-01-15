@@ -138,6 +138,7 @@ struct q931_interface *q931_open_interface(
 		intf->master_socket = -1;
 
 		q931_broadcast_dlc_init(&intf->bc_dlc, NULL, -1);
+		q931_dlc_init(&intf->dlc, intf, s);
 
 		intf->T301 = 180 * 1000000LL;
 		intf->T302 =  15 * 1000000LL;
