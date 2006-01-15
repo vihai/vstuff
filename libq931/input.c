@@ -582,13 +582,15 @@ int q931_decode_information_elements(
 			cause->diagnostics, &cause->diagnostics_len,
 			&ds.mandatory_ies);
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		q931_ies_add_put(&ies, &cause->ie);
 
 		switch(msg->message_type) {
 		case Q931_MT_SETUP:
 		case Q931_MT_RELEASE:
 			q931_call_send_release_complete(call, &ies);
+
+			Q931_UNDECLARE_IES(ies);
 
 			goto do_not_process_message;
 		break;
@@ -604,9 +606,13 @@ int q931_decode_information_elements(
 		default:
 			q931_call_send_status(call, &ies);
 
+			Q931_UNDECLARE_IES(ies);
+
 			goto do_not_process_message;
 		break;
 		}
+
+		Q931_UNDECLARE_IES(ies);
 	}
 
 	if (!list_empty(&ds.invalid_mand_ies)) {
@@ -625,13 +631,15 @@ int q931_decode_information_elements(
 			cause->diagnostics, &cause->diagnostics_len,
 			&ds.invalid_mand_ies);
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		q931_ies_add_put(&ies, &cause->ie);
 
 		switch(msg->message_type) {
 		case Q931_MT_SETUP:
 		case Q931_MT_RELEASE:
 			q931_call_send_release_complete(call, &ies);
+
+			Q931_UNDECLARE_IES(ies);
 
 			goto do_not_process_message;
 		break;
@@ -647,13 +655,17 @@ int q931_decode_information_elements(
 		default:
 			q931_call_send_status(call, &ies);
 
+			Q931_UNDECLARE_IES(ies);
+
 			goto do_not_process_message;
 		break;
 		}
+
+		Q931_UNDECLARE_IES(ies);
 	}
 
 	if (!list_empty(&ds.invalid_access_ies)) {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_cause *cause;
 		cause = q931_ie_cause_alloc();
 
@@ -670,11 +682,13 @@ int q931_decode_information_elements(
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_status(call, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 
 	if (!list_empty(&ds.invalid_opt_ies)) {
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_cause *cause;
 		cause = q931_ie_cause_alloc();
 
@@ -692,6 +706,8 @@ int q931_decode_information_elements(
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_call_send_status(call, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 
 	if (!list_empty(&ds.unrecognized_ies)) {
@@ -709,7 +725,7 @@ int q931_decode_information_elements(
 			cause->diagnostics, &cause->diagnostics_len,
 			&ds.unrecognized_ies);
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		q931_ies_add_put(&ies, &cause->ie);
 
 		switch(msg->message_type) {
@@ -719,6 +735,8 @@ int q931_decode_information_elements(
 
 		case Q931_MT_RELEASE: {
 			q931_call_send_release_complete(call, &ies);
+
+			Q931_UNDECLARE_IES(ies);
 
 			goto do_not_process_message;
 		}
@@ -731,9 +749,13 @@ int q931_decode_information_elements(
 		default:
 			q931_call_send_status(call, &ies);
 
+			Q931_UNDECLARE_IES(ies);
+
 			goto do_not_process_message;
 		break;
 		}
+
+		Q931_UNDECLARE_IES(ies);
 	}
 
 process_message:
@@ -963,7 +985,7 @@ int q931_receive(struct q931_dlc *dlc)
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE for an unknown callref\n");
 
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
 			cause->location = q931_ie_cause_location_call(call);
@@ -975,6 +997,7 @@ int q931_receive(struct q931_dlc *dlc)
 
 			q931_call_release_reference(call);
 			q931_call_put(call);
+			Q931_UNDECLARE_IES(ies);
 
 			return Q931_RECEIVE_OK;
 		break;
@@ -1011,7 +1034,7 @@ int q931_receive(struct q931_dlc *dlc)
 		break;
 
 		default: {
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
 			cause->location = q931_ie_cause_location_call(call);
@@ -1030,6 +1053,7 @@ int q931_receive(struct q931_dlc *dlc)
 
 			q931_call_release_reference(call);
 			q931_call_put(call);
+			Q931_UNDECLARE_IES(ies);
 
 			return Q931_RECEIVE_OK;
 		}

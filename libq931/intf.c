@@ -195,16 +195,13 @@ struct q931_interface *q931_open_interface(
 	break;
 	}
 
-	intf->next_call_reference = (rand() &
-	    ((1 << ((intf->call_reference_len * 8) - 1)) - 2)) + 1;
+	intf->next_call_reference =
+		(rand() &
+		((1 << ((intf->call_reference_len * 8) - 1)) - 2)) + 1;
 
 	int i;
-	for (i=0; i<intf->n_channels; i++) {
-		intf->channels[i].id = i;
-		intf->channels[i].intf = intf;
-		intf->channels[i].state = Q931_CHANSTATE_AVAILABLE;
-		intf->channels[i].call = NULL;
-	}
+	for (i=0; i<intf->n_channels; i++)
+		q931_channel_init(&intf->channels[i], i, intf);
 
 	intf->global_call.intf = intf;
 

@@ -1857,7 +1857,7 @@ static int visdn_call(
 
 	visdn_debug("Calling on interface '%s'\n", intf->name);
 
-	struct q931_ies ies = Q931_IES_INIT;
+	Q931_DECLARE_IES(ies);
 
 	/* ------------- Bearer Capability ---------------- */
 	char *raw_bc = pbx_builtin_getvar_helper(ast_chan, "BEARERCAP_RAW");
@@ -2041,11 +2041,14 @@ bc_failure:;
 
 	q931_call_put(q931_call);
 
+	Q931_UNDECLARE_IES(ies);
+
 	return 0;
 
 	q931_call_release_reference(q931_call);
 	q931_call_put(q931_call);
 err_call_alloc:
+	Q931_UNDECLARE_IES(ies);
 err_intf_not_found:
 err_no_channel_available:
 err_huntgroup_not_found:
@@ -2281,7 +2284,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_DISCONNECT: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -2300,6 +2303,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		if (!visdn_chan->inband_info)
 			tone = ast_get_indication_tone(ast_chan->zone, "busy");
+
+		Q931_UNDECLARE_IES(ies);
 	break;
 	}
 
@@ -2317,7 +2322,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_RINGING: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_progress_indicator *pi = NULL;
 
@@ -2353,6 +2358,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		if (!visdn_chan->inband_info)
 			tone = ast_get_indication_tone(ast_chan->zone, "ring");
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 
@@ -2361,7 +2368,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_BUSY: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -2380,12 +2387,14 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		if (!visdn_chan->inband_info)
 			tone = ast_get_indication_tone(ast_chan->zone, "busy");
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 
 	case AST_CONTROL_CONGESTION: {
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
 		cause->location = q931_ie_cause_location_call(
@@ -2403,11 +2412,13 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		if (!visdn_chan->inband_info)
 			tone = ast_get_indication_tone(ast_chan->zone, "busy");
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 
 	case AST_CONTROL_PROGRESS: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_progress_indicator *pi =
 			q931_ie_progress_indicator_alloc();
@@ -2429,6 +2440,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_PROGRESS_REQUEST, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 
@@ -2493,7 +2506,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
-	struct q931_ies ies = Q931_IES_INIT;
+	Q931_DECLARE_IES(ies);
 
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
@@ -2508,6 +2521,8 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 
 	q931_send_primitive(visdn_chan->q931_call,
 		Q931_CCB_INFO_REQUEST, &ies);
+
+	Q931_UNDECLARE_IES(ies);
 
 	/* IMPORTANT: Since Asterisk is a bug made software, if there
 	 * are DTMF frames queued and we start generating DTMF tones
@@ -2566,7 +2581,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	if (q931_call) {
 		q931_call->pvt = NULL;
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -2636,6 +2651,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		}
 
 		q931_call_put(q931_call);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 
 	ast_mutex_unlock(&visdn.lock);
@@ -3706,7 +3723,7 @@ static void visdn_q931_resume_indication(
 							VISDN_CHAN_TYPE)) {
 			// Wow, the remote channel is ISDN too, let's notify it!
 
-			struct q931_ies response_ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(response_ies);
 
 			struct visdn_chan *remote_visdn_chan =
 				to_visdn_chan(
@@ -3723,13 +3740,15 @@ static void visdn_q931_resume_indication(
 
 			q931_send_primitive(remote_call,
 				Q931_CCB_NOTIFY_REQUEST, &response_ies);
+
+			Q931_UNDECLARE_IES(response_ies);
 		}
 
 		ast_moh_stop(ast_bridged_channel(suspended_call->ast_chan));
 	}
 
 	{
-	struct q931_ies response_ies = Q931_IES_INIT;
+	Q931_DECLARE_IES(response_ies);
 
 	struct q931_ie_channel_identification *ci =
 		q931_ie_channel_identification_alloc();
@@ -3743,6 +3762,8 @@ static void visdn_q931_resume_indication(
 	q931_ies_add_put(&response_ies, &ci->ie);
 
 	q931_send_primitive(q931_call, Q931_CCB_RESUME_RESPONSE, &response_ies);
+
+	Q931_UNDECLARE_IES(response_ies);
 	}
 
 	list_del(&suspended_call->node);
@@ -3753,7 +3774,7 @@ static void visdn_q931_resume_indication(
 err_call_not_found:
 err_ast_chan:
 	;
-	struct q931_ies resp_ies = Q931_IES_INIT;
+	Q931_DECLARE_IES(resp_ies);
 	struct q931_ie_cause *c = q931_ie_cause_alloc();
 	c->coding_standard = Q931_IE_C_CS_CCITT;
 	c->location = q931_ie_cause_location_call(q931_call);
@@ -3762,6 +3783,8 @@ err_ast_chan:
 
 	q931_send_primitive(q931_call,
 		Q931_CCB_RESUME_REJECT_REQUEST, &resp_ies);
+
+	Q931_UNDECLARE_IES(resp_ies);
 
 	return;
 }
@@ -4047,7 +4070,7 @@ static void visdn_q931_setup_indication(
 		pbx_builtin_setvar_helper(ast_chan,
 			"BEARERCAP_CLASS", "voice");
 	} else {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -4057,6 +4080,8 @@ static void visdn_q931_setup_indication(
 
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_REJECT_REQUEST, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 
 		goto err_unsupported_bearercap;
 	}
@@ -4197,7 +4222,7 @@ no_cgpn:;
 					ast_chan->name);
 				ast_hangup(ast_chan);
 
-				struct q931_ies ies = Q931_IES_INIT;
+				Q931_DECLARE_IES(ies);
 
 				struct q931_ie_cause *cause =
 					q931_ie_cause_alloc();
@@ -4211,6 +4236,8 @@ no_cgpn:;
 
 				q931_send_primitive(visdn_chan->q931_call,
 					Q931_CCB_REJECT_REQUEST, &ies);
+
+				Q931_UNDECLARE_IES(ies);
 			} else {
 				q931_send_primitive(visdn_chan->q931_call,
 					Q931_CCB_PROCEEDING_REQUEST, NULL);
@@ -4224,7 +4251,7 @@ no_cgpn:;
 				called_number,
 				intf->context);
 
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -4238,6 +4265,8 @@ no_cgpn:;
 				Q931_CCB_REJECT_REQUEST, &ies);
 
 			ast_hangup(ast_chan);
+
+			Q931_UNDECLARE_IES(ies);
 		}
 	} else {
 		strncpy(ast_chan->exten, "s",
@@ -4249,7 +4278,7 @@ no_cgpn:;
 				ast_chan->name);
 			ast_hangup(ast_chan);
 
-			struct q931_ies ies_proc = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies_proc);
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
 			cause->location =
@@ -4258,7 +4287,7 @@ no_cgpn:;
 			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 			q931_ies_add_put(&ies_proc, &cause->ie);
 
-			struct q931_ies ies_disc = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies_disc);
 			if (visdn_chan->is_voice) {
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
@@ -4276,17 +4305,22 @@ no_cgpn:;
 			q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_DISCONNECT_REQUEST, &ies_disc);
 
+			Q931_UNDECLARE_IES(ies_disc);
+			Q931_UNDECLARE_IES(ies_proc);
+
 			return;
 		}
 
 #if 0 // Don't be tempted :^)
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_display *disp = q931_ie_display_alloc();
 		strcpy(disp->text, "Mark Spencer Sucks");
 		q931_ies_add_put(&ies, &disp->ie);
 
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_MORE_INFO_REQUEST, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 #endif
 
 		q931_send_primitive(visdn_chan->q931_call,
@@ -4401,7 +4435,7 @@ static void visdn_q931_suspend_indication(
 							VISDN_CHAN_TYPE)) {
 			// Wow, the remote channel is ISDN too, let's notify it!
 
-			struct q931_ies response_ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(response_ies);
 
 			struct visdn_chan *remote_visdn_chan =
 				to_visdn_chan(ast_bridged_channel(ast_chan));
@@ -4416,6 +4450,8 @@ static void visdn_q931_suspend_indication(
 
 			q931_send_primitive(remote_call,
 				Q931_CCB_NOTIFY_REQUEST, &response_ies);
+
+			Q931_UNDECLARE_IES(response_ies);
 		}
 	}
 
@@ -4434,7 +4470,7 @@ err_suspend_alloc:
 err_call_identity_in_use:
 err_ast_chan:
 	;
-	struct q931_ies resp_ies = Q931_IES_INIT;
+	Q931_DECLARE_IES(resp_ies);
 	struct q931_ie_cause *c = q931_ie_cause_alloc();
 	c->coding_standard = Q931_IE_C_CS_CCITT;
 	c->location = q931_ie_cause_location_call(q931_call);
@@ -4443,6 +4479,8 @@ err_ast_chan:
 
 	q931_send_primitive(visdn_chan->q931_call,
 		Q931_CCB_SUSPEND_REJECT_REQUEST, &resp_ies);
+
+	Q931_UNDECLARE_IES(resp_ies);
 
 	return;
 }

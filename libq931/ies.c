@@ -1,7 +1,7 @@
 /*
  * vISDN DSSS-1/q.931 signalling library
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -20,6 +20,17 @@
 
 #include <libq931/lib.h>
 #include <libq931/ies.h>
+
+void q931_ies_destroy(struct q931_ies *ies)
+{
+	assert(ies);
+
+	int i;
+	for (i=0; i<ies->count; i++)
+		q931_ie_put(ies->ies[i]);
+
+	ies->count = 0;
+}
 
 void q931_ies_add(
 	struct q931_ies *ies,

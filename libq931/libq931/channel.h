@@ -61,6 +61,11 @@ void q931_channel_start_tone(
 void q931_channel_stop_tone(
 	struct q931_channel *channel);
 
+void q931_channel_init(
+	struct q931_channel *channel,
+	int id,
+	struct q931_interface *intf);
+
 #endif
 
 #endif

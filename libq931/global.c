@@ -90,7 +90,7 @@ void q931_management_restart_request(
 		gc->restart_acknowledged = 0;
 		gc->restart_request_count = 0;
 
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 
 		if (chanset && q931_chanset_count(chanset)) {
 			q931_chanset_init(&gc->restart_acked_chans);
@@ -116,6 +116,8 @@ void q931_management_restart_request(
 			ri->restart_class = Q931_IE_RI_C_SINGLE_INTERFACE;
 			q931_ies_add_put(&ies, &ri->ie);
 		}
+
+		Q931_UNDECLARE_IES(ies);
 
 		q931_global_send_message(gc, &gc->dlc, Q931_MT_RESTART, &ies);
 
@@ -185,7 +187,7 @@ void q931_global_restart_confirm(
 			q931_global_stop_timer(gc, T317);
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
 
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_channel_identification *ci =
 				q931_ie_channel_identification_alloc();
@@ -205,6 +207,8 @@ void q931_global_restart_confirm(
 
 			q931_global_send_message(NULL, &gc->dlc,
 				Q931_MT_RESTART_ACKNOWLEDGE, &ies);
+
+			Q931_UNDECLARE_IES(ies);
 		} else {
 			q931_chanset_add(&gc->restart_acked_chans,
 				call->channel);
@@ -331,7 +335,7 @@ static void q931_global_handle_restart(
 
 			q931_global_set_state(gc, Q931_GLOBAL_STATE_RESTART);
 		} else {
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
 			cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -340,12 +344,14 @@ static void q931_global_handle_restart(
 			q931_ies_add_put(&ies, &cause->ie);
 
 			q931_global_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
+
+			Q931_UNDECLARE_IES(ies);
 		}
 	break;
 
 	case Q931_GLOBAL_STATE_RESTART_REQUEST:
 	case Q931_GLOBAL_STATE_RESTART: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
 		cause->location = q931_ie_cause_location_gc(gc);
@@ -353,6 +359,8 @@ static void q931_global_handle_restart(
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_global_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 	}
@@ -406,7 +414,7 @@ static void q931_global_handle_restart_acknowledge(
 
 	case Q931_GLOBAL_STATE_NULL:
 	case Q931_GLOBAL_STATE_RESTART: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
 		cause->location = q931_ie_cause_location_gc(gc);
@@ -414,6 +422,8 @@ static void q931_global_handle_restart_acknowledge(
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_global_send_message(NULL, msg->dlc, Q931_MT_STATUS, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 	}
@@ -434,7 +444,7 @@ void q931_global_timer_T316(void *data)
 			// Indicate that restart has failed
 			q931_global_primitive1(gc, Q931_CCB_MANAGEMENT_RESTART_CONFIRM, NULL);
 		} else {
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 
 			if (q931_chanset_count(&gc->restart_reqd_chans)) {
 				struct q931_ie_channel_identification *ci =
@@ -463,6 +473,8 @@ void q931_global_timer_T316(void *data)
 				Q931_MT_RESTART, &ies);
 
 			q931_global_start_timer(gc, T316);
+
+			Q931_UNDECLARE_IES(ies);
 		}
 	break;
 
@@ -503,7 +515,7 @@ void q931_global_timer_T317(void *data)
 	case Q931_GLOBAL_STATE_RESTART:
 		// Any channel restarted?
 		if (q931_chanset_count(&gc->restart_acked_chans)) {
-			struct q931_ies ies = Q931_IES_INIT;
+			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_channel_identification *ci =
 				q931_ie_channel_identification_alloc();
@@ -522,6 +534,8 @@ void q931_global_timer_T317(void *data)
 
 			q931_global_send_message(gc, &gc->dlc,
 				Q931_MT_RESTART, &ies);
+
+			Q931_UNDECLARE_IES(ies);
 		}
 
 		q931_global_set_state(gc, Q931_GLOBAL_STATE_NULL);
@@ -558,7 +572,7 @@ void q931_dispatch_global_message(
 	break;
 
 	default: {
-		struct q931_ies ies = Q931_IES_INIT;
+		Q931_DECLARE_IES(ies);
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
 		cause->location = q931_ie_cause_location_gc(gc);
@@ -566,6 +580,8 @@ void q931_dispatch_global_message(
 		q931_ies_add_put(&ies, &cause->ie);
 
 		q931_global_send_message(gc, msg->dlc, Q931_MT_STATUS, &ies);
+
+		Q931_UNDECLARE_IES(ies);
 	}
 	break;
 	}

@@ -202,7 +202,7 @@ static void q931_write_ies(
 	struct q931_message *msg,
 	const struct q931_ies *user_ies)
 {
-	struct q931_ies ies = Q931_IES_INIT;
+	Q931_DECLARE_IES(ies);
 	q931_ies_copy(&ies, user_ies);
 	q931_ies_sort(&ies);
 
@@ -254,6 +254,8 @@ static void q931_write_ies(
 				ies.ies[i],
 				q931_report, "->    ");
 	}
+
+	Q931_UNDECLARE_IES(ies);
 }
 
 static int q931_send_message(

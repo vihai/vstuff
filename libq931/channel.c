@@ -181,3 +181,13 @@ void q931_channel_stop_tone(
 	q931_channel_primitive(channel, Q931_CCB_STOP_TONE);
 }
 
+void q931_channel_init(
+	struct q931_channel *channel,
+	int id,
+	struct q931_interface *intf)
+{
+	channel->id = id;
+	channel->intf = intf;
+	channel->state = Q931_CHANSTATE_AVAILABLE;
+	channel->call = NULL;
+}

@@ -17,6 +17,9 @@
 
 #define Q931_IES_NUM_IES 260
 
+#define Q931_DECLARE_IES(name)		struct q931_ies name = Q931_IES_INIT
+#define Q931_UNDECLARE_IES(name)	q931_ies_destroy(&name)
+
 struct q931_ies
 {
 	struct q931_ie *ies[Q931_IES_NUM_IES]; // FIXME make this dynamic
@@ -28,6 +31,8 @@ static inline void q931_ies_init(
 {
 	ies->count = 0;
 }
+
+void q931_ies_destroy(struct q931_ies *ies);
 
 void q931_ies_add(
 	struct q931_ies *ies,
