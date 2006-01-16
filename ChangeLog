@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-16 03:08:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-457
+
+    Summary:
+      Send queued digits only if at least one digit is in queue
+    Revision:
+      isdn--devel--0.1--patch-457
+
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c
+
+
 2006-01-16 02:35:41 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-456
 
     Summary:

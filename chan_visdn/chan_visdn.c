@@ -1803,24 +1803,26 @@ static void visdn_undefer_dtmf_in(
 	visdn_chan->dtmf_deferred = FALSE;
 
 	/* Flush queue */
-	Q931_DECLARE_IES(ies);
+	if (strlen(visdn_chan->dtmf_queue)) {
+		Q931_DECLARE_IES(ies);
 
-	struct q931_ie_called_party_number *cdpn =
-		q931_ie_called_party_number_alloc();
-	cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-					intf->outbound_called_ton);
-	cdpn->numbering_plan_identificator =
-		Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+		struct q931_ie_called_party_number *cdpn =
+			q931_ie_called_party_number_alloc();
+		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+						intf->outbound_called_ton);
+		cdpn->numbering_plan_identificator =
+			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 
-	strncpy(cdpn->number, visdn_chan->dtmf_queue, sizeof(cdpn->number));
-	q931_ies_add_put(&ies, &cdpn->ie);
+		strncpy(cdpn->number, visdn_chan->dtmf_queue, sizeof(cdpn->number));
+		q931_ies_add_put(&ies, &cdpn->ie);
 
-	q931_send_primitive(visdn_chan->q931_call,
-		Q931_CCB_INFO_REQUEST, &ies);
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_INFO_REQUEST, &ies);
 
-	Q931_UNDECLARE_IES(ies);
+		visdn_chan->dtmf_queue[0] = '\0';
 
-	visdn_chan->dtmf_queue[0] = '\0';
+		Q931_UNDECLARE_IES(ies);
+	}
 
 	ast_mutex_unlock(&visdn_chan->ast_chan->lock);
 }
