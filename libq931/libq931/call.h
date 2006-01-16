@@ -146,7 +146,6 @@ struct q931_call
 
 	// Maybe we should have a channel mask, instead
 	struct q931_channel *channel;
-	struct q931_channel *proposed_channel;
 
 	void *pvt;
 

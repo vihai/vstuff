@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-16 23:12:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-466
+
+    Summary:
+      Fixes for channel handling and line hunting
+    Revision:
+      isdn--devel--0.1--patch-466
+
+
+    modified files:
+     ChangeLog TODO chan_visdn/chan_visdn.c libq931/call.c
+     libq931/channel.c libq931/libq931/call.h
+     libq931/libq931/channel.h
+
+
 2006-01-16 20:25:11 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-465
 
     Summary:

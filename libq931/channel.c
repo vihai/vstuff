@@ -31,22 +31,6 @@
 		q931_queue_primitive(NULL, primitive, NULL,	\
 			(unsigned long)channel, par1)
 
-struct q931_channel *q931_channel_select(struct q931_call *call)
-{
-	assert(call);
-	assert(call->intf);
-
-	int i;
-	for(i=0; i<call->intf->n_channels; i++) {
-		if (call->intf->channels[i].state ==
-		      Q931_CHANSTATE_AVAILABLE) {
-			return &call->intf->channels[i];
-		}
-	}
-
-	return NULL;
-}
-
 struct q931_channel *q931_channel_alloc(struct q931_call *call)
 {
 	assert(call);
@@ -91,8 +75,6 @@ const char *q931_channel_state_to_text(enum q931_channel_state state)
 		return "AVAILABLE";
 	case Q931_CHANSTATE_SELECTED:
 		return "SELECTED";
-	case Q931_CHANSTATE_PROPOSED:
-		return "PROPOSED";
 	case Q931_CHANSTATE_CONNECTED:
 		return "CONNECTED";
 	case Q931_CHANSTATE_DISCONNECTED:
@@ -102,6 +84,18 @@ const char *q931_channel_state_to_text(enum q931_channel_state state)
 	assert(0);
 }
 
+void q931_channel_set_state(
+	struct q931_channel *channel,
+	enum q931_channel_state state)
+{
+	report_chan(channel, LOG_DEBUG,
+		"changed state from %s to %s\n",
+		q931_channel_state_to_text(channel->state),
+		q931_channel_state_to_text(state));
+
+	channel->state = state;
+}
+
 void q931_channel_connect(
 	struct q931_channel *channel)
 {
@@ -109,7 +103,7 @@ void q931_channel_connect(
 	assert(channel->call);
 
 	if (channel->state != Q931_CHANSTATE_CONNECTED) {
-		channel->state = Q931_CHANSTATE_CONNECTED;
+		q931_channel_set_state(channel, Q931_CHANSTATE_CONNECTED);
 
 		q931_channel_primitive(channel, Q931_CCB_CONNECT_CHANNEL);
 	}
@@ -122,7 +116,7 @@ void q931_channel_control(
 	assert(channel->call);
 
 	if (channel->state != Q931_CHANSTATE_CONNECTED) {
-		channel->state = Q931_CHANSTATE_CONNECTED;
+		q931_channel_set_state(channel, Q931_CHANSTATE_CONNECTED);
 
 		q931_channel_primitive(channel, Q931_CCB_CONNECT_CHANNEL);
 	}
@@ -161,7 +155,7 @@ void q931_channel_release(
 		q931_channel_primitive(channel, Q931_CCB_DISCONNECT_CHANNEL);
 	}
 
-	channel->state = Q931_CHANSTATE_AVAILABLE;
+	q931_channel_set_state(channel, Q931_CHANSTATE_AVAILABLE);
 }
 
 void q931_channel_start_tone(

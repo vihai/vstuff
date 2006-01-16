@@ -634,7 +634,7 @@ static int q931_channel_select_response(
 
 	if (!ci) {
 		// No channel identification IE
-		if (!call->proposed_channel) {
+		if (!call->channel) {
 			report_call(call, LOG_DEBUG,
 				"No channel identification IE and no proposed"
 				" channel\n");
@@ -644,16 +644,16 @@ static int q931_channel_select_response(
 			report_call(call, LOG_DEBUG,
 				"No channel identification IE, using proposed"
 				" channel %d\n",
-				call->proposed_channel->id);
+				call->channel->id);
 
-			call->channel = call->proposed_channel;
+			call->channel = call->channel;
 			call->channel->call = call;
 
 			return TRUE;
 		}
 	}
 
-	if (!call->proposed_channel) {
+	if (!call->channel) {
 		// Ok, we did not indicate a channel so, attempt to use what
 		// other party requests in his response
 
@@ -670,7 +670,9 @@ static int q931_channel_select_response(
 
 				call->channel = ci->chanset.chans[i];
 				call->channel->call = call;
-				call->channel->state = Q931_CHANSTATE_SELECTED;
+
+				q931_channel_set_state(call->channel,
+						Q931_CHANSTATE_SELECTED);
 
 				return TRUE;
 			} else {
@@ -696,7 +698,7 @@ static int q931_channel_select_response(
 	}
 
 	// Uh oh, we already indicated the same channel
-	if (q931_chanset_contains(&ci->chanset, call->proposed_channel)) {
+	if (q931_chanset_contains(&ci->chanset, call->channel)) {
 		// Good, the channel is compatible, we will use it
 
 		if (ci->preferred_exclusive == Q931_IE_CI_PE_PREFERRED) {
@@ -710,11 +712,6 @@ static int q931_channel_select_response(
 				" standard, but tolerable\n");
 		}
 
-		// Just select the channel
-		call->channel = call->proposed_channel;
-		call->channel->call = call;
-		call->channel->state = Q931_CHANSTATE_SELECTED;
-
 		return TRUE;
 	} else {
 		/* Uh, well, we proposed another channel but
@@ -724,10 +721,21 @@ static int q931_channel_select_response(
 
 		int i;
 		for (i=0; ci->chanset.nchans; i++) {
-			if (ci->chanset.chans[i]->state == Q931_CHANSTATE_AVAILABLE) {
+			if (ci->chanset.chans[i]->state ==
+					Q931_CHANSTATE_AVAILABLE) {
+
+				if (call->channel) {
+					call->channel->state =
+						Q931_CHANSTATE_AVAILABLE;
+					call->channel->call = NULL;
+					call->channel = NULL;
+				}
+
 				call->channel = ci->chanset.chans[i];
 				call->channel->call = call;
-				call->channel->state = Q931_CHANSTATE_SELECTED;
+
+				q931_channel_set_state(call->channel,
+						Q931_CHANSTATE_SELECTED);
 
 				return TRUE;
 			}
@@ -1758,6 +1766,31 @@ void q931_setup_complete_request(
 	}
 }
 
+static void q931_channel_acquire(struct q931_call *call)
+{
+	assert(call);
+	assert(call->intf);
+	assert(!call->channel);
+
+	int i;
+	for(i=0; i<call->intf->n_channels; i++) {
+		if (call->intf->channels[i].state ==
+		      Q931_CHANSTATE_AVAILABLE) {
+
+			struct q931_channel *chan =
+				&call->intf->channels[i];
+
+			chan->call = call;
+			chan->call->channel = chan;
+
+			q931_channel_set_state(call->channel,
+					Q931_CHANSTATE_SELECTED);
+
+			break;
+		}
+	}
+}
+
 void q931_setup_request(
 	struct q931_call *call,
 	const struct q931_ies *user_ies)
@@ -1768,9 +1801,10 @@ void q931_setup_request(
 
 	switch (call->state) {
 	case N0_NULL_STATE: {
-		call->proposed_channel = q931_channel_select(call);
 
-		if (call->proposed_channel || call->intf->enable_bumping) {
+		q931_channel_acquire(call);
+
+		if (call->channel || call->intf->enable_bumping) {
 
 			q931_call_start_timer(call, T303);
 
@@ -1785,9 +1819,8 @@ void q931_setup_request(
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 
-			if (call->proposed_channel)
-				q931_chanset_add(&ci->chanset,
-						call->proposed_channel);
+			if (call->channel)
+				q931_chanset_add(&ci->chanset, call->channel);
 
 			q931_ies_add_put(&call->setup_ies, &ci->ie);
 
@@ -2887,7 +2920,8 @@ static void q931_timer_T308(void *data)
 			if (call->intf->config == Q931_INTF_CONFIG_MULTIPOINT) {
 				q931_channel_release(call->channel);
 			} else {
-				call->channel->state = Q931_CHANSTATE_MAINTAINANCE;
+				q931_channel_set_state(call->channel,
+					Q931_CHANSTATE_MAINTAINANCE);
 			}
 
 			q931_call_set_state(call, N0_NULL_STATE);
@@ -2904,7 +2938,8 @@ static void q931_timer_T308(void *data)
 			q931_call_start_timer(call, T308);
 		} else {
 			if (call->intf->config != Q931_INTF_CONFIG_MULTIPOINT) {
-				call->channel->state = Q931_CHANSTATE_MAINTAINANCE;
+				q931_channel_set_state(call->channel,
+					Q931_CHANSTATE_MAINTAINANCE);
 			}
 
 			q931_channel_release(call->channel);
@@ -4175,7 +4210,8 @@ static void q931_handle_setup(
 		} else {
 			call->channel = chan;
 			chan->call = call;
-			call->channel->state = Q931_CHANSTATE_SELECTED;
+			q931_channel_set_state(chan,
+					Q931_CHANSTATE_MAINTAINANCE);
 
 			q931_ies_copy(&call->setup_ies, &msg->ies);
 
@@ -5113,6 +5149,9 @@ static void q931_handle_release_complete(
 	case U1_CALL_INITIATED:
 		if (q931_decode_information_elements(call, msg) < 0)
 			break;
+
+		/* Not in EN 300 403-2, is this acceptable too? */
+		q931_channel_release(call->channel);
 
 		q931_call_stop_timer(call, T303);
 		q931_call_release_reference(call);

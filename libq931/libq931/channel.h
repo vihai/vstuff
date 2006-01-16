@@ -18,7 +18,6 @@ enum q931_channel_state
 	Q931_CHANSTATE_MAINTAINANCE,
 	Q931_CHANSTATE_AVAILABLE,
 	Q931_CHANSTATE_SELECTED,
-	Q931_CHANSTATE_PROPOSED,
 	Q931_CHANSTATE_CONNECTED,
 	Q931_CHANSTATE_DISCONNECTED,
 };
@@ -40,7 +39,6 @@ struct q931_channel
 	void *pvt;
 };
 
-struct q931_channel *q931_channel_select(struct q931_call *call);
 struct q931_channel *q931_channel_alloc(struct q931_call *call);
 struct q931_channel *get_channel_by_id(
 	struct q931_interface *intf,
@@ -54,6 +52,18 @@ void q931_channel_disconnect(struct q931_channel *channel);
 void q931_channel_release(struct q931_channel *channel);
 
 #ifdef Q931_PRIVATE
+
+#define report_chan(chan, lvl, format, arg...)		\
+	q931_report((lvl),				\
+		"%s[B%d]: "				\
+		format,					\
+		(chan)->intf->name,			\
+		(chan)->id + 1,				\
+		## arg)
+
+void q931_channel_set_state(
+	struct q931_channel *channel,
+	enum q931_channel_state state);
 
 void q931_channel_start_tone(
 	struct q931_channel *channel,

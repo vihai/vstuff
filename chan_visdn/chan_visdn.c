@@ -1704,7 +1704,7 @@ static struct visdn_interface *visdn_hg_next_interface(
 {
 	struct visdn_interface *intf;
 
-	if (&cur_intf->hg_node == &hg->ifs)
+	if (cur_intf->hg_node.next == &hg->ifs)
 		intf = list_entry(hg->ifs.next,
 			struct visdn_interface, hg_node);
 	else
@@ -1726,9 +1726,7 @@ static struct visdn_interface *visdn_hg_hunt(
 
 	struct visdn_interface *starting_intf;
 	if (cur_intf) {
-		starting_intf =
-			list_entry(cur_intf->hg_node.next,
-				struct visdn_interface, hg_node);
+		starting_intf = visdn_hg_next_interface(hg, cur_intf);
 
 		visdn_debug("Huntgroup: continuing on interface '%s'\n",
 			starting_intf->name);
@@ -1768,19 +1766,22 @@ static struct visdn_interface *visdn_hg_hunt(
 
 		struct q931_interface *q931_intf = intf->q931_intf;
 
-		if (!q931_intf)
-			continue;
+		if (q931_intf) {
+			int i;
+			for (i=0; i<q931_intf->n_channels; i++) {
+				if (q931_intf->channels[i].state ==
+						Q931_CHANSTATE_AVAILABLE) {
 
-		int i;
-		for (i=0; i<q931_intf->n_channels; i++) {
-			if (q931_intf->channels[i].state ==
-					Q931_CHANSTATE_AVAILABLE) {
+					hg->current_intf = intf;
 
-				hg->current_intf = intf;
+					ast_mutex_unlock(&visdn.lock);
 
-				ast_mutex_unlock(&visdn.lock);
+					visdn_debug(
+						"Huntgroup: found interface"
+					       	" '%s'\n", intf->name);
 
-				return intf;
+					return intf;
+				}
 			}
 		}
 

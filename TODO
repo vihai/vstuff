@@ -57,6 +57,8 @@ libq931:
 - Implement User-User Information IE
 - Implement ETS 300 125 Appendix III (Optional basic access deactivation
   procedures)
+- Make libq931 a daemon to which clients can connect.
+  Invent a protocol (CAPI-ng :)) to use for such connection.
 
 app_visdn_ppp:
 --------------
