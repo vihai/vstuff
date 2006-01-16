@@ -2395,7 +2395,7 @@ void q931_int_release_indication(
 		// FIXME Is this correct? Specs are unclear! FIXME
 
 		struct q931_ces *tces = NULL;
-		list_for_each_entry(ces, &call->ces, node) {
+		list_for_each_entry(tces, &call->ces, node) {
 			if (tces != ces &&
 			    tces->state != N0_NULL_STATE &&
 			    tces->state != N19_RELEASE_REQUEST) {
