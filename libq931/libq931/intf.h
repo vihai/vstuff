@@ -80,6 +80,8 @@ struct q931_interface
 
 	int dlc_autorelease_time;
 
+	int enable_bumping;
+
 	struct list_head dlcs;
 
 	q931_callref next_call_reference;

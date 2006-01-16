@@ -137,6 +137,12 @@
 ;	A value of '0' disables the autorelease mechanism.
 ;	## role: network, user
 ;
+; call_bumping = No
+;	In network role sends SETUP requests with "no channel available"
+;	instead of rejecting the call.
+; 	Usage in user role is not supported.
+;	## role: network, user
+;
 ; T301 => T322
 ;	Configure Layer3/CCB timers. For a description of the timers meaning
 ;	refer to ETS 300 102 Table 9.1 and successive modifications.
@@ -162,6 +168,7 @@ abbreviated_prefix =
 overlap_sending = Yes
 overlap_receiving = No
 autorelease_dlc = 10
+call_bumping = No
 
 [huntgroup:telco]
 mode = sequential

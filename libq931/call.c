@@ -638,14 +638,14 @@ static int q931_channel_select_response(
 		// No channel identification IE
 		if (!call->proposed_channel) {
 			report_call(call, LOG_DEBUG,
-				"No channel identification IE"
-				" and no proposed channel\n");
+				"No channel identification IE and no proposed"
+				" channel\n");
 
 			return FALSE;
 		} else {
 			report_call(call, LOG_DEBUG,
-				"No channel identification IE,"
-				" using proposed channel %d\n",
+				"No channel identification IE, using proposed"
+				" channel %d\n",
 				call->proposed_channel->id);
 
 			call->channel = call->proposed_channel;
@@ -661,7 +661,8 @@ static int q931_channel_select_response(
 
 		int i;
 		for (i=0; ci->chanset.nchans; i++) {
-			if (ci->chanset.chans[i]->state == Q931_CHANSTATE_AVAILABLE) {
+			if (ci->chanset.chans[i]->state ==
+					Q931_CHANSTATE_AVAILABLE) {
 				// Nice, the channel is available
 
 				report_call(call, LOG_DEBUG,
@@ -677,7 +678,8 @@ static int q931_channel_select_response(
 			} else {
 				report_call(call, LOG_DEBUG,
 					"No channel proposed in setup, "
-					"but indicated channel B%d is unavailable\n",
+					"but indicated channel B%d is "
+					"unavailable\n",
 					ci->chanset.chans[i]->id+1);
 			}
 
@@ -755,11 +757,14 @@ static int q931_channel_select_response(
 static struct q931_channel *q931_channel_select_setup(
 	struct q931_call *call,
 	const struct q931_ies *setup_ies,
-	struct q931_ies *causes)
+	struct q931_ies *causes,
+	int *bumping_possible)
 {
 	assert(call);
 	assert(setup_ies);
 	assert(call->intf);
+
+	*bumping_possible = FALSE;
 
 	struct q931_ie_channel_identification *ci = NULL;
 
@@ -799,6 +804,11 @@ static struct q931_channel *q931_channel_select_setup(
 		cause->value = Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE;
 		q931_ies_add_put(causes, &cause->ie);
 
+		return NULL;
+	}
+
+	if (!ci->chanset.nchans) {
+		*bumping_possible = TRUE;
 		return NULL;
 	}
 
@@ -1761,20 +1771,9 @@ void q931_setup_request(
 	switch (call->state) {
 	case N0_NULL_STATE: {
 		call->proposed_channel = q931_channel_select(call);
-		if (!call->proposed_channel) {
 
-			Q931_DECLARE_IES(ies);
-			struct q931_ie_cause *cause = q931_ie_cause_alloc();
-			cause->coding_standard = Q931_IE_C_CS_CCITT;
-			cause->location = q931_ie_cause_location_call(call);
-			cause->value =
-				Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE;
-			q931_ies_add_put(&ies, &cause->ie);
+		if (call->proposed_channel || call->intf->enable_bumping) {
 
-			q931_call_primitive(call,
-				Q931_CCB_RELEASE_INDICATION, &ies);
-			Q931_UNDECLARE_IES(ies);
-		} else {
 			q931_call_start_timer(call, T303);
 
 			q931_ies_copy(&call->setup_ies, user_ies);
@@ -1787,7 +1786,11 @@ void q931_setup_request(
 								call->intf);
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
-			q931_chanset_add(&ci->chanset, call->proposed_channel);
+
+			if (call->proposed_channel)
+				q931_chanset_add(&ci->chanset,
+						call->proposed_channel);
+
 			q931_ies_add_put(&call->setup_ies, &ci->ie);
 
 			struct q931_ie_datetime *dt =
@@ -1814,7 +1817,21 @@ void q931_setup_request(
 			}
 
 			q931_call_set_state(call, N6_CALL_PRESENT);
+
+		} else {
+			Q931_DECLARE_IES(ies);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value =
+				Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE;
+			q931_ies_add_put(&ies, &cause->ie);
+
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &ies);
+			Q931_UNDECLARE_IES(ies);
 		}
+
 	}
 	break;
 
@@ -4131,8 +4148,11 @@ static void q931_handle_setup(
 		}
 
 		Q931_DECLARE_IES(ies);
+
+		int bumping_possible;
 		struct q931_channel *chan =
-			 q931_channel_select_setup(call, &msg->ies, &ies);
+			 q931_channel_select_setup(call, &msg->ies, &ies,
+				&bumping_possible);
 
 		if (!chan) {
 			q931_call_send_release_complete(call, &ies);
@@ -4157,20 +4177,22 @@ static void q931_handle_setup(
 			break;
 
 		Q931_DECLARE_IES(ies);
-		struct q931_channel *chan =
-			q931_channel_select_setup(call, &msg->ies, &ies);
 
-		if (!chan) {
+		int bumping_possible;
+		call->proposed_channel =
+			q931_channel_select_setup(call, &msg->ies, &ies,
+						&bumping_possible);
+
+		if (!call->proposed_channel) {
 			q931_call_send_release_complete(call, &ies);
 			q931_call_set_state(call, U0_NULL_STATE);
 			q931_call_release_reference(call);
 		} else {
-			call->proposed_channel = chan;
-
 			q931_ies_copy(&call->setup_ies, &msg->ies);
 
 			q931_call_set_state(call, U6_CALL_PRESENT);
-			q931_call_primitive(call, Q931_CCB_SETUP_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_SETUP_INDICATION, &msg->ies);
 		}
 
 		Q931_UNDECLARE_IES(ies);

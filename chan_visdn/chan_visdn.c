@@ -195,6 +195,7 @@ struct visdn_interface
 	enum visdn_clir_mode clir_mode;
 	int overlap_sending;
 	int overlap_receiving;
+	int call_bumping;
 	int dlc_autorelease_time;
 
 	int T301;
@@ -288,6 +289,7 @@ struct visdn_state
 		.clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF,
 		.overlap_sending = TRUE,
 		.overlap_receiving = FALSE,
+		.call_bumping = FALSE, 
 		.cli_rewriting = FALSE,
 		.national_prefix = "",
 		.international_prefix = "",
@@ -497,6 +499,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Context                   : %s\n"
 			"Overlap Sending           : %s\n"
 			"Overlap Receiving         : %s\n"
+			"Call bumping              : %s\n"
 			"CLI rewriting             : %s\n"
 			"National prefix           : %s\n"
 			"International prefix      : %s\n"
@@ -520,6 +523,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			intf->context,
 			intf->overlap_sending ? "Yes" : "No",
 			intf->overlap_receiving ? "Yes" : "No",
+			intf->call_bumping ? "Yes" : "No",
 			intf->cli_rewriting ? "Yes" : "No",
 			intf->national_prefix,
 			intf->international_prefix,
@@ -842,6 +846,8 @@ static int visdn_intf_from_var(
 		intf->overlap_sending = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "overlap_receiving")) {
 		intf->overlap_receiving = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "call_bumping")) {
+		intf->call_bumping = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "autorelease_dlc")) {
 		intf->dlc_autorelease_time = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t301")) {
@@ -955,6 +961,7 @@ static void visdn_copy_interface_config(
 	dst->clir_mode = src->clir_mode;
 	dst->overlap_sending = src->overlap_sending;
 	dst->overlap_receiving = src->overlap_receiving;
+	dst->call_bumping = src->call_bumping;
 	dst->cli_rewriting = src->cli_rewriting;
 	strcpy(dst->national_prefix, src->national_prefix);
 	strcpy(dst->international_prefix, src->international_prefix);
@@ -3145,6 +3152,7 @@ static int visdn_open_interface(
 	intf->q931_intf->pvt = intf;
 	intf->q931_intf->network_role = intf->network_role;
 	intf->q931_intf->dlc_autorelease_time = intf->dlc_autorelease_time;
+	intf->q931_intf->enable_bumping = intf->call_bumping;
 
 	if (intf->T301) intf->q931_intf->T301 = intf->T301 * 1000000LL;
 	if (intf->T302) intf->q931_intf->T302 = intf->T302 * 1000000LL;

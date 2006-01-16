@@ -87,6 +87,8 @@ struct q931_interface *q931_open_interface(
 	INIT_LIST_HEAD(&intf->dlcs);
 
 	intf->name = strdup(name);
+	intf->dlc_autorelease_time = 0;
+	intf->enable_bumping = TRUE;
 
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
 	if (socket < 0)
