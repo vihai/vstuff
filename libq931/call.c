@@ -846,7 +846,7 @@ static struct q931_channel *q931_channel_select_setup(
 		}
 	}
 
-	report_call(call, LOG_DEBUG, "No channel unavailable\n");
+	report_call(call, LOG_DEBUG, "No channel available\n");
 
 	struct q931_ie_cause *cause = q931_ie_cause_alloc();
 	cause->coding_standard = Q931_IE_C_CS_CCITT;
@@ -1762,8 +1762,18 @@ void q931_setup_request(
 	case N0_NULL_STATE: {
 		call->proposed_channel = q931_channel_select(call);
 		if (!call->proposed_channel) {
+
+			Q931_DECLARE_IES(ies);
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value =
+				Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE;
+			q931_ies_add_put(&ies, &cause->ie);
+
 			q931_call_primitive(call,
-				Q931_CCB_RELEASE_INDICATION, NULL);
+				Q931_CCB_RELEASE_INDICATION, &ies);
+			Q931_UNDECLARE_IES(ies);
 		} else {
 			q931_call_start_timer(call, T303);
 

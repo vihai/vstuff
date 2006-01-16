@@ -50,10 +50,17 @@ struct visdn_chan {
 
 	int inband_info;
 
-	int may_send_digits;
-	char queued_digits[21];
+	char number[32];
+	char options[16];
+
+	char dtmf_queue[20];
+	int dtmf_deferred;
 
 	struct ast_dsp *dsp;
+
+	struct visdn_huntgroup *huntgroup;
+
+	struct visdn_interface *intf;
 };
 
 #ifndef ASTERISK_VERSION_NUM

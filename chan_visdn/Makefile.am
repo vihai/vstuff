@@ -12,4 +12,4 @@ INCLUDES =					\
 chan_visdn_la_LIBADD = ../libq931/libq931.la
 chan_visdn_la_LDFLAGS = -module -avoid-version -no-undefined
 
-AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall -fno-inline

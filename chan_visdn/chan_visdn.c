@@ -163,6 +163,9 @@ struct visdn_interface
 	struct list_head ifs_node;
 	struct list_head hg_node;
 
+	int refcnt;
+	ast_mutex_t lock;
+
 	char name[IFNAMSIZ];
 
 	int configured;
@@ -994,6 +997,27 @@ static int visdn_clip_valid(
 	return FALSE;
 }
 
+static struct visdn_interface *visdn_intf_alloc(void)
+{
+	struct visdn_interface *intf;
+
+	intf = malloc(sizeof(*intf));
+	if (!intf)
+		return NULL;
+
+	memset(intf, 0, sizeof(*intf));
+
+	intf->refcnt = 1;
+
+	INIT_LIST_HEAD(&intf->suspended_calls);
+	INIT_LIST_HEAD(&intf->clip_numbers_list);
+	intf->q931_intf = NULL;
+	intf->configured = FALSE;
+	intf->open_pending = FALSE;
+
+	return intf;
+}
+
 static void visdn_reload_config(void)
 {
 	struct ast_config *cfg;
@@ -1092,15 +1116,10 @@ static void visdn_reload_config(void)
 		}
 
 		if (!found) {
-			intf = malloc(sizeof(*intf));
+			intf = visdn_intf_alloc();
 
-			memset(intf, 0, sizeof(*intf));
-
-			INIT_LIST_HEAD(&intf->suspended_calls);
-			INIT_LIST_HEAD(&intf->clip_numbers_list);
-			intf->q931_intf = NULL;
-			intf->open_pending = FALSE;
 			strncpy(intf->name, cat, sizeof(intf->name));
+
 			visdn_copy_interface_config(intf, &visdn.default_intf);
 
 			list_add_tail(&intf->ifs_node, &visdn.ifs);
@@ -1673,65 +1692,75 @@ static enum q931_ie_calling_party_number_type_of_number
 }
 
 static struct visdn_interface *visdn_hunt_in_huntgroup(
-	struct visdn_huntgroup *hg)
+	struct visdn_huntgroup *hg,
+	struct visdn_interface *cur_intf)
 {
-	if (hg->mode == VISDN_HUNTGROUP_MODE_SEQUENTIAL) {
-		struct visdn_interface *intf;
-		list_for_each_entry(intf, &hg->ifs, hg_node) {
-			struct q931_interface *q931_intf =
-				intf->q931_intf;
+	struct visdn_interface *starting_intf;
 
-			if (!q931_intf)
-				continue;
+	if (list_empty(&hg->ifs)) {
+		visdn_debug("No interfaces in huntgroup '%s'\n", hg->name);
 
-			int i;
-			for (i=0; i<q931_intf->n_channels; i++) {
-				if (q931_intf->channels[i].state ==
-						Q931_CHANSTATE_AVAILABLE) {
+		return NULL;
+	}
 
-					return intf;
-				}
-			}
-		}
-	} else if (hg->mode == VISDN_HUNTGROUP_MODE_CYCLIC) {
-		struct visdn_interface *intf;
-		struct visdn_interface *starting_intf =
-			list_entry(&hg->ifs, struct visdn_interface, hg_node);
-
-		list_for_each_entry(intf, &hg->ifs, hg_node) {
-			if (intf == hg->current_intf) {
-				starting_intf = intf;
-				break;
-			}
-		}
-
-		for (intf = list_entry(starting_intf->hg_node.next,
+	if (cur_intf) {
+		starting_intf =
+			list_entry(cur_intf->hg_node.next,
 				struct visdn_interface, hg_node);
-		     intf != starting_intf;
-		     intf = list_entry(intf->hg_node.next,
-				struct visdn_interface, hg_node)) {
+	} else {
+		starting_intf = list_entry(hg->ifs.next,
+				struct visdn_interface, hg_node);
 
-			visdn_debug(
-				"Cyclic hunt group, trying interface '%s'\n",
-				intf->name);
-
-			struct q931_interface *q931_intf = intf->q931_intf;
-
-			if (!q931_intf)
-				continue;
-
-			int i;
-			for (i=0; i<q931_intf->n_channels; i++) {
-				if (q931_intf->channels[i].state ==
-						Q931_CHANSTATE_AVAILABLE) {
-
-					hg->current_intf = intf;
-
-					return intf;
-				}
+		switch(hg->mode) {
+		case VISDN_HUNTGROUP_MODE_CYCLIC:
+			if (hg->current_intf) {
+				starting_intf =
+					list_entry(hg->current_intf->hg_node.next,
+						struct visdn_interface, hg_node);
 			}
+		break;
+
+		case VISDN_HUNTGROUP_MODE_SEQUENTIAL:
+		break;
 		}
 	}
+
+	visdn_debug("Huntgroup: starting from interface '%s'\n",
+			starting_intf->name);
+
+	ast_mutex_lock(&visdn.lock);
+
+	struct visdn_interface *intf = starting_intf;
+	do {
+		visdn_debug(
+			"Huntgroup: trying interface '%s'\n",
+			intf->name);
+
+		struct q931_interface *q931_intf = intf->q931_intf;
+
+		if (!q931_intf)
+			continue;
+
+		int i;
+		for (i=0; i<q931_intf->n_channels; i++) {
+			if (q931_intf->channels[i].state ==
+					Q931_CHANSTATE_AVAILABLE) {
+
+				hg->current_intf = intf;
+
+				ast_mutex_unlock(&visdn.lock);
+
+				return intf;
+			}
+		}
+
+	     intf = list_entry(intf->hg_node.next,
+			struct visdn_interface, hg_node);
+
+	} while(intf != starting_intf);
+
+
+	ast_mutex_unlock(&visdn.lock);
 
 	return NULL;
 }
@@ -1748,112 +1777,78 @@ static struct visdn_huntgroup *visdn_get_huntgroup_by_name(const char *name)
 	return NULL;
 }
 
-static int visdn_call(
+static void visdn_defer_dtmf_in(
+	struct visdn_chan *visdn_chan)
+{
+
+	ast_mutex_lock(&visdn_chan->ast_chan->lock);
+	visdn_chan->dtmf_deferred = TRUE;
+	ast_mutex_unlock(&visdn_chan->ast_chan->lock);
+}
+
+static void visdn_undefer_dtmf_in(
+	struct visdn_chan *visdn_chan)
+{
+	struct q931_call *q931_call = visdn_chan->q931_call;
+	struct visdn_interface *intf = q931_call->intf->pvt;
+
+	ast_mutex_lock(&visdn_chan->ast_chan->lock);
+	visdn_chan->dtmf_deferred = FALSE;
+
+	/* Flush queue */
+	Q931_DECLARE_IES(ies);
+
+	struct q931_ie_called_party_number *cdpn =
+		q931_ie_called_party_number_alloc();
+	cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+					intf->outbound_called_ton);
+	cdpn->numbering_plan_identificator =
+		Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+
+	strncpy(cdpn->number, visdn_chan->dtmf_queue, sizeof(cdpn->number));
+	q931_ies_add_put(&ies, &cdpn->ie);
+
+	q931_send_primitive(visdn_chan->q931_call,
+		Q931_CCB_INFO_REQUEST, &ies);
+
+	Q931_UNDECLARE_IES(ies);
+
+	visdn_chan->dtmf_queue[0] = '\0';
+
+	ast_mutex_unlock(&visdn_chan->ast_chan->lock);
+}
+
+static void visdn_queue_dtmf(
+	struct visdn_chan *visdn_chan,
+	char digit)
+{
+	ast_mutex_lock(&visdn_chan->ast_chan->lock);
+
+	int len = strlen(visdn_chan->dtmf_queue);
+
+	if (len >= sizeof(visdn_chan->dtmf_queue) - 1) {
+		ast_log(LOG_WARNING, "DTMF queue is full, dropping digit\n");
+		return;
+	}
+
+	visdn_chan->dtmf_queue[len] = digit;
+	visdn_chan->dtmf_queue[len + 1] = '\0';
+
+	ast_mutex_unlock(&visdn_chan->ast_chan->lock);
+}
+
+static int visdn_request_call(
 	struct ast_channel *ast_chan,
-	char *orig_dest,
-	int timeout)
+	struct visdn_interface *intf,
+	const char *number,
+	const char *options)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	int err;
 
-	if ((ast_chan->_state != AST_STATE_DOWN) &&
-	    (ast_chan->_state != AST_STATE_RESERVED)) {
-		ast_log(LOG_WARNING,
-			"visdn_call called on %s,"
-			" neither down nor reserved\n",
-			ast_chan->name);
-
-		err = -1;
-		goto err_channel_not_down;
-	}
-
-	// Parse destination and obtain interface name + number
-	const char *intf_name;
-	const char *number;
-	char dest[256];
-	char *stringp = dest;
-
-	strncpy(dest, orig_dest, sizeof(dest));
-
-	intf_name = strsep(&stringp, "/");
-	if (!intf_name) {
-		ast_log(LOG_WARNING,
-			"Invalid destination '%s' format (interface/number)\n",
-			dest);
-
-		err = -1;
-		goto err_invalid_destination;
-	}
-
-	number = strsep(&stringp, "/");
-	if (!number) {
-		ast_log(LOG_WARNING,
-			"Invalid destination '%s' format (interface/number)\n",
-			dest);
-
-		err = -1;
-		goto err_invalid_format;
-	}
-
-	struct visdn_interface *intf = NULL;
-
-	ast_mutex_lock(&visdn.lock);
-	if (!strncasecmp(intf_name, VISDN_HUNTGROUP_PREFIX,
-			strlen(VISDN_HUNTGROUP_PREFIX))) {
-
-		const char *hg_name = intf_name +
-					strlen(VISDN_HUNTGROUP_PREFIX);
-		struct visdn_huntgroup *hg;
-		hg = visdn_get_huntgroup_by_name(hg_name);
-		if (!hg) {
-			ast_log(LOG_ERROR, "Cannot find huntgroup '%s'\n",
-				hg_name);
-
-			ast_chan->hangupcause = AST_CAUSE_BUSY;
-
-			err = -1;
-			ast_mutex_unlock(&visdn.lock);
-			goto err_huntgroup_not_found;
-		}
-
-		intf = visdn_hunt_in_huntgroup(hg);
-		if (!intf) {
-			err = -1;
-			ast_mutex_unlock(&visdn.lock);
-			goto err_no_channel_available;
-		}
-
-	} else {
-		int found = FALSE;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-			if (intf->q931_intf &&
-			    !strcmp(intf->name, intf_name)) {
-				found = TRUE;
-				break;
-			}
-		}
-
-		if (!found) {
-			ast_log(LOG_WARNING,
-				"Interface %s not found\n",
-				intf_name);
-			err = -1;
-			ast_mutex_unlock(&visdn.lock);
-			goto err_intf_not_found;
-		}
-
-		if (!intf->q931_intf) {
-			ast_log(LOG_WARNING,
-				"Interface %s not active\n",
-				intf_name);
-			err = -1;
-			ast_mutex_unlock(&visdn.lock);
-			goto err_intf_not_found;
-		}
-	}
-	ast_mutex_unlock(&visdn.lock);
-
 	visdn_debug("Calling on interface '%s'\n", intf->name);
+
+	visdn_chan->intf = intf;
 
 	Q931_DECLARE_IES(ies);
 
@@ -1896,7 +1891,6 @@ bc_failure:;
 
 		visdn_chan->is_voice = TRUE;
 
-		const char *options = strsep(&stringp, "/");
 		if (options) {
 			if (strchr(options, 'D')) {
 				bc->information_transfer_capability =
@@ -1920,11 +1914,6 @@ bc_failure:;
 		err = -1;
 		goto err_call_alloc;
 	}
-
-	if (option_debug)
-		ast_log(LOG_DEBUG,
-			"Calling %s on %s\n",
-			dest, ast_chan->name);
 
 	q931_call->pvt = ast_chan;
 	visdn_chan->q931_call = q931_call_get(q931_call);
@@ -2033,7 +2022,7 @@ bc_failure:;
 	hlc->presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
 	hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
 
-	ast_channel_defer_dtmf(ast_chan);
+	visdn_defer_dtmf_in(visdn_chan);
 
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_REQUEST, &ies);
 
@@ -2046,7 +2035,134 @@ bc_failure:;
 	q931_call_release_reference(q931_call);
 	q931_call_put(q931_call);
 err_call_alloc:
+
 	Q931_UNDECLARE_IES(ies);
+
+	return err;
+}
+
+static int visdn_call(
+	struct ast_channel *ast_chan,
+	char *orig_dest,
+	int timeout)
+{
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+	int err;
+
+	if ((ast_chan->_state != AST_STATE_DOWN) &&
+	    (ast_chan->_state != AST_STATE_RESERVED)) {
+		ast_log(LOG_WARNING,
+			"visdn_call called on %s,"
+			" neither down nor reserved\n",
+			ast_chan->name);
+
+		err = -1;
+		goto err_channel_not_down;
+	}
+
+	// Parse destination and obtain interface name + number
+	char dest[64];
+	char *dest_pos = dest;
+	const char *token;
+
+	strncpy(dest, orig_dest, sizeof(dest));
+
+	const char *intf_name = strsep(&dest_pos, "/");
+	if (!intf_name) {
+		ast_log(LOG_WARNING,
+			"Invalid destination '%s' format (interface/number)\n",
+			dest);
+
+		err = -1;
+		goto err_invalid_destination;
+	}
+
+	token = strsep(&dest_pos, "/");
+	if (!token) {
+		ast_log(LOG_WARNING,
+			"Invalid destination '%s' format (interface/number)\n",
+			dest);
+
+		err = -1;
+		goto err_invalid_format;
+	}
+
+	strncpy(visdn_chan->number, token, sizeof(visdn_chan->number));
+
+	token = strsep(&dest_pos, "/");
+	if (token)
+		strncpy(visdn_chan->options, token,
+			sizeof(visdn_chan->options));
+
+	visdn_debug("Calling %s on %s\n",
+			dest, ast_chan->name);
+
+	struct visdn_interface *intf = NULL;
+
+	if (!strncasecmp(intf_name, VISDN_HUNTGROUP_PREFIX,
+			strlen(VISDN_HUNTGROUP_PREFIX))) {
+
+		const char *hg_name = intf_name +
+					strlen(VISDN_HUNTGROUP_PREFIX);
+		struct visdn_huntgroup *hg;
+		hg = visdn_get_huntgroup_by_name(hg_name);
+		if (!hg) {
+			ast_log(LOG_ERROR, "Cannot find huntgroup '%s'\n",
+				hg_name);
+
+			ast_chan->hangupcause = AST_CAUSE_BUSY;
+
+			err = -1;
+			ast_mutex_unlock(&visdn.lock);
+			goto err_huntgroup_not_found;
+		}
+
+		intf = visdn_hunt_in_huntgroup(hg, NULL);
+		if (!intf) {
+			visdn_debug("Cannot hunt in huntgroup %s\n", hg_name);
+
+			err = -1;
+			ast_mutex_unlock(&visdn.lock);
+			goto err_no_channel_available;
+		}
+
+		visdn_chan->huntgroup = hg;
+
+	} else {
+		int found = FALSE;
+		ast_mutex_lock(&visdn.lock);
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+			if (intf->q931_intf &&
+			    !strcmp(intf->name, intf_name)) {
+				found = TRUE;
+				break;
+			}
+		}
+		ast_mutex_unlock(&visdn.lock);
+
+		if (!found) {
+			ast_log(LOG_WARNING,
+				"Interface %s not found\n",
+				intf_name);
+			err = -1;
+			goto err_intf_not_found;
+		}
+
+		if (!intf->q931_intf) {
+			ast_log(LOG_WARNING,
+				"Interface %s not active\n",
+				intf_name);
+			err = -1;
+			goto err_intf_not_found;
+		}
+	}
+
+	visdn_request_call(ast_chan, intf,
+		visdn_chan->number,
+		visdn_chan->options);
+
+	return 0;
+
 err_intf_not_found:
 err_no_channel_available:
 err_huntgroup_not_found:
@@ -2401,7 +2517,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		if (ast_chan->hangupcause)
 			cause->value = ast_chan->hangupcause;
 		else
-			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
+			cause->value =
+				Q931_IE_C_CV_SWITCHING_EQUIPMENT_CONGESTION;
 
 		q931_ies_add_put(&ies, &cause->ie);
 
@@ -2504,6 +2621,11 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_interface *intf = q931_call->intf->pvt;
 
+	if (visdn_chan->dtmf_deferred) {
+		visdn_queue_dtmf(visdn_chan, digit);
+		return 0;
+	}
+
 	Q931_DECLARE_IES(ies);
 
 	struct q931_ie_called_party_number *cdpn =
@@ -2525,7 +2647,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 	/* IMPORTANT: Since Asterisk is a bug made software, if there
 	 * are DTMF frames queued and we start generating DTMF tones
 	 * the queued frames are discarded and we fail completing
-	 * overlap dialling.
+	 * overlap dialing.
 	 */
 
 	if (q931_call->state != U1_CALL_INITIATED &&
@@ -3126,13 +3248,10 @@ static void visdn_add_interface(const char *name)
 	}
 
 	if (!found) {
-		intf = malloc(sizeof(*intf));
+		intf = visdn_intf_alloc();
+		if (!intf)
+			return;
 
-		INIT_LIST_HEAD(&intf->suspended_calls);
-		INIT_LIST_HEAD(&intf->clip_numbers_list);
-		intf->q931_intf = NULL;
-		intf->configured = FALSE;
-		intf->open_pending = FALSE;
 		strncpy(intf->name, name, sizeof(intf->name));
 		visdn_copy_interface_config(intf, &visdn.default_intf);
 
@@ -3557,7 +3676,9 @@ static void visdn_q931_more_info_indication(
 	if (!ast_chan)
 		return;
 
-	ast_channel_undefer_dtmf(ast_chan);
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+	visdn_undefer_dtmf_in(visdn_chan);
 }
 
 static void visdn_q931_notify_indication(
@@ -3578,7 +3699,9 @@ static void visdn_q931_proceeding_indication(
 	if (!ast_chan)
 		return;
 
-	ast_channel_undefer_dtmf(ast_chan);
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+	visdn_undefer_dtmf_in(visdn_chan);
 
 	ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
 }
@@ -3643,10 +3766,49 @@ static void visdn_q931_release_indication(
 	if (!ast_chan)
 		return;
 
-	ast_mutex_lock(&ast_chan->lock);
-	visdn_set_hangupcause_by_ies(ast_chan, ies);
-	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
-	ast_mutex_unlock(&ast_chan->lock);
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+	struct q931_ie_cause *cause = NULL;
+
+	int i;
+	for(i=0; i<ies->count; i++) {
+		if (ies->ies[i]->cls->id == Q931_IE_CAUSE) {
+			cause = container_of(ies->ies[i],
+				struct q931_ie_cause, ie);
+		}
+	}
+
+	if (cause &&
+	    (cause->value == Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE ||
+	    cause->value == Q931_IE_C_CV_NETWORK_OUT_OF_ORDER ||
+	    cause->value == Q931_IE_C_CV_TEMPORARY_FAILURE ||
+	    cause->value == Q931_IE_C_CV_SWITCHING_EQUIPMENT_CONGESTION ||
+	    cause->value == Q931_IE_C_CV_ACCESS_INFORMATION_DISCARDED ||
+	    cause->value == Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE ||
+	    cause->value == Q931_IE_C_CV_RESOURCES_UNAVAILABLE)) {
+
+		struct visdn_interface *intf;
+
+		intf = visdn_hunt_in_huntgroup(visdn_chan->huntgroup,
+							visdn_chan->intf);
+		if (!intf) {
+			ast_mutex_lock(&ast_chan->lock);
+			visdn_set_hangupcause_by_ies(ast_chan, ies);
+			ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+			ast_mutex_unlock(&ast_chan->lock);
+
+			return;
+		}
+
+		visdn_request_call(ast_chan, intf,
+			visdn_chan->number, visdn_chan->options);
+
+	} else {
+		ast_mutex_lock(&ast_chan->lock);
+		visdn_set_hangupcause_by_ies(ast_chan, ies);
+		ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+		ast_mutex_unlock(&ast_chan->lock);
+	}
 }
 
 static void visdn_q931_resume_confirm(
@@ -3808,6 +3970,10 @@ static void visdn_q931_setup_confirm(
 		return;
 
 	ast_setstate(ast_chan, AST_STATE_UP);
+
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+	visdn_undefer_dtmf_in(visdn_chan);
 }
 
 static int visdn_cgpn_to_pres(
