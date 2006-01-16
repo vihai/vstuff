@@ -36,7 +36,8 @@
 #include <libq931/dlc.h>
 #include <libq931/intf.h>
 
-q931_callref q931_intf_take_call_reference(struct q931_interface *interface)
+q931_callref q931_intf_find_free_call_reference(
+	struct q931_interface *interface)
 {
 	assert(interface);
 

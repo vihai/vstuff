@@ -139,6 +139,6 @@ struct q931_interface *q931_open_interface(
 	int flags);
 void q931_close_interface(struct q931_interface *intf);
 
-q931_callref q931_intf_take_call_reference(struct q931_interface *intf);
+q931_callref q931_intf_find_free_call_reference(struct q931_interface *intf);
 
 #endif

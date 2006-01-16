@@ -282,18 +282,17 @@ struct q931_call *q931_call_alloc_out(
 	struct q931_call *call;
 	call = q931_call_alloc(intf);
 	if (!call)
-		return NULL;
+		goto err_call_alloc;
 
 	call->direction = Q931_CALL_DIRECTION_OUTBOUND;
 	call->call_reference =
-		q931_intf_take_call_reference(call->intf);
+		q931_intf_find_free_call_reference(call->intf);
 
 	if (call->call_reference < 0) {
-		report_call(call, LOG_ERR,
+		report_intf(intf, LOG_ERR,
 			"Cannot find an available call reference number!\n");
 
-		q931_call_put(call);
-		return NULL;
+		goto err_find_callref;
 	}
 
 	if (intf->role == LAPD_ROLE_TE) {
@@ -305,6 +304,12 @@ struct q931_call *q931_call_alloc_out(
 	q931_intf_add_call(intf, q931_call_get(call));
 
 	return call;
+
+err_find_callref:
+	free(call);
+err_call_alloc:
+
+	return NULL;
 }
 
 struct q931_call *_q931_call_get(struct q931_call *call,
@@ -323,13 +328,6 @@ void _q931_call_put(struct q931_call *call,
 	int line)
 {
 	assert(call);
-
-#if 0
-	report_call(call, LOG_DEBUG, "%s:%d >>>>>>==== PUT ==== %d\n",
-		file,
-		line,
-		call->refcnt);
-#endif
 
 	call->refcnt--;
 
