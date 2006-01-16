@@ -1705,10 +1705,10 @@ static struct visdn_interface *visdn_hg_next_interface(
 	struct visdn_interface *intf;
 
 	if (&cur_intf->hg_node == &hg->ifs)
-		intf = list_entry(cur_intf->hg_node.next,
+		intf = list_entry(hg->ifs.next,
 			struct visdn_interface, hg_node);
 	else
-		intf = list_entry(hg->ifs.next,
+		intf = list_entry(cur_intf->hg_node.next,
 			struct visdn_interface, hg_node);
 
 	return intf;
@@ -1784,11 +1784,13 @@ static struct visdn_interface *visdn_hg_hunt(
 			}
 		}
 
-		starting_intf = visdn_hg_next_interface(
-			hg, intf);
+		intf = visdn_hg_next_interface(hg, intf);
+
+		visdn_debug(
+			"Huntgroup: next interface '%s'\n",
+			intf->name);
 
 	} while(intf != starting_intf);
-
 
 	ast_mutex_unlock(&visdn.lock);
 
