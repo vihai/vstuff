@@ -1698,22 +1698,41 @@ static enum q931_ie_calling_party_number_type_of_number
 	return ton; /* Ahhrgh */
 }
 
-static struct visdn_interface *visdn_hunt_in_huntgroup(
+static struct visdn_interface *visdn_hg_next_interface(
 	struct visdn_huntgroup *hg,
 	struct visdn_interface *cur_intf)
 {
-	struct visdn_interface *starting_intf;
+	struct visdn_interface *intf;
 
+	if (&cur_intf->hg_node == &hg->ifs)
+		intf = list_entry(cur_intf->hg_node.next,
+			struct visdn_interface, hg_node);
+	else
+		intf = list_entry(hg->ifs.next,
+			struct visdn_interface, hg_node);
+
+	return intf;
+}
+
+static struct visdn_interface *visdn_hg_hunt(
+	struct visdn_huntgroup *hg,
+	struct visdn_interface *cur_intf)
+{
 	if (list_empty(&hg->ifs)) {
 		visdn_debug("No interfaces in huntgroup '%s'\n", hg->name);
 
 		return NULL;
 	}
 
+	struct visdn_interface *starting_intf;
 	if (cur_intf) {
 		starting_intf =
 			list_entry(cur_intf->hg_node.next,
 				struct visdn_interface, hg_node);
+
+		visdn_debug("Huntgroup: continuing on interface '%s'\n",
+			starting_intf->name);
+
 	} else {
 		starting_intf = list_entry(hg->ifs.next,
 				struct visdn_interface, hg_node);
@@ -1721,19 +1740,23 @@ static struct visdn_interface *visdn_hunt_in_huntgroup(
 		switch(hg->mode) {
 		case VISDN_HUNTGROUP_MODE_CYCLIC:
 			if (hg->current_intf) {
-				starting_intf =
-					list_entry(hg->current_intf->hg_node.next,
-						struct visdn_interface, hg_node);
+				visdn_debug(
+					"Huntgroup: Cyclic current "
+					"interface = '%s'\n", 
+					hg->current_intf->name);
+
+				starting_intf = visdn_hg_next_interface(
+					hg, hg->current_intf);
 			}
 		break;
 
 		case VISDN_HUNTGROUP_MODE_SEQUENTIAL:
 		break;
 		}
-	}
 
-	visdn_debug("Huntgroup: starting from interface '%s'\n",
+		visdn_debug("Huntgroup: starting from interface '%s'\n",
 			starting_intf->name);
+	}
 
 	ast_mutex_lock(&visdn.lock);
 
@@ -1761,8 +1784,8 @@ static struct visdn_interface *visdn_hunt_in_huntgroup(
 			}
 		}
 
-	     intf = list_entry(intf->hg_node.next,
-			struct visdn_interface, hg_node);
+		starting_intf = visdn_hg_next_interface(
+			hg, intf);
 
 	} while(intf != starting_intf);
 
@@ -2126,7 +2149,7 @@ static int visdn_call(
 			goto err_huntgroup_not_found;
 		}
 
-		intf = visdn_hunt_in_huntgroup(hg, NULL);
+		intf = visdn_hg_hunt(hg, NULL);
 		if (!intf) {
 			visdn_debug("Cannot hunt in huntgroup %s\n", hg_name);
 
@@ -3377,12 +3400,13 @@ static void visdn_ccb_q931_receive()
 	while(1) {
 		ast_mutex_lock(&visdn.ccb_q931_queue_lock);
 
-		msg = list_entry(visdn.ccb_q931_queue.next,
-				struct q931_ccb_message, node);
-		if (&msg->node == &visdn.ccb_q931_queue) {
+		if (list_empty(&visdn.ccb_q931_queue)) {
 			ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
 			break;
 		}
+
+		msg = list_entry(visdn.ccb_q931_queue.next,
+				struct q931_ccb_message, node);
 
 		char buf[1];
 		read(visdn.ccb_q931_queue_pipe_read, buf, 1);
@@ -3788,7 +3812,8 @@ static void visdn_q931_release_indication(
 		}
 	}
 
-	if (cause &&
+	if (visdn_chan->huntgroup &&
+	    cause &&
 	    (cause->value == Q931_IE_C_CV_NO_CIRCUIT_CHANNEL_AVAILABLE ||
 	    cause->value == Q931_IE_C_CV_NETWORK_OUT_OF_ORDER ||
 	    cause->value == Q931_IE_C_CV_TEMPORARY_FAILURE ||
@@ -3799,7 +3824,7 @@ static void visdn_q931_release_indication(
 
 		struct visdn_interface *intf;
 
-		intf = visdn_hunt_in_huntgroup(visdn_chan->huntgroup,
+		intf = visdn_hg_hunt(visdn_chan->huntgroup,
 							visdn_chan->intf);
 		if (!intf) {
 			ast_mutex_lock(&ast_chan->lock);
@@ -4896,12 +4921,13 @@ static void visdn_q931_ccb_receive()
 	while(1) {
 		ast_mutex_lock(&visdn.q931_ccb_queue_lock);
 
-		msg = list_entry(visdn.q931_ccb_queue.next,
-				struct q931_ccb_message, node);
-		if (&msg->node == &visdn.q931_ccb_queue) {
+		if (list_empty(&visdn.q931_ccb_queue)) {
 			ast_mutex_unlock(&visdn.q931_ccb_queue_lock);
 			break;
 		}
+
+		msg = list_entry(visdn.q931_ccb_queue.next,
+				struct q931_ccb_message, node);
 
 		char buf[1];
 		read(visdn.q931_ccb_queue_pipe_read, buf, 1);

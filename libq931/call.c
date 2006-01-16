@@ -4179,15 +4179,17 @@ static void q931_handle_setup(
 		Q931_DECLARE_IES(ies);
 
 		int bumping_possible;
-		call->proposed_channel =
+		call->channel =
 			q931_channel_select_setup(call, &msg->ies, &ies,
 						&bumping_possible);
 
-		if (!call->proposed_channel) {
+		if (!call->channel) {
 			q931_call_send_release_complete(call, &ies);
 			q931_call_set_state(call, U0_NULL_STATE);
 			q931_call_release_reference(call);
 		} else {
+			call->channel->call = call;
+
 			q931_ies_copy(&call->setup_ies, &msg->ies);
 
 			q931_call_set_state(call, U6_CALL_PRESENT);
