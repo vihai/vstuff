@@ -3640,6 +3640,9 @@ static void visdn_q931_disconnect_indication(
 		}
 	}
 
+	if (!ast_chan)
+		return;
+	
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_set_hangupcause_by_ies(ast_chan, ies);
 	ast_mutex_unlock(&ast_chan->lock);
