@@ -3767,41 +3767,6 @@ static void visdn_q931_reject_indication(
 	if (!ast_chan)
 		return;
 
-	ast_mutex_lock(&ast_chan->lock);
-	visdn_set_hangupcause_by_ies(ast_chan, ies);
-	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
-	ast_mutex_unlock(&ast_chan->lock);
-}
-
-static void visdn_q931_release_confirm(
-	struct q931_call *q931_call,
-	const struct q931_ies *ies,
-	enum q931_release_confirm_status status)
-{
-	FUNC_DEBUG();
-
-	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
-
-	if (!ast_chan)
-		return;
-
-	ast_mutex_lock(&ast_chan->lock);
-	visdn_set_hangupcause_by_ies(ast_chan, ies);
-	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
-	ast_mutex_unlock(&ast_chan->lock);
-}
-
-static void visdn_q931_release_indication(
-	struct q931_call *q931_call,
-	const struct q931_ies *ies)
-{
-	FUNC_DEBUG();
-
-	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
-
-	if (!ast_chan)
-		return;
-
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	struct q931_ie_cause *cause = NULL;
@@ -3846,6 +3811,41 @@ static void visdn_q931_release_indication(
 		ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
 		ast_mutex_unlock(&ast_chan->lock);
 	}
+}
+
+static void visdn_q931_release_confirm(
+	struct q931_call *q931_call,
+	const struct q931_ies *ies,
+	enum q931_release_confirm_status status)
+{
+	FUNC_DEBUG();
+
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan)
+		return;
+
+	ast_mutex_lock(&ast_chan->lock);
+	visdn_set_hangupcause_by_ies(ast_chan, ies);
+	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+	ast_mutex_unlock(&ast_chan->lock);
+}
+
+static void visdn_q931_release_indication(
+	struct q931_call *q931_call,
+	const struct q931_ies *ies)
+{
+	FUNC_DEBUG();
+
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan)
+		return;
+
+	ast_mutex_lock(&ast_chan->lock);
+	visdn_set_hangupcause_by_ies(ast_chan, ies);
+	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
+	ast_mutex_unlock(&ast_chan->lock);
 }
 
 static void visdn_q931_resume_confirm(

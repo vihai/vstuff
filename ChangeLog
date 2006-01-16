@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-16 20:11:11 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-462
+
+    Summary:
+      Call hunting is now made in REJECT-INDICATION handler. libq931 modified to use it. Is EN 300 403-2 wrong?
+    Revision:
+      isdn--devel--0.1--patch-462
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c libq931/call.c
+
+
 2006-01-16 19:53:32 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-461
 
     Summary:

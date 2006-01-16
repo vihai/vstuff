@@ -5000,7 +5000,18 @@ static void q931_handle_release_complete(
 			q931_channel_release(call->channel);
 			q931_call_release_reference(call);
 			q931_call_set_state(call, N0_NULL_STATE);
-			q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION, &msg->ies);
+
+			/* EN 300 403-2 says that the primitive should be
+			 * RELEASE-INDICATION, instead, REJECT-INDICATION seems
+			 * more sensible:
+			 *
+			 * q931_call_primitive(call,
+			 * 	Q931_CCB_RELEASE_INDICATION, &msg->ies);
+			 * 
+			 */
+
+			q931_call_primitive(call,
+				Q931_CCB_REJECT_INDICATION, &msg->ies);
 		}
 	break;
 
