@@ -2639,24 +2639,41 @@ static void q931_timer_T303(void *data)
 			if (call->broadcast_setup) {
 				q931_channel_release(call->channel);
 				q931_call_set_state(call, N22_CALL_ABORT);
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+
+
+				Q931_DECLARE_IES(ies);
+				struct q931_ie_cause *cause =
+						q931_ie_cause_alloc();
+				cause->coding_standard = Q931_IE_C_CS_CCITT;
+				cause->location =
+					q931_ie_cause_location_call(call);
+				cause->value = Q931_IE_C_CV_NO_USER_RESPONDING;
+				q931_ies_add_put(&ies, &cause->ie);
+
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					NULL);
 			} else {
 				q931_call_start_timer(call, T305);
 
 				Q931_DECLARE_IES(ies);
 
-				struct q931_ie_cause *cause = q931_ie_cause_alloc();
+				struct q931_ie_cause *cause =
+					q931_ie_cause_alloc();
 				cause->coding_standard = Q931_IE_C_CS_CCITT;
-				cause->location = q931_ie_cause_location_call(call);
-				cause->value = Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
+				cause->location =
+					q931_ie_cause_location_call(call);
+				cause->value =
+					Q931_IE_C_CV_RECOVERY_ON_TIMER_EXPIRY;
 				memcpy(cause->diagnostics, "303", 3);
 				cause->diagnostics_len = 3;
 				q931_ies_add_put(&ies, &cause->ie);
 
 				q931_call_send_disconnect(call, &ies);
-				q931_call_set_state(call, N12_DISCONNECT_INDICATION);
-				q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION,
+				q931_call_set_state(call,
+					N12_DISCONNECT_INDICATION);
+				q931_call_primitive(call,
+					Q931_CCB_DISCONNECT_INDICATION,
 					NULL);
 
 				Q931_UNDECLARE_IES(ies);
