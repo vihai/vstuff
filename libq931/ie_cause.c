@@ -344,7 +344,7 @@ struct q931_ie_cause_value_info q931_ie_cause_value_infos[] =
 	},
 	{
 	Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE,
-	"Rquested circuit/channel not available",
+	"Requested circuit/channel not available",
 	},
 	{
 	Q931_IE_C_CV_RESOURCES_UNAVAILABLE,
