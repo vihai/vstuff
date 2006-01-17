@@ -4204,19 +4204,20 @@ static void q931_handle_setup(
 			 q931_channel_select_setup(call, &msg->ies, &ies,
 				&bumping_possible);
 
-		if (!chan) {
-			q931_call_send_release_complete(call, &ies);
-			q931_call_release_reference(call);
-		} else {
+		if (chan) {
 			call->channel = chan;
 			chan->call = call;
 			q931_channel_set_state(chan,
-					Q931_CHANSTATE_MAINTAINANCE);
+					Q931_CHANSTATE_SELECTED);
 
 			q931_ies_copy(&call->setup_ies, &msg->ies);
 
 			q931_call_set_state(call, N1_CALL_INITIATED);
-			q931_call_primitive(call, Q931_CCB_SETUP_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_SETUP_INDICATION, &msg->ies);
+		} else {
+			q931_call_send_release_complete(call, &ies);
+			q931_call_release_reference(call);
 		}
 
 		Q931_UNDECLARE_IES(ies);
@@ -6050,10 +6051,19 @@ void q931_call_dl_release_indication(struct q931_call *call)
 			q931_call_start_timer(call, T309);
 
 			if (connect(call->dlc->socket, NULL, 0) < 0) {
-				report_call(call, LOG_WARNING,
-					"Cannot reconnect: %s\n",
-					strerror(errno));
-				return;
+				if (errno == ECONNRESET) {
+					q931_dl_release_indication(call->dlc);
+				} else if (errno == EALREADY) {
+					q931_dl_establish_indication(call->dlc);
+				} else if (errno == ENOTCONN) {
+					q931_dl_release_confirm(call->dlc);
+				} else if (errno == EISCONN) {
+					q931_dl_establish_confirm(call->dlc);
+				} else if (errno != EAGAIN) {
+					report_call(call, LOG_ERR,
+						"connect: %s\n",
+						strerror(errno));
+				}
 			}
 		}
 	break;
