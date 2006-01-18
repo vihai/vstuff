@@ -10,8 +10,26 @@
  *
  */
 
-#ifndef _LAPD_MULTI_H
-#define _LAPD_MULTI_H
+#ifndef _LAPD_DATALINK_H
+#define _LAPD_DATALINK_H
+
+enum lapd_mdl_primitive_type
+{
+	LAPD_MDL_ASSIGN_REQUEST,
+	LAPD_MDL_REMOVE_REQUEST,
+	LAPD_MDL_ERROR_RESPONSE,
+};
+
+struct lapd_mdl_primitive
+{
+	enum lapd_mdl_primitive_type type;
+	int param;
+};
+
+void lapd_mdl_primitive(
+	struct lapd_sock *lapd_sock,
+	enum lapd_mdl_primitive_type type,
+	int param);
 
 void lapd_datalink_state_init(struct lapd_sock *lapd_sock);
 

@@ -19,6 +19,7 @@
 
 #include "lapd.h"
 #include "tei_mgmt_te.h"
+#include "datalink.h"
 
 struct hlist_head lapd_utme_hash = HLIST_HEAD_INIT;
 rwlock_t lapd_utme_hash_lock = RW_LOCK_UNLOCKED;
@@ -30,39 +31,6 @@ static inline void lapd_utme_change_state(
 	tme->state = new_state;
 }
 
-static void lapd_utme_send_to_socket(
-	struct lapd_sock *lapd_sock,
-	enum lapd_int_msg_type type,
-	int param)
-{
-	lapd_bh_lock_sock(lapd_sock);
-
-	if (sock_owned_by_user(&lapd_sock->sk)) {
-		struct sk_buff *skb;
-		struct lapd_internal_msg *msg;
-
-		skb = alloc_skb(sizeof(struct lapd_internal_msg), GFP_ATOMIC);
-		if (!skb) {
-			lapd_msg(KERN_ERR,
-				"Cannot send message %d to socket\n",
-				type);
-
-			return;
-		}
-
-		skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
-
-		msg = (struct lapd_internal_msg *)skb->data;
-		msg->type = type;
-		msg->param = param;
-
-		sk_add_backlog(&lapd_sock->sk, skb);
-	} else {
-		lapd_deliver_internal_message(lapd_sock, type, param);
-	}
-
-	lapd_bh_unlock_sock(lapd_sock);
-}
 
 /*
  * Must be called holding tme->lock
@@ -169,9 +137,8 @@ void lapd_utme_T202_timer(unsigned long data)
 				if (!lapd_sock->nt_mode &&
 				    lapd_sock->usr_tme == tme) {
 
-					lapd_utme_send_to_socket(lapd_sock,
-						LAPD_INT_MDL_ERROR_RESPONSE,
-						0);
+					lapd_mdl_primitive(lapd_sock,
+						LAPD_MDL_ERROR_RESPONSE, 0);
 				}
 			}
 		}
@@ -279,9 +246,9 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 
 					if (!lapd_sock->nt_mode &&
 					    lapd_sock->usr_tme == tme) {
-						lapd_utme_send_to_socket(
+						lapd_mdl_primitive(
 							lapd_sock,
-							LAPD_INT_MDL_ASSIGN_REQUEST,
+							LAPD_MDL_ASSIGN_REQUEST,
 							tme->tei);
 					}
 				}
@@ -420,9 +387,9 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 
 					if (!lapd_sock->nt_mode &&
 					    lapd_sock->usr_tme == tme) {
-						lapd_utme_send_to_socket(
+						lapd_mdl_primitive(
 							lapd_sock,
-							LAPD_INT_MDL_REMOVE_REQUEST,
+							LAPD_MDL_REMOVE_REQUEST,
 							0);
 					}
 				}

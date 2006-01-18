@@ -281,39 +281,34 @@ struct lapd_sock
 	struct hlist_head new_dlcs;
 };
 
-enum lapd_int_msg_type
+#define to_lapd_sock(obj) container_of(obj, struct lapd_sock, sk)
+
+enum lapd_dl_primitive_type
 {
-	LAPD_INT_MDL_ASSIGN_REQUEST,
-	LAPD_INT_MDL_REMOVE_REQUEST,
-	LAPD_INT_MDL_ERROR_RESPONSE,
+	LAPD_DL_RELEASE_INDICATION,
+	LAPD_DL_RELEASE_CONFIRM,
+	LAPD_DL_ESTABLISH_INDICATION,
+	LAPD_DL_ESTABLISH_CONFIRM,
 };
 
-struct lapd_internal_msg
+struct lapd_dl_primitive
 {
-	enum lapd_int_msg_type type;
+	enum lapd_dl_primitive_type type;
 	int param;
 };
-
-#define to_lapd_sock(obj) container_of(obj, struct lapd_sock, sk)
 
 struct lapd_sock *lapd_new_sock(
 	struct lapd_sock *parent_lapd_sock,
 	u8 tei, int sapi);
 
-void lapd_deliver_internal_message(
-	struct lapd_sock *lapd_sock,
-	enum lapd_int_msg_type type,
-	int param);
-
-void lapd_dl_establish_indication(struct lapd_sock *lapd_sock);
-void lapd_dl_establish_confirm(struct lapd_sock *lapd_sock);
-void lapd_dl_release_indication(struct lapd_sock *lapd_sock);
-void lapd_dl_release_confirm(struct lapd_sock *lapd_sock);
-
 void lapd_mdl_error_indication(
 	struct lapd_sock *lapd_sock,
 	unsigned long indication);
 
+void lapd_dl_primitive(
+	struct lapd_sock *lapd_sock,
+	enum lapd_dl_primitive_type type,
+	int param);
 int lapd_dl_unit_data_indication(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb);

@@ -551,13 +551,59 @@ err_shutting_down:
 	return err;
 }
 
+void lapd_dl_primitive(
+	struct lapd_sock *lapd_sock,
+	enum lapd_dl_primitive_type type,
+	int param)
+{
+	struct sk_buff *skb;
+	struct lapd_dl_primitive *pri;
+	int skb_len;
+
+	if (lapd_sock->sk.sk_state == TCP_CLOSING) {
+		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
+
+		/* Defer unhash */
+		sk_reset_timer(&lapd_sock->sk,
+			&lapd_sock->sk.sk_timer,
+			jiffies + 1 * HZ);
+
+		return;
+	}
+
+	skb = alloc_skb(sizeof(struct lapd_dl_primitive), GFP_ATOMIC);
+	if (!skb) {
+		lapd_msg(KERN_ERR,
+			"Cannot queue primitive %d to socket\n",
+			type);
+
+		return;
+	}
+
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+	skb->dev = NULL;
+
+	pri = (struct lapd_dl_primitive *)
+		skb_put(skb, sizeof(struct lapd_dl_primitive));
+	pri->type = type;
+	pri->param = param;
+
+	skb_set_owner_r(skb, &lapd_sock->sk);
+
+	skb_len = skb->len;
+
+	skb_queue_tail(&lapd_sock->sk.sk_receive_queue, skb);
+
+	if (!sock_flag(&lapd_sock->sk, SOCK_DEAD))
+		lapd_sock->sk.sk_data_ready(&lapd_sock->sk, skb_len);
+}
+
 int lapd_dl_unit_data_indication(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
 	int skb_len = skb->len;
 
-	skb->dev = NULL;
 	skb_set_owner_r(skb, &lapd_sock->sk);
 
 	skb_queue_tail(&lapd_sock->sk.sk_receive_queue, skb);
@@ -574,7 +620,6 @@ void lapd_dl_data_indication(
 {
 	int skb_len = skb->len;
 
-	skb->dev = NULL;
 	skb_set_owner_r(skb, &lapd_sock->sk);
 
 	skb_queue_tail(&lapd_sock->sk.sk_receive_queue, skb);
@@ -597,18 +642,18 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	lapd_lock_sock(lapd_sock);
 
 	if (sk->sk_state != TCP_ESTABLISHED) {
-		err = -ENOTCONN;
-		goto err_not_established;
+		lapd_release_sock(lapd_sock);
+		return -ENOTCONN;
 	}
 
 	if (sk->sk_shutdown & RCV_SHUTDOWN) {
-		err = -EPIPE;
-		goto err_shutting_down;
+		lapd_release_sock(lapd_sock);
+		return -EPIPE;
 	}
 
 	if (!lapd_sock->dev) {
-		err = -ENODEV;
-		goto err_no_dev;
+		lapd_release_sock(lapd_sock);
+		return -ENODEV;
 	}
 
 	lapd_release_sock(lapd_sock);
@@ -617,33 +662,57 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (!skb)
 		goto err_recv_datagram;
 
-	hdr = (struct lapd_hdr *)skb->mac.raw;
+	if (skb->dev) {
+		hdr = (struct lapd_hdr *)skb->mac.raw;
 
-	if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
-		msg->msg_flags |= MSG_OOB;
-		hdrsize = sizeof(struct lapd_hdr);
+		if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
+			msg->msg_flags |= MSG_OOB;
+			hdrsize = sizeof(struct lapd_hdr);
+		} else {
+			hdrsize = sizeof(struct lapd_hdr_e);
+		}
+
+		copied = skb->len - hdrsize;
+		if (copied > size) {
+			copied = size;
+			msg->msg_flags |= MSG_TRUNC;
+		}
+
+		skb_copy_datagram_iovec(skb, hdrsize, msg->msg_iov, copied);
+
 	} else {
-		hdrsize = sizeof(struct lapd_hdr_e);
-	}
+		struct lapd_dl_primitive *pri =
+			(struct lapd_dl_primitive *)skb->data;
 
-	copied = skb->len - hdrsize;
-	if (copied > size) {
-		copied = size;
-		msg->msg_flags |= MSG_TRUNC;
-	}
+		switch(pri->type) {
+		case LAPD_DL_ESTABLISH_INDICATION:
+			copied = -EALREADY;
+		break;
 
-	skb_copy_datagram_iovec(skb, hdrsize, msg->msg_iov, copied);
+		case LAPD_DL_ESTABLISH_CONFIRM:
+			copied = -EISCONN;
+		break;
+
+		case LAPD_DL_RELEASE_INDICATION:
+			copied = -ECONNRESET;
+		break;
+
+		case LAPD_DL_RELEASE_CONFIRM:
+			copied = -ENOTCONN;
+		break;
+
+		default:
+			BUG();
+			copied = 0;
+		}
+	}
 
 	skb_free_datagram(sk, skb);
 
 	return copied;
 
+	skb_free_datagram(sk, skb);
 err_recv_datagram:
-err_no_dev:
-err_shutting_down:
-err_not_established:
-
-	lapd_release_sock(lapd_sock);
 
 	return err;
 }
@@ -1365,23 +1434,6 @@ void lapd_dl_release_indication(struct lapd_sock *lapd_sock)
 
 	lapd_sock->sk.sk_err = ECONNRESET;
 	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
-}
-
-void lapd_dl_release_confirm(struct lapd_sock *lapd_sock)
-{
-	lapd_debug_ls(lapd_sock,
-		"DL-RELEASE-CONFIRM: Multiple frame mode released\n");
-
-	lapd_sock->sk.sk_err = ENOTCONN;
-	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
-
-	if (lapd_sock->sk.sk_state == TCP_CLOSING) {
-		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
-		/* Defers unhash */
-		sk_reset_timer(&lapd_sock->sk,
-			&lapd_sock->sk.sk_timer,
-			jiffies + 1 * HZ);
-	}
 }
 
 void lapd_mdl_error_indication(

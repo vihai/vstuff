@@ -149,6 +149,34 @@ static void _lapd_unexpected_timer(
 		lapd_state_to_text(lapd_sock->state));
 }
 
+void lapd_mdl_primitive(
+	struct lapd_sock *lapd_sock,
+	enum lapd_mdl_primitive_type type,
+	int param)
+{
+	struct sk_buff *skb;
+	struct lapd_dl_primitive *pri;
+
+	skb = alloc_skb(sizeof(struct lapd_dl_primitive), GFP_ATOMIC);
+	if (!skb) {
+		lapd_msg(KERN_ERR,
+			"Cannot queue primitive %d to socket\n",
+			type);
+
+		return;
+	}
+
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+	skb->dev = NULL;
+
+	pri = (struct lapd_dl_primitive *)
+		skb_put(skb, sizeof(struct lapd_dl_primitive));
+	pri->type = type;
+	pri->param = param;
+
+	sk_add_backlog(&lapd_sock->sk, skb);
+}
+
 static void lapd_clear_exception_conditions_procedure(
 	struct lapd_sock *lapd_sock)
 {
@@ -423,14 +451,14 @@ void lapd_mdl_remove_request(struct lapd_sock *lapd_sock)
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	case LAPD_DLS_6_AWAITING_RELEASE:
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
-		lapd_dl_release_confirm(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_CONFIRM, 0);
 	break;
 
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
@@ -439,7 +467,7 @@ void lapd_mdl_remove_request(struct lapd_sock *lapd_sock)
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_stop_timer(lapd_sock, T203);
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	case LAPD_DLS_8_TIMER_RECOVERY:
@@ -447,7 +475,7 @@ void lapd_mdl_remove_request(struct lapd_sock *lapd_sock)
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	default:
@@ -468,10 +496,8 @@ void lapd_mdl_error_response(struct lapd_sock *lapd_sock)
 
 	case LAPD_DLS_3_ESTABLISH_AWAITING_TEI:
 		lapd_discard_ui_queue(lapd_sock);
-		lapd_sock->sk.sk_err = EIO; /* ???? */
-
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	default:
@@ -492,10 +518,8 @@ void lapd_persistent_deactivation(struct lapd_sock *lapd_sock)
 
 	case LAPD_DLS_3_ESTABLISH_AWAITING_TEI:
 		lapd_discard_ui_queue(lapd_sock);
-		lapd_sock->sk.sk_err = EIO; /* ???? */
-
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	case LAPD_DLS_4_TEI_ASSIGNED:
@@ -507,14 +531,14 @@ void lapd_persistent_deactivation(struct lapd_sock *lapd_sock)
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	case LAPD_DLS_6_AWAITING_RELEASE:
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-		lapd_dl_release_confirm(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_CONFIRM, 0);
 	break;
 
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
@@ -523,7 +547,7 @@ void lapd_persistent_deactivation(struct lapd_sock *lapd_sock)
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_stop_timer(lapd_sock, T203);
 		lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	case LAPD_DLS_8_TIMER_RECOVERY:
@@ -531,7 +555,7 @@ void lapd_persistent_deactivation(struct lapd_sock *lapd_sock)
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	default:
@@ -1339,12 +1363,15 @@ static int lapd_socket_handle_uframe_ua(
 				LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED);
 
 			if (lapd_sock->layer_3_initiated) {
-				lapd_dl_establish_confirm(lapd_sock);
+				lapd_dl_primitive(lapd_sock,
+					LAPD_DL_ESTABLISH_CONFIRM, 0);
 				lapd_run_i_queue(lapd_sock);
 			} else {
 				if (lapd_sock->v_s != lapd_sock->v_a) {
 					lapd_discard_i_queue(lapd_sock);
-					lapd_dl_establish_indication(lapd_sock);
+					lapd_dl_primitive(lapd_sock,
+						LAPD_DL_ESTABLISH_INDICATION,
+						0);
 				}
 			}
 		}
@@ -1357,7 +1384,8 @@ static int lapd_socket_handle_uframe_ua(
 		} else {
 			lapd_stop_timer(lapd_sock, T200);
 			lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-			lapd_dl_release_confirm(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_RELEASE_CONFIRM, 0);
 		}
 	break;
 
@@ -1403,7 +1431,7 @@ static int lapd_socket_handle_uframe_disc(
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_stop_timer(lapd_sock, T203);
 		lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	case LAPD_DLS_8_TIMER_RECOVERY:
@@ -1412,7 +1440,7 @@ static int lapd_socket_handle_uframe_disc(
 				hdr->u.p_f, NULL, 0);
 		lapd_stop_timer(lapd_sock, T200);
 		lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-		lapd_dl_release_indication(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_INDICATION, 0);
 	break;
 
 	default:
@@ -1475,7 +1503,8 @@ static int lapd_socket_handle_uframe_dm(
 			lapd_discard_i_queue(lapd_sock);
 			lapd_stop_timer(lapd_sock, T200);
 			lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-			lapd_dl_release_indication(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_RELEASE_INDICATION, 0);
 		}
 	break;
 
@@ -1483,7 +1512,8 @@ static int lapd_socket_handle_uframe_dm(
 		if (hdr->u.p_f) {
 			lapd_stop_timer(lapd_sock, T200);
 			lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-			lapd_dl_release_confirm(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_RELEASE_CONFIRM, 0);
 		}
 	break;
 
@@ -1535,7 +1565,8 @@ static int lapd_socket_handle_uframe_sabme(
 			lapd_send_uframe(lapd_sock, LAPD_UFRAME_FUNC_UA,
 					hdr->u.p_f, NULL, 0);
 
-			lapd_dl_establish_indication(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_ESTABLISH_INDICATION, 0);
 		} else {
 			lapd_send_uframe(lapd_sock, LAPD_UFRAME_FUNC_DM,
 					hdr->u.p_f, NULL, 0);
@@ -1570,7 +1601,8 @@ static int lapd_socket_handle_uframe_sabme(
 
 		if (lapd_sock->v_s != lapd_sock->v_a) {
 			lapd_discard_i_queue(lapd_sock);
-			lapd_dl_establish_indication(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_ESTABLISH_INDICATION, 0);
 		}
 	break;
 
@@ -1592,7 +1624,8 @@ static int lapd_socket_handle_uframe_sabme(
 
 		if (lapd_sock->v_s != lapd_sock->v_a) {
 			lapd_discard_i_queue(lapd_sock);
-			lapd_dl_establish_indication(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_ESTABLISH_INDICATION, 0);
 		}
 	break;
 
@@ -1692,35 +1725,51 @@ int lapd_process_frame(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	int queued = 0;
 	struct lapd_hdr *hdr;
 
 	if (!skb->dev) {
-		struct lapd_internal_msg *msg =
-			(struct lapd_internal_msg *)skb->data;
+		struct lapd_mdl_primitive *pri =
+			(struct lapd_mdl_primitive *)skb->data;
 
-		lapd_deliver_internal_message(lapd_sock, msg->type, msg->param);
+		switch(pri->type) {
+		case LAPD_MDL_ASSIGN_REQUEST:
+			lapd_mdl_assign_request(lapd_sock, pri->param);
+		break;
+
+		case LAPD_MDL_ERROR_RESPONSE:
+			lapd_mdl_error_response(lapd_sock);
+		break;
+
+		case LAPD_MDL_REMOVE_REQUEST:
+			lapd_mdl_remove_request(lapd_sock);
+		break;
+
+		default:
+			BUG();
+		}
 
 		return TRUE;
+	} else {
+		int queued = 0;
+
+		hdr = (struct lapd_hdr *)skb->mac.raw;
+
+		switch (lapd_frame_type(hdr->control)) {
+		case LAPD_FRAME_TYPE_IFRAME:
+			queued = lapd_socket_handle_iframe(lapd_sock, skb);
+		break;
+
+		case LAPD_FRAME_TYPE_SFRAME:
+			queued = lapd_socket_handle_sframe(lapd_sock, skb);
+		break;
+
+		case LAPD_FRAME_TYPE_UFRAME:
+			queued = lapd_socket_handle_uframe(lapd_sock, skb);
+		break;
+		}
+
+		return queued;
 	}
-
-	hdr = (struct lapd_hdr *)skb->mac.raw;
-
-	switch (lapd_frame_type(hdr->control)) {
-	case LAPD_FRAME_TYPE_IFRAME:
-		queued = lapd_socket_handle_iframe(lapd_sock, skb);
-	break;
-
-	case LAPD_FRAME_TYPE_SFRAME:
-		queued = lapd_socket_handle_sframe(lapd_sock, skb);
-	break;
-
-	case LAPD_FRAME_TYPE_UFRAME:
-		queued = lapd_socket_handle_uframe(lapd_sock, skb);
-	break;
-	};
-
-	return queued;
 }
 
 int lapd_dl_establish_request(
@@ -1780,7 +1829,7 @@ int lapd_dl_release_request(
 {
 	switch (lapd_sock->state) {
 	case LAPD_DLS_4_TEI_ASSIGNED:
-		lapd_dl_release_confirm(lapd_sock);
+		lapd_dl_primitive(lapd_sock, LAPD_DL_RELEASE_CONFIRM, 0);
 	break;
 
 	case LAPD_DLS_5_AWAITING_ESTABLISH:
@@ -1894,7 +1943,8 @@ static void lapd_timer_T200(unsigned long data)
 			lapd_mdl_error_indication(lapd_sock,
 				LAPD_MDL_ERROR_INDICATION_G);
 
-			lapd_dl_release_indication(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_RELEASE_INDICATION, 0);
 		} else {
 			lapd_sock->retrans_cnt++;
 			lapd_send_uframe(lapd_sock, LAPD_UFRAME_FUNC_SABME,
@@ -1906,7 +1956,8 @@ static void lapd_timer_T200(unsigned long data)
 	case LAPD_DLS_6_AWAITING_RELEASE:
 		if (lapd_sock->retrans_cnt == lapd_sock->sap->N200) {
 			lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
-			lapd_dl_release_confirm(lapd_sock);
+			lapd_dl_primitive(lapd_sock,
+				LAPD_DL_RELEASE_CONFIRM, 0);
 			lapd_mdl_error_indication(lapd_sock,
 				LAPD_MDL_ERROR_INDICATION_H);
 		} else {

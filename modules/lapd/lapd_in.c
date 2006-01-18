@@ -24,21 +24,6 @@
 #include "tei_mgmt_te.h"
 #include "datalink.h"
 
-void lapd_deliver_internal_message(
-	struct lapd_sock *lapd_sock,
-	enum lapd_int_msg_type type,
-	int param)
-{
-	if (type == LAPD_INT_MDL_ASSIGN_REQUEST)
-		lapd_mdl_assign_request(lapd_sock, param);
-	else if (type == LAPD_INT_MDL_ERROR_RESPONSE)
-		lapd_mdl_error_response(lapd_sock);
-	else if (type == LAPD_INT_MDL_REMOVE_REQUEST)
-		lapd_mdl_remove_request(lapd_sock);
-	else
-		WARN_ON(1);
-}
-
 /*****************+
  * WARNING: this function may be called under lapd_hash_lock and acquires
  * bh_lock_sock. To avoid deadlocks, nothing inside this functions should
