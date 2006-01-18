@@ -111,9 +111,11 @@ void q931_ces_free(struct q931_ces *ces)
 {
 	assert(ces);
 
-	report_ces(ces, LOG_DEBUG, "CES %d freed for call %d\n",
+	report_ces(ces, LOG_DEBUG, "CES %d freed for call %d.%c\n",
 		ces->dlc->tei,
-		ces->call->call_reference);
+		ces->call->call_reference,
+		ces->call->direction ==
+			Q931_CALL_DIRECTION_OUTBOUND ? 'O' : 'I');
 
 	list_del(&ces->node);
 

@@ -16,13 +16,13 @@
 #include <libq931/list.h>
 #include <libq931/timer.h>
 
-#define report_dlc(dlc, lvl, format, arg...)					\
-		q931_report(							\
-			(lvl),							\
-			"%s:TEI[%d]: "						\
-			format,							\
-			(dlc)->intf->name,					\
-			(dlc)->tei,						\
+#define report_dlc(dlc, lvl, format, arg...)				\
+		q931_report(						\
+			(lvl),						\
+			"%s:TEI[%d]: "					\
+			format,						\
+			(dlc)->intf->name,				\
+			(dlc)->tei,					\
 			## arg)
 
 enum q931_dlc_status

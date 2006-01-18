@@ -145,23 +145,32 @@ enum visdn_huntgroup_mode
 };
 
 struct visdn_interface;
+
+struct visdn_huntgroup_member
+{
+	struct list_head node;
+
+	struct visdn_interface *intf;
+};
+
 struct visdn_huntgroup
 {
 	struct list_head node;
 
-	struct list_head ifs;
+	int refcnt;
+
+	int configured;
 
 	char name[32];
-
 	enum visdn_huntgroup_mode mode;
+	struct list_head members;
 
-	struct visdn_interface *current_intf;
+	struct visdn_huntgroup_member *current_member;
 };
 
 struct visdn_interface
 {
 	struct list_head ifs_node;
-	struct list_head hg_node;
 
 	int refcnt;
 	ast_mutex_t lock;
@@ -672,9 +681,9 @@ static int do_show_visdn_huntgroups(int fd, int argc, char *argv[])
 			visdn_huntgroup_mode_to_text(hg->mode));
 
 		ast_cli(fd, "Members: ");
-		struct visdn_interface *intf;
-		list_for_each_entry(intf, &hg->ifs, hg_node) {
-			ast_cli(fd, "%s, ", intf->name);
+		struct visdn_huntgroup_member *hgm;
+		list_for_each_entry(hgm, &hg->members, node) {
+			ast_cli(fd, "%s, ", hgm->intf->name);
 		}
 		ast_cli(fd, "\n");
 	}
@@ -898,7 +907,7 @@ static int visdn_intf_from_var(
 }
 
 static enum visdn_huntgroup_mode
-	visdn_string_to_hg_mode(const char *str)
+	visdn_hg_string_to_mode(const char *str)
 {
 	if (!strcasecmp(str, "sequential"))
 		return VISDN_HUNTGROUP_MODE_SEQUENTIAL;
@@ -913,12 +922,129 @@ static enum visdn_huntgroup_mode
 	}
 }
 
+static struct visdn_interface *visdn_intf_alloc(void)
+{
+	struct visdn_interface *intf;
+
+	intf = malloc(sizeof(*intf));
+	if (!intf)
+		return NULL;
+
+	memset(intf, 0, sizeof(*intf));
+
+	intf->refcnt = 1;
+
+	INIT_LIST_HEAD(&intf->suspended_calls);
+	INIT_LIST_HEAD(&intf->clip_numbers_list);
+	intf->q931_intf = NULL;
+	intf->configured = FALSE;
+	intf->open_pending = FALSE;
+
+	return intf;
+}
+
+static struct visdn_interface *visdn_intf_get(
+	struct visdn_interface *intf)
+{
+	intf->refcnt++;
+
+	return intf;
+}
+
+static void visdn_intf_put(
+	struct visdn_interface *intf)
+{
+	intf->refcnt--;
+
+	if (!intf->refcnt) {
+		free(intf);
+	}
+}
+
+
+static void visdn_hg_clear_members(
+	struct visdn_huntgroup *hg)
+{
+	struct visdn_huntgroup_member *hgm, *tpos;
+	list_for_each_entry_safe(hgm, tpos, &hg->members, node) {
+		visdn_intf_put(hgm->intf);
+		hgm->intf = NULL;
+		
+		list_del(&hgm->node);
+		free(hgm);
+	}
+}
+
+static struct visdn_interface *visdn_intf_get_by_name(const char *name)
+{
+	struct visdn_interface *intf;
+
+	ast_mutex_lock(&visdn.lock);
+	
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (!strcasecmp(intf->name, name)) {
+			ast_mutex_unlock(&visdn.lock);
+			return visdn_intf_get(intf);
+		}
+	}
+
+	ast_mutex_unlock(&visdn.lock);
+
+	return NULL;
+}
+
+
+static void visdn_hg_parse_members(
+	struct visdn_huntgroup *hg,
+	const char *value)
+{
+	char *str = strdup(value);
+	char *strpos = str;
+	char *tok;
+
+	visdn_hg_clear_members(hg);
+
+	while ((tok = strsep(&strpos, ","))) {
+		while(*tok == ' ' || *tok == '\t')
+			tok++;
+
+		while(*(tok + strlen(tok) - 1) == ' ' ||
+			*(tok + strlen(tok) - 1) == '\t')
+			*(tok + strlen(tok) - 1) = '\0';
+
+		struct visdn_interface *intf;
+		intf = visdn_intf_get_by_name(tok);
+		if (!intf) {
+			ast_log(LOG_WARNING,
+				"Huntgroup member %s not found\n",
+				tok);
+
+			continue;
+		}
+		
+		struct visdn_huntgroup_member *hgm;
+		hgm = malloc(sizeof(*hgm));
+		memset(hgm, 0, sizeof(hgm));
+
+		hgm->intf = visdn_intf_get(intf);
+
+		list_add_tail(&hgm->node, &hg->members);
+
+		visdn_intf_put(intf);
+		intf = NULL;
+	}
+
+	free(str);
+}
+
 static int visdn_huntgroup_from_var(
 	struct visdn_huntgroup *hg,
 	struct ast_variable *var)
 {
 	if (!strcasecmp(var->name, "mode")) {
-		hg->mode = visdn_string_to_hg_mode(var->value);
+		hg->mode = visdn_hg_string_to_mode(var->value);
+	} else if (!strcasecmp(var->name, "members")) {
+		visdn_hg_parse_members(hg, var->value);
 	} else {
 		return -1;
 	}
@@ -1004,25 +1130,434 @@ static int visdn_clip_valid(
 	return FALSE;
 }
 
-static struct visdn_interface *visdn_intf_alloc(void)
+static struct visdn_huntgroup *visdn_hg_alloc(void)
 {
-	struct visdn_interface *intf;
+	struct visdn_huntgroup *hg;
 
-	intf = malloc(sizeof(*intf));
-	if (!intf)
+	hg = malloc(sizeof(*hg));
+	if (!hg)
 		return NULL;
 
-	memset(intf, 0, sizeof(*intf));
+	memset(hg, 0, sizeof(*hg));
 
-	intf->refcnt = 1;
+	hg->refcnt = 1;
 
-	INIT_LIST_HEAD(&intf->suspended_calls);
-	INIT_LIST_HEAD(&intf->clip_numbers_list);
-	intf->q931_intf = NULL;
-	intf->configured = FALSE;
+	INIT_LIST_HEAD(&hg->members);
+	hg->configured = FALSE;
+
+	return hg;
+}
+
+static struct visdn_huntgroup *visdn_hg_get(
+	struct visdn_huntgroup *hg)
+{
+	hg->refcnt++;
+
+	return hg;
+}
+
+static void visdn_hg_put(
+	struct visdn_huntgroup *hg)
+{
+	hg->refcnt--;
+
+	if (!hg->refcnt) {
+		visdn_hg_clear_members(hg);
+		
+		free(hg);
+	}
+}
+
+static struct visdn_huntgroup *visdn_hg_get_by_name(const char *name)
+{
+	struct visdn_huntgroup *hg;
+
+	ast_mutex_lock(&visdn.lock);
+	
+	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
+		if (!strcasecmp(hg->name, name)) {
+			ast_mutex_unlock(&visdn.lock);
+			return visdn_hg_get(hg);
+		}
+	}
+
+	ast_mutex_unlock(&visdn.lock);
+
+	return NULL;
+}
+
+static int visdn_open_interface(
+	struct visdn_interface *intf)
+{
+	assert(!intf->q931_intf);
+
+	intf->open_pending = TRUE;
+
+	intf->q931_intf = q931_open_interface(intf->name, 0);
+	if (!intf->q931_intf) {
+		ast_log(LOG_WARNING,
+			"Cannot open interface %s, skipping\n",
+			intf->name);
+
+		return -1;
+	}
+
+	intf->q931_intf->pvt = intf;
+	intf->q931_intf->network_role = intf->network_role;
+	intf->q931_intf->dlc_autorelease_time = intf->dlc_autorelease_time;
+	intf->q931_intf->enable_bumping = intf->call_bumping;
+
+	if (intf->T301) intf->q931_intf->T301 = intf->T301 * 1000000LL;
+	if (intf->T302) intf->q931_intf->T302 = intf->T302 * 1000000LL;
+	if (intf->T303) intf->q931_intf->T303 = intf->T303 * 1000000LL;
+	if (intf->T304) intf->q931_intf->T304 = intf->T304 * 1000000LL;
+	if (intf->T305) intf->q931_intf->T305 = intf->T305 * 1000000LL;
+	if (intf->T306) intf->q931_intf->T306 = intf->T306 * 1000000LL;
+	if (intf->T308) intf->q931_intf->T308 = intf->T308 * 1000000LL;
+	if (intf->T309) intf->q931_intf->T309 = intf->T309 * 1000000LL;
+	if (intf->T310) intf->q931_intf->T310 = intf->T310 * 1000000LL;
+	if (intf->T312) intf->q931_intf->T312 = intf->T312 * 1000000LL;
+	if (intf->T313) intf->q931_intf->T313 = intf->T313 * 1000000LL;
+	if (intf->T314) intf->q931_intf->T314 = intf->T314 * 1000000LL;
+	if (intf->T316) intf->q931_intf->T316 = intf->T316 * 1000000LL;
+	if (intf->T317) intf->q931_intf->T317 = intf->T317 * 1000000LL;
+	if (intf->T318) intf->q931_intf->T318 = intf->T318 * 1000000LL;
+	if (intf->T319) intf->q931_intf->T319 = intf->T319 * 1000000LL;
+	if (intf->T320) intf->q931_intf->T320 = intf->T320 * 1000000LL;
+	if (intf->T321) intf->q931_intf->T321 = intf->T321 * 1000000LL;
+	if (intf->T322) intf->q931_intf->T322 = intf->T322 * 1000000LL;
+
+	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+		if (listen(intf->q931_intf->master_socket, 100) < 0) {
+			ast_log(LOG_ERROR,
+				"cannot listen on master socket: %s\n",
+				strerror(errno));
+
+			return -1;
+		}
+	}
+
+	char path[PATH_MAX];
+	char goodpath[PATH_MAX];
+	snprintf(path, sizeof(path),
+		"/sys/class/net/%s/visdn_channel/leg_a/",
+		intf->name);
+
+	struct stat st;
+	for(;;) {
+		if (stat(path, &st) < 0) {
+			if (errno == ENOENT)
+				break;
+
+			ast_log(LOG_ERROR,
+				"cannot stat(%s): %s\n",
+				path,
+				strerror(errno));
+
+			return -1;
+		}
+
+		strcpy(goodpath, path);
+
+		strncat(path, "connected/other_leg/", sizeof(path));
+	}
+
+	strncat(goodpath, "../..", sizeof(goodpath));
+
+	if (realpath(goodpath, intf->remote_port) < 0) {
+		ast_log(LOG_ERROR,
+			"cannot find realpath(%s): %s\n",
+			goodpath,
+			strerror(errno));
+	}
+
 	intf->open_pending = FALSE;
 
-	return intf;
+	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+		if (list_empty(&intf->clip_numbers_list)) {
+			ast_log(LOG_NOTICE,
+				"Interface '%s' is configured in network"
+				" mode but clip_numbers is empty\n",
+				intf->name);
+		} else if (!strlen(intf->clip_default_number)) {
+			ast_log(LOG_NOTICE,
+				"Interface '%s' is configured in network"
+				" mode but clip_default_number is empty\n",
+				intf->name);
+		} else if (!visdn_clip_valid(intf, intf->clip_default_number)) {
+			ast_log(LOG_NOTICE,
+				"Interface '%s' clip_numbers should contain "
+				"clip_default_number (%s)\n",
+				intf->name,
+				intf->clip_default_number);
+		}
+	}
+
+	return 0;
+}
+
+// Must be called with visdn.lock acquired
+static void refresh_polls_list()
+{
+	visdn.npolls = 0;
+
+	visdn.polls[visdn.npolls].fd = visdn.q931_ccb_queue_pipe_read;
+	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_Q931_CCB;
+	visdn.poll_infos[visdn.npolls].interface = NULL;
+	(visdn.npolls)++;
+
+	visdn.polls[visdn.npolls].fd = visdn.ccb_q931_queue_pipe_read;
+	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_CCB_Q931;
+	visdn.poll_infos[visdn.npolls].interface = NULL;
+	(visdn.npolls)++;
+
+	visdn.polls[visdn.npolls].fd = visdn.netlink_socket;
+	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_NETLINK;
+	visdn.poll_infos[visdn.npolls].interface = NULL;
+	(visdn.npolls)++;
+
+	visdn.open_pending = FALSE;
+
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (intf->open_pending)
+			visdn.open_pending = TRUE;
+			visdn.open_pending_nextcheck = 0;
+
+		if (!intf->q931_intf)
+			continue;
+
+		if (intf->q931_intf->role == LAPD_ROLE_NT) {
+			visdn.polls[visdn.npolls].fd =
+					intf->q931_intf->master_socket;
+			visdn.polls[visdn.npolls].events =
+					POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+					POLL_INFO_TYPE_INTERFACE;
+			visdn.poll_infos[visdn.npolls].interface =
+					intf->q931_intf;
+			visdn.npolls++;
+		} else {
+			visdn.polls[visdn.npolls].fd =
+					intf->q931_intf->dlc.socket;
+			visdn.polls[visdn.npolls].events =
+					POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+					POLL_INFO_TYPE_DLC;
+			visdn.poll_infos[visdn.npolls].dlc =
+					&intf->q931_intf->dlc;
+			visdn.npolls++;
+		}
+
+		struct q931_dlc *dlc;
+		list_for_each_entry(dlc, &intf->q931_intf->dlcs, intf_node) {
+			visdn.polls[visdn.npolls].fd = dlc->socket;
+			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+							POLL_INFO_TYPE_DLC;
+			visdn.poll_infos[visdn.npolls].dlc = dlc;
+			(visdn.npolls)++;
+		}
+	}
+}
+
+// Must be called with visdn.lock acquired
+static void visdn_accept(
+	struct q931_interface *intf,
+	int accept_socket)
+{
+	struct q931_dlc *newdlc;
+
+	newdlc = q931_accept(intf, accept_socket);
+	if (!newdlc)
+		return;
+
+	visdn_debug("New DLC (TEI=%d) accepted on interface %s\n",
+			newdlc->tei,
+			intf->name);
+
+	refresh_polls_list();
+}
+
+
+static void visdn_intf_reconfigure(
+	struct ast_config *cfg,
+	const char *name)
+{
+	/* Allocate a new interface */
+	
+	struct visdn_interface *intf;
+	intf = visdn_intf_alloc();
+	if (!intf)
+		return;
+
+	/* Configure it with default configuration */
+	strncpy(intf->name, name, sizeof(intf->name));
+	visdn_copy_interface_config(intf, &visdn.default_intf);
+
+	/* Now read the configuration from file */
+	intf->configured = TRUE;
+
+	struct ast_variable *var;
+	var = ast_variable_browse(cfg, (char *)name);
+	while (var) {
+		if (visdn_intf_from_var(intf, var) < 0) {
+			ast_log(LOG_WARNING,
+				"Unknown configuration "
+				"variable %s\n",
+				var->name);
+		}
+
+		var = var->next;
+	}
+
+	ast_mutex_lock(&visdn.lock);
+
+	/* Now do the switch thing. If there is another interface, * unlink it
+	 * from the list and drop the reference. Other references will continue
+	 * to be valid. */
+	struct visdn_interface *old_intf, *tpos;
+	list_for_each_entry_safe(old_intf, tpos, &visdn.ifs, ifs_node) {
+		if (!strcasecmp(old_intf->name, name)) {
+			intf->q931_intf = old_intf->q931_intf;
+
+			list_del(&old_intf->ifs_node);
+
+			break;
+		}
+	}
+
+	if (!intf->q931_intf) {
+		visdn_debug("Opening interface %s\n", name);
+
+		visdn_open_interface(intf);
+		refresh_polls_list();
+	}
+
+	list_add_tail(&visdn_intf_get(intf)->ifs_node, &visdn.ifs);
+
+	ast_mutex_unlock(&visdn.lock);
+}
+
+static void visdn_hg_reconfigure(
+	struct ast_config *cfg,
+	const char *cat,
+	const char *name)
+{
+	struct visdn_huntgroup *hg;
+	hg = visdn_hg_alloc();
+
+	strncpy(hg->name, name, sizeof(hg->name));
+
+	hg->configured = TRUE;
+
+	struct ast_variable *var;
+	var = ast_variable_browse(cfg, (char *)cat);
+	while (var) {
+		if (visdn_huntgroup_from_var(hg, var) < 0) {
+			ast_log(LOG_WARNING,
+				"Unknown configuration variable %s\n",
+				var->name);
+		}
+
+		var = var->next;
+	}
+
+	ast_mutex_lock(&visdn.lock);
+
+	struct visdn_huntgroup *old_hg, *tpos;
+	list_for_each_entry_safe(old_hg, tpos, &visdn.huntgroups_list, node) {
+		if (strcasecmp(old_hg->name, name))
+			continue;
+
+		list_del(&old_hg->node);
+		visdn_hg_put(old_hg);
+
+		break;
+	}
+
+	list_add_tail(&visdn_hg_get(hg)->node, &visdn.huntgroups_list);
+
+	ast_mutex_unlock(&visdn.lock);
+}
+
+static void visdn_reload_huntgroups(
+	struct ast_config *cfg)
+{
+	ast_mutex_lock(&visdn.lock);
+
+	/*
+	struct visdn_huntgroup *hg;
+	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
+		hg->configured = FALSE;
+	}*/
+
+	const char *cat;
+	for (cat = ast_category_browse(cfg, NULL); cat;
+	     cat = ast_category_browse(cfg, (char *)cat)) {
+
+		if (!strcasecmp(cat, "general") ||
+		    !strcasecmp(cat, "global") ||
+		    strncasecmp(cat, VISDN_HUNTGROUP_PREFIX,
+				strlen(VISDN_HUNTGROUP_PREFIX)))
+			continue;
+
+		if (strlen(cat) <= strlen(VISDN_HUNTGROUP_PREFIX)) {
+			ast_log(LOG_WARNING,
+				"Empty huntgroup name in configuration\n");
+
+			continue;
+		}
+
+		visdn_hg_reconfigure(cfg, cat,
+			cat + strlen(VISDN_HUNTGROUP_PREFIX));
+	}
+
+	ast_mutex_unlock(&visdn.lock);
+}
+
+static void visdn_reload_interfaces(
+	struct ast_config *cfg)
+{
+	ast_mutex_lock(&visdn.lock);
+
+	/* Read default interface configuration */
+	struct ast_variable *var;
+	var = ast_variable_browse(cfg, "global");
+	while (var) {
+		if (visdn_intf_from_var(&visdn.default_intf, var) < 0) {
+			ast_log(LOG_WARNING,
+				"Unknown configuration variable %s\n",
+				var->name);
+		}
+
+		var = var->next;
+	}
+
+	{
+	struct visdn_interface *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		intf->configured = FALSE;
+	}
+	}
+
+	const char *cat;
+	for (cat = ast_category_browse(cfg, NULL); cat;
+	     cat = ast_category_browse(cfg, (char *)cat)) {
+
+		if (!strcasecmp(cat, "general") ||
+		    !strcasecmp(cat, "global") ||
+		    !strncasecmp(cat, VISDN_HUNTGROUP_PREFIX,
+				strlen(VISDN_HUNTGROUP_PREFIX)))
+			continue;
+
+		visdn_intf_reconfigure(cfg, cat);
+	}
+
+	ast_mutex_unlock(&visdn.lock);
 }
 
 static void visdn_reload_config(void)
@@ -1037,139 +1572,8 @@ static void visdn_reload_config(void)
 		return;
 	}
 
-	ast_mutex_lock(&visdn.lock);
-
-	struct visdn_huntgroup *hg, *t;
-	list_for_each_entry_safe(hg, t, &visdn.huntgroups_list, node) {
-		list_del(&hg->node);
-		free(hg);
-	}
-
-	const char *cat;
-	struct ast_variable *var;
-
-	/* Read huntgroups list */
-	for (cat = ast_category_browse(cfg, NULL); cat;
-	     cat = ast_category_browse(cfg, (char *)cat)) {
-
-		if (!strcasecmp(cat, "general") ||
-		    !strcasecmp(cat, "global") ||
-		    strncasecmp(cat, VISDN_HUNTGROUP_PREFIX,
-				strlen(VISDN_HUNTGROUP_PREFIX)))
-			continue;
-
-		if (strlen(cat) <= 10) {
-			ast_log(LOG_WARNING,
-				"Empty huntgroup name in configuration\n");
-
-			continue;
-		}
-
-		struct visdn_huntgroup *hg;
-		hg = malloc(sizeof(*hg));
-		memset(hg, 0, sizeof(*hg));
-
-		INIT_LIST_HEAD(&hg->ifs);
-
-		strncpy(hg->name, cat + strlen(VISDN_HUNTGROUP_PREFIX),
-			sizeof(hg->name));
-
-		var = ast_variable_browse(cfg, (char *)cat);
-		while (var) {
-			if (visdn_huntgroup_from_var(hg, var) < 0) {
-				ast_log(LOG_WARNING,
-					"Unknown configuration variable %s\n",
-					var->name);
-			}
-
-			var = var->next;
-		}
-
-		list_add_tail(&hg->node, &visdn.huntgroups_list);
-	}
-
-	/* Configure interfaces */
-	var = ast_variable_browse(cfg, "global");
-	while (var) {
-		if (visdn_intf_from_var(&visdn.default_intf, var) < 0) {
-			ast_log(LOG_WARNING,
-				"Unknown configuration variable %s\n",
-				var->name);
-		}
-
-		var = var->next;
-	}
-
-	struct visdn_interface *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		intf->configured = FALSE;
-	}
-
-	for (cat = ast_category_browse(cfg, NULL); cat;
-	     cat = ast_category_browse(cfg, (char *)cat)) {
-
-		if (!strcasecmp(cat, "general") ||
-		    !strcasecmp(cat, "global") ||
-		    !strncasecmp(cat, VISDN_HUNTGROUP_PREFIX,
-				strlen(VISDN_HUNTGROUP_PREFIX)))
-			continue;
-
-		int found = FALSE;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-			if (!strcasecmp(intf->name, cat)) {
-				found = TRUE;
-				break;
-			}
-		}
-
-		if (!found) {
-			intf = visdn_intf_alloc();
-
-			strncpy(intf->name, cat, sizeof(intf->name));
-
-			visdn_copy_interface_config(intf, &visdn.default_intf);
-
-			list_add_tail(&intf->ifs_node, &visdn.ifs);
-		}
-
-		intf->configured = TRUE;
-
-		var = ast_variable_browse(cfg, (char *)cat);
-		while (var) {
-			if (!strcasecmp(var->name, "hunt_member_of")) {
-				/* Special treatment */
-
-				int found = FALSE;
-				struct visdn_huntgroup *hg;
-				list_for_each_entry(hg, &visdn.huntgroups_list,
-									node) {
-					if (!strcasecmp(hg->name, var->value)) {
-						list_add_tail(&intf->hg_node,
-							&hg->ifs);
-
-						found = TRUE;
-					}
-				}
-
-				if (!found) {
-					ast_log(LOG_WARNING,
-						"Hunt group '%s' not found\n",
-						var->value);
-				}
-			} else {
-				if (visdn_intf_from_var(intf, var) < 0) {
-					ast_log(LOG_WARNING,
-						"Unknown configuration "
-						"variable %s\n",
-						var->name);
-				}
-			}
-
-			var = var->next;
-		}
-	}
-
-	ast_mutex_unlock(&visdn.lock);
+	visdn_reload_interfaces(cfg);
+	visdn_reload_huntgroups(cfg);
 
 	ast_config_destroy(cfg);
 }
@@ -1698,73 +2102,91 @@ static enum q931_ie_calling_party_number_type_of_number
 	return ton; /* Ahhrgh */
 }
 
-static struct visdn_interface *visdn_hg_next_interface(
+static struct visdn_huntgroup_member *visdn_hg_find_member(
 	struct visdn_huntgroup *hg,
-	struct visdn_interface *cur_intf)
+	const char *name)
 {
-	struct visdn_interface *intf;
+	struct visdn_huntgroup_member *hgm;
+	list_for_each_entry(hgm, &hg->members, node) {
+		if (!strcasecmp(hgm->intf->name, name))
+			return hgm;
+	}
 
-	if (cur_intf->hg_node.next == &hg->ifs)
-		intf = list_entry(hg->ifs.next,
-			struct visdn_interface, hg_node);
+	return NULL;
+}
+
+static struct visdn_huntgroup_member *visdn_hg_next_member(
+	struct visdn_huntgroup *hg,
+	struct visdn_huntgroup_member *cur_memb)
+{
+	struct visdn_huntgroup_member *memb;
+
+	ast_mutex_lock(&visdn.lock);
+
+	if (cur_memb->node.next == &hg->members)
+		memb = list_entry(hg->members.next,
+			struct visdn_huntgroup_member, node);
 	else
-		intf = list_entry(cur_intf->hg_node.next,
-			struct visdn_interface, hg_node);
+		memb = list_entry(cur_memb->node.next,
+			struct visdn_huntgroup_member, node);
 
-	return intf;
+	ast_mutex_unlock(&visdn.lock);
+
+	return memb;
 }
 
 static struct visdn_interface *visdn_hg_hunt(
 	struct visdn_huntgroup *hg,
-	struct visdn_interface *cur_intf)
+	struct visdn_interface *cur_intf,
+	struct visdn_interface *first_intf)
 {
-	if (list_empty(&hg->ifs)) {
+	ast_mutex_lock(&visdn.lock);
+
+	if (list_empty(&hg->members)) {
 		visdn_debug("No interfaces in huntgroup '%s'\n", hg->name);
 
-		return NULL;
+		goto err_no_interfaces;
 	}
 
-	struct visdn_interface *starting_intf;
+	struct visdn_huntgroup_member *starting_hgm;
 	if (cur_intf) {
-		starting_intf = visdn_hg_next_interface(hg, cur_intf);
-
-		visdn_debug("Huntgroup: continuing on interface '%s'\n",
-			starting_intf->name);
+		starting_hgm = visdn_hg_find_member(hg, cur_intf->name);
 
 	} else {
-		starting_intf = list_entry(hg->ifs.next,
-				struct visdn_interface, hg_node);
+		starting_hgm = list_entry(hg->members.next,
+				struct visdn_huntgroup_member, node);
 
 		switch(hg->mode) {
 		case VISDN_HUNTGROUP_MODE_CYCLIC:
-			if (hg->current_intf) {
-				visdn_debug(
-					"Huntgroup: Cyclic current "
-					"interface = '%s'\n", 
-					hg->current_intf->name);
-
-				starting_intf = visdn_hg_next_interface(
-					hg, hg->current_intf);
+			if (hg->current_member) {
+				starting_hgm = visdn_hg_next_member(
+					hg, hg->current_member);
 			}
 		break;
 
 		case VISDN_HUNTGROUP_MODE_SEQUENTIAL:
 		break;
 		}
-
-		visdn_debug("Huntgroup: starting from interface '%s'\n",
-			starting_intf->name);
 	}
 
-	ast_mutex_lock(&visdn.lock);
+	visdn_debug("Huntgroup: starting from interface '%s'"
+			" (mode='%s', hg_cur='%s', ext_cur='%s', first='%s')\n",
+			visdn_huntgroup_mode_to_text(hg->mode),
+			starting_hgm->intf->name,
+			hg->current_member ? hg->current_member->intf->name : "",
+			cur_intf ? cur_intf->name : "",
+			first_intf ? first_intf->name : "");
 
-	struct visdn_interface *intf = starting_intf;
+	struct visdn_huntgroup_member *hgm = starting_hgm;
 	do {
+		if (hgm->intf == first_intf)
+			break;
+		
 		visdn_debug(
 			"Huntgroup: trying interface '%s'\n",
-			intf->name);
+			hgm->intf->name);
 
-		struct q931_interface *q931_intf = intf->q931_intf;
+		struct q931_interface *q931_intf = hgm->intf->q931_intf;
 
 		if (q931_intf) {
 			int i;
@@ -1772,40 +2194,29 @@ static struct visdn_interface *visdn_hg_hunt(
 				if (q931_intf->channels[i].state ==
 						Q931_CHANSTATE_AVAILABLE) {
 
-					hg->current_intf = intf;
-
-					ast_mutex_unlock(&visdn.lock);
+					hg->current_member = hgm;
 
 					visdn_debug(
 						"Huntgroup: found interface"
-					       	" '%s'\n", intf->name);
+					       	" '%s'\n", hgm->intf->name);
 
-					return intf;
+					ast_mutex_unlock(&visdn.lock);
+
+					return visdn_intf_get(hgm->intf);
 				}
 			}
 		}
 
-		intf = visdn_hg_next_interface(hg, intf);
+		hgm = visdn_hg_next_member(hg, hgm);
 
 		visdn_debug(
 			"Huntgroup: next interface '%s'\n",
-			intf->name);
+			hgm->intf->name);
 
-	} while(intf != starting_intf);
+	} while(hgm != starting_hgm);
 
+err_no_interfaces:
 	ast_mutex_unlock(&visdn.lock);
-
-	return NULL;
-}
-
-static struct visdn_huntgroup *visdn_get_huntgroup_by_name(const char *name)
-{
-	struct visdn_huntgroup *hg;
-
-	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
-		if (!strcasecmp(hg->name, name))
-			return hg;
-	}
 
 	return NULL;
 }
@@ -1839,7 +2250,8 @@ static void visdn_undefer_dtmf_in(
 		cdpn->numbering_plan_identificator =
 			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
 
-		strncpy(cdpn->number, visdn_chan->dtmf_queue, sizeof(cdpn->number));
+		strncpy(cdpn->number, visdn_chan->dtmf_queue,
+			sizeof(cdpn->number));
 		q931_ies_add_put(&ies, &cdpn->ie);
 
 		q931_send_primitive(visdn_chan->q931_call,
@@ -1883,7 +2295,7 @@ static int visdn_request_call(
 
 	visdn_debug("Calling on interface '%s'\n", intf->name);
 
-	visdn_chan->intf = intf;
+	visdn_chan->intf = visdn_intf_get(intf);
 
 	Q931_DECLARE_IES(ies);
 
@@ -2017,7 +2429,8 @@ bc_failure:;
 					intf->force_outbound_cli,
 						sizeof(cgpn->number));
 				else {
-					strncpy(cgpn->number, ast_chan->cid.cid_num,
+					strncpy(cgpn->number,
+						ast_chan->cid.cid_num,
 						sizeof(cgpn->number));
 				}
 			} else {
@@ -2067,9 +2480,12 @@ bc_failure:;
 
 	return 0;
 
+	visdn_intf_put(visdn_chan->intf);
+
 	q931_call_release_reference(q931_call);
 	q931_call_put(q931_call);
 err_call_alloc:
+
 
 	Q931_UNDECLARE_IES(ies);
 
@@ -2133,14 +2549,15 @@ static int visdn_call(
 			dest, ast_chan->name);
 
 	struct visdn_interface *intf = NULL;
-
 	if (!strncasecmp(intf_name, VISDN_HUNTGROUP_PREFIX,
 			strlen(VISDN_HUNTGROUP_PREFIX))) {
+
+		ast_mutex_lock(&visdn.lock);
 
 		const char *hg_name = intf_name +
 					strlen(VISDN_HUNTGROUP_PREFIX);
 		struct visdn_huntgroup *hg;
-		hg = visdn_get_huntgroup_by_name(hg_name);
+		hg = visdn_hg_get_by_name(hg_name);
 		if (!hg) {
 			ast_log(LOG_ERROR, "Cannot find huntgroup '%s'\n",
 				hg_name);
@@ -2152,7 +2569,7 @@ static int visdn_call(
 			goto err_huntgroup_not_found;
 		}
 
-		intf = visdn_hg_hunt(hg, NULL);
+		intf = visdn_hg_hunt(hg, NULL, NULL);
 		if (!intf) {
 			visdn_debug("Cannot hunt in huntgroup %s\n", hg_name);
 
@@ -2161,21 +2578,14 @@ static int visdn_call(
 			goto err_no_channel_available;
 		}
 
-		visdn_chan->huntgroup = hg;
+		visdn_chan->hg_first_intf = visdn_intf_get(intf);
+		visdn_chan->huntgroup = visdn_hg_get(hg);
 
-	} else {
-		int found = FALSE;
-		ast_mutex_lock(&visdn.lock);
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-			if (intf->q931_intf &&
-			    !strcmp(intf->name, intf_name)) {
-				found = TRUE;
-				break;
-			}
-		}
 		ast_mutex_unlock(&visdn.lock);
+	} else {
+		intf = visdn_intf_get_by_name(intf_name);
 
-		if (!found) {
+		if (!intf) {
 			ast_log(LOG_WARNING,
 				"Interface %s not found\n",
 				intf_name);
@@ -2190,11 +2600,17 @@ static int visdn_call(
 			err = -1;
 			goto err_intf_not_found;
 		}
+
+		visdn_chan->hg_first_intf = NULL;
+		visdn_chan->huntgroup = NULL;
 	}
 
 	visdn_request_call(ast_chan, intf,
 		visdn_chan->number,
 		visdn_chan->options);
+
+	visdn_intf_put(intf);
+	intf = NULL;
 
 	return 0;
 
@@ -2733,15 +3149,14 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	struct q931_call *q931_call = visdn_chan->q931_call;
 
 	ast_mutex_lock(&visdn.lock);
-	if (q931_call) {
+	if (q931_call && q931_call->intf) {
 		q931_call->pvt = NULL;
 
 		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
 		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(
-						q931_call);
+		cause->location = q931_ie_cause_location_call(q931_call);
 
 		if (ast_chan->hangupcause)
 			cause->value = ast_chan->hangupcause;
@@ -2814,8 +3229,6 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 	ast_mutex_lock(&ast_chan->lock);
 
-	visdn_chan->q931_call = NULL;
-
 	if (visdn_chan->suspended_call) {
 		// We are responsible for the channel
 		q931_channel_release(visdn_chan->suspended_call->q931_chan);
@@ -2828,6 +3241,23 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	close(ast_chan->fds[0]);
 
 	if (visdn_chan) {
+		if (visdn_chan->hg_first_intf) {
+			visdn_intf_put(visdn_chan->hg_first_intf);
+			visdn_chan->hg_first_intf = NULL;
+		}
+
+		if (visdn_chan->intf) {
+			visdn_intf_put(visdn_chan->intf);
+			visdn_chan->intf = NULL;
+		}
+
+		if (visdn_chan->huntgroup) {
+			visdn_hg_put(visdn_chan->huntgroup);
+			visdn_chan->huntgroup = NULL;
+		}
+
+		visdn_chan->q931_call = NULL;
+
 		if (visdn_chan->channel_fd >= 0) {
 			// Disconnect the softport since we cannot rely on
 			// libq931 (see above)
@@ -3075,251 +3505,6 @@ static const struct ast_channel_tech visdn_tech = {
 	.setoption	= visdn_setoption,
 };
 
-// Must be called with visdn.lock acquired
-static void refresh_polls_list()
-{
-	visdn.npolls = 0;
-
-	visdn.polls[visdn.npolls].fd = visdn.q931_ccb_queue_pipe_read;
-	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_Q931_CCB;
-	visdn.poll_infos[visdn.npolls].interface = NULL;
-	(visdn.npolls)++;
-
-	visdn.polls[visdn.npolls].fd = visdn.ccb_q931_queue_pipe_read;
-	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_CCB_Q931;
-	visdn.poll_infos[visdn.npolls].interface = NULL;
-	(visdn.npolls)++;
-
-	visdn.polls[visdn.npolls].fd = visdn.netlink_socket;
-	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_NETLINK;
-	visdn.poll_infos[visdn.npolls].interface = NULL;
-	(visdn.npolls)++;
-
-	visdn.open_pending = FALSE;
-
-	struct visdn_interface *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		if (intf->open_pending)
-			visdn.open_pending = TRUE;
-			visdn.open_pending_nextcheck = 0;
-
-		if (!intf->q931_intf)
-			continue;
-
-		if (intf->q931_intf->role == LAPD_ROLE_NT) {
-			visdn.polls[visdn.npolls].fd =
-					intf->q931_intf->master_socket;
-			visdn.polls[visdn.npolls].events =
-					POLLIN | POLLERR;
-			visdn.poll_infos[visdn.npolls].type =
-					POLL_INFO_TYPE_INTERFACE;
-			visdn.poll_infos[visdn.npolls].interface =
-					intf->q931_intf;
-			visdn.npolls++;
-		} else {
-			visdn.polls[visdn.npolls].fd =
-					intf->q931_intf->dlc.socket;
-			visdn.polls[visdn.npolls].events =
-					POLLIN | POLLERR;
-			visdn.poll_infos[visdn.npolls].type =
-					POLL_INFO_TYPE_DLC;
-			visdn.poll_infos[visdn.npolls].dlc =
-					&intf->q931_intf->dlc;
-			visdn.npolls++;
-		}
-
-		struct q931_dlc *dlc;
-		list_for_each_entry(dlc, &intf->q931_intf->dlcs, intf_node) {
-			visdn.polls[visdn.npolls].fd = dlc->socket;
-			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
-			visdn.poll_infos[visdn.npolls].type =
-							POLL_INFO_TYPE_DLC;
-			visdn.poll_infos[visdn.npolls].dlc = dlc;
-			(visdn.npolls)++;
-		}
-	}
-}
-
-// Must be called with visdn.lock acquired
-static void visdn_accept(
-	struct q931_interface *intf,
-	int accept_socket)
-{
-	struct q931_dlc *newdlc;
-
-	newdlc = q931_accept(intf, accept_socket);
-	if (!newdlc)
-		return;
-
-	visdn_debug("New DLC (TEI=%d) accepted on interface %s\n",
-			newdlc->tei,
-			intf->name);
-
-	refresh_polls_list();
-}
-
-static int visdn_open_interface(
-	struct visdn_interface *intf)
-{
-	assert(!intf->q931_intf);
-
-	intf->open_pending = TRUE;
-
-	intf->q931_intf = q931_open_interface(intf->name, 0);
-	if (!intf->q931_intf) {
-		ast_log(LOG_WARNING,
-			"Cannot open interface %s, skipping\n",
-			intf->name);
-
-		return -1;
-	}
-
-	intf->q931_intf->pvt = intf;
-	intf->q931_intf->network_role = intf->network_role;
-	intf->q931_intf->dlc_autorelease_time = intf->dlc_autorelease_time;
-	intf->q931_intf->enable_bumping = intf->call_bumping;
-
-	if (intf->T301) intf->q931_intf->T301 = intf->T301 * 1000000LL;
-	if (intf->T302) intf->q931_intf->T302 = intf->T302 * 1000000LL;
-	if (intf->T303) intf->q931_intf->T303 = intf->T303 * 1000000LL;
-	if (intf->T304) intf->q931_intf->T304 = intf->T304 * 1000000LL;
-	if (intf->T305) intf->q931_intf->T305 = intf->T305 * 1000000LL;
-	if (intf->T306) intf->q931_intf->T306 = intf->T306 * 1000000LL;
-	if (intf->T308) intf->q931_intf->T308 = intf->T308 * 1000000LL;
-	if (intf->T309) intf->q931_intf->T309 = intf->T309 * 1000000LL;
-	if (intf->T310) intf->q931_intf->T310 = intf->T310 * 1000000LL;
-	if (intf->T312) intf->q931_intf->T312 = intf->T312 * 1000000LL;
-	if (intf->T313) intf->q931_intf->T313 = intf->T313 * 1000000LL;
-	if (intf->T314) intf->q931_intf->T314 = intf->T314 * 1000000LL;
-	if (intf->T316) intf->q931_intf->T316 = intf->T316 * 1000000LL;
-	if (intf->T317) intf->q931_intf->T317 = intf->T317 * 1000000LL;
-	if (intf->T318) intf->q931_intf->T318 = intf->T318 * 1000000LL;
-	if (intf->T319) intf->q931_intf->T319 = intf->T319 * 1000000LL;
-	if (intf->T320) intf->q931_intf->T320 = intf->T320 * 1000000LL;
-	if (intf->T321) intf->q931_intf->T321 = intf->T321 * 1000000LL;
-	if (intf->T322) intf->q931_intf->T322 = intf->T322 * 1000000LL;
-
-	if (intf->q931_intf->role == LAPD_ROLE_NT) {
-		if (listen(intf->q931_intf->master_socket, 100) < 0) {
-			ast_log(LOG_ERROR,
-				"cannot listen on master socket: %s\n",
-				strerror(errno));
-
-			return -1;
-		}
-	}
-
-	char path[PATH_MAX];
-	char goodpath[PATH_MAX];
-	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/visdn_channel/leg_a/",
-		intf->name);
-
-	struct stat st;
-	for(;;) {
-		if (stat(path, &st) < 0) {
-			if (errno == ENOENT)
-				break;
-
-			ast_log(LOG_ERROR,
-				"cannot stat(%s): %s\n",
-				path,
-				strerror(errno));
-
-			return -1;
-		}
-
-		strcpy(goodpath, path);
-
-		strncat(path, "connected/other_leg/", sizeof(path));
-	}
-
-	strncat(goodpath, "../..", sizeof(goodpath));
-
-	if (realpath(goodpath, intf->remote_port) < 0) {
-		ast_log(LOG_ERROR,
-			"cannot find realpath(%s): %s\n",
-			goodpath,
-			strerror(errno));
-	}
-
-	intf->open_pending = FALSE;
-
-	if (intf->q931_intf->role == LAPD_ROLE_NT) {
-		if (list_empty(&intf->clip_numbers_list)) {
-			ast_log(LOG_NOTICE,
-				"Interface '%s' is configured in network"
-				" mode but clip_numbers is empty\n",
-				intf->name);
-		} else if (!strlen(intf->clip_default_number)) {
-			ast_log(LOG_NOTICE,
-				"Interface '%s' is configured in network"
-				" mode but clip_default_number is empty\n",
-				intf->name);
-		} else if (!visdn_clip_valid(intf, intf->clip_default_number)) {
-			ast_log(LOG_NOTICE,
-				"Interface '%s' clip_numbers should contain "
-				"clip_default_number (%s)\n",
-				intf->name,
-				intf->clip_default_number);
-		}
-	}
-
-	return 0;
-}
-
-// Must be called with visdn.lock acquired
-static void visdn_add_interface(const char *name)
-{
-	int found = FALSE;
-	struct visdn_interface *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		if (!strcasecmp(intf->name, name)) {
-			found = TRUE;
-			break;
-		}
-	}
-
-	if (!found) {
-		intf = visdn_intf_alloc();
-		if (!intf)
-			return;
-
-		strncpy(intf->name, name, sizeof(intf->name));
-		visdn_copy_interface_config(intf, &visdn.default_intf);
-
-		list_add_tail(&intf->ifs_node, &visdn.ifs);
-	}
-
-	if (!intf->q931_intf) {
-		visdn_debug("Opening interface %s\n", name);
-
-		visdn_open_interface(intf);
-		refresh_polls_list();
-	}
-}
-
-// Must be called with visdn.lock acquired
-static void visdn_rem_interface(const char *name)
-{
-	struct visdn_interface *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		if (intf->q931_intf &&
-		    !strcmp(intf->name, name)) {
-			q931_close_interface(intf->q931_intf);
-
-			intf->q931_intf = NULL;
-
-			refresh_polls_list();
-
-			break;
-		}
-	}
-}
-
 #define MAX_PAYLOAD 1024
 
 // Must be called with visdn.lock acquired
@@ -3383,14 +3568,14 @@ static void visdn_netlink_receive()
 					(ifi->ifi_flags & IFF_ALLMULTI) ?
 				 		"NT": "TE");
 
-				visdn_add_interface(ifname);
+				//visdn_intf_now_up(ifname);XXX
 			} else {
 				visdn_debug("Netlink msg: %s DOWN %s\n",
 					ifname,
 					(ifi->ifi_flags & IFF_ALLMULTI) ?
 						"NT": "TE");
 
-				visdn_rem_interface(ifname);
+				//visdn_intf_now_down(ifname);XXX
 			}
 		}
 	}
@@ -3795,8 +3980,8 @@ static void visdn_q931_reject_indication(
 
 		struct visdn_interface *intf;
 
-		intf = visdn_hg_hunt(visdn_chan->huntgroup,
-							visdn_chan->intf);
+		intf = visdn_hg_hunt(visdn_chan->huntgroup, visdn_chan->intf,
+				visdn_chan->hg_first_intf);
 		if (!intf) {
 			ast_mutex_lock(&ast_chan->lock);
 			visdn_set_hangupcause_by_ies(ast_chan, ies);
@@ -3809,6 +3994,8 @@ static void visdn_q931_reject_indication(
 		visdn_request_call(ast_chan, intf,
 			visdn_chan->number, visdn_chan->options);
 
+		visdn_intf_put(intf);
+		intf = NULL;
 	} else {
 		ast_mutex_lock(&ast_chan->lock);
 		visdn_set_hangupcause_by_ies(ast_chan, ies);
@@ -5207,6 +5394,7 @@ int load_module()
 		return -1;
 	}
 
+#if 0
 	// Enum interfaces and open them
 	struct ifaddrs *ifaddrs;
 	struct ifaddrs *ifaddr;
@@ -5244,12 +5432,13 @@ int load_module()
 		if (!(ifaddr->ifa_flags & IFF_UP))
 			continue;
 
-		visdn_add_interface(ifreq.ifr_name);
+		// visdn_add_interface(ifreq.ifr_name);XXX
 
 	}
 	close(fd);
 	freeifaddrs(ifaddrs);
-
+#endif
+	
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);

@@ -58,9 +58,10 @@ struct visdn_chan {
 
 	struct ast_dsp *dsp;
 
-	struct visdn_huntgroup *huntgroup;
-
 	struct visdn_interface *intf;
+
+	struct visdn_huntgroup *huntgroup;
+	struct visdn_interface *hg_first_intf;
 };
 
 #ifndef ASTERISK_VERSION_NUM
