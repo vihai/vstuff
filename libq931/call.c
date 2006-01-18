@@ -296,8 +296,7 @@ struct q931_call *q931_call_alloc_out(
 	}
 
 	if (intf->role == LAPD_ROLE_TE) {
-		call->dlc = &intf->dlc;
-		q931_dlc_get(call->dlc);
+		call->dlc = q931_dlc_get(&intf->dlc);
 	} else
 		call->dlc = NULL;
 

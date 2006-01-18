@@ -46,9 +46,16 @@ struct q931_message
 #ifdef Q931_PRIVATE
 
 #define report_msg(msg, lvl, format, arg...)				\
-	report_dlc((msg)->dlc, (lvl),					\
-			format,						\
-			## arg)
+	do {								\
+	       	if ((msg)->dlc)						\
+			report_dlc((msg)->dlc, (lvl),			\
+				format,					\
+				## arg);				\
+		else							\
+			q931_report((lvl),				\
+				format,					\
+				## arg);				\
+	} while(0)
 
 #define report_msg_cont(msg, lvl, format, arg...)			\
 	q931_report((lvl),						\
@@ -58,6 +65,7 @@ struct q931_message
 struct q931_message *q931_msg_get(struct q931_message *msg);
 void q931_msg_put(struct q931_message *msg);
 struct q931_message *q931_msg_alloc(struct q931_dlc *dlc);
+struct q931_message *q931_msg_alloc_nodlc(void);
 
 #endif
 

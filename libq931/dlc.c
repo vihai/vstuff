@@ -44,25 +44,18 @@ void q931_dlc_put(
 
 	dlc->refcnt--;
 
-	if (dlc->refcnt == 1 &&
-	    dlc->intf->dlc_autorelease_time) {
-		q931_start_timer_delta(
-			&dlc->autorelease_timer,
-			dlc->intf->dlc_autorelease_time * 1000000LL);
+	if (dlc->refcnt == 1) {
+		if (dlc->intf->dlc_autorelease_time) {
+			q931_start_timer_delta(
+				&dlc->autorelease_timer,
+				dlc->intf->dlc_autorelease_time * 1000000LL);
 
-		report_dlc(dlc, LOG_DEBUG, "DLC autorelease timer started\n");
-	}
-
-	if (dlc->refcnt == 0) {
-		report_dlc(dlc, LOG_DEBUG, "Releasing DLC\n");
-
-		/* Discard outgoing queue */
-		struct q931_message *msg, *n;
-		list_for_each_entry_safe(msg, n,
-				&dlc->outgoing_queue, outgoing_queue_node) {
-			list_del(&msg->outgoing_queue_node);
-			q931_msg_put(msg);
+			report_dlc(dlc, LOG_DEBUG,
+				"DLC autorelease timer started\n");
 		}
+
+	} else if (dlc->refcnt == 0) {
+		report_dlc(dlc, LOG_DEBUG, "Releasing DLC\n");
 
 		free(dlc);
 	}

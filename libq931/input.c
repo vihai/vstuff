@@ -823,7 +823,7 @@ int q931_receive(struct q931_dlc *dlc)
 	int err;
 
 	struct q931_message *msg;
-	msg = q931_msg_alloc(dlc);
+	msg = q931_msg_alloc_nodlc();
 	if (!msg) {
 		err = -EFAULT;
 		goto err_message_alloc;
@@ -867,6 +867,13 @@ int q931_receive(struct q931_dlc *dlc)
 
 		goto primitive_received;
 	}
+
+	/* DLC assignment is delayed to avoid get_dlc/put_dlc without a real
+	 * message present, otherwise the autorelease timer gets reset by
+	 * DL-RELEASE-CONFIRM primitives
+	 */
+
+	msg->dlc = q931_dlc_get(dlc);
 
 	if (msg->rawlen < sizeof(struct q931_header)) {
 		report_msg(msg, LOG_DEBUG,

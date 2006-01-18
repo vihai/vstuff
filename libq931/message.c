@@ -68,3 +68,18 @@ struct q931_message *q931_msg_alloc(
 	return msg;
 }
 
+struct q931_message *q931_msg_alloc_nodlc(void)
+{
+	struct q931_message *msg;
+
+	msg = malloc(sizeof(*msg));
+	if (!msg)
+		return NULL;
+
+	memset(msg, 0, sizeof(*msg));
+
+	msg->refcnt = 1;
+	msg->dlc = NULL;
+
+	return msg;
+}
