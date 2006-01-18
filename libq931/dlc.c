@@ -61,7 +61,7 @@ void q931_dlc_put(
 		list_for_each_entry_safe(msg, n,
 				&dlc->outgoing_queue, outgoing_queue_node) {
 			list_del(&msg->outgoing_queue_node);
-			q931_message_put(msg);
+			q931_msg_put(msg);
 		}
 
 		free(dlc);

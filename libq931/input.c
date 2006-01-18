@@ -820,12 +820,14 @@ err_malloc:
 
 int q931_receive(struct q931_dlc *dlc)
 {
-	struct q931_message *msg;
-	msg = malloc(sizeof(*msg));
-	if (!msg)
-		return -EFAULT;
+	int err;
 
-	q931_message_init(msg, dlc);
+	struct q931_message *msg;
+	msg = q931_msg_alloc(dlc);
+	if (!msg) {
+		err = -EFAULT;
+		goto err_message_alloc;
+	}
 
 	struct msghdr skmsg;
 	struct sockaddr_lapd sal;
@@ -859,10 +861,11 @@ int q931_receive(struct q931_dlc *dlc)
 
 			list_del(&dlc->intf_node);
 
-			return Q931_RECEIVE_REFRESH;
+			err = Q931_RECEIVE_REFRESH;
+			goto err_recvmsg_error;
 		}
 
-		return Q931_RECEIVE_OK;
+		goto primitive_received;
 	}
 
 	if (msg->rawlen < sizeof(struct q931_header)) {
@@ -870,7 +873,8 @@ int q931_receive(struct q931_dlc *dlc)
 			"Message too short (%d bytes), ignoring\n",
 			msg->rawlen);
 
-		return -EBADMSG;
+		err = -EBADMSG;
+		goto err_msg_too_short;
 	}
 
 	struct q931_header *hdr = (struct q931_header *)msg->raw;
@@ -881,14 +885,16 @@ int q931_receive(struct q931_dlc *dlc)
 			" ignoring message\n",
 			hdr->protocol_discriminator);
 
-		return -EBADMSG;
+		err = -EBADMSG;
+		goto err_msg_not_q931;
 	}
 
 	if (hdr->spare1 != 0) {
 		report_msg(msg, LOG_DEBUG,
 			"Call reference size invalid, ignoring frame\n");
 
-		return -EBADMSG;
+		err = -EBADMSG;
+		goto err_msg_callref_invalid;
 	}
 
 	if (hdr->call_reference_len > 4) {
@@ -897,7 +903,8 @@ int q931_receive(struct q931_dlc *dlc)
 			" and not supported (max 4), ignoring frame\n",
 			hdr->call_reference_len);
 
-		return -EBADMSG;
+		err = -EBADMSG;
+		goto err_msg_callref_too_big;
 	}
 
 	/* Decode the call reference. If the call reference length is zero
@@ -955,7 +962,7 @@ int q931_receive(struct q931_dlc *dlc)
 		q931_dispatch_global_message(
 			&dlc->intf->global_call, msg);
 
-		return Q931_RECEIVE_OK;
+		goto global_dispatched;
 	}
 
 	struct q931_call *call =
@@ -968,16 +975,15 @@ int q931_receive(struct q931_dlc *dlc)
 			msg->callref);
 
 	if (!call) {
-
 		call = q931_call_alloc_in(
-			dlc->intf, dlc,
-			msg->callref,
-			skmsg.msg_flags & MSG_OOB);
+				dlc->intf, dlc,
+				msg->callref,
+				skmsg.msg_flags & MSG_OOB);
 		if (!call) {
-			report_msg(msg, LOG_ERR,
-				"Error allocating call\n");
+			report_msg(msg, LOG_ERR, "Error allocating call\n");
 
-			return -EFAULT;
+			err = -EFAULT;
+			goto err_alloc_call;
 		}
 
 		switch (msg->message_type) {
@@ -999,7 +1005,8 @@ int q931_receive(struct q931_dlc *dlc)
 			q931_call_put(call);
 			Q931_UNDECLARE_IES(ies);
 
-			return Q931_RECEIVE_OK;
+			err = Q931_RECEIVE_OK;
+			goto err_unknown_callref;
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
@@ -1010,7 +1017,8 @@ int q931_receive(struct q931_dlc *dlc)
 			q931_call_release_reference(call);
 			q931_call_put(call);
 
-			return Q931_RECEIVE_OK;
+			err = Q931_RECEIVE_OK;
+			goto err_unknown_callref;
 		break;
 
 		case Q931_MT_SETUP:
@@ -1025,7 +1033,8 @@ int q931_receive(struct q931_dlc *dlc)
 				q931_call_release_reference(call);
 				q931_call_put(call);
 
-				return Q931_RECEIVE_OK;
+				err = Q931_RECEIVE_OK;
+				goto err_unknown_callref;
 			}
 		break;
 
@@ -1055,7 +1064,8 @@ int q931_receive(struct q931_dlc *dlc)
 			q931_call_put(call);
 			Q931_UNDECLARE_IES(ies);
 
-			return Q931_RECEIVE_OK;
+			err = Q931_RECEIVE_OK;
+			goto err_unknown_callref;
 		}
 		break;
 		}
@@ -1075,7 +1085,7 @@ int q931_receive(struct q931_dlc *dlc)
 				q931_ces_dispatch_message(ces, msg);
 				q931_call_put(call);
 
-				return Q931_RECEIVE_OK;
+				goto ces_dispatched;
 			}
 		}
 	}
@@ -1084,8 +1094,23 @@ int q931_receive(struct q931_dlc *dlc)
 
 	report_msg_cont(msg, LOG_DEBUG, "\n");
 
-	q931_message_put(msg);
+ces_dispatched:
 	q931_call_put(call);
+primitive_received:
+global_dispatched:
+	q931_msg_put(msg);
 
 	return Q931_RECEIVE_OK;
+
+err_unknown_callref:
+err_alloc_call:
+err_msg_callref_too_big:
+err_msg_callref_invalid:
+err_msg_not_q931:
+err_msg_too_short:
+err_recvmsg_error:
+	q931_msg_put(msg);
+err_message_alloc:
+
+	return err;
 }

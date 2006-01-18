@@ -194,7 +194,7 @@ void q931_flush_outgoing_queue(
 
 		list_del(&msg->outgoing_queue_node);
 
-		q931_message_put(msg);
+		q931_msg_put(msg);
 	}
 }
 
@@ -270,11 +270,9 @@ static int q931_send_message(
 	assert(!call || !gc);
 
 	struct q931_message *msg;
-	msg = malloc(sizeof(*msg));
+	msg = q931_msg_alloc(dlc);
 	if (!msg)
 		return -EFAULT;
-
-	q931_message_init(msg, dlc);
 
 	if (call) {
 		msg->rawlen += q931_prepare_header(call, msg->raw, mt);
@@ -325,13 +323,13 @@ static int q931_send_message(
 			"DLC is awaiting connection: message queued\n");
 
 		list_add_tail(
-			&q931_message_get(msg)->outgoing_queue_node,
+			&q931_msg_get(msg)->outgoing_queue_node,
 			&dlc->outgoing_queue);
 	} else {
 		res = q931_send_frame(dlc, msg->raw, msg->rawlen);
 	}
 
-	q931_message_put(msg);
+	q931_msg_put(msg);
 
 	return res;
 }
@@ -364,11 +362,9 @@ int q931_call_send_message_bc(
 	assert(dlc);
 
 	struct q931_message *msg;
-	msg = malloc(sizeof(*msg));
+	msg = q931_msg_alloc(dlc);
 	if (!msg)
 		return -EFAULT;
-
-	q931_message_init(msg, dlc);
 
 	report_call(call, LOG_DEBUG, "Sending message:\n");
 	report_call(call, LOG_DEBUG, "->  message type: %s (%d)\n",

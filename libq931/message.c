@@ -21,44 +21,50 @@
 #include <libq931/logging.h>
 #include <libq931/message.h>
 
-struct q931_message *q931_message_get(
-	struct q931_message *message)
+struct q931_message *q931_msg_get(
+	struct q931_message *msg)
 {
-	message->refcnt++;
+	msg->refcnt++;
 
-	return message;
+	return msg;
 }
 
-void q931_message_put(
-	struct q931_message *message)
+void q931_msg_put(
+	struct q931_message *msg)
 {
-	assert(message);
-	assert(message->refcnt > 0);
+	assert(msg);
+	assert(msg->refcnt > 0);
 
-	message->refcnt--;
+	msg->refcnt--;
 
-	if (message->refcnt == 0) {
-		report_msg(message, LOG_DEBUG, "Releasing message\n");
+	if (msg->refcnt == 0) {
+		report_msg(msg, LOG_DEBUG, "Releasing message\n");
 
-		if (message->dlc) {
-			q931_dlc_put(message->dlc);
-			message->dlc = NULL;
+		if (msg->dlc) {
+			q931_dlc_put(msg->dlc);
+			msg->dlc = NULL;
 		}
 
-		free(message);
+		free(msg);
 	}
 }
 
-void q931_message_init(
-	struct q931_message *message,
+struct q931_message *q931_msg_alloc(
 	struct q931_dlc *dlc)
 {
-	assert(message);
+	struct q931_message *msg;
+
 	assert(dlc);
 
-	memset(message, 0, sizeof(*message));
+	msg = malloc(sizeof(*msg));
+	if (!msg)
+		return NULL;
 
-	message->refcnt = 1;
-	message->dlc = q931_dlc_get(dlc);
+	memset(msg, 0, sizeof(*msg));
+
+	msg->refcnt = 1;
+	msg->dlc = q931_dlc_get(dlc);
+
+	return msg;
 }
 
