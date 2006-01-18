@@ -2914,12 +2914,24 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
 		q931_ies_add_put(&ies, &pi->ie);
 
-		if (visdn_chan->q931_call->state == N1_CALL_INITIATED)
+		switch(visdn_chan->q931_call->state) {
+		case N1_CALL_INITIATED:
 			q931_send_primitive(visdn_chan->q931_call,
-				Q931_CCB_PROCEEDING_REQUEST, NULL);
+				Q931_CCB_PROCEEDING_REQUEST, &ies);
+		break;
 
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_ALERTING_REQUEST, &ies);
+		case N2_OVERLAP_SENDING:
+		case N3_OUTGOING_CALL_PROCEEDING:
+		case U6_CALL_PRESENT:
+		case U9_INCOMING_CALL_PROCEEDING:
+		case U25_OVERLAP_RECEIVING:
+			q931_send_primitive(visdn_chan->q931_call,
+				Q931_CCB_ALERTING_REQUEST, &ies);
+		break;
+
+		default:
+		break;
+		}
 
 		if (!visdn_chan->inband_info)
 			tone = ast_get_indication_tone(ast_chan->zone, "ring");

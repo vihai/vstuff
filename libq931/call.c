@@ -6061,7 +6061,8 @@ void q931_call_dl_release_indication(struct q931_call *call)
 			cause->value = Q931_IE_C_CV_DESTINATION_OUT_OF_ORDER;
 			q931_ies_add_put(&ies, &cause->ie);
 
-			q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION, &ies);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &ies);
 
 			Q931_UNDECLARE_IES(ies);
 		} else {

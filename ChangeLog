@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-18 16:23:51 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-472
+
+    Summary:
+      Do not send ALERTING-REQUEST in wrong state
+    Revision:
+      isdn--devel--0.1--patch-472
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c libq931/call.c
+
+
 2006-01-18 14:28:24 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-471
 
     Summary:
