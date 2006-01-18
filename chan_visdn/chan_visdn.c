@@ -946,7 +946,9 @@ static struct visdn_interface *visdn_intf_alloc(void)
 static struct visdn_interface *visdn_intf_get(
 	struct visdn_interface *intf)
 {
+	ast_mutex_lock(&usecnt_lock);
 	intf->refcnt++;
+	ast_mutex_unlock(&usecnt_lock);
 
 	return intf;
 }
@@ -954,11 +956,13 @@ static struct visdn_interface *visdn_intf_get(
 static void visdn_intf_put(
 	struct visdn_interface *intf)
 {
+	ast_mutex_lock(&usecnt_lock);
 	intf->refcnt--;
 
 	if (!intf->refcnt) {
 		free(intf);
 	}
+	ast_mutex_unlock(&usecnt_lock);
 }
 
 
@@ -1151,7 +1155,9 @@ static struct visdn_huntgroup *visdn_hg_alloc(void)
 static struct visdn_huntgroup *visdn_hg_get(
 	struct visdn_huntgroup *hg)
 {
+	ast_mutex_lock(&usecnt_lock);
 	hg->refcnt++;
+	ast_mutex_unlock(&usecnt_lock);
 
 	return hg;
 }
@@ -1159,6 +1165,7 @@ static struct visdn_huntgroup *visdn_hg_get(
 static void visdn_hg_put(
 	struct visdn_huntgroup *hg)
 {
+	ast_mutex_lock(&usecnt_lock);
 	hg->refcnt--;
 
 	if (!hg->refcnt) {
@@ -1166,6 +1173,7 @@ static void visdn_hg_put(
 		
 		free(hg);
 	}
+	ast_mutex_unlock(&usecnt_lock);
 }
 
 static struct visdn_huntgroup *visdn_hg_get_by_name(const char *name)
