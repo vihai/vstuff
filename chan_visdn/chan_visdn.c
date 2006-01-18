@@ -946,6 +946,9 @@ static struct visdn_interface *visdn_intf_alloc(void)
 static struct visdn_interface *visdn_intf_get(
 	struct visdn_interface *intf)
 {
+	assert(intf);
+	assert(intf->refcnt > 0);
+	
 	ast_mutex_lock(&usecnt_lock);
 	intf->refcnt++;
 	ast_mutex_unlock(&usecnt_lock);
@@ -956,6 +959,9 @@ static struct visdn_interface *visdn_intf_get(
 static void visdn_intf_put(
 	struct visdn_interface *intf)
 {
+	assert(intf);
+	assert(intf->refcnt > 0);
+
 	ast_mutex_lock(&usecnt_lock);
 	intf->refcnt--;
 
@@ -1155,6 +1161,9 @@ static struct visdn_huntgroup *visdn_hg_alloc(void)
 static struct visdn_huntgroup *visdn_hg_get(
 	struct visdn_huntgroup *hg)
 {
+	assert(hg);
+	assert(hg->refcnt > 0);
+
 	ast_mutex_lock(&usecnt_lock);
 	hg->refcnt++;
 	ast_mutex_unlock(&usecnt_lock);
@@ -1165,6 +1174,9 @@ static struct visdn_huntgroup *visdn_hg_get(
 static void visdn_hg_put(
 	struct visdn_huntgroup *hg)
 {
+	assert(hg);
+	assert(hg->refcnt > 0);
+
 	ast_mutex_lock(&usecnt_lock);
 	hg->refcnt--;
 
@@ -2494,7 +2506,6 @@ bc_failure:;
 	q931_call_put(q931_call);
 err_call_alloc:
 
-
 	Q931_UNDECLARE_IES(ies);
 
 	return err;
@@ -3166,11 +3177,14 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	FUNC_DEBUG("%s", ast_chan->name);
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-	struct q931_call *q931_call = visdn_chan->q931_call;
+
+	ast_setstate(ast_chan, AST_STATE_DOWN);
 
 	ast_mutex_lock(&visdn.lock);
-	if (q931_call && q931_call->intf) {
-		q931_call->pvt = NULL;
+	if (visdn_chan->q931_call &&
+	    visdn_chan->q931_call->intf) {
+
+		struct q931_call *q931_call = visdn_chan->q931_call;
 
 		Q931_DECLARE_IES(ies);
 
@@ -3240,11 +3254,14 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		break;
 		}
 
-		q931_call_put(q931_call);
-
 		Q931_UNDECLARE_IES(ies);
 	}
 
+	if (visdn_chan->q931_call) {
+		visdn_chan->q931_call->pvt = NULL;
+		q931_call_put(visdn_chan->q931_call);
+		visdn_chan->q931_call = NULL;
+	}
 	ast_mutex_unlock(&visdn.lock);
 
 	ast_mutex_lock(&ast_chan->lock);
@@ -3260,49 +3277,42 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 	close(ast_chan->fds[0]);
 
-	if (visdn_chan) {
-		if (visdn_chan->hg_first_intf) {
-			visdn_intf_put(visdn_chan->hg_first_intf);
-			visdn_chan->hg_first_intf = NULL;
-		}
-
-		if (visdn_chan->intf) {
-			visdn_intf_put(visdn_chan->intf);
-			visdn_chan->intf = NULL;
-		}
-
-		if (visdn_chan->huntgroup) {
-			visdn_hg_put(visdn_chan->huntgroup);
-			visdn_chan->huntgroup = NULL;
-		}
-
-		visdn_chan->q931_call = NULL;
-
-		if (visdn_chan->channel_fd >= 0) {
-			// Disconnect the softport since we cannot rely on
-			// libq931 (see above)
-			if (ioctl(visdn_chan->channel_fd,
-					VISDN_IOC_DISCONNECT_PATH, NULL) < 0) {
-				ast_log(LOG_ERROR,
-					"ioctl(VISDN_IOC_DISCONNECT): %s\n",
-					strerror(errno));
-			}
-
-			if (close(visdn_chan->channel_fd) < 0) {
-				ast_log(LOG_ERROR,
-					"close(visdn_chan->channel_fd): %s\n",
-					strerror(errno));
-			}
-
-			visdn_chan->channel_fd = -1;
-		}
-
-		visdn_destroy(visdn_chan);
-
-		ast_chan->tech_pvt = NULL;
+	if (visdn_chan->hg_first_intf) {
+		visdn_intf_put(visdn_chan->hg_first_intf);
+		visdn_chan->hg_first_intf = NULL;
 	}
 
-	ast_setstate(ast_chan, AST_STATE_DOWN);
+	if (visdn_chan->intf) {
+		visdn_intf_put(visdn_chan->intf);
+		visdn_chan->intf = NULL;
+	}
+
+	if (visdn_chan->huntgroup) {
+		visdn_hg_put(visdn_chan->huntgroup);
+		visdn_chan->huntgroup = NULL;
+	}
+
+	if (visdn_chan->channel_fd >= 0) {
+		// Disconnect the softport since we cannot rely on
+		// libq931 (see above)
+		if (ioctl(visdn_chan->channel_fd,
+				VISDN_IOC_DISCONNECT_PATH, NULL) < 0) {
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_IOC_DISCONNECT): %s\n",
+				strerror(errno));
+		}
+
+		if (close(visdn_chan->channel_fd) < 0) {
+			ast_log(LOG_ERROR,
+				"close(visdn_chan->channel_fd): %s\n",
+				strerror(errno));
+		}
+
+		visdn_chan->channel_fd = -1;
+	}
+
+	visdn_destroy(visdn_chan);
+	ast_chan->tech_pvt = NULL;
 
 	ast_mutex_unlock(&ast_chan->lock);
 
@@ -4123,7 +4133,7 @@ static void visdn_q931_resume_indication(
 	struct visdn_chan *visdn_chan = to_visdn_chan(suspended_call->ast_chan);
 
 	q931_call->pvt = suspended_call->ast_chan;
-	visdn_chan->q931_call = q931_call;
+	visdn_chan->q931_call = q931_call_get(q931_call);
 	visdn_chan->suspended_call = NULL;
 
 	if (ast_bridged_channel(suspended_call->ast_chan)) {

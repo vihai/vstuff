@@ -191,6 +191,8 @@ void q931_call_release_reference(struct q931_call *call);
 
 #ifdef Q931_PRIVATE
 
+struct q931_call *q931_call_alloc(struct q931_interface *intf);
+
 #define report_call(call, lvl, format, arg...)				\
 	q931_report((lvl),						\
 		"%s:CALL[%u.%c]: "					\

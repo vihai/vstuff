@@ -982,15 +982,36 @@ int q931_receive(struct q931_dlc *dlc)
 			msg->callref);
 
 	if (!call) {
-		call = q931_call_alloc_in(
-				dlc->intf, dlc,
-				msg->callref,
-				skmsg.msg_flags & MSG_OOB);
-		if (!call) {
-			report_msg(msg, LOG_ERR, "Error allocating call\n");
+		if (msg->callref_direction ==
+				Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE) {
 
-			err = -EFAULT;
-			goto err_alloc_call;
+			call = q931_call_alloc_in(
+					dlc->intf, dlc,
+					msg->callref,
+					skmsg.msg_flags & MSG_OOB);
+			if (!call) {
+				report_msg(msg, LOG_ERR,
+					"Error allocating call\n");
+
+				err = -EFAULT;
+				goto err_alloc_call;
+			}
+
+		} else {
+			call = q931_call_alloc(dlc->intf);
+			if (!call) {
+				report_msg(msg, LOG_ERR,
+					"Error allocating call\n");
+				err = -EFAULT;
+				goto err_alloc_call;
+			}
+
+			call->direction = Q931_CALL_DIRECTION_OUTBOUND;
+			call->call_reference = msg->callref;
+
+			call->dlc = q931_dlc_get(dlc);
+
+			q931_intf_add_call(dlc->intf, q931_call_get(call));
 		}
 
 		switch (msg->message_type) {
@@ -1008,8 +1029,6 @@ int q931_receive(struct q931_dlc *dlc)
 
 			q931_call_send_release_complete(call, &ies);
 
-			q931_call_release_reference(call);
-			q931_call_put(call);
 			Q931_UNDECLARE_IES(ies);
 
 			err = Q931_RECEIVE_OK;
@@ -1020,9 +1039,6 @@ int q931_receive(struct q931_dlc *dlc)
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE COMPLETE for an unknown"
 				" callref, ignoring frame\n");
-
-			q931_call_release_reference(call);
-			q931_call_put(call);
 
 			err = Q931_RECEIVE_OK;
 			goto err_unknown_callref;
@@ -1036,9 +1052,6 @@ int q931_receive(struct q931_dlc *dlc)
 				report_call(call, LOG_DEBUG,
 					"Received a SETUP/RESUME for an unknown"
 					" outbound callref, ignoring frame\n");
-
-				q931_call_release_reference(call);
-				q931_call_put(call);
 
 				err = Q931_RECEIVE_OK;
 				goto err_unknown_callref;
@@ -1067,8 +1080,6 @@ int q931_receive(struct q931_dlc *dlc)
 			else
 				q931_call_set_state(call, U19_RELEASE_REQUEST);
 
-			q931_call_release_reference(call);
-			q931_call_put(call);
 			Q931_UNDECLARE_IES(ies);
 
 			err = Q931_RECEIVE_OK;
@@ -1090,7 +1101,6 @@ int q931_receive(struct q931_dlc *dlc)
 				break;
 			} else {
 				q931_ces_dispatch_message(ces, msg);
-				q931_call_put(call);
 
 				goto ces_dispatched;
 			}
@@ -1110,6 +1120,8 @@ global_dispatched:
 	return Q931_RECEIVE_OK;
 
 err_unknown_callref:
+	q931_call_release_reference(call);
+	q931_call_put(call);
 err_alloc_call:
 err_msg_callref_too_big:
 err_msg_callref_invalid:
