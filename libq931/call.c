@@ -6068,15 +6068,7 @@ void q931_call_dl_release_indication(struct q931_call *call)
 			q931_call_start_timer(call, T309);
 
 			if (connect(call->dlc->socket, NULL, 0) < 0) {
-				if (errno == ECONNRESET) {
-					q931_dl_release_indication(call->dlc);
-				} else if (errno == EALREADY) {
-					q931_dl_establish_indication(call->dlc);
-				} else if (errno == ENOTCONN) {
-					q931_dl_release_confirm(call->dlc);
-				} else if (errno == EISCONN) {
-					q931_dl_establish_confirm(call->dlc);
-				} else if (errno != EAGAIN) {
+				if (errno != EAGAIN) {
 					report_call(call, LOG_ERR,
 						"connect: %s\n",
 						strerror(errno));
@@ -6134,17 +6126,19 @@ void q931_call_dl_release_indication(struct q931_call *call)
 			cause->value = Q931_IE_C_CV_NETWORK_OUT_OF_ORDER;
 			q931_ies_add_put(&ies, &cause->ie);
 
-			q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION, &ies);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &ies);
 
 			Q931_UNDECLARE_IES(ies);
 		} else {
 			q931_call_start_timer(call, T309);
 
 			if (connect(call->dlc->socket, NULL, 0) < 0) {
-				report_call(call, LOG_WARNING,
-					"Cannot reconnect: %s\n",
-					strerror(errno));
-				return;
+				if (errno != EAGAIN) {
+					report_call(call, LOG_WARNING,
+						"Cannot reconnect: %s\n",
+						strerror(errno));
+				}
 			}
 		}
 	break;

@@ -135,18 +135,8 @@ int q931_send_frame(struct q931_dlc *dlc, void *frame, int size)
 	iov.iov_len = size;
 
 	if (sendmsg(dlc->socket, &msghdr, 0) < 0) {
-		if (errno == ECONNRESET) {
-			q931_dl_release_indication(dlc);
-		} else if (errno == EALREADY) {
-			q931_dl_establish_indication(dlc);
-		} else if (errno == ENOTCONN) {
-			q931_dl_release_confirm(dlc);
-		} else if (errno == EISCONN) {
-			q931_dl_establish_confirm(dlc);
-		} else {
-			report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",
-				strerror(errno));
-		}
+		report_dlc(dlc, LOG_ERR, "sendmsg error: %s\n",
+		strerror(errno));
 
 		return errno;
 	}
@@ -265,14 +255,18 @@ static int q931_send_message(
 	enum q931_message_type mt,
 	const struct q931_ies *user_ies)
 {
+	int err;
+
 	assert(dlc);
 	assert(call || gc);
 	assert(!call || !gc);
 
 	struct q931_message *msg;
 	msg = q931_msg_alloc(dlc);
-	if (!msg)
-		return -EFAULT;
+	if (!msg) {
+		err = -EFAULT;
+		goto err_msg_alloc;
+	}
 
 	if (call) {
 		msg->rawlen += q931_prepare_header(call, msg->raw, mt);
@@ -301,18 +295,12 @@ static int q931_send_message(
 		dlc->status = Q931_DLC_STATUS_AWAITING_CONNECTION;
 
 		if (connect(dlc->socket, NULL, 0) < 0) {
-			if (errno == ECONNRESET) {
-				q931_dl_release_indication(dlc);
-			} else if (errno == EALREADY) {
-				q931_dl_establish_indication(dlc);
-			} else if (errno == ENOTCONN) {
-				q931_dl_release_confirm(dlc);
-			} else if (errno == EISCONN) {
-				q931_dl_establish_confirm(dlc);
-			} else if (errno != EAGAIN) {
+			if (errno != EAGAIN) {
 				report_dlc(dlc, LOG_ERR, "connect: %s\n",
 					strerror(errno));
-				return errno;
+
+				err = errno;
+				goto err_connect;
 			}
 		}
 	}
@@ -332,6 +320,12 @@ static int q931_send_message(
 	q931_msg_put(msg);
 
 	return res;
+
+err_connect:
+	q931_msg_put(msg);
+err_msg_alloc:
+
+	return err;
 }
 
 int q931_call_send_message(
