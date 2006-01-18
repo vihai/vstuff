@@ -318,9 +318,11 @@ struct q931_call *_q931_call_get(struct q931_call *call,
 	assert(call);
 	assert(call->refcnt > 0);
 
+#if 0
 	report_call(call, LOG_DEBUG, "%s:%d GET (%d => %d)\n",
 		file, line,
 		call->refcnt, call->refcnt+1);
+#endif
 
 	call->refcnt++;
 
@@ -334,9 +336,11 @@ void _q931_call_put(struct q931_call *call,
 	assert(call);
 	assert(call->refcnt > 0);
 
+#if 0
 	report_call(call, LOG_DEBUG, "%s:%d PUT (%d => %d)\n",
 		file, line,
 		call->refcnt, call->refcnt-1);
+#endif
 
 	call->refcnt--;
 
