@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-18 12:08:33 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-469
+
+    Summary:
+      Fixed missing T301 stop
+    Revision:
+      isdn--devel--0.1--patch-469
+
+
+    modified files:
+     ChangeLog libq931/call.c
+
+
 2006-01-18 11:26:00 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-468
 
     Summary:

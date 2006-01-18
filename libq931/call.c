@@ -2390,7 +2390,7 @@ void q931_int_release_indication(
 				q931_ies_merge(&call->saved_cause,
 					ies);
 			} else {
-				q931_call_stop_timer(call, T310);
+				q931_call_stop_timer(call, T301);
 				q931_channel_release(call->channel);
 				q931_call_set_state(call, N0_NULL_STATE);
 				q931_call_release_reference(call);
@@ -3834,12 +3834,13 @@ static void q931_handle_connect(
 
 			Q931_DECLARE_IES(causes);
 
-			if (q931_channel_select_response(call, &msg->ies, &causes)) {
+			if (q931_channel_select_response(call, &msg->ies,
+								&causes)) {
 				q931_call_stop_timer(call, T303);
 				call->preselected_ces = ces;
-				q931_call_start_timer(call, T301);
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
-				q931_call_primitive1(call, Q931_CCB_SETUP_CONFIRM,
+				q931_call_primitive1(call,
+					Q931_CCB_SETUP_CONFIRM,
 					&msg->ies, Q931_SETUP_CONFIRM_OK);
 				q931_ces_connect_request(ces, &msg->ies);
 			} else {
@@ -3852,15 +3853,18 @@ static void q931_handle_connect(
 
 			Q931_DECLARE_IES(causes);
 
-			if (q931_channel_select_response(call, &msg->ies, &causes)) {
+			if (q931_channel_select_response(call, &msg->ies,
+								&causes)) {
 				q931_call_set_state(call, N8_CONNECT_REQUEST);
-				q931_call_primitive1(call, Q931_CCB_SETUP_CONFIRM,
+				q931_call_primitive1(call,
+					Q931_CCB_SETUP_CONFIRM,
 					&msg->ies, Q931_SETUP_CONFIRM_OK);
 			} else {
 				q931_call_send_release(call, &causes);
 				q931_call_start_timer(call, T308);
 				q931_call_set_state(call, N19_RELEASE_REQUEST);
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					&causes);
 			}
 
