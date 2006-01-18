@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-18 14:04:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-470
+
+    Summary:
+      Fixed a missing break in libq931
+    Revision:
+      isdn--devel--0.1--patch-470
+
+
+    modified files:
+     ChangeLog libq931/call.c
+
+
 2006-01-18 12:08:33 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-469
 
     Summary:

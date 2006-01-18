@@ -2282,7 +2282,8 @@ void q931_int_release_complete_indication(
 
 		if (list_empty(&call->ces)) {
 			if (call->disconnect_indication_sent) {
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
+				q931_call_primitive(call,
+					Q931_CCB_RELEASE_INDICATION,
 					ies);
 			}
 
@@ -3116,14 +3117,16 @@ static void q931_timer_T312(void *data)
 		}
 
 		if (!able_to_proceed) {
-				q931_call_stop_timer(call, T310);
-				q931_channel_release(call->channel);
-				q931_call_set_state(call, N0_NULL_STATE);
-				q931_call_release_reference(call);
-				q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION,
-					NULL);
+			q931_call_stop_timer(call, T310);
+			q931_channel_release(call->channel);
+			q931_call_set_state(call, N0_NULL_STATE);
+			q931_call_release_reference(call);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION,
+				NULL);
 		}
 	}
+	break;
 
 	case N22_CALL_ABORT:
 		if (list_empty(&call->ces)) {
@@ -3163,7 +3166,6 @@ static void q931_timer_T312(void *data)
 				NULL);
 		}
 	}
-
 	break;
 
 	default:
