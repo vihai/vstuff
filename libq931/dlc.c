@@ -24,9 +24,11 @@
 struct q931_dlc *q931_dlc_get(
 	struct q931_dlc *dlc)
 {
-	q931_stop_timer(&dlc->autorelease_timer);
+	if (dlc->refcnt == 1) {
+		q931_stop_timer(&dlc->autorelease_timer);
 
-	report_dlc(dlc, LOG_DEBUG, "DLC autorelease timer stopped\n");
+		report_dlc(dlc, LOG_DEBUG, "DLC autorelease timer stopped\n");
+	}
 
 	dlc->refcnt++;
 

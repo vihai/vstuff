@@ -1743,8 +1743,7 @@ void q931_setup_complete_request(
 
 		if (call->broadcast_setup) {
 			call->selected_ces = call->preselected_ces;
-			call->dlc = call->preselected_ces->dlc;
-			q931_dlc_get(call->dlc);
+			call->dlc = q931_dlc_get(call->preselected_ces->dlc);
 
 			q931_call_send_connect_acknowledge(call, user_ies);
 			q931_ces_free(call->selected_ces);

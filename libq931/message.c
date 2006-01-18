@@ -40,6 +40,11 @@ void q931_message_put(
 	if (message->refcnt == 0) {
 		report_msg(message, LOG_DEBUG, "Releasing message\n");
 
+		if (message->dlc) {
+			q931_dlc_put(message->dlc);
+			message->dlc = NULL;
+		}
+
 		free(message);
 	}
 }
