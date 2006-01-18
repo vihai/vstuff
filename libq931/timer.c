@@ -22,9 +22,11 @@
 
 void q931_init_timer(
 	struct q931_timer *timer,
+	const char *name,
 	void (*func)(void *data),
 	void *data)
 {
+	timer->name = name;
 	timer->expires = 0LL;
 	timer->func = func;
 	timer->data = data;

@@ -94,9 +94,9 @@ struct q931_ces *q931_ces_alloc(
 	ces->state = I0_NULL_STATE;
 	ces->dlc = q931_dlc_get(dlc);
 
-	q931_init_timer(&ces->T304, q931_ces_timer_T304, ces);
-	q931_init_timer(&ces->T308, q931_ces_timer_T308, ces);
-	q931_init_timer(&ces->T322, q931_ces_timer_T322, ces);
+	q931_init_timer(&ces->T304, "T304", q931_ces_timer_T304, ces);
+	q931_init_timer(&ces->T308, "T308", q931_ces_timer_T308, ces);
+	q931_init_timer(&ces->T322, "T322", q931_ces_timer_T322, ces);
 
 	report_ces(ces, LOG_DEBUG, "CES (TEI=%d) allocated for call %d\n",
 		ces->dlc->tei,

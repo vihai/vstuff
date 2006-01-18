@@ -226,24 +226,24 @@ struct q931_call *q931_call_alloc(struct q931_interface *intf)
 	q931_ies_init(&call->saved_cause);
 	q931_ies_init(&call->release_cause);
 
-	q931_init_timer(&call->T301, q931_timer_T301, call);
-	q931_init_timer(&call->T302, q931_timer_T302, call);
-	q931_init_timer(&call->T303, q931_timer_T303, call);
-	q931_init_timer(&call->T304, q931_timer_T304, call);
-	q931_init_timer(&call->T305, q931_timer_T305, call);
-	q931_init_timer(&call->T306, q931_timer_T306, call);
-	q931_init_timer(&call->T308, q931_timer_T308, call);
-	q931_init_timer(&call->T309, q931_timer_T309, call);
-	q931_init_timer(&call->T310, q931_timer_T310, call);
-	q931_init_timer(&call->T312, q931_timer_T312, call);
-	q931_init_timer(&call->T313, q931_timer_T313, call);
-	q931_init_timer(&call->T314, q931_timer_T314, call);
-	q931_init_timer(&call->T316, q931_timer_T316, call);
-	q931_init_timer(&call->T318, q931_timer_T318, call);
-	q931_init_timer(&call->T319, q931_timer_T319, call);
-	q931_init_timer(&call->T320, q931_timer_T320, call);
-	q931_init_timer(&call->T321, q931_timer_T321, call);
-	q931_init_timer(&call->T322, q931_timer_T322, call);
+	q931_init_timer(&call->T301, "T301", q931_timer_T301, call);
+	q931_init_timer(&call->T302, "T302", q931_timer_T302, call);
+	q931_init_timer(&call->T303, "T303", q931_timer_T303, call);
+	q931_init_timer(&call->T304, "T304", q931_timer_T304, call);
+	q931_init_timer(&call->T305, "T305", q931_timer_T305, call);
+	q931_init_timer(&call->T306, "T306", q931_timer_T306, call);
+	q931_init_timer(&call->T308, "T308", q931_timer_T308, call);
+	q931_init_timer(&call->T309, "T309", q931_timer_T309, call);
+	q931_init_timer(&call->T310, "T310", q931_timer_T310, call);
+	q931_init_timer(&call->T312, "T312", q931_timer_T312, call);
+	q931_init_timer(&call->T313, "T313", q931_timer_T313, call);
+	q931_init_timer(&call->T314, "T314", q931_timer_T314, call);
+	q931_init_timer(&call->T316, "T316", q931_timer_T316, call);
+	q931_init_timer(&call->T318, "T318", q931_timer_T318, call);
+	q931_init_timer(&call->T319, "T319", q931_timer_T319, call);
+	q931_init_timer(&call->T320, "T320", q931_timer_T320, call);
+	q931_init_timer(&call->T321, "T321", q931_timer_T321, call);
+	q931_init_timer(&call->T322, "T322", q931_timer_T322, call);
 
 	return call;
 }
@@ -351,6 +351,17 @@ void q931_call_release_reference(
 	q931_call_put(call);
 }
 
+void _q931_call_restart_timer(
+	struct q931_call *call,
+	struct q931_timer *timer,
+	int delta)
+{
+	if (!q931_timer_pending(timer))
+		q931_call_get(call);
+
+	q931_start_timer_delta(timer, delta);
+}
+
 void _q931_call_start_timer(
 	struct q931_call *call,
 	struct q931_timer *timer,
@@ -359,9 +370,7 @@ void _q931_call_start_timer(
 	if (!q931_timer_pending(timer)) {
 		q931_call_get(call);
 
-		q931_start_timer_delta(
-			timer,
-			delta);
+		q931_start_timer_delta(timer, delta);
 	}
 }
 
@@ -1284,7 +1293,8 @@ void q931_info_request(
 	break;
 
 	case N6_CALL_PRESENT:
-		// Save event until completion of a transition??? FIXME TODO XXX
+		// Save event until completion of a transition???
+		// FIXME TODO XXX
 	break;
 
 	case N7_CALL_RECEIVED:
@@ -1308,7 +1318,7 @@ void q931_info_request(
 		q931_call_send_information(call, ies);
 
 		if (q931_call_timer_running(call, T304))
-			q931_call_start_timer(call, T304);
+			q931_call_restart_timer(call, T304);
 	break;
 
 	case U3_OUTGOING_CALL_PROCEEDING:
@@ -2661,7 +2671,7 @@ static void q931_timer_T303(void *data)
 					q931_call_send_setup_bc(call,
 						&call->setup_ies);
 					q931_call_start_timer(call, T303);
-					q931_call_start_timer(call, T312);
+					q931_call_restart_timer(call, T312);
 				}
 			} else {
 				q931_call_send_setup(call,
@@ -5576,7 +5586,8 @@ static void q931_handle_info(
 			if (q931_decode_information_elements(call, msg) < 0)
 				break;
 
-			q931_call_primitive(call, Q931_CCB_INFO_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_INFO_INDICATION, &msg->ies);
 		}
 	break;
 
@@ -5601,7 +5612,7 @@ static void q931_handle_info(
 		if (q931_decode_information_elements(call, msg) < 0)
 			break;
 
-		q931_call_start_timer(call, T302);
+		q931_call_restart_timer(call, T302);
 		q931_call_primitive(call, Q931_CCB_INFO_INDICATION, &msg->ies);
 	break;
 

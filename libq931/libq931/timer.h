@@ -21,6 +21,8 @@ struct q931_timer
 {
 	struct list_head node;
 
+	const char *name;
+	
 	int pending;
 
 	longtime_t expires;
@@ -35,6 +37,7 @@ extern longtime_t q931_run_timers();
 
 extern void q931_init_timer(
 	struct q931_timer *timer,
+	const char *name,
 	void (*func)(void *data),
 	void *data);
 

@@ -86,7 +86,8 @@ void q931_dlc_init(
 
 	INIT_LIST_HEAD(&dlc->intf_node);
 
-	q931_init_timer(&dlc->autorelease_timer, q931_dlc_autorelease, dlc);
+	q931_init_timer(&dlc->autorelease_timer, "dlc-autorelease",
+			q931_dlc_autorelease, dlc);
 
 	dlc->socket = socket;
 	dlc->intf = intf;

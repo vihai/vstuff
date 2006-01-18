@@ -224,6 +224,17 @@ void _q931_call_start_timer(
 			#timer);				\
 	} while(0)
 
+#define q931_call_restart_timer(call, timer)			\
+	do {							\
+		_q931_call_restart_timer(call,			\
+			&(call)->timer,				\
+			(call)->intf->timer);			\
+		report_call(call, LOG_DEBUG,			\
+			"%s:%d Timer %s restarted\n",		\
+			__FILE__,__LINE__,			\
+			#timer);				\
+	} while(0)
+
 void _q931_call_stop_timer(
 	struct q931_call *call,
 	struct q931_timer *timer);
