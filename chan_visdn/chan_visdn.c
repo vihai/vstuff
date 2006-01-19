@@ -10,7 +10,7 @@
  *
  */
 
-#include <asterisk/astmm.h>
+//#include <asterisk/astmm.h>
 
 #include <stdio.h>
 #include <string.h>
