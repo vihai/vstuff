@@ -10,6 +10,8 @@
  *
  */
 
+#include <asterisk/astmm.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -3633,6 +3635,8 @@ static void visdn_ccb_q931_receive()
 		ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
 
 		q931_ccb_dispatch(msg);
+
+		free(msg);
 	}
 }
 
@@ -5288,6 +5292,8 @@ static void visdn_q931_ccb_receive()
 			ast_log(LOG_WARNING, "Unexpected primitive %d\n",
 				msg->primitive);
 		}
+
+		free(msg);
 	}
 }
 
