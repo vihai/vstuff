@@ -3294,6 +3294,11 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->huntgroup = NULL;
 	}
 
+	if (visdn_chan->dsp) {
+		ast_dsp_free(visdn_chan->dsp);
+		visdn_chan->dsp = NULL;
+	}
+	
 	if (visdn_chan->channel_fd >= 0) {
 		// Disconnect the softport since we cannot rely on
 		// libq931 (see above)
