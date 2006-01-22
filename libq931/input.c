@@ -434,7 +434,8 @@ __u8 q931_decode_shift_ie(
 
 		report_msg_cont(msg, LOG_DEBUG,
 			"<-  Non-Locked Switch from codeset %u to codeset %u\n",
-			ds->active_codeset);
+			ds->active_codeset,
+			codeset);
 	}
 
 	assert(codeset < ARRAY_SIZE(ds->previous_ie_id));
@@ -951,7 +952,7 @@ int q931_receive(struct q931_dlc *dlc)
 	report_msg(msg, LOG_DEBUG, "Received message:\n");
 
 	report_msg_cont(msg, LOG_DEBUG,
-		"<-  call reference = %lu.%c (len %d)\n",
+		"<-  call reference = %d.%c (len %d)\n",
 		msg->callref,
 		msg->callref_direction ? 'O' : 'I',
 		msg->callref_len);

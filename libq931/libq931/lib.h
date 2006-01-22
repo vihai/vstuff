@@ -49,7 +49,10 @@ void q931_leave();
 extern struct list_head q931_timers;
 extern struct list_head q931_interfaces;
 
-extern void (*q931_report)(int level, const char *format, ...);
+extern void (*q931_report)(int level, const char *format, ...)
+	__attribute__ ((format (printf, 2, 3)));
+
+
 extern void (*q931_timer_update)(void);
 extern void (*q931_queue_primitive)(
 	struct q931_call *call,

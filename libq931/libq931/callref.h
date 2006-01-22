@@ -19,7 +19,7 @@ enum q931_callref_flag
 	Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE = 0x1,
 };
 
-typedef signed long q931_callref;
+typedef int q931_callref;
 
 void q931_make_callref(
 	void *void_buf,

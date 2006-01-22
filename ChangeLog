@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-22 20:18:51 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-486
+
+    Summary:
+      Added GCC printf format checking to libq931
+    Revision:
+      isdn--devel--0.1--patch-486
+
+
+    modified files:
+     ChangeLog libq931/input.c libq931/libq931/callref.h
+     libq931/libq931/lib.h
+
+
 2006-01-22 19:29:31 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-485
 
     Summary:
