@@ -174,7 +174,14 @@ void lapd_mdl_primitive(
 	pri->type = type;
 	pri->param = param;
 
-	sk_add_backlog(&lapd_sock->sk, skb);
+	lapd_bh_lock_sock(lapd_sock);
+	if (sock_owned_by_user(&lapd_sock->sk)) {
+		sk_add_backlog(&lapd_sock->sk, skb);
+	} else {
+		if (!lapd_process_frame(lapd_sock, skb))
+			kfree_skb(skb);
+	}
+	lapd_bh_unlock_sock(lapd_sock);
 }
 
 static void lapd_clear_exception_conditions_procedure(
