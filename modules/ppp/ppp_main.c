@@ -42,6 +42,8 @@ static struct class_device vppp_control_class_dev;
 
 static struct visdn_port vppp_port;
 
+static u8 ppphdr[] = { 0xff, 0x03 };
+
 static int vppp_ppp_start_xmit(
 	struct ppp_channel *ppp_chan,
 	struct sk_buff *skb)
@@ -54,6 +56,8 @@ static int vppp_ppp_start_xmit(
 
 	if (test_bit(VPPP_CHAN_STATUS_QUEUE_STOPPED, &chan->status))
 		return 0;
+
+	memcpy(skb_put(skb, sizeof(ppphdr)), ppphdr, sizeof(ppphdr));
 
 	res = visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
 	switch(res) {
@@ -102,7 +106,7 @@ static int vppp_chan_open(struct visdn_chan *visdn_chan)
 	chan->ppp_chan.private = chan;
 	chan->ppp_chan.ops = &vppp_ppp_ops;
 	chan->ppp_chan.mtu = visdn_find_lowest_mtu(&visdn_chan->leg_a);
-	chan->ppp_chan.hdrlen = 2;
+	chan->ppp_chan.hdrlen = sizeof(ppphdr);
 
 	err = ppp_register_channel(&chan->ppp_chan);
 	if (err < 0)
@@ -135,6 +139,9 @@ static int vppp_chan_frame_xmit(
 	unsigned long flags;
 
 	vppp_debug(3, "vppp_chan_frame_xmit()\n");
+
+	/* Throw away address and control bytes */
+	skb_pull(skb, 2);
 
 	if (irqs_disabled()) {
 		spin_lock_irqsave(&chan->rx_queue_lock, flags);

@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-22 19:29:31 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-485
+
+    Summary:
+      PPP frames were missing address and control bytes
+    Revision:
+      isdn--devel--0.1--patch-485
+
+
+    modified files:
+     ChangeLog modules/ppp/ppp_main.c
+
+
 2006-01-22 16:14:45 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-484
 
     Summary:
