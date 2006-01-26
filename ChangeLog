@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-26 19:20:13 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-488
+
+    Summary:
+      T1, T3 timers show function now correctly uses HZ
+    Revision:
+      isdn--devel--0.1--patch-488
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/st_port.c modules/hfc-pci/st_port.c
+
+
 2006-01-26 19:08:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-487
 
     Summary:

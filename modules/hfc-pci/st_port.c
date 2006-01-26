@@ -149,7 +149,8 @@ static ssize_t hfc_show_timer_t1(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", port->timer_t1_value);
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			port->timer_t1_value * 1000 / HZ);
 }
 
 static ssize_t hfc_store_timer_t1(
@@ -185,7 +186,8 @@ static ssize_t hfc_show_timer_t3(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", port->timer_t3_value);
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			port->timer_t3_value * 1000 / HZ);
 }
 
 static ssize_t hfc_store_timer_t3(
