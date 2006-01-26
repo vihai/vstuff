@@ -196,7 +196,8 @@ static ssize_t hfc_show_timer_t1(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", port->timer_t1_value);
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			port->timer_t1_value * 1000 / HZ);
 }
 
 static ssize_t hfc_store_timer_t1(
@@ -232,7 +233,8 @@ static ssize_t hfc_show_timer_t3(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", port->timer_t3_value);
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			port->timer_t3_value * 1000 /HZ);
 }
 
 static ssize_t hfc_store_timer_t3(
@@ -515,7 +517,8 @@ static void hfc_st_port_state_change_nt(
 	case 3:
 		visdn_port_activated(&port->visdn_port);
 
-		schedule_delayed_work(&port->fifo_activation_work, 50 * HZ / 1000);
+		schedule_delayed_work(&port->fifo_activation_work,
+							50 * HZ / 1000);
 	break;
 
 	case 4:
@@ -570,7 +573,8 @@ static void hfc_st_port_state_change_te(
 	case 7:
 		visdn_port_activated(&port->visdn_port);
 
-		schedule_delayed_work(&port->fifo_activation_work, 50 * HZ / 1000);
+		schedule_delayed_work(&port->fifo_activation_work,
+							50 * HZ / 1000);
 
 		if (old_state == 6 || old_state == 8)
 			visdn_port_error_indication(&port->visdn_port);
@@ -632,14 +636,17 @@ static void hfc_st_port_state_change_work(void *data)
 
 			port->rechecking_f7_f6 = TRUE;
 
-			schedule_delayed_work(&port->state_change_work, 1 * HZ / 1000);
+			schedule_delayed_work(&port->state_change_work,
+								1 * HZ / 1000);
 		} else {
 			if (port->rechecking_f7_f6 && new_state != 3)
-				hfc_st_port_state_change_te(port, 6, port->l1_state);
+				hfc_st_port_state_change_te(port, 6,
+								port->l1_state);
 
 			port->rechecking_f7_f6 = FALSE;
 
-			hfc_st_port_state_change_te(port, port->l1_state, new_state);
+			hfc_st_port_state_change_te(port, port->l1_state,
+								new_state);
 		}
 	}
 
