@@ -25,6 +25,18 @@
 #include "card_inline.h"
 #include "st_port.h"
 
+static int sanprintf(char *buf, int bufsize, const char *fmt, ...)
+{
+	int len = strlen(buf);
+	va_list ap;
+
+	va_start(ap, fmt);
+	len = vsnprintf(buf + len, bufsize - len, fmt, ap);
+	va_end(ap);
+
+	return len;
+}
+
 static ssize_t hfc_show_fifo_state(
 	struct device *device,
 	DEVICE_ATTR_COMPAT
@@ -33,11 +45,13 @@ static ssize_t hfc_show_fifo_state(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 	int i;
-	int len = 0;
 
-	len += snprintf(buf + len, PAGE_SIZE - len,
+	*buf = '\0';
+
+	sanprintf(buf, PAGE_SIZE,
 		"       Receive                   Transmit\n"
-		"Fifo#  F1 F2   Z1   Z2 Used      F1 F2   Z1   Z2 Used Connected\n");
+		"Fifo#  F1 F2   Z1   Z2 Used      F1 F2   Z1   Z2 Used"
+		" Connected\n");
 
 	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
 		struct hfc_fifo *fifo_rx = &card->st_port.chans[i].rx_fifo;
@@ -46,7 +60,7 @@ static ssize_t hfc_show_fifo_state(
 		if (!card->st_port.chans[i].has_real_fifo)
 			continue;
 
-		len += snprintf(buf + len, PAGE_SIZE - len,
+		sanprintf(buf, PAGE_SIZE,
 			"%2d     %02x %02x %04x %04x %4d %c%c%c"
 			"        %02x %02x %04x %04x %4d %c%c%c",
 			fifo_rx->id,
@@ -67,18 +81,18 @@ static ssize_t hfc_show_fifo_state(
 			fifo_tx->enabled ? 'E' : ' ',
 			hfc_fifo_is_running(fifo_tx) ? 'R' : ' ');
 
-		len += snprintf(buf + len, PAGE_SIZE - len,
+		sanprintf(buf, PAGE_SIZE,
 			" st:%s",
 			card->st_port.chans[i].visdn_chan.name);
 
-		len += snprintf(buf + len, PAGE_SIZE - len,
+		sanprintf(buf, PAGE_SIZE,
 			" st:%s",
 			card->st_port.chans[i].visdn_chan.name);
 
-		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
+		sanprintf(buf, PAGE_SIZE, "\n");
 	}
 
-	return len;
+	return strlen(buf);
 }
 
 static DEVICE_ATTR(fifo_state, S_IRUGO,

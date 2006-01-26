@@ -73,6 +73,18 @@ static VISDN_PORT_ATTR(master, S_IRUGO | S_IWUSR,
 
 //----------------------------------------------------------------------------
 
+static int sanprintf(char *buf, int bufsize, const char *fmt, ...)
+{
+	int len = strlen(buf);
+	va_list ap;
+
+	va_start(ap, fmt);
+	len = vsnprintf(buf + len, bufsize - len, fmt, ap);
+	va_end(ap);
+
+	return len;
+}
+
 static ssize_t hfc_show_slots_state(
 	struct visdn_port *visdn_port,
 	struct visdn_port_attribute *attr,
@@ -81,9 +93,9 @@ static ssize_t hfc_show_slots_state(
 	struct hfc_pcm_port *port = to_pcm_port(visdn_port);
 	struct hfc_card *card = port->card;
 
-	int len = 0;
+	*buf = '\0';
 
-	len += snprintf(buf + len, PAGE_SIZE - len,
+	sanprintf(buf, PAGE_SIZE,
 		"Slot    Chan\n");
 
 	hfc_card_lock(card);
@@ -125,7 +137,7 @@ static ssize_t hfc_show_slots_state(
 
 	hfc_card_unlock(card);
 
-	return len;
+	return strlen(buf);
 
 }
 

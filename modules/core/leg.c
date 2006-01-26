@@ -211,6 +211,18 @@ static VISDN_LEG_ATTR(framing, S_IRUGO | S_IWUSR,
 
 //----------------------------------------------------------------------------
 
+int sanprintf(char *buf, int bufsize, const char *fmt, ...)
+{
+	int len = strlen(buf);
+	va_list ap;
+
+	va_start(ap, fmt);
+	len = vsnprintf(buf + len, bufsize - len, fmt, ap);
+	va_end(ap);
+
+	return len;
+}
+
 static ssize_t visdn_leg_show_framing_avail(
 	struct visdn_leg *leg,
 	struct visdn_leg_attribute *attr,
@@ -221,17 +233,19 @@ static ssize_t visdn_leg_show_framing_avail(
 	if (visdn_chan_lock_interruptible(leg->chan))
 		return -ERESTARTSYS;
 
+	*buf = '\0';
+
 	if (leg->framing_avail & VISDN_LEG_FRAMING_NONE)
-		len += snprintf(buf + len, PAGE_SIZE - len, "none\n");
+		strcat(buf, "none\n");
 
 	if (leg->framing_avail & VISDN_LEG_FRAMING_ASYNC)
-		len += snprintf(buf + len, PAGE_SIZE - len, "async\n");
+		strcat(buf, "async\n");
 
 	if (leg->framing_avail & VISDN_LEG_FRAMING_HDLC)
-		len += snprintf(buf + len, PAGE_SIZE - len, "hdlc\n");
+		strcat(buf, "hdlc\n");
 
 	if (leg->framing_avail & VISDN_LEG_FRAMING_MTP2)
-		len += snprintf(buf + len, PAGE_SIZE - len, "mtp2\n");
+		strcat(buf, "mtp2\n");
 
 	visdn_chan_unlock(leg->chan);
 
