@@ -2,6 +2,74 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-28 15:14:59 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-491
+
+    Summary:
+      Prelimiary echo canceller implementation, rarely working...
+    Revision:
+      isdn--devel--0.1--patch-491
+
+
+    new files:
+     modules/ec/.arch-ids/arith.h.id
+     modules/ec/.arch-ids/kb1ec.h.id modules/ec/.arch-ids/mec2.h.id
+     modules/ec/.arch-ids/mec2_const.h.id
+     modules/ec/.arch-ids/mg2ec.h.id
+     modules/ec/.arch-ids/mg2ec_const.h.id
+     modules/ec/.arch-ids/xlaw.h.id modules/ec/arith.h
+     modules/ec/kb1ec.h modules/ec/mec2.h modules/ec/mec2_const.h
+     modules/ec/mg2ec.h modules/ec/mg2ec_const.h modules/ec/xlaw.h
+     modules/include/linux/visdn/.arch-ids/ec.h.id
+     modules/include/linux/visdn/ec.h
+
+    removed files:
+     modules/ec-kb/.arch-ids/kb1ec.c.id modules/ec-kb/kb1ec.c
+     modules/include/linux/visdn/.arch-ids/ec-kb.h.id
+     modules/include/linux/visdn/ec-kb.h
+
+    modified files:
+     ChangeLog TODO app_visdn_ppp/app_visdn_ppp.c
+     chan_visdn/chan_visdn.c chan_visdn/chan_visdn.h configure.ac
+     modules/Makefile.am modules/core/core.h modules/core/cxc.h
+     modules/core/router.h modules/core/timer.c
+     modules/core/timer.h modules/ec/Makefile.in modules/ec/ec.h
+     modules/ec/ec_main.c modules/netdev/netdev.h modules/ppp/ppp.h
+     modules/streamport/streamport.h samples/visdn.conf.sample
+     scripts/visdn_configurator.in
+
+    renamed files:
+     modules/ec-kb/.arch-ids/.arch-inventory.id
+       ==> modules/ec/.arch-ids/.arch-inventory.id
+     modules/ec-kb/.arch-ids/=id
+       ==> modules/ec/.arch-ids/=id
+     modules/ec-kb/.arch-ids/Makefile.in.id
+       ==> modules/ec/.arch-ids/Makefile.in.id
+     modules/ec-kb/.arch-ids/arith.h.id
+       ==> modules/ec/.arch-ids/arith_old.h.id
+     modules/ec-kb/.arch-ids/ec-kb.h.id
+       ==> modules/ec/.arch-ids/ec.h.id
+     modules/ec-kb/.arch-ids/ec-kb_main.c.id
+       ==> modules/ec/.arch-ids/ec_main.c.id
+     modules/ec-kb/.arch-ids/kb1ec_const.h.id
+       ==> modules/ec/.arch-ids/kb1ec_const.h.id
+     modules/ec-kb/arith.h
+       ==> modules/ec/arith_old.h
+     modules/ec-kb/ec-kb.h
+       ==> modules/ec/ec.h
+     modules/ec-kb/ec-kb_main.c
+       ==> modules/ec/ec_main.c
+
+    new directories:
+     modules/ec/.arch-ids
+
+    removed directories:
+     modules/ec-kb/.arch-ids
+
+    renamed directories:
+     modules/ec-kb
+       ==> modules/ec
+
+
 2006-01-28 13:39:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-490
 
     Summary:

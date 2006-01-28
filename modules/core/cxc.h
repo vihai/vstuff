@@ -16,8 +16,8 @@
 #include "chan.h"
 
 /* See core.h for IOC allocation */
-#define VISDN_IOC_CONNECT		_IOR(0xd0, 2, unsigned int)
-#define VISDN_IOC_DISCONNECT		_IOR(0xd0, 3, unsigned int)
+#define VISDN_IOC_CONNECT		_IOR(0xd0, 0x02, unsigned int)
+#define VISDN_IOC_DISCONNECT		_IOR(0xd0, 0x03, unsigned int)
 
 #define VISDN_CONNECT_FLAG_PERMANENT	(1 << 0)
 #define VISDN_CONNECT_FLAG_OVERRIDE	(1 << 1)

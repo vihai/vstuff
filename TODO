@@ -73,6 +73,7 @@ timer:
 visdn_core:
 -----------
 
+- Use correct _IOR/_IOC/_IOW macros!!!
 - Channel bundling
 - Allocate a single major number for control devices?
 - Reconnection does not work
@@ -114,6 +115,10 @@ lapd:
 - Implement ETS 300 125 Appendix III (Optional basic access deactivation
   procedures)
 
+visdn-ec:
+---------
+
+- Add LEC disabler tone detection
 
 visdn-netdev:
 -------------

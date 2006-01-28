@@ -53,6 +53,10 @@ struct visdn_timer
 
 	int total_users;
 	int users_left;
+
+	cycles_t tot_cycles;
+	int tot_ticks;
+	cycles_t start_cycles;
 };
 
 extern int visdn_timer_modinit(void);

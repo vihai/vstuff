@@ -12,6 +12,7 @@ modprobe visdn-netdev
 modprobe visdn-streamport
 modprobe visdn-ppp
 modprobe visdn-timer-system
+modprobe visdn-ec
 modprobe visdn-hfc-4s
 modprobe visdn-hfc-pci
 modprobe visdn-hfc-usb

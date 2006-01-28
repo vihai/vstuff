@@ -15,8 +15,8 @@
 
 #include <linux/if.h>
 
-#define VND_IOC_CREATE	_IOR(0xd0, 64, unsigned int)
-#define VND_IOC_DESTROY	_IOR(0xd0, 65, unsigned int)
+#define VND_IOC_CREATE	_IOR(0xd0, 0x40, unsigned int)
+#define VND_IOC_DESTROY	_IOR(0xd0, 0x41, unsigned int)
 
 struct vnd_create
 {

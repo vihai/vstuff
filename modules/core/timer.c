@@ -120,7 +120,8 @@ void visdn_timer_tick(struct visdn_timer *timer)
 {
 	struct visdn_cxc *cxc;
 	struct visdn_timer_user *timer_user;
-
+	cycles_t start_cycles = get_cycles();
+	
 	rcu_read_lock();
 	list_for_each_entry_rcu(cxc, &visdn_cxc_list, cxc_list_node) {
 		if (cxc->ops->timer_func)
@@ -142,6 +143,20 @@ void visdn_timer_tick(struct visdn_timer *timer)
 
 		wake_up(&timer->wait_queue);
 	}
+
+#if 0
+	timer->tot_cycles += get_cycles() - start_cycles;
+	timer->tot_ticks++;
+
+	if (timer->tot_ticks >= 500) {
+		printk(KERN_DEBUG "Timer: %llu/%llu\n",
+			timer->tot_cycles, get_cycles() - timer->start_cycles);
+
+		timer->tot_cycles = 0;
+		timer->tot_ticks = 0;
+		timer->start_cycles = get_cycles();
+	}
+#endif
 }
 EXPORT_SYMBOL(visdn_timer_tick);
 
@@ -265,7 +280,7 @@ int visdn_timer_register(
 	BUG_ON(!timer->ops);
 	BUG_ON(!timer->ops->owner);
 
-	visdn_debug(3, "visdn_timer_register(%s)\n", timer->name);
+	visdn_debug(3, "visdn_timer_register(%s) (HZ=%d)\n", timer->name, HZ);
 
 	{
 	int cur_index = 0;
@@ -316,12 +331,12 @@ retry:
 	if (err < 0)
 		goto err_class_device_create_file;
 
-#define TIMER_DIVIDER 100
+#define TIMER_FREQUENCY 500
 
 	INIT_LIST_HEAD(&timer->users_list);
 	spin_lock_init(&timer->users_list_lock);
-	timer->main_divider = timer->natural_frequency / TIMER_DIVIDER;
-	timer->poll_divider = TIMER_DIVIDER / 100;
+	timer->main_divider = timer->natural_frequency / TIMER_FREQUENCY;
+	timer->poll_divider = 5;
 	timer->poll_count = 0;
 
 	spin_lock(&visdn_timer_list_lock);

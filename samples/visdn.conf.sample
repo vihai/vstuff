@@ -143,6 +143,17 @@
 ; 	Usage in user role is not supported.
 ;	## role: network, user
 ;
+; echocancel = Yes
+;	Enable line echo cancellation on the interface.
+;
+; echocancel_taps = 256
+;	Echo cancellation filter length (in samples). Since the ISDN channels
+;	use a 8 KHz sampling rate each sample lasts 125us. A 256-taps echo
+;	canceller can cancel no more than 32ms of echo (somethat less, due to
+;	limited line bandwidth). The taps value must be a power of two. Keep
+;	in mind that with many taps the computational load grows and
+;	convergence becomes more and more difficult.
+;
 ; T301 => T322
 ;	Configure Layer3/CCB timers. For a description of the timers meaning
 ;	refer to ETS 300 102 Table 9.1 and successive modifications.

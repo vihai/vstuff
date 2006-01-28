@@ -14,7 +14,7 @@
 #define _VISDN_PPP_H
 
 /* See core.h for IOC allocation */
-#define VISDN_PPP_GET_CHANID	_IOR(0xd0, 11, unsigned int)
+#define VISDN_PPP_GET_CHANID	_IOR(0xd0, 0x30, unsigned int)
 
 #ifdef __KERNEL__
 

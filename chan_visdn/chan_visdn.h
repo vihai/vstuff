@@ -42,9 +42,15 @@ struct visdn_chan {
 	struct q931_call *q931_call;
 	struct visdn_suspended_call *suspended_call;
 
-	int visdn_chan_id;
 	int is_voice;
-	int channel_fd;
+
+	int sp_fd;
+	int ec_fd;
+
+	int sp_channel_id;
+	int ec_ne_channel_id;
+	int ec_fe_channel_id;
+	int isdn_channel_id;
 
 	int sending_complete;
 
@@ -64,21 +70,7 @@ struct visdn_chan {
 	struct visdn_interface *hg_first_intf;
 };
 
-#ifndef ASTERISK_VERSION_NUM
-
-#define ast_config_load ast_load
-#define ast_config_destroy ast_destroy
-
-static inline struct visdn_chan *to_visdn_chan(struct ast_channel *ast_chan)
-{
-	return ast_chan->pvt->pvt;
-}
-
-#else
-
 static inline struct visdn_chan *to_visdn_chan(struct ast_channel *ast_chan)
 {
 	return ast_chan->tech_pvt;
 }
-
-#endif

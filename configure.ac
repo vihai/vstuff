@@ -427,7 +427,7 @@ AC_CONFIG_FILES([Makefile
 		modules/timer-system/Makefile
 		modules/netdev/Makefile
 		modules/ppp/Makefile
-		modules/ec-kb/Makefile
+		modules/ec/Makefile
 		visdn.spec])
 
 #		modules/hfc-e1/Makefile

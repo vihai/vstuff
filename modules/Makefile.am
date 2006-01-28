@@ -3,8 +3,7 @@ SUBDIRS=
 
 SUBDIRS += core lapd softcxc timer-system
 SUBDIRS += kfifo
-SUBDIRS += netdev streamport ppp
-#	ec-kb
+SUBDIRS += netdev streamport ppp ec
 
 
 if driver_hfc_usb
