@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-28 16:11:55 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-492
+
+    Summary:
+      Fixex fifo_state output routine in hfc_4s
+    Revision:
+      isdn--devel--0.1--patch-492
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/sys_port.c
+
+
 2006-01-28 15:14:59 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-491
 
     Summary:

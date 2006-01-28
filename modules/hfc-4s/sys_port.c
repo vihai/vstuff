@@ -190,7 +190,7 @@ static ssize_t hfc_show_fifo_state(
 		f.f1f2 = hfc_inw(card, hfc_A_F12);
 		z.z1z2 = hfc_inl(card, hfc_A_Z12);
 
-		snprintf(buf, PAGE_SIZE,
+		sanprintf(buf, PAGE_SIZE,
 			"   %02x %02x %04x %04x %4d %c%c%c  ",
 			f.f1, f.f2, z.z1, z.z2,
 			hfc_fifo_used_tx(fifo_tx),
