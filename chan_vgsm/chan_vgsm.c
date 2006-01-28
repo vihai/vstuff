@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -49,223 +49,16 @@
 #include <linux/visdn/cxc.h>
 #include <linux/visdn/router.h>
 
+#include "util.h"
 #include "chan_vgsm.h"
-
-//#include "../config.h"
+#include "comm.h"
 
 #define VGSM_DESCRIPTION "VoiSmart VGSM Channel For Asterisk"
 #define VGSM_CHAN_TYPE "VGSM"
 #define VGSM_CONFIG_FILE "vgsm.conf"
 #define VGSM_OP_CONFIG_FILE "vgsm_operators.conf"
 
-#define assert(cond)							\
-	do {								\
-		if (!(cond)) {						\
-			ast_log(LOG_ERROR,				\
-				"assertion (" #cond ") failed\n");	\
-			abort();					\
-		}							\
-	} while(0)
-
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-AST_MUTEX_DEFINE_STATIC(usecnt_lock);
-
-static pthread_t vgsm_comm_thread = AST_PTHREADT_NULL;
-static pthread_t vgsm_monitor_thread = AST_PTHREADT_NULL;
-
-static struct sched_context *sched;
-
-struct vgsm_operator_info
-{
-	struct list_head node;
-
-	char id[8];
-	const char *name;
-	const char *country;
-	const char *date;
-	const char *bands;
-};
-
-enum vgsm_interface_status
-{
-	VGSM_INT_STATUS_UNINITIALIZED,
-	VGSM_INT_STATUS_INITIALIZING,
-	VGSM_INT_STATUS_READY,
-	VGSM_INT_STATUS_INCALL,
-	VGSM_INT_STATUS_NOT_READY,
-	VGSM_INT_STATUS_LOCKED_DOWN,
-	VGSM_INT_STATUS_FAILED,
-};
-
-enum vgsm_net_status
-{
-	VGSM_NET_STATUS_NOT_SEARCHING,
-	VGSM_NET_STATUS_NOT_REGISTERED,
-	VGSM_NET_STATUS_REGISTERED_HOME,
-	VGSM_NET_STATUS_UNKNOWN,
-	VGSM_NET_STATUS_REGISTRATION_DENIED,
-	VGSM_NET_STATUS_REGISTERED_ROAMING,
-};
-
-enum vgsm_operator_selection
-{
-	VGSM_OPSEL_AUTOMATIC = 0,
-	VGSM_OPSEL_MANUAL_UNLOCKED = 1,
-	VGSM_OPSEL_MANUAL_FALLBACK = 4,
-	VGSM_OPSEL_MANUAL_LOCKED = 5,
-};
-
-enum vgsm_operator_status
-{
-	VGSM_OPSTAT_UNKNOWN,
-	VGSM_OPSTAT_AVAILABLE,
-	VGSM_OPSTAT_CURRENT,
-	VGSM_OPSTAT_FORBIDDEN,
-};
-
-enum vgsm_parser_state
-{
-	VGSM_PS_BITBUCKET,
-	VGSM_PS_IDLE,
-	VGSM_PS_RECOVERING,
-	VGSM_PS_AWAITING_RESPONSE,
-	VGSM_PS_READING_RESPONSE,
-	VGSM_PS_RESPONSE_READY,
-	VGSM_PS_READING_URC,
-	VGSM_PS_AWAITING_RESPONSE_READING_URC,
-	VGSM_PS_RESPONSE_READY_READING_URC,
-};
-
-typedef long long longtime_t;
-
-struct vgsm_response
-{
-	int refcnt;
-
-	struct list_head lines;
-};
-
-struct vgsm_response_line
-{
-	struct list_head node;
-
-	char text[0];
-};
-
-struct vgsm_interface;
-struct vgsm_urc
-{
-	const char *code;
-
-	void (*handler)(
-		const struct vgsm_urc *urc,
-		struct vgsm_interface *intf,
-		const char *line,
-		const char *pars);
-};
-
-struct vgsm_interface
-{
-	struct list_head ifs_node;
-
-	ast_mutex_t lock;
-
-	/* Configuration */
-	char name[64];
-	char device_filename[PATH_MAX];
-
-	char context[AST_MAX_EXTENSION];
-
-	char pin[16];
-	int min_level;
-	int rx_gain;
-	int tx_gain;
-	enum vgsm_operator_selection operator_selection;
-	char operator_id[8];
-	int set_clock;
-
-	/* Operative data */
-
-	int fd;
-
-	enum vgsm_interface_status status;
-
-	enum vgsm_parser_state parser_state;
-	ast_cond_t parser_state_change_cond;
-
-	int connect_check_sched_id;
-
-	const struct vgsm_urc *urc;
-
-	struct ast_channel *current_call;
-
-	struct {
-		longtime_t timeout;
-		char buf[82];
-		struct vgsm_response *response;
-		int response_error;
-	} req;
-
-	struct
-	{
-		char number[30];
-		int ton;
-		char subaddress[30];
-		int subaddress_type;
-		char alpha[32];
-		int validity;
-	} last_cli;
-
-	char buf[2048];
-
-	struct {
-		char vendor[32];
-		char model[32];
-		char version[32];
-		char dob_version[32];
-		char serial_number[32];
-		char imei[32];
-	} module;
-
-	struct {
-		char imsi[32];
-		int remaining_attempts;
-	} sim;
-
-	struct {
-		enum vgsm_net_status status;
-		char operator_id[6];
-		int rxqual;
-		int ta;
-		int bsic;
-
-		struct {
-			int id;
-			int lac;
-			int arfcn;
-			int pwr;
-		} cells[16];
-
-		int ncells;
-	} net;
-
-};
-
-struct vgsm_state
-{
-	ast_mutex_t lock;
-
-	struct list_head ifs;
-	struct list_head op_list;
-
-	int usecnt;
-
-	int debug;
-	
-
-	struct vgsm_interface default_intf;
-} vgsm = {
+struct vgsm_state vgsm = {
 	.usecnt = 0,
 #ifdef DEBUG_DEFAULTS
 	.debug = TRUE,
@@ -276,7 +69,6 @@ struct vgsm_state
 	.default_intf = {
 		.context = "vgsm",
 		.pin = "",
-		.min_level = -100,
 		.rx_gain = 0,
 		.tx_gain = 0,
 		.set_clock = 0,
@@ -285,27 +77,9 @@ struct vgsm_state
 	}
 };
 
-#ifdef DEBUG_CODE
-#define vgsm_debug(format, arg...)			\
-	if (vgsm.debug)					\
-		ast_log(LOG_NOTICE,			\
-			format,				\
-			## arg)
-#else
-#define vgsm_debug(format, arg...)			\
-	do {} while(0);
-#endif
+static pthread_t vgsm_monitor_thread = AST_PTHREADT_NULL;
 
-#if defined(DEBUG_CODE) && 0
-#define vgsm_debug_verb(format, arg...)			\
-	if (vgsm.debug)					\
-		ast_verbose(VERBOSE_PREFIX_1,		\
-			format,				\
-			## arg)
-#else
-#define vgsm_debug_verb(format, arg...)			\
-	do {} while(0);
-#endif
+static struct sched_context *sched;
 
 static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
 {
@@ -390,32 +164,97 @@ static const char *vgsm_intf_operator_selection_to_text(
 	return "*UNKNOWN*";
 };
 
-struct vgsm_operator_info *vgsm_search_operator(const char *id)
+static struct vgsm_interface *vgsm_intf_alloc(void)
 {
-	struct vgsm_operator_info *op_info;
+	struct vgsm_interface *intf;
 
-	list_for_each_entry(op_info, &vgsm.op_list, node) {
-		if (!strcmp(op_info->id, id))
-			return op_info;
+	intf = malloc(sizeof(*intf));
+	if (!intf)
+		return NULL;
+
+	memset(intf, 0, sizeof(*intf));
+
+	intf->refcnt = 1;
+
+	ast_mutex_init(&intf->lock);
+
+	intf->status = VGSM_INT_STATUS_UNINITIALIZED;
+
+	intf->connect_check_sched_id = -1;
+
+	return intf;
+}
+
+static struct vgsm_interface *vgsm_intf_get(
+	struct vgsm_interface *intf)
+{
+	assert(intf);
+	assert(intf->refcnt > 0);
+
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	intf->refcnt++;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	return intf;
+}
+
+static void vgsm_intf_put(
+	struct vgsm_interface *intf)
+{
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	intf->refcnt--;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	if (!intf->refcnt)
+		free(intf);
+}
+
+static struct vgsm_interface *vgsm_intf_get_by_name(const char *name)
+{
+	ast_mutex_lock(&vgsm.lock);
+	struct vgsm_interface *intf;
+	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+
+		if (!strcasecmp(intf->name, name))
+			return vgsm_intf_get(intf);
 	}
+	ast_mutex_unlock(&vgsm.lock);
 
 	return NULL;
 }
 
+struct vgsm_operator_info *vgsm_search_operator(const char *id)
+{
+	struct vgsm_operator_info *op_info;
+
+	ast_mutex_lock(&vgsm.lock);
+	list_for_each_entry(op_info, &vgsm.op_list, node) {
+		if (!strcmp(op_info->id, id))
+			return op_info;
+	}
+	ast_mutex_unlock(&vgsm.lock);
+
+	return NULL;
+}
+
+//-----------------------------------------------------------------------------
+
 static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 {
 	struct vgsm_interface *intf;
+
+	ast_mutex_lock(&vgsm.lock);
 	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
 
 		ast_cli(fd, "\n------ Interface '%s' ---------\n", intf->name);
 
 		ast_cli(fd,
-			"  Device : %s\n"
+			"\n"
+		      	"  Device : %s\n"
 			"  Context: %s\n"
 			"  RX-gain: %d\n"
 			"  TX-gain: %d\n"
-			"  Set clock: %s\n"
-			"\n",
+			"  Set clock: %s\n",
 			intf->device_filename,
 			intf->context,
 			intf->rx_gain,
@@ -423,14 +262,13 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 			intf->set_clock ? "YES" : "NO");
 
 		ast_cli(fd,
-			"Module:\n"
+			"\nModule:\n"
 			"  Status: %s\n"
 			"  Model: %s %s\n"
 			"  Version: %s\n"
 			"  DOB Version: %s\n"
 			"  Serial#: %s\n"
-			"  IMEI: %s\n"
-			"\n",
+			"  IMEI: %s\n",
 			vgsm_intf_status_to_text(intf->status),
 			intf->module.vendor,
 			intf->module.model,
@@ -439,16 +277,21 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 			intf->module.serial_number,
 			intf->module.imei);
 
-		ast_cli(fd,
-			"SIM:\n"
-			"  IMSI: %s\n"
-			"  PIN remaining attempts: %d\n"
-			"\n",
-			intf->sim.imsi,
-			intf->sim.remaining_attempts);
+		if (intf->sim.inserted) {
+			ast_cli(fd,
+				"\nSIM:\n"
+				"  IMSI: %s\n"
+				"  PIN remaining attempts: %d\n",
+				intf->sim.imsi,
+				intf->sim.remaining_attempts);
+		} else {
+			ast_cli(fd,
+				"\nSIM:\n"
+				"  Not inserted\n");
+		}
 
 		ast_cli(fd,
-			"Network: \n"
+			"\nNetwork: \n"
 			"  Operator Selection: %s\n",
 			vgsm_intf_operator_selection_to_text(
 				intf->operator_selection));
@@ -472,29 +315,30 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 			}
 		}
 
-		struct vgsm_operator_info *op_info;
-		op_info = vgsm_search_operator(intf->net.operator_id);
-
-		if (op_info) {
-			ast_cli(fd,
-				"  Current network:"
-				" %s (%s - %s - %s)\n",
-				intf->net.operator_id,
-				op_info->name,
-				op_info->country,
-				op_info->bands);
-		} else {
-			ast_cli(fd,
-				"  Current network: %s\n",
-				intf->net.operator_id);
-		}
-
 		ast_cli(fd,
 			"  Status: %s\n",
 			vgsm_net_status_to_text(intf->net.status));
 
 		if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
 	            intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+
+			struct vgsm_operator_info *op_info;
+			op_info = vgsm_search_operator(intf->net.operator_id);
+
+			if (op_info) {
+				ast_cli(fd,
+					"  Current network:"
+					" %s (%s - %s - %s)\n",
+					intf->net.operator_id,
+					op_info->name,
+					op_info->country,
+					op_info->bands);
+			} else {
+				ast_cli(fd,
+					"  Current network: %s\n",
+					intf->net.operator_id);
+			}
+
 			ast_cli(fd,
 				"  Local Area Code: 0x%04x\n"
 				"  Cell ID: 0x%04x\n"
@@ -527,9 +371,226 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 			}
 		}
 	}
+	ast_mutex_unlock(&vgsm.lock);
 
 	return 0;
 }
+
+//-----------------------------------------------------------------------------
+
+static int do_vgsm_pin_input(int fd, int argc, char *argv[])
+{
+	ast_cli(fd, "Not implemented yet!\n");
+
+	return 0;
+}
+
+//-----------------------------------------------------------------------------
+
+static int do_vgsm_puk_input(int fd, int argc, char *argv[])
+{
+	ast_cli(fd, "Not implemented yet!\n");
+
+	return 0;
+}
+
+//-----------------------------------------------------------------------------
+
+static int vgsm_validate_pin(const char *pin)
+{
+	int i;
+
+	for (i=0; i<strlen(pin); i++) {
+		if (!isdigit(pin[i]))
+			return -1;
+	}
+
+	return 0;
+}
+
+
+struct vgsm_error_code
+{
+	int code;
+	const char *text;
+};
+
+struct vgsm_error_code vgsm_error_codes[] =
+{
+	{ 0, "phone failure" },
+	{ 1, "no connection to phone" },
+	{ 2, "phone-adaptor link reserved" },
+	{ 3, "operation not allowed" },
+	{ 4, "operation not supported" },
+	{ 5, "PH-SIM PIN required" },
+	{ 6, "NOT SUPPORTED" },
+	{ 7, "NOT SUPPORTED" },
+	{ 10, "SIM not inserted" },
+	{ 11, "SIM PIN required" },
+	{ 12, "SIM PUK required" },
+	{ 13, "SIM failure" },
+	{ 14, "SIM busy" },
+	{ 15, "SIM wrong" },
+	{ 16, "incorrect password" },
+	{ 17, "SIM PIN2 required" },
+	{ 18, "SIM PUK2 required" },
+	{ 20, "memory full" },
+	{ 21, "invalid index" },
+	{ 22, "not found" },
+	{ 23, "memory failure" },
+	{ 24, "text string too long" },
+	{ 25, "invalid characters in text string" },
+	{ 26, "dial string too long" },
+	{ 27, "invalid characters in dial string" },
+	{ 30, "no network service" },
+	{ 31, "network timeout" },
+	{ 32, "network not allowed - emergency calls only" },
+	{ 40, "network personalization PIN required" },
+	{ 41, "network personalization PUK required" },
+	{ 42, "network subset personalization PIN required" },
+	{ 43, "network subset personalization PUK required" },
+	{ 44, "service provider personalization PIN required" },
+	{ 45, "service provider personalization PUK required" },
+	{ 46, "corporate personalization PIN required" },
+	{ 47, "corporate personalization PUK required" },
+	{ 100, "unknown" },
+	{ 103, "illegal MS" },
+	{ 106, "illegal ME" },
+	{ 107, "GPRS service not allowed" },
+	{ 111, "PLMN not allowed" },
+	{ 112, "location area not allowed" },
+	{ 113, "roaming not allowed in this location area" },
+	{ 132, "service option not supported" },
+	{ 133, "requested service option not subscribed" },
+	{ 134, "service option temporarily out of order" },
+	{ 149, "PDP authentication failure" },
+	{ 400, "generic undocumented error" },
+	{ 401, "wrong state" },
+	{ 402, "wrong mode" },
+	{ 403, "context already activated" },
+	{ 404, "stack already active" },
+	{ 405, "activation failed" },
+	{ 406, "context not opened" },
+	{ 407, "cannot setup socket" },
+	{ 408, "cannot resolve DN" },
+	{ 409, "timeout in opening socket" },
+	{ 410, "cannot open socket" },
+	{ 411, "remote disconnected or timeout" },
+	{ 412, "connection failed" },
+
+	/* CMS errors */
+	{ 300, "ME failure" },
+	{ 301, "SMS service of ME reserved" },
+	{ 302, "operation not allowed" },
+	{ 303, "operation not supported" },
+	{ 304, "invalid PDU mode parameter" },
+	{ 305, "invalid text mode parameter" },
+	{ 310, "SIM not inserted" },
+	{ 311, "SIM PIN required" },
+	{ 312, "PH-SIM PIN required" },
+	{ 313, "SIM failure" },
+	{ 314, "SIM busy" },
+	{ 315, "SIM wrong" },
+	{ 316, "SIM PUK required" },
+	{ 317, "SIM PIN2 required" },
+	{ 318, "SIM PUK2 required" },
+	{ 320, "memory failure" },
+	{ 321, "invalid memory index" },
+	{ 322, "memory full" },
+	{ 330, "SMSC address unknown" },
+	{ 331, "no network service" },
+	{ 332, "network timeout" },
+	{ 340, "no +CNMA acknowledgment expected" },
+	{ 500, "unknown error" },
+};
+
+static const char *vgsm_error_to_text(int code)
+{
+	int i;
+	for (i=0; i<ARRAY_SIZE(vgsm_error_codes); i++) {
+		if (vgsm_error_codes[i].code == code)
+			return vgsm_error_codes[i].text;
+	}
+
+	return "*UNKNOWN*";
+}
+
+static int do_vgsm_pin_set(int fd, int argc, char *argv[])
+{
+	if (argc < 4) {
+		ast_cli(fd, "Missing interface name\n");
+		return -1;
+	}
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing OLDPIN\n");
+		return -1;
+	}
+
+	if (vgsm_validate_pin(argv[4]) < 0) {
+		ast_cli(fd, "OLDPIN contains invalid characters\n");
+		return -1;
+	}
+
+	if (argc < 6) {
+		ast_cli(fd, "Missing NEWPIN\n");
+		return -1;
+	}
+
+	struct vgsm_interface *intf;
+	intf = vgsm_intf_get_by_name(argv[3]);
+	if (!intf) {
+		ast_cli(fd, "Cannot find interface '%s'\n", argv[3]);
+		return -1;
+	}
+
+	if (!strcasecmp(argv[5], "enabled")) {
+		vgsm_send_request(&intf->comm, 180000,
+			"AT+CLCK=SC,1,\"%s\"", argv[4]);
+	} else if (!strcasecmp(argv[5], "disabled")) {
+		vgsm_send_request(&intf->comm, 180000,
+			"AT+CLCK=SC,0,\"%s\"", argv[4]);
+	} else {
+		if (vgsm_validate_pin(argv[5]) < 0) {
+			ast_cli(fd, "NEWPIN contains invalid characters\n");
+			vgsm_intf_put(intf);
+			return -1;
+		}
+
+		vgsm_send_request(&intf->comm, 180000,
+			"AT+CPWD=SC,\"%s\",\"%s\"",
+			argv[4], argv[5]);
+	}
+
+	int err = vgsm_expect_ok(&intf->comm);
+	if (err != VGSM_RESP_OK) {
+		ast_cli(fd, "Unable to complete command: %s (%d)\n",
+			vgsm_error_to_text(err),
+			err);
+		vgsm_intf_put(intf);
+		return -1;
+	}
+
+	vgsm_intf_put(intf);
+	intf = NULL;
+
+	return 0;
+}
+
+static char vgsm_pin_set_help[] =
+	"Usage: vgsm pin set <interface> <OLDPIN> [<NEWPIN>|enabled|disabled]\n"
+	"	Set PIN on selected interface.\n";
+
+static struct ast_cli_entry vgsm_pin_set =
+{
+	{ "vgsm", "pin", "set", NULL },
+	do_vgsm_pin_set,
+	"Set PIN on the selected interface",
+	vgsm_pin_set_help,
+	NULL
+};
+
+//-----------------------------------------------------------------------------
 
 static int vgsm_intf_from_var(
 	struct vgsm_interface *intf,
@@ -542,8 +603,6 @@ static int vgsm_intf_from_var(
 		strncpy(intf->context, var->value, sizeof(intf->context));
 	} else if (!strcasecmp(var->name, "pin")) {
 		strncpy(intf->pin, var->value, sizeof(intf->pin));
-	} else if (!strcasecmp(var->name, "min_level")) {
-		intf->min_level = atoi(var->value);
 	} else if (!strcasecmp(var->name, "rx_gain")) {
 		intf->rx_gain = atoi(var->value);
 	} else if (!strcasecmp(var->name, "tx_gain")) {
@@ -584,7 +643,6 @@ static void vgsm_copy_interface_config(
 	strncpy(dst->pin, src->pin,
 		sizeof(dst->pin));
 
-	dst->min_level = src->min_level;
 	dst->rx_gain = src->rx_gain;
 	dst->tx_gain = src->tx_gain;
 	dst->set_clock = src->set_clock;
@@ -593,6 +651,8 @@ static void vgsm_copy_interface_config(
 	strncpy(dst->operator_id, src->operator_id,
 		sizeof(dst->operator_id));
 }
+
+static struct vgsm_urc urcs[];
 
 static void vgsm_reload_config(void)
 {
@@ -638,20 +698,16 @@ static void vgsm_reload_config(void)
 		}
 
 		if (!found) {
-			intf = malloc(sizeof(*intf));
-			memset(intf, 0, sizeof(*intf));
-
-			ast_mutex_init(&intf->lock);
-			ast_cond_init(&intf->parser_state_change_cond, NULL);
-
-			intf->status = VGSM_INT_STATUS_UNINITIALIZED;
-			intf->parser_state = VGSM_PS_BITBUCKET;
-
-			intf->fd = -1;
-			intf->connect_check_sched_id = -1;
+			intf = vgsm_intf_alloc();
+			if (!intf) {
+				// Do something
+				return;
+			}
 
 			strncpy(intf->name, cat, sizeof(intf->name));
 			vgsm_copy_interface_config(intf, &vgsm.default_intf);
+
+			vgsm_comm_init(&intf->comm, urcs);
 
 			list_add_tail(&intf->ifs_node, &vgsm.ifs);
 		}
@@ -745,7 +801,7 @@ static struct ast_cli_entry no_debug_vgsm_generic =
 };
 
 static char show_vgsm_interfaces_help[] =
-	"Usage: vgsm show interfaces\n"
+	"Usage: show vgsm interfaces\n"
 	"	Displays informations on vGSM interfaces\n";
 
 static struct ast_cli_entry show_vgsm_interfaces =
@@ -770,48 +826,36 @@ static struct ast_cli_entry vgsm_reload =
 	NULL
 };
 
+static char vgsm_pin_input_help[] =
+	"Usage: vgsm pin input <interface> <PIN>\n"
+	"	Manually input PIN to selected interface\n";
 
-static int vgsm_send_request(
-	struct vgsm_interface *intf,
-	int timeout,
-	const char *fmt, ...)
-	__attribute__ ((format (printf, 3, 4)));
-
-static struct vgsm_response *vgsm_read_response(
-	struct vgsm_interface *intf);
-
-static int vgsm_expect_ok(struct vgsm_interface *intf);
-
-static struct vgsm_response_line *vgsm_response_first_line(
-	struct vgsm_response *resp);
-static struct vgsm_response_line *vgsm_response_last_line(
-	struct vgsm_response *resp);
-
-static void vgsm_respone_get(struct vgsm_response *resp)
+static struct ast_cli_entry vgsm_pin_input =
 {
-	resp->refcnt++;
-}
+	{ "vgsm", "pin", "input", NULL },
+	do_vgsm_pin_input,
+	"Manually input PIN to selected interface",
+	vgsm_pin_input_help,
+	NULL
+};
 
-static void vgsm_response_put(struct vgsm_response *resp)
+static char vgsm_puk_input_help[] =
+	"Usage: vgsm puk input <interface> <PUK>\n"
+	"	Manually input PUK to selected interface\n";
+
+static struct ast_cli_entry vgsm_puk_input =
 {
-	resp->refcnt--;
-
-	if (!resp->refcnt) {
-		struct vgsm_response_line *line, *n;
-
-		list_for_each_entry_safe(line, n, &resp->lines, node) {
-			list_del(&line->node);
-			free(line);
-		}
-
-		free(resp);
-	}
-}
-
+	{ "vgsm", "puk", "input", NULL },
+	do_vgsm_puk_input,
+	"Manually input PUK to selected interface",
+	vgsm_puk_input_help,
+	NULL
+};
 
 static int vgsm_connect_check(void *data)
 {
 	struct vgsm_interface *intf = data;
+	struct vgsm_comm *comm = &intf->comm;
 	struct vgsm_response *resp;
 
 	if (!intf->current_call) {
@@ -820,9 +864,8 @@ static int vgsm_connect_check(void *data)
 		return -1;
 	}
 
-	vgsm_send_request(intf, 500, "AT+CPAS");
-	resp = vgsm_read_response(intf);
-
+	vgsm_send_request(comm, 500, "AT+CPAS");
+	resp = vgsm_read_response(comm);
 	if (!resp)
 		return -1;
 
@@ -846,7 +889,7 @@ static int vgsm_connect_check(void *data)
 	else {
 		intf->connect_check_sched_id =
 			ast_sched_add(sched, 1000, vgsm_connect_check, intf);
-		pthread_kill(vgsm_comm_thread, SIGURG);
+		vgsm_comm_awake(&intf->comm);
 	}
 
 	return 0;
@@ -938,9 +981,11 @@ static int vgsm_call(
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
+	struct vgsm_response *resp;
 	// 'timeout' instead of 20s ?
-	vgsm_send_request(intf, 20 * 1000, "ATD%s;", number);
-	if (vgsm_expect_ok(intf)) {
+	vgsm_send_request(&intf->comm, 20 * 1000, "ATD%s;", number);
+	resp = vgsm_read_response(&intf->comm);
+	if (!resp) {
 		err = -1;
 		goto err_atd_failed;
 	}
@@ -950,7 +995,7 @@ static int vgsm_call(
 
 	intf->connect_check_sched_id =
 		ast_sched_add(sched, 1000, vgsm_connect_check, intf);
-	pthread_kill(vgsm_comm_thread, SIGURG);
+	vgsm_comm_awake(&intf->comm);
 
 	return 0;
 
@@ -980,8 +1025,10 @@ static int vgsm_answer(struct ast_channel *ast_chan)
 
 	ast_channel_setwhentohangup(intf->current_call, 0);
 
-	vgsm_send_request(intf, 500, "ATA");
-	if (vgsm_expect_ok(intf))
+	struct vgsm_response *resp;
+	vgsm_send_request(&intf->comm, 500, "ATA");
+	resp = vgsm_read_response(&intf->comm);
+	if (!resp)
 		return -1;
 
 	return 0;
@@ -1180,13 +1227,13 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	struct vgsm_interface *intf = vgsm_chan->intf;
 
 	if (intf) {
-	//	ast_mutex_lock(&intf->lock);
+		ast_mutex_lock(&intf->lock);
 		if (intf->connect_check_sched_id >= 0)
-	//		ast_sched_del(sched, intf->connect_check_sched_id);
+			ast_sched_del(sched, intf->connect_check_sched_id);
 		ast_mutex_unlock(&intf->lock);
 
-		vgsm_send_request(intf, 500, "ATH");
-		vgsm_expect_ok(intf);
+		vgsm_send_request(&intf->comm, 500, "ATH");
+		vgsm_expect_ok(&intf->comm);
 
 		intf->status = VGSM_INT_STATUS_READY;
 		intf->current_call = NULL;
@@ -1400,9 +1447,9 @@ static struct ast_channel *vgsm_request(
 
 	snprintf(ast_chan->name, sizeof(ast_chan->name), "VGSM/null");
 
-	ast_mutex_lock(&usecnt_lock);
+	ast_mutex_lock(&vgsm.usecnt_lock);
 	vgsm.usecnt++;
-	ast_mutex_unlock(&usecnt_lock);
+	ast_mutex_unlock(&vgsm.usecnt_lock);
 	ast_update_use_count();
 
 	return ast_chan;
@@ -1583,381 +1630,77 @@ static void vgsm_q931_disconnect_channel(
 }
 */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-static char *unprintable_escape(const char *str, char *buf, int bufsize)
-{
-	const char *c = str;
-	int len = 0;
-
-	while(*c) {
-		switch(*c) {
-		case '\r':
-			len += snprintf(buf + len, bufsize - len, "<cr>");
-		break;
-		case '\n':
-			len += snprintf(buf + len, bufsize - len, "<lf>");
-		break;
-
-		default:
-			if (isprint(*c)) {
-				len += snprintf(buf + len,
-						bufsize - len, "%c", *c);
-			} else
-				len += snprintf(buf + len,
-						bufsize - len, ".");
-		}
-
-		c++;
-	}
-
-	return buf;
-}
-
-static const char *vgsm_parser_state(
-	enum vgsm_parser_state state)
-{
-	switch(state) {
-	case VGSM_PS_BITBUCKET:
-		return "BITBUCKET";
-	case VGSM_PS_IDLE:
-		return "IDLE";
-	case VGSM_PS_RECOVERING:
-		return "RECOVERING";
-	case VGSM_PS_AWAITING_RESPONSE:
-		return "AWAITING_RESPONSE";
-	case VGSM_PS_READING_RESPONSE:
-		return "READING_RESPONSE";
-	case VGSM_PS_RESPONSE_READY:
-		return "RESPONSE_READY";
-	case VGSM_PS_READING_URC:
-		return "READING_URC";
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
-		return "AWAITING_RESPONSE_READING_URC";
-	case VGSM_PS_RESPONSE_READY_READING_URC:
-		return "RESPONSE_READY_READING_URC";
-	}
-
-	return "*UNKNOWN*";
-}
-
-static void vgsm_parser_change_state(
-	struct vgsm_interface *intf,
-	enum vgsm_parser_state newstate)
-{
-	vgsm_debug_verb("State change from %s to %s\n",
-		vgsm_parser_state(intf->parser_state),
-		vgsm_parser_state(newstate));
-
-	intf->parser_state = newstate;
-
-	ast_cond_broadcast(&intf->parser_state_change_cond);
-}
-
-static int vgsm_module_recover(struct vgsm_interface *intf)
-{
-	vgsm_parser_change_state(intf, VGSM_PS_RECOVERING);
-
-	sleep(1);
-
-	if (write(intf->fd, "+", 1) < 0) {
-		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
-			strerror(errno));
-
-		return -1;
-	}
-
-	usleep(100000);
-
-	if (write(intf->fd, "+", 1) < 0) {
-		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
-			strerror(errno));
-
-		return -1;
-	}
-
-	usleep(100000);
-
-	if (write(intf->fd, "+", 1) < 0) {
-		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
-			strerror(errno));
-
-		return -1;
-	}
-
-	sleep(1);
-
-	const char *cmd = "AT Z0 &F E1 V1 Q0 &K0\r";
-	if (write(intf->fd, cmd, strlen(cmd)) < 0) {
-		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
-			strerror(errno));
-
-		return -1;
-	}
-
-	ast_mutex_lock(&intf->lock);
-	while(intf->parser_state != VGSM_PS_IDLE)
-		ast_cond_wait(&intf->parser_state_change_cond, &intf->lock);
-	ast_mutex_unlock(&intf->lock);
-
-	return 0;
-}
-
-static struct vgsm_response_line *vgsm_response_first_line(
-	struct vgsm_response *resp)
-{
-	return list_entry(resp->lines.next, struct vgsm_response_line, node);
-}
-
-static struct vgsm_response_line *vgsm_response_last_line(
-	struct vgsm_response *resp)
-{
-	return list_entry(resp->lines.prev, struct vgsm_response_line, node);
-}
-
-static struct vgsm_response *vgsm_response_alloc()
-{
-	struct vgsm_response *resp;
-
-	resp = malloc(sizeof(*resp));
-	if (!resp)
-		return NULL;
-
-	memset(resp, 0, sizeof(*resp));
-
-	resp->refcnt = 1;
-
-	INIT_LIST_HEAD(&resp->lines);
-
-	return resp;
-}
-
-static struct vgsm_response *vgsm_read_response(
-	struct vgsm_interface *intf)
-{
-	struct vgsm_response *resp;
-
-	ast_mutex_lock(&intf->lock);
-	while(intf->parser_state != VGSM_PS_RESPONSE_READY &&
-	      intf->parser_state != VGSM_PS_RESPONSE_READY_READING_URC)
-		ast_cond_wait(&intf->parser_state_change_cond, &intf->lock);
-
-	vgsm_parser_change_state(intf, VGSM_PS_IDLE);
-	resp = intf->req.response;
-	intf->req.response = NULL;
-
-	ast_mutex_unlock(&intf->lock);
-
-	return resp;
-}
-
-static int vgsm_expect_ok(struct vgsm_interface *intf)
-{
-	ast_mutex_lock(&intf->lock);
-	while(intf->parser_state != VGSM_PS_RESPONSE_READY &&
-	      intf->parser_state != VGSM_PS_RESPONSE_READY_READING_URC)
-		ast_cond_wait(&intf->parser_state_change_cond, &intf->lock);
-
-	int error_code = intf->req.response_error;
-
-	vgsm_parser_change_state(intf, VGSM_PS_IDLE);
-	vgsm_response_put(intf->req.response);
-	intf->req.response = NULL;
-
-	ast_mutex_unlock(&intf->lock);
-
-	return error_code;
-}
-
-static longtime_t longtime_now()
-{
-	struct timeval now_tv;
-	gettimeofday(&now_tv, NULL);
-
-	return now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
-}
-
-static int vgsm_send_request(
-	struct vgsm_interface *intf,
-	int timeout,
-	const char *fmt, ...)
-{
-	va_list ap;
-	char buf[82];
-
-	va_start(ap, fmt);
-
-	if (vsnprintf(buf, sizeof(buf), fmt, ap) >= sizeof(buf) - 1)
-		return -1;
-
-	ast_mutex_lock(&intf->lock);
-	while(intf->parser_state != VGSM_PS_IDLE)
-		ast_cond_wait(&intf->parser_state_change_cond, &intf->lock);
-
-	strncpy(intf->req.buf, buf, sizeof(intf->req.buf));
-	vgsm_parser_change_state(intf, VGSM_PS_AWAITING_RESPONSE);
-	intf->req.response = vgsm_response_alloc();
-	intf->req.timeout = longtime_now() + timeout * 1000;
-	ast_mutex_unlock(&intf->lock);
-
-	strcat(buf, "\r");
-
-	char tmpstr[80];
-	vgsm_debug_verb("TX: '%s'\n",
-		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
-
-	pthread_kill(vgsm_comm_thread, SIGURG);
-
-	return write(intf->fd, buf, strlen(buf));
-}
-
-static void vgsm_retransmit_request(struct vgsm_interface *intf)
-{
-	char buf[82];
-	strncpy(buf, intf->req.buf, sizeof(buf));
-	strcat(buf, "\r");
-
-	char tmpstr[80];
-	vgsm_debug_verb("TX: '%s'\n",
-		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
-
-	if (write(intf->fd, buf, strlen(buf)) < 0)
-		ast_log(LOG_WARNING,
-			"Cannot write to module: %s\n",
-			strerror(errno));
-}
-
-static void handle_response_line(
-	struct vgsm_interface *intf,
-	const char *line)
-{
-	// Handle response
-	char tmpstr[80];
-	vgsm_debug_verb("RX: '%s' (crlf)\n",
-		unprintable_escape(line, tmpstr, sizeof(tmpstr)));
-
-	struct vgsm_response_line *resp_line;
-	resp_line = malloc(sizeof(struct vgsm_response_line) +
-			 strlen(line) + 1);
-
-	strcpy(resp_line->text, line);
-
-	list_add_tail(&resp_line->node, &intf->req.response->lines);
-
-	if (!strcmp(line, "OK")) {
-		intf->req.response_error = 0;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "CONNECT")) {
-		intf->req.response_error = 1;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "NO CARRIER")) {
-		intf->req.response_error = 3;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "ERROR")) {
-		intf->req.response_error = 4;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "NO DIALTONE")) {
-		intf->req.response_error = 6;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "BUSY")) {
-		intf->req.response_error = 7;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "NO ANSWER")) {
-		intf->req.response_error = 8;
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	} else if (strstr(line, "+CME ERROR: ") == line) {
-		intf->req.response_error = atoi(line + strlen("+CME ERROR: "));
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	}
-}
+#define to_intf(cm) container_of((cm), struct vgsm_interface, comm)
 
 static void handle_unsolicited_busy(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
+	struct vgsm_interface *intf = to_intf(comm);
+
+	ast_mutex_lock(&intf->lock);
 	if (intf->current_call)
 		ast_softhangup(intf->current_call, AST_SOFTHANGUP_DEV);
+	ast_mutex_unlock(&intf->lock);
 }
 
 static void handle_unsolicited_no_dialtone(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 	ast_log(LOG_WARNING, "'NO DIALTONE' not yet handled\n");
 }
 
 static void handle_unsolicited_no_carrier(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
+	struct vgsm_interface *intf = to_intf(comm);
+
+	ast_mutex_lock(&intf->lock);
 	if (intf->current_call)
 		ast_softhangup(intf->current_call, AST_SOFTHANGUP_DEV);
+	ast_mutex_unlock(&intf->lock);
 }
 
 static void handle_unsolicited_ring(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 	ast_log(LOG_NOTICE, "Unexpected RING\n");
 }
 
 static void handle_unsolicited_cring(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
-	if (intf->status != VGSM_INT_STATUS_READY) {
-		ast_log(LOG_NOTICE, "Rejecting RING on not ready interface\n");
-		vgsm_send_request(intf, 500, "ATH");
-		vgsm_expect_ok(intf);
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_response_first_line(urm)->text;
+	const char *pars = line + strlen(urm->urc->code);
 
-		return;
+	ast_mutex_lock(&intf->lock);
+
+	if (intf->status != VGSM_INT_STATUS_READY) {
+		ast_log(LOG_NOTICE,
+			"Rejecting RING on not ready interface\n");
+		vgsm_send_request(comm, 500, "ATH");
+		vgsm_expect_ok(comm);
+
+		goto err_intf_not_ready;
 	}
 
 	if (intf->current_call) {
 		ast_log(LOG_NOTICE, "Updating timeout\n");
 		ast_channel_setwhentohangup(intf->current_call, 6);
-		return;
+		goto timeout_updated;
 	}
 
 	if (strcmp(pars, "VOICE")) {
 		ast_log(LOG_NOTICE, "Not a voice call, rejecting\n");
-		vgsm_send_request(intf, 500, "ATH");
-		vgsm_expect_ok(intf);
+		vgsm_send_request(comm, 500, "ATH");
+		vgsm_expect_ok(comm);
 
-		return;
+		goto err_not_voice;
 	}
 
 	struct vgsm_chan *vgsm_chan;
@@ -1976,9 +1719,9 @@ static void handle_unsolicited_cring(
 
 	intf->current_call = ast_chan;
 
-	ast_mutex_lock(&usecnt_lock);
+	ast_mutex_lock(&vgsm.usecnt_lock);
 	vgsm.usecnt++;
-	ast_mutex_unlock(&usecnt_lock);
+	ast_mutex_unlock(&vgsm.usecnt_lock);
 	ast_update_use_count();
 
 	if (strlen(intf->last_cli.number))
@@ -2007,8 +1750,10 @@ static void handle_unsolicited_cring(
 			ast_chan->name);
 			goto err_pbx_start;
 
-		vgsm_send_request(intf, 500, "ATH");
+		vgsm_send_request(comm, 500, "ATH");
 	}
+
+	ast_mutex_unlock(&intf->lock);
 
 	return;
 
@@ -2017,6 +1762,11 @@ err_pbx_start:
 err_vgsm_new:
 	vgsm_destroy(vgsm_chan);
 err_vgsm_alloc:
+err_not_voice:
+timeout_updated:
+err_intf_not_ready:
+
+	ast_mutex_unlock(&intf->lock);
 
 	return;
 }
@@ -2045,7 +1795,10 @@ static const char *get_token(const char **s, char *token, int token_size)
 				p++;
 		}
 
-		if (!*p || *p == ',') {
+		if (!*p)
+			break;
+
+		if (*p == ',') {
 			*s = p + 1;
 
 			break;
@@ -2115,10 +1868,11 @@ err_no_mode:
 static int vgsm_update_cops(
 	struct vgsm_interface *intf)
 {
+	struct vgsm_comm *comm = &intf->comm;
 	struct vgsm_response *resp;
 
-	vgsm_send_request(intf, 5 * 1000, "AT+COPS?");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(&intf->comm, 5 * 1000, "AT+COPS?");
+	resp = vgsm_read_response(comm);
 	if (!resp)
 		return -1;
 
@@ -2148,13 +1902,25 @@ parsing_complete:
 	return 0;
 }
 
+static void vgsm_module_update_readiness(
+	struct vgsm_interface *intf)
+{
+	if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+	    intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		intf->status = VGSM_INT_STATUS_READY;
+	}
+}
 
 static void handle_unsolicited_creg(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_response_first_line(urm)->text;
+	const char *pars = line + strlen(urm->urc->code);
+
+	ast_mutex_lock(&intf->lock);
+
 	if (strlen(pars) > 7)
 		vgsm_update_intf_by_creg(intf, pars + 7);
 
@@ -2174,40 +1940,41 @@ static void handle_unsolicited_creg(
 	}
 
 	vgsm_update_cops(intf);
+
+	vgsm_module_update_readiness(intf);
+
+	ast_mutex_unlock(&intf->lock);
 }
 
 static void handle_unsolicited_cusd(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_cccm(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_ccwa(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_clip(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
-	const char *pars_ptr = pars;
 	char field[32];
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_response_first_line(urm)->text;
+	const char *pars = line + strlen(urm->urc->code);
+	const char *pars_ptr = pars;
+
+	ast_mutex_lock(&intf->lock);
 
 	if (!get_token(&pars_ptr, intf->last_cli.number,
 			sizeof(intf->last_cli.number))) {
@@ -2241,475 +2008,159 @@ static void handle_unsolicited_clip(
 
 parsing_done:
 
+	ast_mutex_unlock(&intf->lock);
 	return;
 
 err_parse_cid:
 
+	ast_mutex_unlock(&intf->lock);
 	return;
 }
 
 static void handle_unsolicited_cssi(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_cssu(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_alarm(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_cgreg(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_cmti(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_cmt(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_cbm(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
-	switch(intf->parser_state) {
-	case VGSM_PS_READING_URC:
-		ast_log(LOG_NOTICE, "CBM: %s\n", line);
-		vgsm_parser_change_state(intf, VGSM_PS_IDLE);
-	break;
-
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
-		ast_log(LOG_NOTICE, "CBM: %s\n", line);
-		vgsm_parser_change_state(intf, VGSM_PS_AWAITING_RESPONSE);
-	break;
-
-	case VGSM_PS_RESPONSE_READY_READING_URC:
-		ast_log(LOG_NOTICE, "CBM: %s\n", line);
-		vgsm_parser_change_state(intf, VGSM_PS_RESPONSE_READY);
-	break;
-
-	case VGSM_PS_IDLE:
-		intf->urc = urc;
-		vgsm_parser_change_state(intf, VGSM_PS_READING_URC);
-	break;
-
-	case VGSM_PS_RESPONSE_READY:
-		intf->urc = urc;
-		vgsm_parser_change_state(intf,
-			VGSM_PS_RESPONSE_READY_READING_URC);
-	break;
-
-	case VGSM_PS_AWAITING_RESPONSE:
-		intf->urc = urc;
-		vgsm_parser_change_state(intf,
-			VGSM_PS_AWAITING_RESPONSE_READING_URC);
-	break;
-
-	case VGSM_PS_BITBUCKET:
-	case VGSM_PS_RECOVERING:
-	case VGSM_PS_READING_RESPONSE:
-		ast_log(LOG_ERROR,
-			"Unexpected handle_unsolicited_cbm in state %d\n",
-			intf->parser_state);
-	break;
-	}
-	
 }
 
 static void handle_unsolicited_cds(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
 }
 
 static void handle_unsolicited_qss(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
-	ast_log(LOG_NOTICE, "QSS\n");
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_response_first_line(urm)->text;
+	const char *pars = line + strlen(urm->urc->code);
+
+	ast_mutex_lock(&intf->lock);
+	if (atoi(pars))
+		intf->sim.inserted = TRUE;
+	else
+		intf->sim.inserted = FALSE;
+	ast_mutex_unlock(&intf->lock);
 }
 
 static void handle_unsolicited_jdr(
-	const struct vgsm_urc *urc,
-	struct vgsm_interface *intf,
-	const char *line,
-	const char *pars)
+	const struct vgsm_response *urm,
+	struct vgsm_comm *comm)
 {
-	ast_log(LOG_WARNING, "Jammin'... jammin' in the name of the Lord.\n");
+	struct vgsm_interface *intf = to_intf(comm);
+
+	ast_mutex_lock(&intf->lock);
+	ast_log(LOG_WARNING,
+		"Jammin'... jammin' in the name of the flying "
+		"spaghetti monster.\n");
+
+	vgsm_module_update_readiness(intf);
+	ast_mutex_unlock(&intf->lock);
 }
 
 static struct vgsm_urc urcs[] =
 {
-	{ "BUSY", handle_unsolicited_busy },
-	{ "NO CARRIER", handle_unsolicited_no_carrier },
-	{ "NO DIALTONE", handle_unsolicited_no_dialtone },
-	{ "BUSY", handle_unsolicited_busy },
-	{ "RING: ", handle_unsolicited_ring },
-	{ "+CRING: ", handle_unsolicited_cring },
-	{ "+CREG: ", handle_unsolicited_creg },
-	{ "+CUSD: ", handle_unsolicited_cusd },
-	{ "+CCWA: ", handle_unsolicited_ccwa },
-	{ "+CLIP: ", handle_unsolicited_clip },
-	{ "+CCCM: ", handle_unsolicited_cccm },
-	{ "+CSSI: ", handle_unsolicited_cssi },
-	{ "+CSSU: ", handle_unsolicited_cssu },
-	{ "+ALARM: ", handle_unsolicited_alarm },
-	{ "+CGREG: ", handle_unsolicited_cgreg },
-	{ "+CMTI: ", handle_unsolicited_cmti },
-	{ "+CMT: ", handle_unsolicited_cmt },
-	{ "+CBM: ", handle_unsolicited_cbm },
-	{ "+CDS: ", handle_unsolicited_cds },
-	{ "#QSS: ", handle_unsolicited_qss },
-	{ "#JDR: ", handle_unsolicited_jdr },
+	{ "BUSY", FALSE, handle_unsolicited_busy },
+	{ "NO CARRIER", FALSE, handle_unsolicited_no_carrier },
+	{ "NO DIALTONE", FALSE, handle_unsolicited_no_dialtone },
+	{ "BUSY", FALSE, handle_unsolicited_busy },
+	{ "RING: ", FALSE, handle_unsolicited_ring },
+	{ "+CRING: ", FALSE, handle_unsolicited_cring },
+	{ "+CREG: ", FALSE, handle_unsolicited_creg },
+	{ "+CUSD: ", FALSE, handle_unsolicited_cusd },
+	{ "+CCWA: ", FALSE, handle_unsolicited_ccwa },
+	{ "+CLIP: ", FALSE, handle_unsolicited_clip },
+	{ "+CCCM: ", FALSE, handle_unsolicited_cccm },
+	{ "+CSSI: ", FALSE, handle_unsolicited_cssi },
+	{ "+CSSU: ", FALSE, handle_unsolicited_cssu },
+	{ "+ALARM: ", FALSE, handle_unsolicited_alarm },
+	{ "+CGREG: ", FALSE, handle_unsolicited_cgreg },
+	{ "+CMTI: ", FALSE, handle_unsolicited_cmti },
+	{ "+CMT: ", FALSE, handle_unsolicited_cmt },
+	{ "+CBM: ", TRUE, handle_unsolicited_cbm },
+	{ "+CDS: ", FALSE, handle_unsolicited_cds },
+	{ "#QSS: ", FALSE, handle_unsolicited_qss },
+	{ "#JDR: ", FALSE, handle_unsolicited_jdr },
+	{ },
 };
-
-static void handle_unsolicited_line(
-	struct vgsm_interface *intf,
-	const char *line)
-{
-	int i;
-	for (i=0; i<ARRAY_SIZE(urcs); i++) {
-		if (strstr(line, urcs[i].code) == line) {
-			urcs[i].handler(&urcs[i], intf, line,
-				line + strlen(urcs[i].code));
-
-			return;
-		}
-	}
-
-	ast_log(LOG_WARNING,
-		"Unsupported/unexpected unsolicited"
-		" code '%s'\n",
-		line);
-}
-
-static int handle_crlf_msg_crlf(struct vgsm_interface *intf)
-{
-	char *begin, *end;
-
-	begin = intf->buf;
-
-	if (*(begin + 1) == '\0')
-		return 0;
-
-	if (*(begin + 1) == '\r')
-		return 1;
-
-	if (*(begin + 1) != '\n') {
-		ast_log(LOG_WARNING, "Unexpected char 0x%02x after <cr>\n",
-			*(begin + 1));
-
-		return 1;
-	}
-
-	end = strchr(begin + 2, '\n');
-	if (!end)
-		return 0;
-
-	if (*(end - 1) != '\r') {
-		ast_log(LOG_WARNING, "Unexpected char 0x%02x before <lf>\n",
-			*(end - 1));
-
-		return end - begin + 1;
-	}
-
-	*(end - 1) = '\0';
-
-	char tmpstr[80];
-	vgsm_debug_verb("RX: '%s'\n",
-		unprintable_escape(begin + 2, tmpstr, sizeof(tmpstr)));
-
-	switch(intf->parser_state) {
-	case VGSM_PS_READING_RESPONSE:
-	case VGSM_PS_AWAITING_RESPONSE:
-		handle_response_line(intf, begin + 2);
-	break;
-
-	case VGSM_PS_IDLE:
-	case VGSM_PS_RESPONSE_READY:
-	case VGSM_PS_READING_URC:
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
-	case VGSM_PS_RESPONSE_READY_READING_URC:
-		handle_unsolicited_line(intf, begin + 2);
-	break;
-
-	case VGSM_PS_BITBUCKET:
-	case VGSM_PS_RECOVERING:
-		assert(1);
-	break;
-	}
-
-	return end - intf->buf + 1;
-}
-
-static int handle_msg_cr(struct vgsm_interface *intf)
-{
-	char *firstcr;
-	firstcr = strchr(intf->buf, '\r');
-
-	*firstcr = '\0';
-
-	if (intf->parser_state != VGSM_PS_AWAITING_RESPONSE)
-		return firstcr - intf->buf + 1;
-
-	char tmpstr[80];
-	vgsm_debug_verb("RX: '%s'\n",
-		unprintable_escape(intf->buf, tmpstr, sizeof(tmpstr)));
-
-	if (!strncmp(intf->buf, intf->req.buf, strlen(intf->req.buf))) {
-		
-		vgsm_parser_change_state(intf, VGSM_PS_READING_RESPONSE);
-	} else {
-		char *dropped = malloc(firstcr - intf->buf + 1);
-
-		memcpy(dropped, intf->buf, firstcr - intf->buf);
-		dropped[firstcr - intf->buf] = '\0';
-
-		char tmpstr[80];
-		ast_log(LOG_WARNING,
-			"Dropped spurious bytes '%s' from serial\n",
-			unprintable_escape(dropped, tmpstr, sizeof(tmpstr)));
-
-		free(dropped);
-	}
-
-	return firstcr - intf->buf + 1;
-}
-
-static int handle_msg_crlf(struct vgsm_interface *intf)
-{
-	char *lf;
-	lf = strchr(intf->buf, '\n');
-
-	if (lf == intf->buf) {
-		ast_log(LOG_WARNING, "Unexpected <lf>\n");
-		return 1;
-	}
-
-	*(lf - 1) = '\0';
-
-	char tmpstr[80];
-	vgsm_debug_verb("RX: '%s'\n",
-		unprintable_escape(intf->buf, tmpstr, sizeof(tmpstr)));
-
-	intf->urc->handler(intf->urc, intf, intf->buf,
-			intf->buf + strlen(intf->urc->code));
-
-	return lf - intf->buf + 1;
-}
-
-static int vgsm_receive(struct vgsm_interface *intf)
-{
-	int buflen = strlen(intf->buf);
-	int nread;
-
-	nread = read(intf->fd, intf->buf + buflen,
-			sizeof(intf->buf) - buflen - 1);
-	if (nread < 0) {
-		ast_log(LOG_WARNING, "Error reading from serial: %s\n",
-			strerror(errno));
-
-		return -1;
-	}
-
-	intf->buf[buflen + nread] = '\0';
-
-	while(1) {
-		int nread = 0;
-
-#if 0
-char tmpstr[80];
-ast_verbose("BUF='%s'\n",
-	unprintable_escape(intf->buf, tmpstr, sizeof(tmpstr)));
-#endif
-
-		switch(intf->parser_state) {
-		case VGSM_PS_BITBUCKET:
-			/* Throw away everything */
-			nread = strlen(intf->buf);
-		break;
-
-		case VGSM_PS_RECOVERING:
-			if (strstr(intf->buf, "\r\nOK\r\n")) {
-				nread = strlen(intf->buf);
-
-				vgsm_parser_change_state(intf,
-					VGSM_PS_IDLE);
-			}
-		break;
-
-		case VGSM_PS_READING_URC:
-		case VGSM_PS_AWAITING_RESPONSE_READING_URC:
-		case VGSM_PS_RESPONSE_READY_READING_URC: {
-			const char *firstlf = strchr(intf->buf, '\n');
-			if (firstlf)
-				nread = handle_msg_crlf(intf);
-		}
-		break;
-
-		case VGSM_PS_IDLE:
-		case VGSM_PS_AWAITING_RESPONSE:
-		case VGSM_PS_READING_RESPONSE:
-		case VGSM_PS_RESPONSE_READY: {
-			const char *firstcr;
-			firstcr = strchr(intf->buf, '\r');
-
-			if (firstcr > intf->buf)
-				nread = handle_msg_cr(intf);
-			else if (firstcr == intf->buf)
-				nread = handle_crlf_msg_crlf(intf);
-		}
-		break;
-		}
-
-		if (nread)
-			memmove(intf->buf, intf->buf + nread,
-				strlen(intf->buf + nread) + 1);
-		else
-			break;
-	}
-
-	return 0;
-}
-
-static int vgsm_comm_thread_do_stuff()
-{
-	struct pollfd polls[64];
-	struct vgsm_interface *ifs[64];
-	int npolls = 0;
-
-	{
-	struct vgsm_interface *intf;
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
-
-		if (intf->fd < 0)
-			continue;
-
-		polls[npolls].fd = intf->fd;
-		polls[npolls].events = POLLERR | POLLIN;
-
-		ifs[npolls] = intf;
-
-		npolls++;
-	}
-	}
-
-	for(;;) {
-		int i;
-		longtime_t now = longtime_now();
-		longtime_t timeout = -1;
-
-		for (i=0; i<npolls; i++) {
-			ast_mutex_lock(&ifs[i]->lock);
-			if (ifs[i]->parser_state != VGSM_PS_IDLE &&
-			    ifs[i]->req.timeout - now > 0 &&
-			    (ifs[i]->req.timeout - now < timeout ||
-			     timeout == -1))
-				timeout = ifs[i]->req.timeout - now;
-			ast_mutex_unlock(&ifs[i]->lock);
-		}
-
-		int timeout_ms;
-		if (timeout == -1)
-			timeout_ms = -1;
-		else
-			timeout_ms = timeout / 1000 + 1;
-
-		vgsm_debug_verb("poll timeout = %d\n", timeout_ms);
-
-		int res = poll(polls, npolls, timeout_ms);
-		if (res < 0) {
-			if (errno == EINTR) {
-				/* Force reload of polls */
-				return 1;
-			}
-
-			ast_log(LOG_WARNING, "Error polling serial: %s\n",
-				strerror(errno));
-
-			return 0;
-		}
-
-		now = longtime_now();
-
-		for (i=0; i<npolls; i++) {
-			ast_mutex_lock(&ifs[i]->lock);
-			if (ifs[i]->parser_state == VGSM_PS_AWAITING_RESPONSE &&
-			    ifs[i]->req.timeout < now) {
-				vgsm_retransmit_request(ifs[i]);
-			}
-			ast_mutex_unlock(&ifs[i]->lock);
-
-			if (polls[i].revents & POLLIN)
-				vgsm_receive(ifs[i]);
-		}
-	}
-}
 
 static int vgsm_input_pin(struct vgsm_interface *intf)
 {
+	struct vgsm_comm *comm = &intf->comm;
 	struct vgsm_response *resp;
-	struct vgsm_response_line *first_line;
+	const struct vgsm_response_line *first_line;
 	int res = 0;
 
-	vgsm_send_request(intf, 20 * 1000, "AT+CPIN");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 20 * 1000, "AT+CPIN");
+	resp = vgsm_read_response(comm);
 	if (!resp)
 		return -1;
 
 	first_line = vgsm_response_first_line(resp);
 
 	if (!strcmp(first_line->text, "+CPIN: READY")) {
+		/* Do nothing */
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 
-#if 0
 		/* Only do ONE attempt automatically, further attempts must
 		 * be explicitly required by the user */
 
-		vgsm_send_request(intf, "AT+CPIN=%s", intf->pin);
-		if (vgsm_expect_ok(intf, 20 * 1000) < 0) {
+		if (intf->sim.remaining_attempts < 3) {
 			ast_log(LOG_WARNING,
-				"SIM PIN refused, aborting module initialization\n");
+				"SIM requires PIN but attempts < 3. SIM PIN"
+				" should be entered manually\n");
 
-			return -1;
+			res = -1;
+		} else {
+			vgsm_send_request(comm, 20 * 1000,
+					"AT+CPIN=%s", intf->pin);
+
+			if (vgsm_expect_ok(comm) < 0) {
+				ast_log(LOG_WARNING,
+					"SIM PIN refused, aborting module"
+					" initialization\n");
+
+				res = -1;
+			}
 		}
-#else
-		res = -1;
-#endif
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
 		ast_log(LOG_WARNING,
 			"SIM requires PIN2, aborting module initialization\n");
@@ -2758,16 +2209,14 @@ static int vgsm_input_pin(struct vgsm_interface *intf)
 	return res;
 }
 
-static int vgsm_module_init(struct vgsm_interface *intf)
+static int vgsm_module_codec_init(struct vgsm_interface *intf)
 {
-	struct vgsm_response *resp;
-
 	struct vgsm_codec_ctl cctl;
 
 	cctl.parameter = VGSM_CODEC_RXGAIN;
 	cctl.value = intf->rx_gain;
 
-	if (ioctl(intf->fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
+	if (ioctl(intf->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR, "ioctl(IOC_CODEC_SET) failed: %s\n",
 			strerror(errno));
 
@@ -2777,7 +2226,7 @@ static int vgsm_module_init(struct vgsm_interface *intf)
 	cctl.parameter = VGSM_CODEC_TXGAIN;
 	cctl.value = intf->tx_gain;
 
-	if (ioctl(intf->fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
+	if (ioctl(intf->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR, "ioctl(IOC_CODEC_SET) failed: %s\n",
 			strerror(errno));
 
@@ -2803,29 +2252,37 @@ static int vgsm_module_init(struct vgsm_interface *intf)
 	}
 */
 
+	return 0;
+}
+
+static int vgsm_module_init(struct vgsm_interface *intf)
+{
+	struct vgsm_comm *comm = &intf->comm;
+	struct vgsm_response *resp;
+
 	/* Very basic onfiguration before entering PIN */
 
 	/* "AT" is needed before AT+IPR, otherwise it
 	 * responds with ERROR */
 
-	vgsm_send_request(intf, 500, "AT");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
-	vgsm_send_request(intf, 500, "AT+IPR=38400");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+IPR=38400");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
-	vgsm_send_request(intf, 500, "AT+CMEE=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CMEE=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Be careful not consume all the available attempts */
-	vgsm_send_request(intf, 500, "AT#PCT");
+	vgsm_send_request(comm, 500, "AT#PCT");
 
-	resp = vgsm_read_response(intf);
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	intf->sim.remaining_attempts =
 		atoi(vgsm_response_first_line(resp)->text + strlen("#PCT: "));
@@ -2839,76 +2296,76 @@ static int vgsm_module_init(struct vgsm_interface *intf)
 			intf->name,
 			intf->sim.remaining_attempts);
 
-		return -1;
+		goto err_no_resp;
 	}
 
 	if (vgsm_input_pin(intf) < 0)
-		return -1;
+		goto err_no_resp;
 
 	/* Configure operator selection */
 	switch(intf->operator_selection) {
 	case VGSM_OPSEL_AUTOMATIC:
-		vgsm_send_request(intf, 500, "AT+COPS=0,2");
+		vgsm_send_request(comm, 500, "AT+COPS=0,2");
 	break;
 
 	case VGSM_OPSEL_MANUAL_UNLOCKED:
-		vgsm_send_request(intf, 500, "AT+COPS=1,2,%s",
+		vgsm_send_request(comm, 500, "AT+COPS=1,2,%s",
 			intf->operator_id);
 	break;
 
 	case VGSM_OPSEL_MANUAL_FALLBACK:
-		vgsm_send_request(intf, 500, "AT+COPS=4,2,%s",
+		vgsm_send_request(comm, 500, "AT+COPS=4,2,%s",
 			intf->operator_id);
 	break;
 
 	case VGSM_OPSEL_MANUAL_LOCKED:
-		vgsm_send_request(intf, 500, "AT+COPS=5,2,%s",
+		vgsm_send_request(comm, 500, "AT+COPS=5,2,%s",
 			intf->operator_id);
 	break;
 	}
 
-	if (vgsm_expect_ok(intf))
-		return -1;
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable unsolicited registration informations */
-	vgsm_send_request(intf, 500, "AT+CREG=2");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CREG=2");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable unsolicited unstructured supplementary data */
-	vgsm_send_request(intf, 500, "AT+CUSD=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CUSD=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable unsolicited GPRS registration status */
-	vgsm_send_request(intf, 500, "AT+CGREG=2");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CGREG=2");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable unsolicited supplementary service notification */
-	vgsm_send_request(intf, 500, "AT+CSSN=1,1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CSSN=1,1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Subscribe to all cell broadcast channels */
-	vgsm_send_request(intf, 500, "AT+CSCB=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CSCB=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable extended cellular result codes */
-	vgsm_send_request(intf, 500, "AT+CRC=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CRC=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable Calling Line Presentation */
-	vgsm_send_request(intf, 500, "AT+CLIP=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CLIP=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable unsolicited advice of charge notifications */
-	vgsm_send_request(intf, 500, "AT+CAOC=2");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CAOC=2");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Sets current time on module */
 	if (intf->set_clock) {
@@ -2917,7 +2374,7 @@ static int vgsm_module_init(struct vgsm_interface *intf)
 
 		tm = localtime(&ct);
 
-		vgsm_send_request(intf, 500,
+		vgsm_send_request(comm, 500,
 			"AT+CCLK=\"%02d/%02d/%02d,%02d:%02d:%02d%+03ld\"",
 			tm->tm_year % 100,
 			tm->tm_mon + 1,
@@ -2926,74 +2383,81 @@ static int vgsm_module_init(struct vgsm_interface *intf)
 			tm->tm_min,
 			tm->tm_sec,
 			-(timezone / 3600) + tm->tm_isdst);
-		if (vgsm_expect_ok(intf))
-			return -1;
+		if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+			goto err_no_resp;
 	}
 
 	/* Enable unsolicited new message indications */
-	vgsm_send_request(intf, 500, "AT+CNMI=2,1,2,1,0");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT+CNMI=2,1,2,1,0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Select handsfree audio path */
-	vgsm_send_request(intf, 500, "AT#CAP=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#CAP=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Disable tones */
-	vgsm_send_request(intf, 500, "AT#STM=0");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#STM=0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Set ringer auto directed to GPIO7 */
-	vgsm_send_request(intf, 500, "AT#SRP=3");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#SRP=3");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 // SET #SGPO
 	/* Enable unsolicited SIM status reporting */
-	vgsm_send_request(intf, 500, "AT#QSS=1");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#QSS=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Disable handsfree echo canceller */
-	vgsm_send_request(intf, 500, "AT#SHFEC=0");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#SHFEC=0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Set MIC audio gain to +0dB */
-	vgsm_send_request(intf, 500, "AT#HFMICG=0");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#HFMICG=0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Disable sidetone generation */
-	vgsm_send_request(intf, 500, "AT#SHFSD=0");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#SHFSD=0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Set GSM1800 band */
-	vgsm_send_request(intf, 500, "AT#BND=0");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#BND=0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	/* Enable Jammer detector */
-	vgsm_send_request(intf, 500, "AT#JDR=2");
-	if (vgsm_expect_ok(intf))
-		return -1;
+	vgsm_send_request(comm, 500, "AT#JDR=2");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
 
 	return 0;
+
+err_no_resp:
+
+	return -1;
 }
 
 static int vgsm_module_update_static_info(
 	struct vgsm_interface *intf)
 {
+	struct vgsm_comm *comm = &intf->comm;
 	struct vgsm_response *resp;
 
+	ast_mutex_lock(&intf->lock);
+
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "AT+CGMI");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "AT+CGMI");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	strncpy(intf->module.vendor,
 		vgsm_response_first_line(resp)->text,
@@ -3002,10 +2466,10 @@ static int vgsm_module_update_static_info(
 	vgsm_response_put(resp);
 
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "AT+CGMM");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "AT+CGMM");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	strncpy(intf->module.model,
 		vgsm_response_first_line(resp)->text,
@@ -3014,10 +2478,10 @@ static int vgsm_module_update_static_info(
 	vgsm_response_put(resp);
 
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "ATI5");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "ATI5");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	strncpy(intf->module.dob_version,
 		vgsm_response_first_line(resp)->text,
@@ -3026,10 +2490,10 @@ static int vgsm_module_update_static_info(
 	vgsm_response_put(resp);
 
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "AT+CGMR");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "AT+CGMR");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	strncpy(intf->module.version,
 		vgsm_response_first_line(resp)->text,
@@ -3038,10 +2502,10 @@ static int vgsm_module_update_static_info(
 	vgsm_response_put(resp);
 
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "AT+GSN");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "AT+GSN");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	strncpy(intf->module.serial_number,
 		vgsm_response_first_line(resp)->text,
@@ -3050,10 +2514,10 @@ static int vgsm_module_update_static_info(
 	vgsm_response_put(resp);
 
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "AT+CGSN");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "AT+CGSN");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
 
 	strncpy(intf->module.imei,
 		vgsm_response_first_line(resp)->text,
@@ -3061,11 +2525,30 @@ static int vgsm_module_update_static_info(
 
 	vgsm_response_put(resp);
 
+	
 	/*--------*/
-	vgsm_send_request(intf, 5 * 1000, "AT+CIMI");
-	resp = vgsm_read_response(intf);
+	vgsm_send_request(comm, 5 * 1000, "AT#QSS");
+	resp = vgsm_read_response(comm);
 	if (!resp)
-		return -1;
+		goto err_no_resp;
+
+	if (strlen(vgsm_response_first_line(resp)->text) > 7) {
+		if (!strcmp(vgsm_response_first_line(resp)->text + 6, "1,1"))
+			intf->sim.inserted = TRUE;
+		else
+			intf->sim.inserted = FALSE;
+	}
+
+	vgsm_response_put(resp);
+
+	if (!intf->sim.inserted)
+		goto no_sim;
+	
+	/*--------*/
+	vgsm_send_request(comm, 5 * 1000, "AT+CIMI");
+	resp = vgsm_read_response(comm);
+	if (!resp)
+		goto err_no_resp;
 
 	strncpy(intf->sim.imsi,
 		vgsm_response_first_line(resp)->text,
@@ -3073,16 +2556,29 @@ static int vgsm_module_update_static_info(
 
 	vgsm_response_put(resp);
 
+no_sim:
+
+	ast_mutex_unlock(&intf->lock);
+
 	return 0;
+
+err_no_resp:
+
+	ast_mutex_unlock(&intf->lock);
+
+	return -1;
 }
 
 static int vgsm_module_update_net_info(
 	struct vgsm_interface *intf)
 {
+	struct vgsm_comm *comm = &intf->comm;
 	struct vgsm_response *resp;
 
-	vgsm_send_request(intf, 5 * 1000, "AT+CREG?");
-	resp = vgsm_read_response(intf);
+	ast_mutex_lock(&intf->lock);
+
+	vgsm_send_request(comm, 5 * 1000, "AT+CREG?");
+	resp = vgsm_read_response(comm);
 	if (!resp)
 		goto err_creg_read_response;
 
@@ -3098,12 +2594,12 @@ err_creg_read_response:
 
 	int i;
 	for (i=0; i<ARRAY_SIZE(intf->net.cells); i++) {
-		vgsm_send_request(intf, 5 * 1000, "AT#MONI=%d", i);
-		if (vgsm_expect_ok(intf))
+		vgsm_send_request(comm, 5 * 1000, "AT#MONI=%d", i);
+		if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 			break;
 
-		vgsm_send_request(intf, 5 * 1000, "AT#MONI");
-		resp = vgsm_read_response(intf);
+		vgsm_send_request(comm, 5 * 1000, "AT#MONI");
+		resp = vgsm_read_response(comm);
 		if (!resp)
 			break;
 
@@ -3160,6 +2656,8 @@ err_creg_read_response:
 
 	vgsm_update_cops(intf);
 
+	ast_mutex_unlock(&intf->lock);
+
 	return 0;
 
 /*	AT+CSQ
@@ -3167,30 +2665,13 @@ err_creg_read_response:
 */
 }
 
-
-static void *vgsm_comm_thread_main(void *data)
-{
-	while(vgsm_comm_thread_do_stuff());
-
-	return NULL;
-}
-
-static void vgsm_module_update_readiness(
-	struct vgsm_interface *intf)
-{
-	if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-	    intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		intf->status = VGSM_INT_STATUS_READY;
-	}
-}
-
 static void vgsm_monitor_attempt_initialization()
 {
 	struct vgsm_interface *intf;
 	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
-		if (intf->fd < 0) {
-			intf->fd = open(intf->device_filename, O_RDWR);
-			if (intf->fd < 0) {
+		if (intf->comm.fd < 0) {
+			intf->comm.fd = open(intf->device_filename, O_RDWR);
+			if (intf->comm.fd < 0) {
 				ast_log(LOG_WARNING,
 					"Unable to open '%s': %s\n",
 					intf->device_filename,
@@ -3200,7 +2681,7 @@ static void vgsm_monitor_attempt_initialization()
 				continue;
 			}
 
-			pthread_kill(vgsm_comm_thread, SIGURG);
+			vgsm_comm_awake(&intf->comm);
 		}
 
 		if (intf->status != VGSM_INT_STATUS_UNINITIALIZED &&
@@ -3211,14 +2692,20 @@ static void vgsm_monitor_attempt_initialization()
 
 		ast_log(LOG_NOTICE, "Initializing module '%s'\n", intf->name);
 
-		if (vgsm_module_recover(intf) < 0) {
-			vgsm_parser_change_state(intf, VGSM_PS_BITBUCKET);
+		if (vgsm_comm_start_recovery(&intf->comm) < 0) {
+			vgsm_comm_set_bitbucket(&intf->comm);
+			intf->status = VGSM_INT_STATUS_LOCKED_DOWN;
+			continue;
+		}
+
+		if (vgsm_module_codec_init(intf) < 0) {
+			vgsm_comm_set_bitbucket(&intf->comm);
 			intf->status = VGSM_INT_STATUS_LOCKED_DOWN;
 			continue;
 		}
 
 		if (vgsm_module_init(intf) < 0) {
-			vgsm_parser_change_state(intf, VGSM_PS_BITBUCKET);
+			vgsm_comm_set_bitbucket(&intf->comm);
 			intf->status = VGSM_INT_STATUS_LOCKED_DOWN;
 			continue;
 		}
@@ -3228,7 +2715,7 @@ static void vgsm_monitor_attempt_initialization()
 		vgsm_module_update_static_info(intf);
 
 		if (vgsm_module_update_net_info(intf) < 0) {
-			vgsm_parser_change_state(intf, VGSM_PS_BITBUCKET);
+			vgsm_comm_set_bitbucket(&intf->comm);
 			intf->status = VGSM_INT_STATUS_LOCKED_DOWN;
 			continue;
 		}
@@ -3278,9 +2765,13 @@ int load_module()
 {
 	int res = 0;
 
+	memset(&vgsm, 0, sizeof(vgsm));
+	
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
 	ast_mutex_init(&vgsm.lock);
+
+	ast_mutex_init(&vgsm.usecnt_lock);
 
 	INIT_LIST_HEAD(&vgsm.ifs);
 	INIT_LIST_HEAD(&vgsm.op_list);
@@ -3303,17 +2794,19 @@ int load_module()
 	ast_cli_register(&no_debug_vgsm_generic);
 	ast_cli_register(&vgsm_reload);
 	ast_cli_register(&show_vgsm_interfaces);
+	ast_cli_register(&vgsm_pin_input);
+	ast_cli_register(&vgsm_puk_input);
+	ast_cli_register(&vgsm_pin_set);
 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	if (ast_pthread_create(&vgsm_comm_thread, &attr,
-					vgsm_comm_thread_main, NULL) < 0) {
+	if (vgsm_comm_thread_create() < 0) {
 		ast_log(LOG_ERROR, "Unable to start communication thread.\n");
 		return -1;
 	}
-
+	
 	if (ast_pthread_create(&vgsm_monitor_thread, &attr,
 					vgsm_monitor_thread_main, NULL) < 0) {
 		ast_log(LOG_ERROR, "Unable to start maintainance thread.\n");
@@ -3325,6 +2818,9 @@ int load_module()
 
 int unload_module(void)
 {
+	ast_cli_unregister(&vgsm_pin_set);
+	ast_cli_unregister(&vgsm_puk_input);
+	ast_cli_unregister(&vgsm_pin_input);
 	ast_cli_unregister(&show_vgsm_interfaces);
 	ast_cli_unregister(&vgsm_reload);
 	ast_cli_unregister(&no_debug_vgsm_generic);
@@ -3348,9 +2844,9 @@ int reload(void)
 int usecount()
 {
 	int res;
-	ast_mutex_lock(&usecnt_lock);
+	ast_mutex_lock(&vgsm.usecnt_lock);
 	res = vgsm.usecnt;
-	ast_mutex_unlock(&usecnt_lock);
+	ast_mutex_unlock(&vgsm.usecnt_lock);
 	return res;
 }
 

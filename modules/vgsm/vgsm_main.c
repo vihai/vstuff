@@ -161,7 +161,7 @@ static ssize_t vgsm_cdev_read(
 
 	copied_bytes = __kfifo_get_user(module->kfifo_rx, user_buf, count);
 
-	schedule_tasklet(&module->rx_tasklet);
+	tasklet_schedule(&module->card->rx_tasklet);
 
 	return copied_bytes;
 }

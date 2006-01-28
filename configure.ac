@@ -62,10 +62,10 @@ if [[ "$enable_kernel_modules" != "no" ]]; then
 AC_MSG_CHECKING([kernel build directory])
 
 AC_ARG_WITH(
-	[kernel],
+	[kernel-build],
 	AC_HELP_STRING(
-		[--with-kernel],
-		[Specify kernel sourcetree to compile modules]),
+		[--with-kernel-build],
+		[Specify kernel buildtree for external modules compilation]),
 	[kblddir=$withval],
 	[
 		if [[ -d "/lib/modules/`uname -r`/build" ]]; then
@@ -75,7 +75,23 @@ AC_ARG_WITH(
 		fi
 	])
 
-if [[ "$enable_kernel_modules" = "yes" ]]; then
+AC_ARG_WITH(
+	[kernel-modules],
+	AC_HELP_STRING(
+		[--with-kernel-modules],
+		[Specify kernel modules directory]),
+	[kblddir=$withval],
+	[
+		if [[ -d "/lib/modules/`uname -r`/build" ]]; then
+			kblddir="/lib/modules/`uname -r`/build"
+		elif [[ -d "/usr/src/linux" ]]; then
+			kblddir="/usr/src/linux"
+		fi
+	])
+
+if [[ "$enable_kernel_modules" = "yes" -o \
+      "$enable_kernel_modules" = "auto" ]]; then
+
 	if [[ ! -d "$kblddir" ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Cannot locate kernel sources])

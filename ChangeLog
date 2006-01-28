@@ -2,6 +2,35 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-28 13:39:07 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-490
+
+    Summary:
+      Big refactoring of vgsm related stuff with proper locking and state machine handling
+    Revision:
+      isdn--devel--0.1--patch-490
+
+
+    new files:
+     chan_vgsm/.arch-ids/comm.c.id chan_vgsm/.arch-ids/comm.h.id
+     chan_vgsm/.arch-ids/util.h.id chan_vgsm/comm.c
+     chan_vgsm/comm.h chan_vgsm/util.h
+     etc/udev/rules.d/.arch-ids/=id
+
+    modified files:
+     ChangeLog TODO chan_vgsm/Makefile.am chan_vgsm/chan_vgsm.c
+     chan_vgsm/chan_vgsm.h configure.ac etc/Makefile.am
+     modules/vgsm/card.c modules/vgsm/vgsm_main.c samples/vgsm.conf
+
+    renamed files:
+     etc/udev/.arch-ids/30-visdn.rules.id
+       ==> etc/udev/rules.d/.arch-ids/30-visdn.rules.id
+     etc/udev/30-visdn.rules
+       ==> etc/udev/rules.d/30-visdn.rules
+
+    new directories:
+     etc/udev/rules.d etc/udev/rules.d/.arch-ids
+
+
 2006-01-26 19:22:16 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-489
 
     Summary:

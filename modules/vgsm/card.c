@@ -66,7 +66,7 @@ static void vgsm_read_msg(
 static void vgsm_write_msg(
 	struct vgsm_card *card, struct vgsm_micro_message *msg)
 {
-	printk(KERN_CRIT "TX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+	printk(KERN_DEBUG "TX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 		msg->raw[0],
 		msg->raw[1],
 		msg->raw[2],
@@ -93,8 +93,9 @@ static inline void vgsm_wait_e0(struct vgsm_card *card)
 	for (i=0; i<100 && vgsm_inb(card, VGSM_PIB_E0); i++) {
 		udelay(10);
 
-		if (i>10)
-			printk(KERN_WARNING "Uhuh... waiting %d for buffer\n", i);
+		if (i > 10)
+			printk(KERN_WARNING
+				"Uhuh... waiting %d for buffer\n", i);
 	}
 }
 
@@ -193,7 +194,8 @@ void vgsm_update_codec(struct vgsm_module *module)
 	case 0:
 		vgsm_send_codec_setreg(card, VGSM_CODEC_GTX0, module->tx_gain);
 		vgsm_send_codec_setreg(card, VGSM_CODEC_GRX0, module->rx_gain);
-		card->regs.codec_loop &= ~(VGSM_CODEC_LOOPB_AL0 | VGSM_CODEC_LOOPB_DL0);
+		card->regs.codec_loop &= ~(VGSM_CODEC_LOOPB_AL0 |
+			       		VGSM_CODEC_LOOPB_DL0);
 
 		if (module->anal_loop)
 			card->regs.codec_loop |= VGSM_CODEC_LOOPB_AL0;
@@ -262,8 +264,9 @@ static void vgsm_card_rx_tasklet(unsigned long data)
 		module = &card->modules[i];
 
 		if (module->kfifo_rx->size - kfifo_len(module->kfifo_rx) > 8) {
-			if (test_and_clear_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
-							&module->status)) {
+			if (test_and_clear_bit(
+					VGSM_MODULE_STATUS_RX_ACK_PENDING,
+					&module->status)) {
 				vgsm_module_send_ack(module);
 			}
 		}
@@ -293,11 +296,15 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 							&module->status)) {
 
 				u8 buf[7];
-				int bytes_to_send = __kfifo_get(module->kfifo_tx, buf, 7);
+				int bytes_to_send =
+				       	__kfifo_get(module->kfifo_tx, buf, 7);
 
 				wake_up(&module->tx_wait_queue);
 
-				vgsm_module_send_string(module, buf, bytes_to_send);
+				vgsm_module_send_string(module, buf,
+					       bytes_to_send);
+			} else {
+				
 			}
 		}
 	}
@@ -311,14 +318,19 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	/* Resetting all */
 	vgsm_outb(card, VGSM_CNTL,
 		VGSM_CNTL_MASTER_RST |
+		VGSM_CNTL_SERIAL_RST |
+		VGSM_CNTL_EXTRST);
+	mb();
+	msleep(100);
+	vgsm_outb(card, VGSM_CNTL,
+		VGSM_CNTL_MASTER_RST |
 		VGSM_CNTL_SERIAL_RST);
 	mb();
-	udelay(125);
+	msleep(100);
 	vgsm_outb(card, VGSM_CNTL,
 		VGSM_CNTL_DMA_SELF |
 		VGSM_CNTL_PIB_CYCLE_3 |
 		VGSM_CNTL_EXTRST);
-
 	mb();
 
 	/* Setting serial status registers */
@@ -478,9 +490,8 @@ static irqreturn_t vgsm_interrupt(int irq,
 					module = &card->modules[3];
 			}
 
-printk(KERN_CRIT "Received string message from module %d\n", module->id);
-
-printk(KERN_CRIT "ASCII_MSG: %c%c%c%c%c%c%c\n",
+printk(KERN_CRIT "Mod %d: MSG: %c%c%c%c%c%c%c\n",
+	module->id,
 	escape_unprintable(msg.payload[0]),
 	escape_unprintable(msg.payload[1]),
 	escape_unprintable(msg.payload[2]),
@@ -530,7 +541,8 @@ printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 			printk(KERN_INFO "CODEC RESP: %02x = %02x\n",
 				msg.payload[0], msg.payload[1]);
 		} else if (msg.cmd_dep == VGSM_CMD_MAINT_GET_FW_VER) {
-			printk(KERN_INFO "Micro %d firmware version %c%c%c%c%c%c%c\n",
+			printk(KERN_INFO
+				"Micro %d firmware version %c%c%c%c%c%c%c\n",
 				micro,
 				msg.payload[0],
 				msg.payload[1],
