@@ -124,8 +124,8 @@ static ssize_t vec_chan_ne_write(
 	} else if (nref < count) {
 		/* Too few samples in other direction */
 
-/*		printk(KERN_DEBUG "Detected %d slips\n",
-			nref - count);*/
+		printk(KERN_DEBUG "Detected %d slips\n",
+			nref - count);
 
 		// FIXME :) (filled with undetermined samples)
 		nref = count;

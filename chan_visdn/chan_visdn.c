@@ -2314,6 +2314,7 @@ static void visdn_queue_dtmf(
 
 	if (len >= sizeof(visdn_chan->dtmf_queue) - 1) {
 		ast_log(LOG_WARNING, "DTMF queue is full, dropping digit\n");
+		ast_mutex_unlock(&visdn_chan->ast_chan->lock);
 		return;
 	}
 
@@ -3235,13 +3236,15 @@ static void visdn_disconnect_chan_from_visdn(
 
 	visdn_chan->sp_fd = -1;
 
-	if (close(visdn_chan->ec_fd) < 0) {
-		ast_log(LOG_ERROR,
-			"close(visdn_chan->ec_fd): %s\n",
-			strerror(errno));
-	}
+	if (visdn_chan->ec_fd >= 0) {
+		if (close(visdn_chan->ec_fd) < 0) {
+			ast_log(LOG_ERROR,
+				"close(visdn_chan->ec_fd): %s\n",
+				strerror(errno));
+		}
 
-	visdn_chan->ec_fd = -1;
+		visdn_chan->ec_fd = -1;
+	}
 }
 
 static int visdn_hangup(struct ast_channel *ast_chan)
@@ -3392,6 +3395,7 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 	static struct ast_frame f;
 	char buf[512];
 
+	/* Acknowledge timer */
 	read(ast_chan->fds[0], buf, 1);
 
 	f.src = VISDN_CHAN_TYPE;
@@ -5160,6 +5164,19 @@ static int visdn_connect_channels_with_ec(
 		goto err_ioctl;
 	}
 
+	if (visdn_chan->q931_call->state == N10_ACTIVE ||
+	    visdn_chan->q931_call->state == U10_ACTIVE) {
+		visdn_debug("Activating echo canceller\n");
+
+		if (ioctl(visdn_chan->ec_fd, VEC_START,
+			(caddr_t)&visdn_chan->ec_ne_channel_id) < 0) {
+
+			ast_log(LOG_ERROR,
+				"ioctl(VEC_START): %s\n",
+				strerror(errno));
+		}
+	}
+
 	return 0;
 
 err_ioctl:
@@ -5230,19 +5247,6 @@ static void visdn_q931_connect_channel(
 			visdn_connect_channels_with_ec(visdn_chan);
 		else
 			visdn_connect_channels(visdn_chan);
-
-		if (visdn_chan->q931_call->state == N10_ACTIVE ||
-		    visdn_chan->q931_call->state == U10_ACTIVE) {
-			visdn_debug("Activating echo canceller\n");
-
-			if (ioctl(visdn_chan->ec_fd, VEC_START,
-				(caddr_t)&visdn_chan->ec_ne_channel_id) < 0) {
-
-				ast_log(LOG_ERROR,
-					"ioctl(VEC_START): %s\n",
-					strerror(errno));
-			}
-		}
 	}
 
 	ast_mutex_unlock(&ast_chan->lock);

@@ -120,7 +120,7 @@ void visdn_timer_tick(struct visdn_timer *timer)
 {
 	struct visdn_cxc *cxc;
 	struct visdn_timer_user *timer_user;
-	cycles_t start_cycles = get_cycles();
+//	cycles_t start_cycles = get_cycles();
 	
 	rcu_read_lock();
 	list_for_each_entry_rcu(cxc, &visdn_cxc_list, cxc_list_node) {
@@ -129,17 +129,17 @@ void visdn_timer_tick(struct visdn_timer *timer)
 	}
 	rcu_read_unlock();
 
-	spin_lock_bh(&timer->users_list_lock);
-	list_for_each_entry(timer_user, &timer->users_list, users_list_node) {
-		timer_user->timer_reported = FALSE;
-	}
-	spin_unlock_bh(&timer->users_list_lock);
-
-	timer->users_left = timer->total_users;
-
 	timer->poll_count++;
 	if (timer->poll_count >= timer->poll_divider) {
 		timer->poll_count = 0;
+
+		spin_lock_bh(&timer->users_list_lock);
+		list_for_each_entry(timer_user, &timer->users_list, users_list_node) {
+			timer_user->timer_reported = FALSE;
+		}
+		spin_unlock_bh(&timer->users_list_lock);
+
+		timer->users_left = timer->total_users;
 
 		wake_up(&timer->wait_queue);
 	}
@@ -331,11 +331,11 @@ retry:
 	if (err < 0)
 		goto err_class_device_create_file;
 
-#define TIMER_FREQUENCY 500
+#define TIMER_FREQUENCY 250
 
 	INIT_LIST_HEAD(&timer->users_list);
 	spin_lock_init(&timer->users_list_lock);
-	timer->main_divider = timer->natural_frequency / TIMER_FREQUENCY;
+	timer->main_divider = min(timer->natural_frequency / TIMER_FREQUENCY, 1);
 	timer->poll_divider = 5;
 	timer->poll_count = 0;
 

@@ -42,7 +42,7 @@
 #endif
 
 /* Uncomment to provide summary statistics for overall echo can performance every 4000 samples */ 
-#define MEC2_STATS 4000
+//#define MEC2_STATS 4000
 
 /* Uncomment to generate per-sample statistics - this will severely degrade system performance and audio quality */
 /* #define MEC2_STATS_DETAILED */
@@ -375,9 +375,9 @@ static inline short echo_can_update(echo_can_state_t *ec, short iref, short isig
 	    && (ec->max_y_tilde > 0))  {
 		/* Then start the Hangover counter */
 		ec->HCNTR_d = DEFAULT_HANGT;
-//#ifdef MEC2_STATS_DETAILED
+#ifdef MEC2_STATS_DETAILED
 		printk(KERN_INFO "Reset near end speech timer with: s_tilde_i %d, stmnt %d, max_y_tilde %d\n", ec->s_tilde_i, (ec->s_tilde_i >> (DEFAULT_ALPHA_ST_I - 1)), ec->max_y_tilde);
-//#endif
+#endif
 #ifdef MEC2_STATS
 		++ec->cntr_nearend_speech_frames;
 #endif
@@ -415,9 +415,9 @@ static inline short echo_can_update(echo_can_state_t *ec, short iref, short isig
 					ec->a_s[k] = ec->a_i[k] >> 16;
 				}
 		 	 } else { 
-//#ifdef MEC2_STATS_DETAILED
+#ifdef MEC2_STATS_DETAILED
 				printk( KERN_INFO "insufficient signal to update coefficients ec->Lu_i %5d < %5d\n", ec->Lu_i, MIN_UPDATE_THRESH_I);
-//#endif
+#endif
 #ifdef MEC2_STATS
 				ec->avg_Lu_i_toolow = ec->avg_Lu_i_toolow + ec->Lu_i;  
 				++ec->cntr_coeff_missedupdates;

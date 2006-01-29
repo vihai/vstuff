@@ -92,12 +92,15 @@ int main(int argc, char *argv[])
 		"the timer device. Calculating...\n");
 
 	struct pollfd pollfd = { fd, POLLIN, 0 };
+	char junk;
 
 	// Synchronize with the timer
 	if (poll(&pollfd, 1, -1) < 0) {
 		printf("poll; %s\n", strerror(errno));
 		return 1;
 	}
+
+	read(fd, &junk, 1);
 
 	int *frequencies = (int *)malloc(nclasses * sizeof(*frequencies));
 	int i;
@@ -114,6 +117,8 @@ int main(int argc, char *argv[])
 			printf("poll: %s\n", strerror(errno));
 			return 1;
 		}
+
+		read(fd, &junk, 1);
 
 		double delay = double_now() - prepoll;
 		prepoll = double_now();

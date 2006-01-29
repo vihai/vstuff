@@ -37,6 +37,8 @@ chan_visdn:
   accepted by a destination, if it supports overlap dialing and so on...
 - User-mode call bumbing
 - Complete sequence if the user is sending partial CLI
+- When lapd module is removed the poll routine goes in infinite loop with
+  DL-RELEASE-CONFIRM return codes
 
 libq931:
 --------
