@@ -2,6 +2,31 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-01-30 19:01:01 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-494
+
+    Summary:
+      Separated chan_visdn in more files
+    Revision:
+      isdn--devel--0.1--patch-494
+
+
+    new files:
+     chan_visdn/.arch-ids/huntgroup.c.id
+     chan_visdn/.arch-ids/huntgroup.h.id
+     chan_visdn/.arch-ids/intf.c.id chan_visdn/.arch-ids/intf.h.id
+     chan_visdn/.arch-ids/overlap.c.id
+     chan_visdn/.arch-ids/overlap.h.id
+     chan_visdn/.arch-ids/ton.c.id chan_visdn/.arch-ids/ton.h.id
+     chan_visdn/.arch-ids/util.h.id chan_visdn/huntgroup.c
+     chan_visdn/huntgroup.h chan_visdn/intf.c chan_visdn/intf.h
+     chan_visdn/overlap.c chan_visdn/overlap.h chan_visdn/ton.c
+     chan_visdn/ton.h chan_visdn/util.h
+
+    modified files:
+     ChangeLog chan_visdn/Makefile.am chan_visdn/chan_visdn.c
+     chan_visdn/chan_visdn.h
+
+
 2006-01-29 22:05:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-493
 
     Summary:
