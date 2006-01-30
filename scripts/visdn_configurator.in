@@ -81,7 +81,7 @@ function read_netdev_block
 	local NETDEV_TEI="auto"
 
 	local LINE
-	while read -u 10 LINE; do
+	while read -u 9 LINE; do
 		if [[ $LINE =~ '</(.*)>' ]]; then
 			if [ "${BASH_REMATCH[1]}" == 'netdev' ]; then
 				$VISDNCTL netdev create \
@@ -172,7 +172,7 @@ function read_chan_block
 	CHANNEL=`basename \`readlink $SYSFS_CARD_OBJ/$PORT_NAME/$CHAN_NAME\``
 
 	local LINE
-	while read -u 10 LINE; do
+	while read -u 9 LINE; do
 		if [[ "$LINE" =~ '^[ 	]*#' ]]; then
 			continue
 		elif [[ $LINE =~ '</(.*)>' ]]; then
@@ -223,7 +223,7 @@ function read_port_block
 	fi
 
 	local LINE
-	while read -u 10 LINE; do
+	while read -u 9 LINE; do
 		if [[ "$LINE" =~ '^[ 	]*#' ]]; then
 			continue
 		elif [[ $LINE =~ '</(.*)>' ]]; then
@@ -285,9 +285,9 @@ for CARD in `ls $VISDN_DIR`; do
 		continue
 	fi
 
-	exec 10<$CONFIGFILE
+	exec 9<$CONFIGFILE
 
-	while read -u 10 LINE; do
+	while read -u 9 LINE; do
 
 		if [[ "$LINE" =~ '^[ 	]*#' ]]; then
 			continue
@@ -315,7 +315,7 @@ for CARD in `ls $VISDN_DIR`; do
 
 	done
 
-	exec 10<&-
+	exec 9<&-
 
 	declare -i i
 done
