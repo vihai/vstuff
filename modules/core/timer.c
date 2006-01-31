@@ -134,12 +134,11 @@ void visdn_timer_tick(struct visdn_timer *timer)
 		timer->poll_count = 0;
 
 		spin_lock_bh(&timer->users_list_lock);
-		list_for_each_entry(timer_user, &timer->users_list, users_list_node) {
+		list_for_each_entry(timer_user, &timer->users_list,
+							users_list_node) {
 			timer_user->timer_reported = FALSE;
 		}
 		spin_unlock_bh(&timer->users_list_lock);
-
-		timer->users_left = timer->total_users;
 
 		wake_up(&timer->wait_queue);
 	}
@@ -335,7 +334,8 @@ retry:
 
 	INIT_LIST_HEAD(&timer->users_list);
 	spin_lock_init(&timer->users_list_lock);
-	timer->main_divider = min(timer->natural_frequency / TIMER_FREQUENCY, 1);
+	timer->main_divider =
+		max(timer->natural_frequency / TIMER_FREQUENCY, 1);
 	timer->poll_divider = 5;
 	timer->poll_count = 0;
 

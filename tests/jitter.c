@@ -17,13 +17,23 @@
 #include <math.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/poll.h>
 #include <sys/time.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-#define max(a,b) ((a) > (b) ? (a) : (b))
-#define min(a,b) ((a) < (b) ? (a) : (b))
+#define min(x,y) ({ \
+	typeof(x) _x = (x);		\
+	typeof(y) _y = (y);		\
+	(void) (&_x == &_y);		\
+	_x < _y ? _x : _y; })
+
+#define max(x,y) ({ \
+	typeof(x) _x = (x);		\
+	typeof(y) _y = (y);		\
+	(void) (&_x == &_y);		\
+	_x > _y ? _x : _y; })
 
 double double_now()
 {
@@ -48,8 +58,8 @@ int main(int argc, char *argv[])
 {
 	int count = 1000;
 	double class_step = 0.000001;
-	double class_start = 0.0099;
-	double class_end = 0.0101;
+	double class_start = 0.0199;
+	double class_end = 0.0201;
 	int nclasses = (class_end - class_start) / class_step;
 
 	struct option options[] = {
@@ -133,8 +143,8 @@ int main(int argc, char *argv[])
 		if (delay < min_delay)
 			min_delay = delay;
 
-		frequencies[(int)(min(max((delay - class_start) / class_step, 0),
-				nclasses - 1))]++;
+		frequencies[(min(max((int)((delay - class_start) / class_step),
+							0), nclasses - 1))]++;
 	}
 
 	double variance = varsum / (count - 1);

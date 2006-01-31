@@ -51,9 +51,6 @@ struct visdn_timer
 	int poll_divider;
 	int poll_count;
 
-	int total_users;
-	int users_left;
-
 	cycles_t tot_cycles;
 	int tot_ticks;
 	cycles_t start_cycles;
