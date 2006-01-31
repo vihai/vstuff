@@ -6,7 +6,6 @@ EXTRA_DIST =					\
 	$(astconf_DATA)				\
 	$(noinst_DATA)				\
 	visdn.spec				\
-	modules/Kbuild				\
 	modules/linux_compat/linux/kfifo.h	\
 	modules/include/kernel_config.h.in	\
 	modules/include/linux/lapd.h		\
