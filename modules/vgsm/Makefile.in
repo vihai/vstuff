@@ -38,6 +38,18 @@ endif
 obj-m	:= $(MODULE).o
 $(MODULE)-y	:= ${SOURCES:.c=.o}
 
+kblddir = @kblddir@
+modules_dir = ${shell cd .. ; pwd}
+
+all:
+	$(MAKE) -C $(kblddir) modules M=$(modules_dir)
+
+install:
+	$(MAKE) -C $(kblddir) modules_install M=$(modules_dir)
+
+clean:
+	$(MAKE) -C $(kblddir) clean M=$(modules_dir)
+
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
