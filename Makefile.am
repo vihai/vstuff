@@ -11,7 +11,8 @@ EXTRA_DIST =					\
 	modules/include/kernel_config.h.in	\
 	modules/include/linux/lapd.h		\
 	modules/include/linux/vgsm.h		\
-	modules/include/linux/visdn/*.h
+	modules/include/linux/visdn/*.h		\
+	docs/*
 
 SUBDIRS =
 
