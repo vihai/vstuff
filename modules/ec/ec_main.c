@@ -678,7 +678,7 @@ static int vec_cdev_open(
 
 	/* ------------------------------- */
 
-	vec_debug(2, "Echo canceller opened\n", ec->visdn_chan.id);
+	vec_debug(2, "Echo canceller opened\n");
 
 	return 0;
 

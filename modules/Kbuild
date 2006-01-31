@@ -1,0 +1,13 @@
+obj-m += core/
+obj-m += lapd/
+obj-m += softcxc/
+obj-m += timer-system/
+obj-m += kfifo/
+obj-m += netdev/
+obj-m += streamport/
+obj-m += ppp/
+obj-m += ec/
+obj-m += hfc-usb/
+obj-m += hfc-pci/
+obj-m += hfc-4s/
+obj-m += vgsm/

@@ -1,7 +1,3 @@
-# Makefile.in: hybrid automake-generated and Kbuild makefile to compile
-# kernel modules
-
-@SET_MAKE@
 
 subdir = modules/vgsm
 MODULE = visdn-vgsm
@@ -11,94 +7,23 @@ SOURCES = \
 	card.c		\
 	module.c
 
-OBJS = ${SOURCES:.c=.o}
-
-DIST_SOURCES = $(SOURCES)
 DIST_HEADERS = \
 	vgsm.h		\
 	card_inline.h	\
 	regs.h		\
 	module.h
 
-DIST_COMMON = $(srcdir)/Makefile.in
+DIST_COMMON = Makefile.in
+DIST_SOURCES = $(SOURCES)
 
+@SET_MAKE@
 srcdir = @srcdir@
 top_srcdir = @top_srcdir@
-VPATH = @srcdir@
-pkgdatadir = $(datadir)/@PACKAGE@
-pkglibdir = $(libdir)/@PACKAGE@
-pkgincludedir = $(includedir)/@PACKAGE@
 top_builddir = ../..
-INSTALL = @INSTALL@
-install_sh_DATA = $(install_sh) -c -m 644
-install_sh_PROGRAM = $(install_sh) -c
-install_sh_SCRIPT = $(install_sh) -c
-INSTALL_HEADER = $(INSTALL_DATA)
-transform = $(program_transform_name)
-build_triplet = @build@
-host_triplet = @host@
-mkinstalldirs = $(install_sh) -d
-CONFIG_HEADER = $(top_builddir)/config.h
-CONFIG_CLEAN_FILES =
-DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(DIST_HEADERS) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = @ACLOCAL@
-AR = @AR@
-AUTOCONF = @AUTOCONF@
-AUTOHEADER = @AUTOHEADER@
-AUTOMAKE = @AUTOMAKE@
-INSTALL_DATA = @INSTALL_DATA@
-INSTALL_PROGRAM = @INSTALL_PROGRAM@
-INSTALL_SCRIPT = @INSTALL_SCRIPT@
-INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
-PACKAGE = @PACKAGE@
-PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
-PACKAGE_NAME = @PACKAGE_NAME@
-PACKAGE_STRING = @PACKAGE_STRING@
-PACKAGE_TARNAME = @PACKAGE_TARNAME@
-PACKAGE_VERSION = @PACKAGE_VERSION@
-PATH_SEPARATOR = @PATH_SEPARATOR@
+VPATH = @srcdir@
 SHELL = @SHELL@
-STRIP = @STRIP@
-VERSION = @VERSION@
-bindir = @bindir@
-build = @build@
-build_alias = @build_alias@
-build_cpu = @build_cpu@
-build_os = @build_os@
-build_vendor = @build_vendor@
-datadir = @datadir@
-exec_prefix = @exec_prefix@
-host = @host@
-host_alias = @host_alias@
-host_cpu = @host_cpu@
-host_os = @host_os@
-host_vendor = @host_vendor@
-includedir = @includedir@
-infodir = @infodir@
-install_sh = @install_sh@
-libdir = @libdir@
-libexecdir = @libexecdir@
-localstatedir = @localstatedir@
-mandir = @mandir@
-mkdir_p = @mkdir_p@
-oldincludedir = @oldincludedir@
-prefix = @prefix@
-program_transform_name = @program_transform_name@
-sbindir = @sbindir@
-sharedstatedir = @sharedstatedir@
-sysconfdir = @sysconfdir@
-target_alias = @target_alias@
 
-kblddir = @kblddir@
-
-# Use $(src) when we are run inside Kbuild
-ifdef src
-	abssrcdir = $(src)
-else
-	abssrcdir = $(shell pwd)
-endif
-
-EXTRA_CFLAGS= -I$(abssrcdir)/../include/
+EXTRA_CFLAGS= -I$(src)/../include/
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
@@ -108,34 +33,20 @@ ifeq (@enable_debug_defaults@,yes)
 EXTRA_CFLAGS+=-DDEBUG_DEFAULTS
 endif
 
-########################## Targets #################################
-
-# Kbuild:
 obj-m	:= $(MODULE).o
-$(MODULE)-y	:= $(OBJS)
-# end Kbuild
-
-all:
-	-@mkdir -p ../.tmp_versions
-	@ln -sf ../.tmp_versions .
-	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
-install: $(MODULE).ko
-	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
-clean:
-	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
-
-tags:
-ctags:
+$(MODULE)-y	:= ${SOURCES:.c=.o}
 
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
-	    cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh;; \
+	    cd $(top_builddir) && $(MAKE) am--refresh;; \
 	  *) \
-	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
-	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
+	    echo ' cd $(top_builddir) && $(SHELL) ./config.status'; \
+	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ ;; \
 	esac;
+
+DISTFILES=$(DIST_COMMON) $(DIST_SOURCES) $(DIST_HEADERS) $(EXTRA_DIST)
 
 distdir: $(DISTFILES)
 	@srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`; \
@@ -164,47 +75,3 @@ distdir: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-check:
-installdirs:
-
-install-exec:
-install-data:
-uninstall:
-
-installcheck:
-install-strip:
-mostlyclean-generic:
-
-clean-generic:
-
-
-distclean-generic:
-	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
-
-maintainer-clean-generic:
-	@echo "This command is intended for maintainers to use"
-	@echo "it deletes files that may require special tools to rebuild."
-
-distclean:
-	-rm -f Makefile
-
-dvi:
-html:
-info: 
-install-info:
-install-man:
-maintainer-clean:
-	-rm -f Makefile
-mostlyclean:
-pdf:
-ps:
-
-.PHONY: all check clean clean-generic clean-libtool \
-	distclean distclean-generic distclean-libtool distdir dvi \
-	html info install \
-	install-data install-exec \
-	install-info install-man \
-	install-strip installcheck installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-generic mostlyclean-libtool pdf ps \
-	uninstall
