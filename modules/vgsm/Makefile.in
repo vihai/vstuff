@@ -9,9 +9,11 @@ SOURCES = \
 
 DIST_HEADERS = \
 	vgsm.h		\
+	card.h		\
 	card_inline.h	\
 	regs.h		\
-	module.h
+	module.h	\
+	codec.h
 
 DIST_COMMON = Makefile.in
 DIST_SOURCES = $(SOURCES)
