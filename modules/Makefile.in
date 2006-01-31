@@ -1,0 +1,87 @@
+
+@SET_MAKE@
+srcdir = @srcdir@
+subdir = modules
+top_builddir = ..
+SHELL = @SHELL@
+kblddir = @kblddir@
+DIST_COMMON = Makefile.in Kbuild
+
+SUBDIRS= core ec hfc-4s hfc-pci hfc-usb kfifo lapd \
+	netdev ppp softcxc streamport timer-system vgsm
+
+
+# Use $(src) when we are run inside Kbuild
+ifdef src
+	abssrcdir = $(src)
+else
+	abssrcdir = $(shell pwd)
+endif
+
+all: makefiles
+	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
+
+install:
+	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
+
+clean:
+	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
+
+Kbuild:
+	echo "" > Kbuild
+	for I in $(SUBDIRS) ; do \
+		echo "obj-m += $$I/" >> Kbuild ; \
+	done
+
+DISTFILES=$(DIST_COMMON) $(DIST_SOURCES) $(DIST_HEADERS) $(EXTRA_DIST)
+
+distdir: $(DISTFILES)
+	@srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`; \
+	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's|.|.|g'`; \
+	list='$(DISTFILES)'; for file in $$list; do \
+	  case $$file in \
+	    $(srcdir)/*) file=`echo "$$file" | sed "s|^$$srcdirstrip/||"`;; \
+	    $(top_srcdir)/*) file=`echo "$$file" | sed "s|^$$topsrcdirstrip/|$(top_builddir)/|"`;; \
+	  esac; \
+	  if test -f $$file || test -d $$file; then d=.; else d=$(srcdir); fi; \
+	  dir=`echo "$$file" | sed -e 's,/[^/]*$$,,'`; \
+	  if test "$$dir" != "$$file" && test "$$dir" != "."; then \
+	    dir="/$$dir"; \
+	    $(mkdir_p) "$(distdir)$$dir"; \
+	  else \
+	    dir=''; \
+	  fi; \
+	  if test -d $$d/$$file; then \
+	    if test -d $(srcdir)/$$file && test $$d != $(srcdir); then \
+	      cp -pR $(srcdir)/$$file $(distdir)$$dir || exit 1; \
+	    fi; \
+	    cp -pR $$d/$$file $(distdir)$$dir || exit 1; \
+	  else \
+	    test -f $(distdir)/$$file \
+	    || cp -p $$d/$$file $(distdir)/$$file \
+	    || exit 1; \
+	  fi; \
+	done
+	for I in $(SUBDIRS) ; do \
+		( \
+			cd $$I && \
+			$(MAKE) top_distdir="$$top_distdir" \
+				distdir="$$distdir/$$I" \
+				distdir \
+		); \
+	done
+
+makefiles: ${addsuffix /Makefile,$(SUBDIRS)}
+	for I in $(SUBDIRS) ; do \
+		( cd $$I && $(MAKE) Makefile ); \
+	done
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+	@case '$?' in \
+	  *config.status*) \
+	    cd $(top_builddir) && $(MAKE) am--refresh;; \
+	  *) \
+	    echo ' cd $(top_builddir) && $(SHELL) ./config.status'; \
+	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ ;; \
+	esac;
