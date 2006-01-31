@@ -34,8 +34,7 @@
 
 #define vgsm_PCI_MEM_SIZE		0xFF
 
-/* One way DMA area for single module */
-#define vgsm_DMA_SINGLE_CHUNK		0x800
+#define vgsm_DMA_SAMPLES 0x800
 
 /* Resettng delay */
 #define vgsm_RESET_DELAY		20
@@ -63,12 +62,13 @@ struct vgsm_card
 	void *io_mem;
 	
 	/* DMA bus address */
-	dma_addr_t readdma_bus_mem;
-	dma_addr_t writedma_bus_mem;
-	
-	/* DMA mem address */
 	void *readdma_mem;
+	dma_addr_t readdma_bus_mem;
+	int readdma_size;
+
+	dma_addr_t writedma_bus_mem;
 	void *writedma_mem;
+	int writedma_size;
 
 	struct vgsm_module modules[4];
 	int num_modules;

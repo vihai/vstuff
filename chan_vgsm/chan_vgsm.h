@@ -33,8 +33,10 @@ struct vgsm_chan {
 
 	struct vgsm_interface *intf;
 
-	char vgsm_chanid[30];
-	int channel_fd;
+	int sp_fd;
+
+	int sp_channel_id;
+	int module_channel_id;
 
 	char calling_number[21];
 };
@@ -50,15 +52,17 @@ struct vgsm_operator_info
 	const char *bands;
 };
 
-enum vgsm_interface_status
+enum vgsm_intf_status
 {
-	VGSM_INT_STATUS_UNINITIALIZED,
-	VGSM_INT_STATUS_INITIALIZING,
-	VGSM_INT_STATUS_READY,
-	VGSM_INT_STATUS_INCALL,
-	VGSM_INT_STATUS_NOT_READY,
-	VGSM_INT_STATUS_LOCKED_DOWN,
-	VGSM_INT_STATUS_FAILED,
+	VGSM_INTF_STATUS_UNINITIALIZED,
+	VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+	VGSM_INTF_STATUS_INITIALIZING,
+	VGSM_INTF_STATUS_READY,
+	VGSM_INTF_STATUS_INCALL,
+	VGSM_INTF_STATUS_WAITING_PIN,
+	VGSM_INTF_STATUS_NO_NET,
+	VGSM_INTF_STATUS_LOCKED_DOWN,
+	VGSM_INTF_STATUS_FAILED,
 };
 
 enum vgsm_net_status
@@ -110,7 +114,9 @@ struct vgsm_interface
 
 	/* Operative data */
 
-	enum vgsm_interface_status status;
+	enum vgsm_intf_status status;
+
+	char *lockdown_reason;
 
 	int connect_check_sched_id;
 
@@ -167,16 +173,17 @@ struct vgsm_state
 {
 	ast_mutex_t lock;
 
+	struct vgsm_interface default_intf;
 	struct list_head ifs;
+
 	struct list_head op_list;
 
 	ast_mutex_t usecnt_lock;
 	int usecnt;
 
-	int debug;
-	
+	int cxc_control_fd;
 
-	struct vgsm_interface default_intf;
+	int debug;
 };
 
 static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)

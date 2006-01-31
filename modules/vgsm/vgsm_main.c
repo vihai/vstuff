@@ -126,7 +126,8 @@ ssize_t __kfifo_get_user(
 
 	/* first get the data from fifo->out until the end of the buffer */
 	l = min(len, (ssize_t)(fifo->size - (fifo->out & (fifo->size - 1))));
-	if (copy_to_user(buffer, fifo->buffer + (fifo->out & (fifo->size - 1)), l))
+	if (copy_to_user(buffer, fifo->buffer + (fifo->out & (fifo->size - 1)),
+									l))
 		return -EFAULT;
 
 	/* then get the rest (if any) from the beginning of the buffer */
@@ -177,7 +178,8 @@ ssize_t __kfifo_put_user(
 
 	/* first put the data starting from fifo->in to buffer end */
 	l = min(len, (ssize_t)(fifo->size - (fifo->in & (fifo->size - 1))));
-	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)), buffer, l))
+	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)),
+								buffer, l))
 		return -EFAULT;
 
 	/* then put the rest (if any) at the beginning of the buffer */
@@ -211,7 +213,8 @@ static ssize_t vgsm_cdev_write(
 		prepare_to_wait(&module->tx_wait_queue, &wait,
 			TASK_UNINTERRUPTIBLE);
 
-		if (module->kfifo_tx->size - kfifo_len(module->kfifo_tx) < count)
+		if (module->kfifo_tx->size - kfifo_len(module->kfifo_tx) <
+									count)
 			schedule();
 
 		finish_wait(&module->tx_wait_queue, &wait);
@@ -269,6 +272,9 @@ static int vgsm_cdev_do_codec_set(
 			err = -EINVAL;
 			goto err_invalid_value;
 		}
+
+		/* codec's tx gain is analog rx gain */
+		module->tx_gain = cctl.value;
 	break;
 
 	case VGSM_CODEC_TXGAIN:
@@ -276,14 +282,9 @@ static int vgsm_cdev_do_codec_set(
 			err = -EINVAL;
 			goto err_invalid_value;
 		}
-	break;
 
-	case VGSM_CODEC_RXPRE:
-		module->rx_pre = !!cctl.value;
-	break;
-
-	case VGSM_CODEC_TXPRE:
-		module->tx_pre = !!cctl.value;
+		/* codec's rx gain is analog tx gain */
+		module->rx_gain = cctl.value;
 	break;
 
 	case VGSM_CODEC_DIG_LOOP:
@@ -381,7 +382,13 @@ static int vgsm_cdev_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
+	struct vgsm_module *module = file->private_data;
+
 	switch(cmd) {
+	case VGSM_IOC_GET_CHANID:
+		return put_user(module->visdn_chan.id, (unsigned int *)arg);
+	break;
+
 	case VGSM_IOC_CODEC_SET:
 		return vgsm_cdev_do_codec_set(inode, file, cmd, arg);
 	break;

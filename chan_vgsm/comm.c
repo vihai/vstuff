@@ -38,6 +38,11 @@
 #include "comm.h"
 
 static pthread_t vgsm_comm_thread = AST_PTHREADT_NULL;
+static pthread_t vgsm_comm_urm_thread = AST_PTHREADT_NULL;
+
+static struct list_head vgsm_comm_urm_queue =
+			LIST_HEAD_INIT(vgsm_comm_urm_queue);
+AST_MUTEX_DEFINE_STATIC(vgsm_comm_urm_queue_lock);
 
 void vgsm_comm_init(struct vgsm_comm *comm, struct vgsm_urc *urcs)
 {
@@ -46,9 +51,6 @@ void vgsm_comm_init(struct vgsm_comm *comm, struct vgsm_urc *urcs)
 	ast_mutex_init(&comm->lock);
 	ast_cond_init(&comm->state_change_cond, NULL);
 	comm->state = VGSM_PS_BITBUCKET;
-
-	INIT_LIST_HEAD(&comm->urm_queue);
-	ast_mutex_init(&comm->urm_queue_lock);
 }
 
 void vgsm_respone_get(struct vgsm_response *resp)
@@ -194,9 +196,11 @@ const struct vgsm_response_line *vgsm_response_last_line(
 	return list_entry(resp->lines.prev, struct vgsm_response_line, node);
 }
 
-static struct vgsm_response *vgsm_response_alloc()
+static struct vgsm_response *vgsm_response_alloc(struct vgsm_comm *comm)
 {
 	struct vgsm_response *resp;
+
+	assert(comm);
 
 	resp = malloc(sizeof(*resp));
 	if (!resp)
@@ -207,6 +211,8 @@ static struct vgsm_response *vgsm_response_alloc()
 	resp->refcnt = 1;
 
 	INIT_LIST_HEAD(&resp->lines);
+
+	resp->comm = comm;
 
 	return resp;
 }
@@ -321,13 +327,13 @@ int vgsm_send_request(
 
 	strncpy(comm->request, buf, sizeof(comm->request));
 	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_RESPONSE);
-	comm->response = vgsm_response_alloc();
+	comm->response = vgsm_response_alloc(comm);
 	comm->timeout = longtime_now() + timeout * 1000;
 	ast_mutex_unlock(&comm->lock);
 
 	strcat(buf, "\r");
 
-	char tmpstr[80];
+	char tmpstr[200];
 	vgsm_debug_verb("TX: '%s'\n",
 		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
 
@@ -342,7 +348,7 @@ static void vgsm_retransmit_request(struct vgsm_comm *comm)
 	strncpy(buf, comm->request, sizeof(buf));
 	strcat(buf, "\r");
 
-	char tmpstr[80];
+	char tmpstr[200];
 	vgsm_debug_verb("TX: '%s'\n",
 		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
 
@@ -352,12 +358,36 @@ static void vgsm_retransmit_request(struct vgsm_comm *comm)
 			strerror(errno));
 }
 
+int vgsm_comm_line_error(const char *line)
+{
+	if (!strcmp(line, "OK"))
+		return VGSM_RESP_OK;
+	else if (!strcmp(line, "CONNECT"))
+		return VGSM_RESP_CONNECT;
+	else if (!strcmp(line, "NO CARRIER"))
+		return VGSM_RESP_NO_CARRIER;
+	else if (!strcmp(line, "ERROR"))
+		return VGSM_RESP_ERROR;
+	else if (!strcmp(line, "NO DIALTONE"))
+		return VGSM_RESP_NO_DIALTONE;
+	else if (!strcmp(line, "BUSY"))
+		return VGSM_RESP_BUSY;
+	else if (!strcmp(line, "NO ANSWER"))
+		return VGSM_RESP_NO_ANSWER;
+	else if (strstr(line, "+CME ERROR: ") == line)
+		return atoi(line + strlen("+CME ERROR: "));
+	else if (strstr(line, "+CMS ERROR: ") == line)
+		return atoi(line + strlen("+CMS ERROR: "));
+	else
+		return VGSM_RESP_UNKNOWN;
+}
+
 static void handle_response_line(
 	struct vgsm_comm *comm,
 	const char *line)
 {
 	// Handle response
-	char tmpstr[80];
+	char tmpstr[200];
 	vgsm_debug_verb("RX: '%s' (crlf)\n",
 		unprintable_escape(line, tmpstr, sizeof(tmpstr)));
 
@@ -369,32 +399,9 @@ static void handle_response_line(
 
 	list_add_tail(&resp_line->node, &comm->response->lines);
 
-	if (!strcmp(line, "OK")) {
-		comm->response_error = VGSM_RESP_OK;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "CONNECT")) {
-		comm->response_error = VGSM_RESP_CONNECT;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "NO CARRIER")) {
-		comm->response_error = VGSM_RESP_NO_CARRIER;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "ERROR")) {
-		comm->response_error = VGSM_RESP_ERROR;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "NO DIALTONE")) {
-		comm->response_error = VGSM_RESP_NO_DIALTONE;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "BUSY")) {
-		comm->response_error = VGSM_RESP_BUSY;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (!strcmp(line, "NO ANSWER")) {
-		comm->response_error = VGSM_RESP_NO_ANSWER;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (strstr(line, "+CME ERROR: ") == line) {
-		comm->response_error = atoi(line + strlen("+CME ERROR: "));
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
-	} else if (strstr(line, "+CMS ERROR: ") == line) {
-		comm->response_error = atoi(line + strlen("+CMS ERROR: "));
+	int err = vgsm_comm_line_error(line);
+	if (err != VGSM_RESP_UNKNOWN) {
+		comm->response_error = err;
 		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_READY);
 	}
 }
@@ -410,7 +417,7 @@ static void handle_unsolicited_response(
 		if (!strncmp(line, comm->urcs[i].code,
 					strlen(comm->urcs[i].code))) {
 
-			comm->urm = vgsm_response_alloc();
+			comm->urm = vgsm_response_alloc(comm);
 			comm->urm->urc = &comm->urcs[i];
 
 			break;
@@ -431,7 +438,12 @@ static void handle_unsolicited_response(
 	list_add_tail(&resp_line->node, &comm->urm->lines);
 
 	if (!comm->urm->urc->multiline) {
-		list_add_tail(&comm->urm->queue_node, &comm->urm_queue);
+		ast_mutex_lock(&vgsm_comm_urm_queue_lock);
+		list_add_tail(&comm->urm->queue_node, &vgsm_comm_urm_queue);
+		ast_mutex_unlock(&vgsm_comm_urm_queue_lock);
+
+		pthread_kill(vgsm_comm_urm_thread, SIGURG);
+
 		comm->urm = NULL;
 		return;
 	}
@@ -498,7 +510,7 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 
 	*(end - 1) = '\0';
 
-	char tmpstr[80];
+	char tmpstr[200];
 	vgsm_debug_verb("RX: '%s'\n",
 		unprintable_escape(begin + 2, tmpstr, sizeof(tmpstr)));
 
@@ -535,7 +547,7 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 	if (comm->state != VGSM_PS_AWAITING_RESPONSE)
 		return firstcr - comm->buf + 1;
 
-	char tmpstr[80];
+	char tmpstr[200];
 	vgsm_debug_verb("RX: '%s'\n",
 		unprintable_escape(comm->buf, tmpstr, sizeof(tmpstr)));
 
@@ -549,7 +561,7 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 		memcpy(dropped, comm->buf, firstcr - comm->buf);
 		dropped[firstcr - comm->buf] = '\0';
 
-		char tmpstr[80];
+		char tmpstr[200];
 		ast_log(LOG_WARNING,
 			"Dropped spurious bytes '%s' from serial\n",
 			unprintable_escape(dropped, tmpstr, sizeof(tmpstr)));
@@ -572,7 +584,7 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 
 	*(lf - 1) = '\0';
 
-	char tmpstr[80];
+	char tmpstr[200];
 	vgsm_debug_verb("RX: '%s'\n",
 		unprintable_escape(comm->buf, tmpstr, sizeof(tmpstr)));
 
@@ -608,9 +620,13 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 
 	strcpy(resp_line->text, comm->buf);
 
-	ast_mutex_lock(&comm->urm_queue_lock);
 	list_add_tail(&resp_line->node, &comm->urm->lines);
-	ast_mutex_unlock(&comm->urm_queue_lock);
+
+	ast_mutex_lock(&vgsm_comm_urm_queue_lock);
+	list_add_tail(&comm->urm->queue_node, &vgsm_comm_urm_queue);
+	ast_mutex_unlock(&vgsm_comm_urm_queue_lock);
+
+	pthread_kill(vgsm_comm_urm_thread, SIGURG);
 
 	return lf - comm->buf + 1;
 }
@@ -635,7 +651,7 @@ static int vgsm_receive(struct vgsm_comm *comm)
 		int nread = 0;
 
 #if 0
-char tmpstr[180];
+char tmpstr[200];
 ast_verbose("BUF='%s'\n",
 	unprintable_escape(comm->buf, tmpstr, sizeof(tmpstr)));
 #endif
@@ -761,20 +777,6 @@ static int vgsm_comm_thread_do_stuff()
 				vgsm_receive(comms[i]);
 
 			ast_mutex_unlock(&comms[i]->lock);
-
-			ast_mutex_lock(&comms[i]->urm_queue_lock);
-			struct vgsm_response *resp, *tpos;
-			list_for_each_entry_safe(resp, tpos,
-					&comms[i]->urm_queue, queue_node) {
-
-				assert(resp->urc);
-
-				resp->urc->handler(resp, comms[i]);
-
-				list_del(&resp->queue_node);
-				vgsm_response_put(resp);
-			}
-			ast_mutex_unlock(&comms[i]->urm_queue_lock);
 		}
 	}
 }
@@ -784,6 +786,34 @@ static void *vgsm_comm_thread_main(void *data)
 	while(vgsm_comm_thread_do_stuff());
 
 	return NULL;
+}
+
+static void *vgsm_comm_urm_thread_main(void *data)
+{
+	for(;;) {
+		/* Sleep until interrupted */
+		sleep(600);
+
+retry:
+		ast_mutex_lock(&vgsm_comm_urm_queue_lock);
+		struct vgsm_response *resp, *tpos;
+		list_for_each_entry_safe(resp, tpos,
+				&vgsm_comm_urm_queue, queue_node) {
+
+			assert(resp->urc);
+
+			ast_mutex_unlock(&vgsm_comm_urm_queue_lock);
+
+			if (resp->urc->handler)
+				resp->urc->handler(resp);
+
+			list_del(&resp->queue_node);
+			vgsm_response_put(resp);
+
+			goto retry;
+		}
+		ast_mutex_unlock(&vgsm_comm_urm_queue_lock);
+	}
 }
 
 void vgsm_comm_awake(struct vgsm_comm *comm)
@@ -797,6 +827,16 @@ int vgsm_comm_thread_create()
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	return ast_pthread_create(&vgsm_comm_thread, &attr,
-			vgsm_comm_thread_main, NULL);
+	int err;
+	err = ast_pthread_create(&vgsm_comm_thread, &attr,
+						vgsm_comm_thread_main, NULL);
+	if (err < 0)
+		return err;
+
+	err = ast_pthread_create(&vgsm_comm_urm_thread, &attr,
+					vgsm_comm_urm_thread_main, NULL);
+	if (err < 0)
+		return err;
+
+	return 0;
 }

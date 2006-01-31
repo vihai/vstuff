@@ -14,29 +14,28 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <arpa/inet.h>
 #include <fcntl.h>
-#include <sys/ioctl.h>
 #include <stdarg.h>
 #include <signal.h>
 #include <ctype.h>
+
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
 
 #include <asm/types.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
+#include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
-
-//#include <linux/rtc.h>
 
 #include "../config.h"
 
@@ -3213,7 +3212,7 @@ static int visdn_connect_channels(
 	if (ioctl(visdn.cxc_control_fd, VISDN_IOC_CONNECT_PATH,
 						(caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT_PATH, ec_ne, isdn): %s\n",
+			"ioctl(VISDN_CONNECT_PATH, sp, isdn): %s\n",
 			strerror(errno));
 		goto err_ioctl;
 	}

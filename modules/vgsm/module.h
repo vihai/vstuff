@@ -34,6 +34,7 @@ struct vgsm_module
 	struct vgsm_card *card;
 
 	int id;
+	int timeslot_offset;
 
 	dev_t devt;
 
@@ -57,11 +58,11 @@ struct vgsm_module
 
 	unsigned long status;
 
+	int readdma_pos;
+	int writedma_pos;
+
 	u8 rx_gain;
 	u8 tx_gain;
-
-	BOOL rx_pre;
-	BOOL tx_pre;
 
 	BOOL anal_loop;
 	BOOL dig_loop;

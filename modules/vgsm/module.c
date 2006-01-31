@@ -283,11 +283,25 @@ static ssize_t vgsm_chan_leg_read(
 {
 	struct vgsm_module *module = chan_to_module(visdn_leg->chan);
 	struct vgsm_card *card = module->card;
-	int copied_octets;
+	size_t copied_octets = 0;
+	int inpos;
+	u8 *bufp = buf;
 
 	vgsm_card_lock(card);
 
-	copied_octets=0;
+	inpos = le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
+				card->readdma_bus_mem;
+
+	while(module->readdma_pos != inpos && copied_octets < count) {
+		*bufp++ = *(u8 *)(card->readdma_mem + module->readdma_pos +
+						module->timeslot_offset);
+		module->readdma_pos += 4;
+
+		if (module->readdma_pos > card->readdma_size)
+			module->readdma_pos = 0;
+
+		copied_octets++;
+	}
 
 	vgsm_card_unlock(card);
 
@@ -300,11 +314,23 @@ static ssize_t vgsm_chan_leg_write(
 {
 	struct vgsm_module *module = chan_to_module(visdn_leg->chan);
 	struct vgsm_card *card = module->card;
-	int copied_octets;
+	size_t copied_octets = 0;
+	int i;
+	const u8 *bufp = buf;
 
 	vgsm_card_lock(card);
 
-	copied_octets=0;
+	for (i=0; i<count; i++) {
+		*(u8 *)(card->writedma_mem + module->writedma_pos +
+			module->timeslot_offset) = *bufp++;
+
+		module->writedma_pos += 4;
+
+		if (module->writedma_pos > card->writedma_size)
+			module->writedma_pos = 0;
+
+		copied_octets++;
+	}
 
 	vgsm_card_unlock(card);
 
@@ -337,6 +363,7 @@ void vgsm_module_init(
 {
 	module->card = card;
 	module->id = id;
+	module->timeslot_offset = 3 - id;
 
 	/* Initializing kfifo spinlock */
 	spin_lock_init(&module->kfifo_rx_lock);
@@ -346,11 +373,11 @@ void vgsm_module_init(
 	init_waitqueue_head(&module->tx_wait_queue);
 	init_waitqueue_head(&module->rx_wait_queue);
 
+	module->readdma_pos = 0;
+	module->writedma_pos = 0;
+
 	module->rx_gain = 0xE2;
 	module->tx_gain = 0xFF;
-
-	module->rx_pre = FALSE;
-	module->tx_pre = FALSE;
 
 	module->anal_loop = FALSE;
 	module->dig_loop = FALSE;
@@ -420,6 +447,14 @@ int vgsm_module_register(
 		goto err_kfifo_tx;
 	}
 
+	err = visdn_port_register(&module->visdn_port);
+	if (err < 0)
+		goto err_port_register;
+
+	err = visdn_chan_register(&module->visdn_chan);
+	if (err < 0)
+		goto err_chan_register;
+
 	module->devt = vgsm_first_dev + card->id * 4 + module->id;
 
 	snprintf(module->class_device.class_id,
@@ -452,6 +487,10 @@ err_class_device_create_file:
 #endif
 	class_device_unregister(&module->class_device);
 err_class_device_register:
+	visdn_chan_unregister(&module->visdn_chan);
+err_chan_register:
+	visdn_port_unregister(&module->visdn_port);
+err_port_register:
 	kfifo_free(module->kfifo_tx);
 err_kfifo_tx:
 	kfifo_free(module->kfifo_rx);
@@ -463,6 +502,11 @@ err_kfifo_rx:
 void vgsm_module_unregister(
 	struct vgsm_module *module)
 {
+	class_device_unregister(&module->class_device);
+
+	visdn_chan_unregister(&module->visdn_chan);
+	visdn_port_unregister(&module->visdn_port);
+
 	kfifo_free(module->kfifo_tx);
 	kfifo_free(module->kfifo_rx);
 }

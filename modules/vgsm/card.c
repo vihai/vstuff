@@ -52,6 +52,7 @@ static void vgsm_read_msg(
 	msg->raw[6] = ioread8(card->io_mem + VGSM_PIB_D8);
 	msg->raw[7] = ioread8(card->io_mem + VGSM_PIB_DC);	
 
+#if 0
 	printk(KERN_CRIT "RX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 		msg->raw[0],
 		msg->raw[1],
@@ -61,11 +62,13 @@ static void vgsm_read_msg(
 		msg->raw[5],
 		msg->raw[6],
 		msg->raw[7]);
+#endif
 }
 
 static void vgsm_write_msg(
 	struct vgsm_card *card, struct vgsm_micro_message *msg)
 {
+#if 1
 	printk(KERN_DEBUG "TX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 		msg->raw[0],
 		msg->raw[1],
@@ -75,6 +78,7 @@ static void vgsm_write_msg(
 		msg->raw[5],
 		msg->raw[6],
 		msg->raw[7]);
+#endif
 
 	iowrite8(msg->raw[0], card->io_mem + VGSM_PIB_C0);
 	iowrite8(msg->raw[1], card->io_mem + VGSM_PIB_C4);
@@ -93,7 +97,7 @@ static inline void vgsm_wait_e0(struct vgsm_card *card)
 	for (i=0; i<100 && vgsm_inb(card, VGSM_PIB_E0); i++) {
 		udelay(10);
 
-		if (i > 10)
+		if (i > 20)
 			printk(KERN_WARNING
 				"Uhuh... waiting %d for buffer\n", i);
 	}
@@ -174,10 +178,7 @@ void vgsm_update_mask0(struct vgsm_card *card)
 		if (test_bit(VISDN_CHAN_STATE_OPEN,
 				&card->modules[i].visdn_chan.state)) {
 
-			card->regs.mask0 |= VGSM_INT1STAT_WR_REACH_INT |
-					VGSM_INT1STAT_WR_REACH_END |
-					VGSM_INT1STAT_RD_REACH_INT |
-					VGSM_INT1STAT_RD_REACH_END;
+			// ?
 
 			break;
 		}
@@ -194,6 +195,7 @@ void vgsm_update_codec(struct vgsm_module *module)
 	case 0:
 		vgsm_send_codec_setreg(card, VGSM_CODEC_GTX0, module->tx_gain);
 		vgsm_send_codec_setreg(card, VGSM_CODEC_GRX0, module->rx_gain);
+
 		card->regs.codec_loop &= ~(VGSM_CODEC_LOOPB_AL0 |
 			       		VGSM_CODEC_LOOPB_DL0);
 
@@ -355,34 +357,17 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	/* Delay FSC by 0 so it's properly aligned */
 	vgsm_outb(card, VGSM_FSCDELAY, 0x0); 
 
-
 	/* Setup DMA bus addresses on Tiger 320*/
 
-	/* Write start */
 	vgsm_outl(card, VGSM_DMA_WR_START, cpu_to_le32(card->writedma_bus_mem));
-
-	/* Write interrupt - half buffer */
-	vgsm_outl(card, VGSM_DMA_WR_INT,
-		cpu_to_le32(card->writedma_bus_mem +
-			(vgsm_DMA_SINGLE_CHUNK * 2) -4 ));
-
-	/* Write end */
+	vgsm_outl(card, VGSM_DMA_WR_INT, cpu_to_le32(card->writedma_bus_mem));
 	vgsm_outl(card, VGSM_DMA_WR_END,
-		cpu_to_le32(card->writedma_bus_mem +
-			(vgsm_DMA_SINGLE_CHUNK * 4) -4 ));
+		cpu_to_le32(card->writedma_bus_mem + card->writedma_size));
 
-	/* Read start */
 	vgsm_outl(card, VGSM_DMA_RD_START, cpu_to_le32(card->readdma_bus_mem));	
-
-	/* Read interrupt - half buffer */
-	vgsm_outl(card, VGSM_DMA_RD_INT,
-		cpu_to_le32(card->readdma_bus_mem +
-			(vgsm_DMA_SINGLE_CHUNK * 2) -4 ));
-
-	/* Read end */
+	vgsm_outl(card, VGSM_DMA_RD_INT, cpu_to_le32(card->readdma_bus_mem));	
 	vgsm_outl(card, VGSM_DMA_RD_END,
-		cpu_to_le32(card->readdma_bus_mem +
-			(vgsm_DMA_SINGLE_CHUNK * 4) -4 ));
+		cpu_to_le32(card->readdma_bus_mem + card->readdma_size));
 
 	/* Clear DMA interrupts */
 	vgsm_outb(card, VGSM_INT0STAT, 0x3F);
@@ -490,6 +475,7 @@ static irqreturn_t vgsm_interrupt(int irq,
 					module = &card->modules[3];
 			}
 
+#if 0
 printk(KERN_CRIT "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 	module->id,
 	escape_unprintable(msg.payload[0]),
@@ -499,6 +485,7 @@ printk(KERN_CRIT "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 	escape_unprintable(msg.payload[4]),
 	escape_unprintable(msg.payload[5]),
 	escape_unprintable(msg.payload[6]));
+#endif
 
 		/* Got msg from micro, now send ACK */
 		
@@ -531,7 +518,9 @@ printk(KERN_CRIT "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 						module = &card->modules[3];
 				}
 
+#if 0
 printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
+#endif
 
 			clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
 				&module->status);
@@ -579,6 +568,11 @@ int vgsm_card_probe(
 
 	memset(card, 0, sizeof(*card));
 
+	card->pci_dev = pci_dev;
+	pci_set_drvdata(pci_dev, card);
+
+	card->id = numcards++;
+
 	spin_lock_init(&card->lock);
 
 	tasklet_init(&card->rx_tasklet, vgsm_card_rx_tasklet,
@@ -587,15 +581,10 @@ int vgsm_card_probe(
 	tasklet_init(&card->tx_tasklet, vgsm_card_tx_tasklet,
 			(unsigned long)card);
 
-	card->id = numcards++;
-
 	card->num_modules = 4;
 
 	for (i=0; i<card->num_modules; i++)
 		vgsm_module_init(&card->modules[i], card, i);
-
-	card->pci_dev = pci_dev;
-	pci_set_drvdata(pci_dev, card);
 
 	/* From here on vgsm_msg_card may be used */
 
@@ -658,8 +647,9 @@ int vgsm_card_probe(
 	* Each sample written by PCI bridge is 32 bits, 8 bits/module */
 
 	/* READ DMA */
+	card->readdma_size = vgsm_DMA_SAMPLES * 4;
 	card->readdma_mem = pci_alloc_consistent(
-				pci_dev, (vgsm_DMA_SINGLE_CHUNK * 4),
+				pci_dev, card->readdma_size,
 				&card->readdma_bus_mem);
 
 	if (!card->readdma_mem) {
@@ -669,11 +659,12 @@ int vgsm_card_probe(
 		goto err_alloc_readdma;
 	}
 
-	memset(card->readdma_mem, 0, (vgsm_DMA_SINGLE_CHUNK * 4));
+	memset(card->readdma_mem, 0, card->readdma_size);
 
 	/* WRITE DMA */
+	card->writedma_size = vgsm_DMA_SAMPLES * 4;
 	card->writedma_mem = pci_alloc_consistent(
-				pci_dev, (vgsm_DMA_SINGLE_CHUNK * 4),
+				pci_dev, card->writedma_size,
 				&card->writedma_bus_mem);
 
 	if (!card->writedma_mem) {
@@ -683,7 +674,7 @@ int vgsm_card_probe(
 		goto err_alloc_writedma;
 	}
 
-	memset(card->writedma_mem, 0x00, (vgsm_DMA_SINGLE_CHUNK * 4));
+	memset(card->writedma_mem, 0, card->writedma_size);
 
 	/* Requesting IRQ */
 	err = request_irq(card->pci_dev->irq, &vgsm_interrupt,
@@ -694,15 +685,15 @@ int vgsm_card_probe(
 		goto err_request_irq;
 	}
 
-	//SISTEMAREE inizializzazione prova
-	
-	memset(card->readdma_mem, 0x55, (vgsm_DMA_SINGLE_CHUNK * 4));
-
 	{
 	u8 khz[] = { 0x34, 0x21, 0x21, 0x34, 0xb4, 0xa1, 0xa1, 0xb4 };
+	u8 off[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-	for (i=0; i<vgsm_DMA_SINGLE_CHUNK * 4; i++) {
-		*(u8 *)(card->writedma_mem + i) = khz[(i/4) % 8];
+	for (i=0; i<vgsm_DMA_SAMPLES; i++) {
+		*(u8 *)(card->writedma_mem + i * 4 + 0) = khz[i % 8];
+		*(u8 *)(card->writedma_mem + i * 4 + 1) = khz[i % 8];
+		*(u8 *)(card->writedma_mem + i * 4 + 2) = khz[i % 8];
+		*(u8 *)(card->writedma_mem + i * 4 + 3) = khz[i % 8];
 	}
 	}
 
@@ -732,7 +723,8 @@ int vgsm_card_probe(
 	udelay(10);
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_CONFIG,
-		VGSM_CODEC_CONFIG_AMU_ALAW);
+		VGSM_CODEC_CONFIG_AMU_ALAW |
+		VGSM_CODEC_CONFIG_STA);
 	mb();
 	
 	vgsm_send_codec_setreg(card,
@@ -772,9 +764,9 @@ int vgsm_card_probe(
 		VGSM_CODEC_DRA3_ENA | VGSM_CODEC_DRA3_TS(3));
 
 	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG10,
-		VGSM_CODEC_RXG10_0_0 | VGSM_CODEC_RXG10_1_0);
+		VGSM_CODEC_RXG10_CH0_0 | VGSM_CODEC_RXG10_CH1_0);
 	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG32,
-		VGSM_CODEC_RXG32_2_0 | VGSM_CODEC_RXG32_3_0);
+		VGSM_CODEC_RXG32_CH2_0 | VGSM_CODEC_RXG32_CH3_0);
 
 	/* Ensure the modules are turned off */
 	for(i=0; i<card->num_modules; i++) {
@@ -816,10 +808,10 @@ int vgsm_card_probe(
 
 //	free_irq(pci_dev->irq, card);
 err_request_irq:
-	pci_free_consistent(pci_dev, (vgsm_DMA_SINGLE_CHUNK * 4), 
+	pci_free_consistent(pci_dev, card->writedma_size,
 	card->writedma_mem, card->writedma_bus_mem);
 err_alloc_writedma:
-	pci_free_consistent(pci_dev, (vgsm_DMA_SINGLE_CHUNK * 4), 
+	pci_free_consistent(pci_dev, card->readdma_size,
 	card->readdma_mem, card->readdma_bus_mem);		
 err_alloc_readdma:
 	iounmap(card->io_mem);
@@ -892,10 +884,10 @@ void vgsm_card_remove(struct vgsm_card *card)
 	free_irq(card->pci_dev->irq, card);
 
 	/* Free DMA */
-	pci_free_consistent(card->pci_dev, (vgsm_DMA_SINGLE_CHUNK * 4),
+	pci_free_consistent(card->pci_dev, card->writedma_size,
 		 card->writedma_mem, card->writedma_bus_mem);
 
-	pci_free_consistent(card->pci_dev, (vgsm_DMA_SINGLE_CHUNK * 4),
+	pci_free_consistent(card->pci_dev, card->readdma_size,
 		card->readdma_mem, card->readdma_bus_mem);				
 
 	/* Unmap */

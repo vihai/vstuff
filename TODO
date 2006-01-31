@@ -172,13 +172,12 @@ vgsm:
 
 - Handle hung micros by timing out writes/reads and resetting the board
 - SMS/CB handinlg
-- PIN/PUK insertion cli commands
 
 
 chan_vgsm:
 ----------
-- Implement pin changing command
 - Implement network listing command
 - Implement CACM, CAMM,  command
 - Implement SMS/CB handling
 - Implement network survey
+- Handle command timeout and recovery

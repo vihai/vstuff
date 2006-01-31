@@ -52,12 +52,6 @@ static int do_codec(
 	} else if (!strcasecmp(parameter, "txgain")) {
 		cctl.parameter = VGSM_CODEC_TXGAIN;
 		cctl.value = atoi(value);
-	} else if (!strcasecmp(parameter, "rxpre")) {
-		cctl.parameter = VGSM_CODEC_TXPRE;
-		cctl.value = atoi(value);
-	} else if (!strcasecmp(parameter, "txpre")) {
-		cctl.parameter = VGSM_CODEC_TXPRE;
-		cctl.value = atoi(value);
 	} else if (!strcasecmp(parameter, "dig_loop")) {
 		cctl.parameter = VGSM_CODEC_DIG_LOOP;
 		cctl.value = atoi(value);
@@ -100,8 +94,6 @@ static void usage(int argc, char *argv[])
 		"    Available parameters are:\n"
 		"    rxgain: RX-gain (0-255)\n"
 		"    txgain: TX gain (0-255)\n"
-		"    rxpre: RX preamplifier (enabled=1/disabled=0)\n"
-		"    rxpre: TX preamplifier (enabled=1/disabled=0)\n"
 		"    dig_loop: Digital loop (enabled=1/disabled=0)\n"
 		"    anal_loop: Analog loop (enabled=1/disabled=0)\n");
 }

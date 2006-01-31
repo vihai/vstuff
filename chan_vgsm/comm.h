@@ -14,6 +14,7 @@ enum vgsm_response_codes
 	VGSM_RESP_NO_DIALTONE	= 10004,
 	VGSM_RESP_BUSY		= 10005,
 	VGSM_RESP_NO_ANSWER	= 10006,
+	VGSM_RESP_UNKNOWN	= 11000,
 };
 
 enum vgsm_comm_state
@@ -38,6 +39,7 @@ struct vgsm_response
 	struct list_head lines;
 
 	struct vgsm_urc *urc;
+	struct vgsm_comm *comm;
 };
 
 struct vgsm_response_line
@@ -54,9 +56,7 @@ struct vgsm_urc
 
 	int multiline;
 
-	void (*handler)(
-		const struct vgsm_response *urm,
-		struct vgsm_comm *comm);
+	void (*handler)(const struct vgsm_response *urm);
 };
 
 typedef long long longtime_t;
@@ -79,8 +79,6 @@ struct vgsm_comm
 	int response_error;
 
 	struct vgsm_response *urm;
-	struct list_head urm_queue;
-	ast_mutex_t urm_queue_lock;
 };
 
 void vgsm_comm_init(struct vgsm_comm *comm, struct vgsm_urc *urcs);
@@ -95,6 +93,7 @@ struct vgsm_response *vgsm_read_response(
 	struct vgsm_comm *comm);
 
 int vgsm_expect_ok(struct vgsm_comm *comm);
+int vgsm_comm_line_error(const char *line);
 
 const struct vgsm_response_line *vgsm_response_first_line(
 	const struct vgsm_response *resp);
