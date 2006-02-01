@@ -125,7 +125,7 @@ static ssize_t vec_chan_ne_write(
 		/* Too few samples in other direction */
 
 		printk(KERN_DEBUG "Detected %d slips\n",
-			nref - count);
+			(int)(nref - count));
 
 		// FIXME :) (filled with undetermined samples)
 		nref = count;
@@ -488,11 +488,11 @@ static ssize_t vec_port_show_ec_coeffs(
 {
 	struct vec_ec *ec = to_vec_ec(visdn_port);
 	int len = 0;
+	int i;
 
 	if (!ec->ec)
 		return 0;
 
-	int i;
 	for (i=0; i<ec->ec->N_d; i++) {
 		len += snprintf(buf + len, PAGE_SIZE - len,
 			"%d\n",

@@ -20,6 +20,7 @@
 #include <linux/kfifo.h>
 #include <linux/device.h>
 #include <linux/pci.h>
+#include <linux/interrupt.h>
 
 #include "module.h"
 

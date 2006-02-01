@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-01 21:34:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-505
+
+    Summary:
+      Fixed some compilation error under x86-64
+    Revision:
+      isdn--devel--0.1--patch-505
+
+
+    modified files:
+     ChangeLog modules/ec/ec_main.c modules/vgsm/card.h
+
+
 2006-01-31 22:21:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-504
 
     Summary:
