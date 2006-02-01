@@ -7,6 +7,7 @@ INCLUDES =					\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\
+	-I$(top_builddir)/libq931/		\
 	-I$(top_builddir)/chan_visdn/		\
 	-I$(astincdir)
 
