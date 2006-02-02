@@ -51,6 +51,8 @@ struct hfc_card
 
 	struct hfc_st_port st_port;
 
+	struct hfc_fifo fifos[4][2];
+
 	struct hfc_led leds[5];
 	struct work_struct led_update_work;
 

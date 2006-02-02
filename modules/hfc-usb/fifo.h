@@ -13,6 +13,11 @@
 #ifndef _HFC_FIFO_H
 #define _HFC_FIFO_H
 
+#define FIFO_B1 0
+#define FIFO_B2 1
+#define FIFO_D 2
+#define FIFO_PCME 3
+
 enum hfc_fifo_flag
 {
 	HFC_FIFO_FLAG_WAITING_BUSY,
@@ -21,10 +26,13 @@ enum hfc_fifo_flag
 struct hfc_st_chan;
 struct hfc_fifo
 {
-	struct hfc_st_chan *chan;
+	struct hfc_card *card;
+	struct hfc_st_chan *connected_chan;
 
 	int hw_index;
 	enum hfc_direction direction;
+
+	const char *name;
 
 	int subchannel_bit_count;
 	int subchannel_bit_start;
@@ -51,11 +59,11 @@ int hfc_fifo_xmit(struct hfc_fifo *fifo, void *buf, int len);
 
 int hfc_fifo_is_running(struct hfc_fifo *fifo);
 void hfc_fifo_init(
-	struct hfc_fifo *fifo, 
-	struct hfc_st_chan *chan,
+	struct hfc_fifo *fifo,
+	struct hfc_card *card,
 	int hw_index,
 	enum hfc_direction direction,
-	int subchannel_bit_count);
+	const char *name);
 int hfc_fifo_alloc(struct hfc_fifo *fifo);
 void hfc_fifo_dealloc(struct hfc_fifo *fifo);
 void hfc_fifo_reset(struct hfc_fifo *fifo);

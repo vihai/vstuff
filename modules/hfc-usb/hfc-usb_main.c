@@ -72,11 +72,11 @@ static void hfc_card_initialize(struct hfc_card *card)
 {
 	hfc_write(card, HFC_REG_USB_SIZE,
 		HFC_REG_USB_SIZE_OUT(
-			card->st_port.chans[D].tx_fifo.
-				int_endpoint->desc.wMaxPacketSize) |
+			card->fifos[FIFO_D][TX].
+			int_endpoint->desc.wMaxPacketSize) |
 		HFC_REG_USB_SIZE_IN(
-			card->st_port.chans[D].rx_fifo.
-				int_endpoint->desc.wMaxPacketSize));
+			card->fifos[FIFO_D][RX].
+			int_endpoint->desc.wMaxPacketSize));
 
 	hfc_write(card, HFC_REG_USB_SIZE_I, 0x10);
 
@@ -145,36 +145,93 @@ found:
 
 	init_MUTEX(&card->sem);
 
-	hfc_st_port_init(&card->st_port, card, "st0");
+	hfc_fifo_init(&card->fifos[FIFO_B1][TX], card, 0, TX, "B1");
+	hfc_fifo_init(&card->fifos[FIFO_B1][RX], card, 1, RX, "B1");
+	hfc_fifo_init(&card->fifos[FIFO_B2][TX], card, 2, TX, "B2");
+	hfc_fifo_init(&card->fifos[FIFO_B2][RX], card, 3, RX, "B2");
+	hfc_fifo_init(&card->fifos[FIFO_D][TX], card, 4, TX, "D");
+	hfc_fifo_init(&card->fifos[FIFO_D][RX], card, 5, RX, "D");
+	hfc_fifo_init(&card->fifos[FIFO_PCME][TX], card, 6, TX, "PCM/E");
+	hfc_fifo_init(&card->fifos[FIFO_PCME][RX], card, 7, RX, "PCM/E");
 
 	for(i = 0; i < card->usb_interface->cur_altsetting->desc.bNumEndpoints;
 	    i++) {
 
 		struct usb_host_endpoint *ep;
-		struct hfc_st_port *port = &card->st_port;
-
 		ep = &card->usb_interface->cur_altsetting->endpoint[i];
 
 		switch(ep->desc.bEndpointAddress) {
-		case 0x01: port->chans[B1].tx_fifo.int_endpoint = ep; break;
-		case 0x81: port->chans[B1].rx_fifo.int_endpoint = ep; break;
-		case 0x02: port->chans[B2].tx_fifo.int_endpoint = ep; break;
-		case 0x82: port->chans[B2].rx_fifo.int_endpoint = ep; break;
-		case 0x03: port->chans[D].tx_fifo.int_endpoint = ep; break;
-		case 0x83: port->chans[D].rx_fifo.int_endpoint = ep; break;
-		case 0x04: port->chans[E].tx_fifo.int_endpoint = ep; break;
-		case 0x84: port->chans[E].rx_fifo.int_endpoint = ep; break;
+		case 0x01: card->fifos[FIFO_B1][TX].int_endpoint = ep; break;
+		case 0x81: card->fifos[FIFO_B1][RX].int_endpoint = ep; break;
+		case 0x02: card->fifos[FIFO_B2][TX].int_endpoint = ep; break;
+		case 0x82: card->fifos[FIFO_B2][RX].int_endpoint = ep; break;
+		case 0x03: card->fifos[FIFO_D][TX].int_endpoint = ep; break;
+		case 0x83: card->fifos[FIFO_D][RX].int_endpoint = ep; break;
+		case 0x04: card->fifos[FIFO_PCME][TX].int_endpoint = ep; break;
+		case 0x84: card->fifos[FIFO_PCME][RX].int_endpoint = ep; break;
 
-		case 0x05: port->chans[B1].tx_fifo.iso_endpoint = ep; break;
-		case 0x85: port->chans[B1].rx_fifo.iso_endpoint = ep; break;
-		case 0x06: port->chans[B2].tx_fifo.iso_endpoint = ep; break;
-		case 0x86: port->chans[B2].rx_fifo.iso_endpoint = ep; break;
-		case 0x07: port->chans[D].tx_fifo.iso_endpoint = ep; break;
-		case 0x87: port->chans[D].rx_fifo.iso_endpoint = ep; break;
-		case 0x08: port->chans[E].tx_fifo.iso_endpoint = ep; break;
-		case 0x88: port->chans[E].rx_fifo.iso_endpoint = ep; break;
+		case 0x05: card->fifos[FIFO_B1][TX].iso_endpoint = ep; break;
+		case 0x85: card->fifos[FIFO_B1][RX].iso_endpoint = ep; break;
+		case 0x06: card->fifos[FIFO_B2][TX].iso_endpoint = ep; break;
+		case 0x86: card->fifos[FIFO_B2][RX].iso_endpoint = ep; break;
+		case 0x07: card->fifos[FIFO_D][TX].iso_endpoint = ep; break;
+		case 0x87: card->fifos[FIFO_D][RX].iso_endpoint = ep; break;
+		case 0x08: card->fifos[FIFO_PCME][TX].iso_endpoint = ep; break;
+		case 0x88: card->fifos[FIFO_PCME][RX].iso_endpoint = ep; break;
 		}
 	}
+
+	for (i=0; i<ARRAY_SIZE(card->fifos); i++) {
+		if (!card->fifos[i][RX].int_endpoint) {
+			printk(KERN_ERR
+				"Unsupported USB configuration, missing"
+				" endpoint for RX fifo %d\n", i);
+			err = -EINVAL;
+			goto err_invalid_config;
+		}
+
+		if (!card->fifos[i][TX].int_endpoint) {
+			printk(KERN_ERR
+				"Unsupported USB configuration, missing"
+				" endpoint for TX fifo %d\n", i);
+			err = -EINVAL;
+			goto err_invalid_config;
+		}
+	}
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_D][RX]);
+	if (err < 0)
+		goto err_fifo_alloc_d_rx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_D][TX]);
+	if (err < 0)
+		goto err_fifo_alloc_d_tx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_B1][RX]);
+	if (err < 0)
+		goto err_fifo_alloc_b1_rx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_B1][TX]);
+	if (err < 0)
+		goto err_fifo_alloc_b1_tx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_B2][RX]);
+	if (err < 0)
+		goto err_fifo_alloc_b2_rx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_B2][TX]);
+	if (err < 0)
+		goto err_fifo_alloc_b2_tx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_PCME][RX]);
+	if (err < 0)
+		goto err_fifo_alloc_pcme_rx;
+
+	err = hfc_fifo_alloc(&card->fifos[FIFO_PCME][TX]);
+	if (err < 0)
+		goto err_fifo_alloc_pcme_tx;
+
+	hfc_st_port_init(&card->st_port, card, "st0");
 
 	for(i=0; i<ARRAY_SIZE(card->leds); i++)
 		hfc_led_init(&card->leds[i], i, card);
@@ -210,6 +267,23 @@ found:
 
 	hfc_st_port_unregister(&card->st_port);
 err_st_port_register:
+	hfc_fifo_dealloc(&card->fifos[FIFO_PCME][TX]);
+err_fifo_alloc_pcme_tx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_PCME][RX]);
+err_fifo_alloc_pcme_rx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_B2][TX]);
+err_fifo_alloc_b2_tx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_B2][RX]);
+err_fifo_alloc_b2_rx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_B1][TX]);
+err_fifo_alloc_b1_tx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_B1][RX]);
+err_fifo_alloc_b1_rx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_D][TX]);
+err_fifo_alloc_d_tx:
+	hfc_fifo_dealloc(&card->fifos[FIFO_D][RX]);
+err_fifo_alloc_d_rx:
+err_invalid_config:
 	kfree(card);
 err_kmalloc:
 
@@ -235,6 +309,15 @@ static void hfc_disconnect(struct usb_interface *usb_intf)
 	hfc_card_reset(card);
 
 	hfc_st_port_unregister(&card->st_port);
+
+	hfc_fifo_dealloc(&card->fifos[FIFO_PCME][TX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_PCME][RX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_B2][TX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_B2][RX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_B1][TX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_B1][RX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_D][TX]);
+	hfc_fifo_dealloc(&card->fifos[FIFO_D][RX]);
 
 	kfree(card);
 }

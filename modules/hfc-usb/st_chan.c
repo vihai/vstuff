@@ -239,25 +239,75 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	chan->rx_fifo.enabled = TRUE;
-	chan->tx_fifo.enabled = TRUE;
+	if (chan->visdn_chan.leg_b.framing != VISDN_LEG_FRAMING_NONE &&
+	   chan->visdn_chan.leg_b.framing != VISDN_LEG_FRAMING_HDLC) {
 
-	if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
-		chan->rx_fifo.framer_enabled = FALSE;
-		chan->tx_fifo.framer_enabled = FALSE;
-		chan->rx_fifo.bit_reversed = TRUE;
-		chan->tx_fifo.bit_reversed = TRUE;
-	} else if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_HDLC) {
-		chan->rx_fifo.framer_enabled = TRUE;
-		chan->tx_fifo.framer_enabled = TRUE;
-		chan->rx_fifo.bit_reversed = FALSE;
-		chan->tx_fifo.bit_reversed = FALSE;
-	} else {
 		hfc_debug_chan(chan, 1,
 			"open failed: unsupported framing %d\n",
 			chan->visdn_chan.leg_b.framing);
 		err = -EINVAL;
 		goto err_invalid_framing;
+	}
+
+	if (chan->id == E) {
+		/* TODO: Check if the FIFO is used for PCM */
+
+		chan->rx_fifo = &card->fifos[FIFO_PCME][RX];
+		chan->rx_fifo->connected_chan = chan;
+
+		chan->tx_fifo = &card->fifos[FIFO_PCME][RX];
+		chan->tx_fifo->connected_chan = chan;
+	}
+
+	if (chan->rx_fifo) {
+		chan->rx_fifo->enabled = TRUE;
+
+		if (chan->visdn_chan.leg_b.framing ==
+						VISDN_LEG_FRAMING_NONE) {
+			chan->rx_fifo->framer_enabled = FALSE;
+			chan->rx_fifo->bit_reversed = TRUE;
+		} else if (chan->visdn_chan.leg_b.framing ==
+						VISDN_LEG_FRAMING_HDLC) {
+			chan->rx_fifo->framer_enabled = TRUE;
+			chan->rx_fifo->bit_reversed = FALSE;
+		}
+
+		chan->rx_fifo->subchannel_bit_start = 0;
+		chan->rx_fifo->subchannel_bit_count =
+					chan->subchannel_bit_count;
+
+		hfc_fifo_select(chan->rx_fifo);
+		hfc_fifo_reset(chan->rx_fifo);
+		hfc_fifo_configure(chan->rx_fifo);
+
+		err = usb_submit_urb(chan->rx_fifo->urb, GFP_KERNEL);
+		if (err < 0) {
+			printk(KERN_ERR hfc_DRIVER_PREFIX
+				"usb_submit_urb() error %d\n", err);
+			goto err_submit_rx_urb;
+		}
+	}
+
+	if (chan->tx_fifo) {
+		chan->tx_fifo->enabled = TRUE;
+
+		if (chan->visdn_chan.leg_b.framing ==
+						VISDN_LEG_FRAMING_NONE) {
+			chan->tx_fifo->framer_enabled = FALSE;
+			chan->tx_fifo->bit_reversed = TRUE;
+		} else if (chan->visdn_chan.leg_b.framing ==
+						VISDN_LEG_FRAMING_HDLC) {
+			chan->tx_fifo->framer_enabled = TRUE;
+			chan->tx_fifo->bit_reversed = FALSE;
+		}
+
+		chan->tx_fifo->subchannel_bit_start = 0;
+		chan->tx_fifo->subchannel_bit_count =
+					chan->subchannel_bit_count;
+
+		hfc_fifo_select(chan->tx_fifo);
+		hfc_fifo_reset(chan->tx_fifo);
+		hfc_fifo_configure(chan->tx_fifo);
 	}
 
 	if (chan->id == B1) {
@@ -271,29 +321,31 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 	hfc_st_port_update_sctrl(chan->port);
 	hfc_st_port_update_sctrl_r(chan->port);
 
-	hfc_fifo_select(&chan->rx_fifo);
-	hfc_fifo_reset(&chan->rx_fifo);
-	hfc_fifo_configure(&chan->rx_fifo);
-
-	hfc_fifo_select(&chan->tx_fifo);
-	hfc_fifo_reset(&chan->tx_fifo);
-	hfc_fifo_configure(&chan->tx_fifo);
-
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
-
-	err = usb_submit_urb(chan->rx_fifo.urb, GFP_KERNEL);
-	if (err < 0) {
-		printk(KERN_ERR hfc_DRIVER_PREFIX
-			"usb_submit_urb() error %d\n", err);
-		goto err_submit_urb;
-	}
 
 	hfc_msg_chan(chan, KERN_INFO, "channel opened.\n");
 
 	return 0;
 
-err_submit_urb:
+	if (chan->tx_fifo) {
+		chan->tx_fifo->enabled = FALSE;
+		usb_kill_urb(chan->tx_fifo->urb);
+
+		hfc_fifo_select(chan->tx_fifo);
+		hfc_fifo_reset(chan->tx_fifo);
+		hfc_fifo_configure(chan->tx_fifo);
+	}
+
+err_submit_rx_urb:
+	if (chan->rx_fifo) {
+		chan->rx_fifo->enabled = FALSE;
+		usb_kill_urb(chan->rx_fifo->urb);
+
+		hfc_fifo_select(chan->rx_fifo);
+		hfc_fifo_reset(chan->rx_fifo);
+		hfc_fifo_configure(chan->rx_fifo);
+	}
 err_invalid_framing:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
@@ -316,9 +368,6 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	usb_kill_urb(chan->rx_fifo.urb);
-	usb_kill_urb(chan->tx_fifo.urb);
-
 	if (chan->id == B1) {
 		card->leds[HFC_LED_B1].color = HFC_LED_OFF;
 		hfc_led_update(&card->leds[HFC_LED_B1]);
@@ -327,16 +376,31 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 		hfc_led_update(&card->leds[HFC_LED_B2]);
 	}
 
-	chan->rx_fifo.enabled = FALSE;
-	chan->tx_fifo.enabled = FALSE;
+	if (chan->id == E) {
+		chan->rx_fifo->connected_chan = NULL;
+		chan->rx_fifo = NULL;
 
-	hfc_fifo_select(&chan->rx_fifo);
-	hfc_fifo_reset(&chan->rx_fifo);
-	hfc_fifo_configure(&chan->rx_fifo);
+		chan->tx_fifo->connected_chan = NULL;
+		chan->tx_fifo = NULL;
+	}
 
-	hfc_fifo_select(&chan->tx_fifo);
-	hfc_fifo_reset(&chan->tx_fifo);
-	hfc_fifo_configure(&chan->tx_fifo);
+	if (chan->rx_fifo) {
+		chan->rx_fifo->enabled = FALSE;
+		usb_kill_urb(chan->rx_fifo->urb);
+
+		hfc_fifo_select(chan->rx_fifo);
+		hfc_fifo_reset(chan->rx_fifo);
+		hfc_fifo_configure(chan->rx_fifo);
+	}
+
+	if (chan->tx_fifo) {
+		chan->tx_fifo->enabled = FALSE;
+		usb_kill_urb(chan->tx_fifo->urb);
+
+		hfc_fifo_select(chan->tx_fifo);
+		hfc_fifo_reset(chan->tx_fifo);
+		hfc_fifo_configure(chan->tx_fifo);
+	}
 
 	hfc_st_port_update_sctrl(chan->port);
 	hfc_st_port_update_sctrl_r(chan->port);
@@ -364,7 +428,7 @@ static int hfc_st_chan_frame_xmit(
 
 	hfc_st_port_check_l1_up(chan->port);
 
-	err = hfc_fifo_xmit(&chan->tx_fifo, skb->data, skb->len);
+	err = hfc_fifo_xmit(chan->tx_fifo, skb->data, skb->len);
 	if (err < 0)
 		goto err_fifo_xmit;
 
@@ -476,36 +540,32 @@ static struct visdn_leg_ops hfc_leg_ops =
 	.write		= hfc_st_chan_write,
 };
 
-static int hfc_st_chan_to_fifo_num(
-	struct hfc_st_chan *chan,
-	enum hfc_direction dir)
-{
-	switch (chan->id) {
-	case D: return 4 + (dir == RX ? 1 : 0);
-	case B1: return 0 + (dir == RX ? 1 : 0);
-	case B2: return 2 + (dir == RX ? 1 : 0);
-	case E: return 6 + (dir == RX ? 1 : 0);
-	default:
-		BUG();
-		return 0;
-	}
-}
-
 void hfc_st_chan_init(
 	struct hfc_st_chan *chan,
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	BOOL has_real_fifo,
 	struct hfc_led *led,
-	int subchannel_bit_count)
+	int subchannel_bit_count,
+	struct hfc_fifo *rx_fifo,
+	struct hfc_fifo *tx_fifo)
 {
 	chan->port = port;
 	chan->id = id;
 
-	chan->has_real_fifo = has_real_fifo;
+	chan->subchannel_bit_count = subchannel_bit_count;
 
 	chan->led = led;
+
+	if (rx_fifo) {
+		chan->rx_fifo = rx_fifo;
+		chan->rx_fifo->connected_chan = chan;
+	}
+
+	if (tx_fifo) {
+		chan->tx_fifo = tx_fifo;
+		chan->tx_fifo->connected_chan = chan;
+	}
 
 	visdn_chan_init(&chan->visdn_chan);
 	chan->visdn_chan.ops = &hfc_st_chan_ops;
@@ -527,33 +587,11 @@ void hfc_st_chan_init(
 
 	strncpy(chan->visdn_chan.name, name, sizeof(chan->visdn_chan.name));
 	chan->visdn_chan.driver_data = chan;
-
-	if (has_real_fifo) {
-		hfc_fifo_init(
-			&chan->rx_fifo,
-			chan, hfc_st_chan_to_fifo_num(chan, RX), RX,
-			subchannel_bit_count);
-
-		hfc_fifo_init(
-			&chan->tx_fifo,
-			chan, hfc_st_chan_to_fifo_num(chan, TX), TX,
-			subchannel_bit_count);
-	}
 }
 
 int hfc_st_chan_register(struct hfc_st_chan *chan)
 {
 	int err;
-
-	if (chan->has_real_fifo) {
-		err = hfc_fifo_alloc(&chan->rx_fifo);
-		if (err < 0)
-			goto err_fifo_rx_alloc;
-
-		err = hfc_fifo_alloc(&chan->tx_fifo);
-		if (err < 0)
-			goto err_fifo_tx_alloc;
-	}
 
 	err = visdn_chan_register(&chan->visdn_chan);
 	if (err < 0)
@@ -580,10 +618,6 @@ int hfc_st_chan_register(struct hfc_st_chan *chan)
 
 	return 0;
 
-	hfc_fifo_dealloc(&chan->tx_fifo);
-err_fifo_tx_alloc:
-	hfc_fifo_dealloc(&chan->rx_fifo);
-err_fifo_rx_alloc:
 err_chan_register:
 
 	return err;

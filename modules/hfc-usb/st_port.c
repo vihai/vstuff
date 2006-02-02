@@ -372,25 +372,22 @@ static ssize_t hfc_show_fifo_state(
 
 	hfc_card_lock(card);
 
-	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
+	for (i=0; i<ARRAY_SIZE(card->fifos); i++) {
 
 		u8 rx_f1, rx_f2, rx_z1, rx_z2;
 		u8 tx_f1, tx_f2, tx_z1, tx_z2;
 
-		if (!card->st_port.chans[i].has_real_fifo)
-			continue;
-
 		sanprintf(buf, PAGE_SIZE,
 			"%2d     ", i);
 
-		hfc_fifo_select(&card->st_port.chans[i].rx_fifo);
+		hfc_fifo_select(&card->fifos[i][RX]);
 
 		rx_f1 = hfc_read(card, HFC_REG_FIF_F1);
 		rx_f2 = hfc_read(card, HFC_REG_FIF_F2);
 		rx_z1 = hfc_read(card, HFC_REG_FIF_Z1);
 		rx_z2 = hfc_read(card, HFC_REG_FIF_Z2);
 
-		hfc_fifo_select(&card->st_port.chans[i].tx_fifo);
+		hfc_fifo_select(&card->fifos[i][TX]);
 
 		tx_f1 = hfc_read(card, HFC_REG_FIF_F1);
 		tx_f2 = hfc_read(card, HFC_REG_FIF_F2);
@@ -441,10 +438,10 @@ void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 	if (port->sq_enabled)
 		sctrl |= HFC_REG_SCTRL_SQ_ENA;
 
-	if (hfc_fifo_is_running(&port->chans[B1].tx_fifo))
+	if (hfc_fifo_is_running(port->chans[B1].tx_fifo))
 		sctrl |= HFC_REG_SCTRL_B1_ENA;
 
-	if (hfc_fifo_is_running(&port->chans[B2].tx_fifo))
+	if (hfc_fifo_is_running(port->chans[B2].tx_fifo))
 		sctrl |= HFC_REG_SCTRL_B2_ENA;
 
 	hfc_write(port->card, HFC_REG_SCTRL, sctrl);
@@ -454,10 +451,10 @@ void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 {
 	u8 sctrl_r = 0;
 
-	if (hfc_fifo_is_running(&port->chans[B1].rx_fifo))
+	if (hfc_fifo_is_running(port->chans[B1].rx_fifo))
 		sctrl_r |= HFC_REG_SCTRL_R_B1_ENA;
 
-	if (hfc_fifo_is_running(&port->chans[B2].rx_fifo))
+	if (hfc_fifo_is_running(port->chans[B2].rx_fifo))
 		sctrl_r |= HFC_REG_SCTRL_R_B2_ENA;
 
 	hfc_write(port->card, HFC_REG_SCTRL_R, sctrl_r);
@@ -475,12 +472,14 @@ static void hfc_st_port_fifo_update(struct hfc_st_port *port)
 	int i;
 
 	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
-		if (port->chans[i].has_real_fifo) {
-			hfc_fifo_select(&port->chans[i].rx_fifo);
-			hfc_fifo_configure(&port->chans[i].rx_fifo);
+		if (port->chans[i].rx_fifo) {
+			hfc_fifo_select(port->chans[i].rx_fifo);
+			hfc_fifo_configure(port->chans[i].rx_fifo);
+		}
 
-			hfc_fifo_select(&port->chans[i].tx_fifo);
-			hfc_fifo_configure(&port->chans[i].tx_fifo);
+		if (port->chans[i].tx_fifo) {
+			hfc_fifo_select(port->chans[i].tx_fifo);
+			hfc_fifo_configure(port->chans[i].tx_fifo);
 		}
 	}
 }
@@ -773,16 +772,24 @@ void hfc_st_port_init(
 	port->visdn_port.device = &card->usb_dev->dev;
 	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
-	hfc_st_chan_init(&port->chans[D], port, "D", D, 1,
-			&card->leds[HFC_LED_ISDN], 2);
-	hfc_st_chan_init(&port->chans[B1], port, "B1", B1, 1,
-			&card->leds[HFC_LED_B1], 8);
-	hfc_st_chan_init(&port->chans[B2], port, "B2", B2, 1,
-			&card->leds[HFC_LED_B2], 8);
-	hfc_st_chan_init(&port->chans[E], port, "E", E, 0,
-			&card->leds[HFC_LED_ISDN], 2);
-	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ, 0,
-			&card->leds[HFC_LED_ISDN], 0);
+	hfc_st_chan_init(&port->chans[D], port, "D", D,
+			&card->leds[HFC_LED_ISDN], 2,
+			&card->fifos[FIFO_D][RX],
+			&card->fifos[FIFO_D][TX]);
+	hfc_st_chan_init(&port->chans[B1], port, "B1", B1,
+			&card->leds[HFC_LED_B1], 8,
+			&card->fifos[FIFO_B1][RX],
+			&card->fifos[FIFO_B1][TX]);
+	hfc_st_chan_init(&port->chans[B2], port, "B2", B2,
+			&card->leds[HFC_LED_B2], 8,
+			&card->fifos[FIFO_B2][RX],
+			&card->fifos[FIFO_B2][TX]);
+	hfc_st_chan_init(&port->chans[E], port, "E", E,
+			&card->leds[HFC_LED_ISDN], 2,
+			NULL, NULL);
+	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ,
+			&card->leds[HFC_LED_ISDN], 0,
+			NULL, NULL);
 }
 
 int hfc_st_port_register(struct hfc_st_port *port)

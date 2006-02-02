@@ -24,10 +24,10 @@ struct hfc_st_chan {
 
 	int id;
 
-	BOOL has_real_fifo;
+	int subchannel_bit_count;
 
-	struct hfc_fifo rx_fifo;
-	struct hfc_fifo tx_fifo;
+	struct hfc_fifo *rx_fifo;
+	struct hfc_fifo *tx_fifo;
 
 	struct hfc_led *led;
 };
@@ -40,8 +40,9 @@ void hfc_st_chan_init(
 	struct hfc_st_port *port,
 	const char *name,
 	int id,
-	BOOL has_real_fifo,
 	struct hfc_led *led,
-	int subchannel_bit_count);
+	int subchannel_bit_count,
+	struct hfc_fifo *rx_fifo,
+	struct hfc_fifo *tx_fifo);
 
 #endif

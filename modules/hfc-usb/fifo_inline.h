@@ -23,7 +23,7 @@
 
 static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 {
-	hfc_write(fifo->chan->port->card, HFC_REG_FIFO, fifo->hw_index);
+	hfc_write(fifo->card, HFC_REG_FIFO, fifo->hw_index);
 }
 
 #endif

@@ -25,12 +25,11 @@
 	if (debug_level >= dbglevel)					\
 		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
 			"%s-%s:"					\
-			"st:"						\
-			"chan[%s] "					\
+			"fifo[%s] "					\
 			format,						\
-			(fifo)->chan->port->card->usb_dev->dev.bus->name,\
-			(fifo)->chan->port->card->usb_dev->dev.bus_id,	\
-			(fifo)->chan->visdn_chan.name,			\
+			(fifo)->card->usb_dev->dev.bus->name,		\
+			(fifo)->card->usb_dev->dev.bus_id,		\
+			(fifo)->name,					\
 			## arg)
 #else
 #define hfc_debug_fifo(chan, dbglevel, format, arg...) do {} while (0)
@@ -42,18 +41,19 @@
 		"st:"							\
 		"chan[%s] "						\
 		format,							\
-		(fifo)->chan->port->card->usb_dev->dev.bus->name,	\
-		(fifo)->chan->port->card->usb_dev->dev.bus_id,		\
-		(fifo)->chan->visdn_chan.name,				\
+		(fifo)->card->usb_dev->dev.bus->name,			\
+		(fifo)->card->usb_dev->dev.bus_id,			\
+		(fifo)->name,						\
 		## arg)
 
 int hfc_fifo_is_running(struct hfc_fifo *fifo)
 {
 	if (!fifo->enabled ||
-	    (((fifo->chan->port->nt_mode &&
-	      fifo->chan->port->l1_state != 3) ||
-	     (!fifo->chan->port->nt_mode &&
-	      fifo->chan->port->l1_state != 7)))) {
+	    !fifo->connected_chan ||
+	    (((fifo->connected_chan->port->nt_mode &&
+	      fifo->connected_chan->port->l1_state != 3) ||
+	     (!fifo->connected_chan->port->nt_mode &&
+	      fifo->connected_chan->port->l1_state != 7)))) {
 		return FALSE;
 	} else {
 		return TRUE;
@@ -62,7 +62,7 @@ int hfc_fifo_is_running(struct hfc_fifo *fifo)
 
 void hfc_fifo_configure(struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 	u8 con_hdlc = 0;
 	u8 subch;
 
@@ -113,27 +113,10 @@ void hfc_fifo_configure(struct hfc_fifo *fifo)
 
 void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	hfc_write(card, HFC_REG_INC_RES_F,
 		HFC_REG_INC_RES_F_RESET);
-}
-
-void hfc_fifo_init(
-	struct hfc_fifo *fifo, 
-	struct hfc_st_chan *chan,
-	int hw_index,
-	enum hfc_direction direction,
-	int subchannel_bit_count)
-{
-	memset(fifo, 0, sizeof(*fifo));
-
-	fifo->chan = chan;
-	fifo->hw_index = hw_index;
-	fifo->direction = direction;
-
-	fifo->subchannel_bit_start = 0;
-	fifo->subchannel_bit_count = subchannel_bit_count;
 }
 
 struct hfc_fifo_control
@@ -172,33 +155,44 @@ struct hfc_fifo_control
 
 static void hfc_fifo_is_now_ready(struct hfc_fifo *fifo)
 {
-	if (test_and_clear_bit(HFC_FIFO_FLAG_WAITING_BUSY, &fifo->flags))
-		visdn_leg_wake_queue(&fifo->chan->visdn_chan.leg_b);
+	if (fifo->connected_chan) {
+		if (test_and_clear_bit(HFC_FIFO_FLAG_WAITING_BUSY,
+							&fifo->flags)) {
+
+			visdn_leg_wake_queue(
+				&fifo->connected_chan->visdn_chan.leg_b);
+		}
+	}
 }
 
 static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 {
 	struct hfc_fifo *fifo = urb->context;
-	struct hfc_st_chan *chan = fifo->chan;
+	struct hfc_card *card = fifo->card;
+	struct hfc_st_chan *chan = fifo->connected_chan;
 	struct hfc_stat { u8 crc[2], stat; } __attribute((packed)) *stat;
 	struct hfc_fifo_control *fifo_control =
 		(struct hfc_fifo_control *)fifo->urb_buf;
 	int err;
 
+	if (!fifo_control->fill_d_tx && card->st_port.chans[D].tx_fifo)
+		hfc_fifo_is_now_ready(card->st_port.chans[D].tx_fifo);
+
+	if (!fifo_control->fill_b1_tx && card->st_port.chans[B1].tx_fifo)
+		hfc_fifo_is_now_ready(card->st_port.chans[B1].tx_fifo);
+
+	if (!fifo_control->fill_b2_tx && card->st_port.chans[B2].tx_fifo)
+		hfc_fifo_is_now_ready(card->st_port.chans[B2].tx_fifo);
+
+	if (!fifo_control->fill_pcm_tx && card->st_port.chans[E].tx_fifo)
+		hfc_fifo_is_now_ready(card->st_port.chans[E].tx_fifo);
+
+	if (!chan)
+		return;
+
 	if (fifo_control->state != chan->port->l1_state)
 		schedule_work(&chan->port->state_change_work);
 
-	if (!fifo_control->fill_d_tx)
-		hfc_fifo_is_now_ready(&fifo->chan->port->chans[D].tx_fifo);
-
-	if (!fifo_control->fill_b1_tx)
-		hfc_fifo_is_now_ready(&fifo->chan->port->chans[B1].tx_fifo);
-
-	if (!fifo_control->fill_b2_tx)
-		hfc_fifo_is_now_ready(&fifo->chan->port->chans[B2].tx_fifo);
-
-	if (!fifo_control->fill_pcm_tx)
-		hfc_fifo_is_now_ready(&fifo->chan->port->chans[E].tx_fifo);
 
 	if (fifo->frame_buf_len + urb->actual_length - sizeof(*fifo_control) >
 			sizeof(fifo->frame_buf)) {
@@ -295,7 +289,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 		visdn_leg_frame_xmit(&chan->visdn_chan.leg_b, skb);
 
 		{
-		struct hfc_led *led = fifo->chan->led;
+		struct hfc_led *led = chan->led;
 
 		led->flashing_freq = HZ / 10;
 		led->flashes = 1;
@@ -320,13 +314,18 @@ static void hfc_fifo_tx_complete(struct urb *urb, struct pt_regs *regs)
 {
 	struct hfc_fifo *fifo = urb->context;
 
+	if (!fifo->connected_chan)
+		return;
+
 	set_bit(HFC_FIFO_FLAG_WAITING_BUSY,
-		&fifo->chan->tx_fifo.flags);
+		&fifo->connected_chan->tx_fifo->flags);
 }
 
 int hfc_fifo_xmit(struct hfc_fifo *fifo, void *buf, int len)
 {
 	int err;
+
+	BUG_ON(!fifo->connected_chan);
 
 #ifdef DEBUG_CODE
 	if (debug_level >= 3) {
@@ -351,7 +350,7 @@ int hfc_fifo_xmit(struct hfc_fifo *fifo, void *buf, int len)
 	memcpy(fifo->urb_buf + 1, buf, len);
 
 	{
-	struct hfc_led *led = fifo->chan->led;
+	struct hfc_led *led = fifo->connected_chan->led;
 
 	led->flashing_freq = HZ / 10;
 	led->flashes = 1;
@@ -362,7 +361,7 @@ int hfc_fifo_xmit(struct hfc_fifo *fifo, void *buf, int len)
 	 * been ACKed and the FIFO has space
 	 */
 
-	visdn_leg_stop_queue(&fifo->chan->visdn_chan.leg_b);
+	visdn_leg_stop_queue(&fifo->connected_chan->visdn_chan.leg_b);
 
 	err = usb_submit_urb(fifo->urb, GFP_ATOMIC);
 	if (err) {
@@ -381,9 +380,7 @@ err_frame_too_big:
 
 int hfc_fifo_alloc(struct hfc_fifo *fifo)
 {
-	struct hfc_st_chan *chan = fifo->chan;
-	struct hfc_st_port *port = chan->port;
-	struct hfc_card *card = port->card;
+	struct hfc_card *card = fifo->card;
 	int err;
 
 	fifo->urb = usb_alloc_urb(0, GFP_KERNEL);
@@ -435,3 +432,23 @@ void hfc_fifo_dealloc(struct hfc_fifo *fifo)
 {
 //	usb_free_urb
 }
+
+void hfc_fifo_init(
+	struct hfc_fifo *fifo, 
+	struct hfc_card *card,
+	int hw_index,
+	enum hfc_direction direction,
+	const char *name)
+{
+	memset(fifo, 0, sizeof(*fifo));
+
+	fifo->card = card;
+	fifo->hw_index = hw_index;
+	fifo->direction = direction;
+
+	fifo->name = name;
+
+	fifo->subchannel_bit_start = 0;
+	fifo->subchannel_bit_count = 8;
+}
+
