@@ -2,6 +2,24 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-03 20:43:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-508
+
+    Summary:
+      Tested and fixed inbound restart procedure
+    Revision:
+      isdn--devel--0.1--patch-508
+
+
+    modified files:
+     ChangeLog TODO chan_visdn/intf.c libq931/Makefile.am
+     libq931/call.c libq931/ces.c libq931/channel.c libq931/dlc.c
+     libq931/global.c libq931/ie.c libq931/input.c libq931/intf.c
+     libq931/libq931/channel.h libq931/libq931/chanset.h
+     libq931/libq931/dlc.h libq931/libq931/global.h
+     libq931/libq931/input.h libq931/libq931/intf.h
+     modules/hfc-usb/hfc-usb_main.c
+
+
 2006-02-02 18:40:31 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-507
 
     Summary:

@@ -27,7 +27,6 @@ struct q931_interface;
 struct q931_global_call
 {
 	struct q931_interface *intf;
-	struct q931_dlc dlc;
 
 	enum q931_global_state state;
 
@@ -38,10 +37,11 @@ struct q931_global_call
 	int restart_retransmit_count;
 	int restart_responded;
 	int restart_acknowledged;
-	int restart_request_count;
 
 	struct q931_chanset restart_reqd_chans;
 	struct q931_chanset restart_acked_chans;
+
+	struct q931_dlc *restart_dlc;
 };
 
 
@@ -81,7 +81,8 @@ void q931_dispatch_global_message(
 
 void q931_global_restart_confirm(
 	struct q931_global_call *gc,
-	struct q931_call *call);
+	struct q931_dlc *dlc,
+	struct q931_channel *chan);
 
 #endif
 #endif

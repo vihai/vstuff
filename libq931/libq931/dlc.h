@@ -41,6 +41,7 @@ struct q931_dlc
 	struct q931_interface *intf;
 	int socket;
 
+	int holdcnt;
 	int refcnt;
 
 	enum q931_dlc_status status;
@@ -65,6 +66,9 @@ void q931_broadcast_dlc_init(
 
 struct q931_dlc *q931_dlc_get(struct q931_dlc *dlc);
 void q931_dlc_put(struct q931_dlc *dlc);
+
+void q931_dlc_hold(struct q931_dlc *dlc);
+void q931_dlc_release(struct q931_dlc *dlc);
 
 #endif
 

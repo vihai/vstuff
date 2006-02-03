@@ -79,6 +79,8 @@ const char *q931_channel_state_to_text(enum q931_channel_state state)
 		return "CONNECTED";
 	case Q931_CHANSTATE_DISCONNECTED:
 		return "DISCONNECTED";
+	case Q931_CHANSTATE_LEASED:
+		return "LEASED";
 	}
 
 	assert(0);
@@ -155,6 +157,8 @@ void q931_channel_release(
 		q931_channel_primitive(channel, Q931_CCB_DISCONNECT_CHANNEL);
 	}
 
+	channel->call->channel = NULL;
+	channel->call = NULL;
 	q931_channel_set_state(channel, Q931_CHANSTATE_AVAILABLE);
 }
 

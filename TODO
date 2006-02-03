@@ -43,7 +43,6 @@ chan_visdn:
 libq931:
 --------
 
-- Restart Procedure is completely untested, test it.
 - ECT (explicit call transfer) (ETS 300 369-1) (367, 368, 369)
 - Call bumbing
 - Implement Called/Calling party subaddress IE

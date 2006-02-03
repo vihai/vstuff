@@ -134,10 +134,10 @@ inline static void q931_intf_del_call(
 
 #define Q931_INTF_FLAGS_DEBUG (1 << 0)
 
-struct q931_interface *q931_open_interface(
+struct q931_interface *q931_intf_open(
 	const char *name,
 	int flags);
-void q931_close_interface(struct q931_interface *intf);
+void q931_intf_close(struct q931_interface *intf);
 
 q931_callref q931_intf_find_free_call_reference(struct q931_interface *intf);
 

@@ -70,7 +70,7 @@ try_again:
 	return call_reference;
 }
 
-struct q931_interface *q931_open_interface(
+struct q931_interface *q931_intf_open(
 	const char *name,
 	int flags)
 {
@@ -222,19 +222,19 @@ err_socket:
 	return NULL;
 }
 
-void q931_close_interface(struct q931_interface *interface)
+void q931_intf_close(struct q931_interface *intf)
 {
-	assert(interface);
+	assert(intf);
 
-	list_del(&interface->node);
+	list_del(&intf->node);
 
-	if (interface->role == LAPD_ROLE_TE) {
-		shutdown(interface->dlc.socket, 2);
-		close(interface->dlc.socket);
+	if (intf->role == LAPD_ROLE_TE) {
+		shutdown(intf->dlc.socket, 2);
+		close(intf->dlc.socket);
 	} else {
 		struct q931_dlc *dlc, *tpos;
 		list_for_each_entry_safe(dlc, tpos,
-				&interface->dlcs, intf_node) {
+				&intf->dlcs, intf_node) {
 
 			shutdown(dlc->socket, 2);
 			close(dlc->socket);
@@ -246,11 +246,11 @@ void q931_close_interface(struct q931_interface *interface)
 
 		// Broadcast socket == master socket but only we know it :)
 
-		close(interface->master_socket);
+		close(intf->master_socket);
 	}
 
-	if (interface->name)
-		free(interface->name);
+	if (intf->name)
+		free(intf->name);
 
-	free(interface);
+	free(intf);
 }

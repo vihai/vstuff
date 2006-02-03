@@ -29,6 +29,10 @@ void q931_chanset_add(
 	struct q931_chanset *chanset,
 	struct q931_channel *channel);
 
+void q931_chanset_del(
+	struct q931_chanset *chanset,
+	const struct q931_channel *channel);
+
 void q931_chanset_merge(
 	struct q931_chanset *chanset,
 	const struct q931_chanset *src_chanset);

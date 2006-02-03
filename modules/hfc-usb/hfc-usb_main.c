@@ -48,7 +48,7 @@ static struct usb_device_id hfc_table [] = {
 	{ USB_DEVICE(HFC_VENDOR_ID_COLOGNE, 0x2bd0) },
 	{ USB_DEVICE(HFC_VENDOR_ID_TRUST, 0x0006) },
 	{ USB_DEVICE(0x0675, 0x1688) },	/* DrayTek miniVigor 128 USB ISDN TA */
-	{ USB_DEVICE(0x07b0, 0x0007) },	/* Billion USB TA 2 */
+	{ USB_DEVICE(0x07b0, 0x0007) },	/* Billion USB TA 2/USB TA 128 */
 	{ USB_DEVICE(0x0742, 0x2008) },	/* Stollmann USB TA */
 	{ USB_DEVICE(0x0742, 0x2009) },	/* Aceex USB ISDN TA */
 	{ USB_DEVICE(0x0742, 0x200A) },	/* OEM USB ISDN TA */

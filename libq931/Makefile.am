@@ -1,4 +1,4 @@
-AM_CFLAGS = -D_REENTRANT -Wall
+AM_CFLAGS = -D_REENTRANT -Wall -fno-inline
 
 lib_LTLIBRARIES = libq931.la
 

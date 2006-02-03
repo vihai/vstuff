@@ -93,6 +93,7 @@ struct q931_ces *q931_ces_alloc(
 	ces->call = call;
 	ces->state = I0_NULL_STATE;
 	ces->dlc = q931_dlc_get(dlc);
+	q931_dlc_hold(dlc);
 
 	q931_init_timer(&ces->T304, "T304", q931_ces_timer_T304, ces);
 	q931_init_timer(&ces->T308, "T308", q931_ces_timer_T308, ces);
@@ -120,6 +121,7 @@ void q931_ces_free(struct q931_ces *ces)
 	list_del(&ces->node);
 
 	q931_dlc_put(ces->dlc);
+	q931_dlc_release(ces->dlc);
 	ces->dlc = NULL;
 	
 	q931_call_put(ces->call);
@@ -478,7 +480,7 @@ static inline void q931_ces_handle_alerting(
 
 	switch (ces->state) {
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_set_state(ces, I7_CALL_RECEIVED);
@@ -486,7 +488,7 @@ static inline void q931_ces_handle_alerting(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -509,7 +511,7 @@ static inline void q931_ces_handle_call_proceeding(
 
 	switch (ces->state) {
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -532,7 +534,7 @@ static inline void q931_ces_handle_connect(
 
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
@@ -540,7 +542,7 @@ static inline void q931_ces_handle_connect(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_set_state(ces, I8_CONNECT_REQUEST);
@@ -548,7 +550,7 @@ static inline void q931_ces_handle_connect(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -572,14 +574,14 @@ static inline void q931_ces_handle_progress(
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_int_progress_indication(ces->call, ces, &msg->ies);
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -602,7 +604,7 @@ static inline void q931_ces_handle_disconnect(
 	switch (ces->state) {
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_send_release(ces, NULL);
@@ -612,7 +614,7 @@ static inline void q931_ces_handle_disconnect(
 	break;
 
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_send_release(ces, NULL);
@@ -626,7 +628,7 @@ static inline void q931_ces_handle_disconnect(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -654,7 +656,7 @@ static inline void q931_ces_handle_release(
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_send_release_complete(ces, NULL);
@@ -663,7 +665,7 @@ static inline void q931_ces_handle_release(
 	break;
 
 	case I19_RELEASE_REQUEST:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T308);
@@ -671,7 +673,7 @@ static inline void q931_ces_handle_release(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -698,7 +700,7 @@ static inline void q931_ces_handle_release_complete(
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_int_release_indication(ces->call, ces, &msg->ies);
@@ -706,7 +708,7 @@ static inline void q931_ces_handle_release_complete(
 	break;
 
 	case I19_RELEASE_REQUEST:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T308);
@@ -714,7 +716,7 @@ static inline void q931_ces_handle_release_complete(
 	break;
 
 	case I25_OVERLAP_RECEIVING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_ces_stop_timer(ces, T304);
@@ -750,7 +752,7 @@ static inline void q931_ces_handle_status(
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
 	case I25_OVERLAP_RECEIVING: {
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		struct q931_ie_call_state *cs = NULL;
@@ -807,7 +809,7 @@ static inline void q931_ces_handle_status(
 	break;
 
 	case I19_RELEASE_REQUEST: {
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		struct q931_ie_call_state *cs = NULL;
@@ -845,7 +847,7 @@ static inline void q931_ces_handle_info(
 	case I7_CALL_RECEIVED:
 	case I8_CONNECT_REQUEST:
 	case I9_INCOMING_CALL_PROCEEDING:
-		if (q931_decode_information_elements(ces->call, msg) < 0)
+		if (q931_call_decode_ies(ces->call, msg) < 0)
 			break;
 
 		q931_int_info_indication(ces->call, ces, &msg->ies);

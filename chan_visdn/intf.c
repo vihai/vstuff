@@ -396,7 +396,7 @@ int visdn_intf_open(struct visdn_interface *intf)
 
 	intf->open_pending = TRUE;
 
-	intf->q931_intf = q931_open_interface(intf->name, 0);
+	intf->q931_intf = q931_intf_open(intf->name, 0);
 	if (!intf->q931_intf) {
 		ast_log(LOG_WARNING,
 			"Cannot open interface %s, skipping\n",

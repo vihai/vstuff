@@ -21,15 +21,36 @@
 #include <libq931/logging.h>
 #include <libq931/dlc.h>
 
-struct q931_dlc *q931_dlc_get(
-	struct q931_dlc *dlc)
+void q931_dlc_hold(struct q931_dlc *dlc)
 {
-	if (dlc->refcnt == 1) {
+	dlc->holdcnt++;
+
+	if (dlc->holdcnt == 1) {
 		q931_stop_timer(&dlc->autorelease_timer);
 
 		report_dlc(dlc, LOG_DEBUG, "DLC autorelease timer stopped\n");
 	}
+}
 
+void q931_dlc_release(struct q931_dlc *dlc)
+{
+	dlc->holdcnt--;
+
+	if (dlc->holdcnt == 0) {
+		if (dlc->intf->dlc_autorelease_time) {
+			q931_start_timer_delta(
+				&dlc->autorelease_timer,
+				dlc->intf->dlc_autorelease_time * 1000000LL);
+
+			report_dlc(dlc, LOG_DEBUG,
+				"DLC autorelease timer started\n");
+		}
+	}
+}
+
+struct q931_dlc *q931_dlc_get(
+	struct q931_dlc *dlc)
+{
 	dlc->refcnt++;
 
 	return dlc;
@@ -44,17 +65,7 @@ void q931_dlc_put(
 
 	dlc->refcnt--;
 
-	if (dlc->refcnt == 1) {
-		if (dlc->intf->dlc_autorelease_time) {
-			q931_start_timer_delta(
-				&dlc->autorelease_timer,
-				dlc->intf->dlc_autorelease_time * 1000000LL);
-
-			report_dlc(dlc, LOG_DEBUG,
-				"DLC autorelease timer started\n");
-		}
-
-	} else if (dlc->refcnt == 0) {
+	if (dlc->refcnt == 0) {
 		report_dlc(dlc, LOG_DEBUG, "Releasing DLC\n");
 
 		free(dlc);
@@ -77,6 +88,9 @@ void q931_dlc_init(
 	struct q931_interface *intf,
 	int socket)
 {
+	memset(dlc, 0, sizeof(*dlc));
+
+	dlc->holdcnt = 0;
 	dlc->refcnt = 1;
 
 	INIT_LIST_HEAD(&dlc->intf_node);

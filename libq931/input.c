@@ -67,8 +67,8 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 	q931_flush_outgoing_queue(dlc);
 
 	/* Force autorelease timer to start */
-	q931_dlc_get(dlc);
-	q931_dlc_put(dlc);
+	q931_dlc_hold(dlc);
+	q931_dlc_release(dlc);
 }
 
 void q931_dl_establish_indication(struct q931_dlc *dlc)
@@ -78,8 +78,8 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 	dlc->status = Q931_DLC_STATUS_CONNECTED;
 
 	/* Force autorelease timer to start */
-	q931_dlc_get(dlc);
-	q931_dlc_put(dlc);
+	q931_dlc_hold(dlc);
+	q931_dlc_release(dlc);
 
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
@@ -259,9 +259,9 @@ static void q931_ie_has_content_errors(
 }
 
 static void q931_decode_ie(
-	const struct q931_call *call,
 	struct q931_message *msg,
 	struct q931_decoder_status *ds,
+	struct q931_interface *intf,
 	__u8 codeset,
 	__u8 ie_id,
 	__u8 *buf,
@@ -362,9 +362,7 @@ static void q931_decode_ie(
 
 	ie = ie_class->alloc();
 
-	if (!ie->cls->read_from_buf(ie, buf, len,
-			q931_report,
-			call->intf)) {
+	if (!ie->cls->read_from_buf(ie, buf, len, q931_report, intf)) {
 
 		q931_ie_has_content_errors(msg, ds, ie_class, ie_usage);
 
@@ -409,7 +407,6 @@ static void q931_decode_ie(
 }
 
 __u8 q931_decode_shift_ie(
-	const struct q931_call *call,
 	struct q931_message *msg,
 	struct q931_decoder_status *ds,
 	__u8 ie_id)
@@ -465,13 +462,11 @@ static void q931_decoder_status_destroy(struct q931_decoder_status *ds)
 	q931_ieid_flush_list(&ds->unrecognized_ies);
 }
 
-int q931_decode_information_elements(
-	struct q931_call *call,
-	struct q931_message *msg)
+void q931_decode_ies(
+	struct q931_message *msg,
+	struct q931_interface *intf,
+	struct q931_decoder_status *ds)
 {
-	struct q931_decoder_status ds;
-	q931_decoder_status_init(&ds);
-
 	/* Fill the list of mandatory IEs for this message type */
 	int i;
 	for (i=0; i<q931_ie_usages_cnt; i++) {
@@ -481,7 +476,7 @@ int q931_decode_information_elements(
 				continue;
 			
 			q931_ieid_add_to_list(msg,
-				&ds.mandatory_ies,
+				&ds->mandatory_ies,
 				q931_ie_usages[i].codeset,
 				q931_ie_usages[i].ie_id);
 		}
@@ -490,24 +485,23 @@ int q931_decode_information_elements(
 	int rawies_curpos = 0;
 
 	/* Go through the IEs buffer and decode each of them */
-	__u8 codeset = ds.active_codeset;
+	__u8 codeset = ds->active_codeset;
 	while(rawies_curpos < msg->rawies_len) {
 
 		__u8 ie_id = *(__u8 *)(msg->rawies + rawies_curpos);
 
-		ds.curie++;
+		ds->curie++;
 
 		if (q931_is_so_ie(ie_id)) {
 			if (q931_get_so_ie_id(ie_id) == Q931_IE_SHIFT) {
-				codeset = q931_decode_shift_ie(
-						call, msg, &ds, ie_id);
+				codeset = q931_decode_shift_ie(msg, ds, ie_id);
 
 				rawies_curpos++;
 
 				continue;
 			}
 
-			q931_decode_ie(call, msg, &ds, codeset,
+			q931_decode_ie(msg, ds, intf, codeset,
 				q931_get_so_ie_id(ie_id),
 				msg->rawies + rawies_curpos, 1, FALSE);
 
@@ -516,7 +510,7 @@ int q931_decode_information_elements(
 			__u8 ie_len = 
 				*(__u8 *)(msg->rawies + rawies_curpos + 1);
 			
-			q931_decode_ie(call, msg, &ds, codeset, ie_id,
+			q931_decode_ie(msg, ds, intf, codeset, ie_id,
 				msg->rawies + rawies_curpos + 2,
 				ie_len,
 				TRUE);
@@ -534,7 +528,8 @@ int q931_decode_information_elements(
 
 		/* Remove IE from mandatory IEs */
 		struct q931_ieid_entry *entry, *tpos;
-		list_for_each_entry_safe(entry, tpos, &ds.mandatory_ies, node) {
+		list_for_each_entry_safe(entry, tpos, &ds->mandatory_ies,
+									node) {
 			if (entry->codeset == codeset && entry->id == ie_id) {
 				list_del(&entry->node);
 				free(entry);
@@ -543,14 +538,35 @@ int q931_decode_information_elements(
 			}
 		}
 
-		codeset = ds.active_codeset;
+		codeset = ds->active_codeset;
 	}
+}
+
+int q931_gc_decode_ies(
+	struct q931_global_call *gc,
+	struct q931_message *msg)
+{
+	struct q931_decoder_status ds;
+	q931_decoder_status_init(&ds);
+
+	q931_decode_ies(msg, gc->intf, &ds);
 
 	 // TODO: Uhm... we should do some validity check for the global
 	 // call too
 
-	if (!call)
-		goto process_message;
+	q931_decoder_status_destroy(&ds);
+
+	return 0;
+}
+
+int q931_call_decode_ies(
+	struct q931_call *call,
+	struct q931_message *msg)
+{
+	struct q931_decoder_status ds;
+	q931_decoder_status_init(&ds);
+
+	q931_decode_ies(msg, call->intf, &ds);
 
 	if (!list_empty(&ds.mandatory_ies)) {
 
@@ -758,8 +774,6 @@ int q931_decode_information_elements(
 
 		Q931_UNDECLARE_IES(ies);
 	}
-
-process_message:
 
 	q931_decoder_status_destroy(&ds);
 
@@ -1011,6 +1025,7 @@ int q931_receive(struct q931_dlc *dlc)
 			call->call_reference = msg->callref;
 
 			call->dlc = q931_dlc_get(dlc);
+			q931_dlc_hold(dlc);
 
 			q931_intf_add_call(dlc->intf, q931_call_get(call));
 		}

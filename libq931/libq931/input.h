@@ -35,8 +35,11 @@ void q931_dl_establish_indication(struct q931_dlc *dlc);
 void q931_dl_release_confirm(struct q931_dlc *dlc);
 void q931_dl_release_indication(struct q931_dlc *dlc);
 
-int q931_decode_information_elements(
+int q931_call_decode_ies(
 	struct q931_call *call,
+	struct q931_message *msg);
+int q931_gc_decode_ies(
+	struct q931_global_call *gc,
 	struct q931_message *msg);
 
 #endif
