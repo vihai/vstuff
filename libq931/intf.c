@@ -134,18 +134,30 @@ struct q931_interface *q931_intf_open(
 
 	socklen_t optlen = sizeof(intf->type);
 	if (getsockopt(s, SOL_LAPD, LAPD_INTF_TYPE,
-		&intf->type, &optlen)<0)
+		&intf->type, &optlen)<0) {
+		report_intf(intf, LOG_ERR,
+			"getsockopt(LAPD_INTF_TYPE): %s\n",
+			strerror(errno));
 		goto err_getsockopt;
+	}
 
 	optlen = sizeof(intf->mode);
 	if (getsockopt(s, SOL_LAPD, LAPD_INTF_MODE,
-		&intf->mode, &optlen)<0)
+		&intf->mode, &optlen)<0) {
+		report_intf(intf, LOG_ERR,
+			"getsockopt(LAPD_INTF_MODE): %s\n",
+			strerror(errno));
 		goto err_getsockopt;
+	}
 
 	optlen = sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_INTF_ROLE,
-		&intf->role, &optlen)<0)
+		&intf->role, &optlen)<0) {
+		report_intf(intf, LOG_ERR,
+			"getsockopt(LAPD_INTF_ROLE): %s\n",
+			strerror(errno));
 		goto err_getsockopt;
+	}
 
 	if (intf->role == LAPD_INTF_ROLE_TE) {
 		intf->master_socket = -1;
