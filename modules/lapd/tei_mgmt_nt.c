@@ -238,14 +238,14 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 			continue;
 		}
 
-		if (/*tm->body.ai >= LAPD_MIN_STA_TEI && // always true */
-		    tm->body.ai <= LAPD_MAX_STA_TEI) {
+		if (/*tm->ai.value >= LAPD_MIN_STA_TEI && // always true */
+		    tm->ai.value <= LAPD_MAX_STA_TEI) {
 			spin_unlock_bh(&tme->lock);
 			goto found;
-		} else if (tm->body.ai >= LAPD_MIN_DYN_TEI &&
-		           tm->body.ai <= LAPD_MAX_DYN_TEI) {
+		} else if (tm->ai.value >= LAPD_MIN_DYN_TEI &&
+		           tm->ai.value <= LAPD_MAX_DYN_TEI) {
 			lapd_ntme_send_tei_denied(tme,
-					tm->body.ri, tm->body.ai);
+					tm->tm_hdr.ri, tm->ai.value);
 			spin_unlock_bh(&tme->lock);
 			goto found;
 		}
@@ -275,14 +275,14 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 
 		if (tei_found) {
 			lapd_msg_dev(dev, KERN_INFO, "Assigning TEI %d\n", tei);
-			lapd_ntme_send_tei_assigned(tme, tm->body.ri, tei);
+			lapd_ntme_send_tei_assigned(tme, tm->tm_hdr.ri, tei);
 		} else {
 			lapd_msg_dev(dev, KERN_NOTICE,
 				"No more available TEIs, "
 				"starting check procedure\n");
 
-			lapd_ntme_send_tei_denied(tme, tm->body.ri,
-						tm->body.ai);
+			lapd_ntme_send_tei_denied(tme, tm->tm_hdr.ri,
+						tm->ai.value);
 
 			for (i = 0; i < LAPD_NUM_DYN_TEIS; i++) {
 				_lapd_ntme_start_tei_check(tme,
@@ -306,15 +306,23 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
-	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
-
-	lapd_msg_dev(dev, KERN_INFO,
-		"TEI check response TEI=%d\n", tm->body.ai);
+	struct lapd_tei_mgmt_frame_noai *tm =
+		(struct lapd_tei_mgmt_frame_noai *)skb->mac.raw;
+	u8 teis[128];
+	int nteis = 0;
 
 	if (tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI request with C/R=0 ?\n");
+	}
+
+	{
+	struct lapd_tei_mgmt_ai *tm_ai;
+	do {
+		tm_ai = (struct lapd_tei_mgmt_ai *)(skb->mac.raw + nteis);
+
+		teis[nteis++] = tm_ai->value & 0x7F;
+	} while(tm_ai->ext == 0);
 	}
 
 	{
@@ -333,9 +341,12 @@ static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 		{
 		struct lapd_ntme_tei_check *tc;
 		list_for_each_entry(tc, &tme->tei_checks, node) {
-			if (tc->tei == LAPD_BROADCAST_TEI ||
-			    tc->tei == tm->body.ai)
-				tc->responses[tm->body.ai & 0x7F][tc->count]++;
+			int i;
+			for (i=0; i<nteis; i++) {
+				if (tc->tei == LAPD_BROADCAST_TEI ||
+				    tc->tei == teis[i])
+					tc->responses[teis[i]][tc->count]++;
+			}
 		}
 		}
 
@@ -354,14 +365,14 @@ static void lapd_ntme_handle_tei_verify(struct sk_buff *skb)
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI verify received: tei=%d\n",
-		tm->body.ai);
+		tm->ai.value);
 
 	if (tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI verify with C/R=1 ?\n");
 	}
 
-	if (tm->body.ai == LAPD_BROADCAST_TEI) {
+	if (tm->ai.value == LAPD_BROADCAST_TEI) {
 		lapd_msg_dev(dev, KERN_INFO,
 			"received invalid verify"
 			" request with tei=127\n");
@@ -387,7 +398,7 @@ static void lapd_ntme_handle_tei_verify(struct sk_buff *skb)
 		/* We're not going any futher in the list */
 		read_unlock_bh(&lapd_ntme_hash_lock);
 
-		_lapd_ntme_start_tei_check(tme, tm->body.ai);
+		_lapd_ntme_start_tei_check(tme, tm->ai.value);
 
 		spin_unlock_bh(&tme->lock);
 
@@ -429,15 +440,15 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 		return 0;
 	}
 
-	if (tm->body.entity != 0x0f) {
+	if (tm->tm_hdr.entity != 0x0f) {
 		lapd_msg_dev(dev, KERN_ERR,
 			"invalid entity %u\n",
-			tm->body.entity);
+			tm->tm_hdr.entity);
 
 		return 0;
 	}
 
-	switch (tm->body.message_type) {
+	switch (tm->tm_hdr.message_type) {
 	case LAPD_TEI_MT_CHK_RES:
 		lapd_ntme_handle_tei_check_response(skb);
 	break;
@@ -456,13 +467,13 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_CHK_REQ:
 		lapd_msg_dev(dev, KERN_INFO,
 			"TEI Management TE message (%u) in NT mode\n",
-			tm->body.message_type);
+			tm->tm_hdr.message_type);
 	break;
 
 	default:
 		lapd_msg_dev(dev, KERN_INFO,
 			"unknown/unimplemented message_type %u\n",
-			tm->body.message_type);
+			tm->tm_hdr.message_type);
 	}
 
 	return 0;

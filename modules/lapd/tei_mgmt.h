@@ -54,25 +54,35 @@ enum lapd_tei_state
 
 #define LAPD_TEI_UNASSIGNED	255
 
-struct lapd_tei_mgmt_body
+struct lapd_tei_mgmt_hdr
 {
 	u8 entity;
 	u16 ri;
 	u8 message_type;
+} __attribute__ ((__packed__));
 
+struct lapd_tei_mgmt_ai
+{
 #if defined(__BIG_ENDIAN_BITFIELD)
-	u8 ai:7;
-	u8 ai_ext:1;
+	u8 value:7;
+	u8 ext:1;
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
-	u8 ai_ext:1;
-	u8 ai:7;
+	u8 ext:1;
+	u8 value:7;
 #endif
 } __attribute__ ((__packed__));
 
 struct lapd_tei_mgmt_frame
 {
 	struct lapd_hdr hdr;
-	struct lapd_tei_mgmt_body body;
+	struct lapd_tei_mgmt_hdr tm_hdr;
+	struct lapd_tei_mgmt_ai ai;
+} __attribute__ ((__packed__));
+
+struct lapd_tei_mgmt_frame_noai
+{
+	struct lapd_hdr hdr;
+	struct lapd_tei_mgmt_hdr tm_hdr;
 } __attribute__ ((__packed__));
 
 void lapd_start_tei_request(struct sock *sk);
@@ -84,6 +94,9 @@ int lapd_handle_tei_mgmt(struct sk_buff *skb);
 int lapd_tm_send(
 	struct lapd_device *dev,
 	u8 message_type, u16 ri, u8 ai);
+int lapd_tm_send_multiai(
+	struct lapd_device *dev,
+	u8 message_type, u16 ri, u8 ai[], int nai);
 
 #endif /* __KERNEL__ */
 #endif

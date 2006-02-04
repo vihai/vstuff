@@ -82,8 +82,8 @@ visdn_core:
 lapd:
 -----
 
-- Implement automatic TEI check for TEIs that are presumably unused and could
-  be released
+- Write the necessary code to support
+  MPH-INFORMATION-INDICATION(connected/disconnected)
 
 - When allmulti flag is changed while the interface is UP, Tei Mgmt entities
   are not released/allocated correctly. The interface needs to be put down and
@@ -95,8 +95,6 @@ lapd:
 
 - Implement frame acknowledging throught outgoing i-frames instead of specific
   RR
-
-- Check what happens when 64 sockets are open (every dynamic TEIs)
 
 - Add lapd_ptr to struct net_device. Currently we're using atalk_ptr and it is
   safe, since ISDN interfaces will never run AppleTalk, however it is an ugly

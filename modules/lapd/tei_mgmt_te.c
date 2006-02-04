@@ -68,6 +68,21 @@ static inline int lapd_utme_send_tei_check_response(
  *
  */
 
+static inline int lapd_utme_send_tei_check_response_multi(
+	struct lapd_device *dev, u8 teis[], int nteis)
+{
+	u16 ri;
+	get_random_bytes(&ri, sizeof(ri));
+
+	return lapd_tm_send_multiai(dev,
+			LAPD_TEI_MT_CHK_RES, ri, teis, nteis);
+}
+
+/*
+ * Must be called holding tme->lock
+ *
+ */
+
 static inline int lapd_utme_send_tei_verify(
 	struct lapd_utme *tme, u8 tei)
 {
@@ -198,13 +213,13 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 		}
 
 		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
-		    tm->body.ai == tme->tei) {
+		    tm->ai.value == tme->tei) {
 
 			int i;
 
 			lapd_msg_tme(tme, KERN_INFO,
 				"Removing TEI %u due to duplicate detcted\n",
-				tm->body.ai);
+				tm->ai.value);
 
 			tme->tei = LAPD_TEI_UNASSIGNED;
 
@@ -234,7 +249,7 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 			read_unlock_bh(&lapd_hash_lock);
 
 		} else if (tme->tei_request_pending &&
-		           tm->body.ri == tme->tei_request_ri) {
+		           tm->tm_hdr.ri == tme->tei_request_ri) {
 
 			int i;
 
@@ -243,11 +258,11 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 
 			lapd_msg_tme(tme, KERN_INFO,
 				"TEI %u assigned\n",
-				tm->body.ai);
+				tm->ai.value);
 
 			tme->tei_request_pending = FALSE;
 			tme->tei_request_ri = 0;
-			tme->tei = tm->body.ai;
+			tme->tei = tm->ai.value;
 
 			lapd_utme_change_state(tme, LAPD_TME_TEI_ASSIGNED);
 
@@ -299,7 +314,7 @@ static void lapd_utme_handle_tei_denied(struct sk_buff *skb)
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI %u denied\n",
-		tm->body.ai);
+		tm->ai.value);
 
 	if (!tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
@@ -322,42 +337,52 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+	u8 teis[128];
+	int nteis = 0;
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI %u check request\n",
-		tm->body.ai);
+		tm->ai.value);
 
 	if (!tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI request with C/R=0 ?\n");
 	}
 
-	{
-	struct hlist_node *node;
-	struct lapd_utme *tme;
-	read_lock_bh(&lapd_utme_hash_lock);
-	hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
-		spin_lock_bh(&tme->lock);
+	if (tm->ai.value == LAPD_BROADCAST_TEI) {
+		struct hlist_node *node;
+		struct lapd_utme *tme;
+		read_lock_bh(&lapd_utme_hash_lock);
+		hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
+			spin_lock_bh(&tme->lock);
 
-		if (tme->dev->dev != skb->dev) {
+			if (tme->dev->dev == skb->dev &&
+			    tme->state != LAPD_TME_TEI_UNASSIGNED)
+				teis[nteis++] = tme->tei;
+
 			spin_unlock_bh(&tme->lock);
-			continue;
 		}
+		read_unlock_bh(&lapd_utme_hash_lock);
 
-		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
-		    (tm->body.ai == LAPD_BROADCAST_TEI ||
-		     tm->body.ai == tme->tei)) {
-			lapd_msg_tme(tme, KERN_INFO,
-				"responding to TEI check request\n");
+		lapd_utme_send_tei_check_response_multi(dev, teis, nteis);
 
-			lapd_utme_send_tei_check_response(tme, tme->tei);
+	} else {
+		struct hlist_node *node;
+		struct lapd_utme *tme;
+		read_lock_bh(&lapd_utme_hash_lock);
+		hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
+			spin_lock_bh(&tme->lock);
+
+			if (tme->dev->dev == skb->dev &&
+			    tme->state != LAPD_TME_TEI_UNASSIGNED &&
+			    tm->ai.value == tme->tei)
+				lapd_utme_send_tei_check_response(
+					tme, tme->tei);
+
+			spin_unlock_bh(&tme->lock);
 		}
-
-		spin_unlock_bh(&tme->lock);
+		read_unlock_bh(&lapd_utme_hash_lock);
 	}
-	}
-
-	read_unlock_bh(&lapd_utme_hash_lock);
 }
 
 static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
@@ -368,7 +393,7 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI remove: tei=%d\n",
-		tm->body.ai);
+		tm->ai.value);
 
 	if (!tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
@@ -388,13 +413,13 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 		}
 
 		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
-		    (tm->body.ai == LAPD_BROADCAST_TEI ||
-		     tm->body.ai == tme->tei)) {
+		    (tm->ai.value == LAPD_BROADCAST_TEI ||
+		     tm->ai.value == tme->tei)) {
 			int i;
 
 			lapd_msg_tme(tme, KERN_INFO,
 				"TEI %u removed by net request\n",
-				tm->body.ai);
+				tm->ai.value);
 
 			tme->tei = LAPD_TEI_UNASSIGNED;
 
@@ -468,15 +493,15 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 		return 0;
 	}
 
-	if (tm->body.entity != 0x0f) {
+	if (tm->tm_hdr.entity != 0x0f) {
 		lapd_msg_dev(dev, KERN_ERR,
 			"invalid entity %u\n",
-			tm->body.entity);
+			tm->tm_hdr.entity);
 
 		return 0;
 	}
 
-	switch (tm->body.message_type) {
+	switch (tm->tm_hdr.message_type) {
 	case LAPD_TEI_MT_ASSIGNED:
 		lapd_utme_handle_tei_assigned(skb);
 	break;
@@ -498,13 +523,13 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_REQUEST:
 		lapd_msg_dev(dev, KERN_INFO,
 			"TEI management NT message (%u) in TE mode\n",
-			tm->body.message_type);
+			tm->tm_hdr.message_type);
 	break;
 
 	default:
 		lapd_msg_dev(dev, KERN_INFO,
 			"unknown/unimplemented message_type %u\n",
-			tm->body.message_type);
+			tm->tm_hdr.message_type);
 	}
 
 	return 0;

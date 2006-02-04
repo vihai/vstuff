@@ -20,16 +20,18 @@
 #include "lapd_out.h"
 #include "tei_mgmt.h"
 
-int lapd_tm_send(
+int lapd_tm_send_multiai(
 	struct lapd_device *dev,
-	u8 message_type, u16 ri, u8 ai)
+	u8 message_type, u16 ri, u8 ais[], int nai)
 {
 	struct sk_buff *skb;
 	struct lapd_hdr *hdr;
-	struct lapd_tei_mgmt_body *tm;
+	struct lapd_tei_mgmt_hdr *tm;
+	int i;
 
 	skb = alloc_skb(sizeof(struct lapd_hdr) +
-		sizeof(struct lapd_tei_mgmt_body),
+		sizeof(struct lapd_tei_mgmt_hdr) +
+		nai,
 		GFP_ATOMIC);
 
 	skb->dev = dev->dev;
@@ -47,14 +49,26 @@ int lapd_tm_send(
 
 	hdr->control = lapd_uframe_make_control(LAPD_UFRAME_FUNC_UI, 0/* p_f*/);
 
-	tm = (struct lapd_tei_mgmt_body *)skb_put(skb,
-			 sizeof(struct lapd_tei_mgmt_body));
-
+	tm = (struct lapd_tei_mgmt_hdr *)skb_put(skb, sizeof(*tm));
 	tm->entity = LAPD_TEI_ENTITY;
 	tm->message_type = message_type;
 	tm->ri = ri;
-	tm->ai = ai;
-	tm->ai_ext = 1;
+
+	for (i=0; i<nai; i++) {
+		struct lapd_tei_mgmt_ai *tm_ai =
+			(struct lapd_tei_mgmt_ai *)
+			skb_put(skb, sizeof(*tm_ai));
+		
+		tm_ai->value = ais[i];
+		tm_ai->ext = (i < nai - 1) ? 0 : 1;
+	}
 
 	return lapd_send_frame(skb);
+}
+
+int lapd_tm_send(
+	struct lapd_device *dev,
+	u8 message_type, u16 ri, u8 ai)
+{
+	return lapd_tm_send_multiai(dev, message_type, ri, &ai, 1);
 }
