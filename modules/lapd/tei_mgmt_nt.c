@@ -82,8 +82,6 @@ void lapd_ntme_tc_T201_timer(unsigned long data)
 		(struct lapd_ntme_tei_check *)data;
 	struct lapd_ntme *tme = tc->tme;
 
-	lapd_msg(KERN_DEBUG, "tei_mgmt T201\n");
-
 	spin_lock_bh(&tme->lock);
 
 	if (tc->count == 0) {
@@ -110,14 +108,20 @@ void lapd_ntme_tc_T201_timer(unsigned long data)
 		    tc->responses[1] == 0) {
 			/* TEI is unused */
 
+			lapd_msg_tme(tme, KERN_INFO,
+				"Removed TEI %d due to TEI check\n");
+
 			tme->teis[tc->tei - LAPD_MIN_DYN_TEI] =
 					FALSE;
 
-		} else if (tc->responses[1] == 1 ||
-		           tc->responses[1] == 1) {
+		} else if (tc->responses[0] == 1 || tc->responses[1] == 1) {
 			/* TEI in use */
 		} else {
 			/* Multiple TEIs assigned */
+
+			lapd_msg_tme(tme, KERN_INFO,
+				"Removed TEI %d due to multiple"
+				" TEI assignment\n");
 
 			lapd_ntme_send_tei_remove(tme, tc->tei);
 		}
