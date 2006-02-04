@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-04 20:40:13 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-517
+
+    Summary:
+      Implemented actions on datalink errors
+    Revision:
+      isdn--devel--0.1--patch-517
+
+
+    modified files:
+     ChangeLog TODO modules/lapd/af_lapd.c
+     modules/lapd/tei_mgmt_nt.h
+
+
 2006-02-04 19:19:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-516
 
     Summary:

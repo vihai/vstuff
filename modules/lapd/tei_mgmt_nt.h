@@ -62,6 +62,12 @@ struct lapd_ntme *lapd_ntme_alloc(struct lapd_device *net);
 void lapd_ntme_get(struct lapd_ntme *tme);
 void lapd_ntme_put(struct lapd_ntme *tme);
 
+void lapd_ntme_start_tei_check(
+	struct lapd_ntme *tme, int tei);
+
+int lapd_ntme_handle_frame(struct sk_buff *skb);
+void lapd_ntme_audit(void);
+
 static inline void lapd_ntme_tc_reset_timer(
 	struct lapd_ntme_tei_check *tc,
 	struct timer_list *timer,
@@ -95,8 +101,5 @@ static inline void lapd_ntme_stop_timer(
 	if (timer_pending(timer) && del_timer(timer))
 		lapd_ntme_put(tme);
 }
-
-int lapd_ntme_handle_frame(struct sk_buff *skb);
-void lapd_ntme_audit(void);
 
 #endif

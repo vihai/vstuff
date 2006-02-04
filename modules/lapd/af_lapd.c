@@ -1495,6 +1495,22 @@ void lapd_mdl_error_indication(
 		(indication & LAPD_MDL_ERROR_INDICATION_M) ? "M" : "",
 		(indication & LAPD_MDL_ERROR_INDICATION_N) ? "N" : "",
 		(indication & LAPD_MDL_ERROR_INDICATION_O) ? "O" : "");
+
+	if (indication & LAPD_MDL_ERROR_INDICATION_C ||
+	    indication & LAPD_MDL_ERROR_INDICATION_D ||
+	    indication & LAPD_MDL_ERROR_INDICATION_G ||
+	    indication & LAPD_MDL_ERROR_INDICATION_H) {
+
+		if (lapd_sock->dev->role == LAPD_INTF_ROLE_NT) {
+			lapd_ntme_start_tei_check(
+				lapd_sock->dev->net_tme, lapd_sock->tei);
+		} else {
+				lapd_mdl_primitive(
+					lapd_sock,
+					LAPD_MDL_REMOVE_REQUEST,
+					0);
+		}
+	}
 }
 
 int lapd_multiframe_wait_for_establishment(
