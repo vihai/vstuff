@@ -26,9 +26,6 @@ install: makefiles Kbuild
 
 clean: makefiles Kbuild
 	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
-	for I in $(SUBDIRS) ; do \
-		rm $$I/Makefile ; \
-	done
 
 Kbuild:
 	echo "" > Kbuild
