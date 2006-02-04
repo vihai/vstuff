@@ -19,6 +19,8 @@
 #include <linux/netdevice.h>
 #include <linux/ioctl.h>
 
+#include "visdn_mod.h"
+
 #ifndef TRUE
 #define TRUE 1
 #endif

@@ -2,6 +2,22 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-04 11:39:30 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-520
+
+    Summary:
+      Fixed debugging messages in visdn_core
+    Revision:
+      isdn--devel--0.1--patch-520
+
+
+    new files:
+     modules/include/linux/visdn/.arch-ids/visdn_mod.h.id
+     modules/include/linux/visdn/visdn_mod.h
+
+    modified files:
+     ChangeLog modules/core/core.h modules/core/router.c
+
+
 2006-02-04 21:32:19 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-519
 
     Summary:

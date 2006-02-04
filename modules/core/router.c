@@ -277,20 +277,14 @@ int visdn_connect_path_with_id(
 
 	chan1 = visdn_chan_get_by_id(chan1_id);
 	if (!chan1) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan1_id);
-
+		visdn_debug(1, "Channel '%06d' not found\n", chan1_id); 
 		err = -ENODEV;
 		goto err_search_src;
 	}
 
 	chan2 = visdn_chan_get_by_id(chan2_id);
 	if (!chan2) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan2_id);
-
+		visdn_debug(1, "Channel '%06d' not found\n", chan2_id); 
 		err = -ENODEV;
 		goto err_search_dst;
 	}
@@ -365,9 +359,7 @@ int visdn_disconnect_path_with_id(
 
 	chan = visdn_chan_get_by_id(chan_id);
 	if (!chan) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan_id);
+		visdn_debug(1, "Channel '%06d' not found\n", chan_id);
 
 		err = -ENODEV;
 		goto err_search_src;
@@ -446,10 +438,7 @@ int visdn_enable_path_with_id(
 
 	chan = visdn_chan_get_by_id(chan_id);
 	if (!chan) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan_id);
-
+		visdn_debug(1, "Channel '%06d' not found\n", chan_id); 
 		err = -ENODEV;
 		goto err_search_src;
 	}
@@ -517,10 +506,7 @@ int visdn_disable_path_with_id(
 
 	chan = visdn_chan_get_by_id(chan_id);
 	if (!chan) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan_id);
-
+		visdn_debug(1, "Channel '%06d' not found\n", chan_id); 
 		err = -ENODEV;
 		goto err_search_src;
 	}
