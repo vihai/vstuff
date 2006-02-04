@@ -209,7 +209,7 @@ int visdn_cxc_connect(
 	BUG_ON(leg1->cxc != cxc);
 	BUG_ON(leg2->cxc != cxc);
 
-	visdn_debug(2, "Connecting chan '%s' to chan '%s'\n",
+	visdn_debug(1, "Connecting chan '%s' to chan '%s'\n",
 		leg1->chan->kobj.name,
 		leg2->chan->kobj.name);
 
@@ -805,7 +805,8 @@ int visdn_cxc_connect_with_id(
 
 	chan1 = visdn_chan_get_by_id(chan1_id);
 	if (!chan1) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan1_id);
 
 		err = -ENODEV;
@@ -814,7 +815,8 @@ int visdn_cxc_connect_with_id(
 
 	chan2 = visdn_chan_get_by_id(chan2_id);
 	if (!chan2) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan2_id);
 
 		err = -ENODEV;
@@ -885,7 +887,8 @@ static int visdn_cxc_cdev_do_connect(
 		goto err_copy_from_user;
 	}
 
-	printk(KERN_DEBUG "Connecting '%06d' to '%06d' mode=%d\n",
+	visdn_debug(1,
+		"Connecting '%06d' to '%06d' mode=%d\n",
 		connect.src_chan_id,
 		connect.dst_chan_id,
 		do_path);
@@ -912,7 +915,8 @@ static int visdn_cxc_cdev_do_connect(
 err_cxc_connect:
 err_copy_from_user:
 
-	printk(KERN_DEBUG "Connection between '%06d' and '%06d' failed: %d\n",
+	visdn_msg(KERN_NOTICE,
+		"Connection between '%06d' and '%06d' failed: %d\n",
 		connect.src_chan_id,
 		connect.dst_chan_id,
 		err);
@@ -933,7 +937,8 @@ int visdn_cxc_disconnect_with_id(
 
 	chan1 = visdn_chan_get_by_id(chan1_id);
 	if (!chan1) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan1_id);
 
 		err = -ENODEV;
@@ -942,7 +947,8 @@ int visdn_cxc_disconnect_with_id(
 
 	chan2 = visdn_chan_get_by_id(chan2_id);
 	if (!chan2) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan2_id);
 
 		err = -ENODEV;

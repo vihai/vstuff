@@ -108,7 +108,9 @@ void visdn_router_run(
 			break;
 
 #ifdef DIJ_DEBUG
-		verbose(KERN_DEBUG "Min cost (%d) node = ", min_cost_node->cost);
+		verbose(KERN_DEBUG
+			"Min cost (%d) node = ",
+			min_cost_node->cost);
 		visdn_router_print_node_name(min_cost_node);
 		verbose("\n");
 #endif
@@ -275,7 +277,8 @@ int visdn_connect_path_with_id(
 
 	chan1 = visdn_chan_get_by_id(chan1_id);
 	if (!chan1) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan1_id);
 
 		err = -ENODEV;
@@ -284,7 +287,8 @@ int visdn_connect_path_with_id(
 
 	chan2 = visdn_chan_get_by_id(chan2_id);
 	if (!chan2) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan2_id);
 
 		err = -ENODEV;
@@ -361,7 +365,8 @@ int visdn_disconnect_path_with_id(
 
 	chan = visdn_chan_get_by_id(chan_id);
 	if (!chan) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan_id);
 
 		err = -ENODEV;
@@ -441,7 +446,8 @@ int visdn_enable_path_with_id(
 
 	chan = visdn_chan_get_by_id(chan_id);
 	if (!chan) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan_id);
 
 		err = -ENODEV;
@@ -511,7 +517,8 @@ int visdn_disable_path_with_id(
 
 	chan = visdn_chan_get_by_id(chan_id);
 	if (!chan) {
-		printk(KERN_DEBUG "Channel '%06d' not found\n",
+		visdn_debug(1,
+			"Channel '%06d' not found\n",
 			chan_id);
 
 		err = -ENODEV;

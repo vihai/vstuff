@@ -441,7 +441,7 @@ EXPORT_SYMBOL(visdn_chan_unregister);
 
 int visdn_chan_enable(struct visdn_chan *chan)
 {
-	printk(KERN_DEBUG "visnd_chan_enable(%06d)\n", chan->id);
+	visdn_debug(1, "visnd_chan_enable(%06d)\n", chan->id);
 
 	if (!test_and_set_bit(VISDN_CHAN_STATE_OPEN, &chan->state) &&
 	    chan->ops->open) {
@@ -450,7 +450,9 @@ int visdn_chan_enable(struct visdn_chan *chan)
 		err = chan->ops->open(chan);
 		if (err < 0) {
 			clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state);
-			printk(KERN_INFO "visnd_chan_enable(%06d) FAILED: %d\n", chan->id, err);
+			visdn_msg(KERN_WARNING,
+				"visnd_chan_enable(%06d) FAILED: %d\n",
+				chan->id, err);
 			return err;
 		}
 
@@ -462,7 +464,7 @@ int visdn_chan_enable(struct visdn_chan *chan)
 
 int visdn_chan_disable(struct visdn_chan *chan)
 {
-	printk(KERN_DEBUG "visnd_chan_disable(%06d)\n", chan->id);
+	visdn_debug(1, "visnd_chan_disable(%06d)\n", chan->id);
 
 	if (test_and_clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state) &&
 	    chan->ops->close) {
