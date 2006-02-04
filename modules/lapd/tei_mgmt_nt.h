@@ -20,6 +20,22 @@
 
 extern struct hlist_head lapd_ntme_hash;
 
+struct lapd_ntme;
+
+struct lapd_ntme_tei_check
+{
+	struct list_head node;
+
+	struct lapd_ntme *tme;
+
+	int count;
+	int responses[2];
+
+	u8 tei;
+
+	struct timer_list T201_timer;
+};
+
 struct lapd_ntme
 {
 	struct hlist_node node;
@@ -35,24 +51,33 @@ struct lapd_ntme
 	int T201;
 	//---------
 
-	struct timer_list T201_timer;
+	struct list_head tei_checks;
 
 	int cur_dyn_tei;
-//	struct list_head tes;
-
-	int tei_check_outstanding;
-	int tei_check_count;
-	int tei_check_responses[2];
-	u8 tei_check_tei;
-
-	u8 teis[LAPD_NUM_DYN_TEIS];
+	char teis[LAPD_NUM_DYN_TEIS];
 };
 
 struct lapd_ntme *lapd_ntme_alloc(struct lapd_device *net);
 
-
 void lapd_ntme_get(struct lapd_ntme *tme);
 void lapd_ntme_put(struct lapd_ntme *tme);
+
+static inline void lapd_ntme_tc_reset_timer(
+	struct lapd_ntme_tei_check *tc,
+	struct timer_list *timer,
+	unsigned long expires)
+{
+	if (!mod_timer(timer, expires))
+		lapd_ntme_get(tc->tme);
+}
+
+static inline void lapd_ntme_tc_stop_timer(
+	struct lapd_ntme_tei_check *tc,
+	struct timer_list *timer)
+{
+	if (timer_pending(timer) && del_timer(timer))
+		lapd_ntme_put(tc->tme);
+}
 
 static inline void lapd_ntme_reset_timer(
 	struct lapd_ntme *tme,
@@ -71,8 +96,6 @@ static inline void lapd_ntme_stop_timer(
 		lapd_ntme_put(tme);
 }
 
-void lapd_ntme_set_static_tei(
-	struct lapd_ntme *tme, int tei);
 int lapd_ntme_handle_frame(struct sk_buff *skb);
 
 #endif

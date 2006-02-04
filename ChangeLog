@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-04 02:04:09 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-510
+
+    Summary:
+      Added support for multiple outstanding TEI check procedures and emergency TEI check when all TEI allocation have been exausted
+    Revision:
+      isdn--devel--0.1--patch-510
+
+
+    modified files:
+     ChangeLog modules/lapd/tei_mgmt_nt.c
+     modules/lapd/tei_mgmt_nt.h
+
+
 2006-02-04 00:17:51 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-509
 
     Summary:

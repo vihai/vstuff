@@ -15,6 +15,7 @@
 #endif
 
 #include <linux/kernel.h>
+#include <linux/random.h>
 #include <linux/skbuff.h>
 
 #include "lapd.h"
@@ -29,7 +30,7 @@ rwlock_t lapd_ntme_hash_lock = RW_LOCK_UNLOCKED;
  * Must be called holding tme->lock
  */
 
-static inline int lapd_ntme_send_tei_assigned(
+static int lapd_ntme_send_tei_assigned(
 	struct lapd_ntme *tme, u16 ri, int tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_ASSIGNED, ri, tei);
@@ -39,7 +40,7 @@ static inline int lapd_ntme_send_tei_assigned(
  * Must be called holding tme->lock
  */
 
-static inline int lapd_ntme_send_tei_denied(
+static int lapd_ntme_send_tei_denied(
 	struct lapd_ntme *tme, u16 ri, int tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_DENIED, ri, tei);
@@ -49,7 +50,7 @@ static inline int lapd_ntme_send_tei_denied(
  * Must be called holding tme->lock
  */
 
-static inline int lapd_ntme_send_tei_check_request(
+static int lapd_ntme_send_tei_check_request(
 	struct lapd_ntme *tme, int tei)
 {
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_CHK_REQ, 0, tei);
@@ -75,20 +76,93 @@ static inline int lapd_ntme_send_tei_verify(
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_VERIFY, 0, tei);
 }
 
+void lapd_ntme_tc_T201_timer(unsigned long data)
+{
+	struct lapd_ntme_tei_check *tc =
+		(struct lapd_ntme_tei_check *)data;
+	struct lapd_ntme *tme = tc->tme;
+
+	lapd_msg(KERN_DEBUG, "tei_mgmt T201\n");
+
+	spin_lock_bh(&tme->lock);
+
+	if (tc->count == 0) {
+		/* End of first T201 window */
+		if (tc->responses[0] > 1) {
+			/* Multiple TEIs assigned */
+
+			lapd_ntme_send_tei_remove(tme, tc->tei);
+
+			list_del(&tc->node);
+			kfree(tc);
+		} else {
+			/* We need to try a second time */
+
+			tc->count++;
+
+			lapd_ntme_send_tei_check_request(tme, tc->tei);
+		        lapd_ntme_tc_reset_timer(tc, &tc->T201_timer,
+				jiffies + tme->T201);
+		}
+	} else {
+		/* End of second T201 window */
+		if (tc->responses[0] == 0 &&
+		    tc->responses[1] == 0) {
+			/* TEI is unused */
+
+			tme->teis[tc->tei - LAPD_MIN_DYN_TEI] =
+					FALSE;
+
+		} else if (tc->responses[1] == 1 ||
+		           tc->responses[1] == 1) {
+			/* TEI in use */
+		} else {
+			/* Multiple TEIs assigned */
+
+			lapd_ntme_send_tei_remove(tme, tc->tei);
+		}
+
+		list_del(&tc->node);
+		kfree(tc);
+	}
+
+	spin_unlock_bh(&tme->lock);
+
+	lapd_ntme_put(tme);
+}
+
+
 static void _lapd_ntme_start_tei_check(
 	struct lapd_ntme *tme, int tei)
 {
-	WARN_ON(tme->T201 == 0);
-	WARN_ON(tme->tei_check_outstanding);
+	/* Check for duplicates */
+	struct lapd_ntme_tei_check *tc;
+	list_for_each_entry(tc, &tme->tei_checks, node) {
+		if (tc->tei == tei)
+			return;
+	}
 
-	lapd_ntme_reset_timer(tme, &tme->T201_timer,
+	tc = kmalloc(sizeof(*tc), GFP_ATOMIC);
+	if (!tc)
+		return;
+
+	memset(tc, 0, sizeof(*tc));
+
+	tc->tme = tme;
+
+	init_timer(&tc->T201_timer);
+	tc->T201_timer.function = lapd_ntme_tc_T201_timer;
+	tc->T201_timer.data = (unsigned long)tc;
+
+	lapd_ntme_tc_reset_timer(tc, &tc->T201_timer,
 		jiffies + tme->T201);
 
-	tme->tei_check_outstanding = TRUE;
-	tme->tei_check_count = 0;
-	tme->tei_check_responses[0] = 0;
-	tme->tei_check_responses[1] = 0;
-	tme->tei_check_tei = tei;
+	tc->count = 0;
+	tc->responses[0] = 0;
+	tc->responses[1] = 0;
+	tc->tei = tei;
+
+	list_add_tail(&tc->node, &tme->tei_checks);
 
 	lapd_ntme_send_tei_check_request(tme, tei);
 }
@@ -101,66 +175,13 @@ void lapd_ntme_start_tei_check(
 	spin_unlock_bh(&tme->lock);
 }
 
-void lapd_ntme_T201_timer(unsigned long data)
-{
-	struct lapd_ntme *tme =
-		(struct lapd_ntme *)data;
-
-	lapd_msg(KERN_DEBUG, "tei_mgmt T201\n");
-
-	spin_lock_bh(&tme->lock);
-
-	BUG_TRAP(tme->tei_check_outstanding);
-
-	if (tme->tei_check_count == 0) {
-		/* End of first T201 window */
-		if (tme->tei_check_responses[0] > 1) {
-			/* Multiple TEIs assigned */
-
-			tme->tei_check_outstanding = FALSE;
-			lapd_ntme_send_tei_remove(tme, tme->tei_check_tei);
-		} else {
-			/* We need to try a second time */
-
-			tme->tei_check_count++;
-
-			lapd_ntme_send_tei_check_request(tme,
-						tme->tei_check_tei);
-		        lapd_ntme_reset_timer(tme, &tme->T201_timer,
-				jiffies + tme->T201);
-		}
-	} else {
-		tme->tei_check_outstanding = FALSE;
-
-		/* End of second T201 window */
-		if (tme->tei_check_responses[0] == 0 &&
-		    tme->tei_check_responses[1] == 0) {
-			/* TEI is unused */
-
-			tme->teis[tme->tei_check_tei] = LAPD_TEI_UNASSIGNED;
-		} else if (tme->tei_check_responses[1] == 1 ||
-		           tme->tei_check_responses[1] == 1) {
-			/* TEI in use */
-		} else {
-			/* Multiple TEIs assigned */
-
-			lapd_ntme_send_tei_remove(tme, tme->tei_check_tei);
-		}
-	}
-
-	spin_unlock_bh(&tme->lock);
-
-	lapd_ntme_put(tme);
-}
-
 static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_msg_dev(dev, KERN_INFO,
-		"TEI request\n");
+	lapd_debug_dev(dev, "TEI request\n");
 
 	if (tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
@@ -174,6 +195,7 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 	read_lock_bh(&lapd_ntme_hash_lock);
 	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
 		u8 tei;
+		int tei_found;
 		int i;
 
 		spin_lock_bh(&tme->lock);
@@ -197,22 +219,43 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 
 		tei = LAPD_TEI_UNASSIGNED;
 
+		tei_found = FALSE;
 		for (i = 0; i < LAPD_NUM_DYN_TEIS; i++) {
 
 			tme->cur_dyn_tei++;
 
 			if(tme->cur_dyn_tei > LAPD_MAX_DYN_TEI)
-				tme->cur_dyn_tei = LAPD_MAX_DYN_TEI;
+				tme->cur_dyn_tei = LAPD_MIN_DYN_TEI;
 
-			if (tme->teis[tme->cur_dyn_tei - LAPD_MIN_DYN_TEI] ==
-						LAPD_TEI_UNASSIGNED) {
+			if (!tme->teis[tme->cur_dyn_tei - LAPD_MIN_DYN_TEI]) {
+
 				tei = tme->cur_dyn_tei;
+
+				tme->teis[tme->cur_dyn_tei - LAPD_MIN_DYN_TEI] =
+					TRUE;
+
+				tei_found = TRUE;
 
 				break;
 			}
 		}
 
-		lapd_ntme_send_tei_assigned(tme, tm->body.ri, tei);
+		if (tei_found) {
+			lapd_msg_dev(dev, KERN_INFO, "Assignign TEI %d\n", tei);
+			lapd_ntme_send_tei_assigned(tme, tm->body.ri, tei);
+		} else {
+			lapd_msg_dev(dev, KERN_NOTICE,
+				"No more available TEIs, "
+				"starting check procedure\n");
+
+			lapd_ntme_send_tei_denied(tme, tm->body.ri,
+						tm->body.ai);
+
+			for (i = 0; i < LAPD_NUM_DYN_TEIS; i++) {
+				_lapd_ntme_start_tei_check(tme,
+						LAPD_MIN_DYN_TEI + i);
+			}
+		}
 
 		spin_unlock_bh(&tme->lock);
 		goto found;
@@ -234,7 +277,7 @@ static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	lapd_msg_dev(dev, KERN_INFO,
-		"TEI check response\n");
+		"TEI check response TEI=%d\n", tm->body.ai);
 
 	if (tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
@@ -254,14 +297,16 @@ static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 			continue;
 		}
 
-		if (!tme->tei_check_outstanding) {
-			lapd_msg_dev(dev, KERN_WARNING,
-				"unexpected/late check response\n");
-			spin_unlock_bh(&tme->lock);
-			break;
-		}
+		{
+		struct lapd_ntme_tei_check *tc;
+		list_for_each_entry(tc, &tme->tei_checks, node) {
+			if (tc->tei == tm->body.ai) {
 
-		tme->tei_check_responses[tme->tei_check_count]++;
+				tc->responses[tc->count]++;
+				break;
+			}
+		}
+		}
 
 		spin_unlock_bh(&tme->lock);
 	}
@@ -402,7 +447,13 @@ void lapd_ntme_put(
 	struct lapd_ntme *tme)
 {
 	if (atomic_dec_and_test(&tme->refcnt)) {
-		lapd_ntme_stop_timer(tme, &tme->T201_timer);
+		struct lapd_ntme_tei_check *tc, *tpos;
+		list_for_each_entry_safe(tc, tpos, &tme->tei_checks, node) {
+			lapd_ntme_tc_stop_timer(tc, &tc->T201_timer);
+			
+			list_del(&tc->node);
+			kfree(tc);
+		}
 
 		lapd_dev_put(tme->dev);
 		tme->dev = NULL;
@@ -415,6 +466,7 @@ struct lapd_ntme *lapd_ntme_alloc(struct lapd_device *dev)
 {
 	int i;
 	struct lapd_ntme *tme;
+	u8 random_byte;
 
 	tme = kmalloc(sizeof(struct lapd_ntme), GFP_ATOMIC);
 	if (!tme)
@@ -429,17 +481,15 @@ struct lapd_ntme *lapd_ntme_alloc(struct lapd_device *dev)
 	lapd_dev_get(dev);
 	tme->dev = dev;
 
-	tme->cur_dyn_tei = LAPD_MIN_DYN_TEI;
-	tme->tei_check_outstanding = FALSE;
+	get_random_bytes(&random_byte, sizeof(random_byte));
+	tme->cur_dyn_tei = (random_byte % LAPD_NUM_DYN_TEIS) + LAPD_MIN_DYN_TEI;
 
 	for (i=0; i<LAPD_NUM_DYN_TEIS; i++)
-		tme->teis[i] = LAPD_TEI_UNASSIGNED;
+		tme->teis[i] = FALSE;
 
 	tme->T201 = 1 * HZ;
 
-	init_timer(&tme->T201_timer);
-	tme->T201_timer.function = lapd_ntme_T201_timer;
-	tme->T201_timer.data = (unsigned long)tme;
+	INIT_LIST_HEAD(&tme->tei_checks);
 
 	return tme;
 }
