@@ -29,7 +29,7 @@ struct lapd_ntme_tei_check
 	struct lapd_ntme *tme;
 
 	int count;
-	int responses[2];
+	u8 responses[128][2];
 
 	u8 tei;
 
@@ -54,7 +54,7 @@ struct lapd_ntme
 	struct list_head tei_checks;
 
 	int cur_dyn_tei;
-	char teis[LAPD_NUM_DYN_TEIS];
+	u8 teis[LAPD_NUM_DYN_TEIS];
 };
 
 struct lapd_ntme *lapd_ntme_alloc(struct lapd_device *net);
@@ -97,5 +97,6 @@ static inline void lapd_ntme_stop_timer(
 }
 
 int lapd_ntme_handle_frame(struct sk_buff *skb);
+void lapd_ntme_audit(void);
 
 #endif

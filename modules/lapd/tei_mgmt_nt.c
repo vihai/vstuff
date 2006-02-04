@@ -76,6 +76,44 @@ static inline int lapd_ntme_send_tei_verify(
 	return lapd_tm_send(tme->dev, LAPD_TEI_MT_VERIFY, 0, tei);
 }
 
+void lapd_ntme_tc_check_first(
+	struct lapd_ntme_tei_check *tc,
+	u8 tei)
+{
+	if(tc->responses[tei][0] > 1)
+		lapd_ntme_send_tei_remove(tc->tme, tei);
+}
+
+void lapd_ntme_tc_check_second(
+	struct lapd_ntme_tei_check *tc,
+	u8 tei)
+{
+	struct lapd_ntme *tme = tc->tme;
+
+	if(tc->responses[tei][0] == 0 &&
+	   tc->responses[tei][1] == 0) {
+		/* TEI is unused */
+		if (tei >= LAPD_MIN_DYN_TEI &&
+		    tei <= LAPD_MAX_DYN_TEI) {
+			/* Close corresponding sockets TODO FIXME */
+			tme->teis[tei - LAPD_MIN_DYN_TEI] = FALSE;
+		}
+
+	} else if (tc->responses[tei][0] == 1 ||
+		   tc->responses[tei][1] == 1) {
+		/* TEI in use */
+	} else {
+		/* Multiple TEIs assigned */
+
+		lapd_msg_tme(tme, KERN_INFO,
+			"Removing TEI %d due to"
+			" multiple TEI assignment\n",
+			tei);
+
+		lapd_ntme_send_tei_remove(tme, tei);
+	}
+}
+
 void lapd_ntme_tc_T201_timer(unsigned long data)
 {
 	struct lapd_ntme_tei_check *tc =
@@ -86,55 +124,48 @@ void lapd_ntme_tc_T201_timer(unsigned long data)
 
 	if (tc->count == 0) {
 		/* End of first T201 window */
-		if (tc->responses[0] > 1) {
-			/* Multiple TEIs assigned */
+		if (tc->tei == LAPD_BROADCAST_TEI) {
+			int i;
+			for (i=0; i<ARRAY_SIZE(tc->responses); i++)
+				lapd_ntme_tc_check_first(tc, i);
 
-			lapd_ntme_send_tei_remove(tme, tc->tei);
+		} else {
+			/* Multiple TEIs assigned */
+			lapd_ntme_tc_check_first(tc, tc->tei);
 
 			list_del(&tc->node);
 			kfree(tc);
-		} else {
-			/* We need to try a second time */
 
-			tc->count++;
-
-			lapd_ntme_send_tei_check_request(tme, tc->tei);
-		        lapd_ntme_tc_reset_timer(tc, &tc->T201_timer,
-				jiffies + tme->T201);
+			goto finished;
 		}
+
+		/* We need to try a second time */
+		tc->count++;
+		
+		lapd_ntme_send_tei_check_request(tme, tc->tei);
+		lapd_ntme_tc_reset_timer(tc, &tc->T201_timer,
+			jiffies + tme->T201);
 	} else {
 		/* End of second T201 window */
-		if (tc->responses[0] == 0 &&
-		    tc->responses[1] == 0) {
-			/* TEI is unused */
+		if (tc->tei == LAPD_BROADCAST_TEI) {
+			int i;
+			for (i=0; i<ARRAY_SIZE(tc->responses); i++)
+				lapd_ntme_tc_check_second(tc, i);
 
-			lapd_msg_tme(tme, KERN_INFO,
-				"Removed TEI %d due to TEI check\n");
-
-			tme->teis[tc->tei - LAPD_MIN_DYN_TEI] =
-					FALSE;
-
-		} else if (tc->responses[0] == 1 || tc->responses[1] == 1) {
-			/* TEI in use */
 		} else {
-			/* Multiple TEIs assigned */
-
-			lapd_msg_tme(tme, KERN_INFO,
-				"Removed TEI %d due to multiple"
-				" TEI assignment\n");
-
-			lapd_ntme_send_tei_remove(tme, tc->tei);
+			lapd_ntme_tc_check_second(tc, tc->tei);
+			
 		}
 
 		list_del(&tc->node);
 		kfree(tc);
 	}
 
+finished:
 	spin_unlock_bh(&tme->lock);
 
 	lapd_ntme_put(tme);
 }
-
 
 static void _lapd_ntme_start_tei_check(
 	struct lapd_ntme *tme, int tei)
@@ -162,8 +193,6 @@ static void _lapd_ntme_start_tei_check(
 		jiffies + tme->T201);
 
 	tc->count = 0;
-	tc->responses[0] = 0;
-	tc->responses[1] = 0;
 	tc->tei = tei;
 
 	list_add_tail(&tc->node, &tme->tei_checks);
@@ -245,7 +274,7 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 		}
 
 		if (tei_found) {
-			lapd_msg_dev(dev, KERN_INFO, "Assignign TEI %d\n", tei);
+			lapd_msg_dev(dev, KERN_INFO, "Assigning TEI %d\n", tei);
 			lapd_ntme_send_tei_assigned(tme, tm->body.ri, tei);
 		} else {
 			lapd_msg_dev(dev, KERN_NOTICE,
@@ -304,11 +333,9 @@ static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 		{
 		struct lapd_ntme_tei_check *tc;
 		list_for_each_entry(tc, &tme->tei_checks, node) {
-			if (tc->tei == tm->body.ai) {
-
-				tc->responses[tc->count]++;
-				break;
-			}
+			if (tc->tei == LAPD_BROADCAST_TEI ||
+			    tc->tei == tm->body.ai)
+				tc->responses[tm->body.ai & 0x7F][tc->count]++;
 		}
 		}
 
@@ -440,6 +467,21 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 
 	return 0;
 }
+
+void lapd_ntme_audit()
+{
+	struct lapd_ntme *tme;
+	struct hlist_node *node;
+
+	read_lock_bh(&lapd_ntme_hash_lock);
+	hlist_for_each_entry(tme, node, &lapd_ntme_hash, node) {
+		spin_lock_bh(&tme->lock);
+		_lapd_ntme_start_tei_check(tme, LAPD_BROADCAST_TEI);
+		spin_unlock_bh(&tme->lock);
+	}
+	read_unlock_bh(&lapd_ntme_hash_lock);
+}
+
 
 void lapd_ntme_get(
 	struct lapd_ntme *tme)

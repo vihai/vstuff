@@ -19,7 +19,7 @@
 
 #ifdef __KERNEL__
 
-#define lapd_msg_tme(lvl, tme, format, arg...)	\
+#define lapd_msg_tme(tme, lvl, format, arg...)	\
 	printk(lvl "lapd: tei_mgmt: "			\
 		"%s "					\
 		format,					\

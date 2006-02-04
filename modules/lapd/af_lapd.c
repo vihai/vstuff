@@ -1909,6 +1909,51 @@ struct packet_type lapd_packet_type = {
 	.func		= lapd_rcv,
 };
 
+static void lapd_watchdog(void *data);
+
+DECLARE_WORK(lapd_watchdog_work, lapd_watchdog, NULL);
+
+static void lapd_watchdog(void *data)
+{
+#if 0
+	static int count;
+	int i;
+
+	read_lock_bh(&lapd_hash_lock);
+
+	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+		struct sock *sk;
+		struct hlist_node *t;
+		sk_for_each(sk, t, &lapd_hash[i]) {
+			struct lapd_sock *lapd_sock =
+				to_lapd_sock(sk);
+
+printk(KERN_INFO "Sock %s %d %d\n", lapd_sock->dev->name, lapd_sock->tei, lapd_sock->state);
+			if (lapd_sock->dev &&
+			    (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED ||
+			     lapd_sock->state == LAPD_DLS_1_TEI_UNASSIGNED)) {
+
+				lapd_sock->sk.sk_state = TCP_CLOSING;
+				lapd_sock->sk.sk_shutdown = SHUTDOWN_MASK;
+				lapd_sock->sk.sk_err = EPIPE;
+
+				if (!sock_flag(&lapd_sock->sk, SOCK_DEAD)) {
+					lapd_sock->sk.sk_state_change(
+						&lapd_sock->sk);
+					sock_set_flag(&lapd_sock->sk,
+						SOCK_DEAD);
+				}
+			}
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+#endif
+
+	lapd_ntme_audit();
+
+	schedule_delayed_work(&lapd_watchdog_work, 60 * 60 * HZ);
+}
+
 static int __init lapd_init(void)
 {
 	int err;
@@ -1943,6 +1988,8 @@ static int __init lapd_init(void)
 
 	lapd_proc_init();
 
+	schedule_work(&lapd_watchdog_work);
+
 	return 0;
 
 #ifdef HAVE_SK_PROT
@@ -1959,6 +2006,9 @@ module_init(lapd_init);
 
 static void __exit lapd_exit(void)
 {
+	cancel_delayed_work(&lapd_watchdog_work);
+	flush_scheduled_work();
+
 	lapd_proc_exit();
 
 	BUG_TRAP(hlist_empty(&lapd_ntme_hash));

@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-04 04:13:20 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-512
+
+    Summary:
+      Implemented TEI auditing procedure and broadcast TEI check
+    Revision:
+      isdn--devel--0.1--patch-512
+
+
+    modified files:
+     ChangeLog modules/lapd/af_lapd.c modules/lapd/tei_mgmt.h
+     modules/lapd/tei_mgmt_nt.c modules/lapd/tei_mgmt_nt.h
+     modules/lapd/tei_mgmt_te.c
+
+
 2006-02-04 02:07:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-511
 
     Summary:

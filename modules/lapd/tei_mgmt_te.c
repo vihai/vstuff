@@ -111,7 +111,7 @@ void lapd_utme_T202_timer(unsigned long data)
 	struct lapd_utme *tme =
 		(struct lapd_utme *)data;
 
-	lapd_msg_tme(KERN_DEBUG, tme,
+	lapd_msg_tme(tme, KERN_DEBUG,
 		"tei_mgmt T202\n");
 
 	spin_lock_bh(&tme->lock);
@@ -224,7 +224,7 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 			/* We're not going further in the list */
 			read_unlock_bh(&lapd_utme_hash_lock);
 
-			lapd_msg_tme(KERN_INFO, tme,
+			lapd_msg_tme(tme, KERN_INFO,
 				"TEI %u assigned\n",
 				tm->body.ai);
 
@@ -330,7 +330,7 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
 		    (tm->body.ai == LAPD_BROADCAST_TEI ||
 		     tm->body.ai == tme->tei)) {
-			lapd_msg_tme(KERN_INFO, tme,
+			lapd_msg_tme(tme, KERN_INFO,
 				"responding to TEI check request\n");
 
 			lapd_utme_send_tei_check_response(tme, tme->tei);
@@ -375,7 +375,7 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 		     tm->body.ai == tme->tei)) {
 			int i;
 
-			lapd_msg_tme(KERN_INFO, tme,
+			lapd_msg_tme(tme, KERN_INFO,
 				"TEI %u removed by net request\n",
 				tm->body.ai);
 
