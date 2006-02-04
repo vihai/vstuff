@@ -84,5 +84,11 @@ void q931_global_restart_confirm(
 	struct q931_dlc *dlc,
 	struct q931_channel *chan);
 
+void q931_management_restart_request(
+	struct q931_global_call *gc,
+	struct q931_dlc *dlc,
+	struct q931_chanset *chanset,
+	const struct q931_ies *user_ies);
+
 #endif
 #endif

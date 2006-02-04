@@ -132,7 +132,7 @@ struct q931_ie *q931_ie_cause_alloc_abstract(void);
 enum q931_ie_cause_location q931_ie_cause_location(
 	enum q931_call_direction dir,
 	enum q931_interface_network_role network_role,
-	enum lapd_role role);
+	enum lapd_intf_role role);
 
 static inline enum q931_ie_cause_location q931_ie_cause_location_call(
 	struct q931_call *call)

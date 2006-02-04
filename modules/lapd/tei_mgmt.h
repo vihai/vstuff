@@ -19,11 +19,11 @@
 
 #ifdef __KERNEL__
 
-#define lapd_msg_tme(lvl, dev, format, arg...)	\
+#define lapd_msg_tme(lvl, tme, format, arg...)	\
 	printk(lvl "lapd: tei_mgmt: "			\
 		"%s "					\
 		format,					\
-		(dev)->name,				\
+		(tme)->dev->dev->name,			\
 		## arg)
 
 enum lapd_tei_state
@@ -82,7 +82,7 @@ void lapd_tei_mgmt_T202_timer(unsigned long data);
 int lapd_handle_tei_mgmt(struct sk_buff *skb);
 
 int lapd_tm_send(
-	struct net_device *dev,
+	struct lapd_device *dev,
 	u8 message_type, u16 ri, u8 ai);
 
 #endif /* __KERNEL__ */

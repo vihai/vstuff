@@ -32,18 +32,6 @@
 		(intf)->name,				\
 		## arg)
 
-enum q931_interface_type
-{
-	Q931_INTF_TYPE_BRA,
-	Q931_INTF_TYPE_PRA,
-};
-
-enum q931_interface_config
-{
-	Q931_INTF_CONFIG_POINT_TO_POINT,
-	Q931_INTF_CONFIG_MULTIPOINT,
-};
-
 enum q931_interface_network_role
 {
 	Q931_INTF_NET_USER,
@@ -58,16 +46,15 @@ struct q931_interface
 {
 	struct list_head node;
 
-	void *pvt;
-
 	char *name;
 
 	int flags;
 
-	enum q931_interface_type type;
-	enum q931_interface_config config;
+	enum lapd_intf_type type;
+	enum lapd_intf_mode mode;
+	enum lapd_intf_role role;
+
 	enum q931_interface_network_role network_role;
-	enum lapd_role role;
 
 	// Accept master_socket in NT mode
 	int master_socket;
@@ -115,6 +102,8 @@ struct q931_interface
 	longtime_t T320;
 	longtime_t T321;
 	longtime_t T322;
+
+	void *pvt;
 };
 
 inline static void q931_intf_add_call(

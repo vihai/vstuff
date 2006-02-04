@@ -21,6 +21,20 @@
 #include "lapd.h"
 #include "tei_mgmt_nt.h"
 
+struct lapd_device *lapd_dev_get_by_name(const char *name)
+{
+	struct net_device *dev;
+
+	dev = dev_get_by_name(name);
+
+	if (dev->type != ARPHRD_LAPD) {
+		dev_put(dev);
+		return NULL;
+	}
+
+	return to_lapd_dev(dev);
+}
+
 static void lapd_device_up(struct net_device *dev)
 {
 	struct lapd_device *lapd_device;
@@ -33,15 +47,30 @@ static void lapd_device_up(struct net_device *dev)
 	/* TODO FIXME use the correct pointer XXX */
 	dev->atalk_ptr = lapd_device;
 
-	dev_hold(dev);
 	lapd_device->dev = dev;
+	lapd_dev_get(lapd_device);
+
+	/* FIXME */
+	if (1)
+		lapd_device->type = LAPD_INTF_TYPE_BRA;
+	else
+		lapd_device->type = LAPD_INTF_TYPE_PRA;
+
+	/* FIXME */
+	if (dev->flags & IFF_NOARP)
+		lapd_device->mode = LAPD_INTF_MODE_POINT_TO_POINT;
+	else
+		lapd_device->mode = LAPD_INTF_MODE_MULTIPOINT;
 
 	if (dev->flags & IFF_ALLMULTI) {
-		lapd_device->net_tme = lapd_ntme_alloc(dev);
+		lapd_device->role = LAPD_INTF_ROLE_NT;
+
+		lapd_device->net_tme = lapd_ntme_alloc(lapd_device);
 
 		lapd_ntme_get(lapd_device->net_tme);
 		hlist_add_head(&lapd_device->net_tme->node, &lapd_ntme_hash);
 	} else {
+		lapd_device->role = LAPD_INTF_ROLE_TE;
 		lapd_device->net_tme = NULL;
 	}
 
@@ -62,7 +91,7 @@ static void lapd_device_up(struct net_device *dev)
 	lapd_device->x25.T203 = 10 * HZ;
 }
 
-static void lapd_kill_by_device(struct net_device *dev)
+static void lapd_kill_by_device(struct lapd_device *dev)
 {
 	struct sock *sk;
 	struct hlist_node *node;
@@ -87,10 +116,9 @@ static void lapd_kill_by_device(struct net_device *dev)
 
 static void lapd_device_down(struct net_device *dev)
 {
-	struct lapd_device *lapd_device =
-		lapd_dev(dev);
+	struct lapd_device *lapd_device = to_lapd_dev(dev);
 
-	lapd_kill_by_device(dev);
+	lapd_kill_by_device(lapd_device);
 
 	if (lapd_device) {
 

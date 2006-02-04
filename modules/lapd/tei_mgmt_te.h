@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 #include <asm/atomic.h>
 
+#include "lapd_dev.h"
 #include "tei_mgmt.h"
 
 extern struct hlist_head lapd_utme_hash;
@@ -27,7 +28,7 @@ struct lapd_utme
 
 	atomic_t refcnt;
 
-	struct net_device *dev;
+	struct lapd_device *dev;
 
 	spinlock_t lock;
 
@@ -69,7 +70,7 @@ static inline void lapd_utme_stop_timer(
 		lapd_utme_put(tme);
 }
 
-struct lapd_utme *lapd_utme_alloc(struct net_device *dev);
+struct lapd_utme *lapd_utme_alloc(struct lapd_device *dev);
 int lapd_utme_handle_frame(struct sk_buff *skb);
 void lapd_utme_mdl_assign_indication(struct lapd_utme *tme);
 

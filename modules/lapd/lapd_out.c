@@ -22,13 +22,14 @@
 
 int lapd_send_frame(struct sk_buff *skb)
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int err;
 
 	BUG_ON(!skb->dev);
 
 	if((err = dev_queue_xmit(skb)) < 0) {
 
-		lapd_msg_dev(skb->dev, KERN_ERR,
+		lapd_msg_dev(dev, KERN_ERR,
 			"dev_queue_xmit: %d\n", err);
 
 		kfree_skb(skb);
@@ -50,7 +51,7 @@ int lapd_prepare_uframe(struct sock *sk,
 
 	BUG_ON(!lapd_sock->dev);
 
-	skb->dev = lapd_sock->dev;
+	skb->dev = lapd_sock->dev->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
@@ -73,7 +74,8 @@ int lapd_prepare_uframe(struct sock *sk,
 		case LAPD_UFRAME_FUNC_INVALID: BUG(); break;
 	}
 
-	hdr->addr.c_r = ((cr == LAPD_RESPONSE) == !lapd_sock->nt_mode) ? 1 : 0;
+	hdr->addr.c_r = ((cr == LAPD_RESPONSE) ==
+			(lapd_sock->dev->role == LAPD_INTF_ROLE_TE)) ? 1 : 0;
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 

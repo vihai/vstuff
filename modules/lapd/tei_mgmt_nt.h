@@ -26,7 +26,7 @@ struct lapd_ntme
 
 	atomic_t refcnt;
 
-	struct net_device *dev;
+	struct lapd_device *dev;
 	wait_queue_head_t waitq;
 
 	spinlock_t lock;
@@ -48,7 +48,7 @@ struct lapd_ntme
 	u8 teis[LAPD_NUM_DYN_TEIS];
 };
 
-struct lapd_ntme *lapd_ntme_alloc(struct net_device *net);
+struct lapd_ntme *lapd_ntme_alloc(struct lapd_device *net);
 
 
 void lapd_ntme_get(struct lapd_ntme *tme);

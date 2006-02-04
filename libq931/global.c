@@ -73,15 +73,6 @@ void q931_management_restart_request(
 	struct q931_chanset *chanset,
 	const struct q931_ies *user_ies)
 {
-	if (gc->intf->config == Q931_INTF_CONFIG_MULTIPOINT &&
-	    gc->intf->role == LAPD_ROLE_NT) {
-		report_intf(gc->intf, LOG_ERR,
-			"Cannot start restart procedure on a"
-			" multipoint network interface\n");
-
-		return;
-	}
-
 	switch(gc->state) {
 	case Q931_GLOBAL_STATE_NULL: {
 

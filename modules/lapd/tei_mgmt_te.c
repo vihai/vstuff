@@ -111,7 +111,7 @@ void lapd_utme_T202_timer(unsigned long data)
 	struct lapd_utme *tme =
 		(struct lapd_utme *)data;
 
-	lapd_msg_tme(KERN_DEBUG, tme->dev,
+	lapd_msg_tme(KERN_DEBUG, tme,
 		"tei_mgmt T202\n");
 
 	spin_lock_bh(&tme->lock);
@@ -134,7 +134,8 @@ void lapd_utme_T202_timer(unsigned long data)
 				struct lapd_sock *lapd_sock =
 					to_lapd_sock(sk);
 
-				if (!lapd_sock->nt_mode &&
+				if (lapd_sock->dev &&
+				    lapd_sock->dev->role == LAPD_INTF_ROLE_TE &&
 				    lapd_sock->usr_tme == tme) {
 
 					lapd_mdl_primitive(lapd_sock,
@@ -175,13 +176,14 @@ retransmit_expired:
 
 static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	lapd_msg(KERN_INFO, "TEI assigned\n");
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_msg_tme(KERN_WARNING, skb->dev,
+		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI assigned with C/R=0 ?\n");
 	}
 
@@ -205,7 +207,7 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 	hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
 		spin_lock_bh(&tme->lock);
 
-		if (tme->dev != skb->dev) {
+		if (tme->dev != dev) {
 			spin_unlock_bh(&tme->lock);
 			continue;
 		}
@@ -222,7 +224,7 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 			/* We're not going further in the list */
 			read_unlock_bh(&lapd_utme_hash_lock);
 
-			lapd_msg_tme(KERN_INFO, skb->dev,
+			lapd_msg_tme(KERN_INFO, tme,
 				"TEI %u assigned\n",
 				tm->body.ai);
 
@@ -244,7 +246,9 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 					struct lapd_sock *lapd_sock =
 						to_lapd_sock(sk);
 
-					if (!lapd_sock->nt_mode &&
+					if (lapd_sock->dev &&
+					    lapd_sock->dev->role ==
+							LAPD_INTF_ROLE_TE &&
 					    lapd_sock->usr_tme == tme) {
 						lapd_mdl_primitive(
 							lapd_sock,
@@ -272,15 +276,16 @@ tme_found:
 
 static void lapd_utme_handle_tei_denied(struct sk_buff *skb)
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_msg_tme(KERN_INFO, skb->dev,
+	lapd_msg_dev(dev, KERN_INFO,
 		"TEI %u denied\n",
 		tm->body.ai);
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_msg_tme(KERN_WARNING, skb->dev,
+		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI denied with C/R=0 ?\n");
 	}
 }
@@ -297,15 +302,16 @@ static void lapd_utme_handle_tei_denied(struct sk_buff *skb)
 
 static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_msg_tme(KERN_INFO, skb->dev,
+	lapd_msg_dev(dev, KERN_INFO,
 		"TEI %u check request\n",
 		tm->body.ai);
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_msg_tme(KERN_WARNING, skb->dev,
+		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI request with C/R=0 ?\n");
 	}
 
@@ -316,7 +322,7 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 	hlist_for_each_entry(tme, node, &lapd_utme_hash, node) {
 		spin_lock_bh(&tme->lock);
 
-		if (tme->dev != skb->dev) {
+		if (tme->dev->dev != skb->dev) {
 			spin_unlock_bh(&tme->lock);
 			continue;
 		}
@@ -324,7 +330,7 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
 		    (tm->body.ai == LAPD_BROADCAST_TEI ||
 		     tm->body.ai == tme->tei)) {
-			lapd_msg_tme(KERN_INFO, skb->dev,
+			lapd_msg_tme(KERN_INFO, tme,
 				"responding to TEI check request\n");
 
 			lapd_utme_send_tei_check_response(tme, tme->tei);
@@ -339,15 +345,16 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 
 static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_msg_tme(KERN_INFO, skb->dev,
+	lapd_msg_dev(dev, KERN_INFO,
 		"TEI remove: tei=%d\n",
 		tm->body.ai);
 
 	if (!tm->hdr.addr.c_r) {
-		lapd_msg_tme(KERN_WARNING, skb->dev,
+		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI request with C/R=0 ?\n");
 	}
 
@@ -358,7 +365,7 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 	hlist_for_each_entry(tme, t, &lapd_utme_hash, node) {
 		spin_lock_bh(&tme->lock);
 
-		if (tme->dev != skb->dev) {
+		if (tme->dev->dev != skb->dev) {
 			spin_unlock_bh(&tme->lock);
 			continue;
 		}
@@ -368,7 +375,7 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 		     tm->body.ai == tme->tei)) {
 			int i;
 
-			lapd_msg_tme(KERN_INFO, skb->dev,
+			lapd_msg_tme(KERN_INFO, tme,
 				"TEI %u removed by net request\n",
 				tm->body.ai);
 
@@ -385,8 +392,11 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 					struct lapd_sock *lapd_sock =
 						to_lapd_sock(sk);
 
-					if (!lapd_sock->nt_mode &&
+					if (lapd_sock->dev &&
+					    lapd_sock->dev->role ==
+					    		LAPD_INTF_ROLE_TE &&
 					    lapd_sock->usr_tme == tme) {
+
 						lapd_mdl_primitive(
 							lapd_sock,
 							LAPD_MDL_REMOVE_REQUEST,
@@ -410,19 +420,20 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 
 int lapd_utme_handle_frame(struct sk_buff *skb)
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
 	if (skb->len < sizeof(*tm)) {
-		lapd_msg_tme(KERN_ERR, skb->dev,
-			"frame too small (%d bytes)\n",
+		lapd_msg_dev(dev, KERN_ERR,
+			"frame too small (%d octets)\n",
 			skb->len);
 
 		return 0;
 	}
 
 	if (lapd_frame_type(tm->hdr.control) != LAPD_FRAME_TYPE_UFRAME) {
-		lapd_msg_tme(KERN_ERR, skb->dev,
+		lapd_msg_dev(dev, KERN_ERR,
 			"not an U-Frame (%u%u)\n",
 			tm->hdr.ft2,
 			tm->hdr.ft1);
@@ -431,7 +442,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	}
 
 	if (lapd_uframe_function(tm->hdr.control) != LAPD_UFRAME_FUNC_UI) {
-		lapd_msg_tme(KERN_ERR, skb->dev,
+		lapd_msg_dev(dev, KERN_ERR,
 			"not an Unnumbered Information"
 			" (%u%u)\n",
 			tm->hdr.u.m3,
@@ -441,7 +452,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	}
 
 	if (tm->body.entity != 0x0f) {
-		lapd_msg_tme(KERN_ERR, skb->dev,
+		lapd_msg_dev(dev, KERN_ERR,
 			"invalid entity %u\n",
 			tm->body.entity);
 
@@ -468,13 +479,13 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	case LAPD_TEI_MT_VERIFY:
 	case LAPD_TEI_MT_CHK_RES:
 	case LAPD_TEI_MT_REQUEST:
-		lapd_msg_tme(KERN_INFO, skb->dev,
+		lapd_msg_dev(dev, KERN_INFO,
 			"TEI management NT message (%u) in TE mode\n",
 			tm->body.message_type);
 	break;
 
 	default:
-		lapd_msg_tme(KERN_INFO, skb->dev,
+		lapd_msg_dev(dev, KERN_INFO,
 			"unknown/unimplemented message_type %u\n",
 			tm->body.message_type);
 	}
@@ -504,14 +515,14 @@ void lapd_utme_put(
 	if (atomic_dec_and_test(&tme->refcnt)) {
 		lapd_utme_stop_timer(tme, &tme->T202_timer);
 
-		dev_put(tme->dev);
+		lapd_dev_put(tme->dev);
 		tme->dev = NULL;
 
 		kfree(tme);
 	}
 }
 
-struct lapd_utme *lapd_utme_alloc(struct net_device *dev)
+struct lapd_utme *lapd_utme_alloc(struct lapd_device *dev)
 {
 	struct lapd_utme *tme;
 	tme = kmalloc(sizeof(struct lapd_utme), GFP_ATOMIC);
@@ -524,7 +535,7 @@ struct lapd_utme *lapd_utme_alloc(struct net_device *dev)
 
 	atomic_set(&tme->refcnt, 1);
 
-	dev_hold(dev);
+	lapd_dev_get(dev);
 	tme->dev = dev;
 
 	tme->tei = -1;

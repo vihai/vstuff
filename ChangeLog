@@ -2,6 +2,35 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-04 00:17:51 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-509
+
+    Summary:
+      Reorganization of interface flags in lapd
+    Revision:
+      isdn--devel--0.1--patch-509
+
+
+    new files:
+     modules/include/linux/.arch-ids/lapd_dev.h.id
+     modules/include/linux/lapd_dev.h
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c chan_visdn/intf.c
+     libq931/call.c libq931/global.c libq931/ie_cause.c
+     libq931/ie_channel_identification.c
+     libq931/ie_progress_indicator.c libq931/intf.c
+     libq931/libq931/global.h libq931/libq931/ie_cause.h
+     libq931/libq931/ie_channel_identification.h
+     libq931/libq931/intf.h modules/lapd/af_lapd.c
+     modules/lapd/datalink.c modules/lapd/lapd.h
+     modules/lapd/lapd_dev.c modules/lapd/lapd_dev.h
+     modules/lapd/lapd_in.c modules/lapd/lapd_out.c
+     modules/lapd/lapd_proto.h modules/lapd/tei_mgmt.c
+     modules/lapd/tei_mgmt.h modules/lapd/tei_mgmt_nt.c
+     modules/lapd/tei_mgmt_nt.h modules/lapd/tei_mgmt_te.c
+     modules/lapd/tei_mgmt_te.h
+
+
 2006-02-03 20:43:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-508
 
     Summary:

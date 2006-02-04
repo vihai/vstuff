@@ -120,40 +120,53 @@ int q931_ie_progress_indicator_write_to_buf(
 	return len;
 }
 
+static enum q931_ie_progress_indicator_location
+	q931_ie_progress_indicator_location_private(
+		const struct q931_call *call)
+{
+	if (call->intf->role == LAPD_INTF_ROLE_NT) {
+		if (call->direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+		else
+			return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	} else {
+		if (call->direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		else
+			return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+	}
+}
+
+static enum q931_ie_progress_indicator_location
+	q931_ie_progress_indicator_location_loctrans(
+		const struct q931_call *call)
+{
+	if (call->intf->role == LAPD_INTF_ROLE_NT) {
+		if (call->direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+		else
+			return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+	} else {
+		if (call->direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+		else
+			return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+	}
+}
+
 enum q931_ie_progress_indicator_location
 	q931_ie_progress_indicator_location(
 		const struct q931_call *call)
 {
-	if (call->intf->network_role == Q931_INTF_NET_USER) {
+	if (call->intf->network_role == Q931_INTF_NET_USER)
 		return Q931_IE_PI_L_USER;
-	} else if (call->intf->network_role == Q931_INTF_NET_PRIVATE) {
-		if (call->intf->role == LAPD_ROLE_NT) {
-			if (call->direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
-			else
-				return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-		} else {
-			if (call->direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			else
-				return Q931_IE_PI_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
-		}
-	} else if (call->intf->network_role == Q931_INTF_NET_LOCAL ||
-	           call->intf->network_role == Q931_INTF_NET_TRANSIT) {
-		if (call->intf->role == LAPD_ROLE_NT) {
-			if (call->direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
-			else
-				return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
-		} else {
-			if (call->direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
-			else
-				return Q931_IE_PI_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
-		}
-	} else if (call->intf->network_role == Q931_INTF_NET_INTERNATIONAL) {
+	else if (call->intf->network_role == Q931_INTF_NET_PRIVATE)
+		return q931_ie_progress_indicator_location_private(call);
+	else if (call->intf->network_role == Q931_INTF_NET_LOCAL ||
+	           call->intf->network_role == Q931_INTF_NET_TRANSIT)
+		return q931_ie_progress_indicator_location_loctrans(call);
+	else if (call->intf->network_role == Q931_INTF_NET_INTERNATIONAL)
 		return Q931_IE_PI_L_INTERNATIONAL_NETWORK;
-	}
 
 	assert(0);
 	return 0;

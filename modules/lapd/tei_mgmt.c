@@ -21,7 +21,7 @@
 #include "tei_mgmt.h"
 
 int lapd_tm_send(
-	struct net_device *dev,
+	struct lapd_device *dev,
 	u8 message_type, u16 ri, u8 ai)
 {
 	struct sk_buff *skb;
@@ -32,7 +32,7 @@ int lapd_tm_send(
 		sizeof(struct lapd_tei_mgmt_body),
 		GFP_ATOMIC);
 
-	skb->dev = dev;
+	skb->dev = dev->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
@@ -40,7 +40,7 @@ int lapd_tm_send(
 
 	hdr->addr.sapi = LAPD_SAPI_TEI_MGMT;
 
-	hdr->addr.c_r = (dev->flags & IFF_ALLMULTI)?1:0;
+	hdr->addr.c_r = lapd_make_cr(dev, LAPD_COMMAND);
 	hdr->addr.ea1 = 0;
 	hdr->addr.ea2 = 1;
 	hdr->addr.tei = LAPD_BROADCAST_TEI;

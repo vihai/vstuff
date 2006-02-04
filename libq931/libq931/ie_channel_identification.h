@@ -111,7 +111,7 @@ static inline enum q931_ie_channel_identification_interface_type
 	q931_ie_channel_identification_intftype(
 		struct q931_interface *intf)
 {
-	if (intf->type == Q931_INTF_TYPE_PRA)
+	if (intf->type == LAPD_INTF_TYPE_PRA)
 		return Q931_IE_CI_IT_PRIMARY;
 	else
 		return Q931_IE_CI_IT_BASIC;

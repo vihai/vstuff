@@ -121,7 +121,7 @@ static void visdn_set_socket_debug(int on)
 		if (!intf->q931_intf)
 			continue;
 
-		if (intf->q931_intf->role == LAPD_ROLE_NT) {
+		if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 			setsockopt(intf->q931_intf->master_socket,
 				SOL_SOCKET, SO_DEBUG,
 				&on, sizeof(on));
@@ -176,7 +176,7 @@ void refresh_polls_list()
 		if (!intf->q931_intf)
 			continue;
 
-		if (intf->q931_intf->role == LAPD_ROLE_NT) {
+		if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 			visdn.polls[visdn.npolls].fd =
 					intf->q931_intf->master_socket;
 			visdn.polls[visdn.npolls].events =
@@ -583,7 +583,7 @@ bc_failure:;
 	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
 	q931_ies_add_put(&ies, &cdpn->ie);
 
-	if (intf->q931_intf->role == LAPD_ROLE_NT &&
+	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT &&
 	    !intf->overlap_receiving) {
 		struct q931_ie_sending_complete *sc =
 			q931_ie_sending_complete_alloc();
@@ -2830,7 +2830,7 @@ static void visdn_q931_setup_indication(
 	ast_chan->cid.cid_pres = 0;
 	ast_chan->cid.cid_name = strdup(intf->clip_default_name);
 
-	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 
 		visdn_handle_clip_nt(ast_chan, intf, cgpn);
 

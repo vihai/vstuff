@@ -30,7 +30,7 @@
 			"%s "				\
 			"V(S)=%u V(R)=%u V(A)=%u: "	\
 			format,				\
-			(ls)->dev->name,		\
+			(ls)->dev->dev->name,		\
 			(ls)->v_s,			\
 			(ls)->v_r,			\
 			(ls)->v_a,			\
@@ -45,7 +45,7 @@
 		"%s "				\
 		"V(S)=%u V(R)=%u V(A)=%u: "	\
 		format,				\
-		(ls)->dev->name,		\
+		(ls)->dev->dev->name,		\
 		(ls)->v_s,			\
 		(ls)->v_r,			\
 		(ls)->v_a,			\
@@ -216,14 +216,14 @@ static int lapd_prepare_sframe(
 
 	BUG_ON(!lapd_sock->dev);
 
-	skb->dev = lapd_sock->dev;
+	skb->dev = lapd_sock->dev->dev;
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 	hdr = (struct lapd_hdr_e *)skb_put(skb, sizeof(struct lapd_hdr_e));
 
 	hdr->addr.sapi = lapd_sock->sapi;
-	hdr->addr.c_r = lapd_make_cr(lapd_sock->nt_mode, c_r);
+	hdr->addr.c_r = lapd_make_cr(lapd_sock->dev, c_r);
 	hdr->addr.ea1 = 0;
 	hdr->addr.tei = lapd_sock->tei;
 	hdr->addr.ea2 = 1;
@@ -649,7 +649,7 @@ int lapd_prepare_iframe(
 
 	hdr->addr.sapi = lapd_sock->sapi;
 	/* I-frames are always commands */
-	hdr->addr.c_r = lapd_sock->nt_mode ? 1 : 0;
+	hdr->addr.c_r = lapd_make_cr(lapd_sock->dev, LAPD_COMMAND);
 	hdr->addr.ea1 = 0;
 	hdr->addr.tei = lapd_sock->tei;
 	hdr->addr.ea2 = 1;
@@ -707,7 +707,7 @@ static int lapd_queue_completed_iframe(
 	lapd_debug_multiframe(lapd_sock,
 		"Queueing i-frame\n");
 
-	skb->dev = lapd_sock->dev;
+	skb->dev = lapd_sock->dev->dev;
 
 	skb_queue_tail(&lapd_sock->sk.sk_write_queue, skb);
 
@@ -789,7 +789,7 @@ of this ETS shall be taken.
 	};
 
 	frmr->v_s = lapd_sock->v_s;
-	frmr->c_r = lapd_rx_is_response(lapd_sock->nt_mode, rhdr->addr.c_r) ? 1 : 0;
+	frmr->c_r = lapd_rx_is_response(lapd_sock->dev, rhdr->addr.c_r) ? 1 : 0;
 	frmr->v_r = lapd_sock->v_r;
 
 	frmr->z = z;
@@ -813,12 +813,12 @@ static int lapd_socket_handle_iframe(
 		hdr->i.n_s,
 		hdr->i.n_r);
 
-	if (skb->len > lapd_sock->dev->mtu) {
+	if (skb->len > lapd_sock->dev->dev->mtu) {
 		lapd_msg_ls(lapd_sock, KERN_WARNING,
 			"received i-frame longer than mtu (%d > %d),"
 			" rejecting\n",
 			skb->len,
-			lapd_sock->dev->mtu);
+			lapd_sock->dev->dev->mtu);
 
 		lapd_frame_reject(lapd_sock, skb, LAPD_FE_N201);
 
@@ -1019,7 +1019,7 @@ static int lapd_socket_handle_sframe_rr(
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 		lapd_sock->peer_receiver_busy = FALSE;
 
-		if (lapd_rx_is_response(lapd_sock->nt_mode, hdr->addr.c_r)) {
+		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
 				lapd_mdl_error_indication(lapd_sock,
 					LAPD_MDL_ERROR_INDICATION_A);
@@ -1054,7 +1054,7 @@ static int lapd_socket_handle_sframe_rr(
 	case LAPD_DLS_8_TIMER_RECOVERY:
 		lapd_sock->peer_receiver_busy = FALSE;
 
-		if (lapd_rx_is_response(lapd_sock->nt_mode, hdr->addr.c_r)) {
+		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
 				if (lapd_is_valid_nr(lapd_sock, hdr->s.n_r)) {
 					lapd_ack_frames(lapd_sock, hdr->s.n_r);
@@ -1119,7 +1119,7 @@ static int lapd_socket_handle_sframe_rnr(
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 		lapd_sock->peer_receiver_busy = TRUE;
 
-		if (lapd_rx_is_response(lapd_sock->nt_mode, hdr->addr.c_r)) {
+		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
 				lapd_mdl_error_indication(lapd_sock,
 					LAPD_MDL_ERROR_INDICATION_A);
@@ -1148,7 +1148,7 @@ static int lapd_socket_handle_sframe_rnr(
 	case LAPD_DLS_8_TIMER_RECOVERY:
 		lapd_sock->peer_receiver_busy = TRUE;
 
-		if (lapd_rx_is_response(lapd_sock->nt_mode, hdr->addr.c_r)) {
+		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
 				if (lapd_is_valid_nr(lapd_sock, hdr->s.n_r)) {
 					lapd_ack_frames(lapd_sock, hdr->s.n_r);
@@ -1210,7 +1210,7 @@ static int lapd_socket_handle_sframe_rej(
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 		lapd_sock->peer_receiver_busy = FALSE;
 
-		if (lapd_rx_is_response(lapd_sock->nt_mode, hdr->addr.c_r)) {
+		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
 				lapd_mdl_error_indication(lapd_sock,
 					LAPD_MDL_ERROR_INDICATION_A);
@@ -1239,7 +1239,7 @@ static int lapd_socket_handle_sframe_rej(
 	case LAPD_DLS_8_TIMER_RECOVERY:
 		lapd_sock->peer_receiver_busy = FALSE;
 
-		if (lapd_rx_is_response(lapd_sock->nt_mode, hdr->addr.c_r)) {
+		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
 				if (lapd_is_valid_nr(lapd_sock, hdr->s.n_r)) {
 					lapd_ack_frames(lapd_sock, hdr->s.n_r);

@@ -168,42 +168,55 @@ int q931_ies_contain_cause(
 	return FALSE;
 }
 
+static enum q931_ie_cause_location q931_ie_cause_location_private(
+	enum q931_call_direction direction,
+	enum lapd_intf_role role)
+{
+	if (role == LAPD_INTF_ROLE_NT) {
+		if (direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+		else
+			return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+	} else {
+		if (direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
+		else
+			return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
+	}
+}
+
+static enum q931_ie_cause_location q931_ie_cause_location_local(
+	enum q931_call_direction direction,
+	enum lapd_intf_role role)
+{
+	if (role == LAPD_INTF_ROLE_NT) {
+		if (direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+		else
+			return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+	} else {
+		if (direction == Q931_CALL_DIRECTION_INBOUND)
+			return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
+		else
+			return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
+	}
+}
+
 enum q931_ie_cause_location q931_ie_cause_location(
 	enum q931_call_direction direction,
 	enum q931_interface_network_role network_role,
-	enum lapd_role role)
+	enum lapd_intf_role role)
 {
-	if (network_role == Q931_INTF_NET_USER) {
+	if (network_role == Q931_INTF_NET_USER)
 		return Q931_IE_C_L_USER;
-	} else if (network_role == Q931_INTF_NET_PRIVATE) {
-		if (role == LAPD_ROLE_NT) {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
-			else
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-		} else {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_REMOTE_USER;
-			else
-				return Q931_IE_C_L_PRIVATE_NETWORK_SERVING_LOCAL_USER;
-		}
-	} else if (network_role == Q931_INTF_NET_LOCAL) {
-		if (role == LAPD_ROLE_NT) {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
-			else
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
-		} else {
-			if (direction == Q931_CALL_DIRECTION_INBOUND)
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_REMOTE_USER;
-			else
-				return Q931_IE_C_L_PUBLIC_NETWORK_SERVING_LOCAL_USER;
-		}
-	} else if (network_role == Q931_INTF_NET_TRANSIT) {
-		return Q931_IE_C_L_TRANSIT_NETWORK;
-	} else if (network_role == Q931_INTF_NET_INTERNATIONAL) {
-		return Q931_IE_C_L_INTERNATIONAL_NETWORK;
-	}
+	else if (network_role == Q931_INTF_NET_PRIVATE)
+	      return q931_ie_cause_location_private(direction, role);
+	else if (network_role == Q931_INTF_NET_LOCAL)
+	      return q931_ie_cause_location_local(direction, role);
+	else if (network_role == Q931_INTF_NET_TRANSIT)
+	      return Q931_IE_C_L_TRANSIT_NETWORK;
+	else if (network_role == Q931_INTF_NET_INTERNATIONAL)
+	      return Q931_IE_C_L_INTERNATIONAL_NETWORK;
 
 	assert(0);
 	return 0;

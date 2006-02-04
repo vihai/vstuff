@@ -430,7 +430,7 @@ int visdn_intf_open(struct visdn_interface *intf)
 	if (intf->T321) intf->q931_intf->T321 = intf->T321 * 1000000LL;
 	if (intf->T322) intf->q931_intf->T322 = intf->T322 * 1000000LL;
 
-	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 		if (listen(intf->q931_intf->master_socket, 100) < 0) {
 			ast_log(LOG_ERROR,
 				"cannot listen on master socket: %s\n",
@@ -476,7 +476,7 @@ int visdn_intf_open(struct visdn_interface *intf)
 
 	intf->open_pending = FALSE;
 
-	if (intf->q931_intf->role == LAPD_ROLE_NT) {
+	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 		if (list_empty(&intf->clip_numbers_list)) {
 			ast_log(LOG_NOTICE,
 				"Interface '%s' is configured in network"
@@ -649,7 +649,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 
 		ast_cli(fd, "Role                      : %s\n",
 				intf->q931_intf ?
-					(intf->q931_intf->role == LAPD_ROLE_NT ?
+					(intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
 						"NT" : "TE") :
 					"UNUSED!");
 
@@ -713,7 +713,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 		ast_cli(fd, "\n");
 
 		if (intf->q931_intf) {
-			if (intf->q931_intf->role == LAPD_ROLE_NT) {
+			if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 				ast_cli(fd, "DLCs                      : ");
 
 				struct q931_dlc *dlc;

@@ -212,7 +212,7 @@ struct q931_call *q931_call_alloc(struct q931_interface *intf)
 
 	call->intf = intf;
 
-	if (call->intf->role == LAPD_ROLE_TE)
+	if (call->intf->role == LAPD_INTF_ROLE_TE)
 		call->state = U0_NULL_STATE;
 	else
 		call->state = N0_NULL_STATE;
@@ -296,7 +296,7 @@ struct q931_call *q931_call_alloc_out(
 		goto err_find_callref;
 	}
 
-	if (intf->role == LAPD_ROLE_TE) {
+	if (intf->role == LAPD_INTF_ROLE_TE) {
 		call->dlc = q931_dlc_get(&intf->dlc);
 		q931_dlc_hold(call->dlc);
 	} else {
@@ -1682,7 +1682,7 @@ void q931_resume_request(
 
 	report_call(call, LOG_DEBUG, "RESUME-REQ\n");
 
-	if (call->intf->type != Q931_INTF_TYPE_BRA)
+	if (call->intf->type != LAPD_INTF_TYPE_BRA)
 		q931_call_unexpected_primitive(call);
 
 	switch (call->state) {
@@ -1852,8 +1852,7 @@ void q931_setup_request(
 			dt->time = time(NULL);
 			q931_ies_add_put(&call->setup_ies, &dt->ie);
 
-			if (call->intf->config ==
-					Q931_INTF_CONFIG_MULTIPOINT) {
+			if (call->intf->mode == LAPD_INTF_MODE_MULTIPOINT) {
 
 				ci->preferred_exclusive =
 					Q931_IE_CI_PE_EXCLUSIVE;
@@ -2947,11 +2946,20 @@ static void q931_timer_T308(void *data)
 
 			Q931_UNDECLARE_IES(ies);
 		} else {
-			if (call->intf->config == Q931_INTF_CONFIG_MULTIPOINT) {
+			if (call->intf->mode == LAPD_INTF_MODE_MULTIPOINT) {
 				q931_channel_release(call->channel);
 			} else {
 				q931_channel_set_state(call->channel,
 					Q931_CHANSTATE_MAINTAINANCE);
+
+				struct q931_chanset cs;
+				q931_chanset_init(&cs);
+				q931_chanset_add(&cs, call->channel);
+
+				q931_management_restart_request(
+					&call->intf->global_call,
+					call->dlc,
+					&cs, NULL);
 			}
 
 			q931_call_set_state(call, N0_NULL_STATE);
@@ -2967,9 +2975,18 @@ static void q931_timer_T308(void *data)
 			q931_call_send_release(call, NULL);
 			q931_call_start_timer(call, T308);
 		} else {
-			if (call->intf->config != Q931_INTF_CONFIG_MULTIPOINT) {
+			if (call->intf->mode != LAPD_INTF_MODE_MULTIPOINT) {
 				q931_channel_set_state(call->channel,
 					Q931_CHANSTATE_MAINTAINANCE);
+
+				struct q931_chanset cs;
+				q931_chanset_init(&cs);
+				q931_chanset_add(&cs, call->channel);
+
+				q931_management_restart_request(
+					&call->intf->global_call,
+					call->dlc,
+					&cs, NULL);
 			}
 
 			q931_channel_release(call->channel);
@@ -5759,7 +5776,7 @@ static void q931_handle_resume(
 
 	switch (call->state) {
 	case N0_NULL_STATE:
-		if (call->intf->type != Q931_INTF_TYPE_BRA) {
+		if (call->intf->type != LAPD_INTF_TYPE_BRA) {
 			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
@@ -5848,7 +5865,7 @@ static void q931_handle_suspend(
 
 	switch (call->state) {
 	case N10_ACTIVE: {
-		if (call->intf->type != Q931_INTF_TYPE_BRA) {
+		if (call->intf->type != LAPD_INTF_TYPE_BRA) {
 			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();

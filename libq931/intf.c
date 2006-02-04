@@ -132,12 +132,22 @@ struct q931_interface *q931_intf_open(
 		goto err_fcntl_setfl;
 	}
 
-	socklen_t optlen = sizeof(intf->role);
-	if (getsockopt(s, SOL_LAPD, LAPD_ROLE,
+	socklen_t optlen = sizeof(intf->type);
+	if (getsockopt(s, SOL_LAPD, LAPD_INTF_TYPE,
+		&intf->type, &optlen)<0)
+		goto err_getsockopt;
+
+	optlen = sizeof(intf->mode);
+	if (getsockopt(s, SOL_LAPD, LAPD_INTF_MODE,
+		&intf->mode, &optlen)<0)
+		goto err_getsockopt;
+
+	optlen = sizeof(intf->role);
+	if (getsockopt(s, SOL_LAPD, LAPD_INTF_ROLE,
 		&intf->role, &optlen)<0)
 		goto err_getsockopt;
 
-	if (intf->role == LAPD_ROLE_TE) {
+	if (intf->role == LAPD_INTF_ROLE_TE) {
 		intf->master_socket = -1;
 
 		q931_broadcast_dlc_init(&intf->bc_dlc, NULL, -1);
@@ -182,16 +192,12 @@ struct q931_interface *q931_intf_open(
 		intf->T322 =   4 * 1000000LL;
 	}
 
-	// FIXME TODO: Take this from the config
-	intf->type = Q931_INTF_TYPE_BRA;
-	intf->config = Q931_INTF_CONFIG_MULTIPOINT;
-
 	switch (intf->type) {
-	case Q931_INTF_TYPE_BRA:
+	case LAPD_INTF_TYPE_BRA:
 		intf->n_channels = 2;
 		intf->call_reference_len = 1;
 	break;
-	case Q931_INTF_TYPE_PRA:
+	case LAPD_INTF_TYPE_PRA:
 		intf->n_channels = 30;
 		intf->call_reference_len = 2;
 	break;
@@ -228,7 +234,7 @@ void q931_intf_close(struct q931_interface *intf)
 
 	list_del(&intf->node);
 
-	if (intf->role == LAPD_ROLE_TE) {
+	if (intf->role == LAPD_INTF_ROLE_TE) {
 		shutdown(intf->dlc.socket, 2);
 		close(intf->dlc.socket);
 	} else {

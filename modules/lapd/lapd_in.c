@@ -69,6 +69,7 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 	struct sk_buff *rskb;
 	struct lapd_hdr *rhdr;
 	struct lapd_hdr *hdr;
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 
 	rskb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
 	if (!rskb)
@@ -82,7 +83,7 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 	hdr = (struct lapd_hdr *)skb->mac.raw;
 
 	rhdr->addr.sapi = hdr->addr.sapi;
-	rhdr->addr.c_r = skb->dev->flags & IFF_ALLMULTI ? 0 : 1;
+	rhdr->addr.c_r = dev->role == LAPD_INTF_ROLE_NT ? 0 : 1;
 	rhdr->addr.ea1 = 0;
 	rhdr->addr.ea2 = 1;
 	rhdr->addr.tei = hdr->addr.tei;
@@ -124,13 +125,14 @@ static inline int lapd_pass_frame_to_socket_nt(
 	struct sock *sk = NULL;
 	struct hlist_node *node;
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int queued = 0;
 
 	write_lock_bh(&lapd_hash_lock);
-	sk_for_each(sk, node, lapd_get_hash(skb->dev)) {
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
 		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-		if (lapd_sock->dev == skb->dev) {
+		if (lapd_sock->dev == dev) {
 
 			if (sk->sk_state == TCP_LISTEN) {
 				listening_lapd_sock = lapd_sock;
@@ -173,7 +175,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 			return FALSE;
 		}
 
-		sk_add_node(&new_lapd_sock->sk, lapd_get_hash(skb->dev));
+		sk_add_node(&new_lapd_sock->sk, lapd_get_hash(dev));
 		write_unlock_bh(&lapd_hash_lock);
 
 		skb->sk = &new_lapd_sock->sk;
@@ -232,18 +234,18 @@ frame_handled:
 static inline int lapd_pass_frame_to_socket_te(
 	struct sk_buff *skb)
 {
-
 	struct sock *sk;
 	struct hlist_node *node, *tmp;
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int queued = 0;
 
 	read_lock_bh(&lapd_hash_lock);
 	if (hdr->addr.tei == LAPD_BROADCAST_TEI) {
-		sk_for_each_safe(sk, node, tmp, lapd_get_hash(skb->dev)) {
+		sk_for_each_safe(sk, node, tmp, lapd_get_hash(dev)) {
 			struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-			if (lapd_sock->dev == skb->dev &&
+			if (lapd_sock->dev == dev &&
 			    lapd_sock->sapi == hdr->addr.sapi) {
 				struct sk_buff *new_skb;
 				new_skb = skb_clone(skb, GFP_ATOMIC);
@@ -255,10 +257,10 @@ static inline int lapd_pass_frame_to_socket_te(
 			}
 		}
 	} else {
-		sk_for_each(sk, node, lapd_get_hash(skb->dev)) {
+		sk_for_each(sk, node, lapd_get_hash(dev)) {
 			struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-			if (lapd_sock->dev == skb->dev &&
+			if (lapd_sock->dev == dev &&
 			    (lapd_sock->state ==
 				LAPD_DLS_4_TEI_ASSIGNED ||
 			     lapd_sock->state ==
@@ -289,16 +291,17 @@ static inline int lapd_pass_frame_to_socket_te(
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 int lapd_rcv(
 	struct sk_buff *skb,
-	struct net_device *dev,
+	struct net_device *in_dev,
 	struct packet_type *pt)
 #else
 int lapd_rcv(
 	struct sk_buff *skb,
-	struct net_device *dev,
+	struct net_device *in_dev,
 	struct packet_type *pt,
 	struct net_device *orig_dev)
 #endif
 {
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_hdr *hdr;
 	int queued = 0;
 
@@ -318,18 +321,16 @@ int lapd_rcv(
 	if (!pskb_may_pull(skb, sizeof(struct lapd_hdr)))
 		goto err_pskb_may_pull;
 
-	BUG_ON(!skb->dev);
-
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 	hdr = (struct lapd_hdr *)skb->mac.raw;
 	if (hdr->addr.ea1 || !hdr->addr.ea2) {
-		lapd_msg_dev(skb->dev, KERN_WARNING,
+		lapd_msg_dev(dev, KERN_WARNING,
 			"improper ea bits in received frame\n");
 		goto err_improper_ea;
 	}
 
-	if (skb->dev->flags & IFF_ALLMULTI) {
+	if (dev->role && LAPD_INTF_ROLE_NT) {
 		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT)
 			lapd_ntme_handle_frame(skb);
 		else
@@ -356,4 +357,3 @@ not_ours:
 
 	return 0;
 }
-

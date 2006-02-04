@@ -46,24 +46,38 @@
 
 enum
 {
-	LAPD_ROLE		= 0,
-	LAPD_TEI		= 1,
-	LAPD_SAPI		= 2,
-	LAPD_TEI_MGMT_STATUS	= 3,
-	LAPD_TEI_MGMT_T201	= 4,
-	LAPD_TEI_MGMT_N202	= 5,
-	LAPD_TEI_MGMT_T202	= 6,
-	LAPD_DLC_STATE		= 7,
-	LAPD_T200		= 8,
-	LAPD_N200		= 9,
-	LAPD_T203		= 10,
-	LAPD_N201		= 11,
-	LAPD_K			= 12,
+	LAPD_INTF_TYPE		= 0,
+	LAPD_INTF_MODE		= 1,
+	LAPD_INTF_ROLE		= 2,
+	LAPD_TEI		= 3,
+	LAPD_SAPI		= 4,
+	LAPD_TEI_MGMT_STATUS	= 5,
+	LAPD_TEI_MGMT_T201	= 6,
+	LAPD_TEI_MGMT_N202	= 7,
+	LAPD_TEI_MGMT_T202	= 8,
+	LAPD_DLC_STATE		= 9,
+	LAPD_T200		= 10,
+	LAPD_N200		= 11,
+	LAPD_T203		= 12,
+	LAPD_N201		= 13,
+	LAPD_K			= 14,
 };
 
-enum lapd_role {
-	LAPD_ROLE_TE		= 0,
-	LAPD_ROLE_NT		= 1
+enum lapd_intf_type
+{
+	LAPD_INTF_TYPE_BRA = 0,
+	LAPD_INTF_TYPE_PRA = 1,
+};
+
+enum lapd_intf_mode
+{
+	LAPD_INTF_MODE_POINT_TO_POINT = 0,
+	LAPD_INTF_MODE_MULTIPOINT = 1,
+};
+
+enum lapd_intf_role {
+	LAPD_INTF_ROLE_TE = 0,
+	LAPD_INTF_ROLE_NT = 1
 };
 
 struct sockaddr_lapd {
@@ -106,15 +120,7 @@ struct sockaddr_lapd {
 			"lapd: "				\
 			"%s "					\
 			format,					\
-			(ls)->dev ? (ls)->dev->name : "",	\
-			## arg)
-
-#define lapd_debug_dev(dev, format, arg...)			\
-		printk(KERN_DEBUG				\
-			"lapd: "				\
-			"%s "					\
-			format,					\
-			(dev)->name ? (dev)->name : "",		\
+			(ls)->dev ? (ls)->dev->dev->name : "",	\
 			## arg)
 #else
 #define lapd_debug(ls, format, arg...) do { } while (0)
@@ -131,23 +137,11 @@ struct sockaddr_lapd {
 	printk(lvl "lapd: "				\
 		"%s: "					\
 		format,					\
-		(ls)->dev ? (ls)->dev->name : "",	\
-		## arg)
-
-#define lapd_msg_dev(dev, lvl, format, arg...)		\
-	printk(lvl "lapd: "				\
-		"%s: "					\
-		format,					\
-		(dev)->name,				\
+		(ls)->dev ? (ls)->dev->dev->name : "",	\
 		## arg)
 
 extern struct hlist_head lapd_hash[LAPD_HASHSIZE];
 extern rwlock_t lapd_hash_lock;
-
-enum {
-	LAPD_PROTO_UFRAME = 0,
-	LAPD_PROTO_IFRAME = 1,
-};
 
 // Do not changes these values, user mode binary compatibility needs them
 enum lapd_datalink_state
@@ -206,19 +200,7 @@ struct lapd_sap
 	int T203;
 };
 
-struct lapd_device
-{
-	struct net_device *dev;
-
-	struct lapd_ntme *net_tme;
-	struct lapd_sap q931;
-	struct lapd_sap x25;
-};
-
-static inline struct lapd_device *lapd_dev(struct net_device *dev)
-{
-	return (struct lapd_device *)dev->atalk_ptr;
-}
+#include "lapd_dev.h"
 
 struct lapd_new_dlc
 {
@@ -248,9 +230,7 @@ struct lapd_sock
 {
 	struct sock sk;
 
-	struct net_device *dev;
-
-	int nt_mode;
+	struct lapd_device *dev;
 
 	struct sk_buff_head u_queue;
 
@@ -316,9 +296,9 @@ void lapd_dl_data_indication(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb);
 
-static inline struct hlist_head *lapd_get_hash(struct net_device *dev)
+static inline struct hlist_head *lapd_get_hash(struct lapd_device *dev)
 {
-	return &lapd_hash[dev->ifindex & (LAPD_HASHSIZE - 1)];
+	return &lapd_hash[dev->dev->ifindex & (LAPD_HASHSIZE - 1)];
 }
 
 static inline void lapd_bh_lock_sock(struct lapd_sock *lapd_sock)

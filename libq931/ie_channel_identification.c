@@ -107,7 +107,7 @@ int q931_ie_channel_identification_read_from_buf(
 			return FALSE;
 		}
 
-		if (intf->type == Q931_INTF_TYPE_BRA) {
+		if (intf->type == LAPD_INTF_TYPE_BRA) {
 			report_ie(abstract_ie, LOG_ERR,
 				"IE specifies BRI while interface is PRI\n");
 
@@ -145,7 +145,7 @@ int q931_ie_channel_identification_read_from_buf(
 		return TRUE;
 
 	} else {
-		if (intf->type == Q931_INTF_TYPE_PRA) {
+		if (intf->type == LAPD_INTF_TYPE_PRA) {
 			report_ie(abstract_ie, LOG_ERR,
 				"IE specifies PRI while interface is BRI\n");
 

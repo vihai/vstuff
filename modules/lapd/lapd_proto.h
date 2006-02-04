@@ -200,19 +200,23 @@ enum lapd_uframe_function
 #define LAPD_UFRAME_FUNCTIONS_MASK 0xEC
 #define LAPD_SFRAME_FUNCTIONS_MASK 0xFE
 
-static inline int lapd_rx_is_command(int nt_mode, int c_r)
+static inline int lapd_rx_is_command(
+	struct lapd_device *dev, int c_r)
 {
-	return !nt_mode != !c_r;
+	return (dev->role == LAPD_INTF_ROLE_TE) != !c_r;
 }
 
-static inline int lapd_rx_is_response(int nt_mode, int c_r)
+static inline int lapd_rx_is_response(
+	struct lapd_device *dev, int c_r)
 {
-	return !nt_mode == !c_r;
+	return (dev->role == LAPD_INTF_ROLE_TE) == !c_r;
 }
 
-static inline u8 lapd_make_cr(int nt_mode, int c_r)
+static inline u8 lapd_make_cr(
+	struct lapd_device *dev, int c_r)
 {
-	return (!nt_mode == !(c_r == LAPD_COMMAND)) ? 1 : 0;
+	return ((dev->role == LAPD_INTF_ROLE_TE) ==
+		!(c_r == LAPD_COMMAND)) ? 1 : 0;
 }
 
 static inline enum lapd_frame_type lapd_frame_type(u8 control)
