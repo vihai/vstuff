@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-04 17:46:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-515
+
+    Summary:
+      Fixed two NULL pointer deferences in chan_visdn caused by a race-condition
+    Revision:
+      isdn--devel--0.1--patch-515
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c modules/lapd/tei_mgmt_te.c
+
+
 2006-02-04 16:00:02 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-514
 
     Summary:

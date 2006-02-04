@@ -3431,6 +3431,9 @@ static void visdn_q931_disconnect_channel(
 {
 	FUNC_DEBUG();
 
+	if (!channel->call)
+		return;
+
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 
 	if (!ast_chan)
@@ -3480,6 +3483,9 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 static void visdn_q931_stop_tone(struct q931_channel *channel)
 {
 	FUNC_DEBUG();
+
+	if (!channel->call)
+		return;
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(channel->call);
 

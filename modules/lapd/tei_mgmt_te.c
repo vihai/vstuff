@@ -180,25 +180,10 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
 
-	lapd_msg(KERN_INFO, "TEI assigned\n");
-
 	if (!tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI assigned with C/R=0 ?\n");
 	}
-
-/* TODO FIXME TODO FIXME TODO FIXME TODO FIXME
- *
- * A user side layer management entity receiving this identity assigned
- * message shall compare the TEI value in the Ai field to its own TEI
- * value(s) (if any) to see if it is already allocated if an identity
- * request message is outstanding.
- * Additionally, the TEI value in the Ai field may be compared to its
- * TEI(s) on the receipt of all identity assigned messages. If there is
- * a match, the management entity shall either:
- * - initiate TEI removal; or
- * - initiate the TEI identity verify procedures.
- */
 
 	{
 	struct hlist_node *node;
@@ -215,10 +200,42 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
 		    tm->body.ai == tme->tei) {
 
-// TODO FIXME	lapd_start_tei_removal_or_initiate_tei_identify_procedures();
+			int i;
+
+			lapd_msg_tme(tme, KERN_INFO,
+				"Removing TEI %u due to duplicate detcted\n",
+				tm->body.ai);
+
+			tme->tei = LAPD_TEI_UNASSIGNED;
+
+			lapd_utme_change_state(tme, LAPD_TME_TEI_UNASSIGNED);
+
+			read_lock_bh(&lapd_hash_lock);
+
+			for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+				struct sock *sk;
+				struct hlist_node *node;
+
+				sk_for_each(sk, node, &lapd_hash[i]) {
+					struct lapd_sock *lapd_sock =
+						to_lapd_sock(sk);
+
+					if (lapd_sock->dev &&
+					    lapd_sock->dev->role ==
+							LAPD_INTF_ROLE_TE &&
+					    lapd_sock->usr_tme == tme) {
+						lapd_mdl_primitive(
+							lapd_sock,
+							LAPD_MDL_REMOVE_REQUEST,
+							0);
+					}
+				}
+			}
+			read_unlock_bh(&lapd_hash_lock);
 
 		} else if (tme->tei_request_pending &&
 		           tm->body.ri == tme->tei_request_ri) {
+
 			int i;
 
 			/* We're not going further in the list */
