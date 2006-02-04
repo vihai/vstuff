@@ -18,13 +18,13 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
-all: makefiles
+all: makefiles Kbuild
 	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
 
-install:
+install: makefiles Kbuild
 	$(MAKE) -C $(kblddir) modules_install M=${abssrcdir}
 
-clean:
+clean: makefiles Kbuild
 	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
 
 Kbuild:
