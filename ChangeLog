@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-06 10:57:00 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-521
+
+    Summary:
+      Added lapd_dev.h to modules/include
+    Revision:
+      isdn--devel--0.1--patch-521
+
+
+    modified files:
+     ChangeLog Makefile.am
+
+
 2006-02-04 11:39:30 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-520
 
     Summary:
