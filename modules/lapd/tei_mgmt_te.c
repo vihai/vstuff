@@ -364,8 +364,9 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 		}
 		read_unlock_bh(&lapd_utme_hash_lock);
 
-		lapd_utme_send_tei_check_response_multi(dev, teis, nteis);
-
+		if (nteis)
+			lapd_utme_send_tei_check_response_multi(dev, teis,
+								nteis);
 	} else {
 		struct hlist_node *node;
 		struct lapd_utme *tme;
@@ -383,6 +384,50 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 		}
 		read_unlock_bh(&lapd_utme_hash_lock);
 	}
+}
+
+static void _lapd_utme_tei_remove(struct lapd_utme *tme)
+{
+	int i;
+
+	tme->tei = LAPD_TEI_UNASSIGNED;
+
+	lapd_utme_change_state(tme, LAPD_TME_TEI_UNASSIGNED);
+
+	read_lock_bh(&lapd_hash_lock);
+
+	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+		struct sock *sk;
+		struct hlist_node *t2;
+		sk_for_each(sk, t2, &lapd_hash[i]) {
+			struct lapd_sock *lapd_sock =
+					to_lapd_sock(sk);
+
+			if (lapd_sock->dev &&
+			    lapd_sock->dev->role ==
+			    		LAPD_INTF_ROLE_TE &&
+			    lapd_sock->usr_tme == tme) {
+
+				lapd_mdl_primitive(
+					lapd_sock,
+					LAPD_MDL_REMOVE_REQUEST,
+					0);
+			}
+		}
+	}
+
+	read_unlock_bh(&lapd_hash_lock);
+
+	/* FIXME TODO Shall we inform the upper layer that a
+	 * static TEI has been removed?
+	 */
+}
+
+void lapd_utme_tei_remove(struct lapd_utme *tme)
+{
+	spin_lock_bh(&tme->lock);
+	_lapd_utme_tei_remove(tme);
+	spin_unlock_bh(&tme->lock);
 }
 
 static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
@@ -415,49 +460,17 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
 		    (tm->ai.value == LAPD_BROADCAST_TEI ||
 		     tm->ai.value == tme->tei)) {
-			int i;
-
 			lapd_msg_tme(tme, KERN_INFO,
 				"TEI %u removed by net request\n",
 				tm->ai.value);
 
-			tme->tei = LAPD_TEI_UNASSIGNED;
-
-			lapd_utme_change_state(tme, LAPD_TME_TEI_UNASSIGNED);
-
-			read_lock_bh(&lapd_hash_lock);
-
-			for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
-				struct sock *sk;
-				struct hlist_node *t2;
-				sk_for_each(sk, t2, &lapd_hash[i]) {
-					struct lapd_sock *lapd_sock =
-						to_lapd_sock(sk);
-
-					if (lapd_sock->dev &&
-					    lapd_sock->dev->role ==
-					    		LAPD_INTF_ROLE_TE &&
-					    lapd_sock->usr_tme == tme) {
-
-						lapd_mdl_primitive(
-							lapd_sock,
-							LAPD_MDL_REMOVE_REQUEST,
-							0);
-					}
-				}
-			}
-
-			read_unlock_bh(&lapd_hash_lock);
-
-			/* FIXME TODO Shall we inform the upper layer that a
-			 * static TEI has been removed?
-			 */
+			_lapd_utme_tei_remove(tme);
 		}
 
 		spin_unlock_bh(&tme->lock);
 	}
-	}
 	read_unlock_bh(&lapd_utme_hash_lock);
+	}
 }
 
 int lapd_utme_handle_frame(struct sk_buff *skb)
