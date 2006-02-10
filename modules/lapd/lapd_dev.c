@@ -26,6 +26,8 @@ struct lapd_device *lapd_dev_get_by_name(const char *name)
 	struct net_device *dev;
 
 	dev = dev_get_by_name(name);
+	if (!dev)
+		return NULL;
 
 	if (dev->type != ARPHRD_LAPD) {
 		dev_put(dev);
