@@ -104,7 +104,7 @@ static int q931_global_prepare_header(
 	q931_make_callref(frame + size,
 		hdr->call_reference_len,
 		0,
-		Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE);
+		Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE);
 
 	size += hdr->call_reference_len;
 
