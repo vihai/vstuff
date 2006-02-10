@@ -292,7 +292,7 @@ static void lapd_transmit_enquiry_procedure(
 static void lapd_nr_error_recovery_procedure(
 	struct lapd_sock *lapd_sock)
 {
-	lapd_mdl_error_indication(lapd_sock,
+	lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 		LAPD_MDL_ERROR_INDICATION_J);
 
 	lapd_establish_datalink_procedure(lapd_sock);
@@ -724,24 +724,24 @@ static void lapd_frame_reject(
 {
 	switch (error == LAPD_FE_LENGTH) {
 	case LAPD_FE_LENGTH:
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_N);
 		/* w=1, x=1, y=0, z=0 */
 	break;
 
 	case LAPD_FE_N201:
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_O);
 		/* 0, 0, 1, 0 */
 	break;
 
 	case LAPD_FE_UNDEFINED_COMMAND:
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_L);
 	break;
 
 	case LAPD_FE_I_FIELD_NOT_PERMITTED:
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_M);
 	break;
 	}
@@ -1021,7 +1021,7 @@ static int lapd_socket_handle_sframe_rr(
 
 		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
-				lapd_mdl_error_indication(lapd_sock,
+				lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 					LAPD_MDL_ERROR_INDICATION_A);
 			}
 		} else {
@@ -1121,7 +1121,7 @@ static int lapd_socket_handle_sframe_rnr(
 
 		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
-				lapd_mdl_error_indication(lapd_sock,
+				lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 					LAPD_MDL_ERROR_INDICATION_A);
 			}
 		} else {
@@ -1136,8 +1136,8 @@ static int lapd_socket_handle_sframe_rnr(
 
 			lapd_invoke_retransmission_procedure(lapd_sock);
 
-			lapd_stop_timer(lapd_sock, T200);
-			lapd_start_timer(lapd_sock, T203);
+			lapd_stop_timer(lapd_sock, T203);
+			lapd_start_timer(lapd_sock, T200);
 		} else {
 			lapd_change_state(lapd_sock,
 				LAPD_DLS_5_AWAITING_ESTABLISH);
@@ -1212,7 +1212,7 @@ static int lapd_socket_handle_sframe_rej(
 
 		if (lapd_rx_is_response(lapd_sock->dev, hdr->addr.c_r)) {
 			if (hdr->s.p_f) {
-				lapd_mdl_error_indication(lapd_sock,
+				lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 					LAPD_MDL_ERROR_INDICATION_A);
 			}
 		} else {
@@ -1349,14 +1349,14 @@ static int lapd_socket_handle_uframe_ua(
 
 	switch (lapd_sock->state) {
 	case LAPD_DLS_4_TEI_ASSIGNED:
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_C |
 			LAPD_MDL_ERROR_INDICATION_D);
 	break;
 
 	case LAPD_DLS_5_AWAITING_ESTABLISH:
 		if (!hdr->u.p_f) {
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_D);
 		} else {
 			lapd_stop_timer(lapd_sock, T200);
@@ -1386,7 +1386,7 @@ static int lapd_socket_handle_uframe_ua(
 
 	case LAPD_DLS_6_AWAITING_RELEASE:
 		if (!hdr->u.p_f) {
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_D);
 		} else {
 			lapd_stop_timer(lapd_sock, T200);
@@ -1398,7 +1398,7 @@ static int lapd_socket_handle_uframe_ua(
 
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 	case LAPD_DLS_8_TIMER_RECOVERY:
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_C |
 			LAPD_MDL_ERROR_INDICATION_D);
 	break;
@@ -1475,7 +1475,7 @@ static int lapd_socket_handle_uframe_frmr(
 	       lapd_frame_type(frmr->control) == LAPD_FRAME_TYPE_SFRAME))) {
 */
 
-	lapd_mdl_error_indication(lapd_sock,
+	lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 		LAPD_MDL_ERROR_INDICATION_K);
 
 	lapd_establish_datalink_procedure(lapd_sock);
@@ -1527,10 +1527,10 @@ static int lapd_socket_handle_uframe_dm(
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 	case LAPD_DLS_8_TIMER_RECOVERY:
 		if (hdr->u.p_f) {
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_B);
 		} else {
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_E);
 
 			lapd_establish_datalink_procedure(lapd_sock);
@@ -1596,7 +1596,7 @@ static int lapd_socket_handle_uframe_sabme(
 
 		lapd_clear_exception_conditions_procedure(lapd_sock);
 
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_F);
 
 		lapd_stop_timer(lapd_sock, T200);
@@ -1619,7 +1619,7 @@ static int lapd_socket_handle_uframe_sabme(
 
 		lapd_clear_exception_conditions_procedure(lapd_sock);
 
-		lapd_mdl_error_indication(lapd_sock,
+		lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 			LAPD_MDL_ERROR_INDICATION_F);
 
 		lapd_stop_timer(lapd_sock, T200);
@@ -1745,6 +1745,10 @@ int lapd_process_frame(
 
 		case LAPD_MDL_ERROR_RESPONSE:
 			lapd_mdl_error_response(lapd_sock);
+		break;
+
+		case LAPD_MDL_ERROR_INDICATION:
+			lapd_mdl_error_indication(lapd_sock, pri->param);
 		break;
 
 		case LAPD_MDL_REMOVE_REQUEST:
@@ -1947,7 +1951,7 @@ static void lapd_timer_T200(unsigned long data)
 			lapd_discard_i_queue(lapd_sock);
 			lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
 
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_G);
 
 			lapd_dl_primitive(lapd_sock,
@@ -1965,7 +1969,7 @@ static void lapd_timer_T200(unsigned long data)
 			lapd_change_state(lapd_sock, LAPD_DLS_4_TEI_ASSIGNED);
 			lapd_dl_primitive(lapd_sock,
 				LAPD_DL_RELEASE_CONFIRM, 0);
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_H);
 		} else {
 			lapd_sock->retrans_cnt++;
@@ -1986,7 +1990,7 @@ static void lapd_timer_T200(unsigned long data)
 
 	case LAPD_DLS_8_TIMER_RECOVERY:
 		if (lapd_sock->retrans_cnt == lapd_sock->sap->N200) {
-			lapd_mdl_error_indication(lapd_sock,
+			lapd_mdl_primitive(lapd_sock, LAPD_MDL_ERROR_INDICATION,
 				LAPD_MDL_ERROR_INDICATION_I);
 
 			lapd_establish_datalink_procedure(lapd_sock);

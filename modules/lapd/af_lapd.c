@@ -1502,13 +1502,13 @@ void lapd_mdl_error_indication(
 	    indication & LAPD_MDL_ERROR_INDICATION_H) {
 
 		if (lapd_sock->dev->role == LAPD_INTF_ROLE_NT) {
-			lapd_ntme_start_tei_check(
-				lapd_sock->dev->net_tme, lapd_sock->tei);
+			if (lapd_sock->dev->net_tme)
+				lapd_ntme_start_tei_check(
+					lapd_sock->dev->net_tme,
+					lapd_sock->tei);
 		} else {
-				lapd_mdl_primitive(
-					lapd_sock,
-					LAPD_MDL_REMOVE_REQUEST,
-					0);
+			if (lapd_sock->usr_tme)
+				lapd_utme_tei_remove(lapd_sock->usr_tme);
 		}
 	}
 }

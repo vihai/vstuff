@@ -18,6 +18,7 @@ enum lapd_mdl_primitive_type
 	LAPD_MDL_ASSIGN_REQUEST,
 	LAPD_MDL_REMOVE_REQUEST,
 	LAPD_MDL_ERROR_RESPONSE,
+	LAPD_MDL_ERROR_INDICATION,
 };
 
 struct lapd_mdl_primitive
