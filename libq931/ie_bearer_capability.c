@@ -275,13 +275,13 @@ int q931_ie_bearer_capability_write_to_buf(
 	    ie->user_information_layer_2_protocol !=
 			Q931_IE_BC_UIL2P_UNUSED) {
 		// oct_6
-		assert(0);
+		return -1;
 	}
 
 	if (ie->user_information_layer_2_protocol !=
 			Q931_IE_BC_UIL3P_UNUSED) {
 		// oct_7
-		assert(0);
+		return -1;
 	}
 
 	return len;

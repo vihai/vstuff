@@ -211,6 +211,7 @@ static void q931_write_ies(
 					ies.ies[i],
 					msg->raw + msg->rawlen + 1,
 					sizeof(msg->raw) - msg->rawlen);
+			assert(ie_len > 0);
 
 			/* Now write len */
 			*(__u8 *)(msg->raw + msg->rawlen) = ie_len;
@@ -227,9 +228,11 @@ static void q931_write_ies(
 				ies.ies[i]->cls->name,
 				ie_len);
 		} else {
-			ies.ies[i]->cls->write_to_buf(ies.ies[i],
+			int res = ies.ies[i]->cls->write_to_buf(ies.ies[i],
 				msg->raw + msg->rawlen,
 				sizeof(msg->raw) - msg->rawlen);
+			assert(res > 0);
+
 			msg->rawlen++;
 
 			report_msg_cont(msg, LOG_DEBUG,
