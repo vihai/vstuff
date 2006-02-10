@@ -59,8 +59,8 @@ int q931_ie_notification_indicator_read_from_buf(
 		container_of(abstract_ie,
 			struct q931_ie_notification_indicator, ie);
 
-	if (len < 2) {
-		report_ie(abstract_ie, LOG_ERR, "IE len < 2\n");
+	if (len != 1) {
+		report_ie(abstract_ie, LOG_ERR, "IE len != 1\n");
 		return FALSE;
 	}
 
