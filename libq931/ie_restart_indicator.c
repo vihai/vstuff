@@ -134,7 +134,7 @@ void q931_ie_restart_indicator_dump(
 		container_of(abstract_ie, struct q931_ie_restart_indicator, ie);
 
 	report_ie_dump(abstract_ie,
-		"%sDescription = %s (%d)\n", prefix,
+		"%sClass = %s (%d)\n", prefix,
 		q931_ie_restart_indicator_restart_class_to_text(
 			ie->restart_class),
 		ie->restart_class);
