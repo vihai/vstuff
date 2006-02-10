@@ -166,9 +166,9 @@ struct q931_interface *q931_intf_open(
 		q931_dlc_init(&intf->dlc, intf, s);
 
 		intf->T301 = 180 * 1000000LL;
-		intf->T302 =  15 * 1000000LL;
-		intf->T303 =   4 * 1000000LL;
-		intf->T304 =  30 * 1000000LL;
+		intf->T302 =   6 * 1000000LL;
+		intf->T303 =   5 * 1000000LL;
+		intf->T304 = 999 * 1000000LL; // T304 is disabled
 		intf->T305 =  30 * 1000000LL;
 		intf->T308 =   4 * 1000000LL;
 		intf->T309 =   6 * 1000000LL;
@@ -223,7 +223,7 @@ struct q931_interface *q931_intf_open(
 	for (i=0; i<intf->n_channels; i++)
 		q931_channel_init(&intf->channels[i], i, intf);
 
-	intf->global_call.intf = intf;
+	q931_global_init(&intf->global_call, intf);
 
 	list_add(&intf->node, &q931_interfaces);
 
