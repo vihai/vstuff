@@ -174,16 +174,6 @@ int q931_ie_channel_identification_read_from_buf(
 
 				return FALSE;
 			}
-		} else if (oct_3->info_channel_selection ==
-					Q931_IE_CI_ICS_BRA_NO_CHANNEL) {
-			if (oct_3->preferred_exclusive ==
-					Q931_IE_CI_PE_EXCLUSIVE) {
-				report_ie(abstract_ie, LOG_ERR,
-					"IE specifies no channel with no"
-					" alternative, is this valid?\n");
-
-				return FALSE;
-			}
 		}
 
 		return TRUE;
