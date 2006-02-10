@@ -62,9 +62,15 @@ int q931_ie_calling_party_number_read_from_buf(
 
 	int nextoct = 0;
 
-	if (len < 1) {
-		report_ie(abstract_ie, LOG_ERR, "IE size < 1\n");
-		return FALSE;
+	if (len == 0) {
+		/* Telecom Italia requires us to be able to support
+		 * zero-length cgpn
+		 */
+
+		ie->type_of_number = Q931_IE_CGPN_TON_UNKNOWN;
+		ie->numbering_plan_identificator = Q931_IE_CGPN_NPI_UNKNOWN;
+
+		return TRUE;
 	}
 
 	struct q931_ie_calling_party_number_onwire_3 *oct_3 =
