@@ -41,7 +41,7 @@ struct q931_ie_high_layer_compatibility *
 	return ie;
 }
 
-struct q931_ie *q931_ie_high_layer_compatibility_abstract(void)
+struct q931_ie *q931_ie_high_layer_compatibility_alloc_abstract(void)
 {
 	return &q931_ie_high_layer_compatibility_alloc()->ie;
 }
@@ -81,7 +81,7 @@ int q931_ie_high_layer_compatibility_read_from_buf(
 	ie->characteristics_identification =
 		oct_4->characteristics_identification;
 
-	if (oct_4->ext) {
+	if (!oct_4->ext) {
 		if (len < 3) {
 			report_ie(abstract_ie, LOG_ERR, "IE size < 3\n");
 			return FALSE;
