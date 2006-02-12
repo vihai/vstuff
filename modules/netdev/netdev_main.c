@@ -261,14 +261,12 @@ static void vnd_chan_e_release(struct visdn_chan *visdn_chan)
 
 static int vnd_chan_e_open(struct visdn_chan *visdn_chan)
 {
-	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
-
 	vnd_debug(3, "vnd_chan_e_open()\n");
 
 	return 0;
 }
 
-static int vnd_chan_close(struct visdn_chan *visdn_chan)
+static int vnd_chan_e_close(struct visdn_chan *visdn_chan)
 {
 	vnd_debug(3, "vnd_chan_e_close()\n");
 
@@ -622,7 +620,7 @@ static int vnd_cdev_ioctl_do_create(
 
 	netdevice->visdn_chan_e.driver_data = netdevice;
 
-	netdevice->visdn_chan_e.ops = &vnd_chan_ops;
+	netdevice->visdn_chan_e.ops = &vnd_chan_ops_e;
 	netdevice->visdn_chan_e.chan_class = &vnd_class_echan;
 	netdevice->visdn_chan_e.port = &vnd_port;
 
