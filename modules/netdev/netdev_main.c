@@ -250,6 +250,31 @@ static void vnd_chan_tx_error(
 	}
 }
 
+static void vnd_chan_e_release(struct visdn_chan *visdn_chan)
+{
+	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
+
+	vnd_debug(3, "vnd_chan_e_release()\n");
+
+	vnd_netdevice_put(netdevice);
+}
+
+static int vnd_chan_e_open(struct visdn_chan *visdn_chan)
+{
+	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
+
+	vnd_debug(3, "vnd_chan_e_open()\n");
+
+	return 0;
+}
+
+static int vnd_chan_close(struct visdn_chan *visdn_chan)
+{
+	vnd_debug(3, "vnd_chan_e_close()\n");
+
+	return 0;
+}
+
 static int vnd_chan_e_frame_xmit(
 	struct visdn_leg *visdn_leg,
 	struct sk_buff *skb)
@@ -305,6 +330,14 @@ struct visdn_leg_ops vnd_chan_leg_ops = {
 
 	.rx_error		= vnd_chan_rx_error,
 	.tx_error		= vnd_chan_tx_error,
+};
+
+struct visdn_chan_ops vnd_chan_ops_e = {
+	.owner			= THIS_MODULE,
+
+	.release		= vnd_chan_e_release,
+	.open			= vnd_chan_e_open,
+	.close			= vnd_chan_e_close,
 };
 
 struct visdn_leg_ops vnd_chan_leg_e_ops = {
