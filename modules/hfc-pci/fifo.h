@@ -19,7 +19,8 @@
 
 struct hfc_fifo
 {
-	struct hfc_st_chan *chan;
+	struct hfc_card *card;
+	struct hfc_st_chan *connected_chan;
 
 	int id;
 	enum hfc_direction direction;
@@ -70,7 +71,7 @@ extern void hfc_fifo_configure(struct hfc_fifo *fifo);
 
 extern void hfc_fifo_init(
 	struct hfc_fifo *fifo,
-	struct hfc_st_chan *chan,
+	struct hfc_card *card,
 	int hw_index,
 	enum hfc_direction direction,
 	int base_off,

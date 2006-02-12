@@ -319,10 +319,12 @@ void hfc_st_port_update_sctrl(struct hfc_st_port *port)
 	if (port->sq_enabled)
 		sctrl |= hfc_SCTRL_SQ_ENA;
 
-	if (port->chans[B1].tx_fifo.enabled)
+	if (port->chans[B1].tx_fifo &&
+	    port->chans[B1].tx_fifo->enabled)
 		sctrl |= hfc_SCTRL_B1_ENA;
 
-	if (port->chans[B2].tx_fifo.enabled)
+	if (port->chans[B2].tx_fifo &&
+	    port->chans[B2].tx_fifo->enabled)
 		sctrl |= hfc_SCTRL_B2_ENA;
 
 	hfc_outb(port->card, hfc_SCTRL, sctrl);
@@ -332,10 +334,12 @@ void hfc_st_port_update_sctrl_r(struct hfc_st_port *port)
 {
 	u8 sctrl_r = 0;
 
-	if (port->chans[B1].rx_fifo.enabled)
+	if (port->chans[B1].rx_fifo &&
+	    port->chans[B1].rx_fifo->enabled)
 		sctrl_r |= hfc_SCTRL_R_B1_ENA;
 
-	if (port->chans[B2].rx_fifo.enabled)
+	if (port->chans[B2].rx_fifo &&
+	    port->chans[B2].rx_fifo->enabled)
 		sctrl_r |= hfc_SCTRL_R_B2_ENA;
 
 	hfc_outb(port->card, hfc_SCTRL_R, sctrl_r);
@@ -346,18 +350,6 @@ void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 	hfc_outb(port->card, hfc_CLKDEL,
 		hfc_CLKDEL_ST_CLK_DLY(port->clock_delay) |
 		hfc_CLKDEL_ST_SMPL(port->sampling_comp));
-}
-
-static void hfc_st_port_fifo_update(struct hfc_st_port *port)
-{
-	int i;
-
-	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
-		if (port->chans[i].has_real_fifo) {
-			hfc_fifo_configure(&port->chans[i].rx_fifo);
-			hfc_fifo_configure(&port->chans[i].tx_fifo);
-		}
-	}
 }
 
 static void hfc_st_port_state_change_nt(
@@ -385,7 +377,7 @@ static void hfc_st_port_state_change_nt(
 			visdn_port_error_indication(&port->visdn_port);
 			visdn_port_deactivated(&port->visdn_port);
 
-			hfc_st_port_fifo_update(port);
+			hfc_card_fifo_update(card);
 		}
 	break;
 
@@ -397,7 +389,7 @@ static void hfc_st_port_state_change_nt(
 
 	case 4:
 		visdn_port_deactivated(&port->visdn_port);
-		hfc_st_port_fifo_update(port);
+		hfc_card_fifo_update(card);
 	break;
 	}
 
@@ -408,6 +400,8 @@ static void hfc_st_port_state_change_te(
 	struct hfc_st_port *port,
 	u8 old_state, u8 new_state)
 {
+	struct hfc_card *card = port->card;
+
 	hfc_debug_st_port(port, 1,
 		"layer 1 state = F%d => F%d\n",
 		old_state,
@@ -418,7 +412,7 @@ static void hfc_st_port_state_change_te(
 	case 1:
 		visdn_port_deactivated(&port->visdn_port);
 
-		hfc_st_port_fifo_update(port);
+		hfc_card_fifo_update(card);
 
 		if (old_state != 3)
 			visdn_port_disconnected(&port->visdn_port);
@@ -433,7 +427,7 @@ static void hfc_st_port_state_change_te(
 	case 3:
 		visdn_port_deactivated(&port->visdn_port);
 
-		hfc_st_port_fifo_update(port);
+		hfc_card_fifo_update(card);
 
 		if (old_state == 8)
 			visdn_port_error_indication(&port->visdn_port);
@@ -530,7 +524,7 @@ static void hfc_st_port_fifo_activation_work(void *data)
 
 	hfc_card_lock(card);
 
-	hfc_st_port_fifo_update(port);
+	hfc_card_fifo_update(card);
 
 	hfc_card_unlock(card);
 }
@@ -629,75 +623,16 @@ void hfc_st_port_init(
 	port->visdn_port.device = &card->pci_dev->dev;
 	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
-	hfc_st_chan_init(&port->chans[D], port, "D", D, 1);
-	hfc_st_chan_init(&port->chans[B1], port, "B1", B1, 1);
-	hfc_st_chan_init(&port->chans[B2], port, "B2", B2, 1);
-	hfc_st_chan_init(&port->chans[E], port, "E", E, 0);
-	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ, 0);
+	hfc_st_chan_init(&port->chans[D], port, "D", D);
+	hfc_st_chan_init(&port->chans[B1], port, "B1", B1);
+	hfc_st_chan_init(&port->chans[B2], port, "B2", B2);
+	hfc_st_chan_init(&port->chans[E], port, "E", E);
+	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ);
 
-	hfc_fifo_init(
-		&port->chans[D].rx_fifo,
-		&port->chans[D], D, RX,
-		0x4000,
-		0x4000,
-		0x6080, 0x6082,
-		0x0000, 0x01FF,
-		0x10, 0x1F,
-		0x60a0, 0x60a1);
-
-	hfc_fifo_init(
-		&port->chans[D].tx_fifo,
-		&port->chans[D], D, TX,
-		0x0000,
-		0x0000,
-		0x2080, 0x2082,
-		0x0000, 0x01FF,
-		0x10, 0x1F,
-		0x20a0, 0x20a1);
-
-	hfc_fifo_init(
-		&port->chans[B1].rx_fifo,
-		&port->chans[B1], B1, RX,
-		0x4200,
-		0x4000,
-		0x6000, 0x6002,
-		0x0200, 0x1FFF,
-		0x00, 0x1F,
-		0x6080, 0x6081);
-
-	hfc_fifo_init(
-		&port->chans[B1].tx_fifo,
-		&port->chans[B1], B1, TX,
-		0x0200,
-		0x0000,
-		0x2000, 0x2002,
-		0x0200, 0x1FFF,
-		0x00, 0x1F,
-		0x2080, 0x2081);
-
-	hfc_fifo_init(
-		&port->chans[B2].rx_fifo,
-		&port->chans[B2], B2, RX,
-		0x6200,
-		0x6000,
-		0x6100, 0x6102,
-		0x0200, 0x1FFF,
-		0x00, 0x1F,
-		0x6180, 0x6181);
-
-	hfc_fifo_init(
-		&port->chans[B2].tx_fifo,
-		&port->chans[B2], B2, TX,
-		0x2200,
-		0x2000,
-		0x2100, 0x2102,
-		0x0200, 0x1FFF,
-		0x00, 0x1F,
-		0x2180, 0x2181);
-
-	port->chans[D].visdn_chan.leg_b.mtu = port->chans[D].tx_fifo.size;
-	port->chans[B1].visdn_chan.leg_b.mtu = port->chans[B1].tx_fifo.size;
-	port->chans[B2].visdn_chan.leg_b.mtu = port->chans[B2].tx_fifo.size;
+printk(KERN_INFO "AAAAAAAAAAAAAAAAAAAAA %d\n", card->fifos[hfc_FIFO_D][TX].size);
+	port->chans[D].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_D][TX].size;
+	port->chans[B1].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_B1][TX].size;
+	port->chans[B2].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_B2][TX].size;
 }
 
 int hfc_st_port_register(struct hfc_st_port *port)

@@ -27,9 +27,8 @@ struct hfc_st_chan {
 
 	int id;
 
-	int has_real_fifo;
-	struct hfc_fifo rx_fifo;
-	struct hfc_fifo tx_fifo;
+	struct hfc_fifo *rx_fifo;
+	struct hfc_fifo *tx_fifo;
 
 	struct visdn_chan visdn_chan;
 
@@ -40,8 +39,7 @@ extern void hfc_st_chan_init(
 	struct hfc_st_chan *chan,
 	struct hfc_st_port *port,
 	const char *name,
-	int id,
-	int has_real_fifo);
+	int id);
 
 extern int hfc_st_chan_register(struct hfc_st_chan *chan);
 extern void hfc_st_chan_unregister(struct hfc_st_chan *chan);

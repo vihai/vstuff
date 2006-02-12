@@ -53,12 +53,9 @@ static ssize_t hfc_show_fifo_state(
 		"Fifo#  F1 F2   Z1   Z2 Used      F1 F2   Z1   Z2 Used"
 		" Connected\n");
 
-	for (i=0; i<ARRAY_SIZE(card->st_port.chans); i++) {
-		struct hfc_fifo *fifo_rx = &card->st_port.chans[i].rx_fifo;
-		struct hfc_fifo *fifo_tx = &card->st_port.chans[i].tx_fifo;
-
-		if (!card->st_port.chans[i].has_real_fifo)
-			continue;
+	for (i=0; i<ARRAY_SIZE(card->fifos); i++) {
+		struct hfc_fifo *fifo_rx = &card->fifos[i][RX];
+		struct hfc_fifo *fifo_tx = &card->fifos[i][TX];
 
 		sanprintf(buf, PAGE_SIZE,
 			"%2d     %02x %02x %04x %04x %4d %c%c%c"
@@ -81,13 +78,17 @@ static ssize_t hfc_show_fifo_state(
 			fifo_tx->enabled ? 'E' : ' ',
 			hfc_fifo_is_running(fifo_tx) ? 'R' : ' ');
 
-		sanprintf(buf, PAGE_SIZE,
-			" st:%s",
-			card->st_port.chans[i].visdn_chan.name);
+		if (fifo_tx->connected_chan) {
+			sanprintf(buf, PAGE_SIZE,
+				" st:%s",
+				fifo_tx->connected_chan->visdn_chan.name);
+		}
 
-		sanprintf(buf, PAGE_SIZE,
-			" st:%s",
-			card->st_port.chans[i].visdn_chan.name);
+		if (fifo_rx->connected_chan) {
+			sanprintf(buf, PAGE_SIZE,
+				" st:%s",
+				fifo_rx->connected_chan->visdn_chan.name);
+		}
 
 		sanprintf(buf, PAGE_SIZE, "\n");
 	}
@@ -211,21 +212,34 @@ void hfc_initialize_hw(struct hfc_card *card)
 	hfc_outb(card, hfc_INT_M2, card->regs.m2);
 }
 
+void hfc_card_fifo_update(struct hfc_card *card)
+{
+	int i;
+
+	for (i=0; i<ARRAY_SIZE(card->fifos); i++) {
+		hfc_fifo_configure(&card->fifos[i][RX]);
+		hfc_fifo_configure(&card->fifos[i][TX]);
+	}
+}
+
 /******************************************
  * Interrupt Handler
  ******************************************/
 
-static inline void hfc_handle_fifo_rx_interrupt(struct hfc_st_chan *chan)
+static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 {
-	schedule_work(&chan->rx_work);
+	if (fifo->connected_chan)
+		schedule_work(&fifo->connected_chan->rx_work);
 }
 
-static inline void hfc_handle_fifo_tx_interrupt(struct hfc_st_chan *chan)
+static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
-	if (visdn_leg_queue_stopped(&chan->visdn_chan.leg_b)) {
-		if (hfc_fifo_free_frames(&chan->tx_fifo) &&
-		    hfc_fifo_free_tx(&chan->tx_fifo) > 20)
-			visdn_leg_wake_queue(&chan->visdn_chan.leg_b);
+	if (fifo->connected_chan &&
+	    visdn_leg_queue_stopped(&fifo->connected_chan->visdn_chan.leg_b)) {
+		if (hfc_fifo_free_frames(fifo) &&
+		    hfc_fifo_free_tx(fifo) > 20)
+			visdn_leg_wake_queue(
+				&fifo->connected_chan->visdn_chan.leg_b);
 	}
 }
 
@@ -288,22 +302,28 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			hfc_handle_state_interrupt(&card->st_port);
 
 		if (s1 & hfc_INT_S1_DREC)
-			hfc_handle_fifo_rx_interrupt(&card->st_port.chans[D]);
+			hfc_handle_fifo_rx_interrupt(
+				&card->fifos[hfc_FIFO_D][RX]);
 
 		if (s1 & hfc_INT_S1_B1REC)
-			hfc_handle_fifo_rx_interrupt(&card->st_port.chans[B1]);
+			hfc_handle_fifo_rx_interrupt(
+				&card->fifos[hfc_FIFO_B1][RX]);
 
 		if (s1 & hfc_INT_S1_B2REC)
-			hfc_handle_fifo_rx_interrupt(&card->st_port.chans[B2]);
+			hfc_handle_fifo_rx_interrupt(
+				&card->fifos[hfc_FIFO_B2][RX]);
 
 		if (s1 & hfc_INT_S1_DTRANS)
-			hfc_handle_fifo_tx_interrupt(&card->st_port.chans[D]);
+			hfc_handle_fifo_tx_interrupt(
+				&card->fifos[hfc_FIFO_D][TX]);
 
-		if (s1 & hfc_INT_S1_B1TRANS)
-			hfc_handle_fifo_tx_interrupt(&card->st_port.chans[B1]);
+		if (s1 & hfc_INT_S1_B1TRANS)                                     
+			hfc_handle_fifo_tx_interrupt(
+				&card->fifos[hfc_FIFO_B1][TX]);
 
-		if (s1 & hfc_INT_S1_B2TRANS)
-			hfc_handle_fifo_tx_interrupt(&card->st_port.chans[B2]);
+		if (s1 & hfc_INT_S1_B2TRANS)                                     
+			hfc_handle_fifo_tx_interrupt(
+				&card->fifos[hfc_FIFO_B2][TX]);
 	}
 
 	if (s2 != 0) {
@@ -445,6 +465,72 @@ int __devinit hfc_card_probe(
 			"unable to register irq\n");
 		goto err_request_irq;
 	}
+
+	hfc_fifo_init(
+		&card->fifos[hfc_FIFO_D][RX],
+		card,
+		D, RX,
+		0x4000,
+		0x4000,
+		0x6080, 0x6082,
+		0x0000, 0x01FF,
+		0x10, 0x1F,
+		0x60a0, 0x60a1);
+
+	hfc_fifo_init(
+		&card->fifos[hfc_FIFO_D][TX],
+		card,
+		D, TX,
+		0x0000,
+		0x0000,
+		0x2080, 0x2082,
+		0x0000, 0x01FF,
+		0x10, 0x1F,
+		0x20a0, 0x20a1);
+
+	hfc_fifo_init(
+		&card->fifos[hfc_FIFO_B1][RX],
+		card,
+		B1, RX,
+		0x4200,
+		0x4000,
+		0x6000, 0x6002,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x6080, 0x6081);
+
+	hfc_fifo_init(
+		&card->fifos[hfc_FIFO_B1][TX],
+		card,
+		B1, TX,
+		0x0200,
+		0x0000,
+		0x2000, 0x2002,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x2080, 0x2081);
+
+	hfc_fifo_init(
+		&card->fifos[hfc_FIFO_B2][RX],
+		card,
+		B2, RX,
+		0x6200,
+		0x6000,
+		0x6100, 0x6102,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x6180, 0x6181);
+
+	hfc_fifo_init(
+		&card->fifos[hfc_FIFO_B2][TX],
+		card,
+		B2, TX,
+		0x2200,
+		0x2000,
+		0x2100, 0x2102,
+		0x0200, 0x1FFF,
+		0x00, 0x1F,
+		0x2180, 0x2181);
 
 	hfc_st_port_init(&card->st_port, card, "st0");
 	hfc_pcm_port_init(&card->pcm_port, card, "pcm");

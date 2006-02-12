@@ -237,20 +237,8 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	chan->rx_fifo.enabled = TRUE;
-	chan->tx_fifo.enabled = TRUE;
-
-	if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
-		chan->rx_fifo.framer_enabled = FALSE;
-		chan->tx_fifo.framer_enabled = FALSE;
-		chan->rx_fifo.bit_reversed = TRUE;
-		chan->tx_fifo.bit_reversed = TRUE;
-	} else if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_HDLC) {
-		chan->rx_fifo.framer_enabled = TRUE;
-		chan->tx_fifo.framer_enabled = TRUE;
-		chan->rx_fifo.bit_reversed = FALSE;
-		chan->tx_fifo.bit_reversed = FALSE;
-	} else {
+	if (chan->visdn_chan.leg_b.framing != VISDN_LEG_FRAMING_NONE &&
+	    chan->visdn_chan.leg_b.framing != VISDN_LEG_FRAMING_HDLC) {
 		hfc_debug_chan(chan, 1,
 			"open failed: unsupported framing %d\n",
 			chan->visdn_chan.leg_b.framing);
@@ -258,44 +246,25 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		goto err_invalid_framing;
 	}
 
-	hfc_fifo_reset(&chan->rx_fifo);
-	hfc_fifo_configure(&chan->rx_fifo);
-
-	hfc_fifo_reset(&chan->tx_fifo);
-	hfc_fifo_configure(&chan->tx_fifo);
-
-/*
 	switch(chan->id) {
+	case D:
+		chan->rx_fifo = &card->fifos[hfc_FIFO_D][RX];
+		chan->tx_fifo = &card->fifos[hfc_FIFO_D][TX];
+	break;
+
+	case B1:
+		chan->rx_fifo = &card->fifos[hfc_FIFO_B1][RX];
+		chan->tx_fifo = &card->fifos[hfc_FIFO_B1][TX];
+	break;
+
+	case B2:
+		chan->rx_fifo = &card->fifos[hfc_FIFO_B2][RX];
+		chan->tx_fifo = &card->fifos[hfc_FIFO_B2][TX];
+	break;
+
 	case E:
-		if (port->chans[B2].status == HFC_CHAN_STATUS_FREE) {
-			port->chans[B2].status = HFC_CHAN_STATUS_OPEN_E_AUX;
-
-			chan->port->card->regs.connect &= hfc_CONNECT_B2_MASK;
-			chan->port->card->regs.connect |=
-				hfc_CONNECT_B2_HFC_from_ST |
-				hfc_CONNECT_B2_ST_from_HFC |
-				hfc_CONNECT_B2_GCI_from_HFC;
-
-			chan->port->card->regs.m1 |= hfc_INT_M1_B2REC;
-			chan->port->card->regs.fifo_en |= hfc_FIFO_EN_B2;
-			chan->port->card->regs.ctmt &= ~hfc_CTMT_TRANSB2;
-
-		} else if(port->chans[B1].status == HFC_CHAN_STATUS_FREE) {
-
-			// We should switch B1/B2
-
-			hfc_debug_chan(chan, 1, "B2 channel busy\n");
-
-			err = -EBUSY;
-			goto err_busy;
-
-		} else {
-			hfc_debug_chan(chan, 1,
-				"No B channel available for E AUX\n");
-
-			err = -EBUSY;
-			goto err_busy;
-		}
+		chan->rx_fifo = &card->fifos[hfc_FIFO_B2][RX];
+		chan->tx_fifo = &card->fifos[hfc_FIFO_B2][TX];
 
 		card->regs.trm |= hfc_TRM_ECHO;
 	break;
@@ -303,7 +272,49 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		err = -ENOTSUPP;
 		goto err_invalid_chan;
 	}
-*/
+
+	if ((chan->rx_fifo && chan->rx_fifo->connected_chan) ||
+	    (chan->tx_fifo && chan->tx_fifo->connected_chan)) {
+		err = -EBUSY;
+		goto err_fifo_busy;
+	}
+
+	if (chan->rx_fifo) {
+		chan->rx_fifo->connected_chan = chan;
+		chan->rx_fifo->enabled = TRUE;
+
+		if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
+			chan->rx_fifo->framer_enabled = FALSE;
+			chan->rx_fifo->bit_reversed = TRUE;
+
+		} else if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_HDLC) {
+			chan->rx_fifo->framer_enabled = TRUE;
+			chan->rx_fifo->bit_reversed = FALSE;
+		}
+
+		hfc_fifo_reset(chan->rx_fifo);
+		hfc_fifo_configure(chan->rx_fifo);
+	}
+
+	if (chan->rx_fifo) {
+		chan->tx_fifo->connected_chan = chan;
+		chan->tx_fifo->enabled = TRUE;
+
+		if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
+			chan->tx_fifo->framer_enabled = FALSE;
+			chan->tx_fifo->bit_reversed = TRUE;
+		} else if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_HDLC) {
+			chan->tx_fifo->framer_enabled = TRUE;
+			chan->tx_fifo->bit_reversed = FALSE;
+		}
+
+		hfc_fifo_reset(chan->tx_fifo);
+		hfc_fifo_configure(chan->tx_fifo);
+	}
+
+	hfc_outb(card, hfc_TRM, card->regs.trm);
+	hfc_st_port_update_sctrl(chan->port);
+	hfc_st_port_update_sctrl_r(chan->port);
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
@@ -313,6 +324,10 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 	return 0;
 
 err_invalid_framing:
+err_fifo_busy:
+err_invalid_chan:
+	chan->tx_fifo = NULL;
+	chan->rx_fifo = NULL;
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:
 	hfc_card_unlock(card);
@@ -334,14 +349,34 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	chan->rx_fifo.enabled = FALSE;
-	chan->tx_fifo.enabled = FALSE;
+	switch(chan->id) {
+	case E:
+		card->regs.trm &= ~hfc_TRM_ECHO;
+	}
 
-	hfc_fifo_reset(&chan->rx_fifo);
-	hfc_fifo_configure(&chan->rx_fifo);
+	if (chan->rx_fifo) {
+		chan->rx_fifo->enabled = FALSE;
 
-	hfc_fifo_reset(&chan->tx_fifo);
-	hfc_fifo_configure(&chan->tx_fifo);
+		hfc_fifo_reset(chan->rx_fifo);
+		hfc_fifo_configure(chan->rx_fifo);
+
+		chan->rx_fifo->connected_chan = NULL;
+		chan->rx_fifo = NULL;
+	}
+
+	if (chan->tx_fifo) {
+		chan->tx_fifo->enabled = FALSE;
+
+		hfc_fifo_reset(chan->tx_fifo);
+		hfc_fifo_configure(chan->tx_fifo);
+
+		chan->tx_fifo->connected_chan = NULL;
+		chan->tx_fifo = NULL;
+	}
+
+	hfc_outb(card, hfc_TRM, card->regs.trm);
+	hfc_st_port_update_sctrl(chan->port);
+	hfc_st_port_update_sctrl_r(chan->port);
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
@@ -363,9 +398,12 @@ static int hfc_st_chan_frame_xmit(
 {
 	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
-	struct hfc_fifo *fifo = &chan->tx_fifo;
+	struct hfc_fifo *fifo = chan->tx_fifo;
 
 	hfc_card_lock(card);
+
+	if (!fifo)
+		goto no_fifo;
 
 	hfc_st_port_check_l1_up(chan->port);
 
@@ -417,6 +455,7 @@ static int hfc_st_chan_frame_xmit(
 	*Z1_F1(fifo) = newz1;
 	}
 
+no_fifo:
 	hfc_card_unlock(card);
 
 	visdn_kfree_skb(skb);
@@ -434,13 +473,16 @@ void hfc_st_chan_rx_work(void *data)
 {
 	struct hfc_st_chan *chan = data;
 	struct hfc_card *card = chan->port->card;
-	struct hfc_fifo *fifo = &chan->rx_fifo;
+	struct hfc_fifo *fifo = chan->rx_fifo;
 	struct sk_buff *skb;
 	int frame_size;
 	u16 newz2;
 	struct { u8 crc[2], stat; } __attribute((packed)) stat;
 
 	hfc_card_lock(card);
+
+	if (!fifo)
+		goto err_no_fifo;
 
 	if (!hfc_fifo_has_frames(fifo))
 		goto no_frames;
@@ -557,6 +599,7 @@ all_went_well:
 	if (hfc_fifo_has_frames(fifo))
 		schedule_work(&chan->rx_work);
 
+err_no_fifo:
 	hfc_card_unlock(card);
 }
 
@@ -572,15 +615,18 @@ static ssize_t hfc_st_chan_read(
 
 	hfc_card_lock(card);
 
-	copied_octets = hfc_fifo_used_rx(&chan->rx_fifo);
-	if (copied_octets > count)
-		copied_octets = count;
+	if (chan->rx_fifo) {
+		copied_octets = hfc_fifo_used_rx(chan->rx_fifo);
+		if (copied_octets > count)
+			copied_octets = count;
 
-	 hfc_fifo_mem_read(&chan->rx_fifo, buf, copied_octets);
+		hfc_fifo_mem_read(chan->rx_fifo, buf, copied_octets);
 
-	*Z2_F2(&chan->rx_fifo) = Z_inc(&chan->rx_fifo,
-					*Z2_F2(&chan->rx_fifo),
-					copied_octets);
+		*Z2_F2(chan->rx_fifo) = Z_inc(chan->rx_fifo,
+						*Z2_F2(chan->rx_fifo),
+						copied_octets);
+	} else
+		copied_octets = -EINVAL;
 
 	hfc_card_unlock(card);
 
@@ -597,15 +643,18 @@ static ssize_t hfc_st_chan_write(
 
 	hfc_card_lock(card);
 
-	copied_octets = hfc_fifo_free_tx(&chan->tx_fifo);
-	if (copied_octets > count)
-		copied_octets = count;
+	if (chan->tx_fifo) {
+		copied_octets = hfc_fifo_free_tx(chan->tx_fifo);
+		if (copied_octets > count)
+			copied_octets = count;
 
-	hfc_fifo_mem_write(&chan->tx_fifo, buf, copied_octets);
+		hfc_fifo_mem_write(chan->tx_fifo, buf, copied_octets);
 
-	*Z1_F1(&chan->tx_fifo) = Z_inc(&chan->tx_fifo,
-					*Z1_F1(&chan->tx_fifo),
-					count);
+		*Z1_F1(chan->tx_fifo) = Z_inc(chan->tx_fifo,
+						*Z1_F1(chan->tx_fifo),
+						count);
+	} else
+		copied_octets = -EINVAL;
 
 	hfc_card_unlock(card);
 
@@ -660,13 +709,10 @@ void hfc_st_chan_init(
 	struct hfc_st_chan *chan,
 	struct hfc_st_port *port,
 	const char *name,
-	int id,
-	int has_real_fifo)
+	int id)
 {
 	chan->port = port;
 	chan->id = id;
-
-	chan->has_real_fifo = has_real_fifo;
 
 	visdn_chan_init(&chan->visdn_chan);
 	chan->visdn_chan.ops = &hfc_st_chan_ops;

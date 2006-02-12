@@ -43,6 +43,10 @@
 		(card)->pci_dev->dev.bus_id,		\
 		## arg)
 
+#define hfc_FIFO_B1 0
+#define hfc_FIFO_B2 1
+#define hfc_FIFO_D 2
+
 struct hfc_card
 {
 	spinlock_t lock;
@@ -75,15 +79,19 @@ struct hfc_card
 	struct hfc_st_port st_port;
 	struct hfc_pcm_port pcm_port;
 
+	struct hfc_fifo fifos[3][2];
+
 	int debug_event;
 };
 
-extern void hfc_softreset(struct hfc_card *card);
-extern void hfc_initialize_hw(struct hfc_card *card);
+void hfc_softreset(struct hfc_card *card);
+void hfc_initialize_hw(struct hfc_card *card);
 
-extern int __devinit hfc_card_probe(
+int __devinit hfc_card_probe(
 	struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry);
-extern void __devexit hfc_card_remove(struct hfc_card *card);
+void __devexit hfc_card_remove(struct hfc_card *card);
+
+void hfc_card_fifo_update(struct hfc_card *card);
 
 #endif

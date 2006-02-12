@@ -25,8 +25,8 @@
 			"%s-%s:"				\
 			"fifo[%d,%s]:"				\
 			format,					\
-			(fifo)->chan->port->card->pci_dev->dev.bus->name, \
-			(fifo)->chan->port->card->pci_dev->dev.bus_id,	\
+			(fifo)->card->pci_dev->dev.bus->name,	\
+			(fifo)->card->pci_dev->dev.bus_id,	\
 			(fifo)->id,				\
 			(fifo)->direction == RX ? "RX" : "TX",	\
 			## arg)
@@ -39,8 +39,8 @@
 		"%s-%s:"				\
 		"fifo[%d,%s]:"				\
 		format,					\
-		(fifo)->chan->port->card->pci_dev->dev.bus->name, \
-		(fifo)->chan->port->card->pci_dev->dev.bus_id,	\
+		(fifo)->card->pci_dev->dev.bus->name, \
+		(fifo)->card->pci_dev->dev.bus_id,	\
 		(fifo)->id,			\
 		(fifo)->direction == RX ? "RX" : "TX",	\
 		## arg)
@@ -215,21 +215,22 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 int hfc_fifo_is_running(struct hfc_fifo *fifo)
 {
-	if (!fifo->enabled ||
-	    (((fifo->chan->port->nt_mode &&
-	      fifo->chan->port->l1_state != 3) ||
-	     (!fifo->chan->port->nt_mode &&
-	      fifo->chan->port->l1_state != 7)))) {
-		return FALSE;
-	} else {
+	if (fifo->enabled &&
+	    fifo->connected_chan &&
+	    (((fifo->connected_chan->port->nt_mode &&
+	      fifo->connected_chan->port->l1_state == 3) ||
+	     (!fifo->connected_chan->port->nt_mode &&
+	      fifo->connected_chan->port->l1_state == 7)))) {
 		return TRUE;
+	} else {
+		return FALSE;
 	}
 }
 
 void hfc_fifo_configure(
 	struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	switch(fifo->id) {
 	case D:
@@ -303,14 +304,11 @@ void hfc_fifo_configure(
 	hfc_outb(card, hfc_FIFO_EN, card->regs.fifo_en);
 	hfc_outb(card, hfc_CONNECT, card->regs.connect);
 //	hfc_outb(card, hfc_TRM, card->regs.trm);
-
-	hfc_st_port_update_sctrl(fifo->chan->port);
-	hfc_st_port_update_sctrl_r(fifo->chan->port);
 }
 
 void hfc_fifo_init(
 	struct hfc_fifo *fifo,
-	struct hfc_st_chan *chan,
+	struct hfc_card *card,
 	int id,
 	enum hfc_direction direction,
 	int base_off,
@@ -320,11 +318,9 @@ void hfc_fifo_init(
 	int f_min, int f_max,
 	int f1_off, int f2_off)
 {
-	struct hfc_card *card = chan->port->card;
-
 	fifo->id = id;
 	fifo->direction = direction;
-	fifo->chan = chan;
+	fifo->card = card;
 
 	fifo->mem_base	= card->fifo_mem + base_off;
 	fifo->z_base    = card->fifo_mem + z_off;
