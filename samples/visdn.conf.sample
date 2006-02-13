@@ -13,6 +13,17 @@
 ; read anyway but its status will be marked as "UNUSED" in
 ; "show visdn interfaces" output, ready for when the interface comes up.
 ;
+; Alternatively, if prefixed by hungroup: an entry describes a huntgroup.
+; The hunting method is specified by:
+;
+; mode = sequential
+;		(sequential | rotary)
+; 	Type of hunting to perform in the hungroup
+;
+; members = ""
+;	List the members (interface names) belonging to the huntgroup.
+;	The order is preserved in the hunting process.
+;
 ; Here follow the configuration directives available in [global] and
 ; interface-specific sections. "role" indicates for which interface role
 ; the directive is meaningful.
@@ -188,6 +199,7 @@ call_bumping = No
 
 [huntgroup:telco]
 mode = sequential
+members = visdn1.0 visdn1.1
 
 [visdn0]
 network_role = private
@@ -216,8 +228,6 @@ clip_numbers = 200
 clir_mode = default_off
 overlap_sending = Yes
 overlap_receiving = No
-hunt_member_of = telco
-hunt_channels = all
 
 [visdn1.1]
 network_role = private
@@ -232,8 +242,6 @@ clip_default_number = 201
 clip_numbers = 201
 overlap_sending = Yes
 overlap_receiving = No
-hunt_member_of = telco
-hunt_channels = all
 
 [visdn1.2]
 network_role = private
