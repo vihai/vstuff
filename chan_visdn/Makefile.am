@@ -1,7 +1,21 @@
 
 astmod_LTLIBRARIES = chan_visdn.la
-chan_visdn_la_SOURCES = chan_visdn.c intf.c huntgroup.c ton.c overlap.c
-noinst_HEADERS = chan_visdn.h intf.h huntgroup.h ton.h overlap.h util.h
+chan_visdn_la_SOURCES = \
+	chan_visdn.c	\
+	intf.c		\
+	huntgroup.c	\
+	ton.c		\
+	overlap.c	\
+	numbers_list.c
+		
+noinst_HEADERS = \
+	chan_visdn.h	\
+	intf.h		\
+	huntgroup.h	\
+	ton.h		\
+	overlap.h	\
+	numbers_list.h	\
+	util.h
 
 INCLUDES =					\
 	-I$(top_builddir)			\

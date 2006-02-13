@@ -22,13 +22,10 @@ Build system:
 chan_visdn:
 -----------
 
-- Implement filtering to determine bearer compatibility
-- Add more environment variables beside BEARERCAP_RAW
 - When the module fails initialization, forbid calls and report an error
 - Record call failures and failure type in order to put an interface offline
   if not working.
 - Make call parking feature enabling configurable
-- The network should be able to refuse certain bearer capabilities
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
 - MWI on ISDN phones
@@ -39,6 +36,9 @@ chan_visdn:
 - Complete sequence if the user is sending partial CLI
 - When lapd module is removed the poll routine goes in infinite loop with
   DL-RELEASE-CONFIRM return codes
+- When the remote party responds RELEASE COMPLETE with "User Busy" cause
+  we respond to * "CHANUNAVAIL"
+- overlap_sending=off does not send sending complete
 
 libq931:
 --------
@@ -63,8 +63,6 @@ libq931:
 
 app_visdn_ppp:
 --------------
-
-- Handle hangup
 
 timer:
 ------

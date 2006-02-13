@@ -78,7 +78,10 @@ struct visdn_chan {
 	struct q931_call *q931_call;
 	struct visdn_suspended_call *suspended_call;
 
+	__u8 buf[512];
+
 	int is_voice;
+	int handle_stream;
 
 	int sp_fd;
 	int ec_fd;
@@ -90,9 +93,12 @@ struct visdn_chan {
 
 	int sending_complete;
 
+	int channel_has_been_connected;
 	int inband_info;
 
 	char number[32];
+	int sent_digits;
+
 	char options[16];
 
 	char dtmf_queue[20];
@@ -142,7 +148,7 @@ struct visdn_state
 	int debug_q931;
 	int debug_q921;
 
-	struct visdn_interface default_intf;
+	struct visdn_interface *default_intf;
 };
 
 extern struct visdn_state visdn;

@@ -34,6 +34,7 @@
 #include <libq931/output.h>
 #include <libq931/input.h>
 #include <libq931/global.h>
+#include <libq931/dummy.h>
 #include <libq931/ces.h>
 #include <libq931/call.h>
 #include <libq931/intf.h>
@@ -275,7 +276,7 @@ static void q931_decode_ie(
 		if (q931_ie_comprehension_required(ie_id)) {
 
 			q931_ieid_add_to_list(msg, &ds->unrecognized_ies,
-				ie_class->codeset, ie_class->id);
+				codeset, ie_id);
 
 			report_msg(msg, LOG_DEBUG,
 				"!! Unrecognized IE %d:%d in message"
@@ -298,17 +299,21 @@ static void q931_decode_ie(
 	ie_usage = q931_get_ie_usage(msg->message_type, codeset, ie_id);
 
 	if (!ie_usage) {
-		report_msg(msg, LOG_NOTICE,
-			"!! Unexpected IE %s (%d) in message type %s\n",
-			ie_class->name,
-			ie_class->id,
-			q931_message_type_to_text(
-				msg->message_type));
+		if (q931_ie_comprehension_required(ie_id)) {
+
+			q931_ieid_add_to_list(msg, &ds->unrecognized_ies,
+				codeset, ie_id);
+
+			report_msg(msg, LOG_DEBUG,
+				"!! Unrecognized IE %d:%d in message"
+				" for which comprehension is required\n",
+				codeset, ie_id);
+		}
 
 		return;
 	}
 
-	// Ignore IEs appearing more than "man_occur" times
+	// Ignore IEs appearing more than "max_occur" times
 	if (ie_class->max_occur > 0 && ie_class->max_occur != INT_MAX) {
 		int i;
 		int count = 0;
@@ -318,8 +323,12 @@ static void q931_decode_ie(
 				count++;
 		}
 
-		if (count > ie_class->max_occur)
+		if (count > ie_class->max_occur) {
+			report_msg(msg, LOG_DEBUG,
+				"Ignoring repeated IE %d\n", ie_id);
+
 			return;
+		}
 	}
 
 	if (!ie_class->alloc ||
@@ -414,25 +423,25 @@ __u8 q931_decode_shift_ie(
 	__u8 codeset;
 
 	if (q931_get_so_ie_type2_value(ie_id) & 0x08) {
+		// Non-Locking shift
+
+		codeset = q931_get_so_ie_type2_value(ie_id) & 0x07;
+
+		report_msg_cont(msg, LOG_DEBUG,
+			"<-  Non-Locking shift from codeset %u to codeset %u\n",
+			ds->active_codeset,
+			codeset);
+	} else {
 		// Locking shift
 
 		codeset = q931_get_so_ie_type2_value(ie_id) & 0x07;
 
 		report_msg_cont(msg, LOG_DEBUG,
-			"<-  Locked Switch from codeset %u to codeset %u\n",
+			"<-  Locking shift from codeset %u to codeset %u\n",
 			ds->active_codeset,
 			codeset);
 
 		ds->active_codeset = codeset;
-	} else {
-		// Non-Locking shift
-
-		codeset = q931_get_so_ie_type2_value(ie_id);
-
-		report_msg_cont(msg, LOG_DEBUG,
-			"<-  Non-Locked Switch from codeset %u to codeset %u\n",
-			ds->active_codeset,
-			codeset);
 	}
 
 	assert(codeset < ARRAY_SIZE(ds->previous_ie_id));
@@ -480,6 +489,14 @@ void q931_decode_ies(
 				q931_ie_usages[i].codeset,
 				q931_ie_usages[i].ie_id);
 		}
+	}
+
+	if (msg->message_type == Q931_MT_SETUP &&
+	    intf->role == LAPD_INTF_ROLE_TE) {
+		/* Channel ID is mandatory in SETUP n->u */
+		q931_ieid_add_to_list(msg,
+			&ds->mandatory_ies,
+			0, Q931_IE_CHANNEL_IDENTIFICATION);
 	}
 
 	int rawies_curpos = 0;
@@ -613,7 +630,6 @@ int q931_call_decode_ies(
 		break;
 
 		case Q931_MT_DISCONNECT:
-			q931_ies_add_put(&call->release_with_cause, &cause->ie);
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
@@ -662,7 +678,6 @@ int q931_call_decode_ies(
 		break;
 
 		case Q931_MT_DISCONNECT:
-			q931_ies_add_put(&call->release_with_cause, &cause->ie);
 		break;
 
 		case Q931_MT_RELEASE_COMPLETE:
@@ -746,8 +761,16 @@ int q931_call_decode_ies(
 		q931_ies_add_put(&ies, &cause->ie);
 
 		switch(msg->message_type) {
+		case Q931_MT_SETUP: {
+			q931_call_send_release_complete(call, &ies);
+
+			Q931_UNDECLARE_IES(ies);
+
+			goto do_not_process_message;
+		}
+		break;
+
 		case Q931_MT_DISCONNECT: 
-			q931_ies_add_put(&call->release_with_cause, &cause->ie);
 		break;
 
 		case Q931_MT_RELEASE: {
@@ -929,10 +952,6 @@ int q931_receive(struct q931_dlc *dlc)
 		goto err_msg_callref_too_big;
 	}
 
-	/* Decode the call reference. If the call reference length is zero
-	 * msg->callref will remain zero, indicating the dummy call reference
-	 */
-
 	msg->callref = 0;
 	msg->callref_direction = Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE;
 	msg->callref_len = hdr->call_reference_len;
@@ -954,6 +973,17 @@ int q931_receive(struct q931_dlc *dlc)
 #else
 		msg->callref |= val << (hdr->i * 8);
 #endif
+	}
+
+	if (msg->rawlen < sizeof(struct q931_header) +
+			hdr->call_reference_len + sizeof(__u8)) {
+
+		report_msg(msg, LOG_DEBUG,
+			"Message too short (%d bytes), ignoring\n",
+			msg->rawlen);
+
+		err = -EBADMSG;
+		goto err_msg_too_short2;
 	}
 
 	msg->raw_message_type =
@@ -980,7 +1010,15 @@ int q931_receive(struct q931_dlc *dlc)
 	msg->rawies_len = msg->rawlen - (sizeof(struct q931_header) +
 			msg->callref_len + 1);
 
-	if (msg->callref == 0) {
+	if (msg->callref_len == 0) {
+		/* Dummy call reference */
+
+		q931_dispatch_dummy_message(msg);
+
+		goto dummy_dispatched;
+	} else if (msg->callref == 0) {
+		/* Global call */
+
 		q931_dispatch_global_message(
 			&dlc->intf->global_call, msg);
 
@@ -1045,6 +1083,9 @@ int q931_receive(struct q931_dlc *dlc)
 
 			q931_call_send_release_complete(call, &ies);
 
+			/* Call remains in NULL state */
+			q931_call_release_reference(call);
+
 			Q931_UNDECLARE_IES(ies);
 
 			err = Q931_RECEIVE_OK;
@@ -1055,6 +1096,9 @@ int q931_receive(struct q931_dlc *dlc)
 			report_call(call, LOG_DEBUG,
 				"Received a RELEASE COMPLETE for an unknown"
 				" callref, ignoring frame\n");
+
+			/* Call remains in NULL state */
+			q931_call_release_reference(call);
 
 			err = Q931_RECEIVE_OK;
 			goto err_unknown_callref;
@@ -1068,6 +1112,9 @@ int q931_receive(struct q931_dlc *dlc)
 				report_call(call, LOG_DEBUG,
 					"Received a SETUP/RESUME for an unknown"
 					" outbound callref, ignoring frame\n");
+
+				/* Call remains in NULL state */
+				q931_call_release_reference(call);
 
 				err = Q931_RECEIVE_OK;
 				goto err_unknown_callref;
@@ -1130,15 +1177,16 @@ int q931_receive(struct q931_dlc *dlc)
 ces_dispatched:
 	q931_call_put(call);
 primitive_received:
+dummy_dispatched:
 global_dispatched:
 	q931_msg_put(msg);
 
 	return Q931_RECEIVE_OK;
 
 err_unknown_callref:
-	q931_call_release_reference(call);
 	q931_call_put(call);
 err_alloc_call:
+err_msg_too_short2:
 err_msg_callref_too_big:
 err_msg_callref_invalid:
 err_msg_not_q931:

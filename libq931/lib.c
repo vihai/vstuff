@@ -64,6 +64,9 @@ void (*q931_queue_primitive)(
 	unsigned long par1,
 	unsigned long par2) = NULL;
 
+int (*q931_is_number_complete)(
+	struct q931_call *call) = NULL;
+
 void q931_set_report_func(
 	void (*report_func)(int level, const char *format, ...))
 {
@@ -85,6 +88,13 @@ void q931_set_queue_primitive_func(
 		unsigned long par2))
 {
 	q931_queue_primitive = queue_primitive_func;
+}
+
+void q931_set_is_number_complete_func(
+	int (*is_number_complete_func)(
+		struct q931_call *call))
+{
+	q931_is_number_complete = is_number_complete_func;
 }
 
 void q931_init()

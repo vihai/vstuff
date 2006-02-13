@@ -99,8 +99,8 @@ void lapd_ntme_tc_check_second(
 			tme->teis[tei - LAPD_MIN_DYN_TEI] = FALSE;
 		}
 
-	} else if (tc->responses[tei][0] == 1 ||
-		   tc->responses[tei][1] == 1) {
+	} else if (tc->responses[tei][0] <= 1 &&
+		   tc->responses[tei][1] <= 1) {
 		/* TEI in use */
 	} else {
 		/* Multiple TEIs assigned */

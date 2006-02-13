@@ -629,7 +629,6 @@ void hfc_st_port_init(
 	hfc_st_chan_init(&port->chans[E], port, "E", E);
 	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ);
 
-printk(KERN_INFO "AAAAAAAAAAAAAAAAAAAAA %d\n", card->fifos[hfc_FIFO_D][TX].size);
 	port->chans[D].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_D][TX].size;
 	port->chans[B1].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_B1][TX].size;
 	port->chans[B2].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_B2][TX].size;

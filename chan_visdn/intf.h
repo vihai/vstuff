@@ -27,12 +27,6 @@ enum visdn_clir_mode
 	VISDN_CLIR_MODE_ON,
 };
 
-struct visdn_clip_number
-{
-	struct list_head node;
-	char number[32];
-};
-
 struct visdn_interface
 {
 	struct list_head ifs_node;
@@ -65,6 +59,7 @@ struct visdn_interface
 	char clip_default_name[128];
 	char clip_default_number[32];
 	struct list_head clip_numbers_list;
+	struct list_head trans_numbers_list;
 	int clip_special_arrangement;
 	enum visdn_clir_mode clir_mode;
 	int overlap_sending;
@@ -111,11 +106,10 @@ int visdn_intf_open(struct visdn_interface *intf);
 
 void visdn_intf_reload(struct ast_config *cfg);
 
-int visdn_intf_clip_valid(
-	struct visdn_interface *intf,
-	const char *called_number);
-
 void visdn_intf_cli_register(void);
 void visdn_intf_cli_unregister(void);
+
+struct visdn_interface *visdn_intf_alloc(void);
+void visdn_intf_default_init(struct visdn_interface *intf);
 
 #endif

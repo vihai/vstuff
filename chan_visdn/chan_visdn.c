@@ -68,6 +68,7 @@
 #include "util.h"
 #include "huntgroup.h"
 #include "overlap.h"
+#include "numbers_list.h"
 
 static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
 
@@ -82,36 +83,6 @@ struct visdn_state visdn = {
 	.debug_q921 = FALSE,
 	.debug_q931 = FALSE,
 #endif
-
-	.default_intf = {
-		.network_role = Q931_INTF_NET_PRIVATE,
-		.outbound_called_ton = VISDN_TYPE_OF_NUMBER_UNKNOWN,
-		.force_outbound_cli = "",
-		.force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET,
-		.tones_option = TRUE,
-		.context = "visdn",
-		.clip_enabled = TRUE,
-		.clip_override = FALSE,
-		.clip_default_name = "",
-		.clip_default_number = "",
-		.clip_numbers_list =
-			LIST_HEAD_INIT(visdn.default_intf.clip_numbers_list),
-		.clip_special_arrangement = FALSE,
-		.clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF,
-		.overlap_sending = TRUE,
-		.overlap_receiving = FALSE,
-		.call_bumping = FALSE, 
-		.cli_rewriting = FALSE,
-		.national_prefix = "",
-		.international_prefix = "",
-		.network_specific_prefix = "",
-		.subscriber_prefix = "",
-		.abbreviated_prefix = "",
-		.dlc_autorelease_time = 10,
-		.echocancel = FALSE,
-		.echocancel_taps = 256,
-		.T307 = 180,
-	}
 };
 
 static void visdn_set_socket_debug(int on)
@@ -355,6 +326,24 @@ void visdn_queue_primitive(
 	}
 }
 
+static int visdn_q931_is_number_complete(
+	struct q931_call *q931_call)
+{
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan)
+		return FALSE;
+
+	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
+
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+	return ast_exists_extension(NULL,
+			ast_chan->context,
+			visdn_chan->number, 1,
+			ast_chan->cid.cid_num);
+}
+
 static void visdn_pres_to_pi_si(
 	int pres,
 	enum q931_ie_calling_party_number_presentation_indicator *pi,
@@ -427,6 +416,26 @@ static void visdn_defer_dtmf_in(
 	ast_mutex_unlock(&visdn_chan->ast_chan->lock);
 }
 
+static enum q931_ie_called_party_number_numbering_plan_identificator
+	visdn_cdpn_numbering_plan_by_ton(
+		enum q931_ie_called_party_number_type_of_number ton)
+{
+	if (ton == Q931_IE_CDPN_TON_UNKNOWN)
+		return Q931_IE_CDPN_NPI_UNKNOWN;
+	else
+		return Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+}
+
+static enum q931_ie_calling_party_number_numbering_plan_identificator
+	visdn_cgpn_numbering_plan_by_ton(
+		enum q931_ie_calling_party_number_type_of_number ton)
+{
+	if (ton == Q931_IE_CGPN_TON_UNKNOWN)
+		return Q931_IE_CGPN_NPI_UNKNOWN;
+	else
+		return Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
+}
+
 static void visdn_undefer_dtmf_in(
 	struct visdn_chan *visdn_chan)
 {
@@ -445,7 +454,8 @@ static void visdn_undefer_dtmf_in(
 		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
 						intf->outbound_called_ton);
 		cdpn->numbering_plan_identificator =
-			Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+			visdn_cdpn_numbering_plan_by_ton(
+				cdpn->type_of_number);
 
 		strncpy(cdpn->number, visdn_chan->dtmf_queue,
 			sizeof(cdpn->number));
@@ -482,6 +492,36 @@ static void visdn_queue_dtmf(
 	ast_mutex_unlock(&visdn_chan->ast_chan->lock);
 }
 
+static int char_to_hexdigit(char c)
+{
+	switch(c) {
+		case '0': return 0;
+		case '1': return 1;
+		case '2': return 2;
+		case '3': return 3;
+		case '4': return 4;
+		case '5': return 5;
+		case '6': return 6;
+		case '7': return 7;
+		case '8': return 8;
+		case '9': return 9;
+		case 'a': return 10;
+		case 'b': return 11;
+		case 'c': return 12;
+		case 'd': return 13;
+		case 'e': return 14;
+		case 'f': return 15;
+		case 'A': return 10;
+		case 'B': return 11;
+		case 'C': return 12;
+		case 'D': return 13;
+		case 'E': return 14;
+		case 'F': return 15;
+	}
+
+	return -1;
+}
+
 static int visdn_request_call(
 	struct ast_channel *ast_chan,
 	struct visdn_interface *intf,
@@ -505,17 +545,44 @@ static int visdn_request_call(
 		struct q931_ie_bearer_capability *bc;
 		bc = q931_ie_bearer_capability_alloc();
 		char buf[20];
-		int len = strlen(raw_bc);
 
-		if (len > sizeof(buf) * 2) {
-			ast_log(LOG_WARNING, "BEARERCAP_RAW is too long\n");
+		if (strlen(raw_bc) % 2) {
+			ast_log(LOG_WARNING, "BEARERCAP_RAW is invalid\n");
+			goto hlc_failure;
+		}
+
+		int len = strlen(raw_bc) / 2;
+
+		if (len > sizeof(buf)) {
+			ast_log(LOG_WARNING,
+				"BEARERCAP_RAW is too long\n");
 			goto bc_failure;
 		}
+
+		int i;
+		for (i=0; i<len; i++) {
+			if (char_to_hexdigit(raw_bc[i * 2]) < 0 ||
+			    char_to_hexdigit(raw_bc[i * 2 + 1]) < 0) {
+				ast_log(LOG_WARNING,
+					"BEARERCAP_RAW is invalid\n");
+				goto bc_failure;
+			}
+
+			buf[i] = char_to_hexdigit(raw_bc[i * 2]) << 4;
+			buf[i] |= char_to_hexdigit(raw_bc[i * 2 + 1]);
+		}
+
+		buf[len] = '\0';
 
 		if (!q931_ie_bearer_capability_read_from_buf(&bc->ie,
 					buf, len, NULL, NULL)) {
 			ast_log(LOG_WARNING, "BEARERCAP_RAW is not valid\n");
 			goto bc_failure;
+		}
+
+		if (bc->information_transfer_capability == Q931_IE_BC_ITC_SPEECH) {
+			visdn_chan->is_voice = TRUE;
+			visdn_chan->handle_stream = TRUE;
 		}
 
 		q931_ies_add_put(&ies, &bc->ie);
@@ -535,6 +602,7 @@ bc_failure:;
 		bc->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
 
 		visdn_chan->is_voice = TRUE;
+		visdn_chan->handle_stream = TRUE;
 
 		if (options) {
 			if (strchr(options, 'D')) {
@@ -544,13 +612,71 @@ bc_failure:;
 					Q931_IE_BC_UIL1P_UNUSED;
 
 				visdn_chan->is_voice = FALSE;
+				visdn_chan->handle_stream = FALSE;
 			}
 		}
 
 		q931_ies_add_put(&ies, &bc->ie);
 	}
 
-	/* ------------- END Bearer Capability ---------------- */
+	/* ------------- High Layer Compatibility ---------------- */
+	char *raw_hlc = pbx_builtin_getvar_helper(ast_chan, "HLC_RAW");
+	if (raw_hlc) {
+		visdn_debug("Taking HLC from bridged channel\n");
+
+		struct q931_ie_high_layer_compatibility *hlc;
+		hlc = q931_ie_high_layer_compatibility_alloc();
+		char buf[20];
+
+		if (strlen(raw_hlc) % 2) {
+			ast_log(LOG_WARNING, "HLC_RAW is invalid\n");
+			goto hlc_failure;
+		}
+
+		int len = strlen(raw_hlc) / 2;
+
+		if (len > sizeof(buf)) {
+			ast_log(LOG_WARNING, "HLC_RAW is too long\n");
+			goto hlc_failure;
+		}
+
+		int i;
+		for (i=0; i<len; i++) {
+			if (char_to_hexdigit(raw_hlc[i * 2]) < 0 ||
+			    char_to_hexdigit(raw_hlc[i * 2 + 1]) < 0) {
+				ast_log(LOG_WARNING, "HLC_RAW is invalid\n");
+				goto hlc_failure;
+			}
+
+			buf[i] = char_to_hexdigit(raw_hlc[i * 2]) << 4;
+			buf[i] |= char_to_hexdigit(raw_hlc[i * 2 + 1]);
+		}
+
+		buf[len] = '\0';
+
+		if (!q931_ie_high_layer_compatibility_read_from_buf(&hlc->ie,
+					buf, len, NULL, NULL)) {
+			ast_log(LOG_WARNING, "HLC_RAW is not valid\n");
+			goto hlc_failure;
+		}
+
+		q931_ies_add_put(&ies, &hlc->ie);
+
+	} else {
+hlc_failure:;
+
+		struct q931_ie_high_layer_compatibility *hlc;
+		hlc = q931_ie_high_layer_compatibility_alloc();
+
+		hlc->coding_standard = Q931_IE_HLC_CS_CCITT;
+		hlc->interpretation = Q931_IE_HLC_P_FIRST;
+		hlc->presentation_method =
+			Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
+		hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
+		q931_ies_add_put(&ies, &hlc->ie);
+	}
+
+	/* ------------- END HLC ---------------- */
 
 	struct q931_call *q931_call;
 	q931_call = q931_call_alloc_out(intf->q931_intf);
@@ -574,14 +700,31 @@ bc_failure:;
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
 	cdpn->type_of_number =
 		visdn_type_of_number_to_cdpn(intf->outbound_called_ton);
-	cdpn->numbering_plan_identificator = Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+
+	cdpn->numbering_plan_identificator =
+		visdn_cdpn_numbering_plan_by_ton(
+			cdpn->type_of_number);
+
 	snprintf(cdpn->number, sizeof(cdpn->number), "%s", number);
+
+	visdn_chan->sent_digits = strlen(cdpn->number);
+
 	q931_ies_add_put(&ies, &cdpn->ie);
+
+	visdn_defer_dtmf_in(visdn_chan);
+
+	if (visdn_chan->sent_digits < strlen(number)) {
+		if (!intf->overlap_sending) {
+			ast_log(LOG_WARNING,
+				"Number too big and overlap sending disabled\n");
+			err = -1;
+			goto err_too_many_digits;
+		}
+	}
 
 	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT &&
 	    !intf->overlap_receiving) {
@@ -620,7 +763,8 @@ bc_failure:;
 				}
 
 				cgpn->numbering_plan_identificator =
-					Q931_IE_CGPN_NPI_ISDN_TELEPHONY;
+					visdn_cgpn_numbering_plan_by_ton(
+						cgpn->type_of_number);
 
 				if (strlen(intf->force_outbound_cli))
 					strncpy(cgpn->number,
@@ -660,17 +804,63 @@ bc_failure:;
 		 */
 	}
 
-	struct q931_ie_high_layer_compatibility *hlc =
-		q931_ie_high_layer_compatibility_alloc();
-
-	hlc->coding_standard = Q931_IE_HLC_CS_CCITT;
-	hlc->interpretation = Q931_IE_HLC_P_FIRST;
-	hlc->presentation_method = Q931_IE_HLC_PM_HIGH_LAYER_PROTOCOL_PROFILE;
-	hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
-
-	visdn_defer_dtmf_in(visdn_chan);
-
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_REQUEST, &ies);
+
+	q931_call_put(q931_call);
+
+	Q931_UNDECLARE_IES(ies);
+
+	return 0;
+
+err_too_many_digits:
+	q931_call_release_reference(q931_call);
+	q931_call_put(q931_call);
+err_call_alloc:
+	visdn_intf_put(visdn_chan->intf);
+
+	Q931_UNDECLARE_IES(ies);
+
+	return err;
+}
+
+static int visdn_resume_call(
+	struct ast_channel *ast_chan,
+	struct visdn_interface *intf,
+	const char *number,
+	const char *options)
+{
+	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+	int err;
+
+	visdn_debug("Resuming on interface '%s'\n", intf->name);
+
+	visdn_chan->intf = visdn_intf_get(intf);
+
+	Q931_DECLARE_IES(ies);
+
+	struct q931_call *q931_call;
+	q931_call = q931_call_alloc_out(intf->q931_intf);
+	if (!q931_call) {
+		ast_log(LOG_WARNING, "Cannot allocate outbound call\n");
+		err = -1;
+		goto err_call_alloc;
+	}
+
+	q931_call->pvt = ast_chan;
+	visdn_chan->q931_call = q931_call_get(q931_call);
+
+	char newname[40];
+	snprintf(newname, sizeof(newname), "VISDN/%s/%d.%c",
+		q931_call->intf->name,
+		q931_call->call_reference,
+		q931_call->direction ==
+			Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
+
+	ast_change_name(ast_chan, newname);
+
+	ast_setstate(ast_chan, AST_STATE_DIALING);
+
+	q931_send_primitive(q931_call, Q931_CCB_RESUME_REQUEST, &ies);
 
 	q931_call_put(q931_call);
 
@@ -749,6 +939,12 @@ static int visdn_call(
 	if (!strncasecmp(intf_name, VISDN_HUNTGROUP_PREFIX,
 			strlen(VISDN_HUNTGROUP_PREFIX))) {
 
+		if (strchr(visdn_chan->options, 'R')) {
+			ast_log(LOG_WARNING, "Resume on huntgroup not supported\n");
+			err = -1;
+			goto err_resume_in_huntgroup;
+		}
+
 		ast_mutex_lock(&visdn.lock);
 
 		const char *hg_name = intf_name +
@@ -802,9 +998,15 @@ static int visdn_call(
 		visdn_chan->huntgroup = NULL;
 	}
 
-	visdn_request_call(ast_chan, intf,
-		visdn_chan->number,
-		visdn_chan->options);
+	if (strchr(visdn_chan->options, 'R')) {
+		visdn_resume_call(ast_chan, intf,
+			visdn_chan->number,
+			visdn_chan->options);
+	} else {
+		visdn_request_call(ast_chan, intf,
+			visdn_chan->number,
+			visdn_chan->options);
+	}
 
 	visdn_intf_put(intf);
 	intf = NULL;
@@ -814,6 +1016,7 @@ static int visdn_call(
 err_intf_not_found:
 err_no_channel_available:
 err_huntgroup_not_found:
+err_resume_in_huntgroup:
 err_invalid_format:
 err_invalid_destination:
 err_channel_not_down:
@@ -844,6 +1047,9 @@ static int visdn_answer(struct ast_channel *ast_chan)
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_SETUP_RESPONSE, NULL);
 	}
+
+	q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
 
 	return 0;
 }
@@ -1027,6 +1233,10 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	FUNC_DEBUG("%d", condition);
 
 	switch(condition) {
+	case -1:
+		ast_playtones_stop(ast_chan);
+	break;
+
 	case AST_CONTROL_RING:
 	case AST_CONTROL_TAKEOFFHOOK:
 	case AST_CONTROL_FLASH:
@@ -1037,8 +1247,9 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		res = 1;
 	break;
 
-	case -1:
-		ast_playtones_stop(ast_chan);
+	case AST_CONTROL_ANSWER:
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_SETUP_RESPONSE, NULL);
 	break;
 
 	case AST_CONTROL_INBAND_INFO:
@@ -1135,10 +1346,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 
 		Q931_UNDECLARE_IES(ies);
 	}
-	break;
-
-	case AST_CONTROL_ANSWER:
-		ast_playtones_stop(ast_chan);
 	break;
 
 	case AST_CONTROL_BUSY: {
@@ -1288,19 +1495,26 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 
 	Q931_DECLARE_IES(ies);
 
-	struct q931_ie_called_party_number *cdpn =
-		q931_ie_called_party_number_alloc();
-	cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-					intf->outbound_called_ton);
-	cdpn->numbering_plan_identificator =
-		Q931_IE_CDPN_NPI_ISDN_TELEPHONY;
+	/* Needed for Tilab compliance */
+	if (q931_call->state != U3_OUTGOING_CALL_PROCEEDING &&
+	    q931_call->state != U4_CALL_DELIVERED &&
+	    q931_call->state != U10_ACTIVE) {
 
-	cdpn->number[0] = digit;
-	cdpn->number[1] = '\0';
-	q931_ies_add_put(&ies, &cdpn->ie);
+		struct q931_ie_called_party_number *cdpn =
+			q931_ie_called_party_number_alloc();
+		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+						intf->outbound_called_ton);
+		cdpn->numbering_plan_identificator =
+			visdn_cdpn_numbering_plan_by_ton(
+				cdpn->type_of_number);
 
-	q931_send_primitive(visdn_chan->q931_call,
-		Q931_CCB_INFO_REQUEST, &ies);
+		cdpn->number[0] = digit;
+		cdpn->number[1] = '\0';
+		q931_ies_add_put(&ies, &cdpn->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_INFO_REQUEST, &ies);
+	}
 
 	Q931_UNDECLARE_IES(ies);
 
@@ -1551,10 +1765,9 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	static struct ast_frame f;
-	char buf[512];
 
 	/* Acknowledge timer */
-	read(ast_chan->fds[0], buf, 1);
+	read(ast_chan->fds[0], visdn_chan->buf, 1);
 
 	f.src = VISDN_CHAN_TYPE;
 	f.mallocd = 0;
@@ -1572,7 +1785,8 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return &f;
 	}
 
-	int nread = read(visdn_chan->sp_fd, buf, sizeof(buf));
+	int nread = read(visdn_chan->sp_fd, visdn_chan->buf,
+					sizeof(visdn_chan->buf));
 	if (nread < 0) {
 		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
 		return &f;
@@ -1582,15 +1796,25 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 struct timeval tv;
 gettimeofday(&tv, NULL);
 unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "R %.3f %d\n",
+ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02d %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 	t/1000000.0,
-	visdn_chan->sp_fd);
+	visdn_chan->sp_fd,
+	*(__u8 *)(visdn_chan->buf + 0),
+	*(__u8 *)(visdn_chan->buf + 1),
+	*(__u8 *)(visdn_chan->buf + 2),
+	*(__u8 *)(visdn_chan->buf + 3),
+	*(__u8 *)(visdn_chan->buf + 4),
+	*(__u8 *)(visdn_chan->buf + 5),
+	*(__u8 *)(visdn_chan->buf + 6),
+	*(__u8 *)(visdn_chan->buf + 7),
+	nread);
 #endif
+
 	f.frametype = AST_FRAME_VOICE;
 	f.subclass = AST_FORMAT_ALAW;
 	f.samples = nread;
 	f.datalen = nread;
-	f.data = buf;
+	f.data = visdn_chan->buf;
 	f.offset = 0;
 
 	struct ast_frame *f2 = ast_dsp_process(ast_chan, visdn_chan->dsp, &f);
@@ -1626,7 +1850,12 @@ static int visdn_write(
 	}
 
 #if 0
-ast_verbose(VERBOSE_PREFIX_3 "W %d %02x%02x%02x%02x%02x%02x%02x%02x %d\n", visdn_chan->sp_fd,
+struct timeval tv;
+gettimeofday(&tv, NULL);
+unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02d %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
+	t/1000000.0,
+	visdn_chan->sp_fd,
 	*(__u8 *)(frame->data + 0),
 	*(__u8 *)(frame->data + 1),
 	*(__u8 *)(frame->data + 2),
@@ -1671,7 +1900,7 @@ static struct ast_channel *visdn_new(
 	ast_dsp_set_features(visdn_chan->dsp,
 		DSP_FEATURE_DTMF_DETECT |
 //		DSP_FEATURE_SILENCE_SUPPRESS |
-		DSP_FEATURE_BUSY_DETECT |
+////		DSP_FEATURE_BUSY_DETECT |
 		DSP_FEATURE_FAX_DETECT);
 	ast_dsp_digitmode(visdn_chan->dsp, DSP_DIGITMODE_DTMF);
 
@@ -1861,6 +2090,7 @@ static void visdn_ccb_q931_receive()
 
 		q931_ccb_dispatch(msg);
 
+		q931_ies_destroy(&msg->ies);
 		free(msg);
 	}
 }
@@ -2129,10 +2359,12 @@ static void visdn_q931_disconnect_indication(
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
-	if (visdn_chan->inband_info)
+	if (visdn_chan->inband_info &&
+	    visdn_chan->channel_has_been_connected) {
 		ast_queue_control(ast_chan, AST_CONTROL_INBAND_INFO);
-	else
+	} else {
 		q931_send_primitive(q931_call, Q931_CCB_RELEASE_REQUEST, NULL);
+	}
 
 	ast_queue_control(ast_chan, AST_CONTROL_DISCONNECT);
 }
@@ -2158,8 +2390,9 @@ static void visdn_q931_info_indication(
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	if (q931_call->state != U2_OVERLAP_SENDING &&
-	    q931_call->state != N2_OVERLAP_SENDING) {
-		ast_log(LOG_WARNING, "Received info not in overlap sending\n");
+	    q931_call->state != N2_OVERLAP_SENDING &&
+	    q931_call->state != U25_OVERLAP_RECEIVING &&
+	    q931_call->state != N25_OVERLAP_RECEIVING) {
 		return;
 	}
 
@@ -2176,12 +2409,16 @@ static void visdn_q931_info_indication(
 		}
 	}
 
-	if (!cdpn)
-		return;
-
-	for(i=0; cdpn->number[i]; i++) {
+	if (cdpn) {
+		for(i=0; cdpn->number[i]; i++) {
+			struct ast_frame f =
+				{ AST_FRAME_DTMF, cdpn->number[i] };
+			ast_queue_frame(ast_chan, &f);
+		}
+	} else {
+		/* Better to use a specific frame */
 		struct ast_frame f =
-			{ AST_FRAME_DTMF, cdpn->number[i] };
+			{ AST_FRAME_DTMF, 0 };
 		ast_queue_frame(ast_chan, &f);
 	}
 }
@@ -2198,6 +2435,31 @@ static void visdn_q931_more_info_indication(
 		return;
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+	if (visdn_chan->sent_digits < strlen(visdn_chan->number)) {
+		/* There are still digits to be sent in INFO */
+
+		Q931_DECLARE_IES(ies);
+
+		struct q931_ie_called_party_number *cdpn =
+			q931_ie_called_party_number_alloc();
+		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
+					visdn_chan->intf->outbound_called_ton);
+		cdpn->numbering_plan_identificator =
+			visdn_cdpn_numbering_plan_by_ton(
+				cdpn->type_of_number);
+
+		strncpy(cdpn->number,
+			visdn_chan->number + visdn_chan->sent_digits,
+			sizeof(cdpn->number));
+
+		q931_ies_add_put(&ies, &cdpn->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_INFO_REQUEST, &ies);
+
+		Q931_UNDECLARE_IES(ies);
+	}
 
 	visdn_undefer_dtmf_in(visdn_chan);
 }
@@ -2487,7 +2749,9 @@ static void visdn_q931_setup_complete_indication(
 	const struct q931_ies *ies,
 	enum q931_setup_complete_indication_status status)
 {
-	FUNC_DEBUG();
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 }
 
 static void visdn_q931_setup_confirm(
@@ -2499,10 +2763,13 @@ static void visdn_q931_setup_confirm(
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
+/*	q931_send_primitive(q931_call,
+			Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);*/
+
 	if (!ast_chan)
 		return;
 
-	ast_setstate(ast_chan, AST_STATE_UP);
+	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
@@ -2664,7 +2931,8 @@ static void visdn_handle_clip_nt(
 		ast_chan->cid.cid_pres |=
 			AST_PRES_USER_NUMBER_UNSCREENED;
 	} else {
-		if (visdn_intf_clip_valid(intf, cgpn->number)) {
+		if (visdn_numbers_list_match(&intf->clip_numbers_list,
+							cgpn->number)) {
 			if (0) { /* Sequence is valid but incomplete */
 				/* Complete sequence TODO FIXME */
 			}
@@ -2706,6 +2974,7 @@ static void visdn_q931_setup_indication(
 	struct q931_ie_calling_party_number *cgpn = NULL;
 	struct q931_ie_called_party_number *cdpn = NULL;
 	struct q931_ie_bearer_capability *bc = NULL;
+	struct q931_ie_high_layer_compatibility *hlc = NULL;
 
 	int i;
 	for(i=0; i<ies->count; i++) {
@@ -2727,70 +2996,14 @@ static void visdn_q931_setup_indication(
 
 			bc = container_of(ies->ies[i],
 				struct q931_ie_bearer_capability, ie);
+		} else if (ies->ies[i]->cls->id == Q931_IE_HIGH_LAYER_COMPATIBILITY) {
+
+			hlc = container_of(ies->ies[i],
+				struct q931_ie_high_layer_compatibility, ie);
 		}
 	}
 
 	assert(bc);
-
-	/* ------ Handle Bearer Capability ------ */
-	
-	/* We should check the destination bearer capability
-	 * unfortunately we don't know if the destination is
-	 * compatible until we start the PBX... this is a
-	 * design flaw in Asterisk
-	 */
-
-	{
-		__u8 buf[20];
-		char raw_bc_text[sizeof(buf) + 1];
-
-		assert(bc->ie.cls->write_to_buf);
-
-		int len = bc->ie.cls->write_to_buf(&bc->ie, buf, sizeof(buf));
-
-		for (i=0; i<len; i++)
-			sprintf(raw_bc_text + i * 2, "%02x", buf[i]);
-
-		pbx_builtin_setvar_helper(ast_chan,
-			"BEARERCAP_RAW", raw_bc_text);
-	}
-
-	if (bc->information_transfer_capability ==
-		Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL) {
-
-		pbx_builtin_setvar_helper(ast_chan,
-			"BEARERCAP_CLASS", "data");
-	
-		visdn_chan->is_voice = FALSE;
-		q931_call->tones_option = FALSE;
-
-	} else  if (bc->information_transfer_capability ==
-			Q931_IE_BC_ITC_SPEECH ||
-		    bc->information_transfer_capability ==
-			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
-
-		visdn_chan->is_voice = TRUE;
-		q931_call->tones_option = intf->tones_option;
-
-		pbx_builtin_setvar_helper(ast_chan,
-			"BEARERCAP_CLASS", "voice");
-	} else {
-		Q931_DECLARE_IES(ies);
-
-		struct q931_ie_cause *cause = q931_ie_cause_alloc();
-		cause->coding_standard = Q931_IE_C_CS_CCITT;
-		cause->location = q931_ie_cause_location_call(q931_call);
-		cause->value = Q931_IE_C_CV_BEARER_CAPABILITY_NOT_IMPLEMENTED;
-		q931_ies_add_put(&ies, &cause->ie);
-
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_REJECT_REQUEST, &ies);
-
-		Q931_UNDECLARE_IES(ies);
-
-		goto err_unsupported_bearercap;
-	}
-	/* ------ ----------------------------- ------ */
 
 	q931_call->pvt = ast_chan;
 
@@ -2818,9 +3031,91 @@ static void visdn_q931_setup_indication(
 						cdpn->type_of_number),
 			cdpn->number);
 
-	       	if (cdpn->number[strlen(cdpn->number) - 1] == '#')
+		if (cdpn->number[strlen(cdpn->number) - 1] == '#')
 			visdn_chan->sending_complete = TRUE;
 	}
+
+	/* ------ Handle Bearer Capability ------ */
+	
+	/* We should check the destination bearer capability
+	 * unfortunately we don't know if the destination is
+	 * compatible until we start the PBX... this is a
+	 * design flaw in Asterisk
+	 */
+
+	{
+		__u8 buf[20];
+		char raw_bc_text[sizeof(buf) + 1];
+
+		assert(bc->ie.cls->write_to_buf);
+
+		int len = bc->ie.cls->write_to_buf(&bc->ie, buf, sizeof(buf));
+		assert(len >= 0);
+
+		for (i=0; i<len; i++)
+			sprintf(raw_bc_text + i * 2, "%02x", buf[i]);
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"_BEARERCAP_RAW", raw_bc_text);
+	}
+
+	if (bc->information_transfer_capability ==
+		Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
+		visdn_numbers_list_match(&intf->trans_numbers_list,
+				called_number)) {
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"_BEARERCAP_CLASS", "data");
+	
+		visdn_chan->is_voice = FALSE;
+		visdn_chan->handle_stream = TRUE;
+		q931_call->tones_option = FALSE;
+
+	} else  if (bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_SPEECH ||
+		    bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
+
+		visdn_chan->is_voice = TRUE;
+		visdn_chan->handle_stream = TRUE;
+		q931_call->tones_option = intf->tones_option;
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"_BEARERCAP_CLASS", "voice");
+	} else {
+		Q931_DECLARE_IES(ies);
+
+		struct q931_ie_cause *cause = q931_ie_cause_alloc();
+		cause->coding_standard = Q931_IE_C_CS_CCITT;
+		cause->location = q931_ie_cause_location_call(q931_call);
+		cause->value = Q931_IE_C_CV_INCOMPATIBLE_DESTINATION;
+		q931_ies_add_put(&ies, &cause->ie);
+
+		q931_send_primitive(visdn_chan->q931_call,
+			Q931_CCB_REJECT_REQUEST, &ies);
+
+		Q931_UNDECLARE_IES(ies);
+
+		goto err_unsupported_bearercap;
+	}
+
+	/* ------ Handle HLC ------ */
+	if (hlc) {
+		__u8 buf[20];
+		char raw_hlc_text[sizeof(buf) + 1];
+
+		assert(hlc->ie.cls->write_to_buf);
+
+		int len = hlc->ie.cls->write_to_buf(&hlc->ie, buf, sizeof(buf));
+
+		for (i=0; i<len; i++)
+			sprintf(raw_hlc_text + i * 2, "%02x", buf[i]);
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"_HLC_RAW", raw_hlc_text);
+	}
+
+	/* ------ ----------------------------- ------ */
 
 	/* ------ Handle Calling Line Presentation/Restriction ------ */
 
@@ -3043,6 +3338,7 @@ no_cgpn:;
 
 err_unsupported_bearercap:
 	ast_hangup(ast_chan);
+	goto err_visdn_alloc; // FIXME, ast_hangup frees visdn_chan too
 err_visdn_new:
 	visdn_destroy(visdn_chan);
 err_visdn_alloc:
@@ -3367,6 +3663,8 @@ static void visdn_q931_connect_channel(
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct visdn_interface *visdn_intf = channel->intf->pvt;
 
+	visdn_chan->channel_has_been_connected = TRUE;
+
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
 		"%s/B%d",
@@ -3389,7 +3687,7 @@ static void visdn_q931_connect_channel(
 
 	visdn_chan->isdn_channel_id = atoi(chanid + 1);
 
-	if (visdn_chan->is_voice) {
+	if (visdn_chan->handle_stream) {
 		visdn_chan->sp_fd = open("/dev/visdn/streamport", O_RDWR);
 		if (visdn_chan->sp_fd < 0) {
 			ast_log(LOG_ERROR,
@@ -3707,6 +4005,7 @@ static void visdn_q931_ccb_receive()
 				msg->primitive);
 		}
 
+		q931_ies_destroy(&msg->ies);
 		free(msg);
 	}
 }
@@ -4125,7 +4424,6 @@ static struct ast_cli_entry show_visdn_calls =
 
 /*---------------------------------------------------------------------------*/
 
-
 int load_module()
 {
 	// Initialize q.931 library.
@@ -4138,6 +4436,9 @@ int load_module()
 
 	INIT_LIST_HEAD(&visdn.q931_ccb_queue);
 	ast_mutex_init(&visdn.q931_ccb_queue_lock);
+
+	visdn.default_intf = visdn_intf_alloc();
+	visdn_intf_default_init(visdn.default_intf);
 
 	int filedes[2];
 	if (pipe(filedes) < 0) {
@@ -4165,6 +4466,7 @@ int load_module()
 	q931_set_report_func(visdn_logger);
 	q931_set_timer_update_func(visdn_q931_timer_update);
 	q931_set_queue_primitive_func(visdn_queue_primitive);
+	q931_set_is_number_complete_func(visdn_q931_is_number_complete);
 
 	visdn_reload_config();
 
@@ -4294,6 +4596,8 @@ err_pipe_ccb_q931:
 
 int unload_module(void)
 {
+	visdn_intf_put(visdn.default_intf);
+	
 	visdn_overlap_unregister();
 
 	visdn_intf_cli_unregister();

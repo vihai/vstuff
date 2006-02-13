@@ -368,7 +368,6 @@ int hfc_pcm_port_register(
 	if (err < 0)
 		goto err_port_register;
 
-printk(KERN_DEBUG "NUM CHANS: %d\n", port->num_chans);
 	port->num_chans = 0;
 
 	for (i=0; i<port->num_chans; i++) {

@@ -30,6 +30,7 @@
 #include <asterisk/pbx.h>
 #include <asterisk/options.h>
 #include <asterisk/cli.h>
+#include <asterisk/causes.h>
 #include <asterisk/version.h>
 
 #include "chan_visdn.h"
@@ -39,67 +40,154 @@ STANDARD_LOCAL_USER;
 
 LOCAL_USER_DECL;
 
-static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
+static int new_digit(
+	struct ast_channel *chan,
+	char *called_number,
+	int called_number_size,
+	char digit, int *retval)
 {
-	struct localuser *u;
-	LOCAL_USER_ADD(u);
+	ast_setstate(chan, AST_STATE_DIALING);
 
-	char called_number[32] = "";
+	if (digit) {
+		if(strlen(called_number) >= called_number_size - 1) {
+			ast_log(LOG_NOTICE,
+				"Maximum number of digits exceeded\n");
 
-	while(ast_waitfor(chan, -1) > -1) {
-		struct ast_frame *f;
-		f = ast_read(chan);
-		if (!f)
-			break;
+			chan->hangupcause =
+				AST_CAUSE_INVALID_NUMBER_FORMAT;
+			*retval = -1;
+			return TRUE;
+		}
 
-		if (f->frametype == AST_FRAME_DTMF) {
-			ast_setstate(chan, AST_STATE_DIALING);
+		called_number[strlen(called_number)] = digit;
+	}
 
-			if(strlen(called_number) >= sizeof(called_number)-1)
-				break;
+	int sending_complete = FALSE;
+	if (!strcmp(chan->tech->type, "VISDN")) {
+		struct visdn_chan *visdn_chan = to_visdn_chan(chan);
 
-			called_number[strlen(called_number)] = f->subclass;
+		sending_complete = visdn_chan->sending_complete;
+	}
 
+	if (sending_complete) {
+		if (ast_exists_extension(NULL,
+				chan->context,
+				called_number, 1,
+				chan->cid.cid_num)) {
+
+			ast_indicate(chan,
+				AST_CONTROL_PROCEEDING);
+
+			chan->priority = 0;
+			strncpy(chan->exten, called_number,
+					sizeof(chan->exten));
+
+			*retval = 0;
+			return TRUE;
+#if 0
+		} else if (ast_canmatch_extension(NULL,
+				chan->context,
+				"pippo", 1,
+//				called_number, 1, // FIXME!!!!!!!!!!!!1
+				chan->cid.cid_num)) {
+
+			ast_indicate(chan,
+				AST_CONTROL_PROCEEDING);
+
+			chan->priority = 0;
+//			strncpy(chan->exten, called_number,
+			strncpy(chan->exten, "pippo",
+					sizeof(chan->exten));
+
+			*retval = 0;
+			return TRUE;
+#endif
+		} else {
+			chan->hangupcause =
+				AST_CAUSE_INVALID_NUMBER_FORMAT;
+			*retval = -1;
+			return TRUE;
+		}
+	} else {
+		char overlap_number[32];
+		snprintf(overlap_number, sizeof(overlap_number),
+			"o-%s", called_number);
+		if (ast_canmatch_extension(NULL,
+				chan->context,
+				overlap_number, 1,
+				chan->cid.cid_num)) {
+
+			if (ast_exists_extension(NULL,
+					chan->context,
+					overlap_number, 1,
+					chan->cid.cid_num)) {
+
+				chan->priority = 0;
+				strncpy(chan->exten, overlap_number,
+						sizeof(chan->exten));
+
+				*retval = 0;
+				return TRUE;
+			}
+		} else {
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
 					called_number, 1,
 					chan->cid.cid_num)) {
 
-				ast_indicate(chan, AST_CONTROL_CONGESTION);
-				ast_safe_sleep(chan, 30000);
-				return -1;
+				chan->hangupcause =
+					AST_CAUSE_INVALID_NUMBER_FORMAT;
+				*retval = -1;
+				return TRUE;
 			}
 
-			if (ast_exists_extension(NULL,
-					chan->context,
-					called_number, 1,
-					chan->cid.cid_num)) {
+			if (!ast_matchmore_extension(NULL,
+				chan->context,
+				called_number, 1,
+				chan->cid.cid_num)) {
 
-				if (!ast_matchmore_extension(NULL,
-					chan->context,
-					called_number, 1,
-					chan->cid.cid_num)) {
-
-					ast_setstate(chan, AST_STATE_RING);
-					ast_indicate(chan,
-						AST_CONTROL_PROCEEDING);
-				}
+				ast_setstate(chan, AST_STATE_RING);
+				ast_indicate(chan,
+					AST_CONTROL_PROCEEDING);
 
 				chan->priority = 0;
 				strncpy(chan->exten, called_number,
 						sizeof(chan->exten));
 
-				ast_frfree(f);
-
-				return 0;
+				*retval = 0;
+				return TRUE;
 			}
 		}
+	}
+
+	return FALSE;
+}
+
+static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
+{
+	struct localuser *u;
+	int retval = -1;
+	int do_exit = FALSE;
+	LOCAL_USER_ADD(u);
+
+	char called_number[32] = "";
+
+	while(ast_waitfor(chan, -1) > -1 && !do_exit) {
+		struct ast_frame *f;
+		f = ast_read(chan);
+		if (!f)
+			break;
+
+		if (f->frametype == AST_FRAME_DTMF)
+			 do_exit = new_digit(chan, called_number,
+					 sizeof(called_number),
+					 f->subclass, &retval);
 
 		ast_frfree(f);
 	}
 
 	LOCAL_USER_REMOVE(u);
-	return -1;
+	return retval;
 }
 
 static char *visdn_overlap_dial_descr =

@@ -37,6 +37,7 @@ struct q931_global_call
 	int restart_retransmit_count;
 	int restart_responded;
 	int restart_acknowledged;
+	struct q931_ie_restart_indicator *restart_indicator;
 
 	struct q931_chanset restart_reqd_chans;
 	struct q931_chanset restart_acked_chans;
@@ -90,5 +91,8 @@ void q931_management_restart_request(
 	struct q931_chanset *chanset,
 	const struct q931_ies *user_ies);
 
+void q931_global_init(
+	struct q931_global_call *gc,
+	struct q931_interface *intf);
 #endif
 #endif

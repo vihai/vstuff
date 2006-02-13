@@ -49,18 +49,6 @@ struct q931_ie
 	int refcnt;
 };
 
-static inline void q931_ie_get(struct q931_ie *ie)
-{
-	ie->refcnt++;
-}
-
-static inline void q931_ie_put(struct q931_ie *ie)
-{
-	ie->refcnt--;
-	if (ie->refcnt == 0)
-		free(ie);
-}
-
 struct q931_ie_onwire
 {
 	__u8 id;
@@ -250,5 +238,8 @@ const struct q931_ie_usage *q931_get_ie_usage(
 	enum q931_message_type message_type,
 	__u8 codeset,
 	enum q931_ie_id ie_id);
+struct q931_ie *q931_ie_get(struct q931_ie *ie);
+void q931_ie_put(struct q931_ie *ie);
+
 
 #endif

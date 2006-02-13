@@ -1,4 +1,4 @@
-
+;
 ; These are some example entries to be put in extensions.conf
 ; to enable dialin/dialout through vISDN interfaces.
 
@@ -8,15 +8,15 @@
 exten => _.,1,Dial(VISDN/visdn1.0/${EXTEN})
 
 ;------------------------
-; Dialout with a macro:
+; Dialout with a macro, the 'o-' prefixed exenstion indicates that passthru
+; overlap dialing is supported by the dialed channel:
 
 exten => _.,1,Macro(telcobri_out|${EXTEN})
+exten => _o-.,1,Macro(telcobri_out|${EXTEN}:2)
 
 [macro-telcobri_out]
 exten => s,1,SetCallerID(12345000)	; Set the MSN to be used
 exten => s,2,Dial(VISDN/visdn1.0/${ARG1})
-exten => s,3,Congestion
-exten => s,103,Busy
 
 ;------------------------
 ; Dialin PPP extension
@@ -29,11 +29,11 @@ exten => 229,1,visdnPPP(172.16.0.1:172.16.0.2)
 
 [visdn1_0_in]
 include => local
-exten => s,1,VISDNOverlapDial()		; Needed in NT mode
+exten => s,1,VISDNOverlapDial()		; Needed for overlap sending/receiving
 
 [visdn1_1_in]
 include => default
-exten => s,1,VISDNOverlapDial()		; Needed in NT mode
+exten => s,1,VISDNOverlapDial()		; Needed for overlap sending/receiving
 
 [visdn1_3_in]
 exten => 12345000,1,Dial(SIP/100)	; One entry for each MSN

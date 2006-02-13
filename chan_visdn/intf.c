@@ -51,8 +51,9 @@
 #include "util.h"
 #include "huntgroup.h"
 #include "ton.h"
+#include "numbers_list.h"
 
-static struct visdn_interface *visdn_intf_alloc(void)
+struct visdn_interface *visdn_intf_alloc(void)
 {
 	struct visdn_interface *intf;
 
@@ -66,6 +67,7 @@ static struct visdn_interface *visdn_intf_alloc(void)
 
 	INIT_LIST_HEAD(&intf->suspended_calls);
 	INIT_LIST_HEAD(&intf->clip_numbers_list);
+	INIT_LIST_HEAD(&intf->trans_numbers_list);
 	intf->q931_intf = NULL;
 	intf->configured = FALSE;
 	intf->open_pending = FALSE;
@@ -159,41 +161,6 @@ static enum visdn_clir_mode
 	}
 }
 
-static void visdn_decode_clip_numbers(
-	struct visdn_interface *intf,
-	const char *value)
-{
-	char *str = strdup(value);
-	char *strpos = str;
-	char *tok;
-
-	struct visdn_clip_number *num, *t;
-	list_for_each_entry_safe(num, t,
-		       &intf->clip_numbers_list, node) {
-		list_del(&num->node);
-		free(num);
-	}
-
-	while ((tok = strsep(&strpos, ","))) {
-		while(*tok == ' ' || *tok == '\t')
-			tok++;
-
-		while(*(tok + strlen(tok) - 1) == ' ' ||
-			*(tok + strlen(tok) - 1) == '\t')
-			*(tok + strlen(tok) - 1) = '\0';
-
-		struct visdn_clip_number *num;
-		num = malloc(sizeof(*num));
-		memset(num, 0, sizeof(num));
-
-		strncpy(num->number, tok, sizeof(num->number));
-
-		list_add_tail(&num->node, &intf->clip_numbers_list);
-	}
-
-	free(str);
-}
-
 static int visdn_intf_from_var(
 	struct visdn_interface *intf,
 	struct ast_variable *var)
@@ -235,6 +202,9 @@ static int visdn_intf_from_var(
 		intf->tones_option = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "context")) {
 		strncpy(intf->context, var->value, sizeof(intf->context));
+	} else if (!strcasecmp(var->name, "trans_numbers")) {
+		visdn_numbers_list_from_string(
+			&intf->trans_numbers_list, var->value);
 	} else if (!strcasecmp(var->name, "clip_enabled")) {
 		intf->clip_enabled = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clip_override")) {
@@ -246,7 +216,8 @@ static int visdn_intf_from_var(
 		strncpy(intf->clip_default_number, var->value,
 			sizeof(intf->clip_default_number));
 	} else if (!strcasecmp(var->name, "clip_numbers")) {
-		visdn_decode_clip_numbers(intf, var->value);
+		visdn_numbers_list_from_string(
+			&intf->clip_numbers_list, var->value);
 	} else if (!strcasecmp(var->name, "clip_special_arrangement")) {
 		intf->clip_special_arrangement = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clir_mode")) {
@@ -325,22 +296,11 @@ static void visdn_copy_interface_config(
 	strcpy(dst->clip_default_name, src->clip_default_name);
 	strcpy(dst->clip_default_number, src->clip_default_number);
 
-	struct visdn_clip_number *num, *t;
-	list_for_each_entry_safe(num, t,
-		       &dst->clip_numbers_list, node) {
-		list_del(&num->node);
-		free(num);
-	}
+	visdn_numbers_list_copy(&dst->trans_numbers_list,
+			&src->trans_numbers_list);
+	visdn_numbers_list_copy(&dst->clip_numbers_list,
+			&src->clip_numbers_list);
 
-	list_for_each_entry(num, &src->clip_numbers_list, node) {
-
-		struct visdn_clip_number *num2;
-
-		num2 = malloc(sizeof(*num2));
-		strcpy(num2->number, num->number);
-		list_add_tail(&num2->node, &dst->clip_numbers_list);
-	}
-	
 	dst->clip_special_arrangement = src->clip_special_arrangement;
 	dst->clir_mode = src->clir_mode;
 	dst->overlap_sending = src->overlap_sending;
@@ -375,19 +335,6 @@ static void visdn_copy_interface_config(
 	dst->T320 = src->T320;
 	dst->T321 = src->T321;
 	dst->T322 = src->T322;
-}
-
-int visdn_intf_clip_valid(
-	struct visdn_interface *intf,
-	const char *called_number)
-{
-	struct visdn_clip_number *num;
-	list_for_each_entry(num, &intf->clip_numbers_list, node) {
-		if (ast_extension_match(num->number, called_number))
-			return TRUE;
-	}
-
-	return FALSE;
 }
 
 int visdn_intf_open(struct visdn_interface *intf)
@@ -487,7 +434,7 @@ int visdn_intf_open(struct visdn_interface *intf)
 				"Interface '%s' is configured in network"
 				" mode but clip_default_number is empty\n",
 				intf->name);
-		} else if (!visdn_intf_clip_valid(intf,
+		} else if (!visdn_numbers_list_match(&intf->clip_numbers_list,
 					intf->clip_default_number)) {
 
 			ast_log(LOG_NOTICE,
@@ -499,6 +446,35 @@ int visdn_intf_open(struct visdn_interface *intf)
 	}
 
 	return 0;
+}
+
+void visdn_intf_default_init(struct visdn_interface *intf)
+{
+	intf->network_role = Q931_INTF_NET_PRIVATE;
+	intf->outbound_called_ton = VISDN_TYPE_OF_NUMBER_UNKNOWN;
+	strcpy(intf->force_outbound_cli, "");
+	intf->force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET;
+	intf->tones_option = TRUE;
+	strcpy(intf->context, "visdn");
+	intf->clip_enabled = TRUE;
+	intf->clip_override = FALSE;
+	strcpy(intf->clip_default_name, "");
+	strcpy(intf->clip_default_number, "");
+	intf->clip_special_arrangement = FALSE;
+	intf->clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF;
+	intf->overlap_sending = TRUE;
+	intf->overlap_receiving = FALSE;
+	intf->call_bumping = FALSE;
+	intf->cli_rewriting = FALSE;
+	strcpy(intf->national_prefix, "");
+	strcpy(intf->international_prefix, "");
+	strcpy(intf->network_specific_prefix, "");
+	strcpy(intf->subscriber_prefix, "");
+	strcpy(intf->abbreviated_prefix, "");
+	intf->dlc_autorelease_time = 10;
+	intf->echocancel = FALSE;
+	intf->echocancel_taps = 256;
+	intf->T307 = 180;
 }
 
 static void visdn_intf_reconfigure(
@@ -514,7 +490,7 @@ static void visdn_intf_reconfigure(
 
 	/* Configure it with default configuration */
 	strncpy(intf->name, name, sizeof(intf->name));
-	visdn_copy_interface_config(intf, &visdn.default_intf);
+	visdn_copy_interface_config(intf, visdn.default_intf);
 
 	/* Now read the configuration from file */
 	intf->configured = TRUE;
@@ -568,7 +544,7 @@ void visdn_intf_reload(struct ast_config *cfg)
 	struct ast_variable *var;
 	var = ast_variable_browse(cfg, "global");
 	while (var) {
-		if (visdn_intf_from_var(&visdn.default_intf, var) < 0) {
+		if (visdn_intf_from_var(visdn.default_intf, var) < 0) {
 			ast_log(LOG_WARNING,
 				"Unknown configuration variable %s\n",
 				var->name);
@@ -649,7 +625,8 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 
 		ast_cli(fd, "Role                      : %s\n",
 				intf->q931_intf ?
-					(intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
+					(intf->q931_intf->role ==
+					 	LAPD_INTF_ROLE_NT ?
 						"NT" : "TE") :
 					"UNUSED!");
 
@@ -661,7 +638,29 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Tones option              : %s\n"
 			"Echo canceller            : %s\n"
 			"Echo canceller taps       : %d (%d ms)\n"
-			"Context                   : %s\n"
+			"Context                   : %s\n",
+			visdn_interface_network_role_to_string(
+				intf->network_role),
+			visdn_ton_to_string(
+				intf->outbound_called_ton),
+			intf->force_outbound_cli,
+			visdn_ton_to_string(
+				intf->force_outbound_cli_ton),
+			intf->tones_option ? "Yes" : "No",
+			intf->echocancel ? "Yes" : "No",
+			intf->echocancel_taps, intf->echocancel_taps / 8,
+			intf->context);
+
+		ast_cli(fd, "Transparent Numbers       : ");
+		{
+		struct visdn_number *num;
+		list_for_each_entry(num, &intf->clip_numbers_list, node) {
+			ast_cli(fd, "%s ", num->number);
+		}
+		}
+		ast_cli(fd, "\n");
+
+		ast_cli(fd,
 			"Overlap Sending           : %s\n"
 			"Overlap Receiving         : %s\n"
 			"Call bumping              : %s\n"
@@ -677,17 +676,6 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"CLIP override             : %s\n"
 			"CLIP default              : %s <%s>\n"
 			"CLIP special arrangement  : %s\n",
-			visdn_interface_network_role_to_string(
-				intf->network_role),
-			visdn_ton_to_string(
-				intf->outbound_called_ton),
-			intf->force_outbound_cli,
-			visdn_ton_to_string(
-				intf->force_outbound_cli_ton),
-			intf->tones_option ? "Yes" : "No",
-			intf->echocancel ? "Yes" : "No",
-			intf->echocancel_taps, intf->echocancel_taps / 8,
-			intf->context,
 			intf->overlap_sending ? "Yes" : "No",
 			intf->overlap_receiving ? "Yes" : "No",
 			intf->call_bumping ? "Yes" : "No",
@@ -706,9 +694,11 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			intf->clip_special_arrangement ? "Yes" : "No");
 
 		ast_cli(fd, "CLIP Numbers              : ");
-		struct visdn_clip_number *num;
+		{
+		struct visdn_number *num;
 		list_for_each_entry(num, &intf->clip_numbers_list, node) {
 			ast_cli(fd, "%s ", num->number);
+		}
 		}
 		ast_cli(fd, "\n");
 

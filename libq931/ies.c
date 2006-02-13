@@ -21,7 +21,9 @@
 #include <libq931/lib.h>
 #include <libq931/ies.h>
 
-void q931_ies_destroy(struct q931_ies *ies)
+#include <libq931/ie_cause.h>
+
+void q931_ies_flush(struct q931_ies *ies)
 {
 	assert(ies);
 
@@ -32,6 +34,13 @@ void q931_ies_destroy(struct q931_ies *ies)
 	ies->count = 0;
 }
 
+void q931_ies_destroy(struct q931_ies *ies)
+{
+	assert(ies);
+
+	q931_ies_flush(ies);
+}
+
 void q931_ies_add(
 	struct q931_ies *ies,
 	struct q931_ie *ie)
@@ -40,9 +49,8 @@ void q931_ies_add(
 	assert(ies->count < Q931_IES_NUM_IES);
 	assert(ie);
 
-	q931_ie_get(ie);
+	ies->ies[ies->count] = q931_ie_get(ie);
 
-	ies->ies[ies->count] = ie;
 	ies->count++;
 }
 
@@ -89,7 +97,28 @@ void q931_ies_merge(
 
 	int i;
 	for (i=0; i<src_ies->count; i++) {
+
+		if (src_ies->ies[i]->cls->id == Q931_IE_CAUSE) {
+			struct q931_ie_cause *src_cause =
+				container_of(src_ies->ies[i],
+				struct q931_ie_cause, ie);
+
+			int j;
+			for (j=0; j<ies->count; j++) {
+				if (ies->ies[j]->cls->id == Q931_IE_CAUSE) {
+					struct q931_ie_cause *cause =
+						container_of(ies->ies[j],
+						struct q931_ie_cause, ie);
+
+					if (cause->value == src_cause->value)
+						goto continue_to_next;
+				}
+			}
+		}
+
 		q931_ies_add(ies, src_ies->ies[i]);
+
+continue_to_next:;
 	}
 }
 
@@ -103,14 +132,11 @@ void q931_ies_copy(
 	assert(ies);
 	assert(src_ies);
 
-	int i;
-	for (i=0; i<ies->count; i++) {
-		q931_ies_del(ies, ies->ies[i]);
-	}
+	q931_ies_flush(ies);
 
-	for (i=0; i<src_ies->count; i++) {
+	int i;
+	for (i=0; i<src_ies->count; i++)
 		q931_ies_add(ies, src_ies->ies[i]);
-	}
 }
 
 static int q931_ies_compare(const void *a, const void *b)

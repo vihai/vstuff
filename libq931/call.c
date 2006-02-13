@@ -222,7 +222,6 @@ struct q931_call *q931_call_alloc(struct q931_interface *intf)
 	q931_ies_init(&call->setup_ies);
 
 	q931_ies_init(&call->disconnect_cause);
-	q931_ies_init(&call->release_with_cause);
 	q931_ies_init(&call->saved_cause);
 	q931_ies_init(&call->release_cause);
 
@@ -321,7 +320,7 @@ struct q931_call *_q931_call_get(struct q931_call *call,
 	assert(call);
 	assert(call->refcnt > 0);
 
-#if 0
+#if 1
 	report_call(call, LOG_DEBUG, "%s:%d GET (%d => %d)\n",
 		file, line,
 		call->refcnt, call->refcnt+1);
@@ -339,7 +338,7 @@ void _q931_call_put(struct q931_call *call,
 	assert(call);
 	assert(call->refcnt > 0);
 
-#if 0
+#if 1
 	report_call(call, LOG_DEBUG, "%s:%d PUT (%d => %d)\n",
 		file, line,
 		call->refcnt, call->refcnt-1);
@@ -786,13 +785,13 @@ static struct q931_channel *q931_channel_select_setup(
 	struct q931_call *call,
 	const struct q931_ies *setup_ies,
 	struct q931_ies *causes,
-	int *bumping_possible)
+	int *bumping_needed)
 {
 	assert(call);
 	assert(setup_ies);
 	assert(call->intf);
 
-	*bumping_possible = FALSE;
+	*bumping_needed = FALSE;
 
 	struct q931_ie_channel_identification *ci = NULL;
 
@@ -810,6 +809,7 @@ static struct q931_channel *q931_channel_select_setup(
 
 	if (!ci) {
 		// No Channel Identification IE, assuming any channel is ok
+		// Presence of CI n->u is already checked in q931_decode_ies
 		report_call(call, LOG_DEBUG,
 			"No channel identification IE,"
 			" assuming any channel available\n");
@@ -836,7 +836,7 @@ static struct q931_channel *q931_channel_select_setup(
 	}
 
 	if (!ci->chanset.nchans) {
-		*bumping_possible = TRUE;
+		*bumping_needed = TRUE;
 		return NULL;
 	}
 
@@ -1596,7 +1596,7 @@ void q931_reject_request(
 	switch (call->state) {
 	case N1_CALL_INITIATED:
 		q931_call_send_release_complete(call, user_ies);
-		q931_channel_disconnect(call->channel);
+		q931_channel_release(call->channel);
 		q931_call_set_state(call, N0_NULL_STATE);
 		q931_call_release_reference(call);
 	break;
@@ -1656,7 +1656,7 @@ void q931_release_request(
 	case U12_DISCONNECT_INDICATION: {
 		Q931_DECLARE_IES(ies);
 
-		q931_ies_merge(&ies, &call->release_with_cause);
+		q931_ies_merge(&ies, &call->disconnect_cause);
 		q931_ies_merge(&ies, user_ies);
 
 		q931_channel_disconnect(call->channel);
@@ -2117,7 +2117,9 @@ void q931_restart_request(
 	case U15_SUSPEND_REQUEST:
 	case U17_RESUME_REQUEST:
 	case U19_RELEASE_REQUEST:
-	case U25_OVERLAP_RECEIVING:
+	case U25_OVERLAP_RECEIVING: {
+		struct q931_channel *callchannel = call->channel;
+
 		q931_call_stop_any_timer(call);
 		q931_channel_release(call->channel);
 		q931_call_set_state(call, U0_NULL_STATE);
@@ -2126,7 +2128,8 @@ void q931_restart_request(
 			user_ies);
 		q931_global_restart_confirm(&call->intf->global_call,
 			call->dlc,
-			call->channel);
+			callchannel);
+	}
 	break;
 
 	case N0_NULL_STATE:
@@ -2145,7 +2148,9 @@ void q931_restart_request(
 	case N17_RESUME_REQUEST:
 	case N19_RELEASE_REQUEST:
 	case N22_CALL_ABORT:
-	case N25_OVERLAP_RECEIVING:
+	case N25_OVERLAP_RECEIVING: {
+		struct q931_channel *callchannel = call->channel;
+
 		q931_call_stop_any_timer(call);
 		q931_channel_release(call->channel);
 		q931_call_set_state(call, N0_NULL_STATE);
@@ -2154,7 +2159,8 @@ void q931_restart_request(
 			Q931_CCB_RELEASE_INDICATION, user_ies);
 		q931_global_restart_confirm(&call->intf->global_call,
 			call->dlc,
-			call->channel);
+			callchannel);
+	}
 	break;
 	}
 }
@@ -2590,10 +2596,20 @@ static void q931_timer_T302(void *data)
 	report_call(call, LOG_DEBUG, "T302 fired\n");
 
 	switch (call->state) {
-	case N2_OVERLAP_SENDING:
-		// Is call info incomplete?
-		// TODO: How do we check? A callback to the CCB?
-		if (1) {
+	case N2_OVERLAP_SENDING: {
+		/* Simulates a sending complete to the CCB */
+
+		Q931_DECLARE_IES(ies);
+		struct q931_ie_sending_complete *sc =
+			q931_ie_sending_complete_alloc();
+		q931_ies_add_put(&ies, &sc->ie);
+
+		q931_call_primitive(call, Q931_CCB_INFO_INDICATION, &ies);
+		Q931_UNDECLARE_IES(ies);
+	}
+
+#if 0
+		if (q931_is_number_complete(call)) {
 			Q931_DECLARE_IES(ies);
 
 			struct q931_ie_cause *cause = q931_ie_cause_alloc();
@@ -2606,8 +2622,10 @@ static void q931_timer_T302(void *data)
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
 				pi->coding_standard = Q931_IE_PI_CS_CCITT;
-				pi->location = q931_ie_progress_indicator_location(call);
-				pi->progress_description = Q931_IE_PI_PD_IN_BAND_INFORMATION;
+				pi->location =
+					q931_ie_progress_indicator_location(call);
+				pi->progress_description =
+					Q931_IE_PI_PD_IN_BAND_INFORMATION;
 				q931_ies_add_put(&ies, &pi->ie);
 
 				q931_call_send_disconnect(call, &ies);
@@ -2628,12 +2646,22 @@ static void q931_timer_T302(void *data)
 			q931_call_set_state(call, N3_OUTGOING_CALL_PROCEEDING);
 			q931_call_primitive(call, Q931_CCB_TIMEOUT_INDICATION, NULL);
 		}
+#endif
 	break;
 
-	case U25_OVERLAP_RECEIVING:
-		// Call info is definitely incomplete?
-		// TODO: How do we check? A callback to the CCB?
-		if (1) {
+	case U25_OVERLAP_RECEIVING: {
+		/* Simulates a sending complete to the CCB */
+
+		Q931_DECLARE_IES(ies);
+		struct q931_ie_sending_complete *sc =
+			q931_ie_sending_complete_alloc();
+		q931_ies_add_put(&ies, &sc->ie);
+
+		q931_call_primitive(call, Q931_CCB_INFO_INDICATION, &ies);
+		Q931_UNDECLARE_IES(ies);
+	}
+#if 0
+		if (q931_is_number_complete(call)) {
 			q931_channel_disconnect(call->channel);
 
 			Q931_DECLARE_IES(ies);
@@ -2656,6 +2684,7 @@ static void q931_timer_T302(void *data)
 			// Alerting => q931_call_set_state(call, U7_CALL_RECEIVED);
 			// Callproc => q931_call_set_state(call, U9_INCOMING_CALL_PROCEEDING);
 		}
+#endif
 	break;
 
 	default:
@@ -2956,10 +2985,13 @@ static void q931_timer_T308(void *data)
 				q931_chanset_init(&cs);
 				q931_chanset_add(&cs, call->channel);
 
+#if 0
+				/* Italian network doesnt require this */
 				q931_management_restart_request(
 					&call->intf->global_call,
 					call->dlc,
 					&cs, NULL);
+#endif
 			}
 
 			q931_call_set_state(call, N0_NULL_STATE);
@@ -2983,10 +3015,13 @@ static void q931_timer_T308(void *data)
 				q931_chanset_init(&cs);
 				q931_chanset_add(&cs, call->channel);
 
+#if 0
+				/* Italian network doesnt require this */
 				q931_management_restart_request(
 					&call->intf->global_call,
 					call->dlc,
 					&cs, NULL);
+#endif
 			}
 
 			q931_channel_release(call->channel);
@@ -4251,10 +4286,10 @@ static void q931_handle_setup(
 
 		Q931_DECLARE_IES(ies);
 
-		int bumping_possible;
+		int bumping_needed;
 		struct q931_channel *chan =
 			 q931_channel_select_setup(call, &msg->ies, &ies,
-				&bumping_possible);
+				&bumping_needed);
 
 		if (chan) {
 			call->channel = chan;
@@ -4282,10 +4317,10 @@ static void q931_handle_setup(
 
 		Q931_DECLARE_IES(ies);
 
-		int bumping_possible;
+		int bumping_needed;
 		call->channel =
 			q931_channel_select_setup(call, &msg->ies, &ies,
-						&bumping_possible);
+						&bumping_needed);
 
 		if (!call->channel) {
 			q931_call_send_release_complete(call, &ies);
@@ -4508,6 +4543,15 @@ static void q931_handle_setup_acknowledge(
 	}
 }
 
+static void q931_save_cause(struct q931_ies *ies, struct q931_ies *src_ies)
+{
+	int i;
+	for (i=0; i<src_ies->count; i++) {
+		if (src_ies->ies[i]->cls->id == Q931_IE_CAUSE)
+			q931_ies_add(ies, src_ies->ies[i]);
+	}
+}
+
 static void q931_handle_disconnect(
 	struct q931_call *call,
 	struct q931_message *msg)
@@ -4521,8 +4565,10 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_channel_disconnect(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case N2_OVERLAP_SENDING:
@@ -4531,8 +4577,10 @@ static void q931_handle_disconnect(
 
 		q931_call_stop_timer(call, T302);
 		q931_channel_disconnect(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case N3_OUTGOING_CALL_PROCEEDING:
@@ -4540,8 +4588,10 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_channel_disconnect(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case N4_CALL_DELIVERED:
@@ -4549,8 +4599,10 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_channel_disconnect(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case N7_CALL_RECEIVED:
@@ -4563,8 +4615,10 @@ static void q931_handle_disconnect(
 
 			q931_call_stop_timer(call, T301);
 			q931_channel_disconnect(call->channel);
+			q931_save_cause(&call->disconnect_cause, &msg->ies);
 			q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-			q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 		}
 	break;
 
@@ -4577,8 +4631,10 @@ static void q931_handle_disconnect(
 				break;
 
 			q931_channel_release(call->channel);
+			q931_save_cause(&call->disconnect_cause, &msg->ies);
 			q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-			q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 		}
 	break;
 
@@ -4592,8 +4648,10 @@ static void q931_handle_disconnect(
 
 			q931_call_stop_timer(call, T310);
 			q931_channel_disconnect(call->channel);
+			q931_save_cause(&call->disconnect_cause, &msg->ies);
 			q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-			q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 		}
 	break;
 
@@ -4602,16 +4660,17 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_channel_disconnect(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case N12_DISCONNECT_INDICATION:
 		q931_call_stop_timer(call, T305);
 		q931_call_stop_timer(call, T306);
 		q931_channel_stop_tone(call->channel);
-		q931_call_send_release(call,
-			&call->release_with_cause); // CHECKME
+		q931_call_send_release(call, &call->disconnect_cause);
 		q931_call_start_timer(call, T308);
 		q931_call_set_state(call, N19_RELEASE_REQUEST);
 	break;
@@ -4621,8 +4680,10 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_channel_disconnect(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case N19_RELEASE_REQUEST:
@@ -4639,8 +4700,10 @@ static void q931_handle_disconnect(
 
 			q931_call_stop_timer(call, T304);
 			q931_channel_disconnect(call->channel);
+			q931_save_cause(&call->disconnect_cause, &msg->ies);
 			q931_call_set_state(call, N11_DISCONNECT_REQUEST);
-			q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 		}
 	break;
 
@@ -4650,8 +4713,10 @@ static void q931_handle_disconnect(
 
 		q931_call_stop_timer(call, T304);
 		q931_channel_control(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, U12_DISCONNECT_INDICATION);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case U3_OUTGOING_CALL_PROCEEDING:
@@ -4660,8 +4725,10 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_channel_control(call->channel);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, U12_DISCONNECT_INDICATION);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case U6_CALL_PRESENT:
@@ -4670,8 +4737,10 @@ static void q931_handle_disconnect(
 		if (q931_call_decode_ies(call, msg) < 0)
 			break;
 
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, U12_DISCONNECT_INDICATION);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case U9_INCOMING_CALL_PROCEEDING:
@@ -4680,14 +4749,15 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_call_stop_timer(call, T313);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, U12_DISCONNECT_INDICATION);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case U11_DISCONNECT_REQUEST:
 		q931_call_stop_timer(call, T305);
-		q931_call_send_release(call,
-			&call->release_with_cause); //CHECKME
+		q931_call_send_release(call, &call->disconnect_cause);
 		q931_call_start_timer(call, T308);
 		q931_call_set_state(call, U19_RELEASE_REQUEST);
 	break;
@@ -4697,14 +4767,15 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_call_stop_timer(call, T319);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, U12_DISCONNECT_INDICATION);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	case U17_RESUME_REQUEST:
 		q931_call_stop_timer(call, T318);
-		q931_call_send_release(call,
-			&call->release_with_cause); // CHECKME
+		q931_call_send_release(call, &call->disconnect_cause);
 		q931_call_start_timer(call, T308);
 		q931_call_set_state(call, U19_RELEASE_REQUEST);
 	break;
@@ -4718,8 +4789,10 @@ static void q931_handle_disconnect(
 			break;
 
 		q931_call_stop_timer(call, T302);
+		q931_save_cause(&call->disconnect_cause, &msg->ies);
 		q931_call_set_state(call, U12_DISCONNECT_INDICATION);
-		q931_call_primitive(call, Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
+		q931_call_primitive(call,
+			Q931_CCB_DISCONNECT_INDICATION, &msg->ies);
 	break;
 
 	default:
@@ -5031,15 +5104,6 @@ static void q931_handle_release_complete(
 	assert(msg);
 
 	call->release_complete_received = TRUE;
-
-#if 0
-	int i;
-	for (i=0; i<msg->ies.count; i++) {
-		if (msg->ies.ies[i]->cls->id == Q931_IE_CAUSE) {
-// FIXME			q931_ie_cause_add_to_causeset(&msg->ies.ies[i], &causeset);
-		}
-	}
-#endif
 
 	switch (call->state) {
 	case N0_NULL_STATE:
@@ -5376,7 +5440,8 @@ static void q931_handle_status(
 			q931_channel_release(call->channel);
 			q931_call_set_state(call, N0_NULL_STATE);
 			q931_call_release_reference(call);
-			q931_call_primitive1(call, Q931_CCB_STATUS_INDICATION, &msg->ies,
+			q931_call_primitive1(call,
+				Q931_CCB_STATUS_INDICATION, &msg->ies,
 				Q931_STATUS_INDICATION_ERROR);
 		}
 	}
@@ -5434,9 +5499,11 @@ skip:
 			q931_channel_release(call->channel);
 			q931_call_set_state(call, N0_NULL_STATE);
 			q931_call_release_reference(call);
-			q931_call_primitive1(call, Q931_CCB_STATUS_INDICATION, &msg->ies,
+			q931_call_primitive1(call,
+				Q931_CCB_STATUS_INDICATION, &msg->ies,
 				Q931_STATUS_INDICATION_ERROR);
-			q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &msg->ies);
 		} else if (cs->value == q931_call_state_to_ie_state(call->state)) {
 				// NOTE 1. FURTHER ACTIONS ARE AN IMPLEMENTATION OPTION.
 		} else {
@@ -5459,9 +5526,11 @@ skip:
 
 			q931_call_start_timer(call, T308);
 			q931_call_set_state(call, N19_RELEASE_REQUEST);
-			q931_call_primitive1(call, Q931_CCB_STATUS_INDICATION, &msg->ies,
+			q931_call_primitive1(call,
+				Q931_CCB_STATUS_INDICATION, &msg->ies,
 				Q931_STATUS_INDICATION_ERROR);
-			q931_call_primitive(call, Q931_CCB_RELEASE_INDICATION, &msg->ies);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &msg->ies);
 
 			Q931_UNDECLARE_IES(ies);
 		}
@@ -5531,6 +5600,95 @@ skip:
 	}
 	break;
 
+	case U1_CALL_INITIATED:
+	case U2_OVERLAP_SENDING:
+	case U3_OUTGOING_CALL_PROCEEDING:
+	case U4_CALL_DELIVERED:
+	case U6_CALL_PRESENT:
+	case U7_CALL_RECEIVED:
+	case U8_CONNECT_REQUEST:
+	case U9_INCOMING_CALL_PROCEEDING:
+	case U10_ACTIVE:
+	case U11_DISCONNECT_REQUEST:
+	case U12_DISCONNECT_INDICATION:
+	case U15_SUSPEND_REQUEST:
+	case U17_RESUME_REQUEST:
+	case U25_OVERLAP_RECEIVING: {
+		if (q931_call_decode_ies(call, msg) < 0)
+			break;
+
+		Q931_DECLARE_IES(ies);
+		struct q931_ie_call_state *cs = NULL;
+
+		int i;
+		for (i=0; i<msg->ies.count; i++) {
+			if (msg->ies.ies[i]->cls->id == Q931_IE_CALL_STATE) {
+				cs = container_of(msg->ies.ies[i],
+					struct q931_ie_call_state, ie);
+			} else if (msg->ies.ies[i]->cls->id == Q931_IE_CAUSE) {
+				q931_ies_add_put(&ies, msg->ies.ies[i]);
+			}
+		}
+
+		if (q931_call_timer_running(call, T322)) {
+			if (q931_ies_contain_cause(&ies,
+				Q931_IE_C_CV_MESSAGE_TYPE_NON_EXISTENT_OR_IMPLEMENTED) ||
+			    q931_ies_contain_cause(&ies,
+				Q931_IE_C_CV_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_STATE)) {
+				// Save cause and call state (!?!?!?)
+				goto skip2;
+			} else if(q931_ies_contain_cause(&ies,
+					Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY)) {
+				q931_call_stop_timer(call, T322);
+			}
+		}
+
+skip2:
+		Q931_UNDECLARE_IES(ies);
+
+		if (cs->value == q931_call_state_to_ie_state(U0_NULL_STATE)) {
+			q931_call_stop_any_timer(call);
+			q931_channel_release(call->channel);
+			q931_call_set_state(call, N0_NULL_STATE);
+			q931_call_release_reference(call);
+			q931_call_primitive1(call,
+				Q931_CCB_STATUS_INDICATION, &msg->ies,
+				Q931_STATUS_INDICATION_ERROR);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &msg->ies);
+		} else if (cs->value == q931_call_state_to_ie_state(call->state)) {
+				// NOTE 1. FURTHER ACTIONS ARE AN IMPLEMENTATION OPTION.
+		} else {
+			q931_call_stop_any_timer(call);
+
+			Q931_DECLARE_IES(ies);
+
+			struct q931_ie_cause *cause = q931_ie_cause_alloc();
+			cause->coding_standard = Q931_IE_C_CS_CCITT;
+			cause->location = q931_ie_cause_location_call(call);
+			cause->value =
+				Q931_IE_C_CV_MESSAGE_NOT_COMPATIBLE_WITH_CALL_STATE;
+			memcpy(cause->diagnostics, &msg->raw_message_type,
+				sizeof(msg->raw_message_type));
+			cause->diagnostics_len = sizeof(msg->raw_message_type);
+
+			q931_ies_add_put(&ies, &cause->ie);
+
+			q931_call_send_release(call, &ies);
+
+			q931_call_start_timer(call, T308);
+			q931_call_set_state(call, U19_RELEASE_REQUEST);
+			q931_call_primitive1(call,
+				Q931_CCB_STATUS_INDICATION, &msg->ies,
+				Q931_STATUS_INDICATION_ERROR);
+			q931_call_primitive(call,
+				Q931_CCB_RELEASE_INDICATION, &msg->ies);
+
+			Q931_UNDECLARE_IES(ies);
+		}
+	}
+	break;
+
 	default:
 		q931_call_message_not_compatible_with_state(call, msg);
 	break;
@@ -5551,6 +5709,11 @@ static void q931_handle_status_enquiry(
 	cause->location = q931_ie_cause_location_call(call);
 	cause->value = Q931_IE_C_CV_RESPONSE_TO_STATUS_ENQUIRY;
 	q931_ies_add_put(&ies, &cause->ie);
+
+	struct q931_ie_call_state *cs = q931_ie_call_state_alloc();
+	cs->coding_standard = Q931_IE_CS_CS_CCITT;
+	cs->value = q931_call_state_to_ie_state(call->state);
+	q931_ies_add_put(&ies, &cs->ie);
 
 	q931_call_send_status(call, &ies);
 

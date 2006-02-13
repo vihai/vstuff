@@ -60,6 +60,11 @@
 ;	Context for incoming calls
 ;	## role: network, user
 ;
+; trans_numbers = ""
+;	Called numbers for which transparent bearer capability/high layer
+;	compatibility passing is supported.
+;	## role: network, user
+;
 ; clip_enabled = Yes
 ;	Enabled Calling Line Identification Presentation service.
 ;	## role: network

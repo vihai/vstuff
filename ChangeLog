@@ -2,6 +2,64 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-13 02:33:53 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-536
+
+    Summary:
+      Bunch of changes to conform to TBR33 and TI tests
+    Revision:
+      isdn--devel--0.1--patch-536
+
+    chan_visdn.c
+    ------------
+    
+    - Addedd numbers list for transparent destinations (destinations which
+      support the passing of bearer capabilities)
+    - Fixed transparent bearer capability and high layer compatibility passing
+      between channels
+    - Changes to overlap sending/receiving
+    - Send numbering plan = unknown when TON == unknown
+    - Do not send INFORMATION messages in states != U3, U4 and U10
+    - Only hear inband information if the channel has been connected
+    - INFO messages may be received in OVERLAP_RECEIVING state, of course
+    - Support sending numbers greater than 20 digits by using an INFO message
+      after receiving SETUP ACK
+    - Handle SETUP-CONFIRM/SETUP-COMPLETE-INDICATION passing between channels
+    - 
+    
+    libq931:
+    -------
+    
+    - Added missing initialization of T316 and T317 in global.c
+    - Added missing IE call state in global call's STATUS sender
+    - Respond single interface instead of indicated channels when appropriate
+    - Added dummy call reference handler
+    - Moved FACILITY handling from global call to dummy call reference
+    - Consider "restartable" also channels not associated with a call
+    - Use exclusive instead of preferred in restarted channel indicator
+    - Improved ies merging code to not duplicate the same cause
+    
+
+    new files:
+     chan_visdn/.arch-ids/numbers_list.c.id
+     chan_visdn/.arch-ids/numbers_list.h.id
+     chan_visdn/numbers_list.c chan_visdn/numbers_list.h
+     libq931/.arch-ids/dummy.c.id libq931/dummy.c
+     libq931/libq931/.arch-ids/dummy.h.id libq931/libq931/dummy.h
+     samples/.arch-ids/asterisk-1.2-answer.diff.id
+     samples/asterisk-1.2-answer.diff
+
+    modified files:
+     ChangeLog TODO chan_visdn/Makefile.am chan_visdn/chan_visdn.c
+     chan_visdn/chan_visdn.h chan_visdn/intf.c chan_visdn/intf.h
+     chan_visdn/overlap.c libq931/Makefile.am libq931/call.c
+     libq931/global.c libq931/ie.c libq931/ies.c libq931/input.c
+     libq931/lib.c libq931/libq931/call.h libq931/libq931/global.h
+     libq931/libq931/ie.h libq931/libq931/ies.h
+     libq931/libq931/lib.h modules/hfc-4s/pcm_port.c
+     modules/hfc-pci/st_port.c modules/lapd/tei_mgmt_nt.c
+     samples/extensions.conf.sample samples/visdn.conf.sample
+
+
 2006-02-12 17:24:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-535
 
     Summary:

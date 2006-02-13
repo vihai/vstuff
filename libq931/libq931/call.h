@@ -140,7 +140,6 @@ struct q931_call
 	struct q931_ies setup_ies;
 
 	struct q931_ies disconnect_cause;
-	struct q931_ies release_with_cause;
 	struct q931_ies saved_cause;
 	struct q931_ies release_cause;
 

@@ -32,6 +32,7 @@ static inline void q931_ies_init(
 	ies->count = 0;
 }
 
+void q931_ies_flush(struct q931_ies *ies);
 void q931_ies_destroy(struct q931_ies *ies);
 
 void q931_ies_add(

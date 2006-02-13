@@ -1,4 +1,4 @@
-AM_CFLAGS = -D_REENTRANT -Wall -fno-inline
+AM_CFLAGS = -D_REENTRANT -Wall
 
 lib_LTLIBRARIES = libq931.la
 
@@ -17,6 +17,7 @@ libq931_la_SOURCES =			\
 	channel.c			\
 	output.c			\
 	global.c			\
+	dummy.c				\
 	chanset.c			\
 	callref.c			\
 	dlc.c				\
@@ -52,6 +53,7 @@ nobase_include_HEADERS =			\
 	libq931/chanset.h			\
 	libq931/dlc.h				\
 	libq931/global.h			\
+	libq931/dummy.h				\
 	libq931/ccb.h				\
 	libq931/ie.h				\
 	libq931/ie_bearer_capability.h		\

@@ -41,6 +41,10 @@ void q931_set_queue_primitive_func(
 		unsigned long par1,
 		unsigned long par2));
 
+void q931_set_is_number_complete_func(
+	int (*is_number_complete_func)(
+		struct q931_call *call));
+
 void q931_init();
 void q931_leave();
 
@@ -60,6 +64,8 @@ extern void (*q931_queue_primitive)(
 	const struct q931_ies *ies,
 	unsigned long par1,
 	unsigned long par2);
+extern int (*q931_is_number_complete)(
+		struct q931_call *call);
 
 typedef char BOOL;
 

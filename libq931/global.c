@@ -1,7 +1,7 @@
 /*
  * vISDN DSSS-1/q.931 signalling library
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -73,6 +73,8 @@ void q931_management_restart_request(
 	struct q931_chanset *chanset,
 	const struct q931_ies *user_ies)
 {
+	report_gc(gc, LOG_DEBUG, "RESTART-REQUEST\n");
+
 	switch(gc->state) {
 	case Q931_GLOBAL_STATE_NULL: {
 
@@ -83,7 +85,9 @@ void q931_management_restart_request(
 
 		Q931_DECLARE_IES(ies);
 
-		if (chanset && q931_chanset_count(chanset)) {
+		if (gc->restart_indicator->restart_class ==
+			       		Q931_IE_RI_C_INDICATED) {
+
 			q931_chanset_init(&gc->restart_acked_chans);
 			q931_chanset_copy(&gc->restart_reqd_chans, chanset);
 
@@ -93,6 +97,7 @@ void q931_management_restart_request(
 			ci->interface_type =
 				q931_ie_channel_identification_intftype(
 								gc->intf);
+			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_copy(&ci->chanset,
@@ -103,11 +108,18 @@ void q931_management_restart_request(
 				q931_ie_restart_indicator_alloc();
 			ri->restart_class = Q931_IE_RI_C_INDICATED;
 			q931_ies_add_put(&ies, &ri->ie);
-		} else {
+
+		} else if (gc->restart_indicator->restart_class ==
+			       		Q931_IE_RI_C_SINGLE_INTERFACE) {
+
 			struct q931_ie_restart_indicator *ri =
 				q931_ie_restart_indicator_alloc();
 			ri->restart_class = Q931_IE_RI_C_SINGLE_INTERFACE;
 			q931_ies_add_put(&ies, &ri->ie);
+
+		} else if (gc->restart_indicator->restart_class ==
+			       		Q931_IE_RI_C_ALL_INTERFACES) {
+			assert(0);
 		}
 
 		Q931_UNDECLARE_IES(ies);
@@ -150,10 +162,14 @@ void q931_global_restart_confirm(
 	struct q931_dlc *dlc,
 	struct q931_channel *chan)
 {
+	report_gc(gc, LOG_DEBUG, "RESTART-CONFIRM\n");
+
 	switch(gc->state) {
 	case Q931_GLOBAL_STATE_RESTART_REQUEST:
-		q931_chanset_del(&gc->restart_reqd_chans, chan);
-		q931_chanset_add(&gc->restart_acked_chans, chan);
+		if (chan) {
+			q931_chanset_del(&gc->restart_reqd_chans, chan);
+			q931_chanset_add(&gc->restart_acked_chans, chan);
+		}
 
 		if (q931_chanset_count(&gc->restart_reqd_chans) == 0) {
 
@@ -179,8 +195,10 @@ void q931_global_restart_confirm(
 	break;
 
 	case Q931_GLOBAL_STATE_RESTART:
-		q931_chanset_del(&gc->restart_reqd_chans, chan);
-		q931_chanset_add(&gc->restart_acked_chans, chan);
+		if (chan) {
+			q931_chanset_del(&gc->restart_reqd_chans, chan);
+			q931_chanset_add(&gc->restart_acked_chans, chan);
+		}
 
 		if (q931_chanset_count(&gc->restart_reqd_chans) == 0) {
 
@@ -189,23 +207,42 @@ void q931_global_restart_confirm(
 
 			Q931_DECLARE_IES(ies);
 
-			struct q931_ie_channel_identification *ci =
-				q931_ie_channel_identification_alloc();
+			if (gc->restart_indicator->restart_class ==
+				       		Q931_IE_RI_C_INDICATED) {
 
-			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
-			ci->interface_type =
-				q931_ie_channel_identification_intftype(
+				struct q931_ie_channel_identification *ci =
+					q931_ie_channel_identification_alloc();
+
+				ci->interface_id_present =
+					Q931_IE_CI_IIP_IMPLICIT;
+				ci->interface_type =
+					q931_ie_channel_identification_intftype(
 								gc->intf);
-			ci->coding_standard = Q931_IE_CI_CS_CCITT;
-			q931_chanset_init(&ci->chanset);
-			q931_chanset_copy(&ci->chanset,
-				&gc->restart_acked_chans);
-			q931_ies_add_put(&ies, &ci->ie);
+				ci->coding_standard = Q931_IE_CI_CS_CCITT;
+				ci->preferred_exclusive =
+					Q931_IE_CI_PE_EXCLUSIVE;
+				q931_chanset_init(&ci->chanset);
+				q931_chanset_copy(&ci->chanset,
+					&gc->restart_acked_chans);
+				q931_ies_add_put(&ies, &ci->ie);
 
-			struct q931_ie_restart_indicator *ri =
-				q931_ie_restart_indicator_alloc();
-			ri->restart_class = Q931_IE_RI_C_INDICATED;
-			q931_ies_add_put(&ies, &ri->ie);
+				struct q931_ie_restart_indicator *ri =
+					q931_ie_restart_indicator_alloc();
+				ri->restart_class = Q931_IE_RI_C_INDICATED;
+				q931_ies_add_put(&ies, &ri->ie);
+			} else if (gc->restart_indicator->restart_class ==
+				       		Q931_IE_RI_C_SINGLE_INTERFACE) {
+
+				struct q931_ie_restart_indicator *ri =
+					q931_ie_restart_indicator_alloc();
+				ri->restart_class =
+					Q931_IE_RI_C_SINGLE_INTERFACE;
+				q931_ies_add_put(&ies, &ri->ie);
+
+			} else if (gc->restart_indicator->restart_class ==
+				       		Q931_IE_RI_C_ALL_INTERFACES) {
+				assert(0);
+			}
 
 			q931_global_send_message(gc, dlc,
 				Q931_MT_RESTART_ACKNOWLEDGE, &ies);
@@ -271,27 +308,18 @@ static void q931_global_handle_status(
 	}
 }
 
-#if 0
-static void q931_global_handle_notify(
-	struct q931_global_call *gc,
-	struct q931_message *msg)
-{
-}
-
-static void q931_global_handle_facility(
-	struct q931_global_call *gc,
-	struct q931_message *msg)
-{
-}
-#endif
-
 static int q931_channel_is_restartable(
 	struct q931_channel *chan,
 	struct q931_dlc *dlc)
 {
 	return chan->state != Q931_CHANSTATE_MAINTAINANCE &&
-		chan->state != Q931_CHANSTATE_LEASED &&
-		(!chan->call || chan->call->dlc == dlc);
+		chan->state != Q931_CHANSTATE_LEASED;
+/* 
+ * Telecom Italia needs all requested channels to be restarted, even if no
+ * calls are active on them
+ *
+ *		 && (!chan->call || chan->call->dlc == dlc);
+*/
 }
 
 static void q931_global_handle_restart(
@@ -320,19 +348,33 @@ static void q931_global_handle_restart(
 				ci = container_of(msg->ies.ies[i],
 					struct q931_ie_channel_identification,
 						ie);
+
+				int j;
+				for (j=0; j<q931_chanset_count(&ci->chanset);
+									j++) {
+					if (q931_channel_is_restartable(
+							ci->chanset.chans[j],
+							msg->dlc)) {
+						q931_chanset_add(
+							&gc->restart_reqd_chans,
+							ci->chanset.chans[j]);
+					}
+				}
+			} else if (msg->ies.ies[i]->cls->id ==
+					Q931_IE_RESTART_INDICATOR) {
+
+				if (gc->restart_indicator)
+					q931_ie_put(&gc->restart_indicator->ie);
+
+				gc->restart_indicator =
+					container_of(q931_ie_get(
+							msg->ies.ies[i]),
+					struct q931_ie_restart_indicator,
+					ie);
 			}
 		}
 
-		if (ci) {
-			for (i=0; i<q931_chanset_count(&ci->chanset); i++) {
-				if (q931_channel_is_restartable(
-					ci->chanset.chans[i], msg->dlc)) {
-					q931_chanset_add(
-						&gc->restart_reqd_chans,
-						ci->chanset.chans[i]);
-				}
-			}
-		} else {
+		if (!ci) {
 			for (i=0; i<gc->intf->n_channels; i++) {
 				if (q931_channel_is_restartable(
 					&gc->intf->channels[i], msg->dlc)) {
@@ -433,11 +475,11 @@ static void q931_global_handle_restart_acknowledge(
 			int i;
 			for (i=0; i<msg->ies.count; i++) {
 				if (msg->ies.ies[i]->cls->id ==
-						Q931_IE_CHANNEL_IDENTIFICATION) {
+					Q931_IE_CHANNEL_IDENTIFICATION) {
 
 					struct q931_ie_channel_identification *ci =
 						container_of(msg->ies.ies[i],
-							struct q931_ie_channel_identification, ie);
+						struct q931_ie_channel_identification, ie);
 
 					q931_chanset_merge(
 						&gc->restart_acked_chans,
@@ -486,7 +528,9 @@ void q931_global_timer_T316(void *data)
 		} else {
 			Q931_DECLARE_IES(ies);
 
-			if (q931_chanset_count(&gc->restart_reqd_chans)) {
+			if (gc->restart_indicator->restart_class ==
+				       		Q931_IE_RI_C_INDICATED) {
+
 				struct q931_ie_channel_identification *ci =
 					q931_ie_channel_identification_alloc();
 
@@ -495,6 +539,8 @@ void q931_global_timer_T316(void *data)
 				ci->interface_type =
 					q931_ie_channel_identification_intftype(
 						gc->intf);
+				ci->preferred_exclusive =
+					Q931_IE_CI_PE_EXCLUSIVE;
 				ci->coding_standard = Q931_IE_CI_CS_CCITT;
 				q931_chanset_init(&ci->chanset);
 				q931_chanset_copy(&ci->chanset,
@@ -505,12 +551,20 @@ void q931_global_timer_T316(void *data)
 					q931_ie_restart_indicator_alloc();
 				ri->restart_class = Q931_IE_RI_C_INDICATED;
 				q931_ies_add_put(&ies, &ri->ie);
-			} else {
+
+			} else if (gc->restart_indicator->restart_class ==
+				       		Q931_IE_RI_C_SINGLE_INTERFACE) {
+
 				struct q931_ie_restart_indicator *ri =
 					q931_ie_restart_indicator_alloc();
 				ri->restart_class =
 					Q931_IE_RI_C_SINGLE_INTERFACE;
 				q931_ies_add_put(&ies, &ri->ie);
+
+			} else if (gc->restart_indicator->restart_class ==
+				       		Q931_IE_RI_C_ALL_INTERFACES) {
+			} else {
+				assert(0);
 			}
 
 			assert(gc->restart_dlc);
@@ -568,7 +622,8 @@ void q931_global_timer_T317(void *data)
 			ci->interface_id_present = Q931_IE_CI_IIP_IMPLICIT;
 			ci->interface_type =
 				q931_ie_channel_identification_intftype(
-								gc->intf);
+							gc->intf);
+			ci->preferred_exclusive = Q931_IE_CI_PE_EXCLUSIVE;
 			ci->coding_standard = Q931_IE_CI_CS_CCITT;
 			q931_chanset_init(&ci->chanset);
 			q931_chanset_copy(&ci->chanset,
@@ -603,16 +658,6 @@ void q931_dispatch_global_message(
 		q931_global_handle_status(gc, msg);
 	break;
 
-#if 0
-	case Q931_MT_NOTIFY:
-		q931_global_handle_notify(gc, msg);
-	break;
-
-	case Q931_MT_FACILITY:
-		q931_global_handle_facility(gc, msg);
-	break;
-#endif
-
 	case Q931_MT_RESTART:
 		q931_global_handle_restart(gc, msg);
 	break;
@@ -629,6 +674,11 @@ void q931_dispatch_global_message(
 		cause->value = Q931_IE_C_CV_INVALID_CALL_REFERENCE_VALUE;
 		q931_ies_add_put(&ies, &cause->ie);
 
+		struct q931_ie_call_state *cs = q931_ie_call_state_alloc();
+		cs->coding_standard = Q931_IE_CS_CS_CCITT;
+		cs->value = q931_global_state_to_ie_state(gc->state);
+		q931_ies_add_put(&ies, &cs->ie);
+
 		q931_global_send_message(gc, msg->dlc, Q931_MT_STATUS, &ies);
 
 		Q931_UNDECLARE_IES(ies);
@@ -637,3 +687,19 @@ void q931_dispatch_global_message(
 	}
 }
 
+void q931_global_init(
+	struct q931_global_call *gc,
+	struct q931_interface *intf)
+{
+	gc->intf = intf;
+
+	q931_init_timer(&gc->T316, "T316", q931_global_timer_T316, gc);
+	q931_init_timer(&gc->T317, "T317", q931_global_timer_T317, gc);
+
+}
+
+void q931_global_destroy(struct q931_global_call *gc)
+{
+	if (gc->restart_indicator)
+		q931_ie_put(&gc->restart_indicator->ie);
+}

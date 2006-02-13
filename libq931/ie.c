@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <assert.h>
 #include <linux/types.h>
 
 #define Q931_PRIVATE
@@ -191,7 +192,7 @@ static struct q931_ie_class q931_ie_classes[] =
 	{
 		.type		= Q931_IE_TYPE_VL,
 		.max_len	= INT_MAX,
-		.max_occur	= 1,
+		.max_occur	= INT_MAX,
 		.network_type	= Q931_NT_ETSI,
 		.codeset	= 0,
 		.id		= Q931_IE_CHANNEL_IDENTIFICATION,
@@ -583,6 +584,11 @@ static struct q931_ie_class q931_ie_classes[] =
 		.codeset	= 0,
 		.id		= Q931_IE_HIGH_LAYER_COMPATIBILITY,
 		.name		= "High Layer Compatibility",
+		.init		= q931_ie_high_layer_compatibility_register,
+		.alloc		= q931_ie_high_layer_compatibility_alloc_abstract,
+		.read_from_buf	= q931_ie_high_layer_compatibility_read_from_buf,
+		.write_to_buf   = q931_ie_high_layer_compatibility_write_to_buf,
+		.dump		= q931_ie_high_layer_compatibility_dump,
 	},
 	{
 		.type		= Q931_IE_TYPE_VL,
@@ -1407,3 +1413,23 @@ void q931_ie_classes_init()
 			q931_ie_classes[i].init(&q931_ie_classes[i]);
 	}
 }
+
+struct q931_ie *q931_ie_get(struct q931_ie *ie)
+{
+	assert(ie->refcnt > 0);
+
+	ie->refcnt++;
+
+	return ie;
+}
+
+void q931_ie_put(struct q931_ie *ie)
+{
+	assert(ie->refcnt > 0);
+
+	ie->refcnt--;
+
+	if (ie->refcnt == 0)
+		free(ie);
+}
+
