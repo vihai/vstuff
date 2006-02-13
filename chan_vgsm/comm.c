@@ -516,13 +516,13 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 
 	switch(comm->state) {
 	case VGSM_PS_READING_RESPONSE:
-	case VGSM_PS_AWAITING_RESPONSE:
 		handle_response_line(comm, begin + 2);
 	break;
 
 	case VGSM_PS_IDLE:
 	case VGSM_PS_RESPONSE_READY:
 	case VGSM_PS_READING_URC:
+	case VGSM_PS_AWAITING_RESPONSE:
 	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
 	case VGSM_PS_RESPONSE_READY_READING_URC:
 		handle_unsolicited_response(comm, begin + 2);

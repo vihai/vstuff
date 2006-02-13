@@ -39,6 +39,7 @@ chan_visdn:
 - When the remote party responds RELEASE COMPLETE with "User Busy" cause
   we respond to * "CHANUNAVAIL"
 - overlap_sending=off does not send sending complete
+- Rewrite netlink code to use proper macros
 
 libq931:
 --------
