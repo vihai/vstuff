@@ -378,7 +378,7 @@ static void hfc_st_port_update_led(struct hfc_st_port *port)
 		    (!port->nt_mode &&
 		     port->l1_state == 7)) {
 
-			led->color = HFC_LED_RED;
+			led->color = HFC_LED_GREEN;
 			led->flashing_freq = 0;
 			led->flashes = 0;
 
@@ -387,12 +387,12 @@ static void hfc_st_port_update_led(struct hfc_st_port *port)
 		           (!port->nt_mode &&
 		            port->l1_state == 3)) {
 
-			led->color = HFC_LED_GREEN;
+			led->color = HFC_LED_RED;
 			led->flashing_freq = 0;
 			led->flashes = 0;
 		} else {
-			led->color = HFC_LED_GREEN;
-			led->alt_color = HFC_LED_RED;
+			led->color = HFC_LED_RED;
+			led->alt_color = HFC_LED_GREEN;
 			led->flashing_freq = HZ / 10;
 			led->flashes = -1;
 		}
