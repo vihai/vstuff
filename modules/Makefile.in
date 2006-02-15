@@ -18,6 +18,10 @@ else
 	abssrcdir = $(shell pwd)
 endif
 
+ifneq ($(KERNELRELEASE),)
+include $(abssrcdir)/Kbuild
+else
+
 all: makefiles Kbuild
 	$(MAKE) -C $(kblddir) modules M=${abssrcdir}
 
@@ -85,3 +89,5 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ ;; \
 	esac;
+
+endif

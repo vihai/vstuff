@@ -25,7 +25,7 @@ top_builddir = ../..
 VPATH = @srcdir@
 SHELL = @SHELL@
 
-EXTRA_CFLAGS= -I$(src)/../include/
+EXTRA_CFLAGS= -I$(src)/../include/ -I$(src)/../linux_compat/
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE
