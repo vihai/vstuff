@@ -68,10 +68,8 @@ void hfc_led_update(struct hfc_led *led)
 	hfc_outb(card, hfc_R_GPIO_EN1, card->gpio_en);
 	hfc_outb(card, hfc_R_GPIO_OUT1, card->gpio_out);
 
-	if (led->flashing_freq && led->flashes != 0) {
-		led->timer.expires = jiffies + led->flashing_freq / 2;
-		add_timer(&led->timer);
-	}
+	if (led->flashing_freq && led->flashes != 0)
+		mod_timer(&led->timer, jiffies + led->flashing_freq / 2);
 }
 
 static void hfc_led_timer(unsigned long data)
@@ -105,5 +103,8 @@ void hfc_led_init(
 void hfc_led_remove(
 	struct hfc_led *led)
 {
+	/* Ensure the timer doesn't reschedule itself */
+	led->flashes = 0;
+
 	del_timer_sync(&led->timer);
 }

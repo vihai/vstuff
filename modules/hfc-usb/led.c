@@ -29,8 +29,8 @@ void hfc_led_update(struct hfc_led *led)
 
 	if (led->flashing_freq && led->flashes != 0) {
 
-		led->timer.expires = jiffies + led->flashing_freq / 2;
-		add_timer(&led->timer);
+		mod_timer(&led->timer,
+			jiffies + led->flashing_freq / 2);
 
 	    	if ((jiffies % led->flashing_freq) >= (led->flashing_freq / 2))
 			actual_color = HFC_LED_OFF;
