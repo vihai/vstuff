@@ -49,7 +49,6 @@ libq931:
 - Implement Called/Calling party subaddress IE
 - Implement Congestion level IE
 - Implement Keypad facility IE
-- Implement Low layer compatibility IE
 - Implement More Data IE (?)
 - Implement Network-specific facilities IE
 - Implement Repeat Indicator IE
@@ -59,6 +58,7 @@ libq931:
 - Implement User-User Information IE
 - Implement ETS 300 125 Appendix III (Optional basic access deactivation
   procedures)
+- Complete decoding of BC, HLC, LLC
 - Make libq931 a daemon to which clients can connect.
   Invent a protocol (CAPI-ng :)) to use for such connection.
 

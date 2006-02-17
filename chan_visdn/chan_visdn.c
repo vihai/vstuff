@@ -62,7 +62,31 @@
 #include <linux/visdn/ec.h>
 #include <linux/visdn/router.h>
 
-#include <libq931/q931.h>
+#include <libq931/lib.h>
+#include <libq931/dlc.h>
+#include <libq931/list.h>
+#include <libq931/logging.h>
+#include <libq931/call.h>
+#include <libq931/intf.h>
+#include <libq931/ces.h>
+#include <libq931/ccb.h>
+#include <libq931/input.h>
+
+#include <libq931/ie.h>
+#include <libq931/ie_bearer_capability.h>
+#include <libq931/ie_call_state.h>
+#include <libq931/ie_cause.h>
+#include <libq931/ie_called_party_number.h>
+#include <libq931/ie_calling_party_number.h>
+#include <libq931/ie_channel_identification.h>
+#include <libq931/ie_call_identity.h>
+#include <libq931/ie_display.h>
+#include <libq931/ie_low_layer_compatibility.h>
+#include <libq931/ie_high_layer_compatibility.h>
+#include <libq931/ie_notification_indicator.h>
+#include <libq931/ie_progress_indicator.h>
+#include <libq931/ie_restart_indicator.h>
+#include <libq931/ie_sending_complete.h>
 
 #include "chan_visdn.h"
 #include "util.h"
@@ -580,7 +604,10 @@ static int visdn_request_call(
 			goto bc_failure;
 		}
 
-		if (bc->information_transfer_capability == Q931_IE_BC_ITC_SPEECH) {
+		if (bc->information_transfer_capability ==
+					Q931_IE_BC_ITC_SPEECH ||
+		    bc->information_transfer_capability ==
+		    			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
 			visdn_chan->is_voice = TRUE;
 			visdn_chan->handle_stream = TRUE;
 		}
@@ -675,6 +702,52 @@ hlc_failure:;
 		hlc->characteristics_identification = Q931_IE_HLC_CI_TELEPHONY;
 		q931_ies_add_put(&ies, &hlc->ie);
 	}
+
+	/* ------------- Low Layer Compatibility ---------------- */
+	char *raw_llc = pbx_builtin_getvar_helper(ast_chan, "LLC_RAW");
+	if (raw_llc) {
+		visdn_debug("Taking LLC from bridged channel\n");
+
+		struct q931_ie_low_layer_compatibility *llc;
+		llc = q931_ie_low_layer_compatibility_alloc();
+		char buf[20];
+
+		if (strlen(raw_llc) % 2) {
+			ast_log(LOG_WARNING, "LLC_RAW is invalid\n");
+			goto llc_failure;
+		}
+
+		int len = strlen(raw_llc) / 2;
+
+		if (len > sizeof(buf)) {
+			ast_log(LOG_WARNING, "LLC_RAW is too long\n");
+			goto llc_failure;
+		}
+
+		int i;
+		for (i=0; i<len; i++) {
+			if (char_to_hexdigit(raw_llc[i * 2]) < 0 ||
+			    char_to_hexdigit(raw_llc[i * 2 + 1]) < 0) {
+				ast_log(LOG_WARNING, "LLC_RAW is invalid\n");
+				goto llc_failure;
+			}
+
+			buf[i] = char_to_hexdigit(raw_llc[i * 2]) << 4;
+			buf[i] |= char_to_hexdigit(raw_llc[i * 2 + 1]);
+		}
+
+		buf[len] = '\0';
+
+		if (!q931_ie_low_layer_compatibility_read_from_buf(&llc->ie,
+					buf, len, NULL, NULL)) {
+			ast_log(LOG_WARNING, "LLC_RAW is not valid\n");
+			goto llc_failure;
+		}
+
+		q931_ies_add_put(&ies, &llc->ie);
+
+	}
+llc_failure:;
 
 	/* ------------- END HLC ---------------- */
 
@@ -2975,6 +3048,7 @@ static void visdn_q931_setup_indication(
 	struct q931_ie_called_party_number *cdpn = NULL;
 	struct q931_ie_bearer_capability *bc = NULL;
 	struct q931_ie_high_layer_compatibility *hlc = NULL;
+	struct q931_ie_low_layer_compatibility *llc = NULL;
 
 	int i;
 	for(i=0; i<ies->count; i++) {
@@ -2996,10 +3070,16 @@ static void visdn_q931_setup_indication(
 
 			bc = container_of(ies->ies[i],
 				struct q931_ie_bearer_capability, ie);
-		} else if (ies->ies[i]->cls->id == Q931_IE_HIGH_LAYER_COMPATIBILITY) {
+		} else if (ies->ies[i]->cls->id ==
+					Q931_IE_HIGH_LAYER_COMPATIBILITY) {
 
 			hlc = container_of(ies->ies[i],
 				struct q931_ie_high_layer_compatibility, ie);
+		} else if (ies->ies[i]->cls->id ==
+					Q931_IE_LOW_LAYER_COMPATIBILITY) {
+
+			llc = container_of(ies->ies[i],
+				struct q931_ie_low_layer_compatibility, ie);
 		}
 	}
 
@@ -3115,7 +3195,21 @@ static void visdn_q931_setup_indication(
 			"_HLC_RAW", raw_hlc_text);
 	}
 
-	/* ------ ----------------------------- ------ */
+	/* ------ Handle LLC ------ */
+	if (llc) {
+		__u8 buf[20];
+		char raw_llc_text[sizeof(buf) + 1];
+
+		assert(llc->ie.cls->write_to_buf);
+
+		int len = llc->ie.cls->write_to_buf(&llc->ie, buf, sizeof(buf));
+
+		for (i=0; i<len; i++)
+			sprintf(raw_llc_text + i * 2, "%02x", buf[i]);
+
+		pbx_builtin_setvar_helper(ast_chan,
+			"_LLC_RAW", raw_llc_text);
+	}
 
 	/* ------ Handle Calling Line Presentation/Restriction ------ */
 

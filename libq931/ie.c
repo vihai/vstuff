@@ -30,6 +30,7 @@
 #include <libq931/ie_channel_identification.h>
 #include <libq931/ie_display.h>
 #include <libq931/ie_datetime.h>
+#include <libq931/ie_low_layer_compatibility.h>
 #include <libq931/ie_high_layer_compatibility.h>
 #include <libq931/ie_notification_indicator.h>
 #include <libq931/ie_progress_indicator.h>
@@ -575,6 +576,11 @@ static struct q931_ie_class q931_ie_classes[] =
 		.codeset	= 0,
 		.id		= Q931_IE_LOW_LAYER_COMPATIBILITY,
 		.name		= "Low Layer Compatibility",
+		.init		= q931_ie_low_layer_compatibility_register,
+		.alloc		= q931_ie_low_layer_compatibility_alloc_abstract,
+		.read_from_buf	= q931_ie_low_layer_compatibility_read_from_buf,
+		.write_to_buf   = q931_ie_low_layer_compatibility_write_to_buf,
+		.dump		= q931_ie_low_layer_compatibility_dump,
 	},
 	{
 		.type		= Q931_IE_TYPE_VL,

@@ -45,7 +45,7 @@
 #include <asterisk/version.h>
 
 #include <linux/lapd.h>
-#include <libq931/q931.h>
+#include <libq931/intf.h>
 
 #include "chan_visdn.h"
 #include "util.h"

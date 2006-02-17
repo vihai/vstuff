@@ -15,7 +15,7 @@
 
 #include <linux/if.h>
 
-#include <libq931/q931.h>
+#include <libq931/intf.h>
 
 #include "ton.h"
 
