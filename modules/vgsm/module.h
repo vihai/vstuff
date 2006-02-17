@@ -50,6 +50,8 @@ struct vgsm_module
 	wait_queue_head_t tx_wait_queue;
 	wait_queue_head_t rx_wait_queue;
 
+	struct timer_list ack_timeout_timer;
+
 	/* One port per card */
 	struct visdn_port visdn_port;
 

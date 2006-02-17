@@ -267,6 +267,10 @@ static int vgsm_cdev_do_codec_set(
 	vgsm_card_lock(module->card);
 
 	switch(cctl.parameter) {
+	case VGSM_CODEC_RESET:
+		vgsm_codec_reset(module->card);
+	break;
+
 	case VGSM_CODEC_RXGAIN:
 		if (cctl.value < 0 || cctl.value > 0xFF) {
 			err = -EINVAL;
@@ -323,7 +327,7 @@ static int vgsm_cdev_do_power(
 		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_ON);
 		vgsm_card_unlock(module->card);
 
-		ssleep(1);
+		msleep(1500);
 	} else if (arg == 1) {
 		vgsm_card_lock(module->card);
 		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);

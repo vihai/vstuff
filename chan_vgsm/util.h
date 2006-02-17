@@ -48,5 +48,18 @@ extern struct vgsm_state vgsm;
 	(void) (&_x == &_y);		\
 	_x > _y ? _x : _y; })
 
+#if 0
+#define ast_mutex_lock(a) \
+	do {				\
+		ast_verbose("LOCK " # a "  %s:%d\n", __FILE__, __LINE__); \
+		ast_mutex_lock(a);	\
+	} while(0)
+
+#define ast_mutex_unlock(a) \
+	do {				\
+		ast_verbose("UNLOCK " # a "  %s:%d\n", __FILE__, __LINE__); \
+		ast_mutex_unlock(a);	\
+	} while(0)
 #endif
 
+#endif

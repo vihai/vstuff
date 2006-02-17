@@ -124,6 +124,8 @@ struct vgsm_interface
 
 	struct vgsm_comm comm;
 
+	pthread_t monitor_thread;
+
 	struct
 	{
 		char number[30];

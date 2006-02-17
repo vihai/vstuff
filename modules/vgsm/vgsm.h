@@ -28,6 +28,7 @@ struct vgsm_codec_ctl
 
 enum vgsm_codec_parameter
 {
+	VGSM_CODEC_RESET,
 	VGSM_CODEC_RXGAIN,
 	VGSM_CODEC_TXGAIN,
 	VGSM_CODEC_DIG_LOOP,

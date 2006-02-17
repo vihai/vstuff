@@ -46,7 +46,10 @@ static int do_codec(
 
 	struct vgsm_codec_ctl cctl;
 
-	if (!strcasecmp(parameter, "rxgain")) {
+	if (!strcasecmp(parameter, "reset")) {
+		cctl.parameter = VGSM_CODEC_RESET;
+		cctl.value = atoi(value);
+	} else if (!strcasecmp(parameter, "rxgain")) {
 		cctl.parameter = VGSM_CODEC_RXGAIN;
 		cctl.value = atoi(value);
 	} else if (!strcasecmp(parameter, "txgain")) {

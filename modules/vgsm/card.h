@@ -46,6 +46,11 @@
 
 #define vgsm_SERIAL_BUFF	0x1000
 
+enum vgsm_card_flags
+{
+	VGSM_CARD_FLAGS_SHUTTING_DOWN,
+};
+
 struct vgsm_card
 {
 	struct list_head cards_list_node;
@@ -55,6 +60,8 @@ struct vgsm_card
 	struct pci_dev *pci_dev;
 
 	int id;
+
+	unsigned long flags;
 
 	/* Serial ports */
 	u8 ios_12_status;
@@ -82,6 +89,8 @@ struct vgsm_card
 	struct tasklet_struct rx_tasklet;
 	struct tasklet_struct tx_tasklet;
 	int rr_last_module;
+
+	struct timer_list maint_timer;
 };
 
 struct vgsm_micro_message
@@ -121,6 +130,8 @@ void vgsm_send_get_fw_ver(
 	int micro);
 
 void vgsm_update_mask0(struct vgsm_card *card);
+
+void vgsm_codec_reset(struct vgsm_card *card);
 void vgsm_update_codec(struct vgsm_module *module);
 
 #endif

@@ -5,6 +5,9 @@
 
 #include <list.h>
 
+#define SEC 1000000
+#define MILLISEC 1000
+
 enum vgsm_response_codes
 {
 	VGSM_RESP_OK		= 10000,
@@ -15,6 +18,7 @@ enum vgsm_response_codes
 	VGSM_RESP_BUSY		= 10005,
 	VGSM_RESP_NO_ANSWER	= 10006,
 	VGSM_RESP_UNKNOWN	= 11000,
+	VGSM_RESP_TIMEOUT	= 11001,
 };
 
 enum vgsm_comm_state
@@ -22,11 +26,12 @@ enum vgsm_comm_state
 	VGSM_PS_BITBUCKET,
 	VGSM_PS_IDLE,
 	VGSM_PS_RECOVERING,
-	VGSM_PS_AWAITING_RESPONSE,
+	VGSM_PS_AWAITING_ECHO,
 	VGSM_PS_READING_RESPONSE,
 	VGSM_PS_RESPONSE_READY,
+	VGSM_PS_RESPONSE_FAILED,
 	VGSM_PS_READING_URC,
-	VGSM_PS_AWAITING_RESPONSE_READING_URC,
+	VGSM_PS_AWAITING_ECHO_READING_URC,
 	VGSM_PS_RESPONSE_READY_READING_URC,
 };
 
@@ -72,8 +77,12 @@ struct vgsm_comm
 	enum vgsm_comm_state state;
 	ast_cond_t state_change_cond;
 
-	longtime_t timeout;
+	longtime_t timer_expiration;
+
 	char request[82];
+	int request_timeout;
+	int request_retransmit_cnt;
+
 	char buf[2048];
 	struct vgsm_response *response;
 	int response_error;

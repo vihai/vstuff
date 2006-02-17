@@ -88,16 +88,18 @@ static const char *vgsm_comm_state_to_text(
 		return "IDLE";
 	case VGSM_PS_RECOVERING:
 		return "RECOVERING";
-	case VGSM_PS_AWAITING_RESPONSE:
-		return "AWAITING_RESPONSE";
+	case VGSM_PS_AWAITING_ECHO:
+		return "AWAITING_ECHO";
 	case VGSM_PS_READING_RESPONSE:
 		return "READING_RESPONSE";
 	case VGSM_PS_RESPONSE_READY:
 		return "RESPONSE_READY";
+	case VGSM_PS_RESPONSE_FAILED:
+		return "RESPONSE_FAILED";
 	case VGSM_PS_READING_URC:
 		return "READING_URC";
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
-		return "AWAITING_RESPONSE_READING_URC";
+	case VGSM_PS_AWAITING_ECHO_READING_URC:
+		return "AWAITING_ECHO_READING_URC";
 	case VGSM_PS_RESPONSE_READY_READING_URC:
 		return "RESPONSE_READY_READING_URC";
 	}
@@ -127,13 +129,12 @@ void vgsm_comm_set_bitbucket(
 void vgsm_comm_reset(
 	struct vgsm_comm *comm)
 {
+	comm->timer_expiration = -1;
 	vgsm_parser_change_state(comm, VGSM_PS_IDLE);
 }
 
-int vgsm_comm_start_recovery(struct vgsm_comm *comm)
+int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 {
-	vgsm_parser_change_state(comm, VGSM_PS_RECOVERING);
-
 	sleep(1);
 
 	if (write(comm->fd, "+", 1) < 0) {
@@ -174,6 +175,27 @@ int vgsm_comm_start_recovery(struct vgsm_comm *comm)
 
 		return -1;
 	}
+
+	usleep(20000);
+
+	return 0;
+}
+
+static longtime_t longtime_now()
+{
+	struct timeval now_tv;
+	gettimeofday(&now_tv, NULL);
+
+	return now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
+}
+
+int vgsm_comm_start_recovery(struct vgsm_comm *comm)
+{
+	comm->timer_expiration = longtime_now() + 3 * SEC;
+	vgsm_parser_change_state(comm, VGSM_PS_RECOVERING);
+
+	if (vgsm_comm_send_recovery_sequence(comm) < 0)
+		return -1;
 
 	ast_mutex_lock(&comm->lock);
 	while(comm->state != VGSM_PS_IDLE)
@@ -224,13 +246,23 @@ struct vgsm_response *vgsm_read_response(
 
 	ast_mutex_lock(&comm->lock);
 	while(comm->state != VGSM_PS_RESPONSE_READY &&
-	      comm->state != VGSM_PS_RESPONSE_READY_READING_URC)
+	      comm->state != VGSM_PS_RESPONSE_READY_READING_URC &&
+	      comm->state != VGSM_PS_RESPONSE_FAILED)
 		ast_cond_wait(&comm->state_change_cond,
 			      &comm->lock);
 
+	comm->timer_expiration = -1;
 	vgsm_parser_change_state(comm, VGSM_PS_IDLE);
-	resp = comm->response;
-	comm->response = NULL;
+
+	if (comm->state != VGSM_PS_RESPONSE_FAILED) {
+		resp = comm->response;
+		comm->response = NULL;
+	} else {
+		vgsm_response_put(comm->response);
+		comm->response = NULL;
+		resp = NULL;
+		comm->response_error = VGSM_RESP_TIMEOUT;
+	}
 
 	ast_mutex_unlock(&comm->lock);
 
@@ -241,12 +273,18 @@ int vgsm_expect_ok(struct vgsm_comm *comm)
 {
 	ast_mutex_lock(&comm->lock);
 	while(comm->state != VGSM_PS_RESPONSE_READY &&
-	      comm->state != VGSM_PS_RESPONSE_READY_READING_URC)
+	      comm->state != VGSM_PS_RESPONSE_READY_READING_URC &&
+	      comm->state != VGSM_PS_RESPONSE_FAILED)
 		ast_cond_wait(&comm->state_change_cond,
 			      &comm->lock);
 
-	int error_code = comm->response_error;
+	int error_code;
+	if (comm->state != VGSM_PS_RESPONSE_FAILED)
+		error_code = comm->response_error;
+	else
+		error_code = VGSM_RESP_TIMEOUT;
 
+	comm->timer_expiration = -1;
 	vgsm_parser_change_state(comm, VGSM_PS_IDLE);
 	vgsm_response_put(comm->response);
 	comm->response = NULL;
@@ -254,14 +292,6 @@ int vgsm_expect_ok(struct vgsm_comm *comm)
 	ast_mutex_unlock(&comm->lock);
 
 	return error_code;
-}
-
-static longtime_t longtime_now()
-{
-	struct timeval now_tv;
-	gettimeofday(&now_tv, NULL);
-
-	return now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
 }
 
 int sanprintf(char *buf, int bufsize, const char *fmt, ...)
@@ -326,9 +356,11 @@ int vgsm_send_request(
 			      &comm->lock);
 
 	strncpy(comm->request, buf, sizeof(comm->request));
-	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_RESPONSE);
+	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
 	comm->response = vgsm_response_alloc(comm);
-	comm->timeout = longtime_now() + timeout * 1000;
+	comm->timer_expiration = longtime_now() + 100 * MILLISEC;
+	comm->request_timeout = timeout;
+	comm->request_retransmit_cnt = 3;
 	ast_mutex_unlock(&comm->lock);
 
 	strcat(buf, "\r");
@@ -348,14 +380,20 @@ static void vgsm_retransmit_request(struct vgsm_comm *comm)
 	strncpy(buf, comm->request, sizeof(buf));
 	strcat(buf, "\r");
 
+	comm->request_retransmit_cnt--;
+
 	char tmpstr[200];
 	vgsm_debug_verb("TX: '%s'\n",
 		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
+
+	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
 
 	if (write(comm->fd, buf, strlen(buf)) < 0)
 		ast_log(LOG_WARNING,
 			"Cannot write to module: %s\n",
 			strerror(errno));
+
+	vgsm_comm_awake(comm);
 }
 
 int vgsm_comm_line_error(const char *line)
@@ -454,20 +492,21 @@ static void handle_unsolicited_response(
 	break;
 
 	case VGSM_PS_RESPONSE_READY:
+	case VGSM_PS_RESPONSE_FAILED:
 		vgsm_parser_change_state(comm,
 			VGSM_PS_RESPONSE_READY_READING_URC);
 	break;
 
-	case VGSM_PS_AWAITING_RESPONSE:
+	case VGSM_PS_AWAITING_ECHO:
 		vgsm_parser_change_state(comm,
-			VGSM_PS_AWAITING_RESPONSE_READING_URC);
+			VGSM_PS_AWAITING_ECHO_READING_URC);
 	break;
 
 	case VGSM_PS_BITBUCKET:
 	case VGSM_PS_RECOVERING:
 	case VGSM_PS_READING_RESPONSE:
 	case VGSM_PS_READING_URC:
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
+	case VGSM_PS_AWAITING_ECHO_READING_URC:
 	case VGSM_PS_RESPONSE_READY_READING_URC:
 		ast_log(LOG_ERROR,
 			"Unexpected handle_unsolicited_message"
@@ -521,9 +560,10 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 
 	case VGSM_PS_IDLE:
 	case VGSM_PS_RESPONSE_READY:
+	case VGSM_PS_RESPONSE_FAILED:
 	case VGSM_PS_READING_URC:
-	case VGSM_PS_AWAITING_RESPONSE:
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
+	case VGSM_PS_AWAITING_ECHO:
+	case VGSM_PS_AWAITING_ECHO_READING_URC:
 	case VGSM_PS_RESPONSE_READY_READING_URC:
 		handle_unsolicited_response(comm, begin + 2);
 	break;
@@ -544,7 +584,7 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 
 	*firstcr = '\0';
 
-	if (comm->state != VGSM_PS_AWAITING_RESPONSE)
+	if (comm->state != VGSM_PS_AWAITING_ECHO)
 		return firstcr - comm->buf + 1;
 
 	char tmpstr[200];
@@ -553,7 +593,7 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 
 	if (!strncmp(comm->buf, comm->request,
 			       strlen(comm->request))) {
-		
+		comm->timer_expiration = longtime_now() + comm->request_timeout;
 		vgsm_parser_change_state(comm, VGSM_PS_READING_RESPONSE);
 	} else {
 		char *dropped = malloc(firstcr - comm->buf + 1);
@@ -593,8 +633,8 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 		vgsm_parser_change_state(comm, VGSM_PS_IDLE);
 	break;
 
-	case VGSM_PS_AWAITING_RESPONSE_READING_URC:
-		vgsm_parser_change_state(comm, VGSM_PS_AWAITING_RESPONSE);
+	case VGSM_PS_AWAITING_ECHO_READING_URC:
+		vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
 	break;
 
 	case VGSM_PS_RESPONSE_READY_READING_URC:
@@ -603,7 +643,8 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 
 	case VGSM_PS_IDLE:
 	case VGSM_PS_RESPONSE_READY:
-	case VGSM_PS_AWAITING_RESPONSE:
+	case VGSM_PS_RESPONSE_FAILED:
+	case VGSM_PS_AWAITING_ECHO:
 	case VGSM_PS_BITBUCKET:
 	case VGSM_PS_RECOVERING:
 	case VGSM_PS_READING_RESPONSE:
@@ -647,6 +688,10 @@ static int vgsm_receive(struct vgsm_comm *comm)
 
 	comm->buf[buflen + nread] = '\0';
 
+char tmpstr[200];
+ast_verbose("R='%s'\n",
+	unprintable_escape(comm->buf + buflen, tmpstr, sizeof(tmpstr)));
+
 	while(1) {
 		int nread = 0;
 
@@ -666,13 +711,27 @@ ast_verbose("BUF='%s'\n",
 			if (strstr(comm->buf, "\r\nOK\r\n")) {
 				nread = strlen(comm->buf);
 
-				vgsm_parser_change_state(comm,
-					VGSM_PS_IDLE);
+				if (strlen(comm->request)) {
+					if (comm->request_retransmit_cnt > 0) {
+						ast_log(LOG_NOTICE,
+							"Retransmitting"
+							" request\n");
+						vgsm_retransmit_request(comm);
+					} else {
+						comm->timer_expiration = -1;
+						vgsm_parser_change_state(comm,
+						VGSM_PS_RESPONSE_FAILED);
+					}
+				} else {
+					comm->timer_expiration = -1;
+					vgsm_parser_change_state(comm,
+						VGSM_PS_IDLE);
+				}
 			}
 		break;
 
 		case VGSM_PS_READING_URC:
-		case VGSM_PS_AWAITING_RESPONSE_READING_URC:
+		case VGSM_PS_AWAITING_ECHO_READING_URC:
 		case VGSM_PS_RESPONSE_READY_READING_URC: {
 			const char *firstlf = strchr(comm->buf, '\n');
 			if (firstlf)
@@ -681,9 +740,10 @@ ast_verbose("BUF='%s'\n",
 		break;
 
 		case VGSM_PS_IDLE:
-		case VGSM_PS_AWAITING_RESPONSE:
+		case VGSM_PS_AWAITING_ECHO:
 		case VGSM_PS_READING_RESPONSE:
-		case VGSM_PS_RESPONSE_READY: {
+		case VGSM_PS_RESPONSE_READY:
+		case VGSM_PS_RESPONSE_FAILED: {
 			const char *firstcr;
 			firstcr = strchr(comm->buf, '\r');
 
@@ -703,6 +763,39 @@ ast_verbose("BUF='%s'\n",
 	}
 
 	return 0;
+}
+
+static void vgsm_comm_timed_out(struct vgsm_comm *comm)
+{
+	switch(comm->state) {
+	case VGSM_PS_RECOVERING:
+		comm->timer_expiration = -1;
+		if (strlen(comm->request))
+			vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_FAILED);
+		else
+			vgsm_parser_change_state(comm, VGSM_PS_IDLE);
+	break;
+
+	case VGSM_PS_AWAITING_ECHO:
+	case VGSM_PS_READING_RESPONSE:
+		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING);
+		vgsm_comm_send_recovery_sequence(comm);
+		comm->timer_expiration = longtime_now() + 1 * SEC;
+	break;
+
+	case VGSM_PS_BITBUCKET:
+	case VGSM_PS_IDLE:
+	case VGSM_PS_READING_URC:
+	case VGSM_PS_AWAITING_ECHO_READING_URC:
+	case VGSM_PS_RESPONSE_READY_READING_URC:
+	case VGSM_PS_RESPONSE_READY:
+	case VGSM_PS_RESPONSE_FAILED:
+		ast_log(LOG_WARNING,
+			"Unexpected timeout in state %s\n",
+			vgsm_comm_state_to_text(comm->state));
+	break;
+
+	}
 }
 
 static int vgsm_comm_thread_do_stuff()
@@ -734,11 +827,13 @@ static int vgsm_comm_thread_do_stuff()
 
 		for (i=0; i<npolls; i++) {
 			ast_mutex_lock(&comms[i]->lock);
-			if (comms[i]->state != VGSM_PS_IDLE &&
-			    comms[i]->timeout - now > 0 &&
-			    (comms[i]->timeout - now < timeout ||
+
+			if (comms[i]->timer_expiration != -1 &&
+			    comms[i]->timer_expiration - now > 0 &&
+			    (comms[i]->timer_expiration - now < timeout ||
 			     timeout == -1))
-				timeout = comms[i]->timeout - now;
+				timeout = comms[i]->timer_expiration - now;
+
 			ast_mutex_unlock(&comms[i]->lock);
 		}
 
@@ -746,7 +841,7 @@ static int vgsm_comm_thread_do_stuff()
 		if (timeout == -1)
 			timeout_ms = -1;
 		else
-			timeout_ms = timeout / 1000 + 1;
+			timeout_ms = max(timeout / 1000, 1LL);
 
 		vgsm_debug_verb("poll timeout = %d\n", timeout_ms);
 
@@ -767,11 +862,10 @@ static int vgsm_comm_thread_do_stuff()
 
 		for (i=0; i<npolls; i++) {
 			ast_mutex_lock(&comms[i]->lock);
-			if (comms[i]->state ==
-				       	VGSM_PS_AWAITING_RESPONSE &&
-			    comms[i]->timeout < now) {
-				vgsm_retransmit_request(comms[i]);
-			}
+
+			if (comms[i]->timer_expiration != -1 &&
+			    comms[i]->timer_expiration < now)
+				vgsm_comm_timed_out(comms[i]);
 
 			if (polls[i].revents & POLLIN)
 				vgsm_receive(comms[i]);

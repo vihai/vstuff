@@ -166,8 +166,6 @@ vgsm:
 -----
 
 - Handle hung micros by timing out writes/reads and resetting the board
-- SMS/CB handinlg
-
 
 chan_vgsm:
 ----------
@@ -176,3 +174,4 @@ chan_vgsm:
 - Implement SMS/CB handling
 - Implement network survey
 - Handle command timeout and recovery
+- Hangup and shutdown on * exit

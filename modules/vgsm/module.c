@@ -1,7 +1,7 @@
 /*
  * VoiSmart GSM board vISDN driver
  *
- * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
+ * Copyright (C) 2005-2006 Daniele Orlandi, Massimo Mazzeo
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *          Massimo Mazzeo <mmazzeo@voismart.it>
@@ -297,6 +297,15 @@ static ssize_t vgsm_chan_leg_read(
 						module->timeslot_offset);
 		module->readdma_pos += 4;
 
+#if 0
+		if (!(module->readdma_pos % 1000))
+			printk(KERN_DEBUG "%02x %02x %02x %02x\n",
+			*((u8 *)card->readdma_mem + module->readdma_pos + 0),
+			*((u8 *)card->readdma_mem + module->readdma_pos + 1),
+			*((u8 *)card->readdma_mem + module->readdma_pos + 2),
+			*((u8 *)card->readdma_mem + module->readdma_pos + 3));
+#endif
+
 		if (module->readdma_pos > card->readdma_size)
 			module->readdma_pos = 0;
 
@@ -356,6 +365,19 @@ struct visdn_leg_ops vgsm_chan_leg_ops = {
 	.write		= vgsm_chan_leg_write,
 };
 
+static void vgsm_module_ack_timeout_timer(unsigned long data)
+{
+	struct vgsm_module *module = (struct vgsm_module *)data;
+
+	printk(KERN_ERR "Timeout waiting for ACK\n");
+
+	kfifo_reset(module->kfifo_tx);
+	clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING, &module->status);
+
+	wake_up(&module->tx_wait_queue);
+	tasklet_schedule(&module->card->tx_tasklet);
+}
+
 void vgsm_module_init(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
@@ -373,10 +395,14 @@ void vgsm_module_init(
 	init_waitqueue_head(&module->tx_wait_queue);
 	init_waitqueue_head(&module->rx_wait_queue);
 
+	init_timer(&module->ack_timeout_timer);
+	module->ack_timeout_timer.function = vgsm_module_ack_timeout_timer;
+	module->ack_timeout_timer.data = (unsigned long)module;
+
 	module->readdma_pos = 0;
 	module->writedma_pos = 0;
 
-	module->rx_gain = 0xE2;
+	module->rx_gain = 0xFF;
 	module->tx_gain = 0xFF;
 
 	module->anal_loop = FALSE;

@@ -53,7 +53,7 @@ static void vgsm_read_msg(
 	msg->raw[7] = ioread8(card->io_mem + VGSM_PIB_DC);	
 
 #if 0
-	printk(KERN_CRIT "RX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+	printk(KERN_DEBUG "RX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 		msg->raw[0],
 		msg->raw[1],
 		msg->raw[2],
@@ -68,7 +68,7 @@ static void vgsm_read_msg(
 static void vgsm_write_msg(
 	struct vgsm_card *card, struct vgsm_micro_message *msg)
 {
-#if 1
+#if 0
 	printk(KERN_DEBUG "TX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 		msg->raw[0],
 		msg->raw[1],
@@ -119,6 +119,23 @@ void vgsm_send_msg(
 		BUG();
 }
 
+static void vgsm_send_codec_resync(
+	struct vgsm_card *card,
+	u8 reg_address, 
+	u8 reg_data)
+{
+	struct vgsm_micro_message msg = { };
+	
+	msg.cmd = VGSM_CMD_MAINT;
+	msg.cmd_dep = VGSM_CMD_MAINT_CODEC_SET;
+	msg.numbytes = 2;
+	
+	msg.payload[0] = 0x00;
+	msg.payload[1] = 0x00;
+
+	vgsm_send_msg(card, 0, &msg);
+}
+	
 static void vgsm_send_codec_setreg(
 	struct vgsm_card *card,
 	u8 reg_address, 
@@ -305,8 +322,10 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 
 				vgsm_module_send_string(module, buf,
 					       bytes_to_send);
-			} else {
-				
+
+				module->ack_timeout_timer.expires =
+					jiffies + HZ;
+				add_timer(&module->ack_timeout_timer);
 			}
 		}
 	}
@@ -362,12 +381,12 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_outl(card, VGSM_DMA_WR_START, cpu_to_le32(card->writedma_bus_mem));
 	vgsm_outl(card, VGSM_DMA_WR_INT, cpu_to_le32(card->writedma_bus_mem));
 	vgsm_outl(card, VGSM_DMA_WR_END,
-		cpu_to_le32(card->writedma_bus_mem + card->writedma_size));
+		cpu_to_le32(card->writedma_bus_mem + card->writedma_size - 4));
 
 	vgsm_outl(card, VGSM_DMA_RD_START, cpu_to_le32(card->readdma_bus_mem));	
 	vgsm_outl(card, VGSM_DMA_RD_INT, cpu_to_le32(card->readdma_bus_mem));	
 	vgsm_outl(card, VGSM_DMA_RD_END,
-		cpu_to_le32(card->readdma_bus_mem + card->readdma_size));
+		cpu_to_le32(card->readdma_bus_mem + card->readdma_size - 4));
 
 	/* Clear DMA interrupts */
 	vgsm_outb(card, VGSM_INT0STAT, 0x3F);
@@ -430,10 +449,6 @@ static irqreturn_t vgsm_interrupt(int irq,
 		printk("\n");
 		}
 
-/*		struct vgsm_micro_message msg;
-		vgsm_send_codec_getreg(card, 0x22);
-		udelay(2000);
-		vgsm_read_msg(card, &msg);*/
 	}
 
 	if (int0stat & VGSM_INT1STAT_PCI_MASTER_ABORT)
@@ -525,6 +540,8 @@ printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 			clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
 				&module->status);
 
+			del_timer(&module->ack_timeout_timer);
+
 			tasklet_schedule(&card->tx_tasklet);
 		} else if (msg.cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
 			printk(KERN_INFO "CODEC RESP: %02x = %02x\n",
@@ -547,6 +564,80 @@ printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 err_unexpected_micro:
 
 	return IRQ_HANDLED;
+}
+
+static void vgsm_maint_timer(unsigned long data)
+{
+	struct vgsm_card *card = (struct vgsm_card *)data;
+
+	vgsm_card_lock(card);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);
+	vgsm_card_unlock(card);
+
+	if (!test_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags))
+		mod_timer(&card->maint_timer, jiffies + 5 * HZ);
+}
+
+void vgsm_codec_reset(
+	struct vgsm_card *card)
+{
+	/* Reset codec */
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_CONFIG,
+		VGSM_CODEC_CONFIG_RES);
+	mb();
+	udelay(50);
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_CONFIG,
+		VGSM_CODEC_CONFIG_AMU_ALAW);
+//		VGSM_CODEC_CONFIG_STA);
+	mb();
+	
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DIR_0,
+		VGSM_CODEC_DIR_0_IO_0);
+
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_PCMSH,
+		VGSM_CODEC_PCMSH_RS(1) | VGSM_CODEC_PCMSH_XS(0));
+
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DXA0,
+		VGSM_CODEC_DXA0_ENA | VGSM_CODEC_DXA0_TS(0));
+
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DXA1,
+		VGSM_CODEC_DXA1_ENA | VGSM_CODEC_DXA1_TS(1));
+
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DXA2,
+		VGSM_CODEC_DXA2_ENA | VGSM_CODEC_DXA2_TS(2));
+
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DXA3,
+		VGSM_CODEC_DXA3_ENA | VGSM_CODEC_DXA3_TS(3));
+	
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DRA0,
+		VGSM_CODEC_DRA0_ENA | VGSM_CODEC_DRA0_TS(0));
+	
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DRA1,
+		VGSM_CODEC_DRA1_ENA | VGSM_CODEC_DRA1_TS(1));
+	
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DRA2,
+		VGSM_CODEC_DRA2_ENA | VGSM_CODEC_DRA2_TS(2));
+	
+	vgsm_send_codec_setreg(card,
+		VGSM_CODEC_DRA3,
+		VGSM_CODEC_DRA3_ENA | VGSM_CODEC_DRA3_TS(3));
+
+	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG10,
+		VGSM_CODEC_RXG10_CH0_0 | VGSM_CODEC_RXG10_CH1_0);
+	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG32,
+		VGSM_CODEC_RXG32_CH2_0 | VGSM_CODEC_RXG32_CH3_0);
 }
 
 /* Do probing type stuff here */
@@ -580,6 +671,10 @@ int vgsm_card_probe(
 
 	tasklet_init(&card->tx_tasklet, vgsm_card_tx_tasklet,
 			(unsigned long)card);
+
+	init_timer(&card->maint_timer);
+	card->maint_timer.function = vgsm_maint_timer;
+	card->maint_timer.data = (unsigned long)card;
 
 	card->num_modules = 4;
 
@@ -686,9 +781,8 @@ int vgsm_card_probe(
 	}
 
 	{
+	/* Initialize buffers with 1 kHz tone */
 	u8 khz[] = { 0x34, 0x21, 0x21, 0x34, 0xb4, 0xa1, 0xa1, 0xb4 };
-	u8 off[] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-
 	for (i=0; i<vgsm_DMA_SAMPLES; i++) {
 		*(u8 *)(card->writedma_mem + i * 4 + 0) = khz[i % 8];
 		*(u8 *)(card->writedma_mem + i * 4 + 1) = khz[i % 8];
@@ -715,58 +809,7 @@ int vgsm_card_probe(
 	vgsm_send_get_fw_ver(card, 0);
 	vgsm_send_get_fw_ver(card, 1);
 
-	/* Reset codec */
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_CONFIG,
-		VGSM_CODEC_CONFIG_RES);
-	mb();
-	udelay(10);
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_CONFIG,
-		VGSM_CODEC_CONFIG_AMU_ALAW |
-		VGSM_CODEC_CONFIG_STA);
-	mb();
-	
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_PCMSH,
-		VGSM_CODEC_PCMSH_RS(1) | VGSM_CODEC_PCMSH_XS(0));
-
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DXA0,
-		VGSM_CODEC_DXA0_ENA | VGSM_CODEC_DXA0_TS(0));
-
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DXA1,
-		VGSM_CODEC_DXA1_ENA | VGSM_CODEC_DXA1_TS(1));
-
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DXA2,
-		VGSM_CODEC_DXA2_ENA | VGSM_CODEC_DXA2_TS(2));
-
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DXA3,
-		VGSM_CODEC_DXA3_ENA | VGSM_CODEC_DXA3_TS(3));
-	
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DRA0,
-		VGSM_CODEC_DRA0_ENA | VGSM_CODEC_DRA0_TS(0));
-	
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DRA1,
-		VGSM_CODEC_DRA1_ENA | VGSM_CODEC_DRA1_TS(1));
-	
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DRA2,
-		VGSM_CODEC_DRA2_ENA | VGSM_CODEC_DRA2_TS(2));
-	
-	vgsm_send_codec_setreg(card,
-		VGSM_CODEC_DRA3,
-		VGSM_CODEC_DRA3_ENA | VGSM_CODEC_DRA3_TS(3));
-
-	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG10,
-		VGSM_CODEC_RXG10_CH0_0 | VGSM_CODEC_RXG10_CH1_0);
-	vgsm_send_codec_setreg(card, VGSM_CODEC_RXG32,
-		VGSM_CODEC_RXG32_CH2_0 | VGSM_CODEC_RXG32_CH3_0);
+	vgsm_codec_reset(card);
 
 	/* Ensure the modules are turned off */
 	for(i=0; i<card->num_modules; i++) {
@@ -787,7 +830,7 @@ int vgsm_card_probe(
 			VGSM_CMD_MAINT_ONOFF_ON);
 	}
 
-	ssleep(1);
+	msleep(1500);
 
 	for(i=0; i<card->num_modules; i++) {
 		vgsm_module_send_onoff(&card->modules[i],
@@ -803,6 +846,9 @@ int vgsm_card_probe(
 	spin_lock(&vgsm_cards_list_lock);
 	list_add_tail(&card->cards_list_node, &vgsm_cards_list);
 	spin_unlock(&vgsm_cards_list_lock);
+
+	card->maint_timer.expires = jiffies + 5 * HZ;
+	add_timer(&card->maint_timer);
 
 	return 0;
 
@@ -840,6 +886,10 @@ void vgsm_card_remove(struct vgsm_card *card)
 	vgsm_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n", card->io_mem);
 
+	set_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags);
+
+	del_timer_sync(&card->maint_timer);
+
 	spin_lock(&vgsm_cards_list_lock);
 	list_del(&card->cards_list_node);
 	spin_unlock(&vgsm_cards_list_lock);
@@ -850,7 +900,7 @@ void vgsm_card_remove(struct vgsm_card *card)
 			VGSM_CMD_MAINT_ONOFF_ON);
 	}
 
-	ssleep(1);
+	msleep(1500);
 
 	for(i=0; i<card->num_modules; i++) {
 		vgsm_module_send_onoff(&card->modules[i],
