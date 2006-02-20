@@ -67,6 +67,7 @@ nobase_include_HEADERS =			\
 	libq931/ie_channel_identification.h	\
 	libq931/ie_display.h			\
 	libq931/ie_datetime.h			\
+	libq931/ie_low_layer_compatibility.h	\
 	libq931/ie_high_layer_compatibility.h	\
 	libq931/ie_notification_indicator.h	\
 	libq931/ie_progress_indicator.h		\
