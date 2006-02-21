@@ -102,8 +102,19 @@ static int visdn_cxc_connect_simplex(
 	hlist_add_head_rcu(&conn->hash_node,
 			visdn_cxc_get_hash(cxc, src));
 
-	list_add_tail_rcu(&conn->list_node,
-			&cxc->connections_list);
+	{
+	struct list_head *add_before = &cxc->connections_list;
+	struct visdn_cxc_connection *tc;
+	list_for_each_entry(tc, &cxc->connections_list, list_node) {
+		if (tc->dst->chan->write_priority <
+				conn->dst->chan->write_priority) {
+			add_before = &tc->list_node;
+			break;
+		}
+	}
+
+	list_add_tail_rcu(&conn->list_node, add_before);
+	}
 
 	up(&cxc->sem);
 

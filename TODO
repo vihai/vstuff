@@ -11,6 +11,7 @@ General:
   ppp needs ppp_input() to not be called in hard-irq context and we either must
   force all vISDN xmit functions callers to not be in hard-irq context or queue
   frames in visdn-ppp.ko and use a tasklet to pass them to ppp
+- What should we do when a frame is bigger than the FIFO size on hardware?
 
 Build system:
 -------------

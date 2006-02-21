@@ -66,6 +66,8 @@ struct visdn_chan
 
 	int bitrate;
 
+	int write_priority;
+
 	struct visdn_leg leg_a;
 	struct visdn_leg leg_b;
 

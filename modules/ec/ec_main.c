@@ -27,6 +27,7 @@
 #include <linux/visdn/router.h>
 
 #include "kb1ec.h"
+//#define AGGRESSIVE_SUPPRESSOR
 //#include "mec2.h"
 //#include "mg2ec.h"
 
@@ -124,8 +125,8 @@ static ssize_t vec_chan_ne_write(
 	} else if (nref < count) {
 		/* Too few samples in other direction */
 
-	//	printk(KERN_DEBUG "Detected %d slips\n",
-	//		(int)(nref - count));
+//		printk(KERN_DEBUG "Detected %d slips\n",
+//			(int)(nref - count));
 
 		// FIXME :) (filled with undetermined samples)
 		nref = count;
@@ -142,12 +143,14 @@ static ssize_t vec_chan_ne_write(
 			kfifo_len(ec->fe_w_fifo));
 	}
 #endif
-
 	for (i=0; i<count; i++) {
 		u8 octet;
 		s16 sample = alaw_to_linear(((u8 *)buf)[i]);
 
 		switch (ec->ec_state) {
+		case VEC_OFF:
+		break;
+
 		case VEC_PRE_TRAINING:
 			// Mute NE output
 			ref[i] = linear_to_alaw(0);
@@ -166,7 +169,7 @@ printk(KERN_DEBUG "Echo canceller started training\n");
 
 		case VEC_TRAINING:
 			if (ec->training_pos == 0)
-				ref[i] = linear_to_alaw(32000);
+				ref[i] = linear_to_alaw(16384);
 			else
 				ref[i] = linear_to_alaw(0);
 
@@ -175,9 +178,6 @@ printk(KERN_DEBUG "Echo canceller started training\n");
 					ec->training_pos,
 					sample)) {
 				ec->ec_state = VEC_ACTIVE;
-
-			// Mute FE output
-			sample = 0;
 
 printk(KERN_DEBUG "Echo canceller active\n");
 {
@@ -189,6 +189,9 @@ for(i=0; i<ec->ec->N_d; i++) {
 printk("\n");}
 			}
 
+			// Mute FE output
+			sample = 0;
+
 			ec->training_pos++;
 		break;
 
@@ -196,9 +199,6 @@ printk("\n");}
 			sample = echo_can_update(ec->ec,
 					alaw_to_linear(ref[i]),
 					sample);
-		break;
-
-		case VEC_OFF:
 		break;
 		}
 
@@ -627,6 +627,7 @@ static int vec_cdev_open(
 	ec->visdn_chan_ne.ops = &vec_chan_ne_ops;
 	ec->visdn_chan_ne.chan_class = NULL;
 	ec->visdn_chan_ne.port = &ec->visdn_port;
+	ec->visdn_chan_ne.write_priority = 100;
 
 	ec->visdn_chan_ne.leg_a.ops = &vec_leg_ne_ops;
 	ec->visdn_chan_ne.leg_a.cxc = &vsc_softcxc.cxc;
@@ -655,6 +656,7 @@ static int vec_cdev_open(
 	ec->visdn_chan_fe.ops = &vec_chan_fe_ops;
 	ec->visdn_chan_fe.chan_class = NULL;
 	ec->visdn_chan_fe.port = &ec->visdn_port;
+	ec->visdn_chan_fe.write_priority = 100;
 
 	ec->visdn_chan_fe.leg_a.ops = &vec_leg_fe_ops;
 	ec->visdn_chan_fe.leg_a.cxc = &vsc_softcxc.cxc;
