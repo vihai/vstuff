@@ -22,6 +22,8 @@
 #include "fifo_inline.h"
 #include "st_port_inline.h"
 
+#define HFC_FIFO_JITTBUFF 5
+
 #ifdef DEBUG_CODE
 #define hfc_debug_sys_chan(chan, dbglevel, format, arg...)		\
 	if (debug_level >= dbglevel)					\
@@ -126,6 +128,36 @@ static VISDN_CHAN_ATTR(rx_fifo_used, S_IRUGO | S_IWUSR,
 
 /*---------------------------------------------------------------------------*/
 
+static ssize_t hfc_show_rx_fifo_min(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->rx_fifo.stats_min);
+}
+
+static VISDN_CHAN_ATTR(rx_fifo_min, S_IRUGO,
+		hfc_show_rx_fifo_min, NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_rx_fifo_max(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->rx_fifo.stats_max);
+}
+
+static VISDN_CHAN_ATTR(rx_fifo_max, S_IRUGO,
+		hfc_show_rx_fifo_max, NULL);
+
+/*---------------------------------------------------------------------------*/
+
 static ssize_t hfc_show_tx_fifo_used(
 	struct visdn_chan *visdn_chan,
 	struct visdn_chan_attribute *attr,
@@ -162,6 +194,36 @@ static ssize_t hfc_store_tx_fifo_used(
 static VISDN_CHAN_ATTR(tx_fifo_used, S_IRUGO | S_IWUSR,
 		hfc_show_tx_fifo_used,
 		hfc_store_tx_fifo_used);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_min(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->tx_fifo.stats_min);
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_min, S_IRUGO,
+		hfc_show_tx_fifo_min, NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_max(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->tx_fifo.stats_max);
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_max, S_IRUGO,
+		hfc_show_tx_fifo_max, NULL);
 
 /*---------------------------------------------------------------------------*/
 
@@ -239,6 +301,10 @@ static struct visdn_chan_attribute *hfc_sys_attributes[] =
 	&visdn_chan_attr_tx_fifo_size,
 	&visdn_chan_attr_rx_fifo_used,
 	&visdn_chan_attr_tx_fifo_used,
+	&visdn_chan_attr_rx_fifo_min,
+	&visdn_chan_attr_tx_fifo_min,
+	&visdn_chan_attr_rx_fifo_max,
+	&visdn_chan_attr_tx_fifo_max,
 	&visdn_chan_attr_rx_subchannel_bit_start,
 	&visdn_chan_attr_tx_subchannel_bit_start,
 	&visdn_chan_attr_rx_subchannel_bit_count,
@@ -258,6 +324,7 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 	int err;
+	int i;
 
 	if (visdn_chan_lock_interruptible(visdn_chan)) {
 		err = -ERESTARTSYS;
@@ -307,6 +374,11 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 	hfc_fifo_select(&chan->tx_fifo);
 	hfc_fifo_reset(&chan->tx_fifo);
 	hfc_fifo_configure(&chan->tx_fifo);
+
+	for (i=0; i<HFC_FIFO_JITTBUFF; i++) {
+		u8 foo = 0;
+		hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
+	}
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
@@ -534,6 +606,14 @@ static ssize_t hfc_sys_chan_read(
 
 	copied_octets = available_octets < count ? available_octets : count;
 
+	if (available_octets > chan->rx_fifo.stats_max)
+		chan->rx_fifo.stats_max = available_octets;
+
+	if (available_octets - copied_octets < chan->rx_fifo.stats_min)
+		chan->rx_fifo.stats_min = available_octets - copied_octets;
+
+	chan->rx_fifo.stats_cycles++;
+
 	hfc_fifo_mem_read(&chan->rx_fifo, buf, copied_octets);
 
 	hfc_card_unlock(card);
@@ -549,6 +629,7 @@ static ssize_t hfc_sys_chan_write(
 	struct hfc_card *card = chan->port->card;
 	int copied_octets;
 	int available_octets;
+	int used_octets;
 
 	hfc_card_lock(card);
 
@@ -560,7 +641,28 @@ static ssize_t hfc_sys_chan_write(
 	if (copied_octets > available_octets)
 		copied_octets = available_octets;
 
-	hfc_fifo_mem_write(&chan->rx_fifo, buf, copied_octets);
+	used_octets = hfc_fifo_used_tx(&chan->tx_fifo);
+
+	chan->tx_fifo.stats_cycles++;
+	if (chan->tx_fifo.stats_cycles >= 10) {
+		if (chan->tx_fifo.stats_min < HFC_FIFO_JITTBUFF) {
+			u8 foo = ((u8 *)buf)[0];
+			hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
+			printk(KERN_DEBUG "Added one sample\n");
+		}
+
+		chan->tx_fifo.stats_cycles = 0;
+		chan->tx_fifo.stats_min = INT_MAX;
+		chan->tx_fifo.stats_max = 0;
+	}
+
+	if (used_octets < chan->tx_fifo.stats_min)
+		chan->tx_fifo.stats_min = used_octets;
+
+	if (used_octets + copied_octets > chan->tx_fifo.stats_max)
+		chan->tx_fifo.stats_max = used_octets + copied_octets;
+
+	hfc_fifo_mem_write(&chan->tx_fifo, buf, copied_octets);
 
 	hfc_card_unlock(card);
 

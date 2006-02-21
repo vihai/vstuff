@@ -72,6 +72,10 @@ struct hfc_fifo
 	u8 f_min;
 	u8 f_max;
 	u8 f_num;
+
+	int stats_max;
+	int stats_min;
+	int stats_cycles;
 };
 
 void hfc_fifo_clear_rx(struct hfc_fifo *fifo);
