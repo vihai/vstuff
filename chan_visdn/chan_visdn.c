@@ -3015,6 +3015,8 @@ static void visdn_handle_clip_nt(
 			ast_chan->cid.cid_pres |=
 				AST_PRES_USER_NUMBER_PASSED_SCREEN;
 		} else {
+			visdn_debug("Specified CLI did not pass screening\n");
+
 			ast_chan->cid.cid_num =
 				strdup(intf->clip_default_number);
 			ast_chan->cid.cid_pres |= AST_PRES_NETWORK_NUMBER;
