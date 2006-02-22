@@ -375,9 +375,11 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 	hfc_fifo_reset(&chan->tx_fifo);
 	hfc_fifo_configure(&chan->tx_fifo);
 
-	for (i=0; i<HFC_FIFO_JITTBUFF; i++) {
-		u8 foo = 0;
-		hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
+	if (!chan->tx_fifo.framer_enabled) {
+		for (i=0; i<HFC_FIFO_JITTBUFF; i++) {
+			u8 foo = 0;
+			hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
+		}
 	}
 
 	hfc_card_unlock(card);
