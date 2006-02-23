@@ -217,9 +217,6 @@ int visdn_chan_register(struct visdn_chan *chan)
 	hlist_add_head(&chan->node, visdn_chan_hash_id(chan->id));
 	spin_unlock(&visdn_chan_id_hash_lock);
 
-	if (!strlen(chan->name))
-		snprintf(chan->name, sizeof(chan->name), "%06d", chan->id);
-
 	kobject_set_name(&chan->kobj, "%06d", chan->id);
 	chan->kobj.parent = &chan->port->kobj;
 
@@ -311,18 +308,24 @@ int visdn_chan_register(struct visdn_chan *chan)
 	if (err < 0)
 		goto err_create_link_cxc_id;
 
-	err = sysfs_create_link(
-		&chan->port->kobj,
-		&chan->kobj,
-		chan->name);
-	if (err < 0)
-		goto err_create_link_name;
+	if (!strlen(chan->name))
+		snprintf(chan->name, sizeof(chan->name), "%06d", chan->id);
+
+	if (strcmp(chan->name, chan->kobj.name)) {
+		err = sysfs_create_link(
+			&chan->port->kobj,
+			&chan->kobj,
+			chan->name);
+		if (err < 0)
+			goto err_create_link_name;
+	}
 
 	visdn_call_notifiers(VISDN_NOTIFY_CHAN_REGISTERED, chan);
 
 	return 0;
 
-	sysfs_remove_link(&chan->port->kobj, chan->name);
+	if (strcmp(chan->name, chan->kobj.name))
+		sysfs_remove_link(&chan->port->kobj, chan->name);
 err_create_link_name:
 	sysfs_remove_link(&visdn_channels_subsys.kset.kobj, chanid_str);
 err_create_link_cxc_id:
@@ -367,7 +370,8 @@ void visdn_chan_unregister(
 
 	visdn_call_notifiers(VISDN_NOTIFY_CHAN_UNREGISTERED, chan);
 
-	sysfs_remove_link(&chan->port->kobj, chan->name);
+	if (strcmp(chan->name, chan->kobj.name))
+		sysfs_remove_link(&chan->port->kobj, chan->name);
 
 	{
 	char chanid_str[16];

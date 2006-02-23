@@ -210,14 +210,14 @@ static int vsp_cdev_open(
 	memset(chan, 0, sizeof(*chan));
 
 	spin_lock_init(&chan->rx_fifo_lock);
-	chan->rx_fifo = kfifo_alloc(16384, GFP_KERNEL, &chan->rx_fifo_lock);
+	chan->rx_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->rx_fifo_lock);
 	if (!chan->rx_fifo) {
 		err = -EFAULT;
 		goto err_fifo_rx_alloc;
 	}
 
 	spin_lock_init(&chan->tx_fifo_lock);
-	chan->tx_fifo = kfifo_alloc(16384, GFP_KERNEL, &chan->tx_fifo_lock);
+	chan->tx_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->tx_fifo_lock);
 	if (!chan->tx_fifo) {
 		err = -EFAULT;
 		goto err_fifo_tx_alloc;
