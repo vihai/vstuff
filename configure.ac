@@ -416,6 +416,7 @@ AC_CONFIG_FILES([Makefile
 		modules/include/kernel_config.h
 		modules/Makefile
 		modules/hfc-4s/Makefile
+		modules/hfc-e1/Makefile
 		modules/hfc-pci/Makefile
 		modules/hfc-usb/Makefile
 		modules/vgsm/Makefile

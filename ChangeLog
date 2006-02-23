@@ -2,6 +2,72 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-23 14:58:01 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-549
+
+    Summary:
+      Integrated HFC-E1 driver
+    Revision:
+      isdn--devel--0.1--patch-549
+
+
+    new files:
+     modules/hfc-e1/.arch-ids/.arch-inventory.id
+     modules/hfc-e1/.arch-ids/=id
+     modules/hfc-e1/.arch-ids/Makefile.in.id
+     modules/hfc-e1/.arch-ids/card.c.id
+     modules/hfc-e1/.arch-ids/card.h.id
+     modules/hfc-e1/.arch-ids/card_inline.h.id
+     modules/hfc-e1/.arch-ids/cxc.c.id
+     modules/hfc-e1/.arch-ids/cxc.h.id
+     modules/hfc-e1/.arch-ids/e1_chan.c.id
+     modules/hfc-e1/.arch-ids/e1_chan.h.id
+     modules/hfc-e1/.arch-ids/e1_port.c.id
+     modules/hfc-e1/.arch-ids/e1_port.h.id
+     modules/hfc-e1/.arch-ids/e1_port_inline.h.id
+     modules/hfc-e1/.arch-ids/fifo.c.id
+     modules/hfc-e1/.arch-ids/fifo.h.id
+     modules/hfc-e1/.arch-ids/fifo_inline.h.id
+     modules/hfc-e1/.arch-ids/hfc-e1_main.c.id
+     modules/hfc-e1/.arch-ids/led.c.id
+     modules/hfc-e1/.arch-ids/led.h.id
+     modules/hfc-e1/.arch-ids/module.h.id
+     modules/hfc-e1/.arch-ids/pcm_chan.c.id
+     modules/hfc-e1/.arch-ids/pcm_chan.h.id
+     modules/hfc-e1/.arch-ids/pcm_port.c.id
+     modules/hfc-e1/.arch-ids/pcm_port.h.id
+     modules/hfc-e1/.arch-ids/pcm_port_inline.h.id
+     modules/hfc-e1/.arch-ids/regs.h.id
+     modules/hfc-e1/.arch-ids/sys_chan.c.id
+     modules/hfc-e1/.arch-ids/sys_chan.h.id
+     modules/hfc-e1/.arch-ids/sys_port.c.id
+     modules/hfc-e1/.arch-ids/sys_port.h.id
+     modules/hfc-e1/.arch-ids/util.h.id
+     modules/hfc-e1/.arch-inventory modules/hfc-e1/Makefile.in
+     modules/hfc-e1/card.c modules/hfc-e1/card.h
+     modules/hfc-e1/card_inline.h modules/hfc-e1/cxc.c
+     modules/hfc-e1/cxc.h modules/hfc-e1/e1_chan.c
+     modules/hfc-e1/e1_chan.h modules/hfc-e1/e1_port.c
+     modules/hfc-e1/e1_port.h modules/hfc-e1/e1_port_inline.h
+     modules/hfc-e1/fifo.c modules/hfc-e1/fifo.h
+     modules/hfc-e1/fifo_inline.h modules/hfc-e1/hfc-e1_main.c
+     modules/hfc-e1/led.c modules/hfc-e1/led.h
+     modules/hfc-e1/module.h modules/hfc-e1/pcm_chan.c
+     modules/hfc-e1/pcm_chan.h modules/hfc-e1/pcm_port.c
+     modules/hfc-e1/pcm_port.h modules/hfc-e1/pcm_port_inline.h
+     modules/hfc-e1/regs.h modules/hfc-e1/sys_chan.c
+     modules/hfc-e1/sys_chan.h modules/hfc-e1/sys_port.c
+     modules/hfc-e1/sys_port.h modules/hfc-e1/util.h
+     samples/.arch-ids/device-pci-0000:00:06.id
+     samples/device-pci-0000:00:06
+
+    modified files:
+     ChangeLog configure.ac modules/Makefile.in
+     scripts/visdn_configurator.in
+
+    new directories:
+     modules/hfc-e1 modules/hfc-e1/.arch-ids
+
+
 2006-02-22 12:00:25 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-548
 
     Summary:

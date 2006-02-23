@@ -1,0 +1,24 @@
+#
+# Sample configuration file for a HFC-E1 board with the netdev
+# interface being named visdn3.
+#
+
+<netdev visdn3>
+  protocol lapd
+  role TE
+  tei static 0
+</netdev>
+
+<port e1>
+  attribute role TE
+  attribute rx_line_code HDB3
+  attribute rx_full_baud 0
+  attribute rx_crc4 1
+  attribute tx_line_code HDB3
+  attribute tx_full_baud 0
+  attribute tx_crc4 1
+
+  <chan 16>
+    connectmodule netdev visdn3
+  </chan>
+</port>

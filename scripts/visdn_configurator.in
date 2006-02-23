@@ -16,6 +16,7 @@ modprobe visdn-ec
 modprobe visdn-hfc-4s
 modprobe visdn-hfc-pci
 modprobe visdn-hfc-usb
+modprobe visdn-hfc-e1
 
 NETDEV_CONTROL_DEVICE="/dev/visdn/netdev-control"
 CXC_CONTROL_DEVICE="/dev/visdn/cxc-control"
@@ -164,8 +165,13 @@ function read_chan_block
 {
 	local CHAN_NAME=$1
 
+	if [ ! -d "$SYSFS_CARD_OBJ/$PORT_NAME" ]; then
+		echo "Port $PORT_NAME not found"
+		exit 1
+	fi
+
 	if [ ! -d "$SYSFS_CARD_OBJ/$PORT_NAME/$CHAN_NAME" ]; then
-		echo "Port object $PORT_NAME not found"
+		echo "Channel $PORT_NAME/$CHAN_NAME not found"
 		exit 1
 	fi
 

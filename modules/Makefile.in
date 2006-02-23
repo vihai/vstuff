@@ -7,7 +7,7 @@ SHELL = @SHELL@
 kblddir = @kblddir@
 DIST_COMMON = Makefile.in Kbuild
 
-SUBDIRS= core ec hfc-4s hfc-pci hfc-usb kfifo lapd \
+SUBDIRS= core ec hfc-4s hfc-pci hfc-usb hfc-e1 kfifo lapd \
 	netdev ppp softcxc streamport timer-system vgsm
 
 
