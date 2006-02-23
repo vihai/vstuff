@@ -2975,23 +2975,26 @@ static void q931_timer_T308(void *data)
 
 			Q931_UNDECLARE_IES(ies);
 		} else {
-			if (call->intf->mode == LAPD_INTF_MODE_MULTIPOINT) {
-				q931_channel_release(call->channel);
-			} else {
-				q931_channel_set_state(call->channel,
-					Q931_CHANSTATE_MAINTAINANCE);
-
-				struct q931_chanset cs;
-				q931_chanset_init(&cs);
-				q931_chanset_add(&cs, call->channel);
+			if (call->channel) {
+				if (call->intf->mode ==
+						LAPD_INTF_MODE_MULTIPOINT) {
+					q931_channel_release(call->channel);
+				} else {
+					q931_channel_set_state(call->channel,
+						Q931_CHANSTATE_MAINTAINANCE);
 
 #if 0
-				/* Italian network doesnt require this */
-				q931_management_restart_request(
-					&call->intf->global_call,
-					call->dlc,
-					&cs, NULL);
+					struct q931_chanset cs;
+					q931_chanset_init(&cs);
+					q931_chanset_add(&cs, call->channel);
+
+					/* Italian network doesnt require this */
+					q931_management_restart_request(
+						&call->intf->global_call,
+						call->dlc,
+						&cs, NULL);
 #endif
+				}
 			}
 
 			q931_call_set_state(call, N0_NULL_STATE);
@@ -3007,15 +3010,16 @@ static void q931_timer_T308(void *data)
 			q931_call_send_release(call, NULL);
 			q931_call_start_timer(call, T308);
 		} else {
-			if (call->intf->mode != LAPD_INTF_MODE_MULTIPOINT) {
+			if (call->intf->mode != LAPD_INTF_MODE_MULTIPOINT &&
+			    call->channel) {
 				q931_channel_set_state(call->channel,
 					Q931_CHANSTATE_MAINTAINANCE);
 
+#if 0
 				struct q931_chanset cs;
 				q931_chanset_init(&cs);
 				q931_chanset_add(&cs, call->channel);
 
-#if 0
 				/* Italian network doesnt require this */
 				q931_management_restart_request(
 					&call->intf->global_call,
