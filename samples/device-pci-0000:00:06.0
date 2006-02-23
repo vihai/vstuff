@@ -5,6 +5,7 @@
 
 <netdev visdn3>
   protocol lapd
+  type PRI
   role TE
   tei static 0
 </netdev>

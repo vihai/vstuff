@@ -53,10 +53,10 @@ static void lapd_device_up(struct net_device *dev)
 	lapd_dev_get(lapd_device);
 
 	/* FIXME */
-	if (1)
-		lapd_device->type = LAPD_INTF_TYPE_BRA;
-	else
+	if (dev->flags & IFF_PORTSEL)
 		lapd_device->type = LAPD_INTF_TYPE_PRA;
+	else
+		lapd_device->type = LAPD_INTF_TYPE_BRA;
 
 	/* FIXME */
 	if (dev->flags & IFF_NOARP)

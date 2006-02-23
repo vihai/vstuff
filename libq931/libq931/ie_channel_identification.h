@@ -95,6 +95,7 @@ struct q931_ie_channel_identification
 		d_channel_indicator;
 	enum q931_ie_channel_identification_coding_standard
 		coding_standard;
+	int any_channel;
 
 	struct q931_chanset chanset;
 

@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -172,6 +172,36 @@ static int set_flags(const char *devname, int newflags, int mask)
 	return 0;
 }
 
+static int do_set_type(const char *devname, int pri)
+{
+	if (pri)
+		return set_flags(devname, IFF_PORTSEL, IFF_PORTSEL);
+	else
+		return set_flags(devname, 0, IFF_PORTSEL);
+}
+
+static int handle_netdev_set_type(
+	int argc, char *argv[], int optind,
+	const char *devname)
+{
+	if (argc <= optind + 4) {
+		print_usage("Missing netdev's parameter value\n");
+		return 1;
+	}
+
+	const char *value = argv[optind + 4];
+
+	if (!strcasecmp(value, "bri"))
+		return do_set_type(devname, 0);
+	else if (!strcasecmp(value, "pri"))
+		return do_set_type(devname, 1);
+	else {
+		print_usage("Unknown type '%s'\n",
+			value);
+		return 1;
+	}
+}
+
 static int do_set_role(const char *devname, int nt_mode)
 {
 	if (nt_mode)
@@ -279,6 +309,8 @@ static int handle_netdev_set(int argc, char *argv[], int optind)
 		return set_flags(devname, IFF_UP, IFF_UP);
 	} else if (!strcasecmp(parameter, "down")) {
 		return set_flags(devname, 0, IFF_UP);
+	} else if (!strcasecmp(parameter, "type")) {
+		return handle_netdev_set_type(argc, argv, optind, devname);
 	} else if (!strcasecmp(parameter, "role")) {
 		return handle_netdev_set_role(argc, argv, optind, devname);
 	} else if (!strcasecmp(parameter, "tei")) {

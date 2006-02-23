@@ -89,6 +89,14 @@ function read_netdev_block
 					"$NETDEV_REQ_DEVNAME" \
 					"$NETDEV_PROTOCOL" || return
 
+				if [ "$NETDEV_TYPE" = "PRI" ] ; then
+					$VISDNCTL netdev \
+						set $NETDEV_DEVNAME type pri
+				else
+					$VISDNCTL netdev \
+						set $NETDEV_DEVNAME type bri
+				fi
+
 				if [ "$NETDEV_ROLE" = "NT" ] ; then
 					$VISDNCTL netdev \
 						set $NETDEV_DEVNAME role nt
@@ -108,6 +116,7 @@ function read_netdev_block
 		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
 			case "${BASH_REMATCH[1]}" in
 			protocol) NETDEV_PROTOCOL=${BASH_REMATCH[2]} ;;
+			type) NETDEV_TYPE=${BASH_REMATCH[2]} ;;
 			role) NETDEV_ROLE=${BASH_REMATCH[2]} ;;
 			tei) NETDEV_TEI=${BASH_REMATCH[2]} ;;
 			*)

@@ -295,7 +295,8 @@ struct q931_call *q931_call_alloc_out(
 		goto err_find_callref;
 	}
 
-	if (intf->role == LAPD_INTF_ROLE_TE) {
+	if (intf->role == LAPD_INTF_ROLE_TE ||
+	    intf->mode == LAPD_INTF_MODE_POINT_TO_POINT) {
 		call->dlc = q931_dlc_get(&intf->dlc);
 		q931_dlc_hold(call->dlc);
 	} else {

@@ -117,13 +117,6 @@ int q931_ie_channel_identification_read_from_buf(
 		struct q931_ie_channel_identification_onwire_3c *oct_3c =
 			(struct q931_ie_channel_identification_onwire_3c *)
 			(buf + nextoct++);
-		if (oct_3c->number_map == Q931_IE_CI_NM_MAP) {
-			report_ie(abstract_ie, LOG_ERR,
-				"IE specifies channel map, which"
-				" is not supported by DSSS-1\n");
-
-			return FALSE;
-		}
 
 		if (oct_3c->coding_standard != Q931_IE_CI_CS_CCITT) {
 			report_ie(abstract_ie, LOG_ERR,
@@ -132,15 +125,38 @@ int q931_ie_channel_identification_read_from_buf(
 			return FALSE;
 		}
 
-		struct q931_ie_channel_identification_onwire_3d *oct_3d;
-		do {
-			oct_3d = (struct
+		if (oct_3c->number_map == Q931_IE_CI_NM_MAP) {
+			report_ie(abstract_ie, LOG_ERR,
+				"IE specifies channel map, which"
+				" is not supported by DSSS-1\n");
+
+			return FALSE;
+		}
+
+		if (oct_3->info_channel_selection ==
+				Q931_IE_CI_ICS_PRA_INDICATED) {
+
+			struct q931_ie_channel_identification_onwire_3d *oct_3d;
+			do {
+				oct_3d = (struct
 				q931_ie_channel_identification_onwire_3d *)
-					(buf + nextoct++);
+						(buf + nextoct++);
 
-			// FIXME
+				q931_chanset_add(&ie->chanset,
+				&intf->channels[oct_3d->channel_number]);
 
-		} while (!oct_3d->ext);
+			} while (!oct_3d->ext && nextoct < len);
+
+		} else if (oct_3->info_channel_selection ==
+				Q931_IE_CI_ICS_PRA_ANY) {
+
+			ie->any_channel = TRUE;
+
+			int i;
+			for (i=0; i<intf->n_channels; i++)
+				q931_chanset_add(&ie->chanset,
+				&intf->channels[i]);
+		}
 
 		return TRUE;
 
@@ -165,6 +181,8 @@ int q931_ie_channel_identification_read_from_buf(
 					&intf->channels[0]);
 			q931_chanset_add(&ie->chanset,
 					&intf->channels[1]);
+
+			ie->any_channel = TRUE;
 
 			if (oct_3->preferred_exclusive ==
 						Q931_IE_CI_PE_EXCLUSIVE) {
@@ -197,24 +215,36 @@ int q931_ie_channel_identification_write_to_buf_bra(
 	oct_3->preferred_exclusive = ie->preferred_exclusive;
 	oct_3->d_channel_indicator = ie->d_channel_indicator;
 
-	if (ie->chanset.nchans == 0) {
-		oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_NO_CHANNEL;
-	} else if (ie->chanset.nchans == 1) {
-		if (ie->chanset.chans[0]->id == 0)
-			oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_B1;
-		else if (ie->chanset.chans[0]->id == 1)
-			oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_B2;
-		else
-			assert(0);
-	} else if (ie->chanset.nchans == 2) {
-		assert(ie->chanset.chans[0]->id == 0 ||
-			ie->chanset.chans[0]->id == 1);
-		assert(ie->chanset.chans[1]->id == 0 ||
-			ie->chanset.chans[1]->id == 1);
-
+	if (ie->any_channel) {
 		oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_ANY;
 	} else {
-		assert(0);
+		if (ie->chanset.nchans == 0) {
+
+			oct_3->info_channel_selection =
+				Q931_IE_CI_ICS_BRA_NO_CHANNEL;
+
+		} else if (ie->chanset.nchans == 1) {
+
+			if (ie->chanset.chans[0]->id == 0)
+				oct_3->info_channel_selection =
+					Q931_IE_CI_ICS_BRA_B1;
+			else if (ie->chanset.chans[0]->id == 1)
+				oct_3->info_channel_selection =
+					Q931_IE_CI_ICS_BRA_B2;
+			else
+				assert(0);
+
+		} else if (ie->chanset.nchans == 2) {
+
+			assert(ie->chanset.chans[0]->id == 0 ||
+				ie->chanset.chans[0]->id == 1);
+			assert(ie->chanset.chans[1]->id == 0 ||
+				ie->chanset.chans[1]->id == 1);
+
+			oct_3->info_channel_selection = Q931_IE_CI_ICS_BRA_ANY;
+		} else {
+			assert(0);
+		}
 	}
 
 	len++;
@@ -238,9 +268,16 @@ static int q931_ie_channel_identification_write_to_buf_pra(
 	oct_3->interface_type = Q931_IE_CI_IT_PRIMARY;
 	oct_3->preferred_exclusive = ie->preferred_exclusive;
 	oct_3->d_channel_indicator = ie->d_channel_indicator;
-	oct_3->info_channel_selection = Q931_IE_CI_ICS_PRA_NO_CHANNEL; //FIXME
-	len++;
 
+	if (ie->any_channel)
+		oct_3->info_channel_selection = Q931_IE_CI_ICS_PRA_ANY;
+	else if (ie->chanset.nchans == 0)
+		oct_3->info_channel_selection = Q931_IE_CI_ICS_PRA_NO_CHANNEL;
+	else
+		oct_3->info_channel_selection = Q931_IE_CI_ICS_PRA_INDICATED;
+
+	len++;
+	
 	// Interface implicit, do not add Interface identifier
 
 	struct q931_ie_channel_identification_onwire_3c *oct_3c =
@@ -260,10 +297,12 @@ static int q931_ie_channel_identification_write_to_buf_pra(
 	oct_3d->ext = 1;
 	len++;
 
-	int i;
-	for (i=0; i<ie->chanset.nchans; i++) {
-		oct_3d->channel_number = ie->chanset.chans[i]->id;
-		len++;
+	if (oct_3->info_channel_selection == Q931_IE_CI_ICS_PRA_INDICATED) {
+		int i;
+		for (i=0; i<ie->chanset.nchans; i++) {
+			oct_3d->channel_number = ie->chanset.chans[i]->id;
+			len++;
+		}
 	}
 
 	return len;
