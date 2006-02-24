@@ -111,7 +111,7 @@ struct visdn_state visdn = {
 
 static void visdn_set_socket_debug(int on)
 {
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 		if (!intf->q931_intf)
 			continue;
@@ -162,7 +162,7 @@ void refresh_polls_list()
 
 	visdn.open_pending = FALSE;
 
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 		if (intf->open_pending)
 			visdn.open_pending = TRUE;
@@ -463,8 +463,7 @@ static enum q931_ie_calling_party_number_numbering_plan_identificator
 static void visdn_undefer_dtmf_in(
 	struct visdn_chan *visdn_chan)
 {
-	struct q931_call *q931_call = visdn_chan->q931_call;
-	struct visdn_interface *intf = q931_call->intf->pvt;
+	struct visdn_ic *ic = visdn_chan->ic;
 
 	ast_mutex_lock(&visdn_chan->ast_chan->lock);
 	visdn_chan->dtmf_deferred = FALSE;
@@ -476,7 +475,7 @@ static void visdn_undefer_dtmf_in(
 		struct q931_ie_called_party_number *cdpn =
 			q931_ie_called_party_number_alloc();
 		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-						intf->outbound_called_ton);
+						ic->outbound_called_ton);
 		cdpn->numbering_plan_identificator =
 			visdn_cdpn_numbering_plan_by_ton(
 				cdpn->type_of_number);
@@ -548,16 +547,17 @@ static int char_to_hexdigit(char c)
 
 static int visdn_request_call(
 	struct ast_channel *ast_chan,
-	struct visdn_interface *intf,
+	struct visdn_intf *intf,
 	const char *number,
 	const char *options)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+	struct visdn_ic *ic = intf->current_ic;
 	int err;
 
 	visdn_debug("Calling on interface '%s'\n", intf->name);
 
-	visdn_chan->intf = visdn_intf_get(intf);
+	visdn_chan->ic = visdn_ic_get(intf->current_ic);
 
 	Q931_DECLARE_IES(ies);
 
@@ -776,7 +776,7 @@ llc_failure:;
 	struct q931_ie_called_party_number *cdpn =
 		q931_ie_called_party_number_alloc();
 	cdpn->type_of_number =
-		visdn_type_of_number_to_cdpn(intf->outbound_called_ton);
+		visdn_type_of_number_to_cdpn(ic->outbound_called_ton);
 
 	cdpn->numbering_plan_identificator =
 		visdn_cdpn_numbering_plan_by_ton(
@@ -791,7 +791,7 @@ llc_failure:;
 	visdn_defer_dtmf_in(visdn_chan);
 
 	if (visdn_chan->sent_digits < strlen(number)) {
-		if (!intf->overlap_sending) {
+		if (!ic->overlap_sending) {
 			ast_log(LOG_WARNING,
 				"Number too big and overlap sending disabled\n");
 			err = -1;
@@ -800,14 +800,14 @@ llc_failure:;
 	}
 
 	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT &&
-	    !intf->overlap_receiving) {
+	    !ic->overlap_receiving) {
 		struct q931_ie_sending_complete *sc =
 			q931_ie_sending_complete_alloc();
 
 		q931_ies_add_put(&ies, &sc->ie);
 	}
 
-	if (intf->clip_enabled) {
+	if (ic->clip_enabled) {
 		struct q931_ie_calling_party_number *cgpn =
 			q931_ie_calling_party_number_alloc();
 
@@ -816,7 +816,7 @@ llc_failure:;
 
 			if ((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
 					AST_PRES_ALLOWED ||
-			    intf->clip_override) {
+			    ic->clip_override) {
 
 				/* Send subaddress if provided */
 
@@ -824,11 +824,11 @@ llc_failure:;
 					&cgpn->presentation_indicator,
 					&cgpn->screening_indicator);
 
-				if (intf->force_outbound_cli_ton !=
+				if (ic->force_outbound_cli_ton !=
 						VISDN_TYPE_OF_NUMBER_UNSET) {
 					cgpn->type_of_number =
 						visdn_type_of_number_to_cgpn(
-						intf->force_outbound_cli_ton);
+						ic->force_outbound_cli_ton);
 				} else {
 					cgpn->type_of_number =
 						visdn_ast_ton_to_cgpn(
@@ -839,9 +839,9 @@ llc_failure:;
 					visdn_cgpn_numbering_plan_by_ton(
 						cgpn->type_of_number);
 
-				if (strlen(intf->force_outbound_cli))
+				if (strlen(ic->force_outbound_cli))
 					strncpy(cgpn->number,
-					intf->force_outbound_cli,
+					ic->force_outbound_cli,
 						sizeof(cgpn->number));
 				else {
 					strncpy(cgpn->number,
@@ -889,7 +889,7 @@ err_too_many_digits:
 	q931_call_release_reference(q931_call);
 	q931_call_put(q931_call);
 err_call_alloc:
-	visdn_intf_put(visdn_chan->intf);
+	visdn_ic_put(visdn_chan->ic);
 
 	Q931_UNDECLARE_IES(ies);
 
@@ -898,7 +898,7 @@ err_call_alloc:
 
 static int visdn_resume_call(
 	struct ast_channel *ast_chan,
-	struct visdn_interface *intf,
+	struct visdn_intf *intf,
 	const char *number,
 	const char *options)
 {
@@ -907,7 +907,7 @@ static int visdn_resume_call(
 
 	visdn_debug("Resuming on interface '%s'\n", intf->name);
 
-	visdn_chan->intf = visdn_intf_get(intf);
+	visdn_chan->ic = visdn_ic_get(intf->current_ic);
 
 	Q931_DECLARE_IES(ies);
 
@@ -941,7 +941,7 @@ static int visdn_resume_call(
 
 	return 0;
 
-	visdn_intf_put(visdn_chan->intf);
+	visdn_ic_put(visdn_chan->ic);
 
 	q931_call_release_reference(q931_call);
 	q931_call_put(q931_call);
@@ -1008,12 +1008,13 @@ static int visdn_call(
 	visdn_debug("Calling %s on %s\n",
 			dest, ast_chan->name);
 
-	struct visdn_interface *intf = NULL;
+	struct visdn_intf *intf = NULL;
 	if (!strncasecmp(intf_name, VISDN_HUNTGROUP_PREFIX,
 			strlen(VISDN_HUNTGROUP_PREFIX))) {
 
 		if (strchr(visdn_chan->options, 'R')) {
-			ast_log(LOG_WARNING, "Resume on huntgroup not supported\n");
+			ast_log(LOG_WARNING,
+				"Resume on huntgroup not supported\n");
 			err = -1;
 			goto err_resume_in_huntgroup;
 		}
@@ -1559,7 +1560,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
-	struct visdn_interface *intf = q931_call->intf->pvt;
+	struct visdn_ic *ic = visdn_chan->ic;
 
 	if (visdn_chan->dtmf_deferred) {
 		visdn_queue_dtmf(visdn_chan, digit);
@@ -1576,7 +1577,7 @@ static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 		struct q931_ie_called_party_number *cdpn =
 			q931_ie_called_party_number_alloc();
 		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-						intf->outbound_called_ton);
+						ic->outbound_called_ton);
 		cdpn->numbering_plan_identificator =
 			visdn_cdpn_numbering_plan_by_ton(
 				cdpn->type_of_number);
@@ -1802,9 +1803,9 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->hg_first_intf = NULL;
 	}
 
-	if (visdn_chan->intf) {
-		visdn_intf_put(visdn_chan->intf);
-		visdn_chan->intf = NULL;
+	if (visdn_chan->ic) {
+		visdn_ic_put(visdn_chan->ic);
+		visdn_chan->ic = NULL;
 	}
 
 	if (visdn_chan->huntgroup) {
@@ -2196,10 +2197,11 @@ static int visdn_q931_thread_do_poll()
 		exit(1);
 	}
 
+/*
 	ast_mutex_lock(&visdn.lock);
 	if (time(NULL) > visdn.open_pending_nextcheck) {
 
-		struct visdn_interface *intf;
+		struct visdn_intf *intf;
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
 			if (intf->open_pending) {
@@ -2215,6 +2217,7 @@ static int visdn_q931_thread_do_poll()
 		refresh_polls_list();
 	}
 	ast_mutex_unlock(&visdn.lock);
+*/
 
 	int i;
 	for(i = 0; i < visdn.npolls; i++) {
@@ -2279,7 +2282,7 @@ static int visdn_q931_thread_do_poll()
 	if (visdn.have_to_exit) {
 		active_calls_cnt = 0;
 
-		struct visdn_interface *intf;
+		struct visdn_intf *intf;
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 			if (intf->q931_intf) {
 				struct q931_call *call;
@@ -2517,7 +2520,7 @@ static void visdn_q931_more_info_indication(
 		struct q931_ie_called_party_number *cdpn =
 			q931_ie_called_party_number_alloc();
 		cdpn->type_of_number = visdn_type_of_number_to_cdpn(
-					visdn_chan->intf->outbound_called_ton);
+					visdn_chan->ic->outbound_called_ton);
 		cdpn->numbering_plan_identificator =
 			visdn_cdpn_numbering_plan_by_ton(
 				cdpn->type_of_number);
@@ -2618,9 +2621,10 @@ static void visdn_q931_reject_indication(
 	    		Q931_IE_C_CV_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE ||
 	    cause->value == Q931_IE_C_CV_RESOURCES_UNAVAILABLE)) {
 
-		struct visdn_interface *intf;
+		struct visdn_intf *intf;
 
-		intf = visdn_hg_hunt(visdn_chan->huntgroup, visdn_chan->intf,
+		intf = visdn_hg_hunt(visdn_chan->huntgroup,
+				visdn_chan->ic->intf,
 				visdn_chan->hg_first_intf);
 		if (!intf) {
 			ast_mutex_lock(&ast_chan->lock);
@@ -2711,7 +2715,7 @@ static void visdn_q931_resume_indication(
 		}
 	}
 
-	struct visdn_interface *intf = q931_call->intf->pvt;
+	struct visdn_intf *intf = q931_call->intf->pvt;
 	struct visdn_suspended_call *suspended_call;
 
 	int found = FALSE;
@@ -2883,7 +2887,7 @@ static int visdn_cgpn_to_pres(
 }
 
 static const char *visdn_get_prefix_by_cdpn_ton(
-	struct visdn_interface *intf,
+	struct visdn_ic *ic,
 	enum q931_ie_called_party_number_type_of_number ton)
 {
 	switch(ton) {
@@ -2892,23 +2896,23 @@ static const char *visdn_get_prefix_by_cdpn_ton(
 		return "";
 
 	case Q931_IE_CDPN_TON_INTERNATIONAL:
-		return intf->international_prefix;
+		return ic->international_prefix;
 	break;
 
 	case Q931_IE_CDPN_TON_NATIONAL:
-		return intf->national_prefix;
+		return ic->national_prefix;
 	break;
 
 	case Q931_IE_CDPN_TON_NETWORK_SPECIFIC:
-		return intf->network_specific_prefix;
+		return ic->network_specific_prefix;
 	break;
 
 	case Q931_IE_CDPN_TON_SUBSCRIBER:
-		return intf->subscriber_prefix;
+		return ic->subscriber_prefix;
 	break;
 
 	case Q931_IE_CDPN_TON_ABBREVIATED:
-		return intf->abbreviated_prefix;
+		return ic->abbreviated_prefix;
 	break;
 	}
 
@@ -2917,7 +2921,7 @@ static const char *visdn_get_prefix_by_cdpn_ton(
 }
 
 static const char *visdn_get_prefix_by_cgpn_ton(
-	struct visdn_interface *intf,
+	struct visdn_ic *ic,
 	enum q931_ie_calling_party_number_type_of_number ton)
 {
 	switch(ton) {
@@ -2926,23 +2930,23 @@ static const char *visdn_get_prefix_by_cgpn_ton(
 		return "";
 
 	case Q931_IE_CGPN_TON_INTERNATIONAL:
-		return intf->international_prefix;
+		return ic->international_prefix;
 	break;
 
 	case Q931_IE_CGPN_TON_NATIONAL:
-		return intf->national_prefix;
+		return ic->national_prefix;
 	break;
 
 	case Q931_IE_CGPN_TON_NETWORK_SPECIFIC:
-		return intf->network_specific_prefix;
+		return ic->network_specific_prefix;
 	break;
 
 	case Q931_IE_CGPN_TON_SUBSCRIBER:
-		return intf->subscriber_prefix;
+		return ic->subscriber_prefix;
 	break;
 
 	case Q931_IE_CGPN_TON_ABBREVIATED:
-		return intf->abbreviated_prefix;
+		return ic->abbreviated_prefix;
 	break;
 	}
 
@@ -2952,17 +2956,17 @@ static const char *visdn_get_prefix_by_cgpn_ton(
 
 static void visdn_rewrite_and_assign_cli(
 	struct ast_channel *ast_chan,
-	struct visdn_interface *intf,
+	struct visdn_ic *ic,
 	struct q931_ie_calling_party_number *cgpn)
 {
 	assert(!ast_chan->cid.cid_num);
 
-	if (intf->cli_rewriting) {
+	if (ic->cli_rewriting) {
 		char rewritten_num[32];
 
 		snprintf(rewritten_num, sizeof(rewritten_num),
 			"%s%s",
-			visdn_get_prefix_by_cgpn_ton(intf,
+			visdn_get_prefix_by_cgpn_ton(ic,
 						cgpn->type_of_number),
 			cgpn->number);
 
@@ -2974,7 +2978,7 @@ static void visdn_rewrite_and_assign_cli(
 
 static void visdn_handle_clip_nt(
 	struct ast_channel *ast_chan,
-	struct visdn_interface *intf,
+	struct visdn_ic *ic,
 	struct q931_ie_calling_party_number *cgpn)
 {
 
@@ -2983,7 +2987,7 @@ static void visdn_handle_clip_nt(
 	 */
 
 	if (!cgpn) {
-		ast_chan->cid.cid_num = strdup(intf->clip_default_number);
+		ast_chan->cid.cid_num = strdup(ic->clip_default_number);
 		ast_chan->cid.cid_pres = AST_PRES_NETWORK_NUMBER;
 
 		return;
@@ -2994,23 +2998,23 @@ static void visdn_handle_clip_nt(
 	    cgpn->numbering_plan_identificator !=
 	    		Q931_IE_CGPN_NPI_ISDN_TELEPHONY) {
 
-		ast_chan->cid.cid_num = strdup(intf->clip_default_number);
+		ast_chan->cid.cid_num = strdup(ic->clip_default_number);
 		ast_chan->cid.cid_pres = AST_PRES_NETWORK_NUMBER;
 
 		return;
 	}
 
-	if (intf->clip_special_arrangement) {
+	if (ic->clip_special_arrangement) {
 		ast_chan->cid.cid_pres |=
 			AST_PRES_USER_NUMBER_UNSCREENED;
 	} else {
-		if (visdn_numbers_list_match(&intf->clip_numbers_list,
+		if (visdn_numbers_list_match(&ic->clip_numbers_list,
 							cgpn->number)) {
 			if (0) { /* Sequence is valid but incomplete */
 				/* Complete sequence TODO FIXME */
 			}
 
-			visdn_rewrite_and_assign_cli(ast_chan, intf, cgpn);
+			visdn_rewrite_and_assign_cli(ast_chan, ic, cgpn);
 
 			ast_chan->cid.cid_pres |=
 				AST_PRES_USER_NUMBER_PASSED_SCREEN;
@@ -3018,7 +3022,7 @@ static void visdn_handle_clip_nt(
 			visdn_debug("Specified CLI did not pass screening\n");
 
 			ast_chan->cid.cid_num =
-				strdup(intf->clip_default_number);
+				strdup(ic->clip_default_number);
 			ast_chan->cid.cid_pres |= AST_PRES_NETWORK_NUMBER;
 		}
 	}
@@ -3037,9 +3041,11 @@ static void visdn_q931_setup_indication(
 		goto err_visdn_alloc;
 	}
 
-	visdn_chan->q931_call = q931_call_get(q931_call);
+	struct visdn_intf *intf = q931_call->intf->pvt;
+	struct visdn_ic *ic = intf->current_ic;
 
-	struct visdn_interface *intf = q931_call->intf->pvt;
+	visdn_chan->q931_call = q931_call_get(q931_call);
+	visdn_chan->ic = visdn_ic_get(ic);
 
 	struct ast_channel *ast_chan;
 	ast_chan = visdn_new(visdn_chan, AST_STATE_OFFHOOK);
@@ -3096,7 +3102,7 @@ static void visdn_q931_setup_indication(
 			Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
 
 	strncpy(ast_chan->context,
-		intf->context,
+		ic->context,
 		sizeof(ast_chan->context)-1);
 
 	ast_mutex_lock(&visdn.usecnt_lock);
@@ -3109,7 +3115,7 @@ static void visdn_q931_setup_indication(
 	if (cdpn) {
 		snprintf(called_number, sizeof(called_number),
 			"%s%s",
-			visdn_get_prefix_by_cdpn_ton(intf,
+			visdn_get_prefix_by_cdpn_ton(ic,
 						cdpn->type_of_number),
 			cdpn->number);
 
@@ -3143,7 +3149,7 @@ static void visdn_q931_setup_indication(
 
 	if (bc->information_transfer_capability ==
 		Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
-		visdn_numbers_list_match(&intf->trans_numbers_list,
+		visdn_numbers_list_match(&ic->trans_numbers_list,
 				called_number)) {
 
 		pbx_builtin_setvar_helper(ast_chan,
@@ -3160,7 +3166,7 @@ static void visdn_q931_setup_indication(
 
 		visdn_chan->is_voice = TRUE;
 		visdn_chan->handle_stream = TRUE;
-		q931_call->tones_option = intf->tones_option;
+		q931_call->tones_option = ic->tones_option;
 
 		pbx_builtin_setvar_helper(ast_chan,
 			"_BEARERCAP_CLASS", "voice");
@@ -3219,22 +3225,22 @@ static void visdn_q931_setup_indication(
 	assert(!ast_chan->cid.cid_num);
 
 	ast_chan->cid.cid_pres = 0;
-	ast_chan->cid.cid_name = strdup(intf->clip_default_name);
+	ast_chan->cid.cid_name = strdup(ic->clip_default_name);
 
 	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 
-		visdn_handle_clip_nt(ast_chan, intf, cgpn);
+		visdn_handle_clip_nt(ast_chan, ic, cgpn);
 
 		/* Handle CLIR */
-		if (intf->clir_mode == VISDN_CLIR_MODE_ON)
+		if (ic->clir_mode == VISDN_CLIR_MODE_ON)
 			ast_chan->cid.cid_pres |= AST_PRES_RESTRICTED;
-		else if (intf->clir_mode == VISDN_CLIR_MODE_OFF)
+		else if (ic->clir_mode == VISDN_CLIR_MODE_OFF)
 			ast_chan->cid.cid_pres |= AST_PRES_ALLOWED;
 		else {
 			if (cgpn)
 				ast_chan->cid.cid_pres |=
 					visdn_cgpn_to_pres(cgpn);
-			else if (intf->clir_mode == VISDN_CLIR_MODE_DEFAULT_ON)
+			else if (ic->clir_mode == VISDN_CLIR_MODE_DEFAULT_ON)
 				ast_chan->cid.cid_pres |= AST_PRES_RESTRICTED;
 			else
 				ast_chan->cid.cid_pres |= AST_PRES_ALLOWED;
@@ -3249,7 +3255,7 @@ static void visdn_q931_setup_indication(
 			goto no_cgpn;
 		}
 
-		visdn_rewrite_and_assign_cli(ast_chan, intf, cgpn);
+		visdn_rewrite_and_assign_cli(ast_chan, ic, cgpn);
 
 		switch(cgpn->screening_indicator) {
 		case Q931_IE_CGPN_SI_USER_PROVIDED_NOT_SCREENED:
@@ -3300,9 +3306,9 @@ no_cgpn:;
 
 	/* ------ ----------------------------- ------ */
 
-	if (!intf->overlap_sending ||
+	if (!ic->overlap_sending ||
 	    visdn_chan->sending_complete) {
-		if (ast_exists_extension(NULL, intf->context,
+		if (ast_exists_extension(NULL, ic->context,
 				called_number, 1,
 				ast_chan->cid.cid_num)) {
 
@@ -3345,7 +3351,7 @@ no_cgpn:;
 				"No extension '%s' in context '%s',"
 				" rejecting call\n",
 				called_number,
-				intf->context);
+				ic->context);
 
 			Q931_DECLARE_IES(ies);
 
@@ -3489,7 +3495,8 @@ static void visdn_q931_suspend_indication(
 		}
 	}
 
-	struct visdn_interface *intf = q931_call->intf->pvt;
+	struct visdn_ic *ic = visdn_chan->ic;
+	struct visdn_intf *intf = ic->intf;
 	struct visdn_suspended_call *suspended_call;
 	list_for_each_entry(suspended_call, &intf->suspended_calls, node) {
 		if ((!ci && suspended_call->call_identity_len == 0) ||
@@ -3554,7 +3561,7 @@ static void visdn_q931_suspend_indication(
 
 	if (!ast_chan->whentohangup ||
 	    time(NULL) + 45 < ast_chan->whentohangup)
-		ast_channel_setwhentohangup(ast_chan, intf->T307);
+		ast_channel_setwhentohangup(ast_chan, ic->T307);
 
 	q931_call->pvt = NULL;
 	visdn_chan->q931_call = NULL;
@@ -3757,14 +3764,14 @@ static void visdn_q931_connect_channel(
 	ast_mutex_lock(&ast_chan->lock);
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-	struct visdn_interface *visdn_intf = channel->intf->pvt;
+	struct visdn_ic *ic = visdn_chan->ic;
 
 	visdn_chan->channel_has_been_connected = TRUE;
 
 	char path[100], dest[100];
 	snprintf(path, sizeof(path),
 		"%s/B%d",
-		visdn_intf->remote_port,
+		ic->intf->remote_port,
 		channel->id+1);
 
 	memset(dest, 0, sizeof(dest));
@@ -3802,7 +3809,7 @@ static void visdn_q931_connect_channel(
 		}
 
 		/* FIXME TODO FIXME XXX Handle return value */
-		if (visdn_intf->echocancel)
+		if (ic->echocancel)
 			visdn_connect_channels_with_ec(visdn_chan);
 		else
 			visdn_connect_channels(visdn_chan);
@@ -4284,7 +4291,7 @@ static int do_show_visdn_channels(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
 		if (!intf->q931_intf)
@@ -4329,7 +4336,7 @@ static int visdn_cli_print_call_list(
 
 	ast_mutex_lock(&visdn.lock);
 
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
 		if (!intf->q931_intf)
@@ -4450,8 +4457,8 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 			callpos++;
 		}
 
-		struct visdn_interface *filter_intf = NULL;
-		struct visdn_interface *intf;
+		struct visdn_intf *filter_intf = NULL;
+		struct visdn_intf *intf;
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 			if (intf->q931_intf &&
 			    !strcasecmp(intf->name, argv[3])) {
@@ -4533,8 +4540,8 @@ int load_module()
 	INIT_LIST_HEAD(&visdn.q931_ccb_queue);
 	ast_mutex_init(&visdn.q931_ccb_queue_lock);
 
-	visdn.default_intf = visdn_intf_alloc();
-	visdn_intf_default_init(visdn.default_intf);
+	visdn.default_ic = visdn_ic_alloc();
+	visdn_ic_setdefault(visdn.default_ic);
 
 	int filedes[2];
 	if (pipe(filedes) < 0) {
@@ -4692,7 +4699,7 @@ err_pipe_ccb_q931:
 
 int unload_module(void)
 {
-	visdn_intf_put(visdn.default_intf);
+	visdn_ic_put(visdn.default_ic);
 	
 	visdn_overlap_unregister();
 

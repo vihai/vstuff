@@ -53,9 +53,9 @@
 #include "ton.h"
 #include "numbers_list.h"
 
-struct visdn_interface *visdn_intf_alloc(void)
+struct visdn_intf *visdn_intf_alloc(void)
 {
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 
 	intf = malloc(sizeof(*intf));
 	if (!intf)
@@ -65,17 +65,16 @@ struct visdn_interface *visdn_intf_alloc(void)
 
 	intf->refcnt = 1;
 
-	INIT_LIST_HEAD(&intf->suspended_calls);
-	INIT_LIST_HEAD(&intf->clip_numbers_list);
-	INIT_LIST_HEAD(&intf->trans_numbers_list);
 	intf->q931_intf = NULL;
 	intf->configured = FALSE;
 	intf->open_pending = FALSE;
 
+	INIT_LIST_HEAD(&intf->suspended_calls);
+
 	return intf;
 }
 
-struct visdn_interface *visdn_intf_get(struct visdn_interface *intf)
+struct visdn_intf *visdn_intf_get(struct visdn_intf *intf)
 {
 	assert(intf);
 	assert(intf->refcnt > 0);
@@ -87,7 +86,7 @@ struct visdn_interface *visdn_intf_get(struct visdn_interface *intf)
 	return intf;
 }
 
-void visdn_intf_put(struct visdn_interface *intf)
+void visdn_intf_put(struct visdn_intf *intf)
 {
 	assert(intf);
 	assert(intf->refcnt > 0);
@@ -95,15 +94,15 @@ void visdn_intf_put(struct visdn_interface *intf)
 	ast_mutex_lock(&visdn.usecnt_lock);
 	intf->refcnt--;
 
-	if (!intf->refcnt) {
+	if (!intf->refcnt)
 		free(intf);
-	}
+
 	ast_mutex_unlock(&visdn.usecnt_lock);
 }
 
-struct visdn_interface *visdn_intf_get_by_name(const char *name)
+struct visdn_intf *visdn_intf_get_by_name(const char *name)
 {
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 
 	ast_mutex_lock(&visdn.lock);
 	
@@ -117,6 +116,54 @@ struct visdn_interface *visdn_intf_get_by_name(const char *name)
 	ast_mutex_unlock(&visdn.lock);
 
 	return NULL;
+}
+
+struct visdn_ic *visdn_ic_alloc(void)
+{
+	struct visdn_ic *ic;
+
+	ic = malloc(sizeof(*ic));
+	if (!ic)
+		return NULL;
+
+	memset(ic, 0, sizeof(*ic));
+
+	ic->refcnt = 1;
+
+	INIT_LIST_HEAD(&ic->clip_numbers_list);
+	INIT_LIST_HEAD(&ic->trans_numbers_list);
+
+	return ic;
+}
+
+struct visdn_ic *visdn_ic_get(struct visdn_ic *ic)
+{
+	assert(ic);
+	assert(ic->refcnt > 0);
+	
+	ast_mutex_lock(&visdn.usecnt_lock);
+	ic->refcnt++;
+	ast_mutex_unlock(&visdn.usecnt_lock);
+
+	return ic;
+}
+
+void visdn_ic_put(struct visdn_ic *ic)
+{
+	assert(ic);
+	assert(ic->refcnt > 0);
+
+	ast_mutex_lock(&visdn.usecnt_lock);
+	ic->refcnt--;
+
+	if (!ic->refcnt) {
+		if (ic->intf)
+			visdn_intf_put(ic->intf);
+
+		free(ic);
+	}
+
+	ast_mutex_unlock(&visdn.usecnt_lock);
 }
 
 static enum q931_interface_network_role
@@ -161,119 +208,119 @@ static enum visdn_clir_mode
 	}
 }
 
-static int visdn_intf_from_var(
-	struct visdn_interface *intf,
+static int visdn_ic_from_var(
+	struct visdn_ic *ic,
 	struct ast_variable *var)
 {
 	if (!strcasecmp(var->name, "network_role")) {
-		intf->network_role =
+		ic->network_role =
 			visdn_string_to_network_role(var->value);
 	} else if (!strcasecmp(var->name, "outbound_called_ton")) {
-		intf->outbound_called_ton =
+		ic->outbound_called_ton =
 			visdn_ton_from_string(var->value);
 	} else if (!strcasecmp(var->name, "force_outbound_cli")) {
-		strncpy(intf->force_outbound_cli, var->value,
-			sizeof(intf->force_outbound_cli));
+		strncpy(ic->force_outbound_cli, var->value,
+			sizeof(ic->force_outbound_cli));
 	} else if (!strcasecmp(var->name, "force_outbound_cli_ton")) {
 		if (!strlen(var->value) || !strcasecmp(var->value, "no"))
-			intf->force_outbound_cli_ton =
+			ic->force_outbound_cli_ton =
 				VISDN_TYPE_OF_NUMBER_UNSET;
 		else
-			intf->force_outbound_cli_ton =
+			ic->force_outbound_cli_ton =
 				visdn_ton_from_string(var->value);
 	} else if (!strcasecmp(var->name, "cli_rewriting")) {
-		intf->cli_rewriting = ast_true(var->value);
+		ic->cli_rewriting = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "national_prefix")) {
-		strncpy(intf->national_prefix, var->value,
-			sizeof(intf->national_prefix));
+		strncpy(ic->national_prefix, var->value,
+			sizeof(ic->national_prefix));
 	} else if (!strcasecmp(var->name, "international_prefix")) {
-		strncpy(intf->international_prefix, var->value,
-			sizeof(intf->international_prefix));
+		strncpy(ic->international_prefix, var->value,
+			sizeof(ic->international_prefix));
 	} else if (!strcasecmp(var->name, "network_specific_prefix")) {
-		strncpy(intf->network_specific_prefix, var->value,
-			sizeof(intf->network_specific_prefix));
+		strncpy(ic->network_specific_prefix, var->value,
+			sizeof(ic->network_specific_prefix));
 	} else if (!strcasecmp(var->name, "subscriber_prefix")) {
-		strncpy(intf->subscriber_prefix, var->value,
-			sizeof(intf->subscriber_prefix));
+		strncpy(ic->subscriber_prefix, var->value,
+			sizeof(ic->subscriber_prefix));
 	} else if (!strcasecmp(var->name, "abbreviated_prefix")) {
-		strncpy(intf->abbreviated_prefix, var->value,
-			sizeof(intf->abbreviated_prefix));
+		strncpy(ic->abbreviated_prefix, var->value,
+			sizeof(ic->abbreviated_prefix));
 	} else if (!strcasecmp(var->name, "tones_option")) {
-		intf->tones_option = ast_true(var->value);
+		ic->tones_option = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "context")) {
-		strncpy(intf->context, var->value, sizeof(intf->context));
+		strncpy(ic->context, var->value, sizeof(ic->context));
 	} else if (!strcasecmp(var->name, "trans_numbers")) {
 		visdn_numbers_list_from_string(
-			&intf->trans_numbers_list, var->value);
+			&ic->trans_numbers_list, var->value);
 	} else if (!strcasecmp(var->name, "clip_enabled")) {
-		intf->clip_enabled = ast_true(var->value);
+		ic->clip_enabled = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clip_override")) {
-		intf->clip_override = ast_true(var->value);
+		ic->clip_override = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clip_default_name")) {
-		strncpy(intf->clip_default_name, var->value,
-			sizeof(intf->clip_default_name));
+		strncpy(ic->clip_default_name, var->value,
+			sizeof(ic->clip_default_name));
 	} else if (!strcasecmp(var->name, "clip_default_number")) {
-		strncpy(intf->clip_default_number, var->value,
-			sizeof(intf->clip_default_number));
+		strncpy(ic->clip_default_number, var->value,
+			sizeof(ic->clip_default_number));
 	} else if (!strcasecmp(var->name, "clip_numbers")) {
 		visdn_numbers_list_from_string(
-			&intf->clip_numbers_list, var->value);
+			&ic->clip_numbers_list, var->value);
 	} else if (!strcasecmp(var->name, "clip_special_arrangement")) {
-		intf->clip_special_arrangement = ast_true(var->value);
+		ic->clip_special_arrangement = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "clir_mode")) {
-		intf->clir_mode = visdn_string_to_clir_mode(var->value);
+		ic->clir_mode = visdn_string_to_clir_mode(var->value);
 	} else if (!strcasecmp(var->name, "overlap_sending")) {
-		intf->overlap_sending = ast_true(var->value);
+		ic->overlap_sending = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "overlap_receiving")) {
-		intf->overlap_receiving = ast_true(var->value);
+		ic->overlap_receiving = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "call_bumping")) {
-		intf->call_bumping = ast_true(var->value);
+		ic->call_bumping = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "autorelease_dlc")) {
-		intf->dlc_autorelease_time = atoi(var->value);
+		ic->dlc_autorelease_time = atoi(var->value);
 	} else if (!strcasecmp(var->name, "echocancel")) {
-		intf->echocancel = ast_true(var->value);
+		ic->echocancel = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "echocancel_taps")) {
-		intf->echocancel_taps = atoi(var->value);
+		ic->echocancel_taps = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t301")) {
-		intf->T301 = atoi(var->value);
+		ic->T301 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t302")) {
-		intf->T302 = atoi(var->value);
+		ic->T302 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t303")) {
-		intf->T303 = atoi(var->value);
+		ic->T303 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t304")) {
-		intf->T304 = atoi(var->value);
+		ic->T304 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t305")) {
-		intf->T305 = atoi(var->value);
+		ic->T305 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t306")) {
-		intf->T306 = atoi(var->value);
+		ic->T306 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t307")) {
-		intf->T307 = atoi(var->value);
+		ic->T307 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t308")) {
-		intf->T308 = atoi(var->value);
+		ic->T308 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t309")) {
-		intf->T309 = atoi(var->value);
+		ic->T309 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t310")) {
-		intf->T310 = atoi(var->value);
+		ic->T310 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t312")) {
-		intf->T312 = atoi(var->value);
+		ic->T312 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t313")) {
-		intf->T313 = atoi(var->value);
+		ic->T313 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t314")) {
-		intf->T314 = atoi(var->value);
+		ic->T314 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t316")) {
-		intf->T316 = atoi(var->value);
+		ic->T316 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t317")) {
-		intf->T317 = atoi(var->value);
+		ic->T317 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t318")) {
-		intf->T318 = atoi(var->value);
+		ic->T318 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t319")) {
-		intf->T319 = atoi(var->value);
+		ic->T319 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t320")) {
-		intf->T320 = atoi(var->value);
+		ic->T320 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t321")) {
-		intf->T321 = atoi(var->value);
+		ic->T321 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t322")) {
-		intf->T322 = atoi(var->value);
+		ic->T322 = atoi(var->value);
 	} else {
 		return -1;
 	}
@@ -281,9 +328,9 @@ static int visdn_intf_from_var(
 	return 0;
 }
 
-static void visdn_copy_interface_config(
-	struct visdn_interface *dst,
-	const struct visdn_interface *src)
+static void visdn_ic_copy(
+	struct visdn_ic *dst,
+	const struct visdn_ic *src)
 {
 	dst->network_role = src->network_role;
 	dst->outbound_called_ton = src->outbound_called_ton;
@@ -337,7 +384,7 @@ static void visdn_copy_interface_config(
 	dst->T322 = src->T322;
 }
 
-int visdn_intf_open(struct visdn_interface *intf)
+int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 {
 	assert(!intf->q931_intf);
 
@@ -353,29 +400,29 @@ int visdn_intf_open(struct visdn_interface *intf)
 	}
 
 	intf->q931_intf->pvt = intf;
-	intf->q931_intf->network_role = intf->network_role;
-	intf->q931_intf->dlc_autorelease_time = intf->dlc_autorelease_time;
-	intf->q931_intf->enable_bumping = intf->call_bumping;
+	intf->q931_intf->network_role = ic->network_role;
+	intf->q931_intf->dlc_autorelease_time = ic->dlc_autorelease_time;
+	intf->q931_intf->enable_bumping = ic->call_bumping;
 
-	if (intf->T301) intf->q931_intf->T301 = intf->T301 * 1000000LL;
-	if (intf->T302) intf->q931_intf->T302 = intf->T302 * 1000000LL;
-	if (intf->T303) intf->q931_intf->T303 = intf->T303 * 1000000LL;
-	if (intf->T304) intf->q931_intf->T304 = intf->T304 * 1000000LL;
-	if (intf->T305) intf->q931_intf->T305 = intf->T305 * 1000000LL;
-	if (intf->T306) intf->q931_intf->T306 = intf->T306 * 1000000LL;
-	if (intf->T308) intf->q931_intf->T308 = intf->T308 * 1000000LL;
-	if (intf->T309) intf->q931_intf->T309 = intf->T309 * 1000000LL;
-	if (intf->T310) intf->q931_intf->T310 = intf->T310 * 1000000LL;
-	if (intf->T312) intf->q931_intf->T312 = intf->T312 * 1000000LL;
-	if (intf->T313) intf->q931_intf->T313 = intf->T313 * 1000000LL;
-	if (intf->T314) intf->q931_intf->T314 = intf->T314 * 1000000LL;
-	if (intf->T316) intf->q931_intf->T316 = intf->T316 * 1000000LL;
-	if (intf->T317) intf->q931_intf->T317 = intf->T317 * 1000000LL;
-	if (intf->T318) intf->q931_intf->T318 = intf->T318 * 1000000LL;
-	if (intf->T319) intf->q931_intf->T319 = intf->T319 * 1000000LL;
-	if (intf->T320) intf->q931_intf->T320 = intf->T320 * 1000000LL;
-	if (intf->T321) intf->q931_intf->T321 = intf->T321 * 1000000LL;
-	if (intf->T322) intf->q931_intf->T322 = intf->T322 * 1000000LL;
+	if (ic->T301) intf->q931_intf->T301 = ic->T301 * 1000000LL;
+	if (ic->T302) intf->q931_intf->T302 = ic->T302 * 1000000LL;
+	if (ic->T303) intf->q931_intf->T303 = ic->T303 * 1000000LL;
+	if (ic->T304) intf->q931_intf->T304 = ic->T304 * 1000000LL;
+	if (ic->T305) intf->q931_intf->T305 = ic->T305 * 1000000LL;
+	if (ic->T306) intf->q931_intf->T306 = ic->T306 * 1000000LL;
+	if (ic->T308) intf->q931_intf->T308 = ic->T308 * 1000000LL;
+	if (ic->T309) intf->q931_intf->T309 = ic->T309 * 1000000LL;
+	if (ic->T310) intf->q931_intf->T310 = ic->T310 * 1000000LL;
+	if (ic->T312) intf->q931_intf->T312 = ic->T312 * 1000000LL;
+	if (ic->T313) intf->q931_intf->T313 = ic->T313 * 1000000LL;
+	if (ic->T314) intf->q931_intf->T314 = ic->T314 * 1000000LL;
+	if (ic->T316) intf->q931_intf->T316 = ic->T316 * 1000000LL;
+	if (ic->T317) intf->q931_intf->T317 = ic->T317 * 1000000LL;
+	if (ic->T318) intf->q931_intf->T318 = ic->T318 * 1000000LL;
+	if (ic->T319) intf->q931_intf->T319 = ic->T319 * 1000000LL;
+	if (ic->T320) intf->q931_intf->T320 = ic->T320 * 1000000LL;
+	if (ic->T321) intf->q931_intf->T321 = ic->T321 * 1000000LL;
+	if (ic->T322) intf->q931_intf->T322 = ic->T322 * 1000000LL;
 
 	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 		if (listen(intf->q931_intf->master_socket, 100) < 0) {
@@ -424,57 +471,57 @@ int visdn_intf_open(struct visdn_interface *intf)
 	intf->open_pending = FALSE;
 
 	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
-		if (list_empty(&intf->clip_numbers_list)) {
+		if (list_empty(&ic->clip_numbers_list)) {
 			ast_log(LOG_NOTICE,
 				"Interface '%s' is configured in network"
 				" mode but clip_numbers is empty\n",
 				intf->name);
-		} else if (!strlen(intf->clip_default_number)) {
+		} else if (!strlen(ic->clip_default_number)) {
 			ast_log(LOG_NOTICE,
 				"Interface '%s' is configured in network"
 				" mode but clip_default_number is empty\n",
 				intf->name);
-		} else if (!visdn_numbers_list_match(&intf->clip_numbers_list,
-					intf->clip_default_number)) {
+		} else if (!visdn_numbers_list_match(&ic->clip_numbers_list,
+					ic->clip_default_number)) {
 
 			ast_log(LOG_NOTICE,
 				"Interface '%s' clip_numbers should contain "
 				"clip_default_number (%s)\n",
 				intf->name,
-				intf->clip_default_number);
+				ic->clip_default_number);
 		}
 	}
 
 	return 0;
 }
 
-void visdn_intf_default_init(struct visdn_interface *intf)
+void visdn_ic_setdefault(struct visdn_ic *ic)
 {
-	intf->network_role = Q931_INTF_NET_PRIVATE;
-	intf->outbound_called_ton = VISDN_TYPE_OF_NUMBER_UNKNOWN;
-	strcpy(intf->force_outbound_cli, "");
-	intf->force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET;
-	intf->tones_option = TRUE;
-	strcpy(intf->context, "visdn");
-	intf->clip_enabled = TRUE;
-	intf->clip_override = FALSE;
-	strcpy(intf->clip_default_name, "");
-	strcpy(intf->clip_default_number, "");
-	intf->clip_special_arrangement = FALSE;
-	intf->clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF;
-	intf->overlap_sending = TRUE;
-	intf->overlap_receiving = FALSE;
-	intf->call_bumping = FALSE;
-	intf->cli_rewriting = FALSE;
-	strcpy(intf->national_prefix, "");
-	strcpy(intf->international_prefix, "");
-	strcpy(intf->network_specific_prefix, "");
-	strcpy(intf->subscriber_prefix, "");
-	strcpy(intf->abbreviated_prefix, "");
-	intf->dlc_autorelease_time = 10;
-	intf->echocancel = FALSE;
-	intf->echocancel_taps = 256;
-	intf->T307 = 180;
+	ic->network_role = Q931_INTF_NET_PRIVATE;
+	ic->outbound_called_ton = VISDN_TYPE_OF_NUMBER_UNKNOWN;
+	strcpy(ic->force_outbound_cli, "");
+	ic->force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET;
+	ic->tones_option = TRUE;
+	strcpy(ic->context, "visdn");
+	ic->clip_enabled = TRUE;
+	ic->clip_override = FALSE;
+	strcpy(ic->clip_default_name, "");
+	strcpy(ic->clip_default_number, "");
+	ic->clip_special_arrangement = FALSE;
+	ic->clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF;
+	ic->overlap_sending = TRUE;
+	ic->overlap_receiving = FALSE;
+	ic->call_bumping = FALSE;
+	ic->cli_rewriting = FALSE;
+	strcpy(ic->national_prefix, "");
+	strcpy(ic->international_prefix, "");
+	strcpy(ic->network_specific_prefix, "");
+	strcpy(ic->subscriber_prefix, "");
+	strcpy(ic->abbreviated_prefix, "");
+	ic->dlc_autorelease_time = 10;
+	ic->echocancel = FALSE;
+	ic->echocancel_taps = 256;
+	ic->T307 = 180;
 }
 
 static void visdn_intf_reconfigure(
@@ -483,22 +530,20 @@ static void visdn_intf_reconfigure(
 {
 	/* Allocate a new interface */
 	
-	struct visdn_interface *intf;
-	intf = visdn_intf_alloc();
-	if (!intf)
+	struct visdn_ic *ic;
+	ic = visdn_ic_alloc();
+	if (!ic)
 		return;
 
-	/* Configure it with default configuration */
-	strncpy(intf->name, name, sizeof(intf->name));
-	visdn_copy_interface_config(intf, visdn.default_intf);
+	visdn_ic_copy(ic, visdn.default_ic);
 
 	/* Now read the configuration from file */
-	intf->configured = TRUE;
+//	intf->configured = TRUE;
 
 	struct ast_variable *var;
 	var = ast_variable_browse(cfg, (char *)name);
 	while (var) {
-		if (visdn_intf_from_var(intf, var) < 0) {
+		if (visdn_ic_from_var(ic, var) < 0) {
 			ast_log(LOG_WARNING,
 				"Unknown configuration "
 				"variable %s\n",
@@ -510,28 +555,28 @@ static void visdn_intf_reconfigure(
 
 	ast_mutex_lock(&visdn.lock);
 
-	/* Now do the switch thing. If there is another interface, * unlink it
-	 * from the list and drop the reference. Other references will continue
-	 * to be valid. */
-	struct visdn_interface *old_intf, *tpos;
-	list_for_each_entry_safe(old_intf, tpos, &visdn.ifs, ifs_node) {
-		if (!strcasecmp(old_intf->name, name)) {
-			intf->q931_intf = old_intf->q931_intf;
+	struct visdn_intf *intf = visdn_intf_get_by_name(name);
+	if (!intf) {
+		intf = visdn_intf_alloc();
+		if (!intf)
+			return;
 
-			list_del(&old_intf->ifs_node);
+		strncpy(intf->name, name, sizeof(intf->name));
 
-			break;
-		}
-	}
-
-	if (!intf->q931_intf) {
 		visdn_debug("Opening interface %s\n", name);
 
-		visdn_intf_open(intf);
+		visdn_intf_open(intf, ic);
 		refresh_polls_list();
+
+		list_add_tail(&intf->ifs_node, &visdn.ifs);
 	}
 
-	list_add_tail(&visdn_intf_get(intf)->ifs_node, &visdn.ifs);
+	if (intf->current_ic)
+		visdn_ic_put(intf->current_ic);
+
+	ic->intf = intf;
+
+	intf->current_ic = visdn_ic_get(ic);
 
 	ast_mutex_unlock(&visdn.lock);
 }
@@ -544,7 +589,7 @@ void visdn_intf_reload(struct ast_config *cfg)
 	struct ast_variable *var;
 	var = ast_variable_browse(cfg, "global");
 	while (var) {
-		if (visdn_intf_from_var(visdn.default_intf, var) < 0) {
+		if (visdn_ic_from_var(visdn.default_ic, var) < 0) {
 			ast_log(LOG_WARNING,
 				"Unknown configuration variable %s\n",
 				var->name);
@@ -554,7 +599,7 @@ void visdn_intf_reload(struct ast_config *cfg)
 	}
 
 	{
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 		intf->configured = FALSE;
 	}
@@ -578,7 +623,7 @@ void visdn_intf_reload(struct ast_config *cfg)
 
 /*---------------------------------------------------------------------------*/
 
-static const char *visdn_interface_network_role_to_string(
+static const char *visdn_ic_network_role_to_string(
 	enum q931_interface_network_role value)
 {
 	switch(value) {
@@ -614,12 +659,14 @@ static const char *visdn_clir_mode_to_text(
 	return "*UNKNOWN*";
 }
 
-static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
+static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+
+		struct visdn_ic *ic = intf->current_ic;
 
 		ast_cli(fd, "\n-- %s --\n", intf->name);
 
@@ -639,22 +686,22 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"Echo canceller            : %s\n"
 			"Echo canceller taps       : %d (%d ms)\n"
 			"Context                   : %s\n",
-			visdn_interface_network_role_to_string(
-				intf->network_role),
+			visdn_ic_network_role_to_string(
+				ic->network_role),
 			visdn_ton_to_string(
-				intf->outbound_called_ton),
-			intf->force_outbound_cli,
+				ic->outbound_called_ton),
+			ic->force_outbound_cli,
 			visdn_ton_to_string(
-				intf->force_outbound_cli_ton),
-			intf->tones_option ? "Yes" : "No",
-			intf->echocancel ? "Yes" : "No",
-			intf->echocancel_taps, intf->echocancel_taps / 8,
-			intf->context);
+				ic->force_outbound_cli_ton),
+			ic->tones_option ? "Yes" : "No",
+			ic->echocancel ? "Yes" : "No",
+			ic->echocancel_taps, ic->echocancel_taps / 8,
+			ic->context);
 
 		ast_cli(fd, "Transparent Numbers       : ");
 		{
 		struct visdn_number *num;
-		list_for_each_entry(num, &intf->clip_numbers_list, node) {
+		list_for_each_entry(num, &ic->clip_numbers_list, node) {
 			ast_cli(fd, "%s ", num->number);
 		}
 		}
@@ -676,27 +723,27 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 			"CLIP override             : %s\n"
 			"CLIP default              : %s <%s>\n"
 			"CLIP special arrangement  : %s\n",
-			intf->overlap_sending ? "Yes" : "No",
-			intf->overlap_receiving ? "Yes" : "No",
-			intf->call_bumping ? "Yes" : "No",
-			intf->cli_rewriting ? "Yes" : "No",
-			intf->national_prefix,
-			intf->international_prefix,
-			intf->network_specific_prefix,
-			intf->subscriber_prefix,
-			intf->abbreviated_prefix,
-			intf->dlc_autorelease_time,
-			visdn_clir_mode_to_text(intf->clir_mode),
-			intf->clip_enabled ? "Yes" : "No",
-			intf->clip_override ? "Yes" : "No",
-			intf->clip_default_name,
-			intf->clip_default_number,
-			intf->clip_special_arrangement ? "Yes" : "No");
+			ic->overlap_sending ? "Yes" : "No",
+			ic->overlap_receiving ? "Yes" : "No",
+			ic->call_bumping ? "Yes" : "No",
+			ic->cli_rewriting ? "Yes" : "No",
+			ic->national_prefix,
+			ic->international_prefix,
+			ic->network_specific_prefix,
+			ic->subscriber_prefix,
+			ic->abbreviated_prefix,
+			ic->dlc_autorelease_time,
+			visdn_clir_mode_to_text(ic->clir_mode),
+			ic->clip_enabled ? "Yes" : "No",
+			ic->clip_override ? "Yes" : "No",
+			ic->clip_default_name,
+			ic->clip_default_number,
+			ic->clip_special_arrangement ? "Yes" : "No");
 
 		ast_cli(fd, "CLIP Numbers              : ");
 		{
 		struct visdn_number *num;
-		list_for_each_entry(num, &intf->clip_numbers_list, node) {
+		list_for_each_entry(num, &ic->clip_numbers_list, node) {
 			ast_cli(fd, "%s ", num->number);
 		}
 		}
@@ -718,12 +765,12 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 #define TIMER_CONFIG(timer)					\
 	ast_cli(fd, #timer ": %3lld%-5s",			\
 		intf->q931_intf->timer / 1000000LL,		\
-		intf->timer ? " (*)" : "");
+		ic->timer ? " (*)" : "");
 
 #define TIMER_CONFIG_LN(timer)					\
 	ast_cli(fd, #timer ": %3lld%-5s\n",			\
 		intf->q931_intf->timer / 1000000LL,		\
-		intf->timer ? " (*)" : "");
+		ic->timer ? " (*)" : "");
 
 				TIMER_CONFIG(T301);
 				TIMER_CONFIG(T301);
@@ -732,7 +779,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				TIMER_CONFIG(T304);
 				TIMER_CONFIG(T305);
 				TIMER_CONFIG(T306);
-				ast_cli(fd, "T307: %d\n", intf->T307);
+				ast_cli(fd, "T307: %d\n", ic->T307);
 				TIMER_CONFIG(T308);
 				TIMER_CONFIG(T309);
 				TIMER_CONFIG(T310);
@@ -750,7 +797,7 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 				TIMER_CONFIG_LN(T304);
 				TIMER_CONFIG(T305);
 				TIMER_CONFIG(T306);
-				ast_cli(fd, "T307: %d\n", intf->T307);
+				ast_cli(fd, "T307: %d\n", ic->T307);
 				TIMER_CONFIG_LN(T308);
 				TIMER_CONFIG(T309);
 				TIMER_CONFIG(T310);
@@ -803,16 +850,16 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 	return 0;
 }
 
-static char show_visdn_interfaces_help[] =
+static char show_visdn_intfs_help[] =
 	"Usage: visdn show interfaces\n"
 	"	Displays informations on vISDN interfaces\n";
 
-static struct ast_cli_entry show_visdn_interfaces =
+static struct ast_cli_entry show_visdn_intfs =
 {
 	{ "show", "visdn", "interfaces", NULL },
-	do_show_visdn_interfaces,
+	do_show_visdn_intfs,
 	"Displays vISDN interface information",
-	show_visdn_interfaces_help,
+	show_visdn_intfs_help,
 	NULL
 };
 
@@ -820,10 +867,10 @@ static struct ast_cli_entry show_visdn_interfaces =
 
 void visdn_intf_cli_register(void)
 {
-	ast_cli_register(&show_visdn_interfaces);
+	ast_cli_register(&show_visdn_intfs);
 }
 
 void visdn_intf_cli_unregister(void)
 {
-	ast_cli_unregister(&show_visdn_interfaces);
+	ast_cli_unregister(&show_visdn_intfs);
 }

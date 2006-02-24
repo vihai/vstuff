@@ -27,17 +27,13 @@ enum visdn_clir_mode
 	VISDN_CLIR_MODE_ON,
 };
 
-struct visdn_interface
+struct visdn_intf;
+
+struct visdn_ic
 {
-	struct list_head ifs_node;
-
 	int refcnt;
-	ast_mutex_t lock;
 
-	char name[IFNAMSIZ];
-
-	int configured;
-	int open_pending;
+	struct visdn_intf *intf;
 
 	enum q931_interface_network_role network_role;
 	enum visdn_type_of_number outbound_called_ton;
@@ -90,7 +86,22 @@ struct visdn_interface
 	int T320;
 	int T321;
 	int T322;
+};
 
+struct visdn_intf
+{
+	struct list_head ifs_node;
+
+	int refcnt;
+	ast_mutex_t lock;
+
+	char name[IFNAMSIZ];
+
+	int configured;
+	int open_pending;
+
+	struct visdn_ic *current_ic;
+	
 	struct list_head suspended_calls;
 
 	struct q931_interface *q931_intf;
@@ -98,18 +109,19 @@ struct visdn_interface
 	char remote_port[PATH_MAX];
 };
 
-struct visdn_interface *visdn_intf_get(struct visdn_interface *intf);
-void visdn_intf_put(struct visdn_interface *intf);
-struct visdn_interface *visdn_intf_get_by_name(const char *name);
-
-int visdn_intf_open(struct visdn_interface *intf);
-
+struct visdn_intf *visdn_intf_alloc(void);
+struct visdn_intf *visdn_intf_get(struct visdn_intf *intf);
+void visdn_intf_put(struct visdn_intf *intf);
+struct visdn_intf *visdn_intf_get_by_name(const char *name);
+int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic);
 void visdn_intf_reload(struct ast_config *cfg);
+
+struct visdn_ic *visdn_ic_alloc(void);
+struct visdn_ic *visdn_ic_get(struct visdn_ic *ic);
+void visdn_ic_put(struct visdn_ic *ic);
+void visdn_ic_setdefault(struct visdn_ic *ic);
 
 void visdn_intf_cli_register(void);
 void visdn_intf_cli_unregister(void);
-
-struct visdn_interface *visdn_intf_alloc(void);
-void visdn_intf_default_init(struct visdn_interface *intf);
 
 #endif

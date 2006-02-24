@@ -23,13 +23,13 @@ enum visdn_huntgroup_mode
 	VISDN_HUNTGROUP_MODE_CYCLIC,
 };
 
-struct visdn_interface;
+struct visdn_intf;
 
 struct visdn_huntgroup_member
 {
 	struct list_head node;
 
-	struct visdn_interface *intf;
+	struct visdn_intf *intf;
 };
 
 struct visdn_huntgroup
@@ -53,10 +53,10 @@ struct visdn_huntgroup *visdn_hg_get(struct visdn_huntgroup *hg);
 void visdn_hg_put(struct visdn_huntgroup *hg);
 struct visdn_huntgroup *visdn_hg_get_by_name(const char *name);
 
-struct visdn_interface *visdn_hg_hunt(
+struct visdn_intf *visdn_hg_hunt(
 	struct visdn_huntgroup *hg,
-	struct visdn_interface *cur_intf,
-	struct visdn_interface *first_intf);
+	struct visdn_intf *cur_intf,
+	struct visdn_intf *first_intf);
 
 void visdn_hg_cli_register(void);
 void visdn_hg_cli_unregister(void);

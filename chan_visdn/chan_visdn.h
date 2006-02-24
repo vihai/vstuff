@@ -106,10 +106,10 @@ struct visdn_chan {
 
 	struct ast_dsp *dsp;
 
-	struct visdn_interface *intf;
+	struct visdn_ic *ic;
 
 	struct visdn_huntgroup *huntgroup;
-	struct visdn_interface *hg_first_intf;
+	struct visdn_intf *hg_first_intf;
 };
 
 struct visdn_state
@@ -148,7 +148,7 @@ struct visdn_state
 	int debug_q931;
 	int debug_q921;
 
-	struct visdn_interface *default_intf;
+	struct visdn_ic *default_ic;
 };
 
 extern struct visdn_state visdn;

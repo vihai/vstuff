@@ -175,7 +175,7 @@ static void visdn_hg_parse_members(
 			*(tok + strlen(tok) - 1) == '\t')
 			*(tok + strlen(tok) - 1) = '\0';
 
-		struct visdn_interface *intf;
+		struct visdn_intf *intf;
 		intf = visdn_intf_get_by_name(tok);
 		if (!intf) {
 			ast_log(LOG_WARNING,
@@ -366,10 +366,10 @@ static struct visdn_huntgroup_member *visdn_hg_next_member(
 	return memb;
 }
 
-struct visdn_interface *visdn_hg_hunt(
+struct visdn_intf *visdn_hg_hunt(
 	struct visdn_huntgroup *hg,
-	struct visdn_interface *cur_intf,
-	struct visdn_interface *first_intf)
+	struct visdn_intf *cur_intf,
+	struct visdn_intf *first_intf)
 {
 	ast_mutex_lock(&visdn.lock);
 

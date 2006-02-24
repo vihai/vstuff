@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-24 16:15:50 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-555
+
+    Summary:
+      Fixed visdn reload by separating interface objects from interface configs
+    Revision:
+      isdn--devel--0.1--patch-555
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c chan_visdn/chan_visdn.h
+     chan_visdn/huntgroup.c chan_visdn/huntgroup.h
+     chan_visdn/intf.c chan_visdn/intf.h
+
+
 2006-02-24 01:13:46 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-554
 
     Summary:
