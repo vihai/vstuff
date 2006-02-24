@@ -799,8 +799,10 @@ llc_failure:;
 		}
 	}
 
-	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT &&
-	    !ic->overlap_receiving) {
+	if ((intf->q931_intf->role == LAPD_INTF_ROLE_NT &&
+	    !ic->overlap_receiving) ||
+	    (intf->q931_intf->role == LAPD_INTF_ROLE_TE &&
+	    !ic->overlap_sending)) {
 		struct q931_ie_sending_complete *sc =
 			q931_ie_sending_complete_alloc();
 

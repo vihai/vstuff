@@ -558,8 +558,10 @@ static void visdn_intf_reconfigure(
 	struct visdn_intf *intf = visdn_intf_get_by_name(name);
 	if (!intf) {
 		intf = visdn_intf_alloc();
-		if (!intf)
+		if (!intf) {
+			ast_mutex_unlock(&visdn.lock);
 			return;
+		}
 
 		strncpy(intf->name, name, sizeof(intf->name));
 
