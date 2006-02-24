@@ -49,11 +49,13 @@ void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
 	int i;
 	for (i=fifo->f_min; i<=fifo->f_max; i++) {
-		*fifo->f2 = fifo->f_max;
-		*fifo->f1 = fifo->f_max;
+		*fifo->f2 = i;
+		*fifo->f1 = i;
 
-		*Z2_F2(fifo) = fifo->z_max;
+		*Z1_F1(fifo) = fifo->z_max;
+		*Z2_F1(fifo) = fifo->z_max;
 		*Z1_F2(fifo) = fifo->z_max;
+		*Z2_F2(fifo) = fifo->z_max;
 	}
 }
 
