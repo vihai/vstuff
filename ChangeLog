@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-24 18:56:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-557
+
+    Summary:
+      Implemented E-channel duplicates filtering, so that just transmitted frames are not shown two times in captures, also forbids E-channel usage in NT ports
+    Revision:
+      isdn--devel--0.1--patch-557
+
+
+    modified files:
+     ChangeLog TODO modules/hfc-4s/st_chan.c
+     modules/hfc-4s/sys_chan.c modules/hfc-4s/sys_port.c
+     modules/netdev/netdev.h modules/netdev/netdev_main.c
+
+
 2006-02-24 16:44:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-556
 
     Summary:

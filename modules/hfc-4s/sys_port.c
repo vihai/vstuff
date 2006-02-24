@@ -272,17 +272,17 @@ void hfc_upload_fsm_entry(
 			chan->hw_index));
 
 	switch (fifo->subchannel_bit_count) {
-		case 1: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_1; break;
-		case 2: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_2; break;
-		case 3: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_3; break;
-		case 4: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_4; break;
-		case 5: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_5; break;
-		case 6: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_6; break;
-		case 7: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_7; break;
-		case 8: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8; break;
-		default:
-			WARN_ON(1);
-			subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8;
+	case 1: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_1; break;
+	case 2: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_2; break;
+	case 3: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_3; break;
+	case 4: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_4; break;
+	case 5: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_5; break;
+	case 6: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_6; break;
+	case 7: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_7; break;
+	case 8: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8; break;
+	default:
+		WARN_ON(1);
+		subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_8;
 	}
 
 	hfc_outb(card, hfc_A_SUBCH_CFG, subch_bits);

@@ -19,6 +19,7 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/list.h>
+#include <linux/crc32.h>
 
 #include <linux/visdn/core.h>
 #include <linux/visdn/cxc.h>
@@ -279,6 +280,11 @@ static int vnd_chan_e_frame_xmit(
 {
 	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
 
+	/* If frame matches a previously sent frame, it is our echo, so,
+	 * we may ignore it */
+	if (crc32_le(0, skb->data, skb->len) == netdevice->last_crc)
+		return 0;
+
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -398,6 +404,9 @@ static int vnd_netdev_frame_xmit(
 
 	netdevice->stats.tx_packets++;
 	netdevice->stats.tx_bytes += skb->len + 2;
+
+	if (netdevice->netdev->flags & IFF_PROMISC)
+		netdevice->last_crc = crc32_le(0, skb->data, skb->len);
 
 	res = visdn_leg_frame_xmit(&netdevice->visdn_chan.leg_a, skb);
 	switch(res) {

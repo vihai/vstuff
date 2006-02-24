@@ -458,13 +458,12 @@ static int hfc_sys_chan_leg_a_connect(
 
 	hfc_card_lock(card);
 
-	if (visdn_leg2->chan->chan_class == &hfc_st_chan_class) {
+	if (visdn_leg2->chan->chan_class == &hfc_st_chan_class)
 		chan->connected_st_chan = to_st_chan(visdn_leg2->chan);
-	} else if (visdn_leg2->chan->chan_class == &hfc_pcm_chan_class) {
+	else if (visdn_leg2->chan->chan_class == &hfc_pcm_chan_class)
 		chan->connected_pcm_chan = to_pcm_chan(visdn_leg2->chan);
-	} else {
+	else
 		WARN_ON(1);
-	}
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_leg->chan);

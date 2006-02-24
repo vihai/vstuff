@@ -70,6 +70,8 @@ struct vnd_netdevice
 	struct net_device_stats stats;
 
 	struct work_struct promiscuity_change_work;
+
+	u32 last_crc;
 };
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)

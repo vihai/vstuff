@@ -39,7 +39,6 @@ chan_visdn:
   DL-RELEASE-CONFIRM return codes
 - When the remote party responds RELEASE COMPLETE with "User Busy" cause
   we respond to * "CHANUNAVAIL"
-- overlap_sending=off does not send sending complete
 - Rewrite netlink code to use proper macros
 
 libq931:
@@ -122,8 +121,6 @@ visdn-ec:
 visdn-netdev:
 -------------
 
-- Ignore frames from E channel when they are a copy of our just transmitted
-  frame.
 - Reallocate channel ID from the beginning instead of incrementing every time
 
 visdn-ppp:

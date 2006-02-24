@@ -527,7 +527,7 @@ static int hfc_st_chan_connect(
 	struct visdn_leg *visdn_leg2)
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_leg->chan);
-//	struct hfc_st_port *port = chan->port;
+	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = chan->port->card;
 	int err;
 
@@ -553,13 +553,17 @@ static int hfc_st_chan_connect(
 		goto err_invalid_chan;
 	}
 
-	if (visdn_leg2->chan->chan_class == &hfc_sys_chan_class) {
-		chan->connected_sys_chan = to_sys_chan(visdn_leg2->chan);
-	} else if (visdn_leg2->chan->chan_class == &hfc_pcm_chan_class) {
-		chan->connected_pcm_chan = to_pcm_chan(visdn_leg2->chan);
-	} else {
-		WARN_ON(1);
+	if (chan->id == E && port->nt_mode) {
+		err = -EINVAL;
+		goto err_invalid_chan;
 	}
+
+	if (visdn_leg2->chan->chan_class == &hfc_sys_chan_class)
+		chan->connected_sys_chan = to_sys_chan(visdn_leg2->chan);
+	else if (visdn_leg2->chan->chan_class == &hfc_pcm_chan_class)
+		chan->connected_pcm_chan = to_pcm_chan(visdn_leg2->chan);
+	else
+		WARN_ON(1);
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_leg->chan);
