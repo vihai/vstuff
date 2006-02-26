@@ -232,44 +232,15 @@ static int handle_netdev_set_role(
 	}
 }
 
-static int do_set_static_tei(const char *devname, int tei)
+static int do_set_mode(const char *devname, int p2p)
 {
-	if (set_flags(devname, IFF_NOARP, IFF_NOARP))
-		return 1;
-
-	int fd = socket(PF_LAPD, SOCK_SEQPACKET, 0);
-	if (fd < 0) {
-		fprintf(stderr, "Cannot create socket: %s\n",
-			strerror(errno));
-		return 1;
-	}
-
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, devname, IFNAMSIZ);
-
-	if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
-		close(fd);
-		fprintf(stderr, "ioctl(SIOCGIFHWADDR): %s\n",
-			strerror(errno));
-		return 1;
-	}
-
-	ifr.ifr_hwaddr.sa_data[0] = tei;
-
-	if (ioctl(fd, SIOCSIFHWBROADCAST, &ifr) < 0) {
-		close(fd);
-		fprintf(stderr, "ioctl(SIOCSIFHWBROADCAST): %s\n",
-			strerror(errno));
-		return 1;
-	}
-
-	close(fd);
-
-	return 0;
+	if (p2p)
+		return set_flags(devname, IFF_NOARP, IFF_NOARP);
+	else
+		return set_flags(devname, 0, IFF_NOARP);
 }
 
-static int handle_netdev_set_tei(
+static int handle_netdev_set_mode(
 	int argc, char *argv[], int optind,
 	const char *devname)
 {
@@ -280,13 +251,15 @@ static int handle_netdev_set_tei(
 
 	const char *value = argv[optind + 4];
 
-	if (!strcasecmp(value, "dynamic"))
-		return set_flags(devname, 0, IFF_NOARP);
+	if (!strcasecmp(value, "p2p"))
+		return do_set_mode(devname, 1);
+	else if (!strcasecmp(value, "p2mp"))
+		return do_set_mode(devname, 0);
 	else {
-		return do_set_static_tei(devname, atoi(value));
+		print_usage("Unknown mode '%s'\n",
+			value);
+		return 1;
 	}
-
-	return 0;
 }
 
 static int handle_netdev_set(int argc, char *argv[], int optind)
@@ -313,8 +286,8 @@ static int handle_netdev_set(int argc, char *argv[], int optind)
 		return handle_netdev_set_type(argc, argv, optind, devname);
 	} else if (!strcasecmp(parameter, "role")) {
 		return handle_netdev_set_role(argc, argv, optind, devname);
-	} else if (!strcasecmp(parameter, "tei")) {
-		return handle_netdev_set_tei(argc, argv, optind, devname);
+	} else if (!strcasecmp(parameter, "mode")) {
+		return handle_netdev_set_mode(argc, argv, optind, devname);
 	} else {
 		print_usage("Unknown parameter '%s'\n",
 			parameter);

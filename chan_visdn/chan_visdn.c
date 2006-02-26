@@ -116,12 +116,20 @@ static void visdn_set_socket_debug(int on)
 		if (!intf->q931_intf)
 			continue;
 
-		if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
-			setsockopt(intf->q931_intf->master_socket,
+		if (intf->q931_intf->accept_socket >= 0) {
+			setsockopt(intf->q931_intf->accept_socket,
 				SOL_SOCKET, SO_DEBUG,
 				&on, sizeof(on));
-		} else {
+		}
+
+		if (intf->q931_intf->dlc.socket >= 0) {
 			setsockopt(intf->q931_intf->dlc.socket,
+				SOL_SOCKET, SO_DEBUG,
+				&on, sizeof(on));
+		}
+
+		if (intf->q931_intf->bc_dlc.socket >= 0) {
+			setsockopt(intf->q931_intf->bc_dlc.socket,
 				SOL_SOCKET, SO_DEBUG,
 				&on, sizeof(on));
 		}
@@ -171,17 +179,19 @@ void refresh_polls_list()
 		if (!intf->q931_intf)
 			continue;
 
-		if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
+		if (intf->q931_intf->accept_socket >= 0) {
 			visdn.polls[visdn.npolls].fd =
-					intf->q931_intf->master_socket;
+					intf->q931_intf->accept_socket;
 			visdn.polls[visdn.npolls].events =
 					POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type =
-					POLL_INFO_TYPE_INTERFACE;
+					POLL_INFO_TYPE_ACCEPT;
 			visdn.poll_infos[visdn.npolls].interface =
 					intf->q931_intf;
 			visdn.npolls++;
-		} else {
+		}
+
+		if (intf->q931_intf->dlc.socket >= 0) {
 			visdn.polls[visdn.npolls].fd =
 					intf->q931_intf->dlc.socket;
 			visdn.polls[visdn.npolls].events =
@@ -190,6 +200,18 @@ void refresh_polls_list()
 					POLL_INFO_TYPE_DLC;
 			visdn.poll_infos[visdn.npolls].dlc =
 					&intf->q931_intf->dlc;
+			visdn.npolls++;
+		}
+
+		if (intf->q931_intf->bc_dlc.socket >= 0) {
+			visdn.polls[visdn.npolls].fd =
+					intf->q931_intf->bc_dlc.socket;
+			visdn.polls[visdn.npolls].events =
+					POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+					POLL_INFO_TYPE_BC_DLC;
+			visdn.poll_infos[visdn.npolls].dlc =
+					&intf->q931_intf->bc_dlc;
 			visdn.npolls++;
 		}
 
@@ -2247,7 +2269,7 @@ static int visdn_q931_thread_do_poll()
 				visdn_ccb_q931_receive();
 			}
 		} else if (visdn.poll_infos[i].type ==
-						POLL_INFO_TYPE_INTERFACE) {
+						POLL_INFO_TYPE_ACCEPT) {
 
 			if (visdn.polls[i].revents &
 					(POLLIN | POLLPRI | POLLERR |
@@ -2266,7 +2288,26 @@ static int visdn_q931_thread_do_poll()
 
 				int err;
 				ast_mutex_lock(&visdn.lock);
-				err = q931_receive(visdn.poll_infos[i].dlc);
+				err = q931_receive(visdn.poll_infos[i].dlc,
+								FALSE);
+
+				if (err == Q931_RECEIVE_REFRESH) {
+					refresh_polls_list();
+					ast_mutex_unlock(&visdn.lock);
+
+					break;
+				}
+				ast_mutex_unlock(&visdn.lock);
+			}
+		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_BC_DLC) {
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
+
+				int err;
+				ast_mutex_lock(&visdn.lock);
+				err = q931_receive(visdn.poll_infos[i].dlc,
+								TRUE);
 
 				if (err == Q931_RECEIVE_REFRESH) {
 					refresh_polls_list();

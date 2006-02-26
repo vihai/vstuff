@@ -37,8 +37,8 @@ struct lapd_device
 	struct net_device *dev;
 
 	enum lapd_intf_type type;
-	enum lapd_intf_mode mode;
 	enum lapd_intf_role role;
+	enum lapd_intf_mode mode;
 
 	struct lapd_ntme *net_tme;
 	struct lapd_sap q931;
@@ -46,7 +46,7 @@ struct lapd_device
 };
 
 int lapd_device_event(struct notifier_block *this,
- 		unsigned long event, void *ptr);
+	unsigned long event, void *ptr);
 
 struct lapd_device *lapd_dev_get_by_name(const char *name);
 

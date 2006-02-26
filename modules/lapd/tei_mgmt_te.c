@@ -558,10 +558,12 @@ void lapd_utme_set_static_tei(
 	spin_unlock_bh(&tme->lock);
 }
 
-void lapd_utme_get(
+struct lapd_utme *lapd_utme_get(
 	struct lapd_utme *tme)
 {
 	atomic_inc(&tme->refcnt);
+
+	return tme;
 }
 
 void lapd_utme_put(

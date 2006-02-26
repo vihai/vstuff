@@ -23,6 +23,7 @@ Build system:
 chan_visdn:
 -----------
 
+- Echo canceller produces some strange noise
 - When the module fails initialization, forbid calls and report an error
 - Record call failures and failure type in order to put an interface offline
   if not working.
@@ -127,6 +128,8 @@ visdn-ppp:
 ----------
 
 - Reallocate channel ID from the beginning instead of incrementing every time
+- There is a race condition between interface creation and SuSE scripts bringing
+  the interface up and down
 
 visdn-streamport:
 -----------------

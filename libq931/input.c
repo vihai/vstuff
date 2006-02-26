@@ -856,7 +856,7 @@ err_malloc:
 	return NULL;
 }
 
-int q931_receive(struct q931_dlc *dlc)
+int q931_receive(struct q931_dlc *dlc, int broadcast)
 {
 	int err;
 
@@ -1041,7 +1041,7 @@ int q931_receive(struct q931_dlc *dlc)
 			call = q931_call_alloc_in(
 					dlc->intf, dlc,
 					msg->callref,
-					skmsg.msg_flags & MSG_OOB);
+					broadcast);
 			if (!call) {
 				report_msg(msg, LOG_ERR,
 					"Error allocating call\n");

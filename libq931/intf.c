@@ -70,32 +70,11 @@ try_again:
 	return call_reference;
 }
 
-struct q931_interface *q931_intf_open(
-	const char *name,
-	int flags)
+int q931_open_socket(struct q931_interface *intf)
 {
-	struct q931_interface *intf;
-
-	assert(name);
-
-	intf = malloc(sizeof(*intf));
-	if (!intf)
-		return NULL;
-
-	memset(intf, 0, sizeof(*intf));
-
-	INIT_LIST_HEAD(&intf->calls);
-	INIT_LIST_HEAD(&intf->dlcs);
-
-	intf->name = strdup(name);
-	intf->dlc_autorelease_time = 0;
-	intf->enable_bumping = TRUE;
-
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
-	if (socket < 0)
+	if (s < 0)
 		goto err_socket;
-
-	intf->flags = flags;
 
 	if (intf->flags & Q931_INTF_FLAGS_DEBUG) {
 		int on=1;
@@ -105,7 +84,7 @@ struct q931_interface *q931_intf_open(
 	}
 
 	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
-			name, strlen(name)+1) < 0) {
+			intf->name, strlen(intf->name)+1) < 0) {
 
 		report_intf(intf, LOG_ERR,
 			"setsockopt(SO_BINDTODEVICE): %s\n",
@@ -122,6 +101,7 @@ struct q931_interface *q931_intf_open(
 			strerror(errno));
 
 		goto err_fcntl_getfl;
+		goto err_fcntl_setfl;
 	}
 
 	if (fcntl(s, F_SETFL, oldflags | O_NONBLOCK) < 0) {
@@ -132,18 +112,180 @@ struct q931_interface *q931_intf_open(
 		goto err_fcntl_setfl;
 	}
 
+	return s;
+
+err_fcntl_setfl:
+err_fcntl_getfl:
+err_setsockopt:
+	close(s);
+err_socket:
+
+	return -1;
+}
+
+int q931_intf_open_nt(struct q931_interface *intf)
+{
+	int s;
+
+	s = q931_open_socket(intf);
+	if (s < 0)
+		goto err_open_accept_sock;
+
+	if (listen(s, 100) < 0) {
+		report_intf(intf, LOG_ERR,
+			"listen(): %s\n",
+			strerror(errno));
+		goto err_listen;
+	}
+
+	intf->accept_socket = s;
+
+	if (intf->mode == LAPD_INTF_MODE_POINT_TO_POINT) {
+		s = q931_open_socket(intf);
+		if (s < 0)
+			goto err_open_dlc;
+
+		if (intf->tei == LAPD_DYNAMIC_TEI)
+			intf->tei = 0;
+
+		struct sockaddr_lapd sal;
+		sal.sal_family = AF_LAPD;
+		sal.sal_tei = intf->tei;
+
+		if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
+			report_intf(intf, LOG_ERR,
+				"bind(): %s\n",
+				strerror(errno));
+			goto err_bind_dlc;
+		}
+
+		q931_dlc_init(&intf->dlc, intf, s);
+	} else {
+		q931_dlc_init(&intf->dlc, NULL, -1);
+	}
+
+	intf->T301 = 180 * 1000000LL;
+	intf->T302 =  12 * 1000000LL;
+	intf->T303 =   4 * 1000000LL;
+	intf->T304 =  20 * 1000000LL;
+	intf->T305 =  30 * 1000000LL;
+	intf->T306 =  30 * 1000000LL;
+	intf->T308 =   4 * 1000000LL;
+	intf->T309 =   6 * 1000000LL;
+	intf->T310 =  35 * 1000000LL;
+	intf->T312 = intf->T303 + 2 * 1000000LL;
+	intf->T314 =   4 * 1000000LL;
+	intf->T316 = 120 * 1000000LL;
+	intf->T317 =  60 * 1000000LL;
+	intf->T320 =  30 * 1000000LL;
+	intf->T321 =  30 * 1000000LL;
+	intf->T322 =   4 * 1000000LL;
+
+	return 0;
+
+err_bind_dlc:
+err_open_dlc:
+err_listen:
+err_open_accept_sock:
+
+	return -1;
+}
+
+int q931_intf_open_te(struct q931_interface *intf)
+{
+	int s;
+
+	intf->accept_socket = -1;
+
+	s = q931_open_socket(intf);
+	if (s < 0)
+		goto err_open_dlc;
+
+	if (intf->mode == LAPD_INTF_MODE_POINT_TO_POINT &&
+	    intf->tei == LAPD_DYNAMIC_TEI)
+			intf->tei = 0;
+
+	struct sockaddr_lapd sal;
+	sal.sal_family = AF_LAPD;
+	sal.sal_tei = intf->tei;
+
+	if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
+		report_intf(intf, LOG_ERR,
+			"bind(t): %s\n",
+			strerror(errno));
+		goto err_bind_dlc;
+	}
+
+	q931_dlc_init(&intf->dlc, intf, s);
+
+	intf->T301 = 180 * 1000000LL;
+	intf->T302 =   6 * 1000000LL;
+	intf->T303 =   5 * 1000000LL;
+	intf->T304 = 999 * 1000000LL; // T304 is disabled
+	intf->T305 =  30 * 1000000LL;
+	intf->T308 =   4 * 1000000LL;
+	intf->T309 =   6 * 1000000LL;
+	intf->T310 =  40 * 1000000LL;
+	intf->T313 =   4 * 1000000LL;
+	intf->T314 =   4 * 1000000LL;
+	intf->T316 = 120 * 1000000LL;
+	intf->T317 =  60 * 1000000LL;
+	intf->T318 =   4 * 1000000LL;
+	intf->T319 =   4 * 1000000LL;
+	intf->T321 =  30 * 1000000LL;
+	intf->T322 =   4 * 1000000LL;
+
+	return 0;
+
+err_bind_dlc:
+err_open_dlc:
+
+	return -1;
+}
+
+struct q931_interface *q931_intf_open(
+	const char *name,
+	int flags,
+	int tei)
+{
+	struct q931_interface *intf;
+	int err;
+
+	assert(name);
+
+	intf = malloc(sizeof(*intf));
+	if (!intf)
+		return NULL;
+
+	memset(intf, 0, sizeof(*intf));
+
+	INIT_LIST_HEAD(&intf->calls);
+	INIT_LIST_HEAD(&intf->dlcs);
+
+	intf->name = strdup(name);
+	intf->dlc_autorelease_time = 0;
+	intf->enable_bumping = TRUE;
+
+	intf->flags = flags;
+
+	int s;
+
+	s = q931_open_socket(intf);
+	if (s < 0)
+		goto err_open_broadcast;
+
 	socklen_t optlen = sizeof(intf->type);
 	if (getsockopt(s, SOL_LAPD, LAPD_INTF_TYPE,
-		&intf->type, &optlen)<0) {
+					&intf->type, &optlen) < 0) {
 		report_intf(intf, LOG_ERR,
 			"getsockopt(LAPD_INTF_TYPE): %s\n",
 			strerror(errno));
 		goto err_getsockopt;
 	}
 
-	optlen = sizeof(intf->mode);
+	optlen = sizeof(intf->type);
 	if (getsockopt(s, SOL_LAPD, LAPD_INTF_MODE,
-		&intf->mode, &optlen)<0) {
+					&intf->mode, &optlen) < 0) {
 		report_intf(intf, LOG_ERR,
 			"getsockopt(LAPD_INTF_MODE): %s\n",
 			strerror(errno));
@@ -152,58 +294,33 @@ struct q931_interface *q931_intf_open(
 
 	optlen = sizeof(intf->role);
 	if (getsockopt(s, SOL_LAPD, LAPD_INTF_ROLE,
-		&intf->role, &optlen)<0) {
+					&intf->role, &optlen) < 0) {
 		report_intf(intf, LOG_ERR,
 			"getsockopt(LAPD_INTF_ROLE): %s\n",
 			strerror(errno));
 		goto err_getsockopt;
 	}
 
-	if (intf->role == LAPD_INTF_ROLE_TE) {
-		intf->master_socket = -1;
+	struct sockaddr_lapd sal;
+	sal.sal_family = AF_LAPD;
+	sal.sal_tei = LAPD_BROADCAST_TEI;
 
-		q931_broadcast_dlc_init(&intf->bc_dlc, NULL, -1);
-		q931_dlc_init(&intf->dlc, intf, s);
-
-		intf->T301 = 180 * 1000000LL;
-		intf->T302 =   6 * 1000000LL;
-		intf->T303 =   5 * 1000000LL;
-		intf->T304 = 999 * 1000000LL; // T304 is disabled
-		intf->T305 =  30 * 1000000LL;
-		intf->T308 =   4 * 1000000LL;
-		intf->T309 =   6 * 1000000LL;
-		intf->T310 =  40 * 1000000LL;
-		intf->T313 =   4 * 1000000LL;
-		intf->T314 =   4 * 1000000LL;
-		intf->T316 = 120 * 1000000LL;
-		intf->T317 =  60 * 1000000LL;
-		intf->T318 =   4 * 1000000LL;
-		intf->T319 =   4 * 1000000LL;
-		intf->T321 =  30 * 1000000LL;
-		intf->T322 =   4 * 1000000LL;
-	} else {
-		intf->master_socket = s;
-
-		q931_broadcast_dlc_init(&intf->bc_dlc, intf, s);
-		q931_dlc_init(&intf->dlc, intf, s);
-
-		intf->T301 = 180 * 1000000LL;
-		intf->T302 =  12 * 1000000LL;
-		intf->T303 =   4 * 1000000LL;
-		intf->T304 =  20 * 1000000LL;
-		intf->T305 =  30 * 1000000LL;
-		intf->T306 =  30 * 1000000LL;
-		intf->T308 =   4 * 1000000LL;
-		intf->T309 =   6 * 1000000LL;
-		intf->T310 =  35 * 1000000LL;
-		intf->T312 = intf->T303 + 2 * 1000000LL;
-		intf->T314 =   4 * 1000000LL;
-		intf->T316 = 120 * 1000000LL;
-		intf->T317 =  60 * 1000000LL;
-		intf->T320 =  30 * 1000000LL;
-		intf->T321 =  30 * 1000000LL;
-		intf->T322 =   4 * 1000000LL;
+	if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
+		report_intf(intf, LOG_ERR,
+			"bind(broacast): %s\n",
+			strerror(errno));
+		goto err_bind_broadcast;
 	}
+
+	q931_broadcast_dlc_init(&intf->bc_dlc, intf, s);
+
+	if (intf->role == LAPD_INTF_ROLE_NT)
+		err = q931_intf_open_nt(intf);
+	else
+		err = q931_intf_open_te(intf);
+
+	if (err < 0)
+		goto err_open;
 
 	switch (intf->type) {
 	case LAPD_INTF_TYPE_BRA:
@@ -230,12 +347,10 @@ struct q931_interface *q931_intf_open(
 
 	return intf;
 
+err_open:
+err_bind_broadcast:
 err_getsockopt:
-err_fcntl_setfl:
-err_fcntl_getfl:
-err_setsockopt:
-	close(s);
-err_socket:
+err_open_broadcast:
 	free(intf);
 
 	return NULL;
@@ -247,26 +362,30 @@ void q931_intf_close(struct q931_interface *intf)
 
 	list_del(&intf->node);
 
-	if (intf->role == LAPD_INTF_ROLE_TE) {
+	if (intf->dlc.socket >= 0) {
 		shutdown(intf->dlc.socket, 2);
 		close(intf->dlc.socket);
-	} else {
-		struct q931_dlc *dlc, *tpos;
-		list_for_each_entry_safe(dlc, tpos,
-				&intf->dlcs, intf_node) {
-
-			shutdown(dlc->socket, 2);
-			close(dlc->socket);
-
-			list_del(&dlc->intf_node);
-
-			free(dlc);
-		}
-
-		// Broadcast socket == master socket but only we know it :)
-
-		close(intf->master_socket);
 	}
+
+	if (intf->bc_dlc.socket >= 0) {
+		shutdown(intf->bc_dlc.socket, 2);
+		close(intf->bc_dlc.socket);
+	}
+
+	struct q931_dlc *dlc, *tpos;
+	list_for_each_entry_safe(dlc, tpos,
+			&intf->dlcs, intf_node) {
+
+		shutdown(dlc->socket, 2);
+		close(dlc->socket);
+
+		list_del(&dlc->intf_node);
+
+		free(dlc);
+	}
+
+	if (intf->accept_socket >= 0)
+		close(intf->accept_socket);
 
 	if (intf->name)
 		free(intf->name);

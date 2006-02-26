@@ -47,7 +47,7 @@ struct lapd_utme
 	int tei_request_pending;
 };
 
-void lapd_utme_get(struct lapd_utme *tme);
+struct lapd_utme *lapd_utme_get(struct lapd_utme *tme);
 void lapd_utme_put(struct lapd_utme *tme);
 
 extern void lapd_utme_set_static_tei(

@@ -28,6 +28,12 @@
 ; interface-specific sections. "role" indicates for which interface role
 ; the directive is meaningful.
 ;
+; tei = dynamic
+;	TEI to be used on the interface. If set to dynamic it will fall back
+;	to TEI 0 when used on P2P interfaces. It is ignored in NT P2MP
+;	interfaces.
+;	## role: network, user
+;
 ; network_role = private
 ;		(user | private | local | transit | international)
 ;	The role of the interface in the ISDN network. Normally you would use

@@ -55,14 +55,15 @@ struct q931_interface
 	enum lapd_intf_role role;
 
 	enum q931_interface_network_role network_role;
+	int tei;
 
 	// Accept master_socket in NT mode
-	int master_socket;
+	int accept_socket;
 
-	// Broadcast DLC for multipoint interfaces in NT MODE
+	// Broadcast DLC
 	struct q931_dlc bc_dlc;
 
-	// Interface's PTP DLC for TE mode
+	// Single DLC for P2P mode
 	struct q931_dlc dlc;
 
 	int dlc_autorelease_time;
@@ -125,7 +126,9 @@ inline static void q931_intf_del_call(
 
 struct q931_interface *q931_intf_open(
 	const char *name,
-	int flags);
+	int flags,
+	int tei);
+
 void q931_intf_close(struct q931_interface *intf);
 
 q931_callref q931_intf_find_free_call_reference(struct q931_interface *intf);

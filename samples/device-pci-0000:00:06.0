@@ -7,7 +7,7 @@
   protocol lapd
   type PRI
   role TE
-  tei static 0
+  mode P2P
 </netdev>
 
 <port e1>

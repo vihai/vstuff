@@ -1,7 +1,7 @@
 /*
  * vISDN LAPD/q.931 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -219,6 +219,15 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 	if (tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
 			"TEI request with C/R=1 ?\n");
+	}
+
+	if (dev->mode == LAPD_INTF_MODE_POINT_TO_POINT) {
+		lapd_debug_dev(dev,
+			"Rejecting TEI request on a P2P interface\n");
+
+		lapd_tm_send(dev, LAPD_TEI_MT_DENIED,
+			tm->tm_hdr.ri, tm->ai.value);
+		return;
 	}
 
 	{

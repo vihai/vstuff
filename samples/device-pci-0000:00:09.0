@@ -18,7 +18,7 @@ attribute bert_mode 7
 <netdev visdn1.0>
   protocol lapd
   role NT
-  tei dynamic
+  mode P2P
 </netdev>
 
 <port st0>
@@ -37,7 +37,7 @@ attribute bert_mode 7
 <netdev visdn1.1>
   protocol lapd
   role NT
-  tei dynamic
+  mode P2MP
 </netdev>
 
 <port st1>
@@ -56,7 +56,7 @@ attribute bert_mode 7
 <netdev visdn1.2>
   protocol lapd
   role TE
-  tei dynamic
+  mode P2MP
 </netdev>
 
 <port st2>
@@ -75,7 +75,7 @@ attribute bert_mode 7
 <netdev visdn1.3>
   protocol lapd
   role TE
-  tei dynamic
+  mode P2MP
 </netdev>
 
 <port st3>

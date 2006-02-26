@@ -35,6 +35,8 @@ struct visdn_ic
 
 	struct visdn_intf *intf;
 
+	int tei;
+
 	enum q931_interface_network_role network_role;
 	enum visdn_type_of_number outbound_called_ton;
 	char force_outbound_cli[32];

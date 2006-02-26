@@ -721,7 +721,6 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 {
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 	int err = 0;
-	int bound_socket_present = FALSE;
 	struct lapd_device *dev;
 
 	dev = lapd_dev_get_by_name(devname);
@@ -740,63 +739,7 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 		goto err_dev_not_up;
 	}
 
-	{
-	int i;
-	struct sock *othersk = NULL;
-	struct hlist_node *node;
-
-	read_lock_bh(&lapd_hash_lock);
-	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
-		sk_for_each(othersk, node, &lapd_hash[i]) {
-			if (to_lapd_sock(othersk)->dev == dev &&
-			    to_lapd_sock(othersk)->dev->role ==
-						LAPD_INTF_ROLE_NT) {
-
-				bound_socket_present = TRUE;
-
-				break;
-			}
-		}
-	}
-	read_unlock_bh(&lapd_hash_lock);
-	}
-
-	if (dev->role == LAPD_INTF_ROLE_NT) {
-
-		if (bound_socket_present) {
-			err = -EBUSY;
-			goto err_socket_already_present;
-		}
-
-		sk->sk_state = TCP_SYN_SENT;
-
-		lapd_sock->tei = dev->dev->broadcast[0];
-		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
-	} else {
-		if (dev->mode == LAPD_INTF_MODE_POINT_TO_POINT &&
-		    bound_socket_present) {
-			err = -EBUSY;
-			goto err_socket_already_present;
-		}
-
-		sk->sk_state = TCP_ESTABLISHED;
-
-		if (dev->mode == LAPD_INTF_MODE_POINT_TO_POINT) {
-			lapd_sock->usr_tme = NULL; 
-			lapd_sock->tei = dev->dev->broadcast[0];
-			lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
-		} else {
-			lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
-
-			lapd_sock->usr_tme = lapd_utme_alloc(dev);
-			lapd_utme_get(lapd_sock->usr_tme);
-
-			read_lock_bh(&lapd_utme_hash_lock);
-			hlist_add_head(&lapd_sock->usr_tme->node,
-					&lapd_utme_hash);
-			read_unlock_bh(&lapd_utme_hash_lock);
-		}
-	}
+	lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
 
 	/* Useless? */
 	sk->sk_bound_dev_if = dev->dev->ifindex;
@@ -816,7 +759,6 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 
 	return 0;
 
-err_socket_already_present:
 err_dev_not_up:
 err_invalid_socket_type:
 	lapd_dev_put(dev);
@@ -910,53 +852,6 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 		if (err < 0)
 			goto err_bind_to_device;
 	}
-	break;
-
-	case LAPD_TEI:
-
-		if (optlen != sizeof(int)) {
-			err = -EINVAL;
-			goto err_invalid_optlen;
-		}
-
-		if (!lapd_sock->dev) {
-			err = -EINVAL;
-			goto err_invalid_optlen;
-		}
-
-		/* Static TEIs are 0-63 */
-		if (intoptval >= 0 && intoptval <= 63) {
-
-			if (lapd_sock->usr_tme) {
-				read_lock_bh(&lapd_utme_hash_lock);
-				hlist_del(&lapd_sock->usr_tme->node);
-				lapd_utme_put(lapd_sock->usr_tme);
-
-				lapd_utme_put(lapd_sock->usr_tme);
-				read_unlock_bh(&lapd_utme_hash_lock);
-
-				lapd_sock->usr_tme = NULL;
-			}
-
-			lapd_sock->tei = intoptval;
-			lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
-		} else if (intoptval == 64) {
-			if (!lapd_sock->usr_tme) {
-				lapd_sock->usr_tme =
-					lapd_utme_alloc(lapd_sock->dev);
-				lapd_utme_get(lapd_sock->usr_tme);
-
-				read_lock_bh(&lapd_utme_hash_lock);
-				hlist_add_head(&lapd_sock->usr_tme->node,
-						&lapd_utme_hash);
-				read_unlock_bh(&lapd_utme_hash_lock);
-			}
-
-			lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
-		} else {
-			err = -EINVAL;
-			goto err_invalid_optval;
-		}
 	break;
 
 	case LAPD_TEI_MGMT_T201:
@@ -1108,7 +1003,6 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 err_bind_to_device:
 err_copy_from_user:
 err_invalid_optlen:
-err_invalid_optval:
 
 	lapd_release_sock(lapd_sock);
 
@@ -1565,6 +1459,104 @@ int lapd_multiframe_wait_for_establishment(
 	return err;
 }
 
+static int lapd_bind(
+	struct socket *sock,
+	struct sockaddr *uaddr,
+	int addr_len)
+{
+	struct sock *sk = sock->sk;
+	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+	struct sockaddr_lapd *sal = (struct sockaddr_lapd *)uaddr;
+	int err;
+
+	if (addr_len < sizeof(struct sockaddr_lapd)) {
+		err = -EINVAL;
+		goto err_inv_sockaddr;
+	}
+
+	lapd_lock_sock(lapd_sock);
+
+	if (!lapd_sock->dev) {
+		err = -ENODEV;
+		goto err_no_dev;
+	}
+
+	if (sal->sal_tei == LAPD_BROADCAST_TEI) {
+
+		if (lapd_sock->usr_tme)
+			lapd_utme_put(lapd_sock->usr_tme);
+
+		lapd_sock->usr_tme = NULL; 
+		lapd_sock->tei = sal->sal_tei;
+		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
+
+	} else  if (sal->sal_tei == LAPD_DYNAMIC_TEI) {
+
+		if (lapd_sock->dev->role == LAPD_INTF_ROLE_NT) {
+			err = -EINVAL;
+			goto err_dyn_and_nt;
+		}
+
+		lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
+
+		if (!lapd_sock->usr_tme)
+			lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
+
+		read_lock_bh(&lapd_utme_hash_lock);
+		hlist_add_head(&lapd_utme_get(lapd_sock->usr_tme)->node,
+				&lapd_utme_hash);
+		read_unlock_bh(&lapd_utme_hash_lock);
+
+	} else if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
+	           sal->sal_tei <= LAPD_MAX_STA_TEI) {
+
+		if (lapd_sock->usr_tme)
+			lapd_utme_put(lapd_sock->usr_tme);
+
+		lapd_sock->usr_tme = NULL; 
+		lapd_sock->tei = sal->sal_tei;
+		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
+
+	} else {
+		err = -EINVAL;
+		goto err_inv_tei;
+	}
+/*
+	struct sock *othersk = NULL;
+	struct hlist_node *node;
+	int i;
+	int bound_socket_present = FALSE;
+
+	read_lock_bh(&lapd_hash_lock);
+	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+		sk_for_each(othersk, node, &lapd_hash[i]) {
+			if (to_lapd_sock(othersk)->dev == dev &&
+			    !to_lapd_sock(othersk)->usr_tme
+
+				bound_socket_present = TRUE;
+
+				break;
+			}
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+*/
+
+	sk->sk_state = TCP_ESTABLISHED;
+
+	lapd_release_sock(lapd_sock);
+
+	return 0;
+
+err_inv_tei:
+err_dyn_and_nt:
+err_no_dev:
+	lapd_release_sock(lapd_sock);
+err_inv_sockaddr:
+
+	return err;
+}
+
 static int lapd_connect(
 	struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
@@ -1694,11 +1686,6 @@ static int lapd_listen(struct socket *sock, int backlog)
 		goto err_no_dev;
 	}
 
-	if (lapd_sock->dev->role != LAPD_INTF_ROLE_NT) {
-		err = -ENOTSUPP;
-		goto err_no_nt_mode;
-	}
-
 	if (sk->sk_state == TCP_CLOSING) {
 		err = -EIO;
 		goto err_closing;
@@ -1716,7 +1703,6 @@ static int lapd_listen(struct socket *sock, int backlog)
 
 err_already_listening:
 err_closing:
-err_no_nt_mode:
 err_no_dev:
 
 	lapd_release_sock(lapd_sock);
@@ -1810,7 +1796,7 @@ static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops) = {
 	.family		= PF_LAPD,
 	.owner		= THIS_MODULE,
 	.release	= lapd_release,
-	.bind		= sock_no_bind,
+	.bind		= lapd_bind,
 	.connect	= lapd_connect,
 	.socketpair	= sock_no_socketpair,
 	.accept		= lapd_accept,
@@ -1889,8 +1875,6 @@ static int lapd_create(struct socket *sock, int protocol)
 
 	/* We use ->sapi as a temporary until SO_BINDTODEVICE */
 	lapd_sock->sapi = protocol;
-
-	/* TE mode section */
 
 	lapd_sock->usr_tme = NULL;
 

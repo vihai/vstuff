@@ -9,6 +9,7 @@
 [general]
 
 [global]
+tei = dynamic
 network_role = private
 tones_option = yes
 outbound_called_ton = unknown

@@ -212,7 +212,12 @@ static int visdn_ic_from_var(
 	struct visdn_ic *ic,
 	struct ast_variable *var)
 {
-	if (!strcasecmp(var->name, "network_role")) {
+	if (!strcasecmp(var->name, "tei")) {
+		if (!strcasecmp(var->value, "dynamic"))
+			ic->tei = LAPD_DYNAMIC_TEI;
+		else
+			ic->tei = atoi(var->value);
+	} else if (!strcasecmp(var->name, "network_role")) {
 		ic->network_role =
 			visdn_string_to_network_role(var->value);
 	} else if (!strcasecmp(var->name, "outbound_called_ton")) {
@@ -332,6 +337,7 @@ static void visdn_ic_copy(
 	struct visdn_ic *dst,
 	const struct visdn_ic *src)
 {
+	dst->tei = src->tei;
 	dst->network_role = src->network_role;
 	dst->outbound_called_ton = src->outbound_called_ton;
 	strcpy(dst->force_outbound_cli, src->force_outbound_cli);
@@ -390,7 +396,7 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 
 	intf->open_pending = TRUE;
 
-	intf->q931_intf = q931_intf_open(intf->name, 0);
+	intf->q931_intf = q931_intf_open(intf->name, 0, ic->tei);
 	if (!intf->q931_intf) {
 		ast_log(LOG_WARNING,
 			"Cannot open interface %s, skipping\n",
@@ -423,16 +429,6 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 	if (ic->T320) intf->q931_intf->T320 = ic->T320 * 1000000LL;
 	if (ic->T321) intf->q931_intf->T321 = ic->T321 * 1000000LL;
 	if (ic->T322) intf->q931_intf->T322 = ic->T322 * 1000000LL;
-
-	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
-		if (listen(intf->q931_intf->master_socket, 100) < 0) {
-			ast_log(LOG_ERROR,
-				"cannot listen on master socket: %s\n",
-				strerror(errno));
-
-			return -1;
-		}
-	}
 
 	char path[PATH_MAX];
 	char goodpath[PATH_MAX];
@@ -497,6 +493,7 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 
 void visdn_ic_setdefault(struct visdn_ic *ic)
 {
+	ic->tei = LAPD_DYNAMIC_TEI;
 	ic->network_role = Q931_INTF_NET_PRIVATE;
 	ic->outbound_called_ton = VISDN_TYPE_OF_NUMBER_UNKNOWN;
 	strcpy(ic->force_outbound_cli, "");
@@ -625,6 +622,19 @@ void visdn_intf_reload(struct ast_config *cfg)
 
 /*---------------------------------------------------------------------------*/
 
+static const char *visdn_intf_mode_to_string(
+	enum lapd_intf_mode value)
+{
+	switch(value) {
+	case LAPD_INTF_MODE_POINT_TO_POINT:
+		return "Point-to-point";
+	case LAPD_INTF_MODE_MULTIPOINT:
+		return "Point-to-Multipoint";
+	}
+
+	return "*UNKNOWN*";
+}
+
 static const char *visdn_ic_network_role_to_string(
 	enum q931_interface_network_role value)
 {
@@ -672,12 +682,23 @@ static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 
 		ast_cli(fd, "\n-- %s --\n", intf->name);
 
-		ast_cli(fd, "Role                      : %s\n",
-				intf->q931_intf ?
-					(intf->q931_intf->role ==
-					 	LAPD_INTF_ROLE_NT ?
-						"NT" : "TE") :
-					"UNUSED!");
+		if (intf->q931_intf) {
+			ast_cli(fd, "Role                      : %s\n",
+				intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
+					"NT" : "TE");
+
+			ast_cli(fd,
+				"Mode                      : %s\n",
+				visdn_intf_mode_to_string(
+					intf->q931_intf->mode));
+
+			if (intf->q931_intf->tei != LAPD_DYNAMIC_TEI)
+				ast_cli(fd, "TEI                       : %d\n",
+					intf->q931_intf->tei);
+			else
+				ast_cli(fd, "TEI                       : "
+						"Dynamic\n");
+		}
 
 		ast_cli(fd,
 			"Network role              : %s\n"

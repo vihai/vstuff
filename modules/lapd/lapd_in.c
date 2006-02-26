@@ -139,7 +139,6 @@ static inline int lapd_pass_frame_to_socket_nt(
 				continue;
 			}
 
-
 			if (lapd_sock->sapi == hdr->addr.sapi &&
 		 	    lapd_sock->tei == hdr->addr.tei) {
 

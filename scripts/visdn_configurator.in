@@ -79,7 +79,8 @@ function read_netdev_block
 {
 	local NETDEV_REQ_DEVNAME=$1
 	local NETDEV_PROTOCOL="lapd"
-	local NETDEV_TEI="auto"
+	local NETDEV_TYPE="bri"
+	local NETDEV_MODE="p2mp"
 
 	local LINE
 	while read -u 9 LINE; do
@@ -89,24 +90,14 @@ function read_netdev_block
 					"$NETDEV_REQ_DEVNAME" \
 					"$NETDEV_PROTOCOL" || return
 
-				if [ "$NETDEV_TYPE" = "PRI" ] ; then
-					$VISDNCTL netdev \
-						set $NETDEV_DEVNAME type pri
-				else
-					$VISDNCTL netdev \
-						set $NETDEV_DEVNAME type bri
-				fi
-
-				if [ "$NETDEV_ROLE" = "NT" ] ; then
-					$VISDNCTL netdev \
-						set $NETDEV_DEVNAME role nt
-				else
-					$VISDNCTL netdev \
-						set $NETDEV_DEVNAME role te
-				fi
+				$VISDNCTL netdev \
+					set $NETDEV_DEVNAME type $NETDEV_TYPE
 
 				$VISDNCTL netdev \
-					set $NETDEV_DEVNAME tei $NETDEV_TEI
+					set $NETDEV_DEVNAME role $NETDEV_ROLE
+
+				$VISDNCTL netdev \
+					set $NETDEV_DEVNAME mode $NETDEV_MODE
 
 				return
 			else
@@ -118,7 +109,7 @@ function read_netdev_block
 			protocol) NETDEV_PROTOCOL=${BASH_REMATCH[2]} ;;
 			type) NETDEV_TYPE=${BASH_REMATCH[2]} ;;
 			role) NETDEV_ROLE=${BASH_REMATCH[2]} ;;
-			tei) NETDEV_TEI=${BASH_REMATCH[2]} ;;
+			mode) NETDEV_MODE=${BASH_REMATCH[2]} ;;
 			*)
 				echo "Unknown directive ${BASH_REMATCH[1]}"
 				continue

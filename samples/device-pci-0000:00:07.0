@@ -6,7 +6,7 @@
 <netdev visdn0>
   protocol lapd
   role TE
-  tei dynamic
+  mode P2MP
 </netdev>
 
 <port st0>

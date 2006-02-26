@@ -44,6 +44,9 @@
 #define LAPD_SAPI_Q931		0x00
 #define LAPD_SAPI_X25		0x0f
 
+#define LAPD_BROADCAST_TEI	127
+#define LAPD_DYNAMIC_TEI	255
+
 enum
 {
 	LAPD_INTF_TYPE		= 0,
@@ -72,18 +75,19 @@ enum lapd_intf_type
 enum lapd_intf_mode
 {
 	LAPD_INTF_MODE_POINT_TO_POINT = 0,
-	LAPD_INTF_MODE_MULTIPOINT = 1,
+	LAPD_INTF_MODE_MULTIPOINT = 1
 };
 
-enum lapd_intf_role {
+enum lapd_intf_role
+{
 	LAPD_INTF_ROLE_TE = 0,
 	LAPD_INTF_ROLE_NT = 1
 };
 
-struct sockaddr_lapd {
+struct sockaddr_lapd
+{
 	sa_family_t	sal_family;
-	__u8            sal_bcast;
-	char		sal_zero[8];
+	__u8            sal_tei;
 };
 
 #ifdef __KERNEL__
@@ -102,8 +106,6 @@ struct sockaddr_lapd {
 #ifndef FALSE
 #define FALSE 0
 #endif
-
-#define LAPD_BROADCAST_TEI	127
 
 #define LAPD_HASHBITS		8
 #define LAPD_HASHSIZE		((1 << LAPD_HASHBITS) - 1)

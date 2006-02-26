@@ -148,17 +148,14 @@ int q931_send_frame_bc(struct q931_dlc *dlc, void *frame, int size)
 {
 	struct msghdr msg;
 	struct iovec iov;
-	struct sockaddr_lapd sal;
 
-	msg.msg_name = &sal;
-	msg.msg_namelen = sizeof(sal);
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = NULL;
 	msg.msg_controllen = 0;
 	msg.msg_flags = 0;
-
-	sal.sal_bcast = 0;
 
 	iov.iov_base = frame;
 	iov.iov_len = size;

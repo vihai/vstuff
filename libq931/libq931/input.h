@@ -23,7 +23,7 @@
 #define	Q931_RECEIVE_OK		0
 #define Q931_RECEIVE_REFRESH	1
 
-int q931_receive(struct q931_dlc *dlc);
+int q931_receive(struct q931_dlc *dlc, int broadcast);
 struct q931_dlc *q931_accept(
 	struct q931_interface *intf,
 	int accept_socket);
