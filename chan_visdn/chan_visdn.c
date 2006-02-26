@@ -815,7 +815,8 @@ llc_failure:;
 	if (visdn_chan->sent_digits < strlen(number)) {
 		if (!ic->overlap_sending) {
 			ast_log(LOG_WARNING,
-				"Number too big and overlap sending disabled\n");
+				"Number too big and overlap sending "
+				"disabled\n");
 			err = -1;
 			goto err_too_many_digits;
 		}
@@ -3351,6 +3352,10 @@ no_cgpn:;
 
 	if (!ic->overlap_sending ||
 	    visdn_chan->sending_complete) {
+
+		if (!strlen(called_number))
+			strcpy(called_number, "s");
+
 		if (ast_exists_extension(NULL, ic->context,
 				called_number, 1,
 				ast_chan->cid.cid_num)) {

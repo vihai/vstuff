@@ -156,12 +156,10 @@ hfc-pci:
 hfc-e1:
 -------
 
-- Rewrite using new model
-
 hfc-usb:
 --------
 
-- Rewrite using new model
+- First received frame is dropped
 
 vgsm:
 -----
