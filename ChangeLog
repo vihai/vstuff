@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-27 18:09:36 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-566
+
+    Summary:
+      Hopefully fixed line hunting
+    Revision:
+      isdn--devel--0.1--patch-566
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c chan_visdn/huntgroup.c
+
+
 2006-02-27 18:09:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-565
 
     Summary:

@@ -14,27 +14,11 @@
 
 #include <stdio.h>
 #include <string.h>
-//#include <sys/socket.h>
-//#include <sys/time.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
-//#include <arpa/inet.h>
-//#include <fcntl.h>
-//#include <sys/ioctl.h>
 #include <stdarg.h>
-//#include <signal.h>
 #include <ctype.h>
-
-//#include <asm/types.h>
-//#include <linux/netlink.h>
-//#include <linux/rtnetlink.h>
-
-//#include <ifaddrs.h>
-//#include <netinet/in.h>
-//#include <linux/if.h>
-//#include <linux/if_ether.h>
-//#include <net/if_arp.h>
 
 #include "../config.h"
 
@@ -379,10 +363,20 @@ struct visdn_intf *visdn_hg_hunt(
 		goto err_no_interfaces;
 	}
 
+	visdn_debug("Hunting started on group '%s'"
+			" (mode='%s', cur_intf='%s', first_intf='%s',"
+			" int_member='%s')\n",
+			hg->name,
+			visdn_huntgroup_mode_to_text(hg->mode),
+			cur_intf ? cur_intf->name : "",
+			first_intf ? first_intf->name : "",
+			hg->current_member ?
+				hg->current_member->intf->name : "");
+
 	struct visdn_huntgroup_member *starting_hgm;
 	if (cur_intf) {
-		starting_hgm = visdn_hg_find_member(hg, cur_intf->name);
-
+		starting_hgm = visdn_hg_next_member(hg,
+				visdn_hg_find_member(hg, cur_intf->name));
 	} else {
 		starting_hgm = list_entry(hg->members.next,
 				struct visdn_huntgroup_member, node);
@@ -400,22 +394,17 @@ struct visdn_intf *visdn_hg_hunt(
 		}
 	}
 
-	visdn_debug("Huntgroup: starting from interface '%s'"
-			" (mode='%s', hg_cur='%s', ext_cur='%s', first='%s')\n",
-			visdn_huntgroup_mode_to_text(hg->mode),
-			starting_hgm->intf->name,
-			hg->current_member ? hg->current_member->intf->name : "",
-			cur_intf ? cur_intf->name : "",
-			first_intf ? first_intf->name : "");
-
 	struct visdn_huntgroup_member *hgm = starting_hgm;
 	do {
-		if (hgm->intf == first_intf)
-			break;
-		
 		visdn_debug(
 			"Huntgroup: trying interface '%s'\n",
 			hgm->intf->name);
+
+		if (hgm->intf == first_intf) {
+			visdn_debug(
+				"Huntgroup: cycle completed without success\n");
+			break;
+		}
 
 		struct q931_interface *q931_intf = hgm->intf->q931_intf;
 

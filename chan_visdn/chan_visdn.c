@@ -2631,19 +2631,11 @@ static void visdn_q931_progress_indication(
 	ast_queue_control(ast_chan, AST_CONTROL_PROGRESS);
 }
 
-static void visdn_q931_reject_indication(
-	struct q931_call *q931_call,
+static void visdn_hunt_next_or_hangup(
+	struct ast_channel *ast_chan,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
-	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
-
-	if (!ast_chan)
-		return;
-
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-
 	struct q931_ie_cause *cause = NULL;
 
 	int i;
@@ -2692,6 +2684,20 @@ static void visdn_q931_reject_indication(
 	}
 }
 
+static void visdn_q931_reject_indication(
+	struct q931_call *q931_call,
+	const struct q931_ies *ies)
+{
+	FUNC_DEBUG();
+
+	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
+
+	if (!ast_chan)
+		return;
+
+	visdn_hunt_next_or_hangup(ast_chan, ies);
+}
+
 static void visdn_q931_release_confirm(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies,
@@ -2721,10 +2727,7 @@ static void visdn_q931_release_indication(
 	if (!ast_chan)
 		return;
 
-	ast_mutex_lock(&ast_chan->lock);
-	visdn_set_hangupcause_by_ies(ast_chan, ies);
-	ast_chan->_softhangup |= AST_SOFTHANGUP_DEV;
-	ast_mutex_unlock(&ast_chan->lock);
+	visdn_hunt_next_or_hangup(ast_chan, ies);
 }
 
 static void visdn_q931_resume_confirm(
