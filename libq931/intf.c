@@ -267,6 +267,7 @@ struct q931_interface *q931_intf_open(
 	intf->enable_bumping = TRUE;
 
 	intf->flags = flags;
+	intf->tei = tei;
 
 	int s;
 

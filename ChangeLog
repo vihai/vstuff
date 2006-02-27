@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-27 18:09:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-565
+
+    Summary:
+      Fixed TEI initialization in libq931
+    Revision:
+      isdn--devel--0.1--patch-565
+
+
+    modified files:
+     ChangeLog libq931/intf.c
+
+
 2006-02-27 16:44:41 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-564
 
     Summary:
