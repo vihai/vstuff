@@ -1,7 +1,7 @@
 /*
  * vISDN
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -72,7 +72,8 @@ int main(int argc, char *argv[])
 		    !strcmp(options[optidx].name, "debug"))) {
 			opts.socket_debug = 1;
 		} else {
-			fprintf(stderr,"Unknow option %s\n", options[optidx].name);
+			fprintf(stderr,
+				"Unknow option %s\n", options[optidx].name);
 			print_usage(argv[0]);
 			return 1;
 		}
@@ -130,6 +131,17 @@ int main(int argc, char *argv[])
 	} else
 		printf("Unknown role %d\n", role);
 
+	printf("Binding TEI...");
+	struct sockaddr_lapd sal;
+	sal.sal_family = AF_LAPD;
+	sal.sal_tei = LAPD_DYNAMIC_TEI;
+
+	if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
+		printf("bind(): %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("OK\n");
+
 	printf("Connecting...");
 	if (connect(s, NULL, 0) < 0) {
 		printf("connect: %s\n", strerror(errno));
@@ -156,8 +168,4 @@ int main(int argc, char *argv[])
 			printf("POLLIN\n");
 		}
 	}
-}
-
-
-	return 0;
 }

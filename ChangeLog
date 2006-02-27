@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-02-27 12:38:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-562
+
+    Summary:
+      Removed demoswitch
+    Revision:
+      isdn--devel--0.1--patch-562
+
+
+    removed files:
+     tests/.arch-ids/demoswitch.c.id tests/demoswitch.c
+
+    modified files:
+     ChangeLog tests/Makefile.am tests/test.c
+
+
 2006-02-27 12:35:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-561
 
     Summary:
