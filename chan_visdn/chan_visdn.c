@@ -4347,12 +4347,26 @@ static int do_show_visdn_channels(int fd, int argc, char *argv[])
 
 		ast_cli(fd, "Interface: %s\n", intf->name);
 
-		int j;
-		for (j=0; j<intf->q931_intf->n_channels; j++) {
-			ast_cli(fd, "  B%d: %s\n",
-				intf->q931_intf->channels[j].id + 1,
+		int i;
+		for (i=0; i<intf->q931_intf->n_channels; i++) {
+			ast_cli(fd, "  B%d: %s",
+				intf->q931_intf->channels[i].id + 1,
 				q931_channel_state_to_text(
-					intf->q931_intf->channels[j].state));
+					intf->q931_intf->channels[i].state));
+
+			if (intf->q931_intf->channels[i].call) {
+				struct q931_call *call =
+					intf->q931_intf->channels[i].call;
+				
+				ast_cli(fd, "  Call: %5d.%c %s",
+					call->call_reference,
+					(call->direction ==
+						Q931_CALL_DIRECTION_INBOUND)
+							? 'I' : 'O',
+					q931_call_state_to_text(call->state));
+			}
+
+			ast_cli(fd, "\n");
 		}
 	}
 
