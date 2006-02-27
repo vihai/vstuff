@@ -34,7 +34,12 @@ struct lapd_device *lapd_dev_get_by_name(const char *name)
 		return NULL;
 	}
 
-	return to_lapd_dev(dev);
+	if (to_lapd_dev(dev))
+		return to_lapd_dev(dev);
+	else {
+		dev_put(dev);
+		return NULL;
+	}
 }
 
 static void lapd_device_up(struct net_device *dev)

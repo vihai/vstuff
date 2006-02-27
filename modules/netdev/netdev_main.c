@@ -417,6 +417,7 @@ static int vnd_netdev_frame_xmit(
 	case VISDN_TX_LOCKED:
 		return NETDEV_TX_LOCKED;
 	default:
+		kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
 }

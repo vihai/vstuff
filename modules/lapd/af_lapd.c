@@ -723,15 +723,15 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	int err = 0;
 	struct lapd_device *dev;
 
-	dev = lapd_dev_get_by_name(devname);
-	if (dev == NULL) {
-		err = -ENODEV;
-		goto err_nodev;
-	}
-
 	if (sk->sk_type != SOCK_SEQPACKET) {
 		err = -EINVAL;
 		goto err_invalid_socket_type;
+	}
+
+	dev = lapd_dev_get_by_name(devname);
+	if (!dev) {
+		err = -ENODEV;
+		goto err_nodev;
 	}
 
 	if (!(dev->dev->flags & IFF_UP)) {
@@ -760,9 +760,9 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	return 0;
 
 err_dev_not_up:
-err_invalid_socket_type:
 	lapd_dev_put(dev);
 err_nodev:
+err_invalid_socket_type:
 
 	return err;
 }
@@ -1439,6 +1439,11 @@ int lapd_multiframe_wait_for_establishment(
 
 		if (lapd_sock->state == LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED)
 			break;
+
+		if (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED) {
+			err = -ECONNRESET;
+			break;
+		}
 
 		if (signal_pending(current)) {
 			err = sock_intr_errno(timeout);
