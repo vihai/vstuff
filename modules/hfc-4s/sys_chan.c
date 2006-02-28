@@ -72,24 +72,6 @@ static VISDN_CHAN_ATTR(rx_fifo_size, S_IRUGO,
 
 /*---------------------------------------------------------------------------*/
 
-static ssize_t hfc_show_tx_fifo_size(
-	struct visdn_chan *visdn_chan,
-	struct visdn_chan_attribute *attr,
-	char *buf)
-{
-	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-		(chan->tx_fifo.size));
-
-}
-
-static VISDN_CHAN_ATTR(tx_fifo_size, S_IRUGO,
-		hfc_show_tx_fifo_size,
-		NULL);
-
-/*---------------------------------------------------------------------------*/
-
 static ssize_t hfc_show_rx_fifo_used(
 	struct visdn_chan *visdn_chan,
 	struct visdn_chan_attribute *attr,
@@ -155,6 +137,24 @@ static ssize_t hfc_show_rx_fifo_max(
 
 static VISDN_CHAN_ATTR(rx_fifo_max, S_IRUGO,
 		hfc_show_rx_fifo_max, NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_size(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		(chan->tx_fifo.size));
+
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_size, S_IRUGO,
+		hfc_show_tx_fifo_size,
+		NULL);
 
 /*---------------------------------------------------------------------------*/
 
@@ -298,13 +298,15 @@ static VISDN_CHAN_ATTR(tx_subchannel_bit_count, S_IRUGO,
 static struct visdn_chan_attribute *hfc_sys_attributes[] =
 {
 	&visdn_chan_attr_rx_fifo_size,
-	&visdn_chan_attr_tx_fifo_size,
 	&visdn_chan_attr_rx_fifo_used,
-	&visdn_chan_attr_tx_fifo_used,
 	&visdn_chan_attr_rx_fifo_min,
-	&visdn_chan_attr_tx_fifo_min,
 	&visdn_chan_attr_rx_fifo_max,
+
+	&visdn_chan_attr_tx_fifo_size,
+	&visdn_chan_attr_tx_fifo_used,
+	&visdn_chan_attr_tx_fifo_min,
 	&visdn_chan_attr_tx_fifo_max,
+
 	&visdn_chan_attr_rx_subchannel_bit_start,
 	&visdn_chan_attr_tx_subchannel_bit_start,
 	&visdn_chan_attr_rx_subchannel_bit_count,
@@ -636,11 +638,9 @@ static ssize_t hfc_sys_chan_write(
 
 	hfc_fifo_select(&chan->tx_fifo);
 
-	copied_octets = count;
-
 	available_octets = hfc_fifo_free_tx(&chan->tx_fifo);
-	if (copied_octets > available_octets)
-		copied_octets = available_octets;
+
+	copied_octets = available_octets > count ? count : available_octets;
 
 	used_octets = hfc_fifo_used_tx(&chan->tx_fifo);
 

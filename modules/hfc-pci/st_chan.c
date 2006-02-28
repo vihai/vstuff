@@ -22,7 +22,9 @@
 #include "fifo.h"
 #include "fifo_inline.h"
 
-#define to_chan_duplex(chan) \
+#define HFC_FIFO_JITTBUFF 5
+
+#define to_st_chan(chan) \
 	container_of(chan, struct hfc_st_chan, visdn_chan)
 
 #ifdef DEBUG_CODE
@@ -52,6 +54,175 @@
 		(chan)->visdn_chan.name,				\
 		## arg)
 
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_rx_fifo_size(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		(chan->rx_fifo->size));
+
+}
+
+static VISDN_CHAN_ATTR(rx_fifo_size, S_IRUGO,
+		hfc_show_rx_fifo_size,
+		NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_rx_fifo_used(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+	int fifo_used;
+
+	hfc_card_lock(chan->port->card);
+	fifo_used = hfc_fifo_used_rx(chan->rx_fifo);
+	hfc_card_unlock(chan->port->card);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", fifo_used);
+}
+
+static ssize_t hfc_store_rx_fifo_used(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	hfc_card_lock(chan->port->card);
+	hfc_fifo_reset(chan->rx_fifo);
+	hfc_card_unlock(chan->port->card);
+
+	return count;
+}
+
+static VISDN_CHAN_ATTR(rx_fifo_used, S_IRUGO | S_IWUSR,
+		hfc_show_rx_fifo_used,
+		hfc_store_rx_fifo_used);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_rx_fifo_min(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->rx_fifo->stats_min);
+}
+
+static VISDN_CHAN_ATTR(rx_fifo_min, S_IRUGO,
+		hfc_show_rx_fifo_min, NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_rx_fifo_max(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->rx_fifo->stats_max);
+}
+
+static VISDN_CHAN_ATTR(rx_fifo_max, S_IRUGO,
+		hfc_show_rx_fifo_max, NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_size(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		(chan->tx_fifo->size));
+
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_size, S_IRUGO,
+		hfc_show_tx_fifo_size,
+		NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_used(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	int fifo_used;
+
+	hfc_card_lock(chan->port->card);
+	fifo_used = hfc_fifo_used_rx(chan->tx_fifo);
+	hfc_card_unlock(chan->port->card);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", fifo_used);
+}
+
+static ssize_t hfc_store_tx_fifo_used(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	hfc_card_lock(chan->port->card);
+	hfc_fifo_reset(chan->tx_fifo);
+	hfc_card_unlock(chan->port->card);
+
+	return count;
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_used, S_IRUGO | S_IWUSR,
+		hfc_show_tx_fifo_used,
+		hfc_store_tx_fifo_used);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_min(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->tx_fifo->stats_min);
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_min, S_IRUGO,
+		hfc_show_tx_fifo_min, NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t hfc_show_tx_fifo_max(
+	struct visdn_chan *visdn_chan,
+	struct visdn_chan_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", chan->tx_fifo->stats_max);
+}
+
+static VISDN_CHAN_ATTR(tx_fifo_max, S_IRUGO,
+		hfc_show_tx_fifo_max, NULL);
+
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_sq_bits(
@@ -59,7 +230,7 @@ static ssize_t hfc_show_sq_bits(
 	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
@@ -75,7 +246,7 @@ static ssize_t hfc_store_sq_bits(
 	const char *buf,
 	size_t count)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
@@ -102,7 +273,7 @@ static ssize_t hfc_show_sq_enabled(
 	struct visdn_chan_attribute *attr,
 	char *buf)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
 	return snprintf(buf, PAGE_SIZE, "%d\n",
 		(chan->port->sq_enabled ? 1 : 0));
@@ -115,7 +286,7 @@ static ssize_t hfc_store_sq_enabled(
 	const char *buf,
 	size_t count)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
@@ -135,10 +306,33 @@ static VISDN_CHAN_ATTR(sq_enabled, S_IRUGO | S_IWUSR,
 		hfc_show_sq_enabled,
 		hfc_store_sq_enabled);
 
+static struct visdn_chan_attribute *hfc_st_attributes[] =
+{
+	&visdn_chan_attr_rx_fifo_size,
+	&visdn_chan_attr_rx_fifo_used,
+	&visdn_chan_attr_rx_fifo_min,
+	&visdn_chan_attr_rx_fifo_max,
+
+	&visdn_chan_attr_tx_fifo_size,
+	&visdn_chan_attr_tx_fifo_used,
+	&visdn_chan_attr_tx_fifo_min,
+	&visdn_chan_attr_tx_fifo_max,
+	NULL
+};
 
 static int hfc_st_chan_sysfs_create_files_DB(
 	struct hfc_st_chan *chan)
 {
+	struct visdn_chan_attribute **attr = hfc_st_attributes;
+
+	while(*attr) {
+		visdn_chan_create_file(
+			&chan->visdn_chan,
+			*attr);
+
+		attr++;
+	}
+
 	return 0;
 }
 
@@ -188,6 +382,15 @@ err_create_file_sq_bits:
 void hfc_st_chan_sysfs_delete_files_DB(
 	struct hfc_st_chan *chan)
 {
+	struct visdn_chan_attribute **attr = hfc_st_attributes;
+
+	while(*attr) {
+		visdn_chan_remove_file(
+			&chan->visdn_chan,
+			*attr);
+
+		attr++;
+	}
 }
 
 void hfc_st_chan_sysfs_delete_files_D(
@@ -224,7 +427,7 @@ static void hfc_st_chan_release(struct visdn_chan *chan)
 
 static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
@@ -287,7 +490,8 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 			chan->rx_fifo->framer_enabled = FALSE;
 			chan->rx_fifo->bit_reversed = TRUE;
 
-		} else if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_HDLC) {
+		} else if (chan->visdn_chan.leg_b.framing ==
+						VISDN_LEG_FRAMING_HDLC) {
 			chan->rx_fifo->framer_enabled = TRUE;
 			chan->rx_fifo->bit_reversed = FALSE;
 		}
@@ -296,20 +500,30 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		hfc_fifo_configure(chan->rx_fifo);
 	}
 
-	if (chan->rx_fifo) {
+	if (chan->tx_fifo) {
+		int i;
+
 		chan->tx_fifo->connected_chan = chan;
 		chan->tx_fifo->enabled = TRUE;
 
 		if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
 			chan->tx_fifo->framer_enabled = FALSE;
 			chan->tx_fifo->bit_reversed = TRUE;
-		} else if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_HDLC) {
+		} else if (chan->visdn_chan.leg_b.framing ==
+						VISDN_LEG_FRAMING_HDLC) {
 			chan->tx_fifo->framer_enabled = TRUE;
 			chan->tx_fifo->bit_reversed = FALSE;
 		}
 
 		hfc_fifo_reset(chan->tx_fifo);
 		hfc_fifo_configure(chan->tx_fifo);
+
+		if (!chan->tx_fifo->framer_enabled) {
+			for (i=0; i<HFC_FIFO_JITTBUFF; i++) {
+				u8 foo = 0;
+				hfc_fifo_mem_write(chan->tx_fifo, &foo, 1);
+			}
+		}
 	}
 
 	hfc_outb(card, hfc_TRM, card->regs.trm);
@@ -338,7 +552,7 @@ err_visdn_chan_lock:
 static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 {
 	int err;
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 	struct hfc_st_port *port = chan->port;
 	struct hfc_card *card = port->card;
 
@@ -396,7 +610,7 @@ static int hfc_st_chan_frame_xmit(
 	struct visdn_leg *visdn_leg,
 	struct sk_buff *skb)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
 	struct hfc_fifo *fifo = chan->tx_fifo;
 
@@ -609,63 +823,113 @@ static ssize_t hfc_st_chan_read(
 	void *buf,
 	size_t count)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
 	int copied_octets;
+	int available_octets;
+	int err;
 
 	hfc_card_lock(card);
 
-	if (chan->rx_fifo) {
-		copied_octets = hfc_fifo_used_rx(chan->rx_fifo);
-		if (copied_octets > count)
-			copied_octets = count;
+	if (!chan->rx_fifo) {
+		err = -EINVAL;
+		goto err_no_fifo;
+	}
 
-		hfc_fifo_mem_read(chan->rx_fifo, buf, copied_octets);
+	available_octets = hfc_fifo_used_rx(chan->rx_fifo);
 
-		*Z2_F2(chan->rx_fifo) = Z_inc(chan->rx_fifo,
-						*Z2_F2(chan->rx_fifo),
-						copied_octets);
-	} else
-		copied_octets = -EINVAL;
+	copied_octets = available_octets < count ? available_octets : count;
+
+	if (available_octets > chan->rx_fifo->stats_max)
+		chan->rx_fifo->stats_max = available_octets;
+
+	if (available_octets - copied_octets < chan->rx_fifo->stats_min)
+		chan->rx_fifo->stats_min = available_octets - copied_octets;
+
+	chan->rx_fifo->stats_cycles++;
+
+	hfc_fifo_mem_read(chan->rx_fifo, buf, copied_octets);
+
+	*Z2_F2(chan->rx_fifo) = Z_inc(chan->rx_fifo,
+					*Z2_F2(chan->rx_fifo),
+					copied_octets);
 
 	hfc_card_unlock(card);
 
 	return copied_octets;
+
+err_no_fifo:
+
+	hfc_card_unlock(card);
+
+	return err;
 }
 
 static ssize_t hfc_st_chan_write(
 	struct visdn_leg *visdn_leg,
 	const void *buf, size_t count)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_leg->chan);
 	struct hfc_card *card = chan->port->card;
 	int copied_octets;
+	int available_octets;
+	int used_octets;
+	int err;
 
 	hfc_card_lock(card);
 
-	if (chan->tx_fifo) {
-		copied_octets = hfc_fifo_free_tx(chan->tx_fifo);
-		if (copied_octets > count)
-			copied_octets = count;
+	if (!chan->tx_fifo) {
+		err = -EINVAL;
+		goto err_no_fifo;
+	}
 
-		hfc_fifo_mem_write(chan->tx_fifo, buf, copied_octets);
+	available_octets = hfc_fifo_free_tx(chan->tx_fifo);
 
-		*Z1_F1(chan->tx_fifo) = Z_inc(chan->tx_fifo,
-						*Z1_F1(chan->tx_fifo),
-						count);
-	} else
-		copied_octets = -EINVAL;
+	copied_octets = available_octets > count ? count : available_octets;
+
+	used_octets = hfc_fifo_used_tx(chan->tx_fifo);
+
+	chan->tx_fifo->stats_cycles++;
+	if (chan->tx_fifo->stats_cycles >= 10) {
+		if (chan->tx_fifo->stats_min < HFC_FIFO_JITTBUFF) {
+			u8 foo = ((u8 *)buf)[0];
+			hfc_fifo_mem_write(chan->tx_fifo, &foo, 1);
+			printk(KERN_DEBUG "Added one sample\n");
+		}
+
+		chan->tx_fifo->stats_cycles = 0;
+		chan->tx_fifo->stats_min = INT_MAX;
+		chan->tx_fifo->stats_max = 0;
+	}
+
+	if (used_octets < chan->tx_fifo->stats_min)
+		chan->tx_fifo->stats_min = used_octets;
+
+	if (used_octets + copied_octets > chan->tx_fifo->stats_max)
+		chan->tx_fifo->stats_max = used_octets + copied_octets;
+
+	hfc_fifo_mem_write(chan->tx_fifo, buf, copied_octets);
+
+	*Z1_F1(chan->tx_fifo) = Z_inc(chan->tx_fifo,
+					*Z1_F1(chan->tx_fifo),
+					count);
 
 	hfc_card_unlock(card);
 
 	return copied_octets;
+
+err_no_fifo:
+
+	hfc_card_unlock(card);
+
+	return err;
 }
 
 static int hfc_st_chan_connect(
 	struct visdn_leg *visdn_leg,
 	struct visdn_leg *visdn_leg2)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_leg->chan);
 
 	hfc_debug_chan(chan, 2, "connecting to %06d\n",
 		visdn_leg2->chan->id);
@@ -677,7 +941,7 @@ static void hfc_st_chan_disconnect(
 	struct visdn_leg *visdn_leg,
 	struct visdn_leg *visdn_leg2)
 {
-	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
+	struct hfc_st_chan *chan = to_st_chan(visdn_leg->chan);
 
 	hfc_debug_chan(chan, 2, "disconnected from %06d\n",
 		visdn_leg2->chan->id);
