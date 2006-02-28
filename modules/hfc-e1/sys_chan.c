@@ -335,17 +335,11 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	if (chan->connected_e1_chan) {
-		chan->rx_fifo.subchannel_bit_start =
-			chan->connected_e1_chan->subchannel_bit_start;
-		chan->tx_fifo.subchannel_bit_start =
-			chan->connected_e1_chan->subchannel_bit_start;
+	chan->rx_fifo.subchannel_bit_start = 0;
+	chan->rx_fifo.subchannel_bit_count = 8;
 
-		chan->rx_fifo.subchannel_bit_count =
-			chan->connected_e1_chan->subchannel_bit_count;
-		chan->tx_fifo.subchannel_bit_count =
-			chan->connected_e1_chan->subchannel_bit_count;
-	}
+	chan->tx_fifo.subchannel_bit_start = 0;
+	chan->tx_fifo.subchannel_bit_count = 8;
 
 	chan->rx_fifo.enabled = TRUE;
 	chan->tx_fifo.enabled = TRUE;

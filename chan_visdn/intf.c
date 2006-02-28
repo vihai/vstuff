@@ -503,7 +503,7 @@ void visdn_ic_setdefault(struct visdn_ic *ic)
 	ic->force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET;
 	ic->tones_option = TRUE;
 	strcpy(ic->context, "visdn");
-	strcpy(ic->language, "en");
+	strcpy(ic->language, "");
 	ic->clip_enabled = TRUE;
 	ic->clip_override = FALSE;
 	strcpy(ic->clip_default_name, "");
