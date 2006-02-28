@@ -4393,6 +4393,34 @@ static struct ast_cli_entry show_visdn_channels =
 
 /*---------------------------------------------------------------------------*/
 
+static void visdn_print_call_summary_entry(
+	int fd,
+	struct q931_call *call)
+{
+	char idstr[20];
+	snprintf(idstr, sizeof(idstr), "%s/%d.%c",
+		call->intf->name,
+		call->call_reference,
+		(call->direction ==
+			Q931_CALL_DIRECTION_INBOUND)
+				? 'I' : 'O');
+
+	ast_cli(fd, "%-17s %-25s",
+		idstr,
+		q931_call_state_to_text(call->state));
+
+	struct ast_channel *ast_chan = callpvt_to_astchan(call);
+	if (ast_chan) {
+		struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+		ast_cli(fd, "%s%s",
+			visdn_chan->number,
+			visdn_chan->sending_complete ? "(SC)" : "");
+	}
+
+	ast_cli(fd, "\n");
+}
+
 static int visdn_cli_print_call_list(
 	int fd,
 	struct q931_interface *filter_intf)
@@ -4416,27 +4444,13 @@ static int visdn_cli_print_call_list(
 
 				if (first_call) {
 					ast_cli(fd,
-						"Interface: %s\n",
-						intf->q931_intf->name);
-					ast_cli(fd,
-						"  CallRef  State\n");
+						"ID                "
+						"State                    "
+						"Number\n");
 					first_call = FALSE;
 				}
 
-				struct ast_channel *ast_chan =
-						callpvt_to_astchan(call);
-
-				struct visdn_chan *visdn_chan = NULL;
-				if (ast_chan)
-					visdn_chan = to_visdn_chan(ast_chan);
-
-				ast_cli(fd, "  %5d.%c %s %d\n",
-					call->call_reference,
-					(call->direction ==
-						Q931_CALL_DIRECTION_INBOUND)
-							? 'I' : 'O',
-					q931_call_state_to_text(call->state),
-					call->refcnt);
+				visdn_print_call_summary_entry(fd, call);
 			}
 		}
 	}
@@ -4507,6 +4521,40 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 		ast_cli(fd, "\n");
 	}
 
+	struct ast_channel *ast_chan = callpvt_to_astchan(call);
+	if (ast_chan) {
+		struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+
+		ast_cli(fd, "------ Asterisk Channel\n");
+
+		ast_cli(fd,
+			"Number               : %s%s\n"
+			"Options              : %s\n"
+			"Is voice             : %s\n"
+			"Handle stream        : %s\n"
+			"Streamport Chanid    : %06d\n"
+			"EC NearEnd Chanid    : %06d\n"
+			"EC FarEnd Chanid     : %06d\n"
+			"ISDN Chanid          : %06d\n"
+			"In-band informations : %s\n"
+			"DTMF Deferred        : %s\n",
+			visdn_chan->number,
+			visdn_chan->sending_complete ? " (SC)" : "",
+			visdn_chan->options,
+			visdn_chan->is_voice ? "Yes" : "No",
+			visdn_chan->handle_stream ? "Yes" : "No",
+			visdn_chan->sp_channel_id,
+			visdn_chan->ec_ne_channel_id,
+			visdn_chan->ec_fe_channel_id,
+			visdn_chan->isdn_channel_id,
+			visdn_chan->inband_info ? "Yes" : "No",
+			visdn_chan->dtmf_deferred ? "Yes" : "No");
+
+		if (strlen(visdn_chan->dtmf_queue))
+			ast_cli(fd, "DTMF Queue           : %s\n",
+				visdn_chan->dtmf_queue);
+	}
+
 }
 
 static int do_show_visdn_calls(int fd, int argc, char *argv[])
@@ -4533,32 +4581,43 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 		}
 
 		if (!filter_intf) {
-			ast_cli(fd, "Interface not found\n");
+			ast_cli(fd, "Interface '%s' not found\n", argv[3]);
 			goto err_intf_not_found;
 		}
 
 		if (!callpos) {
 			visdn_cli_print_call_list(fd, filter_intf->q931_intf);
 		} else {
-			struct q931_call *call;
+			struct q931_call *call = NULL;
 
-			if (callpos[0] == 'i' || callpos[0] == 'I') {
+			char *dirpos = strchr(callpos, '.');
+			if (dirpos) {
+				*dirpos = '\0';
+				dirpos++;
+			} else {
+				ast_cli(fd, "Invalid call reference\n");
+				goto err_invalid_callref;
+			}
+
+			if (*dirpos == 'i' || *dirpos == 'I') {
 				call = q931_get_call_by_reference(
-							filter_intf->q931_intf,
-					Q931_CALL_DIRECTION_INBOUND,
-					atoi(callpos + 1));
-			} else if (callpos[0] == 'o' || callpos[0] == 'O') {
+						filter_intf->q931_intf,
+						Q931_CALL_DIRECTION_INBOUND,
+						atoi(callpos));
+			} else if (*dirpos == 'o' || *dirpos == 'O') {
 				call = q931_get_call_by_reference(
-							filter_intf->q931_intf,
-					Q931_CALL_DIRECTION_OUTBOUND,
-					atoi(callpos + 1));
+						filter_intf->q931_intf,
+						Q931_CALL_DIRECTION_OUTBOUND,
+						atoi(callpos));
 			} else {
 				ast_cli(fd, "Invalid call reference\n");
 				goto err_unknown_direction;
 			}
 
 			if (!call) {
-				ast_cli(fd, "Call %s not found\n", callpos);
+				ast_cli(fd, "Call '%s.%s' not found\n",
+					callpos,
+					dirpos);
 				goto err_call_not_found;
 			}
 
@@ -4570,6 +4629,7 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 
 err_call_not_found:
 err_unknown_direction:
+err_invalid_callref:
 err_intf_not_found:
 
 	ast_mutex_unlock(&visdn.lock);

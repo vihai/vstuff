@@ -70,9 +70,6 @@ static int new_digit(
 	}
 
 	if (sending_complete) {
-		if (!strlen(called_number))
-			strcpy(called_number, "s");
-
 		if (ast_exists_extension(NULL,
 				chan->context,
 				called_number, 1,
