@@ -254,6 +254,8 @@ static int visdn_ic_from_var(
 		ic->tones_option = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "context")) {
 		strncpy(ic->context, var->value, sizeof(ic->context));
+	} else if (!strcasecmp(var->name, "language")) {
+		strncpy(ic->language, var->value, sizeof(ic->language));
 	} else if (!strcasecmp(var->name, "trans_numbers")) {
 		visdn_numbers_list_from_string(
 			&ic->trans_numbers_list, var->value);
@@ -344,6 +346,7 @@ static void visdn_ic_copy(
 	dst->force_outbound_cli_ton = src->force_outbound_cli_ton;
 	dst->tones_option = src->tones_option;
 	strcpy(dst->context, src->context);
+	strcpy(dst->language, src->language);
 	dst->clip_enabled = src->clip_enabled;
 	dst->clip_override = src->clip_override;
 	strcpy(dst->clip_default_name, src->clip_default_name);
@@ -500,6 +503,7 @@ void visdn_ic_setdefault(struct visdn_ic *ic)
 	ic->force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET;
 	ic->tones_option = TRUE;
 	strcpy(ic->context, "visdn");
+	strcpy(ic->language, "en");
 	ic->clip_enabled = TRUE;
 	ic->clip_override = FALSE;
 	strcpy(ic->clip_default_name, "");
@@ -708,7 +712,8 @@ static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 			"Tones option              : %s\n"
 			"Echo canceller            : %s\n"
 			"Echo canceller taps       : %d (%d ms)\n"
-			"Context                   : %s\n",
+			"Context                   : %s\n"
+			"Language                  : %s\n",
 			visdn_ic_network_role_to_string(
 				ic->network_role),
 			visdn_ton_to_string(
@@ -719,7 +724,8 @@ static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 			ic->tones_option ? "Yes" : "No",
 			ic->echocancel ? "Yes" : "No",
 			ic->echocancel_taps, ic->echocancel_taps / 8,
-			ic->context);
+			ic->context,
+			ic->language);
 
 		ast_cli(fd, "Transparent Numbers       : ");
 		{

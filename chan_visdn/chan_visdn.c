@@ -3152,6 +3152,8 @@ static void visdn_q931_setup_indication(
 		ic->context,
 		sizeof(ast_chan->context)-1);
 
+	strncpy(ast_chan->language, ic->language, sizeof(ast_chan->language));
+
 	ast_mutex_lock(&visdn.usecnt_lock);
 	visdn.usecnt++;
 	ast_mutex_unlock(&visdn.usecnt_lock);

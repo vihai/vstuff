@@ -77,6 +77,10 @@
 ;	Context for incoming calls
 ;	## role: network, user
 ;
+; language = ""
+;	Language associated to inbound calls
+;	## role: network, user
+;
 ; trans_numbers = ""
 ;	Called numbers for which transparent bearer capability/high layer
 ;	compatibility passing is supported.
@@ -188,6 +192,7 @@
 [global]
 network_role = private
 tones_option = yes
+language = en
 outbound_called_ton = unknown
 force_outbound_cli =
 force_outbound_cli_ton = no
@@ -224,6 +229,7 @@ overlap_receiving = No
 [visdn1.0]
 network_role = private
 context = visdn1_0_in
+language = it
 tones_option = yes
 outbound_called_ton = unknown
 force_outbound_cli =

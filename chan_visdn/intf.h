@@ -51,6 +51,7 @@ struct visdn_ic
 
 	int tones_option;
 	char context[AST_MAX_EXTENSION];
+	char language[MAX_LANGUAGE];
 
 	int clip_enabled;
 	int clip_override;
