@@ -352,7 +352,9 @@ void visdn_queue_primitive(
 	if (!msg)
 		return;
 
-	msg->call = call;
+	if (call)
+		msg->call = q931_call_get(call);
+
 	msg->primitive = primitive;
 	msg->par1 = par1;
 	msg->par2 = par2;
@@ -4160,6 +4162,9 @@ static void visdn_q931_ccb_receive()
 			ast_log(LOG_WARNING, "Unexpected primitive %d\n",
 				msg->primitive);
 		}
+
+		if (msg->call)
+			q931_call_put(msg->call);
 
 		q931_ies_destroy(&msg->ies);
 		free(msg);
