@@ -82,7 +82,7 @@ static int hfc_pcm_chan_open(struct visdn_chan *visdn_chan)
 
 	chan->status = HFC_ST_CHAN_STATUS_FREE;
 //err_invalid_l1_proto:
-err_invalid_chan:
+//err_invalid_chan:
 err_channel_busy:
 	visdn_chan_unlock(visdn_chan);
 err_visdn_chan_lock:

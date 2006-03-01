@@ -27,6 +27,13 @@ enum hfc_line_code
 	hfc_LINE_CODE_AMI,
 };
 
+enum hfc_clock_source
+{
+	hfc_CLOCK_SOURCE_LOOP,
+	hfc_CLOCK_SOURCE_F0IO,
+	hfc_CLOCK_SOURCE_SYNC_IN,
+};
+
 struct hfc_e1_port
 {
 	struct hfc_card *card;
@@ -34,6 +41,8 @@ struct hfc_e1_port
 	BOOL nt_mode;
 
 	u8 l1_state;
+
+	enum hfc_clock_source clock_source;
 
 	enum hfc_line_code rx_line_code;
 	BOOL rx_full_baud;
@@ -72,5 +81,6 @@ void hfc_e1_port_update_rx0(struct hfc_e1_port *port);
 void hfc_e1_port_update_tx0(struct hfc_e1_port *port);
 void hfc_e1_port_update_rx_sl0_cfg1(struct hfc_e1_port *port);
 void hfc_e1_port_update_tx_sl0_cfg1(struct hfc_e1_port *port);
+void hfc_e1_port_update_sync_ctrl( struct hfc_e1_port *port);
 
 #endif

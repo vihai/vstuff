@@ -123,10 +123,26 @@ void hfc_e1_port_update_tx_sl0_cfg1(
 
 	if (port->tx_crc4)
 		cfg1 |= hfc_R_TX_SL0_CFG1_V_TX_MF |
-			hfc_R_TX_SL0_CFG1_V_TX_E;
-//			hfc_R_TX_SL0_CFG1_V_INV_E;
+			hfc_R_TX_SL0_CFG1_V_TX_E |
+			hfc_R_TX_SL0_CFG1_V_INV_E;
 
 	hfc_outb(port->card, hfc_R_TX_SL0_CFG1, cfg1);
+}
+
+void hfc_e1_port_update_sync_ctrl(
+	struct hfc_e1_port *port)
+{
+	u8 sc = 0;
+
+	if (port->clock_source != hfc_CLOCK_SOURCE_LOOP)
+		sc |= hfc_R_SYNC_CTRL_V_EXT_CLK_SYNC;
+
+	if (port->clock_source == hfc_CLOCK_SOURCE_F0IO) {
+		sc |= hfc_R_SYNC_CTRL_V_PCM_SYNC_F0IO;
+		sc |= hfc_R_SYNC_CTRL_V_JATT_OFF;
+	}
+	
+	hfc_outb(port->card, hfc_R_SYNC_CTRL, sc);
 }
 
 //----------------------------------------------------------------------------
@@ -176,6 +192,78 @@ static VISDN_PORT_ATTR(role, S_IRUGO | S_IWUSR,
 
 //----------------------------------------------------------------------------
 
+static ssize_t hfc_show_clock_source(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
+
+	switch(port->clock_source) {
+	case hfc_CLOCK_SOURCE_LOOP:
+		return snprintf(buf, PAGE_SIZE, "loop\n");
+	case hfc_CLOCK_SOURCE_F0IO:
+		return snprintf(buf, PAGE_SIZE, "f0io\n");
+	case hfc_CLOCK_SOURCE_SYNC_IN:
+		return snprintf(buf, PAGE_SIZE, "sync_in\n");
+	default:
+		return 0;
+	}
+}
+
+static ssize_t hfc_store_clock_source(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
+	struct hfc_card *card = port->card;
+
+	if (count < 2)
+		return count;
+
+	hfc_card_lock(card);
+	if (!strncmp(buf, "loop", strlen("loop")))
+		port->clock_source = hfc_CLOCK_SOURCE_LOOP;
+	else if (!strncmp(buf, "f0io", strlen("f0io")))
+		port->clock_source = hfc_CLOCK_SOURCE_F0IO;
+	else if (!strncmp(buf, "sync_in", strlen("sync_in")))
+		port->clock_source = hfc_CLOCK_SOURCE_SYNC_IN;
+	else {
+		hfc_card_unlock(card);
+		return -EINVAL;
+	}
+
+	hfc_e1_port_update_sync_ctrl(port);
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static VISDN_PORT_ATTR(clock_source, S_IRUGO | S_IWUSR,
+		hfc_show_clock_source,
+		hfc_store_clock_source);
+
+//----------------------------------------------------------------------------
+
+static ssize_t hfc_show_jatt_sta(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			(hfc_inb(port->card, hfc_R_JATT_STA) >> 5) & 0x03);
+}
+
+static VISDN_PORT_ATTR(jatt_sta, S_IRUGO,
+		hfc_show_jatt_sta,
+		NULL);
+
+//----------------------------------------------------------------------------
+
 static ssize_t hfc_show_l1_state(
 	struct visdn_port *visdn_port,
 	struct visdn_port_attribute *attr,
@@ -194,21 +282,38 @@ static VISDN_PORT_ATTR(l1_state, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
-static ssize_t hfc_show_frame_sync(
+static ssize_t hfc_show_rx_frame_sync(
 	struct visdn_port *visdn_port,
 	struct visdn_port_attribute *attr,
 	char *buf)
 {
 	struct hfc_e1_port *port = to_e1_port(visdn_port);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
+	return snprintf(buf, PAGE_SIZE, "%02x\n",
+			hfc_inb(port->card, hfc_R_SYNC_STA));
+/*	return snprintf(buf, PAGE_SIZE, "%d\n",
 			(hfc_inb(port->card, hfc_R_SYNC_STA) &
-				hfc_R_SYNC_STA_V_FR_SYNC) ? 1 : 0);
+				hfc_R_SYNC_STA_V_FR_SYNC) ? 1 : 0);*/
 }
 
-static VISDN_PORT_ATTR(frame_sync, S_IRUGO,
-		hfc_show_frame_sync,
-		NULL);
+static ssize_t hfc_store_rx_frame_sync(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
+	struct hfc_card *card = port->card;
+
+	hfc_outb(card, hfc_R_RX_SL0_CFG0, hfc_R_RX_SL0_CFG0_V_RESYNC);
+//	hfc_outb(card, hfc_R_RX_SL0_CFG1, hfc_R_RX_SL0_CFG1_V_RES_NMF);
+
+	return count;
+}
+
+static VISDN_PORT_ATTR(rx_frame_sync, S_IRUGO | S_IWUSR,
+		hfc_show_rx_frame_sync,
+		hfc_store_rx_frame_sync);
 
 //----------------------------------------------------------------------------
 
@@ -248,6 +353,24 @@ static VISDN_PORT_ATTR(rx_ais, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
+static ssize_t hfc_show_rx_rai(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_e1_port *port = to_e1_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			(hfc_inb(port->card, hfc_R_RX_SL0_0) &
+				hfc_R_RX_SL0_0_V_A) ? 1 : 0);
+}
+
+static VISDN_PORT_ATTR(rx_rai, S_IRUGO,
+		hfc_show_rx_rai,
+		NULL);
+
+//----------------------------------------------------------------------------
+
 static ssize_t hfc_show_rx_line_code(
 	struct visdn_port *visdn_port,
 	struct visdn_port_attribute *attr,
@@ -277,11 +400,11 @@ static ssize_t hfc_store_rx_line_code(
 	struct hfc_card *card = port->card;
 
 	hfc_card_lock(card);
-	if (!strncmp(buf, "NRZ", sizeof("NRZ")))
+	if (!strncmp(buf, "NRZ", strlen("NRZ")))
 		port->rx_line_code = hfc_LINE_CODE_NRZ;
-	else if (!strncmp(buf, "HDB3", sizeof("HDB3")))
+	else if (!strncmp(buf, "HDB3", strlen("HDB3")))
 		port->rx_line_code = hfc_LINE_CODE_HDB3;
-	else if (!strncmp(buf, "AMI", sizeof("AMI")))
+	else if (!strncmp(buf, "AMI", strlen("AMI")))
 		port->rx_line_code = hfc_LINE_CODE_AMI;
 	else {
 		hfc_card_unlock(card);
@@ -599,6 +722,8 @@ static VISDN_PORT_ATTR(sa6_val23_cnt, S_IRUGO,
 static struct visdn_port_attribute *hfc_e1_port_attributes[] =
 {
 	&visdn_port_attr_role,
+	&visdn_port_attr_clock_source,
+	&visdn_port_attr_jatt_sta,
 	&visdn_port_attr_l1_state,
 
 	&visdn_port_attr_rx_line_code,
@@ -609,9 +734,10 @@ static struct visdn_port_attribute *hfc_e1_port_attributes[] =
 	&visdn_port_attr_tx_full_baud,
 	&visdn_port_attr_tx_crc4,
 
-	&visdn_port_attr_frame_sync,
+	&visdn_port_attr_rx_frame_sync,
 	&visdn_port_attr_rx_los,
 	&visdn_port_attr_rx_ais,
+	&visdn_port_attr_rx_rai,
 
 	&visdn_port_attr_fas_cnt,
 	&visdn_port_attr_vio_cnt,
@@ -628,7 +754,7 @@ static void hfc_e1_port_update_led(struct hfc_e1_port *port)
 	struct hfc_card *card = port->card;
 
 	u8 sync_sta = hfc_inb(port->card, hfc_R_SYNC_STA);
-       
+
 	if (sync_sta & hfc_R_SYNC_STA_V_AIS)
 		card->leds[0].color = HFC_LED_RED;
 	else
@@ -742,8 +868,6 @@ static void hfc_e1_port_state_change_nt(
 		/* Do nothing */
 	break;
 	}
-
-	port->l1_state = new_state;
 }
 
 static void hfc_e1_port_state_change_te(
@@ -812,8 +936,6 @@ static void hfc_e1_port_state_change_te(
 		/* Do nothing */
 	break;
 	}
-
-	port->l1_state = new_state;
 }
 
 /* TODO: use a tasklet here, or better, add a queue of state changes, otherwise
@@ -824,17 +946,19 @@ static void hfc_e1_port_state_change_work(void *data)
 	struct hfc_e1_port *port = data;
 	struct hfc_card *card = port->card;
 	u8 rd_sta;
-	u8 new_state;
+	u8 old_state;
 
 	hfc_card_lock(card);
 
+	old_state = port->l1_state;
+	
 	rd_sta = hfc_inb(card, hfc_R_E1_RD_STA);
-	new_state = hfc_R_E1_RD_STA_V_E1_STA(rd_sta);
+	port->l1_state = hfc_R_E1_RD_STA_V_E1_STA(rd_sta);
 
 	if (port->nt_mode) {
-		hfc_e1_port_state_change_nt(port, port->l1_state, new_state);
+		hfc_e1_port_state_change_nt(port, old_state, port->l1_state);
 	} else {
-		hfc_e1_port_state_change_te(port, port->l1_state, new_state);
+		hfc_e1_port_state_change_te(port, old_state, port->l1_state);
 	}
 
 	hfc_e1_port_update_led(port);
@@ -878,6 +1002,8 @@ static void hfc_e1_port_counters_update_work(void *data)
 
 	port->sa6_val23_cnt += hfc_inb(card, hfc_R_SA6_VAL23_ECL) |
 			hfc_inb(card, hfc_R_SA6_VAL23_ECH) << 8;
+
+	hfc_e1_port_update_led(port);
 
 	hfc_card_unlock(card);
 }

@@ -151,9 +151,9 @@
 #define hfc_R_PCM_MD2		0x15
 #define hfc_R_PCM_MD2_V_SYNC_PLL_V_SYNC_OUT	(0 << 0)
 #define hfc_R_PCM_MD2_V_SYNC_PLL_SYNC_O		(1 << 0)
-#define hfc_R_PCM_MD2_V_SYNC_SRC_ST		(0 << 1)
+#define hfc_R_PCM_MD2_V_SYNC_SRC_E1		(0 << 1)
 #define hfc_R_PCM_MD2_V_SYNC_SRC_SYNC_I		(1 << 1)
-#define hfc_R_PCM_MD2_V_SYNC_OUT_ST		(0 << 2)
+#define hfc_R_PCM_MD2_V_SYNC_OUT_E1		(0 << 2)
 #define hfc_R_PCM_MD2_V_SYNC_OUT_SYNC_O		(1 << 2)
 #define hfc_R_PCM_MD2_V_ICR_FR_TIME_INCR	(1 << 6)
 #define hfc_R_PCM_MD2_V_ICR_FR_TIME_DECR	(0 << 6)
@@ -291,9 +291,9 @@
 
 #define hfc_R_TX0		0x28
 #define hfc_R_TX0_V_TX_CODE_NRZ			(0x0 << 0)
-#define hfc_R_TX0_V_TX_CODE_AMI			(0x1 << 0)
-#define hfc_R_TX0_V_TX_CODE_HDB3		(0x2 << 0)
-#define hfc_R_TX0_V_TX_FBAUD_HALF		(1 << 2)
+#define hfc_R_TX0_V_TX_CODE_HDB3		(0x1 << 0)
+#define hfc_R_TX0_V_TX_CODE_AMI			(0x2 << 0)
+#define hfc_R_TX0_V_TX_FBAUD_HALF		(0 << 2)
 #define hfc_R_TX0_V_TX_FBAUD_FULL		(1 << 2)
 #define hfc_R_TX0_V_TX_CMI			(1 << 3)
 #define hfc_R_TX0_V_TX_INV_CMI			(1 << 4)

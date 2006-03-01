@@ -68,16 +68,10 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 int hfc_fifo_is_running(struct hfc_fifo *fifo)
 {
-	if (fifo->enabled && fifo->chan->connected_e1_chan) {
-
-		if (fifo->direction == RX)
-			return TRUE;
-		else if ((fifo->chan->connected_e1_chan->port->nt_mode &&
-		    fifo->chan->connected_e1_chan->port->l1_state == 1) ||
-		   (!fifo->chan->connected_e1_chan->port->nt_mode &&
-		    fifo->chan->connected_e1_chan->port->l1_state == 1))
-			return TRUE;
-	}
+	if (fifo->enabled &&
+	    fifo->chan->connected_e1_chan &&
+	    fifo->chan->connected_e1_chan->port->l1_state == 1)
+		return TRUE;
 
 	return FALSE;
 }

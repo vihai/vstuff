@@ -465,8 +465,6 @@ static void hfc_st_port_state_change_nt(
 		hfc_st_port_fifo_update(port);
 	break;
 	}
-
-	port->l1_state = new_state;
 }
 
 static void hfc_st_port_state_change_te(
@@ -519,8 +517,6 @@ static void hfc_st_port_state_change_te(
 			visdn_port_error_indication(&port->visdn_port);
 	break;
 	}
-
-	port->l1_state = new_state;
 }
 
 static void hfc_st_port_timer_t1(unsigned long data)
@@ -559,19 +555,21 @@ static void hfc_st_port_state_change_work(void *data)
 	struct hfc_st_port *port = data;
 	struct hfc_card *card = port->card;
 	u8 rd_sta;
-	u8 new_state;
+	u8 old_state;
 
 	hfc_card_lock(card);
 
 	hfc_st_port_select(port);
 
+	old_state = port->l1_state;
+
 	rd_sta = hfc_inb(card, hfc_A_ST_RD_STA);
-	new_state = hfc_A_ST_RD_STA_V_ST_STA(rd_sta);
+	port->l1_state = hfc_A_ST_RD_STA_V_ST_STA(rd_sta);
 
 	if (port->nt_mode) {
-		hfc_st_port_state_change_nt(port, port->l1_state, new_state);
+		hfc_st_port_state_change_nt(port, old_state, port->l1_state);
 	} else {
-		if (port->l1_state == 7 && new_state == 6 &&
+		if (old_state == 7 && port->l1_state == 6 &&
 		    rd_sta & hfc_A_ST_RD_STA_V_INFO0 &&
 		    !port->rechecking_f7_f6) {
 
@@ -580,14 +578,14 @@ static void hfc_st_port_state_change_work(void *data)
 			schedule_delayed_work(&port->state_change_work,
 								1 * HZ / 1000);
 		} else {
-			if (port->rechecking_f7_f6 && new_state != 3)
+			if (port->rechecking_f7_f6 && port->l1_state != 3)
 				hfc_st_port_state_change_te(port, 6,
-							port->l1_state);
+							old_state);
 
 			port->rechecking_f7_f6 = FALSE;
 
-			hfc_st_port_state_change_te(port, port->l1_state,
-								new_state);
+			hfc_st_port_state_change_te(port, old_state,
+							port->l1_state);
 		}
 	}
 

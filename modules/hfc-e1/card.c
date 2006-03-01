@@ -381,7 +381,7 @@ static ssize_t hfc_show_dip_switches(
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
 	return snprintf(buf, PAGE_SIZE, "%02x\n",
-		(~hfc_inb(card, hfc_R_GPIO_IN1) >> 5) & 0x7);
+		(~hfc_inb(card, hfc_R_GPI_IN0) >> 5) & 0x7);
 }
 
 static DEVICE_ATTR(dip_switches, S_IRUGO,
@@ -611,13 +611,20 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_TX_OFFS_V_TX_OFFS(2) |
 		hfc_R_TX_OFFS_V_TX_INIT);
 
-	hfc_outb(card, hfc_R_SYNC_CTRL,
-		hfc_R_SYNC_CTRL_V_JATT_MAN);
-
+	card->e1_port.clock_source = hfc_CLOCK_SOURCE_LOOP;
+	hfc_e1_port_update_sync_ctrl(&card->e1_port);
 
 	hfc_update_pcm_md0(card, 0);
 	hfc_update_pcm_md1(card);
 	hfc_update_bert_wd_md(card, 0);
+
+/*	hfc_update_pcm_md0(card,
+		hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD2);
+	hfc_wait_busy(card);
+
+	hfc_outb(card, hfc_R_PCM_MD2,
+		hfc_R_PCM_MD2_V_SYNC_SRC_SYNC_I |
+		hfc_R_PCM_MD2_V_SYNC_OUT_SYNC_O);*/
 
 	hfc_outb(card, hfc_R_SCI_MSK,
 		hfc_R_SCI_MSK_V_SCI_MSK_ST0|
