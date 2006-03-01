@@ -322,7 +322,9 @@ void q931_send_primitive(
 	if (!msg)
 		return;
 
-	msg->call = call;
+	if (call)
+		msg->call = q931_call_get(call);
+
 	msg->primitive = primitive;
 
 	q931_ies_init(&msg->ies);
@@ -2190,6 +2192,9 @@ static void visdn_ccb_q931_receive()
 		ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
 
 		q931_ccb_dispatch(msg);
+
+		if (msg->call)
+			q931_call_put(msg->call);
 
 		q931_ies_destroy(&msg->ies);
 		free(msg);
