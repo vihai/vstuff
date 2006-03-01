@@ -52,15 +52,6 @@ typedef char BOOL;
 #define FALSE 0
 #endif
 
-#ifndef PCI_VENDOR_ID_SITECOM
-#define PCI_VENDOR_ID_SITECOM 0x182D
-#endif
-
-#ifndef PCI_DEVICE_ID_SITECOM_3069
-#define PCI_DEVICE_ID_SITECOM_3069 0x3069
-#endif
-
-
 extern int debug_level;
 
 enum hfc_direction { RX = 0, TX = 1 };

@@ -220,18 +220,6 @@ static CLASS_DEVICE_ATTR(timer_freq, S_IRUGO,
 		visdn_timer_show_freq,
 		visdn_timer_store_freq);
 
-static int visdn_timer_class_hotplug(struct class_device *device, char **envp,
-	int num_envp, char *buf, int size)
-{
-//	struct visdn_timer *timer = to_visdn_timer(cd);
-
-	visdn_debug(3, "visdn_timer_class_hotplug()\n");
-
-	envp[0] = NULL;
-
-	return 0;
-}
-
 static void visdn_timer_class_release(struct class_device *device)
 {
 	struct visdn_timer *timer = to_visdn_timer(device);
@@ -247,7 +235,6 @@ static void visdn_timer_class_release(struct class_device *device)
 static struct class visdn_timer_class = {
 	.name = "visdn-timer",
 	.release = visdn_timer_class_release,
-	.hotplug = visdn_timer_class_hotplug,
 };
 
 void visdn_timer_init(

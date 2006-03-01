@@ -38,16 +38,6 @@ int debug_level = 0;
 dev_t visdn_first_dev;
 EXPORT_SYMBOL(visdn_first_dev);
 
-static int visdn_hotplug(struct class_device *cd, char **envp,
-	int num_envp, char *buf, int size)
-{
-	visdn_debug(3, "visdn_hotplug()\n");
-
-	envp[0] = NULL;
-
-	return 0;
-}
-
 static void visdn_release(struct class_device *cd)
 {
 }
@@ -55,7 +45,6 @@ static void visdn_release(struct class_device *cd)
 struct class visdn_system_class = {
 	.name = "visdn",
 	.release = visdn_release,
-	.hotplug = visdn_hotplug,
 };
 EXPORT_SYMBOL(visdn_system_class);
 

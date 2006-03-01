@@ -466,24 +466,10 @@ static void vgsm_class_release(struct class_device *device)
 	printk(KERN_INFO "vgsm_class_release()\n");
 }
 
-static int vgsm_class_hotplug(struct class_device *device, 
-	char **envp,
-	int num_envp, 
-	char *buf, 
-	int size)
-{
-	printk(KERN_INFO "vgsm_class_hotplug()\n");
-
-	envp[0] = NULL;
-
-	return 0;
-}
-
 struct class vgsm_class =
 {
 	.name = "vgsm-serial",
 	.release = vgsm_class_release,
-	.hotplug = vgsm_class_hotplug,
 };
 
 #ifdef DEBUG_CODE
