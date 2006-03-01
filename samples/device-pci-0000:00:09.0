@@ -28,9 +28,11 @@ attribute bert_mode 7
     connectmodule netdev visdn1.0
   </chan>
 
-  <chan E>
-    connectmodule netdev visdn1.0 echo
-  </chan>
+# No E-channel in NT mode
+#
+#  <chan E>
+#    connectmodule netdev visdn1.0 echo
+#  </chan>
 </port>
 
 #---------------------- st1 -----------------------
@@ -47,9 +49,11 @@ attribute bert_mode 7
     connectmodule netdev visdn1.1
   </chan>
 
-  <chan E>
-    connectmodule netdev visdn1.1 echo
-  </chan>
+# No E-channel in NT mode
+#
+#  <chan E>
+#    connectmodule netdev visdn1.1 echo
+#  </chan>
 </port>
 
 #---------------------- st2 -----------------------
