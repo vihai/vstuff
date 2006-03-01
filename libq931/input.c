@@ -856,9 +856,12 @@ err_malloc:
 	return NULL;
 }
 
-int q931_receive(struct q931_dlc *dlc, int broadcast)
+int q931_receive(struct q931_dlc *dlc)
 {
 	int err;
+
+	assert(dlc->intf);
+	struct q931_interface *intf = dlc->intf;
 
 	struct q931_message *msg;
 	msg = q931_msg_alloc_nodlc();
@@ -1020,14 +1023,15 @@ int q931_receive(struct q931_dlc *dlc, int broadcast)
 		/* Global call */
 
 		q931_dispatch_global_message(
-			&dlc->intf->global_call, msg);
+			&intf->global_call, msg);
 
 		goto global_dispatched;
 	}
 
+	/* Search for an alrady active call */
 	struct q931_call *call =
 		q931_get_call_by_reference(
-			dlc->intf,
+			intf,
 			msg->callref_direction ==
 				Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE
 				? Q931_CALL_DIRECTION_INBOUND
@@ -1035,13 +1039,16 @@ int q931_receive(struct q931_dlc *dlc, int broadcast)
 			msg->callref);
 
 	if (!call) {
+		/* No call with that reference is active */
+
 		if (msg->callref_direction ==
 				Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE) {
 
+			/* The call is inbound, let's allocate a new call */
+
 			call = q931_call_alloc_in(
-					dlc->intf, dlc,
-					msg->callref,
-					broadcast);
+					intf, dlc,
+					msg->callref);
 			if (!call) {
 				report_msg(msg, LOG_ERR,
 					"Error allocating call\n");
@@ -1051,7 +1058,10 @@ int q931_receive(struct q931_dlc *dlc, int broadcast)
 			}
 
 		} else {
-			call = q931_call_alloc(dlc->intf);
+			/* The call is outbound?! Let's allocate a new call
+			 * anyway, that will be used to send release complete */
+
+			call = q931_call_alloc(intf);
 			if (!call) {
 				report_msg(msg, LOG_ERR,
 					"Error allocating call\n");
@@ -1062,10 +1072,18 @@ int q931_receive(struct q931_dlc *dlc, int broadcast)
 			call->direction = Q931_CALL_DIRECTION_OUTBOUND;
 			call->call_reference = msg->callref;
 
-			call->dlc = q931_dlc_get(dlc);
-			q931_dlc_hold(dlc);
+			assert(intf->role == LAPD_INTF_ROLE_TE ||
+				dlc->tei != LAPD_BROADCAST_TEI);
 
-			q931_intf_add_call(dlc->intf, q931_call_get(call));
+			if (dlc->tei == LAPD_BROADCAST_TEI) {
+				call->dlc = q931_dlc_get(&dlc->intf->dlc);
+				q931_dlc_hold(&dlc->intf->dlc);
+			} else {
+				call->dlc = q931_dlc_get(dlc);
+				q931_dlc_hold(dlc);
+			}
+
+			q931_intf_add_call(intf, q931_call_get(call));
 		}
 
 		switch (msg->message_type) {

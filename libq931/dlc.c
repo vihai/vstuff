@@ -23,6 +23,8 @@
 
 void q931_dlc_hold(struct q931_dlc *dlc)
 {
+	assert(dlc->tei != LAPD_BROADCAST_TEI);
+
 	dlc->holdcnt++;
 
 	if (dlc->holdcnt == 1) {
@@ -34,6 +36,8 @@ void q931_dlc_hold(struct q931_dlc *dlc)
 
 void q931_dlc_release(struct q931_dlc *dlc)
 {
+	assert(dlc->tei != LAPD_BROADCAST_TEI);
+
 	dlc->holdcnt--;
 
 	if (dlc->holdcnt == 0) {
@@ -113,5 +117,5 @@ void q931_broadcast_dlc_init(
 {
 	dlc->socket = socket;
 	dlc->intf = intf;
-	dlc->tei = 127;
+	dlc->tei = LAPD_BROADCAST_TEI;
 }

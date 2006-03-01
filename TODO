@@ -82,6 +82,9 @@ visdn_core:
 lapd:
 -----
 
+- When the socket on a TE port is bound, do a TEI Verify?
+- When the socket on a TE port is closed send a TEI Verify?
+
 - Write the necessary code to support
   MPH-INFORMATION-INDICATION(connected/disconnected)
 

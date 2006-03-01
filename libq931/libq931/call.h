@@ -205,9 +205,7 @@ struct q931_call *q931_call_alloc(struct q931_interface *intf);
 struct q931_call *q931_call_alloc_in(
 	struct q931_interface *intf,
 	struct q931_dlc *dlc,
-	int call_reference,
-	int broadcast_setup);
-
+	int call_reference);
 
 void _q931_call_start_timer(
 	struct q931_call *call,

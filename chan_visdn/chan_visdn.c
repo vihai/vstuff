@@ -322,6 +322,8 @@ void q931_send_primitive(
 	if (!msg)
 		return;
 
+	memset(msg, 0, sizeof(*msg));
+
 	if (call)
 		msg->call = q931_call_get(call);
 
@@ -353,6 +355,8 @@ void visdn_queue_primitive(
 	msg = malloc(sizeof(*msg));
 	if (!msg)
 		return;
+
+	memset(msg, 0, sizeof(*msg));
 
 	if (call)
 		msg->call = q931_call_get(call);
@@ -2289,34 +2293,16 @@ static int visdn_q931_thread_do_poll()
 				ast_mutex_unlock(&visdn.lock);
 				break; // polls list may have been changed
 			}
-		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_DLC) {
+		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_DLC ||
+		           visdn.poll_infos[i].type == POLL_INFO_TYPE_BC_DLC) {
 			if (visdn.polls[i].revents &
 					(POLLIN | POLLPRI | POLLERR |
 					 POLLHUP | POLLNVAL)) {
 
 				int err;
 				ast_mutex_lock(&visdn.lock);
-				err = q931_receive(visdn.poll_infos[i].dlc,
-								FALSE);
 
-				if (err == Q931_RECEIVE_REFRESH) {
-					refresh_polls_list();
-					ast_mutex_unlock(&visdn.lock);
-
-					break;
-				}
-				ast_mutex_unlock(&visdn.lock);
-			}
-		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_BC_DLC) {
-			if (visdn.polls[i].revents &
-					(POLLIN | POLLPRI | POLLERR |
-					 POLLHUP | POLLNVAL)) {
-
-				int err;
-				ast_mutex_lock(&visdn.lock);
-				err = q931_receive(visdn.poll_infos[i].dlc,
-								TRUE);
-
+				err = q931_receive(visdn.poll_infos[i].dlc);
 				if (err == Q931_RECEIVE_REFRESH) {
 					refresh_polls_list();
 					ast_mutex_unlock(&visdn.lock);

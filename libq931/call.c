@@ -250,8 +250,7 @@ struct q931_call *q931_call_alloc(struct q931_interface *intf)
 struct q931_call *q931_call_alloc_in(
 	struct q931_interface *intf,
 	struct q931_dlc *dlc,
-	int call_reference,
-	int broadcast_setup)
+	int call_reference)
 {
 	assert(intf);
 	assert(dlc);
@@ -262,10 +261,16 @@ struct q931_call *q931_call_alloc_in(
 	if (!call)
 		return NULL;
 
-	call->dlc = q931_dlc_get(dlc);
-	q931_dlc_hold(dlc);
+	if (dlc->tei == LAPD_BROADCAST_TEI) {
+		call->dlc = q931_dlc_get(&dlc->intf->dlc);
+		q931_dlc_hold(&dlc->intf->dlc);
+		call->broadcast_setup = TRUE;
+	} else {
+		call->dlc = q931_dlc_get(dlc);
+		q931_dlc_hold(dlc);
+		call->broadcast_setup = FALSE;
+	}
 
-	call->broadcast_setup = broadcast_setup;
 	call->direction = Q931_CALL_DIRECTION_INBOUND;
 	call->call_reference = call_reference;
 

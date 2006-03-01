@@ -234,52 +234,43 @@ static inline int lapd_pass_frame_to_socket_te(
 	struct sk_buff *skb)
 {
 	struct sock *sk;
-	struct hlist_node *node, *tmp;
+	struct hlist_node *node;
 	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int queued = 0;
 
 	read_lock_bh(&lapd_hash_lock);
-	if (hdr->addr.tei == LAPD_BROADCAST_TEI) {
-		sk_for_each_safe(sk, node, tmp, lapd_get_hash(dev)) {
-			struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-			if (lapd_sock->dev == dev &&
-			    lapd_sock->sapi == hdr->addr.sapi) {
-				struct sk_buff *new_skb;
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
+		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+		if (lapd_sock->dev == dev &&
+		    (lapd_sock->state ==
+			LAPD_DLS_4_TEI_ASSIGNED ||
+		     lapd_sock->state ==
+			LAPD_DLS_5_AWAITING_ESTABLISH ||
+		     lapd_sock->state ==
+			LAPD_DLS_6_AWAITING_RELEASE ||
+		     lapd_sock->state ==
+			LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED ||
+		     lapd_sock->state ==
+			LAPD_DLS_8_TIMER_RECOVERY) &&
+		    lapd_sock->sapi == hdr->addr.sapi &&
+		    lapd_sock->tei == hdr->addr.tei) {
+
+			struct sk_buff *new_skb;
+
+			if (!queued) {
+				new_skb = skb;
+				queued = TRUE;
+			} else {
 				new_skb = skb_clone(skb, GFP_ATOMIC);
+			}
 
-				new_skb->sk = sk;
+			new_skb->sk = sk;
 
-				lapd_pass_frame_to_socket(
+			queued = lapd_pass_frame_to_socket(
 					to_lapd_sock(sk), new_skb);
-			}
-		}
-	} else {
-		sk_for_each(sk, node, lapd_get_hash(dev)) {
-			struct lapd_sock *lapd_sock = to_lapd_sock(sk);
-
-			if (lapd_sock->dev == dev &&
-			    (lapd_sock->state ==
-				LAPD_DLS_4_TEI_ASSIGNED ||
-			     lapd_sock->state ==
-				LAPD_DLS_5_AWAITING_ESTABLISH ||
-			     lapd_sock->state ==
-				LAPD_DLS_6_AWAITING_RELEASE ||
-			     lapd_sock->state ==
-				LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED ||
-			     lapd_sock->state ==
-				LAPD_DLS_8_TIMER_RECOVERY) &&
-			    lapd_sock->sapi == hdr->addr.sapi &&
-			    lapd_sock->tei == hdr->addr.tei) {
-
-				skb->sk = sk;
-
-				queued = lapd_pass_frame_to_socket(
-						to_lapd_sock(sk), skb);
-
-				break;
-			}
 		}
 	}
 	read_unlock_bh(&lapd_hash_lock);

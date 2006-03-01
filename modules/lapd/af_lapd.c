@@ -464,8 +464,8 @@ static int lapd_sendmsg(
 	}
 
 	if (sk->sk_state != TCP_ESTABLISHED &&
-	    sk->sk_state != TCP_LISTEN) {
-		err = -EPIPE;
+	    sk->sk_state != TCP_SYN_SENT) {
+		err = -EINVAL;
 		goto err_not_established;
 	}
 
@@ -641,9 +641,10 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	lapd_lock_sock(lapd_sock);
 
-	if (sk->sk_state != TCP_ESTABLISHED) {
+	if (sk->sk_state != TCP_ESTABLISHED &&
+	    sk->sk_state != TCP_SYN_SENT) {
 		lapd_release_sock(lapd_sock);
-		return -ENOTCONN;
+		return -EINVAL;
 	}
 
 	if (sk->sk_shutdown & RCV_SHUTDOWN) {
@@ -1481,6 +1482,11 @@ static int lapd_bind(
 
 	lapd_lock_sock(lapd_sock);
 
+	if (sk->sk_state == TCP_LISTEN) {
+		err = -EINVAL;
+		goto err_listening;
+	}
+
 	if (!lapd_sock->dev) {
 		err = -ENODEV;
 		goto err_no_dev;
@@ -1494,6 +1500,8 @@ static int lapd_bind(
 		lapd_sock->usr_tme = NULL; 
 		lapd_sock->tei = sal->sal_tei;
 		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
+
+		sk->sk_state = TCP_SYN_SENT;
 
 	} else  if (sal->sal_tei == LAPD_DYNAMIC_TEI) {
 
@@ -1512,6 +1520,8 @@ static int lapd_bind(
 				&lapd_utme_hash);
 		read_unlock_bh(&lapd_utme_hash_lock);
 
+		sk->sk_state = TCP_ESTABLISHED;
+
 	} else if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
 	           sal->sal_tei <= LAPD_MAX_STA_TEI) {
 
@@ -1522,6 +1532,7 @@ static int lapd_bind(
 		lapd_sock->tei = sal->sal_tei;
 		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
 
+		sk->sk_state = TCP_ESTABLISHED;
 	} else {
 		err = -EINVAL;
 		goto err_inv_tei;
@@ -1547,8 +1558,6 @@ static int lapd_bind(
 	read_unlock_bh(&lapd_hash_lock);
 */
 
-	sk->sk_state = TCP_ESTABLISHED;
-
 	lapd_release_sock(lapd_sock);
 
 	return 0;
@@ -1556,6 +1565,7 @@ static int lapd_bind(
 err_inv_tei:
 err_dyn_and_nt:
 err_no_dev:
+err_listening:
 	lapd_release_sock(lapd_sock);
 err_inv_sockaddr:
 

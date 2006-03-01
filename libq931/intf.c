@@ -1,7 +1,7 @@
 /*
  * vISDN DSSS-1/q.931 signalling library
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
