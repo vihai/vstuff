@@ -41,12 +41,11 @@ enum frame_type
 {
 	FRAME_TYPE_IFRAME,
 	FRAME_TYPE_UFRAME,
-	FRAME_TYPE_UFRAME_BROADCAST,
 };
 
 struct opts
 {
-	int accept;
+	int listen;
 	int tei;
 
 	enum working_mode mode;
@@ -58,66 +57,6 @@ struct opts
 
 	int socket_debug;
 };
-
-void send_broadcast(int s, const char *prefix, struct opts *opts)
-{
-	struct msghdr msg;
-	struct cmsghdr cmsg;
-	struct iovec iov;
-
-	__u8 frame[65536];
-
-	iov.iov_base = frame;
-	iov.iov_len = opts->frame_size;
-
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	msg.msg_control = &cmsg;
-	msg.msg_controllen = sizeof(cmsg);
-	msg.msg_flags = 0;
-
-	memset(frame, 0x5a, sizeof(frame));
-
-	static int frame_seq = 0;
-
-	*(__u32 *)frame = htonl(frame_seq);
-
-	int len;
-	len = sendmsg(s, &msg, MSG_OOB);
-	if(len < 0) {
-		if (errno == ECONNRESET) {
-			printf("%sDL-RELEASE-INDICATION\n", prefix);
-		} else if (errno == EALREADY) {
-			printf("%sDL-ESTABLISH-INDICATION\n", prefix);
-		} else if (errno == ENOTCONN) {
-			printf("%sDL-RELEASE-CONFIRM\n", prefix);
-		} else if (errno == EISCONN) {
-			printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
-		} else {
-			printf("%ssendmsg: %s\n", prefix, strerror(errno));
-		}
-
-		return;
-	}
-
-	int in_size;
-	if(ioctl(s, SIOCINQ, &in_size) < 0) {
-		printf("%sioctl: %s\n", prefix, strerror(errno));
-		exit(1);
-	}
-
-	int out_size;
-	if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
-		printf("%sioctl: %s\n", prefix, strerror(errno));
-		exit(1);
-	}
-
-	printf("%sO R%7d W:%7d - Broadcast %d\n", prefix, in_size, out_size, len);
-
-	frame_seq++;
-}
 
 void start_loopback(int s, const char *prefix, struct opts *opts)
 {
@@ -166,7 +105,8 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 			} else if (errno == EISCONN) {
 				printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 			} else {
-				printf("%srecvmsg: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%srecvmsg: %s\n",
+						prefix, strerror(errno));
 				break;
 			}
 
@@ -190,24 +130,28 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 				printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
 				continue;
 			} else {
-				printf("%ssendmsg: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%ssendmsg: %s\n",
+						prefix, strerror(errno));
 				break;
 			}
 		}
 
 		int in_size;
 		if(ioctl(s, SIOCINQ, &in_size) < 0) {
-			printf("%sioctl: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%sioctl: %s\n",
+					prefix, strerror(errno));
 			exit(1);
 		}
 
 		int out_size;
 		if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
-			printf("%sioctl: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%sioctl: %s\n",
+					prefix, strerror(errno));
 			exit(1);
 		}
 
-		printf("%sI R%7d W:%7d - Echo %d\n", prefix, in_size, out_size, len);
+		printf("%sI R%7d W:%7d - Echo %d\n",
+				prefix, in_size, out_size, len);
 	}
 
 }
@@ -217,13 +161,15 @@ void start_null(int s, const char *prefix, struct opts *opts)
 	for (;;) {
 		int in_size;
 		if(ioctl(s, SIOCINQ, &in_size) < 0) {
-			printf("%sioctl: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%sioctl: %s\n",
+					prefix, strerror(errno));
 			exit(1);
 		}
 
 		int out_size;
 		if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
-			printf("%sioctl: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%sioctl: %s\n",
+					prefix, strerror(errno));
 			exit(1);
 		}
 
@@ -295,16 +241,14 @@ void start_source(int s, const char *prefix, struct opts *opts)
 
 		polls.events = POLLERR;
 
-		if (opts->frame_type != FRAME_TYPE_UFRAME_BROADCAST)
-			polls.events |= POLLIN;
-
 		if (time_to_wait < 0) {
 			polls.events |= POLLOUT;
 			time_to_wait = 0;
 		}
 
 		if (poll(&polls, 1, time_to_wait/1000 + 1) < 0) {
-			printf("%spoll: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%spoll: %s\n",
+					prefix, strerror(errno));
 			exit(1);
 		}
 
@@ -317,32 +261,39 @@ void start_source(int s, const char *prefix, struct opts *opts)
 			len = recvmsg(s, &in_msg, 0);
 			if(len < 0) {
 				if (errno == ECONNRESET) {
-					printf("%sDL-RELEASE-INDICATION\n", prefix);
+					printf("%sDL-RELEASE-INDICATION\n",
+								prefix);
 					break;
 				} else if (errno == EALREADY) {
-					printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+					printf("%sDL-ESTABLISH-INDICATION\n",
+								prefix);
 					continue;
 				} else if (errno == ENOTCONN) {
-					printf("%sDL-RELEASE-CONFIRM\n", prefix);
+					printf("%sDL-RELEASE-CONFIRM\n",
+								prefix);
 					break;
 				} else if (errno == EISCONN) {
-					printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
+					printf("%sDL-ESTABLISH-CONFIRM\n",
+								prefix);
 					continue;
 				} else {
-					printf("%srecvmsg: %s\n", prefix, strerror(errno));
+					fprintf(stderr, "%srecvmsg: %s\n",
+						prefix, strerror(errno));
 					break;
 				}
 			}
 
 			int in_size;
 			if(ioctl(s, SIOCINQ, &in_size) < 0) {
-				printf("%sioctl: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%sioctl: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
 			int out_size;
 			if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
-				printf("%sioctl: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%sioctl: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
@@ -369,22 +320,26 @@ void start_source(int s, const char *prefix, struct opts *opts)
 
 			len = sendmsg(s, &out_msg, out_flags);
 			if(len < 0) {
-				printf("%ssendmsg: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%ssendmsg: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
 			gettimeofday(&last_tx_tv, NULL);
-			last_tx = last_tx_tv.tv_sec * 1000000LL + last_tx_tv.tv_usec;
+			last_tx = last_tx_tv.tv_sec * 1000000LL +
+					last_tx_tv.tv_usec;
 
 			int in_size;
 			if(ioctl(s, SIOCINQ, &in_size) < 0) {
-				printf("%sioctl: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%sioctl: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
 			int out_size;
 			if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
-				printf("%sioctl: %s\n", prefix, strerror(errno));
+				fprintf(stderr,"%sioctl: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
@@ -425,7 +380,7 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 	int expected = -1;
 	for (i=0;;i++) {
 		if (poll(&polls, 1, -1) < 0) {
-			printf("%spoll: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%spoll: %s\n", prefix, strerror(errno));
 			exit(1);
 		}
 
@@ -438,32 +393,39 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 			len = recvmsg(s, &in_msg, 0);
 			if(len < 0) {
 				if (errno == ECONNRESET) {
-					printf("%sDL-RELEASE-INDICATION\n", prefix);
+					printf("%sDL-RELEASE-INDICATION\n",
+								prefix);
 					break;
 				} else if (errno == EALREADY) {
-					printf("%sDL-ESTABLISH-INDICATION\n", prefix);
+					printf("%sDL-ESTABLISH-INDICATION\n",
+						       		prefix);
 					continue;
 				} else if (errno == ENOTCONN) {
-					printf("%sDL-RELEASE-CONFIRM\n", prefix);
+					printf("%sDL-RELEASE-CONFIRM\n",
+								prefix);
 					continue;
 				} else if (errno == EISCONN) {
-					printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
+					printf("%sDL-ESTABLISH-CONFIRM\n",
+								prefix);
 					continue;
 				} else {
-					printf("%srecvmsg: %s\n", prefix, strerror(errno));
+					fprintf(stderr, "%srecvmsg: %s\n",
+						prefix, strerror(errno));
 					break;
 				}
 			}
 
 			int in_size;
 			if(ioctl(s, SIOCINQ, &in_size) < 0) {
-				printf("%sioctl: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%sioctl: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
 			int out_size;
 			if(ioctl(s, SIOCOUTQ, &out_size) < 0) {
-				printf("%sioctl: %s\n", prefix, strerror(errno));
+				fprintf(stderr, "%sioctl: %s\n",
+						prefix, strerror(errno));
 				exit(1);
 			}
 
@@ -499,7 +461,7 @@ void print_usage(const char *progname)
 "\n"
 "	sink:      Eat frames\n"
 "	source: Generate frames\n"
-"		[-a|--accept]               Enter accept-loop\n"
+"		[--listen]                  Enter accept-loop\n"
 "		[-t|--tei]                  Specify TEI\n"
 "		[-l|--length <length>]      Frame length\n"
 "		[-i|--interval <interval>]  Inter-frame delay interval\n"
@@ -511,8 +473,44 @@ void print_usage(const char *progname)
 	exit(1);
 }
 
-void start_accept_loop(int accept_socket, struct opts *opts)
+void start_accept_loop(int argc, char *argv[], struct opts *opts)
 {
+	printf("Opening listen socket... ");
+	int accept_socket = socket(PF_LAPD, SOCK_SEQPACKET, 0);
+	if (accept_socket < 0) {
+		fprintf(stderr, "socket: %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("OK\n");
+
+	if (opts->socket_debug) {
+		int on=1;
+
+		printf("Putting socket in debug mode... ");
+		if (setsockopt(accept_socket, SOL_SOCKET, SO_DEBUG,
+			             &on, sizeof(on)) < 0) {
+			fprintf(stderr, "setsockopt: %s\n", strerror(errno));
+			exit(1);
+		}
+		printf("OK\n");
+	}
+
+	printf("Binding to %s... ", opts->intf_name);
+	if (setsockopt(accept_socket, SOL_LAPD, SO_BINDTODEVICE,
+		             opts->intf_name, strlen(opts->intf_name)+1) < 0) {
+		fprintf(stderr, "setsockopt: %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("OK\n");
+
+	int role;
+	socklen_t optlen = sizeof(role);
+	if (getsockopt(accept_socket, SOL_LAPD, LAPD_INTF_ROLE,
+	    &role, &optlen)<0) {
+		fprintf(stderr, "getsockopt: %s\n", strerror(errno));
+		exit(1);
+	}
+
 	listen(accept_socket, 10);
 
 	struct pollfd polls;
@@ -523,15 +521,10 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 	int time_to_wait;
 
 	for (;;) {
-		if (opts->frame_type == FRAME_TYPE_UFRAME_BROADCAST) {
-			time_to_wait = opts->interval;
-			send_broadcast(accept_socket, "", opts);
-		} else {
-			time_to_wait = -1;
-		}
+		time_to_wait = -1;
 
 		if (poll(&polls, 1, time_to_wait) < 0) {
-			printf("poll: %s\n", strerror(errno));
+			fprintf(stderr, "poll: %s\n", strerror(errno));
 			exit(1);
 		}
 
@@ -544,7 +537,8 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 			s = accept(accept_socket, NULL, 0);
 
 			if (s < 0) {
-				printf("accept: %s\n", strerror(errno));
+				fprintf(stderr,
+					"accept: %s\n", strerror(errno));
 				exit(1);
 			}
 
@@ -552,7 +546,8 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 			socklen_t optlen = sizeof(tei);
 			if (getsockopt(s, SOL_LAPD, LAPD_TEI,
 			    &tei, &optlen)<0) {
-				printf("getsockopt: %s\n", strerror(errno));
+				fprintf(stderr,
+					"getsockopt: %s\n", strerror(errno));
 				exit(1);
 			}
 
@@ -574,11 +569,97 @@ void start_accept_loop(int accept_socket, struct opts *opts)
 				else if (opts->mode == MODE_NULL)
 					start_null(s, prefix, opts);
 			} else if (pid < 0) {
-				printf("fork: %s\n", strerror(errno));
+				fprintf(stderr, "fork: %s\n", strerror(errno));
 				exit(1);
 			}
 		}
 	}
+}
+
+void start_simple_loop(int argc, char *argv[], struct opts *opts)
+{
+	printf("Opening socket... ");
+	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
+	if (s < 0) {
+		fprintf(stderr, "socket: %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("OK\n");
+
+	if (opts->socket_debug) {
+		int on=1;
+
+		printf("Putting socket in debug mode... ");
+		if (setsockopt(s, SOL_SOCKET, SO_DEBUG,
+			             &on, sizeof(on)) < 0) {
+			fprintf(stderr, "setsockopt: %s\n", strerror(errno));
+			exit(1);
+		}
+		printf("OK\n");
+	}
+
+	printf("Binding to %s... ", opts->intf_name);
+	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
+		             opts->intf_name, strlen(opts->intf_name)+1) < 0) {
+		fprintf(stderr, "setsockopt: %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("OK\n");
+
+	int role;
+	socklen_t optlen = sizeof(role);
+	if (getsockopt(s, SOL_LAPD, LAPD_INTF_ROLE,
+	    &role, &optlen)<0) {
+		fprintf(stderr, "getsockopt: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	printf("Role... ");
+	if (role == LAPD_INTF_ROLE_TE) {
+		printf("TE\n");
+	} else if (role == LAPD_INTF_ROLE_NT) {
+		printf("NT\n");
+
+		if (opts->tei == LAPD_DYNAMIC_TEI) {
+			fprintf(stderr, "Please specify a TEI\n");
+			exit(1);
+		}
+	} else {
+		fprintf(stderr, "Unknown role %d\n", role);
+		exit(1);
+	}
+
+	printf("Binding TEI (%d)...", opts->tei);
+	struct sockaddr_lapd sal;
+	sal.sal_family = AF_LAPD;
+	sal.sal_tei = opts->tei;
+
+	if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
+		fprintf(stderr, "bind(): %s\n", strerror(errno));
+		exit(1);
+	}
+	printf("OK\n");
+
+	if (opts->frame_type == FRAME_TYPE_IFRAME) {
+		printf("Connecting...");
+		if (connect(s, NULL, 0) < 0) {
+			fprintf(stderr, "connect: %s %d\n",
+				strerror(errno), errno);
+			exit(1);
+		}
+		printf("OK\n");
+	}
+
+	if (opts->mode == MODE_LOOPBACK)
+		start_loopback(s, "", opts);
+	else if (opts->mode == MODE_SOURCE)
+		start_source(s, "", opts);
+	else if (opts->mode == MODE_SINK)
+		start_sink(s, "", opts);
+	else if (opts->mode == MODE_NULL)
+		start_null(s, "", opts);
+	else
+		print_usage(argv[0]);
 }
 
 int main(int argc, char *argv[])
@@ -595,7 +676,7 @@ int main(int argc, char *argv[])
 	opts.tei = LAPD_DYNAMIC_TEI;
 
 	struct option options[] = {
-		{ "accept", no_argument, 0, 0 },
+		{ "listen", no_argument, 0, 0 },
 		{ "tei", required_argument, 0, 0 },
 		{ "length", required_argument, 0, 0 },
 		{ "interval", required_argument, 0, 0 },
@@ -604,7 +685,6 @@ int main(int argc, char *argv[])
 		{ "loopback", no_argument, 0, 0 },
 		{ "null", no_argument, 0, 0 },
 		{ "uframe", no_argument, 0, 0 },
-		{ "broadcast", no_argument, 0, 0 },
 		{ "debug", no_argument, 0, 0 },
 		{ }
 	};
@@ -620,8 +700,8 @@ int main(int argc, char *argv[])
 			break;
 
 		if (c == 'a' || (c == 0 &&
-		    !strcmp(options[optidx].name, "accept"))) {
-			opts.accept = 1;
+		    !strcmp(options[optidx].name, "listen"))) {
+			opts.listen = 1;
 		} else if (c == 't' || (c == 0 &&
 		    !strcmp(options[optidx].name, "tei"))) {
 			opts.tei = atoi(optarg);
@@ -649,9 +729,6 @@ int main(int argc, char *argv[])
 		} else if (c == 'u' || (c == 0 &&
 		    !strcmp(options[optidx].name, "uframe"))) {
 			opts.frame_type = FRAME_TYPE_UFRAME;
-		} else if (c == 'b' || (c == 0 &&
-		    !strcmp(options[optidx].name, "broadcast"))) {
-			opts.frame_type = FRAME_TYPE_UFRAME_BROADCAST;
 		} else {
 			if (c)
 				fprintf(stderr,"Unknow option -%c\n", c);
@@ -672,85 +749,11 @@ int main(int argc, char *argv[])
 		print_usage(argv[0]);
 	}
 
-	printf("Opening socket... ");
-	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
-	if (s < 0) {
-		printf("socket: %s\n", strerror(errno));
-		exit(1);
-	}
-	printf("OK\n");
+	if (opts.listen)
+		start_accept_loop(argc, argv, &opts);
+	else
+		start_simple_loop(argc, argv, &opts);
 
-	if (opts.socket_debug) {
-		int on=1;
-
-		printf("Putting socket in debug mode... ");
-		if (setsockopt(s, SOL_SOCKET, SO_DEBUG,
-			             &on, sizeof(on)) < 0) {
-			printf("setsockopt: %s\n", strerror(errno));
-			exit(1);
-		}
-		printf("OK\n");
-	}
-
-	printf("Binding to %s... ", opts.intf_name);
-	if (setsockopt(s, SOL_LAPD, SO_BINDTODEVICE,
-		             opts.intf_name, strlen(opts.intf_name)+1) < 0) {
-		printf("setsockopt: %s\n", strerror(errno));
-		exit(1);
-	}
-	printf("OK\n");
-
-	int role;
-	socklen_t optlen = sizeof(role);
-	if (getsockopt(s, SOL_LAPD, LAPD_INTF_ROLE,
-	    &role, &optlen)<0) {
-		printf("getsockopt: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	printf("Binding TEI (%d)...", opts.tei);
-	struct sockaddr_lapd sal;
-	sal.sal_family = AF_LAPD;
-	sal.sal_tei = opts.tei;
-
-	if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
-		printf("bind(): %s\n", strerror(errno));
-		exit(1);
-	}
-	printf("OK\n");
-
-	printf("Role... ");
-	if (role == LAPD_INTF_ROLE_TE) {
-		printf("TE\n");
-	} else if (role == LAPD_INTF_ROLE_NT) {
-		printf("NT\n");
-	} else
-		printf("Unknown role %d\n", role);
-
-	if (opts.accept) {
-		start_accept_loop(s, &opts);
-	} else {
-		if (opts.frame_type == FRAME_TYPE_IFRAME) {
-			printf("Connecting...");
-			if (connect(s, NULL, 0) < 0) {
-				printf("connect: %s %d\n",
-					strerror(errno), errno);
-				exit(1);
-			}
-			printf("OK\n");
-		}
-
-		if (opts.mode == MODE_LOOPBACK)
-			start_loopback(s, "", &opts);
-		else if (opts.mode == MODE_SOURCE)
-			start_source(s, "", &opts);
-		else if (opts.mode == MODE_SINK)
-			start_sink(s, "", &opts);
-		else if (opts.mode == MODE_NULL)
-			start_null(s, "", &opts);
-		else
-			print_usage(argv[0]);
-	}
 
 	return 0;
 }
