@@ -2,6 +2,24 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-01 11:43:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-572
+
+    Summary:
+      Added new documents
+    Revision:
+      isdn--devel--0.1--patch-572
+
+
+    new files:
+     docs/.arch-ids/visdn_echo_canceller_state_machine.odg.id
+     docs/.arch-ids/visdn_overlap_dialing_flow.odg.id
+     docs/visdn_echo_canceller_state_machine.odg
+     docs/visdn_overlap_dialing_flow.odg
+
+    modified files:
+     ChangeLog
+
+
 2006-03-01 02:06:42 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-571
 
     Summary:
