@@ -12,7 +12,7 @@ exten => _.,1,Dial(VISDN/visdn1.0/${EXTEN})
 ; overlap dialing is supported by the dialed channel:
 
 exten => _.,1,Macro(telcobri_out|${EXTEN})
-exten => _o-.,1,Macro(telcobri_out|${EXTEN}:2)
+exten => _o-.,1,Macro(telcobri_out|${EXTEN:2})
 
 [macro-telcobri_out]
 exten => s,1,SetCallerID(12345000)	; Set the MSN to be used
