@@ -63,7 +63,6 @@ void send_broadcast(int s, const char *prefix, struct opts *opts)
 {
 	struct msghdr msg;
 	struct cmsghdr cmsg;
-	struct sockaddr_lapd sal;
 	struct iovec iov;
 
 	__u8 frame[65536];
@@ -71,8 +70,8 @@ void send_broadcast(int s, const char *prefix, struct opts *opts)
 	iov.iov_base = frame;
 	iov.iov_len = opts->frame_size;
 
-	msg.msg_name = &sal;
-	msg.msg_namelen = sizeof(sal);
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = &cmsg;
@@ -125,7 +124,6 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 	struct msghdr msg_in;
 	struct cmsghdr cmsg_in;
 	struct iovec iov_in;
-	struct sockaddr_lapd sal_in;
 
 	struct msghdr msg_out;
 	struct cmsghdr cmsg_out;
@@ -136,8 +134,8 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 	iov_in.iov_base = frame;
 	iov_in.iov_len = sizeof(frame);
 
-	msg_in.msg_name = &sal_in;
-	msg_in.msg_namelen = sizeof(sal_in);
+	msg_in.msg_name = NULL;
+	msg_in.msg_namelen = 0;
 	msg_in.msg_iov = &iov_in;
 	msg_in.msg_iovlen = 1;
 	msg_in.msg_control = &cmsg_in;
@@ -242,15 +240,14 @@ void start_source(int s, const char *prefix, struct opts *opts)
 
 	struct msghdr in_msg;
 	struct cmsghdr in_cmsg;
-	struct sockaddr_lapd in_sal;
 	struct iovec in_iov;
 	__u8 in_frame[65536];
 
 	in_iov.iov_base = in_frame;
 	in_iov.iov_len = sizeof(in_frame);
 
-	in_msg.msg_name = &in_sal;
-	in_msg.msg_namelen = sizeof(in_sal);
+	in_msg.msg_name = NULL;
+	in_msg.msg_namelen = 0;
 	in_msg.msg_iov = &in_iov;
 	in_msg.msg_iovlen = 1;
 	in_msg.msg_control = &in_cmsg;
@@ -405,15 +402,14 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 
 	struct msghdr in_msg;
 	struct cmsghdr in_cmsg;
-	struct sockaddr_lapd in_sal;
 	struct iovec in_iov;
 	__u8 in_frame[65536];
 
 	in_iov.iov_base = in_frame;
 	in_iov.iov_len = sizeof(in_frame);
 
-	in_msg.msg_name = &in_sal;
-	in_msg.msg_namelen = sizeof(in_sal);
+	in_msg.msg_name = NULL;
+	in_msg.msg_namelen = 0;
 	in_msg.msg_iov = &in_iov;
 	in_msg.msg_iovlen = 1;
 	in_msg.msg_control = &in_cmsg;
@@ -596,6 +592,7 @@ int main(int argc, char *argv[])
 	opts.frame_type = FRAME_TYPE_IFRAME;
 	opts.frame_size = 100;
 	opts.interval = 1000;
+	opts.tei = LAPD_DYNAMIC_TEI;
 
 	struct option options[] = {
 		{ "accept", no_argument, 0, 0 },
@@ -711,10 +708,10 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	printf("Binding TEI...");
+	printf("Binding TEI (%d)...", opts.tei);
 	struct sockaddr_lapd sal;
 	sal.sal_family = AF_LAPD;
-	sal.sal_tei = LAPD_DYNAMIC_TEI;
+	sal.sal_tei = opts.tei;
 
 	if (bind(s, (struct sockaddr *)&sal, sizeof(sal)) < 0) {
 		printf("bind(): %s\n", strerror(errno));
