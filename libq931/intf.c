@@ -73,8 +73,13 @@ try_again:
 int q931_open_socket(struct q931_interface *intf)
 {
 	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
-	if (s < 0)
+	if (s < 0) {
+		report_intf(intf, LOG_ERR,
+			"socket(PF_LAPD, ...): %s\n",
+			strerror(errno));
+
 		goto err_socket;
+	}
 
 	if (intf->flags & Q931_INTF_FLAGS_DEBUG) {
 		int on=1;
