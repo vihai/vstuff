@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-06 09:50:56 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-582
+
+    Summary:
+      Fixed timers T1 and T3 usage in hfc-pci and hfc-4s
+    Revision:
+      isdn--devel--0.1--patch-582
+
+
+    modified files:
+     ChangeLog TODO modules/hfc-4s/st_port.c
+     modules/hfc-pci/st_port.c
+
+
 2006-03-02 18:58:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-581
 
     Summary:

@@ -163,6 +163,7 @@ hfc-usb:
 --------
 
 - First received frame is dropped
+- Implement T1 and T3 timers
 
 vgsm:
 -----

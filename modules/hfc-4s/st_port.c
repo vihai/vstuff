@@ -125,6 +125,14 @@ static ssize_t hfc_store_l1_state(
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
 		hfc_outb(card, hfc_A_ST_WR_STA,
 			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION);
+
+		if (port->nt_mode)
+			mod_timer(&port->timer_t1,
+				jiffies + port->timer_t1_value);
+		else
+			mod_timer(&port->timer_t3,
+				jiffies + port->timer_t3_value);
+
 	} else if (count >= 10 && !strncmp(buf, "deactivate", 10)) {
 		hfc_outb(card, hfc_A_ST_WR_STA,
 			hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION);
@@ -442,6 +450,9 @@ static void hfc_st_port_state_change_nt(
 	break;
 
 	case 2:
+		mod_timer(&port->timer_t1,
+			jiffies + port->timer_t1_value);
+
 		/* Allow transition from G2 to G3 */
 		hfc_outb(card, hfc_A_ST_WR_STA, hfc_A_ST_WR_STA_V_SET_G2_G3);
 
@@ -454,6 +465,8 @@ static void hfc_st_port_state_change_nt(
 	break;
 
 	case 3:
+		del_timer(&port->timer_t1);
+
 		visdn_port_activated(&port->visdn_port);
 
 		schedule_delayed_work(&port->fifo_activation_work,
@@ -515,6 +528,8 @@ static void hfc_st_port_state_change_te(
 
 		if (old_state == 6 || old_state == 8)
 			visdn_port_error_indication(&port->visdn_port);
+
+		del_timer(&port->timer_t3);
 	break;
 	}
 }
@@ -823,6 +838,9 @@ void hfc_st_port_unregister(
 	struct hfc_st_port *port)
 {
 	struct visdn_port_attribute **attr = hfc_st_port_attributes;
+
+	del_timer_sync(&port->timer_t1);
+	del_timer_sync(&port->timer_t3);
 
 	while(*attr) {
 		visdn_port_remove_file(
