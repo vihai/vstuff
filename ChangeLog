@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-10 17:01:06 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-587
+
+    Summary:
+      Added HST PCI ID for HFC-4S based cards
+    Revision:
+      isdn--devel--0.1--patch-587
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/hfc-4s_main.c modules/hfc-4s/util.h
+
+
 2006-03-10 15:38:41 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-586
 
     Summary:

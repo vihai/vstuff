@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -44,6 +44,22 @@ int debug_level = 0;
 #endif
 #endif
 
+#ifndef PCI_DEVICE_ID_CCD_HFC_4S
+#define PCI_DEVICE_ID_CCD_HFC_4S	0x08b4
+#endif
+
+#ifndef PCI_DEVICE_ID_CCD_HFC_8S
+#define PCI_DEVICE_ID_CCD_HFC_8S	0x16B8
+#endif
+
+#ifndef PCI_VENDOR_ID_HST
+#define PCI_VENDOR_ID_HST		0x136a
+#endif
+
+#ifndef PCI_VENDOR_ID_HST_HFC_4S
+#define PCI_VENDOR_ID_HST_HFC_4S 	0x0007
+#endif
+
 static struct pci_device_id hfc_pci_ids[] = {
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
 		PCI_ANY_ID, 0xb520, 0, 0,
@@ -53,6 +69,13 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.ram_size = 32,
 			 }},
 	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+		(unsigned long)&(struct hfc_card_config) {
+			.double_clock = 0,
+			.quartz_49 = 0,
+			.ram_size = 32,
+			 }},
+	{PCI_VENDOR_ID_HST, PCI_VENDOR_ID_HST_HFC_4S,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
 		(unsigned long)&(struct hfc_card_config) {
 			.double_clock = 0,

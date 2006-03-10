@@ -42,14 +42,6 @@
 #define PCI_DMA_32BIT	0x00000000ffffffffULL
 #endif
 
-#ifndef PCI_DEVICE_ID_CCD_HFC_4S
-#define PCI_DEVICE_ID_CCD_HFC_4S	0x08b4
-#endif
-
-#ifndef PCI_DEVICE_ID_CCD_HFC_8S
-#define PCI_DEVICE_ID_CCD_HFC_8S	0x16B8
-#endif
-
 #define hfc_PCI_MEM_SIZE	0x1000
 
 typedef char BOOL;
