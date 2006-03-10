@@ -54,6 +54,8 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 
+		q931_call_get(call);
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -63,6 +65,8 @@ void q931_dl_establish_confirm(struct q931_dlc *dlc)
 
 		if (call->dlc == dlc)
 			q931_call_dl_establish_confirm(call);
+
+		q931_call_put(call);
 	}
 
 	q931_flush_outgoing_queue(dlc);
@@ -85,6 +89,8 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 
+		q931_call_get(call);
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -94,6 +100,8 @@ void q931_dl_establish_indication(struct q931_dlc *dlc)
 
 		if (call->dlc == dlc)
 			q931_call_dl_establish_indication(call);
+
+		q931_call_put(call);
 	}
 
 	q931_flush_outgoing_queue(dlc);
@@ -108,6 +116,8 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 
+		q931_call_get(call);
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -117,6 +127,8 @@ void q931_dl_release_confirm(struct q931_dlc *dlc)
 
 		if (call->dlc == dlc)
 			q931_call_dl_release_confirm(call);
+
+		q931_call_put(call);
 	}
 }
 
@@ -129,6 +141,8 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 	struct q931_call *call, *callt;
 	list_for_each_entry_safe(call, callt, &dlc->intf->calls, calls_node) {
 
+		q931_call_get(call);
+
 		struct q931_ces *ces, *cest;
 		list_for_each_entry_safe(ces, cest, &call->ces, node) {
 
@@ -138,6 +152,8 @@ void q931_dl_release_indication(struct q931_dlc *dlc)
 
 		if (call->dlc == dlc)
 			q931_call_dl_release_indication(call);
+
+		q931_call_put(call);
 	}
 }
 
