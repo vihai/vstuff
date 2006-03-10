@@ -881,6 +881,14 @@ llc_failure:;
 						ast_chan->cid.cid_num,
 						sizeof(cgpn->number));
 				}
+
+				if (ast_chan->cid.cid_name) {
+					struct q931_ie_display *disp =
+						q931_ie_display_alloc();
+					strcpy(disp->text,
+						ast_chan->cid.cid_name);
+					q931_ies_add_put(&ies, &disp->ie);
+				}
 			} else {
 				cgpn->type_of_number =
 					Q931_IE_CGPN_TON_UNKNOWN;
