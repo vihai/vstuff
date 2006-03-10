@@ -63,8 +63,11 @@ static ssize_t hfc_show_rx_fifo_size(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-		(chan->rx_fifo->size));
+	if (chan->rx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				chan->rx_fifo->size);
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 
 }
 
@@ -80,13 +83,13 @@ static ssize_t hfc_show_rx_fifo_used(
 	char *buf)
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
-	int fifo_used;
 
-	hfc_card_lock(chan->port->card);
-	fifo_used = hfc_fifo_used_rx(chan->rx_fifo);
-	hfc_card_unlock(chan->port->card);
+	if (chan->rx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				hfc_fifo_used_rx(chan->rx_fifo));
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", fifo_used);
 }
 
 static ssize_t hfc_store_rx_fifo_used(
@@ -98,7 +101,8 @@ static ssize_t hfc_store_rx_fifo_used(
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
 	hfc_card_lock(chan->port->card);
-	hfc_fifo_reset(chan->rx_fifo);
+	if (chan->rx_fifo)
+		hfc_fifo_reset(chan->rx_fifo);
 	hfc_card_unlock(chan->port->card);
 
 	return count;
@@ -117,7 +121,11 @@ static ssize_t hfc_show_rx_fifo_min(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", chan->rx_fifo->stats_min);
+	if (chan->rx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				chan->rx_fifo->stats_min);
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 }
 
 static VISDN_CHAN_ATTR(rx_fifo_min, S_IRUGO,
@@ -132,7 +140,11 @@ static ssize_t hfc_show_rx_fifo_max(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", chan->rx_fifo->stats_max);
+	if (chan->rx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				chan->rx_fifo->stats_max);
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 }
 
 static VISDN_CHAN_ATTR(rx_fifo_max, S_IRUGO,
@@ -147,9 +159,11 @@ static ssize_t hfc_show_tx_fifo_size(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-		(chan->tx_fifo->size));
-
+	if (chan->tx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				chan->tx_fifo->size);
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 }
 
 static VISDN_CHAN_ATTR(tx_fifo_size, S_IRUGO,
@@ -165,13 +179,11 @@ static ssize_t hfc_show_tx_fifo_used(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	int fifo_used;
-
-	hfc_card_lock(chan->port->card);
-	fifo_used = hfc_fifo_used_rx(chan->tx_fifo);
-	hfc_card_unlock(chan->port->card);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", fifo_used);
+	if (chan->tx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				hfc_fifo_used_tx(chan->tx_fifo));
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 }
 
 static ssize_t hfc_store_tx_fifo_used(
@@ -183,7 +195,8 @@ static ssize_t hfc_store_tx_fifo_used(
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
 	hfc_card_lock(chan->port->card);
-	hfc_fifo_reset(chan->tx_fifo);
+	if (chan->tx_fifo)
+		hfc_fifo_reset(chan->tx_fifo);
 	hfc_card_unlock(chan->port->card);
 
 	return count;
@@ -202,7 +215,11 @@ static ssize_t hfc_show_tx_fifo_min(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", chan->tx_fifo->stats_min);
+	if (chan->tx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				chan->tx_fifo->stats_min);
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 }
 
 static VISDN_CHAN_ATTR(tx_fifo_min, S_IRUGO,
@@ -217,7 +234,11 @@ static ssize_t hfc_show_tx_fifo_max(
 {
 	struct hfc_st_chan *chan = to_st_chan(visdn_chan);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", chan->tx_fifo->stats_max);
+	if (chan->tx_fifo)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				chan->tx_fifo->stats_max);
+	else
+		return snprintf(buf, PAGE_SIZE, "\n");
 }
 
 static VISDN_CHAN_ATTR(tx_fifo_max, S_IRUGO,
