@@ -306,6 +306,50 @@ tme_found:
 	return;
 }
 
+void lapd_utme_assign_static_tei(struct lapd_utme *tme, u8 tei)
+{
+	int i;
+
+	spin_lock_bh(&tme->lock);
+
+	lapd_msg_tme(tme, KERN_INFO,
+		"static TEI %u assigned\n",
+		tei);
+
+	tme->tei_request_pending = FALSE;
+	tme->tei_request_ri = 0;
+	tme->tei = tei;
+
+	lapd_utme_change_state(tme, LAPD_TME_TEI_ASSIGNED);
+
+	lapd_utme_stop_timer(tme, &tme->T202_timer);
+
+	read_lock_bh(&lapd_hash_lock);
+
+	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
+		struct sock *sk;
+		struct hlist_node *node;
+
+		sk_for_each(sk, node, &lapd_hash[i]) {
+			struct lapd_sock *lapd_sock =
+				to_lapd_sock(sk);
+
+			if (lapd_sock->dev &&
+			    lapd_sock->dev->role ==
+					LAPD_INTF_ROLE_TE &&
+			    lapd_sock->usr_tme == tme) {
+				lapd_mdl_primitive(
+					lapd_sock,
+					LAPD_MDL_ASSIGN_REQUEST,
+					tme->tei);
+			}
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+
+	spin_unlock_bh(&tme->lock);
+}
+
 static void lapd_utme_handle_tei_denied(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);

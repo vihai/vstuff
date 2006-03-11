@@ -74,5 +74,6 @@ struct lapd_utme *lapd_utme_alloc(struct lapd_device *dev);
 int lapd_utme_handle_frame(struct sk_buff *skb);
 void lapd_utme_mdl_assign_indication(struct lapd_utme *tme);
 void lapd_utme_tei_remove(struct lapd_utme *tme);
+void lapd_utme_assign_static_tei(struct lapd_utme *tme, u8 tei);
 
 #endif

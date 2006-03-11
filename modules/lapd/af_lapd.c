@@ -1503,7 +1503,9 @@ static int lapd_bind(
 
 		sk->sk_state = TCP_SYN_SENT;
 
-	} else  if (sal->sal_tei == LAPD_DYNAMIC_TEI) {
+	} else  if (sal->sal_tei == LAPD_DYNAMIC_TEI ||
+		  (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
+	           sal->sal_tei <= LAPD_MAX_STA_TEI)) {
 
 		if (lapd_sock->dev->role == LAPD_INTF_ROLE_NT) {
 			err = -EINVAL;
@@ -1512,8 +1514,10 @@ static int lapd_bind(
 
 		lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
 
-		if (!lapd_sock->usr_tme)
-			lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
+		if (lapd_sock->usr_tme)
+			lapd_utme_put(lapd_sock->usr_tme);
+
+		lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
 
 		read_lock_bh(&lapd_utme_hash_lock);
 		hlist_add_head(&lapd_utme_get(lapd_sock->usr_tme)->node,
@@ -1522,21 +1526,15 @@ static int lapd_bind(
 
 		sk->sk_state = TCP_ESTABLISHED;
 
-	} else if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
-	           sal->sal_tei <= LAPD_MAX_STA_TEI) {
-
-		if (lapd_sock->usr_tme)
-			lapd_utme_put(lapd_sock->usr_tme);
-
-		lapd_sock->usr_tme = NULL; 
-		lapd_sock->tei = sal->sal_tei;
-		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
-
-		sk->sk_state = TCP_ESTABLISHED;
+		if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
+		    sal->sal_tei <= LAPD_MAX_STA_TEI)
+			lapd_utme_assign_static_tei(
+				lapd_sock->usr_tme, sal->sal_tei);
 	} else {
 		err = -EINVAL;
 		goto err_inv_tei;
 	}
+
 /*
 	struct sock *othersk = NULL;
 	struct hlist_node *node;
