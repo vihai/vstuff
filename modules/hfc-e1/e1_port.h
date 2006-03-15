@@ -54,7 +54,6 @@ struct hfc_e1_port
 	struct hfc_e1_chan chans[32];
 
 	struct work_struct state_change_work;
-	struct work_struct fifo_activation_work;
 	struct work_struct counters_update_work;
 
 	struct visdn_port visdn_port;

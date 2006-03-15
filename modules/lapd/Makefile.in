@@ -2,10 +2,10 @@
 subdir = modules/lapd
 MODULE = lapd
 
-SOURCES = af_lapd.c lapd_dev.c lapd_in.c lapd_out.c datalink.c \
+SOURCES = af_lapd.c device.c input.c output.c datalink.c \
 	tei_mgmt.c tei_mgmt_nt.c tei_mgmt_te.c
-DIST_HEADERS = lapd.h lapd_in.h lapd_out.h lapd_proto.h lapd_dev.h datalink.h  \
-	tei_mgmt.h tei_mgmt_nt.h tei_mgmt_te.h
+DIST_HEADERS = lapd.h input.h output.h proto.h device.h datalink.h  \
+	tei_mgmt.h tei_mgmt_nt.h tei_mgmt_te.h sock_inline.h
 DIST_COMMON = Makefile.in
 DIST_SOURCES = $(SOURCES)
 

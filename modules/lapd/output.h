@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,7 +13,10 @@
 #ifndef _LAPD_OUT_H
 #define _LAPD_OUT_H
 
-#include "lapd_proto.h"
+#include "proto.h"
+
+void lapd_out_queue_flush(struct lapd_device *dev);
+void lapd_out_queue_drop(struct lapd_device *dev);
 
 int lapd_send_iframe(struct lapd_sock *lapd_sock, u8 sapi, u8 tei,
 	void *data, int datalen);
@@ -33,5 +36,8 @@ int lapd_send_uframe(struct lapd_sock *lapd_sock,
 	void *data, int datalen);
 
 int lapd_send_frame(struct sk_buff *skb);
+
+void lapd_out_init(void);
+void lapd_out_exit(void);
 
 #endif

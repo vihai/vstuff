@@ -72,7 +72,7 @@ try_again:
 
 int q931_open_socket(struct q931_interface *intf)
 {
-	int s = socket(PF_LAPD, SOCK_SEQPACKET, 0);
+	int s = socket(PF_LAPD, SOCK_SEQPACKET, LAPD_SAPI_Q931);
 	if (s < 0) {
 		report_intf(intf, LOG_ERR,
 			"socket(PF_LAPD, ...): %s\n",
@@ -106,7 +106,6 @@ int q931_open_socket(struct q931_interface *intf)
 			strerror(errno));
 
 		goto err_fcntl_getfl;
-		goto err_fcntl_setfl;
 	}
 
 	if (fcntl(s, F_SETFL, oldflags | O_NONBLOCK) < 0) {

@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -18,11 +18,13 @@
 #include <linux/tcp.h>
 
 #include "lapd.h"
-#include "lapd_in.h"
-#include "lapd_out.h"
+#include "input.h"
+#include "output.h"
+#include "device.h"
 #include "tei_mgmt_nt.h"
 #include "tei_mgmt_te.h"
 #include "datalink.h"
+#include "sock_inline.h"
 
 /*****************+
  * WARNING: this function may be called under lapd_hash_lock and acquires
@@ -37,7 +39,7 @@ int lapd_backlog_rcv(
 {
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
-	if (!lapd_process_frame(lapd_sock, skb))
+	if (!lapd_dlc_recv(lapd_sock, skb))
 		kfree_skb(skb);
 
 	return 0;
@@ -53,7 +55,7 @@ static int lapd_pass_frame_to_socket(
 	lapd_bh_lock_sock(lapd_sock);
 
 	if (!sock_owned_by_user(&lapd_sock->sk)) {
-		queued = lapd_process_frame(lapd_sock, skb);
+		queued = lapd_dlc_recv(lapd_sock, skb);
 	} else {
 		sk_add_backlog(&lapd_sock->sk, skb);
 		queued = 1;
@@ -245,16 +247,8 @@ static inline int lapd_pass_frame_to_socket_te(
 		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
 		if (lapd_sock->dev == dev &&
-		    (lapd_sock->state ==
-			LAPD_DLS_4_TEI_ASSIGNED ||
-		     lapd_sock->state ==
-			LAPD_DLS_5_AWAITING_ESTABLISH ||
-		     lapd_sock->state ==
-			LAPD_DLS_6_AWAITING_RELEASE ||
-		     lapd_sock->state ==
-			LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED ||
-		     lapd_sock->state ==
-			LAPD_DLS_8_TIMER_RECOVERY) &&
+		    (sk->sk_state == LAPD_SK_STATE_NORMAL_DLC ||
+		    sk->sk_state == LAPD_SK_STATE_BROADCAST_DLC) &&
 		    lapd_sock->sapi == hdr->addr.sapi &&
 		    lapd_sock->tei == hdr->addr.tei) {
 
@@ -341,6 +335,183 @@ int lapd_rcv(
 err_small_frame:
 err_improper_ea:
 err_pskb_may_pull:
+err_share_check:
+	kfree_skb(skb);
+not_ours:
+
+	return 0;
+}
+
+void lapd_ph_activate_indication(struct lapd_device *dev)
+{
+	lapd_debug_dev(dev, "PH-ACTIVATE-INDICATION\n");
+
+	dev->l1_state = LAPD_L1_STATE_AVAILABLE;
+
+	lapd_out_queue_flush(dev);
+}
+
+void lapd_ph_deactivate_indication(struct lapd_device *dev)
+{
+	struct sock *sk;
+	struct hlist_node *node;
+
+	lapd_debug_dev(dev, "PH-DEACTIVATE-INDICATION\n");
+
+	dev->l1_state = LAPD_L1_STATE_UNAVAILABLE;
+
+	read_lock_bh(&lapd_hash_lock);
+
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
+		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+		if (lapd_sock->dev == dev &&
+		    sk->sk_state == LAPD_SK_STATE_NORMAL_DLC) {
+
+			lapd_mdl_primitive(
+				lapd_sock,
+				LAPD_MDL_PERSISTENT_DEACTIVATION, 0);
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+
+}
+
+static int lapd_mgmt_queue_primitive(
+	struct lapd_sock *lapd_sock,
+	struct sk_buff *skb)
+{
+	int skb_len = skb->len;
+
+	skb_set_owner_r(skb, &lapd_sock->sk);
+
+	skb_queue_tail(&lapd_sock->sk.sk_receive_queue, skb);
+
+	if (!sock_flag(&lapd_sock->sk, SOCK_DEAD))
+		lapd_sock->sk.sk_data_ready(&lapd_sock->sk, skb_len);
+
+	return TRUE;
+}
+
+int lapd_mgmt_backlog_rcv(
+	struct sock *sk,
+	struct sk_buff *skb)
+{
+	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+	if (!lapd_mgmt_queue_primitive(lapd_sock, skb))
+		kfree_skb(skb);
+
+	return 0;
+}
+
+static int lapd_mgmt_rcv_primitive(struct sk_buff *skb)
+{
+	struct sock *sk;
+	struct hlist_node *node;
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
+	int queued = FALSE;
+
+	read_lock_bh(&lapd_hash_lock);
+
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
+		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+		if (lapd_sock->dev == dev &&
+		    sk->sk_state == LAPD_SK_STATE_MGMT) {
+
+			struct sk_buff *new_skb;
+
+			if (!queued) {
+				new_skb = skb;
+				queued = TRUE;
+			} else {
+				new_skb = skb_clone(skb, GFP_ATOMIC);
+			}
+
+			new_skb->sk = sk;
+
+			lapd_bh_lock_sock(lapd_sock);
+
+			if (!sock_owned_by_user(&lapd_sock->sk)) {
+				queued = lapd_mgmt_queue_primitive(lapd_sock,
+									skb);
+			} else {
+				sk_add_backlog(&lapd_sock->sk, skb);
+				queued = TRUE;
+			}
+
+			lapd_bh_unlock_sock(lapd_sock);
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+
+	return queued;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
+int lapd_ctrl_rcv(
+	struct sk_buff *skb,
+	struct net_device *in_dev,
+	struct packet_type *pt)
+#else
+int lapd_ctrl_rcv(
+	struct sk_buff *skb,
+	struct net_device *in_dev,
+	struct packet_type *pt,
+	struct net_device *orig_dev)
+#endif
+{
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
+	struct lapd_ctrl_header *hdr;
+
+	/* Ignore frames not destined to us */
+	if (skb->pkt_type != PACKET_HOST)
+		goto not_ours;
+
+	/* Don't mangle buffer if shared */
+	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
+		goto err_share_check;
+
+	if (skb->len < sizeof(struct lapd_ctrl_header))
+		goto err_small_frame;
+
+	/* Size check and make sure header is contiguous */
+	if (!pskb_may_pull(skb, sizeof(struct lapd_ctrl_header)))
+		goto err_pskb_may_pull;
+
+	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+
+	hdr = (struct lapd_ctrl_header *)skb->data;
+
+	switch(hdr->primitive_type) {
+	case LAPD_PH_ACTIVATE_INDICATION:
+		lapd_ph_activate_indication(dev);
+		kfree_skb(skb);
+	break;
+
+	case LAPD_PH_DEACTIVATE_INDICATION:
+		lapd_ph_deactivate_indication(dev);
+		kfree_skb(skb);
+	break;
+
+	case LAPD_MPH_ERROR_INDICATION:
+	case LAPD_MPH_ACTIVATE_INDICATION:
+	case LAPD_MPH_DEACTIVATE_INDICATION:
+	case LAPD_MPH_INFORMATION_INDICATION:
+		if (!lapd_mgmt_rcv_primitive(skb))
+			kfree_skb(skb);
+	break;
+	}
+
+	if (hdr->primitive_type == LAPD_MPH_INFORMATION_INDICATION &&
+	    hdr->param1 == LAPD_MPH_II_DISCONNECTED)
+		lapd_utme_remove_tei(dev, LAPD_BROADCAST_TEI);
+
+	return 0;
+
+err_pskb_may_pull:
+err_small_frame:
 err_share_check:
 	kfree_skb(skb);
 not_ours:

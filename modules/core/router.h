@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -16,10 +16,23 @@
 #include <kernel_config.h>
 
 /* See core.h for IOC allocation */
-#define VISDN_IOC_CONNECT_PATH		_IOR(0xd0, 0x04, unsigned int)
-#define VISDN_IOC_DISCONNECT_PATH	_IOR(0xd0, 0x05, unsigned int)
-#define VISDN_IOC_ENABLE_PATH		_IOR(0xd0, 0x06, unsigned int)
-#define VISDN_IOC_DISABLE_PATH		_IOR(0xd0, 0x07, unsigned int)
+#define VISDN_IOC_CONNECT		_IOR(0xd0, 0x02, unsigned int)
+#define VISDN_IOC_DISCONNECT		_IOR(0xd0, 0x03, unsigned int)
+#define VISDN_IOC_DISCONNECT_ENDPOINT	_IOR(0xd0, 0x04, unsigned int)
+#define VISDN_IOC_ENABLE_PATH		_IOR(0xd0, 0x05, unsigned int)
+#define VISDN_IOC_DISABLE_PATH		_IOR(0xd0, 0x06, unsigned int)
+
+struct visdn_connect
+{
+	int path_id;
+
+	int src_chan_id;
+	int dst_chan_id;
+
+	int flags;
+};
+
+#define VISDN_CONNECT_FLAG_PERMANENT	(1 << 0)
 
 #ifdef __KERNEL__
 
@@ -56,35 +69,11 @@ extern void visdn_router_del_node(struct visdn_router_node *node);
 extern void visdn_router_add_arch(struct visdn_router_arch *arch);
 extern void visdn_router_del_arch(struct visdn_router_arch *arch);
 
-struct visdn_chan;
+void visdn_router_run(struct visdn_router_node *start);
+void visdn_router_print_node_name(struct visdn_router_node *node);
 
-extern int visdn_connect_path(
-	struct visdn_chan *src_chan,
-	struct visdn_chan *dst_chan,
-	struct file *file,
-	unsigned long flags);
-
-extern int visdn_connect_path_with_id(
-	int chan1_id,
-	int chan2_id,
-	struct file *file,
-	unsigned long flags);
-
-extern int visdn_disconnect_path(
-	struct visdn_chan *src_chan);
-extern int visdn_disconnect_path_with_id(
-	int chan1_id);
-
-extern int visdn_enable_path(
-	struct visdn_chan *src_chan);
-extern int visdn_enable_path_with_id(
-	int chan1_id);
-
-extern int visdn_disable_path(
-	struct visdn_chan *src_chan);
-extern int visdn_disable_path_with_id(
-	int chan1_id);
-extern int visdn_find_lowest_mtu(struct visdn_leg *leg);
+void visdn_router_lock(void);
+void visdn_router_unlock(void);
 
 #endif
 

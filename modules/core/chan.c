@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -224,6 +224,8 @@ int visdn_chan_register(struct visdn_chan *chan)
 	if (err < 0)
 		goto err_kobject_add;
 
+	BUG_ON(chan->leg_b.cxc && !chan->leg_a.cxc);
+
 	/*----------- LEG A -------*/
 
 	kobject_init(&chan->leg_a.kobj);
@@ -320,7 +322,7 @@ int visdn_chan_register(struct visdn_chan *chan)
 			goto err_create_link_name;
 	}
 
-	visdn_call_notifiers(VISDN_NOTIFY_CHAN_REGISTERED, chan);
+	visdn_call_notifiers(VISDN_EVENT_CHAN_REGISTERED, chan);
 
 	return 0;
 
@@ -368,7 +370,7 @@ void visdn_chan_unregister(
 	visdn_debug(3, "visdn_chan_unregister(%06d) called\n",
 		chan->id);
 
-	visdn_call_notifiers(VISDN_NOTIFY_CHAN_UNREGISTERED, chan);
+	visdn_call_notifiers(VISDN_EVENT_CHAN_UNREGISTERED, chan);
 
 	if (strcmp(chan->name, chan->kobj.name))
 		sysfs_remove_link(&chan->port->kobj, chan->name);
@@ -460,7 +462,7 @@ int visdn_chan_enable(struct visdn_chan *chan)
 			return err;
 		}
 
-		visdn_call_notifiers(VISDN_NOTIFY_CHAN_ENABLED, chan);
+		visdn_call_notifiers(VISDN_EVENT_CHAN_ENABLED, chan);
 	}
 
 	return 0;
@@ -477,7 +479,7 @@ int visdn_chan_disable(struct visdn_chan *chan)
 		if (err < 0)
 			return err;
 
-		visdn_call_notifiers(VISDN_NOTIFY_CHAN_DISABLED, chan);
+		visdn_call_notifiers(VISDN_EVENT_CHAN_DISABLED, chan);
 	}
 
 	return 0;
@@ -620,7 +622,7 @@ struct kobj_type ktype_visdn_chan = {
 	.default_attrs	= visdn_chan_default_attrs,
 };
 
-decl_subsys(visdn_channels, &ktype_visdn_chan, NULL);
+decl_subsys_name(visdn_channels, channels, &ktype_visdn_chan, NULL);
 
 int visdn_chan_create_file(
 	struct visdn_chan *chan,
@@ -651,6 +653,8 @@ EXPORT_SYMBOL(visdn_chan_remove_file);
 int visdn_chan_modinit(void)
 {
 	int err;
+
+	visdn_channels_subsys.kset.kobj.parent = &visdn_subsys.kset.kobj;
 
 	err = subsystem_register(&visdn_channels_subsys);
 	if (err < 0)

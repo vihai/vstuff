@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-S USB vISDN driver
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -16,6 +16,37 @@
 #include "st_port.h"
 #include "st_chan.h"
 #include "fifo_inline.h"
+
+static void hfc_port_do_activate_request(
+	struct hfc_st_port *port)
+{
+	struct hfc_card *card = port->card;
+
+	hfc_write(card, HFC_REG_STATES,
+		HFC_REG_STATES_START_ACTIVATION|
+		HFC_REG_STATES_NT_G2_G3);
+
+	if (port->nt_mode)
+		mod_timer(&port->timer_t1,
+			jiffies + port->timer_t1_value);
+	else
+		mod_timer(&port->timer_t3,
+			jiffies + port->timer_t3_value);
+}
+
+static void hfc_port_do_deactivate_request(
+	struct hfc_st_port *port)
+{
+	struct hfc_card *card = port->card;
+
+	if (port->nt_mode)
+		del_timer(&port->timer_t1);
+	else
+		del_timer(&port->timer_t3);
+
+	hfc_write(card, HFC_REG_STATES,
+		HFC_REG_STATES_START_DEACTIVATION);
+}
 
 static void hfc_st_port_update_led(struct hfc_st_port *port)
 {
@@ -146,12 +177,9 @@ static ssize_t hfc_store_l1_state(
 	hfc_card_lock(card);
 
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
-		hfc_write(card, HFC_REG_STATES,
-			HFC_REG_STATES_START_ACTIVATION|
-			HFC_REG_STATES_NT_G2_G3);
+		hfc_port_do_activate_request(port);
 	} else if (count >= 10 && !strncmp(buf, "deactivate", 10)) {
-		hfc_write(card, HFC_REG_STATES,
-			HFC_REG_STATES_START_DEACTIVATION);
+		hfc_port_do_deactivate_request(port);
 	} else {
 		int state;
 		if (sscanf(buf, "%d", &state) < 1) {
@@ -506,7 +534,7 @@ static void hfc_st_port_state_change_nt(
 		hfc_write(card, HFC_REG_STATES, HFC_REG_STATES_NT_G2_G3);
 
 		if (old_state == 3) {
-			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_error_indication(&port->visdn_port, 0);
 			visdn_port_deactivated(&port->visdn_port);
 
 			hfc_st_port_fifo_update(port);
@@ -516,8 +544,7 @@ static void hfc_st_port_state_change_nt(
 	case 3:
 		visdn_port_activated(&port->visdn_port);
 
-		schedule_delayed_work(&port->fifo_activation_work,
-							50 * HZ / 1000);
+		hfc_st_port_fifo_update(port);
 	break;
 
 	case 4:
@@ -559,22 +586,21 @@ static void hfc_st_port_state_change_te(
 		hfc_st_port_fifo_update(port);
 
 		if (old_state == 8)
-			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 
 	case 6:
 	case 8:
-		visdn_port_error_indication(&port->visdn_port);
+		visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 
 	case 7:
 		visdn_port_activated(&port->visdn_port);
 
-		schedule_delayed_work(&port->fifo_activation_work,
-							50 * HZ / 1000);
+		hfc_st_port_fifo_update(port);
 
 		if (old_state == 6 || old_state == 8)
-			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 	}
 }
@@ -652,37 +678,12 @@ static void hfc_st_port_state_change_work(void *data)
 	hfc_card_unlock(card);
 }
 
-static void hfc_st_port_fifo_activation_work(void *data)
-{
-	struct hfc_st_port *port = data;
-	struct hfc_card *card = port->card;
-
-	hfc_card_lock(card);
-
-	hfc_st_port_fifo_update(port);
-
-	hfc_card_unlock(card);
-}
-
 static void hfc_st_port_activate_request_work(void *data)
 {
 	struct hfc_st_port *port = data;
 
 	hfc_write(port->card, HFC_REG_STATES,
 		HFC_REG_STATES_START_ACTIVATION);
-}
-
-void hfc_st_port_check_l1_up(struct hfc_st_port *port)
-{
-	if (port->visdn_port.enabled &&
-		((!port->nt_mode && port->l1_state != 7) ||
-		(port->nt_mode && port->l1_state != 3))) {
-
-		hfc_debug_st_port(port, 1,
-			"L1 is down, bringing up L1.\n");
-
-		schedule_work(&port->activate_request_work);
-	}
 }
 
 static void hfc_st_port_release(
@@ -740,10 +741,6 @@ void hfc_st_port_init(
 
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
-		port);
-
-	INIT_WORK(&port->fifo_activation_work,
-		hfc_st_port_fifo_activation_work,
 		port);
 
 	INIT_WORK(&port->activate_request_work,

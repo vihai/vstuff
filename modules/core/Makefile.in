@@ -2,8 +2,8 @@
 subdir = modules/core
 MODULE = visdn-core
 
-SOURCES = core_main.c port.c chan.c leg.c timer.c cxc.c router.c
-DIST_HEADERS = core.h visdn_mod.h chan.h leg.h port.h timer.h cxc.h router.h
+SOURCES = core_main.c port.c chan.c leg.c timer.c cxc.c path.c router.c
+DIST_HEADERS = core.h visdn_mod.h chan.h leg.h port.h timer.h cxc.h path.h router.h
 DIST_SOURCES = $(SOURCES)
 DIST_COMMON = Makefile.in
 

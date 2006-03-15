@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *

@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -20,24 +20,56 @@
 #include "tei_mgmt_nt.h"
 #include "tei_mgmt_te.h"
 
-int lapd_send_frame(struct sk_buff *skb)
+void lapd_out_queue_flush(struct lapd_device *dev)
+{
+	struct sk_buff *skb;
+
+	spin_lock_bh(&dev->out_queue_lock);
+
+	while ((skb = skb_dequeue(&dev->out_queue)))
+		dev_queue_xmit(skb);
+
+	spin_unlock_bh(&dev->out_queue_lock);
+}
+
+void lapd_out_queue_drop(struct lapd_device *dev)
+{
+	spin_lock_bh(&dev->out_queue_lock);
+	skb_queue_purge(&dev->out_queue);
+	spin_unlock_bh(&dev->out_queue_lock);
+}
+
+void lapd_send_frame(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int err;
 
 	BUG_ON(!skb->dev);
 
-	if((err = dev_queue_xmit(skb)) < 0) {
+	switch (dev->l1_state) {
+	case LAPD_L1_STATE_UNAVAILABLE:
+		if (skb->dev->do_ioctl)
+			skb->dev->do_ioctl(skb->dev, NULL, LAPD_DEV_IOC_ACTIVATE);
 
-		lapd_msg_dev(dev, KERN_ERR,
-			"dev_queue_xmit: %d\n", err);
+		dev->l1_state = LAPD_L1_STATE_ACTIVATING;
 
-		kfree_skb(skb);
+	case LAPD_L1_STATE_ACTIVATING:
+		spin_lock_bh(&dev->out_queue_lock);
+		skb_queue_tail(&dev->out_queue, skb);
+		spin_unlock_bh(&dev->out_queue_lock);
+	break;
 
-		return err;
+	case LAPD_L1_STATE_AVAILABLE:
+		err = dev_queue_xmit(skb);
+		if (err < 0) {
+
+			lapd_msg_dev(dev, KERN_ERR,
+				"dev_queue_xmit: %d\n", err);
+
+			kfree_skb(skb);
+		}
+	break;
 	}
-
-	return skb->len;
 }
 
 int lapd_prepare_uframe(struct sock *sk,
@@ -109,7 +141,9 @@ int lapd_send_uframe(struct sock *sk,
 	if (data && datalen)
 		memcpy(skb_put(skb, datalen), data, datalen);
 
-	return lapd_send_frame(skb);
+	lapd_send_frame(skb);
+
+	return 0;
 
 err_prepare_uframe:
 	kfree_skb(skb);
@@ -126,8 +160,15 @@ void lapd_queue_completed_uframe(
 	skb_queue_tail(&to_lapd_sock(sk)->u_queue, skb);
 }
 
-int lapd_send_completed_uframe(struct sk_buff *skb)
+void lapd_send_completed_uframe(struct sk_buff *skb)
 {
-	return lapd_send_frame(skb);
+	lapd_send_frame(skb);
 }
 
+void lapd_out_init(void)
+{
+}
+
+void lapd_out_exit(void)
+{
+}

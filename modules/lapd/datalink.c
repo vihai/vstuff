@@ -1,13 +1,15 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
  *
+ * --------------
+ *  This file implements point-to-point datalink procedures
  */
 
 #if defined(DEBUG_CODE) && !defined(SOCK_DEBUGGING)
@@ -18,14 +20,15 @@
 #include <linux/tcp.h>
 
 #include "lapd.h"
-#include "lapd_in.h"
-#include "lapd_out.h"
+#include "input.h"
+#include "output.h"
 #include "tei_mgmt_nt.h"
 #include "tei_mgmt_te.h"
 #include "datalink.h"
+#include "sock_inline.h"
 
 #ifdef SOCK_DEBUGGING
-#define lapd_debug_multiframe(ls, format, arg...)	\
+#define lapd_debug_dlc(ls, format, arg...)	\
 		SOCK_DEBUG(&(ls)->sk, "lapd: "		\
 			"%s "				\
 			"V(S)=%u V(R)=%u V(A)=%u: "	\
@@ -36,11 +39,11 @@
 			(ls)->v_a,			\
 			## arg)
 #else
-#define lapd_debug_multiframe(ls, format, arg...)	\
+#define lapd_debug_dlc(ls, format, arg...)	\
 		do { } while (0)
 #endif
 
-#define lapd_msg_multiframe(ls, lvl, format, arg...)	\
+#define lapd_msg_dlc(ls, lvl, format, arg...)	\
 	printk(lvl "lapd: "			\
 		"%s "				\
 		"V(S)=%u V(R)=%u V(A)=%u: "	\
@@ -53,7 +56,7 @@
 
 #define lapd_start_timer(ls, timername)					\
 	do {								\
-		lapd_debug_multiframe(lapd_sock, "%s:%d %s START\n",	\
+		lapd_debug_dlc(lapd_sock, "%s:%d %s START\n",	\
 			__FILE__, __LINE__, #timername);		\
 		sk_reset_timer(&(ls)->sk, &(ls)->timer_##timername,	\
 			jiffies + (ls)->sap->timername);		\
@@ -61,7 +64,7 @@
 
 #define lapd_stop_timer(ls, timername)					\
 	do {								\
-		lapd_debug_multiframe(lapd_sock, "%s:%d %s STOP\n",	\
+		lapd_debug_dlc(lapd_sock, "%s:%d %s STOP\n",	\
 			__FILE__, __LINE__, #timername);		\
 		sk_stop_timer(&(ls)->sk, &(ls)->timer_##timername);	\
 	} while(0)
@@ -177,7 +180,7 @@ void lapd_mdl_primitive(
 	if (sock_owned_by_user(&lapd_sock->sk)) {
 		sk_add_backlog(&lapd_sock->sk, skb);
 	} else {
-		if (!lapd_process_frame(lapd_sock, skb))
+		if (!lapd_dlc_recv(lapd_sock, skb))
 			kfree_skb(skb);
 	}
 }
@@ -232,7 +235,6 @@ static int lapd_prepare_sframe(
 	return 0;
 }
 
-
 static int lapd_send_sframe(
 	struct lapd_sock *lapd_sock,
 	enum lapd_cr c_r,
@@ -257,7 +259,7 @@ static int lapd_send_sframe(
 
 	hdr = (struct lapd_hdr_e *)skb->mac.raw;
 
-	lapd_debug_multiframe(lapd_sock,
+	lapd_debug_dlc(lapd_sock,
 		"Transmitting s-frame %s N(R)=%d\n",
 		lapd_sframe_function_name(lapd_sframe_function(hdr->control)),
 		lapd_sock->v_r);
@@ -339,9 +341,8 @@ static void lapd_run_ui_queue(struct lapd_sock *lapd_sock)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&to_lapd_sock(&lapd_sock->sk)->u_queue))) {
+	while ((skb = skb_dequeue(&to_lapd_sock(&lapd_sock->sk)->u_queue)))
 		lapd_send_frame(skb);
-	}
 }
 
 static inline void lapd_discard_ui_queue(struct lapd_sock *lapd_sock)
@@ -378,7 +379,7 @@ static void lapd_run_i_queue(struct lapd_sock *lapd_sock)
 		hdr->i.n_s = lapd_sock->v_s;
 		hdr->i.n_r = lapd_sock->v_r;
 
-		lapd_debug_multiframe(lapd_sock,
+		lapd_debug_dlc(lapd_sock,
 			"Transmitting i-frame N(S)=%d\n",
 			hdr->i.n_s);
 
@@ -390,13 +391,13 @@ static void lapd_run_i_queue(struct lapd_sock *lapd_sock)
 		/* We need to copy the datagram because we will
 		 * change N(S) and N(R) in the future
 		 */
-		dev_queue_xmit(skb_copy(skb, GFP_ATOMIC));
+		lapd_send_frame(skb_copy(skb, GFP_ATOMIC));
 
 		lapd_sock->v_s = (lapd_sock->v_s + 1) % 128;
 	}
 
 	if (lapd_sock->v_s == (lapd_sock->v_a + lapd_sock->sap->k) % 128)
-		lapd_debug_multiframe(lapd_sock,
+		lapd_debug_dlc(lapd_sock,
 			"k reached, not sending more frames\n");
 
 	if (sk->sk_send_head ==
@@ -516,6 +517,10 @@ void lapd_persistent_deactivation(struct lapd_sock *lapd_sock)
 	lapd_debug_ls(lapd_sock, "PERSISTENT DEACTIVATION\n");
 
 	switch(lapd_sock->state) {
+	case LAPD_DLS_1_TEI_UNASSIGNED:
+		/* Do nothing */
+	break;
+
 	case LAPD_DLS_2_AWAITING_TEI:
 		lapd_discard_ui_queue(lapd_sock);
 		lapd_change_state(lapd_sock, LAPD_DLS_1_TEI_UNASSIGNED);
@@ -572,7 +577,7 @@ void lapd_persistent_deactivation(struct lapd_sock *lapd_sock)
 #if 0
 static void lapd_dump_queue(struct lapd_sock *lapd_sock)
 {
-	lapd_debug_multiframe(lapd_sock, "vvvvvvvvvvvvvvvvvvvvvvv\n");
+	lapd_debug_dlc(lapd_sock, "vvvvvvvvvvvvvvvvvvvvvvv\n");
 
 	struct sock *sk = &lapd_sock->sk;
 	struct sk_buff *skb;
@@ -580,7 +585,7 @@ static void lapd_dump_queue(struct lapd_sock *lapd_sock)
 	     (skb != (struct sk_buff *)&sk->sk_write_queue);
 	     skb = skb->next) {
 
-		lapd_debug_multiframe(lapd_sock, "");
+		lapd_debug_dlc(lapd_sock, "");
 
 		if (sk->sk_send_head)
 			printk("HEAD ");
@@ -589,7 +594,7 @@ static void lapd_dump_queue(struct lapd_sock *lapd_sock)
 		printk("V(S) = %d\n", hdr->i.n_s);
 	}
 
-	lapd_debug_multiframe(lapd_sock, "^^^^^^^^^^^^^^^^^^^^^^^\n");
+	lapd_debug_dlc(lapd_sock, "^^^^^^^^^^^^^^^^^^^^^^^\n");
 }
 #endif
 
@@ -603,7 +608,7 @@ static void lapd_ack_frames(struct lapd_sock *lapd_sock, int n_r)
 		return;
 
 	/* The sender is acking some frame */
-	lapd_debug_multiframe(lapd_sock,
+	lapd_debug_dlc(lapd_sock,
 		"received ack for frames from %d to %d-1\n",
 		lapd_sock->v_a,
 		n_r);
@@ -616,7 +621,7 @@ static void lapd_ack_frames(struct lapd_sock *lapd_sock, int n_r)
 
 		if (hdr->i.n_s == n_r) break;
 
-		lapd_debug_multiframe(lapd_sock,
+		lapd_debug_dlc(lapd_sock,
 			"peer acked frame %d\n",
 			hdr->i.n_s);
 
@@ -702,7 +707,7 @@ static int lapd_queue_completed_iframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	lapd_debug_multiframe(lapd_sock,
+	lapd_debug_dlc(lapd_sock,
 		"Queueing i-frame\n");
 
 	skb->dev = lapd_sock->dev->dev;
@@ -806,7 +811,7 @@ static int lapd_socket_handle_iframe(
 	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
 	int queued = FALSE;
 
-	lapd_debug_multiframe(lapd_sock,
+	lapd_debug_dlc(lapd_sock,
 		"Received i-frame N(S)=%d N(R)=%d\n",
 		hdr->i.n_s,
 		hdr->i.n_r);
@@ -828,7 +833,7 @@ static int lapd_socket_handle_iframe(
 		(unsigned)lapd_sock->sk.sk_rcvbuf &&
 	    lapd_sock->own_receiver_busy) {
 
-		lapd_debug_multiframe(lapd_sock,
+		lapd_debug_dlc(lapd_sock,
 			"Input queue not full anymore,"
 			" exiting busy condition\n");
 
@@ -839,7 +844,7 @@ static int lapd_socket_handle_iframe(
 	if (atomic_read(&lapd_sock->sk.sk_rmem_alloc) >=
 	    (unsigned)lapd_sock->sk.sk_rcvbuf) {
 
-		lapd_debug_multiframe(lapd_sock,
+		lapd_debug_dlc(lapd_sock,
 			"Incoming queue full, entering busy condition\n");
 
 		lapd_set_own_receiver_busy(lapd_sock);
@@ -1300,13 +1305,13 @@ static int lapd_socket_handle_sframe(
 	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
 	int queued = FALSE;
 
-	lapd_debug_multiframe(lapd_sock,
+	lapd_debug_dlc(lapd_sock,
 		"Received s-frame %s N(R)=%d\n",
 		lapd_sframe_function_name(lapd_sframe_function(hdr->control)),
 		hdr->s.n_r);
 
 	if (skb->len != 4) {
-		lapd_debug_multiframe(lapd_sock,
+		lapd_debug_dlc(lapd_sock,
 			"received s-frame with wrong size (%d), rejecting\n",
 			skb->len);
 
@@ -1495,7 +1500,9 @@ static int lapd_socket_handle_uframe_dm(
 
 	switch (lapd_sock->state) {
 	case LAPD_DLS_4_TEI_ASSIGNED:
-		if (!hdr->u.p_f && lapd_sock->sk.sk_state == TCP_ESTABLISHED) {
+		if (!hdr->u.p_f &&
+		    lapd_sock->sk.sk_state == LAPD_SK_STATE_NORMAL_DLC) {
+
 			lapd_establish_datalink_procedure(lapd_sock);
 			lapd_sock->layer_3_initiated = TRUE;
 			lapd_change_state(lapd_sock,
@@ -1556,7 +1563,7 @@ static int lapd_socket_handle_uframe_sabme(
 
 	switch (lapd_sock->state) {
 	case LAPD_DLS_4_TEI_ASSIGNED:
-		if (lapd_sock->sk.sk_state == TCP_ESTABLISHED) {
+		if (lapd_sock->sk.sk_state == LAPD_SK_STATE_NORMAL_DLC) {
 			lapd_clear_exception_conditions_procedure(lapd_sock);
 
 			lapd_sock->v_s = 0;
@@ -1726,13 +1733,18 @@ static int lapd_socket_handle_uframe(
 	return queued;
 }
 
-int lapd_process_frame(
+int lapd_dlc_recv(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
 	struct lapd_hdr *hdr;
 
 	if (!skb->dev) {
+
+		/* Handle primitives from Layer Management to datalink
+		 * procedures
+		 */
+		
 		struct lapd_mdl_primitive *pri =
 			(struct lapd_mdl_primitive *)skb->data;
 
@@ -1751,6 +1763,10 @@ int lapd_process_frame(
 
 		case LAPD_MDL_REMOVE_REQUEST:
 			lapd_mdl_remove_request(lapd_sock);
+		break;
+
+		case LAPD_MDL_PERSISTENT_DEACTIVATION:
+			lapd_persistent_deactivation(lapd_sock);
 		break;
 
 		default:
@@ -1941,7 +1957,7 @@ static void lapd_timer_T200(unsigned long data)
 		goto socket_owned;
 	}
 
-	lapd_debug_multiframe(lapd_sock, "T200\n");
+	lapd_debug_dlc(lapd_sock, "T200\n");
 
 	switch (lapd_sock->state) {
 	case LAPD_DLS_5_AWAITING_ESTABLISH:
@@ -2017,7 +2033,7 @@ static void lapd_timer_T203(unsigned long data)
 {
 	struct lapd_sock *lapd_sock = (struct lapd_sock *)data;
 
-	lapd_debug_multiframe(lapd_sock, "T203\n");
+	lapd_debug_dlc(lapd_sock, "T203\n");
 
 	bh_lock_sock(&lapd_sock->sk);
 

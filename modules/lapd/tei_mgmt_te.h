@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -16,7 +16,7 @@
 #include <linux/spinlock.h>
 #include <asm/atomic.h>
 
-#include "lapd_dev.h"
+#include "device.h"
 #include "tei_mgmt.h"
 
 extern struct hlist_head lapd_utme_hash;
@@ -75,5 +75,6 @@ int lapd_utme_handle_frame(struct sk_buff *skb);
 void lapd_utme_mdl_assign_indication(struct lapd_utme *tme);
 void lapd_utme_tei_remove(struct lapd_utme *tme);
 void lapd_utme_assign_static_tei(struct lapd_utme *tme, u8 tei);
+void lapd_utme_remove_tei(struct lapd_device *dev, u8 tei);
 
 #endif

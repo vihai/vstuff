@@ -21,6 +21,7 @@
 #include <linux/visdn/softcxc.h>
 #include <linux/visdn/leg.h>
 #include <linux/visdn/port.h>
+#include <linux/visdn/path.h>
 #include <linux/visdn/router.h>
 
 #include "streamport.h"
@@ -287,10 +288,13 @@ static int vsp_cdev_release(
 	struct inode *inode, struct file *file)
 {
 	struct vsp_chan *chan = file->private_data;
+	struct visdn_path *path;
 
 	vsp_debug(3, "vsp_cdev_release()\n");
 
-	visdn_disconnect_path_with_id(chan->visdn_chan.id);
+	path = visdn_path_get_by_endpoint(&chan->visdn_chan);
+	if (path)
+		visdn_path_disconnect(path);
 
 	visdn_chan_remove_file(&chan->visdn_chan,
 				&visdn_chan_attr_tx_fifo_usage);
@@ -400,37 +404,6 @@ err_kfifo_put_user:
 	return err;
 }
 
-static int vsp_cdev_do_connect(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct vsp_chan *chan = file->private_data;
-	struct visdn_connect connect;
-	int err;
-
-	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	err = visdn_connect_path_with_id(
-		chan->visdn_chan.id,
-		connect.dst_chan_id,
-		file,
-		connect.flags);
-	if (err < 0)
-		goto err_cxc_disconnect;
-
-	return 0;
-
-err_cxc_disconnect:
-err_copy_from_user:
-
-	return err;
-}
-
 static int vsp_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
@@ -442,22 +415,6 @@ static int vsp_cdev_ioctl(
 	switch(cmd) {
 	case VISDN_SP_GET_CHANID:
 		return put_user(chan->visdn_chan.id, (unsigned int *)arg);
-	break;
-
-	case VISDN_IOC_CONNECT_PATH:
-		return vsp_cdev_do_connect(inode, file, cmd, arg);
-	break;
-
-	case VISDN_IOC_DISCONNECT_PATH:
-		return visdn_disconnect_path_with_id(chan->visdn_chan.id);
-	break;
-
-	case VISDN_IOC_ENABLE_PATH:
-		return visdn_enable_path_with_id(chan->visdn_chan.id);
-	break;
-
-	case VISDN_IOC_DISABLE_PATH:
-		return visdn_disable_path_with_id(chan->visdn_chan.id);
 	break;
 	}
 

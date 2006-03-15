@@ -30,14 +30,8 @@
 #include "visdnctl.h"
 #include "disconnect.h"
 
-int handle_disconnect(int argc, char *argv[], int optind)
+int disconnect_path(int id)
 {
-	if (argc <= optind + 1) {
-		print_usage("Missing first channel ID\n");
-	}
-
-	int chan1_id = decode_chan_id(argv[optind + 1]);
-
 	int fd = open(CXC_CONTROL_DEV, O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr, "open failed: %s\n",
@@ -48,43 +42,72 @@ int handle_disconnect(int argc, char *argv[], int optind)
 
 	struct visdn_connect connect;
 
-	if (argc > optind + 2) {
-		int chan2_id =  decode_chan_id(argv[optind + 2]);
+	printf("Disconnecting path '%06d'\n", id);
 
-		printf("Disconnecting '%06d' from '%06d'\n",
-			chan1_id,
-			chan2_id);
+	connect.path_id = id;
+	connect.src_chan_id = 0;
+	connect.dst_chan_id = 0;
+	connect.flags = 0;
 
-		connect.src_chan_id = chan1_id;
-		connect.dst_chan_id = chan2_id;
-		connect.flags = 0;
+	if (ioctl(fd, VISDN_IOC_DISCONNECT, &connect) < 0) {
+		fprintf(stderr,
+			"ioctl(IOC_DISCONNECT) failed: %s\n",
+			strerror(errno));
 
-		if (ioctl(fd, VISDN_IOC_DISCONNECT, &connect) < 0) {
-			fprintf(stderr, "ioctl(IOC_DISCONNECT) failed: %s\n",
-				strerror(errno));
-
-			return 1;
-		}
-
-	} else {
-		printf("Disconnecting '%06d'\n",
-			chan1_id);
-
-		connect.src_chan_id = chan1_id;
-		connect.dst_chan_id = 0;
-		connect.flags = 0;
-
-		if (ioctl(fd, VISDN_IOC_DISCONNECT_PATH, &connect) < 0) {
-			fprintf(stderr,
-				"ioctl(IOC_DISCONNECT_PATH) failed: %s\n",
-				strerror(errno));
-
-			return 1;
-		}
-
+		return 1;
 	}
 
 	close(fd);
+
+	return 0;
+}
+
+int disconnect_endpoint(const char *chan_id_str)
+{
+	int fd = open(CXC_CONTROL_DEV, O_RDWR);
+	if (fd < 0) {
+		fprintf(stderr, "open failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	}
+
+	struct visdn_connect connect;
+
+	int chan_id = decode_chan_id(chan_id_str);
+
+	printf("Disconnecting endpoint '%06d'\n", chan_id);
+
+	connect.src_chan_id = chan_id;
+	connect.dst_chan_id = 0;
+	connect.flags = 0;
+
+	if (ioctl(fd, VISDN_IOC_DISCONNECT_ENDPOINT, &connect) < 0) {
+		fprintf(stderr, "ioctl(IOC_DISCONNECT_ENDPOINT) failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	}
+
+	close(fd);
+
+	return 0;
+}
+
+int handle_disconnect(int argc, char *argv[], int optind)
+{
+	if (argc <= optind + 1)
+		print_usage("Missing disconnection type\n");
+
+	if (argc <= optind + 2)
+		print_usage("Missing disconnection parameter\n");
+
+	if (!strcasecmp(argv[optind + 1], "path"))
+		disconnect_path(atoi(argv[optind + 2]));
+	else if (!strcasecmp(argv[optind + 1], "endpoint"))
+		disconnect_endpoint(argv[optind + 2]);
+	else
+		print_usage("Invalid disconnection type\n");
 
 	return 0;
 }

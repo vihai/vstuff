@@ -43,6 +43,7 @@
 
 enum poll_info_type
 {
+	POLL_INFO_TYPE_MGMT,
 	POLL_INFO_TYPE_ACCEPT,
 	POLL_INFO_TYPE_BC_DLC,
 	POLL_INFO_TYPE_DLC,
@@ -54,11 +55,8 @@ enum poll_info_type
 struct poll_info
 {
 	enum poll_info_type type;
-	union
-	{
-		struct q931_interface *interface;
-		struct q931_dlc *dlc;
-	};
+	struct visdn_intf *intf;
+	struct q931_dlc *dlc;
 };
 
 struct visdn_suspended_call
@@ -90,7 +88,10 @@ struct visdn_chan {
 	int sp_channel_id;
 	int ec_ne_channel_id;
 	int ec_fe_channel_id;
-	int isdn_channel_id;
+	int bearer_channel_id;
+
+	int sp_path_id;
+	int bearer_path_id;
 
 	int sending_complete;
 
@@ -143,7 +144,7 @@ struct visdn_state
 	int usecnt;
 	int netlink_socket;
 
-	int cxc_control_fd;
+	int router_control_fd;
 
 	int debug;
 	int debug_q931;

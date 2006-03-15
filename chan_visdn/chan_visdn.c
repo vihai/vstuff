@@ -58,7 +58,6 @@
 #include <linux/lapd.h>
 #include <linux/visdn/netdev.h>
 #include <linux/visdn/streamport.h>
-#include <linux/visdn/cxc.h>
 #include <linux/visdn/ec.h>
 #include <linux/visdn/router.h>
 
@@ -153,19 +152,16 @@ void refresh_polls_list()
 	visdn.polls[visdn.npolls].fd = visdn.q931_ccb_queue_pipe_read;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_Q931_CCB;
-	visdn.poll_infos[visdn.npolls].interface = NULL;
 	(visdn.npolls)++;
 
 	visdn.polls[visdn.npolls].fd = visdn.ccb_q931_queue_pipe_read;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_CCB_Q931;
-	visdn.poll_infos[visdn.npolls].interface = NULL;
 	(visdn.npolls)++;
 
 	visdn.polls[visdn.npolls].fd = visdn.netlink_socket;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_NETLINK;
-	visdn.poll_infos[visdn.npolls].interface = NULL;
 	(visdn.npolls)++;
 
 	visdn.open_pending = FALSE;
@@ -176,8 +172,20 @@ void refresh_polls_list()
 			visdn.open_pending = TRUE;
 			visdn.open_pending_nextcheck = 0;
 
+		if (intf->status == VISDN_INTF_STATUS_FAILED)
+			continue;
+
 		if (!intf->q931_intf)
 			continue;
+
+		if (intf->mgmt_fd >= 0) {
+			visdn.polls[visdn.npolls].fd = intf->mgmt_fd;
+			visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
+			visdn.poll_infos[visdn.npolls].type =
+					POLL_INFO_TYPE_MGMT;
+			visdn.poll_infos[visdn.npolls].intf = intf;
+			visdn.npolls++;
+		}
 
 		if (intf->q931_intf->accept_socket >= 0) {
 			visdn.polls[visdn.npolls].fd =
@@ -186,9 +194,8 @@ void refresh_polls_list()
 					POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type =
 					POLL_INFO_TYPE_ACCEPT;
-			visdn.poll_infos[visdn.npolls].interface =
-					intf->q931_intf;
 			visdn.npolls++;
+			visdn.poll_infos[visdn.npolls].intf = intf;
 		}
 
 		if (intf->q931_intf->dlc.socket >= 0) {
@@ -200,6 +207,7 @@ void refresh_polls_list()
 					POLL_INFO_TYPE_DLC;
 			visdn.poll_infos[visdn.npolls].dlc =
 					&intf->q931_intf->dlc;
+			visdn.poll_infos[visdn.npolls].intf = intf;
 			visdn.npolls++;
 		}
 
@@ -212,6 +220,7 @@ void refresh_polls_list()
 					POLL_INFO_TYPE_BC_DLC;
 			visdn.poll_infos[visdn.npolls].dlc =
 					&intf->q931_intf->bc_dlc;
+			visdn.poll_infos[visdn.npolls].intf = intf;
 			visdn.npolls++;
 		}
 
@@ -222,6 +231,7 @@ void refresh_polls_list()
 			visdn.poll_infos[visdn.npolls].type =
 							POLL_INFO_TYPE_DLC;
 			visdn.poll_infos[visdn.npolls].dlc = dlc;
+			visdn.poll_infos[visdn.npolls].intf = intf;
 			(visdn.npolls)++;
 		}
 	}
@@ -1687,32 +1697,36 @@ static void visdn_disconnect_chan_from_visdn(
 		return;
 
 	struct visdn_connect vc;
-	vc.src_chan_id = visdn_chan->sp_channel_id;
-	vc.dst_chan_id = 0;
-	vc.flags = 0;
 
-	if (ioctl(visdn.cxc_control_fd,
-			VISDN_IOC_DISCONNECT_PATH,
-			(caddr_t)&vc) < 0) {
+	if (visdn_chan->sp_path_id) {
+		memset(&vc, 0, sizeof(vc));
+		vc.path_id = visdn_chan->sp_path_id;
 
-		ast_log(LOG_ERROR,
-			"ioctl(VISDN_IOC_DISCONNECT_PATH):"
-			" %s\n",
-			strerror(errno));
+		if (ioctl(visdn.router_control_fd,
+				VISDN_IOC_DISCONNECT,
+				(caddr_t)&vc) < 0) {
+
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_IOC_DISCONNECT):"
+				" %s\n",
+				strerror(errno));
+		}
 	}
 
-	vc.src_chan_id = visdn_chan->isdn_channel_id;
-	vc.dst_chan_id = 0;
-	vc.flags = 0;
+	if (visdn_chan->bearer_path_id >= 0 &&
+	    visdn_chan->bearer_path_id != visdn_chan->sp_path_id) {
+		memset(&vc, 0, sizeof(vc));
+		vc.path_id = visdn_chan->bearer_path_id;
 
-	if (ioctl(visdn.cxc_control_fd,
-			VISDN_IOC_DISCONNECT_PATH,
-			(caddr_t)&vc) < 0) {
+		if (ioctl(visdn.router_control_fd,
+				VISDN_IOC_DISCONNECT,
+				(caddr_t)&vc) < 0) {
 
-		ast_log(LOG_ERROR,
-			"ioctl(VISDN_IOC_DISCONNECT_PATH):"
-			" %s\n",
-			strerror(errno));
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_IOC_DISCONNECT):"
+				" %s\n",
+				strerror(errno));
+		}
 	}
 
 	if (close(visdn_chan->sp_fd) < 0) {
@@ -2213,6 +2227,62 @@ static void visdn_ccb_q931_receive()
 	}
 }
 
+static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
+{
+	struct msghdr skmsg;
+	struct cmsghdr cmsg;
+	struct iovec iov;
+	struct lapd_ctrl_header hdr;
+	int len;
+
+	iov.iov_base = &hdr;
+	iov.iov_len = sizeof(hdr);
+
+	skmsg.msg_name = NULL;
+	skmsg.msg_namelen = 0;
+	skmsg.msg_iov = &iov;
+	skmsg.msg_iovlen = 1;
+	skmsg.msg_control = &cmsg;
+	skmsg.msg_controllen = sizeof(cmsg);
+	skmsg.msg_flags = 0;
+
+	len = recvmsg(visdn_intf->mgmt_fd, &skmsg, 0);
+	if(len < 0) {
+		ast_log(LOG_ERROR, "recvmsg error: %s\n",
+			strerror(errno));
+
+		return len;
+	}
+
+	switch(hdr.primitive_type) {
+	case LAPD_MPH_ERROR_INDICATION:
+		ast_log(LOG_NOTICE, "MPH-ERROR-INDICATION: %d\n", hdr.param1);
+	break;
+
+	case LAPD_MPH_ACTIVATE_INDICATION:
+		visdn_debug("MPH-ACTIVATE-INDICATION\n");
+	break;
+
+	case LAPD_MPH_DEACTIVATE_INDICATION:
+		visdn_debug("MPH-DEACTIVATE-INDICATION\n");
+	break;
+
+	case LAPD_MPH_INFORMATION_INDICATION:
+		visdn_debug("MPH-INFORMATION-INDICATION: %s\n",
+			hdr.param1 == LAPD_MPH_II_CONNECTED ?
+				"CONNECTED" :
+				"DISCONNECTED");
+	break;
+
+	default:
+		ast_log(LOG_NOTICE, "Unexpected primitive %d\n",
+			hdr.primitive_type);
+		return -EBADMSG;
+	}
+
+	return 0;
+}
+
 static void visdn_q931_ccb_receive();
 
 static int visdn_q931_thread_do_poll()
@@ -2289,6 +2359,36 @@ static int visdn_q931_thread_do_poll()
 				visdn_ccb_q931_receive();
 			}
 		} else if (visdn.poll_infos[i].type ==
+						POLL_INFO_TYPE_MGMT) {
+
+			if (visdn.polls[i].revents &
+					(POLLIN | POLLPRI | POLLERR |
+					 POLLHUP | POLLNVAL)) {
+
+				int err = visdn_mgmt_receive(
+					visdn.poll_infos[i].intf);
+
+				if (err < 0) {
+
+					ast_log(LOG_ERROR,
+						"Interface '%s' has been put "
+						"in FAILED mode\n",
+						visdn.poll_infos[i].intf->name);
+					
+					visdn.poll_infos[i].intf->status =
+						VISDN_INTF_STATUS_FAILED;
+
+					visdn_intf_close(
+						visdn.poll_infos[i].intf);
+
+					refresh_polls_list();
+					ast_mutex_unlock(&visdn.lock);
+
+					break;
+				}
+			}
+
+		} else if (visdn.poll_infos[i].type ==
 						POLL_INFO_TYPE_ACCEPT) {
 
 			if (visdn.polls[i].revents &
@@ -2296,7 +2396,7 @@ static int visdn_q931_thread_do_poll()
 					 POLLHUP | POLLNVAL)) {
 				ast_mutex_lock(&visdn.lock);
 				visdn_accept(
-					visdn.poll_infos[i].interface,
+					visdn.poll_infos[i].intf->q931_intf,
 					visdn.polls[i].fd);
 				ast_mutex_unlock(&visdn.lock);
 				break; // polls list may have been changed
@@ -2311,12 +2411,25 @@ static int visdn_q931_thread_do_poll()
 				ast_mutex_lock(&visdn.lock);
 
 				err = q931_receive(visdn.poll_infos[i].dlc);
-				if (err == Q931_RECEIVE_REFRESH) {
+				if (err < 0 && err != -EBADMSG) {
+
+					ast_log(LOG_ERROR,
+						"Interface '%s' has been put "
+						"in FAILED mode\n",
+						visdn.poll_infos[i].intf->name);
+					
+					visdn.poll_infos[i].intf->status =
+						VISDN_INTF_STATUS_FAILED;
+
+					visdn_intf_close(
+						visdn.poll_infos[i].intf);
+
 					refresh_polls_list();
 					ast_mutex_unlock(&visdn.lock);
 
 					break;
 				}
+
 				ast_mutex_unlock(&visdn.lock);
 			}
 		}
@@ -3655,34 +3768,42 @@ static int visdn_connect_channels(
 {
 	visdn_debug("Connecting streamport %06d to chan %06d\n",
 			visdn_chan->sp_channel_id,
-			visdn_chan->isdn_channel_id);
+			visdn_chan->bearer_channel_id);
 
 	struct visdn_connect vc;
+	memset(&vc, 0, sizeof(vc));
 	vc.src_chan_id = visdn_chan->sp_channel_id;
-	vc.dst_chan_id = visdn_chan->isdn_channel_id;
-	vc.flags = 0;
+	vc.dst_chan_id = visdn_chan->bearer_channel_id;
 
-	if (ioctl(visdn.cxc_control_fd, VISDN_IOC_CONNECT_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
 						(caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT_PATH, sp, isdn): %s\n",
+			"ioctl(VISDN_CONNECT, sp, isdn): %s\n",
 			strerror(errno));
-		goto err_ioctl;
+		goto err_ioctl_connect;
 	}
 
-	vc.src_chan_id = visdn_chan->isdn_channel_id;
-	vc.flags = 0;
+	visdn_chan->sp_path_id = vc.path_id;
+	visdn_chan->bearer_path_id = vc.path_id;
 
-	if (ioctl(visdn_chan->sp_fd, VISDN_IOC_ENABLE_PATH, (caddr_t)&vc) < 0) {
+	memset(&vc, 0, sizeof(vc));
+	vc.path_id = visdn_chan->sp_path_id;
+
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_ENABLE_PATH,
+						(caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_ENABLE_PATH, isdn): %s\n",
 			strerror(errno));
-		goto err_ioctl;
+		goto err_ioctl_enable;
 	}
 
 	return 0;
 
-err_ioctl:
+err_ioctl_enable:
+	memset(&vc, 0, sizeof(vc));
+	vc.path_id = visdn_chan->sp_path_id;
+	ioctl(visdn.router_control_fd, VISDN_IOC_DISCONNECT, (caddr_t) &vc);
+err_ioctl_connect:
 
 	return -1;
 }
@@ -3692,7 +3813,7 @@ static int visdn_connect_channels_with_ec(
 {
 	visdn_debug("Connecting streamport %06d to chan %06d via EC\n",
 			visdn_chan->sp_channel_id,
-			visdn_chan->isdn_channel_id);
+			visdn_chan->bearer_channel_id);
 
 	visdn_chan->ec_fd = open("/dev/visdn/ec-control", O_RDWR);
 	if (visdn_chan->ec_fd < 0) {
@@ -3734,52 +3855,54 @@ static int visdn_connect_channels_with_ec(
 			visdn_chan->ec_fe_channel_id);
 
 	struct visdn_connect vc;
+	memset(&vc, 0, sizeof(vc));
 	vc.src_chan_id = visdn_chan->sp_channel_id;
 	vc.dst_chan_id = visdn_chan->ec_fe_channel_id;
-	vc.flags = 0;
 
-	if (ioctl(visdn.cxc_control_fd, VISDN_IOC_CONNECT_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
 	    (caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT_PATH, sp, ec_fe): %s\n",
+			"ioctl(VISDN_CONNECT, sp, ec_fe): %s\n",
 			strerror(errno));
-		goto err_ioctl;
+		goto err_ioctl_connect_sp_ec;
 	}
 
+	visdn_chan->sp_path_id = vc.path_id;
+
+	memset(&vc, 0, sizeof(vc));
 	vc.src_chan_id = visdn_chan->ec_ne_channel_id;
-	vc.dst_chan_id = visdn_chan->isdn_channel_id;
-	vc.flags = 0;
+	vc.dst_chan_id = visdn_chan->bearer_channel_id;
 
-	if (ioctl(visdn.cxc_control_fd, VISDN_IOC_CONNECT_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
 	    (caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT_PATH, ec_ne, isdn): %s\n",
+			"ioctl(VISDN_CONNECT, ec_ne, bearer): %s\n",
 			strerror(errno));
-		goto err_ioctl;
+		goto err_ioctl_connect_ec_b;
 	}
 
-	vc.src_chan_id = visdn_chan->sp_channel_id;
-	vc.dst_chan_id = 0;
-	vc.flags = 0;
+	visdn_chan->bearer_path_id = vc.path_id;
 
-	if (ioctl(visdn.cxc_control_fd, VISDN_IOC_ENABLE_PATH,
+	memset(&vc, 0, sizeof(vc));
+	vc.path_id = visdn_chan->sp_path_id;
+
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_ENABLE_PATH,
 						 (caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_ENABLE_PATH, sp): %s\n",
 			strerror(errno));
-		goto err_ioctl;
+		goto err_ioctl_enable_sp;
 	}
 
-	vc.src_chan_id = visdn_chan->isdn_channel_id;
-	vc.dst_chan_id = 0;
-	vc.flags = 0;
+	memset(&vc, 0, sizeof(vc));
+	vc.path_id = visdn_chan->bearer_path_id;
 
-	if (ioctl(visdn.cxc_control_fd, VISDN_IOC_ENABLE_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_ENABLE_PATH,
 						 (caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_ENABLE_PATH, isdn): %s\n",
+			"ioctl(VISDN_ENABLE_PATH, bearer): %s\n",
 			strerror(errno));
-		goto err_ioctl;
+		goto err_ioctl_enable_b;
 	}
 
 	if (visdn_chan->q931_call->state == N10_ACTIVE ||
@@ -3797,6 +3920,10 @@ static int visdn_connect_channels_with_ec(
 
 	return 0;
 
+err_ioctl_connect_sp_ec:
+err_ioctl_connect_ec_b:
+err_ioctl_enable_sp:
+err_ioctl_enable_b:
 err_ioctl:
 	close(visdn_chan->sp_fd);
 err_open:
@@ -3842,7 +3969,7 @@ static void visdn_q931_connect_channel(
 		goto err_invalid_chanid;
 	}
 
-	visdn_chan->isdn_channel_id = atoi(chanid + 1);
+	visdn_chan->bearer_channel_id = atoi(chanid + 1);
 
 	if (visdn_chan->handle_stream) {
 		visdn_chan->sp_fd = open("/dev/visdn/streamport", O_RDWR);
@@ -4541,7 +4668,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 			"Streamport Chanid    : %06d\n"
 			"EC NearEnd Chanid    : %06d\n"
 			"EC FarEnd Chanid     : %06d\n"
-			"ISDN Chanid          : %06d\n"
+			"Bearer Chanid        : %06d\n"
 			"In-band informations : %s\n"
 			"DTMF Deferred        : %s\n",
 			visdn_chan->number,
@@ -4552,7 +4679,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 			visdn_chan->sp_channel_id,
 			visdn_chan->ec_ne_channel_id,
 			visdn_chan->ec_fe_channel_id,
-			visdn_chan->isdn_channel_id,
+			visdn_chan->bearer_channel_id,
 			visdn_chan->inband_info ? "Yes" : "No",
 			visdn_chan->dtmf_deferred ? "Yes" : "No");
 
@@ -4769,11 +4896,11 @@ int load_module()
 	freeifaddrs(ifaddrs);
 #endif
 
-	visdn.cxc_control_fd = open("/dev/visdn/cxc-control", O_RDWR);
-	if (visdn.cxc_control_fd < 0) {
+	visdn.router_control_fd = open("/dev/visdn/router-control", O_RDWR);
+	if (visdn.router_control_fd < 0) {
 		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
 			strerror(errno));
-		goto err_open_cxc_control;
+		goto err_open_router_control;
 	}
 
 	pthread_attr_t attr;
@@ -4811,8 +4938,8 @@ int load_module()
 
 err_channel_register:
 err_thread_create:
-	close(visdn.cxc_control_fd);
-err_open_cxc_control:
+	close(visdn.router_control_fd);
+err_open_router_control:
 //err_socket_lapd:
 //err_getifaddrs:
 err_bind_netlink:
@@ -4851,7 +4978,7 @@ int unload_module(void)
 
 	q931_leave();
 
-	close(visdn.cxc_control_fd);
+	close(visdn.router_control_fd);
 	close(visdn.netlink_socket);
 
 	return 0;

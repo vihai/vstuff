@@ -1,7 +1,7 @@
 /*
  * vISDN gateway between vISDN's crossconnector and Linux's netdev subsystem
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -66,6 +66,8 @@ struct vnd_netdevice
 
 	struct visdn_chan visdn_chan;
 	struct visdn_chan visdn_chan_e;
+
+	struct visdn_port *remote_port; 
 
 	struct net_device_stats stats;
 

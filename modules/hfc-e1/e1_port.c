@@ -818,12 +818,11 @@ static void hfc_e1_port_state_change_nt(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*0*/
+		visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 
 	case 1:
-		schedule_delayed_work(&port->fifo_activation_work,
-						50 * HZ / 1000);
+		hfc_e1_port_fifo_update(port);
 
 		visdn_port_activated(&port->visdn_port);
 	break;
@@ -834,7 +833,7 @@ static void hfc_e1_port_state_change_nt(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*1*/
+		visdn_port_error_indication(&port->visdn_port, 1);
 	break;
 
 	case 3:
@@ -843,7 +842,7 @@ static void hfc_e1_port_state_change_nt(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*2*/
+		visdn_port_error_indication(&port->visdn_port, 2);
 	break;
 
 	case 4:
@@ -852,7 +851,7 @@ static void hfc_e1_port_state_change_nt(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*3*/
+		visdn_port_error_indication(&port->visdn_port, 3);
 	break;
 
 	case 5:
@@ -861,7 +860,7 @@ static void hfc_e1_port_state_change_nt(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*4*/
+		visdn_port_error_indication(&port->visdn_port, 4);
 	break;
 
 	case 6:
@@ -886,12 +885,11 @@ static void hfc_e1_port_state_change_te(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*0*/
+		visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 
 	case 1:
-		schedule_delayed_work(&port->fifo_activation_work,
-						50 * HZ / 1000);
+		hfc_e1_port_fifo_update(port);
 
 		visdn_port_activated(&port->visdn_port);
 	break;
@@ -902,7 +900,7 @@ static void hfc_e1_port_state_change_te(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*1*/
+		visdn_port_error_indication(&port->visdn_port, 1);
 	break;
 
 	case 3:
@@ -911,7 +909,7 @@ static void hfc_e1_port_state_change_te(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*2*/
+		visdn_port_error_indication(&port->visdn_port, 2);
 	break;
 
 	case 4:
@@ -920,7 +918,7 @@ static void hfc_e1_port_state_change_te(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*3*/
+		visdn_port_error_indication(&port->visdn_port, 3);
 	break;
 
 	case 5:
@@ -929,7 +927,7 @@ static void hfc_e1_port_state_change_te(
 		if (old_state == 1)
 			visdn_port_deactivated(&port->visdn_port);
 
-		visdn_port_error_indication(&port->visdn_port); /*4*/
+		visdn_port_error_indication(&port->visdn_port, 4);
 	break;
 
 	case 6:
@@ -962,18 +960,6 @@ static void hfc_e1_port_state_change_work(void *data)
 	}
 
 	hfc_e1_port_update_led(port);
-
-	hfc_card_unlock(card);
-}
-
-static void hfc_e1_port_fifo_activation_work(void *data)
-{
-	struct hfc_e1_port *port = data;
-	struct hfc_card *card = port->card;
-
-	hfc_card_lock(card);
-
-	hfc_e1_port_fifo_update(port);
 
 	hfc_card_unlock(card);
 }
@@ -1106,10 +1092,6 @@ void hfc_e1_port_init(
 
 	INIT_WORK(&port->state_change_work,
 		hfc_e1_port_state_change_work,
-		port);
-
-	INIT_WORK(&port->fifo_activation_work,
-		hfc_e1_port_fifo_activation_work,
 		port);
 
 	INIT_WORK(&port->counters_update_work,

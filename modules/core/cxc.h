@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -15,22 +15,7 @@
 
 #include "chan.h"
 
-/* See core.h for IOC allocation */
-#define VISDN_IOC_CONNECT		_IOR(0xd0, 0x02, unsigned int)
-#define VISDN_IOC_DISCONNECT		_IOR(0xd0, 0x03, unsigned int)
-
-#define VISDN_CONNECT_FLAG_PERMANENT	(1 << 0)
-#define VISDN_CONNECT_FLAG_OVERRIDE	(1 << 1)
-
 #define VISDN_CXCID_SIZE 32
-
-struct visdn_connect
-{
-	int src_chan_id;
-	int dst_chan_id;
-
-	int flags;
-};
 
 #ifdef __KERNEL__
 
@@ -116,7 +101,7 @@ struct visdn_cxc_connection
 	struct visdn_leg *src;
 	struct visdn_leg *dst;
 
-	struct file *file;
+	struct visdn_path *path;
 };
 
 struct visdn_cxc_attribute {
@@ -153,8 +138,7 @@ extern int visdn_cxc_connect(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2,
-	struct file *file,
-	unsigned long flags);
+	struct visdn_path *path);
 
 extern int visdn_cxc_disconnect(
 	struct visdn_cxc *cxc,
@@ -180,15 +164,6 @@ extern int visdn_cxc_create_file(
 extern void visdn_cxc_remove_file(
 	struct visdn_cxc *cxc,
 	struct visdn_cxc_attribute *attr);
-
-extern int visdn_cxc_connect_with_id(
-	int chan1_id,
-	int chan2_id,
-	struct file *file,
-	unsigned long flags);
-extern int visdn_cxc_disconnect_with_id(
-	int chan1_id,
-	int chan2_id);
 
 extern int visdn_cxc_modinit(void);
 extern void visdn_cxc_modexit(void);

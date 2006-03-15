@@ -77,7 +77,6 @@ struct hfc_st_port
 	int echo_enabled;
 
 	struct work_struct state_change_work;
-	struct work_struct fifo_activation_work;
 
 	struct visdn_port visdn_port;
 };
@@ -85,7 +84,6 @@ struct hfc_st_port
 extern void hfc_st_port_update_sctrl(struct hfc_st_port *port);
 extern void hfc_st_port_update_sctrl_r(struct hfc_st_port *port);
 extern void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port);
-extern void hfc_st_port_check_l1_up(struct hfc_st_port *port);
 
 extern void hfc_st_port_init(
 	struct hfc_st_port *port,

@@ -30,7 +30,6 @@ chan_visdn:
 - Make call parking feature enabling configurable
 - Fix/complete Progress indicators to notify interworking with non-ISDN
 - Fix autocompletion in cli commands
-- MWI on ISDN phones
 - Asterisk's design makes difficult to implement some sort of parameter
   negotiation so it is impossible to know what bearer capabilities are
   accepted by a destination, if it supports overlap dialing and so on...
@@ -41,6 +40,10 @@ chan_visdn:
 - When the remote party responds RELEASE COMPLETE with "User Busy" cause
   we respond to * "CHANUNAVAIL"
 - Rewrite netlink code to use proper macros
+- When path-enabling ioctl fails the call is not hung up
+- When unloading module or rebooting the machine, send TEI_REMOVE to every 
+  interface for every TEI
+
 
 libq931:
 --------
@@ -77,16 +80,12 @@ visdn_core:
 - Use correct _IOR/_IOC/_IOW macros!!!
 - Channel bundling
 - Allocate a single major number for control devices?
-- Reconnection does not work
 
 lapd:
 -----
 
 - When the socket on a TE port is bound, do a TEI Verify?
 - When the socket on a TE port is closed send a TEI Verify?
-
-- Write the necessary code to support
-  MPH-INFORMATION-INDICATION(connected/disconnected)
 
 - When allmulti flag is changed while the interface is UP, Tei Mgmt entities
   are not released/allocated correctly. The interface needs to be put down and
@@ -163,7 +162,7 @@ hfc-usb:
 --------
 
 - First received frame is dropped
-- Implement T1 and T3 timers
+- Finish implementing T1 and T3 timers
 
 vgsm:
 -----

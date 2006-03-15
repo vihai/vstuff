@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -29,6 +29,10 @@
 #define ETH_P_LAPD 0x0030	/* LAPD pseudo type */
 #endif
 
+#ifndef ETH_P_LAPD_CTRL
+#define ETH_P_LAPD_CTRL 0x0031	/* LAPD control pseudo type */
+#endif
+
 #ifndef AF_LAPD
 #define AF_LAPD 30
 #endif
@@ -43,9 +47,13 @@
 
 #define LAPD_SAPI_Q931		0x00
 #define LAPD_SAPI_X25		0x0f
+#define LAPD_SAPI_MGMT		0x10
 
 #define LAPD_BROADCAST_TEI	127
 #define LAPD_DYNAMIC_TEI	255
+
+#define LAPD_DEV_IOC_ACTIVATE	_IOR(0xd0, 0x00, unsigned int)
+#define LAPD_DEV_IOC_DEACTIVATE	_IOR(0xd0, 0x01, unsigned int)
 
 enum
 {
@@ -90,6 +98,30 @@ struct sockaddr_lapd
 	__u8            sal_tei;
 };
 
+enum lapd_ph_primitive_type
+{
+	LAPD_PH_ACTIVATE_INDICATION,
+	LAPD_PH_DEACTIVATE_INDICATION,
+	LAPD_PH_ACTIVATE_REQUEST,
+	LAPD_MPH_ERROR_INDICATION,
+	LAPD_MPH_ACTIVATE_INDICATION,
+	LAPD_MPH_DEACTIVATE_INDICATION,
+	LAPD_MPH_DEACTIVATE_REQUEST,
+	LAPD_MPH_INFORMATION_INDICATION,
+};
+
+enum lapd_mph_information_indication
+{
+	LAPD_MPH_II_CONNECTED,
+	LAPD_MPH_II_DISCONNECTED,
+};
+
+struct lapd_ctrl_header
+{
+	int primitive_type;
+	int param1;
+};
+
 #ifdef __KERNEL__
 #include <asm/atomic.h>
 #include <linux/types.h>
@@ -109,6 +141,14 @@ struct sockaddr_lapd
 
 #define LAPD_HASHBITS		8
 #define LAPD_HASHSIZE		((1 << LAPD_HASHBITS) - 1)
+
+#define LAPD_SK_STATE_NULL		TCP_LAST_ACK
+#define LAPD_SK_STATE_LISTEN		TCP_LISTEN
+#define LAPD_SK_STATE_NORMAL_DLC	TCP_ESTABLISHED
+#define LAPD_SK_STATE_BROADCAST_DLC	TCP_SYN_SENT
+#define LAPD_SK_STATE_MGMT		TCP_SYN_RECV
+#define LAPD_SK_STATE_CLOSE		TCP_CLOSE
+#define LAPD_SK_STATE_CLOSING		TCP_CLOSING
 
 #ifdef DEBUG_CODE
 #define lapd_debug(format, arg...)			\
@@ -202,7 +242,7 @@ struct lapd_sap
 	int T203;
 };
 
-#include "lapd_dev.h"
+//#include "device.h"
 
 struct lapd_new_dlc
 {
@@ -297,32 +337,6 @@ int lapd_dl_unit_data_indication(
 void lapd_dl_data_indication(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb);
-
-static inline struct hlist_head *lapd_get_hash(struct lapd_device *dev)
-{
-	return &lapd_hash[dev->dev->ifindex & (LAPD_HASHSIZE - 1)];
-}
-
-static inline void lapd_bh_lock_sock(struct lapd_sock *lapd_sock)
-{
-	bh_lock_sock(&lapd_sock->sk);
-}
-
-static inline void lapd_bh_unlock_sock(struct lapd_sock *lapd_sock)
-{
-	bh_unlock_sock(&lapd_sock->sk);
-}
-
-static inline void lapd_lock_sock(struct lapd_sock *lapd_sock)
-{
-	lock_sock(&lapd_sock->sk);
-}
-
-static inline void lapd_release_sock(struct lapd_sock *lapd_sock)
-{
-	release_sock(&lapd_sock->sk);
-}
-
 
 #endif
 #endif

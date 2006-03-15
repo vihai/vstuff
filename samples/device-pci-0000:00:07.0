@@ -11,6 +11,8 @@
 
 <port st0>
   attribute role TE
+  attribute timer_t1 1500
+  attribute timer_t3 1500
 
   <chan D>
     connectmodule netdev visdn0

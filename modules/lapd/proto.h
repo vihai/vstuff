@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -14,6 +14,8 @@
 #define _LAPD_PROTO_H
 
 #ifdef __KERNEL__
+
+#include "device.h"
 
 struct lapd_u_frame
 {
@@ -285,7 +287,7 @@ static inline const char *lapd_sframe_function_name(
 static inline u8 lapd_uframe_make_control(
 	enum lapd_uframe_function function, int p_f)
 {
-	return 0x03 | function | (p_f?0x10:0);
+	return 0x03 | function | (p_f ? 0x10 : 0);
 }
 
 static inline u8 lapd_sframe_make_control(

@@ -24,9 +24,9 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-#define CHANNELS_DIR "/sys/visdn_channels"
-#define TDM_DIR "/sys/visdn_tdm"
-#define CXC_CONTROL_DEV "/dev/visdn/cxc-control"
+//#define CHANNELS_DIR "/sys/visdn_channels"
+//#define TDM_DIR "/sys/visdn_tdm"
+#define CXC_CONTROL_DEV "/dev/visdn/router-control"
 
 struct module
 {

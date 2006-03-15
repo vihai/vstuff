@@ -19,6 +19,14 @@
 
 #include "ton.h"
 
+enum visdn_intf_status
+{
+	VISDN_INTF_STATUS_UNINITIALIZED,
+	VISDN_INTF_STATUS_OFFLINE,
+	VISDN_INTF_STATUS_ONLINE,
+	VISDN_INTF_STATUS_FAILED,
+};
+
 enum visdn_clir_mode
 {
 	VISDN_CLIR_MODE_OFF,
@@ -98,10 +106,14 @@ struct visdn_intf
 	int refcnt;
 	ast_mutex_t lock;
 
+	enum visdn_intf_status status;
+
 	char name[IFNAMSIZ];
 
 	int configured;
 	int open_pending;
+
+	int mgmt_fd;
 
 	struct visdn_ic *current_ic;
 	
@@ -117,6 +129,7 @@ struct visdn_intf *visdn_intf_get(struct visdn_intf *intf);
 void visdn_intf_put(struct visdn_intf *intf);
 struct visdn_intf *visdn_intf_get_by_name(const char *name);
 int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic);
+void visdn_intf_close(struct visdn_intf *intf);
 void visdn_intf_reload(struct ast_config *cfg);
 
 struct visdn_ic *visdn_ic_alloc(void);

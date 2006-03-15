@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -37,6 +37,8 @@ struct vgsm_chan {
 
 	int sp_channel_id;
 	int module_channel_id;
+
+	int path_id;
 
 	char calling_number[21];
 };
@@ -183,7 +185,7 @@ struct vgsm_state
 	ast_mutex_t usecnt_lock;
 	int usecnt;
 
-	int cxc_control_fd;
+	int router_control_fd;
 
 	int debug;
 };

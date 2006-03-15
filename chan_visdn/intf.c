@@ -65,6 +65,8 @@ struct visdn_intf *visdn_intf_alloc(void)
 
 	intf->refcnt = 1;
 
+	intf->status = VISDN_INTF_STATUS_UNINITIALIZED;
+
 	intf->q931_intf = NULL;
 	intf->configured = FALSE;
 	intf->open_pending = FALSE;
@@ -405,13 +407,51 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 			"Cannot open interface %s, skipping\n",
 			intf->name);
 
-		return -1;
+		goto err_intf_open;
 	}
 
 	intf->q931_intf->pvt = intf;
 	intf->q931_intf->network_role = ic->network_role;
 	intf->q931_intf->dlc_autorelease_time = ic->dlc_autorelease_time;
 	intf->q931_intf->enable_bumping = ic->call_bumping;
+
+	intf->mgmt_fd = socket(PF_LAPD, SOCK_SEQPACKET, LAPD_SAPI_MGMT);
+	if (intf->mgmt_fd < 0) {
+		ast_log(LOG_WARNING,
+			"Cannot open management socket: %s\n",
+			strerror(errno));
+
+		goto err_socket;
+	}
+
+	if (setsockopt(intf->mgmt_fd, SOL_LAPD, SO_BINDTODEVICE, intf->name,
+					strlen(intf->name) + 1) < 0) {
+
+		ast_log(LOG_WARNING,
+			"Cannot bind management socket to %s: %s, skipping\n",
+			strerror(errno),
+			intf->name);
+
+		goto err_setsockopt;
+	}
+
+	int oldflags;
+	oldflags = fcntl(intf->mgmt_fd, F_GETFL, 0);
+	if (oldflags < 0) {
+		ast_log(LOG_WARNING,
+			"%s: fcntl(GETFL): %s\n",
+			intf->name,
+			strerror(errno));
+		goto err_fcntl_getfl;
+	}
+
+	if (fcntl(intf->mgmt_fd, F_SETFL, oldflags | O_NONBLOCK) < 0) {
+		ast_log(LOG_WARNING,
+			"fcntl(F_SETFL): %s\n",
+			strerror(errno));
+
+		goto err_fcntl_setfl;
+	}
 
 	if (ic->T301) intf->q931_intf->T301 = ic->T301 * 1000000LL;
 	if (ic->T302) intf->q931_intf->T302 = ic->T302 * 1000000LL;
@@ -450,7 +490,7 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 				path,
 				strerror(errno));
 
-			return -1;
+			goto err_stat;
 		}
 
 		strcpy(goodpath, path);
@@ -465,6 +505,8 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 			"cannot find realpath(%s): %s\n",
 			goodpath,
 			strerror(errno));
+
+		goto err_realpath;
 	}
 
 	intf->open_pending = FALSE;
@@ -491,7 +533,31 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 		}
 	}
 
+	intf->status = VISDN_INTF_STATUS_ONLINE;
+
 	return 0;
+
+err_realpath:
+err_stat:
+err_fcntl_setfl:
+err_fcntl_getfl:
+err_setsockopt:
+	close(intf->mgmt_fd);
+err_socket:
+	q931_intf_close(intf->q931_intf);
+err_intf_open:
+
+	intf->status = VISDN_INTF_STATUS_FAILED;
+
+	return -1;
+}
+
+void visdn_intf_close(struct visdn_intf *intf)
+{
+	close(intf->mgmt_fd);
+
+	q931_intf_close(intf->q931_intf);
+	intf->q931_intf = NULL;
 }
 
 void visdn_ic_setdefault(struct visdn_ic *ic)
@@ -675,6 +741,22 @@ static const char *visdn_clir_mode_to_text(
 	return "*UNKNOWN*";
 }
 
+static const char *visdn_intf_status_to_text(enum visdn_intf_status status)
+{
+	switch(status) {
+	case VISDN_INTF_STATUS_UNINITIALIZED:
+		return "Uninitialized";
+	case VISDN_INTF_STATUS_OFFLINE:
+		return "OFFLINE";
+	case VISDN_INTF_STATUS_ONLINE:
+		return "Online";
+	case VISDN_INTF_STATUS_FAILED:
+		return "FAILED!";
+	}
+
+	return "*UNKNOWN*";
+}
+
 static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
@@ -685,6 +767,8 @@ static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 		struct visdn_ic *ic = intf->current_ic;
 
 		ast_cli(fd, "\n-- %s --\n", intf->name);
+			ast_cli(fd, "Status                    : %s\n",
+				visdn_intf_status_to_text(intf->status));
 
 		if (intf->q931_intf) {
 			ast_cli(fd, "Role                      : %s\n",

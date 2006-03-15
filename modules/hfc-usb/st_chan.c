@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-S USB vISDN driver
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -425,8 +425,6 @@ static int hfc_st_chan_frame_xmit(
 {
 	struct hfc_st_chan *chan = to_chan_duplex(visdn_leg->chan);
 	int err;
-
-	hfc_st_port_check_l1_up(chan->port);
 
 	err = hfc_fifo_xmit(chan->tx_fifo, skb->data, skb->len);
 	if (err < 0)

@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -19,11 +19,8 @@
 #include "core.h"
 #include "chan.h"
 #include "cxc.h"
-#include "router.h"
+#include "path.h"
 #include "visdn_mod.h"
-
-static struct cdev visdn_cxc_cdev;
-struct class_device visdn_cxc_control_class_dev;
 
 struct list_head visdn_cxc_list = LIST_HEAD_INIT(visdn_cxc_list);
 DECLARE_MUTEX(visdn_cxc_list_sem);
@@ -46,8 +43,7 @@ static int visdn_cxc_connect_simplex(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *src,
 	struct visdn_leg *dst,
-	struct file *file,
-	unsigned long flags)
+	struct visdn_path *path)
 {
 	int err;
 	struct visdn_cxc_connection *conn;
@@ -67,12 +63,8 @@ static int visdn_cxc_connect_simplex(
 
 		if (conn->src != src &&
 		    conn->dst == dst) {
-			if (flags & VISDN_CONNECT_FLAG_OVERRIDE) {
-				_visdn_cxc_disconnect_simplex(conn);
-			} else {
-				err = -EALREADY;
-				goto err_already_connected;
-			}	
+			err = -EALREADY;
+			goto err_already_connected;
 		}
 	}
 	}
@@ -91,11 +83,7 @@ static int visdn_cxc_connect_simplex(
 	conn->cxc = cxc;
 	conn->src = visdn_leg_get(src);
 	conn->dst = visdn_leg_get(dst);
-
-	if (flags & VISDN_CONNECT_FLAG_PERMANENT)
-		conn->file = NULL;
-	else
-		conn->file = file;
+	conn->path = path;
 
 	down(&cxc->sem);
 
@@ -209,8 +197,7 @@ int visdn_cxc_connect(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2,
-	struct file *file,
-	unsigned long flags)
+	struct visdn_path *path)
 {
 	int err;
 
@@ -225,11 +212,11 @@ int visdn_cxc_connect(
 		leg2->chan->kobj.name);
 
 	// Connect the channels -------------------------------------
-	err = visdn_cxc_connect_simplex(cxc, leg1, leg2, file, flags);
+	err = visdn_cxc_connect_simplex(cxc, leg1, leg2, path);
 	if (err < 0)
 		goto err_cxc_add_leg1;
 
-	err = visdn_cxc_connect_simplex(cxc, leg2, leg1, file, flags);
+	err = visdn_cxc_connect_simplex(cxc, leg2, leg1, path);
 	if (err < 0)
 		goto err_cxc_add_leg2;
 
@@ -321,33 +308,6 @@ int visdn_cxc_disconnect_leg(struct visdn_leg *leg)
 	}
 
 	up(&cxc->sem);
-
-	return 0;
-}
-
-int visdn_cxc_disconnect_by_file(struct file *file)
-{
-	struct visdn_cxc *cxc;
-
-	down(&visdn_cxc_list_sem);
-
-	list_for_each_entry(cxc, &visdn_cxc_list, cxc_list_node) {
-		struct visdn_cxc_connection *conn, *n;
-
-		down(&cxc->sem);
-
-		/* Find destination leg and disconnect it */
-		list_for_each_entry_safe(conn, n, &cxc->connections_list,
-								list_node) {
-
-			if (conn->file == file)
-				_visdn_cxc_disconnect_simplex(conn);
-		}
-
-		up(&cxc->sem);
-	}
-
-	up(&visdn_cxc_list_sem);
 
 	return 0;
 }
@@ -584,6 +544,7 @@ static void visdn_cxc_release(struct kobject *kobj)
 	}
 }
 
+#if 0
 static ssize_t visdn_cxc_connect_store(
 	struct visdn_cxc *cxc,
 	struct visdn_cxc_attribute *attr,
@@ -592,7 +553,7 @@ static ssize_t visdn_cxc_connect_store(
 {
 	int err;
 	char locbuf[100];
-
+	struct visdn_path *path;
 	char *locbuf_p = locbuf;
 	char *chan1_id_str;
 	char *chan2_id_str;
@@ -632,10 +593,9 @@ static ssize_t visdn_cxc_connect_store(
 		goto err_chan2_inval;
 	}
 
-	err = visdn_cxc_connect_with_id(chan1_id, chan2_id, NULL,
-					VISDN_CONNECT_FLAG_PERMANENT |
-					VISDN_CONNECT_FLAG_OVERRIDE);
-	if (err < 0)
+	path = visdn_path_connect_by_id(chan1_id, chan2_id, NULL,
+					VISDN_CONNECT_FLAG_PERMANENT, &err);
+	if (!path)
 		goto err_connect;
 
 	return count;
@@ -653,10 +613,11 @@ err_chan1_untok:
 }
 
 VISDN_CXC_ATTR(connect, S_IWUSR, NULL, visdn_cxc_connect_store);
+#endif
 
 static struct attribute *visdn_cxc_default_attrs[] =
 {
-	&visdn_cxc_attr_connect.attr,
+//	&visdn_cxc_attr_connect.attr,
 	NULL,
 };
 
@@ -691,6 +652,8 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 }
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
+
+decl_subsys_name(visdn_tdm, tdm, &ktype_visdn_cxc, NULL);
 
 int visdn_cxc_register(struct visdn_cxc *cxc)
 {
@@ -782,418 +745,18 @@ void visdn_cxc_unregister(struct visdn_cxc *cxc)
 }
 EXPORT_SYMBOL(visdn_cxc_unregister);
 
-decl_subsys(visdn_tdm, &ktype_visdn_cxc, NULL);
-
-static int visdn_cxc_cdev_open(
-	struct inode *inode,
-	struct file *file)
-{
-	nonseekable_open(inode, file);
-
-	return 0;
-}
-
-static int visdn_cxc_cdev_release(
-	struct inode *inode, struct file *file)
-{
-	visdn_cxc_disconnect_by_file(file);
-
-	return 0;
-}
-
-int visdn_cxc_connect_with_id(
-	int chan1_id,
-	int chan2_id,
-	struct file *file,
-	unsigned long flags)
-{
-	struct visdn_chan *chan1;
-	struct visdn_chan *chan2;
-	struct visdn_leg *leg1;
-	struct visdn_leg *leg2;
-	struct visdn_cxc *cxc;
-	int err;
-
-	chan1 = visdn_chan_get_by_id(chan1_id);
-	if (!chan1) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan1_id);
-
-		err = -ENODEV;
-		goto err_search_src;
-	}
-
-	chan2 = visdn_chan_get_by_id(chan2_id);
-	if (!chan2) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan2_id);
-
-		err = -ENODEV;
-		goto err_search_dst;
-	}
-
-	if (chan1 == chan2) {
-		err = -EINVAL;
-		goto err_connect_self;
-	}
-
-	if (chan1->leg_a.cxc && chan1->leg_a.cxc == chan2->leg_a.cxc) {
-		leg1 = &chan1->leg_a;
-		leg2 = &chan2->leg_a;
-		cxc = chan1->leg_a.cxc;
-	} else if (chan1->leg_a.cxc && chan1->leg_a.cxc == chan2->leg_b.cxc) {
-		leg1 = &chan1->leg_a;
-		leg2 = &chan2->leg_b;
-		cxc = chan1->leg_a.cxc;
-	} else if (chan1->leg_b.cxc && chan1->leg_b.cxc == chan2->leg_a.cxc) {
-		leg1 = &chan1->leg_b;
-		leg2 = &chan2->leg_a;
-		cxc = chan1->leg_b.cxc;
-	} else if (chan1->leg_b.cxc && chan1->leg_b.cxc == chan2->leg_b.cxc) {
-		leg1 = &chan1->leg_b;
-		leg2 = &chan2->leg_b;
-		cxc = chan1->leg_b.cxc;
-	} else {
-		err = -EINVAL;
-		goto err_not_same_cxc;
-	}
-
-	err = visdn_cxc_connect(cxc, leg1, leg2, file, flags);
-	if (err < 0)
-		goto err_connect;
-
-	// Release references returned by visdn_chan_get_by_id()
-	visdn_chan_put(chan1);
-	visdn_chan_put(chan2);
-
-	return 0;
-
-	// visdn_disconnect
-err_connect:
-err_not_same_cxc:
-err_connect_self:
-	visdn_chan_put(chan2);
-err_search_dst:
-	visdn_chan_put(chan1);
-err_search_src:
-
-	return err;
-}
-EXPORT_SYMBOL(visdn_cxc_connect_with_id);
-
-static int visdn_cxc_cdev_do_connect(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg,
-	int do_path)
-{
-	int err;
-	struct visdn_connect connect;
-
-	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	visdn_debug(1,
-		"Connecting '%06d' to '%06d' mode=%d\n",
-		connect.src_chan_id,
-		connect.dst_chan_id,
-		do_path);
-
-	if (do_path) {
-		err = visdn_connect_path_with_id(
-			connect.src_chan_id,
-			connect.dst_chan_id,
-			file,
-			connect.flags);
-	} else {
-		err = visdn_cxc_connect_with_id(
-			connect.src_chan_id,
-			connect.dst_chan_id,
-			file,
-			connect.flags);
-	}
-
-	if (err < 0)
-		goto err_cxc_connect;
-
-	return 0;
-
-err_cxc_connect:
-err_copy_from_user:
-
-	visdn_msg(KERN_NOTICE,
-		"Connection between '%06d' and '%06d' failed: %d\n",
-		connect.src_chan_id,
-		connect.dst_chan_id,
-		err);
-
-	return err;
-}
-
-int visdn_cxc_disconnect_with_id(
-	int chan1_id,
-	int chan2_id)
-{
-	struct visdn_chan *chan1;
-	struct visdn_chan *chan2;
-	struct visdn_leg *leg1;
-	struct visdn_leg *leg2;
-	struct visdn_cxc *cxc;
-	int err;
-
-	chan1 = visdn_chan_get_by_id(chan1_id);
-	if (!chan1) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan1_id);
-
-		err = -ENODEV;
-		goto err_search_src;
-	}
-
-	chan2 = visdn_chan_get_by_id(chan2_id);
-	if (!chan2) {
-		visdn_debug(1,
-			"Channel '%06d' not found\n",
-			chan2_id);
-
-		err = -ENODEV;
-		goto err_search_dst;
-	}
-
-	if (chan1 == chan2) {
-		err = -EINVAL;
-		goto err_disconnect_self;
-	}
-
-	if (chan1->leg_a.cxc && chan1->leg_a.cxc == chan2->leg_a.cxc) {
-		leg1 = &chan1->leg_a;
-		leg2 = &chan2->leg_a;
-		cxc = chan1->leg_a.cxc;
-	} else if (chan1->leg_a.cxc && chan1->leg_a.cxc == chan2->leg_b.cxc) {
-		leg1 = &chan1->leg_a;
-		leg2 = &chan2->leg_b;
-		cxc = chan1->leg_a.cxc;
-	} else if (chan1->leg_b.cxc && chan1->leg_b.cxc == chan2->leg_a.cxc) {
-		leg1 = &chan1->leg_b;
-		leg2 = &chan2->leg_a;
-		cxc = chan1->leg_b.cxc;
-	} else if (chan1->leg_b.cxc && chan1->leg_b.cxc == chan2->leg_b.cxc) {
-		leg1 = &chan1->leg_b;
-		leg2 = &chan2->leg_b;
-		cxc = chan1->leg_b.cxc;
-	} else {
-		err = -EINVAL;
-		goto err_not_same_cxc;
-	}
-
-	err = visdn_cxc_disconnect(cxc, leg1, leg2);
-	if (err < 0)
-		goto err_disconnect;
-
-	/* Release references returned by visdn_chan_get_by_id() */
-	visdn_chan_put(chan1);
-	visdn_chan_put(chan2);
-
-	return 0;
-
-	// visdn_disconnect
-err_disconnect:
-err_not_same_cxc:
-err_disconnect_self:
-	visdn_chan_put(chan2);
-err_search_dst:
-	visdn_chan_put(chan1);
-err_search_src:
-
-	return err;
-}
-EXPORT_SYMBOL(visdn_cxc_disconnect_with_id);
-
-static int visdn_cxc_cdev_do_disconnect(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg,
-	int do_path)
-{
-	struct visdn_connect connect;
-	int err;
-
-	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	if (do_path) {
-		err = visdn_disconnect_path_with_id(
-			connect.src_chan_id);
-	} else {
-		err = visdn_cxc_disconnect_with_id(
-			connect.src_chan_id,
-			connect.dst_chan_id);
-	}
-	if (err < 0)
-		goto err_cxc_disconnect;
-
-	return 0;
-
-err_copy_from_user:
-err_cxc_disconnect:
-
-	return err;
-}
-
-static int visdn_cxc_cdev_do_enable_path(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct visdn_connect connect;
-	int err;
-
-	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	err = visdn_enable_path_with_id(connect.src_chan_id);
-	if (err < 0)
-		goto err_enable;
-
-	return 0;
-
-err_copy_from_user:
-err_enable:
-
-	return err;
-}
-
-static int visdn_cxc_cdev_do_disable_path(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct visdn_connect connect;
-	int err;
-
-	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	err = visdn_disable_path_with_id(connect.src_chan_id);
-	if (err < 0)
-		goto err_disable;
-
-	return 0;
-
-err_copy_from_user:
-err_disable:
-
-	return err;
-}
-
-static int visdn_cxc_cdev_ioctl(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	switch(cmd) {
-	case VISDN_IOC_CONNECT:
-		return visdn_cxc_cdev_do_connect(inode, file, cmd, arg, 0);
-	break;
-
-	case VISDN_IOC_DISCONNECT:
-		return visdn_cxc_cdev_do_disconnect(inode, file, cmd, arg, 0);
-	break;
-
-	case VISDN_IOC_CONNECT_PATH:
-		return visdn_cxc_cdev_do_connect(inode, file, cmd, arg, 1);
-	break;
-
-	case VISDN_IOC_DISCONNECT_PATH:
-		return visdn_cxc_cdev_do_disconnect(inode, file, cmd, arg, 1);
-	break;
-
-	case VISDN_IOC_ENABLE_PATH:
-		return visdn_cxc_cdev_do_enable_path(inode, file, cmd, arg);
-	break;
-
-	case VISDN_IOC_DISABLE_PATH:
-		return visdn_cxc_cdev_do_disable_path(inode, file, cmd, arg);
-	break;
-
-	default:
-		return -EOPNOTSUPP;
-	}
-
-	return 0;
-}
-
-static struct file_operations visdn_cxc_fops =
-{
-	.owner		= THIS_MODULE,
-	.open		= visdn_cxc_cdev_open,
-	.release	= visdn_cxc_cdev_release,
-	.ioctl		= visdn_cxc_cdev_ioctl,
-	.llseek		= no_llseek,
-};
-
 int visdn_cxc_modinit()
 {
 	int err;
 
-	cdev_init(&visdn_cxc_cdev, &visdn_cxc_fops);
-	visdn_cxc_cdev.owner = THIS_MODULE;
-
-	err = cdev_add(&visdn_cxc_cdev, visdn_first_dev + 1, 1);
-	if (err < 0)
-		goto err_cdev_add;
+	visdn_tdm_subsys.kset.kobj.parent = &visdn_subsys.kset.kobj;
 
 	err = subsystem_register(&visdn_tdm_subsys);
 	if (err < 0)
 		goto err_subsystem_register;
 
-	visdn_cxc_control_class_dev.class = &visdn_system_class;
-	visdn_cxc_control_class_dev.class_data = NULL;
-#ifdef HAVE_CLASS_DEV_DEVT
-	visdn_cxc_control_class_dev.devt = visdn_first_dev + 1;
-#endif
-	snprintf(visdn_cxc_control_class_dev.class_id,
-		sizeof(visdn_cxc_control_class_dev.class_id),
-		"cxc-control");
-
-	err = class_device_register(&visdn_cxc_control_class_dev);
-	if (err < 0)
-		goto err_control_class_device_register;
-
-#ifndef HAVE_CLASS_DEV_DEVT
-	class_device_create_file(
-		&visdn_cxc_control_class_dev,
-		&class_device_attr_dev);
-#endif
-
 	return 0;
 
-#ifndef HAVE_CLASS_DEV_DEVT
-	class_device_remove_file(
-		&visdn_cxc_control_class_dev,
-		&class_device_attr_dev);
-#endif
-
-	class_device_del(&visdn_cxc_control_class_dev);
-err_control_class_device_register:
-	cdev_del(&visdn_cxc_cdev);
-err_cdev_add:
 	subsystem_unregister(&visdn_tdm_subsys);
 err_subsystem_register:
 
@@ -1202,13 +765,5 @@ err_subsystem_register:
 
 void visdn_cxc_modexit()
 {
-#ifndef HAVE_CLASS_DEV_DEVT
-	class_device_remove_file(
-		&visdn_cxc_control_class_dev,
-		&class_device_attr_dev);
-#endif
-
-	class_device_del(&visdn_cxc_control_class_dev);
-	cdev_del(&visdn_cxc_cdev);
 	subsystem_unregister(&visdn_tdm_subsys);
 }

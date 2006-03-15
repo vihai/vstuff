@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -32,6 +32,7 @@
 extern dev_t visdn_first_dev;
 extern struct device visdn_system_device;
 extern struct class visdn_system_class;
+extern struct subsystem visdn_subsys;
 
 static inline struct sk_buff *visdn_alloc_skb(unsigned int length)
 {
@@ -62,12 +63,11 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
 
 /*
  * IOC allocation:
- * 0x00 - ?
- * 0x01 - ?
+ * 0x00 - DEV_IOC_ACTIVATE
+ * 0x01 - DEV_IOC_DEACTIVATE
  * 0x02 - IOC_CONNECT
  * 0x03 - IOC_DISCONNECT
- * 0x04 - IOC_CONNECT_PATH
- * 0x05 - IOC_DISCONNECT_PATH
+ * 0x05 - IOC_DISCONNECT_ENDPOINT
  * 0x06 - IOC_ENABLE_PATH
  * 0x07 - IOC_DISABLE_PATH
  * 0x20 - SP_GET_CHANID
@@ -81,22 +81,24 @@ static inline void visdn_kfree_skb(struct sk_buff *skb)
  *
  */
 
-enum visdn_notify
+enum visdn_event
 {
-	VISDN_NOTIFY_PORT_REGISTERED,
-	VISDN_NOTIFY_PORT_UNREGISTERED,
-	VISDN_NOTIFY_PORT_ENABLED,
-	VISDN_NOTIFY_PORT_DISABLED,
-	VISDN_NOTIFY_PORT_CONNECTED,
-	VISDN_NOTIFY_PORT_DISCONNECTED,
-	VISDN_NOTIFY_PORT_ACTIVATED,
-	VISDN_NOTIFY_PORT_DEACTIVATED,
-	VISDN_NOTIFY_PORT_ERROR_INDICATION,
-	VISDN_NOTIFY_CHAN_REGISTERED,
-	VISDN_NOTIFY_CHAN_UNREGISTERED,
-	VISDN_NOTIFY_CHAN_ENABLED,
-	VISDN_NOTIFY_CHAN_DISABLED,
+	VISDN_EVENT_PORT_REGISTERED,
+	VISDN_EVENT_PORT_UNREGISTERED,
+	VISDN_EVENT_PORT_ENABLED,
+	VISDN_EVENT_PORT_DISABLED,
+	VISDN_EVENT_PORT_CONNECTED,
+	VISDN_EVENT_PORT_DISCONNECTED,
+	VISDN_EVENT_PORT_ACTIVATED,
+	VISDN_EVENT_PORT_DEACTIVATED,
+	VISDN_EVENT_PORT_ERROR_INDICATION,
+	VISDN_EVENT_CHAN_REGISTERED,
+	VISDN_EVENT_CHAN_UNREGISTERED,
+	VISDN_EVENT_CHAN_ENABLED,
+	VISDN_EVENT_CHAN_DISABLED,
 };
+
+extern const char *visdn_event_to_text(enum visdn_event event);
 
 extern int visdn_register_notifier(struct notifier_block *nb);
 extern int visdn_unregister_notifier(struct notifier_block *nb);

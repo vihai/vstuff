@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -125,7 +125,10 @@ extern void visdn_port_enabled(struct visdn_port *port);
 extern void visdn_port_disabled(struct visdn_port *port);
 extern void visdn_port_activated(struct visdn_port *port);
 extern void visdn_port_deactivated(struct visdn_port *port);
-extern void visdn_port_error_indication(struct visdn_port *port);
+extern void visdn_port_error_indication(struct visdn_port *port, int code);
+
+extern void visdn_port_activate(struct visdn_port *port);
+extern void visdn_port_deactivate(struct visdn_port *port);
 
 #endif
 

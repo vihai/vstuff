@@ -1,5 +1,5 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
  * Copyright (C) 2004-2006 Daniele Orlandi
  *
@@ -19,8 +19,8 @@
 #include <linux/skbuff.h>
 
 #include "lapd.h"
-#include "lapd_dev.h"
-#include "lapd_out.h"
+#include "device.h"
+#include "output.h"
 #include "tei_mgmt_nt.h"
 
 struct hlist_head lapd_ntme_hash = HLIST_HEAD_INIT;

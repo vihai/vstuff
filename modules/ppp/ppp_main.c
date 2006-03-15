@@ -25,6 +25,7 @@
 #include <linux/visdn/core.h>
 #include <linux/visdn/port.h>
 #include <linux/visdn/softcxc.h>
+#include <linux/visdn/path.h>
 
 #include "ppp.h"
 
@@ -99,13 +100,18 @@ static void vppp_chan_release(struct visdn_chan *visdn_chan)
 static int vppp_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
+	struct visdn_path *path;
 	int err;
 
 	vppp_debug(3, "vppp_open()\n");
 
+	path = visdn_path_get_by_endpoint(visdn_chan);
+	if (!path)
+		return -ENOTCONN;
+
 	chan->ppp_chan.private = chan;
 	chan->ppp_chan.ops = &vppp_ppp_ops;
-	chan->ppp_chan.mtu = visdn_find_lowest_mtu(&visdn_chan->leg_a);
+	chan->ppp_chan.mtu = visdn_path_find_lowest_mtu(path);
 	chan->ppp_chan.hdrlen = sizeof(ppphdr);
 
 	err = ppp_register_channel(&chan->ppp_chan);
@@ -390,37 +396,6 @@ ssize_t vppp_cdev_write(
 	return -ENOTSUPP;
 }
 
-static int vppp_cdev_do_connect(
-	struct inode *inode,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct vppp_chan *chan = file->private_data;
-	struct visdn_connect connect;
-	int err;
-
-	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	err = visdn_connect_path_with_id(
-		chan->visdn_chan.id,
-		connect.dst_chan_id,
-		file,
-		connect.flags);
-	if (err < 0)
-		goto err_cxc_disconnect;
-
-	return 0;
-
-err_cxc_disconnect:
-err_copy_from_user:
-
-	return err;
-}
-
 int vppp_cdev_ioctl(
 	struct inode *inode,
 	struct file *file,
@@ -454,22 +429,6 @@ int vppp_cdev_ioctl(
 
 	case VISDN_PPP_GET_CHANID:
 		return put_user(chan->visdn_chan.id, (unsigned int *)arg);
-	break;
-
-	case VISDN_IOC_CONNECT_PATH:
-		return vppp_cdev_do_connect(inode, file, cmd, arg);
-	break;
-
-	case VISDN_IOC_DISCONNECT_PATH:
-		return visdn_disconnect_path_with_id(chan->visdn_chan.id);
-	break;
-
-	case VISDN_IOC_ENABLE_PATH:
-		return visdn_enable_path_with_id(chan->visdn_chan.id);
-	break;
-
-	case VISDN_IOC_DISABLE_PATH:
-		return visdn_disable_path_with_id(chan->visdn_chan.id);
 	break;
 
 	default:

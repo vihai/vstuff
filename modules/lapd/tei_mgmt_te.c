@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -126,8 +126,7 @@ void lapd_utme_T202_timer(unsigned long data)
 	struct lapd_utme *tme =
 		(struct lapd_utme *)data;
 
-	lapd_msg_tme(tme, KERN_DEBUG,
-		"tei_mgmt T202\n");
+	lapd_msg_tme(tme, KERN_DEBUG, "T202\n");
 
 	spin_lock_bh(&tme->lock);
 
@@ -448,8 +447,7 @@ static void _lapd_utme_tei_remove(struct lapd_utme *tme)
 					to_lapd_sock(sk);
 
 			if (lapd_sock->dev &&
-			    lapd_sock->dev->role ==
-			    		LAPD_INTF_ROLE_TE &&
+			    lapd_sock->dev->role == LAPD_INTF_ROLE_TE &&
 			    lapd_sock->usr_tme == tme) {
 
 				lapd_mdl_primitive(
@@ -474,6 +472,34 @@ void lapd_utme_tei_remove(struct lapd_utme *tme)
 	spin_unlock_bh(&tme->lock);
 }
 
+void lapd_utme_remove_tei(struct lapd_device *dev, u8 tei)
+{
+	struct hlist_node *t;
+	struct lapd_utme *tme;
+	read_lock_bh(&lapd_utme_hash_lock);
+	hlist_for_each_entry(tme, t, &lapd_utme_hash, node) {
+		spin_lock_bh(&tme->lock);
+
+		if (tme->dev != dev) {
+			spin_unlock_bh(&tme->lock);
+			continue;
+		}
+
+		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
+		    (tei == LAPD_BROADCAST_TEI ||
+		     tei == tme->tei)) {
+			lapd_msg_tme(tme, KERN_INFO,
+				"TEI %u removed\n",
+				tei);
+
+			_lapd_utme_tei_remove(tme);
+		}
+
+		spin_unlock_bh(&tme->lock);
+	}
+	read_unlock_bh(&lapd_utme_hash_lock);
+}
+
 static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
@@ -489,32 +515,7 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 			"TEI request with C/R=0 ?\n");
 	}
 
-	{
-	struct hlist_node *t;
-	struct lapd_utme *tme;
-	read_lock_bh(&lapd_utme_hash_lock);
-	hlist_for_each_entry(tme, t, &lapd_utme_hash, node) {
-		spin_lock_bh(&tme->lock);
-
-		if (tme->dev->dev != skb->dev) {
-			spin_unlock_bh(&tme->lock);
-			continue;
-		}
-
-		if (tme->state != LAPD_TME_TEI_UNASSIGNED &&
-		    (tm->ai.value == LAPD_BROADCAST_TEI ||
-		     tm->ai.value == tme->tei)) {
-			lapd_msg_tme(tme, KERN_INFO,
-				"TEI %u removed by net request\n",
-				tm->ai.value);
-
-			_lapd_utme_tei_remove(tme);
-		}
-
-		spin_unlock_bh(&tme->lock);
-	}
-	read_unlock_bh(&lapd_utme_hash_lock);
-	}
+	lapd_utme_remove_tei(dev, tm->ai.value);
 }
 
 int lapd_utme_handle_frame(struct sk_buff *skb)

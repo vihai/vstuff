@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -19,7 +19,9 @@
 #include <linux/tcp.h>
 
 #include "lapd.h"
+#include "output.h"
 #include "tei_mgmt_nt.h"
+#include "sock_inline.h"
 
 struct lapd_device *lapd_dev_get_by_name(const char *name)
 {
@@ -50,6 +52,14 @@ static void lapd_device_up(struct net_device *dev)
 		return;
 
 	memset(lapd_device, 0, sizeof(*lapd_device));
+
+	lapd_device->l1_state = LAPD_L1_STATE_UNAVAILABLE;
+
+	if (dev->do_ioctl)
+		dev->do_ioctl(dev, NULL, LAPD_DEV_IOC_ACTIVATE);
+
+	spin_lock_init(&lapd_device->out_queue_lock);
+	skb_queue_head_init(&lapd_device->out_queue);
 
 	/* TODO FIXME use the correct pointer XXX */
 	dev->atalk_ptr = lapd_device;
@@ -128,6 +138,8 @@ static void lapd_device_down(struct net_device *dev)
 	lapd_kill_by_device(lapd_device);
 
 	if (lapd_device) {
+
+		lapd_out_queue_drop(lapd_device);
 
 		if (lapd_device->net_tme) {
 			hlist_del(&lapd_device->net_tme->node);

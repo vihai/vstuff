@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -33,12 +33,13 @@
 #include <kernel_config.h>
 
 #include "lapd.h"
-#include "lapd_in.h"
-#include "lapd_out.h"
-#include "lapd_dev.h"
+#include "input.h"
+#include "output.h"
+#include "device.h"
 #include "tei_mgmt_nt.h"
 #include "tei_mgmt_te.h"
 #include "datalink.h"
+#include "sock_inline.h"
 
 struct hlist_head lapd_hash[LAPD_HASHSIZE];
 rwlock_t lapd_hash_lock = RW_LOCK_UNLOCKED;
@@ -320,8 +321,8 @@ static int lapd_release(struct socket *sock)
 	lapd_lock_sock(lapd_sock);
 	sk->sk_shutdown = SHUTDOWN_MASK;
 
-	if (sk->sk_state == TCP_LISTEN) {
-		sk->sk_state = TCP_CLOSE;
+	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
+		sk->sk_state = LAPD_SK_STATE_CLOSE;
 
 		write_lock_bh(&lapd_hash_lock);
 		sk_del_node_init(sk);
@@ -331,12 +332,12 @@ static int lapd_release(struct socket *sock)
 
 		case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 		case LAPD_DLS_8_TIMER_RECOVERY:
-			sk->sk_state = TCP_CLOSING;
+			sk->sk_state = LAPD_SK_STATE_CLOSING;
 			lapd_dl_release_request(lapd_sock);
 		break;
 
 		default:
-			sk->sk_state = TCP_CLOSE;
+			sk->sk_state = LAPD_SK_STATE_CLOSE;
 
 			write_lock_bh(&lapd_hash_lock);
 			sk_del_node_init(sk);
@@ -436,6 +437,8 @@ static int lapd_ioctl(
 	case SIOCGIFCOUNT:
 	case SIOCGIFINDEX:
 	case SIOCGIFNAME:
+	case LAPD_DEV_IOC_ACTIVATE:
+	case LAPD_DEV_IOC_DEACTIVATE:
 		rc = dev_ioctl(cmd, argp);
 	break;
 	}
@@ -463,8 +466,9 @@ static int lapd_sendmsg(
 		goto err_shutting_down;
 	}
 
-	if (sk->sk_state != TCP_ESTABLISHED &&
-	    sk->sk_state != TCP_SYN_SENT) {
+	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
+	    sk->sk_state != LAPD_SK_STATE_BROADCAST_DLC &&
+	    sk->sk_state != LAPD_SK_STATE_MGMT) {
 		err = -EINVAL;
 		goto err_not_established;
 	}
@@ -560,7 +564,7 @@ void lapd_dl_primitive(
 	struct lapd_dl_primitive *pri;
 	int skb_len;
 
-	if (lapd_sock->sk.sk_state == TCP_CLOSING) {
+	if (lapd_sock->sk.sk_state == LAPD_SK_STATE_CLOSING) {
 		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
 
 		/* Defer unhash */
@@ -641,15 +645,16 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	lapd_lock_sock(lapd_sock);
 
-	if (sk->sk_state != TCP_ESTABLISHED &&
-	    sk->sk_state != TCP_SYN_SENT) {
-		lapd_release_sock(lapd_sock);
-		return -EINVAL;
-	}
-
 	if (sk->sk_shutdown & RCV_SHUTDOWN) {
 		lapd_release_sock(lapd_sock);
 		return -EPIPE;
+	}
+
+	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
+	    sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
+	    sk->sk_state != LAPD_SK_STATE_MGMT) {
+		lapd_release_sock(lapd_sock);
+		return -EINVAL;
 	}
 
 	if (!lapd_sock->dev) {
@@ -663,7 +668,10 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (!skb)
 		goto err_recv_datagram;
 
-	if (skb->dev) {
+	if (sk->sk_protocol == LAPD_SAPI_MGMT) {
+		skb_copy_datagram_iovec(skb, 0, msg->msg_iov, skb->len);
+		copied = skb->len;
+	} else if (skb->dev) {
 		hdr = (struct lapd_hdr *)skb->mac.raw;
 
 		if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
@@ -748,11 +756,12 @@ static int lapd_bind_to_device(struct sock *sk, const char *devname)
 	/* The reference is passed to lapd_sock->dev */
 	lapd_sock->dev = dev;
 
-	if (lapd_sock->sapi == LAPD_SAPI_Q931) {
+	if (lapd_sock->sapi == LAPD_SAPI_Q931)
 		lapd_sock->sap = &lapd_sock->dev->q931;
-	} else if(lapd_sock->sapi == LAPD_SAPI_X25) {
+	else if(lapd_sock->sapi == LAPD_SAPI_X25)
 		lapd_sock->sap = &lapd_sock->dev->x25;
-	}
+	else if (sk->sk_protocol == LAPD_SAPI_MGMT)
+		sk->sk_state = LAPD_SK_STATE_MGMT;
 
 	write_lock_bh(&lapd_hash_lock);
 	sk_add_node(sk, lapd_get_hash(lapd_sock->dev));
@@ -776,7 +785,7 @@ unsigned int lapd_poll(struct file *file,
 
 	poll_wait(file, sk->sk_sleep, wait);
 
-	if (sk->sk_state == TCP_LISTEN) {
+	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
 		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
 		return !hlist_empty(&lapd_sock->new_dlcs) ?
@@ -801,7 +810,8 @@ unsigned int lapd_poll(struct file *file,
 	    (sk->sk_shutdown & RCV_SHUTDOWN))
 		mask |= POLLIN | POLLRDNORM;
 
-	if (sk->sk_state == TCP_CLOSE || sk->sk_state == TCP_CLOSING)
+	if (sk->sk_state == LAPD_SK_STATE_CLOSE ||
+	    sk->sk_state == LAPD_SK_STATE_CLOSING)
 		mask |= POLLHUP;
 
 	/* writable? */
@@ -1257,7 +1267,7 @@ static void lapd_unhash_timer(unsigned long data)
 	if (lapd_sock)
 		lapd_debug_ls(lapd_sock, "Unhash timer\n");
 
-	WARN_ON(sk->sk_state != TCP_CLOSING);
+	WARN_ON(sk->sk_state != LAPD_SK_STATE_CLOSING);
 
 	write_lock_bh(&lapd_hash_lock);
 	sk_del_node_init(sk);
@@ -1298,7 +1308,7 @@ struct lapd_sock *lapd_new_sock(
 	new_sk->sk_protocol = parent_sk->sk_protocol;
 	new_sk->sk_rcvbuf = parent_sk->sk_rcvbuf;
 	new_sk->sk_sndbuf = parent_sk->sk_sndbuf;
-	new_sk->sk_state = TCP_ESTABLISHED;
+	new_sk->sk_state = LAPD_SK_STATE_NORMAL_DLC;
 	new_sk->sk_sleep = parent_sk->sk_sleep;
 
 #ifdef HAVE_SK_PROT
@@ -1435,7 +1445,7 @@ int lapd_multiframe_wait_for_establishment(
 		if (err)
 			break;
 
-		if (lapd_sock->sk.sk_state != TCP_ESTABLISHED)
+		if (lapd_sock->sk.sk_state != LAPD_SK_STATE_NORMAL_DLC)
 			break;
 
 		if (lapd_sock->state == LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED)
@@ -1482,9 +1492,9 @@ static int lapd_bind(
 
 	lapd_lock_sock(lapd_sock);
 
-	if (sk->sk_state == TCP_LISTEN) {
+	if (sk->sk_state != LAPD_SK_STATE_NULL) {
 		err = -EINVAL;
-		goto err_listening;
+		goto err_not_null;
 	}
 
 	if (!lapd_sock->dev) {
@@ -1501,7 +1511,7 @@ static int lapd_bind(
 		lapd_sock->tei = sal->sal_tei;
 		lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
 
-		sk->sk_state = TCP_SYN_SENT;
+		sk->sk_state = LAPD_SK_STATE_BROADCAST_DLC;
 
 	} else  if (sal->sal_tei == LAPD_DYNAMIC_TEI ||
 		  (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
@@ -1524,7 +1534,7 @@ static int lapd_bind(
 				&lapd_utme_hash);
 		read_unlock_bh(&lapd_utme_hash_lock);
 
-		sk->sk_state = TCP_ESTABLISHED;
+		sk->sk_state = LAPD_SK_STATE_NORMAL_DLC;
 
 		if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
 		    sal->sal_tei <= LAPD_MAX_STA_TEI)
@@ -1563,7 +1573,7 @@ static int lapd_bind(
 err_inv_tei:
 err_dyn_and_nt:
 err_no_dev:
-err_listening:
+err_not_null:
 	lapd_release_sock(lapd_sock);
 err_inv_sockaddr:
 
@@ -1581,7 +1591,7 @@ static int lapd_connect(
 
 	lapd_lock_sock(lapd_sock);
 
-	if (sk->sk_state != TCP_ESTABLISHED) {
+	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC) {
 		err = -EIO;
 		goto err_listening;
 	}
@@ -1650,7 +1660,7 @@ static int lapd_accept(struct socket *sock,
 
 	lapd_lock_sock(lapd_sock);
 
-	if (lapd_sock->sk.sk_state != TCP_LISTEN) {
+	if (lapd_sock->sk.sk_state != LAPD_SK_STATE_LISTEN) {
 		err = -EINVAL;
 		goto err_notlistening;
 	}
@@ -1699,18 +1709,18 @@ static int lapd_listen(struct socket *sock, int backlog)
 		goto err_no_dev;
 	}
 
-	if (sk->sk_state == TCP_CLOSING) {
+	if (sk->sk_state == LAPD_SK_STATE_CLOSING) {
 		err = -EIO;
 		goto err_closing;
 	}
 
-	if (sk->sk_state == TCP_LISTEN) {
+	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
 		err = -ENOTSUPP;
 		goto err_already_listening;
 	}
 
 	sk->sk_max_ack_backlog = backlog;
-	sk->sk_state = TCP_LISTEN;
+	sk->sk_state = LAPD_SK_STATE_LISTEN;
 
 	lapd_sock->state = LAPD_DLS_LISTENING;
 
@@ -1847,7 +1857,8 @@ static int lapd_create(struct socket *sock, int protocol)
 	}
 
 	if (protocol != LAPD_SAPI_Q931 &&
-	    protocol != LAPD_SAPI_X25) {
+	    protocol != LAPD_SAPI_X25 &&
+	    protocol != LAPD_SAPI_MGMT) {
 		err = -EINVAL;
 		goto err_invalid_protocol;
 	}
@@ -1873,10 +1884,14 @@ static int lapd_create(struct socket *sock, int protocol)
 	sk->sk_zapped = 0;
 #endif
 
+	if (protocol == LAPD_SAPI_MGMT)
+		sk->sk_backlog_rcv = lapd_mgmt_backlog_rcv;
+	else
+		sk->sk_backlog_rcv = lapd_backlog_rcv;
+
 	sk->sk_destruct = lapd_sock_destruct;
-	sk->sk_backlog_rcv = lapd_backlog_rcv;
 	sk->sk_protocol = protocol;
-	sk->sk_state = TCP_CLOSE;
+	sk->sk_state = LAPD_SK_STATE_NULL;
 
 	init_timer(&sk->sk_timer);
 	sk->sk_timer.function = &lapd_unhash_timer;
@@ -1922,6 +1937,12 @@ struct packet_type lapd_packet_type = {
 	.func		= lapd_rcv,
 };
 
+struct packet_type lapd_ctrl_packet_type = {
+	.type		= __constant_htons(ETH_P_LAPD_CTRL),
+	.dev		= NULL,
+	.func		= lapd_ctrl_rcv,
+};
+
 static void lapd_watchdog(void *data);
 
 DECLARE_WORK(lapd_watchdog_work, lapd_watchdog, NULL);
@@ -1946,7 +1967,7 @@ printk(KERN_INFO "Sock %s %d %d\n", lapd_sock->dev->name, lapd_sock->tei, lapd_s
 			    (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED ||
 			     lapd_sock->state == LAPD_DLS_1_TEI_UNASSIGNED)) {
 
-				lapd_sock->sk.sk_state = TCP_CLOSING;
+				lapd_sock->sk.sk_state = LAPD_SK_STATE_CLOSING;
 				lapd_sock->sk.sk_shutdown = SHUTDOWN_MASK;
 				lapd_sock->sk.sk_err = EPIPE;
 
@@ -1976,6 +1997,8 @@ static int __init lapd_init(void)
 		INIT_HLIST_HEAD(&lapd_hash[i]);
 	}
 
+	lapd_out_init();
+
 #ifdef HAVE_SK_PROT
 	err = proto_register(&lapd_proto, 1);
 	if (err < 0)
@@ -1996,6 +2019,7 @@ static int __init lapd_init(void)
 	sock_register(&lapd_family_ops);
 
 	dev_add_pack(&lapd_packet_type);
+	dev_add_pack(&lapd_ctrl_packet_type);
 
 	register_netdevice_notifier(&lapd_notifier);
 
@@ -2028,6 +2052,7 @@ static void __exit lapd_exit(void)
 	BUG_TRAP(hlist_empty(&lapd_utme_hash));
 
 	unregister_netdevice_notifier(&lapd_notifier);
+	dev_remove_pack(&lapd_ctrl_packet_type);
 	dev_remove_pack(&lapd_packet_type);
 
 	sock_unregister(PF_LAPD);
@@ -2037,6 +2062,8 @@ static void __exit lapd_exit(void)
 #else
 	kmem_cache_destroy(lapd_sk_cachep);
 #endif
+
+	lapd_out_exit();
 }
 module_exit(lapd_exit);
 

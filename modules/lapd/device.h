@@ -1,5 +1,5 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
  * Copyright (C) 2004-2006 Daniele Orlandi
  *
@@ -14,23 +14,30 @@
 #define _LAPD_DEV_H
 
 #ifdef DEBUG_CODE
-#define lapd_debug_dev(dev, format, arg...)			\
+#define lapd_debug_dev(ld, format, arg...)			\
 		printk(KERN_DEBUG				\
 			"lapd: "				\
 			"%s: "					\
 			format,					\
-			(dev)->dev->name ? (dev)->dev->name : "",\
+			(ld)->dev->name ? (ld)->dev->name : "",\
 			## arg)
 #else
-#define lapd_debug_dev(ls, format, arg...) do { } while (0)
+#define lapd_debug_dev(ld, format, arg...) do { } while (0)
 #endif
 
-#define lapd_msg_dev(dev, lvl, format, arg...)		\
+#define lapd_msg_dev(ld, lvl, format, arg...)		\
 	printk(lvl "lapd: "				\
 		"%s: "					\
 		format,					\
-		(dev)->dev->name,			\
+		(ld)->dev->name,			\
 		## arg)
+
+enum lapd_l1_state
+{
+	LAPD_L1_STATE_UNAVAILABLE,
+	LAPD_L1_STATE_AVAILABLE,
+	LAPD_L1_STATE_ACTIVATING,
+};
 
 struct lapd_device
 {
@@ -43,6 +50,10 @@ struct lapd_device
 	struct lapd_ntme *net_tme;
 	struct lapd_sap q931;
 	struct lapd_sap x25;
+
+	enum lapd_l1_state l1_state;
+	struct sk_buff_head out_queue;
+	spinlock_t out_queue_lock;
 };
 
 int lapd_device_event(struct notifier_block *this,

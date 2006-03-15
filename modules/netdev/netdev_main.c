@@ -1,7 +1,7 @@
 /*
  * vISDN gateway between vISDN's crossconnector and Linux's netdev subsystem
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -26,6 +26,7 @@
 #include <linux/visdn/softcxc.h>
 #include <linux/visdn/port.h>
 #include <linux/visdn/chan.h>
+#include <linux/visdn/path.h>
 #include <linux/lapd.h>
 
 #include "netdev.h"
@@ -100,10 +101,11 @@ static struct vnd_netdevice *_vnd_netdevice_get_by_name(const char *name)
 static struct vnd_netdevice *vnd_netdevice_get_by_name(const char *name)
 {
 	struct vnd_netdevice *netdevice;
+	unsigned long flags;
 
-	spin_lock(&vnd_netdevices_list_lock);
+	spin_lock_irqsave(&vnd_netdevices_list_lock, flags);
 	netdevice = _vnd_netdevice_get_by_name(name);
-	spin_unlock(&vnd_netdevices_list_lock);
+	spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 
 	return netdevice;
 }
@@ -120,10 +122,22 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
+	struct visdn_path *path;
+	struct visdn_chan *other_ep;
 
 	vnd_debug(3, "vnd_chan_open()\n");
 
-	netdevice->mtu = visdn_find_lowest_mtu(&visdn_chan->leg_a);
+	path = visdn_path_get_by_endpoint(visdn_chan);
+	if (!path)
+		return -ENOTCONN;
+
+	netdevice->mtu = visdn_path_find_lowest_mtu(path);
+
+	other_ep = visdn_path_get_other_endpoint(path, visdn_chan);
+
+	netdevice->remote_port = visdn_port_get(other_ep->port);
+
+	visdn_chan_put(other_ep);
 
 	if (!test_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state)) {
 		rtnl_lock();
@@ -138,7 +152,12 @@ static int vnd_chan_open(struct visdn_chan *visdn_chan)
 
 static int vnd_chan_close(struct visdn_chan *visdn_chan)
 {
+	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
+
 	vnd_debug(3, "vnd_chan_close()\n");
+
+	if (netdevice->remote_port)
+		visdn_port_put(netdevice->remote_port);
 
 	return 0;
 }
@@ -356,11 +375,15 @@ struct visdn_leg_ops vnd_chan_leg_e_ops = {
 static int vnd_netdev_open(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
+	struct visdn_path *path;
 	int err;
 
 	set_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
-	err = visdn_enable_path(&netdevice->visdn_chan);
+	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan);
+	BUG_ON(!path);
+
+	err = visdn_path_enable(path);
 	if (err < 0)
 		goto err_enable_path;
 
@@ -378,11 +401,15 @@ err_enable_path:
 static int vnd_netdev_stop(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
+	struct visdn_path *path;
 	int err;
 
 	vnd_debug(3, "vnd_netdev_stop()\n");
 
-	err = visdn_disable_path(&netdevice->visdn_chan);
+	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan);
+	BUG_ON(!path);
+
+	err = visdn_path_disable(path);
 	if (err < 0)
 		goto err_disable_path;
 
@@ -450,11 +477,16 @@ static void vnd_netdev_set_multicast_list(
 static void vnd_promiscuity_change_work(void *data)
 {
 	struct vnd_netdevice *netdevice = data;
+	struct visdn_path *path;
 
-	if (netdevice->netdev->flags & IFF_PROMISC)
-		visdn_enable_path(&netdevice->visdn_chan_e);
-	else if(!(netdevice->netdev->flags & IFF_PROMISC))
-		visdn_disable_path(&netdevice->visdn_chan_e);
+	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan_e);
+	if (path) {
+		if (netdevice->netdev->flags & IFF_PROMISC) {
+			visdn_path_enable(path);
+		} else if(!(netdevice->netdev->flags & IFF_PROMISC)) {
+			visdn_path_disable(path);
+		}
+	}
 
 	vnd_netdevice_put(netdevice);
 }
@@ -463,7 +495,17 @@ static int vnd_netdev_do_ioctl(
 	struct net_device *netdev,
 	struct ifreq *ifr, int cmd)
 {
-//	struct vnd_netdevice *netdevice = netdev->priv;
+	struct vnd_netdevice *netdevice = netdev->priv;
+
+	switch(cmd) {
+	case LAPD_DEV_IOC_ACTIVATE:
+		visdn_port_activate(netdevice->remote_port);
+	break;
+
+	case LAPD_DEV_IOC_DEACTIVATE:
+		visdn_port_deactivate(netdevice->remote_port);
+	break;
+	}
 
 	return -EOPNOTSUPP;
 }
@@ -533,6 +575,114 @@ static void setup_lapd(struct net_device *netdev)
 	netdev->flags = 0;
 }
 
+static void vnd_send_primitive(
+	struct visdn_port *port,
+	u8 primitive_type, u8 param1)
+{
+	struct vnd_netdevice *netdevice;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vnd_netdevices_list_lock, flags);
+
+	list_for_each_entry(netdevice, &vnd_netdevices_list, list_node) {
+		struct lapd_ctrl_header *hdr;
+		struct sk_buff *skb;
+
+		if (netdevice->remote_port != port)
+			continue;
+		
+		skb = alloc_skb(sizeof(struct lapd_ctrl_header), GFP_ATOMIC);
+		if (!skb) {
+			spin_unlock_irqrestore(&vnd_netdevices_list_lock,
+								flags);
+			return;
+		}
+
+		skb->protocol = __constant_htons(ETH_P_LAPD_CTRL);
+		skb->dev = netdevice->netdev;
+		skb->pkt_type = PACKET_HOST;
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
+
+		hdr = (struct lapd_ctrl_header *)
+			skb_put(skb, sizeof(struct lapd_ctrl_header));
+
+		hdr->primitive_type = primitive_type;
+		hdr->param1 = param1;
+
+		netif_rx(skb);
+	}
+
+	spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
+}
+
+static void vnd_port_connected(struct visdn_port *visdn_port)
+{
+	vnd_send_primitive(visdn_port,
+		LAPD_MPH_INFORMATION_INDICATION,
+		LAPD_MPH_II_CONNECTED);
+}
+
+static void vnd_port_disconnected(struct visdn_port *visdn_port)
+{
+	vnd_send_primitive(visdn_port,
+		LAPD_MPH_INFORMATION_INDICATION,
+		LAPD_MPH_II_DISCONNECTED);
+}
+
+static void vnd_port_activated(struct visdn_port *visdn_port)
+{
+	vnd_send_primitive(visdn_port, LAPD_PH_ACTIVATE_INDICATION, 0);
+	vnd_send_primitive(visdn_port, LAPD_MPH_ACTIVATE_INDICATION, 0);
+}
+
+static void vnd_port_deactivated(struct visdn_port *visdn_port)
+{
+	vnd_send_primitive(visdn_port, LAPD_PH_DEACTIVATE_INDICATION, 0);
+	vnd_send_primitive(visdn_port, LAPD_MPH_DEACTIVATE_INDICATION, 0);
+}
+
+static void vnd_port_error_indication(struct visdn_port *visdn_port, u8 value)
+{
+	vnd_send_primitive(visdn_port, LAPD_MPH_ERROR_INDICATION, value);
+}
+
+static int vnd_notifier_event(
+	struct notifier_block *this,
+	unsigned long event,
+	void *ptr)
+{
+	struct visdn_port *port = (struct visdn_port *)ptr;
+
+	switch(event) {
+	case VISDN_EVENT_PORT_CONNECTED:
+		vnd_port_connected(port);
+	break;
+
+	case VISDN_EVENT_PORT_DISCONNECTED:
+		vnd_port_disconnected(port);
+	break;
+
+	case VISDN_EVENT_PORT_ACTIVATED:
+		vnd_port_activated(port);
+	break;
+
+	case VISDN_EVENT_PORT_DEACTIVATED:
+		vnd_port_deactivated(port);
+	break;
+
+	case VISDN_EVENT_PORT_ERROR_INDICATION:
+		vnd_port_error_indication(port, (unsigned long)ptr);
+	break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block vnd_notifier = {
+	.notifier_call = vnd_notifier_event,
+};
+
 static int vnd_cdev_ioctl_do_create(
 	struct inode *inode,
 	struct file *file,
@@ -543,6 +693,7 @@ static int vnd_cdev_ioctl_do_create(
 	struct vnd_create create;
 	void (*setup_func)(struct net_device *) = NULL;
 	struct vnd_netdevice *netdevice = NULL;
+	unsigned long flags;
 
 	if (arg < sizeof(create)) {
 		err = -EINVAL;
@@ -580,18 +731,18 @@ static int vnd_cdev_ioctl_do_create(
 
 	{
 	struct vnd_netdevice *nd;
-	spin_lock(&vnd_netdevices_list_lock);
+	spin_lock_irqsave(&vnd_netdevices_list_lock, flags);
 	nd = _vnd_netdevice_get_by_name(create.devname);
 	if (nd) {
 		err = -EEXIST;
 		vnd_netdevice_put(nd);
-		spin_unlock(&vnd_netdevices_list_lock);
+		spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 		goto err_already_exists;
 	}
 
 	vnd_netdevice_get(netdevice);
 	list_add_tail(&netdevice->list_node, &vnd_netdevices_list);
-	spin_unlock(&vnd_netdevices_list_lock);
+	spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 	}
 
 	/*************** D channel ***************/
@@ -739,9 +890,9 @@ err_alloc_netdev:
 err_visdn_chan_e_register:
 	visdn_chan_unregister(&netdevice->visdn_chan);
 err_visdn_chan_register:
-	spin_lock(&vnd_netdevices_list_lock);
+	spin_lock_irqsave(&vnd_netdevices_list_lock, flags);
 	list_del(&netdevice->list_node);
-	spin_unlock(&vnd_netdevices_list_lock);
+	spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 err_already_exists:
 	kfree(netdevice);
 err_kmalloc:
@@ -754,6 +905,7 @@ err_invalid_sizeof_create:
 
 static void vnd_do_destroy(struct vnd_netdevice *netdevice)
 {
+	unsigned long flags;
 	//visdn_disconnect_path_with_id(netdevice->visdn_chan.id);
 	//visdn_disconnect_path_with_id(netdevice->visdn_chan_e.id);
 
@@ -773,10 +925,10 @@ static void vnd_do_destroy(struct vnd_netdevice *netdevice)
 	visdn_chan_unregister(&netdevice->visdn_chan_e);
 	visdn_chan_put(&netdevice->visdn_chan_e);
 
-	spin_lock(&vnd_netdevices_list_lock);
+	spin_lock_irqsave(&vnd_netdevices_list_lock, flags);
 	list_del_init(&netdevice->list_node);
 	vnd_netdevice_put(netdevice);
-	spin_unlock(&vnd_netdevices_list_lock);
+	spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 }
 
 static int vnd_cdev_ioctl_do_destroy(
@@ -848,10 +1000,6 @@ static struct file_operations vnd_fops =
 	.llseek		= no_llseek,
 	.ioctl		= vnd_cdev_ioctl,
 };
-
-/******************************************
- * Module stuff
- ******************************************/
 
 struct visdn_port_ops vnd_port_ops = {
 	.owner		= THIS_MODULE,
@@ -952,6 +1100,8 @@ static int __init vnd_init_module(void)
 		&class_device_attr_dev);
 #endif
 
+	visdn_register_notifier(&vnd_notifier);
+
 	return 0;
 
 	class_device_del(&vnd_control_class_dev);
@@ -977,6 +1127,8 @@ module_init(vnd_init_module);
 static void __exit vnd_module_exit(void)
 {
 	struct vnd_netdevice *netdevice, *t;
+
+	visdn_unregister_notifier(&vnd_notifier);
 
 	/* Ensure noone can open/ioctl cdevs before removing netdevices*/
 #ifndef HAVE_CLASS_DEV_DEVT

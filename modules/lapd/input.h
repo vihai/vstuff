@@ -1,7 +1,7 @@
 /*
- * vISDN LAPD/q.931 protocol implementation
+ * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,7 +13,7 @@
 #ifndef _LAPD_IN_H
 #define _LAPD_IN_H
 
-extern int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
+int lapd_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 extern int lapd_rcv(
@@ -22,6 +22,21 @@ extern int lapd_rcv(
 	struct packet_type *pt);
 #else
 extern int lapd_rcv(
+	struct sk_buff *skb,
+	struct net_device *dev,
+	struct packet_type *pt,
+	struct net_device *orig_dev);
+#endif
+
+int lapd_mgmt_backlog_rcv(struct sock *sk, struct sk_buff *skb);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
+extern int lapd_ctrl_rcv(
+	struct sk_buff *skb,
+	struct net_device *dev,
+	struct packet_type *pt);
+#else
+extern int lapd_ctrl_rcv(
 	struct sk_buff *skb,
 	struct net_device *dev,
 	struct packet_type *pt,

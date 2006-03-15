@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -26,6 +26,8 @@
 #include "chan.h"
 #include "port.h"
 #include "timer.h"
+#include "router.h"
+#include "path.h"
 
 #ifdef DEBUG_CODE
 #ifdef DEBUG_DEFAULTS
@@ -75,11 +77,52 @@ int visdn_call_notifiers(unsigned long val, void *v)
 }
 EXPORT_SYMBOL(visdn_call_notifiers);
 
+const char *visdn_event_to_text(enum visdn_event event)
+{
+	switch(event) {
+	case VISDN_EVENT_PORT_REGISTERED:
+		return "PORT_REGISTERED";
+	case VISDN_EVENT_PORT_UNREGISTERED:
+		return "PORT_REGISTERED";
+	case VISDN_EVENT_PORT_ENABLED:
+		return "PORT_ENABLED";
+	case VISDN_EVENT_PORT_DISABLED:
+		return "PORT_DISABLED";
+	case VISDN_EVENT_PORT_CONNECTED:
+		return "PORT_CONNECTED";
+	case VISDN_EVENT_PORT_DISCONNECTED:
+		return "PORT_DISCONNECTED";
+	case VISDN_EVENT_PORT_ACTIVATED:
+		return "PORT_ACTIVATED";
+	case VISDN_EVENT_PORT_DEACTIVATED:
+		return "PORT_DEACTIVATED";
+	case VISDN_EVENT_PORT_ERROR_INDICATION:
+		return "ERROR_INDICATION";
+	case VISDN_EVENT_CHAN_REGISTERED:
+		return "CHAN_REGISTERED";
+	case VISDN_EVENT_CHAN_UNREGISTERED:
+		return "CHAN_UNREGISTERED";
+	case VISDN_EVENT_CHAN_ENABLED:
+		return "CHAN_ENABLED";
+	case VISDN_EVENT_CHAN_DISABLED:
+		return "CHAN_DISABLED";
+	default:
+		return "*INVALID*";
+	}
+}
+EXPORT_SYMBOL(visdn_event_to_text);
+
+decl_subsys(visdn, NULL, NULL);
+
 static int __init visdn_init_module(void)
 {
 	int err;
 
 	visdn_msg(KERN_INFO, "loading\n");
+
+	err = subsystem_register(&visdn_subsys);
+	if (err < 0)
+		goto err_subsystem_register;
 
 	err = alloc_chrdev_region(&visdn_first_dev, 0, 2, visdn_MODULE_NAME);
 	if (err < 0)
@@ -106,6 +149,10 @@ static int __init visdn_init_module(void)
 	if (err < 0)
 		goto err_cxc_modinit;
 
+	err = visdn_path_modinit();
+	if (err < 0)
+		goto err_router_modinit;
+
 	err = visdn_timer_modinit();
 	if (err < 0)
 		goto err_timer_modinit;
@@ -126,6 +173,8 @@ err_chan_modinit:
 err_port_modinit:
 	visdn_timer_modexit();
 err_timer_modinit:
+	visdn_path_modexit();
+err_router_modinit:
 	visdn_cxc_modexit();
 err_cxc_modinit:
 	class_unregister(&visdn_system_class);
@@ -134,6 +183,8 @@ err_class_register:
 err_system_device_register:
 	unregister_chrdev_region(visdn_first_dev, 2);
 err_alloc_chrdev_region:
+	subsystem_unregister(&visdn_subsys);
+err_subsystem_register:
 
 	return err;
 }
@@ -145,6 +196,7 @@ static void __exit visdn_module_exit(void)
 	visdn_chan_modexit();
 	visdn_port_modexit();
 	visdn_timer_modexit();
+	visdn_path_modexit();
 	visdn_cxc_modexit();
 
 	class_unregister(&visdn_system_class);
@@ -152,6 +204,8 @@ static void __exit visdn_module_exit(void)
 	device_unregister(&visdn_system_device);
 
 	unregister_chrdev_region(visdn_first_dev, 2);
+
+	subsystem_unregister(&visdn_subsys);
 
 	visdn_msg(KERN_INFO, "unloaded\n");
 }

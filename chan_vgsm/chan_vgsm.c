@@ -46,8 +46,6 @@
 #include <linux/vgsm.h>
 
 #include <linux/visdn/streamport.h>
-#include <linux/visdn/softcxc.h>
-#include <linux/visdn/cxc.h>
 #include <linux/visdn/router.h>
 
 #include "util.h"
@@ -1100,13 +1098,15 @@ static int vgsm_connect_channel(
 	vc.dst_chan_id = vgsm_chan->module_channel_id;
 	vc.flags = 0;
 
-	if (ioctl(vgsm.cxc_control_fd, VISDN_IOC_CONNECT_PATH,
+	if (ioctl(vgsm.router_control_fd, VISDN_IOC_CONNECT,
 						(caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT_PATH, sp, isdn): %s\n",
+			"ioctl(VISDN_CONNECT, sp, isdn): %s\n",
 			strerror(errno));
 		goto err_ioctl_connect_path;
 	}
+
+	vgsm_chan->path_id = vc.path_id;
 
 	vc.src_chan_id = vgsm_chan->module_channel_id;
 	vc.flags = 0;
@@ -1512,30 +1512,17 @@ static void vgsm_disconnect_channel(
 		return;
 
 	struct visdn_connect vc;
-	vc.src_chan_id = vgsm_chan->sp_channel_id;
+	vc.path_id = vgsm_chan->path_id;
+	vc.src_chan_id = 0;
 	vc.dst_chan_id = 0;
 	vc.flags = 0;
 
-	if (ioctl(vgsm.cxc_control_fd,
-			VISDN_IOC_DISCONNECT_PATH,
+	if (ioctl(vgsm.router_control_fd,
+			VISDN_IOC_DISCONNECT,
 			(caddr_t)&vc) < 0) {
 
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_IOC_DISCONNECT_PATH):"
-			" %s\n",
-			strerror(errno));
-	}
-
-	vc.src_chan_id = vgsm_chan->module_channel_id;
-	vc.dst_chan_id = 0;
-	vc.flags = 0;
-
-	if (ioctl(vgsm.cxc_control_fd,
-			VISDN_IOC_DISCONNECT_PATH,
-			(caddr_t)&vc) < 0) {
-
-		ast_log(LOG_ERROR,
-			"ioctl(VISDN_IOC_DISCONNECT_PATH):"
+			"ioctl(VISDN_IOC_DISCONNECT):"
 			" %s\n",
 			strerror(errno));
 	}
@@ -3043,12 +3030,12 @@ int load_module()
 	INIT_LIST_HEAD(&vgsm.ifs);
 	INIT_LIST_HEAD(&vgsm.op_list);
 
-	vgsm.cxc_control_fd = open("/dev/visdn/cxc-control", O_RDWR);
-	if (vgsm.cxc_control_fd < 0) {
-		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
+	vgsm.router_control_fd = open("/dev/visdn/router-control", O_RDWR);
+	if (vgsm.router_control_fd < 0) {
+		ast_log(LOG_ERROR, "Unable to open router-control: %s\n",
 			strerror(errno));
 		err = -1;
-		goto err_open_cxc_control;
+		goto err_open_router_control;
 	}
 
 	sched = sched_context_create();
@@ -3107,9 +3094,8 @@ err_channel_register:
 
 	sched_context_destroy(sched);
 err_sched_context_create:
-	close(vgsm.cxc_control_fd);
-err_open_cxc_control:
-
+	close(vgsm.router_control_fd);
+err_open_router_control:
 
 	return err;
 }
@@ -3129,7 +3115,7 @@ int unload_module(void)
 	if (sched)
 		sched_context_destroy(sched);
 
-	close(vgsm.cxc_control_fd);
+	close(vgsm.router_control_fd);
 
 	return 0;
 }

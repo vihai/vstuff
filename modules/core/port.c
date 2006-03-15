@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -61,7 +61,7 @@ static ssize_t visdn_port_store_enabled(
 		if (port->ops->enable)
 			port->ops->enable(port);
 
-		visdn_call_notifiers(VISDN_NOTIFY_PORT_ENABLED, port);
+		visdn_call_notifiers(VISDN_EVENT_PORT_ENABLED, port);
 
 	} else if (!enabled && port->enabled) {
 
@@ -70,7 +70,7 @@ static ssize_t visdn_port_store_enabled(
 		if (port->ops->disable)
 			port->ops->disable(port);
 
-		visdn_call_notifiers(VISDN_NOTIFY_PORT_DISABLED, port);
+		visdn_call_notifiers(VISDN_EVENT_PORT_DISABLED, port);
 	}
 
 	visdn_port_unlock(port);
@@ -113,51 +113,65 @@ static struct attribute *visdn_port_default_attrs[] =
 
 void visdn_port_connected(struct visdn_port *port)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_CONNECTED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_CONNECTED, port);
 }
 EXPORT_SYMBOL(visdn_port_connected);
 
 void visdn_port_disconnected(struct visdn_port *port)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_DISCONNECTED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_DISCONNECTED, port);
 }
 EXPORT_SYMBOL(visdn_port_disconnected);
 
 void visdn_port_enabled(struct visdn_port *port)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_ENABLED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_ENABLED, port);
 }
 EXPORT_SYMBOL(visdn_port_enabled);
 
 void visdn_port_disabled(struct visdn_port *port)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_DISABLED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_DISABLED, port);
 }
 EXPORT_SYMBOL(visdn_port_disabled);
 
 void visdn_port_activated(struct visdn_port *port)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_ACTIVATED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_ACTIVATED, port);
 }
 EXPORT_SYMBOL(visdn_port_activated);
 
 void visdn_port_deactivated(struct visdn_port *port)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_DEACTIVATED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_DEACTIVATED, port);
 }
 EXPORT_SYMBOL(visdn_port_deactivated);
 
-void visdn_port_error_indication(struct visdn_port *port)
+void visdn_port_error_indication(struct visdn_port *port, int code)
 {
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_ERROR_INDICATION, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_ERROR_INDICATION, port);
 }
 EXPORT_SYMBOL(visdn_port_error_indication);
+
+void visdn_port_activate(struct visdn_port *port)
+{
+	if (port->ops->activate)
+		port->ops->activate(port);
+}
+EXPORT_SYMBOL(visdn_port_activate);
+
+void visdn_port_deactivate(struct visdn_port *port)
+{
+	if (port->ops->deactivate)
+		port->ops->deactivate(port);
+}
+EXPORT_SYMBOL(visdn_port_deactivate);
 
 void visdn_port_init(struct visdn_port *port)
 {
 	BUG_ON(!port);
 
-	memset(port, 0x00, sizeof(*port));
+	memset(port, 0, sizeof(*port));
 
 	kobject_init(&port->kobj);
 	INIT_LIST_HEAD(&port->channels);
@@ -198,7 +212,7 @@ int visdn_port_register(struct visdn_port *port)
 	if (err < 0)
 		goto err_kobject_add;
 
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_REGISTERED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_REGISTERED, port);
 
 	return 0;
 
@@ -219,7 +233,7 @@ void visdn_port_unregister(
 {
 	visdn_debug(3, "visdn_port_unregister called\n");
 
-	visdn_call_notifiers(VISDN_NOTIFY_PORT_UNREGISTERED, port);
+	visdn_call_notifiers(VISDN_EVENT_PORT_UNREGISTERED, port);
 
 	kobject_del(&port->kobj);
 

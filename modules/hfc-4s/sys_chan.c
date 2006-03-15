@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -512,12 +512,6 @@ static int hfc_sys_chan_frame_xmit(
 	struct hfc_fifo *fifo = &chan->tx_fifo;
 
 	hfc_card_lock(card);
-
-	if (chan->connected_st_chan) {
-		hfc_st_port_select(chan->connected_st_chan->port);
-		hfc_st_port_check_l1_up(chan->connected_st_chan->port);
-	}
-
 	hfc_fifo_select(fifo);
 	/*
 	 * hfc_fifo_select() updates F/Z cache, so,

@@ -916,9 +916,7 @@ int q931_receive(struct q931_dlc *dlc)
 			report_dlc(dlc, LOG_ERR, "recvmsg error: %s\n",
 				strerror(errno));
 
-			list_del(&dlc->intf_node);
-
-			err = Q931_RECEIVE_REFRESH;
+			err = -EIO;
 			goto err_recvmsg_error;
 		}
 

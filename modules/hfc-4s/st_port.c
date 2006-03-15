@@ -43,6 +43,34 @@
 		(port)->id,					\
 		## arg)
 
+static void hfc_port_do_activate_request(struct hfc_st_port *port)
+{
+	struct hfc_card *card = port->card;
+
+	hfc_outb(card, hfc_A_ST_WR_STA,
+		hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION);
+
+	if (port->nt_mode)
+		mod_timer(&port->timer_t1,
+			jiffies + port->timer_t1_value);
+	else
+		mod_timer(&port->timer_t3,
+			jiffies + port->timer_t3_value);
+}
+
+static void hfc_port_do_deactivate_request(struct hfc_st_port *port)
+{
+	struct hfc_card *card = port->card;
+
+	if (port->nt_mode)
+		del_timer(&port->timer_t1);
+	else
+		del_timer(&port->timer_t3);
+	
+	hfc_outb(card, hfc_A_ST_WR_STA,
+		hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION);
+}
+
 //----------------------------------------------------------------------------
 
 static ssize_t hfc_show_role(
@@ -123,19 +151,9 @@ static ssize_t hfc_store_l1_state(
 	hfc_st_port_select(port);
 
 	if (count >= 8 && !strncmp(buf, "activate", 8)) {
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION);
-
-		if (port->nt_mode)
-			mod_timer(&port->timer_t1,
-				jiffies + port->timer_t1_value);
-		else
-			mod_timer(&port->timer_t3,
-				jiffies + port->timer_t3_value);
-
+		hfc_port_do_activate_request(port);
 	} else if (count >= 10 && !strncmp(buf, "deactivate", 10)) {
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION);
+		hfc_port_do_deactivate_request(port);
 	} else {
 		int state;
 		if (sscanf(buf, "%d", &state) < 1) {
@@ -457,7 +475,7 @@ static void hfc_st_port_state_change_nt(
 		hfc_outb(card, hfc_A_ST_WR_STA, hfc_A_ST_WR_STA_V_SET_G2_G3);
 
 		if (old_state == 3) {
-			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_error_indication(&port->visdn_port, 0);
 			visdn_port_deactivated(&port->visdn_port);
 
 			hfc_st_port_fifo_update(port);
@@ -469,8 +487,7 @@ static void hfc_st_port_state_change_nt(
 
 		visdn_port_activated(&port->visdn_port);
 
-		schedule_delayed_work(&port->fifo_activation_work,
-							50 * HZ / 1000);
+		hfc_st_port_fifo_update(port);
 	break;
 
 	case 4:
@@ -512,22 +529,21 @@ static void hfc_st_port_state_change_te(
 		hfc_st_port_fifo_update(port);
 
 		if (old_state == 8)
-			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 
 	case 6:
 	case 8:
-		visdn_port_error_indication(&port->visdn_port);
+		visdn_port_error_indication(&port->visdn_port, 0);
 	break;
 
 	case 7:
 		visdn_port_activated(&port->visdn_port);
 
-		schedule_delayed_work(&port->fifo_activation_work,
-						50 * HZ / 1000);
+		hfc_st_port_fifo_update(port);
 
 		if (old_state == 6 || old_state == 8)
-			visdn_port_error_indication(&port->visdn_port);
+			visdn_port_error_indication(&port->visdn_port, 0);
 
 		del_timer(&port->timer_t3);
 	break;
@@ -540,6 +556,7 @@ static void hfc_st_port_timer_t1(unsigned long data)
 	struct hfc_card *card = port->card;
 
 	hfc_card_lock(card);
+	hfc_st_port_select(port);
 	hfc_outb(card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(4) |
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
@@ -554,6 +571,7 @@ static void hfc_st_port_timer_t3(unsigned long data)
 	struct hfc_card *card = port->card;
 
 	hfc_card_lock(card);
+	hfc_st_port_select(port);
 	hfc_outb(card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(3) |
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
@@ -607,36 +625,6 @@ static void hfc_st_port_state_change_work(void *data)
 	hfc_st_port_update_led(port);
 
 	hfc_card_unlock(card);
-}
-
-static void hfc_st_port_fifo_activation_work(void *data)
-{
-	struct hfc_st_port *port = data;
-	struct hfc_card *card = port->card;
-
-	hfc_card_lock(card);
-
-	hfc_st_port_fifo_update(port);
-
-	hfc_card_unlock(card);
-}
-
-void hfc_st_port_check_l1_up(struct hfc_st_port *port)
-{
-	struct hfc_card *card = port->card;
-
-	if (port->visdn_port.enabled &&
-		((!port->nt_mode && port->l1_state != 7) ||
-		(port->nt_mode && port->l1_state != 3))) {
-
-		hfc_debug_st_port(port, 1,
-			"L1 is down, bringing up L1.\n");
-
-		hfc_outb(card, hfc_A_ST_WR_STA,
-			hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION|
-			hfc_A_ST_WR_STA_V_SET_G2_G3);
-
-	}
 }
 
 static void hfc_st_port_release(
@@ -694,8 +682,8 @@ static int hfc_st_port_activate(
 	struct hfc_card *card = port->card;
 
 	hfc_card_lock(card);
-	hfc_outb(card, hfc_A_ST_WR_STA,
-		hfc_A_ST_WR_STA_V_ST_ACT_ACTIVATION);
+	hfc_st_port_select(port);
+	hfc_port_do_activate_request(port);
 	hfc_card_unlock(card);
 
 	return 0;
@@ -708,8 +696,8 @@ static int hfc_st_port_deactivate(
 	struct hfc_card *card = port->card;
 
 	hfc_card_lock(card);
-	hfc_outb(card, hfc_A_ST_WR_STA,
-		hfc_A_ST_WR_STA_V_ST_ACT_DEACTIVATION);
+	hfc_st_port_select(port);
+	hfc_port_do_deactivate_request(port);
 	hfc_card_unlock(card);
 
 	return 0;
@@ -737,10 +725,6 @@ void hfc_st_port_init(
 
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
-		port);
-
-	INIT_WORK(&port->fifo_activation_work,
-		hfc_st_port_fifo_activation_work,
 		port);
 
 	init_timer(&port->timer_t1);

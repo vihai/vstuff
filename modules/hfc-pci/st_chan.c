@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-S PCI A vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -639,8 +639,6 @@ static int hfc_st_chan_frame_xmit(
 
 	if (!fifo)
 		goto no_fifo;
-
-	hfc_st_port_check_l1_up(chan->port);
 
 	if (hfc_fifo_free_frames(fifo) <= 1) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
