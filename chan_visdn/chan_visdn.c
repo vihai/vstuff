@@ -194,8 +194,8 @@ void refresh_polls_list()
 					POLLIN | POLLERR;
 			visdn.poll_infos[visdn.npolls].type =
 					POLL_INFO_TYPE_ACCEPT;
-			visdn.npolls++;
 			visdn.poll_infos[visdn.npolls].intf = intf;
+			visdn.npolls++;
 		}
 
 		if (intf->q931_intf->dlc.socket >= 0) {
@@ -232,7 +232,7 @@ void refresh_polls_list()
 							POLL_INFO_TYPE_DLC;
 			visdn.poll_infos[visdn.npolls].dlc = dlc;
 			visdn.poll_infos[visdn.npolls].intf = intf;
-			(visdn.npolls)++;
+			visdn.npolls++;
 		}
 	}
 
