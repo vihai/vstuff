@@ -19,7 +19,7 @@ modprobe visdn-hfc-usb
 modprobe visdn-hfc-e1
 
 NETDEV_CONTROL_DEVICE="/dev/visdn/netdev-control"
-CXC_CONTROL_DEVICE="/dev/visdn/cxc-control"
+ROUTER_CONTROL_DEVICE="/dev/visdn/router-control"
 
 function check_device()
 {
@@ -273,7 +273,7 @@ function read_port_block
 }
 
 wait_for_device $NETDEV_CONTROL_DEVICE
-wait_for_device $CXC_CONTROL_DEVICE
+wait_for_device $ROUTER_CONTROL_DEVICE
 
 for CARD in `ls $VISDN_DIR`; do
 	if [[ ! "$CARD" =~ '^device-([a-z0-9]+)-(.*)$' ]]; then
