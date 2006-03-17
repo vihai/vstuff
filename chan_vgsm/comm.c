@@ -88,6 +88,8 @@ static const char *vgsm_comm_state_to_text(
 		return "IDLE";
 	case VGSM_PS_RECOVERING:
 		return "RECOVERING";
+	case VGSM_PS_RECOVERING_PENDING:
+		return "RECOVERING_PENDING";
 	case VGSM_PS_AWAITING_ECHO:
 		return "AWAITING_ECHO";
 	case VGSM_PS_READING_RESPONSE:
@@ -504,6 +506,7 @@ static void handle_unsolicited_response(
 
 	case VGSM_PS_BITBUCKET:
 	case VGSM_PS_RECOVERING:
+	case VGSM_PS_RECOVERING_PENDING:
 	case VGSM_PS_READING_RESPONSE:
 	case VGSM_PS_READING_URC:
 	case VGSM_PS_AWAITING_ECHO_READING_URC:
@@ -570,6 +573,7 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 
 	case VGSM_PS_BITBUCKET:
 	case VGSM_PS_RECOVERING:
+	case VGSM_PS_RECOVERING_PENDING:
 		assert(1);
 	break;
 	}
@@ -647,6 +651,7 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 	case VGSM_PS_AWAITING_ECHO:
 	case VGSM_PS_BITBUCKET:
 	case VGSM_PS_RECOVERING:
+	case VGSM_PS_RECOVERING_PENDING:
 	case VGSM_PS_READING_RESPONSE:
 		ast_log(LOG_ERROR,
 			"Unexpected handle_unsolicited_message"
@@ -688,9 +693,11 @@ static int vgsm_receive(struct vgsm_comm *comm)
 
 	comm->buf[buflen + nread] = '\0';
 
+#if 0
 char tmpstr[200];
 ast_verbose("R='%s'\n",
 	unprintable_escape(comm->buf + buflen, tmpstr, sizeof(tmpstr)));
+#endif
 
 	while(1) {
 		int nread = 0;
@@ -711,21 +718,24 @@ ast_verbose("BUF='%s'\n",
 			if (strstr(comm->buf, "\r\nOK\r\n")) {
 				nread = strlen(comm->buf);
 
-				if (strlen(comm->request)) {
-					if (comm->request_retransmit_cnt > 0) {
-						ast_log(LOG_NOTICE,
-							"Retransmitting"
-							" request\n");
-						vgsm_retransmit_request(comm);
-					} else {
-						comm->timer_expiration = -1;
-						vgsm_parser_change_state(comm,
-						VGSM_PS_RESPONSE_FAILED);
-					}
+				comm->timer_expiration = -1;
+				vgsm_parser_change_state(comm, VGSM_PS_IDLE);
+			}
+		break;
+
+		case VGSM_PS_RECOVERING_PENDING:
+			if (strstr(comm->buf, "\r\nOK\r\n")) {
+				nread = strlen(comm->buf);
+
+				if (comm->request_retransmit_cnt > 0) {
+					ast_log(LOG_NOTICE,
+						"Retransmitting"
+						" request\n");
+					vgsm_retransmit_request(comm);
 				} else {
 					comm->timer_expiration = -1;
 					vgsm_parser_change_state(comm,
-						VGSM_PS_IDLE);
+					VGSM_PS_RESPONSE_FAILED);
 				}
 			}
 		break;
@@ -770,15 +780,17 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	switch(comm->state) {
 	case VGSM_PS_RECOVERING:
 		comm->timer_expiration = -1;
-		if (strlen(comm->request))
-			vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_FAILED);
-		else
-			vgsm_parser_change_state(comm, VGSM_PS_IDLE);
+		vgsm_parser_change_state(comm, VGSM_PS_IDLE);
+	break;
+
+	case VGSM_PS_RECOVERING_PENDING:
+		comm->timer_expiration = -1;
+		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_FAILED);
 	break;
 
 	case VGSM_PS_AWAITING_ECHO:
 	case VGSM_PS_READING_RESPONSE:
-		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING);
+		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING_PENDING);
 		vgsm_comm_send_recovery_sequence(comm);
 		comm->timer_expiration = longtime_now() + 1 * SEC;
 	break;
