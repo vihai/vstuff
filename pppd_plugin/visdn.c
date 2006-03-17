@@ -26,6 +26,7 @@
 
 #include <linux/visdn/cxc.h>
 #include <linux/visdn/router.h>
+#include <linux/visdn/ppp.h>
 
 static int device_got_set = 0;
 
@@ -84,6 +85,10 @@ static void visdn_process_extra_options(void)
 
 #include <unistd.h>
 
+int control_fd;
+int ppp_channel_id;
+int ppp_conn_id;
+
 static int visdn_connect(void)
 {
 	int fd;
@@ -92,24 +97,32 @@ static int visdn_connect(void)
 	if (!device_got_set)
 		fatal("No device specified");
 
+	control_fd = open("/dev/visdn/router-control", O_RDWR);
+	if (control_fd < 0)
+		fatal("failed to open router-control: %m");
+
 	fd = open("/dev/visdn/ppp", O_RDWR);
 	if (fd < 0)
 		fatal("failed to open ppp-control device: %m");
 
+	if (ioctl(fd, VISDN_PPP_GET_CHANID,
+			(caddr_t)&ppp_channel_id) < 0)
+		fatal("ioctl(VISDN_IOC_GET_CHANID): %m");
+
 	dbglog("PPPovISDN - control device opened successfully");
 
 	struct visdn_connect vc;
-	vc.src_chan_id = 0;
+	memset(&vc, 0, sizeof(vc));
+	vc.src_chan_id = ppp_channel_id;
 	vc.dst_chan_id = atoi(devnam);
-	vc.flags = 0;
 
-	if (ioctl(fd, VISDN_IOC_CONNECT_PATH, (caddr_t)&vc) < 0) {
-		fatal("ioctl(VISDN_CONNECT_PATH): %m\n");
-	}
+	if (ioctl(fd, VISDN_IOC_CONNECT, (caddr_t)&vc) < 0)
+		fatal("ioctl(VISDN_CONNECT): %m\n");
 
-	if (ioctl(fd, VISDN_IOC_ENABLE_PATH, NULL) < 0) {
+	ppp_conn_id = vc.path_id;
+
+	if (ioctl(fd, VISDN_IOC_ENABLE_PATH, NULL) < 0)
 		fatal("ioctl(VISDN_ENABLE_PATH): %m\n");
-	}
 
 	dbglog("PPPovISDN - channel connected to ppp device");
 

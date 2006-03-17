@@ -1,7 +1,7 @@
 /*
  * vISDN gateway between vISDN's crossconnector and Linux's ppp subsystem
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
