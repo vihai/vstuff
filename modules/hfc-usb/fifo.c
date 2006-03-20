@@ -160,7 +160,7 @@ static void hfc_fifo_is_now_ready(struct hfc_fifo *fifo)
 							&fifo->flags)) {
 
 			visdn_leg_wake_queue(
-				&fifo->connected_chan->visdn_chan.leg_b);
+				&fifo->connected_chan->visdn_chan.leg_a);
 		}
 	}
 }
@@ -219,7 +219,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 				" just %d bytes\n",
 				frame_buf_len);
 
-			visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+			visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 				VISDN_RX_ERROR_DROPPED);
 
 			goto out;
@@ -227,7 +227,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 			hfc_debug_fifo(fifo, 2,
 				"empty frame received\n");
 
-			visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+			visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 				VISDN_RX_ERROR_DROPPED);
 
 			goto out;
@@ -253,7 +253,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 
 			hfc_debug_fifo(fifo, 3, "Frame abort detected\n");
 
-			visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+			visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 					VISDN_RX_ERROR_FR_ABORT);
 
 			goto err_frame_abort;
@@ -263,7 +263,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 			hfc_debug_fifo(fifo, 2,
 				"Received frame with wrong CRC\n");
 
-			visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+			visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 					VISDN_RX_ERROR_CRC);
 
 			goto err_crc_error;
@@ -274,7 +274,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 			hfc_msg_fifo(fifo, KERN_ERR,
 				"cannot allocate skb: frame dropped\n");
 
-			visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+			visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 				VISDN_RX_ERROR_DROPPED);
 
 			goto err_alloc_skb;
@@ -286,7 +286,7 @@ static void hfc_fifo_rx_complete(struct urb *urb, struct pt_regs *regs)
 			fifo->frame_buf,
 			frame_buf_len - 3);
 
-		visdn_leg_frame_xmit(&chan->visdn_chan.leg_b, skb);
+		visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
 
 		{
 		struct hfc_led *led = chan->led;
@@ -361,7 +361,7 @@ int hfc_fifo_xmit(struct hfc_fifo *fifo, void *buf, int len)
 	 * been ACKed and the FIFO has space
 	 */
 
-	visdn_leg_stop_queue(&fifo->connected_chan->visdn_chan.leg_b);
+	visdn_leg_stop_queue(&fifo->connected_chan->visdn_chan.leg_a);
 
 	err = usb_submit_urb(fifo->urb, GFP_ATOMIC);
 	if (err) {

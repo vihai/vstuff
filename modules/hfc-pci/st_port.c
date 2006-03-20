@@ -662,9 +662,9 @@ void hfc_st_port_init(
 	hfc_st_chan_init(&port->chans[E], port, "E", E);
 	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ);
 
-	port->chans[D].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_D][TX].size;
-	port->chans[B1].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_B1][TX].size;
-	port->chans[B2].visdn_chan.leg_b.mtu = card->fifos[hfc_FIFO_B2][TX].size;
+	port->chans[D].visdn_chan.leg_a.mtu = card->fifos[hfc_FIFO_D][TX].size;
+	port->chans[B1].visdn_chan.leg_a.mtu = card->fifos[hfc_FIFO_B1][TX].size;
+	port->chans[B2].visdn_chan.leg_a.mtu = card->fifos[hfc_FIFO_B2][TX].size;
 }
 
 int hfc_st_port_register(struct hfc_st_port *port)

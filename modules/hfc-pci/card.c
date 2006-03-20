@@ -235,11 +235,11 @@ static inline void hfc_handle_fifo_rx_interrupt(struct hfc_fifo *fifo)
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_fifo *fifo)
 {
 	if (fifo->connected_chan &&
-	    visdn_leg_queue_stopped(&fifo->connected_chan->visdn_chan.leg_b)) {
+	    visdn_leg_queue_stopped(&fifo->connected_chan->visdn_chan.leg_a)) {
 		if (hfc_fifo_free_frames(fifo) &&
 		    hfc_fifo_free_tx(fifo) > 20)
 			visdn_leg_wake_queue(
-				&fifo->connected_chan->visdn_chan.leg_b);
+				&fifo->connected_chan->visdn_chan.leg_a);
 	}
 }
 

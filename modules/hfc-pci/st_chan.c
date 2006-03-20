@@ -461,11 +461,11 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 
 	hfc_card_lock(card);
 
-	if (chan->visdn_chan.leg_b.framing != VISDN_LEG_FRAMING_NONE &&
-	    chan->visdn_chan.leg_b.framing != VISDN_LEG_FRAMING_HDLC) {
+	if (chan->visdn_chan.leg_a.framing != VISDN_LEG_FRAMING_NONE &&
+	    chan->visdn_chan.leg_a.framing != VISDN_LEG_FRAMING_HDLC) {
 		hfc_debug_chan(chan, 1,
 			"open failed: unsupported framing %d\n",
-			chan->visdn_chan.leg_b.framing);
+			chan->visdn_chan.leg_a.framing);
 		err = -EINVAL;
 		goto err_invalid_framing;
 	}
@@ -507,11 +507,11 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		chan->rx_fifo->connected_chan = chan;
 		chan->rx_fifo->enabled = TRUE;
 
-		if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
+		if (chan->visdn_chan.leg_a.framing == VISDN_LEG_FRAMING_NONE) {
 			chan->rx_fifo->framer_enabled = FALSE;
 			chan->rx_fifo->bit_reversed = TRUE;
 
-		} else if (chan->visdn_chan.leg_b.framing ==
+		} else if (chan->visdn_chan.leg_a.framing ==
 						VISDN_LEG_FRAMING_HDLC) {
 			chan->rx_fifo->framer_enabled = TRUE;
 			chan->rx_fifo->bit_reversed = FALSE;
@@ -527,10 +527,10 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 		chan->tx_fifo->connected_chan = chan;
 		chan->tx_fifo->enabled = TRUE;
 
-		if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
+		if (chan->visdn_chan.leg_a.framing == VISDN_LEG_FRAMING_NONE) {
 			chan->tx_fifo->framer_enabled = FALSE;
 			chan->tx_fifo->bit_reversed = TRUE;
-		} else if (chan->visdn_chan.leg_b.framing ==
+		} else if (chan->visdn_chan.leg_a.framing ==
 						VISDN_LEG_FRAMING_HDLC) {
 			chan->tx_fifo->framer_enabled = TRUE;
 			chan->tx_fifo->bit_reversed = FALSE;
@@ -643,15 +643,15 @@ static int hfc_st_chan_frame_xmit(
 	if (hfc_fifo_free_frames(fifo) <= 1) {
 		hfc_debug_chan(chan, 3, "TX FIFO frames full, throttling\n");
 
-		visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
+		visdn_leg_stop_queue(&chan->visdn_chan.leg_a);
 	}
 
 	if (hfc_fifo_free_tx(fifo) < skb->len) {
 		hfc_debug_chan(chan, 3, "TX FIFO full, throttling\n");
 
-		visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
+		visdn_leg_stop_queue(&chan->visdn_chan.leg_a);
 
-		visdn_leg_tx_error(&chan->visdn_chan.leg_b,
+		visdn_leg_tx_error(&chan->visdn_chan.leg_a,
 			VISDN_TX_ERROR_FIFO_FULL);
 
 		goto err_no_free_tx;
@@ -728,7 +728,7 @@ void hfc_st_chan_rx_work(void *data)
 			"invalid frame received, just %d octets\n",
 			frame_size);
 
-		visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+		visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 			VISDN_RX_ERROR_LENGTH);
 
 		goto err_invalid_frame;
@@ -737,7 +737,7 @@ void hfc_st_chan_rx_work(void *data)
 		hfc_debug_chan(chan, 3,
 			"empty frame received\n");
 
-		visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+		visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 			VISDN_RX_ERROR_LENGTH);
 
 		goto err_empty_frame;
@@ -748,7 +748,7 @@ void hfc_st_chan_rx_work(void *data)
 		hfc_msg_chan(chan, KERN_ERR,
 			"cannot allocate skb: frame dropped\n");
 
-		visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+		visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 			VISDN_RX_ERROR_DROPPED);
 
 		goto err_alloc_skb;
@@ -794,7 +794,7 @@ void hfc_st_chan_rx_work(void *data)
 
 		hfc_debug_chan(chan, 3, "Frame abort detected\n");
 
-		visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+		visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 			VISDN_RX_ERROR_FR_ABORT);
 
 		goto err_frame_abort;
@@ -804,7 +804,7 @@ void hfc_st_chan_rx_work(void *data)
 
 		hfc_debug_chan(chan, 2, "Received frame with wrong CRC\n");
 
-		visdn_leg_rx_error(&chan->visdn_chan.leg_b,
+		visdn_leg_rx_error(&chan->visdn_chan.leg_a,
 			VISDN_RX_ERROR_CRC);
 
 		goto err_crc_error;
@@ -815,7 +815,7 @@ void hfc_st_chan_rx_work(void *data)
 	// Set Z2 for the next frame we're going to receive
 	*Z2_F2(fifo) = newz2;
 
-	visdn_leg_frame_xmit(&chan->visdn_chan.leg_b, skb);
+	visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
 
 	goto all_went_well;
 
@@ -1002,18 +1002,18 @@ void hfc_st_chan_init(
 	chan->visdn_chan.chan_class = NULL;
 	chan->visdn_chan.port = &port->visdn_port;
 
-	chan->visdn_chan.leg_a.cxc = NULL;
-	chan->visdn_chan.leg_a.ops = NULL;
+	chan->visdn_chan.leg_a.cxc = &vsc_softcxc.cxc;
+	chan->visdn_chan.leg_a.ops = &hfc_leg_ops;
 	chan->visdn_chan.leg_a.framing = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_a.framing_avail = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_a.mtu = -1;
-
-	chan->visdn_chan.leg_b.cxc = &vsc_softcxc.cxc;
-	chan->visdn_chan.leg_b.ops = &hfc_leg_ops;
-	chan->visdn_chan.leg_b.framing = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_b.framing_avail = VISDN_LEG_FRAMING_NONE |
+	chan->visdn_chan.leg_a.framing_avail = VISDN_LEG_FRAMING_NONE |
 						VISDN_LEG_FRAMING_HDLC;
-	chan->visdn_chan.leg_b.mtu = 0;
+	chan->visdn_chan.leg_a.mtu = 0;
+
+	chan->visdn_chan.leg_b.cxc = NULL;
+	chan->visdn_chan.leg_b.ops = NULL;
+	chan->visdn_chan.leg_b.framing = VISDN_LEG_FRAMING_NONE;
+	chan->visdn_chan.leg_b.framing_avail = VISDN_LEG_FRAMING_NONE;
+	chan->visdn_chan.leg_b.mtu = -1;
 
 	strncpy(chan->visdn_chan.name, name, sizeof(chan->visdn_chan.name));
 	chan->visdn_chan.driver_data = chan;
