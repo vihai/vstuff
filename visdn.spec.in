@@ -1,57 +1,213 @@
-#
-# spec file for vISDN
-#
 
-BuildRequires: aaa_base acl attr bash bzip2 coreutils cpio cpp devs diffutils filesystem findutils flex gawk glibc glibc-devel glibc-locale grep groff gzip libgcc libnscd libselinux m4 make man mktemp module-init-tools net-tools netcfg patch permissions procinfo procps sed autoconf automake binutils expat gcc libtool pkgconfig rpm
+%define suse_rel        %(rpm -q --queryformat='%{VERSION}' suse-release)
+%define name            visdn
+%define version         0.0.0
+%define rev             3.20060227
+%define release         wml
+%define group           Hardware/Telephony
+%define copyright       GPL
 
-Name:         visdn
-License:      GPL
-Group:        Productivity/Networking/ISDN
-Autoreqprov:  on
-Summary:      Versatile ISDN framework for Linux
-Version:      @PACKAGE_VERSION@
-Release:      1
-URL:          http://www.orlandi.com/visdn/
-Source:       http://www.orlandi.com/visdn/download/@PACKAGE_TARNAME@-@PACKAGE_VERSION@.tar.bz2
-BuildRoot:    %{_tmppath}/%{name}-%{version}-build
+# neededforbuild  udev kernel-source
+
+# "uname -r" output of the kernel to build for, the running one
+# if none was specified with "--define 'kernel <uname -r>'"
+%{!?kernel: %{expand: %%define kernel %(uname -r)}}
+%define kpackage %(echo %{kernel} | sed -e 's#\\(.*\\)\\-\\(.*\\)\\-\\(.*\\)#\\3#' -)
+##%define kversion %(echo %{kernel} | sed -e s/smp/smp/ -)
+%define kversion %(echo %{kernel} | sed -e 's#\\(.*\\)\\-\\(.*\\)\\-\\(.*\\)#\\1-\\2#' -)
+%define krelver  %(echo %{kversion} | tr -s '-' '_')
+%if %(echo %{kernel} | grep -c smp)
+        %{expand:%%define ksmp -smp}
+%endif
+%define koverdir %(echo %{kernel} | sed -e 's#\\(.*\\)\\-\\(.*\\)\\-\\(.*\\)#\\1-override-\\3#' -)
+
+
+summary		: Linux ISDN Infrastructure
+name            : %{name}
+version         : %{version}
+release         : %{release}.%{rev}
+group           : %{group}
+copyright       : %{copyright}
+URL		: http://www.visdn.org/
+Vendor		: Windmill Media <info@windmill.it>
+Packager	: Lele Forzani <lele@windmill.it>
+Distribution	: [:palantir] telephony toolbox
+
+PreReq:       %insserv_prereq %fillup_prereq udev
+PreReq:       /usr/sbin/useradd
+
+
+Provides: visdn
+BuildRequires: kernel-source
+
+Source0: %{name}-%{version}.tar.gz
+
+Source10: %{name}-init
+Source11: %{name}-sysconfig
+
+#Patch0: %{name}-sleep.diff
+
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 
 %description
-vISDN is an ISDN framework designed to be clean, general purpose, standards
-compliant, for voice and data applications.
 
+Versatile-ISDN (vISDN for short) is an attempt at writing an ISDN 
+implementation for Linux.
 
+vISDN is officially certified from TiLAB (and conforms to TBR)
 
-Authors:
---------
-    Daniele Orlandi <daniele@orlandi.com>
+Author: Daniele Orlandi <daniele@orlandi.com>
 
-%debug_package
+%package -n visdn-asterisk
+Summary: visdn asterisk plugins
+Release: %{release}
+Group: Hardware/ISDN
+BuildRequires:  asterisk-devel
+Requires: 	asterisk
+%description -n visdn-asterisk
+
+Plugins for vISDN support in Asterisk
+
+%package -n visdn-ppp-plugin
+Summary: visdn ppp plugin
+Release: %{release}
+Group: Hardware/ISDN
+BuildRequires:  ppp-devel
+Requires:       ppp
+%description -n visdn-ppp-plugin
+
+Plugin for vISDN support in pppd
+
+%package -n visdn-devel
+Summary: visdn developement packages
+Release: %{release}
+Group: Hardware/ISDN
+BuildRequires:  ppp-devel
+Requires:       ppp
+%description -n visdn-devel
+
+Developement files for software based on vISDN's libq931
+
+%package -n kernel%{?ksmp}-module-visdn
+Summary: visdn kernel modules
+Release: %{release}_%{krelver}_%{kpackage}
+Group: Hardware/ISDN
+BuildRequires:  kernel-source 
+Requires: visdn
+Requires: kernel-%{kpackage} = %{kversion}, /sbin/depmod
+Provides: kernel-modules
+%{?ksmp:Provides: kernel-module-visdn = %{version}-%{release}}
+
+%description -n kernel%{?ksmp}-module-visdn
+
+Infrastructure and Device Kernel Modules for vISDN
+
+package %{kversion} (%{_target_cpu}%{?ksmp:, SMP}).
+
 %prep
-%setup -q
+%setup -q    -n visdn-%{version}
+
+#%patch -p1
 
 %build
-./configure \
-	--sysconfdir=/etc \
-	--mandir=%{_mandir} \
-	--libdir=/usr/%{_lib}
-make %{?jobs:-j%jobs}
+%configure --enable-kernel-modules --enable-pppd-plugin --enable-asterisk-modules \
+	   --with-asterisk-modules=%{_libdir}/asterisk/modules 
+#make KINCLUDES=/lib/modules/%{kversion}/build/include KSMP=%{?ksmp:-D__SMP__} \
+#     KERNEL:=%{kernel}  
+
+make 
+
 
 %install
-make "DESTDIR=$RPM_BUILD_ROOT" install
+#make install DESTDIR=%{buildroot} KERNEL=%{kernel} \
+#        KINCLUDES=/lib/modules/%{kversion}/build/include KSMP=%{?ksmp:-D__SMP__} \
+#	INSTALL_MOD_PATH=%{buildroot}
+make install DESTDIR=%{buildroot} INSTALL_MOD_PATH=%{buildroot}
+
+
+#remove useless trails
+rm -f %{buildroot}/usr/lib/pppd/*/*.a %{buildroot}/usr/lib/pppd/*/*.la
+rm -f %{buildroot}/%{_libdir}/asterisk/modules/*.a %{buildroot}/%{_libdir}/asterisk/modules/*.la
+
+# fix for older udev
+%if %suse_version < 1000
+install -m 644 samples/30-visdn.rules-oldudev %{buildroot}/%{_sysconfdir}/udev/rules.d/30-visdn.rules
+%endif
+
+# sorry, our isdn mgmnt group is 'asterisk'
+sed -i -e 's/pbx/asterisk/g' %{buildroot}/%{_sysconfdir}/udev/rules.d/30-visdn.rules
+
+
+install -D -m 644 samples/visdn.conf.sample %{buildroot}/%{_sysconfdir}/%{name}/visdn.conf.sample
+
+# comment away modprobes
+sed -i -e 's/^modprobe/#modprobe/g' %{buildroot}/%{_sbindir}/visdn_configurator
+
+# installs SuSE-style init scripts
+install -D -m 0755 %{SOURCE10} %{buildroot}%{_initrddir}/%{name}
+install -D -m 644 %{SOURCE11} %{buildroot}/etc/sysconfig/%{name}
+ln -s %{_initrddir}/%{name} %{buildroot}/%{_sbindir}/rc%{name}
 
 %clean
-rm -rf %{buildroot}
+rm -rf $RPM_BUILD_ROOT
+
+%pre
 
 %post
 
+
+%post -n kernel%{?ksmp}-module-visdn
+/sbin/depmod -a -F /boot/System.map-%{kernel} %{kernel} >/dev/null 2>&1 || :
+
+
+
+%preun
+if [ $1 -eq 0 ]; then
+    /sbin/service %{name} stop >/dev/null 2>&1
+    /sbin/chkconfig %{name} --del
+fi
+
 %postun
 
+
+%postun -n kernel%{?ksmp}-module-visdn
+
+
 %files
-%defattr(-,root,root)
-%doc AUTHORS COPYING ChangeLog FEATURES INSTALL NEWS
-/lib/*
+%defattr(-,root,root,-)
+%config(noreplace)%{_sysconfdir}/udev/rules.d/30-visdn.rules
+%config(noreplace) /etc/%{name}/
+%config(noreplace)%{_sysconfdir}/sysconfig/%{name}
+%doc ChangeLog
+%doc AUTHORS COPYING INSTALL NEWS README TODO 
+%doc samples 
+%{_libdir}/*.so
+%{_libdir}/*.so.*
+%{_sbindir}
+%{_initrddir}/%{name}
+
+%files -n visdn-asterisk
+%defattr(-,root,root,-)
+%{_libdir}/asterisk/modules/*.so
+
+%files -n visdn-ppp-plugin
+%defattr(-,root,root,-)
+/usr/lib/pppd/*/*.so
+
+%files -n visdn-devel
+%defattr(-,root,root,-)
+%{_libdir}/*.a
+%{_libdir}/*.la
+%{_includedir}/libq931/
 
 
-%changelog -n visdn
-* Thu Aug 25 2005 - daniele@orlandi.com
-- new package 
+%files -n kernel%{?ksmp}-module-visdn
+%defattr(-,root,root,-)
+/lib/modules/
+
+
+%changelog
+* Thu Jan 13 2006 Lele Forzani <lele@windmill.it>
+- Initial release
+
+

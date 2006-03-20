@@ -586,12 +586,12 @@ static void hfc_st_port_state_change_te(
 		hfc_st_port_fifo_update(port);
 
 		if (old_state == 8)
-			visdn_port_error_indication(&port->visdn_port, 0);
+			visdn_port_error_indication(&port->visdn_port, 2);
 	break;
 
 	case 6:
 	case 8:
-		visdn_port_error_indication(&port->visdn_port, 0);
+		visdn_port_error_indication(&port->visdn_port, 2);
 	break;
 
 	case 7:
@@ -600,7 +600,7 @@ static void hfc_st_port_state_change_te(
 		hfc_st_port_fifo_update(port);
 
 		if (old_state == 6 || old_state == 8)
-			visdn_port_error_indication(&port->visdn_port, 0);
+			visdn_port_error_indication(&port->visdn_port, 1);
 	break;
 	}
 }
@@ -750,12 +750,12 @@ void hfc_st_port_init(
 	init_timer(&port->timer_t1);
 	port->timer_t1.function = hfc_st_port_timer_t1;
 	port->timer_t1.data = (unsigned long)port;
-	port->timer_t1_value = 5 * HZ;
+	port->timer_t1_value = 1 * HZ;
 
 	init_timer(&port->timer_t3);
 	port->timer_t3.function = hfc_st_port_timer_t3;
 	port->timer_t3.data = (unsigned long)port;
-	port->timer_t3_value = 5 * HZ;
+	port->timer_t3_value = 1 * HZ;
 
 	port->nt_mode = FALSE;
 	port->clock_delay = HFC_DEF_TE_CLK_DLY;

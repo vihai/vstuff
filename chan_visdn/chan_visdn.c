@@ -2256,19 +2256,23 @@ static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
 
 	switch(hdr.primitive_type) {
 	case LAPD_MPH_ERROR_INDICATION:
-		ast_log(LOG_NOTICE, "MPH-ERROR-INDICATION: %d\n", hdr.param1);
+		visdn_debug("%s: MPH-ERROR-INDICATION: %d\n",
+			visdn_intf->name, hdr.param1);
 	break;
 
 	case LAPD_MPH_ACTIVATE_INDICATION:
-		visdn_debug("MPH-ACTIVATE-INDICATION\n");
+		visdn_debug("%s: MPH-ACTIVATE-INDICATION\n",
+			visdn_intf->name);
 	break;
 
 	case LAPD_MPH_DEACTIVATE_INDICATION:
-		visdn_debug("MPH-DEACTIVATE-INDICATION\n");
+		visdn_debug("%s: MPH-DEACTIVATE-INDICATION\n",
+			visdn_intf->name);
 	break;
 
 	case LAPD_MPH_INFORMATION_INDICATION:
-		visdn_debug("MPH-INFORMATION-INDICATION: %s\n",
+		visdn_debug("%s: MPH-INFORMATION-INDICATION: %s\n",
+			visdn_intf->name,
 			hdr.param1 == LAPD_MPH_II_CONNECTED ?
 				"CONNECTED" :
 				"DISCONNECTED");

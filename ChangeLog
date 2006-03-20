@@ -2,6 +2,25 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-20 08:35:04 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-595
+
+    Summary:
+      Added experimental RPM packaging stuff
+    Revision:
+      isdn--devel--0.1--patch-595
+
+
+    new files:
+     .arch-ids/visdn-init.id .arch-ids/visdn-sleep.diff.id
+     .arch-ids/visdn-sysconfig.id visdn-init visdn-sleep.diff
+     visdn-sysconfig
+
+    modified files:
+     ChangeLog Makefile.am chan_visdn/chan_visdn.c
+     modules/hfc-4s/st_port.c modules/hfc-pci/st_port.c
+     modules/hfc-usb/st_port.c visdn.spec.in
+
+
 2006-03-17 16:00:58 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-594
 
     Summary:

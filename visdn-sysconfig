@@ -1,0 +1,41 @@
+## Path:                System/Telephony/vISDN
+## Description:         Configuration of vISDN Subsystem
+## Type:                yesno
+## Config:              visdn
+## ServiceReload:       visdn
+#
+# load telephony interface
+#
+TELEPHONY=yes
+
+## Path:                System/Telephony/vISDN
+## Description:         Configuration of vISDN Subsystem
+## Type:                yesno
+## Config:              visdn
+## ServiceReload:       visdn
+#
+# want module debugging
+#
+#DEBUG=yes
+
+## Path:                System/Telephony/vISDN
+## Description:         Configuration of vISDN Subsystem
+## Type:                string
+## Config:              visdn
+## ServiceReload:       visdn
+#
+# modules to load in load order
+#
+
+MODULES=""
+
+## Path:                System/Telephony/vISDN
+## Description:         Configuration of vISDN Subsystem
+## Type:                string
+## Config:              visdn
+## ServiceReload:       visdn
+#
+# modules in unload order
+#
+
+RMODULES=""

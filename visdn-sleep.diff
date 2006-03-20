@@ -1,0 +1,11 @@
+diff -urN visdn-0.0.0-/scripts/visdn_configurator.in visdn-0.0.0/scripts/visdn_configurator.in
+--- visdn-0.0.0-/scripts/visdn_configurator.in	2006-02-24 00:48:59.000000000 +0100
++++ visdn-0.0.0/scripts/visdn_configurator.in	2006-02-24 01:08:34.810110224 +0100
+@@ -88,6 +88,7 @@
+ 				$VISDNCTL netdev create \
+ 					"$NETDEV_REQ_DEVNAME" \
+ 					"$NETDEV_PROTOCOL" || return
++				sleep 5
+ 
+ 				if [ "$NETDEV_TYPE" = "PRI" ] ; then
+ 					$VISDNCTL netdev \
