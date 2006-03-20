@@ -2315,7 +2315,6 @@ static int visdn_q931_thread_do_poll()
 		exit(1);
 	}
 
-/*
 	ast_mutex_lock(&visdn.lock);
 	if (time(NULL) > visdn.open_pending_nextcheck) {
 
@@ -2326,7 +2325,7 @@ static int visdn_q931_thread_do_poll()
 				visdn_debug("Retry opening interface %s\n",
 						intf->name);
 
-				if (visdn_intf_open(intf) < 0)
+				if (visdn_intf_open(intf, intf->current_ic) < 0)
 					visdn.open_pending_nextcheck =
 							time(NULL) + 2;
 			}
@@ -2335,7 +2334,6 @@ static int visdn_q931_thread_do_poll()
 		refresh_polls_list();
 	}
 	ast_mutex_unlock(&visdn.lock);
-*/
 
 	int i;
 	for(i = 0; i < visdn.npolls; i++) {

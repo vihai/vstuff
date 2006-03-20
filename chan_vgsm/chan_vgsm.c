@@ -1108,10 +1108,11 @@ static int vgsm_connect_channel(
 
 	vgsm_chan->path_id = vc.path_id;
 
-	vc.src_chan_id = vgsm_chan->module_channel_id;
-	vc.flags = 0;
+	memset(&vc, 0, sizeof(vc));
+	vc.path_id = vgsm_chan->path_id;
 
-	if (ioctl(vgsm_chan->sp_fd, VISDN_IOC_ENABLE_PATH, (caddr_t)&vc) < 0) {
+	if (ioctl(vgsm.router_control_fd, VISDN_IOC_ENABLE_PATH,
+						(caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_ENABLE_PATH, isdn): %s\n",
 			strerror(errno));

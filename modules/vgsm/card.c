@@ -1,7 +1,8 @@
 /*
  * VoiSmart GSM board vISDN driver
  *
- * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
+ * Copyright (C) 2005-2006 Daniele Orlandi
+ * Copyright (C) 2005 Massimo Mazzeo
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *          Massimo Mazzeo <mmazzeo@voismart.it>
@@ -571,8 +572,8 @@ static void vgsm_maint_timer(unsigned long data)
 	struct vgsm_card *card = (struct vgsm_card *)data;
 
 	vgsm_card_lock(card);
-	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
-	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);
+//	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX1);
 	vgsm_card_unlock(card);
 
 	if (!test_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags))
