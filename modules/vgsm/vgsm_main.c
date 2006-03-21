@@ -315,7 +315,7 @@ err_copy_from_user:
 	return err;
 }
 
-static int vgsm_cdev_do_power(
+static int vgsm_cdev_do_power_get(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
@@ -323,20 +323,62 @@ static int vgsm_cdev_do_power(
 {
 	struct vgsm_module *module = file->private_data;
 
-	if (arg == 0) {
+	vgsm_card_lock(module->card);
+	vgsm_module_send_power_get(module);
+	vgsm_card_unlock(module->card);
+
+	wait_for_completion_timeout(&module->read_status_completion, 10 * HZ);
+
+	if (test_bit(VGSM_MODULE_STATUS_ON, &module->status))
+		put_user(1, (unsigned int *)arg);
+	else
+		put_user(0, (unsigned int *)arg);
+
+	return 0;
+}
+
+static int vgsm_cdev_do_power_set(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module = file->private_data;
+
+	vgsm_card_lock(module->card);
+	vgsm_module_send_power_get(module);
+	vgsm_card_unlock(module->card);
+
+	wait_for_completion_timeout(&module->read_status_completion, 10 * HZ);
+
+	if (!test_bit(VGSM_MODULE_STATUS_ON, &module->status) != !arg) {
 		vgsm_card_lock(module->card);
-		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_ON);
+		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_TOGGLE);
 		vgsm_card_unlock(module->card);
 
 		msleep(1500);
-	} else if (arg == 1) {
+
 		vgsm_card_lock(module->card);
-		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);
+		vgsm_module_send_onoff(module, 0);
 		vgsm_card_unlock(module->card);
-
-		msleep(200);
-
 	}
+
+	return 0;
+}
+
+static int vgsm_cdev_do_reset(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module = file->private_data;
+
+	vgsm_card_lock(module->card);
+	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_RESET);
+	vgsm_card_unlock(module->card);
+
+	msleep(200);
 
 	vgsm_card_lock(module->card);
 	vgsm_module_send_onoff(module, 0);
@@ -398,8 +440,16 @@ static int vgsm_cdev_ioctl(
 		return vgsm_cdev_do_codec_set(inode, file, cmd, arg);
 	break;
 
-	case VGSM_IOC_POWER:
-		return vgsm_cdev_do_power(inode, file, cmd, arg);
+	case VGSM_IOC_POWER_GET:
+		return vgsm_cdev_do_power_get(inode, file, cmd, arg);
+	break;
+
+	case VGSM_IOC_POWER_SET:
+		return vgsm_cdev_do_power_set(inode, file, cmd, arg);
+	break;
+
+	case VGSM_IOC_RESET:
+		return vgsm_cdev_do_reset(inode, file, cmd, arg);
 	break;
 
 	case VGSM_IOC_PAD_TIMEOUT:

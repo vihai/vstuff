@@ -2,6 +2,7 @@
  * VoiSmart GSM board vISDN driver
  *
  * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
+ * Copyright (C) 2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *          Massimo Mazzeo <mmazzeo@voismart.it>
@@ -26,6 +27,7 @@ enum vgsm_module_status
 	VGSM_MODULE_STATUS_RUNNING,
 	VGSM_MODULE_STATUS_RX_ACK_PENDING,
 	VGSM_MODULE_STATUS_TX_ACK_PENDING,
+	VGSM_MODULE_STATUS_ON,
 };
 
 struct vgsm_card;
@@ -39,6 +41,8 @@ struct vgsm_module
 	dev_t devt;
 
 	struct class_device class_device;
+
+	struct completion read_status_completion;
 	
 	/* kfifo management */
 	struct kfifo *kfifo_rx;
@@ -82,6 +86,8 @@ void vgsm_module_send_onoff(
 void vgsm_module_send_set_padding_timeout(
 	struct vgsm_module *module,
 	u8 timeout);
+void vgsm_module_send_power_get(
+	struct vgsm_module *module);
 
 void vgsm_module_init(
 	struct vgsm_module *module,

@@ -1,7 +1,8 @@
 /*
  * VoiSmart GSM board vISDN driver
  *
- * Copyright (C) 2005-2006 Daniele Orlandi, Massimo Mazzeo
+ * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
+ * Copyright (C) 2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *          Massimo Mazzeo <mmazzeo@voismart.it>
@@ -111,6 +112,18 @@ void vgsm_module_send_string(
 
 	memcpy(msg.payload, buf, len);
 
+	vgsm_module_send_msg(module, &msg);
+}
+
+void vgsm_module_send_power_get(
+	struct vgsm_module *module)
+{
+	struct vgsm_micro_message msg = { };
+	
+	msg.cmd = VGSM_CMD_MAINT;
+	msg.cmd_dep = VGSM_CMD_MAINT_POWER_GET;
+	msg.numbytes = 0;
+	
 	vgsm_module_send_msg(module, &msg);
 }
 
@@ -306,7 +319,7 @@ static ssize_t vgsm_chan_leg_read(
 			*((u8 *)card->readdma_mem + module->readdma_pos + 3));
 #endif
 
-		if (module->readdma_pos > card->readdma_size)
+		if (module->readdma_pos >= card->readdma_size)
 			module->readdma_pos = 0;
 
 		copied_octets++;
@@ -390,6 +403,8 @@ void vgsm_module_init(
 	/* Initializing kfifo spinlock */
 	spin_lock_init(&module->kfifo_rx_lock);
 	spin_lock_init(&module->kfifo_tx_lock);
+
+	init_completion(&module->read_status_completion);
 
 	/* Initializing wait queue */
 	init_waitqueue_head(&module->tx_wait_queue);

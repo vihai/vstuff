@@ -95,12 +95,15 @@ static inline void vgsm_wait_e0(struct vgsm_card *card)
 {
 	int i;
 
+//	if (vgsm_inb(card, VGSM_PIB_E0))
+//		printk(KERN_DEBUG "E0 != 0 !!!\n");
+
 	for (i=0; i<100 && vgsm_inb(card, VGSM_PIB_E0); i++) {
 		udelay(10);
 
-		if (i > 20)
+		if (i == 20)
 			printk(KERN_WARNING
-				"Uhuh... waiting %d for buffer\n", i);
+				"Uhuh... waiting too much for buffer\n");
 	}
 }
 
@@ -109,6 +112,7 @@ void vgsm_send_msg(
 	int micro,
 	struct vgsm_micro_message *msg)
 {
+	udelay(500); /* FIXME! */
 	vgsm_wait_e0(card);
 	vgsm_write_msg(card, msg);
 
@@ -545,7 +549,7 @@ printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 
 			tasklet_schedule(&card->tx_tasklet);
 		} else if (msg.cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
-			printk(KERN_INFO "CODEC RESP: %02x = %02x\n",
+			printk(KERN_DEBUG "CODEC RESP: %02x = %02x\n",
 				msg.payload[0], msg.payload[1]);
 		} else if (msg.cmd_dep == VGSM_CMD_MAINT_GET_FW_VER) {
 			printk(KERN_INFO
@@ -558,6 +562,47 @@ printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
 				msg.payload[4],
 				msg.payload[5],
 				msg.payload[6]);
+		} else if (msg.cmd_dep == VGSM_CMD_MAINT_POWER_GET) {
+
+			if (micro == 0) {
+				if (msg.payload[0] & 0x01)
+					set_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[0].status);
+				else
+					clear_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[0].status);
+
+				if (msg.payload[0] & 0x02)
+					set_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[1].status);
+				else
+					clear_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[1].status);
+
+				complete(&card->modules[0].
+						read_status_completion);
+				complete(&card->modules[1].
+						read_status_completion);
+			} else {
+				if (msg.payload[0] & 0x01)
+					set_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[2].status);
+				else
+					clear_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[2].status);
+
+				if (msg.payload[0] & 0x02)
+					set_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[3].status);
+				else
+					clear_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[3].status);
+
+				complete(&card->modules[2].
+						read_status_completion);
+				complete(&card->modules[3].
+						read_status_completion);
+			}
 		}
 	}
 	}
@@ -572,8 +617,16 @@ static void vgsm_maint_timer(unsigned long data)
 	struct vgsm_card *card = (struct vgsm_card *)data;
 
 	vgsm_card_lock(card);
-//	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
+/*	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX0);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX1);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX2);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);*/
+//	vgsm_module_send_power_get(&card->modules[0]);
+//	vgsm_module_send_power_get(&card->modules[1]);
+//	vgsm_module_send_power_get(&card->modules[2]);
+//	vgsm_module_send_power_get(&card->modules[3]);
 	vgsm_card_unlock(card);
 
 	if (!test_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags))
@@ -802,6 +855,8 @@ int vgsm_card_probe(
 	/* Start DMA */
 	vgsm_outb(card, VGSM_OPER, 0x01);
 
+	msleep(100);
+
 	vgsm_module_send_set_padding_timeout(&card->modules[0], 10);
 	vgsm_module_send_set_padding_timeout(&card->modules[1], 10);
 	vgsm_module_send_set_padding_timeout(&card->modules[2], 10);
@@ -809,34 +864,6 @@ int vgsm_card_probe(
 
 	vgsm_send_get_fw_ver(card, 0);
 	vgsm_send_get_fw_ver(card, 1);
-
-	vgsm_codec_reset(card);
-
-	/* Ensure the modules are turned off */
-	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_send_onoff(&card->modules[i],
-			VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);
-	}
-
-	msleep(200);
-
-	for(i=0; i<card->num_modules; i++)
-		vgsm_module_send_onoff(&card->modules[i], 0);
-
-	ssleep(5);
-
-	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_send_onoff(&card->modules[i],
-			VGSM_CMD_MAINT_ONOFF_POWER_ON |
-			VGSM_CMD_MAINT_ONOFF_ON);
-	}
-
-	msleep(1500);
-
-	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_send_onoff(&card->modules[i],
-			VGSM_CMD_MAINT_ONOFF_POWER_ON);
-	}
 
 	for (i=0; i<card->num_modules; i++) {
 		err = vgsm_module_register(&card->modules[i], card);
@@ -850,6 +877,8 @@ int vgsm_card_probe(
 
 	card->maint_timer.expires = jiffies + 5 * HZ;
 	add_timer(&card->maint_timer);
+
+	vgsm_codec_reset(card);
 
 	return 0;
 
@@ -896,29 +925,31 @@ void vgsm_card_remove(struct vgsm_card *card)
 	spin_unlock(&vgsm_cards_list_lock);
 
 	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_send_onoff(&card->modules[i],
-			VGSM_CMD_MAINT_ONOFF_POWER_ON |
-			VGSM_CMD_MAINT_ONOFF_ON);
+		vgsm_module_unregister(&card->modules[i]);
+
+		vgsm_card_lock(card);
+		vgsm_module_send_power_get(&card->modules[i]);
+		vgsm_card_unlock(card);
+
+		wait_for_completion_timeout(
+			&card->modules[i].read_status_completion, 10 * HZ);
+
+		if (test_bit(VGSM_MODULE_STATUS_ON,
+						&card->modules[i].status)) {
+			vgsm_card_lock(card);
+			vgsm_module_send_onoff(&card->modules[i],
+				VGSM_CMD_MAINT_ONOFF_TOGGLE);
+			vgsm_card_unlock(card);
+		}
 	}
 
 	msleep(1500);
 
 	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_send_onoff(&card->modules[i],
-			VGSM_CMD_MAINT_ONOFF_POWER_ON);
-	}
-
-	ssleep(5); /* Leave 5s to the modules for shoutdown */
-
-	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_send_onoff(&card->modules[i],
-			VGSM_CMD_MAINT_ONOFF_UNCOND_OFF);
-	}
-
-	msleep(200);
-
-	for(i=0; i<card->num_modules; i++)
+		vgsm_card_lock(card);
 		vgsm_module_send_onoff(&card->modules[i], 0);
+		vgsm_card_unlock(card);
+	}
 
 	/* Disable IRQs */
 	vgsm_outb(card, VGSM_MASK0, 0x00);
@@ -947,9 +978,6 @@ void vgsm_card_remove(struct vgsm_card *card)
 	pci_release_regions(card->pci_dev);
 
 	pci_disable_device(card->pci_dev);
-
-	for(i=0; i<card->num_modules; i++)
-		vgsm_module_unregister(&card->modules[i]);
 
 	kfree(card);
 }

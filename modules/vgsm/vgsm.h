@@ -2,6 +2,7 @@
  * VoiSmart GSM board vISDN driver
  *
  * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
+ * Copyright (C) 2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *          Massimo Mazzeo <mmazzeo@voismart.it>
@@ -16,9 +17,11 @@
 
 #define VGSM_IOC_GET_CHANID	_IOR(0xd1, 0, unsigned int)
 #define VGSM_IOC_CODEC_SET	_IOR(0xd1, 1, unsigned int)
-#define VGSM_IOC_POWER		_IOR(0xd1, 2, unsigned int)
-#define VGSM_IOC_PAD_TIMEOUT	_IOR(0xd1, 3, unsigned int)
-#define VGSM_IOC_FW_VERSION	_IOR(0xd1, 4, unsigned int)
+#define VGSM_IOC_POWER_GET	_IOR(0xd1, 2, unsigned int)
+#define VGSM_IOC_POWER_SET	_IOR(0xd1, 3, unsigned int)
+#define VGSM_IOC_RESET		_IOR(0xd1, 4, unsigned int)
+#define VGSM_IOC_PAD_TIMEOUT	_IOR(0xd1, 5, unsigned int)
+#define VGSM_IOC_FW_VERSION	_IOR(0xd1, 6, unsigned int)
 
 struct vgsm_codec_ctl
 {

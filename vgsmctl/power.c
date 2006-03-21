@@ -44,19 +44,45 @@ static int do_power(
 	}
 
 	int val;
-	if (!strcasecmp(value, "toggle")) {
-		val = 0;
-	} else if (!strcasecmp(value, "uncond_off")) {
-		val = 1;
-	} else {
-		fprintf(stderr, "Unknown value '%s'\n", value);
+	if (ioctl(fd, VGSM_IOC_POWER_GET, &val) < 0) {
+		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
+			strerror(errno));
+
 		return 1;
 	}
 
-	if (ioctl(fd, VGSM_IOC_POWER, val) < 0) {
-		fprintf(stderr, "ioctl(IOC_POWER) failed: %s\n",
-			strerror(errno));
+	if (!strcasecmp(value, "on")) {
+		if (ioctl(fd, VGSM_IOC_POWER_SET, 1) < 0) {
+			fprintf(stderr, "ioctl(IOC_POWER_SET) failed: %s\n",
+				strerror(errno));
 
+			return 1;
+		}
+	} else if (!strcasecmp(value, "off")) {
+		if (ioctl(fd, VGSM_IOC_POWER_SET, 0) < 0) {
+			fprintf(stderr, "ioctl(IOC_POWER_SET) failed: %s\n",
+				strerror(errno));
+
+			return 1;
+		}
+	} else if (!strcasecmp(value, "reset")) {
+		if (ioctl(fd, VGSM_IOC_RESET, 0) < 0) {
+			fprintf(stderr, "ioctl(IOC_RESET) failed: %s\n",
+				strerror(errno));
+
+			return 1;
+		}
+	} else if (!strcasecmp(value, "get")) {
+		if (ioctl(fd, VGSM_IOC_POWER_GET, &val) < 0) {
+			fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
+				strerror(errno));
+
+			return 1;
+		}
+
+		printf("Module power = %d\n", val);
+	} else {
+		fprintf(stderr, "Unknown value '%s'\n", value);
 		return 1;
 	}
 
@@ -78,8 +104,9 @@ static void usage(int argc, char *argv[])
 		"  power <value>\n"
 		"\n"
 		"    value can be:\n"
-		"    toggle: toggle module on/off)\n"
-		"    uncond_off: immediately turn module off)\n");
+		"    on: Turn module on\n"
+		"    off: Turn module off\n"
+		"    reset: Unconditionally reset module\n");
 }
 
 struct module module_power =

@@ -2425,9 +2425,14 @@ static int vgsm_pin_check_and_input(
 
 static int vgsm_module_codec_init(struct vgsm_interface *intf)
 {
-	return 0;
-
 	struct vgsm_codec_ctl cctl;
+
+	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_SET, 1) < 0) {
+		ast_log(LOG_ERROR, "ioctl(IOC_POWER_SET) failed: %s\n",
+			strerror(errno));
+
+		return -1;
+	}
 
 	cctl.parameter = VGSM_CODEC_RESET;
 	if (ioctl(intf->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
@@ -2983,7 +2988,7 @@ static int vgsm_module_monitor_thread_stuff(
 	case VGSM_INTF_STATUS_READY:
 	case VGSM_INTF_STATUS_NO_NET:
 		vgsm_module_update_net_info(intf);
-		return 30;
+		return 0;
 	break;
 
 	case VGSM_INTF_STATUS_INITIALIZING:

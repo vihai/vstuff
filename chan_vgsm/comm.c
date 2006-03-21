@@ -169,7 +169,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	sleep(1);
 
-	const char *cmd = "AT Z0 &F E1 V1 Q0 &K0\r";
+	const char *cmd = "AT Z0 &F E1 V1 Q0 &K4\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
 			"write to module failed: %s\n",
@@ -330,7 +330,8 @@ static char *unprintable_escape(const char *str, char *buf, int bufsize)
 			if (isprint(*c))
 				sanprintf(buf, bufsize, "%c", *c);
 			else
-				sanprintf(buf, bufsize, ".");
+				sanprintf(buf, bufsize, "<%02x>",
+					*(unsigned char *)c);
 		}
 
 		c++;
@@ -360,8 +361,8 @@ int vgsm_send_request(
 	strncpy(comm->request, buf, sizeof(comm->request));
 	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
 	comm->response = vgsm_response_alloc(comm);
-	comm->timer_expiration = longtime_now() + 100 * MILLISEC;
-	comm->request_timeout = timeout;
+	comm->timer_expiration = longtime_now() + 200 * MILLISEC;
+	comm->request_timeout = timeout + 200 * MILLISEC; // fixme
 	comm->request_retransmit_cnt = 3;
 	ast_mutex_unlock(&comm->lock);
 
@@ -693,9 +694,15 @@ static int vgsm_receive(struct vgsm_comm *comm)
 
 	comm->buf[buflen + nread] = '\0';
 
-#if 0
+	if (strchr(comm->buf, 0x11))
+		ast_log(LOG_ERROR, "XON !!!!!!!!!!!!\n");
+
+	if (strchr(comm->buf, 0x13))
+		ast_log(LOG_ERROR, "XOFF !!!!!!!!!!!!\n");
+
+#if 1
 char tmpstr[200];
-ast_verbose("R='%s'\n",
+ast_verbose("read()='%s'\n",
 	unprintable_escape(comm->buf + buflen, tmpstr, sizeof(tmpstr)));
 #endif
 
