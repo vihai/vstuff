@@ -862,7 +862,7 @@ static int vgsm_comm_thread_do_stuff()
 		else
 			timeout_ms = max(timeout / 1000, 1LL);
 
-		vgsm_debug_verb("poll timeout = %d\n", timeout_ms);
+		vgsm_debug_verb("set timeout = %d\n", timeout_ms);
 
 		int res = poll(polls, npolls, timeout_ms);
 		if (res < 0) {

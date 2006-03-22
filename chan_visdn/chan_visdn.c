@@ -1111,9 +1111,9 @@ static int visdn_call(
 			goto err_intf_not_found;
 		}
 
-		if (!intf->q931_intf) {
+		if (intf->status != VISDN_INTF_STATUS_ONLINE) {
 			ast_log(LOG_WARNING,
-				"Interface %s not active\n",
+				"Interface %s is not online\n",
 				intf_name);
 			err = -1;
 			goto err_intf_not_found;
@@ -1172,9 +1172,6 @@ static int visdn_answer(struct ast_channel *ast_chan)
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_SETUP_RESPONSE, NULL);
 	}
-
-	q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
 
 	return 0;
 }
@@ -2163,7 +2160,8 @@ static void visdn_netlink_receive()
 		if (ifi->ifi_type == ARPHRD_LAPD) {
 
 			char ifname[IFNAMSIZ] = "";
-			int len = hdr->nlmsg_len - NLMSG_LENGTH(sizeof(struct ifinfomsg));
+			int len = hdr->nlmsg_len -
+				NLMSG_LENGTH(sizeof(struct ifinfomsg));
 
 			struct rtattr *rtattr;
 			for (rtattr = IFLA_RTA(ifi);
@@ -2304,7 +2302,7 @@ static int visdn_q931_thread_do_poll()
 		msec_to_wait = (msec_to_wait > 0 && msec_to_wait < 2001) ?
 				msec_to_wait : 2001;
 
-	visdn_debug("poll timeout = %d\n", msec_to_wait);
+	visdn_debug("set timeout = %d\n", msec_to_wait);
 
 	// Uhm... we should lock, copy polls and unlock before poll()
 	if (poll(visdn.polls, visdn.npolls, msec_to_wait) < 0) {
@@ -2375,7 +2373,8 @@ static int visdn_q931_thread_do_poll()
 					ast_log(LOG_ERROR,
 						"Interface '%s' has been put "
 						"in FAILED mode\n",
-						visdn.poll_infos[i].intf->name);
+						visdn.poll_infos[i].
+								intf->name);
 					
 					visdn.poll_infos[i].intf->status =
 						VISDN_INTF_STATUS_FAILED;
@@ -3003,8 +3002,9 @@ static void visdn_q931_setup_confirm(
 
 	struct ast_channel *ast_chan = callpvt_to_astchan(q931_call);
 
-/*	q931_send_primitive(q931_call,
-			Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);*/
+	if (q931_call->intf->role == LAPD_INTF_ROLE_NT)
+		q931_send_primitive(q931_call,
+				Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
 
 	if (!ast_chan)
 		return;
@@ -3336,6 +3336,8 @@ static void visdn_q931_setup_indication(
 		pbx_builtin_setvar_helper(ast_chan,
 			"_BEARERCAP_CLASS", "voice");
 	} else {
+		visdn_debug("Unsupported bearer capability, rejecting call\n");
+
 		Q931_DECLARE_IES(ies);
 
 		struct q931_ie_cause *cause = q931_ie_cause_alloc();
