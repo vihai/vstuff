@@ -46,7 +46,7 @@ udev
 
 vISDN infrastructure and modules make use of several character devices
 which should be created in /dev.
-A udev ruleset is available as etc/udev/30-visdn.rules, it should be
+A udev ruleset is available as samples/30-visdn.rules, it should be
 installed in /etc/udev/rules.d or equivalent, before attempting to
 load the modules.
 
