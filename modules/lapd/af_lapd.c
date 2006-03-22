@@ -651,7 +651,7 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	}
 
 	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
-	    sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
+	    sk->sk_state != LAPD_SK_STATE_BROADCAST_DLC &&
 	    sk->sk_state != LAPD_SK_STATE_MGMT) {
 		lapd_release_sock(lapd_sock);
 		return -EINVAL;
