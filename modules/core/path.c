@@ -730,11 +730,12 @@ static int visdn_router_cdev_ioctl(
 
 	case VISDN_IOC_DISCONNECT_ENDPOINT:
 		return visdn_router_cdev_do_disconnect_endpoint(
-							inode, file, cmd, arg);
+						inode, file, cmd, arg);
 	break;
 
 	case VISDN_IOC_ENABLE_PATH:
-		return visdn_router_cdev_do_enable_path(inode, file, cmd, arg);
+		return visdn_router_cdev_do_enable_path(
+					inode, file, cmd, arg);
 	break;
 
 	case VISDN_IOC_DISABLE_PATH:
@@ -819,6 +820,14 @@ static struct kobj_type ktype_visdn_path = {
 };
 
 decl_subsys_name(visdn_paths, paths, &ktype_visdn_path, NULL);
+
+#ifndef HAVE_CLASS_DEV_DEVT
+static ssize_t show_dev(struct class_device *class_dev, char *buf)
+{
+	return print_dev_t(buf, visdn_first_dev + 1);
+}
+static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
+#endif
 
 int visdn_path_modinit()
 {
