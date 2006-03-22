@@ -928,6 +928,10 @@ llc_failure:;
 		 */
 	}
 
+	ast_dsp_set_features(visdn_chan->dsp,
+		DSP_FEATURE_DTMF_DETECT |
+		DSP_FEATURE_FAX_DETECT);
+
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_REQUEST, &ies);
 
 	q931_call_put(q931_call);
@@ -1171,6 +1175,10 @@ static int visdn_answer(struct ast_channel *ast_chan)
 	    visdn_chan->q931_call->state == N4_CALL_DELIVERED) {
 		q931_send_primitive(visdn_chan->q931_call,
 			Q931_CCB_SETUP_RESPONSE, NULL);
+
+		ast_dsp_set_features(visdn_chan->dsp,
+			DSP_FEATURE_DTMF_DETECT |
+			DSP_FEATURE_FAX_DETECT);
 	}
 
 	return 0;
@@ -1370,8 +1378,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_ANSWER:
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_SETUP_RESPONSE, NULL);
+//		q931_send_primitive(visdn_chan->q931_call,
+//			Q931_CCB_SETUP_RESPONSE, NULL);
 	break;
 
 	case AST_CONTROL_INBAND_INFO:
@@ -1448,7 +1456,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		case N1_CALL_INITIATED:
 			q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_PROCEEDING_REQUEST, &ies);
-		break;
 
 		case N2_OVERLAP_SENDING:
 		case N3_OUTGOING_CALL_PROCEEDING:
@@ -1457,6 +1464,10 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		case U25_OVERLAP_RECEIVING:
 			q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_ALERTING_REQUEST, &ies);
+
+			ast_dsp_set_features(visdn_chan->dsp,
+				DSP_FEATURE_DTMF_DETECT |
+				DSP_FEATURE_FAX_DETECT);
 		break;
 
 		default:
@@ -1553,9 +1564,14 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		if (visdn_chan->q931_call->state == N1_CALL_INITIATED ||
 		    visdn_chan->q931_call->state == N2_OVERLAP_SENDING ||
 		    visdn_chan->q931_call->state == U6_CALL_PRESENT ||
-		    visdn_chan->q931_call->state == U25_OVERLAP_RECEIVING)
+		    visdn_chan->q931_call->state == U25_OVERLAP_RECEIVING) {
 			q931_send_primitive(visdn_chan->q931_call,
 				Q931_CCB_PROCEEDING_REQUEST, NULL);
+
+			ast_dsp_set_features(visdn_chan->dsp,
+				DSP_FEATURE_DTMF_DETECT |
+				DSP_FEATURE_FAX_DETECT);
+		}
 	break;
 	}
 
@@ -2023,11 +2039,7 @@ static struct ast_channel *visdn_new(
 	visdn_chan->ast_chan = ast_chan;
 
 	visdn_chan->dsp = ast_dsp_new();
-	ast_dsp_set_features(visdn_chan->dsp,
-		DSP_FEATURE_DTMF_DETECT |
-//		DSP_FEATURE_SILENCE_SUPPRESS |
-////		DSP_FEATURE_BUSY_DETECT |
-		DSP_FEATURE_FAX_DETECT);
+	ast_dsp_set_features(visdn_chan->dsp, 0);
 	ast_dsp_digitmode(visdn_chan->dsp, DSP_DIGITMODE_DTMF);
 
 	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
@@ -3514,6 +3526,10 @@ no_cgpn:;
 			} else {
 				q931_send_primitive(visdn_chan->q931_call,
 					Q931_CCB_PROCEEDING_REQUEST, NULL);
+
+				ast_dsp_set_features(visdn_chan->dsp,
+					DSP_FEATURE_DTMF_DETECT |
+					DSP_FEATURE_FAX_DETECT);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
 			}
