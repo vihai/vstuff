@@ -401,7 +401,6 @@ AM_CONDITIONAL(driver_vgsm,
 	test -n "`echo $drivers | grep vgsm`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
-		etc/Makefile
 		scripts/Makefile
 		scripts/visdn_configurator
 		samples/Makefile

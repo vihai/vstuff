@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-23 09:34:48 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-604
+
+    Summary:
+      Remove reference to etc/Makefile.am
+    Revision:
+      isdn--devel--0.1--patch-604
+
+
+    modified files:
+     ChangeLog configure.ac
+
+
 2006-03-22 21:42:48 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-603
 
     Summary:
