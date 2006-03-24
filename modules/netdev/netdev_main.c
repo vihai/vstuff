@@ -381,7 +381,10 @@ static int vnd_netdev_open(struct net_device *netdev)
 	set_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
 	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan);
-	BUG_ON(!path);
+	if (!path) {
+		err = -ENODEV;
+		goto err_no_path;
+	}
 
 	err = visdn_path_enable(path);
 	if (err < 0)
@@ -394,6 +397,7 @@ static int vnd_netdev_open(struct net_device *netdev)
 	return 0;
 
 err_enable_path:
+err_no_path:
 
 	return err;
 }
