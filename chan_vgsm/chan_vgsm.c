@@ -2988,7 +2988,7 @@ static int vgsm_module_monitor_thread_stuff(
 	case VGSM_INTF_STATUS_READY:
 	case VGSM_INTF_STATUS_NO_NET:
 		vgsm_module_update_net_info(intf);
-		return 0;
+		return 30;
 	break;
 
 	case VGSM_INTF_STATUS_INITIALIZING:

@@ -86,7 +86,7 @@ static struct pci_device_id hfc_pci_ids[] = {
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
 		(unsigned long)&(struct hfc_card_config) {
 			.double_clock = 0,
-			.quartz_49 = 0,
+			.quartz_49 = 1,
 			.ram_size = 32,
 			 }},
 	{0,}

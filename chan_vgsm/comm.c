@@ -700,7 +700,7 @@ static int vgsm_receive(struct vgsm_comm *comm)
 	if (strchr(comm->buf, 0x13))
 		ast_log(LOG_ERROR, "XOFF !!!!!!!!!!!!\n");
 
-#if 1
+#if 0
 char tmpstr[200];
 ast_verbose("read()='%s'\n",
 	unprintable_escape(comm->buf + buflen, tmpstr, sizeof(tmpstr)));
