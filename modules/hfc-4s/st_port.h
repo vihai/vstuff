@@ -58,6 +58,8 @@ struct hfc_st_port
 
 	struct hfc_st_chan chans[5];
 
+	struct hfc_led *led;
+
 	struct work_struct state_change_work;
 
 	struct visdn_port visdn_port;
@@ -72,7 +74,8 @@ void hfc_st_port_init(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
 	const char *name,
-	int id);
+	int id,
+	struct hfc_led *led);
 int hfc_st_port_register(
 	struct hfc_st_port *port);
 void hfc_st_port_unregister(

@@ -570,12 +570,14 @@ static int hfc_sys_chan_frame_xmit(
 
 	if (chan->connected_st_chan) {
 		struct hfc_led *led =
-			&card->leds[chan->connected_st_chan->port->id];
+			chan->connected_st_chan->port->led;
 
-		led->alt_color = HFC_LED_OFF;
-		led->flashing_freq = HZ / 10;
-		led->flashes = 1;
-		hfc_led_update(led);
+		if (led) {
+			led->alt_color = HFC_LED_OFF;
+			led->flashing_freq = HZ / 10;
+			led->flashes = 1;
+			hfc_led_update(led);
+		}
 	}
 
 	return VISDN_TX_OK;
@@ -768,12 +770,14 @@ static void hfc_sys_chan_rx_work(void *data)
 
 	if (chan->connected_st_chan) {
 		struct hfc_led *led =
-			&card->leds[chan->connected_st_chan->port->id];
+			chan->connected_st_chan->port->led;
 
-		led->alt_color = HFC_LED_OFF;
-		led->flashing_freq = HZ / 10;
-		led->flashes = 1;
-		hfc_led_update(led);
+		if (led) {
+			led->alt_color = HFC_LED_OFF;
+			led->flashing_freq = HZ / 10;
+			led->flashes = 1;
+			hfc_led_update(led);
+		}
 	}
 
 	goto all_went_well;

@@ -931,7 +931,8 @@ int __devinit hfc_card_probe(
 		char portid[10];
 		snprintf(portid, sizeof(portid), "st%d", i);
 
-		hfc_st_port_init(&card->st_ports[i], card, portid, i);
+		hfc_st_port_init(&card->st_ports[i], card, portid, i,
+			card->num_st_ports == 4 ? &card->leds[i] : NULL);
 	}
 
 	hfc_sys_port_init(&card->sys_port, card, "sys");

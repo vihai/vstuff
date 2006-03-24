@@ -395,8 +395,10 @@ void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)
 
 static void hfc_st_port_update_led(struct hfc_st_port *port)
 {
-	struct hfc_card *card = port->card;
-	struct hfc_led *led = &card->leds[port->id];
+	struct hfc_led *led = port->led;
+
+	if (!led)
+		return;
 
 	if (port->visdn_port.enabled) {
 		if ((port->nt_mode &&
@@ -718,10 +720,12 @@ void hfc_st_port_init(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
 	const char *name,
-	int id)
+	int id,
+	struct hfc_led *led)
 {
 	port->card = card;
 	port->id = id;
+	port->led = led;
 
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
