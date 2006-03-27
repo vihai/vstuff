@@ -3501,10 +3501,14 @@ no_cgpn:;
 
 			ast_setstate(ast_chan, AST_STATE_RING);
 
+			// Prevents race conditions after pbx_start
+			ast_mutex_lock(&ast_chan->lock);
+
 			if (ast_pbx_start(ast_chan)) {
 				ast_log(LOG_ERROR,
 					"Unable to start PBX on %s\n",
 					ast_chan->name);
+				ast_mutex_unlock(&ast_chan->lock);
 				ast_hangup(ast_chan);
 
 				Q931_DECLARE_IES(ies);
@@ -3532,6 +3536,8 @@ no_cgpn:;
 					DSP_FEATURE_FAX_DETECT);
 
 				ast_setstate(ast_chan, AST_STATE_RING);
+
+				ast_mutex_unlock(&ast_chan->lock);
 			}
 		} else {
 			ast_log(LOG_NOTICE,
@@ -3561,10 +3567,13 @@ no_cgpn:;
 		strncpy(ast_chan->exten, "s",
 			sizeof(ast_chan->exten)-1);
 
+		ast_mutex_lock(&ast_chan->lock);
+
 		if (ast_pbx_start(ast_chan)) {
 			ast_log(LOG_ERROR,
 				"Unable to start PBX on %s\n",
 				ast_chan->name);
+			ast_mutex_unlock(&ast_chan->lock);
 			ast_hangup(ast_chan);
 
 			Q931_DECLARE_IES(ies_proc);
@@ -3621,6 +3630,8 @@ no_cgpn:;
 
 			ast_queue_frame(ast_chan, &f);
 		}
+
+		ast_mutex_unlock(&ast_chan->lock);
 	}
 
 	return;
