@@ -1,7 +1,7 @@
 /*
  * vISDN DSSS-1/q.931 signalling library
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -208,7 +208,7 @@ static void q931_write_ies(
 					ies.ies[i],
 					msg->raw + msg->rawlen + 1,
 					sizeof(msg->raw) - msg->rawlen);
-			assert(ie_len > 0);
+			assert(ie_len >= 0);
 
 			/* Now write len */
 			*(__u8 *)(msg->raw + msg->rawlen) = ie_len;

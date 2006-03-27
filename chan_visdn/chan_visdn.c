@@ -892,7 +892,8 @@ llc_failure:;
 						sizeof(cgpn->number));
 				}
 
-				if (ast_chan->cid.cid_name) {
+				if (ast_chan->cid.cid_name &&
+				    strlen(ast_chan->cid.cid_name)) {
 					struct q931_ie_display *disp =
 						q931_ie_display_alloc();
 					strcpy(disp->text,
