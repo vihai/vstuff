@@ -921,6 +921,11 @@ static ssize_t hfc_st_chan_write(
 		chan->tx_fifo->stats_max = 0;
 	}
 
+	if (used_octets > HFC_FIFO_JITTBUFF * 2) {
+		printk(KERN_DEBUG "Trimming output fifo\n");
+		goto not_copying;
+	}
+
 	if (used_octets < chan->tx_fifo->stats_min)
 		chan->tx_fifo->stats_min = used_octets;
 
@@ -933,6 +938,7 @@ static ssize_t hfc_st_chan_write(
 					*Z1_F1(chan->tx_fifo),
 					count);
 
+not_copying:
 	hfc_card_unlock(card);
 
 	return copied_octets;

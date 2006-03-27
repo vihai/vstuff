@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-27 13:26:33 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-608
+
+    Summary:
+      Attempt to trim output fifo, workaround for the 1-second delay issue
+    Revision:
+      isdn--devel--0.1--patch-608
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/sys_chan.c modules/hfc-pci/st_chan.c
+
+
 2006-03-24 20:34:34 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-607
 
     Summary:
