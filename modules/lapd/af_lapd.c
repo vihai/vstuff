@@ -1517,29 +1517,34 @@ static int lapd_bind(
 		  (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
 	           sal->sal_tei <= LAPD_MAX_STA_TEI)) {
 
-		if (lapd_sock->dev->role == LAPD_INTF_ROLE_NT) {
-			err = -EINVAL;
-			goto err_dyn_and_nt;
-		}
-
-		lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
-
-		if (lapd_sock->usr_tme)
-			lapd_utme_put(lapd_sock->usr_tme);
-
-		lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
-
-		read_lock_bh(&lapd_utme_hash_lock);
-		hlist_add_head(&lapd_utme_get(lapd_sock->usr_tme)->node,
-				&lapd_utme_hash);
-		read_unlock_bh(&lapd_utme_hash_lock);
-
 		sk->sk_state = LAPD_SK_STATE_NORMAL_DLC;
 
-		if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
-		    sal->sal_tei <= LAPD_MAX_STA_TEI)
-			lapd_utme_assign_static_tei(
-				lapd_sock->usr_tme, sal->sal_tei);
+		if (lapd_sock->dev->role == LAPD_INTF_ROLE_NT) {
+			if (sal->sal_tei == LAPD_DYNAMIC_TEI) {
+				err = -EINVAL;
+				goto err_dyn_and_nt;
+			}
+
+			lapd_sock->state = LAPD_DLS_4_TEI_ASSIGNED;
+		} else {
+			lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
+
+			if (lapd_sock->usr_tme)
+				lapd_utme_put(lapd_sock->usr_tme);
+
+			lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
+
+			read_lock_bh(&lapd_utme_hash_lock);
+			hlist_add_head(&lapd_utme_get(lapd_sock->usr_tme)->node,
+					&lapd_utme_hash);
+			read_unlock_bh(&lapd_utme_hash_lock);
+
+			if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
+			    sal->sal_tei <= LAPD_MAX_STA_TEI)
+				lapd_utme_assign_static_tei(
+					lapd_sock->usr_tme, sal->sal_tei);
+		}
+
 	} else {
 		err = -EINVAL;
 		goto err_inv_tei;
