@@ -112,8 +112,8 @@ static int hfc_bert_enable(struct hfc_st_chan *chan)
 
 	// Enable the channel in the port
 	hfc_st_port_select(chan->port);
-	hfc_st_port_update_st_ctrl_0(chan->port);
-	hfc_st_port_update_st_ctrl_2(chan->port);
+	hfc_st_port_update_st_ctrl0(chan->port);
+	hfc_st_port_update_st_ctrl2(chan->port);
 
 	hfc_card_unlock(card);
 
@@ -146,8 +146,8 @@ static int hfc_bert_disable(
 		chan->status = HFC_ST_CHAN_STATUS_FREE;
 
 		hfc_st_port_select(chan->port);
-		hfc_st_port_update_st_ctrl_0(chan->port);
-		hfc_st_port_update_st_ctrl_2(chan->port);
+		hfc_st_port_update_st_ctrl0(chan->port);
+		hfc_st_port_update_st_ctrl2(chan->port);
 
 		// RX
 		hfc_fifo_select(chan->rx.fifo);
@@ -308,7 +308,7 @@ static ssize_t hfc_store_sq_enabled(
 	port->sq_enabled = !!value;
 
 	hfc_st_port_select(port);
-	hfc_st_port_update_st_ctrl_0(port);
+	hfc_st_port_update_st_ctrl0(port);
 
 	hfc_card_unlock(card);
 
@@ -467,8 +467,8 @@ static int hfc_st_chan_open(struct visdn_chan *visdn_chan)
 
 	// Enable channel in the port
 	hfc_st_port_select(chan->port);
-	hfc_st_port_update_st_ctrl_0(chan->port);
-	hfc_st_port_update_st_ctrl_2(chan->port);
+	hfc_st_port_update_st_ctrl0(chan->port);
+	hfc_st_port_update_st_ctrl2(chan->port);
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
@@ -505,8 +505,8 @@ static int hfc_st_chan_close(struct visdn_chan *visdn_chan)
 	chan->status = HFC_ST_CHAN_STATUS_FREE;
 
 	hfc_st_port_select(chan->port);
-	hfc_st_port_update_st_ctrl_0(chan->port);
-	hfc_st_port_update_st_ctrl_2(chan->port);
+	hfc_st_port_update_st_ctrl0(chan->port);
+	hfc_st_port_update_st_ctrl2(chan->port);
 
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);

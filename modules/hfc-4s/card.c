@@ -149,6 +149,7 @@ static ssize_t hfc_store_output_level(
 
 	// Uhm... this should be safe without locks, indagate
 	hfc_card_lock(card);
+	hfc_outb(card, hfc_R_PWM0, value);
 	hfc_outb(card, hfc_R_PWM1, value);
 	hfc_card_unlock(card);
 
@@ -643,6 +644,7 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_PWM_MD_V_PWM0_MD_PUSH |
 		hfc_R_PWM_MD_V_PWM1_MD_PUSH);
 
+	hfc_outb(card, hfc_R_PWM0, card->output_level);
 	hfc_outb(card, hfc_R_PWM1, card->output_level);
 
 	// Timer setup
@@ -676,8 +678,8 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 	for (i=0; i<card->num_st_ports; i++) {
 		hfc_st_port_select(&card->st_ports[i]);
-		hfc_st_port_update_st_ctrl_0(&card->st_ports[i]);
-		hfc_st_port_update_st_ctrl_2(&card->st_ports[i]);
+		hfc_st_port_update_st_ctrl0(&card->st_ports[i]);
+		hfc_st_port_update_st_ctrl2(&card->st_ports[i]);
 		hfc_st_port_update_st_clk_dly(&card->st_ports[i]);
 	}
 

@@ -46,6 +46,7 @@ struct hfc_st_port
 	BOOL sq_enabled;
 	int clock_delay;
 	int sampling_comp;
+	BOOL enable_96khz;
 
 	u8 l1_state;
 	BOOL rechecking_f7_f6;
@@ -66,8 +67,8 @@ struct hfc_st_port
 };
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port);
-void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port);
-void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port);
+void hfc_st_port_update_st_ctrl0(struct hfc_st_port *port);
+void hfc_st_port_update_st_ctrl2(struct hfc_st_port *port);
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port);
 
 void hfc_st_port_init(

@@ -38,6 +38,9 @@
 static inline void vgsm_interrupt_micro(struct vgsm_card *card, 
 	u8 value)
 {
+	printk(KERN_DEBUG "Sending int to %d\n", value);
+
+	mb();
 	vgsm_outb(card, VGSM_PIB_E4, value);
 }
 

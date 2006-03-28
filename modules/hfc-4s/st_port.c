@@ -110,7 +110,7 @@ static ssize_t hfc_store_role(
 		port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
 	}
 
-	hfc_st_port_update_st_ctrl_0(port);
+	hfc_st_port_update_st_ctrl0(port);
 	hfc_st_port_update_st_clk_dly(port);
 
 	hfc_card_unlock(card);
@@ -264,6 +264,44 @@ static VISDN_PORT_ATTR(timer_t3, S_IRUGO | S_IWUSR,
 
 //----------------------------------------------------------------------------
 
+static ssize_t hfc_show_enable_96khz(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", port->enable_96khz);
+}
+
+static ssize_t hfc_store_enable_96khz(
+	struct visdn_port *visdn_port,
+	struct visdn_port_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct hfc_st_port *port = to_st_port(visdn_port);
+	struct hfc_card *card = port->card;
+
+	unsigned int value;
+	if (sscanf(buf, "%02x", &value) < 1)
+		return -EINVAL;
+
+	hfc_card_lock(card);
+	hfc_st_port_select(port);
+	port->enable_96khz = !!value;
+	hfc_st_port_update_st_ctrl0(port);
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static VISDN_PORT_ATTR(enable_96khz, S_IRUGO | S_IWUSR,
+		hfc_show_enable_96khz,
+		hfc_store_enable_96khz);
+
+//----------------------------------------------------------------------------
+
 static ssize_t hfc_show_st_clock_delay(
 	struct visdn_port *visdn_port,
 	struct visdn_port_attribute *attr,
@@ -347,43 +385,47 @@ static struct visdn_port_attribute *hfc_st_port_attributes[] =
 	&visdn_port_attr_l1_state,
 	&visdn_port_attr_timer_t1,
 	&visdn_port_attr_timer_t3,
+	&visdn_port_attr_enable_96khz,
 	&visdn_port_attr_st_clock_delay,
 	&visdn_port_attr_st_sampling_comp,
 	NULL
 };
 
-void hfc_st_port_update_st_ctrl_0(struct hfc_st_port *port)
+void hfc_st_port_update_st_ctrl0(struct hfc_st_port *port)
 {
-	u8 st_ctrl_0 = 0;
+	u8 st_ctrl0 = 0;
 
 	if (port->nt_mode)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_ST_MD_NT;
+		st_ctrl0 |= hfc_A_ST_CTRL0_V_ST_MD_NT;
 	else
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_ST_MD_TE;
+		st_ctrl0 |= hfc_A_ST_CTRL0_V_ST_MD_TE;
 
 	if (port->sq_enabled)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_SQ_EN;
+		st_ctrl0 |= hfc_A_ST_CTRL0_V_SQ_EN;
 
 	if (port->chans[B1].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_B1_EN;
+		st_ctrl0 |= hfc_A_ST_CTRL0_V_B1_EN;
 
 	if (port->chans[B2].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_0 |= hfc_A_ST_CTRL0_V_B2_EN;
+		st_ctrl0 |= hfc_A_ST_CTRL0_V_B2_EN;
 
-	hfc_outb(port->card, hfc_A_ST_CTRL0, st_ctrl_0);
+	if (port->enable_96khz)
+		st_ctrl0 |= hfc_A_ST_CTRL0_V_96KHZ;
+
+	hfc_outb(port->card, hfc_A_ST_CTRL0, st_ctrl0);
 }
 
-void hfc_st_port_update_st_ctrl_2(struct hfc_st_port *port)
+void hfc_st_port_update_st_ctrl2(struct hfc_st_port *port)
 {
-	u8 st_ctrl_2 = 0;
+	u8 st_ctrl2 = 0;
 
 	if (port->chans[B1].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_2 |= hfc_A_ST_CTRL2_V_B1_RX_EN;
+		st_ctrl2 |= hfc_A_ST_CTRL2_V_B1_RX_EN;
 
 	if (port->chans[B2].status != HFC_ST_CHAN_STATUS_FREE)
-		st_ctrl_2 |= hfc_A_ST_CTRL2_V_B2_RX_EN;
+		st_ctrl2 |= hfc_A_ST_CTRL2_V_B2_RX_EN;
 
-	hfc_outb(port->card, hfc_A_ST_CTRL2, st_ctrl_2);
+	hfc_outb(port->card, hfc_A_ST_CTRL2, st_ctrl2);
 }
 
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port)

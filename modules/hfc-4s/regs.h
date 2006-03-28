@@ -278,7 +278,7 @@
 #define hfc_A_ST_CTRL0_V_ST_MD_NT	(1 << 2)
 #define hfc_A_ST_CTRL0_V_D_PRIO		(1 << 3)
 #define hfc_A_ST_CTRL0_V_SQ_EN		(1 << 4)
-#define hfc_A_ST_CTRL0_V_96_KHZ		(1 << 5)
+#define hfc_A_ST_CTRL0_V_96KHZ		(1 << 5)
 #define hfc_A_ST_CTRL0_V_TX_LI		(1 << 6)
 #define hfc_A_ST_CTRL0_V_ST_STOP	(1 << 7)
 
