@@ -1893,10 +1893,14 @@ void lapd_dl_data_request(
 {
 
 	switch (lapd_sock->state) {
+	case LAPD_DLS_4_TEI_ASSIGNED:
+		/* Drop frame */
+		kfree_skb(skb);
+	break;
+
 	case LAPD_DLS_5_AWAITING_ESTABLISH:
-		if (lapd_sock->layer_3_initiated) {
+		if (lapd_sock->layer_3_initiated)
 			lapd_queue_completed_iframe(lapd_sock, skb);
-		}
 	break;
 
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
