@@ -730,12 +730,16 @@ static int vec_cdev_release(
 	vec_debug(3, "vec_cdev_release()\n");
 
 	path = visdn_path_get_by_endpoint(&ec->visdn_chan_ne);
-	if (path)
+	if (path)  {
 		visdn_path_disconnect(path);
+		visdn_path_put(path);
+	}
 
 	path = visdn_path_get_by_endpoint(&ec->visdn_chan_fe);
-	if (path)
+	if (path) {
 		visdn_path_disconnect(path);
+		visdn_path_put(path);
+	}
 
 	visdn_chan_unregister(&ec->visdn_chan_fe);
 	visdn_chan_unregister(&ec->visdn_chan_ne);

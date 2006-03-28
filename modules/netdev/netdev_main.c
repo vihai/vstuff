@@ -138,6 +138,7 @@ static int vnd_chan_open(struct visdn_chan *visdn_chan)
 	netdevice->remote_port = visdn_port_get(other_ep->port);
 
 	visdn_chan_put(other_ep);
+	visdn_path_put(path);
 
 	if (!test_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state)) {
 		rtnl_lock();
@@ -390,6 +391,8 @@ static int vnd_netdev_open(struct net_device *netdev)
 	if (err < 0)
 		goto err_enable_path;
 
+	visdn_path_put(path);
+
 	clear_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
 	vnd_debug(3, "vnd_netdev_open()\n");
@@ -397,6 +400,7 @@ static int vnd_netdev_open(struct net_device *netdev)
 	return 0;
 
 err_enable_path:
+	visdn_path_put(path);
 err_no_path:
 
 	return err;
@@ -417,9 +421,12 @@ static int vnd_netdev_stop(struct net_device *netdev)
 	if (err < 0)
 		goto err_disable_path;
 
+	visdn_path_put(path);
+
 	return 0;
 
 err_disable_path:
+	visdn_path_put(path);
 
 	return err;
 }
@@ -490,6 +497,8 @@ static void vnd_promiscuity_change_work(void *data)
 		} else if(!(netdevice->netdev->flags & IFF_PROMISC)) {
 			visdn_path_disable(path);
 		}
+
+		visdn_path_put(path);
 	}
 
 	vnd_netdevice_put(netdevice);

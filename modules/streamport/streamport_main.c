@@ -293,8 +293,10 @@ static int vsp_cdev_release(
 	vsp_debug(3, "vsp_cdev_release()\n");
 
 	path = visdn_path_get_by_endpoint(&chan->visdn_chan);
-	if (path)
+	if (path) {
 		visdn_path_disconnect(path);
+		visdn_path_put(path);
+	}
 
 	visdn_chan_remove_file(&chan->visdn_chan,
 				&visdn_chan_attr_tx_fifo_usage);

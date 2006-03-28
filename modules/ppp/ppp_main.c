@@ -114,6 +114,8 @@ static int vppp_chan_open(struct visdn_chan *visdn_chan)
 	chan->ppp_chan.mtu = visdn_path_find_lowest_mtu(path);
 	chan->ppp_chan.hdrlen = sizeof(ppphdr);
 
+	visdn_path_put(path);
+
 	err = ppp_register_channel(&chan->ppp_chan);
 	if (err < 0)
 		goto err_ppp_register_channel;

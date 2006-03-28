@@ -99,7 +99,7 @@ struct visdn_path *visdn_path_get_by_endpoint(struct visdn_chan *chan)
 		    path->ep2 == chan) {
 			up(&visdn_paths_list_sem);
 
-			return path;
+			return visdn_path_get(path);
 		}
 	}
 
@@ -630,10 +630,11 @@ static int visdn_router_cdev_do_disconnect_endpoint(
 
 	return 0;
 
-err_no_path:
-	visdn_chan_put(chan);
-err_no_chan:
 err_path_disconnect:
+err_no_path:
+	visdn_path_put(path);
+err_no_chan:
+	visdn_chan_put(chan);
 err_copy_from_user:
 
 	return err;
