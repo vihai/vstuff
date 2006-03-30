@@ -210,9 +210,16 @@ static void vnd_chan_disconnect(
 	struct visdn_leg *visdn_leg1,
 	struct visdn_leg *visdn_leg2)
 {
+	struct vnd_netdevice *netdevice = visdn_leg1->chan->driver_data;
+
 	vnd_debug(2, "%06d disconnected from %06d\n",
 		visdn_leg1->chan->id,
 		visdn_leg2->chan->id);
+
+	rtnl_lock();
+	dev_change_flags(netdevice->netdev,
+			netdevice->netdev->flags & ~IFF_UP);
+	rtnl_unlock();
 }
 
 static void vnd_chan_stop_queue(struct visdn_leg *visdn_leg)
