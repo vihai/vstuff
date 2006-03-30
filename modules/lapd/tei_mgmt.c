@@ -29,16 +29,14 @@ int lapd_tm_send_multiai(
 	struct lapd_tei_mgmt_hdr *tm;
 	int i;
 
-	skb = alloc_skb(sizeof(struct lapd_data_hdr) +
+	skb = lapd_alloc_data_request_skb(
+		dev,
+		sizeof(struct lapd_data_hdr) +
 		sizeof(struct lapd_tei_mgmt_hdr) +
-		nai,
-		GFP_ATOMIC);
+		nai);
 
-	skb->dev = dev->dev;
-	skb->protocol = __constant_htons(ETH_P_LAPD);
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
-
-	hdr = (struct lapd_data_hdr *)skb_put(skb, sizeof(struct lapd_data_hdr));
+	hdr = (struct lapd_data_hdr *)
+		skb_put(skb, sizeof(struct lapd_data_hdr));
 
 	hdr->addr.sapi = LAPD_SAPI_TEI_MGMT;
 
@@ -63,7 +61,7 @@ int lapd_tm_send_multiai(
 		tm_ai->ext = (i < nai - 1) ? 0 : 1;
 	}
 
-	return lapd_send_frame(skb);
+	return lapd_ph_data_request(skb);
 }
 
 int lapd_tm_send(

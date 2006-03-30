@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-30 16:23:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-619
+
+    Summary:
+      Fixes related to the protocol change in L2/L1 interface
+    Revision:
+      isdn--devel--0.1--patch-619
+
+
+    modified files:
+     ChangeLog modules/lapd/af_lapd.c modules/lapd/datalink.c
+     modules/lapd/input.c modules/lapd/lapd.h modules/lapd/output.c
+     modules/lapd/output.h modules/lapd/tei_mgmt.c
+     modules/netdev/netdev_main.c
+
+
 2006-03-30 00:53:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-618
 
     Summary:

@@ -370,14 +370,17 @@ static int lapd_ioctl(
 
 		spin_lock_bh(&sk->sk_receive_queue.lock);
 		skb = skb_peek(&sk->sk_receive_queue);
-		if (skb) {
-			struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->mac.raw;
+		if (skb && skb->dev) {
+			struct lapd_data_hdr *hdr =
+				(struct lapd_data_hdr *)skb->data;
 
 		        if (lapd_frame_type(hdr->control) ==
 				LAPD_FRAME_TYPE_UFRAME)
-				size = skb->len - sizeof(struct lapd_data_hdr);
+				size = skb->len -
+					sizeof(struct lapd_data_hdr);
 			else
-				size = skb->len - sizeof(struct lapd_data_hdr_e);
+				size = skb->len -
+					sizeof(struct lapd_data_hdr_e);
 		}
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
@@ -470,13 +473,17 @@ static int lapd_sendmsg(
 
 		lapd_release_sock(lapd_sock);
 		skb = sock_alloc_send_skb(sk,
+			sizeof(struct lapd_prim_hdr) +
 			sizeof(struct lapd_data_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
+
 		lapd_lock_sock(lapd_sock);
 		if (!skb) {
 			err = -ENOMEM;
 			goto err_sock_alloc_send_skb;
 		}
+
+		skb_reserve(skb, sizeof(struct lapd_prim_hdr));
 
 		err = lapd_prepare_uframe(lapd_sock, skb,
 					LAPD_UFRAME_FUNC_UI, 0);
@@ -497,12 +504,17 @@ static int lapd_sendmsg(
 		 */
 
 		lapd_release_sock(lapd_sock);
+
 		skb = sock_alloc_send_skb(sk,
+			sizeof(struct lapd_prim_hdr) +
 			sizeof(struct lapd_data_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
+
 		lapd_lock_sock(lapd_sock);
 		if (!skb)
 			goto err_sock_alloc_send_skb;
+
+		skb_reserve(skb, sizeof(struct lapd_prim_hdr));
 
 		err = lapd_prepare_iframe(lapd_sock, skb);
 		if(err < 0)
@@ -564,7 +576,6 @@ void lapd_dl_primitive(
 		return;
 	}
 
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 	skb->dev = NULL;
 
 	pri = (struct lapd_dl_primitive *)
@@ -652,7 +663,7 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 		skb_copy_datagram_iovec(skb, 0, msg->msg_iov, skb->len);
 		copied = skb->len;
 	} else if (skb->dev) {
-		hdr = (struct lapd_data_hdr *)skb->mac.raw;
+		hdr = (struct lapd_data_hdr *)skb->data;
 
 		if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
 			msg->msg_flags |= MSG_OOB;

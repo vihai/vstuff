@@ -173,6 +173,11 @@ static int vnd_chan_frame_xmit(
 	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
 	struct lapd_prim_hdr *prim_hdr;
 
+	netdevice->netdev->last_rx = jiffies;
+
+	netdevice->stats.rx_packets++;
+	netdevice->stats.rx_bytes += skb->len;
+
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -181,11 +186,6 @@ static int vnd_chan_frame_xmit(
 	skb_push(skb, sizeof(struct lapd_prim_hdr));
 	prim_hdr = (struct lapd_prim_hdr *)skb->data;
 	prim_hdr->primitive_type = LAPD_PH_DATA_INDICATION;
-
-	netdevice->netdev->last_rx = jiffies;
-
-	netdevice->stats.rx_packets++;
-	netdevice->stats.rx_bytes += skb->len;
 
 	return netif_rx(skb);
 }
@@ -314,6 +314,11 @@ static int vnd_chan_e_frame_xmit(
 	if (crc32_le(0, skb->data, skb->len) == netdevice->last_crc)
 		return 0;
 
+	netdevice->netdev->last_rx = jiffies;
+
+	netdevice->stats.rx_packets++;
+	netdevice->stats.rx_bytes += skb->len;
+
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -322,11 +327,6 @@ static int vnd_chan_e_frame_xmit(
 	skb_push(skb, sizeof(struct lapd_prim_hdr));
 	prim_hdr = (struct lapd_prim_hdr *)skb->data;
 	prim_hdr->primitive_type = LAPD_PH_DATA_INDICATION;
-
-	netdevice->netdev->last_rx = jiffies;
-
-	netdevice->stats.rx_packets++;
-	netdevice->stats.rx_bytes += skb->len;
 
 	return netif_rx(skb);
 }
@@ -452,6 +452,7 @@ static int vnd_netdev_frame_xmit(
 	struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
+	struct lapd_prim_hdr *prim_hdr;
 	int res;
 
 	netdev->trans_start = jiffies;
@@ -462,15 +463,41 @@ static int vnd_netdev_frame_xmit(
 	if (netdevice->netdev->flags & IFF_PROMISC)
 		netdevice->last_crc = crc32_le(0, skb->data, skb->len);
 
-	res = visdn_leg_frame_xmit(&netdevice->visdn_chan.leg_a, skb);
-	switch(res) {
-	case VISDN_TX_OK:
+	prim_hdr = (struct lapd_prim_hdr *)skb->data;
+
+	switch(prim_hdr->primitive_type) {
+	case LAPD_PH_DATA_REQUEST:
+		skb_pull(skb, sizeof(struct lapd_prim_hdr));
+		res = visdn_leg_frame_xmit(&netdevice->visdn_chan.leg_a, skb);
+		switch(res) {
+		case VISDN_TX_OK:
+			return NETDEV_TX_OK;
+		case VISDN_TX_BUSY:
+			return NETDEV_TX_BUSY;
+		case VISDN_TX_LOCKED:
+			return NETDEV_TX_LOCKED;
+		default:
+			kfree_skb(skb);
+			return NETDEV_TX_OK;
+		}
+	break;
+
+	case LAPD_PH_ACTIVATE_REQUEST:
+		visdn_port_activate(netdevice->remote_port);
+		kfree_skb(skb);
 		return NETDEV_TX_OK;
-	case VISDN_TX_BUSY:
-		return NETDEV_TX_BUSY;
-	case VISDN_TX_LOCKED:
-		return NETDEV_TX_LOCKED;
+	break;
+
+	case LAPD_MPH_DEACTIVATE_REQUEST:
+		visdn_port_deactivate(netdevice->remote_port);
+		kfree_skb(skb);
+		return NETDEV_TX_OK;
+	break;
+
 	default:
+		printk(KERN_ERR "Unexpected primitive %d\n",
+				prim_hdr->primitive_type);
+		WARN_ON(1);
 		kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}

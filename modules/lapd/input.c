@@ -73,15 +73,12 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 	struct lapd_data_hdr *hdr;
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 
-	rskb = alloc_skb(sizeof(struct lapd_data_hdr_e), GFP_ATOMIC);
+	rskb = lapd_alloc_data_request_skb(dev, sizeof(struct lapd_data_hdr_e));
 	if (!rskb)
 		return;
 
-	rskb->dev = skb->dev;
-	rskb->protocol = __constant_htons(ETH_P_LAPD);
-	rskb->h.raw = rskb->nh.raw = rskb->mac.raw = rskb->data;
-
-	rhdr = (struct lapd_data_hdr *)skb_put(rskb, sizeof(struct lapd_data_hdr));
+	rhdr = (struct lapd_data_hdr *)
+		skb_put(rskb, sizeof(struct lapd_data_hdr));
 	hdr = (struct lapd_data_hdr *)skb->data;
 
 	rhdr->addr.sapi = hdr->addr.sapi;
@@ -93,7 +90,7 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 				LAPD_UFRAME_FUNC_DM,
 				hdr->u.p_f);
 
-	lapd_send_frame(rskb);
+	lapd_ph_data_request(rskb);
 }
 
 /*
@@ -473,8 +470,6 @@ int lapd_rcv(
 	/* Size check and make sure header is contiguous */
 	if (!pskb_may_pull(skb, sizeof(struct lapd_prim_hdr)))
 		goto err_pskb_may_pull;
-
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 	hdr = (struct lapd_prim_hdr *)skb->data;
 

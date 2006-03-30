@@ -169,7 +169,6 @@ void lapd_mdl_primitive(
 		return;
 	}
 
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 	skb->dev = NULL;
 
 	pri = (struct lapd_dl_primitive *)
@@ -215,13 +214,8 @@ static int lapd_prepare_sframe(
 {
 	struct lapd_data_hdr_e *hdr;
 
-	BUG_ON(!lapd_sock->dev);
-
-	skb->dev = lapd_sock->dev->dev;
-	skb->protocol = __constant_htons(ETH_P_LAPD);
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
-
-	hdr = (struct lapd_data_hdr_e *)skb_put(skb, sizeof(struct lapd_data_hdr_e));
+	hdr = (struct lapd_data_hdr_e *)
+		skb_put(skb, sizeof(struct lapd_data_hdr_e));
 
 	hdr->addr.sapi = lapd_sock->sapi;
 	hdr->addr.c_r = lapd_make_cr(lapd_sock->dev, c_r);
@@ -245,7 +239,8 @@ static int lapd_send_sframe(
 	struct sk_buff *skb;
 	struct lapd_data_hdr_e *hdr;
 
-	skb = alloc_skb(sizeof(struct lapd_data_hdr_e), GFP_ATOMIC);
+	skb = lapd_alloc_data_request_skb(lapd_sock->dev,
+				sizeof(struct lapd_data_hdr_e));
 	if (!skb) {
 		err = -ENOMEM;
 		goto err_alloc_skb;
@@ -264,7 +259,7 @@ static int lapd_send_sframe(
 		lapd_sframe_function_name(lapd_sframe_function(hdr->control)),
 		lapd_sock->v_r);
 
-	return lapd_send_frame(skb);
+	return lapd_ph_data_request(skb);
 
 err_prepare_sframe:
 	kfree_skb(skb);
@@ -341,8 +336,8 @@ static void lapd_run_ui_queue(struct lapd_sock *lapd_sock)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&to_lapd_sock(&lapd_sock->sk)->u_queue)))
-		lapd_send_frame(skb);
+	while ((skb = skb_dequeue(&lapd_sock->u_queue)))
+		lapd_ph_data_request(skb);
 }
 
 static inline void lapd_discard_ui_queue(struct lapd_sock *lapd_sock)
@@ -372,7 +367,8 @@ static void lapd_run_i_queue(struct lapd_sock *lapd_sock)
 	       lapd_sock->v_s != (lapd_sock->v_a + lapd_sock->sap->k) % 128;
 	     skb = skb->next, sk->sk_send_head = skb) {
 
-		struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
+		struct lapd_data_hdr_e *hdr =
+			(struct lapd_data_hdr_e *)skb->data;
 
 		BUG_ON(!hdr);
 
@@ -391,7 +387,7 @@ static void lapd_run_i_queue(struct lapd_sock *lapd_sock)
 		/* We need to copy the datagram because we will
 		 * change N(S) and N(R) in the future
 		 */
-		lapd_send_frame(skb_copy(skb, GFP_ATOMIC));
+		lapd_ph_data_request(skb_copy(skb, GFP_ATOMIC));
 
 		lapd_sock->v_s = (lapd_sock->v_s + 1) % 128;
 	}
@@ -645,10 +641,8 @@ int lapd_prepare_iframe(
 		/* We should not trasnmit (see 5.6.1) */
 	}
 
-	skb->protocol = __constant_htons(ETH_P_LAPD);
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
-
-	hdr = (struct lapd_data_hdr_e *)skb_put(skb, sizeof(struct lapd_data_hdr_e));
+	hdr = (struct lapd_data_hdr_e *)
+		skb_put(skb, sizeof(struct lapd_data_hdr_e));
 
 	hdr->addr.sapi = lapd_sock->sapi;
 	/* I-frames are always commands */
@@ -703,7 +697,7 @@ static void lapd_clear_own_receiver_busy(
 	}
 }
 
-static int lapd_queue_completed_iframe(
+static int lapd_sock_queue_iframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
@@ -800,7 +794,7 @@ of this ETS shall be taken.
 	frmr->x = x;
 	frmr->w = w;
 
-	lapd_send_completed_uframe(skb);
+	lapd_sock_queue_uframe(skb);
 */
 }
 
@@ -1900,16 +1894,16 @@ void lapd_dl_data_request(
 
 	case LAPD_DLS_5_AWAITING_ESTABLISH:
 		if (lapd_sock->layer_3_initiated)
-			lapd_queue_completed_iframe(lapd_sock, skb);
+			lapd_sock_queue_iframe(lapd_sock, skb);
 	break;
 
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
-		lapd_queue_completed_iframe(lapd_sock, skb);
+		lapd_sock_queue_iframe(lapd_sock, skb);
 		lapd_run_i_queue(lapd_sock);
 	break;
 
 	case LAPD_DLS_8_TIMER_RECOVERY:
-		lapd_queue_completed_iframe(lapd_sock, skb);
+		lapd_sock_queue_iframe(lapd_sock, skb);
 	break;
 
 	default:
@@ -1925,14 +1919,14 @@ void lapd_dl_unit_data_request(
 {
 	switch (lapd_sock->state) {
 	case LAPD_DLS_1_TEI_UNASSIGNED:
-		lapd_queue_completed_uframe(lapd_sock, skb);
+		lapd_sock_queue_uframe(lapd_sock, skb);
 		lapd_change_state(lapd_sock, LAPD_DLS_2_AWAITING_TEI);
 		lapd_utme_mdl_assign_indication(lapd_sock->usr_tme);
 	break;
 
 	case LAPD_DLS_2_AWAITING_TEI:
 	case LAPD_DLS_3_ESTABLISH_AWAITING_TEI:
-		lapd_queue_completed_uframe(lapd_sock, skb);
+		lapd_sock_queue_uframe(lapd_sock, skb);
 	break;
 
 	case LAPD_DLS_NULL:
@@ -1942,7 +1936,7 @@ void lapd_dl_unit_data_request(
 	case LAPD_DLS_6_AWAITING_RELEASE:
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
 	case LAPD_DLS_8_TIMER_RECOVERY:
-		lapd_queue_completed_uframe(lapd_sock, skb);
+		lapd_sock_queue_uframe(lapd_sock, skb);
 		lapd_run_ui_queue(lapd_sock);
 	}
 }

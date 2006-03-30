@@ -117,6 +117,7 @@ enum lapd_mph_information_indication
 struct lapd_prim_hdr
 {
 	__u8 primitive_type;
+	__u8 reserved[3];
 };
 
 struct lapd_ctrl_hdr
