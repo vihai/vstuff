@@ -65,6 +65,8 @@ libq931:
 - Complete decoding of BC, HLC, LLC
 - Make libq931 a daemon to which clients can connect.
   Invent a protocol (CAPI-ng :)) to use for such connection.
+- When we receive a SETUP_ACK after having sent DISCONNECT what should we do?
+  Send STATUS? Ignore it?
 
 app_visdn_ppp:
 --------------

@@ -519,8 +519,10 @@ static void hfc_st_port_state_change_nt(
 		hfc_outb(card, hfc_A_ST_WR_STA, hfc_A_ST_WR_STA_V_SET_G2_G3);
 
 		if (old_state == 3) {
+			/*
 			visdn_port_error_indication(&port->visdn_port, 0);
 			visdn_port_deactivated(&port->visdn_port);
+			*/
 
 			hfc_st_port_fifo_update(port);
 		}
