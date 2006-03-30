@@ -117,23 +117,8 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 
 		len = sendmsg(s, &msg_out, 0);
 		if(len < 0) {
-			if (errno == ECONNRESET) {
-				printf("%sDL-RELEASE-INDICATION\n", prefix);
-				break;
-			} else if (errno == EALREADY) {
-				printf("%sDL-ESTABLISH-INDICATION\n", prefix);
-				continue;
-			} else if (errno == ENOTCONN) {
-				printf("%sDL-RELEASE-CONFIRM\n", prefix);
-				continue;
-			} else if (errno == EISCONN) {
-				printf("%sDL-ESTABLISH-CONFIRM\n", prefix);
-				continue;
-			} else {
-				fprintf(stderr, "%ssendmsg: %s\n",
-						prefix, strerror(errno));
-				break;
-			}
+			fprintf(stderr, "%ssendmsg: %s\n",
+					prefix, strerror(errno));
 		}
 
 		int in_size;
