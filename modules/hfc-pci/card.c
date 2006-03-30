@@ -597,18 +597,16 @@ void __devexit hfc_card_remove(struct hfc_card *card)
 		"shutting down card at %p.\n",
 		card->io_mem);
 
+	hfc_card_lock(card);
+	hfc_softreset(card);
+	hfc_card_unlock(card);
+
 	hfc_card_sysfs_delete_files(card);
 
 	hfc_pcm_port_unregister(&card->pcm_port);
 	hfc_st_port_unregister(&card->st_port);
 
-	hfc_card_lock(card);
-	hfc_softreset(card);
 	// disable memio and bustmaster
-	hfc_card_unlock(card);
-
-	// There should be no interrupt from here on
-
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
 
 	free_irq(card->pci_dev->irq, card);

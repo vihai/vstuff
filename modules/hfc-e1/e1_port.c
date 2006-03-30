@@ -1153,6 +1153,10 @@ void hfc_e1_port_unregister(
 	struct visdn_port_attribute **attr = hfc_e1_port_attributes;
 	int i;
 
+	cancel_delayed_work(&port->state_change_work);
+	cancel_delayed_work(&port->counters_update_work);
+	flush_scheduled_work();
+
 	while(*attr) {
 		visdn_port_remove_file(
 			&port->visdn_port,

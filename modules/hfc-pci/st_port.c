@@ -464,7 +464,7 @@ static void hfc_st_port_state_change_te(
 
 	case 6:
 	case 8:
-		visdn_port_error_indication(&port->visdn_port, 2);
+		visdn_port_error_indication(&port->visdn_port, 1);
 	break;
 
 	case 7:
@@ -473,7 +473,7 @@ static void hfc_st_port_state_change_te(
 		hfc_card_fifo_update(card);
 
 		if (old_state == 6 || old_state == 8)
-			visdn_port_error_indication(&port->visdn_port, 1);
+			visdn_port_error_indication(&port->visdn_port, 2);
 
 		del_timer(&port->timer_t3);
 	break;
@@ -731,6 +731,9 @@ void hfc_st_port_unregister(struct hfc_st_port *port)
 
 	del_timer_sync(&port->timer_t1);
 	del_timer_sync(&port->timer_t3);
+
+	cancel_delayed_work(&port->state_change_work);
+	flush_scheduled_work();
 
 	while(*attr) {
 		visdn_port_remove_file(

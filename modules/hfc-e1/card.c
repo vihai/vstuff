@@ -976,6 +976,11 @@ void __devexit hfc_card_remove(struct hfc_card *card)
 		"shutting down card at %p.\n",
 		card->io_mem);
 
+	// softreset clears all pending interrupts
+	hfc_card_lock(card);
+	hfc_softreset(card);
+	hfc_card_unlock(card);
+
 	for(i=0; i<ARRAY_SIZE(card->leds); i++)
 		hfc_led_remove(&card->leds[i]);
 
@@ -986,13 +991,6 @@ void __devexit hfc_card_remove(struct hfc_card *card)
 	hfc_pcm_port_unregister(&card->pcm_port);
 	hfc_sys_port_unregister(&card->sys_port);
 	visdn_cxc_unregister(&card->cxc.visdn_cxc);
-
-	// softreset clears all pending interrupts
-	hfc_card_lock(card);
-	hfc_softreset(card);
-	hfc_card_unlock(card);
-
-	// There should be no interrupt from here on
 
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
 	free_irq(card->pci_dev->irq, card);
