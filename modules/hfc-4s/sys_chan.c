@@ -645,7 +645,7 @@ static ssize_t hfc_sys_chan_write(
 		if (chan->tx_fifo.stats_min < HFC_FIFO_JITTBUFF) {
 			u8 foo = ((u8 *)buf)[0];
 			hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
-			printk(KERN_DEBUG "Added one sample\n");
+//			printk(KERN_DEBUG "Added one sample\n");
 		}
 
 		chan->tx_fifo.stats_cycles = 0;
@@ -654,7 +654,7 @@ static ssize_t hfc_sys_chan_write(
 	}
 
 	if (used_octets > HFC_FIFO_JITTBUFF * 2) {
-		printk(KERN_DEBUG "Trimming output fifo\n");
+//		printk(KERN_DEBUG "Trimming output fifo\n");
 		goto not_copying;
 	}
 

@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-30 00:53:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-618
+
+    Summary:
+      Commented out 'Added one sample' message that was leading to starvation with misconfigured serial consoles
+    Revision:
+      isdn--devel--0.1--patch-618
+
+
+    modified files:
+     ChangeLog modules/hfc-4s/sys_chan.c modules/hfc-e1/sys_chan.c
+     modules/hfc-pci/st_chan.c
+
+
 2006-03-30 00:51:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-617
 
     Summary:
