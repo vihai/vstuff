@@ -25,11 +25,11 @@ int lapd_tm_send_multiai(
 	u8 message_type, u16 ri, u8 ais[], int nai)
 {
 	struct sk_buff *skb;
-	struct lapd_hdr *hdr;
+	struct lapd_data_hdr *hdr;
 	struct lapd_tei_mgmt_hdr *tm;
 	int i;
 
-	skb = alloc_skb(sizeof(struct lapd_hdr) +
+	skb = alloc_skb(sizeof(struct lapd_data_hdr) +
 		sizeof(struct lapd_tei_mgmt_hdr) +
 		nai,
 		GFP_ATOMIC);
@@ -38,7 +38,7 @@ int lapd_tm_send_multiai(
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
-	hdr = (struct lapd_hdr *)skb_put(skb, sizeof(struct lapd_hdr));
+	hdr = (struct lapd_data_hdr *)skb_put(skb, sizeof(struct lapd_data_hdr));
 
 	hdr->addr.sapi = LAPD_SAPI_TEI_MGMT;
 

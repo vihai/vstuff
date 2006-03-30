@@ -113,22 +113,26 @@ static void lapd_kill_by_device(struct lapd_device *dev)
 	struct sock *sk;
 	struct hlist_node *node;
 
-	write_lock_bh(&lapd_hash_lock);
+	read_lock_bh(&lapd_hash_lock);
 	sk_for_each(sk, node, lapd_get_hash(dev)) {
 		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 
 		if (lapd_sock->dev == dev) {
-			sk->sk_state = TCP_CLOSING;
+
+printk(KERN_DEBUG "Socket %p set to shutdown\n", sk);
+
+			bh_lock_sock(sk);
+
 			sk->sk_shutdown = SHUTDOWN_MASK;
 			sk->sk_err = ENETDOWN;
 
-			if (!sock_flag(sk, SOCK_DEAD)) {
+			if (!sock_flag(sk, SOCK_DEAD))
 				sk->sk_state_change(sk);
-				sock_set_flag(sk, SOCK_DEAD);
-			}
+
+			bh_unlock_sock(sk);
 		}
 	}
-	write_unlock_bh(&lapd_hash_lock);
+	read_unlock_bh(&lapd_hash_lock);
 }
 
 static void lapd_device_down(struct net_device *dev)

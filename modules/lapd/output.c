@@ -78,7 +78,7 @@ int lapd_prepare_uframe(struct sock *sk,
 	int p_f)
 {
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
-	struct lapd_hdr *hdr;
+	struct lapd_data_hdr *hdr;
 	enum lapd_cr cr;
 
 	BUG_ON(!lapd_sock->dev);
@@ -87,7 +87,7 @@ int lapd_prepare_uframe(struct sock *sk,
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
-	hdr = (struct lapd_hdr *)skb_put(skb, sizeof(struct lapd_hdr));
+	hdr = (struct lapd_data_hdr *)skb_put(skb, sizeof(struct lapd_data_hdr));
 
 	hdr->addr.sapi = lapd_sock->sapi;
 
@@ -128,7 +128,7 @@ int lapd_send_uframe(struct sock *sk,
 	int err;
 
 	struct sk_buff *skb;
-	skb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
+	skb = alloc_skb(sizeof(struct lapd_data_hdr_e), GFP_ATOMIC);
 	if (!skb) {
 		err = -ENOMEM;
 		goto err_alloc_skb;

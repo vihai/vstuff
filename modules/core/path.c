@@ -250,7 +250,7 @@ struct visdn_path *visdn_path_connect(
 
 	visdn_router_unlock();
 
-	list_add(&path->node, &visdn_paths_list);
+	list_add(&visdn_path_get(path)->node, &visdn_paths_list);
 
 	up(&visdn_paths_list_sem);
 
@@ -346,7 +346,8 @@ struct visdn_path *visdn_path_connect_by_id(
 
 	return path;
 
-	// visdn_disconnect
+	visdn_path_disconnect(path);
+	visdn_path_put(path);
 err_connect:
 err_connect_self:
 	visdn_chan_put(chan2);
@@ -541,10 +542,13 @@ static int visdn_router_cdev_do_connect(
 		goto err_copy_to_user;
 	}
 
+	visdn_path_put(path);
+
 	return 0;
 
 err_copy_to_user:
 	visdn_path_disconnect(path);
+	visdn_path_put(path);
 err_router_connect:
 err_copy_from_user:
 	visdn_msg(KERN_NOTICE,

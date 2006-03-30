@@ -25,6 +25,7 @@
 #include "port.h"
 #include "cxc.h"
 #include "router.h"
+#include "path.h"
 
 //----------------------------------------------------------------------------
 
@@ -390,24 +391,48 @@ void visdn_chan_unregister(
 		&chan->leg_a.kobj,
 		"other_leg");
 
+	BUG_ON(!chan->leg_a.cxc);
+
+	{
+	struct visdn_cxc_connection *conn;
+	struct hlist_node *pos;
+	struct visdn_path *path = NULL;
+
+	down(&chan->leg_a.cxc->sem);
+
+	hlist_for_each_entry(conn, pos,
+			visdn_cxc_get_hash(chan->leg_a.cxc,
+					&chan->leg_a),
+			hash_node) {
+
+		if (conn->src == &chan->leg_a) {
+			path = visdn_path_get(conn->path);
+			break;
+		}
+
+	}
+
+	up(&chan->leg_a.cxc->sem);
+
+	if (path) {
+		visdn_path_disconnect(path);
+		visdn_path_put(path);
+	}
+	}
+
 	visdn_router_del_node(&chan->router_node);
 
 	visdn_router_del_arch(&chan->leg_b.router_arch);
 
-	if (chan->leg_b.cxc) {
-		visdn_cxc_disconnect_leg(&chan->leg_b);
+	if (chan->leg_b.cxc)
 		visdn_cxc_del(chan->leg_b.cxc, &chan->leg_b);
-	}
 
 	kobject_del(&chan->leg_b.kobj);
 	kobject_put(&chan->leg_b.kobj);
 
 	visdn_router_del_arch(&chan->leg_a.router_arch);
 
-	if (chan->leg_a.cxc) {
-		visdn_cxc_disconnect_leg(&chan->leg_a);
-		visdn_cxc_del(chan->leg_a.cxc, &chan->leg_a);
-	}
+	visdn_cxc_del(chan->leg_a.cxc, &chan->leg_a);
 
 	kobject_del(&chan->leg_a.kobj);
 	kobject_put(&chan->leg_a.kobj);
@@ -670,5 +695,9 @@ err_subsystem_register:
 
 void visdn_chan_modexit(void)
 {
+	int i;
+	for (i=0; i<ARRAY_SIZE(visdn_chan_id_hash); i++)
+		WARN_ON(!hlist_empty(&visdn_chan_id_hash[i]));
+
 	subsystem_unregister(&visdn_channels_subsys);
 }

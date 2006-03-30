@@ -90,7 +90,7 @@ struct lapd_address
 
 } __attribute__ ((__packed__));
 
-struct lapd_hdr
+struct lapd_data_hdr
 {
 	struct lapd_address addr;
 
@@ -116,7 +116,7 @@ struct lapd_hdr
 	u8 data[0];
 } __attribute__ ((__packed__));
 
-struct lapd_hdr_e
+struct lapd_data_hdr_e
 {
 	struct lapd_address addr;
 

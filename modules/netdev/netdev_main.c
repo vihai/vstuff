@@ -59,15 +59,21 @@ static struct visdn_chan_class vnd_class_echan =
 
 static struct visdn_port vnd_port;
 
-static inline void vnd_netdevice_get(
+static inline struct vnd_netdevice *vnd_netdevice_get(
 	struct vnd_netdevice *netdevice)
 {
+	WARN_ON(atomic_read(&netdevice->refcnt) <= 0);
+
 	atomic_inc(&netdevice->refcnt);
+
+	return netdevice;
 }
 
 static inline void vnd_netdevice_put(
 	struct vnd_netdevice *netdevice)
 {
+	WARN_ON(atomic_read(&netdevice->refcnt) <= 0);
+
 	vnd_debug(3, "vnd_netdevice_put() refcnt=%d\n",
 		atomic_read(&netdevice->refcnt) - 1);
 
@@ -88,11 +94,8 @@ static struct vnd_netdevice *_vnd_netdevice_get_by_name(const char *name)
 	struct vnd_netdevice *netdevice;
 
 	list_for_each_entry(netdevice, &vnd_netdevices_list, list_node) {
-		if (!strcmp(netdevice->name, name)) {
-			vnd_netdevice_get(netdevice);
-
-			return netdevice;
-		}
+		if (!strcmp(netdevice->netdev->name, name))
+			return vnd_netdevice_get(netdevice);
 	}
 
 	return NULL;
@@ -168,11 +171,16 @@ static int vnd_chan_frame_xmit(
 	struct sk_buff *skb)
 {
 	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
+	struct lapd_prim_hdr *prim_hdr;
 
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->pkt_type = PACKET_HOST;
+
+	skb_push(skb, sizeof(struct lapd_prim_hdr));
+	prim_hdr = (struct lapd_prim_hdr *)skb->data;
+	prim_hdr->primitive_type = LAPD_PH_DATA_INDICATION;
 
 	netdevice->netdev->last_rx = jiffies;
 
@@ -298,6 +306,7 @@ static int vnd_chan_e_frame_xmit(
 	struct visdn_leg *visdn_leg,
 	struct sk_buff *skb)
 {
+	struct lapd_prim_hdr *prim_hdr;
 	struct vnd_netdevice *netdevice = visdn_leg->chan->driver_data;
 
 	/* If frame matches a previously sent frame, it is our echo, so,
@@ -309,6 +318,10 @@ static int vnd_chan_e_frame_xmit(
 	skb->dev = netdevice->netdev;
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->pkt_type = PACKET_OTHERHOST;
+
+	skb_push(skb, sizeof(struct lapd_prim_hdr));
+	prim_hdr = (struct lapd_prim_hdr *)skb->data;
+	prim_hdr->primitive_type = LAPD_PH_DATA_INDICATION;
 
 	netdevice->netdev->last_rx = jiffies;
 
@@ -414,14 +427,17 @@ static int vnd_netdev_stop(struct net_device *netdev)
 
 	vnd_debug(3, "vnd_netdev_stop()\n");
 
+	cancel_delayed_work(&netdevice->promiscuity_change_work);
+	flush_scheduled_work();
+
 	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan);
-	BUG_ON(!path);
+	if (path) {
+		err = visdn_path_disable(path);
+		if (err < 0)
+			goto err_disable_path;
 
-	err = visdn_path_disable(path);
-	if (err < 0)
-		goto err_disable_path;
-
-	visdn_path_put(path);
+		visdn_path_put(path);
+	}
 
 	return 0;
 
@@ -598,30 +614,34 @@ static void vnd_send_primitive(
 	spin_lock_irqsave(&vnd_netdevices_list_lock, flags);
 
 	list_for_each_entry(netdevice, &vnd_netdevices_list, list_node) {
-		struct lapd_ctrl_header *hdr;
 		struct sk_buff *skb;
+		struct lapd_prim_hdr *prim_hdr;
+		struct lapd_ctrl_hdr *ctrl_hdr;
 
 		if (netdevice->remote_port != port)
 			continue;
 		
-		skb = alloc_skb(sizeof(struct lapd_ctrl_header), GFP_ATOMIC);
+		skb = alloc_skb(sizeof(struct lapd_ctrl_hdr), GFP_ATOMIC);
 		if (!skb) {
 			spin_unlock_irqrestore(&vnd_netdevices_list_lock,
 								flags);
 			return;
 		}
 
-		skb->protocol = __constant_htons(ETH_P_LAPD_CTRL);
+		skb->protocol = __constant_htons(ETH_P_LAPD);
 		skb->dev = netdevice->netdev;
 		skb->pkt_type = PACKET_HOST;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
-		hdr = (struct lapd_ctrl_header *)
-			skb_put(skb, sizeof(struct lapd_ctrl_header));
+		prim_hdr = (struct lapd_prim_hdr *)
+			skb_put(skb, sizeof(struct lapd_prim_hdr));
 
-		hdr->primitive_type = primitive_type;
-		hdr->param1 = param1;
+		ctrl_hdr = (struct lapd_ctrl_hdr *)
+			skb_put(skb, sizeof(struct lapd_ctrl_hdr));
+
+		prim_hdr->primitive_type = primitive_type;
+		ctrl_hdr->param = param1;
 
 		netif_rx(skb);
 	}
@@ -684,8 +704,24 @@ static int vnd_notifier_event(
 		vnd_port_deactivated(port);
 	break;
 
-	case VISDN_EVENT_PORT_ERROR_INDICATION:
-		vnd_port_error_indication(port, (unsigned long)ptr);
+	case VISDN_EVENT_PORT_ERROR_INDICATION_0:
+		vnd_port_error_indication(port, 0);
+	break;
+
+	case VISDN_EVENT_PORT_ERROR_INDICATION_1:
+		vnd_port_error_indication(port, 1);
+	break;
+
+	case VISDN_EVENT_PORT_ERROR_INDICATION_2:
+		vnd_port_error_indication(port, 2);
+	break;
+
+	case VISDN_EVENT_PORT_ERROR_INDICATION_3:
+		vnd_port_error_indication(port, 3);
+	break;
+
+	case VISDN_EVENT_PORT_ERROR_INDICATION_4:
+		vnd_port_error_indication(port, 4);
 	break;
 	}
 
@@ -752,9 +788,10 @@ static int vnd_cdev_ioctl_do_create(
 		spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 		goto err_already_exists;
 	}
+	
+	list_add_tail(&vnd_netdevice_get(netdevice)->list_node,
+			&vnd_netdevices_list);
 
-	vnd_netdevice_get(netdevice);
-	list_add_tail(&netdevice->list_node, &vnd_netdevices_list);
 	spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 	}
 
@@ -919,8 +956,6 @@ err_invalid_sizeof_create:
 static void vnd_do_destroy(struct vnd_netdevice *netdevice)
 {
 	unsigned long flags;
-	//visdn_disconnect_path_with_id(netdevice->visdn_chan.id);
-	//visdn_disconnect_path_with_id(netdevice->visdn_chan_e.id);
 
 	sysfs_remove_link(
 		&netdevice->netdev->class_dev.kobj,
@@ -976,6 +1011,7 @@ static int vnd_cdev_ioctl_do_destroy(
 
 	return 0;
 
+	vnd_netdevice_put(netdevice);
 err_no_device:
 err_copy_from_user:
 err_invalid_sizeof_create:
@@ -1143,13 +1179,13 @@ static void __exit vnd_module_exit(void)
 
 	visdn_unregister_notifier(&vnd_notifier);
 
-	/* Ensure noone can open/ioctl cdevs before removing netdevices*/
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
 		&vnd_control_class_dev,
 		&class_device_attr_dev);
 #endif
 
+	/* Ensure no one can open/ioctl cdevs before removing netdevices */
 	class_device_del(&vnd_control_class_dev);
 	cdev_del(&vnd_cdev);
 	unregister_chrdev_region(vnd_first_dev, 1);
@@ -1176,9 +1212,9 @@ static void __exit vnd_module_exit(void)
 
 				msleep(5000);
 			}
-
-			vnd_netdevice_put(netdevice);
 		}
+
+		vnd_netdevice_put(netdevice);
 	}
 
 #ifdef DEBUG_CODE

@@ -69,11 +69,11 @@ static int lapd_pass_frame_to_socket(
 static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 {
 	struct sk_buff *rskb;
-	struct lapd_hdr *rhdr;
-	struct lapd_hdr *hdr;
+	struct lapd_data_hdr *rhdr;
+	struct lapd_data_hdr *hdr;
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 
-	rskb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
+	rskb = alloc_skb(sizeof(struct lapd_data_hdr_e), GFP_ATOMIC);
 	if (!rskb)
 		return;
 
@@ -81,8 +81,8 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 	rskb->protocol = __constant_htons(ETH_P_LAPD);
 	rskb->h.raw = rskb->nh.raw = rskb->mac.raw = rskb->data;
 
-	rhdr = (struct lapd_hdr *)skb_put(rskb, sizeof(struct lapd_hdr));
-	hdr = (struct lapd_hdr *)skb->mac.raw;
+	rhdr = (struct lapd_data_hdr *)skb_put(rskb, sizeof(struct lapd_data_hdr));
+	hdr = (struct lapd_data_hdr *)skb->data;
 
 	rhdr->addr.sapi = hdr->addr.sapi;
 	rhdr->addr.c_r = dev->role == LAPD_INTF_ROLE_NT ? 0 : 1;
@@ -104,7 +104,7 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
 
 static inline void lapd_handle_socketless_frame(struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 
 	if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME &&
 	    (lapd_uframe_function(hdr->control) == LAPD_UFRAME_FUNC_SABME ||
@@ -126,7 +126,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 	struct lapd_sock *listening_lapd_sock = NULL;
 	struct sock *sk = NULL;
 	struct hlist_node *node;
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int queued = 0;
 
@@ -136,7 +136,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 
 		if (lapd_sock->dev == dev) {
 
-			if (sk->sk_state == TCP_LISTEN) {
+			if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
 				listening_lapd_sock = lapd_sock;
 				continue;
 			}
@@ -158,7 +158,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 
 	if (listening_lapd_sock) {
 		/* A socket has not been found */
-		struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+		struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 		struct lapd_sock *new_lapd_sock;
 
 		if (hdr->addr.sapi != LAPD_SAPI_Q931 &&
@@ -237,7 +237,7 @@ static inline int lapd_pass_frame_to_socket_te(
 {
 	struct sock *sk;
 	struct hlist_node *node;
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	int queued = 0;
 
@@ -272,111 +272,6 @@ static inline int lapd_pass_frame_to_socket_te(
 	return queued;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-int lapd_rcv(
-	struct sk_buff *skb,
-	struct net_device *in_dev,
-	struct packet_type *pt)
-#else
-int lapd_rcv(
-	struct sk_buff *skb,
-	struct net_device *in_dev,
-	struct packet_type *pt,
-	struct net_device *orig_dev)
-#endif
-{
-	struct lapd_device *dev = to_lapd_dev(skb->dev);
-	struct lapd_hdr *hdr;
-	int queued = 0;
-
-	/* Ignore frames not destined to us */
-	if (skb->pkt_type != PACKET_HOST)
-		goto not_ours;
-
-	/* Don't mangle buffer if shared */
-	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
-		goto err_share_check;
-
-	/* Minimum frame is header + 2 CRC <- not sent by driver */
-	if (skb->len < sizeof(struct lapd_hdr)) /* + 2) */
-		goto err_small_frame;
-
-	/* Size check and make sure header is contiguous */
-	if (!pskb_may_pull(skb, sizeof(struct lapd_hdr)))
-		goto err_pskb_may_pull;
-
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
-
-	hdr = (struct lapd_hdr *)skb->mac.raw;
-	if (hdr->addr.ea1 || !hdr->addr.ea2) {
-		lapd_msg_dev(dev, KERN_WARNING,
-			"improper ea bits in received frame\n");
-		goto err_improper_ea;
-	}
-
-	if (dev->role && LAPD_INTF_ROLE_NT) {
-		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT)
-			lapd_ntme_handle_frame(skb);
-		else
-			queued = lapd_pass_frame_to_socket_nt(skb);
-	} else {
-		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT)
-			lapd_utme_handle_frame(skb);
-		else
-			queued = lapd_pass_frame_to_socket_te(skb);
-
-	}
-
-	if (!queued)
-		kfree_skb(skb);
-
-	return 0;
-
-err_small_frame:
-err_improper_ea:
-err_pskb_may_pull:
-err_share_check:
-	kfree_skb(skb);
-not_ours:
-
-	return 0;
-}
-
-void lapd_ph_activate_indication(struct lapd_device *dev)
-{
-	lapd_debug_dev(dev, "PH-ACTIVATE-INDICATION\n");
-
-	dev->l1_state = LAPD_L1_STATE_AVAILABLE;
-
-	lapd_out_queue_flush(dev);
-}
-
-void lapd_ph_deactivate_indication(struct lapd_device *dev)
-{
-	struct sock *sk;
-	struct hlist_node *node;
-
-	lapd_debug_dev(dev, "PH-DEACTIVATE-INDICATION\n");
-
-	dev->l1_state = LAPD_L1_STATE_UNAVAILABLE;
-
-	read_lock_bh(&lapd_hash_lock);
-
-	sk_for_each(sk, node, lapd_get_hash(dev)) {
-		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
-
-		if (lapd_sock->dev == dev &&
-		    sk->sk_state == LAPD_SK_STATE_NORMAL_DLC) {
-
-			lapd_mdl_primitive(
-				lapd_sock,
-				LAPD_MDL_PERSISTENT_DEACTIVATION, 0);
-		}
-	}
-	read_unlock_bh(&lapd_hash_lock);
-
-}
-
 static int lapd_mgmt_queue_primitive(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
@@ -405,7 +300,7 @@ int lapd_mgmt_backlog_rcv(
 	return 0;
 }
 
-static int lapd_mgmt_rcv_primitive(struct sk_buff *skb)
+static int lapd_dispatch_mph_primitive(struct sk_buff *skb)
 {
 	struct sock *sk;
 	struct hlist_node *node;
@@ -449,13 +344,111 @@ static int lapd_mgmt_rcv_primitive(struct sk_buff *skb)
 	return queued;
 }
 
+static int lapd_ph_data_indication(struct sk_buff *skb)
+{
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
+	struct lapd_data_hdr *hdr;
+	int queued;
+
+	/* Minimum frame is header + 2 CRC <- not sent by driver */
+	if (skb->len < sizeof(struct lapd_data_hdr)) /* + 2) */
+		goto err_small_frame;
+
+	hdr = (struct lapd_data_hdr *)skb->data;
+
+	if (hdr->addr.ea1 || !hdr->addr.ea2) {
+		lapd_msg_dev(dev, KERN_WARNING,
+			"improper ea bits in received frame\n");
+		goto err_improper_ea;
+	}
+
+	if (dev->role && LAPD_INTF_ROLE_NT) {
+		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
+			lapd_ntme_handle_frame(skb);
+			queued = FALSE;
+		} else {
+			queued = lapd_pass_frame_to_socket_nt(skb);
+		}
+	} else {
+		if (hdr->addr.sapi == LAPD_SAPI_TEI_MGMT) {
+			lapd_utme_handle_frame(skb);
+			queued = FALSE;
+		} else {
+			queued = lapd_pass_frame_to_socket_te(skb);
+		}
+	}
+
+	return queued;
+
+err_small_frame:
+err_improper_ea:
+
+	return FALSE;
+}
+
+static int lapd_ph_activate_indication(struct lapd_device *dev)
+{
+	lapd_debug_dev(dev, "PH-ACTIVATE-INDICATION\n");
+
+	dev->l1_state = LAPD_L1_STATE_AVAILABLE;
+
+	lapd_out_queue_flush(dev);
+
+	return FALSE;
+}
+
+static int lapd_ph_deactivate_indication(struct lapd_device *dev)
+{
+	struct sock *sk;
+	struct hlist_node *node;
+
+	lapd_debug_dev(dev, "PH-DEACTIVATE-INDICATION\n");
+
+	dev->l1_state = LAPD_L1_STATE_UNAVAILABLE;
+
+	read_lock_bh(&lapd_hash_lock);
+
+	sk_for_each(sk, node, lapd_get_hash(dev)) {
+		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+		if (lapd_sock->dev == dev &&
+		    sk->sk_state == LAPD_SK_STATE_NORMAL_DLC) {
+
+			lapd_mdl_primitive(
+				lapd_sock,
+				LAPD_MDL_PERSISTENT_DEACTIVATION, 0);
+		}
+	}
+	read_unlock_bh(&lapd_hash_lock);
+
+	return FALSE;
+}
+
+static void lapd_mph_information_indication(struct sk_buff *skb)
+{
+	struct lapd_device *dev = to_lapd_dev(skb->dev);
+	struct lapd_ctrl_hdr *hdr;
+
+	if (skb->len < sizeof(struct lapd_prim_hdr) +
+				sizeof(struct lapd_ctrl_hdr))
+		goto err_small_frame;
+
+	hdr = (struct lapd_ctrl_hdr *)
+			(skb->data + sizeof(struct lapd_prim_hdr));
+
+	if (hdr->param == LAPD_MPH_II_DISCONNECTED)
+		lapd_utme_remove_tei(dev, LAPD_BROADCAST_TEI);
+
+err_small_frame:;
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-int lapd_ctrl_rcv(
+int lapd_rcv(
 	struct sk_buff *skb,
 	struct net_device *in_dev,
 	struct packet_type *pt)
 #else
-int lapd_ctrl_rcv(
+int lapd_rcv(
 	struct sk_buff *skb,
 	struct net_device *in_dev,
 	struct packet_type *pt,
@@ -463,7 +456,8 @@ int lapd_ctrl_rcv(
 #endif
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
-	struct lapd_ctrl_header *hdr;
+	struct lapd_prim_hdr *hdr;
+	int queued;
 
 	/* Ignore frames not destined to us */
 	if (skb->pkt_type != PACKET_HOST)
@@ -473,40 +467,62 @@ int lapd_ctrl_rcv(
 	if (!(skb = skb_share_check(skb, GFP_ATOMIC)))
 		goto err_share_check;
 
-	if (skb->len < sizeof(struct lapd_ctrl_header))
+	if (skb->len < sizeof(struct lapd_prim_hdr))
 		goto err_small_frame;
 
 	/* Size check and make sure header is contiguous */
-	if (!pskb_may_pull(skb, sizeof(struct lapd_ctrl_header)))
+	if (!pskb_may_pull(skb, sizeof(struct lapd_prim_hdr)))
 		goto err_pskb_may_pull;
 
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
-	hdr = (struct lapd_ctrl_header *)skb->data;
+	hdr = (struct lapd_prim_hdr *)skb->data;
 
 	switch(hdr->primitive_type) {
+	case LAPD_PH_DATA_INDICATION:
+		skb_pull(skb, sizeof(struct lapd_prim_hdr));
+		queued = lapd_ph_data_indication(skb);
+	break;
+
 	case LAPD_PH_ACTIVATE_INDICATION:
 		lapd_ph_activate_indication(dev);
-		kfree_skb(skb);
+		queued = FALSE;
 	break;
 
 	case LAPD_PH_DEACTIVATE_INDICATION:
 		lapd_ph_deactivate_indication(dev);
-		kfree_skb(skb);
+		queued = FALSE;
 	break;
 
 	case LAPD_MPH_ERROR_INDICATION:
+		queued = lapd_dispatch_mph_primitive(skb);
+	break;
+
 	case LAPD_MPH_ACTIVATE_INDICATION:
+		queued = lapd_dispatch_mph_primitive(skb);
+	break;
+
 	case LAPD_MPH_DEACTIVATE_INDICATION:
+		queued = lapd_dispatch_mph_primitive(skb);
+	break;
+
 	case LAPD_MPH_INFORMATION_INDICATION:
-		if (!lapd_mgmt_rcv_primitive(skb))
-			kfree_skb(skb);
+		lapd_mph_information_indication(skb);
+		queued = lapd_dispatch_mph_primitive(skb);
+	break;
+
+	case LAPD_PH_DATA_REQUEST:
+	case LAPD_PH_ACTIVATE_REQUEST:
+	case LAPD_MPH_DEACTIVATE_REQUEST:
+	default:
+		printk(KERN_WARNING
+			"Unexpected primitive received by lapd\n");
+		queued = FALSE;
 	break;
 	}
 
-	if (hdr->primitive_type == LAPD_MPH_INFORMATION_INDICATION &&
-	    hdr->param1 == LAPD_MPH_II_DISCONNECTED)
-		lapd_utme_remove_tei(dev, LAPD_BROADCAST_TEI);
+	if (!queued)
+		kfree_skb(skb);
 
 	return 0;
 

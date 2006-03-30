@@ -149,7 +149,41 @@ EXPORT_SYMBOL(visdn_port_deactivated);
 
 void visdn_port_error_indication(struct visdn_port *port, int code)
 {
-	visdn_call_notifiers(VISDN_EVENT_PORT_ERROR_INDICATION, port);
+	/* We cannot pass another parameter to visdn_call_notifiers() besid
+	 * the port name, so, we use multiple events to convey the error code
+	 */
+
+	switch(code) {
+	case 0:
+		visdn_call_notifiers(
+			VISDN_EVENT_PORT_ERROR_INDICATION_0, port);
+	break;
+
+	case 1:
+		visdn_call_notifiers(
+			VISDN_EVENT_PORT_ERROR_INDICATION_1, port);
+	break;
+
+	case 2:
+		visdn_call_notifiers(
+			VISDN_EVENT_PORT_ERROR_INDICATION_2, port);
+	break;
+
+
+	case 3:
+		visdn_call_notifiers(
+			VISDN_EVENT_PORT_ERROR_INDICATION_3, port);
+	break;
+
+
+	case 4:
+		visdn_call_notifiers(
+			VISDN_EVENT_PORT_ERROR_INDICATION_4, port);
+	break;
+
+	default:
+		WARN_ON(1);
+	}
 }
 EXPORT_SYMBOL(visdn_port_error_indication);
 

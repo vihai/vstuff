@@ -176,3 +176,14 @@ void visdn_router_unlock()
 {
 	up(&visdn_router_sem);
 }
+
+int visdn_router_modinit()
+{
+	return 0;
+}
+
+void visdn_router_modexit()
+{
+	WARN_ON(!list_empty(&visdn_router_nodes));
+	WARN_ON(!list_empty(&visdn_router_archs));
+}

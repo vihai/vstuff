@@ -74,14 +74,14 @@ struct lapd_tei_mgmt_ai
 
 struct lapd_tei_mgmt_frame
 {
-	struct lapd_hdr hdr;
+	struct lapd_data_hdr hdr;
 	struct lapd_tei_mgmt_hdr tm_hdr;
 	struct lapd_tei_mgmt_ai ai;
 } __attribute__ ((__packed__));
 
 struct lapd_tei_mgmt_frame_noai
 {
-	struct lapd_hdr hdr;
+	struct lapd_data_hdr hdr;
 	struct lapd_tei_mgmt_hdr tm_hdr;
 } __attribute__ ((__packed__));
 

@@ -34,10 +34,7 @@ extern struct device visdn_system_device;
 extern struct class visdn_system_class;
 extern struct subsystem visdn_subsys;
 
-static inline struct sk_buff *visdn_alloc_skb(unsigned int length)
-{
-	return dev_alloc_skb(length);
-}
+extern struct sk_buff *visdn_alloc_skb(unsigned int length);
 
 static inline void visdn_kfree_skb(struct sk_buff *skb)
 {
@@ -91,7 +88,11 @@ enum visdn_event
 	VISDN_EVENT_PORT_DISCONNECTED,
 	VISDN_EVENT_PORT_ACTIVATED,
 	VISDN_EVENT_PORT_DEACTIVATED,
-	VISDN_EVENT_PORT_ERROR_INDICATION,
+	VISDN_EVENT_PORT_ERROR_INDICATION_0,
+	VISDN_EVENT_PORT_ERROR_INDICATION_1,
+	VISDN_EVENT_PORT_ERROR_INDICATION_2,
+	VISDN_EVENT_PORT_ERROR_INDICATION_3,
+	VISDN_EVENT_PORT_ERROR_INDICATION_4,
 	VISDN_EVENT_CHAN_REGISTERED,
 	VISDN_EVENT_CHAN_UNREGISTERED,
 	VISDN_EVENT_CHAN_ENABLED,

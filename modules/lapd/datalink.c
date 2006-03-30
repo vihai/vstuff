@@ -213,7 +213,7 @@ static int lapd_prepare_sframe(
 	enum lapd_cr c_r,
 	enum lapd_sframe_function function, int p_f)
 {
-	struct lapd_hdr_e *hdr;
+	struct lapd_data_hdr_e *hdr;
 
 	BUG_ON(!lapd_sock->dev);
 
@@ -221,7 +221,7 @@ static int lapd_prepare_sframe(
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
-	hdr = (struct lapd_hdr_e *)skb_put(skb, sizeof(struct lapd_hdr_e));
+	hdr = (struct lapd_data_hdr_e *)skb_put(skb, sizeof(struct lapd_data_hdr_e));
 
 	hdr->addr.sapi = lapd_sock->sapi;
 	hdr->addr.c_r = lapd_make_cr(lapd_sock->dev, c_r);
@@ -243,9 +243,9 @@ static int lapd_send_sframe(
 	int err = 0;
 
 	struct sk_buff *skb;
-	struct lapd_hdr_e *hdr;
+	struct lapd_data_hdr_e *hdr;
 
-	skb = alloc_skb(sizeof(struct lapd_hdr_e), GFP_ATOMIC);
+	skb = alloc_skb(sizeof(struct lapd_data_hdr_e), GFP_ATOMIC);
 	if (!skb) {
 		err = -ENOMEM;
 		goto err_alloc_skb;
@@ -257,7 +257,7 @@ static int lapd_send_sframe(
 		goto err_prepare_sframe;
 	}
 
-	hdr = (struct lapd_hdr_e *)skb->mac.raw;
+	hdr = (struct lapd_data_hdr_e *)skb->data;
 
 	lapd_debug_dlc(lapd_sock,
 		"Transmitting s-frame %s N(R)=%d\n",
@@ -372,7 +372,7 @@ static void lapd_run_i_queue(struct lapd_sock *lapd_sock)
 	       lapd_sock->v_s != (lapd_sock->v_a + lapd_sock->sap->k) % 128;
 	     skb = skb->next, sk->sk_send_head = skb) {
 
-		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+		struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 
 		BUG_ON(!hdr);
 
@@ -590,7 +590,7 @@ static void lapd_dump_queue(struct lapd_sock *lapd_sock)
 		if (sk->sk_send_head)
 			printk("HEAD ");
 
-		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+		struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 		printk("V(S) = %d\n", hdr->i.n_s);
 	}
 
@@ -616,7 +616,7 @@ static void lapd_ack_frames(struct lapd_sock *lapd_sock, int n_r)
 	for (skb = sk->sk_write_queue.next;
 	    (skb != (struct sk_buff *)&sk->sk_write_queue) &&
 	     skb != sk->sk_send_head;) {
-		struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+		struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 		struct sk_buff *old_skb;
 
 		if (hdr->i.n_s == n_r) break;
@@ -638,7 +638,7 @@ int lapd_prepare_iframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr_e *hdr;
+	struct lapd_data_hdr_e *hdr;
 
 	if ((lapd_sock->v_s - lapd_sock->v_a + 128) % 128
 	     > lapd_sock->sap->k) {
@@ -648,7 +648,7 @@ int lapd_prepare_iframe(
 	skb->protocol = __constant_htons(ETH_P_LAPD);
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
-	hdr = (struct lapd_hdr_e *)skb_put(skb, sizeof(struct lapd_hdr_e));
+	hdr = (struct lapd_data_hdr_e *)skb_put(skb, sizeof(struct lapd_data_hdr_e));
 
 	hdr->addr.sapi = lapd_sock->sapi;
 	/* I-frames are always commands */
@@ -764,7 +764,7 @@ of this ETS shall be taken.
 **********************************************
 	struct sk_buff *skb;
 	skb = alloc_skb(
-		sizeof(struct lapd_hdr) + sizeof(struct lapd_frmr),
+		sizeof(struct lapd_data_hdr) + sizeof(struct lapd_frmr),
 		GFP_ATOMIC);
 	if (!skb)
 		return;
@@ -776,8 +776,8 @@ of this ETS shall be taken.
 		(struct lapd_frmr *)skb_put(skb, sizeof(struct lapd_frmr));
 	memset(frmr, 0x00, sizeof(struct lapd_frmr));
 
-	struct lapd_hdr *rhdr = (struct lapd_hdr *)rskb->mac.raw;
-	struct lapd_hdr_e *rhdr_e = (struct lapd_hdr_e *)rskb->mac.raw;
+	struct lapd_data_hdr *rhdr = (struct lapd_data_hdr *)rskb->data;
+	struct lapd_data_hdr_e *rhdr_e = (struct lapd_data_hdr_e *)rskb->data;
 
 	switch (lapd_frame_type(rhdr->control)) {
 	case LAPD_FRAME_TYPE_IFRAME:
@@ -808,7 +808,7 @@ static int lapd_socket_handle_iframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+	struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 	int queued = FALSE;
 
 	lapd_debug_dlc(lapd_sock,
@@ -1016,7 +1016,7 @@ static int lapd_socket_handle_sframe_rr(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+	struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 
 	switch(lapd_sock->state) {
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
@@ -1116,7 +1116,7 @@ static int lapd_socket_handle_sframe_rnr(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+	struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 
 	switch(lapd_sock->state) {
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
@@ -1207,7 +1207,7 @@ static int lapd_socket_handle_sframe_rej(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+	struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 
 	switch(lapd_sock->state) {
 	case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
@@ -1302,7 +1302,7 @@ static int lapd_socket_handle_sframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr_e *hdr = (struct lapd_hdr_e *)skb->mac.raw;
+	struct lapd_data_hdr_e *hdr = (struct lapd_data_hdr_e *)skb->data;
 	int queued = FALSE;
 
 	lapd_debug_dlc(lapd_sock,
@@ -1346,7 +1346,7 @@ static int lapd_socket_handle_uframe_ua(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 
 	lapd_debug_ls(lapd_sock, "received u-frame UA\n");
 
@@ -1418,7 +1418,7 @@ static int lapd_socket_handle_uframe_disc(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 
 	lapd_debug_ls(lapd_sock, "received u-frame DISC\n");
 
@@ -1469,7 +1469,7 @@ static int lapd_socket_handle_uframe_frmr(
 
 /*
 	struct lapd_frmr *frmr =
-		(struct lapd_frmr *)(skb->mac.raw + sizeof(struct lapd_hdr));
+		(struct lapd_frmr *)(skb->data + sizeof(struct lapd_data_hdr));
 
 	if ((frmr->control == 0 &&
 	     lapd_uframe_function(frmr->control2) == LAPD_UFRAME_FUNC_UA) ||
@@ -1494,7 +1494,7 @@ static int lapd_socket_handle_uframe_dm(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 
 	lapd_debug_ls(lapd_sock, "received u-frame DM\n");
 
@@ -1557,7 +1557,7 @@ static int lapd_socket_handle_uframe_sabme(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 
 	lapd_debug_ls(lapd_sock, "received u-frame SABME\n");
 
@@ -1675,7 +1675,7 @@ static int lapd_socket_handle_uframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 	int queued = FALSE;
 
 	lapd_debug_ls(lapd_sock, "received u-frame\n");
@@ -1737,7 +1737,7 @@ int lapd_dlc_recv(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-	struct lapd_hdr *hdr;
+	struct lapd_data_hdr *hdr;
 
 	if (!skb->dev) {
 
@@ -1777,7 +1777,7 @@ int lapd_dlc_recv(
 	} else {
 		int queued = 0;
 
-		hdr = (struct lapd_hdr *)skb->mac.raw;
+		hdr = (struct lapd_data_hdr *)skb->data;
 
 		switch (lapd_frame_type(hdr->control)) {
 		case LAPD_FRAME_TYPE_IFRAME:

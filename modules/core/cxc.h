@@ -152,8 +152,6 @@ extern int visdn_cxc_leg_connected(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg);
 
-extern int visdn_cxc_disconnect_leg(struct visdn_leg *leg);
-
 extern void visdn_cxc_init(struct visdn_cxc *cxc);
 extern int visdn_cxc_register(struct visdn_cxc *cxc);
 extern void visdn_cxc_unregister(struct visdn_cxc *cxc);

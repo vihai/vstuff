@@ -2,6 +2,28 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-03-30 00:51:17 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-617
+
+    Summary:
+      Changed L1/L2 interface my implementing an encapsulated protocol with primitive+payload plus various related fixe. Ethereal will need to be patched to support this new protocol.
+    Revision:
+      isdn--devel--0.1--patch-617
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c modules/core/chan.c
+     modules/core/core.h modules/core/core_main.c
+     modules/core/cxc.c modules/core/cxc.h modules/core/path.c
+     modules/core/port.c modules/core/router.c
+     modules/core/router.h modules/lapd/af_lapd.c
+     modules/lapd/datalink.c modules/lapd/device.c
+     modules/lapd/input.c modules/lapd/input.h modules/lapd/lapd.h
+     modules/lapd/output.c modules/lapd/proto.h
+     modules/lapd/tei_mgmt.c modules/lapd/tei_mgmt.h
+     modules/lapd/tei_mgmt_nt.c modules/lapd/tei_mgmt_te.c
+     modules/netdev/netdev.h modules/netdev/netdev_main.c
+
+
 2006-03-30 00:44:43 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-616
 
     Summary:

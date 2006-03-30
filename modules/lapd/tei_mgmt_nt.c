@@ -212,7 +212,7 @@ static void lapd_ntme_handle_tei_request(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	lapd_debug_dev(dev, "TEI request\n");
 
@@ -316,7 +316,7 @@ static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame_noai *tm =
-		(struct lapd_tei_mgmt_frame_noai *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame_noai *)skb->data;
 	u8 teis[128];
 	int nteis = 0;
 
@@ -328,7 +328,7 @@ static void lapd_ntme_handle_tei_check_response(struct sk_buff *skb)
 	{
 	struct lapd_tei_mgmt_ai *tm_ai;
 	do {
-		tm_ai = (struct lapd_tei_mgmt_ai *)(skb->mac.raw + nteis);
+		tm_ai = (struct lapd_tei_mgmt_ai *)(skb->data + nteis);
 
 		teis[nteis++] = tm_ai->value & 0x7F;
 	} while(tm_ai->ext == 0);
@@ -370,7 +370,7 @@ static void lapd_ntme_handle_tei_verify(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI verify received: tei=%d\n",
@@ -420,7 +420,7 @@ int lapd_ntme_handle_frame(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	if (skb->len < sizeof(struct lapd_tei_mgmt_frame)) {
 		lapd_msg_dev(dev, KERN_ERR,

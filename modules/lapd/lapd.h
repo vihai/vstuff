@@ -29,10 +29,6 @@
 #define ETH_P_LAPD 0x0030	/* LAPD pseudo type */
 #endif
 
-#ifndef ETH_P_LAPD_CTRL
-#define ETH_P_LAPD_CTRL 0x0031	/* LAPD control pseudo type */
-#endif
-
 #ifndef AF_LAPD
 #define AF_LAPD 30
 #endif
@@ -98,8 +94,10 @@ struct sockaddr_lapd
 	__u8            sal_tei;
 };
 
-enum lapd_ph_primitive_type
+enum lapd_primitive_type
 {
+	LAPD_PH_DATA_REQUEST = 1,
+	LAPD_PH_DATA_INDICATION,
 	LAPD_PH_ACTIVATE_INDICATION,
 	LAPD_PH_DEACTIVATE_INDICATION,
 	LAPD_PH_ACTIVATE_REQUEST,
@@ -116,10 +114,14 @@ enum lapd_mph_information_indication
 	LAPD_MPH_II_DISCONNECTED,
 };
 
-struct lapd_ctrl_header
+struct lapd_prim_hdr
 {
-	int primitive_type;
-	int param1;
+	__u8 primitive_type;
+};
+
+struct lapd_ctrl_hdr
+{
+	__u8 param;
 };
 
 #ifdef __KERNEL__
@@ -142,13 +144,13 @@ struct lapd_ctrl_header
 #define LAPD_HASHBITS		8
 #define LAPD_HASHSIZE		((1 << LAPD_HASHBITS) - 1)
 
-#define LAPD_SK_STATE_NULL		TCP_LAST_ACK
-#define LAPD_SK_STATE_LISTEN		TCP_LISTEN
-#define LAPD_SK_STATE_NORMAL_DLC	TCP_ESTABLISHED
-#define LAPD_SK_STATE_BROADCAST_DLC	TCP_SYN_SENT
-#define LAPD_SK_STATE_MGMT		TCP_SYN_RECV
-#define LAPD_SK_STATE_CLOSE		TCP_CLOSE
-#define LAPD_SK_STATE_CLOSING		TCP_CLOSING
+#define LAPD_SK_STATE_NULL			TCP_LAST_ACK
+#define LAPD_SK_STATE_LISTEN			TCP_LISTEN
+#define LAPD_SK_STATE_NORMAL_DLC		TCP_ESTABLISHED
+#define LAPD_SK_STATE_NORMAL_DLC_CLOSING	TCP_CLOSING
+#define LAPD_SK_STATE_BROADCAST_DLC		TCP_SYN_SENT
+#define LAPD_SK_STATE_MGMT			TCP_SYN_RECV
+#define LAPD_SK_STATE_CLOSE			TCP_CLOSE
 
 #ifdef DEBUG_CODE
 #define lapd_debug(format, arg...)			\

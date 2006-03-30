@@ -75,6 +75,9 @@ void visdn_router_print_node_name(struct visdn_router_node *node);
 void visdn_router_lock(void);
 void visdn_router_unlock(void);
 
+int visdn_router_modinit(void);
+void visdn_router_modexit(void);
+
 #endif
 
 #endif

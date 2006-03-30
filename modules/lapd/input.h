@@ -30,17 +30,4 @@ extern int lapd_rcv(
 
 int lapd_mgmt_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-extern int lapd_ctrl_rcv(
-	struct sk_buff *skb,
-	struct net_device *dev,
-	struct packet_type *pt);
-#else
-extern int lapd_ctrl_rcv(
-	struct sk_buff *skb,
-	struct net_device *dev,
-	struct packet_type *pt,
-	struct net_device *orig_dev);
-#endif
-
 #endif

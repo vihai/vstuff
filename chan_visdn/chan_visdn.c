@@ -2238,16 +2238,22 @@ static void visdn_ccb_q931_receive()
 	}
 }
 
+struct mgmt_prim
+{
+	struct lapd_prim_hdr prim;
+	struct lapd_ctrl_hdr ctrl;
+};
+
 static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
 {
 	struct msghdr skmsg;
 	struct cmsghdr cmsg;
 	struct iovec iov;
-	struct lapd_ctrl_header hdr;
+	struct mgmt_prim prim;
 	int len;
 
-	iov.iov_base = &hdr;
-	iov.iov_len = sizeof(hdr);
+	iov.iov_base = &prim;
+	iov.iov_len = sizeof(prim);
 
 	skmsg.msg_name = NULL;
 	skmsg.msg_namelen = 0;
@@ -2265,10 +2271,10 @@ static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
 		return len;
 	}
 
-	switch(hdr.primitive_type) {
+	switch(prim.prim.primitive_type) {
 	case LAPD_MPH_ERROR_INDICATION:
 		visdn_debug("%s: MPH-ERROR-INDICATION: %d\n",
-			visdn_intf->name, hdr.param1);
+			visdn_intf->name, prim.ctrl.param);
 	break;
 
 	case LAPD_MPH_ACTIVATE_INDICATION:
@@ -2284,14 +2290,14 @@ static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
 	case LAPD_MPH_INFORMATION_INDICATION:
 		visdn_debug("%s: MPH-INFORMATION-INDICATION: %s\n",
 			visdn_intf->name,
-			hdr.param1 == LAPD_MPH_II_CONNECTED ?
+			prim.ctrl.param == LAPD_MPH_II_CONNECTED ?
 				"CONNECTED" :
 				"DISCONNECTED");
 	break;
 
 	default:
 		ast_log(LOG_NOTICE, "Unexpected primitive %d\n",
-			hdr.primitive_type);
+			prim.prim.primitive_type);
 		return -EBADMSG;
 	}
 

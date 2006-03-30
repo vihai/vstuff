@@ -265,7 +265,10 @@ static void lapd_sock_destruct(struct sock *sk)
 	}
 
 	if (lapd_sock->usr_tme) {
+		write_lock_bh(&lapd_utme_hash_lock);
 		hlist_del(&lapd_sock->usr_tme->node);
+		write_unlock_bh(&lapd_utme_hash_lock);
+
 		lapd_utme_put(lapd_sock->usr_tme);
 
 		lapd_utme_put(lapd_sock->usr_tme);
@@ -289,23 +292,6 @@ static void lapd_sock_destruct(struct sock *sk)
 
 	WARN_ON(atomic_read(&sk->sk_rmem_alloc));
 	WARN_ON(atomic_read(&sk->sk_wmem_alloc));
-
-/*	{
-	struct lapd_te *te, *n;
-	write_lock_bh(&lapd_sock->nt.tes_lock);
-
-	list_for_each_entry_safe(te, n, &lapd_sock->nt.tes, hash_list) {
-
-		lapd_msg_ls(lapd_sock, KERN_ERR, "List del %p\n",
-			&te->hash_list);
-
-		list_del(&te->hash_list);
-		kfree(te);
-	}
-
-	write_unlock_bh(&lapd_sock->nt.tes_lock);
-	}
-*/
 }
 
 static int lapd_release(struct socket *sock)
@@ -319,31 +305,24 @@ static int lapd_release(struct socket *sock)
 		return 0;
 
 	lapd_lock_sock(lapd_sock);
-	sk->sk_shutdown = SHUTDOWN_MASK;
 
-	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
+	if (sk->sk_state == LAPD_SK_STATE_NORMAL_DLC &&
+	    (lapd_sock->state == LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED ||
+	     lapd_sock->state == LAPD_DLS_8_TIMER_RECOVERY)) {
+
+		/* Be kind and bring down the DLC.
+		 * Since we need to receive responses the unhash is deferred
+		 * after DL-RELEASE-CONFIRM
+		 */
+
+		sk->sk_state = LAPD_SK_STATE_NORMAL_DLC_CLOSING;
+		lapd_dl_release_request(lapd_sock);
+	} else {
 		sk->sk_state = LAPD_SK_STATE_CLOSE;
 
 		write_lock_bh(&lapd_hash_lock);
 		sk_del_node_init(sk);
 		write_unlock_bh(&lapd_hash_lock);
-	} else {
-		switch (lapd_sock->state) {
-
-		case LAPD_DLS_7_LINK_CONNECTION_ESTABLISHED:
-		case LAPD_DLS_8_TIMER_RECOVERY:
-			sk->sk_state = LAPD_SK_STATE_CLOSING;
-			lapd_dl_release_request(lapd_sock);
-		break;
-
-		default:
-			sk->sk_state = LAPD_SK_STATE_CLOSE;
-
-			write_lock_bh(&lapd_hash_lock);
-			sk_del_node_init(sk);
-			write_unlock_bh(&lapd_hash_lock);
-		break;
-		}
 	}
 
 	lapd_release_sock(lapd_sock);
@@ -392,13 +371,13 @@ static int lapd_ioctl(
 		spin_lock_bh(&sk->sk_receive_queue.lock);
 		skb = skb_peek(&sk->sk_receive_queue);
 		if (skb) {
-			struct lapd_hdr *hdr = (struct lapd_hdr *)skb->mac.raw;
+			struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->mac.raw;
 
 		        if (lapd_frame_type(hdr->control) ==
 				LAPD_FRAME_TYPE_UFRAME)
-				size = skb->len - sizeof(struct lapd_hdr);
+				size = skb->len - sizeof(struct lapd_data_hdr);
 			else
-				size = skb->len - sizeof(struct lapd_hdr_e);
+				size = skb->len - sizeof(struct lapd_data_hdr_e);
 		}
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
@@ -461,16 +440,16 @@ static int lapd_sendmsg(
 	if (err)
 		goto err_socket_error;
 
-	if(sk->sk_shutdown & SEND_SHUTDOWN) {
-		err = -EPIPE;
-		goto err_shutting_down;
-	}
-
 	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
 	    sk->sk_state != LAPD_SK_STATE_BROADCAST_DLC &&
 	    sk->sk_state != LAPD_SK_STATE_MGMT) {
 		err = -EINVAL;
-		goto err_not_established;
+		goto err_not_valid;
+	}
+
+	if (sk->sk_shutdown & SEND_SHUTDOWN) {
+		err = -EPIPE;
+		goto err_shutting_down;
 	}
 
 	if (!lapd_sock->dev) {
@@ -491,7 +470,7 @@ static int lapd_sendmsg(
 
 		lapd_release_sock(lapd_sock);
 		skb = sock_alloc_send_skb(sk,
-			sizeof(struct lapd_hdr_e) + len,
+			sizeof(struct lapd_data_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
 		lapd_lock_sock(lapd_sock);
 		if (!skb) {
@@ -519,7 +498,7 @@ static int lapd_sendmsg(
 
 		lapd_release_sock(lapd_sock);
 		skb = sock_alloc_send_skb(sk,
-			sizeof(struct lapd_hdr_e) + len,
+			sizeof(struct lapd_data_hdr_e) + len,
 			(msg->msg_flags & MSG_DONTWAIT), &err);
 		lapd_lock_sock(lapd_sock);
 		if (!skb)
@@ -546,9 +525,9 @@ err_prepare_frame:
 err_sock_alloc_send_skb:
 err_over_mtu:
 err_no_dev:
-err_not_established:
-err_socket_error:
 err_shutting_down:
+err_not_valid:
+err_socket_error:
 
 	lapd_release_sock(lapd_sock);
 
@@ -564,13 +543,14 @@ void lapd_dl_primitive(
 	struct lapd_dl_primitive *pri;
 	int skb_len;
 
-	if (lapd_sock->sk.sk_state == LAPD_SK_STATE_CLOSING) {
+	if (lapd_sock->sk.sk_state == LAPD_SK_STATE_NORMAL_DLC_CLOSING &&
+	    type == LAPD_DL_RELEASE_CONFIRM) {
 		lapd_debug_ls(lapd_sock, "Scheduling unhash\n");
 
 		/* Defer unhash */
 		sk_reset_timer(&lapd_sock->sk,
 			&lapd_sock->sk.sk_timer,
-			jiffies + 1 * HZ);
+			jiffies + 5 * HZ);
 
 		return;
 	}
@@ -638,28 +618,28 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 	struct sock *sk = sock->sk;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
 	struct sk_buff *skb;
-	struct lapd_hdr *hdr;
+	struct lapd_data_hdr *hdr;
 	int hdrsize;
 	int err;
 	int copied;
 
 	lapd_lock_sock(lapd_sock);
 
-	if (sk->sk_shutdown & RCV_SHUTDOWN) {
-		lapd_release_sock(lapd_sock);
-		return -EPIPE;
-	}
-
 	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC &&
 	    sk->sk_state != LAPD_SK_STATE_BROADCAST_DLC &&
 	    sk->sk_state != LAPD_SK_STATE_MGMT) {
-		lapd_release_sock(lapd_sock);
-		return -EINVAL;
+		err = -EINVAL;
+		goto err_not_valid;
+	}
+
+	if (sk->sk_shutdown & RCV_SHUTDOWN) {
+		err = -EPIPE;
+		goto err_shutting_down;
 	}
 
 	if (!lapd_sock->dev) {
-		lapd_release_sock(lapd_sock);
-		return -ENODEV;
+		err = -ENODEV;
+		goto err_no_dev;
 	}
 
 	lapd_release_sock(lapd_sock);
@@ -672,13 +652,13 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 		skb_copy_datagram_iovec(skb, 0, msg->msg_iov, skb->len);
 		copied = skb->len;
 	} else if (skb->dev) {
-		hdr = (struct lapd_hdr *)skb->mac.raw;
+		hdr = (struct lapd_data_hdr *)skb->mac.raw;
 
 		if (lapd_frame_type(hdr->control) == LAPD_FRAME_TYPE_UFRAME) {
 			msg->msg_flags |= MSG_OOB;
-			hdrsize = sizeof(struct lapd_hdr);
+			hdrsize = sizeof(struct lapd_data_hdr);
 		} else {
-			hdrsize = sizeof(struct lapd_hdr_e);
+			hdrsize = sizeof(struct lapd_data_hdr_e);
 		}
 
 		copied = skb->len - hdrsize;
@@ -722,8 +702,55 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	skb_free_datagram(sk, skb);
 err_recv_datagram:
+	lapd_lock_sock(lapd_sock);
+err_no_dev:
+err_shutting_down:
+err_not_valid:
+
+	lapd_release_sock(lapd_sock);
 
 	return err;
+}
+
+unsigned int lapd_poll(struct file *file,
+	struct socket *sock, poll_table *wait)
+{
+	unsigned int mask;
+	struct sock *sk = sock->sk;
+
+	poll_wait(file, sk->sk_sleep, wait);
+
+	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
+		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
+
+		return !hlist_empty(&lapd_sock->new_dlcs) ?
+			(POLLIN | POLLRDNORM) : 0;
+	}
+
+	/* Socket is not locked. We are protected from async events
+	   by poll logic and correct handling of state changes
+	   made by another threads is impossible in any case.
+	 */
+
+	mask = 0;
+
+	/* exceptional events? */
+	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))
+		mask |= POLLERR;
+	if (sk->sk_shutdown & RCV_SHUTDOWN)
+		mask |= POLLHUP;
+
+	/* readable? */
+	if (!skb_queue_empty(&sk->sk_receive_queue))
+		mask |= POLLIN | POLLRDNORM;
+
+	/* writable? */
+	if (sock_writeable(sk))
+		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+	else
+		set_bit(SOCK_ASYNC_NOSPACE, &sk->sk_socket->flags);
+
+	return mask;
 }
 
 static int lapd_bind_to_device(struct sock *sk, const char *devname)
@@ -777,51 +804,6 @@ err_invalid_socket_type:
 	return err;
 }
 
-unsigned int lapd_poll(struct file *file,
-	struct socket *sock, poll_table *wait)
-{
-	unsigned int mask;
-	struct sock *sk = sock->sk;
-
-	poll_wait(file, sk->sk_sleep, wait);
-
-	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
-		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
-
-		return !hlist_empty(&lapd_sock->new_dlcs) ?
-			(POLLIN | POLLRDNORM) : 0;
-	}
-
-	/* Socket is not locked. We are protected from async events
-	   by poll logic and correct handling of state changes
-	   made by another threads is impossible in any case.
-	 */
-
-	mask = 0;
-
-	/* exceptional events? */
-	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))
-		mask |= POLLERR;
-	if (sk->sk_shutdown == SHUTDOWN_MASK)
-		mask |= POLLHUP;
-
-	/* readable? */
-	if (!skb_queue_empty(&sk->sk_receive_queue) ||
-	    (sk->sk_shutdown & RCV_SHUTDOWN))
-		mask |= POLLIN | POLLRDNORM;
-
-	if (sk->sk_state == LAPD_SK_STATE_CLOSE ||
-	    sk->sk_state == LAPD_SK_STATE_CLOSING)
-		mask |= POLLHUP;
-
-	/* writable? */
-	if (sock_writeable(sk))
-		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
-	else
-		set_bit(SOCK_ASYNC_NOSPACE, &sk->sk_socket->flags);
-
-	return mask;
-}
 
 static int lapd_setsockopt(struct socket *sock, int level, int optname,
 	char __user *optval_u, int optlen)
@@ -833,6 +815,9 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 
 	if (level != SOL_LAPD)
 		return -ENOPROTOOPT;
+
+	if (sk->sk_shutdown & SHUTDOWN_MASK)
+		return -EPIPE;
 
 	if (optlen == sizeof(int)) {
 		if (get_user(intoptval, (int __user *)optval_u)) {
@@ -1267,7 +1252,7 @@ static void lapd_unhash_timer(unsigned long data)
 	if (lapd_sock)
 		lapd_debug_ls(lapd_sock, "Unhash timer\n");
 
-	WARN_ON(sk->sk_state != LAPD_SK_STATE_CLOSING);
+	WARN_ON(sk->sk_state != LAPD_SK_STATE_NORMAL_DLC_CLOSING);
 
 	write_lock_bh(&lapd_hash_lock);
 	sk_del_node_init(sk);
@@ -1350,33 +1335,6 @@ struct lapd_sock *lapd_new_sock(
 		new_lapd_sock->sap = &new_lapd_sock->dev->x25;
 
 	return new_lapd_sock;
-}
-
-void lapd_dl_establish_indication(struct lapd_sock *lapd_sock)
-{
-	lapd_debug_ls(lapd_sock,
-		"DL-ESTABLISH-INDICATION: Multiple frame mode established\n");
-
-	lapd_sock->sk.sk_err = EALREADY;
-	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
-}
-
-void lapd_dl_establish_confirm(struct lapd_sock *lapd_sock)
-{
-	lapd_debug_ls(lapd_sock,
-		"DL-ESTABLISH-CONFIRM: Multiple frame mode established\n");
-
-	lapd_sock->sk.sk_err = EISCONN;
-	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
-}
-
-void lapd_dl_release_indication(struct lapd_sock *lapd_sock)
-{
-	lapd_debug_ls(lapd_sock,
-		"DL-RELEASE-INDICATION: Multiple frame mode released\n");
-
-	lapd_sock->sk.sk_err = ECONNRESET;
-	lapd_sock->sk.sk_error_report(&lapd_sock->sk);
 }
 
 void lapd_mdl_error_indication(
@@ -1497,6 +1455,11 @@ static int lapd_bind(
 		goto err_not_null;
 	}
 
+	if (sk->sk_shutdown & SHUTDOWN_MASK) {
+		err = -EPIPE;
+		goto err_shutting_down;
+	}
+
 	if (!lapd_sock->dev) {
 		err = -ENODEV;
 		goto err_no_dev;
@@ -1529,15 +1492,23 @@ static int lapd_bind(
 		} else {
 			lapd_sock->state = LAPD_DLS_1_TEI_UNASSIGNED;
 
-			if (lapd_sock->usr_tme)
+			if (lapd_sock->usr_tme) {
+				write_lock_bh(&lapd_utme_hash_lock);
+				hlist_del(&lapd_sock->usr_tme->node);
+				write_unlock_bh(&lapd_utme_hash_lock);
+
 				lapd_utme_put(lapd_sock->usr_tme);
+
+				lapd_utme_put(lapd_sock->usr_tme);
+				lapd_sock->usr_tme = NULL;
+			}
 
 			lapd_sock->usr_tme = lapd_utme_alloc(lapd_sock->dev);
 
-			read_lock_bh(&lapd_utme_hash_lock);
+			write_lock_bh(&lapd_utme_hash_lock);
 			hlist_add_head(&lapd_utme_get(lapd_sock->usr_tme)->node,
 					&lapd_utme_hash);
-			read_unlock_bh(&lapd_utme_hash_lock);
+			write_unlock_bh(&lapd_utme_hash_lock);
 
 			if (/*sal->sal_tei >= LAPD_MIN_STA_TEI && */
 			    sal->sal_tei <= LAPD_MAX_STA_TEI)
@@ -1578,6 +1549,7 @@ static int lapd_bind(
 err_inv_tei:
 err_dyn_and_nt:
 err_no_dev:
+err_shutting_down:
 err_not_null:
 	lapd_release_sock(lapd_sock);
 err_inv_sockaddr:
@@ -1597,8 +1569,13 @@ static int lapd_connect(
 	lapd_lock_sock(lapd_sock);
 
 	if (sk->sk_state != LAPD_SK_STATE_NORMAL_DLC) {
-		err = -EIO;
-		goto err_listening;
+		err = -EINVAL;
+		goto err_not_valid;
+	}
+
+	if (sk->sk_shutdown & SHUTDOWN_MASK) {
+		err = -EPIPE;
+		goto err_shutting_down;
 	}
 
 	err = lapd_dl_establish_request(lapd_sock);
@@ -1616,7 +1593,8 @@ static int lapd_connect(
 
 err_multiframe_wait_for_establishment:
 err_establish_request:
-err_listening:
+err_shutting_down:
+err_not_valid:
 
 	lapd_release_sock(lapd_sock);
 
@@ -1670,6 +1648,11 @@ static int lapd_accept(struct socket *sock,
 		goto err_notlistening;
 	}
 
+	if (sk->sk_shutdown & SHUTDOWN_MASK) {
+		err = -EPIPE;
+		goto err_shutting_down;
+	}
+
 	if (hlist_empty(&lapd_sock->new_dlcs)) {
 		if (flags & O_NONBLOCK) {
 			err = -EWOULDBLOCK;
@@ -1693,8 +1676,9 @@ static int lapd_accept(struct socket *sock,
 	kfree(new_dlc);
 	}
 
-wouldblock:
 err_wait_for_new_dlc:
+wouldblock:
+err_shutting_down:
 err_notlistening:
 	lapd_release_sock(lapd_sock);
 
@@ -1705,23 +1689,23 @@ static int lapd_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
-	int err = 0;
+	int err;
 
 	lapd_lock_sock(lapd_sock);
+
+	if (sk->sk_state != LAPD_SK_STATE_NULL) {
+		err = -EINVAL;
+		goto err_closing;
+	}
+
+	if (sk->sk_shutdown & SHUTDOWN_MASK) {
+		err = -EPIPE;
+		goto err_shutting_down;
+	}
 
 	if (!lapd_sock->dev) {
 		err = -ENODEV;
 		goto err_no_dev;
-	}
-
-	if (sk->sk_state == LAPD_SK_STATE_CLOSING) {
-		err = -EIO;
-		goto err_closing;
-	}
-
-	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
-		err = -ENOTSUPP;
-		goto err_already_listening;
 	}
 
 	sk->sk_max_ack_backlog = backlog;
@@ -1729,9 +1713,13 @@ static int lapd_listen(struct socket *sock, int backlog)
 
 	lapd_sock->state = LAPD_DLS_LISTENING;
 
-err_already_listening:
-err_closing:
+	lapd_release_sock(lapd_sock);
+
+	return 0;
+
 err_no_dev:
+err_shutting_down:
+err_closing:
 
 	lapd_release_sock(lapd_sock);
 
@@ -1798,7 +1786,7 @@ static int lapd_shutdown(struct socket *sock, int how)
 	int err;
 
 	lapd_debug_ls(lapd_sock,
-		"Starting multiframe release\n");
+		"shutdown()\n");
 
 	lapd_lock_sock(lapd_sock);
 
@@ -1942,52 +1930,12 @@ struct packet_type lapd_packet_type = {
 	.func		= lapd_rcv,
 };
 
-struct packet_type lapd_ctrl_packet_type = {
-	.type		= __constant_htons(ETH_P_LAPD_CTRL),
-	.dev		= NULL,
-	.func		= lapd_ctrl_rcv,
-};
-
 static void lapd_watchdog(void *data);
 
 DECLARE_WORK(lapd_watchdog_work, lapd_watchdog, NULL);
 
 static void lapd_watchdog(void *data)
 {
-#if 0
-	static int count;
-	int i;
-
-	read_lock_bh(&lapd_hash_lock);
-
-	for (i=0; i<ARRAY_SIZE(lapd_hash); i++) {
-		struct sock *sk;
-		struct hlist_node *t;
-		sk_for_each(sk, t, &lapd_hash[i]) {
-			struct lapd_sock *lapd_sock =
-				to_lapd_sock(sk);
-
-printk(KERN_INFO "Sock %s %d %d\n", lapd_sock->dev->name, lapd_sock->tei, lapd_sock->state);
-			if (lapd_sock->dev &&
-			    (lapd_sock->state == LAPD_DLS_4_TEI_ASSIGNED ||
-			     lapd_sock->state == LAPD_DLS_1_TEI_UNASSIGNED)) {
-
-				lapd_sock->sk.sk_state = LAPD_SK_STATE_CLOSING;
-				lapd_sock->sk.sk_shutdown = SHUTDOWN_MASK;
-				lapd_sock->sk.sk_err = EPIPE;
-
-				if (!sock_flag(&lapd_sock->sk, SOCK_DEAD)) {
-					lapd_sock->sk.sk_state_change(
-						&lapd_sock->sk);
-					sock_set_flag(&lapd_sock->sk,
-						SOCK_DEAD);
-				}
-			}
-		}
-	}
-	read_unlock_bh(&lapd_hash_lock);
-#endif
-
 	lapd_ntme_audit();
 
 	schedule_delayed_work(&lapd_watchdog_work, 60 * 60 * HZ);
@@ -2024,7 +1972,6 @@ static int __init lapd_init(void)
 	sock_register(&lapd_family_ops);
 
 	dev_add_pack(&lapd_packet_type);
-	dev_add_pack(&lapd_ctrl_packet_type);
 
 	register_netdevice_notifier(&lapd_notifier);
 
@@ -2057,7 +2004,6 @@ static void __exit lapd_exit(void)
 	BUG_TRAP(hlist_empty(&lapd_utme_hash));
 
 	unregister_netdevice_notifier(&lapd_notifier);
-	dev_remove_pack(&lapd_ctrl_packet_type);
 	dev_remove_pack(&lapd_packet_type);
 
 	sock_unregister(PF_LAPD);

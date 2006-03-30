@@ -192,7 +192,7 @@ static void lapd_utme_handle_tei_assigned(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	if (!tm->hdr.addr.c_r) {
 		lapd_msg_dev(dev, KERN_WARNING,
@@ -353,7 +353,7 @@ static void lapd_utme_handle_tei_denied(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI %u denied\n",
@@ -379,7 +379,7 @@ static void lapd_utme_handle_tei_check_request(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 	u8 teis[128];
 	int nteis = 0;
 
@@ -504,7 +504,7 @@ static void lapd_utme_handle_tei_remove(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	lapd_msg_dev(dev, KERN_INFO,
 		"TEI remove: tei=%d\n",
@@ -522,7 +522,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 {
 	struct lapd_device *dev = to_lapd_dev(skb->dev);
 	struct lapd_tei_mgmt_frame *tm =
-		(struct lapd_tei_mgmt_frame *)skb->mac.raw;
+		(struct lapd_tei_mgmt_frame *)skb->data;
 
 	if (skb->len < sizeof(*tm)) {
 		lapd_msg_dev(dev, KERN_ERR,
@@ -606,6 +606,8 @@ void lapd_utme_set_static_tei(
 struct lapd_utme *lapd_utme_get(
 	struct lapd_utme *tme)
 {
+	WARN_ON(atomic_read(&tme->refcnt) <= 0);
+
 	atomic_inc(&tme->refcnt);
 
 	return tme;
@@ -614,6 +616,8 @@ struct lapd_utme *lapd_utme_get(
 void lapd_utme_put(
 	struct lapd_utme *tme)
 {
+	WARN_ON(atomic_read(&tme->refcnt) <= 0);
+
 	if (atomic_dec_and_test(&tme->refcnt)) {
 		lapd_utme_stop_timer(tme, &tme->T202_timer);
 

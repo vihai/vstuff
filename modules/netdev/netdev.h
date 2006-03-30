@@ -53,8 +53,6 @@ struct vnd_netdevice
 {
 	struct list_head list_node;
 
-	char name[IFNAMSIZ];
-
 	struct net_device *netdev;
 	int type;
 

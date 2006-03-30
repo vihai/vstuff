@@ -272,46 +272,6 @@ int visdn_cxc_disconnect(
 }
 EXPORT_SYMBOL(visdn_cxc_disconnect);
 
-int visdn_cxc_disconnect_leg(struct visdn_leg *leg)
-{
-	struct visdn_cxc *cxc = leg->cxc;
-
-	BUG_ON(!leg->cxc);
-
-	down(&cxc->sem);
-
-	{
-	struct visdn_cxc_connection *conn;
-	struct hlist_node *pos, *n;
-	/* Find destination leg and disconnect it */
-	hlist_for_each_entry_safe(conn, pos, n,
-			visdn_cxc_get_hash(cxc, leg),
-			hash_node) {
-
-		if (conn->src == leg) {
-			_visdn_cxc_disconnect_simplex(conn);
-		}
-	}
-	}
-
-	{
-	struct visdn_cxc_connection *conn, *n;
-	/* Now find legs pointing to us and disconnect them*/
-	list_for_each_entry_safe(conn, n,
-			&cxc->connections_list,
-			list_node) {
-
-		if (conn->dst == leg) {
-			_visdn_cxc_disconnect_simplex(conn);
-		}
-	}
-	}
-
-	up(&cxc->sem);
-
-	return 0;
-}
-
 int visdn_cxc_add(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg)
@@ -700,6 +660,8 @@ retry:
 
 	return 0;
 
+	visdn_router_del_node(&cxc->router_node);
+
 	subsystem_unregister(&cxc->subsys);
 err_subsystem_register:
 err_kobject_set_name:
@@ -737,6 +699,8 @@ EXPORT_SYMBOL(visdn_cxc_remove_file);
 
 void visdn_cxc_unregister(struct visdn_cxc *cxc)
 {
+	visdn_router_del_node(&cxc->router_node);
+
 	down(&visdn_cxc_list_sem);
 	list_del_init(&cxc->cxc_list_node);
 	up(&visdn_cxc_list_sem);

@@ -20,6 +20,8 @@
 
 #include <kernel_config.h>
 
+#include <linux/lapd.h>
+
 #include "core.h"
 #include "visdn_mod.h"
 #include "cxc.h"
@@ -39,6 +41,20 @@ int debug_level = 0;
 
 dev_t visdn_first_dev;
 EXPORT_SYMBOL(visdn_first_dev);
+
+struct sk_buff *visdn_alloc_skb(unsigned int length)
+{
+	struct sk_buff *skb;
+
+	skb = dev_alloc_skb(length);
+	if (!skb)
+		return NULL;
+
+	skb_reserve(skb, sizeof(struct lapd_prim_hdr));
+
+	return skb;
+}
+EXPORT_SYMBOL(visdn_alloc_skb);
 
 static void visdn_release(struct class_device *cd)
 {
@@ -96,8 +112,16 @@ const char *visdn_event_to_text(enum visdn_event event)
 		return "PORT_ACTIVATED";
 	case VISDN_EVENT_PORT_DEACTIVATED:
 		return "PORT_DEACTIVATED";
-	case VISDN_EVENT_PORT_ERROR_INDICATION:
-		return "ERROR_INDICATION";
+	case VISDN_EVENT_PORT_ERROR_INDICATION_0:
+		return "ERROR_INDICATION(0)";
+	case VISDN_EVENT_PORT_ERROR_INDICATION_1:
+		return "ERROR_INDICATION(1)";
+	case VISDN_EVENT_PORT_ERROR_INDICATION_2:
+		return "ERROR_INDICATION(2)";
+	case VISDN_EVENT_PORT_ERROR_INDICATION_3:
+		return "ERROR_INDICATION(3)";
+	case VISDN_EVENT_PORT_ERROR_INDICATION_4:
+		return "ERROR_INDICATION(4)";
 	case VISDN_EVENT_CHAN_REGISTERED:
 		return "CHAN_REGISTERED";
 	case VISDN_EVENT_CHAN_UNREGISTERED:
@@ -151,7 +175,7 @@ static int __init visdn_init_module(void)
 
 	err = visdn_path_modinit();
 	if (err < 0)
-		goto err_router_modinit;
+		goto err_path_modinit;
 
 	err = visdn_timer_modinit();
 	if (err < 0)
@@ -165,8 +189,14 @@ static int __init visdn_init_module(void)
 	if (err < 0)
 		goto err_chan_modinit;
 
+	err = visdn_router_modinit();
+	if (err < 0)
+		goto err_router_modinit;
+
 	return 0;
 
+	visdn_router_modexit();
+err_router_modinit:
 	visdn_chan_modexit();
 err_chan_modinit:
 	visdn_port_modexit();
@@ -174,7 +204,7 @@ err_port_modinit:
 	visdn_timer_modexit();
 err_timer_modinit:
 	visdn_path_modexit();
-err_router_modinit:
+err_path_modinit:
 	visdn_cxc_modexit();
 err_cxc_modinit:
 	class_unregister(&visdn_system_class);
@@ -193,6 +223,7 @@ module_init(visdn_init_module);
 
 static void __exit visdn_module_exit(void)
 {
+	visdn_router_modexit();
 	visdn_chan_modexit();
 	visdn_port_modexit();
 	visdn_timer_modexit();
