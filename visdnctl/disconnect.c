@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -115,12 +115,8 @@ int handle_disconnect(int argc, char *argv[], int optind)
 static void usage(int argc, char *argv[])
 {
 	fprintf(stderr,
-		"  disconnect <chan> [chan2]\n"
-		"\n"
-		"    Disconnects two endpoint channels staring from endpoint\n"
-		"    <chan> and following the path. chan2 may be optionally\n"
-		"    specified if chan is not an endpoint to indicate the\n"
-		"    walk direction\n");
+		"  disconnect <path|endpoint> <id>\n"
+		"\n");
 }
 
 struct module module_disconnect =

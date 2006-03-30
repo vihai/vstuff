@@ -5,8 +5,8 @@ exec_prefix=@exec_prefix@
 
 VISDN_DIR=@visdnhwconfdir@
 
-#VISDNCTL="echo visdnctl"
 VISDNCTL=@sbindir@/visdnctl
+#VISDNCTL="echo visdnctl"
 
 modprobe visdn-netdev
 modprobe visdn-streamport

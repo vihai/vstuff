@@ -224,7 +224,9 @@ void lapd_sock_queue_uframe(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
+	skb->dev = lapd_sock->dev->dev;
 	skb->sk = &lapd_sock->sk;
+
 	skb_queue_tail(&lapd_sock->u_queue, skb);
 }
 

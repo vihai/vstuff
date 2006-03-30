@@ -1885,7 +1885,6 @@ void lapd_dl_data_request(
 	struct lapd_sock *lapd_sock,
 	struct sk_buff *skb)
 {
-
 	switch (lapd_sock->state) {
 	case LAPD_DLS_4_TEI_ASSIGNED:
 		/* Drop frame */
