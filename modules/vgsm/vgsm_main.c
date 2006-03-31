@@ -327,7 +327,8 @@ static int vgsm_cdev_do_power_get(
 	vgsm_module_send_power_get(module);
 	vgsm_card_unlock(module->card);
 
-	wait_for_completion_timeout(&module->read_status_completion, 10 * HZ);
+	wait_for_completion_timeout(
+			&module->read_status_completion, 1 * HZ);
 
 	if (test_bit(VGSM_MODULE_STATUS_ON, &module->status))
 		put_user(1, (unsigned int *)arg);
@@ -349,7 +350,8 @@ static int vgsm_cdev_do_power_set(
 	vgsm_module_send_power_get(module);
 	vgsm_card_unlock(module->card);
 
-	wait_for_completion_timeout(&module->read_status_completion, 10 * HZ);
+	wait_for_completion_timeout(
+			&module->read_status_completion, 1 * HZ);
 
 	if (!test_bit(VGSM_MODULE_STATUS_ON, &module->status) != !arg) {
 		vgsm_card_lock(module->card);

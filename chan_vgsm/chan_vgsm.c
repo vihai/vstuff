@@ -2497,11 +2497,8 @@ static int vgsm_module_init(struct vgsm_interface *intf)
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 
-	vgsm_send_request(comm, 200 * MILLISEC, "AT+IPR=38400");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
-	vgsm_send_request(comm, 5 * SEC, "AT+CMEE=1");
+	vgsm_send_request(comm, 200 * MILLISEC,
+		"AT Z0 &F E1 V1 Q0 &K4 +CMEE=1 +IPR=38400");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 

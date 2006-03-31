@@ -169,7 +169,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	sleep(1);
 
-	const char *cmd = "AT Z0 &F E1 V1 Q0 &K4\r";
+	const char *cmd = "AT E1 V1 Q0 &K4 +CMEE=1 +IPR=38400\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
 			"write to module failed: %s\n",
@@ -178,7 +178,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 		return -1;
 	}
 
-	usleep(20000);
+	usleep(100000);
 
 	return 0;
 }
@@ -598,7 +598,8 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 
 	if (!strncmp(comm->buf, comm->request,
 			       strlen(comm->request))) {
-		comm->timer_expiration = longtime_now() + comm->request_timeout;
+		comm->timer_expiration = longtime_now() +
+					comm->request_timeout;
 		vgsm_parser_change_state(comm, VGSM_PS_READING_RESPONSE);
 	} else {
 		char *dropped = malloc(firstcr - comm->buf + 1);
