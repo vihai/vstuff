@@ -169,7 +169,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	sleep(1);
 
-	const char *cmd = "AT E1 V1 Q0 &K4 +CMEE=1 +IPR=38400\r";
+	const char *cmd = "AT E1 V1 Q0\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
 			"write to module failed: %s\n",
@@ -362,12 +362,14 @@ int vgsm_send_request(
 	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
 	comm->response = vgsm_response_alloc(comm);
 	comm->timer_expiration = longtime_now() + 200 * MILLISEC;
-	comm->request_timeout = timeout + 200 * MILLISEC; // fixme
+	comm->request_timeout = max(timeout, 10 * SEC);
 	comm->request_retransmit_cnt = 3;
 	ast_mutex_unlock(&comm->lock);
 
 	strcat(buf, "\r");
 
+	usleep(20000);
+	
 	char tmpstr[200];
 	vgsm_debug_verb("TX: '%s'\n",
 		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
@@ -724,10 +726,12 @@ ast_verbose("BUF='%s'\n",
 
 		case VGSM_PS_RECOVERING:
 			if (strstr(comm->buf, "\r\nOK\r\n")) {
-				nread = strlen(comm->buf);
-
 				comm->timer_expiration = -1;
-				vgsm_parser_change_state(comm, VGSM_PS_IDLE);
+				comm->buf[0] = '\0';
+				nread = 0;
+
+				vgsm_parser_change_state(comm,
+						VGSM_PS_IDLE);
 			}
 		break;
 
@@ -743,7 +747,7 @@ ast_verbose("BUF='%s'\n",
 				} else {
 					comm->timer_expiration = -1;
 					vgsm_parser_change_state(comm,
-					VGSM_PS_RESPONSE_FAILED);
+						VGSM_PS_RESPONSE_FAILED);
 				}
 			}
 		break;

@@ -2484,31 +2484,6 @@ static int vgsm_module_codec_init(struct vgsm_interface *intf)
 	return 0;
 }
 
-static int vgsm_module_init(struct vgsm_interface *intf)
-{
-	struct vgsm_comm *comm = &intf->comm;
-
-	/* Very basic onfiguration before entering PIN */
-
-	/* "AT" is needed before AT+IPR, otherwise it
-	 * responds with ERROR */
-
-	vgsm_send_request(comm, 200 * MILLISEC, "AT");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
-	vgsm_send_request(comm, 200 * MILLISEC,
-		"AT Z0 &F E1 V1 Q0 &K4 +CMEE=1 +IPR=38400");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
-	return 0;
-
-err_no_resp:
-
-	return -1;
-}
-
 static int vgsm_module_configure(struct vgsm_interface *intf)
 {
 	struct vgsm_comm *comm = &intf->comm;
@@ -2538,6 +2513,7 @@ static int vgsm_module_configure(struct vgsm_interface *intf)
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 
+#if 0
 	/* Enable unsolicited registration informations */
 	vgsm_send_request(comm, 5 * SEC, "AT+CREG=2");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
@@ -2563,6 +2539,28 @@ static int vgsm_module_configure(struct vgsm_interface *intf)
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 
+	/* Enable unsolicited advice of charge notifications */
+	vgsm_send_request(comm, 20 * SEC, "AT+CAOC=2");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	/* Enable unsolicited new message indications */
+	vgsm_send_request(comm, 5 * SEC, "AT+CNMI=2,1,2,1,0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	/* Enable unsolicited SIM status reporting */
+	vgsm_send_request(comm, 100 * MILLISEC, "AT#QSS=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	/* Enable Jammer detector */
+	vgsm_send_request(comm, 100 * MILLISEC, "AT#JDR=2");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+#endif
+
 	/* Enable extended cellular result codes */
 	vgsm_send_request(comm, 200 * MILLISEC, "AT+CRC=1");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
@@ -2570,11 +2568,6 @@ static int vgsm_module_configure(struct vgsm_interface *intf)
 
 	/* Enable Calling Line Presentation */
 	vgsm_send_request(comm, 180 * SEC, "AT+CLIP=1");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
-	/* Enable unsolicited advice of charge notifications */
-	vgsm_send_request(comm, 20 * SEC, "AT+CAOC=2");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 
@@ -2598,11 +2591,6 @@ static int vgsm_module_configure(struct vgsm_interface *intf)
 			goto err_no_resp;
 	}
 
-	/* Enable unsolicited new message indications */
-	vgsm_send_request(comm, 5 * SEC, "AT+CNMI=2,1,2,1,0");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
 	/* Select handsfree audio path */
 	vgsm_send_request(comm, 10 * SEC, "AT#CAP=1");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
@@ -2615,12 +2603,6 @@ static int vgsm_module_configure(struct vgsm_interface *intf)
 
 	/* Set ringer auto directed to GPIO7 */
 	vgsm_send_request(comm, 10 * SEC, "AT#SRP=3");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
-// SET #SGPO
-	/* Enable unsolicited SIM status reporting */
-	vgsm_send_request(comm, 100 * MILLISEC, "AT#QSS=1");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 
@@ -2641,11 +2623,6 @@ static int vgsm_module_configure(struct vgsm_interface *intf)
 
 	/* Set GSM1800 band */
 	vgsm_send_request(comm, 100 * MILLISEC, "AT#BND=0");
-	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
-		goto err_no_resp;
-
-	/* Enable Jammer detector */
-	vgsm_send_request(comm, 100 * MILLISEC, "AT#JDR=2");
 	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
 		goto err_no_resp;
 
@@ -2892,6 +2869,38 @@ not_registered:
 
 /***********************************************/
 
+static int vgsm_module_init(struct vgsm_interface *intf)
+{
+	struct vgsm_comm *comm = &intf->comm;
+
+	vgsm_send_request(comm, 200 * MILLISEC,
+		"AT Z0 E1 V1 Q0 &K0");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	vgsm_send_request(comm, 200 * MILLISEC,
+		"AT");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	vgsm_send_request(comm, 200 * MILLISEC,
+		"AT+IPR=38400");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	vgsm_send_request(comm, 200 * MILLISEC,
+		"AT+CMEE=1");
+	if (vgsm_expect_ok(comm) != VGSM_RESP_OK)
+		goto err_no_resp;
+
+	return 0;
+
+err_no_resp:
+
+	return -1;
+}
+
+
 static void vgsm_module_initialize(
 	struct vgsm_interface *intf)
 {
@@ -2915,18 +2924,18 @@ static void vgsm_module_initialize(
 
 	ast_log(LOG_NOTICE, "Initializing module '%s'\n", intf->name);
 
-	if (vgsm_comm_start_recovery(&intf->comm) < 0) {
-		intf->status = VGSM_INTF_STATUS_FAILED;
-		vgsm_comm_set_bitbucket(&intf->comm);
-		vgsm_intf_setreason(intf, "Communication error");
-		return;
-	}
-
 	if (vgsm_module_codec_init(intf) < 0) {
 		intf->status = VGSM_INTF_STATUS_FAILED;
 		vgsm_comm_set_bitbucket(&intf->comm);
 		vgsm_intf_setreason(intf,
 			"Error configuring CODEC");
+		return;
+	}
+
+	if (vgsm_comm_start_recovery(&intf->comm) < 0) {
+		intf->status = VGSM_INTF_STATUS_FAILED;
+		vgsm_comm_set_bitbucket(&intf->comm);
+		vgsm_intf_setreason(intf, "Communication error");
 		return;
 	}
 
