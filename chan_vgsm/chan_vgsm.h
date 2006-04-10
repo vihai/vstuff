@@ -41,6 +41,8 @@ struct vgsm_chan {
 	int path_id;
 
 	char calling_number[21];
+
+	struct ast_dsp *dsp;
 };
 
 struct vgsm_operator_info
@@ -120,7 +122,7 @@ struct vgsm_interface
 
 	char *lockdown_reason;
 
-	int connect_check_sched_id;
+	int call_monitor;
 
 	struct ast_channel *current_call;
 

@@ -71,6 +71,8 @@ struct vgsm_comm
 {
 	ast_mutex_t lock;
 
+	const char *name;
+
 	struct vgsm_urc *urcs;
 
 	int fd;

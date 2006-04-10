@@ -113,7 +113,8 @@ static void vgsm_parser_change_state(
 	struct vgsm_comm *comm,
 	enum vgsm_comm_state newstate)
 {
-	vgsm_debug_verb("State change from %s to %s\n",
+	vgsm_debug_verb("%s: State change from %s to %s\n",
+		comm->name,
 		vgsm_comm_state_to_text(comm->state),
 		vgsm_comm_state_to_text(newstate));
 
@@ -141,7 +142,8 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	if (write(comm->fd, "+", 1) < 0) {
 		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
+			"%s: write to module failed: %s\n",
+			comm->name,
 			strerror(errno));
 
 		return -1;
@@ -151,7 +153,8 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	if (write(comm->fd, "+", 1) < 0) {
 		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
+			"%s: write to module failed: %s\n",
+			comm->name,
 			strerror(errno));
 
 		return -1;
@@ -161,7 +164,8 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	if (write(comm->fd, "+", 1) < 0) {
 		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
+			"%s: write to module failed: %s\n",
+			comm->name,
 			strerror(errno));
 
 		return -1;
@@ -172,13 +176,12 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 	const char *cmd = "AT E1 V1 Q0\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
-			"write to module failed: %s\n",
+			"%s: write to module failed: %s\n",
+			comm->name,
 			strerror(errno));
 
 		return -1;
 	}
-
-	usleep(100000);
 
 	return 0;
 }
@@ -362,7 +365,7 @@ int vgsm_send_request(
 	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
 	comm->response = vgsm_response_alloc(comm);
 	comm->timer_expiration = longtime_now() + 200 * MILLISEC;
-	comm->request_timeout = max(timeout, 10 * SEC);
+	comm->request_timeout = min(timeout, 15 * SEC) + 100 * MILLISEC;
 	comm->request_retransmit_cnt = 3;
 	ast_mutex_unlock(&comm->lock);
 
@@ -371,7 +374,8 @@ int vgsm_send_request(
 	usleep(20000);
 	
 	char tmpstr[200];
-	vgsm_debug_verb("TX: '%s'\n",
+	vgsm_debug_verb("%s: TX: '%s'\n",
+		comm->name,
 		unprintable_escape(buf, tmpstr, sizeof(tmpstr)));
 
 	vgsm_comm_awake(comm);
@@ -386,6 +390,7 @@ static void vgsm_retransmit_request(struct vgsm_comm *comm)
 	strcat(buf, "\r");
 
 	comm->request_retransmit_cnt--;
+	comm->timer_expiration = longtime_now() + comm->request_timeout;
 
 	char tmpstr[200];
 	vgsm_debug_verb("TX: '%s'\n",
@@ -395,7 +400,8 @@ static void vgsm_retransmit_request(struct vgsm_comm *comm)
 
 	if (write(comm->fd, buf, strlen(buf)) < 0)
 		ast_log(LOG_WARNING,
-			"Cannot write to module: %s\n",
+			"%s: Cannot write to module: %s\n",
+			comm->name,
 			strerror(errno));
 
 	vgsm_comm_awake(comm);
@@ -431,7 +437,8 @@ static void handle_response_line(
 {
 	// Handle response
 	char tmpstr[200];
-	vgsm_debug_verb("RX: '%s' (crlf)\n",
+	vgsm_debug_verb("%s: RX: '%s' (crlf)\n",
+		comm->name,
 		unprintable_escape(line, tmpstr, sizeof(tmpstr)));
 
 	struct vgsm_response_line *resp_line;
@@ -515,8 +522,9 @@ static void handle_unsolicited_response(
 	case VGSM_PS_AWAITING_ECHO_READING_URC:
 	case VGSM_PS_RESPONSE_READY_READING_URC:
 		ast_log(LOG_ERROR,
-			"Unexpected handle_unsolicited_message"
+			"%s: Unexpected handle_unsolicited_message"
 		       	" in state %s (%d)\n",
+			comm->name,
 			vgsm_comm_state_to_text(comm->state),
 			comm->state);
 	break;
@@ -536,7 +544,8 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 		return 1;
 
 	if (*(begin + 1) != '\n') {
-		ast_log(LOG_WARNING, "Unexpected char 0x%02x after <cr>\n",
+		ast_log(LOG_WARNING, "%s: Unexpected char 0x%02x after <cr>\n",
+			comm->name,
 			*(begin + 1));
 
 		return 1;
@@ -547,7 +556,8 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 		return 0;
 
 	if (*(end - 1) != '\r') {
-		ast_log(LOG_WARNING, "Unexpected char 0x%02x before <lf>\n",
+		ast_log(LOG_WARNING, "%s: Unexpected char 0x%02x before <lf>\n",
+			comm->name,
 			*(end - 1));
 
 		return end - begin + 1;
@@ -556,7 +566,8 @@ static int handle_crlf_msg_crlf(struct vgsm_comm *comm)
 	*(end - 1) = '\0';
 
 	char tmpstr[200];
-	vgsm_debug_verb("RX: '%s'\n",
+	vgsm_debug_verb("%s: RX: '%s'\n",
+		comm->name,
 		unprintable_escape(begin + 2, tmpstr, sizeof(tmpstr)));
 
 	switch(comm->state) {
@@ -595,7 +606,8 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 		return firstcr - comm->buf + 1;
 
 	char tmpstr[200];
-	vgsm_debug_verb("RX: '%s'\n",
+	vgsm_debug_verb("%s: RX: '%s'\n",
+		comm->name,
 		unprintable_escape(comm->buf, tmpstr, sizeof(tmpstr)));
 
 	if (!strncmp(comm->buf, comm->request,
@@ -611,7 +623,8 @@ static int handle_msg_cr(struct vgsm_comm *comm)
 
 		char tmpstr[200];
 		ast_log(LOG_WARNING,
-			"Dropped spurious bytes '%s' from serial\n",
+			"%s: Dropped spurious bytes '%s' from serial\n",
+			comm->name,
 			unprintable_escape(dropped, tmpstr, sizeof(tmpstr)));
 
 		free(dropped);
@@ -626,14 +639,16 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 	lf = strchr(comm->buf, '\n');
 
 	if (lf == comm->buf) {
-		ast_log(LOG_WARNING, "Unexpected <lf>\n");
+		ast_log(LOG_WARNING, "%s: Unexpected <lf>\n",
+			comm->name);
 		return 1;
 	}
 
 	*(lf - 1) = '\0';
 
 	char tmpstr[200];
-	vgsm_debug_verb("RX: '%s'\n",
+	vgsm_debug_verb("%s: RX: '%s'\n",
+		comm->name,
 		unprintable_escape(comm->buf, tmpstr, sizeof(tmpstr)));
 
 	switch(comm->state) {
@@ -658,8 +673,9 @@ static int handle_msg_crlf(struct vgsm_comm *comm)
 	case VGSM_PS_RECOVERING_PENDING:
 	case VGSM_PS_READING_RESPONSE:
 		ast_log(LOG_ERROR,
-			"Unexpected handle_unsolicited_message"
+			"%s: Unexpected handle_unsolicited_message"
 			" in state %s (%d)\n",
+			comm->name,
 			vgsm_comm_state_to_text(comm->state),
 			comm->state);
 	}
@@ -689,7 +705,8 @@ static int vgsm_receive(struct vgsm_comm *comm)
 	nread = read(comm->fd, comm->buf + buflen,
 			sizeof(comm->buf) - buflen - 1);
 	if (nread < 0) {
-		ast_log(LOG_WARNING, "Error reading from serial: %s\n",
+		ast_log(LOG_WARNING, "%s: Error reading from serial: %s\n",
+			comm->name,
 			strerror(errno));
 
 		return -1;
@@ -698,14 +715,17 @@ static int vgsm_receive(struct vgsm_comm *comm)
 	comm->buf[buflen + nread] = '\0';
 
 	if (strchr(comm->buf, 0x11))
-		ast_log(LOG_ERROR, "XON !!!!!!!!!!!!\n");
+		ast_log(LOG_ERROR, "%s: XON?\n",
+			comm->name);
 
 	if (strchr(comm->buf, 0x13))
-		ast_log(LOG_ERROR, "XOFF !!!!!!!!!!!!\n");
+		ast_log(LOG_ERROR, "%s: XOFF?\n",
+			comm->name);
 
 #if 0
 char tmpstr[200];
-ast_verbose("read()='%s'\n",
+vgsm_debug_verb("%s: read()='%s'\n",
+	comm->name,
 	unprintable_escape(comm->buf + buflen, tmpstr, sizeof(tmpstr)));
 #endif
 
@@ -714,42 +734,17 @@ ast_verbose("read()='%s'\n",
 
 #if 0
 char tmpstr[200];
-ast_verbose("BUF='%s'\n",
+ast_verbose("%s: BUF='%s'\n",
+	comm->name,
 	unprintable_escape(comm->buf, tmpstr, sizeof(tmpstr)));
 #endif
 
 		switch(comm->state) {
 		case VGSM_PS_BITBUCKET:
+		case VGSM_PS_RECOVERING:
+		case VGSM_PS_RECOVERING_PENDING:
 			/* Throw away everything */
 			nread = strlen(comm->buf);
-		break;
-
-		case VGSM_PS_RECOVERING:
-			if (strstr(comm->buf, "\r\nOK\r\n")) {
-				comm->timer_expiration = -1;
-				comm->buf[0] = '\0';
-				nread = 0;
-
-				vgsm_parser_change_state(comm,
-						VGSM_PS_IDLE);
-			}
-		break;
-
-		case VGSM_PS_RECOVERING_PENDING:
-			if (strstr(comm->buf, "\r\nOK\r\n")) {
-				nread = strlen(comm->buf);
-
-				if (comm->request_retransmit_cnt > 0) {
-					ast_log(LOG_NOTICE,
-						"Retransmitting"
-						" request\n");
-					vgsm_retransmit_request(comm);
-				} else {
-					comm->timer_expiration = -1;
-					vgsm_parser_change_state(comm,
-						VGSM_PS_RESPONSE_FAILED);
-				}
-			}
 		break;
 
 		case VGSM_PS_READING_URC:
@@ -796,15 +791,24 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	break;
 
 	case VGSM_PS_RECOVERING_PENDING:
-		comm->timer_expiration = -1;
-		vgsm_parser_change_state(comm, VGSM_PS_RESPONSE_FAILED);
+		if (comm->request_retransmit_cnt > 0) {
+			ast_log(LOG_NOTICE,
+				"%s: Retransmitting"
+				" request\n",
+				comm->name);
+			vgsm_retransmit_request(comm);
+		} else {
+			comm->timer_expiration = -1;
+			vgsm_parser_change_state(comm,
+				VGSM_PS_RESPONSE_FAILED);
+		}
 	break;
 
 	case VGSM_PS_AWAITING_ECHO:
 	case VGSM_PS_READING_RESPONSE:
 		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING_PENDING);
 		vgsm_comm_send_recovery_sequence(comm);
-		comm->timer_expiration = longtime_now() + 1 * SEC;
+		comm->timer_expiration = longtime_now() + 3 * SEC;
 	break;
 
 	case VGSM_PS_BITBUCKET:
@@ -815,7 +819,8 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	case VGSM_PS_RESPONSE_READY:
 	case VGSM_PS_RESPONSE_FAILED:
 		ast_log(LOG_WARNING,
-			"Unexpected timeout in state %s\n",
+			"%s: Unexpected timeout in state %s\n",
+			comm->name,
 			vgsm_comm_state_to_text(comm->state));
 	break;
 
@@ -867,7 +872,8 @@ static int vgsm_comm_thread_do_stuff()
 		else
 			timeout_ms = max(timeout / 1000, 1LL);
 
-		vgsm_debug_verb("set timeout = %d\n", timeout_ms);
+		vgsm_debug_verb("set timeout = %d\n",
+			timeout_ms);
 
 		int res = poll(polls, npolls, timeout_ms);
 		if (res < 0) {
@@ -876,7 +882,8 @@ static int vgsm_comm_thread_do_stuff()
 				return 1;
 			}
 
-			ast_log(LOG_WARNING, "Error polling serial: %s\n",
+			ast_log(LOG_WARNING, "%s: Error polling serial: %s\n",
+				comms[i]->name,
 				strerror(errno));
 
 			return 0;
