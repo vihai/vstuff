@@ -38,6 +38,8 @@ static inline void vgsm_outl(struct vgsm_card *card, int offset, u32 value)
 	iowrite32(value, card->io_mem + offset);
 }
 
+//#define vgsm_card_lock(card)	spin_lock_irqsave(&card->lock, irqflags);
+
 static inline void vgsm_card_lock(struct vgsm_card *card)
 {
 	spin_lock_bh(&card->lock);

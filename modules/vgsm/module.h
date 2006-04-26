@@ -93,10 +93,9 @@ void vgsm_module_init(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
 	int id);
-int vgsm_module_register(
-	struct vgsm_module *module,
-	struct vgsm_card *card);
-void vgsm_module_unregister(
-	struct vgsm_module *module);
+int vgsm_module_alloc(struct vgsm_module *module);
+int vgsm_module_register(struct vgsm_module *module);
+void vgsm_module_unregister(struct vgsm_module *module);
+void vgsm_module_dealloc(struct vgsm_module *module);
 
 #endif

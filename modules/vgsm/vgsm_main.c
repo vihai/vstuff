@@ -70,12 +70,14 @@ static int vgsm_cdev_open(
 	}
 	spin_unlock(&vgsm_cards_list_lock);
 
+printk(KERN_DEBUG "begin open %d\n", module->id);
 	if (!module)
 		return -ENODEV;
 
 	if (test_and_set_bit(VGSM_MODULE_STATUS_OPEN, &module->status))
 		return -EBUSY;
 
+printk(KERN_DEBUG "end open %d\n", module->id);
 	file->private_data = module;
 
 	set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
@@ -83,13 +85,10 @@ static int vgsm_cdev_open(
 	return 0;
 }
 
-static int vgsm_cdev_release(
-	struct inode *inode,
+static int vgsm_cdev_flush(
 	struct file *file)
 {
 	struct vgsm_module *module = file->private_data;
-
-	clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
 
 	while(kfifo_len(module->kfifo_tx)) {
 		DEFINE_WAIT(wait);
@@ -109,7 +108,20 @@ static int vgsm_cdev_release(
 			return -ERESTARTSYS;
 	}
 
+	return 0;
+}
+
+static int vgsm_cdev_release(
+	struct inode *inode,
+	struct file *file)
+{
+	struct vgsm_module *module = file->private_data;
+
+	clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+
+	/* Flush the RX queue and ACK */
 	kfifo_reset(module->kfifo_rx);
+	tasklet_schedule(&module->card->rx_tasklet);
 	
 	clear_bit(VGSM_MODULE_STATUS_OPEN, &module->status);
 
@@ -338,7 +350,7 @@ static int vgsm_cdev_do_power_get(
 	return 0;
 }
 
-static int vgsm_cdev_do_power_set(
+static int vgsm_cdev_do_power_ign(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
@@ -346,29 +358,30 @@ static int vgsm_cdev_do_power_set(
 {
 	struct vgsm_module *module = file->private_data;
 
+	if (arg == 1) {
+		vgsm_outb(module->card, VGSM_PIB_E0, 0);
+		msleep(5);
+		vgsm_outb(module->card, VGSM_PIB_E0, 1);
+		msleep(5);
+		vgsm_outb(module->card, VGSM_PIB_E0, 0);
+
+		return 0;
+	}
+
 	vgsm_card_lock(module->card);
-	vgsm_module_send_power_get(module);
+	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_IGN);
 	vgsm_card_unlock(module->card);
 
-	wait_for_completion_timeout(
-			&module->read_status_completion, 1 * HZ);
+	msleep(150);
 
-	if (!test_bit(VGSM_MODULE_STATUS_ON, &module->status) != !arg) {
-		vgsm_card_lock(module->card);
-		vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_TOGGLE);
-		vgsm_card_unlock(module->card);
-
-		msleep(1500);
-
-		vgsm_card_lock(module->card);
-		vgsm_module_send_onoff(module, 0);
-		vgsm_card_unlock(module->card);
-	}
+	vgsm_card_lock(module->card);
+	vgsm_module_send_onoff(module, 0);
+	vgsm_card_unlock(module->card);
 
 	return 0;
 }
 
-static int vgsm_cdev_do_reset(
+static int vgsm_cdev_do_emerg_off(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
@@ -377,10 +390,10 @@ static int vgsm_cdev_do_reset(
 	struct vgsm_module *module = file->private_data;
 
 	vgsm_card_lock(module->card);
-	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_RESET);
+	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_EMERG_OFF);
 	vgsm_card_unlock(module->card);
 
-	msleep(200);
+	ssleep(4);
 
 	vgsm_card_lock(module->card);
 	vgsm_module_send_onoff(module, 0);
@@ -446,12 +459,12 @@ static int vgsm_cdev_ioctl(
 		return vgsm_cdev_do_power_get(inode, file, cmd, arg);
 	break;
 
-	case VGSM_IOC_POWER_SET:
-		return vgsm_cdev_do_power_set(inode, file, cmd, arg);
+	case VGSM_IOC_POWER_IGN:
+		return vgsm_cdev_do_power_ign(inode, file, cmd, arg);
 	break;
 
-	case VGSM_IOC_RESET:
-		return vgsm_cdev_do_reset(inode, file, cmd, arg);
+	case VGSM_IOC_POWER_EMERG_OFF:
+		return vgsm_cdev_do_emerg_off(inode, file, cmd, arg);
 	break;
 
 	case VGSM_IOC_PAD_TIMEOUT:
@@ -471,6 +484,7 @@ static struct file_operations vgsm_fops =
 	.owner		= THIS_MODULE,
 	.open		= vgsm_cdev_open,
 	.release	= vgsm_cdev_release,
+	.flush		= vgsm_cdev_flush,
 	.read		= vgsm_cdev_read,
 	.write		= vgsm_cdev_write,
 	.poll		= vgsm_cdev_poll,

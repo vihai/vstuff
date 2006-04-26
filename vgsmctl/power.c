@@ -51,23 +51,23 @@ static int do_power(
 		return 1;
 	}
 
-	if (!strcasecmp(value, "on")) {
-		if (ioctl(fd, VGSM_IOC_POWER_SET, 1) < 0) {
-			fprintf(stderr, "ioctl(IOC_POWER_SET) failed: %s\n",
+	if (!strcasecmp(value, "debug")) {
+		if (ioctl(fd, VGSM_IOC_POWER_IGN, 1) < 0) {
+			fprintf(stderr, "ioctl(IOC_POWER_IGN) failed: %s\n",
 				strerror(errno));
 
 			return 1;
 		}
-	} else if (!strcasecmp(value, "off")) {
-		if (ioctl(fd, VGSM_IOC_POWER_SET, 0) < 0) {
-			fprintf(stderr, "ioctl(IOC_POWER_SET) failed: %s\n",
+	} else if (!strcasecmp(value, "on")) {
+		if (ioctl(fd, VGSM_IOC_POWER_IGN, 0) < 0) {
+			fprintf(stderr, "ioctl(IOC_POWER_IGN) failed: %s\n",
 				strerror(errno));
 
 			return 1;
 		}
-	} else if (!strcasecmp(value, "reset")) {
-		if (ioctl(fd, VGSM_IOC_RESET, 0) < 0) {
-			fprintf(stderr, "ioctl(IOC_RESET) failed: %s\n",
+	} else if (!strcasecmp(value, "emerg_off")) {
+		if (ioctl(fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0) {
+			fprintf(stderr, "ioctl(IOC_POWER_EMERG_OFF) failed: %s\n",
 				strerror(errno));
 
 			return 1;

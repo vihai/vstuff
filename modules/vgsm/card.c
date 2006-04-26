@@ -113,7 +113,6 @@ void vgsm_send_msg(
 	int micro,
 	struct vgsm_micro_message *msg)
 {
-	udelay(500); /* FIXME! */
 	vgsm_wait_e0(card);
 	vgsm_write_msg(card, msg);
 
@@ -398,7 +397,12 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_outb(card, VGSM_INT0STAT, 0x3F);
 
 	/* PIB initialization */
-	vgsm_outb(card, VGSM_PIB_E0, 0x00);
+	ssleep(2);
+	vgsm_outb(card, VGSM_PIB_E0, 0);
+	msleep(5);
+	vgsm_outb(card, VGSM_PIB_E0, 1);
+	msleep(5);
+	vgsm_outb(card, VGSM_PIB_E0, 0);
 
 	/* Setting polarity control register */
 	vgsm_outb(card, VGSM_AUX_POL, 0x03);
@@ -444,7 +448,7 @@ static irqreturn_t vgsm_interrupt(int irq,
 		/* Read or Write DMA reached interrupt address */
 		vgsm_msg(KERN_CRIT, "DMA IRQ\n");
 
-		printk(KERN_CRIT "R: ");
+		printk(KERN_DEBUG "R: ");
 
 		{
 		int j;
@@ -497,7 +501,7 @@ static irqreturn_t vgsm_interrupt(int irq,
 			}
 
 #if 0
-printk(KERN_CRIT "Mod %d: MSG: %c%c%c%c%c%c%c\n",
+printk(KERN_DEBUG "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 	module->id,
 	escape_unprintable(msg.payload[0]),
 	escape_unprintable(msg.payload[1]),
@@ -540,7 +544,7 @@ printk(KERN_CRIT "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 				}
 
 #if 0
-printk(KERN_CRIT "Received ACK from module %d\n\n", module->id);
+printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
 #endif
 
 			clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
@@ -733,8 +737,10 @@ int vgsm_card_probe(
 
 	card->num_modules = 4;
 
-	for (i=0; i<card->num_modules; i++)
+	for (i=0; i<card->num_modules; i++) {
 		vgsm_module_init(&card->modules[i], card, i);
+		vgsm_module_alloc(&card->modules[i]);
+	}
 
 	/* From here on vgsm_msg_card may be used */
 
@@ -790,7 +796,8 @@ int vgsm_card_probe(
 	}
 
 
-	vgsm_msg(KERN_DEBUG, "vgsm card found at 0x%08lx\n", card->io_bus_mem);
+	vgsm_msg(KERN_DEBUG, "vgsm card found at 0x%08lx mapped at %p\n",
+		card->io_bus_mem, card->io_mem);
 
 
 	/* Allocate enough DMA memory for 4 modules, receive and transmit.  
@@ -867,7 +874,7 @@ int vgsm_card_probe(
 	vgsm_send_get_fw_ver(card, 1);
 
 	for (i=0; i<card->num_modules; i++) {
-		err = vgsm_module_register(&card->modules[i], card);
+		err = vgsm_module_register(&card->modules[i]);
 		if (err < 0)
 			goto err_module_register;
 	}
@@ -901,6 +908,7 @@ err_pci_set_dma_mask:
 err_pci_enable_device:
 // TODO Unregister only registered modules
 //	vgsm_module_unregister(&card->modules[0]);
+//	vgsm_module_dealloc(&card->modules[0]);
 err_module_register:
 	kfree(card);
 err_alloc_vgsmcard:
@@ -911,6 +919,7 @@ err_alloc_vgsmcard:
 void vgsm_card_remove(struct vgsm_card *card)
 {
 	int i;
+	int shutting_down = FALSE;
 
 	/* Clean up any allocated resources and stuff here */
 
@@ -933,23 +942,39 @@ void vgsm_card_remove(struct vgsm_card *card)
 		vgsm_card_unlock(card);
 
 		wait_for_completion_timeout(
-			&card->modules[i].read_status_completion, 10 * HZ);
+			&card->modules[i].read_status_completion, 2 * HZ);
 
 		if (test_bit(VGSM_MODULE_STATUS_ON,
 						&card->modules[i].status)) {
+
+			// Force an emergency shutdown of the application did
+			// not do its duty
+
 			vgsm_card_lock(card);
 			vgsm_module_send_onoff(&card->modules[i],
-				VGSM_CMD_MAINT_ONOFF_TOGGLE);
+				VGSM_CMD_MAINT_ONOFF_EMERG_OFF);
 			vgsm_card_unlock(card);
+
+			shutting_down = TRUE;
+
+			vgsm_msg_card(card, KERN_NOTICE,
+				"Module %d has not been shut down, forcing"
+				" emergency shutdown\n",
+				card->modules[i].id);
 		}
+
+		vgsm_module_dealloc(&card->modules[i]);
 	}
 
-	msleep(1500);
+	if (shutting_down) {
 
-	for(i=0; i<card->num_modules; i++) {
-		vgsm_card_lock(card);
-		vgsm_module_send_onoff(&card->modules[i], 0);
-		vgsm_card_unlock(card);
+		msleep(3200);
+
+		for(i=0; i<card->num_modules; i++) {
+			vgsm_card_lock(card);
+			vgsm_module_send_onoff(&card->modules[i], 0);
+			vgsm_card_unlock(card);
+		}
 	}
 
 	/* Disable IRQs */

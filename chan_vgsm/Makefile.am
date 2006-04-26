@@ -1,7 +1,7 @@
 
 astmod_LTLIBRARIES = chan_vgsm.la
-chan_vgsm_la_SOURCES = chan_vgsm.c comm.c
-noinst_HEADERS = chan_vgsm.h comm.h util.h
+chan_vgsm_la_SOURCES = chan_vgsm.c comm.c causes.c sms.c cbm.c util.c
+noinst_HEADERS = chan_vgsm.h comm.h causes.h sms.h cbm.h util.h
 
 INCLUDES =					\
 	-I$(top_builddir)			\

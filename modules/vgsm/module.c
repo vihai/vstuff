@@ -466,9 +466,8 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
-int vgsm_module_register(
-	struct vgsm_module *module,
-	struct vgsm_card *card)
+int vgsm_module_alloc(
+	struct vgsm_module *module)
 {
 	int err;
 
@@ -488,6 +487,28 @@ int vgsm_module_register(
 		goto err_kfifo_tx;
 	}
 
+	return 0;
+
+	kfifo_free(module->kfifo_tx);
+err_kfifo_tx:
+	kfifo_free(module->kfifo_rx);
+err_kfifo_rx:
+
+	return err;
+}
+
+void vgsm_module_dealloc(
+	struct vgsm_module *module)
+{
+	kfifo_free(module->kfifo_tx);
+	kfifo_free(module->kfifo_rx);
+}
+
+int vgsm_module_register(
+	struct vgsm_module *module)
+{
+	int err;
+
 	err = visdn_port_register(&module->visdn_port);
 	if (err < 0)
 		goto err_port_register;
@@ -496,15 +517,15 @@ int vgsm_module_register(
 	if (err < 0)
 		goto err_chan_register;
 
-	module->devt = vgsm_first_dev + card->id * 4 + module->id;
+	module->devt = vgsm_first_dev + module->card->id * 4 + module->id;
 
 	snprintf(module->class_device.class_id,
 		sizeof(module->class_device.class_id),
 		"vgsm%ds%d",
-		card->id,
+		module->card->id,
 		module->id);
 	module->class_device.class = &vgsm_class;
-	module->class_device.dev = &card->pci_dev->dev;
+	module->class_device.dev = &module->card->pci_dev->dev;
 #ifdef HAVE_CLASS_DEV_DEVT
 	module->class_device.devt = module->devt;
 #endif
@@ -532,10 +553,6 @@ err_class_device_register:
 err_chan_register:
 	visdn_port_unregister(&module->visdn_port);
 err_port_register:
-	kfifo_free(module->kfifo_tx);
-err_kfifo_tx:
-	kfifo_free(module->kfifo_rx);
-err_kfifo_rx:
 
 	return err;
 }
@@ -547,8 +564,5 @@ void vgsm_module_unregister(
 
 	visdn_chan_unregister(&module->visdn_chan);
 	visdn_port_unregister(&module->visdn_port);
-
-	kfifo_free(module->kfifo_tx);
-	kfifo_free(module->kfifo_rx);
 }
 

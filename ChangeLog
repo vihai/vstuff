@@ -2,6 +2,32 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-26 02:50:40 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-626
+
+    Summary:
+      Committed a huge change in GSM drivers to support Siemens MC55 modules, SMS send/receive and several smaller fixes and improvements
+    Revision:
+      isdn--devel--0.1--patch-626
+
+
+    new files:
+     chan_vgsm/.arch-ids/causes.c.id
+     chan_vgsm/.arch-ids/causes.h.id chan_vgsm/.arch-ids/cbm.c.id
+     chan_vgsm/.arch-ids/cbm.h.id chan_vgsm/.arch-ids/sms.c.id
+     chan_vgsm/.arch-ids/sms.h.id chan_vgsm/.arch-ids/util.c.id
+     chan_vgsm/causes.c chan_vgsm/causes.h chan_vgsm/cbm.c
+     chan_vgsm/cbm.h chan_vgsm/sms.c chan_vgsm/sms.h
+     chan_vgsm/util.c
+
+    modified files:
+     ChangeLog chan_vgsm/Makefile.am chan_vgsm/chan_vgsm.c
+     chan_vgsm/chan_vgsm.h chan_vgsm/comm.c chan_vgsm/comm.h
+     chan_vgsm/util.h modules/vgsm/card.c
+     modules/vgsm/card_inline.h modules/vgsm/module.c
+     modules/vgsm/module.h modules/vgsm/regs.h modules/vgsm/vgsm.h
+     modules/vgsm/vgsm_main.c samples/vgsm.conf vgsmctl/power.c
+
+
 2006-04-10 15:07:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-625
 
     Summary:

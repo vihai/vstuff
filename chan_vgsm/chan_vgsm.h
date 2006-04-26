@@ -28,6 +28,10 @@
 	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
 	(type *)( (char *)__mptr - offsetof(type,member) );})
 
+#ifndef AST_CONTROL_DISCONNECT
+#define AST_CONTROL_DISCONNECT 43
+#endif
+
 struct vgsm_chan {
 	struct ast_channel *ast_chan;
 
@@ -62,10 +66,11 @@ enum vgsm_intf_status
 	VGSM_INTF_STATUS_WAITING_INITIALIZATION,
 	VGSM_INTF_STATUS_INITIALIZING,
 	VGSM_INTF_STATUS_READY,
+	VGSM_INTF_STATUS_RING,
 	VGSM_INTF_STATUS_INCALL,
+	VGSM_INTF_STATUS_WAITING_SIM,
 	VGSM_INTF_STATUS_WAITING_PIN,
 	VGSM_INTF_STATUS_NO_NET,
-	VGSM_INTF_STATUS_LOCKED_DOWN,
 	VGSM_INTF_STATUS_FAILED,
 };
 
@@ -95,6 +100,26 @@ enum vgsm_operator_status
 	VGSM_OPSTAT_FORBIDDEN,
 };
 
+struct vgsm_net_cell
+{
+	int mcc;
+	int mnc;
+	int lac;
+	int id;
+	int bsic;
+	int arfcn;
+	int rx_lev;
+};
+
+struct vgsm_counter
+{
+	struct list_head node;
+
+	int location;
+	int reason;
+	int count;
+};
+
 struct vgsm_interface
 {
 	struct list_head ifs_node;
@@ -119,6 +144,7 @@ struct vgsm_interface
 	/* Operative data */
 
 	enum vgsm_intf_status status;
+	longtime_t timer_expiration;
 
 	char *lockdown_reason;
 
@@ -128,50 +154,46 @@ struct vgsm_interface
 
 	struct vgsm_comm comm;
 
-	pthread_t monitor_thread;
+	struct list_head counters;
 
-	struct
-	{
-		char number[30];
-		int ton;
-		char subaddress[30];
-		int subaddress_type;
-		char alpha[32];
-		int validity;
-	} last_cli;
+	pthread_t monitor_thread;
 
 	struct {
 		char vendor[32];
 		char model[32];
 		char version[32];
-		char dob_version[32];
-		char serial_number[32];
 		char imei[32];
 	} module;
 
 	struct {
 		int inserted;
 		char imsi[32];
+		char card_id[32];
 		int remaining_attempts;
 	} sim;
 
 	struct {
 		enum vgsm_net_status status;
 		char operator_id[6];
-		int rxqual;
-		int ta;
-		int bsic;
+
+		struct vgsm_net_cell sci;
 
 		struct {
-			int id;
-			int lac;
-			int arfcn;
-			int pwr;
-		} cells[16];
+			int rx_lev_full;
+			int rx_lev_sub;
+			int rx_qual;
+			int rx_qual_full;
+			int rx_qual_sub;
+			int timeslot;
+			int ta;
+			int rssi;
+			int ber;
+		} sci2;
+
+		struct vgsm_net_cell nci[10];
 
 		int ncells;
 	} net;
-
 };
 
 
@@ -189,7 +211,12 @@ struct vgsm_state
 
 	int router_control_fd;
 
-	int debug;
+	int debug_generic;
+	int debug_serial;
+
+	char sms_service_center[32];
+	char sms_spooler[32];
+	char sms_spooler_pars[32];
 };
 
 static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)
