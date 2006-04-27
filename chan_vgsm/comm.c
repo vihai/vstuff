@@ -33,12 +33,14 @@
 #include <asterisk/logger.h>
 #include <asterisk/options.h>
 
+#include <linux/vgsm.h> // REMOVE ME FIXME XXX
+
 #include "chan_vgsm.h"
 #include "util.h"
 #include "comm.h"
 
 #define ECHO_TIMEOUT (400 * MILLISEC)
-#define URC_TIMEOUT (400 * MILLISEC)
+#define URC_TIMEOUT (500 * MILLISEC)
 #define SMS_ECHO_TIMEOUT (400 * MILLISEC)
 
 static pthread_t vgsm_comm_thread = AST_PTHREADT_NULL;
@@ -54,7 +56,6 @@ void vgsm_comm_init(
 {
 	comm->fd = -1;
 	comm->urc_classes = urc_classes;
-	ast_mutex_init(&comm->lock);
 	ast_cond_init(&comm->state_change_cond, NULL);
 	comm->state = VGSM_PS_BITBUCKET;
 	comm->timer_expiration = -1;
@@ -62,15 +63,23 @@ void vgsm_comm_init(
 	INIT_LIST_HEAD(&comm->requests_queue);
 }
 
-void vgsm_req_get(struct vgsm_req *req)
+struct vgsm_req *vgsm_req_get(struct vgsm_req *req)
 {
+	if (!req)
+		return NULL;
+
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	req->refcnt++;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	return req;
 }
 
 void vgsm_req_put(struct vgsm_req *req)
 {
+	if (!req)
+		return;
+
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	req->refcnt--;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
@@ -90,6 +99,16 @@ void vgsm_req_put(struct vgsm_req *req)
 
 		free(req);
 	}
+}
+
+int vgsm_req_status(struct vgsm_req *req)
+{
+	if (!req)
+		return VGSM_RESP_FAILED;
+
+	assert(req->ready);
+
+	return req->err;
 }
 
 static const char *vgsm_comm_state_to_text(
@@ -131,21 +150,21 @@ static void vgsm_parser_change_state(
 	ast_cond_broadcast(&comm->state_change_cond);
 }
 
-void vgsm_comm_set_bitbucket(
-	struct vgsm_comm *comm)
+void vgsm_comm_disable(struct vgsm_comm *comm)
 {
-	vgsm_parser_change_state(comm, VGSM_PS_BITBUCKET);
+	comm->enabled = FALSE;
+	vgsm_comm_wakeup(comm);
 }
 
-void vgsm_comm_reset(
-	struct vgsm_comm *comm)
+void vgsm_comm_enable(struct vgsm_comm *comm)
 {
-	comm->timer_expiration = -1;
-	vgsm_parser_change_state(comm, VGSM_PS_IDLE);
+	comm->enabled = TRUE;
+	vgsm_comm_wakeup(comm);
 }
 
 int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 {
+/*
 	sleep(1);
 
 	if (write(comm->fd, "+", 1) < 0) {
@@ -180,7 +199,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 	}
 
 	sleep(1);
-
+*/
 	const char *cmd = "AT E1 V1 Q0\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
@@ -194,6 +213,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 	return 0;
 }
 
+/*
 int vgsm_comm_start_recovery(struct vgsm_comm *comm)
 {
 	comm->timer_expiration = longtime_now() + 3 * SEC;
@@ -206,10 +226,12 @@ int vgsm_comm_start_recovery(struct vgsm_comm *comm)
 	while(comm->state != VGSM_PS_IDLE)
 		ast_cond_wait(&comm->state_change_cond,
 			       	&comm->lock);
+printf(" UNLOCK %s\n", comm->name);
 	ast_mutex_unlock(&comm->lock);
 
 	return 0;
 }
+*/
 
 const struct vgsm_req_line *vgsm_req_first_line(
 	const struct vgsm_req *req)
@@ -239,6 +261,7 @@ static struct vgsm_req *vgsm_req_alloc(struct vgsm_comm *comm)
 
 	INIT_LIST_HEAD(&req->lines);
 
+	ast_mutex_init(&req->ready_lock);
 	req->ready = FALSE;
 	ast_cond_init(&req->ready_cond, NULL);
 
@@ -250,13 +273,11 @@ static struct vgsm_req *vgsm_req_alloc(struct vgsm_comm *comm)
 
 void vgsm_req_wait(struct vgsm_req *req)
 {
-	struct vgsm_comm *comm = req->comm;
-
-	ast_mutex_lock(&comm->lock);
+	ast_mutex_lock(&req->ready_lock);
 	while(!req->ready) {
-		ast_cond_wait(&req->ready_cond, &comm->lock);
+		ast_cond_wait(&req->ready_cond, &req->ready_lock);
 	}
-	ast_mutex_unlock(&comm->lock);
+	ast_mutex_unlock(&req->ready_lock);
 }
 
 struct vgsm_req *vgsm_req_make_va(
@@ -282,7 +303,7 @@ struct vgsm_req *vgsm_req_make_va(
 	if (sms_pdu && sms_pdu_len) {
 		req->sms_text_pdu = malloc((sms_pdu_len * 2) + 2);
 		if (!req->sms_text_pdu) {
-			vgsm_req_put(req);
+			vgsm_req_put_null(req);
 			return NULL;
 		}
 
@@ -295,9 +316,9 @@ struct vgsm_req *vgsm_req_make_va(
 		strcat(req->sms_text_pdu, "\x1a");
 	}
 
-	ast_mutex_lock(&comm->lock);
-	list_add_tail(&req->node, &comm->requests_queue);
-	ast_mutex_unlock(&comm->lock);
+	ast_mutex_lock(&comm->requests_queue_lock);
+	list_add_tail(&vgsm_req_get(req)->node, &comm->requests_queue);
+	ast_mutex_unlock(&comm->requests_queue_lock);
 
 	vgsm_comm_wakeup(comm);
 
@@ -374,14 +395,14 @@ int vgsm_req_make_wait_result(
 
 	vgsm_req_wait(req);
 
-	res = req->response_error;
+	res = req->err;
 
-	vgsm_req_put(req);
+	vgsm_req_put_null(req);
 
 	return res;
 }
 
-int vgsm_comm_line_error(const char *line)
+int vgsm_req_final_response_code(const char *line)
 {
 	if (!strcmp(line, "OK"))
 		return VGSM_RESP_OK;
@@ -398,9 +419,9 @@ int vgsm_comm_line_error(const char *line)
 	else if (!strcmp(line, "NO ANSWER"))
 		return VGSM_RESP_NO_ANSWER;
 	else if (strstr(line, "+CME ERROR: ") == line)
-		return atoi(line + strlen("+CME ERROR: "));
+		return atoi(line + strlen("+CME ERROR: ")) + 1000;
 	else if (strstr(line, "+CMS ERROR: ") == line)
-		return atoi(line + strlen("+CMS ERROR: ")) + 1000;
+		return atoi(line + strlen("+CMS ERROR: ")) + 2000;
 	else
 		return VGSM_RESP_UNKNOWN;
 }
@@ -484,14 +505,15 @@ static int vgsm_match_response(
 
 	list_add_tail(&req_line->node, &comm->current_req->lines);
 
-	int err = vgsm_comm_line_error(begin);
+	int err = vgsm_req_final_response_code(begin);
 	if (err != VGSM_RESP_UNKNOWN) {
 		comm->timer_expiration = -1;
 		vgsm_parser_change_state(comm, VGSM_PS_IDLE);
 
-		comm->current_req->response_error = err;
+		comm->current_req->err = err;
 		comm->current_req->ready = TRUE;
 		ast_cond_broadcast(&comm->current_req->ready_cond);
+		vgsm_req_put(comm->current_req);
 		comm->current_req = NULL;
 	}
 
@@ -790,20 +812,21 @@ vgsm_debug_serial_verb("%s: NEWBUF='%s'\n",
 	return 0;
 }
 
-static void vgsm_send_next_request(struct vgsm_comm *comm)
+static void vgsm_process_next_request(struct vgsm_comm *comm)
 {
-	if (list_empty(&comm->requests_queue))
+	ast_mutex_lock(&comm->requests_queue_lock);
+	if (list_empty(&comm->requests_queue)) {
+		ast_mutex_unlock(&comm->requests_queue_lock);
 		return;
+	}
 
-	ast_mutex_lock(&comm->lock);
 	assert(!comm->current_req);
 
 	comm->current_req = list_entry(comm->requests_queue.next,
 					struct vgsm_req, node);
 
 	list_del(&comm->current_req->node);
-
-	comm->timer_expiration = longtime_now() + ECHO_TIMEOUT;
+	ast_mutex_unlock(&comm->requests_queue_lock);
 
 	char tmpstr[200];
 	vgsm_debug_serial_verb("%s: TX: '%s'\n",
@@ -814,9 +837,26 @@ static void vgsm_send_next_request(struct vgsm_comm *comm)
 	write(comm->fd, comm->current_req->request,
 		strlen(comm->current_req->request));
 
+	comm->timer_expiration = longtime_now() + ECHO_TIMEOUT;
 	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO);
+}
 
-	ast_mutex_unlock(&comm->lock);
+static void vgsm_flush_requests(struct vgsm_comm *comm)
+{
+	struct vgsm_req *req, *t;
+
+	ast_mutex_lock(&comm->requests_queue_lock);
+	list_for_each_entry_safe(req, t, &comm->requests_queue, node) {
+		
+		list_del(&req->node);
+
+		req->err = VGSM_RESP_FAILED;
+		req->ready = TRUE;
+		ast_cond_broadcast(&req->ready_cond);
+		vgsm_req_put_null(req);
+
+	}
+	ast_mutex_unlock(&comm->requests_queue_lock);
 }
 
 static void vgsm_comm_timed_out(struct vgsm_comm *comm)
@@ -824,13 +864,30 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	switch(comm->state) {
 	case VGSM_PS_RECOVERING:
 		if (comm->current_req) {
+			comm->current_req->retransmit_cnt--;
+
+			if (comm->current_req->retransmit_cnt == 0) {
+				comm->timer_expiration = -1;
+				vgsm_parser_change_state(comm,
+					VGSM_PS_BITBUCKET);
+
+				comm->current_req->err =
+					VGSM_RESP_FAILED;
+				comm->current_req->ready = TRUE;
+				ast_cond_broadcast(
+					&comm->current_req->ready_cond);
+				vgsm_req_put(comm->current_req);
+				comm->current_req = NULL;
+
+				return;
+			}
+
 			comm->timer_expiration =
 			       longtime_now() + ECHO_TIMEOUT;
 
 			char buf[90];
 			assert(strlen(comm->current_req->request) <= 80);
 			strcpy(buf, comm->current_req->request);
-			strcat(buf, "\r");
 
 			char tmpstr[200];
 			vgsm_debug_serial_verb("%s: TX: '%s'\n",
@@ -852,11 +909,13 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	case VGSM_PS_AWAITING_ECHO:
 	case VGSM_PS_AWAITING_ECHO_READING_URC:
 	case VGSM_PS_READING_RESPONSE:
-		ast_log(LOG_NOTICE, "Serial lost synchronization\n");
+		ast_log(LOG_NOTICE, "%s: Serial lost synchronization\n",
+			comm->name);
 
 		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING);
+		comm->buf[0] = '\0';
 		vgsm_comm_send_recovery_sequence(comm);
-		comm->timer_expiration = longtime_now() + 3 * SEC;
+		comm->timer_expiration = longtime_now() + 1 * SEC;
 	break;
 
 	case VGSM_PS_BITBUCKET:
@@ -897,8 +956,23 @@ static int vgsm_comm_thread_do_stuff()
 		longtime_t timeout = -1;
 
 		for (i=0; i<npolls; i++) {
-			ast_mutex_lock(&comms[i]->lock);
+			if (comms[i]->enabled &&
+			    comms[i]->state == VGSM_PS_BITBUCKET) {
+				vgsm_parser_change_state(comms[i],
+					VGSM_PS_RECOVERING);
+				comms[i]->buf[0] = '\0';
+				vgsm_comm_send_recovery_sequence(comms[i]);
+				comms[i]->timer_expiration = longtime_now() +
+					1 * SEC;
+			} else if (!comms[i]->enabled &&
+			           comms[i]->state != VGSM_PS_BITBUCKET) {
+				comms[i]->timer_expiration = -1;
+				vgsm_parser_change_state(comms[i],
+					VGSM_PS_BITBUCKET);
+			}
+		}
 
+		for (i=0; i<npolls; i++) {
 			if (comms[i]->timer_expiration != -1 &&
 			    comms[i]->timer_expiration - now > 0 &&
 			    (comms[i]->timer_expiration - now < timeout ||
@@ -906,9 +980,9 @@ static int vgsm_comm_thread_do_stuff()
 				timeout = comms[i]->timer_expiration - now;
 
 			if (comms[i]->state == VGSM_PS_IDLE)
-				vgsm_send_next_request(comms[i]);
-
-			ast_mutex_unlock(&comms[i]->lock);
+				vgsm_process_next_request(comms[i]);
+			else if (comms[i]->state == VGSM_PS_BITBUCKET)
+				vgsm_flush_requests(comms[i]);
 		}
 
 		int timeout_ms;
@@ -919,6 +993,18 @@ static int vgsm_comm_thread_do_stuff()
 
 		vgsm_debug_serial_verb("set timeout = %d\n",
 			timeout_ms);
+
+/*		printf(" PREPOLL ");
+		for (i=0; i<npolls; i++) {
+			int a;
+
+			ioctl(comms[i]->fd, VGSM_IOC_GET_RX_FIFOLEN, &a);
+
+			printf("%s=%02x-%d ", comms[i]->name, polls[i].revents,
+						a);
+		}
+		printf("\n");*/
+
 
 		int res = poll(polls, npolls, timeout_ms);
 		if (res < 0) {
@@ -937,9 +1023,17 @@ static int vgsm_comm_thread_do_stuff()
 		now = longtime_now();
 		int exit_pending = FALSE;
 
-		for (i=0; i<npolls; i++) {
-			ast_mutex_lock(&comms[i]->lock);
+/*		for (i=0; i<npolls; i++) {
+			int a;
 
+			ioctl(comms[i]->fd, VGSM_IOC_GET_RX_FIFOLEN, &a);
+
+			printf("%s=%02x-%d ", comms[i]->name, polls[i].revents,
+						a);
+		}
+		printf("\n");*/
+
+		for (i=0; i<npolls; i++) {
 			if (comms[i]->timer_expiration != -1 &&
 			    comms[i]->timer_expiration < now)
 				vgsm_comm_timed_out(comms[i]);
@@ -951,8 +1045,6 @@ static int vgsm_comm_thread_do_stuff()
 			    polls[i].revents & POLLERR ||
 			    polls[i].revents & POLLNVAL)
 				exit_pending = TRUE;
-
-			ast_mutex_unlock(&comms[i]->lock);
 		}
 
 		if (exit_pending)
@@ -986,7 +1078,7 @@ retry:
 				req->urc_class->handler(req);
 
 			list_del(&req->node);
-			vgsm_req_put(req);
+			vgsm_req_put_null(req);
 
 			goto retry;
 		}

@@ -447,6 +447,16 @@ static int vgsm_cdev_ioctl(
 	struct vgsm_module *module = file->private_data;
 
 	switch(cmd) {
+	case VGSM_IOC_GET_RX_FIFOLEN:
+		return put_user(kfifo_len(module->kfifo_rx),
+				(unsigned int *)arg);
+	break;
+
+	case VGSM_IOC_GET_TX_FIFOLEN:
+		return put_user(kfifo_len(module->kfifo_tx),
+				(unsigned int *)arg);
+	break;
+
 	case VGSM_IOC_GET_CHANID:
 		return put_user(module->visdn_chan.id, (unsigned int *)arg);
 	break;

@@ -22,6 +22,8 @@
 #define VGSM_IOC_POWER_EMERG_OFF	_IOR(0xd1, 4, unsigned int)
 #define VGSM_IOC_PAD_TIMEOUT		_IOR(0xd1, 5, unsigned int)
 #define VGSM_IOC_FW_VERSION		_IOR(0xd1, 6, unsigned int)
+#define VGSM_IOC_GET_RX_FIFOLEN		_IOR(0xd1, 7, unsigned int)
+#define VGSM_IOC_GET_TX_FIFOLEN		_IOR(0xd1, 8, unsigned int)
 
 struct vgsm_codec_ctl
 {

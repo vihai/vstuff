@@ -24,25 +24,24 @@
 
 /* Error codes allocation:
  *
- * 0-999	CME ERROR: n
- * 1000-1999	CMS ERROR: n - 1000
- * 10000-10006	Final messages
- * 11000-11999	Transaction errors
+ *    0 to  999		Final messages
+ * 1000 to 1999		CME ERROR: n + 1000
+ * 1999 to 2999		CMS ERROR: n + 2000
  *
  */
 
 enum vgsm_req_codes
 {
-	VGSM_RESP_OK		= 10000,
-	VGSM_RESP_CONNECT	= 10001,
-	VGSM_RESP_NO_CARRIER	= 10002,
-	VGSM_RESP_ERROR		= 10003,
-	VGSM_RESP_NO_DIALTONE	= 10004,
-	VGSM_RESP_BUSY		= 10005,
-	VGSM_RESP_NO_ANSWER	= 10006,
-	VGSM_RESP_UNKNOWN	= 11000,
-	VGSM_RESP_TIMEOUT	= 11001,
-	VGSM_RESP_FAILED	= 11002,
+	VGSM_RESP_OK		= 0,
+	VGSM_RESP_CONNECT	= 1,
+	VGSM_RESP_NO_CARRIER	= 2,
+	VGSM_RESP_ERROR		= 3,
+	VGSM_RESP_NO_DIALTONE	= 4,
+	VGSM_RESP_BUSY		= 5,
+	VGSM_RESP_NO_ANSWER	= 6,
+	VGSM_RESP_UNKNOWN	= 100,
+	VGSM_RESP_TIMEOUT	= 101,
+	VGSM_RESP_FAILED	= 102,
 };
 
 enum vgsm_comm_state
@@ -80,13 +79,14 @@ struct vgsm_req
 
 	int retransmit_cnt;
 
+	ast_mutex_t ready_lock;
 	int ready;
 	ast_cond_t ready_cond;
 
 	int timeout;
 
 	struct list_head lines;
-	int response_error;
+	int err;
 
 	struct vgsm_urc_class *urc_class;
 };
@@ -100,11 +100,11 @@ struct vgsm_req_line
 
 struct vgsm_comm
 {
-	ast_mutex_t lock;
-
 	const char *name;
 
 	int fd;
+
+	int enabled;
 
 	enum vgsm_comm_state state;
 	ast_cond_t state_change_cond;
@@ -113,6 +113,7 @@ struct vgsm_comm
 
 	char buf[2048];
 
+	ast_mutex_t requests_queue_lock;
 	struct list_head requests_queue;
 
 	struct vgsm_req *current_req;
@@ -159,21 +160,21 @@ int vgsm_req_make_wait_result(
 
 void vgsm_req_wait(struct vgsm_req *req);
 
-int vgsm_comm_line_error(const char *line);
+int vgsm_req_final_response_code(const char *line);
 
 const struct vgsm_req_line *vgsm_req_first_line(
 	const struct vgsm_req *req);
 const struct vgsm_req_line *vgsm_req_last_line(
 	const struct vgsm_req *req);
 
-void vgsm_req_get(struct vgsm_req *req);
+struct vgsm_req *vgsm_req_get(struct vgsm_req *req);
 void vgsm_req_put(struct vgsm_req *req);
+#define vgsm_req_put_null(req)	do { vgsm_req_put(req); req = NULL; } while(0)
+int vgsm_req_status(struct vgsm_req *req);
 
 void vgsm_comm_wakeup(struct vgsm_comm *comm);
-
-void vgsm_comm_set_bitbucket(struct vgsm_comm *comm);
-void vgsm_comm_reset(struct vgsm_comm *comm);
-int vgsm_comm_start_recovery(struct vgsm_comm *comm);
+void vgsm_comm_disable(struct vgsm_comm *comm);
+void vgsm_comm_enable(struct vgsm_comm *comm);
 int vgsm_comm_thread_create();
 
 #endif
