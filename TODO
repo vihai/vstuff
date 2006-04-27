@@ -170,12 +170,9 @@ vgsm:
 -----
 
 - Handle hung micros by timing out writes/reads and resetting the board
+- Implement CODEC write queueing and CODEC read waiting
 
 chan_vgsm:
 ----------
 - Implement network listing command
-- Implement CACM, CAMM,  command
-- Implement SMS/CB handling
-- Implement network survey
-- Handle command timeout and recovery
 - Hangup and shutdown on * exit

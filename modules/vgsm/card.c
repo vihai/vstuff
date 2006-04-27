@@ -124,6 +124,7 @@ void vgsm_send_msg(
 		BUG();
 }
 
+/*
 static void vgsm_send_codec_resync(
 	struct vgsm_card *card,
 	u8 reg_address, 
@@ -140,6 +141,7 @@ static void vgsm_send_codec_resync(
 
 	vgsm_send_msg(card, 0, &msg);
 }
+*/
 	
 static void vgsm_send_codec_setreg(
 	struct vgsm_card *card,
@@ -156,6 +158,8 @@ static void vgsm_send_codec_setreg(
 	msg.payload[1] = reg_data;
 
 	vgsm_send_msg(card, 0, &msg);
+
+	msleep(2);
 }
 	
 static void vgsm_send_codec_getreg(
@@ -621,18 +625,22 @@ static void vgsm_maint_timer(unsigned long data)
 {
 	struct vgsm_card *card = (struct vgsm_card *)data;
 
-	vgsm_card_lock(card);
-/*	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);
+//	vgsm_card_lock(card);
+/*	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);*/
 	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
+	udelay(1500);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX0);
+	udelay(1500);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX1);
+	udelay(1500);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX2);
-	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);*/
+	udelay(1500);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);
 //	vgsm_module_send_power_get(&card->modules[0]);
 //	vgsm_module_send_power_get(&card->modules[1]);
 //	vgsm_module_send_power_get(&card->modules[2]);
 //	vgsm_module_send_power_get(&card->modules[3]);
-	vgsm_card_unlock(card);
+//	vgsm_card_unlock(card);
 
 	if (!test_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags))
 		mod_timer(&card->maint_timer, jiffies + 5 * HZ);
@@ -646,7 +654,7 @@ void vgsm_codec_reset(
 		VGSM_CODEC_CONFIG,
 		VGSM_CODEC_CONFIG_RES);
 	mb();
-	udelay(50);
+
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_CONFIG,
 		VGSM_CODEC_CONFIG_AMU_ALAW);
@@ -865,10 +873,10 @@ int vgsm_card_probe(
 
 	msleep(100);
 
-	vgsm_module_send_set_padding_timeout(&card->modules[0], 10);
-	vgsm_module_send_set_padding_timeout(&card->modules[1], 10);
-	vgsm_module_send_set_padding_timeout(&card->modules[2], 10);
-	vgsm_module_send_set_padding_timeout(&card->modules[3], 10);
+	vgsm_module_send_set_padding_timeout(&card->modules[0], 1);
+	vgsm_module_send_set_padding_timeout(&card->modules[1], 1);
+	vgsm_module_send_set_padding_timeout(&card->modules[2], 1);
+	vgsm_module_send_set_padding_timeout(&card->modules[3], 1);
 
 	vgsm_send_get_fw_ver(card, 0);
 	vgsm_send_get_fw_ver(card, 1);

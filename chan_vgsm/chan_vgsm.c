@@ -479,10 +479,10 @@ static const char *vgsm_cms_error_to_text(int code)
 
 static const char *vgsm_error_to_text(int code)
 {
-	if (code >= 0 && code < 1000)
-		return vgsm_cme_error_to_text(code);
-	else if (code >= 1000 && code < 2000)
-		return vgsm_cms_error_to_text(code - 1000);
+	if (code >= CME_ERROR_BASE && code < CME_ERROR_BASE + CME_ERROR_SIZE)
+		return vgsm_cme_error_to_text(CME_ERROR(code));
+	else if (code >= CMS_ERROR_BASE && code < CMS_ERROR_BASE + CMS_ERROR_SIZE)
+		return vgsm_cms_error_to_text(CMS_ERROR(code));
 	else if (code == VGSM_RESP_OK)
 		return "OK";
 	else if (code == VGSM_RESP_CONNECT)
@@ -633,9 +633,10 @@ static void vgsm_intf_unexpected_error(struct vgsm_interface *intf, int err)
 	vgsm_comm_disable(&intf->comm);
 
 	if (err == VGSM_RESP_FAILED)
-		vgsm_intf_setreason(intf, "Communication error", err);
+		vgsm_intf_setreason(intf, "Communication error");
 	else
-		vgsm_intf_setreason(intf, "Unexpected error: '%s'", err);
+		vgsm_intf_setreason(intf, "Unexpected error: '%s'",
+			vgsm_error_to_text(err));
 
 	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
 }
@@ -1030,6 +1031,32 @@ static struct ast_cli_entry no_debug_vgsm_generic =
 
 /*---------------------------------------------------------------------------*/
 
+static const char *vgsm_qual_to_text(int ber)
+{
+	switch(ber) {
+	case 0:
+		return "less than 0.1%";
+	case 1:
+		return "0.26% => 0.30%";
+	case 2:
+		return "0.51% => 0.64%";
+	case 3:
+		return "1.0% => 1.3%";
+	case 4:
+		return "1.9% => 2.7%";
+	case 5:
+		return "3.8% => 5.4%";
+	case 6:
+		return "7.6% => 11%";
+	case 7:
+		return "greater than 15%";
+	case 99:
+		return "N/A";
+	default:
+		return "*INVALID*";
+	}
+}
+
 static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 {
 	ast_cli(fd, "\n------ Interface '%s' ---------\n", intf->name);
@@ -1154,24 +1181,37 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 		-intf->net.sci.rx_lev);
 
 	ast_cli(fd,
-		"  RxLev Sub: -%d dBm\n"
-		"  RxLev Full: -%d dBm\n"
-		"  RxQual: %d\n"
-		"  RxQual Sub: %d\n"
-		"  RxQual Full: %d\n"
+		"  RxLev Sub: %d dBm\n"
+		"  RxLev Full: %d dBm\n"
+		"  RxQual: %d (%s)\n"
+		"  RxQual Sub: %d (%s)\n"
+		"  RxQual Full: %d (%s)\n"
 		"  Timeslot: %d\n"
-		"  TA: %d\n"
-		"  RSSI: %d\n"
-		"  BER: %d\n",
-		intf->net.sci2.rx_lev_sub,
-		intf->net.sci2.rx_lev_full,
+		"  TA: %d\n",
+		-intf->net.sci2.rx_lev_sub,
+		-intf->net.sci2.rx_lev_full,
 		intf->net.sci2.rx_qual,
+		vgsm_qual_to_text(intf->net.sci2.rx_qual),
 		intf->net.sci2.rx_qual_sub,
+		vgsm_qual_to_text(intf->net.sci2.rx_qual_sub),
 		intf->net.sci2.rx_qual_full,
+		vgsm_qual_to_text(intf->net.sci2.rx_qual_full),
 		intf->net.sci2.timeslot,
-		intf->net.sci2.ta,
-		intf->net.sci2.rssi,
-		intf->net.sci2.ber);
+		intf->net.sci2.ta);
+
+	if (intf->net.sci2.rssi == 0)
+		ast_cli(fd, "  RSSI: <= -113 dBm\n");
+	else if (intf->net.sci2.rssi == 31)
+		ast_cli(fd, "  RSSI: >= -51 dB,\n");
+	else if (intf->net.sci2.rssi == 99)
+		ast_cli(fd, "  RSSI: N/A\n");
+	else
+		ast_cli(fd, "  RSSI: %d dBm\n",
+			-113 + (intf->net.sci2.rssi * 2));
+
+	ast_cli(fd, "  BER: %d (%s)\n",
+		intf->net.sci2.ber,
+		vgsm_qual_to_text(intf->net.sci2.ber));
 
 	if (intf->net.ncells) {
 		ast_cli(fd, "\nAdjacent cells (%d)\n",
@@ -1207,13 +1247,51 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	}
 }
 
+static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
+{
+	ast_cli(fd, "%-8s: %-8s\n",
+		intf->name,
+		vgsm_intf_status_to_text(intf->status));
+
+	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+            intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_cli(fd, "          %-15s\n",
+			vgsm_net_status_to_text(intf->net.status));
+	} else {
+		struct vgsm_operator_info *op_info;
+		op_info = vgsm_search_operator(intf->net.operator_id);
+
+		if (op_info) {
+			ast_cli(fd, "          %-15s %s (%s - %s - %s)\n",
+				vgsm_net_status_to_text(intf->net.status),
+				intf->net.operator_id,
+				op_info->name,
+				op_info->country,
+				op_info->bands);
+		} else {
+			ast_cli(fd, "          %-15s %s\n",
+				vgsm_net_status_to_text(intf->net.status),
+				intf->net.operator_id);
+		}
+	}
+}
+
 static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 {
 	struct vgsm_interface *intf;
 
 	ast_mutex_lock(&vgsm.lock);
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node)
-		vgsm_show_interface(fd, intf);
+	if (argc >= 4) {
+		list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+			if (!strcasecmp(intf->name, argv[3])) {
+				vgsm_show_interface(fd, intf);
+				break;
+			}
+		}
+	} else {
+		list_for_each_entry(intf, &vgsm.ifs, ifs_node)
+			vgsm_show_interface_summary(fd, intf);
+	}
 	ast_mutex_unlock(&vgsm.lock);
 
 	return 0;
@@ -1392,18 +1470,6 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
 		ast_cli(fd, "SIM requires PUK2");
 		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 10")) {
-		ast_cli(fd, "SIM not present");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 13")) {
-		ast_cli(fd, "SIM defective");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 14")) {
-		ast_cli(fd, "SIM busy");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 15")) {
-		ast_cli(fd, "Wrong type of SIM");
-		res = -1;
 	} else {
 		ast_cli(fd, "Unknown reqonse '%s'", first_line->text);
 
@@ -1509,18 +1575,6 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
 		ast_cli(fd, "SIM requires PUK2");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 10")) {
-		ast_cli(fd, "SIM not present");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 13")) {
-		ast_cli(fd, "SIM defective");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 14")) {
-		ast_cli(fd, "SIM busy");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 15")) {
-		ast_cli(fd, "Wrong type of SIM");
 		res = -1;
 	} else {
 		ast_cli(fd, "Unknown reqonse '%s'", first_line->text);
@@ -3590,7 +3644,12 @@ static int vgsm_pin_check_and_input(
 	/* Be careful to not consume all the available attempts */
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SPIC");
 	err = vgsm_req_status(req);
-	if (err != VGSM_RESP_OK) {
+	if (err == CME_ERROR(10)) {
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
+		vgsm_intf_setreason(intf, "SIM not present");
+		vgsm_req_put_null(req);
+		goto err_spic;
+	} else if (err != VGSM_RESP_OK) {
 		vgsm_intf_unexpected_error(intf, err);
 		vgsm_req_put_null(req);
 		goto err_spic;
@@ -3603,7 +3662,12 @@ static int vgsm_pin_check_and_input(
 
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	err = vgsm_req_status(req);
-	if (err != VGSM_RESP_OK) {
+	if (err == CME_ERROR(10)) {
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
+		vgsm_intf_setreason(intf, "SIM not present");
+		vgsm_req_put_null(req);
+		goto err_spic;
+	} else if (err != VGSM_RESP_OK) {
 		vgsm_intf_unexpected_error(intf, err);
 		vgsm_req_put_null(req);
 		goto err_spic;
@@ -3650,25 +3714,6 @@ static int vgsm_pin_check_and_input(
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_PIN, -1);
 		vgsm_intf_setreason(intf, "SIM requires PUK2");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 10")) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
-		vgsm_intf_setreason(intf, "SIM not present");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 13")) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "SIM defective");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 14")) {
-		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "SIM busy");
-		res = -1;
-	} else if (!strcmp(first_line->text, "+CME ERROR: 15")) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
-		vgsm_intf_setreason(intf, "Wrong type of SIM");
 		res = -1;
 	} else {
 		vgsm_comm_disable(&intf->comm);

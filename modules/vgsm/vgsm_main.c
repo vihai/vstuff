@@ -277,7 +277,7 @@ static int vgsm_cdev_do_codec_set(
 		goto err_copy_from_user;
 	}
 
-	vgsm_card_lock(module->card);
+//	vgsm_card_lock(module->card);
 
 	switch(cctl.parameter) {
 	case VGSM_CODEC_RESET:
@@ -315,7 +315,7 @@ static int vgsm_cdev_do_codec_set(
 
 	vgsm_update_codec(module);
 
-	vgsm_card_unlock(module->card);
+//	vgsm_card_unlock(module->card);
 
 	return 0;
 

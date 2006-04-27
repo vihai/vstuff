@@ -419,9 +419,9 @@ int vgsm_req_final_response_code(const char *line)
 	else if (!strcmp(line, "NO ANSWER"))
 		return VGSM_RESP_NO_ANSWER;
 	else if (strstr(line, "+CME ERROR: ") == line)
-		return atoi(line + strlen("+CME ERROR: ")) + 1000;
+		return atoi(line + strlen("+CME ERROR: ")) + CME_ERROR_BASE;
 	else if (strstr(line, "+CMS ERROR: ") == line)
-		return atoi(line + strlen("+CMS ERROR: ")) + 2000;
+		return atoi(line + strlen("+CMS ERROR: ")) + CMS_ERROR_BASE;
 	else
 		return VGSM_RESP_UNKNOWN;
 }

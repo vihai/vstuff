@@ -30,6 +30,13 @@
  *
  */
 
+#define CME_ERROR_BASE	1000
+#define CME_ERROR_SIZE	1000
+#define CMS_ERROR_BASE	2000
+#define CMS_ERROR_SIZE	1000
+#define CME_ERROR(x)	((x) + CME_ERROR_BASE)
+#define CMS_ERROR(x)	((x) + CMS_ERROR_BASE)
+
 enum vgsm_req_codes
 {
 	VGSM_RESP_OK		= 0,
