@@ -442,17 +442,12 @@ void vgsm_7bit_to_wc(const __u8 *buf, int septets, wchar_t *out, int outsize)
 void vgsm_write_septet(__u8 *out, int septet, char c)
 {
 	int outpos = ((septet + 1) * 7) / 8;
-	int shift = (outpos % 8);
-
-//printf("G outpos=%d shift=%d\n", outpos, shift);
+	int shift = (septet % 8);
 
 	if (outpos > 0) {
-//printf("G1 out[%d] |= %02x \n", outpos - 1, (c << (8 - shift)) & 0xff);
-//printf("G2 out[%d] |= %02x \n", outpos, c >> shift);
-		out[outpos-1] |= (c << shift) & 0xff;
-		out[outpos] |= c >> (8 - shift);
+		out[outpos-1] |= (c << (8 - shift)) & 0xff;
+		out[outpos] |= c >> shift;
 	} else {
-//printf("G out[%d] |= %02x \n", out[outpos], c);
 		out[outpos] |= c;
 	}
 }
@@ -474,7 +469,7 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out)
 
 		if (cnt < 1) {
 			ast_log(LOG_NOTICE, "Cannot translate char %08x\n",
-				inwc);
+				(int)inwc);
 
 			continue;
 		}

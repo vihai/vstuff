@@ -135,11 +135,11 @@ struct vgsm_cbm_data_coding_scheme_1111
 struct vgsm_cbm_page_parameter
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
-	__u8 pages:4;
 	__u8 page:4;
+	__u8 pages:4;
 #elif __BYTE_ORDER == __LITTLE_ENDIAN
-	__u8 page:4;
 	__u8 pages:4;
+	__u8 page:4;
 #else
 #error Unsupported byte order
 #endif

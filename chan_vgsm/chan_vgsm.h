@@ -141,6 +141,8 @@ struct vgsm_interface
 	char operator_id[8];
 	int set_clock;
 
+	char sms_service_center[32];
+
 	/* Operative data */
 
 	enum vgsm_intf_status status;
@@ -214,7 +216,6 @@ struct vgsm_state
 	int debug_generic;
 	int debug_serial;
 
-	char sms_service_center[32];
 	char sms_spooler[32];
 	char sms_spooler_pars[32];
 };

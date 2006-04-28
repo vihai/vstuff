@@ -501,7 +501,7 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	if (!pdu)
 		goto err_alloc_pdu;
 
-	memset(pdu, 0x55, max_len);
+	memset(pdu, 0, max_len);
 
 	int len = 0;
 	sms->pdu = pdu;

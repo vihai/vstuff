@@ -84,6 +84,7 @@ struct vgsm_state vgsm = {
 		.set_clock = 0,
 		.operator_selection = VGSM_OPSEL_AUTOMATIC,
 		.operator_id = "",
+		.sms_service_center = "",
 	}
 };
 
@@ -479,10 +480,12 @@ static const char *vgsm_cms_error_to_text(int code)
 
 static const char *vgsm_error_to_text(int code)
 {
-	if (code >= CME_ERROR_BASE && code < CME_ERROR_BASE + CME_ERROR_SIZE)
-		return vgsm_cme_error_to_text(CME_ERROR(code));
-	else if (code >= CMS_ERROR_BASE && code < CMS_ERROR_BASE + CMS_ERROR_SIZE)
-		return vgsm_cms_error_to_text(CMS_ERROR(code));
+	if (code >= CME_ERROR_BASE &&
+	    code < CME_ERROR_BASE + CME_ERROR_SIZE)
+		return vgsm_cme_error_to_text(code - CME_ERROR_BASE);
+	else if (code >= CMS_ERROR_BASE &&
+	         code < CMS_ERROR_BASE + CMS_ERROR_SIZE)
+		return vgsm_cms_error_to_text(code - CMS_ERROR_BASE);
 	else if (code == VGSM_RESP_OK)
 		return "OK";
 	else if (code == VGSM_RESP_CONNECT)
@@ -724,10 +727,7 @@ static int vgsm_state_from_var(
 	struct vgsm_state *state,
 	struct ast_variable *var)
 {
-	if (!strcasecmp(var->name, "sms_service_center")) { 
-		strncpy(state->sms_service_center, var->value,
-			sizeof(state->sms_service_center));
-	} else if (!strcasecmp(var->name, "sms_spooler")) { 
+	if (!strcasecmp(var->name, "sms_spooler")) { 
 		strncpy(state->sms_spooler, var->value,
 			sizeof(state->sms_spooler));
 	} else if (!strcasecmp(var->name, "sms_spooler_pars")) {
@@ -773,6 +773,9 @@ static int vgsm_intf_from_var(
 	} else if (!strcasecmp(var->name, "operator_id")) {
 		strncpy(intf->operator_id, var->value,
 			sizeof(intf->operator_id));
+	} else if (!strcasecmp(var->name, "sms_service_center")) { 
+		strncpy(intf->sms_service_center, var->value,
+			sizeof(intf->sms_service_center));
 	} else {
 		return -1;
 	}
@@ -798,6 +801,9 @@ static void vgsm_copy_interface_config(
 
 	strncpy(dst->operator_id, src->operator_id,
 		sizeof(dst->operator_id));
+
+	strncpy(dst->sms_service_center, src->sms_service_center,
+		sizeof(dst->sms_service_center));
 }
 
 static struct vgsm_urc_class urc_classes[];
@@ -1312,25 +1318,70 @@ static struct ast_cli_entry show_vgsm_interfaces =
 
 /*---------------------------------------------------------------------------*/
 
+static int vgsm_number_parse(
+	const char *num,
+	char *addr, int addr_len,
+	enum vgsm_numbering_plan *np,
+	enum vgsm_type_of_number *ton)
+{
+	// FIXME TODO: Better validity checking
+
+	assert(num);
+	assert(addr);
+	assert(np);
+	assert(ton);
+
+	*np = VGSM_NP_ISDN;
+
+	if (num[0] == '+') {
+		strncpy(addr, num + 1, addr_len);
+		*ton = VGSM_TON_INTERNATIONAL;
+	} else {
+		strncpy(addr, num, addr_len);
+		*ton = VGSM_TON_NATIONAL;
+	}
+
+	return 0;
+}
+
 static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 {
+	if (argc < 4) {
+		ast_cli(fd, "Missing phone number");
+		return -1;
+	}
+
 	struct vgsm_interface *intf;
 
 	ast_mutex_lock(&vgsm.lock);
 	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+
+		ast_mutex_lock(&intf->lock);
+		if (intf->status != VGSM_INTF_STATUS_READY &&
+		    intf->status != VGSM_INTF_STATUS_INCALL) {
+			ast_log(LOG_NOTICE,
+				"Cannot send SMS on not ready interfce\n");
+			ast_mutex_unlock(&intf->lock);
+			return -1;
+		}
+		ast_mutex_unlock(&intf->lock);
+
 		struct vgsm_sms *sms = vgsm_sms_alloc();
 
 		if (!sms)
 			break;
 
 		sms->intf = intf;
-		strcpy(sms->smcc, "392000200");
-		sms->smcc_np = VGSM_NP_ISDN;
-		sms->smcc_ton = VGSM_TON_INTERNATIONAL;
+		vgsm_number_parse(
+			intf->sms_service_center,
+			sms->smcc, sizeof(sms->smcc),
+			&sms->smcc_np, &sms->smcc_ton);
 
-		strcpy(sms->dest, "393474659309");
-		sms->dest_np = VGSM_NP_ISDN;
-		sms->dest_ton = VGSM_TON_INTERNATIONAL;
+		vgsm_number_parse(
+			argv[3],
+			sms->dest, sizeof(sms->dest),
+			&sms->dest_np,
+			&sms->dest_ton);
 
 		sms->timestamp = time(NULL);
 
@@ -2801,7 +2852,6 @@ err_not_incall:
 static void handle_unsolicited_colp(
 	const struct vgsm_req *urc)
 {
-printf("==========> colp\n");
 }
 
 static void handle_unsolicited_cccm(

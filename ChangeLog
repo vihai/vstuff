@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-28 08:44:15 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-629
+
+    Summary:
+      Another bunch of changes for vGSM
+    Revision:
+      isdn--devel--0.1--patch-629
+
+
+    modified files:
+     ChangeLog chan_vgsm/cbm.c chan_vgsm/cbm.h
+     chan_vgsm/chan_vgsm.c chan_vgsm/chan_vgsm.h chan_vgsm/comm.c
+     chan_vgsm/sms.c chan_vgsm/util.c
+
+
 2006-04-27 16:40:00 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-628
 
     Summary:

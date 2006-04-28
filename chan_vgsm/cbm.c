@@ -137,8 +137,14 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 
 	struct vgsm_cbm_page_parameter *pp =
 		(struct vgsm_cbm_page_parameter *)(pdu + pos++);
-	cbm->page = pp->page;
-	cbm->pages = pp->pages;
+
+	if (cbm->page == 0 || cbm->pages == 0) {
+		cbm->page = 1;
+		cbm->pages = 1;
+	} else {
+		cbm->page = pp->page;
+		cbm->pages = pp->pages;
+	}
 
 	/* Content */
 
