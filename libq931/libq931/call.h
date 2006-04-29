@@ -178,13 +178,12 @@ struct q931_call *q931_get_call_by_reference(
 	enum q931_call_direction direction,
 	q931_callref call_reference);
 
-#define q931_call_get(call) _q931_call_get(call, __FILE__, __LINE__)
-#define q931_call_put(call) _q931_call_put(call, __FILE__, __LINE__)
+#define q931_call_get(call) _q931_call_get((call), __FILE__,  __LINE__)
+#define q931_call_put_nonull(call) _q931_call_put((call), __FILE__,  __LINE__)
+#define q931_call_put(call) do { q931_call_put_nonull(call); call = NULL; } while(0)
 
-struct q931_call *_q931_call_get(struct q931_call *call,
-	const char *file, int line);
-void _q931_call_put(struct q931_call *call,
-	const char *file, int line);
+struct q931_call *_q931_call_get(struct q931_call *call, const char *file, int line);
+void _q931_call_put(struct q931_call *call, const char *prefix, int line);
 
 void q931_call_release_reference(struct q931_call *call);
 

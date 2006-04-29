@@ -363,8 +363,10 @@ static void q931_global_handle_restart(
 			} else if (msg->ies.ies[i]->cls->id ==
 					Q931_IE_RESTART_INDICATOR) {
 
-				if (gc->restart_indicator)
-					q931_ie_put(&gc->restart_indicator->ie);
+				if (gc->restart_indicator) {
+					_q931_ie_put(&gc->restart_indicator->ie);
+					gc->restart_indicator = NULL;
+				}
 
 				gc->restart_indicator =
 					container_of(q931_ie_get(
@@ -700,6 +702,8 @@ void q931_global_init(
 
 void q931_global_destroy(struct q931_global_call *gc)
 {
-	if (gc->restart_indicator)
-		q931_ie_put(&gc->restart_indicator->ie);
+	if (gc->restart_indicator) {
+		_q931_ie_put(&gc->restart_indicator->ie);
+		gc->restart_indicator = NULL;
+	}
 }

@@ -356,9 +356,8 @@ void _q931_call_put(struct q931_call *call,
 		report_call(call, LOG_DEBUG, "Freeing call\n");
 
 		if (call->dlc) {
-			q931_dlc_put(call->dlc);
 			q931_dlc_release(call->dlc);
-			call->dlc = NULL;
+			q931_dlc_put(call->dlc);
 		}
 
 		q931_intf_del_call(call);

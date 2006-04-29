@@ -1422,6 +1422,7 @@ void q931_ie_classes_init()
 
 struct q931_ie *q931_ie_get(struct q931_ie *ie)
 {
+	assert(ie);
 	assert(ie->refcnt > 0);
 
 	ie->refcnt++;
@@ -1429,8 +1430,9 @@ struct q931_ie *q931_ie_get(struct q931_ie *ie)
 	return ie;
 }
 
-void q931_ie_put(struct q931_ie *ie)
+void _q931_ie_put(struct q931_ie *ie)
 {
+	assert(ie);
 	assert(ie->refcnt > 0);
 
 	ie->refcnt--;

@@ -120,12 +120,10 @@ void q931_ces_free(struct q931_ces *ces)
 
 	list_del(&ces->node);
 
-	q931_dlc_put(ces->dlc);
 	q931_dlc_release(ces->dlc);
-	ces->dlc = NULL;
+	q931_dlc_put(ces->dlc);
 	
 	q931_call_put(ces->call);
-	ces->call = NULL;
 
 	free(ces);
 }

@@ -64,11 +64,16 @@ void q931_broadcast_dlc_init(
 	struct q931_interface *intf,
 	int socket);
 
-struct q931_dlc *q931_dlc_get(struct q931_dlc *dlc);
-void q931_dlc_put(struct q931_dlc *dlc);
+struct q931_dlc *_q931_dlc_get(struct q931_dlc *dlc, const char *file, int line);
+void _q931_dlc_put(struct q931_dlc *dlc, const char *file, int line);
+#define q931_dlc_get(dlc) _q931_dlc_get((dlc), __FILE__,  __LINE__)
+#define q931_dlc_put_nonull(dlc) _q931_dlc_put((dlc), __FILE__,  __LINE__)
+#define q931_dlc_put(dlc)	do { q931_dlc_put_nonull(dlc); dlc = NULL; } while(0)
 
-void q931_dlc_hold(struct q931_dlc *dlc);
-void q931_dlc_release(struct q931_dlc *dlc);
+void _q931_dlc_hold(struct q931_dlc *dlc, const char *file, int line);
+void _q931_dlc_release(struct q931_dlc *dlc, const char *file, int line);
+#define q931_dlc_hold(dlc) _q931_dlc_hold((dlc), __FILE__,  __LINE__)
+#define q931_dlc_release(dlc) _q931_dlc_release((dlc), __FILE__,  __LINE__)
 
 #endif
 

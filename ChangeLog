@@ -2,6 +2,21 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-29 23:04:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-635
+
+    Summary:
+      Added debugging to reference handling functions and automatic nulling of the reference pounter
+    Revision:
+      isdn--devel--0.1--patch-635
+
+
+    modified files:
+     ChangeLog libq931/call.c libq931/ces.c libq931/dlc.c
+     libq931/global.c libq931/ie.c libq931/libq931/call.h
+     libq931/libq931/dlc.h libq931/libq931/ie.h
+     libq931/libq931/message.h libq931/message.c
+
+
 2006-04-29 15:37:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-634
 
     Summary:

@@ -29,7 +29,7 @@ struct q931_message *q931_msg_get(
 	return msg;
 }
 
-void q931_msg_put(
+void _q931_msg_put(
 	struct q931_message *msg)
 {
 	assert(msg);
@@ -40,10 +40,8 @@ void q931_msg_put(
 	if (msg->refcnt == 0) {
 		report_msg(msg, LOG_DEBUG, "Releasing message\n");
 
-		if (msg->dlc) {
+		if (msg->dlc)
 			q931_dlc_put(msg->dlc);
-			msg->dlc = NULL;
-		}
 
 		free(msg);
 	}

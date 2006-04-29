@@ -1,7 +1,7 @@
 /*
  * vISDN DSSS-1/q.931 signalling library
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -21,11 +21,22 @@
 #include <libq931/logging.h>
 #include <libq931/dlc.h>
 
-void q931_dlc_hold(struct q931_dlc *dlc)
+void _q931_dlc_hold(
+	struct q931_dlc *dlc,
+	const char *file,
+	int line)
 {
+	assert(dlc);
+	assert(dlc->holdcnt > 0);
 	assert(dlc->tei != LAPD_BROADCAST_TEI);
 
 	dlc->holdcnt++;
+
+#if 1
+	report_dlc(dlc, LOG_DEBUG, "%s:%d HOLD (%d => %d)\n",
+		file, line,
+		dlc->refcnt, dlc->refcnt+1);
+#endif
 
 	if (dlc->holdcnt == 1) {
 		q931_stop_timer(&dlc->autorelease_timer);
@@ -34,8 +45,13 @@ void q931_dlc_hold(struct q931_dlc *dlc)
 	}
 }
 
-void q931_dlc_release(struct q931_dlc *dlc)
+void _q931_dlc_release(
+	struct q931_dlc *dlc,
+	const char *file,
+	int line)
 {
+	assert(dlc);
+	assert(dlc->holdcnt > 0);
 	assert(dlc->tei != LAPD_BROADCAST_TEI);
 
 	dlc->holdcnt--;
@@ -52,20 +68,39 @@ void q931_dlc_release(struct q931_dlc *dlc)
 	}
 }
 
-struct q931_dlc *q931_dlc_get(
-	struct q931_dlc *dlc)
+struct q931_dlc *_q931_dlc_get(
+	struct q931_dlc *dlc,
+	const char *file,
+	int line)
 {
+	assert(dlc);
+	assert(dlc->refcnt > 0);
+
+#if 1
+	report_dlc(dlc, LOG_DEBUG, "%s:%d GET (%d => %d)\n",
+		file, line,
+		dlc->refcnt, dlc->refcnt+1);
+#endif
+
 	dlc->refcnt++;
 
 	return dlc;
 }
 
-void q931_dlc_put(
-	struct q931_dlc *dlc)
+void _q931_dlc_put(
+	struct q931_dlc *dlc,
+	const char *file,
+	int line)
 {
 	assert(dlc);
 	assert(dlc->refcnt > 0);
 	assert(dlc->intf);
+
+#if 1
+	report_dlc(dlc, LOG_DEBUG, "%s:%d PUT (%d => %d)\n",
+		file, line,
+		dlc->refcnt, dlc->refcnt-1);
+#endif
 
 	dlc->refcnt--;
 

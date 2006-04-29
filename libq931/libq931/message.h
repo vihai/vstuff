@@ -63,7 +63,10 @@ struct q931_message
 			## arg)
 
 struct q931_message *q931_msg_get(struct q931_message *msg);
-void q931_msg_put(struct q931_message *msg);
+void _q931_msg_put(struct q931_message *msg);
+#define q931_msg_put(msg) \
+		do { _q931_msg_put(msg); msg = NULL; } while(0)
+
 struct q931_message *q931_msg_alloc(struct q931_dlc *dlc);
 struct q931_message *q931_msg_alloc_nodlc(void);
 
