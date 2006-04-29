@@ -75,20 +75,6 @@ AC_ARG_WITH(
 		fi
 	])
 
-AC_ARG_WITH(
-	[kernel-modules],
-	AC_HELP_STRING(
-		[--with-kernel-modules],
-		[Specify kernel modules directory]),
-	[kblddir=$withval],
-	[
-		if [[ -d "/lib/modules/`uname -r`/build" ]]; then
-			kblddir="/lib/modules/`uname -r`/build"
-		elif [[ -d "/usr/src/linux" ]]; then
-			kblddir="/usr/src/linux"
-		fi
-	])
-
 if [[ "$enable_kernel_modules" = "yes" -o \
       "$enable_kernel_modules" = "auto" ]]; then
 
