@@ -46,7 +46,7 @@ struct sk_buff *visdn_alloc_skb(unsigned int length)
 {
 	struct sk_buff *skb;
 
-	skb = dev_alloc_skb(length);
+	skb = dev_alloc_skb(length + sizeof(struct lapd_prim_hdr));
 	if (!skb)
 		return NULL;
 

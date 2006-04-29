@@ -754,11 +754,12 @@ void hfc_st_chan_rx_work(void *data)
 		goto err_alloc_skb;
 	}
 
-	// Calculate beginning of the next frame
+	/* Calculate beginning of the next frame */
 	newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
 
-	// We cannot use hfc_fifo_get because of different semantic of
-	// "available bytes" and to avoid useless increment of Z2
+	/* We cannot use hfc_fifo_get because of different semantic of
+	 * "available bytes" and to avoid useless increment of Z2
+	 */
 	hfc_fifo_mem_read(fifo,
 		skb_put(skb, frame_size - 3),
 		frame_size - 3);
