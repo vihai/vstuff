@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-29 15:36:30 GMT	vISDN snapshotter <daniele@orlandi.com>	patch-633
+
+    Summary:
+      Fix for 2.6.16 kernels
+    Revision:
+      isdn--devel--0.1--patch-633
+
+
+    modified files:
+     ChangeLog modules/hfc-usb/hfc-usb_main.c
+
+
 2006-04-29 13:15:32 GMT	vISDN snapshotter <daniele@orlandi.com>	patch-632
 
     Summary:

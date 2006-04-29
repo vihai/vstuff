@@ -323,7 +323,9 @@ static void hfc_disconnect(struct usb_interface *usb_intf)
 }
 
 static struct usb_driver hfc_driver = {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,15)
 	.owner		= THIS_MODULE,
+#endif
 	.name		= hfc_DRIVER_NAME,
 	.probe		= hfc_probe,
 	.disconnect	= hfc_disconnect,
