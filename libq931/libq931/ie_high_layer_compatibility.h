@@ -94,6 +94,7 @@ struct q931_ie_high_layer_compatibility_onwire_3
 #if __BYTE_ORDER == __BIG_ENDIAN
 	__u8 ext:1;
 	__u8 coding_standard:2;
+	__u8 interpretation:3;
 	__u8 presentation_method:2;
 #else
 	__u8 presentation_method:2;

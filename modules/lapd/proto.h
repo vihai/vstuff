@@ -105,8 +105,8 @@ struct lapd_data_hdr
 			u8 ft1:1;
 			u8 ft2:1;
 			u8 pad:6;
-		 };
 #endif
+		 };
 
 		u8 control;
 

@@ -988,7 +988,7 @@ int q931_receive(struct q931_dlc *dlc)
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 		msg->callref |= val << ((hdr->call_reference_len-i-1) * 8);
 #else
-		msg->callref |= val << (hdr->i * 8);
+		msg->callref |= val << (i * 8);
 #endif
 	}
 

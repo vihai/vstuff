@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-29 15:37:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-634
+
+    Summary:
+      Some fix for big-endian architectures
+    Revision:
+      isdn--devel--0.1--patch-634
+
+
+    modified files:
+     ChangeLog libq931/input.c
+     libq931/libq931/ie_high_layer_compatibility.h
+     modules/lapd/proto.h
+
+
 2006-04-29 15:36:30 GMT	vISDN snapshotter <daniele@orlandi.com>	patch-633
 
     Summary:
