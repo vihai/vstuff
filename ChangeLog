@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-30 18:12:46 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-640
+
+    Summary:
+      Fixed doxygen.conf.in
+    Revision:
+      isdn--devel--0.1--patch-640
+
+
+    modified files:
+     ChangeLog doxygen.conf.in
+
+
 2006-04-30 18:07:09 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-639
 
     Summary:
