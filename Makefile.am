@@ -52,3 +52,7 @@ release: distdir
 	scp $(distdir).tar.gz $(distdir).tar.gz.asc \
 	    $(distdir).tar.bz2 $(distdir).tar.bz2.asc \
 	    root@aj.uli.it:/www/www.visdn.org/htdocs/download/
+
+doxy:
+	doxygen doxygen.conf
+

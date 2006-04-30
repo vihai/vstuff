@@ -414,6 +414,7 @@ AC_CONFIG_FILES([Makefile
 		modules/netdev/Makefile
 		modules/ppp/Makefile
 		modules/ec/Makefile
+		doxygen.conf
 		visdn.spec])
 
 #		modules/hfc-e1/Makefile
