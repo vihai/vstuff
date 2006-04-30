@@ -64,7 +64,7 @@ AC_MSG_CHECKING([kernel build directory])
 AC_ARG_WITH(
 	[kernel-build],
 	AC_HELP_STRING(
-		[--with-kernel-build],
+		[--with-kernel-build=DIR],
 		[Specify kernel buildtree for external modules compilation]),
 	[kblddir=$withval],
 	[
@@ -127,7 +127,7 @@ AC_MSG_CHECKING([asterisk modules directory])
 AC_ARG_WITH(
 	[asterisk-modules],
 	AC_HELP_STRING(
-		[--with-asterisk-modules],
+		[--with-asterisk-modules=DIR],
 		[Specify asterisk modules directory]),
 	[astmoddir=$withval],
 	[
@@ -155,7 +155,7 @@ AC_MSG_CHECKING([asterisk includes])
 AC_ARG_WITH(
 	[asterisk-includes],
 	AC_HELP_STRING(
-		[--with-asterisk-includes],
+		[--with-asterisk-includes=DIR],
 		[Specify asterisk includes directory (the prefix before \
 		asterisk/)]),
 	[astincdir=$withval],
@@ -188,7 +188,7 @@ AC_MSG_CHECKING([asterisk configuration directory])
 AC_ARG_WITH(
 	[asterisk-config],
 	AC_HELP_STRING(
-		[--with-asterisk-config],
+		[--with-asterisk-config=DIR],
 		[Specify asterisk configuration directory]),
 	[astconfdir=$withval],
 	[
@@ -230,7 +230,7 @@ AC_MSG_CHECKING([pppd plugins directory])
 AC_ARG_WITH(
 	[pppd-plugins],
 	AC_HELP_STRING(
-		[--with-pppd-plugins],
+		[--with-pppd-plugins=DIR],
 		[Specify PPPD plugins directory]),
 	[pppdpluginsdir="$withval"],
 	[
