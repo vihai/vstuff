@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-04-30 17:24:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-636
+
+    Summary:
+      Primitives header has to be packed cause it may not be aligned
+    Revision:
+      isdn--devel--0.1--patch-636
+
+
+    modified files:
+     ChangeLog modules/lapd/lapd.h
+
+
 2006-04-29 23:04:35 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-635
 
     Summary:

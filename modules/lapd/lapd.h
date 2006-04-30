@@ -92,7 +92,7 @@ struct sockaddr_lapd
 {
 	sa_family_t	sal_family;
 	__u8            sal_tei;
-};
+} __attribute__ ((__packed__));
 
 enum lapd_primitive_type
 {
