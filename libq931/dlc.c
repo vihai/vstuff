@@ -27,7 +27,7 @@ void _q931_dlc_hold(
 	int line)
 {
 	assert(dlc);
-	assert(dlc->holdcnt > 0);
+	assert(dlc->holdcnt >= 0);
 	assert(dlc->tei != LAPD_BROADCAST_TEI);
 
 	dlc->holdcnt++;
