@@ -480,8 +480,10 @@ static int vnd_netdev_frame_xmit(
 		case VISDN_TX_OK:
 			return NETDEV_TX_OK;
 		case VISDN_TX_BUSY:
+			skb_push(skb, sizeof(struct lapd_prim_hdr));
 			return NETDEV_TX_BUSY;
 		case VISDN_TX_LOCKED:
+			skb_push(skb, sizeof(struct lapd_prim_hdr));
 			return NETDEV_TX_LOCKED;
 		default:
 			kfree_skb(skb);
