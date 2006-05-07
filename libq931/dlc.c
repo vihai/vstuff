@@ -153,4 +153,7 @@ void q931_broadcast_dlc_init(
 	dlc->socket = socket;
 	dlc->intf = intf;
 	dlc->tei = LAPD_BROADCAST_TEI;
+
+	dlc->holdcnt = 0;
+	dlc->refcnt = 1;
 }
