@@ -267,6 +267,12 @@ AC_ARG_WITH(
 	[
 		if [[ -d "/usr/include/pppd/" ]]; then
 			pppdincdir="/usr/include/pppd/"
+
+			if [[ ! -f "$pppdincdir/pppd.h" -o \
+			      ! -f "$pppdincdir/fsm.h" -o \
+			      ! -f "$pppdincdir/lcp.h" ]]; then
+				enable_pppd="no"
+			fi
 		else
 			enable_pppd="no"
 		fi
@@ -276,6 +282,13 @@ if [[ "$enable_pppd" = "yes" ]]; then
 	if [[ ! -d "$pppdincdir" ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Cannot locate pppd includes directory])
+	fi
+
+	if [[ ! -f "$pppdincdir/pppd.h" -o \
+	      ! -f "$pppdincdir/fsm.h" -o \
+	      ! -f "$pppdincdir/lcp.h" ]]; then
+		AC_MSG_RESULT([failed!])
+		AC_MSG_ERROR([Missing pppd headers])
 	fi
 fi
 
@@ -301,21 +314,11 @@ AC_ARG_WITH(
 	]
 	)
 
-if [[ "$enable_pppd" = "yes" -o "$enable_pppd" = "auto" ]]; then
+if [[ "$enable_pppd" = "yes" ]]; then
 	if [[ ! -d $pppdconfdir ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Cannot locate pppd configuration directory])
 	fi
-
-	if [[ ! -d "$pppdincdir/" -o \
-	      ! -f "$pppdincdir/pppd.h" -o \
-	      ! -f "$pppdincdir/fsm.h" -o \
-	      ! -f "$pppdincdir/lcp.h" ]]; then
-		AC_MSG_RESULT([failed!])
-		AC_MSG_ERROR([Missing pppd headers])
-	fi
-
-	enable_pppd="yes"
 fi
 
 AC_SUBST(pppdconfdir)
