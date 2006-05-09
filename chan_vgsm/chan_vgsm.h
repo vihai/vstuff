@@ -42,7 +42,7 @@ struct vgsm_chan {
 	int sp_channel_id;
 	int module_channel_id;
 
-	int path_id;
+	int pipeline_id;
 
 	char calling_number[21];
 
@@ -63,6 +63,7 @@ struct vgsm_operator_info
 enum vgsm_intf_status
 {
 	VGSM_INTF_STATUS_UNINITIALIZED,
+	VGSM_INTF_STATUS_WAITING_SYSTART,
 	VGSM_INTF_STATUS_WAITING_INITIALIZATION,
 	VGSM_INTF_STATUS_INITIALIZING,
 	VGSM_INTF_STATUS_READY,

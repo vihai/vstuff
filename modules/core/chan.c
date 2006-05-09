@@ -25,7 +25,7 @@
 #include "port.h"
 #include "cxc.h"
 #include "router.h"
-#include "path.h"
+#include "pipeline.h"
 
 //----------------------------------------------------------------------------
 
@@ -44,7 +44,7 @@ static VISDN_CHAN_ATTR(name, S_IRUGO,
 
 //----------------------------------------------------------------------------
 
-static ssize_t visdn_chan_show_enabled(
+static ssize_t visdn_chan_show_open(
 	struct visdn_chan *chan,
 	struct visdn_chan_attribute *attr,
 	char *buf)
@@ -53,32 +53,24 @@ static ssize_t visdn_chan_show_enabled(
 		test_bit(VISDN_CHAN_STATE_OPEN, &chan->state));
 }
 
-static ssize_t visdn_chan_store_enabled(
+static VISDN_CHAN_ATTR(open, S_IRUGO,
+		visdn_chan_show_open,
+		NULL);
+
+//----------------------------------------------------------------------------
+
+static ssize_t visdn_chan_show_playing(
 	struct visdn_chan *chan,
 	struct visdn_chan_attribute *attr,
-	const char *buf,
-	size_t count)
+	char *buf)
 {
-	unsigned int value;
-	int err;
-
-	if (sscanf(buf, "%d", &value) < 1)
-		return -EINVAL;
-
-	if (value)
-		err = visdn_chan_enable(chan);
-	else
-		err = visdn_chan_disable(chan);
-
-	if (err < 0)
-		return err;
-
-	return count;
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		test_bit(VISDN_CHAN_STATE_PLAYING, &chan->state));
 }
 
-static VISDN_CHAN_ATTR(enabled, S_IRUGO | S_IWUSR,
-		visdn_chan_show_enabled,
-		visdn_chan_store_enabled);
+static VISDN_CHAN_ATTR(playing, S_IRUGO,
+		visdn_chan_show_playing,
+		NULL);
 
 //----------------------------------------------------------------------------
 
@@ -114,7 +106,8 @@ static VISDN_CHAN_ATTR(refcnt, S_IRUGO,
 static struct attribute *visdn_chan_default_attrs[] =
 {
 	&visdn_chan_attr_name.attr,
-	&visdn_chan_attr_enabled.attr,
+	&visdn_chan_attr_open.attr,
+	&visdn_chan_attr_playing.attr,
 	&visdn_chan_attr_bitrate.attr,
 	&visdn_chan_attr_refcnt.attr,
 	NULL,
@@ -396,7 +389,7 @@ void visdn_chan_unregister(
 	{
 	struct visdn_cxc_connection *conn;
 	struct hlist_node *pos;
-	struct visdn_path *path = NULL;
+	struct visdn_pipeline *pipeline = NULL;
 
 	down(&chan->leg_a.cxc->sem);
 
@@ -406,7 +399,7 @@ void visdn_chan_unregister(
 			hash_node) {
 
 		if (conn->src == &chan->leg_a) {
-			path = visdn_path_get(conn->path);
+			pipeline = visdn_pipeline_get(conn->pipeline);
 			break;
 		}
 
@@ -414,9 +407,9 @@ void visdn_chan_unregister(
 
 	up(&chan->leg_a.cxc->sem);
 
-	if (path) {
-		visdn_path_disconnect(path);
-		visdn_path_put(path);
+	if (pipeline) {
+		visdn_pipeline_disconnect(pipeline);
+		visdn_pipeline_put(pipeline);
 	}
 	}
 
@@ -470,9 +463,9 @@ void visdn_chan_unregister(
 }
 EXPORT_SYMBOL(visdn_chan_unregister);
 
-int visdn_chan_enable(struct visdn_chan *chan)
+int visdn_chan_open(struct visdn_chan *chan)
 {
-	visdn_debug(1, "visnd_chan_enable(%06d)\n", chan->id);
+	visdn_debug(1, "visnd_chan_open(%06d)\n", chan->id);
 
 	if (!test_and_set_bit(VISDN_CHAN_STATE_OPEN, &chan->state) &&
 	    chan->ops->open) {
@@ -482,20 +475,65 @@ int visdn_chan_enable(struct visdn_chan *chan)
 		if (err < 0) {
 			clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state);
 			visdn_msg(KERN_WARNING,
-				"visnd_chan_enable(%06d) FAILED: %d\n",
+				"visnd_chan_open(%06d) FAILED: %d\n",
 				chan->id, err);
 			return err;
 		}
 
-		visdn_call_notifiers(VISDN_EVENT_CHAN_ENABLED, chan);
+		visdn_call_notifiers(VISDN_EVENT_CHAN_OPENED, chan);
 	}
 
 	return 0;
 }
 
-int visdn_chan_disable(struct visdn_chan *chan)
+int visdn_chan_stop(struct visdn_chan *chan)
 {
-	visdn_debug(1, "visnd_chan_disable(%06d)\n", chan->id);
+	visdn_debug(1, "visnd_chan_stop(%06d)\n", chan->id);
+
+	if (test_and_clear_bit(VISDN_CHAN_STATE_PLAYING, &chan->state) &&
+	    chan->ops->stop) {
+		int err = 0;
+		err = chan->ops->stop(chan);
+		if (err < 0)
+			return err;
+
+		visdn_call_notifiers(VISDN_EVENT_CHAN_STOPPED, chan);
+	}
+
+	return 0;
+}
+
+int visdn_chan_start(struct visdn_chan *chan)
+{
+	visdn_debug(1, "visnd_chan_start(%06d)\n", chan->id);
+
+	if (!test_bit(VISDN_CHAN_STATE_OPEN, &chan->state)) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	if (!test_and_set_bit(VISDN_CHAN_STATE_PLAYING, &chan->state) &&
+	    chan->ops->start) {
+		int err;
+
+		err = chan->ops->start(chan);
+		if (err < 0) {
+			clear_bit(VISDN_CHAN_STATE_PLAYING, &chan->state);
+			visdn_msg(KERN_WARNING,
+				"visnd_chan_start(%06d) FAILED: %d\n",
+				chan->id, err);
+			return err;
+		}
+
+		visdn_call_notifiers(VISDN_EVENT_CHAN_STARTED, chan);
+	}
+
+	return 0;
+}
+
+int visdn_chan_close(struct visdn_chan *chan)
+{
+	visdn_debug(1, "visnd_chan_close(%06d)\n", chan->id);
 
 	if (test_and_clear_bit(VISDN_CHAN_STATE_OPEN, &chan->state) &&
 	    chan->ops->close) {
@@ -504,7 +542,7 @@ int visdn_chan_disable(struct visdn_chan *chan)
 		if (err < 0)
 			return err;
 
-		visdn_call_notifiers(VISDN_EVENT_CHAN_DISABLED, chan);
+		visdn_call_notifiers(VISDN_EVENT_CHAN_CLOSED, chan);
 	}
 
 	return 0;

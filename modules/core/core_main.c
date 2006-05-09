@@ -29,7 +29,7 @@
 #include "port.h"
 #include "timer.h"
 #include "router.h"
-#include "path.h"
+#include "pipeline.h"
 
 #ifdef DEBUG_CODE
 #ifdef DEBUG_DEFAULTS
@@ -126,10 +126,14 @@ const char *visdn_event_to_text(enum visdn_event event)
 		return "CHAN_REGISTERED";
 	case VISDN_EVENT_CHAN_UNREGISTERED:
 		return "CHAN_UNREGISTERED";
-	case VISDN_EVENT_CHAN_ENABLED:
-		return "CHAN_ENABLED";
-	case VISDN_EVENT_CHAN_DISABLED:
-		return "CHAN_DISABLED";
+	case VISDN_EVENT_CHAN_OPENED:
+		return "CHAN_OPENED";
+	case VISDN_EVENT_CHAN_CLOSED:
+		return "CHAN_CLOSED";
+	case VISDN_EVENT_CHAN_STARTED:
+		return "CHAN_STARTED";
+	case VISDN_EVENT_CHAN_STOPPED:
+		return "CHAN_STOPPED";
 	default:
 		return "*INVALID*";
 	}
@@ -173,9 +177,9 @@ static int __init visdn_init_module(void)
 	if (err < 0)
 		goto err_cxc_modinit;
 
-	err = visdn_path_modinit();
+	err = visdn_pipeline_modinit();
 	if (err < 0)
-		goto err_path_modinit;
+		goto err_pipeline_modinit;
 
 	err = visdn_timer_modinit();
 	if (err < 0)
@@ -203,8 +207,8 @@ err_chan_modinit:
 err_port_modinit:
 	visdn_timer_modexit();
 err_timer_modinit:
-	visdn_path_modexit();
-err_path_modinit:
+	visdn_pipeline_modexit();
+err_pipeline_modinit:
 	visdn_cxc_modexit();
 err_cxc_modinit:
 	class_unregister(&visdn_system_class);
@@ -227,7 +231,7 @@ static void __exit visdn_module_exit(void)
 	visdn_chan_modexit();
 	visdn_port_modexit();
 	visdn_timer_modexit();
-	visdn_path_modexit();
+	visdn_pipeline_modexit();
 	visdn_cxc_modexit();
 
 	class_unregister(&visdn_system_class);

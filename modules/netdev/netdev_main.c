@@ -26,7 +26,7 @@
 #include <linux/visdn/softcxc.h>
 #include <linux/visdn/port.h>
 #include <linux/visdn/chan.h>
-#include <linux/visdn/path.h>
+#include <linux/visdn/pipeline.h>
 #include <linux/lapd.h>
 
 #include "netdev.h"
@@ -125,23 +125,23 @@ static void vnd_chan_release(struct visdn_chan *visdn_chan)
 static int vnd_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct vnd_netdevice *netdevice = visdn_chan->driver_data;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	struct visdn_chan *other_ep;
 
 	vnd_debug(3, "vnd_chan_open()\n");
 
-	path = visdn_path_get_by_endpoint(visdn_chan);
-	if (!path)
+	pipeline = visdn_pipeline_get_by_endpoint(visdn_chan);
+	if (!pipeline)
 		return -ENOTCONN;
 
-	netdevice->mtu = visdn_path_find_lowest_mtu(path);
+	netdevice->mtu = visdn_pipeline_find_lowest_mtu(pipeline);
 
-	other_ep = visdn_path_get_other_endpoint(path, visdn_chan);
+	other_ep = visdn_pipeline_get_other_endpoint(pipeline, visdn_chan);
 
 	netdevice->remote_port = visdn_port_get(other_ep->port);
 
 	visdn_chan_put(other_ep);
-	visdn_path_put(path);
+	visdn_pipeline_put(pipeline);
 
 	if (!test_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state)) {
 		rtnl_lock();
@@ -396,22 +396,26 @@ struct visdn_leg_ops vnd_chan_leg_e_ops = {
 static int vnd_netdev_open(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int err;
 
 	set_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
-	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan);
-	if (!path) {
+	pipeline = visdn_pipeline_get_by_endpoint(&netdevice->visdn_chan);
+	if (!pipeline) {
 		err = -ENODEV;
-		goto err_no_path;
+		goto err_no_pipeline;
 	}
 
-	err = visdn_path_enable(path);
+	err = visdn_pipeline_open(pipeline);
 	if (err < 0)
-		goto err_enable_path;
+		goto err_pipeline_open;
 
-	visdn_path_put(path);
+	err = visdn_pipeline_start(pipeline);
+	if (err < 0)
+		goto err_pipeline_start;
+
+	visdn_pipeline_put(pipeline);
 
 	clear_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
@@ -419,9 +423,12 @@ static int vnd_netdev_open(struct net_device *netdev)
 
 	return 0;
 
-err_enable_path:
-	visdn_path_put(path);
-err_no_path:
+	visdn_pipeline_close(pipeline);
+err_pipeline_open:
+	visdn_pipeline_stop(pipeline);
+err_pipeline_start:
+	visdn_pipeline_put(pipeline);
+err_no_pipeline:
 
 	return err;
 }
@@ -429,29 +436,22 @@ err_no_path:
 static int vnd_netdev_stop(struct net_device *netdev)
 {
 	struct vnd_netdevice *netdevice = netdev->priv;
-	struct visdn_path *path;
-	int err;
+	struct visdn_pipeline *pipeline;
 
 	vnd_debug(3, "vnd_netdev_stop()\n");
 
 	cancel_delayed_work(&netdevice->promiscuity_change_work);
 	flush_scheduled_work();
 
-	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan);
-	if (path) {
-		err = visdn_path_disable(path);
-		if (err < 0)
-			goto err_disable_path;
+	pipeline = visdn_pipeline_get_by_endpoint(&netdevice->visdn_chan);
+	if (pipeline) {
+		visdn_pipeline_close(pipeline);
+		visdn_pipeline_stop(pipeline);
 
-		visdn_path_put(path);
+		visdn_pipeline_put(pipeline);
 	}
 
 	return 0;
-
-err_disable_path:
-	visdn_path_put(path);
-
-	return err;
 }
 
 static int vnd_netdev_frame_xmit(
@@ -540,17 +540,19 @@ static void vnd_netdev_set_multicast_list(
 static void vnd_promiscuity_change_work(void *data)
 {
 	struct vnd_netdevice *netdevice = data;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
-	path = visdn_path_get_by_endpoint(&netdevice->visdn_chan_e);
-	if (path) {
+	pipeline = visdn_pipeline_get_by_endpoint(&netdevice->visdn_chan_e);
+	if (pipeline) {
 		if (netdevice->netdev->flags & IFF_PROMISC) {
-			visdn_path_enable(path);
+			visdn_pipeline_open(pipeline); // FIXME: Handle failures
+			visdn_pipeline_start(pipeline);
 		} else if(!(netdevice->netdev->flags & IFF_PROMISC)) {
-			visdn_path_disable(path);
+			visdn_pipeline_stop(pipeline);
+			visdn_pipeline_close(pipeline);
 		}
 
-		visdn_path_put(path);
+		visdn_pipeline_put(pipeline);
 	}
 
 	vnd_netdevice_put(netdevice);

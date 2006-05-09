@@ -30,7 +30,7 @@
 #include "visdnctl.h"
 #include "disconnect.h"
 
-int disconnect_path(int id)
+int disconnect_pipeline(int id)
 {
 	int fd = open(CXC_CONTROL_DEV, O_RDWR);
 	if (fd < 0) {
@@ -42,9 +42,9 @@ int disconnect_path(int id)
 
 	struct visdn_connect connect;
 
-	printf("Disconnecting path '%06d'\n", id);
+	printf("Disconnecting pipeline '%06d'\n", id);
 
-	connect.path_id = id;
+	connect.pipeline_id = id;
 	connect.src_chan_id = 0;
 	connect.dst_chan_id = 0;
 	connect.flags = 0;
@@ -102,8 +102,8 @@ int handle_disconnect(int argc, char *argv[], int optind)
 	if (argc <= optind + 2)
 		print_usage("Missing disconnection parameter\n");
 
-	if (!strcasecmp(argv[optind + 1], "path"))
-		disconnect_path(atoi(argv[optind + 2]));
+	if (!strcasecmp(argv[optind + 1], "pipeline"))
+		disconnect_pipeline(atoi(argv[optind + 2]));
 	else if (!strcasecmp(argv[optind + 1], "endpoint"))
 		disconnect_endpoint(argv[optind + 2]);
 	else
@@ -115,7 +115,7 @@ int handle_disconnect(int argc, char *argv[], int optind)
 static void usage(int argc, char *argv[])
 {
 	fprintf(stderr,
-		"  disconnect <path|endpoint> <id>\n"
+		"  disconnect <pipeline|endpoint> <id>\n"
 		"\n");
 }
 

@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -28,9 +28,9 @@
 #include <linux/visdn/router.h>
 
 #include "visdnctl.h"
-#include "disable_path.h"
+#include "pipeline_open.h"
 
-static int do_disable_path(const char *chan_str)
+static int do_pipeline_open(const char *chan_str)
 {
 	int chan_id = decode_chan_id(chan_str);
 
@@ -47,8 +47,8 @@ static int do_disable_path(const char *chan_str)
 	connect.dst_chan_id = 0;
 	connect.flags = 0;
 
-	if (ioctl(fd, VISDN_IOC_ENABLE_PATH, &connect) < 0) {
-		fprintf(stderr, "ioctl(IOC_ENABLE_PATH) failed: %s\n",
+	if (ioctl(fd, VISDN_IOC_PIPELINE_START, &connect) < 0) {
+		fprintf(stderr, "ioctl(IOC_PIPELINE_START) failed: %s\n",
 			strerror(errno));
 
 		return 1;
@@ -59,26 +59,26 @@ static int do_disable_path(const char *chan_str)
 	return 0;
 }
 
-static int handle_disable_path(int argc, char *argv[], int optind)
+static int handle_pipeline_open(int argc, char *argv[], int optind)
 {
 	if (argc <= optind + 1)
 		print_usage("Missing first channel ID\n");
 
-	return do_disable_path(argv[optind + 1]);
+	return do_pipeline_open(argv[optind + 1]);
 }
 
 static void usage(int argc, char *argv[])
 {
 	fprintf(stderr,
-		"  disable_path <chan>\n"
+		"  pipeline_open <chan>\n"
 		"\n"
-		"    Disabled all the channels comprising a path to which\n"
+		"    Enable all the channels comprising a path to which\n"
 		"    chan belongs.\n");
 }
 
-struct module module_disable_path =
+struct module module_pipeline_open =
 {
-	.cmd	= "disable_path",
-	.do_it	= handle_disable_path,
+	.cmd	= "pipeline_open",
+	.do_it	= handle_pipeline_open,
 	.usage	= usage,
 };

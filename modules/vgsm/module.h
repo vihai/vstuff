@@ -64,8 +64,17 @@ struct vgsm_module
 
 	unsigned long status;
 
-	int readdma_pos;
-	int writedma_pos;
+	int rx_fifo_pos;
+	int rx_fifo_size;
+	int rx_fifo_cycles;
+	int rx_fifo_min;
+	int rx_fifo_max;
+
+	int tx_fifo_pos;
+	int tx_fifo_size;
+	int tx_fifo_cycles;
+	int tx_fifo_min;
+	int tx_fifo_max;
 
 	u8 rx_gain;
 	u8 tx_gain;

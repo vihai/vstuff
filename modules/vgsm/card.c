@@ -159,7 +159,7 @@ static void vgsm_send_codec_setreg(
 
 	vgsm_send_msg(card, 0, &msg);
 
-	msleep(2);
+	msleep(8);
 }
 	
 static void vgsm_send_codec_getreg(
@@ -201,10 +201,14 @@ void vgsm_update_mask0(struct vgsm_card *card)
 
 	for(i=0; i<card->num_modules; i++) {
 
-		if (test_bit(VISDN_CHAN_STATE_OPEN,
+		if (test_bit(VISDN_CHAN_STATE_PLAYING,
 				&card->modules[i].visdn_chan.state)) {
 
-			// ?
+			card->regs.mask0 |=
+				VGSM_INT1STAT_WR_REACH_INT |
+				VGSM_INT1STAT_WR_REACH_END |
+				VGSM_INT1STAT_RD_REACH_INT |
+				VGSM_INT1STAT_RD_REACH_END;
 
 			break;
 		}
@@ -347,17 +351,18 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 {
 	/* Resetting all */
 	vgsm_outb(card, VGSM_CNTL,
-		VGSM_CNTL_MASTER_RST |
+		VGSM_CNTL_DMA_RST |
 		VGSM_CNTL_SERIAL_RST |
 		VGSM_CNTL_EXTRST);
 	mb();
 	msleep(100);
 	vgsm_outb(card, VGSM_CNTL,
-		VGSM_CNTL_MASTER_RST |
+		VGSM_CNTL_DMA_RST |
 		VGSM_CNTL_SERIAL_RST);
 	mb();
 	msleep(100);
 	vgsm_outb(card, VGSM_CNTL,
+		VGSM_CNTL_DMA_INT_PERSISTENT |
 		VGSM_CNTL_DMA_SELF |
 		VGSM_CNTL_PIB_CYCLE_3 |
 		VGSM_CNTL_EXTRST);
@@ -388,12 +393,14 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	/* Setup DMA bus addresses on Tiger 320*/
 
 	vgsm_outl(card, VGSM_DMA_WR_START, cpu_to_le32(card->writedma_bus_mem));
-	vgsm_outl(card, VGSM_DMA_WR_INT, cpu_to_le32(card->writedma_bus_mem));
+	vgsm_outl(card, VGSM_DMA_WR_INT,
+		cpu_to_le32(card->writedma_bus_mem + card->writedma_size / 2));
 	vgsm_outl(card, VGSM_DMA_WR_END,
 		cpu_to_le32(card->writedma_bus_mem + card->writedma_size - 4));
 
 	vgsm_outl(card, VGSM_DMA_RD_START, cpu_to_le32(card->readdma_bus_mem));	
-	vgsm_outl(card, VGSM_DMA_RD_INT, cpu_to_le32(card->readdma_bus_mem));	
+	vgsm_outl(card, VGSM_DMA_RD_INT,
+		cpu_to_le32(card->readdma_bus_mem + card->readdma_size / 2));
 	vgsm_outl(card, VGSM_DMA_RD_END,
 		cpu_to_le32(card->readdma_bus_mem + card->readdma_size - 4));
 
@@ -443,26 +450,17 @@ static irqreturn_t vgsm_interrupt(int irq,
 	if (!int0stat && !int1stat)
 		return IRQ_NONE;
 
-	if (int0stat &
-		(VGSM_INT1STAT_WR_REACH_INT |
-		VGSM_INT1STAT_WR_REACH_END |
-		VGSM_INT1STAT_RD_REACH_INT |
-		VGSM_INT1STAT_RD_REACH_END)) {
+	if (int0stat & VGSM_INT1STAT_WR_REACH_INT) {
+		int i;
+		for(i=0; i < (card->writedma_size / 2) - 1; i++)
+			*(u8 *)(card->writedma_mem + i) = 0x2a;
+	}
 
-		/* Read or Write DMA reached interrupt address */
-		vgsm_msg(KERN_CRIT, "DMA IRQ\n");
-
-		printk(KERN_DEBUG "R: ");
-
-		{
-		int j;
-		// stampo 32 byte di dati
-		for (j=0; j<0x20; j++) {
-			printk("%02x", *(volatile u8 *)(card->readdma_mem+j*4));
-		}
-		printk("\n");
-		}
-
+	if (int0stat & VGSM_INT1STAT_WR_REACH_END) {
+		int i;
+		for(i=card->writedma_size / 2;
+		   i < card->writedma_size - 1; i++)
+			*(u8 *)(card->writedma_mem + i) = 0x2a;
 	}
 
 	if (int0stat & VGSM_INT1STAT_PCI_MASTER_ABORT)
@@ -626,16 +624,17 @@ static void vgsm_maint_timer(unsigned long data)
 	struct vgsm_card *card = (struct vgsm_card *)data;
 
 //	vgsm_card_lock(card);
-/*	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);*/
+/*	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
-	udelay(1500);
+	udelay(2000);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX0);
-	udelay(1500);
+	udelay(2000);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX1);
-	udelay(1500);
+	udelay(2000);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX2);
-	udelay(1500);
+	udelay(2000);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);
+	udelay(2000);*/
 //	vgsm_module_send_power_get(&card->modules[0]);
 //	vgsm_module_send_power_get(&card->modules[1]);
 //	vgsm_module_send_power_get(&card->modules[2]);
@@ -745,6 +744,9 @@ int vgsm_card_probe(
 
 	card->num_modules = 4;
 
+	card->readdma_size = vgsm_DMA_SAMPLES * 4;
+	card->writedma_size = vgsm_DMA_SAMPLES * 4;
+
 	for (i=0; i<card->num_modules; i++) {
 		vgsm_module_init(&card->modules[i], card, i);
 		vgsm_module_alloc(&card->modules[i]);
@@ -812,7 +814,6 @@ int vgsm_card_probe(
 	* Each sample written by PCI bridge is 32 bits, 8 bits/module */
 
 	/* READ DMA */
-	card->readdma_size = vgsm_DMA_SAMPLES * 4;
 	card->readdma_mem = pci_alloc_consistent(
 				pci_dev, card->readdma_size,
 				&card->readdma_bus_mem);
@@ -827,7 +828,6 @@ int vgsm_card_probe(
 	memset(card->readdma_mem, 0, card->readdma_size);
 
 	/* WRITE DMA */
-	card->writedma_size = vgsm_DMA_SAMPLES * 4;
 	card->writedma_mem = pci_alloc_consistent(
 				pci_dev, card->writedma_size,
 				&card->writedma_bus_mem);
@@ -864,12 +864,12 @@ int vgsm_card_probe(
 	vgsm_initialize_hw(card);
 
 	/* Enable interrupts */
-	card->regs.mask0 = 0x00;
+	card->regs.mask0 = 0;
 	vgsm_outb(card, VGSM_MASK0, card->regs.mask0);
 	vgsm_outb(card, VGSM_MASK1, 0x03);
 
 	/* Start DMA */
-	vgsm_outb(card, VGSM_OPER, 0x01);
+	vgsm_outb(card, VGSM_DMA_OPER, VGSM_DMA_OPER_DMA_ENABLE);
 
 	msleep(100);
 
@@ -970,8 +970,6 @@ void vgsm_card_remove(struct vgsm_card *card)
 				" emergency shutdown\n",
 				card->modules[i].id);
 		}
-
-		vgsm_module_dealloc(&card->modules[i]);
 	}
 
 	if (shutting_down) {
@@ -989,9 +987,12 @@ void vgsm_card_remove(struct vgsm_card *card)
 	vgsm_outb(card, VGSM_MASK0, 0x00);
 	vgsm_outb(card, VGSM_MASK1, 0x00);
 
+	/* Stop DMA */
+	vgsm_outb(card, VGSM_DMA_OPER, 0);
+
 	/* Reset Tiger 320  */
 	vgsm_outb(card, VGSM_CNTL,
-		VGSM_CNTL_MASTER_RST |
+		VGSM_CNTL_DMA_RST |
 		VGSM_CNTL_SERIAL_RST);
 
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
@@ -1005,13 +1006,15 @@ void vgsm_card_remove(struct vgsm_card *card)
 
 	pci_free_consistent(card->pci_dev, card->readdma_size,
 		card->readdma_mem, card->readdma_bus_mem);				
-
 	/* Unmap */
 	iounmap(card->io_mem);
 
 	pci_release_regions(card->pci_dev);
 
 	pci_disable_device(card->pci_dev);
+
+	for(i=0; i<card->num_modules; i++)
+		vgsm_module_dealloc(&card->modules[i]);
 
 	kfree(card);
 }

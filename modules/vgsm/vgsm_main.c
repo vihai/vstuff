@@ -70,14 +70,12 @@ static int vgsm_cdev_open(
 	}
 	spin_unlock(&vgsm_cards_list_lock);
 
-printk(KERN_DEBUG "begin open %d\n", module->id);
 	if (!module)
 		return -ENODEV;
 
 	if (test_and_set_bit(VGSM_MODULE_STATUS_OPEN, &module->status))
 		return -EBUSY;
 
-printk(KERN_DEBUG "end open %d\n", module->id);
 	file->private_data = module;
 
 	set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);

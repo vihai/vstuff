@@ -60,6 +60,7 @@
 #define FAILED_RETRY_TIME 30 * SEC
 #define READY_UPDATE_TIME 30 * SEC
 #define UNINITIALIZED_POSTPONE 3 * SEC
+#define WAITING_SYSTART_TIME 7 * SEC
 
 #define VGSM_DESCRIPTION "VoiSmart VGSM Channel For Asterisk"
 #define VGSM_CHAN_TYPE "VGSM"
@@ -93,6 +94,8 @@ static const char *vgsm_intf_status_to_text(enum vgsm_intf_status status)
 	switch(status) {
 	case VGSM_INTF_STATUS_UNINITIALIZED:
 		return "UNINITIALIZED";
+	case VGSM_INTF_STATUS_WAITING_SYSTART:
+		return "WAITING_SYSTART";
 	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
 		return "WAITING_INITIALIZATION";
 	case VGSM_INTF_STATUS_INITIALIZING:
@@ -1699,26 +1702,37 @@ static int vgsm_connect_channel(
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_CONNECT, sp, isdn): %s\n",
 			strerror(errno));
-		goto err_ioctl_connect_path;
+		goto err_ioctl_connect_pipeline;
 	}
 
-	vgsm_chan->path_id = vc.path_id;
+	vgsm_chan->pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
-	vc.path_id = vgsm_chan->path_id;
+	vc.pipeline_id = vgsm_chan->pipeline_id;
 
-	if (ioctl(vgsm.router_control_fd, VISDN_IOC_ENABLE_PATH,
+	if (ioctl(vgsm.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
 						(caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_ENABLE_PATH, isdn): %s\n",
+			"ioctl(VISDN_PIPELINE_OPEN, isdn): %s\n",
 			strerror(errno));
-		goto err_ioctl_enable_path;
+		goto err_ioctl_enable_pipeline;
+	}
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = vgsm_chan->pipeline_id;
+
+	if (ioctl(vgsm.router_control_fd, VISDN_IOC_PIPELINE_START,
+						(caddr_t)&vc) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_PIPELINE_START, isdn): %s\n",
+			strerror(errno));
+		goto err_ioctl_enable_pipeline;
 	}
 
 	return 0;
 
-err_ioctl_enable_path:
-err_ioctl_connect_path:
+err_ioctl_enable_pipeline:
+err_ioctl_connect_pipeline:
 err_ioctl_visdn_get_chanid:
 	close(vgsm_chan->sp_fd);
 err_open_streamport:
@@ -2170,7 +2184,7 @@ static void vgsm_disconnect_channel(
 	}
 
 	struct visdn_connect vc;
-	vc.path_id = vgsm_chan->path_id;
+	vc.pipeline_id = vgsm_chan->pipeline_id;
 	vc.src_chan_id = 0;
 	vc.dst_chan_id = 0;
 	vc.flags = 0;
@@ -3558,6 +3572,13 @@ static void handle_unsolicited_cala(
 static void handle_unsolicited_sysstart(
 	const struct vgsm_req *urc)
 {
+	struct vgsm_comm *comm = urc->comm;
+	struct vgsm_interface *intf = to_intf(comm);
+
+	vgsm_debug_generic("Module started (^SYSSTART received)\n");
+
+	vgsm_intf_set_status(intf,
+		VGSM_INTF_STATUS_WAITING_INITIALIZATION, 0);
 }
 
 static void handle_unsolicited_shutdown(
@@ -3889,8 +3910,8 @@ static int vgsm_module_prepin_configure(struct vgsm_interface *intf)
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
-	/* Disable tones */
-	err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SNFI=0,32767");
+	/* Set audio input */
+	err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SNFI=2,32767");
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
@@ -4310,11 +4331,9 @@ err_no_req:
 	return -1;
 }
 
-static void vgsm_module_initialize(
+static void vgsm_module_ignite(
 	struct vgsm_interface *intf)
 {
-	vgsm_debug_generic("Initializing module '%s'\n", intf->name);
-
 	if (intf->comm.fd >= 0) {
 		ast_mutex_lock(&intf->lock);
 		close(intf->comm.fd);
@@ -4340,21 +4359,7 @@ static void vgsm_module_initialize(
 
 	intf->comm.name = intf->name;
 
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INITIALIZING, -1);
-	vgsm_comm_wakeup(&intf->comm);
-
 	/***************/
-
-	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
-		ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
-			strerror(errno));
-		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "Error turning on module");
-
-		return;
-	}
 
 	if (vgsm_module_codec_init(intf) < 0) {
 		vgsm_comm_disable(&intf->comm);
@@ -4364,9 +4369,74 @@ static void vgsm_module_initialize(
 		return;
 	}
 
-	sleep(3);
-
 	vgsm_comm_enable(&intf->comm);
+
+	/* The very first module power-up will not send ^SYSSTART URC
+	 * because it is configured in auto-bauding mode. We will time out
+	 * and initialize it anyway.
+	 */
+	int val;
+	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
+		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
+			strerror(errno));
+
+		vgsm_intf_set_status(intf,
+			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+
+		return;
+	}
+
+	if (val) {
+		vgsm_debug_generic(
+			"Module is already powered on, I'm not waiting"
+			" for sysstart\n");
+
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+				0);
+	} else {
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SYSTART,
+				WAITING_SYSTART_TIME);
+
+		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
+			ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
+				strerror(errno));
+			vgsm_comm_disable(&intf->comm);
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+						FAILED_RETRY_TIME);
+			vgsm_intf_setreason(intf, "Error turning on module");
+
+			return;
+		}
+	}
+}
+
+static void vgsm_module_initialize(
+	struct vgsm_interface *intf)
+{
+	vgsm_debug_generic("Initializing module '%s'\n", intf->name);
+
+	int val;
+	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
+		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
+			strerror(errno));
+
+		vgsm_intf_set_status(intf,
+			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+
+		return;
+	}
+
+	if (!val) {
+		ast_log(LOG_NOTICE,
+			"Module '%s' is not powered on, re-igniting\n",
+			intf->name);
+		
+		vgsm_intf_set_status(intf,
+			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+
+		return;
+	}
 
 	if (vgsm_module_init_at_interface(intf) < 0)
 		return;
@@ -4397,8 +4467,19 @@ static void vgsm_module_monitor_timer(
 {
 	switch(intf->status) {
 	case VGSM_INTF_STATUS_UNINITIALIZED:
-	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
+		vgsm_module_ignite(intf);
+	break;
+
+	case VGSM_INTF_STATUS_WAITING_SYSTART:
+		vgsm_debug_generic("Module '%s': SYSTART missed\n",
+			intf->name);
+
+		vgsm_intf_set_status(intf,
+			VGSM_INTF_STATUS_WAITING_INITIALIZATION, 0);
+	break;
+
 	case VGSM_INTF_STATUS_FAILED:
+	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
 		vgsm_module_initialize(intf);
 	break;
 

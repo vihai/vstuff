@@ -326,7 +326,6 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 	int err;
-	int i;
 
 	if (visdn_chan_lock_interruptible(visdn_chan)) {
 		err = -ERESTARTSYS;
@@ -340,9 +339,6 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 
 	chan->tx_fifo.subchannel_bit_start = 0;
 	chan->tx_fifo.subchannel_bit_count = 8;
-
-	chan->rx_fifo.enabled = TRUE;
-	chan->tx_fifo.enabled = TRUE;
 
 	if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
 		chan->rx_fifo.framer_enabled = FALSE;
@@ -358,6 +354,43 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 		err = -EINVAL;
 		goto err_invalid_framing;
 	}
+
+	hfc_card_unlock(card);
+	visdn_chan_unlock(visdn_chan);
+
+	hfc_debug_sys_chan(chan, 1, "channel opened\n");
+
+	return 0;
+
+err_invalid_framing:
+	visdn_chan_unlock(visdn_chan);
+err_visdn_chan_lock:
+	hfc_card_unlock(card);
+
+	hfc_debug_sys_chan(chan, 1, "channel opening failed: %d\n", err);
+
+	return err;
+}
+
+static int hfc_sys_chan_close(struct visdn_chan *visdn_chan)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+
+	hfc_debug_sys_chan(chan, 1, "channel closed.\n");
+
+	return 0;
+}
+
+static int hfc_sys_chan_start(struct visdn_chan *visdn_chan)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+	struct hfc_card *card = chan->port->card;
+	int i;
+
+	hfc_card_lock(card);
+
+	chan->rx_fifo.enabled = TRUE;
+	chan->tx_fifo.enabled = TRUE;
 
 	hfc_sys_port_upload_fsm(chan->port);
 
@@ -379,32 +412,16 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 	}
 
 	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
 
-	hfc_debug_sys_chan(chan, 1, "channel opened.\n");
+	hfc_debug_sys_chan(chan, 1, "channel started\n");
 
 	return 0;
-
-err_invalid_framing:
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
-	hfc_card_unlock(card);
-
-	hfc_debug_sys_chan(chan, 1, "channel opening failed: %d\n", err);
-
-	return err;
 }
 
-static int hfc_sys_chan_close(struct visdn_chan *visdn_chan)
+static int hfc_sys_chan_stop(struct visdn_chan *visdn_chan)
 {
-	int err;
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
 	struct hfc_card *card = chan->port->card;
-
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
 
 	hfc_card_lock(card);
 
@@ -422,17 +439,10 @@ static int hfc_sys_chan_close(struct visdn_chan *visdn_chan)
 	hfc_sys_port_upload_fsm(chan->port);
 
 	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
 
-	hfc_debug_sys_chan(chan, 1, "channel closed.\n");
+	hfc_debug_sys_chan(chan, 1, "channel stopped\n");
 
 	return 0;
-
-	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
-
-	return err;
 }
 
 static int hfc_sys_chan_leg_a_connect(
@@ -803,6 +813,8 @@ struct visdn_chan_ops hfc_sys_chan_ops =
 	.release		= hfc_sys_chan_release,
 	.open			= hfc_sys_chan_open,
 	.close			= hfc_sys_chan_close,
+	.start			= hfc_sys_chan_start,
+	.stop			= hfc_sys_chan_stop,
 };
 
 struct visdn_leg_ops hfc_sys_chan_leg_a_ops =

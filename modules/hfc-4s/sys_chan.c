@@ -22,7 +22,10 @@
 #include "fifo_inline.h"
 #include "st_port_inline.h"
 
-#define HFC_FIFO_JITTBUFF 5
+#define HFC_FIFO_JITTBUFF_LOW 5
+#define HFC_FIFO_JITTBUFF_HIGH 10
+#define HFC_FIFO_JITTBUFF_AVG \
+		((HFC_FIFO_JITTBUFF_LOW +HFC_FIFO_JITTBUFF_HIGH) / 2)
 
 #ifdef DEBUG_CODE
 #define hfc_debug_sys_chan(chan, dbglevel, format, arg...)		\
@@ -326,7 +329,6 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 	int err;
-	int i;
 
 	if (visdn_chan_lock_interruptible(visdn_chan)) {
 		err = -ERESTARTSYS;
@@ -347,9 +349,6 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 			chan->connected_st_chan->subchannel_bit_count;
 	}
 
-	chan->rx_fifo.enabled = TRUE;
-	chan->tx_fifo.enabled = TRUE;
-
 	if (chan->visdn_chan.leg_b.framing == VISDN_LEG_FRAMING_NONE) {
 		chan->rx_fifo.framer_enabled = FALSE;
 		chan->tx_fifo.framer_enabled = FALSE;
@@ -365,29 +364,10 @@ static int hfc_sys_chan_open(struct visdn_chan *visdn_chan)
 		goto err_invalid_framing;
 	}
 
-	hfc_sys_port_upload_fsm(chan->port);
-
-	/* RX FIFO */
-	hfc_fifo_select(&chan->rx_fifo);
-	hfc_fifo_reset(&chan->rx_fifo);
-	hfc_fifo_configure(&chan->rx_fifo);
-
-	/* TX FIFO */
-	hfc_fifo_select(&chan->tx_fifo);
-	hfc_fifo_reset(&chan->tx_fifo);
-	hfc_fifo_configure(&chan->tx_fifo);
-
-	if (!chan->tx_fifo.framer_enabled) {
-		for (i=0; i<HFC_FIFO_JITTBUFF; i++) {
-			u8 foo = 0;
-			hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
-		}
-	}
-
 	hfc_card_unlock(card);
 	visdn_chan_unlock(visdn_chan);
 
-	hfc_debug_sys_chan(chan, 1, "channel opened.\n");
+	hfc_debug_sys_chan(chan, 1, "channel opened\n");
 
 	return 0;
 
@@ -439,6 +419,70 @@ static int hfc_sys_chan_close(struct visdn_chan *visdn_chan)
 err_visdn_chan_lock:
 
 	return err;
+}
+
+static int hfc_sys_chan_start(struct visdn_chan *visdn_chan)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+	struct hfc_card *card = chan->port->card;
+	int i;
+
+	hfc_card_lock(card);
+
+	chan->rx_fifo.enabled = TRUE;
+	chan->tx_fifo.enabled = TRUE;
+
+	hfc_sys_port_upload_fsm(chan->port);
+
+	/* RX FIFO */
+	hfc_fifo_select(&chan->rx_fifo);
+	hfc_fifo_reset(&chan->rx_fifo);
+	hfc_fifo_configure(&chan->rx_fifo);
+
+	/* TX FIFO */
+	hfc_fifo_select(&chan->tx_fifo);
+	hfc_fifo_reset(&chan->tx_fifo);
+	hfc_fifo_configure(&chan->tx_fifo);
+
+	if (!chan->tx_fifo.framer_enabled) {
+		for (i=0; i<HFC_FIFO_JITTBUFF_AVG; i++) {
+			u8 foo = 0;
+			hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
+		}
+	}
+
+	hfc_card_unlock(card);
+
+	hfc_debug_sys_chan(chan, 1, "channel started\n");
+
+	return 0;
+}
+
+static int hfc_sys_chan_stop(struct visdn_chan *visdn_chan)
+{
+	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
+	struct hfc_card *card = chan->port->card;
+
+	hfc_card_lock(card);
+
+	chan->rx_fifo.enabled = FALSE;
+	chan->tx_fifo.enabled = FALSE;
+
+	hfc_fifo_select(&chan->rx_fifo);
+	hfc_fifo_reset(&chan->rx_fifo);
+	hfc_fifo_configure(&chan->rx_fifo);
+
+	hfc_fifo_select(&chan->tx_fifo);
+	hfc_fifo_reset(&chan->tx_fifo);
+	hfc_fifo_configure(&chan->tx_fifo);
+
+	hfc_sys_port_upload_fsm(chan->port);
+
+	hfc_card_unlock(card);
+
+	hfc_debug_sys_chan(chan, 1, "channel stopped\n");
+
+	return 0;
 }
 
 static int hfc_sys_chan_leg_a_connect(
@@ -642,7 +686,7 @@ static ssize_t hfc_sys_chan_write(
 
 	chan->tx_fifo.stats_cycles++;
 	if (chan->tx_fifo.stats_cycles >= 10) {
-		if (chan->tx_fifo.stats_min < HFC_FIFO_JITTBUFF) {
+		if (chan->tx_fifo.stats_min < HFC_FIFO_JITTBUFF_LOW) {
 			u8 foo = ((u8 *)buf)[0];
 			hfc_fifo_mem_write(&chan->tx_fifo, &foo, 1);
 //			printk(KERN_DEBUG "Added one sample\n");
@@ -653,7 +697,7 @@ static ssize_t hfc_sys_chan_write(
 		chan->tx_fifo.stats_max = 0;
 	}
 
-	if (used_octets > HFC_FIFO_JITTBUFF * 2) {
+	if (used_octets > HFC_FIFO_JITTBUFF_HIGH) {
 //		printk(KERN_DEBUG "Trimming output fifo\n");
 		goto not_copying;
 	}
@@ -813,6 +857,8 @@ struct visdn_chan_ops hfc_sys_chan_ops =
 	.release		= hfc_sys_chan_release,
 	.open			= hfc_sys_chan_open,
 	.close			= hfc_sys_chan_close,
+	.start			= hfc_sys_chan_start,
+	.stop			= hfc_sys_chan_stop,
 };
 
 struct visdn_leg_ops hfc_sys_chan_leg_a_ops =

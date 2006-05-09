@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,9 +10,9 @@
  *
  */
 
-#ifndef _ENABLE_PATH_H
-#define _ENABLE_PATH_H
+#ifndef _PIPELINE_CLOSE_H
+#define _PIPELINE_CLOSE_H
 
-extern struct module module_enable_path;
+extern struct module module_pipeline_close;
 
 #endif

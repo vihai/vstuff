@@ -119,10 +119,13 @@ static int visdn_connect(void)
 	if (ioctl(fd, VISDN_IOC_CONNECT, (caddr_t)&vc) < 0)
 		fatal("ioctl(VISDN_CONNECT): %m\n");
 
-	ppp_conn_id = vc.path_id;
+	ppp_conn_id = vc.pipeline_id;
 
-	if (ioctl(fd, VISDN_IOC_ENABLE_PATH, NULL) < 0)
-		fatal("ioctl(VISDN_ENABLE_PATH): %m\n");
+	if (ioctl(fd, VISDN_IOC_PIPELINE_OPEN, NULL) < 0)
+		fatal("ioctl(VISDN_PIPELINE_OPEN): %m\n");
+
+	if (ioctl(fd, VISDN_IOC_PIPELINE_START, NULL) < 0)
+		fatal("ioctl(VISDN_PIPELINE_START): %m\n");
 
 	dbglog("PPPovISDN - channel connected to ppp device");
 

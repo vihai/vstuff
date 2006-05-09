@@ -25,7 +25,7 @@
 #include <linux/visdn/core.h>
 #include <linux/visdn/port.h>
 #include <linux/visdn/softcxc.h>
-#include <linux/visdn/path.h>
+#include <linux/visdn/pipeline.h>
 
 #include "ppp.h"
 
@@ -100,21 +100,21 @@ static void vppp_chan_release(struct visdn_chan *visdn_chan)
 static int vppp_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct vppp_chan *chan = to_vppp_chan(visdn_chan);
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int err;
 
 	vppp_debug(3, "vppp_open()\n");
 
-	path = visdn_path_get_by_endpoint(visdn_chan);
-	if (!path)
+	pipeline = visdn_pipeline_get_by_endpoint(visdn_chan);
+	if (!pipeline)
 		return -ENOTCONN;
 
 	chan->ppp_chan.private = chan;
 	chan->ppp_chan.ops = &vppp_ppp_ops;
-	chan->ppp_chan.mtu = visdn_path_find_lowest_mtu(path);
+	chan->ppp_chan.mtu = visdn_pipeline_find_lowest_mtu(pipeline);
 	chan->ppp_chan.hdrlen = sizeof(ppphdr);
 
-	visdn_path_put(path);
+	visdn_pipeline_put(pipeline);
 
 	err = ppp_register_channel(&chan->ppp_chan);
 	if (err < 0)

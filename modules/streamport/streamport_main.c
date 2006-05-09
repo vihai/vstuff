@@ -21,7 +21,7 @@
 #include <linux/visdn/softcxc.h>
 #include <linux/visdn/leg.h>
 #include <linux/visdn/port.h>
-#include <linux/visdn/path.h>
+#include <linux/visdn/pipeline.h>
 #include <linux/visdn/router.h>
 
 #include "streamport.h"
@@ -288,14 +288,14 @@ static int vsp_cdev_release(
 	struct inode *inode, struct file *file)
 {
 	struct vsp_chan *chan = file->private_data;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
 	vsp_debug(3, "vsp_cdev_release()\n");
 
-	path = visdn_path_get_by_endpoint(&chan->visdn_chan);
-	if (path) {
-		visdn_path_disconnect(path);
-		visdn_path_put(path);
+	pipeline = visdn_pipeline_get_by_endpoint(&chan->visdn_chan);
+	if (pipeline) {
+		visdn_pipeline_disconnect(pipeline);
+		visdn_pipeline_put(pipeline);
 	}
 
 	visdn_chan_remove_file(&chan->visdn_chan,

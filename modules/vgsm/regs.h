@@ -17,15 +17,18 @@
 /* Tiger 320 registers */
 #define VGSM_CNTL    		0x00
 #define VGSM_CNTL_EXTRST		(1 << 0)
-#define VGSM_CNTL_MASTER_RST		(1 << 1)
+#define VGSM_CNTL_DMA_RST		(1 << 1)
 #define VGSM_CNTL_SERIAL_RST		(1 << 2)
 #define VGSM_CNTL_PIB_CYCLE_3		(0 << 4)
 #define VGSM_CNTL_PIB_CYCLE_8		(1 << 4)
 #define VGSM_CNTL_PIB_CYCLE_15		(3 << 4)
+#define VGSM_CNTL_DMA_INT_PERSISTENT	(1 << 6)
 #define VGSM_CNTL_DMA_SELF		(0 << 7)
 #define VGSM_CNTL_DMA_NORMAL		(1 << 7)
 
-#define VGSM_OPER			0x01
+#define VGSM_DMA_OPER			0x01
+#define VGSM_DMA_OPER_DMA_ENABLE	(1 << 0)
+#define VGSM_DMA_OPER_DMA_RESTART	(1 << 1)
 
 #define VGSM_AUXC    		0x02
 #define VGSM_AUXC_0_IN		(0 << 0)
@@ -46,7 +49,15 @@
 #define VGSM_AUXC_7_OUT		(1 << 7)
 
 #define VGSM_AUXD    		0x03
+
 #define VGSM_MASK0   		0x04
+#define VGSM_MASK0_DMA_WR_INT		(1 << 0)
+#define VGSM_MASK0_DMA_WR_END		(1 << 1)
+#define VGSM_MASK0_DMA_RD_INT		(1 << 2)
+#define VGSM_MASK0_DMA_RD_END		(1 << 3)
+#define VGSM_MASK0_PCI_MASTER_ABORT	(1 << 4)
+#define VGSM_MASK0_PCI_TARGET_ABORT	(1 << 5)
+
 #define VGSM_MASK1   		0x05
 #define VGSM_INT0STAT 		0x06
 

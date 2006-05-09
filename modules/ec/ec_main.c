@@ -24,7 +24,7 @@
 #include <linux/visdn/softcxc.h>
 #include <linux/visdn/leg.h>
 #include <linux/visdn/port.h>
-#include <linux/visdn/path.h>
+#include <linux/visdn/pipeline.h>
 
 #include "kb1ec.h"
 //#define AGGRESSIVE_SUPPRESSOR
@@ -725,20 +725,20 @@ static int vec_cdev_release(
 	struct inode *inode, struct file *file)
 {
 	struct vec_ec *ec = file->private_data;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
 	vec_debug(3, "vec_cdev_release()\n");
 
-	path = visdn_path_get_by_endpoint(&ec->visdn_chan_ne);
-	if (path)  {
-		visdn_path_disconnect(path);
-		visdn_path_put(path);
+	pipeline = visdn_pipeline_get_by_endpoint(&ec->visdn_chan_ne);
+	if (pipeline)  {
+		visdn_pipeline_disconnect(pipeline);
+		visdn_pipeline_put(pipeline);
 	}
 
-	path = visdn_path_get_by_endpoint(&ec->visdn_chan_fe);
-	if (path) {
-		visdn_path_disconnect(path);
-		visdn_path_put(path);
+	pipeline = visdn_pipeline_get_by_endpoint(&ec->visdn_chan_fe);
+	if (pipeline) {
+		visdn_pipeline_disconnect(pipeline);
+		visdn_pipeline_put(pipeline);
 	}
 
 	visdn_chan_unregister(&ec->visdn_chan_fe);

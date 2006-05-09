@@ -549,9 +549,13 @@ static int vgsm_match_urc(struct vgsm_comm *comm)
 
 	if (*begin != '\r') {
 
-		/* Siemens MC55 send a second CUSD witout <cr><lf> */
+		/* Siemens MC55 send a second CUSD without <cr><lf> */
 		if (*begin == '+')
 			goto cusd_workaround;
+
+		/* ^SYSSTART is not prepended by <cr><lf> */
+		if (*begin == '^')
+			goto sysstart_workaround;
 
 		ast_log(LOG_WARNING, "%s: Unexpected char 0x%02x\n",
 			comm->name,
@@ -593,6 +597,7 @@ static int vgsm_match_urc(struct vgsm_comm *comm)
 		begin++;
 	}
 
+sysstart_workaround:;
 cusd_workaround:;
 
 	char *end = strstr(begin, "\r\n");

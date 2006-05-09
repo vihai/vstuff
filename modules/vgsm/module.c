@@ -33,6 +33,13 @@
 #include "regs.h"
 #include "module.h"
 
+#define VGSM_FIFO_JITBUFF_LOW 10
+#define VGSM_FIFO_JITBUFF_HIGH 300
+#define VGSM_FIFO_JITBUFF_HIGHDROP 500 
+#define VGSM_FIFO_JITBUFF_AVG \
+		((VGSM_FIFO_JITBUFF_LOW + VGSM_FIFO_JITBUFF_HIGH) / 2)
+
+
 #ifdef DEBUG_CODE
 #define vgsm_debug_module(module, dbglevel, format, arg...)		\
 	if (debug_level >= dbglevel)					\
@@ -216,60 +223,58 @@ static void vgsm_chan_release(struct visdn_chan *chan)
 static int vgsm_chan_open(struct visdn_chan *visdn_chan)
 {
 	struct vgsm_module *module = chan_to_module(visdn_chan);
-	struct vgsm_card *card = module->card;
-	int err;
-
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
-	vgsm_card_lock(card);
-
-	vgsm_update_mask0(card);
-
-	vgsm_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
 
 	vgsm_debug_module(module, 1, "channel opened.\n");
 
 	return 0;
-
-err_visdn_chan_lock:
-	vgsm_card_unlock(card);
-
-	vgsm_debug_module(module, 1, "channel opening failed: %d\n", err);
-
-	return err;
 }
 
 static int vgsm_chan_close(struct visdn_chan *visdn_chan)
 {
-	int err;
 	struct vgsm_module *module = chan_to_module(visdn_chan);
-	struct vgsm_card *card = module->card;
-
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
-	vgsm_card_lock(card);
-
-	vgsm_update_mask0(card);
-
-	vgsm_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
 
 	vgsm_debug_module(module, 1, "channel closed.\n");
 
 	return 0;
+}
 
+static int vgsm_chan_start(struct visdn_chan *visdn_chan)
+{
+	struct vgsm_module *module = chan_to_module(visdn_chan);
+	struct vgsm_card *card = module->card;
+	int i;
+
+	vgsm_card_lock(card);
+
+	for(i=module->timeslot_offset; i < card->writedma_size; i+=4)
+		*(u8 *)(card->writedma_mem + i) = 0x2a;
+
+	module->rx_fifo_pos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
+				card->readdma_bus_mem) / 4;
+	module->tx_fifo_pos = ((le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
+			card->writedma_bus_mem + VGSM_FIFO_JITBUFF_AVG) %
+			card->writedma_size) / 4;
+
+	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
 
-	return err;
+	vgsm_debug_module(module, 1, "channel started.\n");
+
+	return 0;
+}
+
+static int vgsm_chan_stop(struct visdn_chan *visdn_chan)
+{
+	struct vgsm_module *module = chan_to_module(visdn_chan);
+	struct vgsm_card *card = module->card;
+
+	vgsm_card_lock(card);
+	vgsm_update_mask0(card);
+	vgsm_card_unlock(card);
+
+	vgsm_debug_module(module, 1, "channel stopped.\n");
+
+	return 0;
 }
 
 static int vgsm_chan_leg_connect(
@@ -302,25 +307,17 @@ static ssize_t vgsm_chan_leg_read(
 
 	vgsm_card_lock(card);
 
-	inpos = le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
-				card->readdma_bus_mem;
+	inpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
+				card->readdma_bus_mem) / 4;
 
-	while(module->readdma_pos != inpos && copied_octets < count) {
-		*bufp++ = *(u8 *)(card->readdma_mem + module->readdma_pos +
-						module->timeslot_offset);
-		module->readdma_pos += 4;
+	while(module->rx_fifo_pos != inpos && copied_octets < count) {
+		*bufp++ = *(u8 *)(card->readdma_mem +
+				(module->rx_fifo_pos * 4) +
+				module->timeslot_offset);
+		module->rx_fifo_pos++;
 
-#if 0
-		if (!(module->readdma_pos % 1000))
-			printk(KERN_DEBUG "%02x %02x %02x %02x\n",
-			*((u8 *)card->readdma_mem + module->readdma_pos + 0),
-			*((u8 *)card->readdma_mem + module->readdma_pos + 1),
-			*((u8 *)card->readdma_mem + module->readdma_pos + 2),
-			*((u8 *)card->readdma_mem + module->readdma_pos + 3));
-#endif
-
-		if (module->readdma_pos >= card->readdma_size)
-			module->readdma_pos = 0;
+		if (module->rx_fifo_pos >= module->rx_fifo_size)
+			module->rx_fifo_pos = 0;
 
 		copied_octets++;
 	}
@@ -330,6 +327,25 @@ static ssize_t vgsm_chan_leg_read(
 	return copied_octets;
 }
 
+static void vgsm_chan_fifo_write(
+	struct vgsm_module *module,
+	const u8 *buf,
+	size_t count)
+{
+	struct vgsm_card *card = module->card;
+	int i;
+
+	for (i=0; i<count; i++) {
+		*(u8 *)(card->writedma_mem + (module->tx_fifo_pos * 4) +
+			module->timeslot_offset) = *(buf + i);
+
+		module->tx_fifo_pos++;
+
+		if (module->tx_fifo_pos >= module->tx_fifo_size)
+			module->tx_fifo_pos = 0;
+	}
+}
+
 static ssize_t vgsm_chan_leg_write(
 	struct visdn_leg *visdn_leg,
 	const void *buf, size_t count)
@@ -337,22 +353,57 @@ static ssize_t vgsm_chan_leg_write(
 	struct vgsm_module *module = chan_to_module(visdn_leg->chan);
 	struct vgsm_card *card = module->card;
 	size_t copied_octets = 0;
-	int i;
-	const u8 *bufp = buf;
+	int outpos;
+	int used_octs;
 
 	vgsm_card_lock(card);
 
-	for (i=0; i<count; i++) {
-		*(u8 *)(card->writedma_mem + module->writedma_pos +
-			module->timeslot_offset) = *bufp++;
+	outpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
+				card->writedma_bus_mem) / 4;
 
-		module->writedma_pos += 4;
+	used_octs = (module->tx_fifo_pos - outpos + module->tx_fifo_size) %
+			module->tx_fifo_size;
 
-		if (module->writedma_pos > card->writedma_size)
-			module->writedma_pos = 0;
+#if 0
+	printk(KERN_DEBUG "U=%d in=%d out=%d count=%d\n",
+		used_octs, module->tx_fifo_pos, outpos, count);
+#endif
 
-		copied_octets++;
+	module->tx_fifo_cycles++;
+	if (module->tx_fifo_cycles >= 10) {
+		if (module->tx_fifo_min < VGSM_FIFO_JITBUFF_LOW) {
+			u8 foo = ((u8 *)buf)[0];
+			vgsm_chan_fifo_write(module, &foo, 1);
+
+#if 0
+			printk(KERN_DEBUG "TX FIFO under low-mark:"
+						" added one sample\n");
+#endif
+		}
+
+		module->tx_fifo_cycles = 0;
+		module->tx_fifo_min = INT_MAX;
+		module->tx_fifo_max = 0;
 	}
+
+	if (used_octs > VGSM_FIFO_JITBUFF_HIGHDROP && count > 0) {
+		module->tx_fifo_pos = outpos + VGSM_FIFO_JITBUFF_LOW;
+
+#if 0
+		printk(KERN_DEBUG "FIFO Underrun\n");
+#endif
+
+	} else if (used_octs > VGSM_FIFO_JITBUFF_HIGH && count > 0) {
+		count--;
+
+#if 0
+		printk(KERN_DEBUG "TX FIFO %d over high-mark:"
+				" dropped one sample\n",
+				used_octs);
+#endif
+	}
+
+	vgsm_chan_fifo_write(module, buf, count);
 
 	vgsm_card_unlock(card);
 
@@ -366,6 +417,8 @@ struct visdn_chan_ops vgsm_chan_ops =
 	.release	= vgsm_chan_release,
 	.open		= vgsm_chan_open,
 	.close		= vgsm_chan_close,
+	.start		= vgsm_chan_start,
+	.stop		= vgsm_chan_stop,
 };
 
 struct visdn_leg_ops vgsm_chan_leg_ops = {
@@ -414,8 +467,17 @@ void vgsm_module_init(
 	module->ack_timeout_timer.function = vgsm_module_ack_timeout_timer;
 	module->ack_timeout_timer.data = (unsigned long)module;
 
-	module->readdma_pos = 0;
-	module->writedma_pos = 0;
+	module->rx_fifo_pos = 0;
+	module->rx_fifo_cycles = 0;
+	module->rx_fifo_min = INT_MAX;
+	module->rx_fifo_max = 0;
+	module->rx_fifo_size = card->readdma_size / 4;
+
+	module->tx_fifo_pos = 0;
+	module->tx_fifo_cycles = 0;
+	module->tx_fifo_min = INT_MAX;
+	module->tx_fifo_max = 0;
+	module->tx_fifo_size = card->writedma_size / 4;
 
 	module->rx_gain = 0xFF;
 	module->tx_gain = 0xFF;

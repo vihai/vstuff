@@ -8,19 +8,23 @@ INCLUDES = \
 	-I$(top_srcdir)/modules/include/
 
 visdnctl_SOURCES = \
-	visdnctl.c	\
-	connect.c	\
-	disconnect.c	\
-	enable_path.c	\
-	disable_path.c	\
+	visdnctl.c		\
+	connect.c		\
+	disconnect.c		\
+	pipeline_open.c		\
+	pipeline_close.c	\
+	pipeline_start.c	\
+	pipeline_stop.c		\
 	netdev.c
 
 visdnctl_LDADD =
 
 noinst_HEADERS = \
-	visdnctl.h	\
-	connect.h	\
-	disconnect.h	\
-	enable_path.h	\
-	disable_path.h	\
+	visdnctl.h		\
+	connect.h		\
+	disconnect.h		\
+	pipeline_open.h		\
+	pipeline_close.h	\
+	pipeline_start.h	\
+	pipeline_stop.h		\
 	netdev.h

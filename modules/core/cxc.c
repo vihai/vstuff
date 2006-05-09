@@ -19,7 +19,7 @@
 #include "core.h"
 #include "chan.h"
 #include "cxc.h"
-#include "path.h"
+#include "pipeline.h"
 #include "visdn_mod.h"
 
 struct list_head visdn_cxc_list = LIST_HEAD_INIT(visdn_cxc_list);
@@ -43,7 +43,7 @@ static int visdn_cxc_connect_simplex(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *src,
 	struct visdn_leg *dst,
-	struct visdn_path *path)
+	struct visdn_pipeline *pipeline)
 {
 	int err;
 	struct visdn_cxc_connection *conn;
@@ -83,7 +83,7 @@ static int visdn_cxc_connect_simplex(
 	conn->cxc = cxc;
 	conn->src = visdn_leg_get(src);
 	conn->dst = visdn_leg_get(dst);
-	conn->path = path;
+	conn->pipeline = pipeline;
 
 	down(&cxc->sem);
 
@@ -142,8 +142,10 @@ static void _visdn_cxc_disconnect_simplex(
 		conn->src->chan->id, conn->dst->chan->id,
 		conn->cxc->id);
 
-	visdn_chan_disable(conn->src->chan);
-	visdn_chan_disable(conn->dst->chan);
+	visdn_chan_stop(conn->src->chan);
+	visdn_chan_stop(conn->dst->chan);
+	visdn_chan_close(conn->src->chan);
+	visdn_chan_close(conn->dst->chan);
 
 	hlist_del_rcu(&conn->hash_node);
 	list_del_rcu(&conn->list_node);
@@ -197,7 +199,7 @@ int visdn_cxc_connect(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2,
-	struct visdn_path *path)
+	struct visdn_pipeline *pipeline)
 {
 	int err;
 
@@ -212,11 +214,11 @@ int visdn_cxc_connect(
 		leg2->chan->kobj.name);
 
 	// Connect the channels -------------------------------------
-	err = visdn_cxc_connect_simplex(cxc, leg1, leg2, path);
+	err = visdn_cxc_connect_simplex(cxc, leg1, leg2, pipeline);
 	if (err < 0)
 		goto err_cxc_add_leg1;
 
-	err = visdn_cxc_connect_simplex(cxc, leg2, leg1, path);
+	err = visdn_cxc_connect_simplex(cxc, leg2, leg1, pipeline);
 	if (err < 0)
 		goto err_cxc_add_leg2;
 
@@ -513,7 +515,7 @@ static ssize_t visdn_cxc_connect_store(
 {
 	int err;
 	char locbuf[100];
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	char *locbuf_p = locbuf;
 	char *chan1_id_str;
 	char *chan2_id_str;
@@ -553,9 +555,9 @@ static ssize_t visdn_cxc_connect_store(
 		goto err_chan2_inval;
 	}
 
-	path = visdn_path_connect_by_id(chan1_id, chan2_id, NULL,
+	pipeline = visdn_pipeline_connect_by_id(chan1_id, chan2_id, NULL,
 					VISDN_CONNECT_FLAG_PERMANENT, &err);
-	if (!path)
+	if (!pipeline)
 		goto err_connect;
 
 	return count;

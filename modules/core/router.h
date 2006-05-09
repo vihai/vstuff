@@ -19,12 +19,14 @@
 #define VISDN_IOC_CONNECT		_IOR(0xd0, 0x02, unsigned int)
 #define VISDN_IOC_DISCONNECT		_IOR(0xd0, 0x03, unsigned int)
 #define VISDN_IOC_DISCONNECT_ENDPOINT	_IOR(0xd0, 0x04, unsigned int)
-#define VISDN_IOC_ENABLE_PATH		_IOR(0xd0, 0x05, unsigned int)
-#define VISDN_IOC_DISABLE_PATH		_IOR(0xd0, 0x06, unsigned int)
+#define VISDN_IOC_PIPELINE_OPEN		_IOR(0xd0, 0x05, unsigned int)
+#define VISDN_IOC_PIPELINE_CLOSE	_IOR(0xd0, 0x06, unsigned int)
+#define VISDN_IOC_PIPELINE_START	_IOR(0xd0, 0x07, unsigned int)
+#define VISDN_IOC_PIPELINE_STOP		_IOR(0xd0, 0x08, unsigned int)
 
 struct visdn_connect
 {
-	int path_id;
+	int pipeline_id;
 
 	int src_chan_id;
 	int dst_chan_id;

@@ -10,9 +10,9 @@
  *
  */
 
-#ifndef _DISCONNECT_H
-#define _DISCONNECT_H
+#ifndef _PIPELINE_START_H
+#define _PIPELINE_START_H
 
-extern struct module module_disconnect;
+extern struct module module_pipeline_start;
 
 #endif

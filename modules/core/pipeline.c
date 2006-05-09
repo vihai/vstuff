@@ -19,103 +19,103 @@
 #include "core.h"
 #include "chan.h"
 #include "cxc.h"
-#include "path.h"
+#include "pipeline.h"
 #include "router.h"
 #include "visdn_mod.h"
 
 static struct cdev visdn_router_cdev;
 struct class_device visdn_router_control_class_dev;
 
-struct list_head visdn_paths_list = LIST_HEAD_INIT(visdn_paths_list);
-DECLARE_MUTEX(visdn_paths_list_sem);
+struct list_head visdn_pipelines_list = LIST_HEAD_INIT(visdn_pipelines_list);
+DECLARE_MUTEX(visdn_pipelines_list_sem);
 
-struct subsystem visdn_paths_subsys;
+struct subsystem visdn_pipelines_subsys;
 
-struct visdn_path *visdn_path_alloc()
+struct visdn_pipeline *visdn_pipeline_alloc()
 {
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
-	path = kmalloc(sizeof(*path), GFP_KERNEL);
-	if (!path)
+	pipeline = kmalloc(sizeof(*pipeline), GFP_KERNEL);
+	if (!pipeline)
 		return NULL;
 
-	memset(path, 0, sizeof(*path));
+	memset(pipeline, 0, sizeof(*pipeline));
 
-	INIT_LIST_HEAD(&path->node);
+	INIT_LIST_HEAD(&pipeline->node);
 
-	kobject_init(&path->kobj);
+	kobject_init(&pipeline->kobj);
 
-	return path;
+	return pipeline;
 }
 
-struct visdn_path *_visdn_path_search_by_id(int id)
+struct visdn_pipeline *_visdn_pipeline_search_by_id(int id)
 {
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
-	list_for_each_entry(path, &visdn_paths_list, node) {
-		if (path->id == id)
-			return path;
+	list_for_each_entry(pipeline, &visdn_pipelines_list, node) {
+		if (pipeline->id == id)
+			return pipeline;
 	}
 
 	return NULL;
 }
 
-struct visdn_path *visdn_path_get_by_id(int id)
+struct visdn_pipeline *visdn_pipeline_get_by_id(int id)
 {
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
-	down(&visdn_paths_list_sem);
+	down(&visdn_pipelines_list_sem);
 
-	path = visdn_path_get(_visdn_path_search_by_id(id));
+	pipeline = visdn_pipeline_get(_visdn_pipeline_search_by_id(id));
 
-	up(&visdn_paths_list_sem);
+	up(&visdn_pipelines_list_sem);
 
-	return path;
+	return pipeline;
 }
 
-static int _visdn_path_new_id(void)
+static int _visdn_pipeline_new_id(void)
 {
 	static int cur_id;
 
 	for (;;) {
-		/* Maybe reusing path ids would be better */
+		/* Maybe reusing pipeline ids would be better */
 
 		if (++cur_id <= 0)
 			cur_id = 1;
 
-		if (!_visdn_path_search_by_id(cur_id))
+		if (!_visdn_pipeline_search_by_id(cur_id))
 			return cur_id;
 	}
 }
 
-struct visdn_path *visdn_path_get_by_endpoint(struct visdn_chan *chan)
+struct visdn_pipeline *visdn_pipeline_get_by_endpoint(struct visdn_chan *chan)
 {
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
-	down(&visdn_paths_list_sem);
+	down(&visdn_pipelines_list_sem);
 
-	list_for_each_entry(path, &visdn_paths_list, node) {
-		if (path->ep1 == chan ||
-		    path->ep2 == chan) {
-			up(&visdn_paths_list_sem);
+	list_for_each_entry(pipeline, &visdn_pipelines_list, node) {
+		if (pipeline->ep1 == chan ||
+		    pipeline->ep2 == chan) {
+			up(&visdn_pipelines_list_sem);
 
-			return visdn_path_get(path);
+			return visdn_pipeline_get(pipeline);
 		}
 	}
 
-	up(&visdn_paths_list_sem);
+	up(&visdn_pipelines_list_sem);
 
 	return NULL;
 }
-EXPORT_SYMBOL(visdn_path_get_by_endpoint);
+EXPORT_SYMBOL(visdn_pipeline_get_by_endpoint);
 
-int visdn_path_find_lowest_mtu(struct visdn_path *path)
+int visdn_pipeline_find_lowest_mtu(struct visdn_pipeline *pipeline)
 {
 	struct visdn_leg *cur_leg;
 	struct visdn_leg *next_leg;
 	int min_mtu = 65536;
 
-	cur_leg = visdn_leg_get(&path->ep1->leg_a);
+	cur_leg = visdn_leg_get(&pipeline->ep1->leg_a);
 
 	while(cur_leg->cxc) {
 		next_leg = visdn_cxc_get_leg_by_src(cur_leg->cxc, cur_leg);
@@ -138,17 +138,17 @@ int visdn_path_find_lowest_mtu(struct visdn_path *path)
 
 	return min_mtu;
 }
-EXPORT_SYMBOL(visdn_path_find_lowest_mtu);
+EXPORT_SYMBOL(visdn_pipeline_find_lowest_mtu);
 
-struct visdn_chan *visdn_path_get_other_endpoint(
-	struct visdn_path *path,
+struct visdn_chan *visdn_pipeline_get_other_endpoint(
+	struct visdn_pipeline *pipeline,
 	struct visdn_chan *chan)
 {
 	struct visdn_leg *cur_leg;
 	struct visdn_leg *next_leg;
 	struct visdn_chan *other_ep;
 
-	BUG_ON(chan != path->ep1 && chan != path->ep2);
+	BUG_ON(chan != pipeline->ep1 && chan != pipeline->ep2);
 
 	cur_leg = visdn_leg_get(&chan->leg_a);
 
@@ -166,16 +166,16 @@ struct visdn_chan *visdn_path_get_other_endpoint(
 
 	return other_ep;
 }
-EXPORT_SYMBOL(visdn_path_get_other_endpoint);
+EXPORT_SYMBOL(visdn_pipeline_get_other_endpoint);
 
-struct visdn_path *visdn_path_connect(
+struct visdn_pipeline *visdn_pipeline_connect(
 	struct visdn_chan *src_chan,
 	struct visdn_chan *dst_chan,
 	struct file *file,
 	unsigned long flags,
 	int *err)
 {
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int done_entries = 0;
 
 	if (src_chan->leg_a.cxc && src_chan->leg_b.cxc) {
@@ -192,22 +192,22 @@ struct visdn_path *visdn_path_connect(
 		return NULL;
 	}
 
-	path = visdn_path_alloc();
-	if (!path) {
+	pipeline = visdn_pipeline_alloc();
+	if (!pipeline) {
 		*err = -EFAULT;
-		goto err_path_alloc;
+		goto err_pipeline_alloc;
 	}
 
-	path->ep1 = src_chan;
-	path->ep2 = dst_chan;
+	pipeline->ep1 = src_chan;
+	pipeline->ep2 = dst_chan;
 
 	if (flags & VISDN_CONNECT_FLAG_PERMANENT)
-		path->file = NULL;
+		pipeline->file = NULL;
 	else
-		path->file = file;
+		pipeline->file = file;
 
-	down(&visdn_paths_list_sem);
-	path->id = _visdn_path_new_id();
+	down(&visdn_pipelines_list_sem);
+	pipeline->id = _visdn_pipeline_new_id();
 
 	visdn_router_lock();
 	visdn_router_run(&src_chan->router_node);
@@ -233,9 +233,9 @@ struct visdn_path *visdn_path_connect(
 							router_node),
 				next_arch->src_leg->other_leg,
 				prev_arch->src_leg,
-				path);
+				pipeline);
 			if (*err < 0) {
-				up(&visdn_paths_list_sem);
+				up(&visdn_pipelines_list_sem);
 				goto err_router_connect;
 			}
 
@@ -250,25 +250,25 @@ struct visdn_path *visdn_path_connect(
 
 	visdn_router_unlock();
 
-	list_add(&visdn_path_get(path)->node, &visdn_paths_list);
+	list_add(&visdn_pipeline_get(pipeline)->node, &visdn_pipelines_list);
 
-	up(&visdn_paths_list_sem);
+	up(&visdn_pipelines_list_sem);
 
-	kobject_set_name(&path->kobj, "%06d", path->id);
-	kobj_set_kset_s(path, visdn_paths_subsys);
+	kobject_set_name(&pipeline->kobj, "%06d", pipeline->id);
+	kobj_set_kset_s(pipeline, visdn_pipelines_subsys);
 
-	*err = kobject_add(&path->kobj);
+	*err = kobject_add(&pipeline->kobj);
 	if (*err < 0)
 		goto err_kobject_add;
 
 	*err = 0;
-	return path;
+	return pipeline;
 
-	kobject_del(&path->kobj);
+	kobject_del(&pipeline->kobj);
 err_kobject_add:
-	down(&visdn_paths_list_sem);
-	list_del(&path->node);
-	up(&visdn_paths_list_sem);
+	down(&visdn_pipelines_list_sem);
+	list_del(&pipeline->node);
+	up(&visdn_pipelines_list_sem);
 err_router_connect:
 	{
 	struct visdn_router_arch *prev_arch = NULL, *next_arch = NULL;
@@ -301,12 +301,12 @@ err_router_connect:
 
 	visdn_router_unlock();
 
-err_path_alloc:
+err_pipeline_alloc:
 
 	return NULL;
 }
 
-struct visdn_path *visdn_path_connect_by_id(
+struct visdn_pipeline *visdn_pipeline_connect_by_id(
 	int chan1_id,
 	int chan2_id,
 	struct file *file,
@@ -315,7 +315,7 @@ struct visdn_path *visdn_path_connect_by_id(
 {
 	struct visdn_chan *chan1;
 	struct visdn_chan *chan2;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
 	chan1 = visdn_chan_get_by_id(chan1_id);
 	if (!chan1) {
@@ -336,18 +336,18 @@ struct visdn_path *visdn_path_connect_by_id(
 		goto err_connect_self;
 	}
 
-	path = visdn_path_connect(chan1, chan2, file, flags, err);
-	if (!path)
+	pipeline = visdn_pipeline_connect(chan1, chan2, file, flags, err);
+	if (!pipeline)
 		goto err_connect;
 
 	/* Release references returned by visdn_chan_get_by_id() */
 	visdn_chan_put(chan1);
 	visdn_chan_put(chan2);
 
-	return path;
+	return pipeline;
 
-	visdn_path_disconnect(path);
-	visdn_path_put(path);
+	visdn_pipeline_disconnect(pipeline);
+	visdn_pipeline_put(pipeline);
 err_connect:
 err_connect_self:
 	visdn_chan_put(chan2);
@@ -357,19 +357,19 @@ err_search_src:
 
 	return NULL;
 }
-EXPORT_SYMBOL(visdn_path_connect_by_id);
+EXPORT_SYMBOL(visdn_pipeline_connect_by_id);
 
-int visdn_path_disconnect(
-	struct visdn_path *path)
+int visdn_pipeline_disconnect(
+	struct visdn_pipeline *pipeline)
 {
 	struct visdn_leg *cur_leg, *next_leg;
 
-	down(&visdn_paths_list_sem);
-	kobject_del(&path->kobj);
-	list_del(&path->node);
-	up(&visdn_paths_list_sem);
+	down(&visdn_pipelines_list_sem);
+	kobject_del(&pipeline->kobj);
+	list_del(&pipeline->node);
+	up(&visdn_pipelines_list_sem);
 
-	cur_leg = &path->ep1->leg_a;
+	cur_leg = &pipeline->ep1->leg_a;
 
 	visdn_leg_get(cur_leg);
 
@@ -389,50 +389,52 @@ int visdn_path_disconnect(
 
 	return 0;
 }
-EXPORT_SYMBOL(visdn_path_disconnect);
+EXPORT_SYMBOL(visdn_pipeline_disconnect);
 
-int visdn_path_disconnect_by_id(int id)
+int visdn_pipeline_disconnect_by_id(int id)
 {
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int err;
 
-	path = visdn_path_get_by_id(id);
-	if (!path) {
+	pipeline = visdn_pipeline_get_by_id(id);
+	if (!pipeline) {
 		visdn_debug(1, "Path '%d' not found\n", id);
 
 		err = -ENODEV;
 		goto err_search_src;
 	}
 
-	err = visdn_path_disconnect(path);
+	err = visdn_pipeline_disconnect(pipeline);
 	if (err < 0)
 		goto err_disconnect;
 
-	/* Release reference returned by visdn_path_get_by_id() */
-	visdn_path_put(path);
+	/* Release reference returned by visdn_pipeline_get_by_id() */
+	visdn_pipeline_put(pipeline);
 
 	return 0;
 
 	// visdn_disconnect
 err_disconnect:
-	visdn_path_put(path);
+	visdn_pipeline_put(pipeline);
 err_search_src:
 
 	return err;
 }
-EXPORT_SYMBOL(visdn_path_disconnect_by_id);
+EXPORT_SYMBOL(visdn_pipeline_disconnect_by_id);
 
-int visdn_path_enable(
-	struct visdn_path *path)
+
+
+int visdn_pipeline_open(
+	struct visdn_pipeline *pipeline)
 {
 	struct visdn_leg *cur_leg, *next_leg;
 	int err;
 
-	err = visdn_chan_enable(path->ep1);
+	err = visdn_chan_open(pipeline->ep1);
 	if (err < 0)
 		return err;
 
-	cur_leg = &path->ep1->leg_a;
+	cur_leg = &pipeline->ep1->leg_a;
 
 	visdn_leg_get(cur_leg);
 
@@ -441,7 +443,7 @@ int visdn_path_enable(
 		if (!next_leg)
 			break;
 
-		err = visdn_chan_enable(next_leg->chan);
+		err = visdn_chan_open(next_leg->chan);
 		if (err < 0) {
 			visdn_leg_put(next_leg);
 			visdn_leg_put(cur_leg);
@@ -458,16 +460,16 @@ int visdn_path_enable(
 
 	return 0;
 }
-EXPORT_SYMBOL(visdn_path_enable);
+EXPORT_SYMBOL(visdn_pipeline_open);
 
-int visdn_path_disable(
-	struct visdn_path *path)
+int visdn_pipeline_close(
+	struct visdn_pipeline *pipeline)
 {
 	struct visdn_leg *cur_leg, *next_leg;
 
-	visdn_chan_disable(path->ep1);
+	visdn_chan_close(pipeline->ep1);
 
-	cur_leg = &path->ep1->leg_a;
+	cur_leg = &pipeline->ep1->leg_a;
 
 	visdn_leg_get(cur_leg);
 
@@ -476,7 +478,7 @@ int visdn_path_disable(
 		if (!next_leg)
 			break;
 
-		visdn_chan_disable(next_leg->chan);
+		visdn_chan_close(next_leg->chan);
 
 		visdn_leg_put(cur_leg);
 		cur_leg = visdn_leg_get(next_leg->other_leg);
@@ -487,7 +489,74 @@ int visdn_path_disable(
 
 	return 0;
 }
-EXPORT_SYMBOL(visdn_path_disable);
+EXPORT_SYMBOL(visdn_pipeline_close);
+
+int visdn_pipeline_start(
+	struct visdn_pipeline *pipeline)
+{
+	struct visdn_leg *cur_leg, *next_leg;
+	int err;
+
+	err = visdn_chan_start(pipeline->ep1);
+	if (err < 0)
+		return err;
+
+	cur_leg = &pipeline->ep1->leg_a;
+
+	visdn_leg_get(cur_leg);
+
+	while(cur_leg->cxc) {
+		next_leg = visdn_cxc_get_leg_by_src(cur_leg->cxc, cur_leg);
+		if (!next_leg)
+			break;
+
+		err = visdn_chan_start(next_leg->chan);
+		if (err < 0) {
+			visdn_leg_put(next_leg);
+			visdn_leg_put(cur_leg);
+
+			return err;
+		}
+
+		visdn_leg_put(cur_leg);
+		cur_leg = visdn_leg_get(next_leg->other_leg);
+		visdn_leg_put(next_leg);
+	}
+
+	visdn_leg_put(cur_leg);
+
+	return 0;
+}
+EXPORT_SYMBOL(visdn_pipeline_start);
+
+int visdn_pipeline_stop(
+	struct visdn_pipeline *pipeline)
+{
+	struct visdn_leg *cur_leg, *next_leg;
+
+	visdn_chan_stop(pipeline->ep1);
+
+	cur_leg = &pipeline->ep1->leg_a;
+
+	visdn_leg_get(cur_leg);
+
+	while(cur_leg->cxc) {
+		next_leg = visdn_cxc_get_leg_by_src(cur_leg->cxc, cur_leg);
+		if (!next_leg)
+			break;
+
+		visdn_chan_stop(next_leg->chan);
+
+		visdn_leg_put(cur_leg);
+		cur_leg = visdn_leg_get(next_leg->other_leg);
+		visdn_leg_put(next_leg);
+	}
+
+	visdn_leg_put(cur_leg);
+
+	return 0;
+}
+EXPORT_SYMBOL(visdn_pipeline_stop);
 
 static int visdn_router_cdev_open(
 	struct inode *inode,
@@ -514,7 +583,7 @@ static int visdn_router_cdev_do_connect(
 {
 	int err;
 	struct visdn_connect connect;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 
 	if (copy_from_user(&connect, (void __user *)arg, sizeof(connect))) {
 		err = -EFAULT;
@@ -526,29 +595,29 @@ static int visdn_router_cdev_do_connect(
 		connect.src_chan_id,
 		connect.dst_chan_id);
 
-	path = visdn_path_connect_by_id(
+	pipeline = visdn_pipeline_connect_by_id(
 		connect.src_chan_id,
 		connect.dst_chan_id,
 		file,
 		connect.flags,
 		&err);
-	if (!path)
+	if (!pipeline)
 		goto err_router_connect;
 
-	connect.path_id = path->id;
+	connect.pipeline_id = pipeline->id;
 
 	if (copy_to_user((void __user *)arg, &connect, sizeof(connect))) {
 		err = -EFAULT;
 		goto err_copy_to_user;
 	}
 
-	visdn_path_put(path);
+	visdn_pipeline_put(pipeline);
 
 	return 0;
 
 err_copy_to_user:
-	visdn_path_disconnect(path);
-	visdn_path_put(path);
+	visdn_pipeline_disconnect(pipeline);
+	visdn_pipeline_put(pipeline);
 err_router_connect:
 err_copy_from_user:
 	visdn_msg(KERN_NOTICE,
@@ -567,7 +636,7 @@ static int visdn_router_cdev_do_disconnect(
 	unsigned long arg)
 {
 	struct visdn_connect connect;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int err;
 
 	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
@@ -575,23 +644,23 @@ static int visdn_router_cdev_do_disconnect(
 		goto err_copy_from_user;
 	}
 
-	path = visdn_path_get_by_id(connect.path_id);
-	if (!path) {
+	pipeline = visdn_pipeline_get_by_id(connect.pipeline_id);
+	if (!pipeline) {
 		err = -ENOENT;
-		goto err_no_path;
+		goto err_no_pipeline;
 	}
 
-	err = visdn_path_disconnect(path);
+	err = visdn_pipeline_disconnect(pipeline);
 	if (err < 0)
-		goto err_path_disconnect;
+		goto err_pipeline_disconnect;
 
-	/* Release reference returned by visdn_path_get_by_id() */
-	visdn_path_put(path);
+	/* Release reference returned by visdn_pipeline_get_by_id() */
+	visdn_pipeline_put(pipeline);
 
 	return 0;
 
-err_no_path:
-err_path_disconnect:
+err_no_pipeline:
+err_pipeline_disconnect:
 err_copy_from_user:
 
 	return err;
@@ -604,7 +673,7 @@ static int visdn_router_cdev_do_disconnect_endpoint(
 	unsigned long arg)
 {
 	struct visdn_connect connect;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	struct visdn_chan *chan;
 	int err;
 
@@ -619,24 +688,24 @@ static int visdn_router_cdev_do_disconnect_endpoint(
 		goto err_no_chan;
 	}
 
-	path = visdn_path_get_by_endpoint(chan);
-	if (!path) {
+	pipeline = visdn_pipeline_get_by_endpoint(chan);
+	if (!pipeline) {
 		err = -ENOTCONN;
-		goto err_no_path;
+		goto err_no_pipeline;
 	}
 
-	err = visdn_path_disconnect(path);
+	err = visdn_pipeline_disconnect(pipeline);
 	if (err < 0)
-		goto err_path_disconnect;
+		goto err_pipeline_disconnect;
 
-	visdn_path_put(path);
+	visdn_pipeline_put(pipeline);
 	visdn_chan_put(chan);
 
 	return 0;
 
-err_path_disconnect:
-err_no_path:
-	visdn_path_put(path);
+err_pipeline_disconnect:
+err_no_pipeline:
+	visdn_pipeline_put(pipeline);
 err_no_chan:
 	visdn_chan_put(chan);
 err_copy_from_user:
@@ -644,14 +713,14 @@ err_copy_from_user:
 	return err;
 }
 
-static int visdn_router_cdev_do_enable_path(
+static int visdn_router_cdev_do_open_pipeline(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
 	unsigned long arg)
 {
 	struct visdn_connect connect;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int err;
 
 	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
@@ -659,36 +728,36 @@ static int visdn_router_cdev_do_enable_path(
 		goto err_copy_from_user;
 	}
 
-	path = visdn_path_get_by_id(connect.path_id);
-	if (!path) {
+	pipeline = visdn_pipeline_get_by_id(connect.pipeline_id);
+	if (!pipeline) {
 		err = -ENOENT;
-		goto err_no_path;
+		goto err_no_pipeline;
 	}
 
-	err = visdn_path_enable(path);
+	err = visdn_pipeline_open(pipeline);
 	if (err < 0)
-		goto err_enable;
+		goto err_open;
 
-	/* Release reference returned by visdn_path_get_by_id() */
-	visdn_path_put(path);
+	/* Release reference returned by visdn_pipeline_get_by_id() */
+	visdn_pipeline_put(pipeline);
 
 	return 0;
 
-err_no_path:
-err_enable:
+err_no_pipeline:
+err_open:
 err_copy_from_user:
 
 	return err;
 }
 
-static int visdn_router_cdev_do_disable_path(
+static int visdn_router_cdev_do_close_pipeline(
 	struct inode *inode,
 	struct file *file,
 	unsigned int cmd,
 	unsigned long arg)
 {
 	struct visdn_connect connect;
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 	int err;
 
 	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
@@ -696,23 +765,97 @@ static int visdn_router_cdev_do_disable_path(
 		goto err_copy_from_user;
 	}
 
-	path = visdn_path_get_by_id(connect.path_id);
-	if (!path) {
+	pipeline = visdn_pipeline_get_by_id(connect.pipeline_id);
+	if (!pipeline) {
 		err = -ENOENT;
-		goto err_no_path;
+		goto err_no_pipeline;
 	}
 
-	err = visdn_path_disable(path);
+	err = visdn_pipeline_close(pipeline);
 	if (err < 0)
-		goto err_disable;
+		goto err_close;
 
-	/* Release reference returned by visdn_path_get_by_id() */
-	visdn_path_put(path);
+	/* Release reference returned by visdn_pipeline_get_by_id() */
+	visdn_pipeline_put(pipeline);
 
 	return 0;
 
-err_no_path:
-err_disable:
+err_no_pipeline:
+err_close:
+err_copy_from_user:
+
+	return err;
+}
+
+static int visdn_router_cdev_do_start_pipeline(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct visdn_connect connect;
+	struct visdn_pipeline *pipeline;
+	int err;
+
+	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
+
+	pipeline = visdn_pipeline_get_by_id(connect.pipeline_id);
+	if (!pipeline) {
+		err = -ENOENT;
+		goto err_no_pipeline;
+	}
+
+	err = visdn_pipeline_start(pipeline);
+	if (err < 0)
+		goto err_start;
+
+	/* Release reference returned by visdn_pipeline_get_by_id() */
+	visdn_pipeline_put(pipeline);
+
+	return 0;
+
+err_no_pipeline:
+err_start:
+err_copy_from_user:
+
+	return err;
+}
+
+static int visdn_router_cdev_do_stop_pipeline(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct visdn_connect connect;
+	struct visdn_pipeline *pipeline;
+	int err;
+
+	if (copy_from_user(&connect, (void *)arg, sizeof(connect))) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
+
+	pipeline = visdn_pipeline_get_by_id(connect.pipeline_id);
+	if (!pipeline) {
+		err = -ENOENT;
+		goto err_no_pipeline;
+	}
+
+	err = visdn_pipeline_stop(pipeline);
+	if (err < 0)
+		goto err_stop;
+
+	/* Release reference returned by visdn_pipeline_get_by_id() */
+	visdn_pipeline_put(pipeline);
+
+	return 0;
+
+err_no_pipeline:
+err_stop:
 err_copy_from_user:
 
 	return err;
@@ -738,13 +881,22 @@ static int visdn_router_cdev_ioctl(
 						inode, file, cmd, arg);
 	break;
 
-	case VISDN_IOC_ENABLE_PATH:
-		return visdn_router_cdev_do_enable_path(
+	case VISDN_IOC_PIPELINE_OPEN:
+		return visdn_router_cdev_do_open_pipeline(
 					inode, file, cmd, arg);
 	break;
 
-	case VISDN_IOC_DISABLE_PATH:
-		return visdn_router_cdev_do_disable_path(inode, file, cmd, arg);
+	case VISDN_IOC_PIPELINE_CLOSE:
+		return visdn_router_cdev_do_close_pipeline(inode, file, cmd, arg);
+	break;
+
+	case VISDN_IOC_PIPELINE_START:
+		return visdn_router_cdev_do_start_pipeline(
+					inode, file, cmd, arg);
+	break;
+
+	case VISDN_IOC_PIPELINE_STOP:
+		return visdn_router_cdev_do_stop_pipeline(inode, file, cmd, arg);
 	break;
 
 	default:
@@ -763,40 +915,40 @@ static struct file_operations visdn_router_fops =
 	.llseek		= no_llseek,
 };
 
-#define to_visdn_path_attr(_attr) \
-	container_of(_attr, struct visdn_path_attribute, attr)
+#define to_visdn_pipeline_attr(_attr) \
+	container_of(_attr, struct visdn_pipeline_attribute, attr)
 
-static ssize_t visdn_path_attr_show(
+static ssize_t visdn_pipeline_attr_show(
 	struct kobject *kobj,
 	struct attribute *attr,
 	char *buf)
 {
-	struct visdn_path_attribute *visdn_path_attr =
-					to_visdn_path_attr(attr);
-	struct visdn_path *visdn_path = to_visdn_path(kobj);
+	struct visdn_pipeline_attribute *visdn_pipeline_attr =
+					to_visdn_pipeline_attr(attr);
+	struct visdn_pipeline *visdn_pipeline = to_visdn_pipeline(kobj);
 	ssize_t err;
 
-	if (visdn_path_attr->show)
-		err = visdn_path_attr->show(visdn_path, visdn_path_attr, buf);
+	if (visdn_pipeline_attr->show)
+		err = visdn_pipeline_attr->show(visdn_pipeline, visdn_pipeline_attr, buf);
 	else
 		err = -EIO;
 
 	return err;
 }
 
-static ssize_t visdn_path_attr_store(
+static ssize_t visdn_pipeline_attr_store(
 	struct kobject *kobj,
 	struct attribute *attr,
 	const char *buf,
 	size_t count)
 {
-	struct visdn_path_attribute *visdn_path_attr =
-					to_visdn_path_attr(attr);
-	struct visdn_path *visdn_path = to_visdn_path(kobj);
+	struct visdn_pipeline_attribute *visdn_pipeline_attr =
+					to_visdn_pipeline_attr(attr);
+	struct visdn_pipeline *visdn_pipeline = to_visdn_pipeline(kobj);
 	ssize_t err;
 
-	if (visdn_path_attr->store)
-		err = visdn_path_attr->store(visdn_path, visdn_path_attr,
+	if (visdn_pipeline_attr->store)
+		err = visdn_pipeline_attr->store(visdn_pipeline, visdn_pipeline_attr,
 							buf, count);
 	else
 		err = -EIO;
@@ -804,27 +956,27 @@ static ssize_t visdn_path_attr_store(
 	return err;
 }
 
-static struct sysfs_ops visdn_path_sysfs_ops = {
-	.show   = visdn_path_attr_show,
-	.store  = visdn_path_attr_store,
+static struct sysfs_ops visdn_pipeline_sysfs_ops = {
+	.show   = visdn_pipeline_attr_show,
+	.store  = visdn_pipeline_attr_store,
 };
 
-static void visdn_path_release(struct kobject *kobj)
+static void visdn_pipeline_release(struct kobject *kobj)
 {
 }
 
-static struct attribute *visdn_path_default_attrs[] =
+static struct attribute *visdn_pipeline_default_attrs[] =
 {
 	NULL,
 };
 
-static struct kobj_type ktype_visdn_path = {
-	.release	= visdn_path_release,
-	.sysfs_ops	= &visdn_path_sysfs_ops,
-	.default_attrs	= visdn_path_default_attrs,
+static struct kobj_type ktype_visdn_pipeline = {
+	.release	= visdn_pipeline_release,
+	.sysfs_ops	= &visdn_pipeline_sysfs_ops,
+	.default_attrs	= visdn_pipeline_default_attrs,
 };
 
-decl_subsys_name(visdn_paths, paths, &ktype_visdn_path, NULL);
+decl_subsys_name(visdn_pipelines, pipelines, &ktype_visdn_pipeline, NULL);
 
 #ifndef HAVE_CLASS_DEV_DEVT
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
@@ -834,7 +986,7 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
-int visdn_path_modinit()
+int visdn_pipeline_modinit()
 {
 	int err;
 
@@ -845,9 +997,9 @@ int visdn_path_modinit()
 	if (err < 0)
 		goto err_cdev_add;
 
-	visdn_paths_subsys.kset.kobj.parent = &visdn_subsys.kset.kobj;
+	visdn_pipelines_subsys.kset.kobj.parent = &visdn_subsys.kset.kobj;
 
-	err = subsystem_register(&visdn_paths_subsys);
+	err = subsystem_register(&visdn_pipelines_subsys);
 	if (err < 0)
 		goto err_subsystem_register;
 
@@ -882,13 +1034,13 @@ int visdn_path_modinit()
 err_control_class_device_register:
 	cdev_del(&visdn_router_cdev);
 err_cdev_add:
-	subsystem_unregister(&visdn_paths_subsys);
+	subsystem_unregister(&visdn_pipelines_subsys);
 err_subsystem_register:
 
 	return err;
 }
 
-void visdn_path_modexit()
+void visdn_pipeline_modexit()
 {
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
@@ -898,5 +1050,5 @@ void visdn_path_modexit()
 
 	class_device_del(&visdn_router_control_class_dev);
 	cdev_del(&visdn_router_cdev);
-	subsystem_unregister(&visdn_paths_subsys);
+	subsystem_unregister(&visdn_pipelines_subsys);
 }

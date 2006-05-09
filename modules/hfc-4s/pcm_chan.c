@@ -126,6 +126,24 @@ err_visdn_chan_lock:
 	return err;
 }
 
+static int hfc_pcm_chan_start(struct visdn_chan *visdn_chan)
+{
+	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_chan);
+
+	hfc_debug_pcm_chan(chan, 1, "channel started\n");
+
+	return 0;
+}
+
+static int hfc_pcm_chan_stop(struct visdn_chan *visdn_chan)
+{
+	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_chan);
+
+	hfc_debug_pcm_chan(chan, 1, "channel stopped\n");
+
+	return 0;
+}
+
 static int hfc_pcm_chan_connect(
 	struct visdn_leg *visdn_leg,
 	struct visdn_leg *visdn_leg2)
@@ -201,6 +219,8 @@ struct visdn_chan_ops hfc_pcm_chan_ops = {
 	.release		= hfc_pcm_chan_release,
 	.open			= hfc_pcm_chan_open,
 	.close			= hfc_pcm_chan_close,
+	.start			= hfc_pcm_chan_start,
+	.stop			= hfc_pcm_chan_stop,
 };
 
 struct visdn_leg_ops hfc_pcm_chan_leg_ops = {

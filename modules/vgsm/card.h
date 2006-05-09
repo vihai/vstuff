@@ -36,7 +36,7 @@
 
 #define vgsm_PCI_MEM_SIZE		0xFF
 
-#define vgsm_DMA_SAMPLES 0x800
+#define vgsm_DMA_SAMPLES 0x2000
 
 /* Resettng delay */
 #define vgsm_RESET_DELAY		20

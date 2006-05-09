@@ -39,6 +39,9 @@ struct visdn_chan_ops
 
 	int (*open)(struct visdn_chan *chan);
 	int (*close)(struct visdn_chan *chan);
+
+	int (*start)(struct visdn_chan *chan);
+	int (*stop)(struct visdn_chan *chan);
 };
 
 #define to_visdn_chan(obj) container_of(obj, struct visdn_chan, kobj)
@@ -153,6 +156,7 @@ enum visdn_chan_state
 {
 	VISDN_CHAN_STATE_CONNECTED	= 0,
 	VISDN_CHAN_STATE_OPEN		= 1,
+	VISDN_CHAN_STATE_PLAYING	= 2,
 };
 
 extern int visdn_chan_lock2(
@@ -168,8 +172,10 @@ extern void visdn_chan_init(struct visdn_chan *chan);
 extern int visdn_chan_register(struct visdn_chan *chan);
 extern void visdn_chan_unregister(struct visdn_chan *chan);
 
-extern int visdn_chan_enable(struct visdn_chan *chan);
-extern int visdn_chan_disable(struct visdn_chan *chan);
+extern int visdn_chan_open(struct visdn_chan *chan);
+extern int visdn_chan_close(struct visdn_chan *chan);
+extern int visdn_chan_start(struct visdn_chan *chan);
+extern int visdn_chan_stop(struct visdn_chan *chan);
 
 #endif
 

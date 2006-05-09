@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -28,8 +28,8 @@
 #include "visdnctl.h"
 #include "connect.h"
 #include "disconnect.h"
-#include "enable_path.h"
-#include "disable_path.h"
+#include "pipeline_start.h"
+#include "pipeline_stop.h"
 #include "netdev.h"
 
 int global_argc;
@@ -109,8 +109,8 @@ int main(int argc, char *argv[])
 
 	list_add_tail(&module_connect.node, &modules);
 	list_add_tail(&module_disconnect.node, &modules);
-	list_add_tail(&module_enable_path.node, &modules);
-	list_add_tail(&module_disable_path.node, &modules);
+	list_add_tail(&module_pipeline_start.node, &modules);
+	list_add_tail(&module_pipeline_stop.node, &modules);
 	list_add_tail(&module_netdev.node, &modules);
 
 	struct option options[] = {

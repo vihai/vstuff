@@ -101,7 +101,7 @@ struct visdn_cxc_connection
 	struct visdn_leg *src;
 	struct visdn_leg *dst;
 
-	struct visdn_path *path;
+	struct visdn_pipeline *pipeline;
 };
 
 struct visdn_cxc_attribute {
@@ -138,7 +138,7 @@ extern int visdn_cxc_connect(
 	struct visdn_cxc *cxc,
 	struct visdn_leg *leg1,
 	struct visdn_leg *leg2,
-	struct visdn_path *path);
+	struct visdn_pipeline *pipeline);
 
 extern int visdn_cxc_disconnect(
 	struct visdn_cxc *cxc,

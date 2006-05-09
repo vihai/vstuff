@@ -227,11 +227,6 @@ static int hfc_e1_chan_open(struct visdn_chan *visdn_chan)
 	struct hfc_card *card = chan->port->card;
 	int err;
 
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
 	hfc_card_lock(card);
 
 	if (chan->status != HFC_ST_CHAN_STATUS_FREE) {
@@ -240,26 +235,16 @@ static int hfc_e1_chan_open(struct visdn_chan *visdn_chan)
 		goto err_channel_busy;
 	}
 
-/*	if (chan->id != D && chan->id != E &&
-	    chan->id != B1 && chan->id != B2) {
-		err = -ENOTSUPP;
-		goto err_invalid_chan;
-	}*/
-
 	chan->status = HFC_ST_CHAN_STATUS_OPEN;
 
 	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
 
 	hfc_debug_e1_chan(chan, 1, "channel opened.\n");
 
 	return 0;
 
 	chan->status = HFC_ST_CHAN_STATUS_FREE;
-//err_invalid_chan:
 err_channel_busy:
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
 	hfc_card_unlock(card);
 
 	hfc_debug_e1_chan(chan, 1, "channel opened failed: %d\n", err);
@@ -269,31 +254,34 @@ err_visdn_chan_lock:
 
 static int hfc_e1_chan_close(struct visdn_chan *visdn_chan)
 {
-	int err;
 	struct hfc_e1_chan *chan = to_e1_chan(visdn_chan);
 	struct hfc_card *card = chan->port->card;
 
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
 	hfc_card_lock(card);
-
 	chan->status = HFC_ST_CHAN_STATUS_FREE;
-
 	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
 
-	hfc_debug_e1_chan(chan, 1, "channel closed.\n");
+	hfc_debug_e1_chan(chan, 1, "channel closed\n");
 
 	return 0;
+}
 
-	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
+static int hfc_e1_chan_start(struct visdn_chan *visdn_chan)
+{
+	struct hfc_e1_chan *chan = to_e1_chan(visdn_chan);
 
-	return err;
+	hfc_debug_e1_chan(chan, 1, "channel start\n");
+
+	return 0;
+}
+
+static int hfc_e1_chan_stop(struct visdn_chan *visdn_chan)
+{
+	struct hfc_e1_chan *chan = to_e1_chan(visdn_chan);
+
+	hfc_debug_e1_chan(chan, 1, "channel stop\n");
+
+	return 0;
 }
 
 static int hfc_e1_chan_connect(
@@ -364,6 +352,8 @@ static struct visdn_chan_ops hfc_e1_chan_ops = {
 	.release		= hfc_e1_chan_release,
 	.open			= hfc_e1_chan_open,
 	.close			= hfc_e1_chan_close,
+	.start			= hfc_e1_chan_start,
+	.stop			= hfc_e1_chan_stop,
 };
 
 static struct visdn_leg_ops hfc_e1_chan_leg_ops = {

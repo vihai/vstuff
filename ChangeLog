@@ -2,6 +2,78 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-09 12:33:22 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-645
+
+    Summary:
+      Renamed 'path' to 'pipeline' and separated pipeline opening/closing from pipeline start/stop
+    Revision:
+      isdn--devel--0.1--patch-645
+
+
+    new files:
+     modules/include/linux/visdn/.arch-ids/pipeline.h.id
+     modules/include/linux/visdn/pipeline.h
+     visdnctl/.arch-ids/pipeline_close.c.id
+     visdnctl/.arch-ids/pipeline_close.h.id
+     visdnctl/.arch-ids/pipeline_open.c.id
+     visdnctl/.arch-ids/pipeline_open.h.id
+     visdnctl/pipeline_close.c visdnctl/pipeline_close.h
+     visdnctl/pipeline_open.c visdnctl/pipeline_open.h
+
+    removed files:
+     modules/include/linux/visdn/.arch-ids/path.h.id
+     modules/include/linux/visdn/path.h
+
+    modified files:
+     ChangeLog chan_vgsm/chan_vgsm.c chan_vgsm/chan_vgsm.h
+     chan_vgsm/comm.c chan_visdn/chan_visdn.c
+     chan_visdn/chan_visdn.h modules/core/Makefile.in
+     modules/core/chan.c modules/core/chan.h modules/core/core.h
+     modules/core/core_main.c modules/core/cxc.c modules/core/cxc.h
+     modules/core/pipeline.c modules/core/pipeline.h
+     modules/core/router.c modules/core/router.h
+     modules/ec/ec_main.c modules/hfc-4s/pcm_chan.c
+     modules/hfc-4s/st_chan.c modules/hfc-4s/sys_chan.c
+     modules/hfc-e1/e1_chan.c modules/hfc-e1/pcm_chan.c
+     modules/hfc-e1/sys_chan.c modules/hfc-pci/st_chan.c
+     modules/hfc-usb/st_chan.c modules/netdev/netdev_main.c
+     modules/ppp/ppp_main.c modules/streamport/streamport_main.c
+     modules/vgsm/card.c modules/vgsm/card.h modules/vgsm/module.c
+     modules/vgsm/module.h modules/vgsm/regs.h
+     modules/vgsm/vgsm_main.c pppd_plugin/visdn.c
+     visdnctl/Makefile.am visdnctl/connect.h visdnctl/disconnect.c
+     visdnctl/disconnect.h visdnctl/netdev.h
+     visdnctl/pipeline_start.c visdnctl/pipeline_start.h
+     visdnctl/pipeline_stop.c visdnctl/pipeline_stop.h
+     visdnctl/visdnctl.c visdnctl/visdnctl.h
+
+    renamed files:
+     modules/core/.arch-ids/path.c.id
+       ==> modules/core/.arch-ids/pipeline.c.id
+     modules/core/.arch-ids/path.h.id
+       ==> modules/core/.arch-ids/pipeline.h.id
+     modules/core/path.c
+       ==> modules/core/pipeline.c
+     modules/core/path.h
+       ==> modules/core/pipeline.h
+     visdnctl/.arch-ids/disable_path.c.id
+       ==> visdnctl/.arch-ids/pipeline_stop.c.id
+     visdnctl/.arch-ids/disable_path.h.id
+       ==> visdnctl/.arch-ids/pipeline_stop.h.id
+     visdnctl/.arch-ids/enable_path.c.id
+       ==> visdnctl/.arch-ids/pipeline_start.c.id
+     visdnctl/.arch-ids/enable_path.h.id
+       ==> visdnctl/.arch-ids/pipeline_start.h.id
+     visdnctl/disable_path.c
+       ==> visdnctl/pipeline_stop.c
+     visdnctl/disable_path.h
+       ==> visdnctl/pipeline_stop.h
+     visdnctl/enable_path.c
+       ==> visdnctl/pipeline_start.c
+     visdnctl/enable_path.h
+       ==> visdnctl/pipeline_start.h
+
+
 2006-05-07 23:40:21 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-644
 
     Summary:

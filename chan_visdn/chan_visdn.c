@@ -1202,16 +1202,16 @@ static int visdn_bridge(
 	struct visdn_chan *visdn_chan1 = to_visdn_chan(c0);
 	struct visdn_chan *visdn_chan2 = to_visdn_chan(c1);
 
-	char path[100], dest1[100], dest2[100];
+	char pipeline[100], dest1[100], dest2[100];
 
-	snprintf(path, sizeof(path),
+	snprintf(pipeline, sizeof(pipeline),
 		"/sys/class/net/%s/visdn_channel/connected/../B%d",
 		visdn_chan1->q931_call->intf->name,
 		visdn_chan1->q931_call->channel->id+1);
 
 	memset(dest1, 0, sizeof(dest1));
-	if (readlink(path, dest1, sizeof(dest1) - 1) < 0) {
-		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
+	if (readlink(pipeline, dest1, sizeof(dest1) - 1) < 0) {
+		ast_log(LOG_ERROR, "readlink(%s): %s\n", pipeline, strerror(errno));
 		return AST_BRIDGE_FAILED;
 	}
 
@@ -1225,14 +1225,14 @@ static int visdn_bridge(
 
 	chanid1++;
 
-	snprintf(path, sizeof(path),
+	snprintf(pipeline, sizeof(pipeline),
 		"/sys/class/net/%s/visdn_channel/connected/../B%d",
 		visdn_chan2->q931_call->intf->name,
 		visdn_chan2->q931_call->channel->id+1);
 
 	memset(dest2, 0, sizeof(dest2));
-	if (readlink(path, dest2, sizeof(dest2) - 1) < 0) {
-		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
+	if (readlink(pipeline, dest2, sizeof(dest2) - 1) < 0) {
+		ast_log(LOG_ERROR, "readlink(%s): %s\n", pipeline, strerror(errno));
 		return AST_BRIDGE_FAILED;
 	}
 
@@ -1712,9 +1712,9 @@ static void visdn_disconnect_chan_from_visdn(
 
 	struct visdn_connect vc;
 
-	if (visdn_chan->sp_path_id) {
+	if (visdn_chan->sp_pipeline_id) {
 		memset(&vc, 0, sizeof(vc));
-		vc.path_id = visdn_chan->sp_path_id;
+		vc.pipeline_id = visdn_chan->sp_pipeline_id;
 
 		if (ioctl(visdn.router_control_fd,
 				VISDN_IOC_DISCONNECT,
@@ -1727,10 +1727,10 @@ static void visdn_disconnect_chan_from_visdn(
 		}
 	}
 
-	if (visdn_chan->bearer_path_id >= 0 &&
-	    visdn_chan->bearer_path_id != visdn_chan->sp_path_id) {
+	if (visdn_chan->bearer_pipeline_id >= 0 &&
+	    visdn_chan->bearer_pipeline_id != visdn_chan->sp_pipeline_id) {
 		memset(&vc, 0, sizeof(vc));
-		vc.path_id = visdn_chan->bearer_path_id;
+		vc.pipeline_id = visdn_chan->bearer_pipeline_id;
 
 		if (ioctl(visdn.router_control_fd,
 				VISDN_IOC_DISCONNECT,
@@ -3821,16 +3821,24 @@ static int visdn_connect_channels(
 		goto err_ioctl_connect;
 	}
 
-	visdn_chan->sp_path_id = vc.path_id;
-	visdn_chan->bearer_path_id = vc.path_id;
+	visdn_chan->sp_pipeline_id = vc.pipeline_id;
+	visdn_chan->bearer_pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
-	vc.path_id = visdn_chan->sp_path_id;
+	vc.pipeline_id = visdn_chan->sp_pipeline_id;
 
-	if (ioctl(visdn.router_control_fd, VISDN_IOC_ENABLE_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
 						(caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_ENABLE_PATH, isdn): %s\n",
+			"ioctl(VISDN_PIPELINE_OPEN, isdn): %s\n",
+			strerror(errno));
+		goto err_ioctl_enable;
+	}
+
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_START,
+						(caddr_t)&vc) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_PIPELINE_START, isdn): %s\n",
 			strerror(errno));
 		goto err_ioctl_enable;
 	}
@@ -3839,7 +3847,7 @@ static int visdn_connect_channels(
 
 err_ioctl_enable:
 	memset(&vc, 0, sizeof(vc));
-	vc.path_id = visdn_chan->sp_path_id;
+	vc.pipeline_id = visdn_chan->sp_pipeline_id;
 	ioctl(visdn.router_control_fd, VISDN_IOC_DISCONNECT, (caddr_t) &vc);
 err_ioctl_connect:
 
@@ -3905,7 +3913,7 @@ static int visdn_connect_channels_with_ec(
 		goto err_ioctl_connect_sp_ec;
 	}
 
-	visdn_chan->sp_path_id = vc.path_id;
+	visdn_chan->sp_pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
 	vc.src_chan_id = visdn_chan->ec_ne_channel_id;
@@ -3919,26 +3927,50 @@ static int visdn_connect_channels_with_ec(
 		goto err_ioctl_connect_ec_b;
 	}
 
-	visdn_chan->bearer_path_id = vc.path_id;
+	visdn_chan->bearer_pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
-	vc.path_id = visdn_chan->sp_path_id;
+	vc.pipeline_id = visdn_chan->sp_pipeline_id;
 
-	if (ioctl(visdn.router_control_fd, VISDN_IOC_ENABLE_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
 						 (caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_ENABLE_PATH, sp): %s\n",
+			"ioctl(VISDN_PIPELINE_OPEN, sp): %s\n",
 			strerror(errno));
 		goto err_ioctl_enable_sp;
 	}
 
 	memset(&vc, 0, sizeof(vc));
-	vc.path_id = visdn_chan->bearer_path_id;
+	vc.pipeline_id = visdn_chan->bearer_pipeline_id;
 
-	if (ioctl(visdn.router_control_fd, VISDN_IOC_ENABLE_PATH,
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
 						 (caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_ENABLE_PATH, bearer): %s\n",
+			"ioctl(VISDN_PIPELINE_OPEN, bearer): %s\n",
+			strerror(errno));
+		goto err_ioctl_enable_b;
+	}
+
+
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = visdn_chan->sp_pipeline_id;
+
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_START,
+						 (caddr_t)&vc) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_PIPELINE_START, sp): %s\n",
+			strerror(errno));
+		goto err_ioctl_enable_sp;
+	}
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = visdn_chan->bearer_pipeline_id;
+
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_START,
+						 (caddr_t)&vc) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_PIPELINE_START, bearer): %s\n",
 			strerror(errno));
 		goto err_ioctl_enable_b;
 	}
@@ -3987,15 +4019,15 @@ static void visdn_q931_connect_channel(
 
 	visdn_chan->channel_has_been_connected = TRUE;
 
-	char path[100], dest[100];
-	snprintf(path, sizeof(path),
+	char pipeline[100], dest[100];
+	snprintf(pipeline, sizeof(pipeline),
 		"%s/B%d",
 		ic->intf->remote_port,
 		channel->id+1);
 
 	memset(dest, 0, sizeof(dest));
-	if (readlink(path, dest, sizeof(dest) - 1) < 0) {
-		ast_log(LOG_ERROR, "readlink(%s): %s\n", path, strerror(errno));
+	if (readlink(pipeline, dest, sizeof(dest) - 1) < 0) {
+		ast_log(LOG_ERROR, "readlink(%s): %s\n", pipeline, strerror(errno));
 		goto err_readlink;
 	}
 

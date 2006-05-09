@@ -20,7 +20,7 @@
 #include "chan.h"
 #include "leg.h"
 #include "cxc.h"
-#include "path.h"
+#include "pipeline.h"
 #include "router.h"
 
 //#define verbose(...) do {} while(0)

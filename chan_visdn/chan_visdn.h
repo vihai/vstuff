@@ -90,8 +90,8 @@ struct visdn_chan {
 	int ec_fe_channel_id;
 	int bearer_channel_id;
 
-	int sp_path_id;
-	int bearer_path_id;
+	int sp_pipeline_id;
+	int bearer_pipeline_id;
 
 	int sending_complete;
 
