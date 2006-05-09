@@ -3506,6 +3506,9 @@ no_cgpn:;
 				called_number,
 				sizeof(ast_chan->exten)-1);
 
+			assert(!ast_chan->cid.cid_dnid);
+			ast_chan->cid.cid_dnid = strdup(called_number);
+
 			ast_setstate(ast_chan, AST_STATE_RING);
 
 			// Prevents race conditions after pbx_start

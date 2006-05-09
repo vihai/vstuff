@@ -35,6 +35,7 @@
 
 #include "chan_visdn.h"
 #include "overlap.h"
+#include "util.h"
 
 STANDARD_LOCAL_USER;
 
@@ -82,6 +83,9 @@ static int new_digit(
 			strncpy(chan->exten, called_number,
 					sizeof(chan->exten));
 
+			assert(!chan->cid.cid_dnid);
+			chan->cid.cid_dnid = strdup(called_number);
+
 			*retval = 0;
 			return TRUE;
 #if 0
@@ -126,6 +130,9 @@ static int new_digit(
 				strncpy(chan->exten, overlap_number,
 						sizeof(chan->exten));
 
+				assert(!chan->cid.cid_dnid);
+				chan->cid.cid_dnid = strdup(called_number);
+
 				*retval = 0;
 				return TRUE;
 			}
@@ -153,6 +160,9 @@ static int new_digit(
 				chan->priority = 0;
 				strncpy(chan->exten, called_number,
 						sizeof(chan->exten));
+
+				assert(!chan->cid.cid_dnid);
+				chan->cid.cid_dnid = strdup(called_number);
 
 				*retval = 0;
 				return TRUE;
