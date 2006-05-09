@@ -116,15 +116,18 @@
 ;	thru the network as user-provided, not-screened.
 ;	## role: network
 ;
-; clir_mode = default_off
-;		(off, default_on, default_off, on)
+; clir_mode = unrestricted_default
+;		(unrestricted, unrestricted_default, restricted_default,
+;		restricted)
 ;	Calling Line Identification Restriction service applied by the
 ;	network on incoming calls. Available modes:
 ;
-;	"off"		: Restriction is never applied
-;	"default_on"	: Restriction is specified by the user, otherwise On
-;	"default_off"	: Restriction is specified by the user, otherwise Off
-;	"on"		: Restriction is always applied
+;	"unrestricted"		: Restriction is never applied
+;	"unrestricted_default"	: Restriction is specified by the user,
+;				  otherwise On
+;	"restricted_default"	: Restriction is specified by the user,
+;				  otherwise Off
+;	"restricted"		: Restriction is always applied
 ;
 ;	## role: network
 ;
@@ -196,7 +199,7 @@ language = en
 outbound_called_ton = unknown
 force_outbound_cli =
 force_outbound_cli_ton = no
-clir_mode = default_off
+clir_mode = unrestricted_default
 cli_rewriting = No
 national_prefix = 0
 international_prefix = 00
@@ -222,7 +225,7 @@ force_outbound_cli_ton = no
 clip_default_name = vISDN
 clip_default_number = 300
 clip_numbers = 300
-clir_mode = default_off
+clir_mode = unrestricted_default
 overlap_sending = Yes
 overlap_receiving = No
 
@@ -237,7 +240,7 @@ force_outbound_cli_ton = no
 clip_default_name = QuadBRI Port 0 
 clip_default_number = 200
 clip_numbers = 200
-clir_mode = default_off
+clir_mode = unrestricted_default
 overlap_sending = Yes
 overlap_receiving = No
 
@@ -248,7 +251,7 @@ tones_option = yes
 outbound_called_ton = unknown
 force_outbound_cli =
 force_outbound_cli_ton = no
-clir_mode = default_off
+clir_mode = unrestricted_default
 clip_default_name = QuadBRI Port 1
 clip_default_number = 201
 clip_numbers = 201
@@ -262,7 +265,7 @@ tones_option = yes
 outbound_called_ton = unknown
 force_outbound_cli =
 force_outbound_cli_ton = no
-clir_mode = default_off
+clir_mode = unrestricted_default
 clip_default_name = QuadBRI Port 2
 clip_default_number = 202
 clip_numbers = _20X
@@ -276,7 +279,7 @@ tones_option = yes
 outbound_called_ton = unknown
 force_outbound_cli =
 force_outbound_cli_ton = no
-clir_mode = default_off
+clir_mode = unrestricted_default
 clip_default_name = QuadBRI Port 3
 clip_default_number = 203
 clip_numbers = _20[3456]

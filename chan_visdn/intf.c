@@ -193,20 +193,20 @@ static enum q931_interface_network_role
 static enum visdn_clir_mode
 	visdn_string_to_clir_mode(const char *str)
 {
-	if (!strcasecmp(str, "off"))
-		return VISDN_CLIR_MODE_OFF;
-	else if (!strcasecmp(str, "default_off"))
-		return VISDN_CLIR_MODE_DEFAULT_OFF;
-	else if (!strcasecmp(str, "default_on"))
-		return VISDN_CLIR_MODE_DEFAULT_ON;
-	else if (!strcasecmp(str, "on"))
-		return VISDN_CLIR_MODE_ON;
+	if (!strcasecmp(str, "unrestricted"))
+		return VISDN_CLIR_MODE_UNRESTRICTED;
+	else if (!strcasecmp(str, "unrestricted_default"))
+		return VISDN_CLIR_MODE_UNRESTRICTED_DEFAULT;
+	else if (!strcasecmp(str, "restricted_default"))
+		return VISDN_CLIR_MODE_RESTRICTED_DEFAULT;
+	else if (!strcasecmp(str, "restricted"))
+		return VISDN_CLIR_MODE_RESTRICTED;
 	else {
 		ast_log(LOG_ERROR,
 			"Unknown clir_mode '%s'\n",
 			str);
 
-		return VISDN_CLIR_MODE_DEFAULT_OFF;
+		return VISDN_CLIR_MODE_UNRESTRICTED_DEFAULT;
 	}
 }
 
@@ -575,7 +575,7 @@ void visdn_ic_setdefault(struct visdn_ic *ic)
 	strcpy(ic->clip_default_name, "");
 	strcpy(ic->clip_default_number, "");
 	ic->clip_special_arrangement = FALSE;
-	ic->clir_mode = VISDN_CLIR_MODE_DEFAULT_OFF;
+	ic->clir_mode = VISDN_CLIR_MODE_UNRESTRICTED_DEFAULT;
 	ic->overlap_sending = TRUE;
 	ic->overlap_receiving = FALSE;
 	ic->call_bumping = FALSE;
@@ -728,14 +728,14 @@ static const char *visdn_clir_mode_to_text(
 	enum visdn_clir_mode mode)
 {
 	switch(mode) {
-	case VISDN_CLIR_MODE_OFF:
-		return "Off";
-	case VISDN_CLIR_MODE_DEFAULT_OFF:
-		return "Default off";
-	case VISDN_CLIR_MODE_DEFAULT_ON:
-		return "Default on";
-	case VISDN_CLIR_MODE_ON:
-		return "On";
+	case VISDN_CLIR_MODE_UNRESTRICTED:
+		return "Unrestricted";
+	case VISDN_CLIR_MODE_UNRESTRICTED_DEFAULT:
+		return "Unrestricted by default";
+	case VISDN_CLIR_MODE_RESTRICTED_DEFAULT:
+		return "Restricted by default";
+	case VISDN_CLIR_MODE_RESTRICTED:
+		return "Restricted";
 	}
 
 	return "*UNKNOWN*";

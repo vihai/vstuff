@@ -3418,15 +3418,16 @@ static void visdn_q931_setup_indication(
 		visdn_handle_clip_nt(ast_chan, ic, cgpn);
 
 		/* Handle CLIR */
-		if (ic->clir_mode == VISDN_CLIR_MODE_ON)
+		if (ic->clir_mode == VISDN_CLIR_MODE_RESTRICTED)
 			ast_chan->cid.cid_pres |= AST_PRES_RESTRICTED;
-		else if (ic->clir_mode == VISDN_CLIR_MODE_OFF)
+		else if (ic->clir_mode == VISDN_CLIR_MODE_UNRESTRICTED)
 			ast_chan->cid.cid_pres |= AST_PRES_ALLOWED;
 		else {
 			if (cgpn)
 				ast_chan->cid.cid_pres |=
 					visdn_cgpn_to_pres(cgpn);
-			else if (ic->clir_mode == VISDN_CLIR_MODE_DEFAULT_ON)
+			else if (ic->clir_mode ==
+					VISDN_CLIR_MODE_RESTRICTED_DEFAULT)
 				ast_chan->cid.cid_pres |= AST_PRES_RESTRICTED;
 			else
 				ast_chan->cid.cid_pres |= AST_PRES_ALLOWED;
