@@ -277,24 +277,53 @@ void visdn_hg_reload(struct ast_config *cfg)
 
 /*---------------------------------------------------------------------------*/
 
+static char *complete_show_visdn_huntgroups(
+		char *line, char *word, int pos, int state)
+{
+	if (pos != 3)
+		return NULL;
+
+	int which = 0;
+
+	ast_mutex_lock(&visdn.lock);
+	struct visdn_huntgroup *huntgroup;
+	list_for_each_entry(huntgroup, &visdn.huntgroups_list, node) {
+		if (!strncasecmp(word, huntgroup->name, strlen(word))) {
+			if (++which > state) {
+				ast_mutex_unlock(&visdn.lock);
+				return strdup(huntgroup->name);
+			}
+		}
+	}
+	ast_mutex_unlock(&visdn.lock);
+
+	return NULL;
+}
+
+static void do_show_visdn_huntgroups_details(
+	int fd, struct visdn_huntgroup *hg)
+{
+	ast_cli(fd, "\n-- '%s'--\n", hg->name);
+
+	ast_cli(fd, "Mode: %s\n",
+		visdn_huntgroup_mode_to_text(hg->mode));
+
+	ast_cli(fd, "Members: ");
+	struct visdn_huntgroup_member *hgm;
+	list_for_each_entry(hgm, &hg->members, node) {
+		ast_cli(fd, "%s, ", hgm->intf->name);
+	}
+	ast_cli(fd, "\n");
+}
+
 static int do_show_visdn_huntgroups(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
 	struct visdn_huntgroup *hg;
 	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
-
-		ast_cli(fd, "\n-- '%s'--\n", hg->name);
-
-		ast_cli(fd, "Mode: %s\n",
-			visdn_huntgroup_mode_to_text(hg->mode));
-
-		ast_cli(fd, "Members: ");
-		struct visdn_huntgroup_member *hgm;
-		list_for_each_entry(hgm, &hg->members, node) {
-			ast_cli(fd, "%s, ", hgm->intf->name);
-		}
-		ast_cli(fd, "\n");
+		if (argc != 4 || !strcasecmp(argv[3], hg->name))
+			do_show_visdn_huntgroups_details(fd, hg);
 	}
 
 	ast_mutex_unlock(&visdn.lock);
@@ -303,16 +332,17 @@ static int do_show_visdn_huntgroups(int fd, int argc, char *argv[])
 }
 
 static char show_visdn_huntgroups_help[] =
-	"Usage: visdn show huntgroups\n"
-	"	Displays informations on vISDN hunt groups\n";
+"Usage: visdn show huntgroups [<huntgroup>]\n"
+"	Displays detailed informations on vISDN's huntgroup or lists all the\n"
+"	available huntgroups if <huntgroup> has not been specified.\n";
 
 static struct ast_cli_entry show_visdn_huntgroups =
 {
 	{ "show", "visdn", "huntgroups", NULL },
 	do_show_visdn_huntgroups,
-	"Displays vISDN huntgroups list",
+	"Displays vISDN's huntgroups informations",
 	show_visdn_huntgroups_help,
-	NULL
+	complete_show_visdn_huntgroups
 };
 
 /*---------------------------------------------------------------------------*/

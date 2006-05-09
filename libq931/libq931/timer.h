@@ -33,6 +33,8 @@ struct q931_timer
 
 extern longtime_t q931_run_timers();
 
+extern longtime_t q931_longtime_now(void);
+
 #ifdef Q931_PRIVATE
 
 extern void q931_init_timer(
@@ -44,8 +46,6 @@ extern void q931_init_timer(
 extern void q931_start_timer(
 	struct q931_timer *timer,
 	longtime_t expires);
-
-extern longtime_t longtime_now(void);
 
 extern void q931_start_timer_delta(
 	struct q931_timer *timer,

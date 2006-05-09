@@ -705,6 +705,19 @@ static const char *visdn_intf_mode_to_string(
 	return "*UNKNOWN*";
 }
 
+static const char *visdn_intf_mode_to_string_short(
+	enum lapd_intf_mode value)
+{
+	switch(value) {
+	case LAPD_INTF_MODE_POINT_TO_POINT:
+		return "P2P";
+	case LAPD_INTF_MODE_MULTIPOINT:
+		return "P2MP";
+	}
+
+	return "*UNKNOWN*";
+}
+
 static const char *visdn_ic_network_role_to_string(
 	enum q931_interface_network_role value)
 {
@@ -757,123 +770,122 @@ static const char *visdn_intf_status_to_text(enum visdn_intf_status status)
 	return "*UNKNOWN*";
 }
 
-static int do_show_visdn_intfs(int fd, int argc, char *argv[])
+static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 {
-	ast_mutex_lock(&visdn.lock);
+	struct visdn_ic *ic = intf->current_ic;
 
-	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	ast_cli(fd, "\n-- %s --\n", intf->name);
+		ast_cli(fd, "Status                    : %s\n",
+			visdn_intf_status_to_text(intf->status));
 
-		struct visdn_ic *ic = intf->current_ic;
-
-		ast_cli(fd, "\n-- %s --\n", intf->name);
-			ast_cli(fd, "Status                    : %s\n",
-				visdn_intf_status_to_text(intf->status));
-
-		if (intf->q931_intf) {
-			ast_cli(fd, "Role                      : %s\n",
-				intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
-					"NT" : "TE");
-
-			ast_cli(fd,
-				"Mode                      : %s\n",
-				visdn_intf_mode_to_string(
-					intf->q931_intf->mode));
-
-			if (intf->q931_intf->tei != LAPD_DYNAMIC_TEI)
-				ast_cli(fd, "TEI                       : %d\n",
-					intf->q931_intf->tei);
-			else
-				ast_cli(fd, "TEI                       : "
-						"Dynamic\n");
-		}
+	if (intf->q931_intf) {
+		ast_cli(fd, "Role                      : %s\n",
+			intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
+				"NT" : "TE");
 
 		ast_cli(fd,
-			"Network role              : %s\n"
-			"Outbound type of number   : %s\n"
-			"Forced CLI                : %s\n"
-			"Forced CLI type of number : %s\n"
-			"Tones option              : %s\n"
-			"Echo canceller            : %s\n"
-			"Echo canceller taps       : %d (%d ms)\n"
-			"Context                   : %s\n"
-			"Language                  : %s\n",
-			visdn_ic_network_role_to_string(
-				ic->network_role),
-			visdn_ton_to_string(
-				ic->outbound_called_ton),
-			ic->force_outbound_cli,
-			visdn_ton_to_string(
-				ic->force_outbound_cli_ton),
-			ic->tones_option ? "Yes" : "No",
-			ic->echocancel ? "Yes" : "No",
-			ic->echocancel_taps, ic->echocancel_taps / 8,
-			ic->context,
-			ic->language);
+			"Mode                      : %s\n",
+			visdn_intf_mode_to_string(
+				intf->q931_intf->mode));
 
-		ast_cli(fd, "Transparent Numbers       : ");
-		{
-		struct visdn_number *num;
-		list_for_each_entry(num, &ic->clip_numbers_list, node) {
-			ast_cli(fd, "%s ", num->number);
-		}
-		}
-		ast_cli(fd, "\n");
+		if (intf->q931_intf->tei != LAPD_DYNAMIC_TEI)
+			ast_cli(fd, "TEI                       : %d\n",
+				intf->q931_intf->tei);
+		else
+			ast_cli(fd, "TEI                       : "
+					"Dynamic\n");
+	}
 
-		ast_cli(fd,
-			"Overlap Sending           : %s\n"
-			"Overlap Receiving         : %s\n"
-			"Call bumping              : %s\n"
-			"CLI rewriting             : %s\n"
-			"National prefix           : %s\n"
-			"International prefix      : %s\n"
-			"Newtork specific prefix   : %s\n"
-			"Subscriber prefix         : %s\n"
-			"Abbreviated prefix        : %s\n"
-			"Autorelease time          : %d\n"
-			"CLIR mode                 : %s\n"
-			"CLIP enabled              : %s\n"
-			"CLIP override             : %s\n"
-			"CLIP default              : %s <%s>\n"
-			"CLIP special arrangement  : %s\n",
-			ic->overlap_sending ? "Yes" : "No",
-			ic->overlap_receiving ? "Yes" : "No",
-			ic->call_bumping ? "Yes" : "No",
-			ic->cli_rewriting ? "Yes" : "No",
-			ic->national_prefix,
-			ic->international_prefix,
-			ic->network_specific_prefix,
-			ic->subscriber_prefix,
-			ic->abbreviated_prefix,
-			ic->dlc_autorelease_time,
-			visdn_clir_mode_to_text(ic->clir_mode),
-			ic->clip_enabled ? "Yes" : "No",
-			ic->clip_override ? "Yes" : "No",
-			ic->clip_default_name,
-			ic->clip_default_number,
-			ic->clip_special_arrangement ? "Yes" : "No");
+	ast_cli(fd,
+		"Network role              : %s\n"
+		"Context                   : %s\n"
+		"Language                  : %s\n",
+		visdn_ic_network_role_to_string(
+			ic->network_role),
+		ic->context,
+		ic->language);
 
-		ast_cli(fd, "CLIP Numbers              : ");
-		{
-		struct visdn_number *num;
-		list_for_each_entry(num, &ic->clip_numbers_list, node) {
-			ast_cli(fd, "%s ", num->number);
-		}
-		}
-		ast_cli(fd, "\n");
+	ast_cli(fd, "Transparent Numbers       : ");
+	{
+	struct visdn_number *num;
+	list_for_each_entry(num, &ic->clip_numbers_list, node) {
+		ast_cli(fd, "%s ", num->number);
+	}
+	}
+	ast_cli(fd, "\n");
 
-		if (intf->q931_intf) {
-			if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
-				ast_cli(fd, "DLCs                      : ");
+	ast_cli(fd,
+		"Echo canceller            : %s\n"
+		"Echo canceller taps       : %d (%d ms)\n"
+		"Tones option              : %s\n"
+		"Overlap Sending           : %s\n"
+		"Overlap Receiving         : %s\n"
+		"Call bumping              : %s\n",
+		ic->echocancel ? "Yes" : "No",
+		ic->echocancel_taps, ic->echocancel_taps / 8,
+		ic->tones_option ? "Yes" : "No",
+		ic->overlap_sending ? "Yes" : "No",
+		ic->overlap_receiving ? "Yes" : "No",
+		ic->call_bumping ? "Yes" : "No");
 
-				struct q931_dlc *dlc;
-				list_for_each_entry(dlc, &intf->q931_intf->dlcs,
-						intf_node) {
-					ast_cli(fd, "%d ", dlc->tei);
+	ast_cli(fd,
+		"National prefix           : %s\n"
+		"International prefix      : %s\n"
+		"Newtork specific prefix   : %s\n"
+		"Subscriber prefix         : %s\n"
+		"Abbreviated prefix        : %s\n"
+		"Autorelease time          : %d\n\n",
+		ic->national_prefix,
+		ic->international_prefix,
+		ic->network_specific_prefix,
+		ic->subscriber_prefix,
+		ic->abbreviated_prefix,
+		ic->dlc_autorelease_time);
 
-				}
+	ast_cli(fd,
+		"Outbound type of number   : %s\n\n"
+		"Forced CLI                : %s\n"
+		"Forced CLI type of number : %s\n"
+		"CLI rewriting             : %s\n"
+		"CLIR mode                 : %s\n"
+		"CLIP enabled              : %s\n"
+		"CLIP override             : %s\n"
+		"CLIP default              : %s <%s>\n"
+		"CLIP special arrangement  : %s\n",
+		visdn_ton_to_string(
+			ic->outbound_called_ton),
+		ic->force_outbound_cli,
+		visdn_ton_to_string(
+			ic->force_outbound_cli_ton),
+		ic->cli_rewriting ? "Yes" : "No",
+		visdn_clir_mode_to_text(ic->clir_mode),
+		ic->clip_enabled ? "Yes" : "No",
+		ic->clip_override ? "Yes" : "No",
+		ic->clip_default_name,
+		ic->clip_default_number,
+		ic->clip_special_arrangement ? "Yes" : "No");
 
-				ast_cli(fd, "\n");
+	ast_cli(fd, "CLIP Numbers              : ");
+	{
+	struct visdn_number *num;
+	list_for_each_entry(num, &ic->clip_numbers_list, node) {
+		ast_cli(fd, "%s ", num->number);
+	}
+	}
+	ast_cli(fd, "\n\n");
+
+	if (intf->q931_intf) {
+		if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
+			ast_cli(fd, "DLCs                      : ");
+
+			struct q931_dlc *dlc;
+			list_for_each_entry(dlc, &intf->q931_intf->dlcs,
+					intf_node) {
+				ast_cli(fd, "%d ", dlc->tei);
+
+			}
+
+			ast_cli(fd, "\n\n");
 
 #define TIMER_CONFIG(timer)					\
 	ast_cli(fd, #timer ": %3lld%-5s",			\
@@ -885,105 +897,206 @@ static int do_show_visdn_intfs(int fd, int argc, char *argv[])
 		intf->q931_intf->timer / 1000000LL,		\
 		ic->timer ? " (*)" : "");
 
-				TIMER_CONFIG(T301);
-				TIMER_CONFIG(T301);
-				TIMER_CONFIG(T302);
-				TIMER_CONFIG_LN(T303);
-				TIMER_CONFIG(T304);
-				TIMER_CONFIG(T305);
-				TIMER_CONFIG(T306);
-				ast_cli(fd, "T307: %d\n", ic->T307);
-				TIMER_CONFIG(T308);
-				TIMER_CONFIG(T309);
-				TIMER_CONFIG(T310);
-				TIMER_CONFIG_LN(T312);
-				TIMER_CONFIG(T314);
-				TIMER_CONFIG(T316);
-				TIMER_CONFIG(T317);
-				TIMER_CONFIG_LN(T320);
-				TIMER_CONFIG(T321);
-				TIMER_CONFIG_LN(T322);
-			} else {
-				TIMER_CONFIG(T301);
-				TIMER_CONFIG(T302);
-				TIMER_CONFIG(T303);
-				TIMER_CONFIG_LN(T304);
-				TIMER_CONFIG(T305);
-				TIMER_CONFIG(T306);
-				ast_cli(fd, "T307: %d\n", ic->T307);
-				TIMER_CONFIG_LN(T308);
-				TIMER_CONFIG(T309);
-				TIMER_CONFIG(T310);
-				TIMER_CONFIG(T312);
-				TIMER_CONFIG_LN(T313);
-				TIMER_CONFIG(T314);
-				TIMER_CONFIG(T316);
-				TIMER_CONFIG(T317);
-				TIMER_CONFIG(T318);
-				TIMER_CONFIG_LN(T319);
-				TIMER_CONFIG(T320);
-				TIMER_CONFIG(T321);
-				TIMER_CONFIG_LN(T322);
-			}
-
+			TIMER_CONFIG(T301);
+			TIMER_CONFIG(T301);
+			TIMER_CONFIG(T302);
+			TIMER_CONFIG_LN(T303);
+			TIMER_CONFIG(T304);
+			TIMER_CONFIG(T305);
+			TIMER_CONFIG(T306);
+			ast_cli(fd, "T307: %d\n", ic->T307);
+			TIMER_CONFIG(T308);
+			TIMER_CONFIG(T309);
+			TIMER_CONFIG(T310);
+			TIMER_CONFIG_LN(T312);
+			TIMER_CONFIG(T314);
+			TIMER_CONFIG(T316);
+			TIMER_CONFIG(T317);
+			TIMER_CONFIG_LN(T320);
+			TIMER_CONFIG(T321);
+			TIMER_CONFIG_LN(T322);
+		} else {
+			TIMER_CONFIG(T301);
+			TIMER_CONFIG(T302);
+			TIMER_CONFIG(T303);
+			TIMER_CONFIG_LN(T304);
+			TIMER_CONFIG(T305);
+			TIMER_CONFIG(T306);
+			ast_cli(fd, "T307: %d\n", ic->T307);
+			TIMER_CONFIG_LN(T308);
+			TIMER_CONFIG(T309);
+			TIMER_CONFIG(T310);
+			TIMER_CONFIG(T312);
+			TIMER_CONFIG_LN(T313);
+			TIMER_CONFIG(T314);
+			TIMER_CONFIG(T316);
+			TIMER_CONFIG(T317);
+			TIMER_CONFIG(T318);
+			TIMER_CONFIG_LN(T319);
+			TIMER_CONFIG(T320);
+			TIMER_CONFIG(T321);
+			TIMER_CONFIG_LN(T322);
 		}
 
-		ast_cli(fd, "Parked calls:\n");
-		struct visdn_suspended_call *suspended_call;
-		list_for_each_entry(suspended_call, &intf->suspended_calls,
-			       					node) {
+	}
 
-			char sane_str[10];
-			char hex_str[20];
-			int i;
-			for(i=0;
-			    i<sizeof(sane_str) &&
-				i<suspended_call->call_identity_len;
-			    i++) {
-				sane_str[i] =
-				isprint(suspended_call->call_identity[i]) ?
-					suspended_call->call_identity[i] : '.';
+	ast_cli(fd, "\nParked calls:\n");
+	struct visdn_suspended_call *suspended_call;
+	list_for_each_entry(suspended_call, &intf->suspended_calls,
+		       					node) {
 
-				snprintf(hex_str + (i*2),
-					sizeof(hex_str)-(i*2),
-					"%02x ",
-					suspended_call->call_identity[i]);
+		char sane_str[10];
+		char hex_str[20];
+		int i;
+		for(i=0;
+		    i<sizeof(sane_str) &&
+			i<suspended_call->call_identity_len;
+		    i++) {
+			sane_str[i] =
+			isprint(suspended_call->call_identity[i]) ?
+				suspended_call->call_identity[i] : '.';
+
+			snprintf(hex_str + (i*2),
+				sizeof(hex_str)-(i*2),
+				"%02x ",
+				suspended_call->call_identity[i]);
+		}
+		sane_str[i] = '\0';
+		hex_str[i*2] = '\0';
+
+		ast_cli(fd, "    %s (%s)\n",
+			sane_str,
+			hex_str);
+	}
+
+	ast_cli(fd, "\nChannels:\n");
+	int i;
+	for (i=0; i<intf->q931_intf->n_channels; i++) {
+		ast_cli(fd, "  B%d: %s",
+			intf->q931_intf->channels[i].id + 1,
+			q931_channel_state_to_text(
+				intf->q931_intf->channels[i].state));
+
+		if (intf->q931_intf->channels[i].call) {
+			struct q931_call *call =
+				intf->q931_intf->channels[i].call;
+			
+			ast_cli(fd, "  Call: %5d.%c %s",
+				call->call_reference,
+				(call->direction ==
+					Q931_CALL_DIRECTION_INBOUND)
+						? 'I' : 'O',
+				q931_call_state_to_text(call->state));
+		}
+
+		ast_cli(fd, "\n");
+	}
+}
+
+char *visdn_intf_complete(char *line, char *word, int pos, int state)
+{
+	int which = 0;
+
+	ast_mutex_lock(&visdn.lock);
+	struct visdn_intf *intf;
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (!strncasecmp(word, intf->name, strlen(word))) {
+			if (++which > state) {
+				ast_mutex_unlock(&visdn.lock);
+				return strdup(intf->name);
 			}
-			sane_str[i] = '\0';
-			hex_str[i*2] = '\0';
-
-			ast_cli(fd, "    %s (%s)\n",
-				sane_str,
-				hex_str);
 		}
 	}
+	ast_mutex_unlock(&visdn.lock);
+
+	return NULL;
+}
+
+static char *complete_show_visdn_interfaces(
+		char *line, char *word, int pos, int state)
+{
+	if (pos != 3)
+		return NULL;
+
+	return visdn_intf_complete(line, word, pos, state);
+}
+
+static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
+{
+	ast_mutex_lock(&visdn.lock);
+
+	if (argc == 3) {
+		ast_cli(fd, "Interface  Role Mode TEI Status        Calls\n");
+		
+		struct visdn_intf *intf;
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+			ast_mutex_lock(&intf->lock);
+
+			char tei[6];
+
+			if (intf->q931_intf->tei != LAPD_DYNAMIC_TEI)
+				snprintf(tei, sizeof(tei), "%d",
+					intf->q931_intf->tei);
+			else
+				strcpy(tei, "");
+
+			int ncalls = 0;
+			struct q931_call *call;
+			list_for_each_entry(call, &intf->q931_intf->calls,
+								calls_node)
+				ncalls++;
+
+			
+			ast_cli(fd, "%-10s %-4s %-4s %-3s %-13s %d\n",
+				intf->name,
+				intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
+					"NT" : "TE",
+				visdn_intf_mode_to_string_short(
+					intf->q931_intf->mode),
+				tei,
+				visdn_intf_status_to_text(intf->status),
+				ncalls);
+
+			ast_mutex_unlock(&intf->lock);
+		}
+	} else if (argc == 4) {
+		struct visdn_intf *intf;
+		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+			if (!strcasecmp(argv[3], intf->name)) {
+				visdn_print_intf_details(fd, intf);
+				break;
+			}
+		}
+	} else
+		return RESULT_SHOWUSAGE;
 
 	ast_mutex_unlock(&visdn.lock);
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
-static char show_visdn_intfs_help[] =
-	"Usage: visdn show interfaces\n"
-	"	Displays informations on vISDN interfaces\n";
+static char show_visdn_interfaces_help[] =
+"Usage: visdn show interfaces [<interface>]\n"
+"	Displays informations on vISDN's interfaces. If no interface name is\n"
+"	specified, shows a summary of all the interfaces.\n";
 
-static struct ast_cli_entry show_visdn_intfs =
+static struct ast_cli_entry show_visdn_interfaces =
 {
 	{ "show", "visdn", "interfaces", NULL },
-	do_show_visdn_intfs,
-	"Displays vISDN interface information",
-	show_visdn_intfs_help,
-	NULL
+	do_show_visdn_interfaces,
+	"Displays vISDN's interface information",
+	show_visdn_interfaces_help,
+	complete_show_visdn_interfaces,
 };
 
 /*---------------------------------------------------------------------------*/
 
 void visdn_intf_cli_register(void)
 {
-	ast_cli_register(&show_visdn_intfs);
+	ast_cli_register(&show_visdn_interfaces);
 }
 
 void visdn_intf_cli_unregister(void)
 {
-	ast_cli_unregister(&show_visdn_intfs);
+	ast_cli_unregister(&show_visdn_interfaces);
 }

@@ -137,6 +137,8 @@ struct visdn_ic *visdn_ic_get(struct visdn_ic *ic);
 void visdn_ic_put(struct visdn_ic *ic);
 void visdn_ic_setdefault(struct visdn_ic *ic);
 
+char *visdn_intf_complete(char *line, char *word, int pos, int state);
+
 void visdn_intf_cli_register(void);
 void visdn_intf_cli_unregister(void);
 

@@ -5,7 +5,7 @@ General:
 - Check what headers/parts should be included by user-mode programs
   (#ifdef KERNEL)
 - Check all input data in ioctls/setsockopt for security bugs
-- Document functions (with doxygen?)
+- Document code with Doxygen standard
 - Create a libvisdn for channel manipulation functions?
 - Define in which contexts all the various functions may be called. For example
   ppp needs ppp_input() to not be called in hard-irq context and we either must
@@ -29,7 +29,6 @@ chan_visdn:
   if not working.
 - Make call parking feature enabling configurable
 - Fix/complete Progress indicators to notify interworking with non-ISDN
-- Fix autocompletion in cli commands
 - Asterisk's design makes difficult to implement some sort of parameter
   negotiation so it is impossible to know what bearer capabilities are
   accepted by a destination, if it supports overlap dialing and so on...
@@ -126,6 +125,7 @@ visdn-ec:
 visdn-netdev:
 -------------
 
+- Backlog frames dropped by netif_rx
 - Reallocate channel ID from the beginning instead of incrementing every time
 
 visdn-ppp:

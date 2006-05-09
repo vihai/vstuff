@@ -70,6 +70,7 @@
 #include <libq931/ces.h>
 #include <libq931/ccb.h>
 #include <libq931/input.h>
+#include <libq931/timer.h>
 
 #include <libq931/ie.h>
 #include <libq931/ie_bearer_capability.h>
@@ -4385,8 +4386,8 @@ static int do_debug_visdn_generic(int fd, int argc, char *argv[])
 }
 
 static char debug_visdn_generic_help[] =
-	"Usage: debug visdn generic\n"
-	"	Debug generic vISDN events\n";
+"Usage: debug visdn generic\n"
+"	Debug generic vISDN events\n";
 
 static struct ast_cli_entry debug_visdn_generic =
 {
@@ -4436,14 +4437,15 @@ static int do_debug_visdn_q921(int fd, int argc, char *argv[])
 }
 
 static char debug_visdn_q921_help[] =
-	"Usage: debug visdn q921 [interface]\n"
-	"	Traces q921 traffic\n";
+"Usage: debug visdn q921\n"
+"	Enabled q.921 debugging messages. Since q.921 runs in kernel mode,\n"
+"	those messages will appear in the kernel log (dmesg) or syslog.\n";
 
 static struct ast_cli_entry debug_visdn_q921 =
 {
 	{ "debug", "visdn", "q921", NULL },
 	do_debug_visdn_q921,
-	"Enables q.921 tracing",
+	"Enables q.921 debugging",
 	debug_visdn_q921_help,
 	NULL
 };
@@ -4468,7 +4470,7 @@ static struct ast_cli_entry no_debug_visdn_q921 =
 {
 	{ "no", "debug", "visdn", "q921", NULL },
 	do_no_debug_visdn_q921,
-	"Disables q.921 tracing",
+	"Disables q.921 debugging",
 	NULL,
 	NULL
 };
@@ -4487,14 +4489,15 @@ static int do_debug_visdn_q931(int fd, int argc, char *argv[])
 }
 
 static char debug_visdn_q931_help[] =
-	"Usage: debug visdn q931 [interface]\n"
-	"	Traces q931 traffic\n";
+"Usage: debug visdn q931 [interface]\n"
+"	Enable q.931 process debugging. Messages and state machine events\n"
+"	will be directed to the console\n";
 
 static struct ast_cli_entry debug_visdn_q931 =
 {
 	{ "debug", "visdn", "q931", NULL },
 	do_debug_visdn_q931,
-	"Enables q.931 tracing",
+	"Enables q.931 debugging",
 	debug_visdn_q931_help,
 	NULL
 };
@@ -4516,7 +4519,7 @@ static struct ast_cli_entry no_debug_visdn_q931 =
 {
 	{ "no", "debug", "visdn", "q931", NULL },
 	do_no_debug_visdn_q931,
-	"Disables q.931 tracing",
+	"Disables q.931 debugging",
 	NULL,
 	NULL
 };
@@ -4531,8 +4534,11 @@ static int do_visdn_reload(int fd, int argc, char *argv[])
 }
 
 static char visdn_visdn_reload_help[] =
-	"Usage: visdn reload\n"
-	"	Reloads vISDN config\n";
+"Usage: visdn reload\n"
+"	Reloads vISDN's configuration.\n"
+"	The reload process is fully non-blocking and can be done while calls\n"
+"	are active. Old calls will retain the previous configuration while\n"
+"	new ones inherit the new configuration\n";
 
 static struct ast_cli_entry visdn_reload =
 {
@@ -4540,61 +4546,6 @@ static struct ast_cli_entry visdn_reload =
 	do_visdn_reload,
 	"Reloads vISDN configuration",
 	visdn_visdn_reload_help,
-	NULL
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int do_show_visdn_channels(int fd, int argc, char *argv[])
-{
-	ast_mutex_lock(&visdn.lock);
-
-	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-
-		if (!intf->q931_intf)
-			continue;
-
-		ast_cli(fd, "Interface: %s\n", intf->name);
-
-		int i;
-		for (i=0; i<intf->q931_intf->n_channels; i++) {
-			ast_cli(fd, "  B%d: %s",
-				intf->q931_intf->channels[i].id + 1,
-				q931_channel_state_to_text(
-					intf->q931_intf->channels[i].state));
-
-			if (intf->q931_intf->channels[i].call) {
-				struct q931_call *call =
-					intf->q931_intf->channels[i].call;
-				
-				ast_cli(fd, "  Call: %5d.%c %s",
-					call->call_reference,
-					(call->direction ==
-						Q931_CALL_DIRECTION_INBOUND)
-							? 'I' : 'O',
-					q931_call_state_to_text(call->state));
-			}
-
-			ast_cli(fd, "\n");
-		}
-	}
-
-	ast_mutex_unlock(&visdn.lock);
-
-	return 0;
-}
-
-static char visdn_show_visdn_channels_help[] =
-	"Usage: show visdn channels\n"
-	"	Displays informations on vISDN channels\n";
-
-static struct ast_cli_entry show_visdn_channels =
-{
-	{ "show", "visdn", "channels", NULL },
-	do_show_visdn_channels,
-	"Displays vISDN channel information",
-	visdn_show_visdn_channels_help,
 	NULL
 };
 
@@ -4667,15 +4618,23 @@ static int visdn_cli_print_call_list(
 	return RESULT_SUCCESS;
 }
 
+static void visdn_cli_print_call_timer_info(
+	int fd, struct q931_timer *timer,
+	const char *name)
+{
+	if (timer->pending) {
+		longtime_t delay = timer->expires - q931_longtime_now();
+		ast_cli(fd, "%s (in %.1f s) ", name, delay / 1000000.0);
+	}
+}
+
 static void visdn_cli_print_call(int fd, struct q931_call *call)
 {
-	ast_cli(fd, "--------- Call %d %s (%d refs)\n",
+	ast_cli(fd, "--------- Call %s/%d.%s\n",
+		call->intf->name,
 		call->call_reference,
 		call->direction == Q931_CALL_DIRECTION_INBOUND ?
-			"inbound" : "outbound",
-		call->refcnt);
-
-	ast_cli(fd, "Interface       : %s\n", call->intf->name);
+			"inbound" : "outbound");
 
 	if (call->dlc)
 		ast_cli(fd, "DLC (TEI)       : %d\n", call->dlc->tei);
@@ -4683,7 +4642,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 	ast_cli(fd, "State           : %s\n",
 		q931_call_state_to_text(call->state));
 
-	ast_cli(fd, "Broadcast seutp : %s\n",
+	ast_cli(fd, "Broadcast setup : %s\n",
 		call->broadcast_setup ? "Yes" : "No");
 
 	ast_cli(fd, "Tones option    : %s\n",
@@ -4691,24 +4650,24 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 
 	ast_cli(fd, "Active timers   : ");
 
-	if (call->T301.pending) ast_cli(fd, "T301 ");
-	if (call->T302.pending) ast_cli(fd, "T302 ");
-	if (call->T303.pending) ast_cli(fd, "T303 ");
-	if (call->T304.pending) ast_cli(fd, "T304 ");
-	if (call->T305.pending) ast_cli(fd, "T305 ");
-	if (call->T306.pending) ast_cli(fd, "T306 ");
-	if (call->T308.pending) ast_cli(fd, "T308 ");
-	if (call->T309.pending) ast_cli(fd, "T309 ");
-	if (call->T310.pending) ast_cli(fd, "T310 ");
-	if (call->T312.pending) ast_cli(fd, "T312 ");
-	if (call->T313.pending) ast_cli(fd, "T313 ");
-	if (call->T314.pending) ast_cli(fd, "T314 ");
-	if (call->T316.pending) ast_cli(fd, "T316 ");
-	if (call->T318.pending) ast_cli(fd, "T318 ");
-	if (call->T319.pending) ast_cli(fd, "T319 ");
-	if (call->T320.pending) ast_cli(fd, "T320 ");
-	if (call->T321.pending) ast_cli(fd, "T321 ");
-	if (call->T322.pending) ast_cli(fd, "T322 ");
+	visdn_cli_print_call_timer_info(fd, &call->T301, "T301");
+	visdn_cli_print_call_timer_info(fd, &call->T302, "T302");
+	visdn_cli_print_call_timer_info(fd, &call->T303, "T303");
+	visdn_cli_print_call_timer_info(fd, &call->T304, "T304");
+	visdn_cli_print_call_timer_info(fd, &call->T305, "T305");
+	visdn_cli_print_call_timer_info(fd, &call->T306, "T306");
+	visdn_cli_print_call_timer_info(fd, &call->T308, "T308");
+	visdn_cli_print_call_timer_info(fd, &call->T309, "T309");
+	visdn_cli_print_call_timer_info(fd, &call->T310, "T310");
+	visdn_cli_print_call_timer_info(fd, &call->T312, "T312");
+	visdn_cli_print_call_timer_info(fd, &call->T313, "T313");
+	visdn_cli_print_call_timer_info(fd, &call->T314, "T314");
+	visdn_cli_print_call_timer_info(fd, &call->T316, "T316");
+	visdn_cli_print_call_timer_info(fd, &call->T318, "T318");
+	visdn_cli_print_call_timer_info(fd, &call->T319, "T319");
+	visdn_cli_print_call_timer_info(fd, &call->T320, "T320");
+	visdn_cli_print_call_timer_info(fd, &call->T321, "T321");
+	visdn_cli_print_call_timer_info(fd, &call->T322, "T322");
 
 	ast_cli(fd, "\n");
 
@@ -4764,97 +4723,149 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 
 }
 
-static int do_show_visdn_calls(int fd, int argc, char *argv[])
+static char *complete_show_visdn_calls(
+		char *line, char *word, int pos, int state)
 {
-	ast_mutex_lock(&visdn.lock);
+	int which = 0;
 
-	if (argc == 3) {
-		visdn_cli_print_call_list(fd, NULL);
-	} else if (argc == 4) {
-		char *callpos = strchr(argv[3], '/');
-		if (callpos) {
-			*callpos = '\0';
-			callpos++;
-		}
+	if (pos != 3)
+		return NULL;
 
-		struct visdn_intf *filter_intf = NULL;
+	char *word_dup = strdupa(word);
+	char *slashpos = strchr(word_dup, '/');
+
+	if (!slashpos) {
+		ast_mutex_lock(&visdn.lock);
 		struct visdn_intf *intf;
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-			if (intf->q931_intf &&
-			    !strcasecmp(intf->name, argv[3])) {
-				filter_intf = intf;
-				break;
+		
+			if (!strncasecmp(word, intf->name, strlen(word))) {
+				if (++which > state) {
+					ast_mutex_unlock(&visdn.lock);
+					return strdup(intf->name);
+				}
 			}
 		}
+		ast_mutex_unlock(&visdn.lock);
+	} else {
+		*slashpos = '\0';
+		struct visdn_intf *intf = visdn_intf_get_by_name(word_dup);
+		if (!intf)
+			return NULL;
 
-		if (!filter_intf) {
-			ast_cli(fd, "Interface '%s' not found\n", argv[3]);
-			goto err_intf_not_found;
-		}
+		struct q931_call *call;
+		list_for_each_entry(call, &intf->q931_intf->calls, calls_node) {
+			char callid[64];
+			snprintf(callid, sizeof(callid), "%s/%d.%c",
+				intf->name,
+				call->call_reference,
+				call->direction ==
+				Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
 
-		if (!callpos) {
-			visdn_cli_print_call_list(fd, filter_intf->q931_intf);
-		} else {
-			struct q931_call *call = NULL;
-
-			char *dirpos = strchr(callpos, '.');
-			if (dirpos) {
-				*dirpos = '\0';
-				dirpos++;
-			} else {
-				ast_cli(fd, "Invalid call reference\n");
-				goto err_invalid_callref;
+			if (!strncasecmp(word, callid, strlen(word))) {
+				if (++which > state)
+					return strdup(callid);
 			}
-
-			if (*dirpos == 'i' || *dirpos == 'I') {
-				call = q931_get_call_by_reference(
-						filter_intf->q931_intf,
-						Q931_CALL_DIRECTION_INBOUND,
-						atoi(callpos));
-			} else if (*dirpos == 'o' || *dirpos == 'O') {
-				call = q931_get_call_by_reference(
-						filter_intf->q931_intf,
-						Q931_CALL_DIRECTION_OUTBOUND,
-						atoi(callpos));
-			} else {
-				ast_cli(fd, "Invalid call reference\n");
-				goto err_unknown_direction;
-			}
-
-			if (!call) {
-				ast_cli(fd, "Call '%s.%s' not found\n",
-					callpos,
-					dirpos);
-				goto err_call_not_found;
-			}
-
-			visdn_cli_print_call(fd, call);
-
-			q931_call_put(call);
 		}
 	}
 
-err_call_not_found:
-err_unknown_direction:
-err_invalid_callref:
-err_intf_not_found:
+	return NULL;
+}
 
+static int do_show_visdn_calls(int fd, int argc, char *argv[])
+{
+	if (argc < 4) {
+		visdn_cli_print_call_list(fd, NULL);
+		return RESULT_SUCCESS;
+	}
+
+	const char *intf_name;
+	char *callid = NULL;
+
+	const char *slashpos = strchr(argv[3], '/');
+	if (slashpos) {
+		intf_name = strndupa(argv[3], slashpos - argv[3]);
+		callid = strdupa(slashpos + 1);
+	} else {
+		intf_name = argv[3];
+	}
+
+	struct visdn_intf *filter_intf = NULL;
+
+	{
+	struct visdn_intf *intf;
+	ast_mutex_lock(&visdn.lock);
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		if (intf->q931_intf &&
+		    !strcasecmp(intf->name, intf_name)) {
+			filter_intf = intf;
+			break;
+		}
+	}
 	ast_mutex_unlock(&visdn.lock);
+	}
+
+	if (!filter_intf) {
+		ast_cli(fd, "Interface '%s' not found\n", argv[3]);
+		return RESULT_FAILURE;
+	}
+
+	if (!callid) {
+		visdn_cli_print_call_list(fd, filter_intf->q931_intf);
+		return RESULT_SUCCESS;
+	}
+
+	/*---------------------*/
+
+	struct q931_call *call = NULL;
+
+	char *dirpos = strchr(callid, '.');
+	if (dirpos) {
+		*dirpos = '\0';
+		dirpos++;
+	} else {
+		ast_cli(fd, "Invalid call reference\n");
+		return RESULT_SHOWUSAGE;
+	}
+
+	if (*dirpos == 'i' || *dirpos == 'I') {
+		call = q931_get_call_by_reference(
+				filter_intf->q931_intf,
+				Q931_CALL_DIRECTION_INBOUND,
+				atoi(callid));
+	} else if (*dirpos == 'o' || *dirpos == 'O') {
+		call = q931_get_call_by_reference(
+				filter_intf->q931_intf,
+				Q931_CALL_DIRECTION_OUTBOUND,
+				atoi(callid));
+	} else {
+		ast_cli(fd, "Invalid call reference\n");
+		return RESULT_SHOWUSAGE;
+	}
+
+	if (!call) {
+		ast_cli(fd, "Call '%s.%s' not found\n", callid, dirpos);
+		return RESULT_FAILURE;
+	}
+
+	visdn_cli_print_call(fd, call);
+	q931_call_put(call);
 
 	return RESULT_SUCCESS;
 }
 
 static char show_visdn_calls_help[] =
-	"Usage: show visdn calls\n"
-	"	Lists vISDN calls\n";
+"Usage: show visdn calls [<interface>|<callid>]\n"
+"	Show detailed call informations if <callid> is specified, otherwise\n"
+"	lists all the available calls, limited to <interface> if provided.\n";
 
 static struct ast_cli_entry show_visdn_calls =
 {
 	{ "show", "visdn", "calls", NULL },
 	do_show_visdn_calls,
-	"Lists vISDN calls",
+	"Show vISDN's calls informations",
 	show_visdn_calls_help,
-	NULL
+	complete_show_visdn_calls
 };
 
 /*---------------------------------------------------------------------------*/
@@ -5000,7 +5011,6 @@ int load_module()
 	ast_cli_register(&debug_visdn_q931);
 	ast_cli_register(&no_debug_visdn_q931);
 	ast_cli_register(&visdn_reload);
-	ast_cli_register(&show_visdn_channels);
 	ast_cli_register(&show_visdn_calls);
 
 	visdn_intf_cli_register();
@@ -5039,7 +5049,6 @@ int unload_module(void)
 	visdn_hg_cli_unregister();
 
 	ast_cli_unregister(&show_visdn_calls);
-	ast_cli_unregister(&show_visdn_channels);
 	ast_cli_unregister(&visdn_reload);
 	ast_cli_unregister(&no_debug_visdn_q931);
 	ast_cli_unregister(&debug_visdn_q931);
