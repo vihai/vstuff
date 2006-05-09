@@ -1979,7 +1979,12 @@ static int vgsm_call(
 
 	struct vgsm_req *req;
 	// 'timeout' instead of 20s ?
-	req = vgsm_req_make_wait(&intf->comm, 180 * SEC, "ATD%s;", number);
+	req = vgsm_req_make_wait(
+			&intf->comm, 180 * SEC,
+			"ATD%c%s;",
+			((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
+				AST_PRES_ALLOWED) ? 'i' : 'I',
+			number);
 	if (!req) {
 		err = -1;
 		goto err_atd_failed;

@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-09 12:54:14 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-646
+
+    Summary:
+      Implemented CLIR in vGSM
+    Revision:
+      isdn--devel--0.1--patch-646
+
+
+    modified files:
+     ChangeLog chan_vgsm/chan_vgsm.c
+
+
 2006-05-09 12:33:22 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-645
 
     Summary:
