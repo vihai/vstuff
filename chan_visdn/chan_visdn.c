@@ -4382,7 +4382,7 @@ static int do_debug_visdn_generic(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vISDN debugging enabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char debug_visdn_generic_help[] =
@@ -4408,7 +4408,7 @@ static int do_no_debug_visdn_generic(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vISDN debugging disabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static struct ast_cli_entry no_debug_visdn_generic =
@@ -4433,7 +4433,7 @@ static int do_debug_visdn_q921(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vISDN q.921 debugging enabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char debug_visdn_q921_help[] =
@@ -4463,7 +4463,7 @@ static int do_no_debug_visdn_q921(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vISDN q.921 debugging disabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static struct ast_cli_entry no_debug_visdn_q921 =
@@ -4485,7 +4485,7 @@ static int do_debug_visdn_q931(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vISDN q.931 debugging enabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char debug_visdn_q931_help[] =
@@ -4512,7 +4512,7 @@ static int do_no_debug_visdn_q931(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vISDN q.931 debugging disabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static struct ast_cli_entry no_debug_visdn_q931 =
@@ -4530,7 +4530,7 @@ static int do_visdn_reload(int fd, int argc, char *argv[])
 {
 	visdn_reload_config();
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char visdn_visdn_reload_help[] =

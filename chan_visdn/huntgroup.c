@@ -328,7 +328,7 @@ static int do_show_visdn_huntgroups(int fd, int argc, char *argv[])
 
 	ast_mutex_unlock(&visdn.lock);
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char show_visdn_huntgroups_help[] =

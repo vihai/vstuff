@@ -653,29 +653,29 @@ static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 {
 	if (argc < 4) {
 		ast_cli(fd, "Missing interface name\n");
-		return -1;
+		return RESULT_SHOWUSAGE;
 	}
 
 	if (argc < 5) {
 		ast_cli(fd, "Missing OLDPIN\n");
-		return -1;
+		return RESULT_SHOWUSAGE;
 	}
 
 	if (vgsm_validate_pin(argv[4]) < 0) {
 		ast_cli(fd, "OLDPIN contains invalid characters\n");
-		return -1;
+		return RESULT_SHOWUSAGE;
 	}
 
 	if (argc < 6) {
 		ast_cli(fd, "Missing NEWPIN\n");
-		return -1;
+		return RESULT_SHOWUSAGE;
 	}
 
 	struct vgsm_interface *intf;
 	intf = vgsm_intf_get_by_name(argv[3]);
 	if (!intf) {
 		ast_cli(fd, "Cannot find interface '%s'\n", argv[3]);
-		return -1;
+		return RESULT_SHOWUSAGE;
 	}
 
 	int err;
@@ -689,7 +689,7 @@ static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 		if (vgsm_validate_pin(argv[5]) < 0) {
 			ast_cli(fd, "NEWPIN contains invalid characters\n");
 			vgsm_intf_put(intf);
-			return -1;
+			return RESULT_SHOWUSAGE;
 		}
 
 		err = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
@@ -702,18 +702,19 @@ static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 			vgsm_error_to_text(err),
 			err);
 		vgsm_intf_put(intf);
-		return -1;
+		return RESULT_FAILURE;
 	}
 
 	vgsm_intf_put(intf);
 	intf = NULL;
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char vgsm_pin_set_help[] =
-	"Usage: vgsm pin set <interface> <OLDPIN> [<NEWPIN>|enabled|disabled]\n"
-	"	Set PIN on selected interface.\n";
+"Usage: vgsm pin set <interface> <OLDPIN> <NEWPIN|enabled|disabled>\n"
+"	Set, enable or disable the PIN on the SIM installed in module \n"
+"	<interface>.\n";
 
 static struct ast_cli_entry vgsm_pin_set =
 {
@@ -952,12 +953,12 @@ static int do_debug_vgsm_serial(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vGSM debugging enabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char debug_vgsm_serial_help[] =
-	"Usage: debug vgsm serial\n"
-	"	Debug serial vGSM events\n";
+"Usage: debug vgsm serial\n"
+"	Debug vGSM's serial communication\n";
 
 static struct ast_cli_entry debug_vgsm_serial =
 {
@@ -978,7 +979,7 @@ static int do_no_debug_vgsm_serial(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vGSM debugging disabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static struct ast_cli_entry no_debug_vgsm_serial =
@@ -1000,12 +1001,12 @@ static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vGSM debugging enabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char debug_vgsm_generic_help[] =
-	"Usage: debug vgsm generic\n"
-	"	Debug generic vGSM events\n";
+"Usage: debug vgsm generic\n"
+"	Debug generic vGSM events\n";
 
 static struct ast_cli_entry debug_vgsm_generic =
 {
@@ -1026,7 +1027,7 @@ static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
 
 	ast_cli(fd, "vGSM debugging disabled\n");
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static struct ast_cli_entry no_debug_vgsm_generic =
@@ -1246,6 +1247,7 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 		}
 	}
 
+	ast_cli(fd, "\nDisconnect causes:\n");
 	struct vgsm_counter *counter;
 	list_for_each_entry(counter, &intf->counters, node) {
 		ast_cli(fd, "  %s/%s: %d\n",
@@ -1285,6 +1287,29 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 	}
 }
 
+static char *complete_show_vgsm_interfaces(
+		char *line, char *word, int pos, int state)
+{
+	if (pos != 3)
+		return NULL;
+
+	int which = 0;
+
+	ast_mutex_lock(&vgsm.lock);
+	struct vgsm_interface *intf;
+	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+		if (!strncasecmp(word, intf->name, strlen(word))) {
+			if (++which > state) {
+				ast_mutex_unlock(&vgsm.lock);
+				return strdup(intf->name);
+			}
+		}
+	}
+	ast_mutex_unlock(&vgsm.lock);
+
+	return NULL;
+}
+
 static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 {
 	struct vgsm_interface *intf;
@@ -1303,12 +1328,12 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 	}
 	ast_mutex_unlock(&vgsm.lock);
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char show_vgsm_interfaces_help[] =
-	"Usage: show vgsm interfaces\n"
-	"	Displays informations on vGSM interfaces\n";
+"Usage: show vgsm interfaces\n"
+"	Displays informations on vGSM interfaces\n";
 
 static struct ast_cli_entry show_vgsm_interfaces =
 {
@@ -1316,7 +1341,7 @@ static struct ast_cli_entry show_vgsm_interfaces =
 	do_show_vgsm_interfaces,
 	"Displays vGSM interface information",
 	show_vgsm_interfaces_help,
-	NULL
+	complete_show_vgsm_interfaces
 };
 
 /*---------------------------------------------------------------------------*/
