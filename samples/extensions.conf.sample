@@ -8,11 +8,13 @@
 exten => _.,1,Dial(VISDN/visdn1.0/${EXTEN})
 
 ;------------------------
-; Dialout with a macro, the 'o-' prefixed exenstion indicates that passthru
-; overlap dialing is supported by the dialed channel:
+; Dialout with a macro, the hint allows vISDN to know in advance what
+; interface is going to be used and decide if passthru-overlap dialing will
+; be supported. Huntgroups are supported but their overlap_sending
+; configuration should be the same on all the interfaces.
 
 exten => _.,1,Macro(telcobri_out|${EXTEN})
-exten => _o-.,1,Macro(telcobri_out|${EXTEN:2})
+exten => _.,hint,VISDN/visdn1.0
 
 [macro-telcobri_out]
 exten => s,1,SetCallerID(12345000)	; Set the MSN to be used

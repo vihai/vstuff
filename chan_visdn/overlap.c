@@ -35,11 +35,77 @@
 
 #include "chan_visdn.h"
 #include "overlap.h"
+#include "huntgroup.h"
 #include "util.h"
 
 STANDARD_LOCAL_USER;
 
 LOCAL_USER_DECL;
+
+static int supports_overlapping(
+	struct ast_channel *chan,
+	char *called_number)
+{
+	char hint[32];
+
+	if (!ast_get_hint(hint, sizeof(hint), NULL, 0, NULL,
+			chan->context, called_number))
+		return FALSE;
+
+	char *slashpos = strchr(hint, '/');
+	if (!slashpos)
+		return FALSE;
+
+	*slashpos = '\0';
+
+	if (strcmp(hint, "VISDN"))
+		return FALSE;
+
+	char *intf_name = slashpos + 1;
+	int overlap_supported;
+
+	if (!strncasecmp(intf_name, "huntgroup:", 10)) {
+
+		char *hg_name = intf_name + 10;
+
+		struct visdn_huntgroup *hg;
+		hg = visdn_hg_get_by_name(hg_name);
+		if (!hg) {
+			ast_log(LOG_NOTICE,
+				"No huntgroup '%s' in hint\n", hg_name);
+			return FALSE;
+		}
+
+		if (list_empty(&hg->members)) {
+			ast_log(LOG_WARNING,
+				"No interfaces in huntgroup '%s'\n",
+				hg->name);
+
+			visdn_hg_put(hg);
+			return FALSE;
+		}
+
+		struct visdn_huntgroup_member *hgm;
+		hgm = list_entry(hg->members.next,
+				struct visdn_huntgroup_member, node);
+
+		overlap_supported = hgm->intf->current_ic->overlap_sending;
+
+		visdn_hg_put(hg);
+	} else {
+		struct visdn_intf *intf = visdn_intf_get_by_name(intf_name);
+		if (!intf) {
+			ast_log(LOG_WARNING,
+				"No interface '%s' in hint\n", intf_name);
+			return FALSE;
+		}
+
+		overlap_supported = intf->current_ic->overlap_sending;
+		visdn_intf_put(intf);
+	}
+
+	return overlap_supported;
+}
 
 static int new_digit(
 	struct ast_channel *chan,
@@ -113,29 +179,16 @@ static int new_digit(
 			return TRUE;
 		}
 	} else {
-		char overlap_number[32];
-		snprintf(overlap_number, sizeof(overlap_number),
-			"o-%s", called_number);
-		if (ast_canmatch_extension(NULL,
-				chan->context,
-				overlap_number, 1,
-				chan->cid.cid_num)) {
+		if (supports_overlapping(chan, called_number)) {
+			chan->priority = 0;
+			strncpy(chan->exten, called_number,
+					sizeof(chan->exten));
 
-			if (ast_exists_extension(NULL,
-					chan->context,
-					overlap_number, 1,
-					chan->cid.cid_num)) {
+			assert(!chan->cid.cid_dnid);
+			chan->cid.cid_dnid = strdup(called_number);
 
-				chan->priority = 0;
-				strncpy(chan->exten, overlap_number,
-						sizeof(chan->exten));
-
-				assert(!chan->cid.cid_dnid);
-				chan->cid.cid_dnid = strdup(called_number);
-
-				*retval = 0;
-				return TRUE;
-			}
+			*retval = 0;
+			return TRUE;
 		} else {
 			if (!ast_canmatch_extension(NULL,
 					chan->context,
