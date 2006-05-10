@@ -6,6 +6,7 @@ chan_visdn_la_SOURCES = \
 	huntgroup.c	\
 	ton.c		\
 	overlap.c	\
+	disconnect.c	\
 	numbers_list.c
 		
 noinst_HEADERS = \
@@ -14,6 +15,7 @@ noinst_HEADERS = \
 	huntgroup.h	\
 	ton.h		\
 	overlap.h	\
+	disconnect.c	\
 	numbers_list.h	\
 	util.h
 

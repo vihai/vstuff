@@ -2,6 +2,24 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-10 13:46:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-653
+
+    Summary:
+      Improved support for DISCONNECT_INDICATION handling, added Disconnect() application
+    Revision:
+      isdn--devel--0.1--patch-653
+
+
+    new files:
+     chan_visdn/.arch-ids/disconnect.c.id
+     chan_visdn/.arch-ids/disconnect.h.id chan_visdn/disconnect.c
+     chan_visdn/disconnect.h
+
+    modified files:
+     ChangeLog chan_visdn/Makefile.am chan_visdn/chan_visdn.c
+     chan_visdn/overlap.c samples/extensions.conf.sample
+
+
 2006-05-10 00:05:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-652
 
     Summary:

@@ -122,7 +122,7 @@ static int new_digit(
 
 			chan->hangupcause =
 				AST_CAUSE_INVALID_NUMBER_FORMAT;
-			*retval = -1;
+			*retval = 0;
 			return TRUE;
 		}
 
@@ -173,9 +173,16 @@ static int new_digit(
 			return TRUE;
 #endif
 		} else {
-			chan->hangupcause =
-				AST_CAUSE_INVALID_NUMBER_FORMAT;
-			*retval = -1;
+			chan->hangupcause = AST_CAUSE_INVALID_NUMBER_FORMAT;
+			ast_indicate(chan, AST_CONTROL_DISCONNECT);
+
+			pbx_builtin_setvar_helper(chan, "INVALID_EXTEN",
+					called_number);
+
+			chan->priority = 0;
+			strncpy(chan->exten, "i", sizeof(chan->exten));
+
+			*retval = 0;
 			return TRUE;
 		}
 	} else {
@@ -197,7 +204,15 @@ static int new_digit(
 
 				chan->hangupcause =
 					AST_CAUSE_INVALID_NUMBER_FORMAT;
-				*retval = -1;
+				ast_indicate(chan, AST_CONTROL_DISCONNECT);
+
+				pbx_builtin_setvar_helper(chan, "INVALID_EXTEN",
+						called_number);
+
+				chan->priority = 1;
+				strncpy(chan->exten, "i", sizeof(chan->exten));
+
+				*retval = 0;
 				return TRUE;
 			}
 
@@ -207,8 +222,7 @@ static int new_digit(
 				chan->cid.cid_num)) {
 
 				ast_setstate(chan, AST_STATE_RING);
-				ast_indicate(chan,
-					AST_CONTROL_PROCEEDING);
+				ast_indicate(chan, AST_CONTROL_PROCEEDING);
 
 				chan->priority = 0;
 				strncpy(chan->exten, called_number,

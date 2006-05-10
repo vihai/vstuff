@@ -32,10 +32,16 @@ exten => 229,1,visdnPPP(172.16.0.1:172.16.0.2)
 [visdn1_0_in]
 include => local
 exten => s,1,VISDNOverlapDial()		; Needed for overlap sending/receiving
+exten => i,1,GotoIf($["${INVALID_EXTEN}" = ""] ? 3)
+exten => i,2,Playback(pbx-invalid)
+exten => i,3,PlayTones(congestion)
 
 [visdn1_1_in]
 include => default
 exten => s,1,VISDNOverlapDial()		; Needed for overlap sending/receiving
+exten => i,1,GotoIf($["${INVALID_EXTEN}" = ""] ? 3)
+exten => i,2,Playback(pbx-invalid)
+exten => i,3,PlayTones(congestion)
 
 [visdn1_3_in]
 exten => 12345000,1,Dial(SIP/100)	; One entry for each MSN

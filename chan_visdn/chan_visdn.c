@@ -92,6 +92,7 @@
 #include "util.h"
 #include "huntgroup.h"
 #include "overlap.h"
+#include "disconnect.h"
 #include "numbers_list.h"
 
 static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
@@ -1399,7 +1400,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		if (ast_chan->hangupcause)
 			cause->value = ast_chan->hangupcause;
 		else
-			cause->value = Q931_IE_C_CV_USER_BUSY;
+			cause->value = Q931_IE_C_CV_NORMAL_CALL_CLEARING;
 
 		q931_ies_add_put(&ies, &cause->ie);
 
@@ -5017,6 +5018,7 @@ int load_module()
 	visdn_hg_cli_register();
 
 	visdn_overlap_register();
+	visdn_disconnect_register();
 
 	return 0;
 
@@ -5043,6 +5045,7 @@ int unload_module(void)
 {
 	visdn_ic_put(visdn.default_ic);
 	
+	visdn_disconnect_unregister();
 	visdn_overlap_unregister();
 
 	visdn_intf_cli_unregister();
