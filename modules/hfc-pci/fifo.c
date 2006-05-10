@@ -52,10 +52,10 @@ void hfc_fifo_reset(struct hfc_fifo *fifo)
 		*fifo->f2 = i;
 		*fifo->f1 = i;
 
-		*Z1_F1(fifo) = fifo->z_max;
-		*Z2_F1(fifo) = fifo->z_max;
-		*Z1_F2(fifo) = fifo->z_max;
-		*Z2_F2(fifo) = fifo->z_max;
+		set_Z1_F1(fifo, fifo->z_max);
+		set_Z2_F1(fifo, fifo->z_max);
+		set_Z1_F2(fifo, fifo->z_max);
+		set_Z2_F2(fifo, fifo->z_max);
 	}
 }
 
@@ -63,15 +63,15 @@ void hfc_fifo_mem_read(struct hfc_fifo *fifo,
 	void *data,
 	int size)
 {
-	int octets_to_boundary = fifo->z_max - *Z2_F2(fifo) + 1;
+	int octets_to_boundary = fifo->z_max - Z2_F2(fifo) + 1;
 	if (octets_to_boundary >= size) {
 		memcpy(data,
-			fifo->z_base + *Z2_F2(fifo),
+			fifo->z_base + Z2_F2(fifo),
 			size);
 	} else {
 		// Buffer wrap
 		memcpy(data,
-			fifo->z_base + *Z2_F2(fifo),
+			fifo->z_base + Z2_F2(fifo),
 			octets_to_boundary);
 
 		memcpy(data + octets_to_boundary,
@@ -106,15 +106,15 @@ void hfc_fifo_mem_write(
 	struct hfc_fifo *fifo,
 	const void *data, int size)
 {
-	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
+	int octets_to_boundary = fifo->z_max - Z1_F1(fifo) + 1;
 	if (octets_to_boundary >= size) {
-		memcpy(fifo->z_base + *Z1_F1(fifo),
+		memcpy(fifo->z_base + Z1_F1(fifo),
 			data,
 			size);
 	} else {
 		// FIFO wrap
 
-		memcpy(fifo->z_base + *Z1_F1(fifo),
+		memcpy(fifo->z_base + Z1_F1(fifo),
 			data,
 			octets_to_boundary);
 
@@ -129,14 +129,14 @@ int hfc_fifo_mem_read_user(
 	void __user *buf,
 	int size)
 {
-	int octets_to_boundary = fifo->z_max - *Z2_F2(fifo) + 1;
+	int octets_to_boundary = fifo->z_max - Z2_F2(fifo) + 1;
 	if (octets_to_boundary >= size) {
-		if (copy_to_user(buf, fifo->z_base + *Z2_F2(fifo), size))
+		if (copy_to_user(buf, fifo->z_base + Z2_F2(fifo), size))
 			return -EFAULT;
 	} else {
 		// FIFO wrap
 
-		if (copy_to_user(buf, fifo->z_base + *Z2_F2(fifo), octets_to_boundary))
+		if (copy_to_user(buf, fifo->z_base + Z2_F2(fifo), octets_to_boundary))
 			return -EFAULT;
 
 		if (copy_to_user(buf + octets_to_boundary,
@@ -153,14 +153,14 @@ int hfc_fifo_mem_write_user(
 	const void __user *buf,
 	int size)
 {
-	int octets_to_boundary = fifo->z_max - *Z1_F1(fifo) + 1;
+	int octets_to_boundary = fifo->z_max - Z1_F1(fifo) + 1;
 	if (octets_to_boundary >= size) {
-		if (copy_from_user(fifo->z_base + *Z1_F1(fifo), buf, size))
+		if (copy_from_user(fifo->z_base + Z1_F1(fifo), buf, size))
 			return -EFAULT;
 	} else {
 		// FIFO wrap
 
-		if (copy_from_user(fifo->z_base + *Z1_F1(fifo),
+		if (copy_from_user(fifo->z_base + Z1_F1(fifo),
 				buf,
 				octets_to_boundary))
 			return -EFAULT;
@@ -185,7 +185,7 @@ void hfc_fifo_drop(struct hfc_fifo *fifo, int size)
 		return;
 	}
 
-	*Z2_F2(fifo) = Z_inc(fifo, *Z2_F2(fifo), size);
+	set_Z2_F2(fifo, Z_inc(fifo, Z2_F2(fifo), size));
 }
 
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
@@ -206,12 +206,12 @@ void hfc_fifo_drop_frame(struct hfc_fifo *fifo)
 
 	{
 	// Calculate beginning of the next frame
-	u16 newz2 = Z_inc(fifo, *Z2_F2(fifo), available_octets);
+	u16 newz2 = Z_inc(fifo, Z2_F2(fifo), available_octets);
 
 	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
 
 	// Set Z2 for the next frame we're going to receive
-	*Z2_F2(fifo) = newz2;
+	set_Z2_F2(fifo, newz2);
 	}
 }
 

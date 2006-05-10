@@ -708,7 +708,7 @@ static int hfc_st_chan_frame_xmit(
 		hfc_debug_chan(chan, 4,
 			"TX (f1=%02x, f2=%02x, z1=%04x z2=%04x) len %2d: ",
 			*fifo->f1, *fifo->f2,
-			*Z1_F1(fifo), *Z2_F1(fifo),
+			Z1_F1(fifo), Z2_F1(fifo),
 			skb->len);
 	}
 
@@ -725,10 +725,10 @@ static int hfc_st_chan_frame_xmit(
 
 	{
 	// Move Z1 and jump to next frame
-	u16 newz1 = Z_inc(fifo, *Z1_F1(fifo), skb->len);
-	*Z1_F1(fifo) = newz1;
+	u16 newz1 = Z_inc(fifo, Z1_F1(fifo), skb->len);
+	set_Z1_F1(fifo, newz1);
 	*fifo->f1 = F_inc(fifo, *fifo->f1, 1);
-	*Z1_F1(fifo) = newz1;
+	set_Z1_F1(fifo, newz1);
 	}
 
 no_fifo:
@@ -798,7 +798,7 @@ void hfc_st_chan_rx_work(void *data)
 	}
 
 	/* Calculate beginning of the next frame */
-	newz2 = Z_inc(fifo, *Z2_F2(fifo), frame_size);
+	newz2 = Z_inc(fifo, Z2_F2(fifo), frame_size);
 
 	/* We cannot use hfc_fifo_get because of different semantic of
 	 * "available bytes" and to avoid useless increment of Z2
@@ -807,7 +807,7 @@ void hfc_st_chan_rx_work(void *data)
 		skb_put(skb, frame_size - 3),
 		frame_size - 3);
 
-	hfc_fifo_mem_read_z(fifo, Z_inc(fifo, *Z2_F2(fifo), frame_size - 3),
+	hfc_fifo_mem_read_z(fifo, Z_inc(fifo, Z2_F2(fifo), frame_size - 3),
 		&stat, sizeof(stat));
 
 #ifdef DEBUG_CODE
@@ -818,7 +818,7 @@ void hfc_st_chan_rx_work(void *data)
 	} else if(debug_level >= 4) {
 		hfc_msg_chan(chan, KERN_DEBUG,
 			"RX (f1=%02x, f2=%02x, z1=%04x, z2=%04x) len %2d: ",
-			*fifo->f1, *fifo->f2, *Z1_F2(fifo), *Z2_F2(fifo),
+			*fifo->f1, *fifo->f2, Z1_F2(fifo), Z2_F2(fifo),
 			frame_size);
 	}
 
@@ -826,7 +826,7 @@ void hfc_st_chan_rx_work(void *data)
 		int i;
 		for (i=0; i < frame_size; i++) {
 			printk("%02x", hfc_fifo_u8(fifo,
-				Z_inc(fifo, *Z2_F2(fifo), i)));
+				Z_inc(fifo, Z2_F2(fifo), i)));
 		}
 
 		printk("\n");
@@ -857,7 +857,7 @@ void hfc_st_chan_rx_work(void *data)
 	*fifo->f2 = F_inc(fifo, *fifo->f2, 1);
 
 	// Set Z2 for the next frame we're going to receive
-	*Z2_F2(fifo) = newz2;
+	set_Z2_F2(fifo, newz2);
 
 	visdn_leg_frame_xmit(&chan->visdn_chan.leg_a, skb);
 
@@ -913,9 +913,9 @@ static ssize_t hfc_st_chan_read(
 
 	hfc_fifo_mem_read(chan->rx_fifo, buf, copied_octets);
 
-	*Z2_F2(chan->rx_fifo) = Z_inc(chan->rx_fifo,
-					*Z2_F2(chan->rx_fifo),
-					copied_octets);
+	set_Z2_F2(chan->rx_fifo, Z_inc(chan->rx_fifo,
+					Z2_F2(chan->rx_fifo),
+					copied_octets));
 
 	hfc_card_unlock(card);
 
@@ -978,9 +978,9 @@ static ssize_t hfc_st_chan_write(
 
 	hfc_fifo_mem_write(chan->tx_fifo, buf, copied_octets);
 
-	*Z1_F1(chan->tx_fifo) = Z_inc(chan->tx_fifo,
-					*Z1_F1(chan->tx_fifo),
-					count);
+	set_Z1_F1(chan->tx_fifo, Z_inc(chan->tx_fifo,
+					Z1_F1(chan->tx_fifo),
+					count));
 
 not_copying:
 	hfc_card_unlock(card);

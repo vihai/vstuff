@@ -15,24 +15,44 @@
 
 #include "card_inline.h"
 
-static inline u16 *Z1_F1(struct hfc_fifo *fifo)
+static inline u16 Z1_F1(struct hfc_fifo *fifo)
 {
-	return fifo->z1_base + (*fifo->f1 * 4);
+	return le16_to_cpu(*(u16 *)(fifo->z1_base + (*fifo->f1 * 4)));
 }
 
-static inline u16 *Z2_F1(struct hfc_fifo *fifo)
+static inline u16 Z2_F1(struct hfc_fifo *fifo)
 {
-	return fifo->z2_base + (*fifo->f1 * 4);
+	return le16_to_cpu(*(u16 *)(fifo->z2_base + (*fifo->f1 * 4)));
 }
 
-static inline u16 *Z1_F2(struct hfc_fifo *fifo)
+static inline u16 Z1_F2(struct hfc_fifo *fifo)
 {
-	return fifo->z1_base + (*fifo->f2 * 4);
+	return le16_to_cpu(*(u16 *)(fifo->z1_base + (*fifo->f2 * 4)));
 }
 
-static inline u16 *Z2_F2(struct hfc_fifo *fifo)
+static inline u16 Z2_F2(struct hfc_fifo *fifo)
 {
-	return fifo->z2_base + (*fifo->f2 * 4);
+	return le16_to_cpu(*(u16 *)(fifo->z2_base + (*fifo->f2 * 4)));
+}
+
+static inline u16 set_Z1_F1(struct hfc_fifo *fifo, u16 z)
+{
+	return *(u16 *)(fifo->z1_base + (*fifo->f1 * 4)) = cpu_to_le16(z);
+}
+
+static inline u16 set_Z1_F2(struct hfc_fifo *fifo, u16 z)
+{
+	return *(u16 *)(fifo->z1_base + (*fifo->f2 * 4)) = cpu_to_le16(z);
+}
+
+static inline u16 set_Z2_F1(struct hfc_fifo *fifo, u16 z)
+{
+	return *(u16 *)(fifo->z2_base + (*fifo->f1 * 4)) = cpu_to_le16(z);
+}
+
+static inline u16 set_Z2_F2(struct hfc_fifo *fifo, u16 z)
+{
+	return *(u16 *)(fifo->z2_base + (*fifo->f2 * 4)) = cpu_to_le16(z);
 }
 
 static inline u16 Z_inc(struct hfc_fifo *fifo, u16 z, u16 inc)
@@ -57,7 +77,7 @@ static inline u8 F_inc(struct hfc_fifo *fifo, u8 f, u8 inc)
 
 static inline u16 hfc_fifo_used_rx(struct hfc_fifo *fifo)
 {
-	return (*Z1_F2(fifo) - *Z2_F2(fifo) + fifo->size) % fifo->size;
+	return (Z1_F2(fifo) - Z2_F2(fifo) + fifo->size) % fifo->size;
 }
 
 static inline u16 hfc_fifo_get_frame_size(struct hfc_fifo *fifo)
@@ -77,13 +97,13 @@ static inline u8 hfc_fifo_u8(struct hfc_fifo *fifo, u16 z)
 
 static inline u16 hfc_fifo_used_tx(struct hfc_fifo *fifo)
 {
-	return (*Z1_F1(fifo) - *Z2_F1(fifo) + fifo->size) %
+	return (Z1_F1(fifo) - Z2_F1(fifo) + fifo->size) %
 			fifo->size;
 }
 
 static inline u16 hfc_fifo_free_tx(struct hfc_fifo *fifo)
 {
-	int free_bytes = *Z2_F1(fifo) - *Z1_F1(fifo) - 1;
+	int free_bytes = Z2_F1(fifo) - Z1_F1(fifo) - 1;
 
 	if (free_bytes >= 0)
 		return free_bytes;

@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-10 00:05:38 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-652
+
+    Summary:
+      Fixed endianity problem accessing Z(F) counters with hfc-pci
+    Revision:
+      isdn--devel--0.1--patch-652
+
+
+    modified files:
+     ChangeLog modules/hfc-pci/card.c modules/hfc-pci/fifo.c
+     modules/hfc-pci/fifo_inline.h modules/hfc-pci/st_chan.c
+
+
 2006-05-09 20:57:11 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-651
 
     Summary:
