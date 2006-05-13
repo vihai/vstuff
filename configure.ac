@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT(visdn, 0.0.0, daniele@orlandi.com)
+AC_INIT(visdn, head, daniele@orlandi.com)
 AC_CONFIG_AUX_DIR(config)
 AM_INIT_AUTOMAKE
 
