@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-13 15:36:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-654
+
+    Summary:
+      Adapted ioctl callback behaviour conforming to 2.6.16 changes
+    Revision:
+      isdn--devel--0.1--patch-654
+
+
+    modified files:
+     ChangeLog modules/lapd/af_lapd.c
+
+
 2006-05-10 13:46:14 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-653
 
     Summary:

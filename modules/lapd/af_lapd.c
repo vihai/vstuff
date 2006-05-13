@@ -348,19 +348,19 @@ static int lapd_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	int rc = -EINVAL;
+	int err = -EINVAL;
 	struct sock *sk = sock->sk;
 	void __user *argp = (void __user *)arg;
 
 	switch (cmd) {
-	/* Protocol layer */
+
 	case SIOCOUTQ: {
 		long amount = sk->sk_sndbuf -
 			      atomic_read(&sk->sk_wmem_alloc);
 
 		if (amount < 0)
 			amount = 0;
-		rc = put_user(amount, (int __user *)argp);
+		err = put_user(amount, (int __user *)argp);
 	}
 	break;
 
@@ -384,48 +384,27 @@ static int lapd_ioctl(
 		}
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
-		rc = put_user(size, (int __user *)argp);
+		err = put_user(size, (int __user *)argp);
 	}
 	break;
 
 	case SIOCGSTAMP:
-		rc = sock_get_timestamp(sk, argp);
+		err = sock_get_timestamp(sk, argp);
 	break;
-	/* Routing */
-	case SIOCADDRT:
-	case SIOCDELRT:
-		rc = -ENOSYS;
-	break;
-	/* Interface */
-	case SIOCGIFADDR:
-	case SIOCSIFADDR:
-	case SIOCGIFBRDADDR:
-	case SIOCDIFADDR:
-	case SIOCSARP:		/* proxy AARP */
-	case SIOCDARP:		/* proxy AARP */
-		rc = -EOPNOTSUPP;
-	break;
-	/* Physical layer ioctl calls */
-	case SIOCSIFLINK:
-	case SIOCGIFHWADDR:
-	case SIOCSIFHWADDR:
-	case SIOCSIFHWBROADCAST:
-	case SIOCGIFFLAGS:
-	case SIOCSIFFLAGS:
-	case SIOCGIFMTU:
-	case SIOCGIFCONF:
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-	case SIOCGIFCOUNT:
-	case SIOCGIFINDEX:
-	case SIOCGIFNAME:
-	case LAPD_DEV_IOC_ACTIVATE:
-	case LAPD_DEV_IOC_DEACTIVATE:
-		rc = dev_ioctl(cmd, argp);
+
+	default:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,16)
+		if (sk->sk_prot->ioctl)
+			err = sk->sk_prot->ioctl(sk, cmd, arg);
+		else
+			err = -ENOIOCTLCMD;
+#else
+			err = dev_ioctl(cmd, argp);
+#endif
 	break;
 	}
 
-	return rc;
+	return err;
 }
 
 static int lapd_sendmsg(
