@@ -48,6 +48,18 @@ int debug_level = 0;
 #define PCI_DEVICE_ID_CCD_HFC_4S	0x08b4
 #endif
 
+#ifndef PCI_SUBDEVICE_ID_CCD_HFC_4S
+#define PCI_SUBDEVICE_ID_CCD_HFC_4S	0x08b4
+#endif
+
+#ifndef PCI_SUBDEVICE_ID_CCD_BERONET
+#define PCI_SUBDEVICE_ID_CCD_BERONET	0xb520
+#endif
+
+#ifndef PCI_SUBDEVICE_ID_CCD_JUNGHANNS
+#define PCI_SUBDEVICE_ID_CCD_JUNGHANNS	0xb560
+#endif
+
 #ifndef PCI_DEVICE_ID_CCD_HFC_8S
 #define PCI_DEVICE_ID_CCD_HFC_8S	0x16B8
 #endif
@@ -61,34 +73,42 @@ int debug_level = 0;
 #endif
 
 static struct pci_device_id hfc_pci_ids[] = {
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
-		PCI_ANY_ID, 0xb520, 0, 0,
-		(unsigned long)&(struct hfc_card_config) {
-			.double_clock = 0,
-			.quartz_49 = 1,
-			.ram_size = 32,
-			 }},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+	{
+		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
+		PCI_VENDOR_ID_CCD, PCI_SUBDEVICE_ID_CCD_HFC_4S, 0, 0,
 		(unsigned long)&(struct hfc_card_config) {
 			.double_clock = 0,
 			.quartz_49 = 0,
 			.ram_size = 32,
-			 }},
-	{PCI_VENDOR_ID_HST, PCI_VENDOR_ID_HST_HFC_4S,
-		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
+			 }
+	},
+	{
+		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
+		PCI_VENDOR_ID_CCD, PCI_SUBDEVICE_ID_CCD_BERONET, 0, 0,
 		(unsigned long)&(struct hfc_card_config) {
 			.double_clock = 0,
-			.quartz_49 = 0,
+			.quartz_49 = 1,
 			.ram_size = 32,
-			 }},
-	{PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_8S,
+			 }
+	},
+	{
+		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
+		PCI_VENDOR_ID_CCD, PCI_SUBDEVICE_ID_CCD_JUNGHANNS, 0, 0,
+		(unsigned long)&(struct hfc_card_config) {
+			.double_clock = 0,
+			.quartz_49 = 1,
+			.ram_size = 32,
+			 }
+	},
+	{
+		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_8S,
 		PCI_ANY_ID, PCI_ANY_ID, 0, 0,
 		(unsigned long)&(struct hfc_card_config) {
 			.double_clock = 0,
 			.quartz_49 = 1,
 			.ram_size = 32,
-			 }},
+			 }
+	},
 	{0,}
 };
 
