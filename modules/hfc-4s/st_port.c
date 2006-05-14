@@ -102,12 +102,12 @@ static ssize_t hfc_store_role(
 
 	if (!strncmp(buf, "NT", 2) && !port->nt_mode) {
 		port->nt_mode = TRUE;
-		port->clock_delay = HFC_DEF_NT_CLK_DLY;
-		port->sampling_comp = HFC_DEF_NT_SAMPL_COMP;
+		port->clock_delay = card->config->clk_dly_nt;
+		port->sampling_comp = card->config->sampl_comp_nt;
 	} else if (!strncmp(buf, "TE", 2) && port->nt_mode) {
 		port->nt_mode = FALSE;
-		port->clock_delay = HFC_DEF_TE_CLK_DLY;
-		port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+		port->clock_delay = card->config->clk_dly_te;
+		port->sampling_comp = card->config->sampl_comp_te;
 	}
 
 	hfc_st_port_update_st_ctrl0(port);
@@ -786,8 +786,8 @@ void hfc_st_port_init(
 	port->timer_t3_value = 1 * HZ;
 
 	port->nt_mode = FALSE;
-	port->clock_delay = HFC_DEF_TE_CLK_DLY;
-	port->sampling_comp = HFC_DEF_TE_SAMPL_COMP;
+	port->clock_delay = card->config->clk_dly_te;
+	port->sampling_comp = card->config->sampl_comp_te;
 
 	visdn_port_init(&port->visdn_port);
 	port->visdn_port.ops = &hfc_st_port_ops;

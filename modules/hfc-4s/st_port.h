@@ -31,11 +31,6 @@
 #define E 3
 #define SQ 4
 
-#define HFC_DEF_NT_CLK_DLY 0x0C
-#define HFC_DEF_NT_SAMPL_COMP 0x6
-#define HFC_DEF_TE_CLK_DLY 0x0E
-#define HFC_DEF_TE_SAMPL_COMP 0x6
-
 struct hfc_st_port
 {
 	struct hfc_card *card;

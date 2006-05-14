@@ -50,9 +50,15 @@
 
 struct hfc_card_config
 {
-	int double_clock;
-	int quartz_49;
-	int ram_size;
+	u8 double_clock;
+	u8 quartz_49;
+	u8 ram_size;
+	u8 pwm0;
+	u8 pwm1;
+	u8 clk_dly_nt;
+	u8 clk_dly_te;
+	u8 sampl_comp_nt;
+	u8 sampl_comp_te;
 };
 
 struct hfc_card
@@ -67,6 +73,7 @@ struct hfc_card
 	} regs;
 
 	struct pci_dev *pci_dev;
+	struct hfc_card_config *config;
 
 	int double_clock;
 	int quartz_49;
@@ -90,7 +97,8 @@ struct hfc_card
 	int clock_source;
 	int ram_size;
 	int bert_mode;
-	int output_level;
+	int pwm0;
+	int pwm1;
 };
 
 extern void hfc_softreset(struct hfc_card *card);

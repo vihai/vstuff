@@ -120,7 +120,7 @@ static DEVICE_ATTR(quartz_49, S_IRUGO | S_IWUSR,
 
 //----------------------------------------------------------------------------
 
-static ssize_t hfc_show_output_level(
+static ssize_t hfc_show_pwm0(
 	struct device *device,
 	DEVICE_ATTR_COMPAT
 	char *buf)
@@ -128,10 +128,10 @@ static ssize_t hfc_show_output_level(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
-	return snprintf(buf, PAGE_SIZE, "%02x\n", card->output_level);
+	return snprintf(buf, PAGE_SIZE, "%02x\n", card->pwm0);
 }
 
-static ssize_t hfc_store_output_level(
+static ssize_t hfc_store_pwm0(
 	struct device *device,
 	DEVICE_ATTR_COMPAT
 	const char *buf,
@@ -156,9 +156,51 @@ static ssize_t hfc_store_output_level(
 	return count;
 }
 
-static DEVICE_ATTR(output_level, S_IRUGO | S_IWUSR,
-		hfc_show_output_level,
-		hfc_store_output_level);
+static DEVICE_ATTR(pwm0, S_IRUGO | S_IWUSR,
+		hfc_show_pwm0,
+		hfc_store_pwm0);
+
+//----------------------------------------------------------------------------
+
+static ssize_t hfc_show_pwm1(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%02x\n", card->pwm1);
+}
+
+static ssize_t hfc_store_pwm1(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	const char *buf,
+	size_t count)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct hfc_card *card = pci_get_drvdata(pci_dev);
+
+	int value;
+	if (sscanf(buf, "%x", &value) < 1)
+		return -EINVAL;
+
+	if (value < 0 || value > 0xff)
+		return -EINVAL;
+
+	// Uhm... this should be safe without locks, indagate
+	hfc_card_lock(card);
+	hfc_outb(card, hfc_R_PWM0, value);
+	hfc_outb(card, hfc_R_PWM1, value);
+	hfc_card_unlock(card);
+
+	return count;
+}
+
+static DEVICE_ATTR(pwm1, S_IRUGO | S_IWUSR,
+		hfc_show_pwm1,
+		hfc_store_pwm1);
 
 //----------------------------------------------------------------------------
 
@@ -470,7 +512,8 @@ static struct device_attribute *hfc_card_attributes[] =
 	&dev_attr_bert_sync,
 	&dev_attr_bert_inv,
 	&dev_attr_bert_cnt,
-	&dev_attr_output_level,
+	&dev_attr_pwm0,
+	&dev_attr_pwm1,
 	NULL
 };
 
@@ -632,7 +675,8 @@ void hfc_initialize_hw(struct hfc_card *card)
 {
 	int i;
 
-	card->output_level = 0x19;
+	card->pwm0 = card->config->pwm0;
+	card->pwm1 = card->config->pwm1;
 	card->clock_source = -1;
 	card->bert_mode = 0;
 
@@ -644,8 +688,8 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_PWM_MD_V_PWM0_MD_PUSH |
 		hfc_R_PWM_MD_V_PWM1_MD_PUSH);
 
-	hfc_outb(card, hfc_R_PWM0, card->output_level);
-	hfc_outb(card, hfc_R_PWM1, card->output_level);
+	hfc_outb(card, hfc_R_PWM0, card->pwm0);
+	hfc_outb(card, hfc_R_PWM1, card->pwm1);
 
 	// Timer setup
 	hfc_outb(card, hfc_R_TI_WD,
@@ -823,7 +867,6 @@ int __devinit hfc_card_probe(
 	const struct pci_device_id *device_id_entry)
 {
 	struct hfc_card *card;
-	struct hfc_card_config *card_config;
 	int chip_type;
 	int revision;
 	int i;
@@ -843,11 +886,11 @@ int __devinit hfc_card_probe(
 	card->pci_dev = pci_dev;
 	pci_set_drvdata(pci_dev, card);
 
-	card_config = (struct hfc_card_config *)device_id_entry->driver_data;
+	card->config = (struct hfc_card_config *)device_id_entry->driver_data;
 
-	card->double_clock = card_config->double_clock;
-	card->quartz_49 = card_config->quartz_49;
-	card->ram_size = card_config->ram_size;
+	card->double_clock = card->config->double_clock;
+	card->quartz_49 = card->config->quartz_49;
+	card->ram_size = card->config->ram_size;
 
 	for(i=0; i<ARRAY_SIZE(card->leds); i++)
 		hfc_led_init(&card->leds[i], i, card);
