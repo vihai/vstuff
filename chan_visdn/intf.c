@@ -1030,7 +1030,13 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 		
 		struct visdn_intf *intf;
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+
 			ast_mutex_lock(&intf->lock);
+
+			if (!intf->q931_intf) {
+				ast_mutex_unlock(&intf->lock);
+				continue;
+			}
 
 			char tei[6];
 
