@@ -15,7 +15,7 @@ noinst_HEADERS = \
 	huntgroup.h	\
 	ton.h		\
 	overlap.h	\
-	disconnect.c	\
+	disconnect.h	\
 	numbers_list.h	\
 	util.h
 

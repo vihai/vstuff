@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-15 21:59:53 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-659
+
+    Summary:
+      Fixed typo in visdn_chan/Makefile.am which leaded to missing disconnet.h in tarballs
+    Revision:
+      isdn--devel--0.1--patch-659
+
+
+    modified files:
+     ChangeLog chan_visdn/Makefile.am chan_visdn/chan_visdn.c
+
+
 2006-05-14 22:56:28 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-658
 
     Summary:
