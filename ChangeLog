@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-15 22:01:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-660
+
+    Summary:
+      Last patch erroneusly reverted ANSWER control frame handling
+    Revision:
+      isdn--devel--0.1--patch-660
+
+
+    modified files:
+     ChangeLog chan_visdn/chan_visdn.c
+
+
 2006-05-15 21:59:53 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-659
 
     Summary:

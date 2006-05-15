@@ -1381,8 +1381,6 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_ANSWER:
-		q931_send_primitive(visdn_chan->q931_call,
-			Q931_CCB_SETUP_RESPONSE, NULL);
 	break;
 
 	case AST_CONTROL_INBAND_INFO:
