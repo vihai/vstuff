@@ -18,24 +18,30 @@
 #include <libq931/callref.h>
 
 void q931_make_callref(
-	void *void_buf,
-	int size,
+	void *buf,
+	int len,
 	q931_callref callref,
 	enum q931_callref_flag direction)
 {
-	assert(void_buf);
+	assert(buf);
 	assert(direction == Q931_CALLREF_FLAG_FROM_ORIGINATING_SIDE ||
 	       direction == Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE);
+	assert(len <= sizeof(q931_callref));
+
+	union { q931_callref cr; __u8 raw[sizeof(q931_callref)]; } cu;
+
+	cu.cr = callref;
 
 	int i;
-	__u8 *buf = void_buf;
-
-	for (i=0; i<size; i++) {
-		buf[i] = callref & (0xFF << ((size-i-1) * 8));
-
-		if (i == 0 &&
-		    direction == Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE)
-			buf[i] |= 0x80;
+	for (i=0; i<len; i++) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+		((__u8 *)buf)[i] = cu.raw[len - 1 - i];
+#else
+		((__u8 *)buf)[i] = cu.raw[i];
+#endif
 	}
+
+	if (direction == Q931_CALLREF_FLAG_TO_ORIGINATING_SIDE)
+		*((__u8 *)buf) |= 0x80;
 }
 
