@@ -4025,8 +4025,9 @@ static void visdn_q931_connect_channel(
 
 	char pipeline[100], dest[100];
 	snprintf(pipeline, sizeof(pipeline),
-		"%s/B%d",
+		"%s/%s%d",
 		ic->intf->remote_port,
+		ic->intf->q931_intf->type == LAPD_INTF_TYPE_BRA ? "B" : "",
 		channel->id+1);
 
 	memset(dest, 0, sizeof(dest));

@@ -290,16 +290,14 @@ static int q931_ie_channel_identification_write_to_buf_pra(
 	oct_3c->channel_type_map_identifier_type = Q931_IE_CI_ET_B;
 	len++;
 
-	struct q931_ie_channel_identification_onwire_3d *oct_3d =
-		(struct q931_ie_channel_identification_onwire_3d *)
-		(buf + len);
-	oct_3d->raw = 0;
-	oct_3d->ext = 1;
-	len++;
-
 	if (oct_3->info_channel_selection == Q931_IE_CI_ICS_PRA_INDICATED) {
 		int i;
 		for (i=0; i<ie->chanset.nchans; i++) {
+			struct q931_ie_channel_identification_onwire_3d *oct_3d =
+				(struct q931_ie_channel_identification_onwire_3d *)
+				(buf + len);
+			oct_3d->raw = 0;
+			oct_3d->ext = 1;
 			oct_3d->channel_number = ie->chanset.chans[i]->id;
 			len++;
 		}
