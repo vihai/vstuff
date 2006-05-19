@@ -4462,8 +4462,20 @@ static void vgsm_module_initialize(
 			"Module '%s' is not powered on, re-igniting\n",
 			intf->name);
 		
-		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SYSTART,
+				WAITING_SYSTART_TIME);
+		vgsm_intf_setreason(intf, "Module not turned on");
+
+		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
+			ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
+				strerror(errno));
+			vgsm_comm_disable(&intf->comm);
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+						FAILED_RETRY_TIME);
+			vgsm_intf_setreason(intf, "Error turning on module");
+
+			return;
+		}
 
 		return;
 	}
