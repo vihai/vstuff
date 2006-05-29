@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-05-29 18:14:37 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-665
+
+    Summary:
+      Added support for voltage/consumption readings and under-over/voltage-temperature notifications
+    Revision:
+      isdn--devel--0.1--patch-665
+
+
+    modified files:
+     ChangeLog chan_vgsm/chan_vgsm.c
+
+
 2006-05-29 16:54:59 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-664
 
     Summary:

@@ -1090,6 +1090,47 @@ static const char *vgsm_qual_to_text(int ber)
 	}
 }
 
+static const char *get_token(const char **s, char *token, int token_size)
+{
+	const char *p = *s;
+	char *token_p = token;
+
+	for(;;) {
+		if (*p == '"') {
+			p++;
+
+			while(*p && *p != '"') {
+				*token_p++ = *p++;
+
+				if (token_p == token + token_size - 2)
+					break;
+			}
+
+			if (*p == '"')
+				p++;
+		}
+
+		if (!*p)
+			break;
+
+		if (*p == ',') {
+			*s = p + 1;
+
+			break;
+		}
+
+		*token_p++ = *p++;
+
+		if (token_p == token + token_size - 2)
+			break;
+	}
+
+	*token_p = '\0';
+
+	return token;
+}
+
+
 static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 {
 	ast_cli(fd, "\n------ Interface '%s' ---------\n", intf->name);
@@ -1131,6 +1172,57 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 		intf->module.model,
 		intf->module.version,
 		intf->module.imei);
+
+	/* Voltage */
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&intf->comm, 5 * SEC, "AT^SBV");
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put_null(req);
+		return;
+	}
+
+	const char *line = vgsm_req_first_line(req)->text;
+
+	if (strlen(line) > strlen("^SBV: ")) {
+		ast_cli(fd, "  Supply voltage: %d mV\n",
+			atoi(line + strlen("^SBV: ")));
+	}
+
+	vgsm_req_put_null(req);
+
+	/* Current */
+	req = vgsm_req_make_wait(&intf->comm, 5 * SEC, "AT^SBC?");
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put_null(req);
+		return;
+	}
+
+	line = vgsm_req_first_line(req)->text;
+	const char *pars_ptr = line + strlen("^SBC: ");
+	char field[32];
+
+	if (!get_token(&pars_ptr, field, sizeof(field))) {
+		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+		vgsm_req_put_null(req);
+		return;
+	}
+
+	if (!get_token(&pars_ptr, field, sizeof(field))) {
+		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+		vgsm_req_put_null(req);
+		return;
+	}
+
+	if (!get_token(&pars_ptr, field, sizeof(field))) {
+		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+		vgsm_req_put_null(req);
+		return;
+	}
+
+	ast_cli(fd, "  Power consumption: %d mA\n", atoi(field));
+
+	vgsm_req_put_null(req);
+
 
 	if (intf->sim.inserted) {
 		ast_cli(fd,
@@ -1789,46 +1881,6 @@ err_ioctl_vgsm_get_chanid:
 	return -1;
 }
 
-static const char *get_token(const char **s, char *token, int token_size)
-{
-	const char *p = *s;
-	char *token_p = token;
-
-	for(;;) {
-		if (*p == '"') {
-			p++;
-
-			while(*p && *p != '"') {
-				*token_p++ = *p++;
-
-				if (token_p == token + token_size - 2)
-					break;
-			}
-
-			if (*p == '"')
-				p++;
-		}
-
-		if (!*p)
-			break;
-
-		if (*p == ',') {
-			*s = p + 1;
-
-			break;
-		}
-
-		*token_p++ = *p++;
-
-		if (token_p == token + token_size - 2)
-			break;
-	}
-
-	*token_p = '\0';
-
-	return token;
-}
-
 static void vgsm_destroy(struct vgsm_chan *vgsm_chan)
 {
 	free(vgsm_chan);
@@ -2473,38 +2525,6 @@ static const struct ast_channel_tech vgsm_tech = {
 	.send_text	= vgsm_sendtext,
 	.setoption	= vgsm_setoption,
 };
-
-// Must be called with vgsm.lock acquired
-static void vgsm_add_interface(const char *name)
-{
-	int found = FALSE;
-	struct vgsm_interface *intf;
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
-		if (!strcasecmp(intf->name, name)) {
-			found = TRUE;
-			break;
-		}
-	}
-
-	if (!found) {
-		intf = malloc(sizeof(*intf));
-
-		strncpy(intf->name, name, sizeof(intf->name));
-		vgsm_copy_interface_config(intf, &vgsm.default_intf);
-
-		list_add_tail(&intf->ifs_node, &vgsm.ifs);
-	}
-}
-
-// Must be called with vgsm.lock acquired
-static void vgsm_rem_interface(const char *name)
-{
-	struct vgsm_interface *intf;
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
-		if (!strcmp(intf->name, name))
-			break;
-	}
-}
 
 #define to_intf(cm) container_of((cm), struct vgsm_interface, comm)
 
@@ -3691,6 +3711,13 @@ static void handle_unsolicited_scks(
 static void handle_unsolicited_sbc(
 	const struct vgsm_req *urc)
 {
+	struct vgsm_comm *comm = urc->comm;
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_req_first_line(urc)->text;
+	const char *pars = line + strlen(urc->urc_class->code);
+
+	ast_log(LOG_ERROR,
+		"%s: Power supply: %s\n", pars, intf->name);
 }
 
 static void handle_unsolicited_sstn(
@@ -3701,11 +3728,83 @@ static void handle_unsolicited_sstn(
 static void handle_unsolicited_sctm_a(
 	const struct vgsm_req *urc)
 {
+	struct vgsm_comm *comm = urc->comm;
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_req_first_line(urc)->text;
+	const char *pars = line + strlen(urc->urc_class->code);
+
+	switch(atoi(pars)) {
+	case -2:
+		ast_log(LOG_ERROR,
+			"%s: Battery is under critical low temperature limit"
+			" and shutting down\n", intf->name);
+	break;
+
+	case -1:
+		ast_log(LOG_WARNING,
+			"%s: Battery is under lower temperature limit\n",
+			intf->name);
+	break;
+
+	case 0:
+		ast_log(LOG_NOTICE,
+			"%s: Battery temperature is now ok\n",
+			intf->name);
+	break;
+
+	case 1:
+		ast_log(LOG_WARNING,
+			"%s: Battery is over high temperature limit\n",
+			intf->name);
+	break;
+
+	case 2:
+		ast_log(LOG_ERROR,
+			"%s: Battery is over critical high temperature limit"
+			" and shutting down\n", intf->name);
+	break;
+	}
 }
 
 static void handle_unsolicited_sctm_b(
 	const struct vgsm_req *urc)
 {
+	struct vgsm_comm *comm = urc->comm;
+	struct vgsm_interface *intf = to_intf(comm);
+	const char *line = vgsm_req_first_line(urc)->text;
+	const char *pars = line + strlen(urc->urc_class->code);
+
+	switch(atoi(pars)) {
+	case -2:
+		ast_log(LOG_ERROR,
+			"%s: Engine is under critical low temperature limit"
+			" and shutting down\n", intf->name);
+	break;
+
+	case -1:
+		ast_log(LOG_WARNING,
+			"%s: Engine is under lower temperature limit\n",
+			intf->name);
+	break;
+
+	case 0:
+		ast_log(LOG_NOTICE,
+			"%s: Engine temperature is now ok\n",
+			intf->name);
+	break;
+
+	case 1:
+		ast_log(LOG_WARNING,
+			"%s: Engine is over high temperature limit\n",
+			intf->name);
+	break;
+
+	case 2:
+		ast_log(LOG_ERROR,
+			"%s: Engine is over critical high temperature limit"
+			" and shutting down\n", intf->name);
+	break;
+	}
 }
 
 static struct vgsm_urc_class urc_classes[] =
@@ -3980,6 +4079,11 @@ static int vgsm_module_prepin_configure(struct vgsm_interface *intf)
 
 	/* Enable unsolicited operating temperature notification */
 	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT^SCTM=1");
+	if (err != VGSM_RESP_OK)
+		goto err_no_req;
+
+	/* Enable unsolicited operating voltage notification */
+	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT^SBC=0");
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
