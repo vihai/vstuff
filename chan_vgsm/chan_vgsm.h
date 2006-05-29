@@ -54,15 +54,15 @@ struct vgsm_operator_info
 	struct list_head node;
 
 	char id[8];
-	const char *name;
-	const char *country;
-	const char *date;
-	const char *bands;
+	char *name;
+	char *country;
+	char *date;
+	char *bands;
 };
 
 enum vgsm_intf_status
 {
-	VGSM_INTF_STATUS_UNINITIALIZED,
+	VGSM_INTF_STATUS_CLOSED,
 	VGSM_INTF_STATUS_WAITING_SYSTART,
 	VGSM_INTF_STATUS_WAITING_INITIALIZATION,
 	VGSM_INTF_STATUS_INITIALIZING,

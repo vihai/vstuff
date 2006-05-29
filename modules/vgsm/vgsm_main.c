@@ -36,7 +36,7 @@ int debug_level = 0;
 #endif
 
 static struct pci_device_id vgsm_ids[] = {
-	{ 0xe159, 0x0001, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0xe159, 0x0001, 0xa100, 0x0001, 0, 0, 0 },
 	{ 0, },
 };
 

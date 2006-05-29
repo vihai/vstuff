@@ -59,7 +59,7 @@
 
 #define FAILED_RETRY_TIME 30 * SEC
 #define READY_UPDATE_TIME 30 * SEC
-#define UNINITIALIZED_POSTPONE 3 * SEC
+#define CLOSED_POSTPONE 3 * SEC
 #define WAITING_SYSTART_TIME 7 * SEC
 
 #define VGSM_DESCRIPTION "VoiSmart VGSM Channel For Asterisk"
@@ -92,8 +92,8 @@ struct vgsm_state vgsm = {
 static const char *vgsm_intf_status_to_text(enum vgsm_intf_status status)
 {
 	switch(status) {
-	case VGSM_INTF_STATUS_UNINITIALIZED:
-		return "UNINITIALIZED";
+	case VGSM_INTF_STATUS_CLOSED:
+		return "CLOSED";
 	case VGSM_INTF_STATUS_WAITING_SYSTART:
 		return "WAITING_SYSTART";
 	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
@@ -529,7 +529,7 @@ static struct vgsm_interface *vgsm_intf_alloc(void)
 
 	INIT_LIST_HEAD(&intf->counters);
 
-	intf->status = VGSM_INTF_STATUS_UNINITIALIZED;
+	intf->status = VGSM_INTF_STATUS_CLOSED;
 	intf->timer_expiration = -1;
 
 	intf->monitor_thread = AST_PTHREADT_NULL;
@@ -881,8 +881,8 @@ static void vgsm_reload_config(void)
 			list_add_tail(&intf->ifs_node, &vgsm.ifs);
 
 			vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_UNINITIALIZED,
-				UNINITIALIZED_POSTPONE);
+				VGSM_INTF_STATUS_CLOSED,
+				CLOSED_POSTPONE);
 		}
 
 		var = ast_variable_browse(cfg, (char *)cat);
@@ -909,7 +909,28 @@ static void vgsm_reload_config(void)
 
 		return;
 	}
-	
+
+	struct vgsm_operator_info *op_info, *t;
+
+	ast_mutex_lock(&vgsm.lock);
+	list_for_each_entry_safe(op_info, t, &vgsm.op_list, node) {
+
+		if (op_info->country)
+			free(op_info->country);
+
+		if (op_info->name)
+			free(op_info->name);
+
+		if (op_info->date)
+			free(op_info->date);
+
+		if (op_info->bands)
+			free(op_info->bands);
+
+		list_del(&op_info->node);
+		free(op_info);
+	}
+
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
 
@@ -941,6 +962,8 @@ static void vgsm_reload_config(void)
 
 		list_add_tail(&op_info->node, &vgsm.op_list);
 	}
+
+	ast_mutex_unlock(&vgsm.lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1089,7 +1112,7 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 		"  Status: %s\n",
 		vgsm_intf_status_to_text(intf->status));
 
-	if (intf->status == VGSM_INTF_STATUS_UNINITIALIZED ||
+	if (intf->status == VGSM_INTF_STATUS_CLOSED ||
 	    intf->status == VGSM_INTF_STATUS_INITIALIZING)
 		return;
 
@@ -1803,10 +1826,7 @@ static const char *get_token(const char **s, char *token, int token_size)
 
 	*token_p = '\0';
 
-//	if (token_p > token)
-		return token;
-//	else
-//		return NULL;
+	return token;
 }
 
 static void vgsm_destroy(struct vgsm_chan *vgsm_chan)
@@ -1861,9 +1881,6 @@ static struct ast_channel *vgsm_new(
 	ast_chan->rawreadformat = AST_FORMAT_ALAW;
 	ast_chan->writeformat = AST_FORMAT_ALAW;
 	ast_chan->rawwriteformat = AST_FORMAT_ALAW;
-
-//	ast_chan->language[0] = '\0';
-//	ast_set_flag(ast_chan, AST_FLAG_DIGITAL);
 
 	vgsm_chan->ast_chan = ast_chan;
 	ast_chan->tech_pvt = vgsm_chan;
@@ -4364,43 +4381,6 @@ err_no_req:
 static void vgsm_module_ignite(
 	struct vgsm_interface *intf)
 {
-	if (intf->comm.fd >= 0) {
-		ast_mutex_lock(&intf->lock);
-		close(intf->comm.fd);
-		intf->comm.fd = -1;
-		ast_mutex_unlock(&intf->lock);
-		vgsm_comm_wakeup(&intf->comm);
-		sleep(1); // Leave time to poll to release fd
-	}
-
-	intf->comm.fd = open(intf->device_filename, O_RDWR);
-	if (intf->comm.fd < 0) {
-		ast_log(LOG_WARNING,
-			"Unable to open '%s': %s\n",
-			intf->device_filename,
-			strerror(errno));
-
-		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_setreason(intf, "Error opening device");
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		return;
-	}
-
-	intf->comm.name = intf->name;
-
-	/***************/
-
-	if (vgsm_module_codec_init(intf) < 0) {
-		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "Error configuring CODEC");
-		return;
-	}
-
-	vgsm_comm_enable(&intf->comm);
-
 	/* The very first module power-up will not send ^SYSSTART URC
 	 * because it is configured in auto-bauding mode. We will time out
 	 * and initialize it anyway.
@@ -4441,10 +4421,54 @@ static void vgsm_module_ignite(
 	}
 }
 
+
+static void vgsm_module_open(
+	struct vgsm_interface *intf)
+{
+	if (intf->comm.fd >= 0) {
+		ast_mutex_lock(&intf->lock);
+		close(intf->comm.fd);
+		intf->comm.fd = -1;
+		ast_mutex_unlock(&intf->lock);
+		vgsm_comm_wakeup(&intf->comm);
+		sleep(1); // Leave time to poll to release fd
+	}
+
+	intf->comm.fd = open(intf->device_filename, O_RDWR);
+	if (intf->comm.fd < 0) {
+		ast_log(LOG_WARNING,
+			"Unable to open '%s': %s\n",
+			intf->device_filename,
+			strerror(errno));
+
+		vgsm_comm_disable(&intf->comm);
+		vgsm_intf_setreason(intf, "Error opening device");
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+					FAILED_RETRY_TIME);
+		return;
+	}
+
+	intf->comm.name = intf->name;
+
+	/***************/
+
+	vgsm_comm_enable(&intf->comm);
+
+	vgsm_module_ignite(intf);
+}
+
 static void vgsm_module_initialize(
 	struct vgsm_interface *intf)
 {
 	vgsm_debug_generic("Initializing module '%s'\n", intf->name);
+
+	if (vgsm_module_codec_init(intf) < 0) {
+		vgsm_comm_disable(&intf->comm);
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+					FAILED_RETRY_TIME);
+		vgsm_intf_setreason(intf, "Error configuring CODEC");
+		return;
+	}
 
 	int val;
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
@@ -4462,20 +4486,9 @@ static void vgsm_module_initialize(
 			"Module '%s' is not powered on, re-igniting\n",
 			intf->name);
 		
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SYSTART,
-				WAITING_SYSTART_TIME);
 		vgsm_intf_setreason(intf, "Module not turned on");
 
-		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
-			ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
-				strerror(errno));
-			vgsm_comm_disable(&intf->comm);
-			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-						FAILED_RETRY_TIME);
-			vgsm_intf_setreason(intf, "Error turning on module");
-
-			return;
-		}
+		vgsm_module_ignite(intf);
 
 		return;
 	}
@@ -4508,8 +4521,8 @@ static void vgsm_module_monitor_timer(
 	struct vgsm_interface *intf)
 {
 	switch(intf->status) {
-	case VGSM_INTF_STATUS_UNINITIALIZED:
-		vgsm_module_ignite(intf);
+	case VGSM_INTF_STATUS_CLOSED:
+		vgsm_module_open(intf);
 	break;
 
 	case VGSM_INTF_STATUS_WAITING_SYSTART:
