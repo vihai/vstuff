@@ -143,6 +143,8 @@ struct vgsm_interface
 	int set_clock;
 
 	char sms_service_center[32];
+	char sms_sender_domain[64];
+	char sms_recipient_address[64];
 
 	/* Operative data */
 
@@ -199,6 +201,7 @@ struct vgsm_interface
 	} net;
 };
 
+#define vgsm_intf_put_null(i)	do { vgsm_intf_put(i); i = NULL; } while(0)
 
 struct vgsm_state
 {
@@ -225,3 +228,5 @@ static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)
 {
 	return ast_chan->tech_pvt;
 }
+
+struct vgsm_operator_info *vgsm_search_operator(const char *id);

@@ -41,7 +41,7 @@
 
 #define ECHO_TIMEOUT (400 * MILLISEC)
 #define URC_TIMEOUT (500 * MILLISEC)
-#define SMS_ECHO_TIMEOUT (400 * MILLISEC)
+#define SMS_ECHO_TIMEOUT (1 * SEC)
 
 static pthread_t vgsm_comm_thread = AST_PTHREADT_NULL;
 static pthread_t vgsm_comm_urc_thread = AST_PTHREADT_NULL;
@@ -525,6 +525,9 @@ static int match_echo(struct vgsm_comm *comm, const char *sent)
 	int n = 0;
 	const char *b = comm->buf;
 	const char *r = sent;
+
+//printf("Match1 = '%s'\n", b);
+//printf("Match2 = '%s'\n", r);
 
 	while(*b && *r && *b == *r) {
 		b++;

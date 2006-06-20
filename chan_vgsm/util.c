@@ -241,7 +241,7 @@ struct vgsm_7bit_wc_translation
 	char c2;
 	wchar_t wc;
 } vgsm_7bit_wc_translations[] = {
-	{ 0x00,    0, 0x00000064 }, // COMMERCIAL AT
+	{ 0x00,    0, 0x00000040 }, // COMMERCIAL AT
 	{ 0x01,    0, 0x000000A3 }, // POUND SIGN
 	{ 0x02,    0, 0x00000024 }, // DOLLAR SIGN
 	{ 0x03,    0, 0x000000A5 }, // YEN SIGN

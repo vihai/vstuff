@@ -88,6 +88,8 @@ struct vgsm_sms *vgsm_sms_alloc(void)
 
 	sms->refcnt = 1;
 
+	sms->message_class = 1;
+
 	return sms;
 };
 
@@ -169,8 +171,8 @@ struct vgsm_sms *vgsm_decode_sms_pdu(
 	struct vgsm_type_of_address *smcc_toa =
 		(struct vgsm_type_of_address *)(pdu + pos++);
 
-	sms->sender_ton = smcc_toa->type_of_number;
-	sms->sender_np = smcc_toa->numbering_plan_identificator;
+	sms->smcc_ton = smcc_toa->type_of_number;
+	sms->smcc_np = smcc_toa->numbering_plan_identificator;
 
 	if (vgsm_bcd_to_text(pdu + pos, (smcc_len - 1) * 2,
 					sms->smcc, sizeof(sms->smcc)) < 0)
@@ -409,7 +411,22 @@ err_sms_alloc:
 	return NULL;
 }
 
-void vgsm_sms_spool(struct vgsm_sms *sms)
+static const char *vgsm_make_number_prefix(
+	enum vgsm_numbering_plan np,
+	enum vgsm_type_of_number ton)
+{
+	/* We probably need to handle national numbers but they are
+	 * currently unused in our test networks
+	 */
+
+	if ((np == VGSM_NP_ISDN || np == VGSM_NP_UNKNOWN) &&
+	    ton == VGSM_TON_INTERNATIONAL)
+		return "+";
+	else
+		return "";
+}
+
+int vgsm_sms_spool(struct vgsm_sms *sms)
 {
 	struct vgsm_interface *intf = sms->intf;
 	char spooler[PATH_MAX];
@@ -423,52 +440,89 @@ void vgsm_sms_spool(struct vgsm_sms *sms)
 	if (!f) {
 		ast_log(LOG_ERROR, "Cannot spawn spooler: %s\n",
 			strerror(errno));
-		return;
+		return -1;
 	}
 
 	char *loc = setlocale(LC_CTYPE, "C");
 	if (!loc) {
 		ast_log(LOG_ERROR, "Cannot set locale: %s\n",
 			strerror(errno));
-		return;
+		return -1;
 	}
+
 
 	struct tm tm;
 	time_t tim = time(NULL);
         localtime_r(&tim, &tm);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
-	fprintf(f, "Received: from GSM module %s; %s\n", intf->name, tmpstr);
 
-	fprintf(f, "From: %s@sms.orlandi.com\n", sms->sender);
+	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+            intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		fprintf(f,
+			"Received: from GSM module %s; %s\n",
+			intf->name, tmpstr);
+	} else {
+		struct vgsm_operator_info *op_info;
+		op_info = vgsm_search_operator(intf->net.operator_id);
+
+		if (op_info) {
+			fprintf(f,
+				"Received: from GSM module %s"
+				" registered on %s, %s; %s\n",
+				intf->name,
+				op_info->name,
+				op_info->country,
+				tmpstr);
+		} else {
+			fprintf(f,
+				"Received: from GSM module %s"
+				" registered on %s; %s\n",
+				intf->name,
+				intf->net.operator_id,
+				tmpstr);
+		}
+	}
+
+	fprintf(f, "From: <%s%s@%s>\n",
+		vgsm_make_number_prefix(sms->sender_np, sms->sender_ton),
+		sms->sender, intf->sms_sender_domain);
 	fprintf(f, "Subject: SMS message\n");
 	fprintf(f, "MIME-Version: 1.0\n");
 	fprintf(f, "Content-Type: text/plain\n\tcharset=\"UTF-8\"\n");
-	fprintf(f, "To: <daniele@orlandi.com>\n");
+
+	if (strchr(intf->sms_recipient_address, '<'))
+		fprintf(f, "To: %s\n", intf->sms_recipient_address);
+	else
+		fprintf(f, "To: <%s>\n", intf->sms_recipient_address);
 
         localtime_r(&sms->timestamp, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "Date: %s\n", tmpstr);
+	fprintf(f, "X-SMS-Service-Center: %s%s\n",
+		vgsm_make_number_prefix(sms->smcc_np, sms->smcc_ton),
+		sms->smcc);
+	fprintf(f, "X-SMS-Class: %d\n", sms->message_class);
 
 	fprintf(f, "\n");
 	
 	char outbuffer[1000];
 	char *inbuf = (char *)sms->text;
 	char *outbuf = outbuffer;
-	size_t inbytes = wcslen(sms->text) * sizeof(wchar_t);
+	size_t inbytes = (wcslen(sms->text) + 1) * sizeof(wchar_t);
 	size_t outbytes = sizeof(outbuffer);
 
 	iconv_t cd = iconv_open("UTF-8", "WCHAR_T");
 	if (cd < 0) {
 		ast_log(LOG_ERROR, "Cannot open iconv context; %s\n",
 			strerror(errno));
-		return;
+		return -1;
 	}
 
 	if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes) < 0) {
 		ast_log(LOG_ERROR, "Cannot iconv; %s\n",
 			strerror(errno));
-		return;
+		return -1;
 	}
 
 	iconv_close(cd);
@@ -478,6 +532,8 @@ void vgsm_sms_spool(struct vgsm_sms *sms)
 	setlocale(LC_CTYPE, loc);
 
 	fclose(f);
+
+	return 0;
 }
 
 int vgsm_sms_prepare(struct vgsm_sms *sms)
@@ -529,7 +585,8 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	struct vgsm_sms_submit_pdu *ssp =
 		(struct vgsm_sms_submit_pdu *)(pdu + len++);
 
-	ssp->tp_rp = 1;
+	//ssp->tp_rp = 1;
+	ssp->tp_rp = 0;
 	ssp->tp_udhi = 0;
 	ssp->tp_srr = 0;
 	ssp->tp_vpf = VGSM_VPF_RELATIVE_FORMAT;
@@ -556,11 +613,11 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 
 	/* Protocol identifier */
 
-	struct vgsm_sms_protocol_identifier_01 *pi =
-		(struct vgsm_sms_protocol_identifier_01 *)(pdu + len++);
+	struct vgsm_sms_protocol_identifier_00 *pi =
+		(struct vgsm_sms_protocol_identifier_00 *)(pdu + len++);
 
-	pi->protocol_type = VGSM_SMS_PT_MESSAGE_TYPE;
-	pi->message_type = VGSM_SMS_MT_SHORT_TYPE_0;
+	pi->protocol_type = VGSM_SMS_PT_INTERWORKING;
+	pi->interworking = 0;
 
 	/* Data coding scheme */
 
@@ -571,7 +628,7 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	dcs->compressed = 0;
 	dcs->has_class = 1;
 	dcs->message_alphabet = VGSM_SMS_DCS_ALPHABET_DEFAULT;
-	dcs->message_class = 0;
+	dcs->message_class = sms->message_class;
 
 	/* Validity Period */
 	*(pdu + len++) = 0xaa;

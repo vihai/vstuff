@@ -325,6 +325,8 @@ struct vgsm_sms
 	time_t timestamp;
 	int timezone;
 
+	int message_class;
+
 	int pdu_len;
 	int pdu_tp_len;
 	void *pdu;
@@ -335,8 +337,10 @@ struct vgsm_sms
 struct vgsm_sms *vgsm_sms_alloc(void);
 struct vgsm_sms *vgsm_sms_get(struct vgsm_sms *sms);
 void vgsm_sms_put(struct vgsm_sms *sms);
+#define vgsm_sms_put_null(s)	do { vgsm_sms_put(s); s = NULL; } while(0)
+
 struct vgsm_sms *vgsm_decode_sms_pdu(const char *text_pdu);
-void vgsm_sms_spool(struct vgsm_sms *sms);
+int vgsm_sms_spool(struct vgsm_sms *sms);
 int vgsm_sms_prepare(struct vgsm_sms *sms);
 
 #endif

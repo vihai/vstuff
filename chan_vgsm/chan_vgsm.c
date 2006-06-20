@@ -44,6 +44,7 @@
 #include <asterisk/musiconhold.h>
 #include <asterisk/dsp.h>
 #include <asterisk/causes.h>
+#include <asterisk/manager.h>
 
 #include <linux/vgsm.h>
 
@@ -57,10 +58,11 @@
 #include "sms.h"
 #include "cbm.h"
 
-#define FAILED_RETRY_TIME 30 * SEC
-#define READY_UPDATE_TIME 30 * SEC
-#define CLOSED_POSTPONE 3 * SEC
-#define WAITING_SYSTART_TIME 7 * SEC
+#define FAILED_RETRY_TIME (30 * SEC)
+#define READY_UPDATE_TIME (30 * SEC)
+#define CLOSED_POSTPONE (3 * SEC)
+#define WAITING_SYSTART_TIME (7 * SEC)
+#define WAITING_INITIALIZATION_DELAY (5 * SEC)
 
 #define VGSM_DESCRIPTION "VoiSmart VGSM Channel For Asterisk"
 #define VGSM_CHAN_TYPE "VGSM"
@@ -86,6 +88,8 @@ struct vgsm_state vgsm = {
 		.operator_selection = VGSM_OPSEL_AUTOMATIC,
 		.operator_id = "",
 		.sms_service_center = "",
+		.sms_sender_domain = "localhost",
+		.sms_recipient_address = "root@localhost",
 	}
 };
 
@@ -651,64 +655,81 @@ static void vgsm_intf_unexpected_error(struct vgsm_interface *intf, int err)
 
 static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 {
+	int err;
+
 	if (argc < 4) {
 		ast_cli(fd, "Missing interface name\n");
-		return RESULT_SHOWUSAGE;
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_interface;
 	}
 
 	if (argc < 5) {
 		ast_cli(fd, "Missing OLDPIN\n");
-		return RESULT_SHOWUSAGE;
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_oldpin;
 	}
 
 	if (vgsm_validate_pin(argv[4]) < 0) {
 		ast_cli(fd, "OLDPIN contains invalid characters\n");
-		return RESULT_SHOWUSAGE;
+		err = RESULT_SHOWUSAGE;
+		goto err_oldpin_invalid;
 	}
 
 	if (argc < 6) {
 		ast_cli(fd, "Missing NEWPIN\n");
-		return RESULT_SHOWUSAGE;
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_newpin;
 	}
 
 	struct vgsm_interface *intf;
 	intf = vgsm_intf_get_by_name(argv[3]);
 	if (!intf) {
 		ast_cli(fd, "Cannot find interface '%s'\n", argv[3]);
-		return RESULT_SHOWUSAGE;
+		err = RESULT_SHOWUSAGE;
+		goto err_intf_not_found;
 	}
 
-	int err;
+	int res;
 	if (!strcasecmp(argv[5], "enabled")) {
-		err = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
+		res = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
 			"AT+CLCK=SC,1,\"%s\"", argv[4]);
 	} else if (!strcasecmp(argv[5], "disabled")) {
-		err = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
+		res = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
 			"AT+CLCK=SC,0,\"%s\"", argv[4]);
 	} else {
 		if (vgsm_validate_pin(argv[5]) < 0) {
 			ast_cli(fd, "NEWPIN contains invalid characters\n");
-			vgsm_intf_put(intf);
-			return RESULT_SHOWUSAGE;
+			err = RESULT_FAILURE;
+			goto err_newpin_invalid;
 		}
 
-		err = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
+		res = vgsm_req_make_wait_result(&intf->comm, 180 * SEC,
 			"AT+CPWD=SC,\"%s\",\"%s\"",
 			argv[4], argv[5]);
 	}
 
-	if (err != VGSM_RESP_OK) {
+	if (res != VGSM_RESP_OK) {
 		ast_cli(fd, "Unable to complete command: %s (%d)\n",
-			vgsm_error_to_text(err),
-			err);
-		vgsm_intf_put(intf);
-		return RESULT_FAILURE;
+			vgsm_error_to_text(res),
+			res);
+		err = RESULT_FAILURE;
+		goto err_response;
 	}
 
-	vgsm_intf_put(intf);
-	intf = NULL;
+	vgsm_intf_put_null(intf);
 
 	return RESULT_SUCCESS;
+
+err_response:
+err_newpin_invalid:
+	vgsm_intf_put_null(intf);
+err_intf_not_found:
+err_missing_newpin:
+err_oldpin_invalid:
+err_missing_oldpin:
+err_missing_interface:
+
+	return err;
 }
 
 static char vgsm_pin_set_help[] =
@@ -780,6 +801,12 @@ static int vgsm_intf_from_var(
 	} else if (!strcasecmp(var->name, "sms_service_center")) { 
 		strncpy(intf->sms_service_center, var->value,
 			sizeof(intf->sms_service_center));
+	} else if (!strcasecmp(var->name, "sms_sender_domain")) { 
+		strncpy(intf->sms_sender_domain, var->value,
+			sizeof(intf->sms_sender_domain));
+	} else if (!strcasecmp(var->name, "sms_recipient_address")) { 
+		strncpy(intf->sms_recipient_address, var->value,
+			sizeof(intf->sms_recipient_address));
 	} else {
 		return -1;
 	}
@@ -808,6 +835,10 @@ static void vgsm_copy_interface_config(
 
 	strncpy(dst->sms_service_center, src->sms_service_center,
 		sizeof(dst->sms_service_center));
+	strncpy(dst->sms_sender_domain, src->sms_sender_domain,
+		sizeof(dst->sms_sender_domain));
+	strncpy(dst->sms_recipient_address, src->sms_recipient_address,
+		sizeof(dst->sms_recipient_address));
 }
 
 static struct vgsm_urc_class urc_classes[];
@@ -1130,7 +1161,6 @@ static const char *get_token(const char **s, char *token, int token_size)
 	return token;
 }
 
-
 static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 {
 	ast_cli(fd, "\n------ Interface '%s' ---------\n", intf->name);
@@ -1308,9 +1338,9 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	ast_cli(fd,
 		"  RxLev Sub: %d dBm\n"
 		"  RxLev Full: %d dBm\n"
-		"  RxQual: %d (%s)\n"
-		"  RxQual Sub: %d (%s)\n"
-		"  RxQual Full: %d (%s)\n"
+		"  RxQual: %d (BER %s)\n"
+		"  RxQual Sub: %d (BER %s)\n"
+		"  RxQual Full: %d (BER %s)\n"
 		"  Timeslot: %d\n"
 		"  TA: %d\n",
 		-intf->net.sci2.rx_lev_sub,
@@ -1402,12 +1432,9 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 	}
 }
 
-static char *complete_show_vgsm_interfaces(
-		char *line, char *word, int pos, int state)
+static char *complete_interface(
+		char *line, char *word, int state)
 {
-	if (pos != 3)
-		return NULL;
-
 	int which = 0;
 
 	ast_mutex_lock(&vgsm.lock);
@@ -1423,6 +1450,15 @@ static char *complete_show_vgsm_interfaces(
 	ast_mutex_unlock(&vgsm.lock);
 
 	return NULL;
+}
+
+static char *complete_show_vgsm_interfaces(
+		char *line, char *word, int pos, int state)
+{
+	if (pos != 3)
+		return NULL;
+
+	return complete_interface(line, word,state);
 }
 
 static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
@@ -1487,83 +1523,140 @@ static int vgsm_number_parse(
 	return 0;
 }
 
+static char *complete_send_sms(
+		char *line, char *word, int pos, int state)
+{
+	if (pos != 3)
+		return NULL;
+
+	return complete_interface(line, word,state);
+}
+
 static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 {
+	int err = RESULT_SUCCESS;
+
 	if (argc < 4) {
+		ast_cli(fd, "Missing interface");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_intf;
+	}
+
+	if (argc < 5) {
 		ast_cli(fd, "Missing phone number");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_number;
+	}
+
+	if (argc < 6) {
+		ast_cli(fd, "Missing text");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_text;
 	}
 
 	struct vgsm_interface *intf;
-
-	ast_mutex_lock(&vgsm.lock);
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
-
-		ast_mutex_lock(&intf->lock);
-		if (intf->status != VGSM_INTF_STATUS_READY &&
-		    intf->status != VGSM_INTF_STATUS_INCALL) {
-			ast_log(LOG_NOTICE,
-				"Cannot send SMS on not ready interfce\n");
-			ast_mutex_unlock(&intf->lock);
-			return -1;
-		}
-		ast_mutex_unlock(&intf->lock);
-
-		struct vgsm_sms *sms = vgsm_sms_alloc();
-
-		if (!sms)
-			break;
-
-		sms->intf = intf;
-		vgsm_number_parse(
-			intf->sms_service_center,
-			sms->smcc, sizeof(sms->smcc),
-			&sms->smcc_np, &sms->smcc_ton);
-
-		vgsm_number_parse(
-			argv[3],
-			sms->dest, sizeof(sms->dest),
-			&sms->dest_np,
-			&sms->dest_ton);
-
-		sms->timestamp = time(NULL);
-
-		tzset();
-		sms->timezone = timezone;
-
-		sms->text = wcsdup(L"Blah Blah Blah");
-
-		vgsm_sms_prepare(sms);
-
-		struct vgsm_req *req = vgsm_req_make_sms(
-			&intf->comm, 30 * SEC, sms->pdu, sms->pdu_len,
-			"AT+CMGS=%d", sms->pdu_tp_len);
-		if (!req) {
-			ast_log(LOG_NOTICE, "Error sending SMS\n");
-			break;
-		}
-
-		vgsm_req_wait(req);
-
-		if (req->err != VGSM_RESP_OK) {
-			ast_log(LOG_NOTICE, "Error sending SMS: %s (%d)\n",
-				vgsm_error_to_text(req->err),
-				req->err);
-			vgsm_req_put_null(req);
-			break;
-		}
-
-		vgsm_req_put_null(req);
-
-		break;
+	intf = vgsm_intf_get_by_name(argv[3]);
+	if (!intf) {
+		ast_cli(fd, "Cannot find interface '%s'\n", argv[3]);
+		err = RESULT_FAILURE;
+		goto err_intf_not_found;
 	}
-	ast_mutex_unlock(&vgsm.lock);
 
-	return 0;
+	ast_mutex_lock(&intf->lock);
+	if (intf->status != VGSM_INTF_STATUS_READY &&
+	    intf->status != VGSM_INTF_STATUS_INCALL) {
+		ast_cli(fd,
+			"Cannot send SMS on not ready interfce\n");
+		ast_mutex_unlock(&intf->lock);
+		err = RESULT_FAILURE;
+		goto err_intf_not_ready;
+	}
+	ast_mutex_unlock(&intf->lock);
+
+	struct vgsm_sms *sms;
+	sms = vgsm_sms_alloc();
+	if (!sms) {
+		ast_cli(fd,  "Cannot allocate SMS\n");
+		err = RESULT_FAILURE;
+		goto err_sms_alloc;
+	}
+
+	sms->intf = intf;
+	vgsm_number_parse(
+		intf->sms_service_center,
+		sms->smcc, sizeof(sms->smcc),
+		&sms->smcc_np, &sms->smcc_ton);
+
+	vgsm_number_parse(
+		argv[4],
+		sms->dest, sizeof(sms->dest),
+		&sms->dest_np,
+		&sms->dest_ton);
+
+	sms->timestamp = time(NULL);
+
+	tzset();
+	sms->timezone = timezone;
+
+	if (argc >= 7)
+		sms->message_class = atoi(argv[6]);
+	else
+		sms->message_class = 1;
+
+	size_t slen;
+	slen = mbstowcs(NULL, argv[5], 0);
+	if(slen == -1)
+		goto err_invalid_mbstring;
+ 
+	sms->text = malloc((slen + 1) * sizeof(wchar_t));
+	if(!sms->text)
+		goto err_malloc_sms_text;
+ 
+	mbstowcs(sms->text, argv[5], slen);
+	sms->text[slen] = L'\0';
+
+	vgsm_sms_prepare(sms);
+
+	struct vgsm_req *req = vgsm_req_make_sms(
+		&intf->comm, 30 * SEC, sms->pdu, sms->pdu_len,
+		"AT+CMGS=%d", sms->pdu_tp_len);
+	if (!req) {
+		ast_cli(fd, "Error sending SMS\n");
+		err = RESULT_FAILURE;
+		goto err_req_make;
+	}
+
+	vgsm_req_wait(req);
+
+	if (req->err != VGSM_RESP_OK) {
+		ast_cli(fd, "Error sending SMS: %s (%d)\n",
+			vgsm_error_to_text(req->err),
+			req->err);
+		goto err_req_result;
+	}
+
+	vgsm_req_put_null(req);
+
+	return RESULT_SUCCESS;
+
+err_req_result:
+	vgsm_req_put_null(req);
+err_req_make:
+err_invalid_mbstring:
+err_malloc_sms_text:
+	vgsm_sms_put_null(sms);
+err_sms_alloc:
+err_intf_not_ready:
+err_intf_not_found:
+err_missing_text:
+err_missing_number:
+err_missing_intf:
+
+	return err;
 }
 
 static char vgsm_send_sms_help[] =
-	"Usage: vgsm send sms\n"
+	"Usage: vgsm send sms <intf> <number> <text> [class]\n"
 	"	Send SMS\n";
 
 static struct ast_cli_entry vgsm_send_sms =
@@ -1572,7 +1665,7 @@ static struct ast_cli_entry vgsm_send_sms =
 	do_vgsm_send_sms,
 	"Send SMS",
 	vgsm_send_sms_help,
-	NULL
+	complete_send_sms,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1581,7 +1674,7 @@ static int do_vgsm_reload(int fd, int argc, char *argv[])
 {
 	vgsm_reload_config();
 
-	return 0;
+	return RESULT_SUCCESS;
 }
 
 static char vgsm_vgsm_reload_help[] =
@@ -1601,28 +1694,32 @@ static struct ast_cli_entry vgsm_reload =
 
 static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 {
-	int res;
+	int err;
 
 	if (argc < 4) {
 		ast_cli(fd, "Missing interface name\n");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_no_interface_name;
 	}
 
 	if (argc < 5) {
 		ast_cli(fd, "Missing PIN\n");
-		return -1;
+		err =  RESULT_SHOWUSAGE;
+		goto err_no_pin;
 	}
 
 	if (vgsm_validate_pin(argv[4]) < 0) {
 		ast_cli(fd, "PIN contains invalid characters\n");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_pin_invalid;
 	}
 
 	struct vgsm_interface *intf;
 	intf = vgsm_intf_get_by_name(argv[3]);
 	if (!intf) {
 		ast_cli(fd, "Cannot find interface '%s'\n", argv[3]);
-		return -1;
+		err = RESULT_FAILURE;
+		goto err_intf_not_found;
 	}
 
 	struct vgsm_comm *comm = &intf->comm;
@@ -1631,8 +1728,8 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	if (req->err != VGSM_RESP_OK) {
 		vgsm_intf_unexpected_error(intf, req->err);
-		vgsm_req_put_null(req);
-		return -1;
+		err = RESULT_FAILURE;
+		goto err_req_make;
 	}
 
 	const struct vgsm_req_line *first_line;
@@ -1640,16 +1737,18 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 
 	if (!strcmp(first_line->text, "+CPIN: READY")) {
 		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 
-		int err = vgsm_req_make_wait_result(comm, 20 * SEC,
+		int res = vgsm_req_make_wait_result(comm, 20 * SEC,
 				"AT+CPIN=\"%s\"", argv[4]);
-		if (err != VGSM_RESP_OK) {
+		if (res != VGSM_RESP_OK) {
 			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_error_to_text(err),
-				err);
-			res = -1;
+				vgsm_error_to_text(res),
+				res);
+			err = RESULT_FAILURE;
+			goto err_send_pin;
 		}
 
 		vgsm_intf_set_status(intf,
@@ -1657,25 +1756,39 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
 		ast_cli(fd, "SIM requires PIN2");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
 		ast_cli(fd, "SIM requires PUK");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
 		ast_cli(fd, "SIM requires PUK2");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
 	} else {
-		ast_cli(fd, "Unknown reqonse '%s'", first_line->text);
-
-		res = -1;
+		ast_cli(fd, "Unknown response '%s'", first_line->text);
+		err = RESULT_FAILURE;
+		goto err_unknown_response;
 	}
 
 	vgsm_req_put_null(req);
+	vgsm_intf_put_null(intf);
 
-	vgsm_intf_put(intf);
-	intf = NULL;
+	return RESULT_SUCCESS;
 
-	return 0;
+err_unknown_response:
+err_send_pin:
+err_not_waiting_pin:
+	vgsm_req_put_null(req);
+err_req_make:
+	vgsm_intf_put_null(intf);
+err_intf_not_found:
+err_pin_invalid:
+err_no_pin:
+err_no_interface_name:
+
+	return err;
 }
 
 static char vgsm_pin_input_help[] =
@@ -1696,38 +1809,43 @@ static struct ast_cli_entry vgsm_pin_input =
 static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 {
 	int err;
-	int res;
 
 	if (argc < 4) {
 		ast_cli(fd, "Missing interface name\n");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_no_intf_name;
 	}
 
 	if (argc < 5) {
 		ast_cli(fd, "Missing PUK\n");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_no_puk;
 	}
 
 	if (vgsm_validate_pin(argv[4]) < 0) {
 		ast_cli(fd, "PUK contains invalid characters\n");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_puk_invalid;
 	}
 
 	if (argc < 6) {
 		ast_cli(fd, "Missing NEWPIN\n");
-		return -1;
+		err = RESULT_SHOWUSAGE;
+		goto err_no_newpin;
 	}
 
 	if (vgsm_validate_pin(argv[4]) < 0) {
 		ast_cli(fd, "NEWPIN contains invalid characters\n");
-		return -1;
+		err = RESULT_FAILURE;
+		goto err_newpin_invalid;
 	}
 
 	struct vgsm_interface *intf;
 	intf = vgsm_intf_get_by_name(argv[3]);
 	if (!intf) {
 		ast_cli(fd, "Cannot find interface '%s'\n", argv[3]);
-		return -1;
+		err = RESULT_FAILURE;
+		goto err_intf_not_found;
 	}
 
 	struct vgsm_comm *comm = &intf->comm;
@@ -1737,8 +1855,8 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_intf_unexpected_error(intf, err);
-		vgsm_req_put_null(req);
-		return -1;
+		err = RESULT_FAILURE;
+		goto err_req_make;
 	}
 
 	const struct vgsm_req_line *first_line;
@@ -1746,13 +1864,16 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 
 	if (!strcmp(first_line->text, "+CPIN: READY")) {
 		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 		ast_cli(fd, "SIM requires PIN");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
 		ast_cli(fd, "SIM requires PIN2");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
 
 		int err = vgsm_req_make_wait_result(comm, 20 * SEC,
@@ -1761,7 +1882,8 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 			ast_cli(fd, "Error: %s (%d)\n",
 				vgsm_error_to_text(err),
 				err);
-			res = -1;
+			err = RESULT_FAILURE;
+		goto err_invalid_state;
 		}
 
 		vgsm_intf_set_status(intf,
@@ -1769,19 +1891,33 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
 		ast_cli(fd, "SIM requires PUK2");
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
 	} else {
-		ast_cli(fd, "Unknown reqonse '%s'", first_line->text);
+		ast_cli(fd, "Unknown response '%s'", first_line->text);
 
-		res = -1;
+		err = RESULT_FAILURE;
+		goto err_unknown_response;
 	}
 
 	vgsm_req_put_null(req);
+	vgsm_intf_put_null(intf);
 
-	vgsm_intf_put(intf);
-	intf = NULL;
+	return RESULT_SUCCESS;
 
-	return 0;
+err_unknown_response:
+err_invalid_state:
+	vgsm_req_put_null(req);
+err_req_make:
+	vgsm_intf_put_null(intf);
+err_intf_not_found:
+err_newpin_invalid:
+err_no_newpin:
+err_puk_invalid:
+err_no_puk:
+err_no_intf_name:
+
+	return err;
 }
 
 static char vgsm_puk_input_help[] =
@@ -2582,6 +2718,8 @@ static int vgsm_request_ceer(struct vgsm_interface *intf)
 
 	int reason = atoi(field);
 
+	vgsm_req_put_null(req);
+
 //	if (!get_token(&pars_ptr, field, sizeof(field)))
 //		goto done;
 //
@@ -2597,6 +2735,7 @@ static int vgsm_request_ceer(struct vgsm_interface *intf)
 	return vgsm_cause_to_ast_cause(location, reason);
 
 err_cerr:
+	vgsm_req_put_null(req);
 
 	return AST_CAUSE_NORMAL_CLEARING;
 }
@@ -2791,13 +2930,34 @@ err_cops:
 static void vgsm_module_update_readiness(
 	struct vgsm_interface *intf)
 {
-	if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-	    intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-					READY_UPDATE_TIME);
-	} else {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_NO_NET,
-					READY_UPDATE_TIME);
+	switch(intf->status) {
+	case VGSM_INTF_STATUS_READY:
+		if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+		    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_NO_NET,
+						READY_UPDATE_TIME);
+		}
+	break;
+
+	case VGSM_INTF_STATUS_NO_NET:
+		if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+		    intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+						READY_UPDATE_TIME);
+		}
+	break;
+
+	case VGSM_INTF_STATUS_CLOSED:
+	case VGSM_INTF_STATUS_WAITING_SYSTART:
+	case VGSM_INTF_STATUS_FAILED:
+	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
+	case VGSM_INTF_STATUS_INITIALIZING:
+	case VGSM_INTF_STATUS_RING:
+	case VGSM_INTF_STATUS_INCALL:
+	case VGSM_INTF_STATUS_WAITING_SIM:
+	case VGSM_INTF_STATUS_WAITING_PIN:
+		/* Do nothing */
+	break;
 	}
 }
 
@@ -3010,17 +3170,21 @@ static void handle_unsolicited_cmt(
 
 	sms->intf = intf;
 
-	vgsm_sms_spool(sms);
+	if (vgsm_sms_spool(sms) >= 0) {
+
+		/* Send Acknowledgment */
+
+		int err = vgsm_req_make_wait_result(comm,
+				20 * SEC, "AT+CNMA=0");
+		if (err != VGSM_RESP_OK) {
+			ast_log(LOG_ERROR,
+				"Error acknowledging SMS: %s (%d)\n",
+				vgsm_error_to_text(err), err);
+			goto err_acknowledge;
+		}
+	}
 
 	vgsm_sms_put(sms);
-
-	int err = vgsm_req_make_wait_result(comm, 20 * SEC, "AT+CNMA=0");
-	if (err != VGSM_RESP_OK) {
-		ast_log(LOG_ERROR,
-			"Error acknowledging SMS: %s (%d)\n",
-			vgsm_error_to_text(err), err);
-		goto err_acknowledge;
-	}
 
 	return;
 
@@ -3256,7 +3420,7 @@ static void handle_unsolicited_ciev_call(
 
 		if (strncmp(line->text, "^SLCC: ", 7)) {
 			ast_log(LOG_ERROR,
-				"Unexpected reqonse %s to AT^SLCC\n",
+				"Unexpected response %s to AT^SLCC\n",
 				line->text);
 			continue;
 		}
@@ -3645,7 +3809,8 @@ static void handle_unsolicited_sysstart(
 	vgsm_debug_generic("Module started (^SYSSTART received)\n");
 
 	vgsm_intf_set_status(intf,
-		VGSM_INTF_STATUS_WAITING_INITIALIZATION, 0);
+		VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+		WAITING_INITIALIZATION_DELAY);
 }
 
 static void handle_unsolicited_shutdown(
@@ -3699,7 +3864,8 @@ static void handle_unsolicited_scks(
 	ast_mutex_lock(&intf->lock);
 	if (atoi(pars)) {
 		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_WAITING_INITIALIZATION, 0);
+			VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+			WAITING_INITIALIZATION_DELAY);
 		intf->sim.inserted = TRUE;
 	} else {
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
@@ -3937,7 +4103,7 @@ static int vgsm_pin_check_and_input(
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
 					FAILED_RETRY_TIME);
 		vgsm_intf_setreason(intf,
-			"Unknown reqonse '%s'", first_line->text);
+			"Unknown response '%s'", first_line->text);
 
 		res = -1;
 	}
@@ -4419,7 +4585,7 @@ static int vgsm_module_update_net_info(
 	if (err != VGSM_RESP_OK) {
 		vgsm_intf_unexpected_error(intf, err);
 		vgsm_req_put_null(req);
-		goto err_creg_read_reqonse;
+		goto err_creg_read_response;
 	}
 
 	const char *line = vgsm_req_first_line(req)->text;
@@ -4445,10 +4611,136 @@ static int vgsm_module_update_net_info(
 
 err_update_cops:
 err_update_smond:
-err_creg_read_reqonse:
+err_creg_read_response:
 	ast_mutex_unlock(&intf->lock);
 
-	return -1;
+	return err;
+}
+
+/***********************************************/
+
+/*! \brief  manager_vgsm_sms_tx: Send a text sms with VGSM card ---*/
+
+static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
+{
+	char *interface = astman_get_header(m, "Interface");
+	char *number = astman_get_header(m, "Destination");
+	char *content = astman_get_header(m, "Content");
+	char *class_str = astman_get_header(m, "Class");
+
+	if (!strlen(interface)) {
+		astman_send_error(s, m, "Interface missing");
+		goto err_missing_interface;
+	}
+
+	if (!strlen(number)) {
+		astman_send_error(s, m, "Destination missing");
+		goto err_missing_destination;
+	}
+
+	if (!strlen(content)) {
+		astman_send_error(s, m, "Content missing");
+		goto err_missing_content;
+	}
+
+	struct vgsm_interface *intf;
+	intf = vgsm_intf_get_by_name(interface);
+	if (!intf) {
+		astman_send_error(s, m, "Cannot find interface");
+		goto err_intf_not_found;
+	}
+
+	ast_mutex_lock(&intf->lock);
+	if (intf->status != VGSM_INTF_STATUS_READY &&
+	    intf->status != VGSM_INTF_STATUS_INCALL) {
+		astman_send_error(s, m,
+			"Cannot send SMS on not ready interfce");
+		ast_mutex_unlock(&intf->lock);
+		goto err_intf_not_ready;
+	}
+	ast_mutex_unlock(&intf->lock);
+
+	struct vgsm_sms *sms;
+	sms = vgsm_sms_alloc();
+	if (!sms) {
+		astman_send_error(s, m,
+			"Cannot allocate SMS");
+		goto err_sms_alloc;
+	}
+
+	sms->intf = intf;
+	vgsm_number_parse(
+		intf->sms_service_center,
+		sms->smcc, sizeof(sms->smcc),
+		&sms->smcc_np, &sms->smcc_ton);
+
+	vgsm_number_parse(
+		number,
+		sms->dest, sizeof(sms->dest),
+		&sms->dest_np,
+		&sms->dest_ton);
+
+	sms->timestamp = time(NULL);
+
+	tzset();
+	sms->timezone = timezone;
+
+	if (strlen(class_str))
+		sms->message_class = atoi(class_str);
+	else
+		sms->message_class = 1;
+
+	size_t slen;
+	slen = mbstowcs(NULL, content, 0);
+	if(slen == -1)
+		goto err_invalid_mbstring;
+ 
+	sms->text = malloc((slen + 1) * sizeof(wchar_t));
+	if(!sms->text)
+		goto err_malloc_sms_text;
+ 
+	mbstowcs(sms->text, content, slen);
+	sms->text[slen] = L'\0';
+ 
+	vgsm_sms_prepare(sms);
+
+	struct vgsm_req *req = vgsm_req_make_sms(
+		&intf->comm, 30 * SEC, sms->pdu, sms->pdu_len,
+		"AT+CMGS=%d", sms->pdu_tp_len);
+	if (!req) {
+		ast_log(LOG_NOTICE,"SMStx: Error requesting SMS\n");
+		astman_send_error(s, m, "Error sending SMS");
+		goto err_req_make;
+	}
+
+	vgsm_req_wait(req);
+
+	if (req->err != VGSM_RESP_OK) {
+		ast_log(LOG_NOTICE,"SMStx: Request Response is not OK\n");
+		astman_send_error(s, m, "Error sending SMS");
+		goto err_req_result;
+	}
+
+	vgsm_req_put_null(req);
+
+	astman_send_ack(s, m, "VGSMsmstx: SMS sent");
+
+	return 0;
+
+err_req_result:
+	vgsm_req_put_null(req);
+err_req_make:
+err_malloc_sms_text:
+err_invalid_mbstring:
+	vgsm_sms_put_null(sms);
+err_sms_alloc:
+err_intf_not_ready:
+err_intf_not_found:
+err_missing_content:
+err_missing_destination:
+err_missing_interface:
+
+	return 0;
 }
 
 /***********************************************/
@@ -4615,6 +4907,8 @@ static void vgsm_module_initialize(
 	if (vgsm_module_update_net_info(intf) < 0)
 		return;
 
+	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_NO_NET, READY_UPDATE_TIME);
+
 	vgsm_module_update_readiness(intf);
 
 	vgsm_debug_generic("Module '%s' successfully initialized\n",
@@ -4687,6 +4981,12 @@ static void *vgsm_module_monitor_thread_main(void *data)
 	return NULL;
 }
 
+static char mandescr_vgsm_sms_tx[] =
+"Description: Send and SMS in text format with VGSM channel driver.\n"
+"Variables: \n"
+"  Content: <text>      Text of the message, max 160 chars (will be cut if longer).\n"
+"  ActionID: <id>       Action ID for this transaction. Will be returned.\n";
+
 int load_module()
 {
 	int err;
@@ -4745,6 +5045,12 @@ int load_module()
 		ast_pthread_create(&intf->monitor_thread, &attr,
 			vgsm_module_monitor_thread_main, intf);
 	}
+
+	/* Register manager commands */
+	ast_manager_register2("VGSMsmstx", EVENT_FLAG_SYSTEM,
+			manager_vgsm_sms_tx,
+			"Send sms with VGSM (text format)",
+			mandescr_vgsm_sms_tx);
 
 	return 0;
 
