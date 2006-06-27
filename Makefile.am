@@ -14,7 +14,8 @@ EXTRA_DIST =					\
 	modules/include/linux/lapd.h		\
 	modules/include/linux/vgsm.h		\
 	modules/include/linux/visdn/*.h		\
-	docs/*
+	docs/*					\
+	vgsm_firmware/*
 
 SUBDIRS =
 

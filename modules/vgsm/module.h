@@ -25,34 +25,39 @@ enum vgsm_module_status
 {
 	VGSM_MODULE_STATUS_OPEN,
 	VGSM_MODULE_STATUS_RUNNING,
+	VGSM_MODULE_STATUS_RX_THROTTLE,
 	VGSM_MODULE_STATUS_RX_ACK_PENDING,
 	VGSM_MODULE_STATUS_TX_ACK_PENDING,
 	VGSM_MODULE_STATUS_ON,
 };
 
 struct vgsm_card;
+
+struct vgsm_micro
+{
+	struct vgsm_card *card;
+	int id;
+
+	struct completion fw_upgrade_ready;
+};
+
 struct vgsm_module
 {
 	struct vgsm_card *card;
+	struct vgsm_micro *micro;
 
 	int id;
 	int timeslot_offset;
 
-	dev_t devt;
-
-	struct class_device class_device;
+	struct tty_struct *tty;
 
 	struct completion read_status_completion;
-	
-	/* kfifo management */
-	struct kfifo *kfifo_rx;
+
 	struct kfifo *kfifo_tx;
-	spinlock_t kfifo_rx_lock;
 	spinlock_t kfifo_tx_lock;
 
 	/* Wait queue */
 	wait_queue_head_t tx_wait_queue;
-	wait_queue_head_t rx_wait_queue;
 
 	struct timer_list ack_timeout_timer;
 
@@ -101,10 +106,16 @@ void vgsm_module_send_power_get(
 void vgsm_module_init(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
+	struct vgsm_micro *micro,
 	int id);
 int vgsm_module_alloc(struct vgsm_module *module);
 int vgsm_module_register(struct vgsm_module *module);
 void vgsm_module_unregister(struct vgsm_module *module);
 void vgsm_module_dealloc(struct vgsm_module *module);
+
+void vgsm_micro_init(
+	struct vgsm_micro *micro,
+	struct vgsm_card *card,
+	int id);
 
 #endif

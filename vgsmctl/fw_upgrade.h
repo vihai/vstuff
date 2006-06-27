@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,9 +10,9 @@
  *
  */
 
-#ifndef _FW_UPDATE_H
-#define _FW_UPDATE_H
+#ifndef _FW_UPGRADE_H
+#define _FW_UPGRADE_H
 
-extern struct module module_fw_update;
+extern struct module module_fw_upgrade;
 
 #endif

@@ -4121,14 +4121,6 @@ static int vgsm_module_codec_init(struct vgsm_interface *intf)
 {
 	struct vgsm_codec_ctl cctl;
 
-	cctl.parameter = VGSM_CODEC_RESET;
-	if (ioctl(intf->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
-		ast_log(LOG_ERROR, "ioctl(IOC_CODEC_SET, RESET) failed: %s\n",
-			strerror(errno));
-
-		return -1;
-	}
-
 	cctl.parameter = VGSM_CODEC_RXGAIN;
 	cctl.value = intf->rx_gain;
 
@@ -4751,7 +4743,7 @@ static int vgsm_module_init_at_interface(struct vgsm_interface *intf)
 	int err;
 
 	err = vgsm_req_make_wait_result(comm, 200 * MILLISEC,
-		"AT Z0 E1 V1 Q0");
+		"AT Z0 E1 V1 Q0 \\Q1");
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
@@ -4817,7 +4809,6 @@ static void vgsm_module_ignite(
 	}
 }
 
-
 static void vgsm_module_open(
 	struct vgsm_interface *intf)
 {
@@ -4845,6 +4836,35 @@ static void vgsm_module_open(
 	}
 
 	intf->comm.name = intf->name;
+
+	struct termios newtio;
+	bzero(&newtio, sizeof(newtio));
+	
+	newtio.c_cflag = B38400 | CRTSCTS | CS8 | CLOCAL | CREAD;
+	newtio.c_iflag = IXON | IXOFF;
+	newtio.c_oflag = 0;
+	newtio.c_lflag = 0;
+	
+	newtio.c_cc[VINTR]	= 0;
+	newtio.c_cc[VQUIT]	= 0;
+	newtio.c_cc[VERASE]	= 0;
+	newtio.c_cc[VKILL]	= 0;
+	newtio.c_cc[VEOF]	= 4;
+	newtio.c_cc[VTIME]	= 0;
+	newtio.c_cc[VMIN]	= 1;
+	newtio.c_cc[VSWTC]	= 0;
+	newtio.c_cc[VSTART]	= 0;
+	newtio.c_cc[VSTOP]	= 0;
+	newtio.c_cc[VSUSP]	= 0;
+	newtio.c_cc[VEOL]	= 0;
+	newtio.c_cc[VREPRINT]	= 0;
+	newtio.c_cc[VDISCARD]	= 0;
+	newtio.c_cc[VWERASE]	= 0;
+	newtio.c_cc[VLNEXT]	= 0;
+	newtio.c_cc[VEOL2]	= 0;
+	
+	tcflush(intf->comm.fd, TCIFLUSH);
+	tcsetattr(intf->comm.fd, TCSANOW, &newtio);
 
 	/***************/
 

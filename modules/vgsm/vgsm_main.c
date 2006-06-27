@@ -23,8 +23,9 @@
 #include <linux/poll.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
-#include <linux/cdev.h>
-#include <linux/kdev_t.h>
+#include <linux/tty.h>
+#include <linux/tty_driver.h>
+#include <linux/serial.h>
 
 #include "vgsm.h"
 #include "card.h"
@@ -37,34 +38,31 @@ int debug_level = 0;
 
 static struct pci_device_id vgsm_ids[] = {
 	{ 0xe159, 0x0001, 0xa100, 0x0001, 0, 0, 0 },
+	{ 0xe159, 0x0001, 0xa120, 0x0001, 0, 0, 0 },
 	{ 0, },
 };
 
 MODULE_DEVICE_TABLE(pci, vgsm_ids);
 
-dev_t vgsm_first_dev;
-static struct cdev vgsm_cdev;
+struct tty_driver *vgsm_tty_driver;
 
 struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
 spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
 
-static int vgsm_cdev_open(
-	struct inode *inode,
+static int vgsm_tty_open(
+	struct tty_struct *tty,
 	struct file *file)
 {
        // int err;
 	struct vgsm_card *card;
 	struct vgsm_module *module = NULL;
 
-        nonseekable_open(inode, file);
-
-	file->private_data = NULL;
+	tty->driver_data = NULL;
 
 	spin_lock(&vgsm_cards_list_lock);
 	list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
-		if (card->id == (inode->i_rdev - vgsm_first_dev) / 4) {
-			module = &card->modules[(inode->i_rdev -
-						vgsm_first_dev) % 4];
+		if (card->id == tty->index / 4) {
+			module = &card->modules[tty->index % 4];
 			break;
 		}
 	}
@@ -76,206 +74,119 @@ static int vgsm_cdev_open(
 	if (test_and_set_bit(VGSM_MODULE_STATUS_OPEN, &module->status))
 		return -EBUSY;
 
-	file->private_data = module;
+	tty->driver_data = module;
+	module->tty = tty;
 
+	clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
 	set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
 
 	return 0;
 }
 
-static int vgsm_cdev_flush(
+static void vgsm_tty_close(
+	struct tty_struct *tty,
 	struct file *file)
 {
-	struct vgsm_module *module = file->private_data;
-
-	while(kfifo_len(module->kfifo_tx)) {
-		DEFINE_WAIT(wait);
-
-		/*if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;*/
-
-		prepare_to_wait(&module->tx_wait_queue, &wait,
-			TASK_UNINTERRUPTIBLE);
-
-		if (kfifo_len(module->kfifo_tx))
-			schedule();
-
-		finish_wait(&module->tx_wait_queue, &wait);
-
-		if (signal_pending(current))
-			return -ERESTARTSYS;
-	}
-
-	return 0;
-}
-
-static int vgsm_cdev_release(
-	struct inode *inode,
-	struct file *file)
-{
-	struct vgsm_module *module = file->private_data;
+	struct vgsm_module *module = tty->driver_data;
 
 	clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
 
 	/* Flush the RX queue and ACK */
-	kfifo_reset(module->kfifo_rx);
 	tasklet_schedule(&module->card->rx_tasklet);
 	
 	clear_bit(VGSM_MODULE_STATUS_OPEN, &module->status);
-
-	return 0;
 }
 
-ssize_t __kfifo_get_user(
-	struct kfifo *fifo,
-	void __user *buffer,
-	ssize_t len)
+static int vgsm_tty_write(
+	struct tty_struct *tty,
+//	int from_user,
+	const unsigned char *buf,
+	int count)
 {
-	ssize_t l;
-
-	len = min(len, (ssize_t)(fifo->in - fifo->out));
-
-	/* first get the data from fifo->out until the end of the buffer */
-	l = min(len, (ssize_t)(fifo->size - (fifo->out & (fifo->size - 1))));
-	if (copy_to_user(buffer, fifo->buffer + (fifo->out & (fifo->size - 1)),
-									l))
-		return -EFAULT;
-
-	/* then get the rest (if any) from the beginning of the buffer */
-	if (copy_to_user(buffer + l, fifo->buffer, len - l))
-		return -EFAULT;
-
-	fifo->out += len;
-
-	return len;
-}
-
-static ssize_t vgsm_cdev_read(
-	struct file *file,
-	char __user *user_buf,
-	size_t count,
-	loff_t *offp)
-{
-	struct vgsm_module *module = file->private_data;
-	int copied_bytes;
-
-	while(!kfifo_len(module->kfifo_rx)) {
-		
-		if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;
-
-		if (wait_event_interruptible(module->rx_wait_queue,
-				(kfifo_len(module->kfifo_rx))))
-			return -ERESTARTSYS;
-	}
-
-	/* No locking is needed as we are the only FIFO reader */
-
-	copied_bytes = __kfifo_get_user(module->kfifo_rx, user_buf, count);
-
-	tasklet_schedule(&module->card->rx_tasklet);
-
-	return copied_bytes;
-}
-
-ssize_t __kfifo_put_user(
-	struct kfifo *fifo,
-	const void __user *buffer,
-	ssize_t len)
-{
-	ssize_t l;
-
-	len = min(len, (ssize_t)(fifo->size - fifo->in + fifo->out));
-
-	/* first put the data starting from fifo->in to buffer end */
-	l = min(len, (ssize_t)(fifo->size - (fifo->in & (fifo->size - 1))));
-	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)),
-								buffer, l))
-		return -EFAULT;
-
-	/* then put the rest (if any) at the beginning of the buffer */
-	if (copy_from_user(fifo->buffer, buffer + l, len - l))
-		return -EFAULT;
-
-	fifo->in += len;
-
-	return len;
-}
-
-static ssize_t vgsm_cdev_write(
-	struct file *file,
-	const char __user *user_buf,
-	size_t count,
-	loff_t *offp)
-{
-	struct vgsm_module *module = file->private_data;
+	struct vgsm_module *module = tty->driver_data;
 	struct vgsm_card *card = module->card;
 	int copied_bytes = 0;
 
-	if (count >= module->kfifo_tx->size)
-		return -E2BIG;
-
-	while(module->kfifo_tx->size - kfifo_len(module->kfifo_tx) < count) {
-		DEFINE_WAIT(wait);
-
-		if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;
-
-		prepare_to_wait(&module->tx_wait_queue, &wait,
-			TASK_UNINTERRUPTIBLE);
-
-		if (module->kfifo_tx->size - kfifo_len(module->kfifo_tx) <
-									count)
-			schedule();
-
-		finish_wait(&module->tx_wait_queue, &wait);
-
-		if (signal_pending(current))
-			return -ERESTARTSYS;
-	}
-
-	copied_bytes = __kfifo_put_user(module->kfifo_tx, user_buf, count);
+	copied_bytes = __kfifo_put(module->kfifo_tx,
+				(unsigned char *)buf, count);
 
 	tasklet_schedule(&card->tx_tasklet);
 
 	return copied_bytes;
 }
 
-static unsigned int vgsm_cdev_poll(
-	struct file *file,
-	poll_table *wait)
+static int vgsm_tty_write_room(struct tty_struct *tty)
 {
-	struct vgsm_module *module = file->private_data;
-	unsigned int res = 0;
+	struct vgsm_module *module = tty->driver_data;
 
-	poll_wait(file, &module->rx_wait_queue, wait);
-	poll_wait(file, &module->tx_wait_queue, wait);
-
-	if (kfifo_len(module->kfifo_rx))
-		res |= POLLIN | POLLRDNORM;
-
-	if (module->kfifo_tx->size - kfifo_len(module->kfifo_tx) > 0)
-		res |= POLLOUT;
-
-	return res;
+	return module->kfifo_tx->size - kfifo_len(module->kfifo_tx);
 }
 
-static int vgsm_cdev_do_codec_set(
-	struct inode *inode,
-	struct file *file,
+static void vgsm_tty_throttle(struct tty_struct *tty)
+{
+	struct vgsm_module *module = tty->driver_data;
+
+	set_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
+}
+
+static void vgsm_tty_unthrottle(struct tty_struct *tty)
+{
+	struct vgsm_module *module = tty->driver_data;
+
+	clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
+
+	tasklet_schedule(&module->card->rx_tasklet);
+}
+
+static int vgsm_tty_chars_in_buffer(struct tty_struct *tty)
+{
+	struct vgsm_module *module = tty->driver_data;
+
+	return kfifo_len(module->kfifo_tx);
+}
+
+static void vgsm_tty_flush_buffer(
+	struct tty_struct *tty)
+{
+	struct vgsm_module *module = tty->driver_data;
+
+	kfifo_reset(module->kfifo_tx);
+}
+
+static void vgsm_tty_wait_until_sent(
+	struct tty_struct *tty,
+	int timeout)
+{
+	struct vgsm_module *module = tty->driver_data;
+
+	while(kfifo_len(module->kfifo_tx)) {
+		DEFINE_WAIT(wait);
+
+		prepare_to_wait(&module->tx_wait_queue, &wait,
+			TASK_UNINTERRUPTIBLE);
+
+		if (kfifo_len(module->kfifo_tx))
+			schedule_timeout(timeout);
+
+		finish_wait(&module->tx_wait_queue, &wait);
+
+		if (signal_pending(current))
+			return;
+	}
+}
+
+static int vgsm_tty_do_codec_set(
+	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
 	int err;
 	struct vgsm_codec_ctl cctl;
-	struct vgsm_module *module = file->private_data;
 
 	if (copy_from_user(&cctl, (void *)arg, sizeof(cctl))) {
 		err = -EFAULT;
 		goto err_copy_from_user;
 	}
-
-//	vgsm_card_lock(module->card);
 
 	switch(cctl.parameter) {
 	case VGSM_CODEC_RESET:
@@ -313,8 +224,6 @@ static int vgsm_cdev_do_codec_set(
 
 	vgsm_update_codec(module);
 
-//	vgsm_card_unlock(module->card);
-
 	return 0;
 
 err_invalid_value:
@@ -325,14 +234,11 @@ err_copy_from_user:
 	return err;
 }
 
-static int vgsm_cdev_do_power_get(
-	struct inode *inode,
-	struct file *file,
+static int vgsm_tty_do_power_get(
+	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = file->private_data;
-
 	vgsm_card_lock(module->card);
 	vgsm_module_send_power_get(module);
 	vgsm_card_unlock(module->card);
@@ -348,24 +254,11 @@ static int vgsm_cdev_do_power_get(
 	return 0;
 }
 
-static int vgsm_cdev_do_power_ign(
-	struct inode *inode,
-	struct file *file,
+static int vgsm_tty_do_power_ign(
+	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = file->private_data;
-
-	if (arg == 1) {
-		vgsm_outb(module->card, VGSM_PIB_E0, 0);
-		msleep(5);
-		vgsm_outb(module->card, VGSM_PIB_E0, 1);
-		msleep(5);
-		vgsm_outb(module->card, VGSM_PIB_E0, 0);
-
-		return 0;
-	}
-
 	vgsm_card_lock(module->card);
 	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_IGN);
 	vgsm_card_unlock(module->card);
@@ -379,19 +272,16 @@ static int vgsm_cdev_do_power_ign(
 	return 0;
 }
 
-static int vgsm_cdev_do_emerg_off(
-	struct inode *inode,
-	struct file *file,
+static int vgsm_tty_do_emerg_off(
+	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = file->private_data;
-
 	vgsm_card_lock(module->card);
 	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_EMERG_OFF);
 	vgsm_card_unlock(module->card);
 
-	ssleep(4);
+	msleep(3200);
 
 	vgsm_card_lock(module->card);
 	vgsm_module_send_onoff(module, 0);
@@ -400,14 +290,11 @@ static int vgsm_cdev_do_emerg_off(
 	return 0;
 }
 
-static int vgsm_cdev_do_pad_timeout(
-	struct inode *inode,
-	struct file *file,
+static int vgsm_tty_do_pad_timeout(
+	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = file->private_data;
-
 	if (arg < 0 || arg > 0xFF)
 		return -EINVAL;
 
@@ -418,38 +305,113 @@ static int vgsm_cdev_do_pad_timeout(
 	return 0;
 }
 
-static int vgsm_cdev_do_fw_version(
-	struct inode *inode,
-	struct file *file,
+static int vgsm_tty_do_fw_version(
+	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = file->private_data;
-
 	vgsm_card_lock(module->card);
 	if (module->id == 0 || module->id == 1)
-		vgsm_send_get_fw_ver(module->card, 0);
+		vgsm_send_get_fw_ver(&module->micro[0]);
 	else
-		vgsm_send_get_fw_ver(module->card, 1);
+		vgsm_send_get_fw_ver(&module->micro[1]);
 	vgsm_card_unlock(module->card);
 
 	return -EOPNOTSUPP;
 }
 
-static int vgsm_cdev_ioctl(
-	struct inode *inode,
+static int vgsm_tty_do_fw_upgrade(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	struct vgsm_micro *micro;
+	struct vgsm_fw_header fwh;
+	struct vgsm_micro_message msg = { };
+	int pos = 0;
+	int err;
+	int i;
+
+	if (module->id == 0 || module->id == 1)
+		micro = &card->micros[0];
+	else
+		micro = &card->micros[1];
+
+	if (copy_from_user(&fwh, (void *)arg, sizeof(fwh))) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
+
+	set_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags);
+
+	init_completion(&micro->fw_upgrade_ready);
+
+	vgsm_card_lock(module->card);
+	vgsm_send_fw_upgrade(micro);
+	vgsm_card_unlock(module->card);
+
+	if (wait_for_completion_timeout(&micro->fw_upgrade_ready, 5 * HZ)) {
+		err = -ETIMEDOUT;
+		goto err_completion_timeout;
+	}
+
+	msg.cmd = VGSM_CMD_FW_UPGRADE;
+	msg.cmd_dep = 1;
+	msg.numbytes = 4;
+	msg.payload[0] = fwh.size & 0xff;
+	msg.payload[1] = (fwh.size & 0xff00) >> 8;
+	msg.payload[2] = fwh.checksum & 0xff;
+	msg.payload[3] = (fwh.checksum & 0xff00) >> 8;
+
+	vgsm_card_lock(micro->card);
+	vgsm_send_msg(micro, &msg);
+	vgsm_card_unlock(micro->card);
+
+	while(pos < fwh.size) {
+		msg.cmd = VGSM_CMD_FW_UPGRADE;
+		msg.cmd_dep = 2;
+		msg.numbytes = min(fwh.size - pos, 7);
+
+		if (copy_from_user(msg.payload,
+				(void *)(arg + sizeof(fwh) + pos),
+				sizeof(msg.payload))) {
+			err = -EFAULT;
+			goto err_copy_from_user_payload;
+		}
+
+		for (i=0; i<1000 && vgsm_inb(card, VGSM_PIB_E0); i++)
+			msleep(1);
+
+		vgsm_card_lock(micro->card);
+		vgsm_send_msg(micro, &msg);
+		vgsm_card_unlock(micro->card);
+
+		pos += 7;
+	}
+
+	return 0; 
+
+err_copy_from_user_payload:
+err_completion_timeout:
+	clear_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags);
+err_copy_from_user:
+
+	return err;
+}
+
+static int vgsm_tty_ioctl(
+	struct tty_struct *tty,
 	struct file *file,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = file->private_data;
+	struct vgsm_module *module = tty->driver_data;
+
+//	if (test_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags))
+//		return -ENOIOCTLCMD;
 
 	switch(cmd) {
-	case VGSM_IOC_GET_RX_FIFOLEN:
-		return put_user(kfifo_len(module->kfifo_rx),
-				(unsigned int *)arg);
-	break;
-
 	case VGSM_IOC_GET_TX_FIFOLEN:
 		return put_user(kfifo_len(module->kfifo_tx),
 				(unsigned int *)arg);
@@ -460,44 +422,56 @@ static int vgsm_cdev_ioctl(
 	break;
 
 	case VGSM_IOC_CODEC_SET:
-		return vgsm_cdev_do_codec_set(inode, file, cmd, arg);
+		return vgsm_tty_do_codec_set(module, cmd, arg);
 	break;
 
 	case VGSM_IOC_POWER_GET:
-		return vgsm_cdev_do_power_get(inode, file, cmd, arg);
+		return vgsm_tty_do_power_get(module, cmd, arg);
 	break;
 
 	case VGSM_IOC_POWER_IGN:
-		return vgsm_cdev_do_power_ign(inode, file, cmd, arg);
+		return vgsm_tty_do_power_ign(module, cmd, arg);
 	break;
 
 	case VGSM_IOC_POWER_EMERG_OFF:
-		return vgsm_cdev_do_emerg_off(inode, file, cmd, arg);
+		return vgsm_tty_do_emerg_off(module, cmd, arg);
 	break;
 
 	case VGSM_IOC_PAD_TIMEOUT:
-		return vgsm_cdev_do_pad_timeout(inode, file, cmd, arg);
+		return vgsm_tty_do_pad_timeout(module, cmd, arg);
 	break;
 
 	case VGSM_IOC_FW_VERSION:
-		return vgsm_cdev_do_fw_version(inode, file, cmd, arg);
+		return vgsm_tty_do_fw_version(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_UPGRADE:
+		return vgsm_tty_do_fw_upgrade(module, cmd, arg);
 	break;
 	}
 
-	return -EOPNOTSUPP;
+	return -ENOIOCTLCMD;
 }
 
-static struct file_operations vgsm_fops =
+static void vgsm_tty_set_termios(
+	struct tty_struct *tty,
+	struct termios * old)
 {
-	.owner		= THIS_MODULE,
-	.open		= vgsm_cdev_open,
-	.release	= vgsm_cdev_release,
-	.flush		= vgsm_cdev_flush,
-	.read		= vgsm_cdev_read,
-	.write		= vgsm_cdev_write,
-	.poll		= vgsm_cdev_poll,
-	.ioctl		= vgsm_cdev_ioctl,
-	.llseek		= no_llseek,
+}
+
+static struct tty_operations vgsm_tty_ops =
+{
+	.open			= vgsm_tty_open,
+	.close			= vgsm_tty_close,
+	.write			= vgsm_tty_write,
+	.write_room		= vgsm_tty_write_room,
+	.throttle		= vgsm_tty_throttle,
+	.unthrottle		= vgsm_tty_unthrottle,
+	.flush_buffer		= vgsm_tty_flush_buffer,
+	.wait_until_sent	= vgsm_tty_wait_until_sent,
+	.chars_in_buffer	= vgsm_tty_chars_in_buffer,
+	.ioctl			= vgsm_tty_ioctl,
+	.set_termios		= vgsm_tty_set_termios,
 };
 
 /* Do probing type stuff here */
@@ -536,17 +510,6 @@ static struct pci_driver vgsm_driver =
 	.remove =	vgsm_remove,
 };
 
-static void vgsm_class_release(struct class_device *device)
-{
-	printk(KERN_INFO "vgsm_class_release()\n");
-}
-
-struct class vgsm_class =
-{
-	.name = "vgsm-serial",
-	.release = vgsm_class_release,
-};
-
 #ifdef DEBUG_CODE
 static ssize_t vgsm_show_debug_level(
 	struct device_driver *driver,
@@ -581,21 +544,29 @@ static int __init vgsm_init(void)
 {
 	int err;
 
-	/* Allocate and register a cdev */
-	err = alloc_chrdev_region(&vgsm_first_dev, 0, 256, vgsm_DRIVER_NAME);
-	if (err < 0)
-		goto err_register_chrdev;
+	vgsm_tty_driver = alloc_tty_driver(63);
+	if (!vgsm_tty_driver) {
+		err = -ENOMEM;
+		goto err_alloc_tty_driver;
+	}
 
-	cdev_init(&vgsm_cdev, &vgsm_fops);
-	vgsm_cdev.owner = THIS_MODULE;
+	vgsm_tty_driver->owner = THIS_MODULE;
+	vgsm_tty_driver->driver_name = vgsm_DRIVER_NAME;
+	vgsm_tty_driver->name = "vgsm";
+	vgsm_tty_driver->devfs_name = "vgsm/";
+	vgsm_tty_driver->major = 0;
+	vgsm_tty_driver->minor_start = 0;
+	vgsm_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
+	vgsm_tty_driver->subtype = SERIAL_TYPE_NORMAL;
+	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS ;
+	vgsm_tty_driver->init_termios = tty_std_termios;
+	vgsm_tty_driver->init_termios.c_cflag =
+				B38400 | CS8 | CREAD | HUPCL | CLOCAL;
 
-	err = cdev_add(&vgsm_cdev, vgsm_first_dev, 256);
+	tty_set_operations(vgsm_tty_driver, &vgsm_tty_ops);
+	err = tty_register_driver(vgsm_tty_driver);
 	if (err < 0)
-		goto err_cdev_add;
-
-	err = class_register(&vgsm_class);
-	if (err < 0)
-		goto err_class_register;
+		goto err_tty_register_driver;
 
 	err = pci_register_driver(&vgsm_driver);
 	if (err < 0)
@@ -619,12 +590,10 @@ static int __init vgsm_init(void)
 
 	pci_unregister_driver(&vgsm_driver);
 err_pci_register_driver:
-	class_unregister(&vgsm_class);
-err_class_register:
-	cdev_del(&vgsm_cdev);
-err_cdev_add:
-	unregister_chrdev_region(vgsm_first_dev, 256);
-err_register_chrdev:
+	tty_unregister_driver(vgsm_tty_driver);
+err_tty_register_driver:
+	put_tty_driver(vgsm_tty_driver);
+err_alloc_tty_driver:
 
 	return err;
 }
@@ -640,11 +609,8 @@ static void __exit vgsm_exit(void)
 
 	pci_unregister_driver(&vgsm_driver);
 
-	class_unregister(&vgsm_class);
-
-	cdev_del(&vgsm_cdev);
-
-	unregister_chrdev_region(vgsm_first_dev, 256);
+	tty_unregister_driver(vgsm_tty_driver);
+	put_tty_driver(vgsm_tty_driver);
 
 	vgsm_msg(KERN_INFO, vgsm_DRIVER_DESCR " unloaded\n");
 }

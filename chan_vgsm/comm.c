@@ -200,7 +200,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	sleep(1);
 */
-	const char *cmd = "AT E1 V1 Q0\r";
+	const char *cmd = "AT E1 V1 Q0 \\Q1\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
 			"%s: write to module failed: %s\n",
@@ -526,8 +526,8 @@ static int match_echo(struct vgsm_comm *comm, const char *sent)
 	const char *b = comm->buf;
 	const char *r = sent;
 
-//printf("Match1 = '%s'\n", b);
-//printf("Match2 = '%s'\n", r);
+//printf("Match1 = '%s'\n", r);
+//printf("Match2 = '%s'\n", b);
 
 	while(*b && *r && *b == *r) {
 		b++;
@@ -1009,18 +1009,6 @@ static int vgsm_comm_thread_do_stuff()
 		vgsm_debug_serial_verb("set timeout = %d\n",
 			timeout_ms);
 
-/*		printf(" PREPOLL ");
-		for (i=0; i<npolls; i++) {
-			int a;
-
-			ioctl(comms[i]->fd, VGSM_IOC_GET_RX_FIFOLEN, &a);
-
-			printf("%s=%02x-%d ", comms[i]->name, polls[i].revents,
-						a);
-		}
-		printf("\n");*/
-
-
 		int res = poll(polls, npolls, timeout_ms);
 		if (res < 0) {
 			if (errno == EINTR) {
@@ -1037,16 +1025,6 @@ static int vgsm_comm_thread_do_stuff()
 
 		now = longtime_now();
 		int exit_pending = FALSE;
-
-/*		for (i=0; i<npolls; i++) {
-			int a;
-
-			ioctl(comms[i]->fd, VGSM_IOC_GET_RX_FIFOLEN, &a);
-
-			printf("%s=%02x-%d ", comms[i]->name, polls[i].revents,
-						a);
-		}
-		printf("\n");*/
 
 		for (i=0; i<npolls; i++) {
 			if (comms[i]->timer_expiration != -1 &&

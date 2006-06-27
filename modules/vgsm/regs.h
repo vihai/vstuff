@@ -131,6 +131,6 @@
 #define VGSM_CMD_MAINT_CODEC_GET	5
 #define VGSM_CMD_MAINT_POWER_GET	6
 
-#define VGSM_CMD_FW		0x3
+#define VGSM_CMD_FW_UPGRADE	0x3
 
 #endif

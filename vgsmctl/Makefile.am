@@ -13,7 +13,7 @@ vgsmctl_SOURCES = \
 	power.c		\
 	pad_timeout.c	\
 	fw_version.c	\
-	fw_update.c
+	fw_upgrade.c
 
 vgsmctl_LDADD =
 
@@ -23,4 +23,4 @@ noinst_HEADERS = \
 	power.h		\
 	pad_timeout.h	\
 	fw_version.h	\
-	fw_update.h
+	fw_upgrade.h

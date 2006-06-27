@@ -22,8 +22,15 @@
 #define VGSM_IOC_POWER_EMERG_OFF	_IOR(0xd1, 4, unsigned int)
 #define VGSM_IOC_PAD_TIMEOUT		_IOR(0xd1, 5, unsigned int)
 #define VGSM_IOC_FW_VERSION		_IOR(0xd1, 6, unsigned int)
-#define VGSM_IOC_GET_RX_FIFOLEN		_IOR(0xd1, 7, unsigned int)
+#define VGSM_IOC_FW_UPGRADE		_IOR(0xd1, 7, unsigned int)
 #define VGSM_IOC_GET_TX_FIFOLEN		_IOR(0xd1, 8, unsigned int)
+
+struct vgsm_fw_header
+{
+	int size;
+	int checksum;
+	unsigned char data[0];
+};
 
 struct vgsm_codec_ctl
 {
@@ -78,8 +85,7 @@ extern int debug_level;
 extern struct list_head vgsm_cards_list;
 extern spinlock_t vgsm_cards_list_lock;
 
-extern dev_t vgsm_first_dev;
-extern struct class vgsm_class;
+extern struct tty_driver *vgsm_tty_driver;
 
 #endif
 

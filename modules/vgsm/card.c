@@ -23,9 +23,9 @@
 #include <linux/poll.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
-#include <linux/cdev.h>
-#include <linux/kdev_t.h>
 #include <linux/bitops.h>
+#include <linux/tty.h>
+#include <linux/tty_flip.h>
 
 #include "vgsm.h"
 #include "card.h"
@@ -109,16 +109,17 @@ static inline void vgsm_wait_e0(struct vgsm_card *card)
 }
 
 void vgsm_send_msg(
-	struct vgsm_card *card,
-	int micro,
+	struct vgsm_micro *micro,
 	struct vgsm_micro_message *msg)
 {
+	struct vgsm_card *card = micro->card;
+
 	vgsm_wait_e0(card);
 	vgsm_write_msg(card, msg);
 
-	if (micro == 0)
+	if (micro->id == 0)
 		vgsm_interrupt_micro(card, 0x08);
-	else if (micro == 1)
+	else if (micro->id == 1)
 		vgsm_interrupt_micro(card, 0x10);
 	else
 		BUG();
@@ -142,14 +143,14 @@ static void vgsm_send_codec_resync(
 	vgsm_send_msg(card, 0, &msg);
 }
 */
-	
+
 static void vgsm_send_codec_setreg(
 	struct vgsm_card *card,
 	u8 reg_address, 
 	u8 reg_data)
 {
 	struct vgsm_micro_message msg = { };
-	
+
 	msg.cmd = VGSM_CMD_MAINT;
 	msg.cmd_dep = VGSM_CMD_MAINT_CODEC_SET;
 	msg.numbytes = 2;
@@ -157,9 +158,9 @@ static void vgsm_send_codec_setreg(
 	msg.payload[0] = reg_address | 0x40;
 	msg.payload[1] = reg_data;
 
-	vgsm_send_msg(card, 0, &msg);
-
-	msleep(8);
+	vgsm_card_lock(card);
+	vgsm_send_msg(&card->micros[0], &msg);
+	vgsm_card_unlock(card);
 }
 	
 static void vgsm_send_codec_getreg(
@@ -174,12 +175,10 @@ static void vgsm_send_codec_getreg(
 	
 	msg.payload[0] = reg_address | 0x80 | 0x40;
 
-	vgsm_send_msg(card, 0, &msg);
+	vgsm_send_msg(&card->micros[0], &msg);
 }
 
-void vgsm_send_get_fw_ver(
-	struct vgsm_card *card,
-	int micro)
+void vgsm_send_get_fw_ver(struct vgsm_micro *micro)
 {
 	struct vgsm_micro_message msg = { };
 	
@@ -187,9 +186,20 @@ void vgsm_send_get_fw_ver(
 	msg.cmd_dep = VGSM_CMD_MAINT_GET_FW_VER;
 	msg.numbytes = 0;
 	
-	vgsm_send_msg(card, micro, &msg);
+	vgsm_send_msg(micro, &msg);
 }
+
+void vgsm_send_fw_upgrade(struct vgsm_micro *micro)
+{
+	struct vgsm_micro_message msg = { };
 	
+	msg.cmd = VGSM_CMD_FW_UPGRADE;
+	msg.cmd_dep = 0;
+	msg.numbytes = 0;
+	
+	vgsm_send_msg(micro, &msg);
+}
+
 void vgsm_update_mask0(struct vgsm_card *card)
 {
 	int i;
@@ -295,12 +305,13 @@ static void vgsm_card_rx_tasklet(unsigned long data)
 
 		module = &card->modules[i];
 
-		if (module->kfifo_rx->size - kfifo_len(module->kfifo_rx) > 8) {
+		if (!test_bit(VGSM_MODULE_STATUS_RX_THROTTLE,
+				&module->status)) {
+
 			if (test_and_clear_bit(
 					VGSM_MODULE_STATUS_RX_ACK_PENDING,
-					&module->status)) {
+					&module->status))
 				vgsm_module_send_ack(module);
-			}
 		}
 	}
 
@@ -339,6 +350,8 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 				module->ack_timeout_timer.expires =
 					jiffies + HZ;
 				add_timer(&module->ack_timeout_timer);
+
+				tty_wakeup(module->tty);
 			}
 		}
 	}
@@ -367,9 +380,6 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		VGSM_CNTL_PIB_CYCLE_3 |
 		VGSM_CNTL_EXTRST);
 	mb();
-
-	/* Setting serial status registers */
-	card->ios_12_status = vgsm_inb(card, VGSM_AUXD);
 
 	/* Set all AUX to outputs */
 	vgsm_outb(card, VGSM_AUXC,
@@ -408,11 +418,11 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_outb(card, VGSM_INT0STAT, 0x3F);
 
 	/* PIB initialization */
-	ssleep(2);
+	msleep(10);
 	vgsm_outb(card, VGSM_PIB_E0, 0);
-	msleep(5);
+	msleep(10);
 	vgsm_outb(card, VGSM_PIB_E0, 1);
-	msleep(5);
+	msleep(10);
 	vgsm_outb(card, VGSM_PIB_E0, 0);
 
 	/* Setting polarity control register */
@@ -421,6 +431,152 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_msg(KERN_DEBUG, "VGSM card initialized\n");
 
 	return 0;
+}
+
+static inline void vgsm_handle_serial_int(
+	struct vgsm_card *card,
+	int micro,
+	struct vgsm_micro_message *msg)
+{
+	int i;
+	struct vgsm_module *module;
+
+	if (micro == 0) {
+		if (msg->cmd == VGSM_CMD_S0)
+			module = &card->modules[0];
+		else
+			module = &card->modules[1];
+	} else {
+		if (msg->cmd == VGSM_CMD_S0)
+			module = &card->modules[2];
+		else
+			module = &card->modules[3];
+	}
+
+#if 0
+printk(KERN_DEBUG "Mod %d: MSG: %c%c%c%c%c%c%c\n",
+	module->id,
+	escape_unprintable(msg->payload[0]),
+	escape_unprintable(msg->payload[1]),
+	escape_unprintable(msg->payload[2]),
+	escape_unprintable(msg->payload[3]),
+	escape_unprintable(msg->payload[4]),
+	escape_unprintable(msg->payload[5]),
+	escape_unprintable(msg->payload[6]));
+#endif
+
+	/* Got msg from micro, now send ACK */
+	if (msg->cmd_dep != 0)
+		printk(KERN_ERR "cmd_dep != 0 ????\n");
+
+	if (test_bit(VGSM_MODULE_STATUS_RUNNING,
+				&module->status)) {
+		for(i=0; i<msg->numbytes; i++) {
+			if (module->tty->flip.count >=
+					TTY_FLIPBUF_SIZE)
+				tty_flip_buffer_push(
+					module->tty);
+
+			tty_insert_flip_char(module->tty,
+						msg->payload[i],
+						TTY_NORMAL);
+		}
+
+		tty_flip_buffer_push(module->tty);
+	}
+
+	set_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
+		&module->status);
+
+	tasklet_schedule(&card->rx_tasklet);
+}
+
+static inline void vgsm_handle_maint_int(
+	struct vgsm_card *card,
+	int micro,
+	struct vgsm_micro_message *msg)
+{
+	struct vgsm_module *module;
+
+	if (msg->cmd_dep == VGSM_CMD_MAINT_ACK) {
+		if (micro == 0) {
+			if (msg->numbytes == 0)
+				module = &card->modules[0];
+			else
+				module = &card->modules[1];
+		} else {
+			if (msg->numbytes == 0)
+				module = &card->modules[2];
+			else
+				module = &card->modules[3];
+		}
+
+#if 0
+printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
+#endif
+
+		clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
+			&module->status);
+
+		del_timer(&module->ack_timeout_timer);
+
+		tasklet_schedule(&card->tx_tasklet);
+	} else if (msg->cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
+/*		printk(KERN_DEBUG "CODEC RESP: %02x = %02x\n",
+			msg->payload[0], msg->payload[1]);*/
+	} else if (msg->cmd_dep == VGSM_CMD_MAINT_GET_FW_VER) {
+		printk(KERN_INFO
+			"Micro %d firmware version %c%c%c%c%c%c%c\n",
+			micro,
+			msg->payload[0],
+			msg->payload[1],
+			msg->payload[2],
+			msg->payload[3],
+			msg->payload[4],
+			msg->payload[5],
+			msg->payload[6]);
+	} else if (msg->cmd_dep == VGSM_CMD_MAINT_POWER_GET) {
+
+		if (micro == 0) {
+			if (msg->payload[0] & 0x01)
+				set_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[0].status);
+			else
+				clear_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[0].status);
+
+			if (msg->payload[0] & 0x02)
+				set_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[1].status);
+			else
+				clear_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[1].status);
+
+			complete(&card->modules[0].
+					read_status_completion);
+			complete(&card->modules[1].
+					read_status_completion);
+		} else {
+			if (msg->payload[0] & 0x01)
+				set_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[2].status);
+			else
+				clear_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[2].status);
+
+			if (msg->payload[0] & 0x02)
+				set_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[3].status);
+			else
+				clear_bit(VGSM_MODULE_STATUS_ON,
+					&card->modules[3].status);
+
+			complete(&card->modules[2].
+					read_status_completion);
+			complete(&card->modules[3].
+					read_status_completion);
+		}
+	}
 }
 
 static irqreturn_t vgsm_interrupt(int irq, 
@@ -471,7 +627,6 @@ static irqreturn_t vgsm_interrupt(int irq,
 
 	if (int1stat) {
 		struct vgsm_micro_message msg;
-		struct vgsm_module *module;
 
 		int micro;
 		if (int1stat == 0x01)
@@ -489,129 +644,20 @@ static irqreturn_t vgsm_interrupt(int irq,
 		mb();
 		vgsm_outb(card, VGSM_PIB_E0, 0x0); /* Release buffer E0 = 0 */
 
-		if (msg.cmd == VGSM_CMD_S0 || msg.cmd == VGSM_CMD_S1) {
-			if (micro == 0) {
-				if (msg.cmd == VGSM_CMD_S0)
-					module = &card->modules[0];
-				else
-					module = &card->modules[1];
-			} else {
-				if (msg.cmd == VGSM_CMD_S0)
-					module = &card->modules[2];
-				else
-					module = &card->modules[3];
-			}
+		if (msg.cmd == VGSM_CMD_S0 || msg.cmd == VGSM_CMD_S1)
+			vgsm_handle_serial_int(card, micro, &msg);
+		else if (msg.cmd == VGSM_CMD_MAINT)
+			vgsm_handle_maint_int(card, micro, &msg);
+		else if (msg.cmd == VGSM_CMD_FW_UPGRADE) {
+			if (msg.cmd_dep == 0)
+				printk(KERN_CRIT "FW upgrade ready!\n");
+			else if (msg.cmd_dep == 1)
+				printk(KERN_CRIT "FW upgrade complete!\n");
+			else if (msg.cmd_dep == 7)
+				printk(KERN_CRIT "FW upgrade failed!\n");
 
-#if 0
-printk(KERN_DEBUG "Mod %d: MSG: %c%c%c%c%c%c%c\n",
-	module->id,
-	escape_unprintable(msg.payload[0]),
-	escape_unprintable(msg.payload[1]),
-	escape_unprintable(msg.payload[2]),
-	escape_unprintable(msg.payload[3]),
-	escape_unprintable(msg.payload[4]),
-	escape_unprintable(msg.payload[5]),
-	escape_unprintable(msg.payload[6]));
-#endif
-
-		/* Got msg from micro, now send ACK */
-		
-			if (msg.cmd_dep != 0)
-				printk(KERN_ERR "cmd_dep != 0 ????\n");
-
-			if (test_bit(VGSM_MODULE_STATUS_RUNNING,
-						&module->status))
-				__kfifo_put(module->kfifo_rx, msg.payload,
-								msg.numbytes);
-
-			set_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
-				&module->status);
-
-			wake_up(&module->rx_wait_queue);
-
-			tasklet_schedule(&card->rx_tasklet);
-
-		} else if (msg.cmd == VGSM_CMD_MAINT) {
-			if (msg.cmd_dep == VGSM_CMD_MAINT_ACK) {
-				if (micro == 0) {
-					if (msg.numbytes == 0)
-						module = &card->modules[0];
-					else
-						module = &card->modules[1];
-				} else {
-					if (msg.numbytes == 0)
-						module = &card->modules[2];
-					else
-						module = &card->modules[3];
-				}
-
-#if 0
-printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
-#endif
-
-			clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING,
-				&module->status);
-
-			del_timer(&module->ack_timeout_timer);
-
-			tasklet_schedule(&card->tx_tasklet);
-		} else if (msg.cmd_dep == VGSM_CMD_MAINT_CODEC_GET) {
-			printk(KERN_DEBUG "CODEC RESP: %02x = %02x\n",
-				msg.payload[0], msg.payload[1]);
-		} else if (msg.cmd_dep == VGSM_CMD_MAINT_GET_FW_VER) {
-			printk(KERN_INFO
-				"Micro %d firmware version %c%c%c%c%c%c%c\n",
-				micro,
-				msg.payload[0],
-				msg.payload[1],
-				msg.payload[2],
-				msg.payload[3],
-				msg.payload[4],
-				msg.payload[5],
-				msg.payload[6]);
-		} else if (msg.cmd_dep == VGSM_CMD_MAINT_POWER_GET) {
-
-			if (micro == 0) {
-				if (msg.payload[0] & 0x01)
-					set_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[0].status);
-				else
-					clear_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[0].status);
-
-				if (msg.payload[0] & 0x02)
-					set_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[1].status);
-				else
-					clear_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[1].status);
-
-				complete(&card->modules[0].
-						read_status_completion);
-				complete(&card->modules[1].
-						read_status_completion);
-			} else {
-				if (msg.payload[0] & 0x01)
-					set_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[2].status);
-				else
-					clear_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[2].status);
-
-				if (msg.payload[0] & 0x02)
-					set_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[3].status);
-				else
-					clear_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[3].status);
-
-				complete(&card->modules[2].
-						read_status_completion);
-				complete(&card->modules[3].
-						read_status_completion);
-			}
+			complete(&card->micros[micro].fw_upgrade_ready);
 		}
-	}
 	}
 
 err_unexpected_micro:
@@ -624,17 +670,17 @@ static void vgsm_maint_timer(unsigned long data)
 	struct vgsm_card *card = (struct vgsm_card *)data;
 
 //	vgsm_card_lock(card);
-/*	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);
-	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
-	udelay(2000);
-	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX0);
-	udelay(2000);
+//	vgsm_send_codec_getreg(card, VGSM_CODEC_CONFIG);
+//	vgsm_send_codec_getreg(card, VGSM_CODEC_ALARM);
+//	udelay(5000);
+/*	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX0);
+	udelay(5000);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX1);
-	udelay(2000);
+	udelay(5000);
 	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX2);
-	udelay(2000);
-	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);
-	udelay(2000);*/
+	udelay(5000);
+	vgsm_send_codec_getreg(card, VGSM_CODEC_GTX3);*/
+//	udelay(5000);
 //	vgsm_module_send_power_get(&card->modules[0]);
 //	vgsm_module_send_power_get(&card->modules[1]);
 //	vgsm_module_send_power_get(&card->modules[2]);
@@ -706,29 +752,19 @@ void vgsm_codec_reset(
 		VGSM_CODEC_RXG32_CH2_0 | VGSM_CODEC_RXG32_CH3_0);
 }
 
-/* Do probing type stuff here */
-int vgsm_card_probe(
-	struct pci_dev *pci_dev, 
-	const struct pci_device_id *ent)
+static void vgsm_card_init(
+	struct vgsm_card *card,
+	struct pci_dev *pci_dev,
+	int id)
 {
-	static int numcards;
-	int err;
 	int i;
-
-	struct vgsm_card *card;
-	card = kmalloc(sizeof(*card), GFP_KERNEL);
-	if (!card) {
-		vgsm_msg(KERN_CRIT, "unable to kmalloc!\n");
-		err = -ENOMEM;
-		goto err_alloc_vgsmcard;
-	}
 
 	memset(card, 0, sizeof(*card));
 
 	card->pci_dev = pci_dev;
 	pci_set_drvdata(pci_dev, card);
 
-	card->id = numcards++;
+	card->id = id;
 
 	spin_lock_init(&card->lock);
 
@@ -742,13 +778,37 @@ int vgsm_card_probe(
 	card->maint_timer.function = vgsm_maint_timer;
 	card->maint_timer.data = (unsigned long)card;
 
-	card->num_modules = 4;
-
 	card->readdma_size = vgsm_DMA_SAMPLES * 4;
 	card->writedma_size = vgsm_DMA_SAMPLES * 4;
 
+	card->num_micros = 2;
+	for (i=0; i<card->num_micros; i++)
+		vgsm_micro_init(&card->micros[i], card, i);
+
+	card->num_modules = 4;
+	for (i=0; i<card->num_modules; i++)
+		vgsm_module_init(&card->modules[i], card,
+				&card->micros[i/2], i);
+}
+
+int vgsm_card_probe(
+	struct pci_dev *pci_dev, 
+	const struct pci_device_id *ent)
+{
+	struct vgsm_card *card;
+	static int numcards;
+	int err;
+	int i;
+
+	card = kmalloc(sizeof(*card), GFP_KERNEL);
+	if (!card) {
+		err = -ENOMEM;
+		goto err_card_alloc;
+	}
+
+	vgsm_card_init(card, pci_dev, numcards++);
+
 	for (i=0; i<card->num_modules; i++) {
-		vgsm_module_init(&card->modules[i], card, i);
 		vgsm_module_alloc(&card->modules[i]);
 	}
 
@@ -871,15 +931,15 @@ int vgsm_card_probe(
 	/* Start DMA */
 	vgsm_outb(card, VGSM_DMA_OPER, VGSM_DMA_OPER_DMA_ENABLE);
 
-	msleep(100);
-
 	vgsm_module_send_set_padding_timeout(&card->modules[0], 1);
 	vgsm_module_send_set_padding_timeout(&card->modules[1], 1);
 	vgsm_module_send_set_padding_timeout(&card->modules[2], 1);
 	vgsm_module_send_set_padding_timeout(&card->modules[3], 1);
 
-	vgsm_send_get_fw_ver(card, 0);
-	vgsm_send_get_fw_ver(card, 1);
+	vgsm_send_get_fw_ver(&card->micros[0]);
+	vgsm_send_get_fw_ver(&card->micros[1]);
+
+	vgsm_codec_reset(card);
 
 	for (i=0; i<card->num_modules; i++) {
 		err = vgsm_module_register(&card->modules[i]);
@@ -893,8 +953,6 @@ int vgsm_card_probe(
 
 	card->maint_timer.expires = jiffies + 5 * HZ;
 	add_timer(&card->maint_timer);
-
-	vgsm_codec_reset(card);
 
 	return 0;
 
@@ -919,7 +977,7 @@ err_pci_enable_device:
 //	vgsm_module_dealloc(&card->modules[0]);
 err_module_register:
 	kfree(card);
-err_alloc_vgsmcard:
+err_card_alloc:
 
 	return err;	
 }

@@ -28,7 +28,7 @@
 #include "power.h"
 #include "pad_timeout.h"
 #include "fw_version.h"
-#include "fw_update.h"
+#include "fw_upgrade.h"
 
 int global_argc;
 char **global_argv;
@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
 	list_add_tail(&module_power.node, &modules);
 	list_add_tail(&module_pad_timeout.node, &modules);
 	list_add_tail(&module_fw_version.node, &modules);
-	list_add_tail(&module_fw_update.node, &modules);
+	list_add_tail(&module_fw_upgrade.node, &modules);
 
 	struct option options[] = {
 		{ "verbose", no_argument, 0, 0 },

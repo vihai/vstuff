@@ -20,8 +20,7 @@
 #include <linux/poll.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
-#include <linux/cdev.h>
-#include <linux/kdev_t.h>
+#include <linux/tty.h>
 
 #include <linux/visdn/port.h>
 #include <linux/visdn/chan.h>
@@ -71,22 +70,12 @@
 #define port_to_module(port)       \
 		container_of(port, struct vgsm_module, visdn_port)
 
-static void vgsm_module_send_msg(
-	struct vgsm_module *module,
-	struct vgsm_micro_message *msg)
-{
-	if (module->id == 0 || module->id == 1)
-		vgsm_send_msg(module->card, 0, msg);
-	else
-		vgsm_send_msg(module->card, 1, msg);
-}
-
 void vgsm_module_send_set_padding_timeout(
 	struct vgsm_module *module,
 	u8 timeout)
 {
 	struct vgsm_micro_message msg = { };
-	
+
 	msg.cmd = VGSM_CMD_MAINT;
 	msg.cmd_dep = VGSM_CMD_MAINT_TIMEOUT_SET;
 
@@ -97,7 +86,7 @@ void vgsm_module_send_set_padding_timeout(
 
 	msg.payload[0] = timeout;
 	
-	vgsm_module_send_msg(module, &msg);
+	vgsm_send_msg(module->micro, &msg);
 }
 
 void vgsm_module_send_string(
@@ -119,7 +108,7 @@ void vgsm_module_send_string(
 
 	memcpy(msg.payload, buf, len);
 
-	vgsm_module_send_msg(module, &msg);
+	vgsm_send_msg(module->micro, &msg);
 }
 
 void vgsm_module_send_power_get(
@@ -131,7 +120,7 @@ void vgsm_module_send_power_get(
 	msg.cmd_dep = VGSM_CMD_MAINT_POWER_GET;
 	msg.numbytes = 0;
 	
-	vgsm_module_send_msg(module, &msg);
+	vgsm_send_msg(module->micro, &msg);
 }
 
 void vgsm_module_send_ack(
@@ -147,7 +136,7 @@ void vgsm_module_send_ack(
 	else
 		msg.numbytes = 1;
 
-	vgsm_module_send_msg(module, &msg);
+	vgsm_send_msg(module->micro, &msg);
 }
 
 void vgsm_module_send_onoff(
@@ -166,7 +155,7 @@ void vgsm_module_send_onoff(
 
 	msg.payload[0] = onoff_cmd;
 
-	vgsm_module_send_msg(module, &msg);
+	vgsm_send_msg(module->micro, &msg);
 }
 
 static void vgsm_port_release(
@@ -444,24 +433,39 @@ static void vgsm_module_ack_timeout_timer(unsigned long data)
 	tasklet_schedule(&module->card->tx_tasklet);
 }
 
-void vgsm_module_init(
-	struct vgsm_module *module,
+void vgsm_micro_init(
+	struct vgsm_micro *micro,
 	struct vgsm_card *card,
 	int id)
 {
+	memset(micro, 0, sizeof(*micro));
+
+	micro->card = card;
+	micro->id = id;
+
+	init_completion(&micro->fw_upgrade_ready);
+}
+
+void vgsm_module_init(
+	struct vgsm_module *module,
+	struct vgsm_card *card,
+	struct vgsm_micro *micro,
+	int id)
+{
+	memset(module, 0, sizeof(*module));
+
+	module->micro = micro;
 	module->card = card;
 	module->id = id;
 	module->timeslot_offset = 3 - id;
 
 	/* Initializing kfifo spinlock */
-	spin_lock_init(&module->kfifo_rx_lock);
 	spin_lock_init(&module->kfifo_tx_lock);
 
 	init_completion(&module->read_status_completion);
 
 	/* Initializing wait queue */
 	init_waitqueue_head(&module->tx_wait_queue);
-	init_waitqueue_head(&module->rx_wait_queue);
 
 	init_timer(&module->ack_timeout_timer);
 	module->ack_timeout_timer.function = vgsm_module_ack_timeout_timer;
@@ -517,34 +521,15 @@ void vgsm_module_init(
 	module->visdn_chan.driver_data = module;
 }
 
-#ifndef HAVE_CLASS_DEV_DEVT
-static ssize_t show_dev(struct class_device *class_dev, char *buf)
-{
-	struct vgsm_module *module =
-		container_of(class_dev, struct vgsm_module, class_device);
-
-	return print_dev_t(buf, module->devt);
-}
-static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
-#endif
-
 int vgsm_module_alloc(
 	struct vgsm_module *module)
 {
 	int err;
 
-	module->kfifo_rx = kfifo_alloc(
-				vgsm_SERIAL_BUFF, GFP_KERNEL,
-				&module->kfifo_rx_lock);
-	if (!(module->kfifo_rx)) {
-		err = -ENOMEM;
-		goto err_kfifo_rx;
-	}
-
 	module->kfifo_tx = kfifo_alloc(
 				vgsm_SERIAL_BUFF, GFP_KERNEL,
 				&module->kfifo_tx_lock);
-	if (!(module->kfifo_tx)) {
+	if (IS_ERR(module->kfifo_tx)) {
 		err = -ENOMEM;
 		goto err_kfifo_tx;
 	}
@@ -553,8 +538,6 @@ int vgsm_module_alloc(
 
 	kfifo_free(module->kfifo_tx);
 err_kfifo_tx:
-	kfifo_free(module->kfifo_rx);
-err_kfifo_rx:
 
 	return err;
 }
@@ -563,7 +546,6 @@ void vgsm_module_dealloc(
 	struct vgsm_module *module)
 {
 	kfifo_free(module->kfifo_tx);
-	kfifo_free(module->kfifo_rx);
 }
 
 int vgsm_module_register(
@@ -579,38 +561,12 @@ int vgsm_module_register(
 	if (err < 0)
 		goto err_chan_register;
 
-	module->devt = vgsm_first_dev + module->card->id * 4 + module->id;
-
-	snprintf(module->class_device.class_id,
-		sizeof(module->class_device.class_id),
-		"vgsm%ds%d",
-		module->card->id,
-		module->id);
-	module->class_device.class = &vgsm_class;
-	module->class_device.dev = &module->card->pci_dev->dev;
-#ifdef HAVE_CLASS_DEV_DEVT
-	module->class_device.devt = module->devt;
-#endif
-
-	err = class_device_register(&module->class_device);
-	if (err < 0)
-		goto err_class_device_register;
-
-#ifndef HAVE_CLASS_DEV_DEVT
-	err = class_device_create_file(
-		&module->class_device,
-		&class_device_attr_dev);
-	if (err < 0)
-		goto err_class_device_create_file;
-#endif
+	tty_register_device(vgsm_tty_driver,
+			module->card->id * 4 + module->id,
+			&module->card->pci_dev->dev);
 
 	return 0;
 
-#ifndef HAVE_CLASS_DEV_DEVT
-err_class_device_create_file:
-#endif
-	class_device_unregister(&module->class_device);
-err_class_device_register:
 	visdn_chan_unregister(&module->visdn_chan);
 err_chan_register:
 	visdn_port_unregister(&module->visdn_port);
@@ -622,7 +578,8 @@ err_port_register:
 void vgsm_module_unregister(
 	struct vgsm_module *module)
 {
-	class_device_unregister(&module->class_device);
+	tty_unregister_device(vgsm_tty_driver,
+			module->card->id * 4 + module->id);
 
 	visdn_chan_unregister(&module->visdn_chan);
 	visdn_port_unregister(&module->visdn_port);

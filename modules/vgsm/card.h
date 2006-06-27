@@ -50,6 +50,7 @@
 enum vgsm_card_flags
 {
 	VGSM_CARD_FLAGS_SHUTTING_DOWN,
+	VGSM_CARD_FLAGS_FW_UPGRADE,
 };
 
 struct vgsm_card
@@ -64,9 +65,6 @@ struct vgsm_card
 
 	unsigned long flags;
 
-	/* Serial ports */
-	u8 ios_12_status;
-
 	unsigned long io_bus_mem;
 	void *io_mem;
 	
@@ -79,8 +77,11 @@ struct vgsm_card
 	void *writedma_mem;
 	int writedma_size;
 
-	struct vgsm_module modules[4];
+	int num_micros;
+	struct vgsm_micro micros[2];
+
 	int num_modules;
+	struct vgsm_module modules[4];
 
 	struct {
 		u8 mask0;
@@ -123,12 +124,12 @@ int vgsm_card_probe(
 void vgsm_card_remove(struct vgsm_card *card);
 
 void vgsm_send_msg(
-	struct vgsm_card *card,
-	int micro,
+	struct vgsm_micro *micro,
 	struct vgsm_micro_message *msg);
 void vgsm_send_get_fw_ver(
-	struct vgsm_card *card,
-	int micro);
+	struct vgsm_micro *micro);
+void vgsm_send_fw_upgrade(
+	struct vgsm_micro *micro);
 
 void vgsm_update_mask0(struct vgsm_card *card);
 

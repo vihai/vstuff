@@ -2,6 +2,44 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-06-27 20:00:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-668
+
+    Summary:
+      Ported vgsm serial interface to tty and implemented firmware upgrade
+    Revision:
+      isdn--devel--0.1--patch-668
+
+
+    new files:
+     vgsm_firmware/.arch-ids/=id
+     vgsm_firmware/.arch-ids/firmware-1.7.a43.id
+     vgsm_firmware/.arch-ids/firmware-1.7.img.id
+     vgsm_firmware/.arch-ids/firmware-2.2.a43.id
+     vgsm_firmware/.arch-ids/firmware-2.2.img.id
+     vgsm_firmware/firmware-1.7.a43 vgsm_firmware/firmware-1.7.img
+     vgsm_firmware/firmware-2.2.a43 vgsm_firmware/firmware-2.2.img
+
+    modified files:
+     ChangeLog Makefile.am chan_vgsm/chan_vgsm.c chan_vgsm/comm.c
+     modules/vgsm/card.c modules/vgsm/card.h modules/vgsm/module.c
+     modules/vgsm/module.h modules/vgsm/regs.h modules/vgsm/vgsm.h
+     modules/vgsm/vgsm_main.c vgsmctl/Makefile.am
+     vgsmctl/fw_upgrade.c vgsmctl/fw_upgrade.h vgsmctl/vgsmctl.c
+
+    renamed files:
+     vgsmctl/.arch-ids/fw_update.c.id
+       ==> vgsmctl/.arch-ids/fw_upgrade.c.id
+     vgsmctl/.arch-ids/fw_update.h.id
+       ==> vgsmctl/.arch-ids/fw_upgrade.h.id
+     vgsmctl/fw_update.c
+       ==> vgsmctl/fw_upgrade.c
+     vgsmctl/fw_update.h
+       ==> vgsmctl/fw_upgrade.h
+
+    new directories:
+     vgsm_firmware vgsm_firmware/.arch-ids
+
+
 2006-06-20 17:56:23 GMT	matteo Brancaleoni <mbrancaleoni@voismart.it>	patch-667
 
     Summary:
