@@ -15,7 +15,8 @@ EXTRA_DIST =					\
 	modules/include/linux/vgsm.h		\
 	modules/include/linux/visdn/*.h		\
 	docs/*					\
-	vgsm_firmware/*
+	vgsm_firmware/*.img			\
+	vgsm_firmware/README
 
 SUBDIRS =
 

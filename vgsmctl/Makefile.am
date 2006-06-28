@@ -15,7 +15,7 @@ vgsmctl_SOURCES = \
 	fw_version.c	\
 	fw_upgrade.c
 
-vgsmctl_LDADD =
+vgsmctl_LDADD = -lz
 
 noinst_HEADERS = \
 	vgsmctl.h	\

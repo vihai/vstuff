@@ -941,6 +941,8 @@ int vgsm_card_probe(
 
 	vgsm_codec_reset(card);
 
+	vgsm_codec_reset(card);
+
 	for (i=0; i<card->num_modules; i++) {
 		err = vgsm_module_register(&card->modules[i]);
 		if (err < 0)

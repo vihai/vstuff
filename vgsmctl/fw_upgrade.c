@@ -25,12 +25,27 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 
+#include <netinet/in.h>
+
+#include <linux/types.h>
+
 #include <list.h>
 
 #include <linux/vgsm.h>
 
+#include <zlib.h>
+
 #include "vgsmctl.h"
 #include "fw_upgrade.h"
+
+struct fw_file_header
+{
+	__u32 magic;
+	__u32 crc;
+	__u32 size;
+	__u8 version[3];
+	__u8 reserved[17];
+};
 
 static int do_fw_upgrade(
 	const char *device,
@@ -62,18 +77,51 @@ static int do_fw_upgrade(
 		return 1;
 	}
 
-	printf("Firmware size: %d bytes\n", (int)stat.st_size);
+	struct fw_file_header ffh;
+	int nread = read(in_fd, &ffh, sizeof(ffh));
+	if (nread < 0) {
+		fprintf(stderr, "read failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	} else if (nread < sizeof(ffh)) {
+		fprintf(stderr, "short read in '%s'\n",
+			filename);
+
+		return 1;
+	}
+
+	if (ntohl(ffh.magic) != 0x92e3299a) {
+		fprintf(stderr,
+			"Firmware '%s' has invalid magic (0x%08x != 0x%08x)\n",
+			filename,
+			ntohl(ffh.magic),
+			0x92e3299a);
+
+		return 1;
+	}
+
+	if (ntohl(ffh.size) != stat.st_size) {
+		fprintf(stderr, "Firmware '%s' has invalid size (%d != %d)\n",
+			filename,
+			ntohl(ffh.size),
+			(int)stat.st_size);
+
+		return 1;
+	}
 
 	struct vgsm_fw_header *fwb;
-	fwb = malloc(sizeof(*fwb) + stat.st_size);
+	fwb = malloc(sizeof(*fwb) + stat.st_size - sizeof(ffh));
 	if (!fwb) {
 		fprintf(stderr, "malloc failed\n");
 		return 1;
 	}
 
-	fwb->size = stat.st_size;
+	fwb->size = stat.st_size - sizeof(ffh);
 
-	int nread = read(in_fd, fwb->data, fwb->size);
+	printf("Firmware size: %d bytes\n", (int)stat.st_size);
+
+	nread = read(in_fd, fwb->data, fwb->size);
 	if (nread < 0) {
 		fprintf(stderr, "Cannot read '%s': %s\n",
 			filename,
@@ -83,6 +131,18 @@ static int do_fw_upgrade(
 		fprintf(stderr, "Short read on '%s': %s\n",
 			filename,
 			strerror(errno));
+		return 1;
+	}
+
+	__u32 crc = crc32(0, fwb->data, fwb->size);
+	if (ntohl(ffh.crc) != crc) {
+		fprintf(stderr,
+			"Firmware '%s' has invalid CRC"
+			" (0x%08x != 0x%08x)\n",
+			filename,
+			ntohl(ffh.crc),
+			crc);
+
 		return 1;
 	}
 

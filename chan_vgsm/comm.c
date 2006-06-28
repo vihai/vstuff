@@ -313,7 +313,7 @@ struct vgsm_req *vgsm_req_make_va(
 				*((__u8 *)sms_pdu + i));
 		}
 
-		strcat(req->sms_text_pdu, "\x1a");
+//		strcat(req->sms_text_pdu, "\x1a");
 	}
 
 	ast_mutex_lock(&comm->requests_queue_lock);
@@ -793,6 +793,8 @@ vgsm_debug_serial_verb("%s: BUF='%s'\n",
 			int nmatch = match_echo(comm,
 					comm->current_req->sms_text_pdu);
 			if (nmatch > 0) {
+				write(comm->fd, "\x1a", 1);
+
 				comm->timer_expiration = longtime_now() +
 					comm->current_req->timeout;
 				vgsm_parser_change_state(comm,

@@ -97,9 +97,36 @@ static void vgsm_tty_close(
 	clear_bit(VGSM_MODULE_STATUS_OPEN, &module->status);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+ssize_t __kfifo_put_user(
+	struct kfifo *fifo,
+	const void __user *buffer,
+	ssize_t len)
+{
+	ssize_t l;
+
+	len = min(len, (ssize_t)(fifo->size - fifo->in + fifo->out));
+
+	/* first put the data starting from fifo->in to buffer end */
+	l = min(len, (ssize_t)(fifo->size - (fifo->in & (fifo->size - 1))));
+	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)), buffer, l))
+		return -EFAULT;
+
+	/* then put the rest (if any) at the beginning of the buffer */
+	if (copy_from_user(fifo->buffer, buffer + l, len - l))
+		return -EFAULT;
+
+	fifo->in += len;
+
+	return len;
+}
+#endif
+
 static int vgsm_tty_write(
 	struct tty_struct *tty,
-//	int from_user,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+	int from_user,
+#endif
 	const unsigned char *buf,
 	int count)
 {
@@ -107,8 +134,19 @@ static int vgsm_tty_write(
 	struct vgsm_card *card = module->card;
 	int copied_bytes = 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+	if (from_user) {
+		copied_bytes = __kfifo_put_user(module->kfifo_tx,
+					(unsigned char *)buf, count);
+	} else {
+		copied_bytes = __kfifo_put(module->kfifo_tx,
+					(unsigned char *)buf, count);
+	}
+#else
+
 	copied_bytes = __kfifo_put(module->kfifo_tx,
 				(unsigned char *)buf, count);
+#endif
 
 	tasklet_schedule(&card->tx_tasklet);
 
@@ -351,7 +389,7 @@ static int vgsm_tty_do_fw_upgrade(
 	vgsm_send_fw_upgrade(micro);
 	vgsm_card_unlock(module->card);
 
-	if (wait_for_completion_timeout(&micro->fw_upgrade_ready, 5 * HZ)) {
+	if (!wait_for_completion_timeout(&micro->fw_upgrade_ready, 5 * HZ)) {
 		err = -ETIMEDOUT;
 		goto err_completion_timeout;
 	}

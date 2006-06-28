@@ -1,0 +1,19 @@
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Warning: Improper firmware flashing may render your card unusable and require
+         replacement.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+_All_ the firmware changes are described in this changelog, there is no need
+to upgrade the firmware unless you are experiencing one of the issues described
+below.
+
+Changelog:
+
+------- 2.2 ------
+- Fixed serial communication: blocks greater than 155 bytes were
+  corrupted and SMS messages greater than 70-80 characters could not be sent.
+
+------- 1.6 ------
+- First firmware release
+
