@@ -90,6 +90,9 @@ struct vgsm_state vgsm = {
 		.sms_service_center = "",
 		.sms_sender_domain = "localhost",
 		.sms_recipient_address = "root@localhost",
+		.dtmf_quelch = FALSE,
+		.dtmf_mutemax = FALSE,
+		.dtmf_relax = FALSE,
 	}
 };
 
@@ -823,6 +826,12 @@ static int vgsm_intf_from_var(
 	} else if (!strcasecmp(var->name, "sms_recipient_address")) { 
 		strncpy(intf->sms_recipient_address, var->value,
 			sizeof(intf->sms_recipient_address));
+	} else if (!strcasecmp(var->name, "dtmf_quelch")) { 
+		intf->dtmf_quelch = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "dtmf_mutemax")) { 
+		intf->dtmf_mutemax = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "dtmf_relax")) { 
+		intf->dtmf_relax = ast_true(var->value);
 	} else {
 		return -1;
 	}
@@ -855,6 +864,10 @@ static void vgsm_copy_interface_config(
 		sizeof(dst->sms_sender_domain));
 	strncpy(dst->sms_recipient_address, src->sms_recipient_address,
 		sizeof(dst->sms_recipient_address));
+
+	dst->dtmf_quelch = src->dtmf_quelch;
+	dst->dtmf_mutemax = src->dtmf_mutemax;
+	dst->dtmf_relax = src->dtmf_relax;
 }
 
 static struct vgsm_urc_class urc_classes[];
@@ -2113,7 +2126,11 @@ static struct ast_channel *vgsm_new(
 
 	vgsm_chan->dsp = ast_dsp_new();
 	ast_dsp_set_features(vgsm_chan->dsp, DSP_FEATURE_DTMF_DETECT);
-	ast_dsp_digitmode(vgsm_chan->dsp, DSP_DIGITMODE_DTMF);
+	ast_dsp_digitmode(vgsm_chan->dsp,
+		DSP_DIGITMODE_DTMF |
+		vgsm_chan->intf->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
+		vgsm_chan->intf->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
+		vgsm_chan->intf->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	ast_setstate(ast_chan, state);
 

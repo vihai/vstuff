@@ -148,6 +148,10 @@ struct vgsm_interface
 	char sms_sender_domain[64];
 	char sms_recipient_address[64];
 
+	int dtmf_quelch;
+	int dtmf_mutemax;
+	int dtmf_relax;
+
 	/* Operative data */
 
 	enum vgsm_intf_status status;
