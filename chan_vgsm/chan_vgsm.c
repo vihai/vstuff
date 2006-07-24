@@ -110,6 +110,10 @@ static const char *vgsm_intf_status_to_text(enum vgsm_intf_status status)
 		return "RING";
 	case VGSM_INTF_STATUS_INCALL:
 		return "INCALL";
+	case VGSM_INTF_STATUS_SENDING_SMS:
+		return "SENDING_SMS";
+	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
+		return "INCALL_SENDING_SMS";
 	case VGSM_INTF_STATUS_NO_NET:
 		return "NO_NET";
 	case VGSM_INTF_STATUS_WAITING_SIM:
@@ -624,15 +628,27 @@ static void vgsm_intf_set_status(
 	enum vgsm_intf_status status,
 	longtime_t timeout)
 {
-	vgsm_debug_generic("vGSM interface '%s' changed state from %s to %s"
-		" (timeout %.2fs)\n",
-		intf->name,
-		vgsm_intf_status_to_text(intf->status),
-		vgsm_intf_status_to_text(status),
-		timeout / 1000000.0);
+	if (timeout >= 0) {
+		intf->timer_expiration = longtime_now() + timeout;
+
+		vgsm_debug_generic(
+			"vGSM interface '%s' changed state from %s to %s"
+			" (timeout %.2fs)\n",
+			intf->name,
+			vgsm_intf_status_to_text(intf->status),
+			vgsm_intf_status_to_text(status),
+			timeout / 1000000.0);
+	} else {
+		intf->timer_expiration = -1;
+
+		vgsm_debug_generic(
+			"vGSM interface '%s' changed state from %s to %s\n",
+			intf->name,
+			vgsm_intf_status_to_text(intf->status),
+			vgsm_intf_status_to_text(status));
+	}
 
 	intf->status = status;
-	intf->timer_expiration = longtime_now() + timeout;
 
 	if (intf->monitor_thread != AST_PTHREADT_NULL)
 		pthread_kill(intf->monitor_thread, SIGURG);
@@ -1563,10 +1579,16 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	}
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->status != VGSM_INTF_STATUS_READY &&
-	    intf->status != VGSM_INTF_STATUS_INCALL) {
+	if (intf->status == VGSM_INTF_STATUS_READY)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS, -1);
+	else if (intf->status == VGSM_INTF_STATUS_INCALL)
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
+				READY_UPDATE_TIME);
+	else {
 		ast_cli(fd,
-			"Cannot send SMS on not ready interfce\n");
+			"Interface '%s' is busy\n",
+			intf->name);
 		ast_mutex_unlock(&intf->lock);
 		err = RESULT_FAILURE;
 		goto err_intf_not_ready;
@@ -1635,6 +1657,14 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 		goto err_req_result;
 	}
 
+	if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+				READY_UPDATE_TIME);
+	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_INCALL,
+				READY_UPDATE_TIME);
+ 
 	vgsm_req_put_null(req);
 
 	return RESULT_SUCCESS;
@@ -1646,6 +1676,13 @@ err_invalid_mbstring:
 err_malloc_sms_text:
 	vgsm_sms_put_null(sms);
 err_sms_alloc:
+	if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+				READY_UPDATE_TIME);
+	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_INCALL,
+				READY_UPDATE_TIME);
 err_intf_not_ready:
 err_intf_not_found:
 err_missing_text:
@@ -2184,14 +2221,21 @@ static int vgsm_call(
 	}
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->status != VGSM_INTF_STATUS_READY) {
+	if (intf->status == VGSM_INTF_STATUS_READY)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
+					READY_UPDATE_TIME);
+	else if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
+				READY_UPDATE_TIME);
+	else {
+		ast_log(LOG_DEBUG, "Interface %s is not ready\n", intf_name);
 		err = -1;
 		goto err_int_not_ready;
 	}
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL, -1);
 	intf->current_call = ast_chan;
 	vgsm_chan->intf = vgsm_intf_get(intf);
 
@@ -2216,6 +2260,8 @@ static int vgsm_call(
 				AST_PRES_ALLOWED) ? 'i' : 'I',
 			number);
 	if (!req) {
+		ast_log(LOG_DEBUG, "%s: Unable to dial: ATD failed\n",
+			intf_name);
 		err = -1;
 		goto err_atd_failed;
 	}
@@ -2463,8 +2509,13 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 		}
 
 done:
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-					READY_UPDATE_TIME);
+		if (intf->status == VGSM_INTF_STATUS_INCALL)
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+						READY_UPDATE_TIME);
+		else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS,
+						READY_UPDATE_TIME);
+
 		intf->current_call = NULL;
 	}
 
@@ -2954,6 +3005,8 @@ static void vgsm_module_update_readiness(
 	case VGSM_INTF_STATUS_INITIALIZING:
 	case VGSM_INTF_STATUS_RING:
 	case VGSM_INTF_STATUS_INCALL:
+	case VGSM_INTF_STATUS_SENDING_SMS:
+	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
 	case VGSM_INTF_STATUS_WAITING_SIM:
 	case VGSM_INTF_STATUS_WAITING_PIN:
 		/* Do nothing */
@@ -3083,6 +3136,8 @@ parsing_done:
 
 err_start_pbx:
 err_parse_cid:
+	ast_hangup(intf->current_call);
+	intf->current_call = NULL;
 err_alloc_call:
 err_not_incall:
 	ast_mutex_unlock(&intf->lock);
@@ -3399,6 +3454,7 @@ static void handle_unsolicited_ciev_call(
 	struct vgsm_comm *comm = urc->comm;
 	struct vgsm_interface *intf = to_intf(comm);
 	int err;
+	int call_present = FALSE;
 
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SLCC");
@@ -3413,7 +3469,7 @@ static void handle_unsolicited_ciev_call(
 
 	struct vgsm_req_line *line;
 	list_for_each_entry(line, &req->lines, node) {
-		const char *pars = line->text + strlen("^SLCC :");
+		const char *pars = line->text + strlen("^SLCC: ");
 
 		if (!strcmp(line->text, "OK"))
 			break;
@@ -3481,7 +3537,7 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-//		call_present = TRUE;
+		call_present = TRUE;
 
 		vgsm_handle_clcc(intf, id, direction, state, mode);
 	}
@@ -3489,6 +3545,14 @@ static void handle_unsolicited_ciev_call(
 	vgsm_req_put_null(req);
 
 	ast_mutex_unlock(&intf->lock);
+
+	if (!call_present) {
+		if(intf->current_call && intf->current_call->pbx) {
+			ast_log(LOG_NOTICE,
+				"SLCC has no call, requesting HANGUP\n");
+			vgsm_common_hangup(intf);
+		}
+        }
 }
 
 static void handle_unsolicited_ciev_roam(
@@ -4623,11 +4687,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	char *content = astman_get_header(m, "Content");
 	char *class_str = astman_get_header(m, "Class");
 
-	if (!strlen(interface)) {
-		astman_send_error(s, m, "Interface missing");
-		goto err_missing_interface;
-	}
-
 	if (!strlen(number)) {
 		astman_send_error(s, m, "Destination missing");
 		goto err_missing_destination;
@@ -4638,23 +4697,59 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_missing_content;
 	}
 
-	struct vgsm_interface *intf;
-	intf = vgsm_intf_get_by_name(interface);
-	if (!intf) {
-		astman_send_error(s, m, "Cannot find interface");
-		goto err_intf_not_found;
+	if (strlen(content) > 160) {
+		astman_send_error(s, m, "Content too long");
+		goto err_too_long_content;
 	}
 
+	/* start interface guessing */
+	struct vgsm_interface *intf;
+	int found = 0;
+
+	/* if user has specified an interface, let's find it */
+	if(strlen(interface)) {
+		intf = vgsm_intf_get_by_name(interface);
+		if (!intf) {
+			astman_send_error(s, m, "Cannot find interface");
+			goto err_intf_not_found;
+		}
+	} else {
+		/* if user has not specified an interface, get the first available */
+		ast_mutex_lock(&vgsm.lock);
+		list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+			        ast_mutex_lock(&intf->lock);
+			        if (intf->status == VGSM_INTF_STATUS_READY ||
+			            intf->status == VGSM_INTF_STATUS_INCALL) {
+	                		ast_mutex_unlock(&intf->lock);
+					found = 1;
+					break;
+	        		}
+	        		ast_mutex_unlock(&intf->lock);
+		}
+		ast_mutex_unlock(&vgsm.lock);
+		if (!found) {
+			astman_send_error(s, m, "Cannot find any interface");
+			goto err_intf_not_found;
+		}
+	}
+
+	/* check again that the intf is available */
 	ast_mutex_lock(&intf->lock);
-	if (intf->status != VGSM_INTF_STATUS_READY &&
-	    intf->status != VGSM_INTF_STATUS_INCALL) {
+	if (intf->status == VGSM_INTF_STATUS_READY)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS, -1);
+	else if (intf->status == VGSM_INTF_STATUS_INCALL)
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
+				READY_UPDATE_TIME);
+	else {
 		astman_send_error(s, m,
-			"Cannot send SMS on not ready interfce");
+			"Interface is busy");
 		ast_mutex_unlock(&intf->lock);
 		goto err_intf_not_ready;
 	}
 	ast_mutex_unlock(&intf->lock);
 
+	/* now the intf is ok, starting sms setup */
 	struct vgsm_sms *sms;
 	sms = vgsm_sms_alloc();
 	if (!sms) {
@@ -4696,14 +4791,14 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
  
 	mbstowcs(sms->text, content, slen);
 	sms->text[slen] = L'\0';
- 
+
 	vgsm_sms_prepare(sms);
 
 	struct vgsm_req *req = vgsm_req_make_sms(
 		&intf->comm, 30 * SEC, sms->pdu, sms->pdu_len,
 		"AT+CMGS=%d", sms->pdu_tp_len);
 	if (!req) {
-		ast_log(LOG_NOTICE,"SMStx: Error requesting SMS\n");
+		ast_log(LOG_NOTICE,"vgsm: Error requesting SMS\n");
 		astman_send_error(s, m, "Error sending SMS");
 		goto err_req_make;
 	}
@@ -4720,11 +4815,24 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	astman_send_ack(s, m, "VGSMsmstx: SMS sent");
 
+       if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
+               vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+					READY_UPDATE_TIME);
+	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
+					READY_UPDATE_TIME);
+
 	return 0;
 
 err_req_result:
 	vgsm_req_put_null(req);
 err_req_make:
+       if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
+               vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+					READY_UPDATE_TIME);
+	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
+					READY_UPDATE_TIME);
 err_malloc_sms_text:
 err_invalid_mbstring:
 	vgsm_sms_put_null(sms);
@@ -4732,8 +4840,8 @@ err_sms_alloc:
 err_intf_not_ready:
 err_intf_not_found:
 err_missing_content:
+err_too_long_content:
 err_missing_destination:
-err_missing_interface:
 
 	return 0;
 }
@@ -4869,7 +4977,6 @@ static void vgsm_module_open(
 	tcflush(intf->comm.fd, TCIFLUSH);
 	tcsetattr(intf->comm.fd, TCSANOW, &newtio);
 
-	//struct termios newtio;
 	bzero(&newtio, sizeof(newtio));
 	
 	newtio.c_cflag = B38400 | CRTSCTS | CS8 | CLOCAL | CREAD;
@@ -4994,11 +5101,16 @@ static void vgsm_module_monitor_timer(
 	break;
 
 	case VGSM_INTF_STATUS_INITIALIZING:
-		ast_log(LOG_ERROR, "Unexpected intf in Initialing state\n");
+	case VGSM_INTF_STATUS_SENDING_SMS:
+		ast_log(LOG_ERROR,
+			"vgsm: Module '%s': Unexpected timer in status %s\n",
+			intf->name,
+			vgsm_intf_status_to_text(intf->status));
 	break;
 
 	case VGSM_INTF_STATUS_RING:
 	case VGSM_INTF_STATUS_INCALL:
+	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
 //		vgsm_call_monitor(intf);
 	break;
 
