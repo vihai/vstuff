@@ -19,6 +19,7 @@
 #include <stdarg.h>
 #include <signal.h>
 #include <ctype.h>
+#include <iconv.h>
 
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -4701,22 +4702,18 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 {
 	char *interface = astman_get_header(m, "Interface");
 	char *number = astman_get_header(m, "Destination");
-	char *content = astman_get_header(m, "Content");
 	char *class_str = astman_get_header(m, "Class");
+	char *content = astman_get_header(m, "Content");
+	char *hex_content = astman_get_header(m, "HexContent");
 
 	if (!strlen(number)) {
 		astman_send_error(s, m, "Destination missing");
 		goto err_missing_destination;
 	}
 
-	if (!strlen(content)) {
+	if (!strlen(content) && !strlen(hex_content)) {
 		astman_send_error(s, m, "Content missing");
 		goto err_missing_content;
-	}
-
-	if (strlen(content) > 160) {
-		astman_send_error(s, m, "Content too long");
-		goto err_too_long_content;
 	}
 
 	/* start interface guessing */
@@ -4797,17 +4794,57 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	else
 		sms->message_class = 1;
 
-	size_t slen;
-	slen = mbstowcs(NULL, content, 0);
-	if(slen == -1)
-		goto err_invalid_mbstring;
- 
-	sms->text = malloc((slen + 1) * sizeof(wchar_t));
-	if(!sms->text)
-		goto err_malloc_sms_text;
- 
-	mbstowcs(sms->text, content, slen);
-	sms->text[slen] = L'\0';
+	size_t content_size;
+	char *content_raw;
+
+	if (strlen(hex_content)) {
+		content_size = strlen(hex_content) / 2;
+		content_raw = alloca(content_size + 1);
+		if (!content_raw)
+			goto err_alloc_content;
+
+		int i;
+		for(i=0; i<content_size; i++) {
+			content_raw[i] =
+				char_to_hexdigit(hex_content[i * 2]) << 4 |
+				char_to_hexdigit(hex_content[i * 2 + 1]);
+		}
+
+		content_raw[content_size] = '\0';
+	} else {
+		content_size = strlen(content);
+		content_raw = content;
+	}
+
+	iconv_t cd = iconv_open("WCHAR_T", "UTF-8");
+	if (cd < 0) {
+		ast_log(LOG_ERROR, "Cannot open iconv context; %s\n",
+			strerror(errno));
+		goto err_iconv_open;
+	}
+
+	char *inbuf = (char *)content_raw;
+	size_t inbytes = content_size;
+	size_t outbytes = 1024;
+
+	inbuf = (char *)content_raw;
+	inbytes = content_size;
+
+	sms->text = malloc(outbytes + sizeof(wchar_t));
+	if (!sms->text) {
+		iconv_close(cd);
+		goto err_text_malloc;
+	}
+
+	char *outbuf = (char *)sms->text;
+	if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes) < 0) {
+		iconv_close(cd);
+		goto err_iconv;
+	}
+
+	iconv_close(cd);
+
+	outbuf[outbytes] = L'\0';
 
 	vgsm_sms_prepare(sms);
 
@@ -4850,14 +4887,17 @@ err_req_make:
 	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
 					READY_UPDATE_TIME);
-err_malloc_sms_text:
-err_invalid_mbstring:
+err_iconv:
+	free(sms->text);
+	sms->text = NULL;
+err_text_malloc:
+err_iconv_open:
+err_alloc_content:
 	vgsm_sms_put_null(sms);
 err_sms_alloc:
 err_intf_not_ready:
 err_intf_not_found:
 err_missing_content:
-err_too_long_content:
 err_missing_destination:
 
 	return 0;
