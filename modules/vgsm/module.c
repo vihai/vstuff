@@ -239,9 +239,9 @@ static int vgsm_chan_start(struct visdn_chan *visdn_chan)
 		*(u8 *)(card->writedma_mem + i) = 0x2a;
 
 	module->rx_fifo_pos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
-				card->readdma_bus_mem) / 4;
+				(u32)card->readdma_bus_mem) / 4;
 	module->tx_fifo_pos = ((le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
-			card->writedma_bus_mem + VGSM_FIFO_JITBUFF_AVG) %
+			(u32)card->writedma_bus_mem + VGSM_FIFO_JITBUFF_AVG) %
 			card->writedma_size) / 4;
 
 	vgsm_update_mask0(card);
