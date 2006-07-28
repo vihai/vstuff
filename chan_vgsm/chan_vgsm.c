@@ -2127,11 +2127,6 @@ static struct ast_channel *vgsm_new(
 
 	vgsm_chan->dsp = ast_dsp_new();
 	ast_dsp_set_features(vgsm_chan->dsp, DSP_FEATURE_DTMF_DETECT);
-	ast_dsp_digitmode(vgsm_chan->dsp,
-		DSP_DIGITMODE_DTMF |
-		vgsm_chan->intf->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
-		vgsm_chan->intf->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
-		vgsm_chan->intf->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	ast_setstate(ast_chan, state);
 
@@ -2160,6 +2155,12 @@ static struct ast_channel *vgsm_alloc_inbound_call(struct vgsm_interface *intf)
 	ast_chan = vgsm_new(vgsm_chan, AST_STATE_OFFHOOK);
 	if (!ast_chan)
 		goto err_vgsm_new;
+
+	ast_dsp_digitmode(vgsm_chan->dsp,
+		DSP_DIGITMODE_DTMF |
+		vgsm_chan->intf->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
+		vgsm_chan->intf->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
+		vgsm_chan->intf->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	vgsm.usecnt++;
@@ -2256,6 +2257,12 @@ static int vgsm_call(
 
 	intf->current_call = ast_chan;
 	vgsm_chan->intf = vgsm_intf_get(intf);
+
+	ast_dsp_digitmode(vgsm_chan->dsp,
+		DSP_DIGITMODE_DTMF |
+		vgsm_chan->intf->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
+		vgsm_chan->intf->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
+		vgsm_chan->intf->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	if (option_debug)
 		ast_log(LOG_DEBUG,
