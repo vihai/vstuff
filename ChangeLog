@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-09-07 17:05:39 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-676
+
+    Summary:
+      Addedd pci-subsystem-vendor-id to vgsm to work around faulty hardware
+    Revision:
+      isdn--devel--0.1--patch-676
+
+
+    modified files:
+     ChangeLog modules/vgsm/vgsm_main.c
+
+
 2006-09-05 09:59:11 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-675
 
     Summary:
