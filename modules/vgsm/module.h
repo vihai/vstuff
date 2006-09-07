@@ -23,7 +23,6 @@
 
 enum vgsm_module_status
 {
-	VGSM_MODULE_STATUS_OPEN,
 	VGSM_MODULE_STATUS_RUNNING,
 	VGSM_MODULE_STATUS_RX_THROTTLE,
 	VGSM_MODULE_STATUS_RX_ACK_PENDING,
@@ -50,6 +49,7 @@ struct vgsm_module
 	int timeslot_offset;
 
 	struct tty_struct *tty;
+	atomic_t tty_open_count;
 
 	struct completion read_status_completion;
 

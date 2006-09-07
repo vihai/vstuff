@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-09-07 18:02:47 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-679
+
+    Summary:
+      Fix for concurrent opening of vgsm serial which leaded to corruption
+    Revision:
+      isdn--devel--0.1--patch-679
+
+
+    modified files:
+     ChangeLog modules/vgsm/module.h modules/vgsm/vgsm_main.c
+
+
 2006-09-07 17:10:23 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-678
 
     Summary:

@@ -54,32 +54,33 @@ static int vgsm_tty_open(
 	struct tty_struct *tty,
 	struct file *file)
 {
-       // int err;
-	struct vgsm_card *card;
-	struct vgsm_module *module = NULL;
+	if (!tty->driver_data) {
+		// int err;
+		struct vgsm_card *card;
+		struct vgsm_module *module = NULL;
 
-	tty->driver_data = NULL;
-
-	spin_lock(&vgsm_cards_list_lock);
-	list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
-		if (card->id == tty->index / 4) {
-			module = &card->modules[tty->index % 4];
-			break;
+		spin_lock(&vgsm_cards_list_lock);
+		list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
+			if (card->id == tty->index / 4) {
+				module = &card->modules[tty->index % 4];
+				break;
+			}
 		}
+		spin_unlock(&vgsm_cards_list_lock);
+
+		if (!module)
+			return -ENODEV;
+
+		tty->driver_data = module;
+		module->tty = tty;
+
+		clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
+		set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+	} else {
+		struct vgsm_module *module = tty->driver_data;
+
+		atomic_inc(&module->tty_open_count);
 	}
-	spin_unlock(&vgsm_cards_list_lock);
-
-	if (!module)
-		return -ENODEV;
-
-	if (test_and_set_bit(VGSM_MODULE_STATUS_OPEN, &module->status))
-		return -EBUSY;
-
-	tty->driver_data = module;
-	module->tty = tty;
-
-	clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
-	set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
 
 	return 0;
 }
@@ -90,12 +91,16 @@ static void vgsm_tty_close(
 {
 	struct vgsm_module *module = tty->driver_data;
 
-	clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+	/* TTY has never ever been initialized */
+	if (!module)
+		return;
 
-	/* Flush the RX queue and ACK */
-	tasklet_schedule(&module->card->rx_tasklet);
-	
-	clear_bit(VGSM_MODULE_STATUS_OPEN, &module->status);
+	if (atomic_dec_and_test(&module->tty_open_count)) {
+		clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+
+		/* Flush the RX queue and ACK */
+		tasklet_schedule(&module->card->rx_tasklet);
+	}
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
