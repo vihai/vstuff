@@ -5081,6 +5081,8 @@ static void vgsm_module_initialize(
 {
 	vgsm_debug_generic("Initializing module '%s'\n", intf->name);
 
+	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INITIALIZING, -1);
+
 	if (vgsm_module_codec_init(intf) < 0) {
 		vgsm_comm_disable(&intf->comm);
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
