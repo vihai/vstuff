@@ -1439,6 +1439,13 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 		intf->name,
 		vgsm_intf_status_to_text(intf->status));
 
+	if (intf->status == VGSM_INTF_STATUS_CLOSED ||
+	    intf->status == VGSM_INTF_STATUS_WAITING_SYSTART ||
+	    intf->status == VGSM_INTF_STATUS_WAITING_INITIALIZATION ||
+	    intf->status == VGSM_INTF_STATUS_INITIALIZING ||
+	    intf->status == VGSM_INTF_STATUS_FAILED)
+		return;
+
 	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
             intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		ast_cli(fd, "          %-15s\n",
