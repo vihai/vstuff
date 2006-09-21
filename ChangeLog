@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-09-21 21:53:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-685
+
+    Summary:
+      Fixed vGSM initialization procedure, removed NO_NET status and correctly handle initialization with no network
+    Revision:
+      isdn--devel--0.1--patch-685
+
+
+    modified files:
+     ChangeLog chan_vgsm/chan_vgsm.c chan_vgsm/chan_vgsm.h
+
+
 2006-09-21 20:39:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-684
 
     Summary:

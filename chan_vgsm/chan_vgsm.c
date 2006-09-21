@@ -118,8 +118,6 @@ static const char *vgsm_intf_status_to_text(enum vgsm_intf_status status)
 		return "SENDING_SMS";
 	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
 		return "INCALL_SENDING_SMS";
-	case VGSM_INTF_STATUS_NO_NET:
-		return "NO_NET";
 	case VGSM_INTF_STATUS_WAITING_SIM:
 		return "WAITING_SIM";
 	case VGSM_INTF_STATUS_WAITING_PIN:
@@ -2247,17 +2245,27 @@ static int vgsm_call(
 	}
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->status == VGSM_INTF_STATUS_READY)
+	if (intf->status == VGSM_INTF_STATUS_READY) {
+
+		if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+		    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+			ast_log(LOG_DEBUG, "Interface %s not registered\n",
+				intf_name);
+			err = -1;
+			goto err_intf_not_registered;
+		}
+
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
 					READY_UPDATE_TIME);
-	else if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
+
+	} else if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
 		vgsm_intf_set_status(intf,
 				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
 				READY_UPDATE_TIME);
 	else {
 		ast_log(LOG_DEBUG, "Interface %s is not ready\n", intf_name);
 		err = -1;
-		goto err_int_not_ready;
+		goto err_intf_not_ready;
 	}
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
@@ -2321,7 +2329,8 @@ static int vgsm_call(
 	return 0;
 
 err_atd_failed:
-err_int_not_ready:
+err_intf_not_ready:
+err_intf_not_registered:
 	ast_mutex_unlock(&intf->lock);
 err_channel_not_down:
 	vgsm_intf_put(intf);
@@ -3010,42 +3019,6 @@ err_cops:
 	return -1;
 }
 
-static void vgsm_module_update_readiness(
-	struct vgsm_interface *intf)
-{
-	switch(intf->status) {
-	case VGSM_INTF_STATUS_READY:
-		if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-		    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_NO_NET,
-						READY_UPDATE_TIME);
-		}
-	break;
-
-	case VGSM_INTF_STATUS_NO_NET:
-		if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-		    intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
-			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-						READY_UPDATE_TIME);
-		}
-	break;
-
-	case VGSM_INTF_STATUS_CLOSED:
-	case VGSM_INTF_STATUS_WAITING_SYSTART:
-	case VGSM_INTF_STATUS_FAILED:
-	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
-	case VGSM_INTF_STATUS_INITIALIZING:
-	case VGSM_INTF_STATUS_RING:
-	case VGSM_INTF_STATUS_INCALL:
-	case VGSM_INTF_STATUS_SENDING_SMS:
-	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
-	case VGSM_INTF_STATUS_WAITING_SIM:
-	case VGSM_INTF_STATUS_WAITING_PIN:
-		/* Do nothing */
-	break;
-	}
-}
-
 static void handle_unsolicited_creg(
 	const struct vgsm_req *urc)
 {
@@ -3066,8 +3039,6 @@ static void handle_unsolicited_creg(
 	if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
             intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING)
 		vgsm_update_cops(intf);
-
-	vgsm_module_update_readiness(intf);
 
 	ast_mutex_unlock(&intf->lock);
 }
@@ -4686,8 +4657,6 @@ static int vgsm_module_update_net_info(
 
 	vgsm_req_put_null(req);
 
-	vgsm_module_update_readiness(intf);
-
 	err = vgsm_update_smond(intf);
 	if (err < 0)
 		goto err_update_smond;
@@ -4763,9 +4732,17 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	/* check again that the intf is available */
 	ast_mutex_lock(&intf->lock);
-	if (intf->status == VGSM_INTF_STATUS_READY)
+	if (intf->status == VGSM_INTF_STATUS_READY) {
+		if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+		    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+			ast_log(LOG_DEBUG, "Interface %s not registered\n",
+				intf->name);
+			goto err_intf_not_registered;
+		}
+
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS, -1);
-	else if (intf->status == VGSM_INTF_STATUS_INCALL)
+
+	} else if (intf->status == VGSM_INTF_STATUS_INCALL)
 		vgsm_intf_set_status(intf,
 				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
 				READY_UPDATE_TIME);
@@ -4910,6 +4887,7 @@ err_alloc_content:
 	vgsm_sms_put_null(sms);
 err_sms_alloc:
 err_intf_not_ready:
+err_intf_not_registered:
 err_intf_not_found:
 err_missing_content:
 err_missing_destination:
@@ -5136,12 +5114,7 @@ static void vgsm_module_initialize(
 	if (vgsm_module_update_static_info(intf) < 0)
 		return;
 
-	if (vgsm_module_update_net_info(intf) < 0)
-		return;
-
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_NO_NET, READY_UPDATE_TIME);
-
-	vgsm_module_update_readiness(intf);
+	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY, 1 * SEC);
 
 	vgsm_debug_generic("Module '%s' successfully initialized\n",
 		intf->name);
@@ -5169,7 +5142,6 @@ static void vgsm_module_monitor_timer(
 	break;
 
 	case VGSM_INTF_STATUS_READY:
-	case VGSM_INTF_STATUS_NO_NET:
 		vgsm_module_update_net_info(intf);
 	break;
 
