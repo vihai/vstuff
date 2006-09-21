@@ -99,13 +99,15 @@ static inline void vgsm_wait_e0(struct vgsm_card *card)
 //	if (vgsm_inb(card, VGSM_PIB_E0))
 //		printk(KERN_DEBUG "E0 != 0 !!!\n");
 
-	for (i=0; i<100 && vgsm_inb(card, VGSM_PIB_E0); i++) {
-		udelay(10);
+	for (i=0; i<100; i++) {
 
-		if (i == 20)
-			printk(KERN_WARNING
-				"Uhuh... waiting too much for buffer\n");
+		if (!vgsm_inb(card, VGSM_PIB_E0))
+			return;
+
+		udelay(10);
 	}
+
+	vgsm_msg(KERN_ERR, "Timeout waiting for E0 buffer\n");
 }
 
 void vgsm_send_msg(
@@ -469,24 +471,20 @@ printk(KERN_DEBUG "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 	if (msg->cmd_dep != 0)
 		printk(KERN_ERR "cmd_dep != 0 ????\n");
 
-	if (test_bit(VGSM_MODULE_STATUS_RUNNING,
-				&module->status)) {
-		for(i=0; i<msg->numbytes; i++) {
-			if (module->tty->flip.count >=
-					TTY_FLIPBUF_SIZE)
-				tty_flip_buffer_push(
-					module->tty);
+	if (test_bit(VGSM_MODULE_STATUS_RUNNING, &module->status)) {
 
-			tty_insert_flip_char(module->tty,
-						msg->payload[i],
-						TTY_NORMAL);
+		for(i=0; i<msg->numbytes; i++) {
+			if (module->tty->flip.count >= TTY_FLIPBUF_SIZE)
+				tty_flip_buffer_push(module->tty);
+
+			tty_insert_flip_char(module->tty, msg->payload[i],
+							TTY_NORMAL);
 		}
 
 		tty_flip_buffer_push(module->tty);
 	}
 
-	set_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING,
-		&module->status);
+	set_bit(VGSM_MODULE_STATUS_RX_ACK_PENDING, &module->status);
 
 	tasklet_schedule(&card->rx_tasklet);
 }
@@ -1015,8 +1013,9 @@ void vgsm_card_remove(struct vgsm_card *card)
 		if (test_bit(VGSM_MODULE_STATUS_ON,
 						&card->modules[i].status)) {
 
-			// Force an emergency shutdown of the application did
-			// not do its duty
+			/* Force an emergency shutdown of the application did
+			 * not do its duty
+			 */
 
 			vgsm_card_lock(card);
 			vgsm_module_send_onoff(&card->modules[i],
