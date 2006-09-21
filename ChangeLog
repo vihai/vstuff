@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-09-21 20:36:46 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-681
+
+    Summary:
+      Fixed missing refcount initialization that would lead to OOPS in interrupt context if receiving serial data after tty close
+    Revision:
+      isdn--devel--0.1--patch-681
+
+
+    modified files:
+     ChangeLog modules/vgsm/vgsm_main.c
+
+
 2006-09-21 15:04:12 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-680
 
     Summary:

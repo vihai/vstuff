@@ -74,6 +74,8 @@ static int vgsm_tty_open(
 		tty->driver_data = module;
 		module->tty = tty;
 
+		atomic_set(&module->tty_open_count, 1);
+
 		clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
 		set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
 	} else {
@@ -522,7 +524,6 @@ static struct tty_operations vgsm_tty_ops =
 static int vgsm_probe(struct pci_dev *pci_dev, 
 	const struct pci_device_id *device_id_entry)
 {
-	
 	int err;
 
 	err = vgsm_card_probe(pci_dev, device_id_entry);
