@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-09-21 20:39:27 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-684
+
+    Summary:
+      Removed vgsm_stress executable from the tree
+    Revision:
+      isdn--devel--0.1--patch-684
+
+
+    modified files:
+     ChangeLog tests/.arch-inventory
+
+
 2006-09-21 20:38:09 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-683
 
     Summary:
