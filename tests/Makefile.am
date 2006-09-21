@@ -1,7 +1,7 @@
 
 AM_CFLAGS = -D_REENTRANT -Wall
 
-bin_PROGRAMS = jitter sniffer traffic
+bin_PROGRAMS = vgsm_stress # jitter sniffer traffic
 
 INCLUDES = \
 	 -I$(top_srcdir)/modules/include/	\
@@ -14,3 +14,5 @@ sniffer_SOURCES = sniffer.c
 sniffer_LDADD = -lasound
 
 traffic_SOURCES = traffic.c
+
+vgsm_stress_SOURCES = vgsm_stress.c
