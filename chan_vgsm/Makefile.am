@@ -13,4 +13,4 @@ chan_vgsm_la_LIBADD =
 chan_vgsm_la_LDFLAGS = -module -avoid-version -no-undefined
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
-AM_CFLAGS += -fno-inline -include $(astincdir)/asterisk/astmm.h
+#AM_CFLAGS += -fno-inline -include $(astincdir)/asterisk/astmm.h
