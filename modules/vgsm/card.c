@@ -550,10 +550,8 @@ printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
 				clear_bit(VGSM_MODULE_STATUS_ON,
 					&card->modules[1].status);
 
-			complete(&card->modules[0].
-					read_status_completion);
-			complete(&card->modules[1].
-					read_status_completion);
+			complete_all(&card->modules[0].read_status_completion);
+			complete_all(&card->modules[1].read_status_completion);
 		} else {
 			if (msg->payload[0] & 0x01)
 				set_bit(VGSM_MODULE_STATUS_ON,
@@ -569,10 +567,8 @@ printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
 				clear_bit(VGSM_MODULE_STATUS_ON,
 					&card->modules[3].status);
 
-			complete(&card->modules[2].
-					read_status_completion);
-			complete(&card->modules[3].
-					read_status_completion);
+			complete_all(&card->modules[2].read_status_completion);
+			complete_all(&card->modules[3].read_status_completion);
 		}
 	}
 }
@@ -654,7 +650,7 @@ static irqreturn_t vgsm_interrupt(int irq,
 			else if (msg.cmd_dep == 7)
 				printk(KERN_CRIT "FW upgrade failed!\n");
 
-			complete(&card->micros[micro].fw_upgrade_ready);
+			complete_all(&card->micros[micro].fw_upgrade_ready);
 		}
 	}
 

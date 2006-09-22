@@ -285,12 +285,13 @@ static int vgsm_tty_do_power_get(
 	unsigned int cmd,
 	unsigned long arg)
 {
+	INIT_COMPLETION(module->read_status_completion);
+
 	vgsm_card_lock(module->card);
 	vgsm_module_send_power_get(module);
 	vgsm_card_unlock(module->card);
 
-	wait_for_completion_timeout(
-			&module->read_status_completion, 1 * HZ);
+	wait_for_completion_timeout(&module->read_status_completion, 1 * HZ);
 
 	if (test_bit(VGSM_MODULE_STATUS_ON, &module->status))
 		put_user(1, (unsigned int *)arg);
@@ -309,7 +310,7 @@ static int vgsm_tty_do_power_ign(
 	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_IGN);
 	vgsm_card_unlock(module->card);
 
-	msleep(150);
+	msleep(180);
 
 	vgsm_card_lock(module->card);
 	vgsm_module_send_onoff(module, 0);
@@ -391,7 +392,7 @@ static int vgsm_tty_do_fw_upgrade(
 
 	set_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags);
 
-	init_completion(&micro->fw_upgrade_ready);
+	INIT_COMPLETION(micro->fw_upgrade_ready);
 
 	vgsm_card_lock(module->card);
 	vgsm_send_fw_upgrade(micro);
