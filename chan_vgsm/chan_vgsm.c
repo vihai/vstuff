@@ -5145,7 +5145,7 @@ static void vgsm_module_monitor_timer(
 
 		/* Re-arm timer */
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-						READY_TIMEOUT);
+						READY_UPDATE_TIME);
 	break;
 
 	case VGSM_INTF_STATUS_INITIALIZING:
