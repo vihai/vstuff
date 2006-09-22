@@ -552,6 +552,7 @@ static struct vgsm_interface *vgsm_intf_get(
 {
 	assert(intf);
 	assert(intf->refcnt > 0);
+	assert(intf->refcnt < 100000);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	intf->refcnt++;
@@ -563,11 +564,15 @@ static struct vgsm_interface *vgsm_intf_get(
 static void vgsm_intf_put(
 	struct vgsm_interface *intf)
 {
+	assert(intf);
+	assert(intf->refcnt > 0);
+	assert(intf->refcnt < 100000);
+
 	ast_mutex_lock(&vgsm.usecnt_lock);
-	intf->refcnt--;
+	int refcnt = --intf->refcnt;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
-	if (!intf->refcnt) {
+	if (!refcnt) {
 		if (intf->lockdown_reason)
 			free(intf->lockdown_reason);
 
@@ -3372,7 +3377,7 @@ static void vgsm_handle_clcc(
 	break;
 
 	case 1: /* Held */
-		ast_log(LOG_ERROR, "Unsupported state 1-held\n");
+		ast_log(LOG_DEBUG, "Unsupported state 1-held\n");
 	break;
 
 	case 2: /* Dialing */
@@ -3406,7 +3411,6 @@ static void vgsm_handle_clcc(
 	break;
 
 	case 6: /* Terminating */
-		ast_log(LOG_ERROR, "Unsupported state 6-terminating\n");
 	break;
 
 	case 7: /* Dropped */
@@ -4639,8 +4643,6 @@ static int vgsm_module_update_net_info(
 	int err;
 	struct vgsm_comm *comm = &intf->comm;
 
-	ast_mutex_lock(&intf->lock);
-
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CREG?");
 	err = vgsm_req_status(req);
@@ -4665,14 +4667,11 @@ static int vgsm_module_update_net_info(
 	if (err < 0)
 		goto err_update_cops;
 
-	ast_mutex_unlock(&intf->lock);
-
 	return 0;
 
 err_update_cops:
 err_update_smond:
 err_creg_read_response:
-	ast_mutex_unlock(&intf->lock);
 
 	return err;
 }
@@ -5143,6 +5142,10 @@ static void vgsm_module_monitor_timer(
 
 	case VGSM_INTF_STATUS_READY:
 		vgsm_module_update_net_info(intf);
+
+		/* Re-arm timer */
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
+						READY_TIMEOUT);
 	break;
 
 	case VGSM_INTF_STATUS_INITIALIZING:

@@ -96,6 +96,7 @@ struct vgsm_sms *vgsm_sms_alloc(void)
 struct vgsm_sms *vgsm_sms_get(struct vgsm_sms *sms)
 {
 	assert(sms->refcnt > 0);
+	assert(sms->refcnt < 100000);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	sms->refcnt++;
@@ -107,12 +108,13 @@ struct vgsm_sms *vgsm_sms_get(struct vgsm_sms *sms)
 void vgsm_sms_put(struct vgsm_sms *sms)
 {
 	assert(sms->refcnt > 0);
+	assert(sms->refcnt < 100000);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
-	sms->refcnt--;
+	int refcnt = --sms->refcnt;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
-	if (!sms->refcnt) {
+	if (!refcnt) {
 		if (sms->text)
 			free(sms->text);
 

@@ -68,6 +68,9 @@ struct vgsm_req *vgsm_req_get(struct vgsm_req *req)
 	if (!req)
 		return NULL;
 
+	assert(req->refcnt > 0);
+	assert(req->refcnt < 100000);
+
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	req->refcnt++;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
@@ -80,11 +83,14 @@ void vgsm_req_put(struct vgsm_req *req)
 	if (!req)
 		return;
 
+	assert(req->refcnt > 0);
+	assert(req->refcnt < 100000);
+
 	ast_mutex_lock(&vgsm.usecnt_lock);
-	req->refcnt--;
+	int refcnt = --req->refcnt;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
-	if (!req->refcnt) {
+	if (!refcnt) {
 		struct vgsm_req_line *line, *n;
 
 		list_for_each_entry_safe(line, n, &req->lines, node) {

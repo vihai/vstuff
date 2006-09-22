@@ -59,6 +59,7 @@ struct vgsm_cbm *vgsm_cbm_alloc(void)
 struct vgsm_cbm *vgsm_cbm_get(struct vgsm_cbm *cbm)
 {
 	assert(cbm->refcnt > 0);
+	assert(cbm->refcnt < 100000);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	cbm->refcnt++;
@@ -70,12 +71,13 @@ struct vgsm_cbm *vgsm_cbm_get(struct vgsm_cbm *cbm)
 void vgsm_cbm_put(struct vgsm_cbm *cbm)
 {
 	assert(cbm->refcnt > 0);
+	assert(cbm->refcnt < 100000);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
-	cbm->refcnt--;
+	int refcnt = --cbm->refcnt;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
-	if (!cbm->refcnt) {
+	if (!refcnt) {
 		if (cbm->text)
 			free(cbm->text);
 

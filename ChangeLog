@@ -2,6 +2,19 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-09-22 12:33:49 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-686
+
+    Summary:
+      Fixed a race condition between refcount decrement and checking for zero
+    Revision:
+      isdn--devel--0.1--patch-686
+
+
+    modified files:
+     ChangeLog chan_vgsm/cbm.c chan_vgsm/chan_vgsm.c
+     chan_vgsm/comm.c chan_vgsm/sms.c
+
+
 2006-09-21 21:53:03 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-685
 
     Summary:
