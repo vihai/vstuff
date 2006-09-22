@@ -62,8 +62,9 @@
 #define FAILED_RETRY_TIME (30 * SEC)
 #define READY_UPDATE_TIME (30 * SEC)
 #define CLOSED_POSTPONE (3 * SEC)
-#define WAITING_SYSTART_TIME (7 * SEC)
-#define WAITING_INITIALIZATION_DELAY (5 * SEC)
+#define POWERING_ON_TIMEOUT (8 * SEC)
+#define POWERING_OFF_TIMEOUT (7 * SEC)
+#define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
 #define VGSM_DESCRIPTION "VoiSmart VGSM Channel For Asterisk"
 #define VGSM_CHAN_TYPE "VGSM"
@@ -86,6 +87,7 @@ struct vgsm_state vgsm = {
 		.rx_gain = 255,
 		.tx_gain = 255,
 		.set_clock = 0,
+		.poweroff_on_exit = TRUE,
 		.operator_selection = VGSM_OPSEL_AUTOMATIC,
 		.operator_id = "",
 		.sms_service_center = "",
@@ -102,8 +104,12 @@ static const char *vgsm_intf_status_to_text(enum vgsm_intf_status status)
 	switch(status) {
 	case VGSM_INTF_STATUS_CLOSED:
 		return "CLOSED";
-	case VGSM_INTF_STATUS_WAITING_SYSTART:
-		return "WAITING_SYSTART";
+	case VGSM_INTF_STATUS_OFF:
+		return "OFF";
+	case VGSM_INTF_STATUS_POWERING_ON:
+		return "POWERING_ON";
+	case VGSM_INTF_STATUS_POWERING_OFF:
+		return "POWERING_OFF";
 	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
 		return "WAITING_INITIALIZATION";
 	case VGSM_INTF_STATUS_INITIALIZING:
@@ -674,6 +680,24 @@ static void vgsm_intf_unexpected_error(struct vgsm_interface *intf, int err)
 	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
 }
 
+static char *vgsm_interface_completion(char *line, char *word, int state)
+{
+	int which = 0;
+
+	ast_mutex_lock(&vgsm.lock);
+	struct vgsm_interface *intf;
+	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+		if (!strncasecmp(word, intf->name, strlen(word)) &&
+		    ++which > state) {
+			ast_mutex_unlock(&vgsm.lock);
+			return strdup(intf->name);
+		}
+	}
+	ast_mutex_unlock(&vgsm.lock);
+
+	return NULL;
+}
+
 //-----------------------------------------------------------------------------
 
 static int do_vgsm_pin_set(int fd, int argc, char *argv[])
@@ -755,6 +779,25 @@ err_missing_interface:
 	return err;
 }
 
+static char *vgsm_pin_set_complete(char *line, char *word, int pos, int state)
+{
+	char *commands[] = { "enabled", "disabled" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_interface_completion(line, word, state);
+	case 5:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
 static char vgsm_pin_set_help[] =
 "Usage: vgsm pin set <interface> <OLDPIN> <NEWPIN|enabled|disabled>\n"
 "	Set, enable or disable the PIN on the SIM installed in module \n"
@@ -766,7 +809,7 @@ static struct ast_cli_entry vgsm_pin_set =
 	do_vgsm_pin_set,
 	"Set PIN on the selected interface",
 	vgsm_pin_set_help,
-	NULL
+	vgsm_pin_set_complete,
 };
 
 //-----------------------------------------------------------------------------
@@ -805,6 +848,8 @@ static int vgsm_intf_from_var(
 		intf->tx_gain = atoi(var->value);
 	} else if (!strcasecmp(var->name, "set_clock")) {
 		intf->set_clock = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "poweroff_on_exit")) {
+		intf->poweroff_on_exit = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "operator_selection")) {
 		if (!strcasecmp(var->value, "auto"))
 			intf->operator_selection = VGSM_OPSEL_AUTOMATIC;
@@ -857,6 +902,7 @@ static void vgsm_copy_interface_config(
 	dst->rx_gain = src->rx_gain;
 	dst->tx_gain = src->tx_gain;
 	dst->set_clock = src->set_clock;
+	dst->poweroff_on_exit = src->poweroff_on_exit;
 	dst->operator_selection = src->operator_selection;
 
 	strncpy(dst->operator_id, src->operator_id,
@@ -872,6 +918,32 @@ static void vgsm_copy_interface_config(
 	dst->dtmf_quelch = src->dtmf_quelch;
 	dst->dtmf_mutemax = src->dtmf_mutemax;
 	dst->dtmf_relax = src->dtmf_relax;
+}
+
+static void vgsm_module_ignite(
+	struct vgsm_interface *intf)
+{
+	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
+		ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
+			strerror(errno));
+		vgsm_comm_disable(&intf->comm);
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+					FAILED_RETRY_TIME);
+		vgsm_intf_setreason(intf, "Error turning on module");
+	}
+}
+
+static void vgsm_module_emerg_off(
+	struct vgsm_interface *intf)
+{
+	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0) {
+		ast_log(LOG_ERROR, "ioctl(IOC_POWER_EMERG_OFF) failed: %s\n",
+			strerror(errno));
+		vgsm_comm_disable(&intf->comm);
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+					FAILED_RETRY_TIME);
+		vgsm_intf_setreason(intf, "Error turning off module");
+	}
 }
 
 static struct vgsm_urc_class urc_classes[];
@@ -937,6 +1009,8 @@ static void vgsm_reload_config(void)
 				return;
 			}
 
+printf("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA %d\n", vgsm.default_intf.poweroff_on_exit);
+
 			strncpy(intf->name, cat, sizeof(intf->name));
 			vgsm_copy_interface_config(intf, &vgsm.default_intf);
 
@@ -944,9 +1018,8 @@ static void vgsm_reload_config(void)
 
 			list_add_tail(&intf->ifs_node, &vgsm.ifs);
 
-			vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_CLOSED,
-				CLOSED_POSTPONE);
+			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_CLOSED,
+						CLOSED_POSTPONE);
 		}
 
 		var = ast_variable_browse(cfg, (char *)cat);
@@ -968,8 +1041,9 @@ static void vgsm_reload_config(void)
 	cfg = ast_config_load(VGSM_OP_CONFIG_FILE);
 	if (!cfg) {
 		ast_log(LOG_WARNING,
-			"Unable to load config %s, VGSM disabled\n",
-			VGSM_OP_CONFIG_FILE);
+			"Unable to load config %s: %s\n",
+			VGSM_OP_CONFIG_FILE,
+			strerror(errno));
 
 		return;
 	}
@@ -1204,27 +1278,41 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 		"  Context: %s\n"
 		"  RX-gain: %d\n"
 		"  TX-gain: %d\n"
-		"  Set clock: %s\n",
+		"  Set clock: %s\n"
+		"  Power off on exit: %s\n",
 		intf->device_filename,
 		intf->context,
 		intf->rx_gain,
 		intf->tx_gain,
-		intf->set_clock ? "YES" : "NO");
+		intf->set_clock ? "YES" : "NO",
+		intf->poweroff_on_exit ? "YES" : "NO");
 
 	ast_cli(fd,
 		"\nModule:\n"
 		"  Status: %s\n",
 		vgsm_intf_status_to_text(intf->status));
 
-	if (intf->status == VGSM_INTF_STATUS_CLOSED ||
-	    intf->status == VGSM_INTF_STATUS_INITIALIZING)
+	switch(intf->status) {
+	case VGSM_INTF_STATUS_CLOSED:
+	case VGSM_INTF_STATUS_OFF:
+	case VGSM_INTF_STATUS_POWERING_ON:
+	case VGSM_INTF_STATUS_POWERING_OFF:
+	case VGSM_INTF_STATUS_INITIALIZING:
+	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
 		return;
 
-	if (intf->status == VGSM_INTF_STATUS_FAILED ||
-	    intf->status == VGSM_INTF_STATUS_WAITING_SIM ||
-	    intf->status == VGSM_INTF_STATUS_WAITING_PIN) {
+	case VGSM_INTF_STATUS_FAILED:
+	case VGSM_INTF_STATUS_WAITING_SIM:
+	case VGSM_INTF_STATUS_WAITING_PIN:
 		ast_cli(fd, "  Reason: %s\n", intf->lockdown_reason);
 		return;
+
+	case VGSM_INTF_STATUS_READY:
+	case VGSM_INTF_STATUS_RING:
+	case VGSM_INTF_STATUS_INCALL:
+	case VGSM_INTF_STATUS_SENDING_SMS:
+	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
+	break;
 	}
 
 	ast_cli(fd,
@@ -1443,7 +1531,9 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 		vgsm_intf_status_to_text(intf->status));
 
 	if (intf->status == VGSM_INTF_STATUS_CLOSED ||
-	    intf->status == VGSM_INTF_STATUS_WAITING_SYSTART ||
+	    intf->status == VGSM_INTF_STATUS_OFF ||
+	    intf->status == VGSM_INTF_STATUS_POWERING_ON ||
+	    intf->status == VGSM_INTF_STATUS_POWERING_OFF ||
 	    intf->status == VGSM_INTF_STATUS_WAITING_INITIALIZATION ||
 	    intf->status == VGSM_INTF_STATUS_INITIALIZING ||
 	    intf->status == VGSM_INTF_STATUS_FAILED)
@@ -1472,35 +1562,6 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 	}
 }
 
-static char *complete_interface(
-		char *line, char *word, int state)
-{
-	int which = 0;
-
-	ast_mutex_lock(&vgsm.lock);
-	struct vgsm_interface *intf;
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
-		if (!strncasecmp(word, intf->name, strlen(word))) {
-			if (++which > state) {
-				ast_mutex_unlock(&vgsm.lock);
-				return strdup(intf->name);
-			}
-		}
-	}
-	ast_mutex_unlock(&vgsm.lock);
-
-	return NULL;
-}
-
-static char *complete_show_vgsm_interfaces(
-		char *line, char *word, int pos, int state)
-{
-	if (pos != 3)
-		return NULL;
-
-	return complete_interface(line, word,state);
-}
-
 static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 {
 	struct vgsm_interface *intf;
@@ -1522,6 +1583,17 @@ static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
+static char *show_vgsm_interfaces_complete(
+		char *line, char *word, int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_interface_completion(line, word,state);
+	}
+
+	return NULL;
+}
+
 static char show_vgsm_interfaces_help[] =
 "Usage: show vgsm interfaces\n"
 "	Displays informations on vGSM interfaces\n";
@@ -1532,7 +1604,7 @@ static struct ast_cli_entry show_vgsm_interfaces =
 	do_show_vgsm_interfaces,
 	"Displays vGSM interface information",
 	show_vgsm_interfaces_help,
-	complete_show_vgsm_interfaces
+	show_vgsm_interfaces_complete,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1561,15 +1633,6 @@ static int vgsm_number_parse(
 	}
 
 	return 0;
-}
-
-static char *complete_send_sms(
-		char *line, char *word, int pos, int state)
-{
-	if (pos != 3)
-		return NULL;
-
-	return complete_interface(line, word,state);
 }
 
 static int do_vgsm_send_sms(int fd, int argc, char *argv[])
@@ -1716,6 +1779,16 @@ err_missing_intf:
 	return err;
 }
 
+static char *vgsm_send_sms_complete(char *line, char *word, int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_interface_completion(line, word,state);
+	}
+
+	return NULL;
+}
+
 static char vgsm_send_sms_help[] =
 	"Usage: vgsm send sms <intf> <number> <text> [class]\n"
 	"	Send SMS\n";
@@ -1726,7 +1799,7 @@ static struct ast_cli_entry vgsm_send_sms =
 	do_vgsm_send_sms,
 	"Send SMS",
 	vgsm_send_sms_help,
-	complete_send_sms,
+	vgsm_send_sms_complete,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1749,6 +1822,106 @@ static struct ast_cli_entry vgsm_reload =
 	"Reloads vGSM configuration",
 	vgsm_vgsm_reload_help,
 	NULL
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int do_vgsm_power(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 3) {
+		ast_cli(fd, "Missing interface name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_interface_name;
+	}
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing command\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_command;
+	}
+
+	struct vgsm_interface *intf;
+	intf = vgsm_intf_get_by_name(argv[2]);
+	if (!intf) {
+		ast_cli(fd, "Cannot find interface '%s'\n", argv[2]);
+		err = RESULT_FAILURE;
+		goto err_intf_not_found;
+	}
+
+	struct vgsm_comm *comm = &intf->comm;
+
+	if (!strcasecmp(argv[3], "on")) {
+
+		vgsm_module_ignite(intf);
+
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_POWERING_ON,
+					POWERING_ON_TIMEOUT);
+
+	} else if (!strcasecmp(argv[3], "off")) {
+
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_POWERING_OFF,
+				POWERING_OFF_TIMEOUT);
+
+		int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT^SMSO");
+		if (res != VGSM_RESP_OK) {
+			ast_cli(fd, "Error: %s (%d)\n",
+				vgsm_error_to_text(res),
+				res);
+			err = RESULT_FAILURE;
+			goto err_request_smso;
+		}
+	} else {
+		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
+		err = RESULT_SHOWUSAGE;
+		goto err_unknown_command;
+	}
+
+	vgsm_intf_put_null(intf);
+
+	return RESULT_SUCCESS;
+
+err_unknown_command:
+err_request_smso:
+	vgsm_intf_put_null(intf);
+err_intf_not_found:
+err_no_command:
+err_no_interface_name:
+
+	return err;
+}
+
+static char vgsm_power_help[] =
+	"Usage: vgsm power <interface> <on|off>\n"
+	"	Power on or off the specified module\n";
+
+static char *vgsm_power_complete(char *line, char *word, int pos, int state)
+{
+	char *commands[] = { "on", "off" };
+	int i;
+
+	switch(pos) {
+	case 2:
+		return vgsm_interface_completion(line, word, state);
+	case 3:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	}
+
+	return NULL;
+}
+
+static struct ast_cli_entry vgsm_power =
+{
+	{ "vgsm", "power", NULL },
+	do_vgsm_power,
+	"Power on the specified module",
+	vgsm_power_help,
+	vgsm_power_complete
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1852,6 +2025,16 @@ err_no_interface_name:
 	return err;
 }
 
+static char *vgsm_pin_input_complete(char *line, char *word, int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_interface_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
 static char vgsm_pin_input_help[] =
 	"Usage: vgsm pin input <interface> <PIN>\n"
 	"	Manually input PIN to selected interface\n";
@@ -1862,7 +2045,7 @@ static struct ast_cli_entry vgsm_pin_input =
 	do_vgsm_pin_input,
 	"Manually input PIN to selected interface",
 	vgsm_pin_input_help,
-	NULL
+	vgsm_pin_input_complete,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1981,6 +2164,16 @@ err_no_intf_name:
 	return err;
 }
 
+static char *vgsm_puk_input_complete(char *line, char *word, int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_interface_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
 static char vgsm_puk_input_help[] =
 	"Usage: vgsm puk input <interface> <PUK>\n"
 	"	Manually input PUK to selected interface\n";
@@ -1991,7 +2184,7 @@ static struct ast_cli_entry vgsm_puk_input =
 	do_vgsm_puk_input,
 	"Manually input PUK to selected interface",
 	vgsm_puk_input_help,
-	NULL
+	vgsm_puk_input_complete,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -3648,12 +3841,6 @@ static int vgsm_update_smond(struct vgsm_interface *intf)
 
 	intf->net.ncells = 0;
 
-	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-	    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		ast_mutex_unlock(&intf->lock);
-		return -1;
-	}
-
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SMOND");
 	err = vgsm_req_status(req);
@@ -3887,6 +4074,12 @@ static void handle_unsolicited_sysstart(
 static void handle_unsolicited_shutdown(
 	const struct vgsm_req *urc)
 {
+	struct vgsm_comm *comm = urc->comm;
+	struct vgsm_interface *intf = to_intf(comm);
+
+	vgsm_debug_generic("Module powered off (^SHUTDOWN received)\n");
+
+	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_OFF, -1);
 }
 
 static void handle_unsolicited_slcc(
@@ -4659,13 +4852,17 @@ static int vgsm_module_update_net_info(
 
 	vgsm_req_put_null(req);
 
-	err = vgsm_update_smond(intf);
-	if (err < 0)
-		goto err_update_smond;
+	if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+	    intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 
-	err = vgsm_update_cops(intf);
-	if (err < 0)
-		goto err_update_cops;
+		err = vgsm_update_smond(intf);
+		if (err < 0)
+			goto err_update_smond;
+
+		err = vgsm_update_cops(intf);
+		if (err < 0)
+			goto err_update_cops;
+	}
 
 	return 0;
 
@@ -4925,49 +5122,6 @@ err_no_req:
 	return -1;
 }
 
-static void vgsm_module_ignite(
-	struct vgsm_interface *intf)
-{
-	/* The very first module power-up will not send ^SYSSTART URC
-	 * because it is configured in auto-bauding mode. We will time out
-	 * and initialize it anyway.
-	 */
-	int val;
-	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
-			strerror(errno));
-
-		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_FAILED, 1 * SEC);
-
-		return;
-	}
-
-	if (val) {
-		vgsm_debug_generic(
-			"Module is already powered on, I'm not waiting"
-			" for sysstart\n");
-
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_WAITING_INITIALIZATION,
-				0);
-	} else {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SYSTART,
-				WAITING_SYSTART_TIME);
-
-		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
-			ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
-				strerror(errno));
-			vgsm_comm_disable(&intf->comm);
-			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-						FAILED_RETRY_TIME);
-			vgsm_intf_setreason(intf, "Error turning on module");
-
-			return;
-		}
-	}
-}
-
 static void vgsm_module_open(
 	struct vgsm_interface *intf)
 {
@@ -5057,7 +5211,36 @@ static void vgsm_module_open(
 
 	vgsm_comm_enable(&intf->comm);
 
-	vgsm_module_ignite(intf);
+	int val;
+	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
+		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
+			strerror(errno));
+
+		vgsm_intf_set_status(intf,
+			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+
+		return;
+	}
+
+	if (val) {
+		vgsm_debug_generic(
+			"Module is already powered on, I'm not waiting"
+			" for SYSSTART\n");
+
+		vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+				0);
+	} else {
+		vgsm_module_ignite(intf);
+
+		/* The very first module power-up will not send ^SYSSTART URC
+		 * because it is configured in auto-bauding mode. We will time
+		 * out and initialize it anyway.
+		 */
+		intf->power_attempts = 0;
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_POWERING_ON,
+					POWERING_ON_TIMEOUT);
+	}
 }
 
 static void vgsm_module_initialize(
@@ -5072,7 +5255,8 @@ static void vgsm_module_initialize(
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
 					FAILED_RETRY_TIME);
 		vgsm_intf_setreason(intf, "Error configuring CODEC");
-		return;
+
+		goto initialization_failure;
 	}
 
 	int val;
@@ -5083,7 +5267,7 @@ static void vgsm_module_initialize(
 		vgsm_intf_set_status(intf,
 			VGSM_INTF_STATUS_FAILED, 1 * SEC);
 
-		return;
+		goto initialization_failure;
 	}
 
 	if (!val) {
@@ -5091,32 +5275,49 @@ static void vgsm_module_initialize(
 			"Module '%s' is not powered on, re-igniting\n",
 			intf->name);
 		
-		vgsm_intf_setreason(intf, "Module not turned on");
+		intf->power_attempts = 0;
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_POWERING_ON,
+						POWERING_ON_TIMEOUT);
 
 		vgsm_module_ignite(intf);
 
-		return;
+		goto initialization_failure;
 	}
 
 	if (vgsm_module_init_at_interface(intf) < 0)
-		return;
+		goto initialization_failure;
 
 	if (vgsm_module_prepin_configure(intf) < 0)
-		return;
+		goto initialization_failure;
 
 	if (vgsm_pin_check_and_input(intf) < 0)
-		return;
+		goto initialization_failure;
 
 	if (vgsm_module_configure(intf) < 0)
-		return;
+		goto initialization_failure;
 
 	if (vgsm_module_update_static_info(intf) < 0)
-		return;
+		goto initialization_failure;
 
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY, 1 * SEC);
+	if (vgsm_module_update_net_info(intf) < 0)
+		goto initialization_failure;
+
+	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY, READY_UPDATE_TIME);
 
 	vgsm_debug_generic("Module '%s' successfully initialized\n",
 		intf->name);
+
+	return;
+
+initialization_failure:
+
+	/* If no-one changed the status to something significant fall back to
+	 * FAILED
+	 */
+
+	if (intf->status == VGSM_INTF_STATUS_INITIALIZING)
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
+					FAILED_RETRY_TIME);
 }
 
 static void vgsm_module_monitor_timer(
@@ -5127,12 +5328,59 @@ static void vgsm_module_monitor_timer(
 		vgsm_module_open(intf);
 	break;
 
-	case VGSM_INTF_STATUS_WAITING_SYSTART:
-		vgsm_debug_generic("Module '%s': SYSTART missed\n",
-			intf->name);
+	case VGSM_INTF_STATUS_POWERING_ON: {
+		int val;
+		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: ioctl(IOC_POWER_GET) failed: %s\n",
+				intf->name,
+				strerror(errno));
+
+			vgsm_intf_set_status(intf,
+				VGSM_INTF_STATUS_FAILED, 1 * SEC);
+
+			return;
+		}
+
+		if (val) {
+			vgsm_debug_generic("Module '%s': SYSTART missed\n",
+				intf->name);
+
+			vgsm_intf_set_status(intf,
+					VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+					0);
+		} else {
+			intf->power_attempts++;
+			if (intf->power_attempts > 3) {
+				ast_log(LOG_ERROR,
+					"%s: Power-on permanently failed\n",
+					intf->name);
+
+				vgsm_intf_set_status(intf,
+					VGSM_INTF_STATUS_OFF, -1);
+				vgsm_intf_setreason(intf,
+					"Power-on sequence failure");
+			} else {
+				ast_log(LOG_NOTICE,
+					"%s: Power-on sequence failed,"
+					" retrying\n",
+					intf->name);
+
+				vgsm_intf_set_status(intf,
+					VGSM_INTF_STATUS_POWERING_ON,
+					POWERING_ON_TIMEOUT);
+
+				vgsm_module_ignite(intf);
+			}
+		}
+	}
+	break;
+
+	case VGSM_INTF_STATUS_POWERING_OFF:
+		vgsm_module_emerg_off(intf);
 
 		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_WAITING_INITIALIZATION, 0);
+			VGSM_INTF_STATUS_OFF, -1);
 	break;
 
 	case VGSM_INTF_STATUS_FAILED:
@@ -5150,6 +5398,7 @@ static void vgsm_module_monitor_timer(
 
 	case VGSM_INTF_STATUS_INITIALIZING:
 	case VGSM_INTF_STATUS_SENDING_SMS:
+	case VGSM_INTF_STATUS_OFF:
 		ast_log(LOG_ERROR,
 			"vgsm: Module '%s': Unexpected timer in status %s\n",
 			intf->name,
@@ -5199,12 +5448,51 @@ static char mandescr_vgsm_sms_tx[] =
 "  Content: <text>      Text of the message, max 160 chars (will be cut if longer).\n"
 "  ActionID: <id>       Action ID for this transaction. Will be returned.\n";
 
+static void vgsm_shutdown_modules(void)
+{
+	struct vgsm_interface *intf;
+
+	ast_verbose("vgsm: powering off all modules\n");
+
+	ast_mutex_lock(&vgsm.lock);
+	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+
+		if (intf->poweroff_on_exit) {
+			vgsm_intf_set_status(intf,
+					VGSM_INTF_STATUS_POWERING_OFF,
+					POWERING_OFF_TIMEOUT);
+
+			vgsm_req_put(vgsm_req_make(&intf->comm,
+						3 * SEC, "AT^SMSO"));
+		}
+	}
+	ast_mutex_unlock(&vgsm.lock);
+
+	int i;
+	for(i=0; i<10; i++) {
+		int not_off = FALSE;
+
+		list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+
+			if (intf->poweroff_on_exit &&
+			    intf->status != VGSM_INTF_STATUS_OFF)
+				not_off = TRUE;
+		}
+
+		if (!not_off)
+			return;
+
+		sleep(1);
+	}
+
+	ast_verbose("vgsm: Failure to power off all modules\n");
+}
+	
+
 int load_module()
 {
 	int err;
 
-	memset(&vgsm, 0, sizeof(vgsm));
-	
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
 	ast_mutex_init(&vgsm.lock);
@@ -5238,6 +5526,7 @@ int load_module()
 	ast_cli_register(&vgsm_reload);
 	ast_cli_register(&show_vgsm_interfaces);
 	ast_cli_register(&vgsm_send_sms);
+	ast_cli_register(&vgsm_power);
 	ast_cli_register(&vgsm_pin_input);
 	ast_cli_register(&vgsm_puk_input);
 	ast_cli_register(&vgsm_pin_set);
@@ -5264,6 +5553,8 @@ int load_module()
 			"Send sms with VGSM (text format)",
 			mandescr_vgsm_sms_tx);
 
+	ast_register_atexit(vgsm_shutdown_modules);
+
 	return 0;
 
 	// Kill comm thread
@@ -5273,6 +5564,7 @@ err_channel_register:
 	ast_cli_unregister(&vgsm_pin_set);
 	ast_cli_unregister(&vgsm_puk_input);
 	ast_cli_unregister(&vgsm_pin_input);
+	ast_cli_unregister(&vgsm_power);
 	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&show_vgsm_interfaces);
 	ast_cli_unregister(&vgsm_reload);
@@ -5292,6 +5584,7 @@ int unload_module(void)
 	ast_cli_unregister(&vgsm_pin_set);
 	ast_cli_unregister(&vgsm_puk_input);
 	ast_cli_unregister(&vgsm_pin_input);
+	ast_cli_unregister(&vgsm_power);
 	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&show_vgsm_interfaces);
 	ast_cli_unregister(&vgsm_reload);

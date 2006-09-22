@@ -63,7 +63,9 @@ struct vgsm_operator_info
 enum vgsm_intf_status
 {
 	VGSM_INTF_STATUS_CLOSED,
-	VGSM_INTF_STATUS_WAITING_SYSTART,
+	VGSM_INTF_STATUS_OFF,
+	VGSM_INTF_STATUS_POWERING_ON,
+	VGSM_INTF_STATUS_POWERING_OFF,
 	VGSM_INTF_STATUS_WAITING_INITIALIZATION,
 	VGSM_INTF_STATUS_INITIALIZING,
 	VGSM_INTF_STATUS_READY,
@@ -143,6 +145,8 @@ struct vgsm_interface
 	char operator_id[8];
 	int set_clock;
 
+	int poweroff_on_exit;
+
 	char sms_service_center[32];
 	char sms_sender_domain[64];
 	char sms_recipient_address[64];
@@ -157,6 +161,7 @@ struct vgsm_interface
 	longtime_t timer_expiration;
 
 	char *lockdown_reason;
+	int power_attempts;
 
 	int call_monitor;
 

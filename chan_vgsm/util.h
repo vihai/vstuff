@@ -26,7 +26,7 @@ extern struct vgsm_state vgsm;
 #endif
 
 #ifndef TRUE
-#define TRUE !FALSE
+#define TRUE (!FALSE)
 #endif
 
 typedef char BOOL;
