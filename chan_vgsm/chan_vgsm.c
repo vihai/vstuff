@@ -1009,8 +1009,6 @@ static void vgsm_reload_config(void)
 				return;
 			}
 
-printf("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA %d\n", vgsm.default_intf.poweroff_on_exit);
-
 			strncpy(intf->name, cat, sizeof(intf->name));
 			vgsm_copy_interface_config(intf, &vgsm.default_intf);
 
@@ -1522,6 +1520,8 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 				counter->reason),
 			counter->count);
 	}
+
+	ast_cli(fd, "\n");
 }
 
 static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
@@ -1548,12 +1548,11 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 		op_info = vgsm_search_operator(intf->net.operator_id);
 
 		if (op_info) {
-			ast_cli(fd, "          %-15s %s (%s - %s - %s)\n",
+			ast_cli(fd, "          %-15s %s (%s - %s)\n",
 				vgsm_net_status_to_text(intf->net.status),
 				intf->net.operator_id,
 				op_info->name,
-				op_info->country,
-				op_info->bands);
+				op_info->country);
 		} else {
 			ast_cli(fd, "          %-15s %s\n",
 				vgsm_net_status_to_text(intf->net.status),
@@ -5125,24 +5124,13 @@ err_no_req:
 static void vgsm_module_open(
 	struct vgsm_interface *intf)
 {
-	if (intf->comm.fd >= 0) {
-		ast_mutex_lock(&intf->lock);
-		close(intf->comm.fd);
-		intf->comm.fd = -1;
-		ast_mutex_unlock(&intf->lock);
-		vgsm_comm_wakeup(&intf->comm);
-		sleep(1); // Leave time to poll to release fd
-	}
+	assert(intf->comm.fd == -1);
 
 	intf->comm.fd = open(intf->device_filename, O_RDWR);
 	if (intf->comm.fd < 0) {
-		ast_log(LOG_WARNING,
-			"Unable to open '%s': %s\n",
-			intf->device_filename,
-			strerror(errno));
-
 		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_setreason(intf, "Error opening device");
+		vgsm_intf_setreason(intf, "Error opening device: %s",
+							strerror(errno));
 		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
 					FAILED_RETRY_TIME);
 		return;
@@ -5213,11 +5201,10 @@ static void vgsm_module_open(
 
 	int val;
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
-			strerror(errno));
-
+		vgsm_intf_setreason(intf, "Error getting power status: %s",
+							strerror(errno));
 		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
 
 		return;
 	}
@@ -5261,11 +5248,10 @@ static void vgsm_module_initialize(
 
 	int val;
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		fprintf(stderr, "ioctl(IOC_POWER_GET) failed: %s\n",
-			strerror(errno));
-
+		vgsm_intf_setreason(intf, "Error getting power status: %s",
+							strerror(errno));
 		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_FAILED, 1 * SEC);
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
 
 		goto initialization_failure;
 	}
@@ -5331,13 +5317,11 @@ static void vgsm_module_monitor_timer(
 	case VGSM_INTF_STATUS_POWERING_ON: {
 		int val;
 		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_POWER_GET) failed: %s\n",
-				intf->name,
+			vgsm_intf_setreason(intf,
+				"Error getting power status: %s",
 				strerror(errno));
-
 			vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_FAILED, 1 * SEC);
+				VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
 
 			return;
 		}
@@ -5347,8 +5331,8 @@ static void vgsm_module_monitor_timer(
 				intf->name);
 
 			vgsm_intf_set_status(intf,
-					VGSM_INTF_STATUS_WAITING_INITIALIZATION,
-					0);
+				VGSM_INTF_STATUS_WAITING_INITIALIZATION,
+				0);
 		} else {
 			intf->power_attempts++;
 			if (intf->power_attempts > 3) {
@@ -5384,6 +5368,17 @@ static void vgsm_module_monitor_timer(
 	break;
 
 	case VGSM_INTF_STATUS_FAILED:
+		if (intf->comm.fd >= 0) {
+			ast_mutex_lock(&intf->lock);
+			close(intf->comm.fd);
+			intf->comm.fd = -1;
+			ast_mutex_unlock(&intf->lock);
+			vgsm_comm_wakeup(&intf->comm);
+		}
+
+		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_CLOSED, 1 * SEC);
+	break;
+
 	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
 		vgsm_module_initialize(intf);
 	break;
@@ -5457,7 +5452,11 @@ static void vgsm_shutdown_modules(void)
 	ast_mutex_lock(&vgsm.lock);
 	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
 
-		if (intf->poweroff_on_exit) {
+		if (intf->poweroff_on_exit &&
+		    intf->status != VGSM_INTF_STATUS_CLOSED &&
+		    intf->status != VGSM_INTF_STATUS_POWERING_OFF &&
+		    intf->status != VGSM_INTF_STATUS_OFF &&
+		    intf->comm.fd >= 0) {
 			vgsm_intf_set_status(intf,
 					VGSM_INTF_STATUS_POWERING_OFF,
 					POWERING_OFF_TIMEOUT);
