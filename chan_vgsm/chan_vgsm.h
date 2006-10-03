@@ -69,10 +69,6 @@ enum vgsm_intf_status
 	VGSM_INTF_STATUS_WAITING_INITIALIZATION,
 	VGSM_INTF_STATUS_INITIALIZING,
 	VGSM_INTF_STATUS_READY,
-	VGSM_INTF_STATUS_RING,
-	VGSM_INTF_STATUS_INCALL,
-	VGSM_INTF_STATUS_SENDING_SMS,
-	VGSM_INTF_STATUS_INCALL_SENDING_SMS,
 	VGSM_INTF_STATUS_WAITING_SIM,
 	VGSM_INTF_STATUS_WAITING_PIN,
 	VGSM_INTF_STATUS_FAILED,
@@ -124,6 +120,50 @@ struct vgsm_counter
 	int count;
 };
 
+enum vgsm_call_direction
+{
+	VGSM_CALL_DIRECTION_MOBILE_ORIGINATED,
+	VGSM_CALL_DIRECTION_MOBILE_TERMINATED
+};
+
+enum vgsm_call_state
+{
+	VGSM_CALL_STATE_UNUSED,
+	VGSM_CALL_STATE_ACTIVE,
+	VGSM_CALL_STATE_HELD,
+	VGSM_CALL_STATE_DIALING,
+	VGSM_CALL_STATE_ALERTING,
+	VGSM_CALL_STATE_INCOMING,
+	VGSM_CALL_STATE_WAITING,
+	VGSM_CALL_STATE_TERMINATING,
+	VGSM_CALL_STATE_DROPPED,
+};
+
+enum vgsm_call_bearer
+{
+	VGSM_CALL_BEARER_VOICE,
+	VGSM_CALL_BEARER_DATA,
+	VGSM_CALL_BEARER_FAX,
+	VGSM_CALL_BEARER_VOICE_THEN_DATA_VOICE,
+	VGSM_CALL_BEARER_VOICE_ALT_DATA_VOICE,
+	VGSM_CALL_BEARER_VOICE_ALT_FAX_VOICE,
+	VGSM_CALL_BEARER_VOICE_THEN_DATA_DATA,
+	VGSM_CALL_BEARER_VOICE_ALT_DATA_DATA,
+	VGSM_CALL_BEARER_VOICE_ALT_FAX_FAX,
+	VGSM_CALL_BEARER_VOICE_UNKNOWN
+};
+
+struct vgsm_call
+{
+	enum vgsm_call_direction direction;
+	enum vgsm_call_state state;
+	enum vgsm_call_bearer bearer;
+	int multiparty;
+	int channel_assigned;
+
+	int updated;
+};
+
 struct vgsm_interface
 {
 	struct list_head ifs_node;
@@ -165,7 +205,11 @@ struct vgsm_interface
 
 	int call_monitor;
 
-	struct ast_channel *current_call;
+	struct vgsm_call calls[4];
+
+	struct ast_channel *active_call;
+
+	int sending_sms;
 
 	struct vgsm_comm comm;
 

@@ -71,6 +71,52 @@
 #define VGSM_CONFIG_FILE "vgsm.conf"
 #define VGSM_OP_CONFIG_FILE "vgsm_operators.conf"
 
+/*
+ * Locking guidelines:
+ *
+ * Locking in vGSM is bit complex, adding the fact that Asterisk's locking
+ * is brain-dead, the risk of making a big mess is very high.
+ *
+ * The most used and dangerous locks are the Asterisk's channel lock and
+ * the interface's lock. The former is the lock we all know and we also know
+ * that Asterisk acquires it on callback invocation.
+ * The latter is a lock protecting access to the "vgsm_interface" structure.
+ * A vgsm_interface describes everything belonging to a GSM module.
+ *
+ * There no one-to-one relationship between them as the module exists even
+ * if no call is present, a ast_chan is actually a call... or a channel?
+ * or half a call? who knows.... 
+ *
+ * Anyway, since our callbacks do get invoked with the ast_chan->lock acquired,
+ * Asterisk is forcing us to follow its locking model.
+ *
+ * GUIDELINES:
+ *
+ * Locking order is ast_chan->lock, then intf->lock.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ * NEVER ever attempt to acquire locks in reverse order, otherwise deadlocks
+ * _will_ occour.
+ *
+ * vgsm_interface callbacks are invoked without locks, it is their
+ * responsibility to acquire the needed locks.
+ *
+ * Some field in intf may be accessed without locking, either because it is
+ * read-only after interface initialization or being meaningful only after
+ * the interface changes into a particular state.
+ *
+ * Furthermore, the interface contains intf->comm which is another object
+ * protected by its own lock, so, it has its own access policy.
+ *
+ * A remaining open question is: I have to lock intf to access active_call, but
+ * I cannot lock active_call because I would be violating the previous rule,
+ * I, thus, take pointer to active_call, release intf->lock and act on active
+ * call. However, since Asterisk does not make use of reference counters (!!)
+ * the call can be freed in the meantime, leading to access to a dead pointer.
+ * IMHO, this is a problem in Asterisk's design, leading to major problems all
+ * around.
+ *
+ */
+
 struct vgsm_state vgsm = {
 	.usecnt = 0,
 #ifdef DEBUG_DEFAULTS
@@ -116,14 +162,6 @@ static const char *vgsm_intf_status_to_text(enum vgsm_intf_status status)
 		return "INITIALIZING";
 	case VGSM_INTF_STATUS_READY:
 		return "READY";
-	case VGSM_INTF_STATUS_RING:
-		return "RING";
-	case VGSM_INTF_STATUS_INCALL:
-		return "INCALL";
-	case VGSM_INTF_STATUS_SENDING_SMS:
-		return "SENDING_SMS";
-	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
-		return "INCALL_SENDING_SMS";
 	case VGSM_INTF_STATUS_WAITING_SIM:
 		return "WAITING_SIM";
 	case VGSM_INTF_STATUS_WAITING_PIN:
@@ -622,25 +660,13 @@ struct vgsm_operator_info *vgsm_search_operator(const char *id)
 	return NULL;
 }
 
-static void vgsm_intf_setreason(
-	struct vgsm_interface *intf,
-	const char *fmt, ...)
-{
-	va_list ap;
-
-	if (intf->lockdown_reason)
-		free(intf->lockdown_reason);
-
-	va_start(ap, fmt);
-	vasprintf(&intf->lockdown_reason, fmt, ap);
-	va_end(ap);
-}
-
 static void vgsm_intf_set_status(
 	struct vgsm_interface *intf,
 	enum vgsm_intf_status status,
 	longtime_t timeout)
 {
+	ast_mutex_lock(&intf->lock);
+
 	if (timeout >= 0) {
 		intf->timer_expiration = longtime_now() + timeout;
 
@@ -665,19 +691,49 @@ static void vgsm_intf_set_status(
 
 	if (intf->monitor_thread != AST_PTHREADT_NULL)
 		pthread_kill(intf->monitor_thread, SIGURG);
+
+	ast_mutex_unlock(&intf->lock);
+}
+
+static void vgsm_intf_set_status_reason(
+	struct vgsm_interface *intf,
+	enum vgsm_intf_status status,
+	longtime_t timeout,
+	const char *fmt, ...)
+{
+	va_list ap;
+
+	ast_mutex_lock(&intf->lock);
+
+	if (intf->lockdown_reason)
+		free(intf->lockdown_reason);
+
+	va_start(ap, fmt);
+	vasprintf(&intf->lockdown_reason, fmt, ap);
+	va_end(ap);
+
+	vgsm_intf_set_status(intf, status, timeout);
+
+	ast_mutex_unlock(&intf->lock);
 }
 
 static void vgsm_intf_unexpected_error(struct vgsm_interface *intf, int err)
 {
 	vgsm_comm_disable(&intf->comm);
 
+	ast_mutex_lock(&intf->lock);
+
 	if (err == VGSM_RESP_FAILED)
-		vgsm_intf_setreason(intf, "Communication error");
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+			"Communication error");
 	else
-		vgsm_intf_setreason(intf, "Unexpected error: '%s'",
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+			"Unexpected error: '%s'",
 			vgsm_error_to_text(err));
 
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
+	ast_mutex_unlock(&intf->lock);
 }
 
 static char *vgsm_interface_completion(char *line, char *word, int state)
@@ -924,12 +980,13 @@ static void vgsm_module_ignite(
 	struct vgsm_interface *intf)
 {
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_IGN, 0) < 0) {
-		ast_log(LOG_ERROR, "ioctl(IOC_POWER_IGN) failed: %s\n",
-			strerror(errno));
+
 		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "Error turning on module");
+
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+			"Error turning on module: ioctl(POWER_IGN): %s",
+			strerror(errno));
 	}
 }
 
@@ -937,12 +994,13 @@ static void vgsm_module_emerg_off(
 	struct vgsm_interface *intf)
 {
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0) {
-		ast_log(LOG_ERROR, "ioctl(IOC_POWER_EMERG_OFF) failed: %s\n",
-			strerror(errno));
+
 		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "Error turning off module");
+
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+			"Error turning off module: ioctl(POWER_EMERG_OFF): %s",
+			strerror(errno));
 	}
 }
 
@@ -1266,8 +1324,79 @@ static const char *get_token(const char **s, char *token, int token_size)
 	return token;
 }
 
+static const char *vgsm_call_state_to_text(enum vgsm_call_state state)
+{
+	switch(state) {
+	case VGSM_CALL_STATE_UNUSED:
+		return "UNUSED";
+	case VGSM_CALL_STATE_ACTIVE:
+		return "ACTIVE";
+	case VGSM_CALL_STATE_HELD:
+		return "HELD";
+	case VGSM_CALL_STATE_DIALING:
+		return "DIALING";
+	case VGSM_CALL_STATE_ALERTING:
+		return "ALERTING";
+	case VGSM_CALL_STATE_INCOMING:
+		return "INCOMING";
+	case VGSM_CALL_STATE_WAITING:
+		return "WAITING";
+	case VGSM_CALL_STATE_TERMINATING:
+		return "TERMINATING";
+	case VGSM_CALL_STATE_DROPPED:
+		return "DROPPED";
+	}
+
+	return "*INVALID*";
+}
+
+#if 0
+static const char *vgsm_call_direction_to_text(
+	enum vgsm_call_direction direction)
+{
+	switch(direction) {
+	case VGSM_CALL_DIRECTION_MOBILE_ORIGINATED:
+		return "MOBILE ORIGINATED";
+	case VGSM_CALL_DIRECTION_MOBILE_TERMINATED:
+		return "MOBILE TERMINATED";
+	}
+
+	return "*INVALID*";
+}
+#endif
+
+static const char *vgsm_call_bearer_to_text(enum vgsm_call_bearer bearer)
+{
+	switch(bearer) {
+	case VGSM_CALL_BEARER_VOICE:
+		return "VOICE";
+	case VGSM_CALL_BEARER_DATA:
+		return "DATA";
+	case VGSM_CALL_BEARER_FAX:
+		return "FAX";
+	case VGSM_CALL_BEARER_VOICE_THEN_DATA_VOICE:
+		return "VOICE=>DATA (VOICE)";
+	case VGSM_CALL_BEARER_VOICE_ALT_DATA_VOICE:
+		return "VOICE/DATA (VOICE)";
+	case VGSM_CALL_BEARER_VOICE_ALT_FAX_VOICE:
+		return "VOICE/FAX (FAX)";
+	case VGSM_CALL_BEARER_VOICE_THEN_DATA_DATA:
+		return "VOICE=>DATA (DATA)";
+	case VGSM_CALL_BEARER_VOICE_ALT_DATA_DATA:
+		return "VOICE/DATA (DATA)";
+	case VGSM_CALL_BEARER_VOICE_ALT_FAX_FAX:
+		return "VOICE/FAX (FAX)";
+	case VGSM_CALL_BEARER_VOICE_UNKNOWN:
+		return "UNKNOWN";
+	}
+
+	return "*INVALID*";
+}
+
 static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 {
+	ast_mutex_lock(&intf->lock);
+
 	ast_cli(fd, "\n------ Interface '%s' ---------\n", intf->name);
 
 	ast_cli(fd,
@@ -1297,19 +1426,15 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	case VGSM_INTF_STATUS_POWERING_OFF:
 	case VGSM_INTF_STATUS_INITIALIZING:
 	case VGSM_INTF_STATUS_WAITING_INITIALIZATION:
-		return;
+		goto out;
 
 	case VGSM_INTF_STATUS_FAILED:
 	case VGSM_INTF_STATUS_WAITING_SIM:
 	case VGSM_INTF_STATUS_WAITING_PIN:
 		ast_cli(fd, "  Reason: %s\n", intf->lockdown_reason);
-		return;
+		goto out;
 
 	case VGSM_INTF_STATUS_READY:
-	case VGSM_INTF_STATUS_RING:
-	case VGSM_INTF_STATUS_INCALL:
-	case VGSM_INTF_STATUS_SENDING_SMS:
-	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
 	break;
 	}
 
@@ -1327,7 +1452,7 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	req = vgsm_req_make_wait(&intf->comm, 5 * SEC, "AT^SBV");
 	if (vgsm_req_status(req) != VGSM_RESP_OK) {
 		vgsm_req_put_null(req);
-		return;
+		goto out;
 	}
 
 	const char *line = vgsm_req_first_line(req)->text;
@@ -1343,7 +1468,7 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	req = vgsm_req_make_wait(&intf->comm, 5 * SEC, "AT^SBC?");
 	if (vgsm_req_status(req) != VGSM_RESP_OK) {
 		vgsm_req_put_null(req);
-		return;
+		goto out;
 	}
 
 	line = vgsm_req_first_line(req)->text;
@@ -1353,25 +1478,24 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
 		vgsm_req_put_null(req);
-		return;
+		goto out;
 	}
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
 		vgsm_req_put_null(req);
-		return;
+		goto out;
 	}
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
 		vgsm_req_put_null(req);
-		return;
+		goto out;
 	}
 
 	ast_cli(fd, "  Power consumption: %d mA\n", atoi(field));
 
 	vgsm_req_put_null(req);
-
 
 	if (intf->sim.inserted) {
 		ast_cli(fd,
@@ -1419,7 +1543,7 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 
 	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
             intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING)
-		return;
+		goto out;
 
 	struct vgsm_operator_info *op_info;
 	op_info = vgsm_search_operator(intf->net.operator_id);
@@ -1511,6 +1635,26 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 		}
 	}
 
+	ast_cli(fd, "\nCalls:\n");
+	ast_cli(fd, "  #  State      Dir T Bearer          Channel\n");
+
+	int i;
+	for(i=0; i<ARRAY_SIZE(intf->calls); i++) {
+		if (intf->calls[i].state == VGSM_CALL_STATE_UNUSED)
+			continue;
+
+		ast_cli(fd, "  %1d: %-10s %-3s %c %-15s %s\n",
+			i + 1,
+			vgsm_call_state_to_text(intf->calls[i].state),
+			(intf->calls[i].direction ==
+				VGSM_CALL_DIRECTION_MOBILE_TERMINATED ?
+					"IN" : "OUT"),
+			intf->calls[i].channel_assigned ? '*' : ' ',
+			vgsm_call_bearer_to_text(intf->calls[i].bearer),
+			(i == 0 && intf->active_call) ?
+				intf->active_call->name : "");
+	}
+
 	ast_cli(fd, "\nDisconnect causes:\n");
 	struct vgsm_counter *counter;
 	list_for_each_entry(counter, &intf->counters, node) {
@@ -1522,6 +1666,9 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 	}
 
 	ast_cli(fd, "\n");
+
+out:
+	ast_mutex_unlock(&intf->lock);
 }
 
 static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
@@ -1665,20 +1812,23 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	}
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->status == VGSM_INTF_STATUS_READY)
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS, -1);
-	else if (intf->status == VGSM_INTF_STATUS_INCALL)
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
-				READY_UPDATE_TIME);
-	else {
-		ast_cli(fd,
-			"Interface '%s' is busy\n",
-			intf->name);
+	if (intf->status != VGSM_INTF_STATUS_READY) {
+		ast_cli(fd, "Interface '%s' is not ready\n", intf->name);
 		ast_mutex_unlock(&intf->lock);
 		err = RESULT_FAILURE;
 		goto err_intf_not_ready;
 	}
+
+	if (intf->sending_sms) {
+		ast_cli(fd, "Interface '%s' is already sending a SMS\n",
+				intf->name);
+		ast_mutex_unlock(&intf->lock);
+		err = RESULT_FAILURE;
+		goto err_already_sending_sms;
+	}
+
+	intf->sending_sms = TRUE;
+
 	ast_mutex_unlock(&intf->lock);
 
 	struct vgsm_sms *sms;
@@ -1743,13 +1893,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 		goto err_req_result;
 	}
 
-	if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-				READY_UPDATE_TIME);
-	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_INCALL,
-				READY_UPDATE_TIME);
+	intf->sending_sms = FALSE;
  
 	vgsm_req_put_null(req);
 
@@ -1762,13 +1906,8 @@ err_invalid_mbstring:
 err_malloc_sms_text:
 	vgsm_sms_put_null(sms);
 err_sms_alloc:
-	if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-				READY_UPDATE_TIME);
-	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_INCALL,
-				READY_UPDATE_TIME);
+	intf->sending_sms = FALSE;
+err_already_sending_sms:
 err_intf_not_ready:
 err_intf_not_found:
 err_missing_text:
@@ -1825,6 +1964,46 @@ static struct ast_cli_entry vgsm_reload =
 
 /*---------------------------------------------------------------------------*/
 
+static int do_vgsm_power_on(int fd, struct vgsm_interface *intf)
+{
+	ast_mutex_lock(&intf->lock);
+
+	if (intf->status != VGSM_INTF_STATUS_OFF) {
+		ast_cli(fd, "Interface is not off, cannot turn on\n");
+	} else {
+		vgsm_module_ignite(intf);
+
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_POWERING_ON,
+			POWERING_ON_TIMEOUT,
+			"CLI request");
+	}
+
+	ast_mutex_unlock(&intf->lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int do_vgsm_power_off(int fd, struct vgsm_interface *intf)
+{
+	struct vgsm_comm *comm = &intf->comm;
+
+	vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_POWERING_OFF,
+			POWERING_OFF_TIMEOUT,
+			"CLI request");
+
+	int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT^SMSO");
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_error_to_text(res),
+			res);
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
 static int do_vgsm_power(int fd, int argc, char *argv[])
 {
 	int err;
@@ -1849,29 +2028,14 @@ static int do_vgsm_power(int fd, int argc, char *argv[])
 		goto err_intf_not_found;
 	}
 
-	struct vgsm_comm *comm = &intf->comm;
-
 	if (!strcasecmp(argv[3], "on")) {
-
-		vgsm_module_ignite(intf);
-
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_POWERING_ON,
-					POWERING_ON_TIMEOUT);
-
+		err = do_vgsm_power_on(fd, intf);
+		if (err != RESULT_SUCCESS)
+			goto err_power_on;
 	} else if (!strcasecmp(argv[3], "off")) {
-
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_POWERING_OFF,
-				POWERING_OFF_TIMEOUT);
-
-		int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT^SMSO");
-		if (res != VGSM_RESP_OK) {
-			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_error_to_text(res),
-				res);
-			err = RESULT_FAILURE;
-			goto err_request_smso;
-		}
+		err = do_vgsm_power_off(fd, intf);
+		if (err != RESULT_SUCCESS)
+			goto err_power_off;
 	} else {
 		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
 		err = RESULT_SHOWUSAGE;
@@ -1883,7 +2047,8 @@ static int do_vgsm_power(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 
 err_unknown_command:
-err_request_smso:
+err_power_off:
+err_power_on:
 	vgsm_intf_put_null(intf);
 err_intf_not_found:
 err_no_command:
@@ -2442,32 +2607,28 @@ static int vgsm_call(
 	}
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->status == VGSM_INTF_STATUS_READY) {
 
-		if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-		    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-			ast_log(LOG_DEBUG, "Interface %s not registered\n",
-				intf_name);
-			err = -1;
-			goto err_intf_not_registered;
-		}
+	if (!intf->status == VGSM_INTF_STATUS_READY) {
+		ast_mutex_unlock(&intf->lock);
 
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
-					READY_UPDATE_TIME);
-
-	} else if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
-				READY_UPDATE_TIME);
-	else {
 		ast_log(LOG_DEBUG, "Interface %s is not ready\n", intf_name);
 		err = -1;
 		goto err_intf_not_ready;
 	}
 
+	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_mutex_unlock(&intf->lock);
+
+		ast_log(LOG_DEBUG, "Interface %s not registered\n",
+			intf_name);
+		err = -1;
+		goto err_intf_not_registered;
+	}
+
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 
-	intf->current_call = ast_chan;
+	intf->active_call = ast_chan;
 	vgsm_chan->intf = vgsm_intf_get(intf);
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
@@ -2477,9 +2638,7 @@ static int vgsm_call(
 		vgsm_chan->intf->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	if (option_debug)
-		ast_log(LOG_DEBUG,
-			"Calling %s on %s\n",
-			dest, ast_chan->name);
+		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_chan->name);
 
 	char newname[40];
 	snprintf(newname, sizeof(newname), "VGSM/%s/%d", intf->name, 1);
@@ -2487,6 +2646,8 @@ static int vgsm_call(
 	ast_change_name(ast_chan, newname);
 
 	ast_setstate(ast_chan, AST_STATE_DIALING);
+
+	ast_mutex_unlock(&intf->lock);
 
 	struct vgsm_req *req;
 	// 'timeout' instead of 20s ?
@@ -2519,16 +2680,13 @@ static int vgsm_call(
 
 	ast_queue_control(ast_chan, AST_CONTROL_PROCEEDING);
 
-	ast_mutex_unlock(&intf->lock);
-
 	vgsm_intf_put(intf);
 
 	return 0;
 
 err_atd_failed:
-err_intf_not_ready:
 err_intf_not_registered:
-	ast_mutex_unlock(&intf->lock);
+err_intf_not_ready:
 err_channel_not_down:
 	vgsm_intf_put(intf);
 err_intf_not_found:
@@ -2546,6 +2704,18 @@ static int vgsm_answer(struct ast_channel *ast_chan)
 
 	vgsm_debug_generic("vgsm_answer\n");
 
+	ast_mutex_lock(&intf->lock);
+	if (intf->status != VGSM_INTF_STATUS_READY) {
+		ast_mutex_unlock(&intf->lock);
+
+		ast_log(LOG_NOTICE, "Interface is not ready anymore\n");
+		return -1;
+	}
+
+	vgsm_connect_channel(vgsm_chan);
+
+	ast_mutex_unlock(&intf->lock);
+
 	ast_indicate(ast_chan, -1);
 
 	if (!vgsm_chan) {
@@ -2560,8 +2730,6 @@ static int vgsm_answer(struct ast_channel *ast_chan)
 
 		return -1;
 	}
-
-	vgsm_connect_channel(vgsm_chan);
 
 	return 0;
 }
@@ -2633,7 +2801,10 @@ static int vgsm_indicate(struct ast_channel *ast_chan, int condition)
 				"Error hanging up: %s (%d)\n",
 				vgsm_error_to_text(err), err);
 
-		ast_softhangup(intf->current_call, AST_SOFTHANGUP_DEV);
+		ast_mutex_lock(&intf->lock);
+		if (intf->active_call)
+			ast_softhangup(intf->active_call, AST_SOFTHANGUP_DEV);
+		ast_mutex_unlock(&intf->lock);
 	}
 	break;
 	}
@@ -2680,9 +2851,12 @@ static int vgsm_transfer(
 
 static int vgsm_send_digit(struct ast_channel *ast_chan, char digit)
 {
-	ast_log(LOG_NOTICE, "%s %c\n", __FUNCTION__, digit);
+	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
+	struct vgsm_interface *intf = vgsm_chan->intf;
 
-	return 1;
+	vgsm_req_put(vgsm_req_make(&intf->comm, 2 * SEC, "AT+VTS=%c", digit));
+
+	return 0;
 }
 
 static int vgsm_sendtext(struct ast_channel *ast, const char *text)
@@ -2695,8 +2869,6 @@ static int vgsm_sendtext(struct ast_channel *ast, const char *text)
 static void vgsm_disconnect_channel(
 	struct vgsm_chan *vgsm_chan)
 {
-	ast_mutex_lock(&vgsm_chan->ast_chan->lock);
-
 	if (vgsm_chan->sp_fd < 0) {
 		ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
 		return;
@@ -2725,8 +2897,6 @@ static void vgsm_disconnect_channel(
 	}
 
 	vgsm_chan->sp_fd = -1;
-
-	ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
 }
 
 static int vgsm_hangup(struct ast_channel *ast_chan)
@@ -2747,14 +2917,9 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 		}
 
 done:
-		if (intf->status == VGSM_INTF_STATUS_INCALL)
-			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-						READY_UPDATE_TIME);
-		else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
-			vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS,
-						READY_UPDATE_TIME);
-
-		intf->current_call = NULL;
+		ast_mutex_lock(&intf->lock);
+		intf->active_call = NULL;
+		ast_mutex_unlock(&intf->lock);
 	}
 
 	ast_mutex_lock(&ast_chan->lock);
@@ -2958,26 +3123,35 @@ static void vgsm_intf_counter_inc(
 	int location,
 	int reason)
 {
+	ast_mutex_lock(&intf->lock);
+
 	struct vgsm_counter *counter;
 	list_for_each_entry(counter, &intf->counters, node) {
 		if (counter->location == location &&
-		    counter->reason == reason) {
-			counter++;
+		    counter->reason == reason)
 			goto found;
-		}
 	}
 
 	counter = malloc(sizeof(*counter));
 	if (!counter)
-		return;
+		goto err_malloc;
 
 	counter->location = location;
 	counter->reason = reason;
-	counter->count = 1;
+	counter->count = 0;
 
 	list_add(&counter->node, &intf->counters);
 	
-found:;
+found:
+	counter++;
+
+	ast_mutex_unlock(&intf->lock);
+
+	return;
+
+err_malloc:
+
+	return;
 }
 
 static int vgsm_request_ceer(struct vgsm_interface *intf)
@@ -3035,9 +3209,9 @@ static void vgsm_common_hangup(struct vgsm_interface *intf)
 	int cause = vgsm_request_ceer(intf);
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->current_call) {
-		intf->current_call->hangupcause = cause;
-		ast_softhangup(intf->current_call, AST_SOFTHANGUP_DEV);
+	if (intf->active_call) {
+		intf->active_call->hangupcause = cause;
+		ast_softhangup(intf->active_call, AST_SOFTHANGUP_DEV);
 	}
 	ast_mutex_unlock(&intf->lock);
 }
@@ -3085,12 +3259,6 @@ static void handle_unsolicited_cring(
 
 	ast_mutex_lock(&intf->lock);
 
-	if (intf->status == VGSM_INTF_STATUS_RING ||
-	    intf->status == VGSM_INTF_STATUS_INCALL) {
-		ast_mutex_unlock(&intf->lock);
-		return;
-	}
-
 	if (intf->status != VGSM_INTF_STATUS_READY) {
 		ast_log(LOG_NOTICE,
 			"Rejecting RING on not ready interface\n");
@@ -3119,12 +3287,27 @@ static void handle_unsolicited_cring(
 		goto err_not_voice;
 	}
 
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_RING, -1);
+	if (intf->active_call) {
+		ast_log(LOG_WARNING,
+			"Received +CRING with an already active call\n");
+		goto err_call_already_present;
+	}
+
+	intf->active_call = vgsm_alloc_inbound_call(intf);
+	if (!intf->active_call) {
+		vgsm_req_put(vgsm_req_make(&intf->comm, 5 * SEC, "AT+CHUP"));
+
+		goto err_alloc_call;
+	}
 
 	ast_mutex_unlock(&intf->lock);
 
 	return;
 
+	ast_hangup(intf->active_call);
+	intf->active_call = NULL;
+err_alloc_call:
+err_call_already_present:
 err_not_voice:
 err_intf_not_ready:
 
@@ -3261,20 +3444,29 @@ static void handle_unsolicited_clip(
 	char field[32];
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->status != VGSM_INTF_STATUS_RING)
-		goto err_not_incall;
 
-	vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
-				READY_UPDATE_TIME);
+	if (!intf->active_call) {
+		ast_mutex_unlock(&intf->lock);
 
-	intf->current_call = vgsm_alloc_inbound_call(intf);
-	if (!intf->current_call) {
-		vgsm_req_put(vgsm_req_make(&intf->comm, 5 * SEC, "AT+CHUP"));
+		ast_log(LOG_WARNING, "Received +CLIP without an active call\n");
 
-		goto err_alloc_call;
+		goto err_call_not_present;
 	}
 
-	intf->current_call->cid.cid_pres =
+	struct ast_channel *ast_chan = intf->active_call;
+
+	ast_mutex_unlock(&intf->lock);
+
+	if (ast_chan->_state != AST_STATE_RING) {
+
+		ast_log(LOG_WARNING,
+			"Received +CLIP but active call"
+			" is not in RING state\n");
+
+		goto err_call_not_ring;
+	}
+
+	ast_chan->cid.cid_pres =
 		AST_PRES_USER_NUMBER_UNSCREENED |
 		AST_PRES_UNAVAILABLE;
 
@@ -3283,12 +3475,12 @@ static void handle_unsolicited_clip(
 		goto err_parse_cid;
 	}
 
-	intf->current_call->cid.cid_num = strdup(field);
+	ast_chan->cid.cid_num = strdup(field);
 
 	if (!get_token(&pars_ptr, field, sizeof(field)))
 		goto parsing_done;
 
-	intf->current_call->cid.cid_ton = atoi(field);
+	ast_chan->cid.cid_ton = atoi(field);
 
 	if (!get_token(&pars_ptr, field, sizeof(field)))
 		goto parsing_done;
@@ -3296,26 +3488,26 @@ static void handle_unsolicited_clip(
 	if (!get_token(&pars_ptr, field, sizeof(field)))
 		goto parsing_done;
 
-	intf->current_call->cid.cid_name = strdup(field);
+	ast_chan->cid.cid_name = strdup(field);
 
 	if (!get_token(&pars_ptr, field, sizeof(field)))
 		goto parsing_done;
 
 	switch(atoi(field)) {
 	case 0:
-		intf->current_call->cid.cid_pres =
+		ast_chan->cid.cid_pres =
 			AST_PRES_USER_NUMBER_PASSED_SCREEN |
 			AST_PRES_ALLOWED;
 	break;
 
 	case 1:
-		intf->current_call->cid.cid_pres =
+		ast_chan->cid.cid_pres =
 			AST_PRES_USER_NUMBER_PASSED_SCREEN |
 			AST_PRES_RESTRICTED;
 	break;
 
 	case 2:
-		intf->current_call->cid.cid_pres =
+		ast_chan->cid.cid_pres =
 			AST_PRES_USER_NUMBER_UNSCREENED |
 			AST_PRES_UNAVAILABLE;
 	break;
@@ -3323,24 +3515,18 @@ static void handle_unsolicited_clip(
 
 parsing_done:
 
-	if (ast_pbx_start(intf->current_call)) {
-		ast_log(LOG_ERROR,
-			"Unable to start PBX on %s\n",
-			intf->current_call->name);
+	if (ast_pbx_start(ast_chan)) {
+		ast_log(LOG_ERROR, "Unable to start PBX on %s\n",
+				ast_chan->name);
 		goto err_start_pbx;
 	}
-
-	ast_mutex_unlock(&intf->lock);
 
 	return;
 
 err_start_pbx:
 err_parse_cid:
-	ast_hangup(intf->current_call);
-	intf->current_call = NULL;
-err_alloc_call:
-err_not_incall:
-	ast_mutex_unlock(&intf->lock);
+err_call_not_ring:
+err_call_not_present:
 
 	return;
 }
@@ -3542,18 +3728,29 @@ static void handle_unsolicited_cdsi(
 	ast_log(LOG_ERROR, "Unexptected CMTI!\n");
 }
 
-static void vgsm_handle_clcc(
+static void vgsm_handle_slcc_update(
 	struct vgsm_interface *intf,
-	int id,
-	int direction,
-	int state,
-	int mode)
+	struct vgsm_call *call)
 {
-	switch (state) {
-	case 0: /* Active */
-		if (!intf->current_call) {
-			ast_log(LOG_ERROR,
-				"Call is active but there is no"
+	ast_mutex_lock(&intf->lock);
+	struct ast_channel *ast_chan = intf->active_call;
+	ast_mutex_unlock(&intf->lock);
+
+	switch(call->state) {
+	case VGSM_CALL_STATE_UNUSED:
+
+		if (ast_chan && ast_chan->pbx) {
+			ast_log(LOG_NOTICE,
+				"Call disappeared from SLCC,"
+				" requesting HANGUP\n");
+
+			ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+        	}
+	break;
+
+	case VGSM_CALL_STATE_ACTIVE: {
+		if (!ast_chan) {
+			ast_log(LOG_ERROR, "Call is active but there is no"
 				" current call\n");
 			vgsm_req_put(vgsm_req_make(&intf->comm,
 					5 * SEC, "AT+CHUP"));
@@ -3561,23 +3758,23 @@ static void vgsm_handle_clcc(
 			return;
 		}
 
-		if (intf->current_call->_state != AST_STATE_UP) {
-			ast_setstate(intf->current_call, AST_STATE_UP);
-			ast_queue_control(intf->current_call,
-						AST_CONTROL_ANSWER);
+		if (ast_chan->_state != AST_STATE_UP) {
+			ast_setstate(ast_chan, AST_STATE_UP);
+			ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 		}
+	}
 	break;
 
-	case 1: /* Held */
+	case VGSM_CALL_STATE_HELD:
 		ast_log(LOG_DEBUG, "Unsupported state 1-held\n");
 	break;
 
-	case 2: /* Dialing */
+	case VGSM_CALL_STATE_DIALING:
 		/* Do nutting */
 	break;
 
-	case 3: /* Alerting */
-		if (!intf->current_call) {
+	case VGSM_CALL_STATE_ALERTING: {
+		if (!ast_chan) {
 			ast_log(LOG_ERROR,
 				"Call is alerting but there is no"
 				" current call\n");
@@ -3588,25 +3785,26 @@ static void vgsm_handle_clcc(
 			return;
 		}
 
-		if (intf->current_call->_state != AST_STATE_RINGING) {
-			ast_setstate(intf->current_call, AST_STATE_RINGING);
-			ast_queue_control(intf->current_call,
-						AST_CONTROL_RINGING);
+		if (ast_chan->_state != AST_STATE_RINGING) {
+			ast_setstate(ast_chan, AST_STATE_RINGING);
+			ast_queue_control(ast_chan, AST_CONTROL_RINGING);
 		}
+	}
 	break;
 
-	case 4: /* Incoming */
+	case VGSM_CALL_STATE_INCOMING:
 	break;
 
-	case 5: /* Waiting */
+	case VGSM_CALL_STATE_WAITING:
 		ast_log(LOG_ERROR, "Unsupported state 5-waiting\n");
 	break;
 
-	case 6: /* Terminating */
+	case VGSM_CALL_STATE_TERMINATING:
+		/* Send DISCONNECT indication? */
 	break;
 
-	case 7: /* Dropped */
-		ast_queue_control(intf->current_call, AST_CONTROL_DISCONNECT);
+	case VGSM_CALL_STATE_DROPPED:
+		ast_queue_control(ast_chan, AST_CONTROL_DISCONNECT);
 	break;
 	}
 }
@@ -3653,7 +3851,6 @@ static void handle_unsolicited_ciev_call(
 	struct vgsm_comm *comm = urc->comm;
 	struct vgsm_interface *intf = to_intf(comm);
 	int err;
-	int call_present = FALSE;
 
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SLCC");
@@ -3666,9 +3863,14 @@ static void handle_unsolicited_ciev_call(
 
 	ast_mutex_lock(&intf->lock);
 
+	int i;
+	for (i=0; i<ARRAY_SIZE(intf->calls); i++)
+		intf->calls[i].updated = FALSE;
+
 	struct vgsm_req_line *line;
 	list_for_each_entry(line, &req->lines, node) {
 		const char *pars = line->text + strlen("^SLCC: ");
+		struct vgsm_call call;
 
 		if (!strcmp(line->text, "OK"))
 			break;
@@ -3689,7 +3891,19 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-		int id = atoi(field);
+		int idx = atoi(field);
+
+		if (idx == 0) {
+			ast_log(LOG_ERROR, "SLCC index 0 is not supported\n");
+			continue;
+		} else if (idx >= ARRAY_SIZE(intf->calls)) {
+			ast_log(LOG_ERROR, "SLCC describes call index %d but"
+				" a maximum of %d calls is handled\n",
+				idx, ARRAY_SIZE(intf->calls));
+			continue;
+		}
+
+		idx--;
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse SLCC '%s' direction\n",
@@ -3697,7 +3911,18 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-		int direction = atoi(field);
+		switch(atoi(field)) {
+		case 0:
+			call.direction = VGSM_CALL_DIRECTION_MOBILE_ORIGINATED;
+		break;
+		case 1:
+			call.direction = VGSM_CALL_DIRECTION_MOBILE_TERMINATED;
+		break;
+		default:
+			ast_log(LOG_ERROR, "Unhandled SLCC direction %d\n",
+				atoi(field));
+			continue;
+		}
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse RLCC '%s' state\n",
@@ -3705,7 +3930,18 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-		int state = atoi(field);
+		switch(atoi(field)) {
+		case 0: call.state = VGSM_CALL_STATE_ACTIVE; break;
+		case 1: call.state = VGSM_CALL_STATE_HELD; break;
+		case 2: call.state = VGSM_CALL_STATE_DIALING; break;
+		case 3: call.state = VGSM_CALL_STATE_ALERTING; break;
+		case 4: call.state = VGSM_CALL_STATE_INCOMING; break;
+		case 5: call.state = VGSM_CALL_STATE_WAITING; break;
+		default:
+			ast_log(LOG_ERROR, "Unhandled SLCC state %d\n",
+				atoi(field));
+			continue;
+		}
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse SLCC '%s' mode\n",
@@ -3713,15 +3949,70 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-		int mode = atoi(field);
+		switch(atoi(field)) {
+		case 0: call.bearer = VGSM_CALL_BEARER_VOICE; break;
+		case 1: call.bearer = VGSM_CALL_BEARER_DATA; break;
+		case 2: call.bearer = VGSM_CALL_BEARER_FAX; break;
+		case 3: call.bearer =
+				VGSM_CALL_BEARER_VOICE_THEN_DATA_VOICE;
+		break;
+		case 4: call.bearer =
+				VGSM_CALL_BEARER_VOICE_ALT_DATA_VOICE;
+		break;
+		case 5: call.bearer =
+				VGSM_CALL_BEARER_VOICE_ALT_FAX_VOICE;
+		break;
+		case 6: call.bearer =
+				VGSM_CALL_BEARER_VOICE_THEN_DATA_DATA;
+		break;
+		case 7: call.bearer =
+				VGSM_CALL_BEARER_VOICE_ALT_DATA_DATA;
+		break;
+		case 8: call.bearer =
+				VGSM_CALL_BEARER_VOICE_ALT_FAX_FAX;
+		break;
+		case 9: call.bearer =
+				VGSM_CALL_BEARER_VOICE_UNKNOWN;
+		break;
+		default:
+			ast_log(LOG_ERROR, "Unhandled SLCC bearer mode %d\n",
+				atoi(field));
+			continue;
+		}
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
-			ast_log(LOG_ERROR, "Cannot parse SLCC '%s' mpty\n",
+			ast_log(LOG_ERROR, "Cannot parse SLCC '%s' <mpty>\n",
 				line->text);
 			continue;
 		}
 
-//		int multiparty = atoi(field);
+		switch(atoi(field)) {
+		case 0: call.multiparty = FALSE; break;
+		case 1: call.multiparty = TRUE; break;
+		default:
+			ast_log(LOG_ERROR,
+				"Unhandled SLCC multiparty value %d\n",
+				atoi(field));
+			continue;
+		}
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SLCC '%s'"
+				" <traffic channel assigned>\n",
+				line->text);
+			continue;
+		}
+
+		switch(atoi(field)) {
+		case 0: call.channel_assigned = FALSE; break;
+		case 1: call.channel_assigned = TRUE; break;
+		default:
+			ast_log(LOG_ERROR,
+				"Unhandled SLCC <traffic channel assigned>"
+				" value %d\n",
+				atoi(field));
+			continue;
+		}
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse SLCC '%s' number\n",
@@ -3729,29 +4020,31 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-		if (id != 1) {
-			ast_log(LOG_WARNING,
-				"Don't know how to handle call id '%d'\n",
-				id);
-			continue;
+		if (intf->calls[idx].state != VGSM_CALL_STATE_UNUSED) {
+			/* This is a new call */
 		}
 
-		call_present = TRUE;
-
-		vgsm_handle_clcc(intf, id, direction, state, mode);
+		intf->calls[idx].updated = TRUE;
+		intf->calls[idx].direction = call.direction;
+		intf->calls[idx].state = call.state;
+		intf->calls[idx].bearer = call.bearer;
+		intf->calls[idx].multiparty = call.multiparty;
+		intf->calls[idx].channel_assigned = call.channel_assigned;
 	}
 
 	vgsm_req_put_null(req);
 
+	for (i=0; i<ARRAY_SIZE(intf->calls); i++) {
+		if (!intf->calls[i].updated) {
+			intf->calls[i].state = VGSM_CALL_STATE_UNUSED;
+			/* Call removed */
+		}
+	}
+
 	ast_mutex_unlock(&intf->lock);
 
-	if (!call_present) {
-		if(intf->current_call && intf->current_call->pbx) {
-			ast_log(LOG_NOTICE,
-				"SLCC has no call, requesting HANGUP\n");
-			vgsm_common_hangup(intf);
-		}
-        }
+	/* There is a race condition here! intf->calls[0] may change! FIXME */
+	vgsm_handle_slcc_update(intf, &intf->calls[0]);
 }
 
 static void handle_unsolicited_ciev_roam(
@@ -4291,8 +4584,9 @@ static int vgsm_pin_check_and_input(
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SPIC");
 	err = vgsm_req_status(req);
 	if (err == CME_ERROR(10)) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
-		vgsm_intf_setreason(intf, "SIM not present");
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_SIM, -1,
+				"SIM not present");
 		vgsm_req_put_null(req);
 		goto err_spic;
 	} else if (err != VGSM_RESP_OK) {
@@ -4309,8 +4603,9 @@ static int vgsm_pin_check_and_input(
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	err = vgsm_req_status(req);
 	if (err == CME_ERROR(10)) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_SIM, -1);
-		vgsm_intf_setreason(intf, "SIM not present");
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_SIM, -1,
+				"SIM not present");
 		vgsm_req_put_null(req);
 		goto err_spic;
 	} else if (err != VGSM_RESP_OK) {
@@ -4326,47 +4621,47 @@ static int vgsm_pin_check_and_input(
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 
 		if (intf->sim.remaining_attempts < 3) {
-			vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_WAITING_PIN, -1);
-			vgsm_intf_setreason(intf, "Input PIN manually");
+			vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_PIN, -1,
+				"Input PIN manually");
 			res = -1;
 		} else if (strlen(intf->pin)) {
 			int err = vgsm_req_make_wait_result(comm, 20 * SEC,
 					"AT+CPIN=\"%s\"", intf->pin);
 
 			if (err != VGSM_RESP_OK) {
-				vgsm_intf_set_status(intf,
-					VGSM_INTF_STATUS_WAITING_PIN, -1);
-				vgsm_intf_setreason(intf,
+				vgsm_intf_set_status_reason(intf,
+					VGSM_INTF_STATUS_WAITING_PIN, -1,
 					"SIM PIN refused (%s), input manually",
 					vgsm_error_to_text(err));
 				res = -1;
 			}
 		} else {
-			vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_WAITING_PIN, -1);
-			vgsm_intf_setreason(intf,
+			vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_PIN, -1,
 				"SIM PIN not configured, input manually");
 			res = -1;
 		}
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_PIN, -1);
-		vgsm_intf_setreason(intf, "SIM requires PIN2");
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_PIN, -1,
+				"SIM requires PIN2");
 		res = -1;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_PIN, -1);
-		vgsm_intf_setreason(intf, "SIM requires PUK, input manually");
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_PIN, -1,
+				"SIM requires PUK, input manually");
 		res = -1;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_WAITING_PIN, -1);
-		vgsm_intf_setreason(intf, "SIM requires PUK2");
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_WAITING_PIN, -1,
+				"SIM requires PUK2");
 		res = -1;
 	} else {
 		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf,
-			"Unknown response '%s'", first_line->text);
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+				"Unknown response '%s'", first_line->text);
 
 		res = -1;
 	}
@@ -4387,7 +4682,7 @@ static int vgsm_module_codec_init(struct vgsm_interface *intf)
 	cctl.parameter = VGSM_CODEC_RXGAIN;
 	cctl.value = intf->rx_gain;
 
-	sleep(1);
+	//sleep(1);
 	if (ioctl(intf->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(IOC_CODEC_SET, RXGAIN) failed: %s\n",
@@ -4910,8 +5205,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		ast_mutex_lock(&vgsm.lock);
 		list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
 			        ast_mutex_lock(&intf->lock);
-			        if (intf->status == VGSM_INTF_STATUS_READY ||
-			            intf->status == VGSM_INTF_STATUS_INCALL) {
+			        if (intf->status == VGSM_INTF_STATUS_READY) {
 	                		ast_mutex_unlock(&intf->lock);
 					found = 1;
 					break;
@@ -4935,13 +5229,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			goto err_intf_not_registered;
 		}
 
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_SENDING_SMS, -1);
-
-	} else if (intf->status == VGSM_INTF_STATUS_INCALL)
-		vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_INCALL_SENDING_SMS,
-				READY_UPDATE_TIME);
-	else {
+		intf->sending_sms = TRUE;
+	} else {
 		astman_send_error(s, m,
 			"Interface is busy");
 		ast_mutex_unlock(&intf->lock);
@@ -5055,24 +5344,14 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	astman_send_ack(s, m, "VGSMsmstx: SMS sent");
 
-       if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
-               vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-					READY_UPDATE_TIME);
-	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
-					READY_UPDATE_TIME);
+       intf->sending_sms = FALSE;
 
 	return 0;
 
 err_req_result:
 	vgsm_req_put_null(req);
 err_req_make:
-       if (intf->status == VGSM_INTF_STATUS_SENDING_SMS)
-               vgsm_intf_set_status(intf, VGSM_INTF_STATUS_READY,
-					READY_UPDATE_TIME);
-	else if (intf->status == VGSM_INTF_STATUS_INCALL_SENDING_SMS)
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_INCALL,
-					READY_UPDATE_TIME);
+	intf->sending_sms = FALSE;
 err_iconv:
 	free(sms->text);
 	sms->text = NULL;
@@ -5129,10 +5408,13 @@ static void vgsm_module_open(
 	intf->comm.fd = open(intf->device_filename, O_RDWR);
 	if (intf->comm.fd < 0) {
 		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_setreason(intf, "Error opening device: %s",
-							strerror(errno));
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
+
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+				"Error opening device: open(%s): %s",
+				intf->device_filename,
+				strerror(errno));
+
 		return;
 	}
 
@@ -5201,10 +5483,11 @@ static void vgsm_module_open(
 
 	int val;
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		vgsm_intf_setreason(intf, "Error getting power status: %s",
-							strerror(errno));
-		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+			"Error getting power status:"
+			" ioctl(POWER_GET): %s",
+			strerror(errno));
 
 		return;
 	}
@@ -5239,19 +5522,19 @@ static void vgsm_module_initialize(
 
 	if (vgsm_module_codec_init(intf) < 0) {
 		vgsm_comm_disable(&intf->comm);
-		vgsm_intf_set_status(intf, VGSM_INTF_STATUS_FAILED,
-					FAILED_RETRY_TIME);
-		vgsm_intf_setreason(intf, "Error configuring CODEC");
+		vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+				"Error configuring CODEC");
 
 		goto initialization_failure;
 	}
 
 	int val;
 	if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		vgsm_intf_setreason(intf, "Error getting power status: %s",
-							strerror(errno));
-		vgsm_intf_set_status(intf,
-			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
+		vgsm_intf_set_status_reason(intf,
+			VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+			"Error getting power status: ioctl(POWER_GET): %s",
+			strerror(errno));
 
 		goto initialization_failure;
 	}
@@ -5317,11 +5600,11 @@ static void vgsm_module_monitor_timer(
 	case VGSM_INTF_STATUS_POWERING_ON: {
 		int val;
 		if (ioctl(intf->comm.fd, VGSM_IOC_POWER_GET, &val) < 0) {
-			vgsm_intf_setreason(intf,
-				"Error getting power status: %s",
+			vgsm_intf_set_status_reason(intf,
+				VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME,
+				"Error getting power status:"
+				" ioctl(POWER_GET): %s",
 				strerror(errno));
-			vgsm_intf_set_status(intf,
-				VGSM_INTF_STATUS_FAILED, FAILED_RETRY_TIME);
 
 			return;
 		}
@@ -5340,9 +5623,8 @@ static void vgsm_module_monitor_timer(
 					"%s: Power-on permanently failed\n",
 					intf->name);
 
-				vgsm_intf_set_status(intf,
-					VGSM_INTF_STATUS_OFF, -1);
-				vgsm_intf_setreason(intf,
+				vgsm_intf_set_status_reason(intf,
+					VGSM_INTF_STATUS_OFF, -1,
 					"Power-on sequence failure");
 			} else {
 				ast_log(LOG_NOTICE,
@@ -5392,18 +5674,11 @@ static void vgsm_module_monitor_timer(
 	break;
 
 	case VGSM_INTF_STATUS_INITIALIZING:
-	case VGSM_INTF_STATUS_SENDING_SMS:
 	case VGSM_INTF_STATUS_OFF:
 		ast_log(LOG_ERROR,
 			"vgsm: Module '%s': Unexpected timer in status %s\n",
 			intf->name,
 			vgsm_intf_status_to_text(intf->status));
-	break;
-
-	case VGSM_INTF_STATUS_RING:
-	case VGSM_INTF_STATUS_INCALL:
-	case VGSM_INTF_STATUS_INCALL_SENDING_SMS:
-//		vgsm_call_monitor(intf);
 	break;
 
 	case VGSM_INTF_STATUS_WAITING_SIM:
@@ -5418,18 +5693,28 @@ static void *vgsm_module_monitor_thread_main(void *data)
 	struct vgsm_interface *intf = (struct vgsm_interface *)data;
 
 	for(;;) {
+		ast_mutex_lock(&intf->lock);
+
 		if (intf->timer_expiration != -1) {
 			longtime_t timeout = intf->timer_expiration -
 						longtime_now();
 			if (timeout < 0) {
 				intf->timer_expiration = -1;
+				ast_mutex_unlock(&intf->lock);
+
 				vgsm_module_monitor_timer(intf);
 			} else if (timeout > 100000000) {
+				ast_mutex_unlock(&intf->lock);
+
 				sleep(timeout / 1000000);
 			} else {
+				ast_mutex_unlock(&intf->lock);
+
 				usleep(timeout);
 			}
 		} else {
+			ast_mutex_unlock(&intf->lock);
+
 			sleep(3600);
 		}
 	}
@@ -5467,16 +5752,22 @@ static void vgsm_shutdown_modules(void)
 	}
 	ast_mutex_unlock(&vgsm.lock);
 
-	int i;
-	for(i=0; i<10; i++) {
+	time_t begin = time(NULL);
+
+	while(time(NULL) - begin < 10) {
 		int not_off = FALSE;
 
+		ast_mutex_lock(&vgsm.lock);
 		list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
 
+			ast_mutex_lock(&intf->lock);
 			if (intf->poweroff_on_exit &&
 			    intf->status != VGSM_INTF_STATUS_OFF)
 				not_off = TRUE;
+
+			ast_mutex_unlock(&intf->lock);
 		}
+		ast_mutex_unlock(&vgsm.lock);
 
 		if (!not_off)
 			return;

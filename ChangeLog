@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-10-03 18:32:01 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-692
+
+    Summary:
+      Cleaned and re-checked interface locking, cleaned up state handling, prettified SLCC handling, implemented outbound DTMF via AT+VTD, fixed shutdown
+    Revision:
+      isdn--devel--0.1--patch-692
+
+
+    modified files:
+     ChangeLog chan_vgsm/chan_vgsm.c chan_vgsm/chan_vgsm.h
+
+
 2006-10-02 13:06:53 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-691
 
     Summary:
