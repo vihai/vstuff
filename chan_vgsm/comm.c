@@ -1060,30 +1060,42 @@ static void *vgsm_comm_thread_main(void *data)
 	return NULL;
 }
 
+static struct vgsm_req *vgsm_comm_dequeue_urc(void)
+{
+	ast_mutex_lock(&vgsm_comm_urc_queue_lock);
+
+	if (list_empty(&vgsm_comm_urc_queue)) {
+		ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
+		return NULL;
+	}
+
+	struct vgsm_req *req;
+	req = list_entry(vgsm_comm_urc_queue.next, struct vgsm_req, node);
+
+	list_del(&req->node);
+
+	ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
+
+	return req;
+}
+
 static void *vgsm_comm_urc_thread_main(void *data)
 {
 	for(;;) {
 		/* Sleep until interrupted */
 		sleep(600);
 
-retry:
-		ast_mutex_lock(&vgsm_comm_urc_queue_lock);
-		struct vgsm_req *req, *tpos;
-		list_for_each_entry_safe(req, tpos,
-				&vgsm_comm_urc_queue, node) {
+		struct vgsm_req *req;
 
-			ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
+		while ((req = vgsm_comm_dequeue_urc())) {
 
 			assert(req->urc_class);
+
 			if (req->urc_class->handler)
 				req->urc_class->handler(req);
 
-			list_del(&req->node);
 			vgsm_req_put_null(req);
-
-			goto retry;
 		}
-		ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
 	}
 }
 
