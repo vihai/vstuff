@@ -1673,39 +1673,37 @@ out:
 
 static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 {
-	ast_cli(fd, "%-8s: %-8s\n",
+	ast_mutex_unlock(&intf->lock);
+
+	ast_cli(fd, "%-10s: %s",
 		intf->name,
 		vgsm_intf_status_to_text(intf->status));
 
-	if (intf->status == VGSM_INTF_STATUS_CLOSED ||
-	    intf->status == VGSM_INTF_STATUS_OFF ||
-	    intf->status == VGSM_INTF_STATUS_POWERING_ON ||
-	    intf->status == VGSM_INTF_STATUS_POWERING_OFF ||
-	    intf->status == VGSM_INTF_STATUS_WAITING_INITIALIZATION ||
-	    intf->status == VGSM_INTF_STATUS_INITIALIZING ||
-	    intf->status == VGSM_INTF_STATUS_FAILED)
-		return;
-
-	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-            intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		ast_cli(fd, "          %-15s\n",
+	if (intf->status == VGSM_INTF_STATUS_READY) {
+		ast_cli(fd, " %-17s",
 			vgsm_net_status_to_text(intf->net.status));
-	} else {
-		struct vgsm_operator_info *op_info;
-		op_info = vgsm_search_operator(intf->net.operator_id);
 
-		if (op_info) {
-			ast_cli(fd, "          %-15s %s (%s - %s)\n",
-				vgsm_net_status_to_text(intf->net.status),
-				intf->net.operator_id,
-				op_info->name,
-				op_info->country);
-		} else {
-			ast_cli(fd, "          %-15s %s\n",
-				vgsm_net_status_to_text(intf->net.status),
-				intf->net.operator_id);
+		if (intf->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+	            intf->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+
+			struct vgsm_operator_info *op_info;
+			op_info = vgsm_search_operator(intf->net.operator_id);
+
+			ast_cli(fd, " \"%s\"",
+				op_info ? op_info->name :
+					intf->net.operator_id);
 		}
 	}
+
+	if (intf->active_call)
+		ast_cli(fd, " - CALL[%s]", intf->active_call->name);
+
+	if (intf->sending_sms)
+		ast_cli(fd, " - SENDING_SMS");
+
+	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&intf->lock);
 }
 
 static int do_show_vgsm_interfaces(int fd, int argc, char *argv[])

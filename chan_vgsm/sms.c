@@ -546,6 +546,17 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	if (!sms->text)
 		return -1;
 
+	int ucs2_needed = FALSE;
+	wchar_t *c = sms->text;
+	char c1, c2;
+
+	while(*c != L'\0') {
+		if (wc_to_gsm(*c, &c1, &c2) == 0)
+			ucs2_needed = TRUE;
+
+		c++;
+	}
+
 	int max_len =
 		(2 + (strlen(sms->smcc) + 1) / 2) +	// SMCC address
 		1 +					// SMS-SUBMIT
@@ -553,7 +564,7 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 		1 +					// Protocol Identifier
 		1 +					// Data Coding Scheme
 		1 +					// Validity
-		1 + wcslen(sms->text) * 2;		// User data
+		1 + wcslen(sms->text) * 2 + 100;		// User data
 
 	__u8 *pdu = malloc(max_len);
 	if (!pdu)
@@ -629,17 +640,48 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	dcs->coding_group = 0;
 	dcs->compressed = 0;
 	dcs->has_class = 1;
-	dcs->message_alphabet = VGSM_SMS_DCS_ALPHABET_DEFAULT;
+	dcs->message_alphabet = ucs2_needed ?
+					VGSM_SMS_DCS_ALPHABET_UCS2 :
+					VGSM_SMS_DCS_ALPHABET_DEFAULT;
 	dcs->message_class = sms->message_class;
 
 	/* Validity Period */
 	*(pdu + len++) = 0xaa;
 
 	/* User data */
-	*(pdu + len++) = wcslen(sms->text);
+	if (ucs2_needed) {
+		char *inbuf = (char *)sms->text;
+		char *outbuf = pdu + len + 1;
+		size_t inbytes = wcslen(sms->text) * sizeof(wchar_t);
+		size_t outbytes = max_len - len - 1;
 
-	len += vgsm_wc_to_7bit(sms->text,
-				wcslen(sms->text), pdu + len);
+		iconv_t cd = iconv_open("UCS-2BE", "WCHAR_T");
+		if (cd < 0) {
+			ast_log(LOG_ERROR, "Cannot open iconv context: %s\n",
+				strerror(errno));
+			goto err_iconv_open;
+		}
+
+		if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes) < 0) {
+			ast_log(LOG_ERROR, "Cannot iconv; %s\n",
+				strerror(errno));
+			iconv_close(cd);
+			goto err_iconv;
+		}
+
+		size_t used_bytes = (max_len - len - 1) - outbytes;
+
+		iconv_close(cd);
+
+		*(pdu + len++) = used_bytes;
+
+		len += used_bytes;
+	} else {
+		*(pdu + len++) = wcslen(sms->text);
+
+		len += vgsm_wc_to_7bit(sms->text, wcslen(sms->text), pdu + len);
+	}
+
 	sms->pdu_tp_len = len - pre_tp_len;
 
 	assert(len <= max_len);
@@ -648,6 +690,8 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	
 	return 0;
 
+err_iconv:
+err_iconv_open:
 err_invalid_dest:
 err_invalid_smcc:
 	free(sms->pdu);
