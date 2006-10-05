@@ -3204,14 +3204,18 @@ err_cerr:
 
 static void vgsm_common_hangup(struct vgsm_interface *intf)
 {
-	int cause = vgsm_request_ceer(intf);
+	int cause;
+
+	cause = vgsm_request_ceer(intf);
 
 	ast_mutex_lock(&intf->lock);
-	if (intf->active_call) {
-		intf->active_call->hangupcause = cause;
-		ast_softhangup(intf->active_call, AST_SOFTHANGUP_DEV);
-	}
+	struct ast_channel *ast_chan = intf->active_call;
 	ast_mutex_unlock(&intf->lock);
+	
+	if (ast_chan) {
+		ast_chan->hangupcause = cause;
+		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+	}
 }
 
 static void handle_unsolicited_no_carrier(

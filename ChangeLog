@@ -2,6 +2,18 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-10-05 11:07:18 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-695
+
+    Summary:
+      Fixed a deadlock in vgsm hangup
+    Revision:
+      isdn--devel--0.1--patch-695
+
+
+    modified files:
+     ChangeLog chan_vgsm/chan_vgsm.c
+
+
 2006-10-04 14:17:53 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-694
 
     Summary:
