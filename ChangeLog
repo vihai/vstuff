@@ -2,6 +2,42 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-10-06 15:16:42 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-697
+
+    Summary:
+      Sources cleanup and separation
+    Revision:
+      isdn--devel--0.1--patch-697
+
+
+    new files:
+     chan_vgsm/.arch-ids/7bit.c.id chan_vgsm/.arch-ids/7bit.h.id
+     chan_vgsm/.arch-ids/bcd.c.id chan_vgsm/.arch-ids/bcd.h.id
+     chan_vgsm/.arch-ids/gsm_charset.c.id
+     chan_vgsm/.arch-ids/gsm_charset.h.id
+     chan_vgsm/.arch-ids/longtime.c.id
+     chan_vgsm/.arch-ids/longtime.h.id
+     chan_vgsm/.arch-ids/module.c.id
+     chan_vgsm/.arch-ids/module.h.id
+     chan_vgsm/.arch-ids/number.c.id
+     chan_vgsm/.arch-ids/number.h.id
+     chan_vgsm/.arch-ids/operators.c.id
+     chan_vgsm/.arch-ids/operators.h.id
+     chan_vgsm/.arch-ids/pin.c.id chan_vgsm/.arch-ids/pin.h.id
+     chan_vgsm/7bit.c chan_vgsm/7bit.h chan_vgsm/bcd.c
+     chan_vgsm/bcd.h chan_vgsm/gsm_charset.c
+     chan_vgsm/gsm_charset.h chan_vgsm/longtime.c
+     chan_vgsm/longtime.h chan_vgsm/module.c chan_vgsm/module.h
+     chan_vgsm/number.c chan_vgsm/number.h chan_vgsm/operators.c
+     chan_vgsm/operators.h chan_vgsm/pin.c chan_vgsm/pin.h
+
+    modified files:
+     ChangeLog chan_vgsm/Makefile.am chan_vgsm/cbm.c
+     chan_vgsm/chan_vgsm.c chan_vgsm/chan_vgsm.h chan_vgsm/comm.c
+     chan_vgsm/comm.h chan_vgsm/sms.c chan_vgsm/sms.h
+     chan_vgsm/util.c chan_vgsm/util.h
+
+
 2006-10-06 12:23:26 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-696
 
     Summary:

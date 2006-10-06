@@ -1,7 +1,36 @@
 
 astmod_LTLIBRARIES = chan_vgsm.la
-chan_vgsm_la_SOURCES = chan_vgsm.c comm.c causes.c sms.c cbm.c util.c
-noinst_HEADERS = chan_vgsm.h comm.h causes.h sms.h cbm.h util.h
+chan_vgsm_la_SOURCES =\
+	chan_vgsm.c	\
+	module.c	\
+	comm.c		\
+	causes.c	\
+	sms.c		\
+	cbm.c		\
+	operators.c	\
+	pin.c		\
+	number.c	\
+	bcd.c		\
+	gsm_charset.c	\
+	7bit.c		\
+	longtime.c	\
+	util.c
+
+noinst_HEADERS =\
+	chan_vgsm.h	\
+	module.h	\
+	comm.h		\
+	causes.h	\
+	sms.h		\
+	cbm.h		\
+	operators.h	\
+	pin.h		\
+	number.h	\
+	bcd.h		\
+	gsm_charset.h	\
+	7bit.h		\
+	longtime.h	\
+	util.h
 
 INCLUDES =					\
 	-I$(top_builddir)			\

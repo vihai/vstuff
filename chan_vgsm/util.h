@@ -17,6 +17,8 @@
 
 #include <linux/types.h>
 
+#include <asterisk/logger.h>
+
 extern struct vgsm_state vgsm;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -28,6 +30,10 @@ extern struct vgsm_state vgsm;
 #ifndef TRUE
 #define TRUE (!FALSE)
 #endif
+
+#define container_of(ptr, type, member) ({			\
+	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
+	(type *)( (char *)__mptr - offsetof(type,member) );})
 
 typedef char BOOL;
 
@@ -98,26 +104,12 @@ typedef char BOOL;
 	} while(0)
 #endif
 
-typedef long long longtime_t;
-
-longtime_t longtime_now();
 int sanprintf(char *buf, int bufsize, const char *fmt, ...);
 wchar_t *w_unprintable_remove(wchar_t *dst, const wchar_t *src, int dst_size);
 char *unprintable_escape(const char *str, char *buf, int bufsize);
 
-__u8 swap_nibbles(__u8 val);
-__u8 nibbles_to_decimal(__u8 val);
-__u8 decimal_to_nibbles(__u8 val);
-
 int char_to_hexdigit(char c);
-char vgsm_bcd_to_char(__u8 bcd);
-int vgsm_bcd_to_text(
-	__u8 *buf, int nibbles,
-	char *str, int str_len);
-int vgsm_text_to_bcd(__u8 *buf, char *str);
-wchar_t gsm_to_wc(char gsm);
-int wc_to_gsm(wchar_t wc, __u8 *c, __u8 *c1);
-void vgsm_7bit_to_wc(const __u8 *buf, int septets, wchar_t *out, int outsize);
-int vgsm_wc_to_7bit(const wchar_t *buf, int buf_len, __u8 *out);
+
+const char *get_token(const char **s, char *token, int token_size);
 
 #endif

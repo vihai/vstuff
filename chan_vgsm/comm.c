@@ -219,26 +219,6 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 	return 0;
 }
 
-/*
-int vgsm_comm_start_recovery(struct vgsm_comm *comm)
-{
-	comm->timer_expiration = longtime_now() + 3 * SEC;
-	vgsm_parser_change_state(comm, VGSM_PS_RECOVERING);
-
-	if (vgsm_comm_send_recovery_sequence(comm) < 0)
-		return -1;
-
-	ast_mutex_lock(&comm->lock);
-	while(comm->state != VGSM_PS_IDLE)
-		ast_cond_wait(&comm->state_change_cond,
-			       	&comm->lock);
-printf(" UNLOCK %s\n", comm->name);
-	ast_mutex_unlock(&comm->lock);
-
-	return 0;
-}
-*/
-
 const struct vgsm_req_line *vgsm_req_first_line(
 	const struct vgsm_req *req)
 {
@@ -951,27 +931,38 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	}
 }
 
-static int vgsm_comm_thread_do_stuff()
+static void *vgsm_comm_thread_main(void *data)
 {
 	struct pollfd polls[64];
-	struct vgsm_comm *comms[64];
+	struct vgsm_module *modules[64];
 	int npolls = 0;
+	int i;
 
-	{
-	struct vgsm_interface *intf;
-	list_for_each_entry(intf, &vgsm.ifs, ifs_node) {
+reload_polls:
 
-		if (intf->comm.fd < 0)
+	for(i=0; i<npolls; i++) {
+		vgsm_module_put(modules[i]);
+	}
+
+	npolls = 0;
+
+	ast_mutex_lock(&vgsm.lock);
+	struct vgsm_module *module;
+	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+
+		if (module->comm.fd < 0) {
+			ast_mutex_unlock(&module->lock);
 			continue;
+		}
 
-		polls[npolls].fd = intf->comm.fd;
+		polls[npolls].fd = module->comm.fd;
 		polls[npolls].events = POLLHUP | POLLERR | POLLIN;
 
-		comms[npolls] = &intf->comm;
+		modules[npolls] = vgsm_module_get(module);
 
 		npolls++;
 	}
-	}
+	ast_mutex_unlock(&vgsm.lock);
 
 	for(;;) {
 		int i;
@@ -979,33 +970,39 @@ static int vgsm_comm_thread_do_stuff()
 		longtime_t timeout = -1;
 
 		for (i=0; i<npolls; i++) {
-			if (comms[i]->enabled &&
-			    comms[i]->state == VGSM_PS_BITBUCKET) {
-				vgsm_parser_change_state(comms[i],
+
+			struct vgsm_comm *comm = &modules[i]->comm;
+
+			if (comm->enabled &&
+			    comm->state == VGSM_PS_BITBUCKET) {
+				vgsm_parser_change_state(comm,
 					VGSM_PS_RECOVERING);
-				comms[i]->buf[0] = '\0';
-				vgsm_comm_send_recovery_sequence(comms[i]);
-				comms[i]->timer_expiration = longtime_now() +
+				comm->buf[0] = '\0';
+				vgsm_comm_send_recovery_sequence(comm);
+				comm->timer_expiration = longtime_now() +
 					1 * SEC;
-			} else if (!comms[i]->enabled &&
-			           comms[i]->state != VGSM_PS_BITBUCKET) {
-				comms[i]->timer_expiration = -1;
-				vgsm_parser_change_state(comms[i],
+			} else if (!comm->enabled &&
+			           comm->state != VGSM_PS_BITBUCKET) {
+				comm->timer_expiration = -1;
+				vgsm_parser_change_state(comm,
 					VGSM_PS_BITBUCKET);
 			}
 		}
 
 		for (i=0; i<npolls; i++) {
-			if (comms[i]->timer_expiration != -1 &&
-			    comms[i]->timer_expiration - now > 0 &&
-			    (comms[i]->timer_expiration - now < timeout ||
-			     timeout == -1))
-				timeout = comms[i]->timer_expiration - now;
 
-			if (comms[i]->state == VGSM_PS_IDLE)
-				vgsm_process_next_request(comms[i]);
-			else if (comms[i]->state == VGSM_PS_BITBUCKET)
-				vgsm_flush_requests(comms[i]);
+			struct vgsm_comm *comm = &modules[i]->comm;
+
+			if (comm->timer_expiration != -1 &&
+			    comm->timer_expiration - now > 0 &&
+			    (comm->timer_expiration - now < timeout ||
+			     timeout == -1))
+				timeout = comm->timer_expiration - now;
+
+			if (comm->state == VGSM_PS_IDLE)
+				vgsm_process_next_request(comm);
+			else if (comm->state == VGSM_PS_BITBUCKET)
+				vgsm_flush_requests(comm);
 		}
 
 		int timeout_ms;
@@ -1021,26 +1018,27 @@ static int vgsm_comm_thread_do_stuff()
 		if (res < 0) {
 			if (errno == EINTR) {
 				/* Force reload of polls */
-				return 1;
+				goto reload_polls;
 			}
 
-			ast_log(LOG_WARNING, "%s: Error polling serial: %s\n",
-				comms[i]->name,
+			ast_log(LOG_WARNING, "vgsm: Error polling: %s\n",
 				strerror(errno));
 
-			return 0;
+			goto reload_polls;
 		}
 
 		now = longtime_now();
 		int exit_pending = FALSE;
 
 		for (i=0; i<npolls; i++) {
-			if (comms[i]->timer_expiration != -1 &&
-			    comms[i]->timer_expiration < now)
-				vgsm_comm_timed_out(comms[i]);
+			struct vgsm_comm *comm = &modules[i]->comm;
+
+			if (comm->timer_expiration != -1 &&
+			    comm->timer_expiration < now)
+				vgsm_comm_timed_out(comm);
 
 			if (polls[i].revents & POLLIN)
-				vgsm_receive(comms[i]);
+				vgsm_receive(comm);
 
 			if (polls[i].revents & POLLHUP ||
 			    polls[i].revents & POLLERR ||
@@ -1049,15 +1047,8 @@ static int vgsm_comm_thread_do_stuff()
 		}
 
 		if (exit_pending)
-			return 1;
+			goto reload_polls;
 	}
-}
-
-static void *vgsm_comm_thread_main(void *data)
-{
-	while(vgsm_comm_thread_do_stuff());
-
-	return NULL;
 }
 
 static struct vgsm_req *vgsm_comm_dequeue_urc(void)

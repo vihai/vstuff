@@ -26,6 +26,10 @@
 #include "chan_vgsm.h"
 #include "util.h"
 #include "sms.h"
+#include "operators.h"
+#include "bcd.h"
+#include "7bit.h"
+#include "gsm_charset.h"
 
 static const char *vgsm_type_of_number_to_text(
 	enum vgsm_type_of_number ton)
@@ -217,12 +221,12 @@ struct vgsm_sms *vgsm_decode_sms_pdu(
 	/* Timestamp */
 
 	struct tm tm;
-	tm.tm_year = nibbles_to_decimal(*(pdu + pos++)) + 100;
-	tm.tm_mon = nibbles_to_decimal(*(pdu + pos++)) - 1;
-	tm.tm_mday = nibbles_to_decimal(*(pdu + pos++));
-	tm.tm_hour = nibbles_to_decimal(*(pdu + pos++));
-	tm.tm_min = nibbles_to_decimal(*(pdu + pos++));
-	tm.tm_sec = nibbles_to_decimal(*(pdu + pos++));
+	tm.tm_year = vgsm_nibbles_to_decimal(*(pdu + pos++)) + 100;
+	tm.tm_mon = vgsm_nibbles_to_decimal(*(pdu + pos++)) - 1;
+	tm.tm_mday = vgsm_nibbles_to_decimal(*(pdu + pos++));
+	tm.tm_hour = vgsm_nibbles_to_decimal(*(pdu + pos++));
+	tm.tm_min = vgsm_nibbles_to_decimal(*(pdu + pos++));
+	tm.tm_sec = vgsm_nibbles_to_decimal(*(pdu + pos++));
 
 	sms->timestamp = mktime(&tm);
 	if (sms->timestamp == -1) {
@@ -231,9 +235,9 @@ struct vgsm_sms *vgsm_decode_sms_pdu(
 	}
 
 	if (*(pdu + pos)  & 0x80)
-		sms->timezone = nibbles_to_decimal(*(pdu + pos) & 0x7f);
+		sms->timezone = vgsm_nibbles_to_decimal(*(pdu + pos) & 0x7f);
 	else
-		sms->timezone = -nibbles_to_decimal(*(pdu + pos) & 0x7f);
+		sms->timezone = -vgsm_nibbles_to_decimal(*(pdu + pos) & 0x7f);
 	pos++;
 
 	sms->timestamp -= sms->timezone;
@@ -430,7 +434,7 @@ static const char *vgsm_make_number_prefix(
 
 int vgsm_sms_spool(struct vgsm_sms *sms)
 {
-	struct vgsm_interface *intf = sms->intf;
+	struct vgsm_module *module = sms->module;
 	char spooler[PATH_MAX];
 
 	snprintf(spooler, sizeof(spooler), "%s %s",
@@ -459,20 +463,20 @@ int vgsm_sms_spool(struct vgsm_sms *sms)
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 
-	if (intf->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-            intf->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+            module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		fprintf(f,
 			"Received: from GSM module %s; %s\n",
-			intf->name, tmpstr);
+			module->name, tmpstr);
 	} else {
 		struct vgsm_operator_info *op_info;
-		op_info = vgsm_search_operator(intf->net.operator_id);
+		op_info = vgsm_operators_search(module->net.operator_id);
 
 		if (op_info) {
 			fprintf(f,
 				"Received: from GSM module %s"
 				" registered on %s, %s; %s\n",
-				intf->name,
+				module->name,
 				op_info->name,
 				op_info->country,
 				tmpstr);
@@ -480,23 +484,23 @@ int vgsm_sms_spool(struct vgsm_sms *sms)
 			fprintf(f,
 				"Received: from GSM module %s"
 				" registered on %s; %s\n",
-				intf->name,
-				intf->net.operator_id,
+				module->name,
+				module->net.operator_id,
 				tmpstr);
 		}
 	}
 
 	fprintf(f, "From: <%s%s@%s>\n",
 		vgsm_make_number_prefix(sms->sender_np, sms->sender_ton),
-		sms->sender, intf->sms_sender_domain);
+		sms->sender, module->sms_sender_domain);
 	fprintf(f, "Subject: SMS message\n");
 	fprintf(f, "MIME-Version: 1.0\n");
 	fprintf(f, "Content-Type: text/plain\n\tcharset=\"UTF-8\"\n");
 
-	if (strchr(intf->sms_recipient_address, '<'))
-		fprintf(f, "To: %s\n", intf->sms_recipient_address);
+	if (strchr(module->sms_recipient_address, '<'))
+		fprintf(f, "To: %s\n", module->sms_recipient_address);
 	else
-		fprintf(f, "To: <%s>\n", intf->sms_recipient_address);
+		fprintf(f, "To: <%s>\n", module->sms_recipient_address);
 
         localtime_r(&sms->timestamp, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
@@ -551,7 +555,7 @@ int vgsm_sms_prepare(struct vgsm_sms *sms)
 	char c1, c2;
 
 	while(*c != L'\0') {
-		if (wc_to_gsm(*c, &c1, &c2) == 0)
+		if (vgsm_wc_to_gsm(*c, &c1, &c2) == 0)
 			ucs2_needed = TRUE;
 
 		c++;

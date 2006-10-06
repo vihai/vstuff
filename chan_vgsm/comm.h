@@ -17,6 +17,7 @@
 
 #include <list.h>
 
+#include "longtime.h"
 #include "util.h"
 
 #define SEC 1000000LL

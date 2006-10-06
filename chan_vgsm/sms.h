@@ -13,6 +13,8 @@
 #ifndef _VGSM_SMS_H
 #define _VGSM_SMS_H
 
+#include "number.h"
+
 struct vgsm_type_of_address
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -185,31 +187,6 @@ struct vgsm_sms_protocol_identifier_11
 #endif
 } __attribute__ ((__packed__));
 
-enum vgsm_type_of_number
-{
-	VGSM_TON_UNKNOWN		= 0x0,
-	VGSM_TON_INTERNATIONAL		= 0x1,
-	VGSM_TON_NATIONAL		= 0x2,
-	VGSM_TON_NETWORK_SPECIFIC	= 0x3,
-	VGSM_TON_SUBSCRIBER		= 0x4,
-	VGSM_TON_ALPHANUMERIC		= 0x5,
-	VGSM_TON_ABBREVIATED		= 0x6,
-	VGSM_TON_RESERVED		= 0x7,
-};
-
-enum vgsm_numbering_plan
-{
-	VGSM_NP_UNKNOWN			= 0x0,
-	VGSM_NP_ISDN			= 0x1,
-	VGSM_NP_DATA			= 0x3,
-	VGSM_NP_TELEX			= 0x4,
-	VGSM_NP_NATIONAL		= 0x8,
-	VGSM_NP_PRIVATE			= 0x9,
-	VGSM_NP_ERMES			= 0xa,
-	VGSM_NP_RESERVED		= 0xf,
-};
-
-
 enum vgsm_sms_dcs_alphabet
 {
 	VGSM_SMS_DCS_ALPHABET_DEFAULT		= 0x0,
@@ -217,7 +194,6 @@ enum vgsm_sms_dcs_alphabet
 	VGSM_SMS_DCS_ALPHABET_UCS2		= 0x2,
 	VGSM_SMS_DCS_ALPHABET_RESERVED		= 0x3
 };
-
 
 struct vgsm_sms_data_coding_scheme
 {
@@ -308,7 +284,7 @@ struct vgsm_sms
 {
 	int refcnt;
 
-	struct vgsm_interface *intf;
+	struct vgsm_module *module;
 
 	char smcc[32];
 	enum vgsm_type_of_number smcc_ton;

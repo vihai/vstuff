@@ -24,6 +24,7 @@
 #include "chan_vgsm.h"
 #include "util.h"
 #include "cbm.h"
+#include "7bit.h"
 
 static const char *vgsm_cbm_serial_geoscope_to_text(
 	enum vgsm_cbm_serial_geoscopes gs)
