@@ -33,6 +33,8 @@
 #endif
 
 struct vgsm_chan {
+	int refcnt; /* workaround for missing asterisk refcounting */
+
 	struct ast_channel *ast_chan;
 
 	struct vgsm_interface *intf;
@@ -207,7 +209,7 @@ struct vgsm_interface
 
 	struct vgsm_call calls[4];
 
-	struct ast_channel *active_call;
+	struct vgsm_chan *vgsm_chan;
 
 	int sending_sms;
 

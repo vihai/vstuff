@@ -107,14 +107,6 @@
  * Furthermore, the interface contains intf->comm which is another object
  * protected by its own lock, so, it has its own access policy.
  *
- * A remaining open question is: I have to lock intf to access active_call, but
- * I cannot lock active_call because I would be violating the previous rule,
- * I, thus, take pointer to active_call, release intf->lock and act on active
- * call. However, since Asterisk does not make use of reference counters (!!)
- * the call can be freed in the meantime, leading to access to a dead pointer.
- * IMHO, this is a problem in Asterisk's design, leading to major problems all
- * around.
- *
  */
 
 struct vgsm_state vgsm = {
@@ -642,6 +634,38 @@ static struct vgsm_interface *vgsm_intf_get_by_name(const char *name)
 	ast_mutex_unlock(&vgsm.lock);
 
 	return NULL;
+}
+
+static struct vgsm_chan *vgsm_chan_get(struct vgsm_chan *vgsm_chan)
+{
+	if (!vgsm_chan)
+		return NULL;
+
+	assert(vgsm_chan->refcnt > 0);
+	assert(vgsm_chan->refcnt < 100000);
+
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	vgsm_chan->refcnt++;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	return vgsm_chan;
+}
+
+static void vgsm_chan_put(struct vgsm_chan *vgsm_chan)
+{
+	if (!vgsm_chan)
+		return;
+
+	assert(vgsm_chan->refcnt > 0);
+	assert(vgsm_chan->refcnt < 100000);
+
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	int refcnt = --vgsm_chan->refcnt;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	if (!refcnt) {
+		/* Put code here when (if) asterisk will be fixed */
+	}
 }
 
 struct vgsm_operator_info *vgsm_search_operator(const char *id)
@@ -1651,8 +1675,8 @@ static void vgsm_show_interface(int fd, struct vgsm_interface *intf)
 					"IN" : "OUT"),
 			intf->calls[i].channel_assigned ? '*' : ' ',
 			vgsm_call_bearer_to_text(intf->calls[i].bearer),
-			(i == 0 && intf->active_call) ?
-				intf->active_call->name : "");
+			(i == 0 && intf->vgsm_chan) ?
+				intf->vgsm_chan->ast_chan->name : "");
 	}
 
 	ast_cli(fd, "\nDisconnect causes:\n");
@@ -1695,8 +1719,8 @@ static void vgsm_show_interface_summary(int fd, struct vgsm_interface *intf)
 		}
 	}
 
-	if (intf->active_call)
-		ast_cli(fd, " - CALL[%s]", intf->active_call->name);
+	if (intf->vgsm_chan)
+		ast_cli(fd, " - CALL[%s]", intf->vgsm_chan->ast_chan->name);
 
 	if (intf->sending_sms)
 		ast_cli(fd, " - SENDING_SMS");
@@ -2435,6 +2459,9 @@ err_ioctl_vgsm_get_chanid:
 
 static void vgsm_destroy(struct vgsm_chan *vgsm_chan)
 {
+	if (vgsm_chan->intf)
+		vgsm_intf_put(vgsm_chan->intf);
+
 	free(vgsm_chan);
 }
 
@@ -2447,6 +2474,8 @@ static struct vgsm_chan *vgsm_alloc()
 		return NULL;
 
 	memset(vgsm_chan, 0, sizeof(*vgsm_chan));
+
+	vgsm_chan->refcnt = 1;
 
 	vgsm_chan->sp_fd = -1;
 
@@ -2505,7 +2534,7 @@ err_channel_alloc:
 	return NULL;
 }
 
-static struct ast_channel *vgsm_alloc_inbound_call(struct vgsm_interface *intf)
+static struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_interface *intf)
 {
 	struct vgsm_chan *vgsm_chan;
 	vgsm_chan = vgsm_alloc();
@@ -2514,7 +2543,7 @@ static struct ast_channel *vgsm_alloc_inbound_call(struct vgsm_interface *intf)
 		goto err_vgsm_alloc;
 	}
 
-	vgsm_chan->intf = intf;
+	vgsm_chan->intf = vgsm_intf_get(intf);
 
 	struct ast_channel *ast_chan;
 	ast_chan = vgsm_new(vgsm_chan, AST_STATE_OFFHOOK);
@@ -2541,7 +2570,7 @@ static struct ast_channel *vgsm_alloc_inbound_call(struct vgsm_interface *intf)
 
 	ast_setstate(ast_chan, AST_STATE_RING);
 
-	return ast_chan;
+	return vgsm_chan;
 
 err_vgsm_new:
 	vgsm_destroy(vgsm_chan);
@@ -2624,9 +2653,18 @@ static int vgsm_call(
 		goto err_intf_not_registered;
 	}
 
+	if (intf->vgsm_chan) {
+		ast_mutex_unlock(&intf->lock);
+
+		ast_log(LOG_DEBUG, "Interface %s is busy (call present)\n",
+			intf_name);
+		err = -1;
+		goto err_intf_busy;
+	}
+
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 
-	intf->active_call = ast_chan;
+	intf->vgsm_chan = vgsm_chan_get(vgsm_chan);
 	vgsm_chan->intf = vgsm_intf_get(intf);
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
@@ -2683,6 +2721,7 @@ static int vgsm_call(
 	return 0;
 
 err_atd_failed:
+err_intf_busy:
 err_intf_not_registered:
 err_intf_not_ready:
 err_channel_not_down:
@@ -2800,9 +2839,14 @@ static int vgsm_indicate(struct ast_channel *ast_chan, int condition)
 				vgsm_error_to_text(err), err);
 
 		ast_mutex_lock(&intf->lock);
-		if (intf->active_call)
-			ast_softhangup(intf->active_call, AST_SOFTHANGUP_DEV);
+		struct vgsm_chan *vgsm_chan = vgsm_chan_get(intf->vgsm_chan);
 		ast_mutex_unlock(&intf->lock);
+
+		if (vgsm_chan) {
+			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
+
+			vgsm_chan_put(vgsm_chan);
+		}
 	}
 	break;
 	}
@@ -2867,10 +2911,8 @@ static int vgsm_sendtext(struct ast_channel *ast, const char *text)
 static void vgsm_disconnect_channel(
 	struct vgsm_chan *vgsm_chan)
 {
-	if (vgsm_chan->sp_fd < 0) {
-		ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
+	if (vgsm_chan->sp_fd < 0)
 		return;
-	}
 
 	struct visdn_connect vc;
 	vc.pipeline_id = vgsm_chan->pipeline_id;
@@ -2916,17 +2958,24 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 
 done:
 		ast_mutex_lock(&intf->lock);
-		intf->active_call = NULL;
+		vgsm_chan_put(intf->vgsm_chan);
+		intf->vgsm_chan = NULL;
 		ast_mutex_unlock(&intf->lock);
 	}
-
-	ast_mutex_lock(&ast_chan->lock);
-
-	close(ast_chan->fds[0]);
 
 	if (vgsm_chan) {
 		if (vgsm_chan->sp_fd >= 0)
 			vgsm_disconnect_channel(vgsm_chan);
+
+		/* Wait for references to vgsm_chan to be released */
+		int refcnt;
+		do {
+			ast_mutex_lock(&vgsm.usecnt_lock);
+			refcnt = vgsm_chan->refcnt;
+			ast_mutex_unlock(&vgsm.usecnt_lock);
+
+			usleep(100000);
+		} while(refcnt > 1);
 
 		vgsm_destroy(vgsm_chan);
 		ast_chan->tech_pvt = NULL;
@@ -2936,6 +2985,10 @@ done:
 		ast_dsp_free(vgsm_chan->dsp);
 		vgsm_chan->dsp = NULL;
 	}
+
+	ast_mutex_lock(&ast_chan->lock);
+
+	close(ast_chan->fds[0]);
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
@@ -3209,12 +3262,14 @@ static void vgsm_common_hangup(struct vgsm_interface *intf)
 	cause = vgsm_request_ceer(intf);
 
 	ast_mutex_lock(&intf->lock);
-	struct ast_channel *ast_chan = intf->active_call;
+	struct vgsm_chan *vgsm_chan = vgsm_chan_get(intf->vgsm_chan);
 	ast_mutex_unlock(&intf->lock);
-	
-	if (ast_chan) {
-		ast_chan->hangupcause = cause;
-		ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+
+	if (vgsm_chan) {
+		vgsm_chan->ast_chan->hangupcause = cause;
+		ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
+
+		vgsm_chan_put(vgsm_chan);
 	}
 }
 
@@ -3289,14 +3344,14 @@ static void handle_unsolicited_cring(
 		goto err_not_voice;
 	}
 
-	if (intf->active_call) {
+	if (intf->vgsm_chan) {
 		ast_log(LOG_WARNING,
 			"Received +CRING with an already active call\n");
 		goto err_call_already_present;
 	}
 
-	intf->active_call = vgsm_alloc_inbound_call(intf);
-	if (!intf->active_call) {
+	intf->vgsm_chan = vgsm_alloc_inbound_call(intf);
+	if (!intf->vgsm_chan) {
 		vgsm_req_put(vgsm_req_make(&intf->comm, 5 * SEC, "AT+CHUP"));
 
 		goto err_alloc_call;
@@ -3306,8 +3361,9 @@ static void handle_unsolicited_cring(
 
 	return;
 
-	ast_hangup(intf->active_call);
-	intf->active_call = NULL;
+	vgsm_chan_put(intf->vgsm_chan);
+	ast_hangup(intf->vgsm_chan->ast_chan);
+	intf->vgsm_chan = NULL;
 err_alloc_call:
 err_call_already_present:
 err_not_voice:
@@ -3447,7 +3503,7 @@ static void handle_unsolicited_clip(
 
 	ast_mutex_lock(&intf->lock);
 
-	if (!intf->active_call) {
+	if (!intf->vgsm_chan) {
 		ast_mutex_unlock(&intf->lock);
 
 		ast_log(LOG_WARNING, "Received +CLIP without an active call\n");
@@ -3455,7 +3511,8 @@ static void handle_unsolicited_clip(
 		goto err_call_not_present;
 	}
 
-	struct ast_channel *ast_chan = intf->active_call;
+	struct vgsm_chan *vgsm_chan = vgsm_chan_get(intf->vgsm_chan);
+	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 
 	ast_mutex_unlock(&intf->lock);
 
@@ -3523,11 +3580,14 @@ parsing_done:
 		goto err_start_pbx;
 	}
 
+	vgsm_chan_put(vgsm_chan);
+
 	return;
 
 err_start_pbx:
 err_parse_cid:
 err_call_not_ring:
+	vgsm_chan_put(vgsm_chan);
 err_call_not_present:
 
 	return;
@@ -3735,34 +3795,35 @@ static void vgsm_handle_slcc_update(
 	struct vgsm_call *call)
 {
 	ast_mutex_lock(&intf->lock);
-	struct ast_channel *ast_chan = intf->active_call;
+	struct vgsm_chan *vgsm_chan = vgsm_chan_get(intf->vgsm_chan);
 	ast_mutex_unlock(&intf->lock);
 
 	switch(call->state) {
 	case VGSM_CALL_STATE_UNUSED:
 
-		if (ast_chan && ast_chan->pbx) {
+		if (vgsm_chan && vgsm_chan->ast_chan->pbx) {
 			ast_log(LOG_NOTICE,
 				"Call disappeared from SLCC,"
 				" requesting HANGUP\n");
 
-			ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
         	}
 	break;
 
 	case VGSM_CALL_STATE_ACTIVE: {
-		if (!ast_chan) {
+		if (!vgsm_chan) {
 			ast_log(LOG_ERROR, "Call is active but there is no"
 				" current call\n");
 			vgsm_req_put(vgsm_req_make(&intf->comm,
 					5 * SEC, "AT+CHUP"));
 
-			return;
+			break;
 		}
 
-		if (ast_chan->_state != AST_STATE_UP) {
-			ast_setstate(ast_chan, AST_STATE_UP);
-			ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
+		if (vgsm_chan->ast_chan->_state != AST_STATE_UP) {
+			ast_setstate(vgsm_chan->ast_chan, AST_STATE_UP);
+			ast_queue_control(vgsm_chan->ast_chan,
+						AST_CONTROL_ANSWER);
 		}
 	}
 	break;
@@ -3776,7 +3837,7 @@ static void vgsm_handle_slcc_update(
 	break;
 
 	case VGSM_CALL_STATE_ALERTING: {
-		if (!ast_chan) {
+		if (!vgsm_chan) {
 			ast_log(LOG_ERROR,
 				"Call is alerting but there is no"
 				" current call\n");
@@ -3784,12 +3845,13 @@ static void vgsm_handle_slcc_update(
 			vgsm_req_put(vgsm_req_make(&intf->comm,
 						5 * SEC, "AT+CHUP"));
 
-			return;
+			break;
 		}
 
-		if (ast_chan->_state != AST_STATE_RINGING) {
-			ast_setstate(ast_chan, AST_STATE_RINGING);
-			ast_queue_control(ast_chan, AST_CONTROL_RINGING);
+		if (vgsm_chan->ast_chan->_state != AST_STATE_RINGING) {
+			ast_setstate(vgsm_chan->ast_chan, AST_STATE_RINGING);
+			ast_queue_control(vgsm_chan->ast_chan,
+							AST_CONTROL_RINGING);
 		}
 	}
 	break;
@@ -3806,9 +3868,13 @@ static void vgsm_handle_slcc_update(
 	break;
 
 	case VGSM_CALL_STATE_DROPPED:
-		ast_queue_control(ast_chan, AST_CONTROL_DISCONNECT);
+		if (vgsm_chan)
+			ast_queue_control(vgsm_chan->ast_chan,
+					AST_CONTROL_DISCONNECT);
 	break;
 	}
+
+	vgsm_chan_put(vgsm_chan);
 }
 
 static void handle_unsolicited_ciev_battchg(
