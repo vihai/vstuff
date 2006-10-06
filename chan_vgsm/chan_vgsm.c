@@ -106,6 +106,14 @@
  * Furthermore, the module contains module->comm which is another object
  * protected by its own lock, so, it has its own access policy.
  *
+ * vgsm_module_config structures are instantiated on configuration and a
+ * pointer to the current configuration is set into vgsm_module.
+ * The values contained in a vgsm_module_config instance are read-only,
+ * procedures which want a stable configuration may simply take a reference
+ * to the vgsm_module_config object and keep it for as long as it is needed.
+ * For example, a snapshot of the configuration is taken into the channel 
+ * structure and kept for as long as the call lasts.
+ *
  */
 
 struct vgsm_state vgsm = {
@@ -118,22 +126,6 @@ struct vgsm_state vgsm = {
 	.debug_serial = FALSE,
 #endif
 
-	.default_module = {
-		.context = "vgsm",
-		.pin = "",
-		.rx_gain = 255,
-		.tx_gain = 255,
-		.set_clock = 0,
-		.poweroff_on_exit = TRUE,
-		.operator_selection = VGSM_OPSEL_AUTOMATIC,
-		.operator_id = "",
-		.sms_service_center = "",
-		.sms_sender_domain = "localhost",
-		.sms_recipient_address = "root@localhost",
-		.dtmf_quelch = FALSE,
-		.dtmf_mutemax = FALSE,
-		.dtmf_relax = FALSE,
-	}
 };
 
 struct vgsm_chan *vgsm_chan_get(struct vgsm_chan *vgsm_chan)
@@ -305,8 +297,6 @@ static struct vgsm_urc_class urc_classes[];
 
 static void vgsm_reload_config(void)
 {
-	/* TODO FIXME XXX: Fix locking during reload */
-
 	struct ast_config *cfg;
 	cfg = ast_config_load(VGSM_CONFIG_FILE);
 	if (!cfg) {
@@ -329,64 +319,7 @@ static void vgsm_reload_config(void)
 		var = var->next;
 	}
 
-	var = ast_variable_browse(cfg, "global");
-	while (var) {
-		if (vgsm_module_from_var(&vgsm.default_module, var) < 0) {
-			ast_log(LOG_WARNING,
-				"Unknown configuration variable %s\n",
-				var->name);
-		}
-
-		var = var->next;
-	}
-
-	const char *cat;
-	for (cat = ast_category_browse(cfg, NULL); cat;
-	     cat = ast_category_browse(cfg, (char *)cat)) {
-
-		if (!strcasecmp(cat, "general") ||
-		    !strcasecmp(cat, "global"))
-			continue;
-
-		int found = FALSE;
-		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node) {
-			if (!strcasecmp(module->name, cat)) {
-				found = TRUE;
-				break;
-			}
-		}
-
-		if (!found) {
-			module = vgsm_module_alloc();
-			if (!module) {
-				// Do something FIXME
-				return;
-			}
-
-			strncpy(module->name, cat, sizeof(module->name));
-			vgsm_module_copy_config(module, &vgsm.default_module);
-
-			vgsm_comm_init(&module->comm, vgsm_module_urcs);
-
-			list_add_tail(&module->ifs_node, &vgsm.ifs);
-
-			vgsm_module_set_status(module,
-					VGSM_MODULE_STATUS_CLOSED,
-					CLOSED_POSTPONE);
-		}
-
-		var = ast_variable_browse(cfg, (char *)cat);
-		while (var) {
-			if (vgsm_module_from_var(module, var) < 0) {
-				ast_log(LOG_WARNING,
-					"Unknown configuration variable %s\n",
-					var->name);
-			}
-			
-			var = var->next;
-		}
-	}
+	vgsm_module_reload(cfg);
 
 	ast_config_destroy(cfg);
 
@@ -522,6 +455,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	}
 
 	ast_mutex_lock(&module->lock);
+
 	if (module->status != VGSM_MODULE_STATUS_READY) {
 		ast_cli(fd, "Interface '%s' is not ready\n", module->name);
 		ast_mutex_unlock(&module->lock);
@@ -539,8 +473,6 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 
 	module->sending_sms = TRUE;
 
-	ast_mutex_unlock(&module->lock);
-
 	struct vgsm_sms *sms;
 	sms = vgsm_sms_alloc();
 	if (!sms) {
@@ -552,7 +484,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	sms->module = module;
 
 	vgsm_number_parse(
-		module->sms_service_center,
+		module->current_config->sms_service_center,
 		sms->smcc, sizeof(sms->smcc),
 		&sms->smcc_np, &sms->smcc_ton);
 
@@ -561,6 +493,8 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 		sms->dest, sizeof(sms->dest),
 		&sms->dest_np,
 		&sms->dest_ton);
+
+	ast_mutex_unlock(&module->lock);
 
 	sms->timestamp = time(NULL);
 
@@ -1105,7 +1039,12 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 		goto err_vgsm_alloc;
 	}
 
+	ast_mutex_lock(&module->lock);
+
 	vgsm_chan->module = vgsm_module_get(module);
+	vgsm_chan->mc = vgsm_module_config_get(module->current_config);
+
+	ast_mutex_unlock(&module->lock);
 
 	struct ast_channel *ast_chan;
 	ast_chan = vgsm_new(vgsm_chan, AST_STATE_OFFHOOK);
@@ -1114,9 +1053,9 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
-		vgsm_chan->module->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
-		vgsm_chan->module->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
-		vgsm_chan->module->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
+		vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
+		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
+		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	vgsm.usecnt++;
@@ -1124,7 +1063,8 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 	ast_update_use_count();
 
 	strcpy(ast_chan->exten, "s");
-	strncpy(ast_chan->context, module->context, sizeof(ast_chan->context));
+	strncpy(ast_chan->context, vgsm_chan->mc->context,
+					sizeof(ast_chan->context));
 	ast_chan->priority = 1;
 
 	snprintf(ast_chan->name, sizeof(ast_chan->name),
@@ -1228,12 +1168,13 @@ static int vgsm_call(
 
 	module->vgsm_chan = vgsm_chan_get(vgsm_chan);
 	vgsm_chan->module = vgsm_module_get(module);
+	vgsm_chan->mc = vgsm_module_config_get(module->current_config);
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
-		vgsm_chan->module->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
-		vgsm_chan->module->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
-		vgsm_chan->module->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
+		vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
+		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
+		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	if (option_debug)
 		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_chan->name);
@@ -1283,6 +1224,10 @@ static int vgsm_call(
 	return 0;
 
 err_atd_failed:
+	vgsm_module_config_put(vgsm_chan->mc);
+	vgsm_chan->mc = NULL;
+	vgsm_module_put(vgsm_chan->module);
+	vgsm_chan->module = NULL;
 err_module_busy:
 err_module_not_registered:
 err_module_not_ready:
@@ -1798,7 +1743,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		ast_mutex_unlock(&module->lock);
 		goto err_module_not_ready;
 	}
-	ast_mutex_unlock(&module->lock);
 
 	/* now the module is ok, starting sms setup */
 	struct vgsm_sms *sms;
@@ -1812,7 +1756,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	sms->module = module;
 
 	vgsm_number_parse(
-		module->sms_service_center,
+		module->current_config->sms_service_center,
 		sms->smcc, sizeof(sms->smcc),
 		&sms->smcc_np, &sms->smcc_ton);
 
@@ -1821,6 +1765,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		sms->dest, sizeof(sms->dest),
 		&sms->dest_np,
 		&sms->dest_ton);
+
+	ast_mutex_unlock(&module->lock);
 
 	sms->timestamp = time(NULL);
 
@@ -1958,6 +1904,9 @@ int load_module()
 	INIT_LIST_HEAD(&vgsm.ifs);
 	INIT_LIST_HEAD(&vgsm.op_list);
 
+	vgsm.default_mc = vgsm_module_config_alloc();
+	vgsm_module_config_default(vgsm.default_mc);
+
 	vgsm.router_control_fd = open("/dev/visdn/router-control", O_RDWR);
 	if (vgsm.router_control_fd < 0) {
 		ast_log(LOG_ERROR, "Unable to open router-control: %s\n",
@@ -2015,6 +1964,7 @@ err_channel_register:
 
 	close(vgsm.router_control_fd);
 err_open_router_control:
+	vgsm_module_config_put(vgsm.default_mc);
 
 	return err;
 }
@@ -2036,6 +1986,8 @@ int unload_module(void)
 	ast_channel_unregister(&vgsm_tech);
 
 	close(vgsm.router_control_fd);
+
+	vgsm_module_config_put(vgsm.default_mc);
 
 	return 0;
 }

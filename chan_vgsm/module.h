@@ -124,16 +124,13 @@ struct vgsm_call
 	int updated;
 };
 
-struct vgsm_module
+struct vgsm_module;
+struct vgsm_module_config
 {
-	struct list_head ifs_node;
-
 	int refcnt;
 
-	ast_mutex_t lock;
+	struct vgsm_module *module;
 
-	/* Configuration */
-	char name[64];
 	char device_filename[PATH_MAX];
 
 	char context[AST_MAX_EXTENSION];
@@ -154,16 +151,25 @@ struct vgsm_module
 	BOOL dtmf_quelch;
 	BOOL dtmf_mutemax;
 	BOOL dtmf_relax;
+};
 
-	/* Operative data */
+struct vgsm_module
+{
+	struct list_head ifs_node;
+
+	int refcnt;
+
+	ast_mutex_t lock;
+
+	struct vgsm_module_config *current_config;
+
+	char name[64];
 
 	enum vgsm_module_status status;
 	longtime_t timer_expiration;
 
 	char *lockdown_reason;
 	int power_attempts;
-
-	int call_monitor;
 
 	struct vgsm_call calls[4];
 
@@ -219,6 +225,12 @@ struct vgsm_module
 
 extern struct vgsm_urc_class vgsm_module_urcs[];
 
+struct vgsm_module_config *vgsm_module_config_alloc(void);
+struct vgsm_module_config *vgsm_module_config_get(
+	struct vgsm_module_config *module_config);
+void vgsm_module_config_put(struct vgsm_module_config *module_config);
+void vgsm_module_config_default(struct vgsm_module_config *mc);
+
 struct vgsm_module *vgsm_module_alloc(void);
 struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
 void vgsm_module_put(struct vgsm_module *module);
@@ -236,16 +248,11 @@ void vgsm_module_set_status_reason(
 	const char *fmt, ...)
 	__attribute__ ((format (printf, 4, 5)));
 
+void vgsm_module_reload(struct ast_config *cfg);
+
 void vgsm_module_unexpected_error(struct vgsm_module *module, int err);
 
 const char *vgsm_module_error_to_text(int code);
-
-void vgsm_module_copy_config(
-	struct vgsm_module *dst,
-	const struct vgsm_module *src);
-int vgsm_module_from_var(
-	struct vgsm_module *module,
-	struct ast_variable *var);
 
 void vgsm_module_shutdown_all(void);
 

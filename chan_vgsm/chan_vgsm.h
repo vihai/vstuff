@@ -35,6 +35,7 @@ struct vgsm_chan {
 	struct ast_channel *ast_chan;
 
 	struct vgsm_module *module;
+	struct vgsm_module_config *mc;
 
 	int sp_fd;
 
@@ -52,7 +53,7 @@ struct vgsm_state
 {
 	ast_mutex_t lock;
 
-	struct vgsm_module default_module;
+	struct vgsm_module_config *default_mc;
 	struct list_head ifs;
 
 	struct list_head op_list;

@@ -946,14 +946,12 @@ reload_polls:
 
 	npolls = 0;
 
-	ast_mutex_lock(&vgsm.lock);
+//	ast_mutex_lock(&vgsm.lock);
 	struct vgsm_module *module;
 	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
 
-		if (module->comm.fd < 0) {
-			ast_mutex_unlock(&module->lock);
+		if (module->comm.fd < 0)
 			continue;
-		}
 
 		polls[npolls].fd = module->comm.fd;
 		polls[npolls].events = POLLHUP | POLLERR | POLLIN;
@@ -962,7 +960,7 @@ reload_polls:
 
 		npolls++;
 	}
-	ast_mutex_unlock(&vgsm.lock);
+//	ast_mutex_unlock(&vgsm.lock);
 
 	for(;;) {
 		int i;

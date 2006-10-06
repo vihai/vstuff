@@ -175,4 +175,4 @@ vgsm:
 chan_vgsm:
 ----------
 - Implement network listing command
-- Hangup and shutdown on * exit
+- Implement reconfiguration of operator selection on reload

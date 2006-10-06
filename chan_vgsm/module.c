@@ -69,6 +69,27 @@
 #define POWERING_OFF_TIMEOUT (7 * SEC)
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
+void vgsm_module_config_default(struct vgsm_module_config *mc)
+{
+	strcpy(mc->context, "vgsm");
+	strcpy(mc->pin, "");
+
+	mc->rx_gain = 255;
+	mc->tx_gain = 255;
+	mc->set_clock = 0;
+	mc->poweroff_on_exit = TRUE;
+	mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
+
+	strcpy(mc->operator_id, "");
+	strcpy(mc->sms_service_center, "");
+	strcpy(mc->sms_sender_domain, "localhost");
+	strcpy(mc->sms_recipient_address, "root@localhost");
+
+	mc->dtmf_quelch = FALSE;
+	mc->dtmf_mutemax = FALSE;
+	mc->dtmf_relax = FALSE;
+}
+
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
 {
 	switch(status) {
@@ -117,7 +138,6 @@ static const char *vgsm_net_status_to_text(
 
 	return "*UNKNOWN*";
 };
-
 
 static const char *vgsm_module_operator_selection_to_text(
 	enum vgsm_operator_selection selection)
@@ -574,6 +594,242 @@ static const char *vgsm_qual_to_text(int ber)
 	}
 }
 
+struct vgsm_module_config *vgsm_module_config_alloc(void)
+{
+	struct vgsm_module_config *module_config;
+
+	module_config = malloc(sizeof(*module_config));
+	if (!module_config)
+		return NULL;
+
+	memset(module_config, 0, sizeof(*module_config));
+
+	module_config->refcnt = 1;
+
+	return module_config;
+}
+
+struct vgsm_module_config *vgsm_module_config_get(
+	struct vgsm_module_config *module_config)
+{
+	assert(module_config);
+	assert(module_config->refcnt > 0);
+	assert(module_config->refcnt < 100000);
+
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	module_config->refcnt++;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	return module_config;
+}
+
+void vgsm_module_config_put(struct vgsm_module_config *module_config)
+{
+	assert(module_config);
+	assert(module_config->refcnt > 0);
+	assert(module_config->refcnt < 100000);
+
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	int refcnt = --module_config->refcnt;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	if (!refcnt)
+		free(module_config);
+}
+
+static int vgsm_module_config_from_var(
+	struct vgsm_module_config *mc,
+	struct ast_variable *var)
+{
+	if (!strcasecmp(var->name, "device")) { 
+		strncpy(mc->device_filename, var->value,
+			sizeof(mc->device_filename));
+	} else if (!strcasecmp(var->name, "context")) {
+		strncpy(mc->context, var->value, sizeof(mc->context));
+	} else if (!strcasecmp(var->name, "pin")) {
+		strncpy(mc->pin, var->value, sizeof(mc->pin));
+	} else if (!strcasecmp(var->name, "rx_gain")) {
+		mc->rx_gain = atoi(var->value);
+	} else if (!strcasecmp(var->name, "tx_gain")) {
+		mc->tx_gain = atoi(var->value);
+	} else if (!strcasecmp(var->name, "set_clock")) {
+		mc->set_clock = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "poweroff_on_exit")) {
+		mc->poweroff_on_exit = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "operator_selection")) {
+		if (!strcasecmp(var->value, "auto"))
+			mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
+		else if (!strcasecmp(var->value, "manual_unlocked"))
+			mc->operator_selection = VGSM_OPSEL_MANUAL_UNLOCKED;
+		else if (!strcasecmp(var->value, "manual_fallback"))
+			mc->operator_selection = VGSM_OPSEL_MANUAL_FALLBACK;
+		else if (!strcasecmp(var->value, "manual_locked"))
+			mc->operator_selection = VGSM_OPSEL_MANUAL_LOCKED;
+		else
+			ast_log(LOG_WARNING,
+				"Operator selection '%s' unknown\n",
+				var->value);
+	} else if (!strcasecmp(var->name, "operator_id")) {
+		strncpy(mc->operator_id, var->value,
+			sizeof(mc->operator_id));
+	} else if (!strcasecmp(var->name, "sms_service_center")) { 
+		strncpy(mc->sms_service_center, var->value,
+			sizeof(mc->sms_service_center));
+	} else if (!strcasecmp(var->name, "sms_sender_domain")) { 
+		strncpy(mc->sms_sender_domain, var->value,
+			sizeof(mc->sms_sender_domain));
+	} else if (!strcasecmp(var->name, "sms_recipient_address")) { 
+		strncpy(mc->sms_recipient_address, var->value,
+			sizeof(mc->sms_recipient_address));
+	} else if (!strcasecmp(var->name, "dtmf_quelch")) { 
+		mc->dtmf_quelch = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "dtmf_mutemax")) { 
+		mc->dtmf_mutemax = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "dtmf_relax")) { 
+		mc->dtmf_relax = ast_true(var->value);
+	} else {
+		return -1;
+	}
+
+	return 0;
+}
+
+static void vgsm_module_config_copy(
+	struct vgsm_module_config *dst,
+	const struct vgsm_module_config *src)
+{
+	strncpy(dst->device_filename, src->device_filename,
+		sizeof(dst->device_filename));
+	strncpy(dst->context, src->context,
+		sizeof(dst->context));
+	strncpy(dst->pin, src->pin,
+		sizeof(dst->pin));
+
+	dst->rx_gain = src->rx_gain;
+	dst->tx_gain = src->tx_gain;
+	dst->set_clock = src->set_clock;
+	dst->poweroff_on_exit = src->poweroff_on_exit;
+	dst->operator_selection = src->operator_selection;
+
+	strncpy(dst->operator_id, src->operator_id,
+		sizeof(dst->operator_id));
+
+	strncpy(dst->sms_service_center, src->sms_service_center,
+		sizeof(dst->sms_service_center));
+	strncpy(dst->sms_sender_domain, src->sms_sender_domain,
+		sizeof(dst->sms_sender_domain));
+	strncpy(dst->sms_recipient_address, src->sms_recipient_address,
+		sizeof(dst->sms_recipient_address));
+
+	dst->dtmf_quelch = src->dtmf_quelch;
+	dst->dtmf_mutemax = src->dtmf_mutemax;
+	dst->dtmf_relax = src->dtmf_relax;
+}
+
+static void vgsm_module_reconfigure(
+	struct ast_config *cfg,
+	const char *name)
+{
+	/* Allocate a new module configuration */
+
+	struct vgsm_module_config *mc;
+	mc = vgsm_module_config_alloc();
+	if (!mc) {
+		ast_log(LOG_ERROR, "Cannot allocate new module config %s\n",
+			name);
+		goto err_module_config_alloc;
+	}
+
+	vgsm_module_config_copy(mc, vgsm.default_mc);
+
+	struct ast_variable *var;
+	var = ast_variable_browse(cfg, (char *)name);
+	while (var) {
+		if (vgsm_module_config_from_var(mc, var) < 0) {
+			ast_log(LOG_WARNING,
+				"Unknown configuration variable %s\n",
+				var->name);
+		}
+		
+		var = var->next;
+	}
+
+	ast_mutex_lock(&vgsm.lock);
+
+	struct vgsm_module *module = vgsm_module_get_by_name(name);
+	if (!module) {
+		module = vgsm_module_alloc();
+		if (!module) {
+			ast_log(LOG_ERROR, "Cannot allocate new module %s\n",
+				name);
+
+			ast_mutex_unlock(&vgsm.lock);
+			goto err_module_alloc;
+		}
+
+		strncpy(module->name, name, sizeof(module->name));
+
+		vgsm_comm_init(&module->comm, vgsm_module_urcs);
+
+		list_add_tail(&module->ifs_node, &vgsm.ifs);
+
+		vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_CLOSED,
+				CLOSED_POSTPONE);
+	}
+
+	ast_mutex_lock(&module->lock);
+	if (module->current_config) {
+		vgsm_module_config_put(module->current_config);
+		module->current_config = NULL;
+	}
+
+	mc->module = module;
+	module->current_config = vgsm_module_config_get(mc);
+	ast_mutex_unlock(&module->lock);
+
+	ast_mutex_unlock(&vgsm.lock);
+
+	vgsm_module_config_put(mc);
+
+	return;
+
+	vgsm_module_put(module);
+err_module_alloc:
+	vgsm_module_config_put(mc);
+err_module_config_alloc:
+
+	return;
+}
+
+void vgsm_module_reload(struct ast_config *cfg)
+{
+	/* Read default interface configuration */
+
+	struct ast_variable *var;
+	var = ast_variable_browse(cfg, "global");
+	while (var) {
+		if (vgsm_module_config_from_var(vgsm.default_mc, var) < 0) {
+			ast_log(LOG_WARNING,
+				"Unknown configuration variable %s\n",
+				var->name);
+		}
+
+		var = var->next;
+	}
+
+	const char *cat;
+	for (cat = ast_category_browse(cfg, NULL); cat;
+	     cat = ast_category_browse(cfg, (char *)cat)) {
+
+		if (!strcasecmp(cat, "general") ||
+		    !strcasecmp(cat, "global"))
+			continue;
+
+		vgsm_module_reconfigure(cfg, cat);
+	}
+}
+
 struct vgsm_module *vgsm_module_alloc(void)
 {
 	struct vgsm_module *module;
@@ -743,95 +999,6 @@ char *vgsm_module_completion(char *line, char *word, int state)
 	return NULL;
 }
 
-int vgsm_module_from_var(
-	struct vgsm_module *module,
-	struct ast_variable *var)
-{
-	if (!strcasecmp(var->name, "device")) { 
-		strncpy(module->device_filename, var->value,
-			sizeof(module->device_filename));
-	} else if (!strcasecmp(var->name, "context")) {
-		strncpy(module->context, var->value, sizeof(module->context));
-	} else if (!strcasecmp(var->name, "pin")) {
-		strncpy(module->pin, var->value, sizeof(module->pin));
-	} else if (!strcasecmp(var->name, "rx_gain")) {
-		module->rx_gain = atoi(var->value);
-	} else if (!strcasecmp(var->name, "tx_gain")) {
-		module->tx_gain = atoi(var->value);
-	} else if (!strcasecmp(var->name, "set_clock")) {
-		module->set_clock = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "poweroff_on_exit")) {
-		module->poweroff_on_exit = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "operator_selection")) {
-		if (!strcasecmp(var->value, "auto"))
-			module->operator_selection = VGSM_OPSEL_AUTOMATIC;
-		else if (!strcasecmp(var->value, "manual_unlocked"))
-			module->operator_selection = VGSM_OPSEL_MANUAL_UNLOCKED;
-		else if (!strcasecmp(var->value, "manual_fallback"))
-			module->operator_selection = VGSM_OPSEL_MANUAL_FALLBACK;
-		else if (!strcasecmp(var->value, "manual_locked"))
-			module->operator_selection = VGSM_OPSEL_MANUAL_LOCKED;
-		else
-			ast_log(LOG_WARNING,
-				"Operator selection '%s' unknown\n",
-				var->value);
-	} else if (!strcasecmp(var->name, "operator_id")) {
-		strncpy(module->operator_id, var->value,
-			sizeof(module->operator_id));
-	} else if (!strcasecmp(var->name, "sms_service_center")) { 
-		strncpy(module->sms_service_center, var->value,
-			sizeof(module->sms_service_center));
-	} else if (!strcasecmp(var->name, "sms_sender_domain")) { 
-		strncpy(module->sms_sender_domain, var->value,
-			sizeof(module->sms_sender_domain));
-	} else if (!strcasecmp(var->name, "sms_recipient_address")) { 
-		strncpy(module->sms_recipient_address, var->value,
-			sizeof(module->sms_recipient_address));
-	} else if (!strcasecmp(var->name, "dtmf_quelch")) { 
-		module->dtmf_quelch = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "dtmf_mutemax")) { 
-		module->dtmf_mutemax = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "dtmf_relax")) { 
-		module->dtmf_relax = ast_true(var->value);
-	} else {
-		return -1;
-	}
-
-	return 0;
-}
-
-void vgsm_module_copy_config(
-	struct vgsm_module *dst,
-	const struct vgsm_module *src)
-{
-	strncpy(dst->device_filename, src->device_filename,
-		sizeof(dst->device_filename));
-	strncpy(dst->context, src->context,
-		sizeof(dst->context));
-	strncpy(dst->pin, src->pin,
-		sizeof(dst->pin));
-
-	dst->rx_gain = src->rx_gain;
-	dst->tx_gain = src->tx_gain;
-	dst->set_clock = src->set_clock;
-	dst->poweroff_on_exit = src->poweroff_on_exit;
-	dst->operator_selection = src->operator_selection;
-
-	strncpy(dst->operator_id, src->operator_id,
-		sizeof(dst->operator_id));
-
-	strncpy(dst->sms_service_center, src->sms_service_center,
-		sizeof(dst->sms_service_center));
-	strncpy(dst->sms_sender_domain, src->sms_sender_domain,
-		sizeof(dst->sms_sender_domain));
-	strncpy(dst->sms_recipient_address, src->sms_recipient_address,
-		sizeof(dst->sms_recipient_address));
-
-	dst->dtmf_quelch = src->dtmf_quelch;
-	dst->dtmf_mutemax = src->dtmf_mutemax;
-	dst->dtmf_relax = src->dtmf_relax;
-}
-
 static void vgsm_module_ignite(
 	struct vgsm_module *module)
 {
@@ -864,6 +1031,8 @@ static void vgsm_show_module(int fd, struct vgsm_module *module)
 {
 	ast_mutex_lock(&module->lock);
 
+	struct vgsm_module_config *mc = module->current_config;
+
 	ast_cli(fd, "\n------ Interface '%s' ---------\n", module->name);
 
 	ast_cli(fd,
@@ -874,12 +1043,12 @@ static void vgsm_show_module(int fd, struct vgsm_module *module)
 		"  TX-gain: %d\n"
 		"  Set clock: %s\n"
 		"  Power off on exit: %s\n",
-		module->device_filename,
-		module->context,
-		module->rx_gain,
-		module->tx_gain,
-		module->set_clock ? "YES" : "NO",
-		module->poweroff_on_exit ? "YES" : "NO");
+		mc->device_filename,
+		mc->context,
+		mc->rx_gain,
+		mc->tx_gain,
+		mc->set_clock ? "YES" : "NO",
+		mc->poweroff_on_exit ? "YES" : "NO");
 
 	ast_cli(fd,
 		"\nModule:\n"
@@ -983,24 +1152,24 @@ static void vgsm_show_module(int fd, struct vgsm_module *module)
 		"\nNetwork: \n"
 		"  Operator Selection: %s\n",
 		vgsm_module_operator_selection_to_text(
-			module->operator_selection));
+			mc->operator_selection));
 
-	if (module->operator_selection != VGSM_OPSEL_AUTOMATIC) {
+	if (mc->operator_selection != VGSM_OPSEL_AUTOMATIC) {
 		struct vgsm_operator_info *op_info;
-		op_info = vgsm_operators_search(module->operator_id);
+		op_info = vgsm_operators_search(mc->operator_id);
 
 		if (op_info) {
 			ast_cli(fd,
 				"  Desidered network:"
 				" %s (%s - %s - %s)\n",
-				module->operator_id,
+				mc->operator_id,
 				op_info->name,
 				op_info->country,
 				op_info->bands);
 		} else {
 			ast_cli(fd,
 				"  Desidered network: %s)\n",
-				module->operator_id);
+				mc->operator_id);
 		}
 	}
 
@@ -1178,19 +1347,21 @@ static int do_show_vgsm_modules(int fd, int argc, char *argv[])
 {
 	struct vgsm_module *module;
 
-	ast_mutex_lock(&vgsm.lock);
 	if (argc >= 4) {
-		list_for_each_entry(module, &vgsm.ifs, ifs_node) {
-			if (!strcasecmp(module->name, argv[3])) {
-				vgsm_show_module(fd, module);
-				break;
-			}
+		module = vgsm_module_get_by_name(argv[3]);
+		if (!module) {
+			ast_cli(fd, "Module %s not found\n", argv[3]);
+			return RESULT_FAILURE;
 		}
+
+		vgsm_show_module(fd, module);
+
 	} else {
+		ast_mutex_lock(&vgsm.lock);
 		list_for_each_entry(module, &vgsm.ifs, ifs_node)
 			vgsm_show_module_summary(fd, module);
+		ast_mutex_unlock(&vgsm.lock);
 	}
-	ast_mutex_unlock(&vgsm.lock);
 
 	return RESULT_SUCCESS;
 }
@@ -2820,7 +2991,8 @@ struct vgsm_urc_class vgsm_module_urcs[] =
 };
 
 static int vgsm_module_pin_check_and_input(
-	struct vgsm_module *module)
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
 {
 	struct vgsm_comm *comm = &module->comm;
 	struct vgsm_req *req;
@@ -2873,9 +3045,9 @@ static int vgsm_module_pin_check_and_input(
 				VGSM_MODULE_STATUS_WAITING_PIN, -1,
 				"Input PIN manually");
 			res = -1;
-		} else if (strlen(module->pin)) {
+		} else if (strlen(mc->pin)) {
 			int err = vgsm_req_make_wait_result(comm, 20 * SEC,
-					"AT+CPIN=\"%s\"", module->pin);
+					"AT+CPIN=\"%s\"", mc->pin);
 
 			if (err != VGSM_RESP_OK) {
 				vgsm_module_set_status_reason(module,
@@ -2923,35 +3095,33 @@ err_spic:
 	return -1;
 }
 
-static int vgsm_module_codec_init(struct vgsm_module *module)
+static int vgsm_module_codec_init(
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
 {
 	struct vgsm_codec_ctl cctl;
 
 	cctl.parameter = VGSM_CODEC_RXGAIN;
-	cctl.value = module->rx_gain;
+	cctl.value = mc->rx_gain;
 
-	//sleep(1);
 	if (ioctl(module->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(IOC_CODEC_SET, RXGAIN) failed: %s\n",
 			strerror(errno));
 
-		return -1;
+		goto err_ioctl_rxgain;
 	}
 
 	cctl.parameter = VGSM_CODEC_TXGAIN;
-	cctl.value = module->tx_gain;
+	cctl.value = mc->tx_gain;
 
-	sleep(1);
 	if (ioctl(module->comm.fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(IOC_CODEC_SET, TXGAIN) failed: %s\n",
 			strerror(errno));
 
-		return -1;
+		goto err_ioctl_txgain;
 	}
-
-	sleep(1);
 /*
 	} else if (!strcasecmp(parameter, "rxpre")) {
 		cctl.parameter = VGSM_CODEC_TXPRE;
@@ -2970,11 +3140,17 @@ static int vgsm_module_codec_init(struct vgsm_module *module)
 		return 1;
 	}
 */
-
 	return 0;
+
+err_ioctl_txgain:
+err_ioctl_rxgain:
+
+	return -1;
 }
 
-static int vgsm_module_prepin_configure(struct vgsm_module *module)
+static int vgsm_module_prepin_configure(
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
 {
 	struct vgsm_comm *comm = &module->comm;
 	int err;
@@ -2992,7 +3168,7 @@ static int vgsm_module_prepin_configure(struct vgsm_module *module)
 		goto err_no_req;
 
 	/* Sets current time on module */
-	if (module->set_clock) {
+	if (mc->set_clock) {
 		struct tm *tm;
 		time_t ct = time(NULL);
 
@@ -3073,13 +3249,15 @@ err_no_req:
 	return -1;
 }
 
-static int vgsm_module_configure(struct vgsm_module *module)
+static int vgsm_module_configure(
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
 {
 	struct vgsm_comm *comm = &module->comm;
 	int err;
 
 	/* Configure operator selection */
-	switch(module->operator_selection) {
+	switch(mc->operator_selection) {
 	case VGSM_OPSEL_AUTOMATIC:
 		err = vgsm_req_make_wait_result(
 			comm, 180 * SEC, "AT+COPS=0,2");
@@ -3088,19 +3266,19 @@ static int vgsm_module_configure(struct vgsm_module *module)
 	case VGSM_OPSEL_MANUAL_UNLOCKED:
 		err = vgsm_req_make_wait_result(
 			comm, 180 * SEC, "AT+COPS=1,2,%s",
-			module->operator_id);
+			mc->operator_id);
 	break;
 
 	case VGSM_OPSEL_MANUAL_FALLBACK:
 		err = vgsm_req_make_wait_result(
 			comm, 180 * SEC, "AT+COPS=4,2,%s",
-			module->operator_id);
+			mc->operator_id);
 	break;
 
 	case VGSM_OPSEL_MANUAL_LOCKED:
 		err = vgsm_req_make_wait_result(
 			comm, 180 * SEC, "AT+COPS=5,2,%s",
-			module->operator_id);
+			mc->operator_id);
 	break;
 
 	default:
@@ -3221,7 +3399,8 @@ err_no_req:
 }
 
 static int vgsm_module_update_static_info(
-	struct vgsm_module *module)
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
 {
 	struct vgsm_comm *comm = &module->comm;
 	struct vgsm_req *req;
@@ -3390,7 +3569,8 @@ static int vgsm_module_update_net_info(
 	const char *line = vgsm_req_first_line(req)->text;
 
 	if (strlen(line) > strlen("+CREG: "))
-		vgsm_update_module_by_creg(module, line + strlen("+CREG: "), TRUE);
+		vgsm_update_module_by_creg(module,
+				line + strlen("+CREG: "), TRUE);
 
 	vgsm_req_put_null(req);
 
@@ -3417,7 +3597,9 @@ err_creg_read_response:
 
 /***********************************************/
 
-static int vgsm_module_init_at_interface(struct vgsm_module *module)
+static int vgsm_module_init_at_interface(
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
 {
 	struct vgsm_comm *comm = &module->comm;
 	int err;
@@ -3451,17 +3633,20 @@ static void vgsm_module_open(
 {
 	assert(module->comm.fd == -1);
 
-	module->comm.fd = open(module->device_filename, O_RDWR);
-	if (module->comm.fd < 0) {
-		vgsm_comm_disable(&module->comm);
+	ast_mutex_lock(&module->lock);
+	struct vgsm_module_config *mc;
+	mc = vgsm_module_config_get(module->current_config);
+	ast_mutex_unlock(&module->lock);
 
+	module->comm.fd = open(mc->device_filename, O_RDWR);
+	if (module->comm.fd < 0) {
 		vgsm_module_set_status_reason(module,
 				VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
 				"Error opening device: open(%s): %s",
-				module->device_filename,
+				mc->device_filename,
 				strerror(errno));
 
-		return;
+		goto err_module_open;
 	}
 
 	module->comm.name = module->name;
@@ -3535,7 +3720,7 @@ static void vgsm_module_open(
 			" ioctl(POWER_GET): %s",
 			strerror(errno));
 
-		return;
+		goto err_ioctl_power_get;
 	}
 
 	if (val) {
@@ -3557,6 +3742,19 @@ static void vgsm_module_open(
 		vgsm_module_set_status(module, VGSM_MODULE_STATUS_POWERING_ON,
 					POWERING_ON_TIMEOUT);
 	}
+
+	vgsm_module_config_put(mc);
+
+	return;
+
+err_ioctl_power_get:
+	vgsm_comm_disable(&module->comm);
+
+	close(module->comm.fd);
+err_module_open:
+	vgsm_module_config_put(mc);
+
+	return;
 }
 
 static void vgsm_module_initialize(
@@ -3564,9 +3762,14 @@ static void vgsm_module_initialize(
 {
 	vgsm_debug_generic("Initializing module '%s'\n", module->name);
 
+	ast_mutex_lock(&module->lock);
+	struct vgsm_module_config *mc;
+	mc = vgsm_module_config_get(module->current_config);
+	ast_mutex_unlock(&module->lock);
+
 	vgsm_module_set_status(module, VGSM_MODULE_STATUS_INITIALIZING, -1);
 
-	if (vgsm_module_codec_init(module) < 0) {
+	if (vgsm_module_codec_init(module, mc) < 0) {
 		vgsm_comm_disable(&module->comm);
 		vgsm_module_set_status_reason(module,
 				VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
@@ -3599,32 +3802,37 @@ static void vgsm_module_initialize(
 		goto initialization_failure;
 	}
 
-	if (vgsm_module_init_at_interface(module) < 0)
+	if (vgsm_module_init_at_interface(module, mc) < 0)
 		goto initialization_failure;
 
-	if (vgsm_module_prepin_configure(module) < 0)
+	if (vgsm_module_prepin_configure(module, mc) < 0)
 		goto initialization_failure;
 
-	if (vgsm_module_pin_check_and_input(module) < 0)
+	if (vgsm_module_pin_check_and_input(module, mc) < 0)
 		goto initialization_failure;
 
-	if (vgsm_module_configure(module) < 0)
+	if (vgsm_module_configure(module, mc) < 0)
 		goto initialization_failure;
 
-	if (vgsm_module_update_static_info(module) < 0)
+	if (vgsm_module_update_static_info(module, mc) < 0)
 		goto initialization_failure;
 
 	if (vgsm_module_update_net_info(module) < 0)
 		goto initialization_failure;
 
-	vgsm_module_set_status(module, VGSM_MODULE_STATUS_READY, READY_UPDATE_TIME);
+	vgsm_module_set_status(module, VGSM_MODULE_STATUS_READY,
+						READY_UPDATE_TIME);
 
 	vgsm_debug_generic("Module '%s' successfully initialized\n",
 		module->name);
 
+	vgsm_module_config_put(mc);
+
 	return;
 
 initialization_failure:
+
+	vgsm_module_config_put(mc);
 
 	/* If no-one changed the status to something significant fall back to
 	 * FAILED
@@ -3777,7 +3985,9 @@ void vgsm_module_shutdown_all(void)
 	ast_mutex_lock(&vgsm.lock);
 	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
 
-		if (module->poweroff_on_exit &&
+		ast_mutex_lock(&module->lock);
+
+		if (module->current_config->poweroff_on_exit &&
 		    module->status != VGSM_MODULE_STATUS_CLOSED &&
 		    module->status != VGSM_MODULE_STATUS_POWERING_OFF &&
 		    module->status != VGSM_MODULE_STATUS_OFF &&
@@ -3789,6 +3999,8 @@ void vgsm_module_shutdown_all(void)
 			vgsm_req_put(vgsm_req_make(&module->comm,
 						3 * SEC, "AT^SMSO"));
 		}
+
+		ast_mutex_unlock(&module->lock);
 	}
 	ast_mutex_unlock(&vgsm.lock);
 
@@ -3801,7 +4013,7 @@ void vgsm_module_shutdown_all(void)
 		list_for_each_entry(module, &vgsm.ifs, ifs_node) {
 
 			ast_mutex_lock(&module->lock);
-			if (module->poweroff_on_exit &&
+			if (module->current_config->poweroff_on_exit &&
 			    module->status != VGSM_MODULE_STATUS_OFF)
 				not_off = TRUE;
 

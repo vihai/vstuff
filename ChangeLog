@@ -2,6 +2,20 @@
 # arch-tag: automatic-ChangeLog--daniele@orlandi.com--2005/isdn--devel--0.1
 #
 
+2006-10-06 17:28:22 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-698
+
+    Summary:
+      Added support for better dynamic reconfiguration with configuration snapshots
+    Revision:
+      isdn--devel--0.1--patch-698
+
+
+    modified files:
+     ChangeLog TODO chan_vgsm/chan_vgsm.c chan_vgsm/chan_vgsm.h
+     chan_vgsm/comm.c chan_vgsm/module.c chan_vgsm/module.h
+     chan_vgsm/sms.c
+
+
 2006-10-06 15:16:42 GMT	Daniele Orlandi <daniele@orlandi.com>	patch-697
 
     Summary:

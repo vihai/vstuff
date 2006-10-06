@@ -463,6 +463,9 @@ int vgsm_sms_spool(struct vgsm_sms *sms)
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 
+	ast_mutex_lock(&module->lock);
+	struct vgsm_module_config *mc = module->current_config;
+
 	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
             module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		fprintf(f,
@@ -492,15 +495,15 @@ int vgsm_sms_spool(struct vgsm_sms *sms)
 
 	fprintf(f, "From: <%s%s@%s>\n",
 		vgsm_make_number_prefix(sms->sender_np, sms->sender_ton),
-		sms->sender, module->sms_sender_domain);
+		sms->sender, mc->sms_sender_domain);
 	fprintf(f, "Subject: SMS message\n");
 	fprintf(f, "MIME-Version: 1.0\n");
 	fprintf(f, "Content-Type: text/plain\n\tcharset=\"UTF-8\"\n");
 
-	if (strchr(module->sms_recipient_address, '<'))
-		fprintf(f, "To: %s\n", module->sms_recipient_address);
+	if (strchr(mc->sms_recipient_address, '<'))
+		fprintf(f, "To: %s\n", mc->sms_recipient_address);
 	else
-		fprintf(f, "To: <%s>\n", module->sms_recipient_address);
+		fprintf(f, "To: <%s>\n", mc->sms_recipient_address);
 
         localtime_r(&sms->timestamp, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
@@ -511,6 +514,9 @@ int vgsm_sms_spool(struct vgsm_sms *sms)
 	fprintf(f, "X-SMS-Class: %d\n", sms->message_class);
 
 	fprintf(f, "\n");
+
+	mc = NULL;
+	ast_mutex_unlock(&module->lock);
 	
 	char outbuffer[1000];
 	char *inbuf = (char *)sms->text;
