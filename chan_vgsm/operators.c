@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <errno.h>
 
 #include "../config.h"
@@ -113,4 +114,6 @@ void vgsm_operators_init(void)
 	}
 
 	ast_mutex_unlock(&vgsm.lock);
+
+	ast_config_destroy(cfg);
 }
