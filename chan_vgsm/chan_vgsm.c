@@ -1336,25 +1336,27 @@ static int vgsm_indicate(struct ast_channel *ast_chan, int condition)
 	break;
 
 	case AST_CONTROL_HANGUP:
+		vgsm_module_counter_inc(module,
+			VGSM_CAUSE_LOCATION_LOCAL,
+			VGSM_CAUSE_REASON_NORMAL_CALL_CLEARING);
+
+		vgsm_module_hangup(module);
+	break;
+
 	case AST_CONTROL_CONGESTION:
-	case AST_CONTROL_BUSY: {
-		int err = vgsm_req_make_wait_result(
-				&module->comm, 5 * SEC, "AT+CHUP");
-		if (err != VGSM_RESP_OK)
-			ast_log(LOG_ERROR,
-				"Error hanging up: %s (%d)\n",
-				vgsm_module_error_to_text(err), err);
+		vgsm_module_counter_inc(module,
+			VGSM_CAUSE_LOCATION_LOCAL,
+			VGSM_CAUSE_REASON_CONGESTION);
 
-		ast_mutex_lock(&module->lock);
-		struct vgsm_chan *vgsm_chan = vgsm_chan_get(module->vgsm_chan);
-		ast_mutex_unlock(&module->lock);
+		vgsm_module_hangup(module);
+	break;
 
-		if (vgsm_chan) {
-			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
+	case AST_CONTROL_BUSY:
+		vgsm_module_counter_inc(module,
+			VGSM_CAUSE_LOCATION_LOCAL,
+			VGSM_CAUSE_REASON_USER_BUSY);
 
-			vgsm_chan_put(vgsm_chan);
-		}
-	}
+		vgsm_module_hangup(module);
 	break;
 	}
 
@@ -1451,29 +1453,22 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	vgsm_debug_generic("vgsm_hangup %s\n", ast_chan->name);
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-	struct vgsm_module *module = vgsm_chan->module;
 
-	if (module) {
-		int err = vgsm_req_make_wait_result(
-				&module->comm, 5 * SEC, "AT+CHUP");
-		if (err != VGSM_RESP_OK) {
-			ast_log(LOG_ERROR,
-				"Error hanging up: %s (%d)\n",
-				vgsm_module_error_to_text(err), err);
-			goto done;
-		}
-
-done:
-		ast_mutex_lock(&module->lock);
-		vgsm_chan_put(module->vgsm_chan);
-		module->vgsm_chan = NULL;
-		ast_mutex_unlock(&module->lock);
-	}
+	ast_mutex_lock(&ast_chan->lock);
 
 	if (vgsm_chan) {
+		if (vgsm_chan->module) {
+			vgsm_module_hangup(vgsm_chan->module);
+
+			vgsm_module_counter_inc(vgsm_chan->module,
+				VGSM_CAUSE_LOCATION_LOCAL,
+				VGSM_CAUSE_REASON_NORMAL_CALL_CLEARING);
+		}
+
 		if (vgsm_chan->sp_fd >= 0)
 			vgsm_disconnect_channel(vgsm_chan);
 
+		ast_mutex_unlock(&ast_chan->lock);
 		/* Wait for references to vgsm_chan to be released */
 		int refcnt;
 		do {
@@ -1483,6 +1478,7 @@ done:
 
 			usleep(100000);
 		} while(refcnt > 1);
+		ast_mutex_lock(&ast_chan->lock);
 
 		vgsm_destroy(vgsm_chan);
 		ast_chan->tech_pvt = NULL;
@@ -1492,8 +1488,6 @@ done:
 		ast_dsp_free(vgsm_chan->dsp);
 		vgsm_chan->dsp = NULL;
 	}
-
-	ast_mutex_lock(&ast_chan->lock);
 
 	close(ast_chan->fds[0]);
 

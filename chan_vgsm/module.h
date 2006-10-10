@@ -250,6 +250,11 @@ void vgsm_module_set_status_reason(
 
 void vgsm_module_reload(struct ast_config *cfg);
 
+void vgsm_module_hangup(struct vgsm_module *module);
+void vgsm_module_counter_inc(
+	struct vgsm_module *module,
+	int location,
+	int reason);
 void vgsm_module_unexpected_error(struct vgsm_module *module, int err);
 
 const char *vgsm_module_error_to_text(int code);
