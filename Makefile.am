@@ -51,8 +51,8 @@ release: distdir
 	tardir=$(distdir) && $(am__tar) | GZIP=$(GZIP_ENV) gzip -c >$(distdir).tar.gz
 	tardir=$(distdir) && $(am__tar) | bzip2 -9 -c >$(distdir).tar.bz2
 	$(am__remove_distdir)
-	gpg --sign -ab $(distdir).tar.gz
-	gpg --sign -ab $(distdir).tar.bz2
+	-gpg --sign -ab $(distdir).tar.gz
+	-gpg --sign -ab $(distdir).tar.bz2
 	scp $(distdir).tar.gz $(distdir).tar.gz.asc \
 	    $(distdir).tar.bz2 $(distdir).tar.bz2.asc \
 	    root@aj.uli.it:/www/www.visdn.org/htdocs/download/

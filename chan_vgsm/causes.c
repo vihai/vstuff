@@ -14,6 +14,8 @@
 
 #include <asterisk/causes.h>
 
+#include "causes.h"
+
 static const char *vgsm_cause_reason_2_to_text(int cause)
 {
 	switch(cause) {
@@ -290,6 +292,8 @@ static const char *vgsm_cause_reason_8_to_text(int cause)
 		return "Protocol error, unspecified";
 	case 127:
 		return "Interworking, unspecified";
+	case 1000:
+		return "Local";
 	default:
 		return "*UNKNOWN*";
 	}
@@ -683,7 +687,7 @@ const char *vgsm_cause_location_to_text(int location)
 {
 	switch(location) {
 	case 0:
-		return "No error (default)";
+		return "No error";
 	case 1:
 		return "SIEMENS L2 cause";
 	case 2:
@@ -757,6 +761,30 @@ const char *vgsm_cause_location_to_text(int location)
 		return "SIEMENS cause for PPP/IP-Stack";
 	case 248:
 		return "SIEMENS cause for IP via AT commands";
+	case 1000:
+		return "Asterisk";
+	default:
+		return "*UNKNOWN*";
+	}
+}
+
+static const char *vgsm_cause_reason_1000_to_text(int cause)
+{
+	switch(cause) {
+	case VGSM_CAUSE_REASON_NORMAL_CALL_CLEARING:
+		return "Normal call clearing";
+	case VGSM_CAUSE_REASON_NO_RESOURCES:
+		return "No resources";
+	case VGSM_CAUSE_REASON_SLCC_ERROR:
+		return "Unexpected SLCC error";
+	case VGSM_CAUSE_REASON_MODULE_NOT_READY:
+		return "Module not ready";
+	case VGSM_CAUSE_REASON_UNSUPPORTED_BEARER_TYPE:
+		return "Unsupported bearer type";
+	case VGSM_CAUSE_REASON_USER_BUSY:
+		return "User busy";
+	case VGSM_CAUSE_REASON_CONGESTION:
+		return "Congestion";
 	default:
 		return "*UNKNOWN*";
 	}
@@ -810,6 +838,8 @@ const char *vgsm_cause_reason_to_text(int location, int cause)
 	case 248:
 		return vgsm_cause_reason_248_to_text(cause);
 
+	case 1000:
+		return vgsm_cause_reason_1000_to_text(cause);
 	default:
 		return NULL;
 	}

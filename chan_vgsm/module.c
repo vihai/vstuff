@@ -881,8 +881,8 @@ void vgsm_module_put(struct vgsm_module *module)
 		if (module->lockdown_reason)
 			free(module->lockdown_reason);
 
-		struct vgsm_counter *counter;
-		list_for_each_entry(counter, &module->counters, node)
+		struct vgsm_counter *counter, *t;
+		list_for_each_entry_safe(counter, t, &module->counters, node)
 			free(counter);
 
 		free(module);
@@ -1520,7 +1520,7 @@ static struct ast_cli_entry vgsm_power =
 
 #define to_module(cm) container_of((cm), struct vgsm_module, comm)
 
-static void vgsm_module_counter_inc(
+void vgsm_module_counter_inc(
 	struct vgsm_module *module,
 	int location,
 	int reason)
@@ -1545,7 +1545,7 @@ static void vgsm_module_counter_inc(
 	list_add(&counter->node, &module->counters);
 	
 found:
-	counter++;
+	counter->count++;
 
 	ast_mutex_unlock(&module->lock);
 
@@ -1678,6 +1678,10 @@ static void handle_unsolicited_cring(
 			// FIXME TODO
 		}
 
+		vgsm_module_counter_inc(module,
+			VGSM_CAUSE_LOCATION_LOCAL,
+			VGSM_CAUSE_REASON_MODULE_NOT_READY);
+
 		goto err_module_not_ready;
 	}
 
@@ -1692,6 +1696,10 @@ static void handle_unsolicited_cring(
 				vgsm_module_error_to_text(err), err);
 		}
 
+		vgsm_module_counter_inc(module,
+			VGSM_CAUSE_LOCATION_LOCAL,
+			VGSM_CAUSE_REASON_UNSUPPORTED_BEARER_TYPE);
+
 		goto err_not_voice;
 	}
 
@@ -1704,6 +1712,10 @@ static void handle_unsolicited_cring(
 	module->vgsm_chan = vgsm_alloc_inbound_call(module);
 	if (!module->vgsm_chan) {
 		vgsm_req_put(vgsm_req_make(&module->comm, 5 * SEC, "AT+CHUP"));
+
+		vgsm_module_counter_inc(module,
+			VGSM_CAUSE_LOCATION_LOCAL,
+			VGSM_CAUSE_REASON_NO_RESOURCES);
 
 		goto err_alloc_call;
 	}
@@ -2141,6 +2153,27 @@ static void handle_unsolicited_cdsi(
 	ast_log(LOG_ERROR, "Unexptected CMTI!\n");
 }
 
+void vgsm_module_hangup(struct vgsm_module *module)
+{
+	int err = vgsm_req_make_wait_result(
+			&module->comm, 5 * SEC, "AT+CHUP");
+	if (err != VGSM_RESP_OK)
+		ast_log(LOG_ERROR,
+			"Error hanging up: %s (%d)\n",
+			vgsm_module_error_to_text(err), err);
+
+	ast_mutex_lock(&module->lock);
+	struct vgsm_chan *vgsm_chan = module->vgsm_chan;
+	module->vgsm_chan = NULL;
+	ast_mutex_unlock(&module->lock);
+
+	if (vgsm_chan) {
+		ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
+
+		vgsm_chan_put(vgsm_chan);
+	}
+}
+
 static void vgsm_handle_slcc_update(
 	struct vgsm_module *module,
 	struct vgsm_call *call)
@@ -2167,6 +2200,10 @@ static void vgsm_handle_slcc_update(
 				" current call\n");
 			vgsm_req_put(vgsm_req_make(&module->comm,
 					5 * SEC, "AT+CHUP"));
+
+			vgsm_module_counter_inc(module,
+				VGSM_CAUSE_LOCATION_LOCAL,
+				VGSM_CAUSE_REASON_SLCC_ERROR);
 
 			break;
 		}
@@ -2195,6 +2232,10 @@ static void vgsm_handle_slcc_update(
 
 			vgsm_req_put(vgsm_req_make(&module->comm,
 						5 * SEC, "AT+CHUP"));
+
+			vgsm_module_counter_inc(module,
+				VGSM_CAUSE_LOCATION_LOCAL,
+				VGSM_CAUSE_REASON_SLCC_ERROR);
 
 			break;
 		}
