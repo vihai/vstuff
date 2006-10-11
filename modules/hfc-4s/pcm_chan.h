@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,15 +13,17 @@
 #ifndef _HFC_PCM_CHAN_H
 #define _HFC_PCM_CHAN_H
 
-#include <linux/visdn/core.h>
-#include <linux/visdn/chan.h>
+#include <linux/kstreamer/kstreamer.h>
+#include <linux/kstreamer/node.h>
+#include <linux/kstreamer/link.h>
 
 #include "util.h"
 
 #define to_pcm_chan(chan)	\
 		container_of(chan, struct hfc_pcm_chan, visdn_chan)
 
-extern struct visdn_chan_class hfc_pcm_chan_class;
+extern struct ks_link_ops hfc_pcm_chan_rx_link_ops;
+extern struct ks_link_ops hfc_pcm_chan_tx_link_ops;
 
 enum hfc_pcm_chan_status {
 	HFC_PCM_CHAN_STATUS_FREE,
@@ -29,46 +31,55 @@ enum hfc_pcm_chan_status {
 };
 
 struct hfc_pcm_chan;
-struct hfc_pcm_slot
+struct hfc_pcm_chan_rx
 {
+	struct ks_link ks_link;
+
 	struct hfc_pcm_chan *chan;
 
-	int hw_index;
-	enum hfc_direction direction;
+	enum hfc_pcm_chan_status status;
+};
 
-	struct hfc_chan_simplex *connected_chan;
+struct hfc_pcm_chan_tx
+{
+	struct ks_link ks_link;
 
-	int used;
+	struct hfc_pcm_chan *chan;
+
+	enum hfc_pcm_chan_status status;
 };
 
 struct hfc_pcm_port;
 struct hfc_pcm_chan {
+	struct ks_node ks_node;
+
 	struct hfc_pcm_port *port;
 
-	enum hfc_pcm_chan_status status;
+	int timeslot;
 
-	int id;
-
-	int hw_index;
-
-	struct hfc_pcm_slot rx_slot;
-	struct hfc_pcm_slot tx_slot;
-
-	struct visdn_chan visdn_chan;
-
-	struct hfc_sys_chan *connected_sys_chan;
-	struct hfc_st_chan *connected_st_chan;
+	struct hfc_pcm_chan_rx rx;
+	struct hfc_pcm_chan_tx tx;
 };
 
+struct hfc_pcm_chan *hfc_pcm_chan_alloc(int flags);
 void hfc_pcm_chan_init(
 	struct hfc_pcm_chan *chan,
 	struct hfc_pcm_port *port,
 	const char *name,
-	int id,
-	int hw_index);
-int hfc_pcm_chan_register(
-	struct hfc_pcm_chan *chan);
-void hfc_pcm_chan_unregister(
-	struct hfc_pcm_chan *chan);
+	int timeslot);
+int hfc_pcm_chan_register(struct hfc_pcm_chan *chan);
+void hfc_pcm_chan_unregister(struct hfc_pcm_chan *chan);
+
+static inline struct hfc_pcm_chan *hfc_pcm_chan_get(struct hfc_pcm_chan *chan)
+{
+	ks_node_get(&chan->ks_node);
+
+	return chan;
+}
+
+static inline void hfc_pcm_chan_put(struct hfc_pcm_chan *chan)
+{
+	ks_node_put(&chan->ks_node);
+}
 
 #endif

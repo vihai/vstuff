@@ -39,10 +39,11 @@ struct vgsm_chan {
 
 	int sp_fd;
 
-	int sp_channel_id;
-	int module_channel_id;
+	char sp_node_id[80];
+	char module_node_id[80];
 
-	int pipeline_id;
+	int sp_module_pipeline_id;
+	int module_sp_pipeline_id;
 
 	char calling_number[21];
 

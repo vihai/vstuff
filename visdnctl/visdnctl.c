@@ -23,13 +23,15 @@
 
 #include <getopt.h>
 
-#include <linux/visdn/cxc.h>
+#include <linux/visdn/router.h>
 
 #include "visdnctl.h"
 #include "connect.h"
 #include "disconnect.h"
 #include "pipeline_start.h"
 #include "pipeline_stop.h"
+#include "pipeline_open.h"
+#include "pipeline_close.h"
 #include "netdev.h"
 
 int global_argc;
@@ -69,32 +71,34 @@ void print_usage(const char *fmt, ...)
 	exit(1);
 }
 
-int decode_chan_id(const char *chan_str)
+#if 0
+int decode_endpoint_id(const char *endpoint_str)
 {
-	int chan_id;
+	int endpoint_id;
 
-	if (chan_str[0] == '/') {
+	if (endpoint_str[0] == '/') {
 		char real_path[PATH_MAX];
 
-		if (!realpath(chan_str, real_path)) {
+		if (!realpath(endpoint_str, real_path)) {
 			fprintf(stderr, "Cannot resolve path '%s': %s\n",
-				chan_str, strerror(errno));
+				endpoint_str, strerror(errno));
 			return 1;
 		}
 
-		chan_id = atoi(basename(real_path));
+		endpoint_id = atoi(basename(real_path));
 
-		if (!chan_id) {
+		if (!endpoint_id) {
 			fprintf(stderr, "Cannot get id from '%s': %s\n",
 				real_path, strerror(errno));
 			return 1;
 		}
 	} else {
-		chan_id = atoi(chan_str);
+		endpoint_id = atoi(endpoint_str);
 	}
 
-	return chan_id;
+	return endpoint_id;
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -109,6 +113,8 @@ int main(int argc, char *argv[])
 
 	list_add_tail(&module_connect.node, &modules);
 	list_add_tail(&module_disconnect.node, &modules);
+	list_add_tail(&module_pipeline_open.node, &modules);
+	list_add_tail(&module_pipeline_close.node, &modules);
 	list_add_tail(&module_pipeline_start.node, &modules);
 	list_add_tail(&module_pipeline_stop.node, &modules);
 	list_add_tail(&module_netdev.node, &modules);
@@ -121,7 +127,7 @@ int main(int argc, char *argv[])
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
 	for(;;) {
-		c = getopt_long(argc, argv, "", options,
+		c = getopt_long(argc, argv, "v", options,
 			&optidx);
 
 		if (c == -1)

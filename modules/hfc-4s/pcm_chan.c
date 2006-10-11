@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -14,7 +14,6 @@
 #include <linux/delay.h>
 
 #include "card.h"
-#include "card_inline.h"
 #include "pcm_port.h"
 #include "pcm_chan.h"
 
@@ -28,7 +27,7 @@
 			format,						\
 			(chan)->port->card->pci_dev->dev.bus->name,	\
 			(chan)->port->card->pci_dev->dev.bus_id,	\
-			(chan)->visdn_chan.name,			\
+			kobject_name(&(chan)->ks_node.kobj),		\
 			## arg)
 
 #else
@@ -44,253 +43,319 @@
 		format,							\
 		(chan)->port->card->pci_dev->dev.bus->name,		\
 		(chan)->port->card->pci_dev->dev.bus_id,		\
-		(chan)->visdn_chan.name,				\
+		kobject_name(&(chan)->visdn_chan.kobj),			\
 		## arg)
 
-static void hfc_pcm_chan_release(struct visdn_chan *chan)
+static void hfc_pcm_chan_rx_link_release(struct ks_link *ks_link)
 {
-	printk(KERN_DEBUG "hfc_pcm_chan_release()\n");
+	printk(KERN_DEBUG "hfc_pcm_chan_rx_link_release()\n");
 
 	// FIXME
 }
 
-static int hfc_pcm_chan_open(struct visdn_chan *visdn_chan)
+static int hfc_pcm_chan_rx_link_connect(struct ks_link *ks_link)
 {
-	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_chan);
-	struct hfc_card *card = chan->port->card;
-	int err;
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_link, struct hfc_pcm_chan_rx, ks_link);
+	struct hfc_pcm_chan *chan = chan_rx->chan;
 
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
-	hfc_card_lock(card);
-
-	if (chan->status != HFC_ST_CHAN_STATUS_FREE) {
-		hfc_debug_pcm_chan(chan, 1, "open failed: channel busy\n");
-		err = -EBUSY;
-		goto err_channel_busy;
-	}
-
-	if (chan->id != D && chan->id != E &&
-	    chan->id != B1 && chan->id != B2) {
-		err = -ENOTSUPP;
-		goto err_invalid_chan;
-	}
-
-	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
-
-	hfc_debug_pcm_chan(chan, 1, "channel opened.\n");
-
-	return 0;
-
-	chan->status = HFC_ST_CHAN_STATUS_FREE;
-//err_invalid_l1_proto:
-err_invalid_chan:
-err_channel_busy:
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
-	hfc_card_unlock(card);
-
-	return err;
-}
-
-static int hfc_pcm_chan_close(struct visdn_chan *visdn_chan)
-{
-	int err;
-	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_chan);
-	struct hfc_card *card = chan->port->card;
-
-	if (visdn_chan_lock_interruptible(visdn_chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
-	hfc_card_lock(card);
-
-	chan->status = HFC_PCM_CHAN_STATUS_FREE;
-
-	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
-
-	hfc_debug_pcm_chan(chan, 1, "channel closed.\n");
-
-	return 0;
-
-	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_chan);
-err_visdn_chan_lock:
-
-	return err;
-}
-
-static int hfc_pcm_chan_start(struct visdn_chan *visdn_chan)
-{
-	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_chan);
-
-	hfc_debug_pcm_chan(chan, 1, "channel started\n");
+	hfc_debug_pcm_chan(chan, 2, "RX connected\n");
 
 	return 0;
 }
 
-static int hfc_pcm_chan_stop(struct visdn_chan *visdn_chan)
+static void hfc_pcm_chan_rx_link_disconnect(struct ks_link *ks_link)
 {
-	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_chan);
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_link, struct hfc_pcm_chan_rx, ks_link);
+	struct hfc_pcm_chan *chan = chan_rx->chan;
 
-	hfc_debug_pcm_chan(chan, 1, "channel stopped\n");
+	hfc_debug_pcm_chan(chan, 2, "RX disconnected\n");
+}
+
+static int hfc_pcm_chan_rx_link_open(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_link, struct hfc_pcm_chan_rx, ks_link);
+	struct hfc_pcm_chan *chan = chan_rx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX opened\n");
 
 	return 0;
 }
 
-static int hfc_pcm_chan_connect(
-	struct visdn_leg *visdn_leg,
-	struct visdn_leg *visdn_leg2)
+static void hfc_pcm_chan_rx_link_close(struct ks_link *ks_link)
 {
-	struct hfc_pcm_chan *chan = to_pcm_chan(visdn_leg->chan);
-//	struct hfc_st_port *port = chan->port;
-	struct hfc_card *card = chan->port->card;
-	int err;
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_link, struct hfc_pcm_chan_rx, ks_link);
+	struct hfc_pcm_chan *chan = chan_rx->chan;
 
-	hfc_debug_pcm_chan(chan, 2, "connecting to %s\n",
-		visdn_leg2->chan->kobj.name);
-
-	if (visdn_chan_lock_interruptible(visdn_leg->chan)) {
-		err = -ERESTARTSYS;
-		goto err_visdn_chan_lock;
-	}
-
-	hfc_card_lock(card);
-
-	if (chan->status != HFC_ST_CHAN_STATUS_FREE) {
-		hfc_debug_pcm_chan(chan, 1, "open failed: channel busy\n");
-		err = -EBUSY;
-		goto err_channel_busy;
-	}
-
-	if (visdn_leg2->chan->chan_class == &hfc_sys_chan_class) {
-		chan->connected_sys_chan = to_sys_chan(visdn_leg2->chan);
-	} else if (visdn_leg2->chan->chan_class == &hfc_st_chan_class) {
-		chan->connected_st_chan = to_st_chan(visdn_leg2->chan);
-	} else {
-		WARN_ON(1);
-	}
-
-	hfc_card_unlock(card);
-	visdn_chan_unlock(visdn_leg->chan);
-
-	hfc_debug_pcm_chan(chan, 1, "channel opened.\n");
-
-	return 0;
-
-	chan->status = HFC_ST_CHAN_STATUS_FREE;
-//err_invalid_l1_proto:
-err_channel_busy:
-	visdn_chan_unlock(visdn_leg->chan);
-err_visdn_chan_lock:
-	hfc_card_unlock(card);
-
-	return err;
+	hfc_debug_pcm_chan(chan, 2, "RX closed\n");
 }
 
-static void hfc_pcm_chan_disconnect(
-	struct visdn_leg *visdn_leg1,
-	struct visdn_leg *visdn_leg2)
+static int hfc_pcm_chan_rx_link_start(struct ks_link *ks_link)
 {
-printk(KERN_INFO "hfc-4s chan %s disconnected\n",
-		visdn_leg1->chan->kobj.name);
-}
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_link, struct hfc_pcm_chan_rx, ks_link);
+	struct hfc_pcm_chan *chan = chan_rx->chan;
 
-/*static int hfc_pcm_chan_update_parameters(
-	struct visdn_chan *chan,
-	struct visdn_chan_pars *pars)
-{
-	// TODO: Complain if someone tryies to change l1_proto mode or bitrate
-
-	memcpy(&chan->pars, pars, sizeof(chan->pars));
+	hfc_debug_pcm_chan(chan, 2, "RX started\n");
 
 	return 0;
-}*/
+}
 
-struct visdn_chan_ops hfc_pcm_chan_ops = {
+static void hfc_pcm_chan_rx_link_stop(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_link, struct hfc_pcm_chan_rx, ks_link);
+	struct hfc_pcm_chan *chan = chan_rx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX stopped\n");
+}
+
+struct ks_link_ops hfc_pcm_chan_rx_link_ops = {
 	.owner			= THIS_MODULE,
 
-	.release		= hfc_pcm_chan_release,
-	.open			= hfc_pcm_chan_open,
-	.close			= hfc_pcm_chan_close,
-	.start			= hfc_pcm_chan_start,
-	.stop			= hfc_pcm_chan_stop,
+	.release		= hfc_pcm_chan_rx_link_release,
+	.connect		= hfc_pcm_chan_rx_link_connect,
+	.disconnect		= hfc_pcm_chan_rx_link_disconnect,
+	.open			= hfc_pcm_chan_rx_link_open,
+	.close			= hfc_pcm_chan_rx_link_close,
+	.start			= hfc_pcm_chan_rx_link_start,
+	.stop			= hfc_pcm_chan_rx_link_stop,
 };
 
-struct visdn_leg_ops hfc_pcm_chan_leg_ops = {
+/*----------------------------------------------------------------------------*/
+
+static void hfc_pcm_chan_tx_link_release(struct ks_link *ks_link)
+{
+	printk(KERN_DEBUG "hfc_pcm_chan_tx_link_release()\n");
+
+	// FIXME
+}
+
+static int hfc_pcm_chan_tx_link_connect(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_link, struct hfc_pcm_chan_tx, ks_link);
+	struct hfc_pcm_chan *chan = chan_tx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX connected\n");
+
+	return 0;
+}
+
+static void hfc_pcm_chan_tx_link_disconnect(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_link, struct hfc_pcm_chan_tx, ks_link);
+	struct hfc_pcm_chan *chan = chan_tx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX disconnected\n");
+}
+
+static int hfc_pcm_chan_tx_link_open(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_link, struct hfc_pcm_chan_tx, ks_link);
+	struct hfc_pcm_chan *chan = chan_tx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX opened\n");
+
+	return 0;
+}
+
+static void hfc_pcm_chan_tx_link_close(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_link, struct hfc_pcm_chan_tx, ks_link);
+	struct hfc_pcm_chan *chan = chan_tx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX closed\n");
+}
+
+static int hfc_pcm_chan_tx_link_start(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_link, struct hfc_pcm_chan_tx, ks_link);
+	struct hfc_pcm_chan *chan = chan_tx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX started\n");
+
+	return 0;
+}
+
+static void hfc_pcm_chan_tx_link_stop(struct ks_link *ks_link)
+{
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_link, struct hfc_pcm_chan_tx, ks_link);
+	struct hfc_pcm_chan *chan = chan_tx->chan;
+
+	hfc_debug_pcm_chan(chan, 2, "RX stopped\n");
+}
+
+struct ks_link_ops hfc_pcm_chan_tx_link_ops = {
 	.owner			= THIS_MODULE,
 
-	.connect		= hfc_pcm_chan_connect,
-	.disconnect		= hfc_pcm_chan_disconnect,
+	.release		= hfc_pcm_chan_tx_link_release,
+	.connect		= hfc_pcm_chan_tx_link_connect,
+	.disconnect		= hfc_pcm_chan_tx_link_disconnect,
+	.open			= hfc_pcm_chan_tx_link_open,
+	.close			= hfc_pcm_chan_tx_link_close,
+	.start			= hfc_pcm_chan_tx_link_start,
+	.stop			= hfc_pcm_chan_tx_link_stop,
 };
 
-struct visdn_chan_class hfc_pcm_chan_class =
+/*----------------------------------------------------------------------------*/
+
+static void hfc_pcm_chan_node_release(struct ks_node *ks_node)
 {
-	.name	= "pcm"
+	struct hfc_pcm_chan *chan =
+		container_of(ks_node, struct hfc_pcm_chan, ks_node);
+
+	printk(KERN_DEBUG "hfc_pcm_chan_node_release()\n");
+
+	kfree(chan);
+}
+
+static struct ks_node_ops hfc_pcm_chan_node_ops = {
+	.owner			= THIS_MODULE,
+
+	.release		= hfc_pcm_chan_node_release,
 };
+
+/*----------------------------------------------------------------------------*/
+
+void hfc_pcm_chan_rx_init(
+	struct hfc_pcm_chan_rx *chan_rx,
+	struct hfc_pcm_chan *chan)
+{
+	chan_rx->chan = chan;
+
+	ks_link_init(&chan_rx->ks_link,
+			&hfc_pcm_chan_rx_link_ops, "rx",
+			NULL,
+			&chan->ks_node.kobj,
+			&chan->ks_node,
+			&chan->port->card->hfcswitch.ks_node);
+
+/*	chan_rx->ks_link.framed_mtu = -1;
+	chan_rx->ks_link.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+}
+
+void hfc_pcm_chan_tx_init(
+	struct hfc_pcm_chan_tx *chan_tx,
+	struct hfc_pcm_chan *chan)
+{
+	chan_tx->chan = chan;
+
+	ks_link_init(&chan_tx->ks_link,
+			&hfc_pcm_chan_tx_link_ops, "tx",
+			NULL,
+			&chan->ks_node.kobj,
+			&chan->port->card->hfcswitch.ks_node,
+			&chan->ks_node);
+
+/*	chan_tx->ks_link.framed_mtu = -1;
+	chan_tx->ks_link.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+}
+
+static int hfc_pcm_chan_rx_register(struct hfc_pcm_chan_rx *chan)
+{
+	int err;
+
+	err = ks_link_register(&chan->ks_link);
+	if (err < 0)
+		goto err_link_register;
+
+	return 0;
+
+	ks_link_unregister(&chan->ks_link);
+err_link_register:
+
+	return err;
+}
+
+static void hfc_pcm_chan_rx_unregister(struct hfc_pcm_chan_rx *chan)
+{
+	ks_link_unregister(&chan->ks_link);
+}
+
+static int hfc_pcm_chan_tx_register(struct hfc_pcm_chan_tx *chan)
+{
+	int err;
+
+	err = ks_link_register(&chan->ks_link);
+	if (err < 0)
+		goto err_link_register;
+
+	return 0;
+
+	ks_link_unregister(&chan->ks_link);
+err_link_register:
+
+	return err;
+}
+
+static void hfc_pcm_chan_tx_unregister(struct hfc_pcm_chan_tx *chan)
+{
+	ks_link_unregister(&chan->ks_link);
+}
+
+struct hfc_pcm_chan *hfc_pcm_chan_alloc(int flags)
+{
+	return kmalloc(sizeof(struct hfc_pcm_chan), flags);
+}
 
 void hfc_pcm_chan_init(
 	struct hfc_pcm_chan *chan,
 	struct hfc_pcm_port *port,
 	const char *name,
-	int id,
-	int hw_index)
+	int timeslot)
 {
 	chan->port = port;
-	chan->status = HFC_ST_CHAN_STATUS_FREE;
-	chan->id = id;
-	chan->hw_index = hw_index;
+	chan->timeslot= timeslot;
 
-	visdn_chan_init(&chan->visdn_chan);
+	ks_node_init(&chan->ks_node,
+			&hfc_pcm_chan_node_ops, name,
+			&port->visdn_port.kobj);
 
-	chan->visdn_chan.ops = &hfc_pcm_chan_ops;
-	chan->visdn_chan.chan_class = &hfc_pcm_chan_class;
-	chan->visdn_chan.port = &port->visdn_port;
-
-	chan->visdn_chan.leg_a.cxc = &port->card->cxc.visdn_cxc;
-	chan->visdn_chan.leg_a.ops = &hfc_pcm_chan_leg_ops;
-	chan->visdn_chan.leg_a.framing = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_a.framing_avail = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_a.mtu = -1;
-
-	chan->visdn_chan.leg_b.cxc = NULL;
-	chan->visdn_chan.leg_b.ops = NULL;
-	chan->visdn_chan.leg_b.framing = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_b.framing_avail = VISDN_LEG_FRAMING_NONE;
-	chan->visdn_chan.leg_b.mtu = -1;
-
-	strncpy(chan->visdn_chan.name, name, sizeof(chan->visdn_chan.name));
-	chan->visdn_chan.driver_data = chan;
+	hfc_pcm_chan_rx_init(&chan->rx, chan);
+	hfc_pcm_chan_tx_init(&chan->tx, chan);
 }
 
-int hfc_pcm_chan_register(
-	struct hfc_pcm_chan *chan)
+int hfc_pcm_chan_register(struct hfc_pcm_chan *chan)
 {
 	int err;
 
-	err = visdn_chan_register(&chan->visdn_chan);
+	err = ks_node_register(&chan->ks_node);
 	if (err < 0)
-		goto err_chan_register;
+		goto err_node_register;
 
-//	hfc_pcm_chan_sysfs_create_files(chan);
+	err = hfc_pcm_chan_rx_register(&chan->rx);
+	if (err < 0)
+		goto err_pcm_chan_rx_register;
+
+	err = hfc_pcm_chan_tx_register(&chan->tx);
+	if (err < 0)
+		goto err_pcm_chan_tx_register;
 
 	return 0;
 
-err_chan_register:
+	hfc_pcm_chan_tx_unregister(&chan->tx);
+err_pcm_chan_tx_register:
+	hfc_pcm_chan_rx_unregister(&chan->rx);
+err_pcm_chan_rx_register:
+	ks_node_unregister(&chan->ks_node);
+err_node_register:
 
 	return err;
 }
 
-void hfc_pcm_chan_unregister(
-	struct hfc_pcm_chan *chan)
+void hfc_pcm_chan_unregister(struct hfc_pcm_chan *chan)
 {
-//	hfc_pcm_chan_sysfs_delete_files(chan);
+	hfc_pcm_chan_tx_unregister(&chan->tx);
+	hfc_pcm_chan_rx_unregister(&chan->rx);
 
-	visdn_chan_unregister(&chan->visdn_chan);
+	ks_node_unregister(&chan->ks_node);
 }

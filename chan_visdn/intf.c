@@ -46,12 +46,16 @@
 
 #include <linux/lapd.h>
 #include <libq931/intf.h>
+#include <libq931/timer.h>
 
 #include "chan_visdn.h"
 #include "util.h"
 #include "huntgroup.h"
 #include "ton.h"
 #include "numbers_list.h"
+
+#define FAILED_RETRY_TIME (30 * SEC)
+#define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
 struct visdn_intf *visdn_intf_alloc(void)
 {
@@ -66,10 +70,9 @@ struct visdn_intf *visdn_intf_alloc(void)
 	intf->refcnt = 1;
 
 	intf->status = VISDN_INTF_STATUS_UNINITIALIZED;
+	intf->timer_expiration = -1;
 
 	intf->q931_intf = NULL;
-	intf->configured = FALSE;
-	intf->open_pending = FALSE;
 
 	INIT_LIST_HEAD(&intf->suspended_calls);
 
@@ -214,7 +217,12 @@ static int visdn_ic_from_var(
 	struct visdn_ic *ic,
 	struct ast_variable *var)
 {
-	if (!strcasecmp(var->name, "tei")) {
+	if (!strcasecmp(var->name, "status")) {
+		if (!strcasecmp(var->value, "online"))
+			ic->initial_status = VISDN_INTF_STATUS_ACTIVE;
+		else
+			ic->initial_status = VISDN_INTF_STATUS_OUT_OF_SERVICE;
+	} else if (!strcasecmp(var->name, "tei")) {
 		if (!strcasecmp(var->value, "dynamic"))
 			ic->tei = LAPD_DYNAMIC_TEI;
 		else
@@ -341,6 +349,7 @@ static void visdn_ic_copy(
 	struct visdn_ic *dst,
 	const struct visdn_ic *src)
 {
+	dst->initial_status = src->initial_status;
 	dst->tei = src->tei;
 	dst->network_role = src->network_role;
 	dst->outbound_called_ton = src->outbound_called_ton;
@@ -395,18 +404,82 @@ static void visdn_ic_copy(
 	dst->T322 = src->T322;
 }
 
-int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
+static const char *visdn_intf_status_to_text(enum visdn_intf_status status)
 {
+	switch(status) {
+	case VISDN_INTF_STATUS_UNINITIALIZED:
+		return "Uninitialized";
+	case VISDN_INTF_STATUS_CONFIGURED:
+		return "Configured";
+	case VISDN_INTF_STATUS_OUT_OF_SERVICE:
+		return "OUT OF SERVICE";
+	case VISDN_INTF_STATUS_ACTIVE:
+		return "Online";
+	case VISDN_INTF_STATUS_FAILED:
+		return "FAILED!";
+	}
+
+	return "*UNKNOWN*";
+}
+
+
+static void visdn_intf_set_status(
+	struct visdn_intf *intf,
+	enum visdn_intf_status status,
+	longtime_t timeout,
+	const char *fmt, ...) 
+	__attribute__ ((format (printf, 4, 5)));
+
+static void visdn_intf_set_status(
+	struct visdn_intf *intf,
+	enum visdn_intf_status status,
+	longtime_t timeout,
+	const char *fmt, ...)
+{
+	visdn_debug("vISDN interface '%s' changed state from %s to %s"
+		" (timer %.2fs)\n",
+		intf->name,
+		visdn_intf_status_to_text(intf->status),
+		visdn_intf_status_to_text(status),
+		timeout / 1000000.0);
+
+	intf->status = status;
+	intf->timer_expiration = q931_longtime_now() + timeout;
+
+	if (fmt) {
+		va_list ap;
+
+		if (intf->status_reason)
+			free(intf->status_reason);
+
+		va_start(ap, fmt);
+		vasprintf(&intf->status_reason, fmt, ap);
+		va_end(ap);
+	}
+
+	if (visdn.q931_thread != AST_PTHREADT_NULL)
+		pthread_kill(visdn.q931_thread, SIGURG);
+}
+
+int visdn_intf_initialize(struct visdn_intf *intf)
+{
+	assert(intf->current_ic);
 	assert(!intf->q931_intf);
 
-	intf->open_pending = TRUE;
+	struct visdn_ic *ic = intf->current_ic;
+
+	if (ic->initial_status == VISDN_INTF_STATUS_OUT_OF_SERVICE) {
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_OUT_OF_SERVICE, -1, NULL);
+		return 0;
+	}
 
 	intf->q931_intf = q931_intf_open(intf->name, 0, ic->tei);
 	if (!intf->q931_intf) {
-		ast_log(LOG_WARNING,
-			"Cannot open interface %s, skipping\n",
-			intf->name);
-
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_FAILED,
+			FAILED_RETRY_TIME,
+			"Cannot open() interface");
 		goto err_intf_open;
 	}
 
@@ -417,8 +490,10 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 
 	intf->mgmt_fd = socket(PF_LAPD, SOCK_SEQPACKET, LAPD_SAPI_MGMT);
 	if (intf->mgmt_fd < 0) {
-		ast_log(LOG_WARNING,
-			"Cannot open management socket: %s\n",
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_FAILED,
+			FAILED_RETRY_TIME,
+			"Cannot open() management socket: %s",
 			strerror(errno));
 
 		goto err_socket;
@@ -427,8 +502,10 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 	if (setsockopt(intf->mgmt_fd, SOL_LAPD, SO_BINDTODEVICE, intf->name,
 					strlen(intf->name) + 1) < 0) {
 
-		ast_log(LOG_WARNING,
-			"Cannot bind management socket to %s: %s, skipping\n",
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_FAILED,
+			FAILED_RETRY_TIME,
+			"Cannot bind management socket to %s: %s",
 			strerror(errno),
 			intf->name);
 
@@ -438,16 +515,19 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 	int oldflags;
 	oldflags = fcntl(intf->mgmt_fd, F_GETFL, 0);
 	if (oldflags < 0) {
-		ast_log(LOG_WARNING,
-			"%s: fcntl(GETFL): %s\n",
-			intf->name,
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_FAILED,
+			FAILED_RETRY_TIME,
+			"fcntl(GETFL): %s",
 			strerror(errno));
 		goto err_fcntl_getfl;
 	}
 
 	if (fcntl(intf->mgmt_fd, F_SETFL, oldflags | O_NONBLOCK) < 0) {
-		ast_log(LOG_WARNING,
-			"fcntl(F_SETFL): %s\n",
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_FAILED,
+			FAILED_RETRY_TIME,
+			"fcntl(SETFL): %s",
 			strerror(errno));
 
 		goto err_fcntl_setfl;
@@ -473,12 +553,8 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 	if (ic->T321) intf->q931_intf->T321 = ic->T321 * 1000000LL;
 	if (ic->T322) intf->q931_intf->T322 = ic->T322 * 1000000LL;
 
-	char path[PATH_MAX];
+/*
 	char goodpath[PATH_MAX];
-	snprintf(path, sizeof(path),
-		"/sys/class/net/%s/visdn_channel/leg_a/",
-		intf->name);
-
 	struct stat st;
 	for(;;) {
 		if (stat(path, &st) < 0) {
@@ -498,18 +574,23 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 		strncat(path, "connected/other_leg/", sizeof(path));
 	}
 
-	strncat(goodpath, "../..", sizeof(goodpath));
+	strncat(goodpath, "../..", sizeof(goodpath));*/
 
-	if (realpath(goodpath, intf->remote_port) < 0) {
-		ast_log(LOG_ERROR,
-			"cannot find realpath(%s): %s\n",
-			goodpath,
+	char path[PATH_MAX];
+	snprintf(path, sizeof(path),
+		"/sys/class/net/%s/visdn_connected_port/",
+		intf->name);
+
+	if (realpath(path, intf->remote_port) < 0) {
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_FAILED,
+			FAILED_RETRY_TIME,
+			"cannot find realpath(%s): %s",
+			path,
 			strerror(errno));
 
 		goto err_realpath;
 	}
-
-	intf->open_pending = FALSE;
 
 	if (intf->q931_intf->role == LAPD_INTF_ROLE_NT) {
 		if (list_empty(&ic->clip_numbers_list)) {
@@ -533,12 +614,13 @@ int visdn_intf_open(struct visdn_intf *intf, struct visdn_ic *ic)
 		}
 	}
 
-	intf->status = VISDN_INTF_STATUS_ONLINE;
+	visdn_intf_set_status(intf, VISDN_INTF_STATUS_ACTIVE, -1, NULL);
+
+	refresh_polls_list();
 
 	return 0;
 
 err_realpath:
-err_stat:
 err_fcntl_setfl:
 err_fcntl_getfl:
 err_setsockopt:
@@ -546,8 +628,6 @@ err_setsockopt:
 err_socket:
 	q931_intf_close(intf->q931_intf);
 err_intf_open:
-
-	intf->status = VISDN_INTF_STATUS_FAILED;
 
 	return -1;
 }
@@ -558,6 +638,47 @@ void visdn_intf_close(struct visdn_intf *intf)
 
 	q931_intf_close(intf->q931_intf);
 	intf->q931_intf = NULL;
+}
+
+
+static void visdn_intf_timer(struct visdn_intf *intf)
+{
+	switch(intf->status) {
+	case VISDN_INTF_STATUS_UNINITIALIZED:
+	break;
+
+	case VISDN_INTF_STATUS_CONFIGURED:
+	case VISDN_INTF_STATUS_FAILED:
+		visdn_intf_initialize(intf);
+	break;
+
+	case VISDN_INTF_STATUS_OUT_OF_SERVICE:
+	break;
+
+	case VISDN_INTF_STATUS_ACTIVE:
+	break;
+	}
+}
+
+longtime_t visdn_intf_run_timers(longtime_t timeout)
+{
+	struct visdn_intf *intf;
+	ast_mutex_lock(&visdn.lock);
+	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+
+		if (intf->timer_expiration != -1) {
+			if (intf->timer_expiration < q931_longtime_now()) {
+				intf->timer_expiration = -1;
+				visdn_intf_timer(intf);
+			} else {
+				timeout = intf->timer_expiration -
+							q931_longtime_now();
+			}
+		}
+	}
+	ast_mutex_unlock(&visdn.lock);
+
+	return timeout;
 }
 
 void visdn_ic_setdefault(struct visdn_ic *ic)
@@ -605,8 +726,6 @@ static void visdn_intf_reconfigure(
 	visdn_ic_copy(ic, visdn.default_ic);
 
 	/* Now read the configuration from file */
-//	intf->configured = TRUE;
-
 	struct ast_variable *var;
 	var = ast_variable_browse(cfg, (char *)name);
 	while (var) {
@@ -632,11 +751,6 @@ static void visdn_intf_reconfigure(
 
 		strncpy(intf->name, name, sizeof(intf->name));
 
-		visdn_debug("Opening interface %s\n", name);
-
-		visdn_intf_open(intf, ic);
-		refresh_polls_list();
-
 		list_add_tail(&intf->ifs_node, &visdn.ifs);
 	}
 
@@ -646,6 +760,11 @@ static void visdn_intf_reconfigure(
 	ic->intf = intf;
 
 	intf->current_ic = visdn_ic_get(ic);
+
+	if (intf->status == VISDN_INTF_STATUS_UNINITIALIZED)
+		visdn_intf_set_status(intf,
+			VISDN_INTF_STATUS_CONFIGURED,
+			WAITING_INITIALIZATION_DELAY, NULL);
 
 	ast_mutex_unlock(&visdn.lock);
 }
@@ -665,13 +784,6 @@ void visdn_intf_reload(struct ast_config *cfg)
 		}
 
 		var = var->next;
-	}
-
-	{
-	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		intf->configured = FALSE;
-	}
 	}
 
 	const char *cat;
@@ -749,22 +861,6 @@ static const char *visdn_clir_mode_to_text(
 		return "Restricted by default";
 	case VISDN_CLIR_MODE_RESTRICTED:
 		return "Restricted";
-	}
-
-	return "*UNKNOWN*";
-}
-
-static const char *visdn_intf_status_to_text(enum visdn_intf_status status)
-{
-	switch(status) {
-	case VISDN_INTF_STATUS_UNINITIALIZED:
-		return "Uninitialized";
-	case VISDN_INTF_STATUS_OFFLINE:
-		return "OFFLINE";
-	case VISDN_INTF_STATUS_ONLINE:
-		return "Online";
-	case VISDN_INTF_STATUS_FAILED:
-		return "FAILED!";
 	}
 
 	return "*UNKNOWN*";
@@ -938,6 +1034,28 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 			TIMER_CONFIG_LN(T322);
 		}
 
+		ast_cli(fd, "\nChannels:\n");
+		int i;
+		for (i=0; i<intf->q931_intf->n_channels; i++) {
+			ast_cli(fd, "  B%d: %s",
+				intf->q931_intf->channels[i].id + 1,
+				q931_channel_state_to_text(
+					intf->q931_intf->channels[i].state));
+
+			if (intf->q931_intf->channels[i].call) {
+				struct q931_call *call =
+					intf->q931_intf->channels[i].call;
+				
+				ast_cli(fd, "  Call: %5d.%c %s",
+					call->call_reference,
+					(call->direction ==
+						Q931_CALL_DIRECTION_INBOUND)
+							? 'I' : 'O',
+					q931_call_state_to_text(call->state));
+			}
+
+			ast_cli(fd, "\n");
+		}
 	}
 
 	ast_cli(fd, "\nParked calls:\n");
@@ -969,28 +1087,6 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 			hex_str);
 	}
 
-	ast_cli(fd, "\nChannels:\n");
-	int i;
-	for (i=0; i<intf->q931_intf->n_channels; i++) {
-		ast_cli(fd, "  B%d: %s",
-			intf->q931_intf->channels[i].id + 1,
-			q931_channel_state_to_text(
-				intf->q931_intf->channels[i].state));
-
-		if (intf->q931_intf->channels[i].call) {
-			struct q931_call *call =
-				intf->q931_intf->channels[i].call;
-			
-			ast_cli(fd, "  Call: %5d.%c %s",
-				call->call_reference,
-				(call->direction ==
-					Q931_CALL_DIRECTION_INBOUND)
-						? 'I' : 'O',
-				q931_call_state_to_text(call->state));
-		}
-
-		ast_cli(fd, "\n");
-	}
 }
 
 char *visdn_intf_complete(char *line, char *word, int pos, int state)
@@ -1021,50 +1117,51 @@ static char *complete_show_visdn_interfaces(
 	return visdn_intf_complete(line, word, pos, state);
 }
 
+static void visdn_show_interface(int fd, struct visdn_intf *intf)
+{
+	ast_mutex_lock(&intf->lock);
+
+	if (intf->q931_intf) {
+		char tei[6] = "";
+		int ncalls = 0;
+
+		if (intf->q931_intf->tei != LAPD_DYNAMIC_TEI)
+			snprintf(tei, sizeof(tei), "%d", intf->q931_intf->tei);
+		else
+			strcpy(tei, "DYN");
+
+		struct q931_call *call;
+		list_for_each_entry(call, &intf->q931_intf->calls, calls_node)
+			ncalls++;
+
+		ast_cli(fd, "%-10s %-14s %-4s %-4s %-3s %d\n",
+			intf->name,
+			visdn_intf_status_to_text(intf->status),
+			(intf->q931_intf->role == LAPD_INTF_ROLE_NT) ?
+				"NT" : "TE",
+			visdn_intf_mode_to_string_short(intf->q931_intf->mode),
+			tei,
+			ncalls);
+	} else {
+		ast_cli(fd, "%-10s %-14s\n",
+			intf->name,
+			visdn_intf_status_to_text(intf->status));
+	}
+
+	ast_mutex_unlock(&intf->lock);
+}
+
 static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
 	if (argc == 3) {
-		ast_cli(fd, "Interface  Role Mode TEI Status        Calls\n");
+		ast_cli(fd, "Interface  Status         Role Mode TEI Calls\n");
 		
 		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		list_for_each_entry(intf, &visdn.ifs, ifs_node)
+			visdn_show_interface(fd, intf);
 
-			ast_mutex_lock(&intf->lock);
-
-			if (!intf->q931_intf) {
-				ast_mutex_unlock(&intf->lock);
-				continue;
-			}
-
-			char tei[6];
-
-			if (intf->q931_intf->tei != LAPD_DYNAMIC_TEI)
-				snprintf(tei, sizeof(tei), "%d",
-					intf->q931_intf->tei);
-			else
-				strcpy(tei, "");
-
-			int ncalls = 0;
-			struct q931_call *call;
-			list_for_each_entry(call, &intf->q931_intf->calls,
-								calls_node)
-				ncalls++;
-
-			
-			ast_cli(fd, "%-10s %-4s %-4s %-3s %-13s %d\n",
-				intf->name,
-				intf->q931_intf->role == LAPD_INTF_ROLE_NT ?
-					"NT" : "TE",
-				visdn_intf_mode_to_string_short(
-					intf->q931_intf->mode),
-				tei,
-				visdn_intf_status_to_text(intf->status),
-				ncalls);
-
-			ast_mutex_unlock(&intf->lock);
-		}
 	} else if (argc == 4) {
 		struct visdn_intf *intf;
 		list_for_each_entry(intf, &visdn.ifs, ifs_node) {

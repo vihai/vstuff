@@ -1,0 +1,1 @@
+../../../kstreamer/pipeline.h

@@ -1,0 +1,138 @@
+/sys/
+  bus/
+    pci/
+      devices/
+        0000:00:00.0/
+          switch/
+          st0/
+            D/
+              rx/
+                from => ../D/
+                to => ../../../switch/
+              tx/
+                from => ../../../switch/
+                to => ../D/
+            B1/
+              sw/
+                from => ../B1/
+                to => ../../../switch/
+              tx/
+                from => ../../../switch/
+                to => ../B1/
+            B2/
+              rx/
+                from => ../B2/
+                to => ../../../switch/
+              tx/
+                from => ../../switch/
+                to => ../B2/
+          sys/
+            sys0/
+              rx/
+                from => ../../../devices/visdn-system/softswitch/softswitch/
+                to => ../../switch/
+                fifo_size
+                fifo_max
+                fifo_min
+              tx/
+                from => ../../switch/
+                to => ../../../devices/visdn-system/softswitch/softswitch/
+                fifo_size
+                fifo_max
+                fifo_min
+        0000:01:00.0/
+          switch/
+          st0/
+            D/
+              rx/
+              tx/
+              rx-sw/
+                from => ../rx/
+                to => ../../../switch/
+              sw-tx/
+                from => ../../../switch/
+                to => ../tx/
+            B1/
+              rx/
+              tx/
+              rx-sw/
+                from => ../rx/
+                to => ../../../switch/
+              sw-tx/
+                from => ../../../switch/
+                to => ../tx/
+            B2/
+              rx/
+              tx/
+              rx-sw/
+                from => ../rx/
+                to => ../../../switch/
+              sw-tx/
+                from => ../../switch/
+                to => ../tx/
+          sys/
+            sys0/
+              rx/
+                from => ../../../devices/visdn-system/softswitch/softswitch/
+                to => ../../switch/
+                fifo_size
+                fifo_max
+                fifo_min
+              tx/
+                from => ../../switch/
+                to => ../../../devices/visdn-system/softswitch/softswitch/
+                fifo_size
+                fifo_max
+                fifo_min
+  devices/
+    visdn-system/
+      softswitch/
+        softswitch
+  visdn/
+    ports/
+      pci-0000:00:00.0-st0 => ../../bus/pci/devices/0000:00:00.0/st0
+      pci-0000:00:00.0-st1 => ../../bus/pci/devices/0000:00:00.0/st1
+      pci-0000:01:00.0-st0 => ../../bus/pci/devices/0000:01:00.0/st0
+      pci-0000:01:00.0-st1 => ../../bus/pci/devices/0000:01:00.0/st1
+    duplexes/
+      pci-0000:00:00.0-st0-D => ../../bus/pci/devices/0000:00:00.0/st0/D
+      pci-0000:00:00.0-st0-B1 => ../../bus/pci/devices/0000:00:00.0/st0/B1
+      pci-0000:00:00.0-st0-B2 => ../../bus/pci/devices/0000:00:00.0/st0/B2
+      pci-0000:00:00.0-st1-D => ../../bus/pci/devices/0000:00:00.0/st1/D
+      pci-0000:00:00.0-st1-B1 => ../../bus/pci/devices/0000:00:00.0/st1/B1
+      pci-0000:00:00.0-st1-B2 => ../../bus/pci/devices/0000:00:00.0/st1/B2
+      pci-0000:01:00.0-st0-D => ../../bus/pci/devices/0000:01:00.0/st0/D
+      pci-0000:01:00.0-st0-B1 => ../../bus/pci/devices/0000:01:00.0/st0/B1
+      pci-0000:01:00.0-st0-B2 => ../../bus/pci/devices/0000:01:00.0/st0/B2
+      pci-0000:01:00.0-st1-D => ../../bus/pci/devices/0000:01:00.0/st1/D
+      pci-0000:01:00.0-st1-B1 => ../../bus/pci/devices/0000:01:00.0/st1/B1
+      pci-0000:01:00.0-st1-B2 => ../../bus/pci/devices/0000:01:00.0/st1/B2
+    endpoints/
+    nodes/
+      pci-0000:00:00.0-switch => ../../bus/pci/devices/0000:00:00.0/switch
+      pci-0000:00:00.0-st0-D => ../../bus/pci/devices/0000:00:00.0/st0/D
+      pci-0000:00:00.0-st0-B1 => ../../bus/pci/devices/0000:00:00.0/st0/B1
+      pci-0000:00:00.0-st0-B2 => ../../bus/pci/devices/0000:00:00.0/st0/B2
+      pci-0000:00:00.0-st1-D => ../../bus/pci/devices/0000:00:00.0/st1/D
+      pci-0000:00:00.0-st1-B1 => ../../bus/pci/devices/0000:00:00.0/st1/B1
+      pci-0000:00:00.0-st1-B2 => ../../bus/pci/devices/0000:00:00.0/st1/B2
+      pci-0000:01:00.0-switch => ../../bus/pci/devices/0000:01:00.0/switch
+      pci-0000:01:00.0-st0-D => ../../bus/pci/devices/0000:01:00.0/st0/D
+      pci-0000:01:00.0-st0-B1 => ../../bus/pci/devices/0000:01:00.0/st0/B1
+      pci-0000:01:00.0-st0-B2 => ../../bus/pci/devices/0000:01:00.0/st0/B2
+      pci-0000:01:00.0-st1-D => ../../bus/pci/devices/0000:01:00.0/st1/D
+      pci-0000:01:00.0-st1-B1 => ../../bus/pci/devices/0000:01:00.0/st1/B1
+      pci-0000:01:00.0-st1-B2 => ../../bus/pci/devices/0000:01:00.0/st1/B2
+      sys-streamport-sp-sp0rx => ../../devices/visdn-system/visdn-streamport/sp/sp0/rx
+      sys-streamport-sp-sp0tx => ../../devices/visdn-system/visdn-streamport/sp/sp0/tx
+    links/
+    pipelines/
+      000001/
+        00 => ../links/000001
+        01 => ../links/000005
+        02 => ../links/000007
+      000002/
+        00 => ../links/000008
+        01 => ../links/000006
+        02 => ../links/000002
+

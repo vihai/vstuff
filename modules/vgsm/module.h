@@ -18,8 +18,9 @@
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
 
-#include <linux/visdn/port.h>
-#include <linux/visdn/chan.h>
+#include <linux/kstreamer/kstreamer.h>
+#include <linux/kstreamer/node.h>
+#include <linux/kstreamer/link.h>
 
 enum vgsm_module_status
 {
@@ -32,16 +33,42 @@ enum vgsm_module_status
 
 struct vgsm_card;
 
-struct vgsm_micro
+struct vgsm_module_rx
 {
-	struct vgsm_card *card;
-	int id;
+	struct ks_link ks_link;
 
-	struct completion fw_upgrade_ready;
+	struct vgsm_module *module;
+
+	int fifo_pos;
+	int fifo_size;
+
+	u8 codec_gain;
+};
+
+struct vgsm_module_tx
+{
+	struct ks_link ks_link;
+
+	struct vgsm_module *module;
+	
+	int fifo_pos;
+	int fifo_size;
+
+	struct kfifo *fifo;
+	spinlock_t fifo_lock;
+
+	wait_queue_head_t wait_queue;
+
+	u8 codec_gain;
 };
 
 struct vgsm_module
 {
+	struct ks_node ks_node;
+
+	struct vgsm_module_rx rx;
+	struct vgsm_module_tx tx;
+
 	struct vgsm_card *card;
 	struct vgsm_micro *micro;
 
@@ -53,36 +80,9 @@ struct vgsm_module
 
 	struct completion read_status_completion;
 
-	struct kfifo *kfifo_tx;
-	spinlock_t kfifo_tx_lock;
-
-	/* Wait queue */
-	wait_queue_head_t tx_wait_queue;
-
 	struct timer_list ack_timeout_timer;
 
-	/* One port per card */
-	struct visdn_port visdn_port;
-
-	/* One channel per port */
-	struct visdn_chan visdn_chan;
-
 	unsigned long status;
-
-	int rx_fifo_pos;
-	int rx_fifo_size;
-	int rx_fifo_cycles;
-	int rx_fifo_min;
-	int rx_fifo_max;
-
-	int tx_fifo_pos;
-	int tx_fifo_size;
-	int tx_fifo_cycles;
-	int tx_fifo_min;
-	int tx_fifo_max;
-
-	u8 rx_gain;
-	u8 tx_gain;
 
 	BOOL anal_loop;
 	BOOL dig_loop;
@@ -103,19 +103,20 @@ void vgsm_module_send_set_padding_timeout(
 void vgsm_module_send_power_get(
 	struct vgsm_module *module);
 
+struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
+void vgsm_module_put(struct vgsm_module *module);
 void vgsm_module_init(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
 	struct vgsm_micro *micro,
-	int id);
-int vgsm_module_alloc(struct vgsm_module *module);
+	int id,
+	const char *name);
+struct vgsm_module *vgsm_module_alloc(
+	struct vgsm_card *card,
+	struct vgsm_micro *micro,
+	int id,
+	const char *name);
 int vgsm_module_register(struct vgsm_module *module);
 void vgsm_module_unregister(struct vgsm_module *module);
-void vgsm_module_dealloc(struct vgsm_module *module);
-
-void vgsm_micro_init(
-	struct vgsm_micro *micro,
-	struct vgsm_card *card,
-	int id);
 
 #endif

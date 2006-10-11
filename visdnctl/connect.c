@@ -26,22 +26,21 @@
 
 #include <list.h>
 
-#include <linux/visdn/softcxc.h>
 #include <linux/visdn/router.h>
 
 #include "visdnctl.h"
 #include "connect.h"
 
-static int do_connect(const char *chan1_str, const char *chan2_str)
+static int do_connect(const char *endpoint1_path, const char *endpoint2_path)
 {
-	int chan1_id, chan2_id;
+/*	int endpoint1_id, endpoint2_id;
 
-	chan1_id = decode_chan_id(chan1_str);
-	chan2_id = decode_chan_id(chan2_str);
+	endpoint1_id = decode_endpoint_id(endpoint1_str);
+	endpoint2_id = decode_endpoint_id(endpoint2_str);*/
 
-	verbose("Connecting '%06d' to '%06d'...",
-		chan1_id,
-		chan2_id);
+	verbose("Connecting '%s' to '%s'...",
+		endpoint1_path,
+		endpoint2_path);
 
 	int fd = open(CXC_CONTROL_DEV, O_RDWR);
 	if (fd < 0) {
@@ -53,9 +52,11 @@ static int do_connect(const char *chan1_str, const char *chan2_str)
 
 	struct visdn_connect connect;
 
+/* FIXME  FIXME  FIXME  FIXME  FIXME  FIXME  FIXME  FIXME  FIXME strncpy */
+
 	/* Make sure both endpoints are disconnected */
-	connect.src_chan_id = chan1_id;
-	connect.dst_chan_id = 0;
+	strcpy(connect.from_endpoint, endpoint1_path);
+	strcpy(connect.to_endpoint, "");
 	connect.flags = 0;
 
 	if (ioctl(fd, VISDN_IOC_DISCONNECT_ENDPOINT, &connect) < 0) {
@@ -69,8 +70,8 @@ static int do_connect(const char *chan1_str, const char *chan2_str)
 		}
 	}
 
-	connect.src_chan_id = chan2_id;
-	connect.dst_chan_id = 0;
+	strcpy(connect.from_endpoint, endpoint2_path);
+	strcpy(connect.to_endpoint, "");
 	connect.flags = 0;
 
 	if (ioctl(fd, VISDN_IOC_DISCONNECT_ENDPOINT, &connect) < 0) {
@@ -84,8 +85,8 @@ static int do_connect(const char *chan1_str, const char *chan2_str)
 	}
 
 	/* Now make the connection */
-	connect.src_chan_id = chan1_id;
-	connect.dst_chan_id = chan2_id;
+	strcpy(connect.from_endpoint, endpoint1_path);
+	strcpy(connect.to_endpoint, endpoint2_path);
 	connect.flags = VISDN_CONNECT_FLAG_PERMANENT;
 
 	if (ioctl(fd, VISDN_IOC_CONNECT, &connect) < 0) {
@@ -105,11 +106,11 @@ static int do_connect(const char *chan1_str, const char *chan2_str)
 static int handle_connect(int argc, char *argv[], int optind)
 {
 	if (argc <= optind + 1) {
-		print_usage("Missing first channel\n");
+		print_usage("Missing first endpoint\n");
 	}
 
 	if (argc <= optind + 2) {
-		print_usage("Missing second channel\n");
+		print_usage("Missing second endpoint\n");
 	}
 
 	return do_connect(argv[optind + 1], argv[optind + 2]);
@@ -118,15 +119,15 @@ static int handle_connect(int argc, char *argv[], int optind)
 static void usage(int argc, char *argv[])
 {
 	fprintf(stderr,
-		"  connect <chan1> <chan2>\n"
+		"  connect <endpoint1> <endpoint2>\n"
 		"\n"
-		"    Connects two endpoint channels using the least-cost\n"
-		"    path. The channel's legs are configured with a\n"
-		"    compatible framing. The channels are not automatically\n"
+		"    Connects two endpoint endpoints using the least-cost\n"
+		"    path. The endpoint's legs are configured with a\n"
+		"    compatible framing. The endpoints are not automatically\n"
 		"    enabled, they should be explicitly enabled through\n"
-		"    \"%s enable <chan1> <chan2>\".\n"
+		"    \"%s enable <endpoint1> <endpoint2>\".\n"
 		"\n"
-		"    <chan> is either numeric channel-id (e.g. 0003422)\n"
+		"    <endpoint> is either numeric endpoint-id (e.g. 0003422)\n"
 		"           or the fully qualified sysfs path (e.g.\n"
 		"           /sys/bus/pci/devices/0000:00:01.0/st0/D)\n",
 		argv[0]);

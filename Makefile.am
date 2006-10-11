@@ -24,17 +24,19 @@ if kernel_modules
 SUBDIRS += modules
 endif
 
+SUBDIRS += libskb
+SUBDIRS += libkstreamer
 SUBDIRS += libq931
 SUBDIRS += scripts samples visdnctl vgsmctl
 
 if asterisk_modules
 SUBDIRS += chan_visdn
 SUBDIRS += chan_vgsm
-SUBDIRS += app_visdn_ppp
+#SUBDIRS += app_visdn_ppp
 endif
 
 if pppd_plugin
-SUBDIRS += pppd_plugin
+#SUBDIRS += pppd_plugin
 endif
 
 if tests

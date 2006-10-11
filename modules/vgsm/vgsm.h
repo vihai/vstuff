@@ -15,7 +15,9 @@
 #ifndef _VGSM_H
 #define _VGSM_H
 
-#define VGSM_IOC_GET_CHANID		_IOR(0xd1, 0, unsigned int)
+#include <linux/spinlock.h>
+
+#define VGSM_IOC_GET_NODEID		_IOR(0xd1, 0, unsigned int)
 #define VGSM_IOC_CODEC_SET		_IOR(0xd1, 1, unsigned int)
 #define VGSM_IOC_POWER_GET		_IOR(0xd1, 2, unsigned int)
 #define VGSM_IOC_POWER_IGN		_IOR(0xd1, 3, unsigned int)
@@ -36,6 +38,11 @@ struct vgsm_codec_ctl
 {
 	int parameter;
 	int value;
+};
+
+struct vgsm_ctl
+{
+	char node_id[80];
 };
 
 enum vgsm_codec_parameter

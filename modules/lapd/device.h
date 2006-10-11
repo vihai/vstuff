@@ -19,7 +19,7 @@
 			"lapd: "				\
 			"%s: "					\
 			format,					\
-			(ld)->dev->name ? (ld)->dev->name : "",\
+			((ld->dev) && (ld)->dev->name) ? (ld)->dev->name : "",\
 			## arg)
 #else
 #define lapd_debug_dev(ld, format, arg...) do { } while (0)

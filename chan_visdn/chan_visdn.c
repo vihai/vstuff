@@ -57,7 +57,7 @@
 
 #include <linux/lapd.h>
 #include <linux/visdn/netdev.h>
-#include <linux/visdn/streamport.h>
+#include <linux/visdn/userport.h>
 #include <linux/visdn/ec.h>
 #include <linux/visdn/router.h>
 
@@ -70,7 +70,6 @@
 #include <libq931/ces.h>
 #include <libq931/ccb.h>
 #include <libq931/input.h>
-#include <libq931/timer.h>
 
 #include <libq931/ie.h>
 #include <libq931/ie_bearer_capability.h>
@@ -95,10 +94,11 @@
 #include "disconnect.h"
 #include "numbers_list.h"
 
-static pthread_t visdn_q931_thread = AST_PTHREADT_NULL;
-
 struct visdn_state visdn = {
 	.usecnt = 0,
+
+	.q931_thread = AST_PTHREADT_NULL,
+
 #ifdef DEBUG_DEFAULTS
 	.debug = TRUE,
 	.debug_q921 = FALSE,
@@ -154,25 +154,20 @@ void refresh_polls_list()
 	visdn.polls[visdn.npolls].fd = visdn.q931_ccb_queue_pipe_read;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_Q931_CCB;
-	(visdn.npolls)++;
+	visdn.npolls++;
 
 	visdn.polls[visdn.npolls].fd = visdn.ccb_q931_queue_pipe_read;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_CCB_Q931;
-	(visdn.npolls)++;
+	visdn.npolls++;
 
 	visdn.polls[visdn.npolls].fd = visdn.netlink_socket;
 	visdn.polls[visdn.npolls].events = POLLIN | POLLERR;
 	visdn.poll_infos[visdn.npolls].type = POLL_INFO_TYPE_NETLINK;
-	(visdn.npolls)++;
-
-	visdn.open_pending = FALSE;
+	visdn.npolls++;
 
 	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		if (intf->open_pending)
-			visdn.open_pending = TRUE;
-			visdn.open_pending_nextcheck = 0;
 
 		if (intf->status == VISDN_INTF_STATUS_FAILED)
 			continue;
@@ -650,7 +645,16 @@ static int visdn_request_call(
 					Q931_IE_BC_ITC_SPEECH ||
 		    bc->information_transfer_capability ==
 		    			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
+			visdn_chan->is_framed = FALSE;
 			visdn_chan->is_voice = TRUE;
+			visdn_chan->handle_stream = TRUE;
+		} else if (bc->information_transfer_capability ==
+				Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
+                           bc->user_information_layer_1_protocol ==
+		    		Q931_IE_BC_UIL1P_G7XX_VIDEO) {
+
+			visdn_chan->is_voice = FALSE;
+			visdn_chan->is_framed = FALSE;
 			visdn_chan->handle_stream = TRUE;
 		}
 
@@ -671,6 +675,7 @@ bc_failure:;
 		bc->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
 
 		visdn_chan->is_voice = TRUE;
+		visdn_chan->is_framed = FALSE;
 		visdn_chan->handle_stream = TRUE;
 
 		if (options) {
@@ -681,7 +686,20 @@ bc_failure:;
 					Q931_IE_BC_UIL1P_UNUSED;
 
 				visdn_chan->is_voice = FALSE;
+				visdn_chan->is_framed = TRUE;
 				visdn_chan->handle_stream = FALSE;
+				visdn_chan->handle_stream = TRUE;
+			}
+
+			if (strchr(options, 'V')) {
+				bc->information_transfer_capability =
+					Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
+				bc->user_information_layer_1_protocol =
+					Q931_IE_BC_UIL1P_G7XX_VIDEO;
+
+				visdn_chan->is_voice = FALSE;
+				visdn_chan->is_framed = FALSE;
+				visdn_chan->handle_stream = TRUE;
 			}
 		}
 
@@ -1118,7 +1136,7 @@ static int visdn_call(
 			goto err_intf_not_found;
 		}
 
-		if (intf->status != VISDN_INTF_STATUS_ONLINE) {
+		if (intf->status != VISDN_INTF_STATUS_ACTIVE) {
 			ast_log(LOG_WARNING,
 				"Interface %s is not online\n",
 				intf_name);
@@ -1258,25 +1276,25 @@ static int visdn_bridge(
 		return AST_BRIDGE_FAILED;
 	}
 
-	if (ioctl(visdn_chan1->sp_fd,
+	if (ioctl(visdn_chan1->up_fd,
 			VISDN_IOC_DISCONNECT, NULL) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
 			strerror(errno));
 	}
 
-	close(visdn_chan1->sp_fd);
-	visdn_chan1->sp_fd = -1;
+	close(visdn_chan1->up_fd);
+	visdn_chan1->up_fd = -1;
 
-	if (ioctl(visdn_chan2->sp_fd,
+	if (ioctl(visdn_chan2->up_fd,
 			VISDN_IOC_DISCONNECT, NULL) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_IOC_DISCONNECT): %s\n",
 			strerror(errno));
 	}
 
-	close(visdn_chan2->sp_fd);
-	visdn_chan2->sp_fd = -1;
+	close(visdn_chan2->up_fd);
+	visdn_chan2->up_fd = -1;
 
 	char command[256];
 	snprintf(command, sizeof(command),
@@ -1286,7 +1304,7 @@ static int visdn_bridge(
 
 	if (write(fd, command, strlen(command)) < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot write to /sys/visdn_tdm/internal-cxc/connect: %s\n",
+			"Cannot write to /sys/: %s\n",
 			strerror(errno));
 
 		close(fd);
@@ -1698,8 +1716,8 @@ static struct visdn_chan *visdn_alloc()
 
 	memset(visdn_chan, 0, sizeof(*visdn_chan));
 
-	visdn_chan->sp_fd = -1;
-	visdn_chan->ec_fd = -1;
+	visdn_chan->up_fd = -1;
+	//visdn_chan->ec_fd = -1;
 
 	return visdn_chan;
 }
@@ -1707,28 +1725,48 @@ static struct visdn_chan *visdn_alloc()
 static void visdn_disconnect_chan_from_visdn(
 	struct visdn_chan *visdn_chan)
 {
-	if (visdn_chan->sp_fd < 0)
+	if (visdn_chan->up_fd < 0)
 		return;
 
-	struct visdn_connect vc;
-
-	if (visdn_chan->sp_pipeline_id) {
+	if (visdn_chan->up_bearer_pipeline_id) {
+		struct visdn_connect vc;
 		memset(&vc, 0, sizeof(vc));
-		vc.pipeline_id = visdn_chan->sp_pipeline_id;
+		vc.pipeline_id = visdn_chan->up_bearer_pipeline_id;
 
 		if (ioctl(visdn.router_control_fd,
 				VISDN_IOC_DISCONNECT,
 				(caddr_t)&vc) < 0) {
 
 			ast_log(LOG_ERROR,
-				"ioctl(VISDN_IOC_DISCONNECT):"
+				"ioctl(VISDN_IOC_DISCONNECT, sp=>br):"
 				" %s\n",
 				strerror(errno));
 		}
+
+		visdn_chan->up_bearer_pipeline_id = 0;
 	}
 
+	if (visdn_chan->up_bearer_pipeline_id) {
+		struct visdn_connect vc;
+		memset(&vc, 0, sizeof(vc));
+		vc.pipeline_id = visdn_chan->bearer_up_pipeline_id;
+
+		if (ioctl(visdn.router_control_fd,
+				VISDN_IOC_DISCONNECT,
+				(caddr_t)&vc) < 0) {
+
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_IOC_DISCONNECT, br=>sp):"
+				" %s\n",
+				strerror(errno));
+		}
+
+		visdn_chan->bearer_up_pipeline_id = 0;
+	}
+
+#if 0
 	if (visdn_chan->bearer_pipeline_id >= 0 &&
-	    visdn_chan->bearer_pipeline_id != visdn_chan->sp_pipeline_id) {
+	    visdn_chan->bearer_pipeline_id != visdn_chan->up_pipeline_id) {
 		memset(&vc, 0, sizeof(vc));
 		vc.pipeline_id = visdn_chan->bearer_pipeline_id;
 
@@ -1741,17 +1779,20 @@ static void visdn_disconnect_chan_from_visdn(
 				" %s\n",
 				strerror(errno));
 		}
-	}
 
-	if (close(visdn_chan->sp_fd) < 0) {
+		visdn_chan->bearer_pipeline_id = 0;
+	}
+#endif
+
+	if (close(visdn_chan->up_fd) < 0) {
 		ast_log(LOG_ERROR,
-			"close(visdn_chan->sp_fd): %s\n",
+			"close(visdn_chan->up_fd): %s\n",
 			strerror(errno));
 	}
 
-	visdn_chan->sp_fd = -1;
+	visdn_chan->up_fd = -1;
 
-	if (visdn_chan->ec_fd >= 0) {
+/*	if (visdn_chan->ec_fd >= 0) {
 		if (close(visdn_chan->ec_fd) < 0) {
 			ast_log(LOG_ERROR,
 				"close(visdn_chan->ec_fd): %s\n",
@@ -1759,7 +1800,7 @@ static void visdn_disconnect_chan_from_visdn(
 		}
 
 		visdn_chan->ec_fd = -1;
-	}
+	}*/
 }
 
 static int visdn_hangup(struct ast_channel *ast_chan)
@@ -1865,8 +1906,6 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->suspended_call = NULL;
 	}
 
-	close(ast_chan->fds[0]);
-
 	if (visdn_chan->hg_first_intf) {
 		visdn_intf_put(visdn_chan->hg_first_intf);
 		visdn_chan->hg_first_intf = NULL;
@@ -1887,7 +1926,7 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 		visdn_chan->dsp = NULL;
 	}
 	
-	if (visdn_chan->sp_fd >= 0) {
+	if (visdn_chan->up_fd >= 0) {
 		// Disconnect the softport since we cannot rely on
 		// libq931 (see above)
 
@@ -1909,39 +1948,50 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	static struct ast_frame f;
 
-	/* Acknowledge timer */
-	read(ast_chan->fds[0], visdn_chan->buf, 1);
-
 	f.src = VISDN_CHAN_TYPE;
+	memset(&f, 0, sizeof(f));
 	f.mallocd = 0;
-	f.delivery.tv_sec = 0;
-	f.delivery.tv_usec = 0;
+	f.frametype = AST_FRAME_NULL;
 
-	if (visdn_chan->sp_fd < 0) {
-		f.frametype = AST_FRAME_NULL;
-		f.subclass = 0;
-		f.samples = 0;
-		f.datalen = 0;
-		f.data = NULL;
-		f.offset = 0;
-
+	if (visdn_chan->up_fd < 0)
 		return &f;
-	}
 
-	int nread = read(visdn_chan->sp_fd, visdn_chan->buf,
+	int nread = read(visdn_chan->up_fd, visdn_chan->buf,
 					sizeof(visdn_chan->buf));
 	if (nread < 0) {
 		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
 		return &f;
 	}
 
-#if 0
+	if (visdn_chan->up_dump_fd >= 0) {
+		write(visdn_chan->up_dump_fd, visdn_chan->buf, nread);
+	}
+
+	if (visdn_chan->is_framed) {
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+		
+		ast_verbose(VERBOSE_PREFIX_3 "R %.3f %04d ",
+			t/1000000.0,
+			nread);
+
+		int i;
+		for (i=0; i<nread; i++) {
+			ast_verbose("%02x", ((__u8 *)visdn_chan)[i]);
+		}
+
+		ast_verbose("\n");
+
+		return &f;
+	} else {
+
+#if 1
 struct timeval tv;
 gettimeofday(&tv, NULL);
-unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02d %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
-	t/1000000.0,
-	visdn_chan->sp_fd,
+ast_verbose("R %.3f %4d     %02x%02x%02x%02x%02x%02x%02x%02x\n",
+	tv.tv_sec + tv.tv_usec/1000000.0,
+	nread,
 	*(__u8 *)(visdn_chan->buf + 0),
 	*(__u8 *)(visdn_chan->buf + 1),
 	*(__u8 *)(visdn_chan->buf + 2),
@@ -1949,21 +1999,39 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02d %02x%02x%02x%02x%02x%02x%02x%02x %d\n"
 	*(__u8 *)(visdn_chan->buf + 4),
 	*(__u8 *)(visdn_chan->buf + 5),
 	*(__u8 *)(visdn_chan->buf + 6),
-	*(__u8 *)(visdn_chan->buf + 7),
-	nread);
+	*(__u8 *)(visdn_chan->buf + 7));
+#elif 0
+struct timeval tv;
+gettimeofday(&tv, NULL);
+ast_verbose("R %.3f %4d    ", tv.tv_sec + tv.tv_usec/1000000.0, nread);
+int i;
+for(i=0; i<nread; i++)
+	ast_verbose("%02x", ((__u8 *)visdn_chan->buf)[i]);
+ast_verbose("\n");
 #endif
 
-	f.frametype = AST_FRAME_VOICE;
-	f.subclass = AST_FORMAT_ALAW;
-	f.samples = nread;
-	f.datalen = nread;
-	f.data = visdn_chan->buf;
-	f.offset = 0;
+		f.frametype = AST_FRAME_VOICE;
+		f.subclass = AST_FORMAT_ALAW;
+		f.samples = nread;
+		f.datalen = nread;
+		f.data = visdn_chan->buf;
+		f.offset = 0;
 
-	struct ast_frame *f2 = ast_dsp_process(ast_chan, visdn_chan->dsp, &f);
+/*		struct ast_frame *f2 =
+			ast_dsp_process(ast_chan, visdn_chan->dsp, &f);
+		return f2;*/
 
-	return f2;
+		return &f;
+	}
 }
+
+#define FIFO_JITTBUFF_LOW 10
+#define FIFO_JITTBUFF_HIGH 20
+#define FIFO_JITTBUFF_AVG \
+		((FIFO_JITTBUFF_LOW + FIFO_JITTBUFF_HIGH) / 2)
+
+#define min(a,b) ((a) < (b) ? (a) : (b))
+#define max(a,b) ((a) > (b) ? (a) : (b))
 
 static int visdn_write(
 	struct ast_channel *ast_chan,
@@ -1986,31 +2054,73 @@ static int visdn_write(
 		return 0;
 	}
 
-	if (visdn_chan->sp_fd < 0) {
+	if (visdn_chan->up_fd < 0) {
 //		ast_log(LOG_WARNING,
 //			"Attempting to write on unconnected channel\n");
 		return 0;
 	}
 
-#if 0
+	if (!frame->datalen)
+		return 0;
+
+	if (!visdn_chan->up_bearer_pipeline_started) {
+		struct visdn_connect vc;
+		memset(&vc, 0, sizeof(vc));
+		vc.pipeline_id = visdn_chan->up_bearer_pipeline_id;
+		visdn_chan->up_bearer_pipeline_started = TRUE;
+
+		if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_START,
+							(caddr_t)&vc) < 0) {
+			ast_log(LOG_ERROR,
+				"ioctl(VISDN_PIPELINE_START, sp=>br): %s\n",
+				strerror(errno));
+		}
+	}
+
+	int len = frame->datalen;
+	__u8 *buf = frame->data;
+
+	int pressure;
+	if (ioctl(visdn_chan->up_fd, VISDN_UP_GET_PRESSURE, &pressure)) {
+		ast_log(LOG_ERROR, "ioctl(): %s\n", strerror(errno));
+	}
+
+	if (pressure < FIFO_JITTBUFF_LOW) {
+		int diff = (FIFO_JITTBUFF_LOW - pressure);
+		buf = malloc(len + diff);
+		memset(buf, 0x2a, diff);
+		memcpy(buf + diff, frame->data, len);
+		len += diff;
+
+#if 1
+		ast_verbose("TX under low-mark: added %d samples\n", diff);
+#endif
+	}
+
+	if (pressure > FIFO_JITTBUFF_HIGH && len > 0) {
+		ast_verbose("TX %d over high-mark: dropped %d samples\n",
+			pressure - FIFO_JITTBUFF_HIGH,
+			min(len, pressure - FIFO_JITTBUFF_HIGH));
+
+		len = max(0, len - (pressure - FIFO_JITTBUFF_HIGH));
+	}
+
+	if (write(visdn_chan->up_fd, buf, len) < 0) {
+		ast_log(LOG_ERROR, "write(): %s\n", strerror(errno));
+	}
+
+#if 1
 struct timeval tv;
 gettimeofday(&tv, NULL);
-unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02d %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
-	t/1000000.0,
-	visdn_chan->sp_fd,
-	*(__u8 *)(frame->data + 0),
-	*(__u8 *)(frame->data + 1),
-	*(__u8 *)(frame->data + 2),
-	*(__u8 *)(frame->data + 3),
-	*(__u8 *)(frame->data + 4),
-	*(__u8 *)(frame->data + 5),
-	*(__u8 *)(frame->data + 6),
-	*(__u8 *)(frame->data + 7),
-	frame->datalen);
+ast_verbose("W %.3f %4d %3d %02x%02x%02x%02x%02x%02x%02x%02x\n",
+	tv.tv_sec + tv.tv_usec/1000000.0,
+	len,
+	pressure,
+	buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
 #endif
 
-	write(visdn_chan->sp_fd, frame->data, frame->datalen);
+	if (buf != frame->data)
+		free(buf);
 
 	return 0;
 }
@@ -2027,12 +2137,7 @@ static struct ast_channel *visdn_new(
 		goto err_channel_alloc;
 	}
 
-	ast_chan->fds[0] = open("/dev/visdn/timer", O_RDONLY);
-	if (ast_chan->fds[0] < 0) {
-		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
-			strerror(errno));
-		goto err_open_timer;
-	}
+	ast_chan->fds[0] = -1;
 
 	if (state == AST_STATE_RING)
 		ast_chan->rings = 1;
@@ -2063,8 +2168,6 @@ static struct ast_channel *visdn_new(
 
 	return ast_chan;
 
-	close(ast_chan->fds[0]);
-err_open_timer:
 	ast_hangup(ast_chan);
 err_channel_alloc:
 
@@ -2308,20 +2411,15 @@ static void visdn_q931_ccb_receive();
 
 static int visdn_q931_thread_do_poll()
 {
-	longtime_t usec_to_wait = q931_run_timers();
-	int msec_to_wait;
+	longtime_t usec_to_wait;
+       
+	usec_to_wait = q931_run_timers();
+	usec_to_wait = visdn_intf_run_timers(usec_to_wait);
 
-	if (usec_to_wait < 0) {
-		msec_to_wait = -1;
-	} else {
-		msec_to_wait = usec_to_wait / 1000 + 1;
-	}
+	int msec_to_wait = (usec_to_wait < 0) ? -1 :
+				usec_to_wait / 1000 + 1;
 
-	if (visdn.open_pending)
-		msec_to_wait = (msec_to_wait > 0 && msec_to_wait < 2001) ?
-				msec_to_wait : 2001;
-
-	visdn_debug("set timeout = %d\n", msec_to_wait);
+	visdn_debug("poll(%d ms)\n", msec_to_wait);
 
 	// Uhm... we should lock, copy polls and unlock before poll()
 	if (poll(visdn.polls, visdn.npolls, msec_to_wait) < 0) {
@@ -2331,26 +2429,6 @@ static int visdn_q931_thread_do_poll()
 		ast_log(LOG_WARNING, "poll error: %s\n", strerror(errno));
 		exit(1);
 	}
-
-	ast_mutex_lock(&visdn.lock);
-	if (time(NULL) > visdn.open_pending_nextcheck) {
-
-		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-
-			if (intf->open_pending) {
-				visdn_debug("Retry opening interface %s\n",
-						intf->name);
-
-				if (visdn_intf_open(intf, intf->current_ic) < 0)
-					visdn.open_pending_nextcheck =
-							time(NULL) + 2;
-			}
-		}
-
-		refresh_polls_list();
-	}
-	ast_mutex_unlock(&visdn.lock);
 
 	int i;
 	for(i = 0; i < visdn.npolls; i++) {
@@ -2556,9 +2634,9 @@ static void visdn_q931_connect_indication(
 
 	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 
-	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
+//	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
-	if (visdn_chan->ec_fd >= 0) {
+/*	if (visdn_chan->ec_fd >= 0) {
 		visdn_debug("Activating echo canceller\n");
 
 		if (ioctl(visdn_chan->ec_fd, VEC_START,
@@ -2568,7 +2646,7 @@ static void visdn_q931_connect_indication(
 				"ioctl(VEC_START): %s\n",
 				strerror(errno));
 		}
-	}
+	}*/
 }
 
 static int visdn_ie_to_ast_hangupcause(
@@ -3034,7 +3112,7 @@ static void visdn_q931_setup_confirm(
 
 	visdn_undefer_dtmf_in(visdn_chan);
 
-	if (visdn_chan->ec_fd >= 0) {
+/*	if (visdn_chan->ec_fd >= 0) {
 
 		visdn_debug("Activating echo canceller\n");
 
@@ -3045,7 +3123,7 @@ static void visdn_q931_setup_confirm(
 				"ioctl(VEC_START): %s\n",
 				strerror(errno));
 		}
-	}
+	}*/
 }
 
 static int visdn_cgpn_to_pres(
@@ -3332,23 +3410,44 @@ static void visdn_q931_setup_indication(
 	}
 
 	if (bc->information_transfer_capability ==
-		Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
-		visdn_numbers_list_match(&ic->trans_numbers_list,
-				called_number)) {
+			Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
+	    bc->user_information_layer_1_protocol ==
+	    		Q931_IE_BC_UIL1P_UNUSED) {
+
+		ast_log(LOG_DEBUG,
+			"Bearer capability is PPP, not handling stream\n");
 
 		pbx_builtin_setvar_helper(ast_chan,
 			"_BEARERCAP_CLASS", "data");
-	
+
 		visdn_chan->is_voice = FALSE;
+		visdn_chan->is_framed = TRUE;
+		visdn_chan->handle_stream = FALSE;
+		q931_call->tones_option = FALSE;
+	} else if (bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
+	           bc->user_information_layer_1_protocol ==
+	    		Q931_IE_BC_UIL1P_G7XX_VIDEO) {
+
+ast_log(LOG_NOTICE, "Video going through!\n");
+
+/*		if (visdn_numbers_list_match(&ic->trans_numbers_list,
+						called_number)) {*/
+		pbx_builtin_setvar_helper(ast_chan,
+			"_BEARERCAP_CLASS", "video");
+	
+		visdn_chan->is_voice = TRUE;
+		visdn_chan->is_framed = FALSE;
 		visdn_chan->handle_stream = TRUE;
 		q931_call->tones_option = FALSE;
 
-	} else  if (bc->information_transfer_capability ==
+	} else if (bc->information_transfer_capability ==
 			Q931_IE_BC_ITC_SPEECH ||
 		    bc->information_transfer_capability ==
 			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
 
 		visdn_chan->is_voice = TRUE;
+		visdn_chan->is_framed = FALSE;
 		visdn_chan->handle_stream = TRUE;
 		q931_call->tones_option = ic->tones_option;
 
@@ -3808,61 +3907,103 @@ static void visdn_q931_timeout_indication(
 static int visdn_connect_channels(
 	struct visdn_chan *visdn_chan)
 {
-	visdn_debug("Connecting streamport %06d to chan %06d\n",
-			visdn_chan->sp_channel_id,
-			visdn_chan->bearer_channel_id);
+	visdn_debug("Connecting userport %s to chan %s\n",
+			visdn_chan->up_node_id,
+			visdn_chan->bearer_node_id);
 
 	struct visdn_connect vc;
 	memset(&vc, 0, sizeof(vc));
-	vc.src_chan_id = visdn_chan->sp_channel_id;
-	vc.dst_chan_id = visdn_chan->bearer_channel_id;
+	strncpy(vc.from_endpoint, visdn_chan->up_node_id,
+				sizeof(vc.from_endpoint));
+	strncpy(vc.to_endpoint, visdn_chan->bearer_node_id,
+				sizeof(vc.to_endpoint));
 
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
 						(caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_CONNECT, sp, isdn): %s\n",
+			"ioctl(VISDN_CONNECT, sp=>br): %s\n",
 			strerror(errno));
-		goto err_ioctl_connect;
+		goto err_ioctl_connect_up_br;
 	}
 
-	visdn_chan->sp_pipeline_id = vc.pipeline_id;
-	visdn_chan->bearer_pipeline_id = vc.pipeline_id;
+	visdn_chan->up_bearer_pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
-	vc.pipeline_id = visdn_chan->sp_pipeline_id;
+	strncpy(vc.from_endpoint, visdn_chan->bearer_node_id,
+				sizeof(vc.from_endpoint));
+	strncpy(vc.to_endpoint, visdn_chan->up_node_id,
+				sizeof(vc.to_endpoint));
 
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
+						(caddr_t) &vc) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_CONNECT, br=>sp): %s\n",
+			strerror(errno));
+		goto err_ioctl_connect_br_up;
+	}
+
+	visdn_chan->bearer_up_pipeline_id = vc.pipeline_id;
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = visdn_chan->up_bearer_pipeline_id;
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
 						(caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_PIPELINE_OPEN, isdn): %s\n",
+			"ioctl(VISDN_PIPELINE_OPEN, sp=>br): %s\n",
 			strerror(errno));
-		goto err_ioctl_enable;
+		goto err_ioctl_open_up_br;
 	}
 
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = visdn_chan->bearer_up_pipeline_id;
+	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
+						(caddr_t)&vc) < 0) {
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_PIPELINE_OPEN, br=>sp): %s\n",
+			strerror(errno));
+		goto err_ioctl_open_br_up;
+	}
+
+	/* Preload the output pipeline */
+	__u8 junk[FIFO_JITTBUFF_AVG];
+	memset(junk, 0x2a, sizeof(junk));
+	write(visdn_chan->up_fd, junk, sizeof(junk));
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = visdn_chan->bearer_up_pipeline_id;
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_START,
 						(caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_PIPELINE_START, isdn): %s\n",
+			"ioctl(VISDN_PIPELINE_START, br=>sp): %s\n",
 			strerror(errno));
-		goto err_ioctl_enable;
+
+		goto err_ioctl_start_br_up;
 	}
 
 	return 0;
 
-err_ioctl_enable:
+err_ioctl_start_br_up:
+err_ioctl_open_br_up:
+err_ioctl_open_up_br:
+err_ioctl_connect_br_up:
+err_ioctl_connect_up_br:
 	memset(&vc, 0, sizeof(vc));
-	vc.pipeline_id = visdn_chan->sp_pipeline_id;
+	vc.pipeline_id = visdn_chan->up_bearer_pipeline_id;
 	ioctl(visdn.router_control_fd, VISDN_IOC_DISCONNECT, (caddr_t) &vc);
-err_ioctl_connect:
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = visdn_chan->bearer_up_pipeline_id;
+	ioctl(visdn.router_control_fd, VISDN_IOC_DISCONNECT, (caddr_t) &vc);
 
 	return -1;
 }
 
+#if 0
 static int visdn_connect_channels_with_ec(
 	struct visdn_chan *visdn_chan)
 {
-	visdn_debug("Connecting streamport %06d to chan %06d via EC\n",
-			visdn_chan->sp_channel_id,
+	visdn_debug("Connecting userport %06d to chan %06d via EC\n",
+			visdn_chan->up_channel_id,
 			visdn_chan->bearer_channel_id);
 
 	visdn_chan->ec_fd = open("/dev/visdn/ec-control", O_RDWR);
@@ -3906,22 +4047,22 @@ static int visdn_connect_channels_with_ec(
 
 	struct visdn_connect vc;
 	memset(&vc, 0, sizeof(vc));
-	vc.src_chan_id = visdn_chan->sp_channel_id;
-	vc.dst_chan_id = visdn_chan->ec_fe_channel_id;
+	vc.from_endpoint_id = visdn_chan->up_channel_id;
+	vc.to_endpoint_id = visdn_chan->ec_fe_channel_id;
 
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
 	    (caddr_t) &vc) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_CONNECT, sp, ec_fe): %s\n",
 			strerror(errno));
-		goto err_ioctl_connect_sp_ec;
+		goto err_ioctl_connect_up_ec;
 	}
 
-	visdn_chan->sp_pipeline_id = vc.pipeline_id;
+	visdn_chan->up_pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
-	vc.src_chan_id = visdn_chan->ec_ne_channel_id;
-	vc.dst_chan_id = visdn_chan->bearer_channel_id;
+	vc.from_endpoint_id = visdn_chan->ec_ne_channel_id;
+	vc.to_endpoint_id = visdn_chan->bearer_channel_id;
 
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_CONNECT,
 	    (caddr_t) &vc) < 0) {
@@ -3934,14 +4075,14 @@ static int visdn_connect_channels_with_ec(
 	visdn_chan->bearer_pipeline_id = vc.pipeline_id;
 
 	memset(&vc, 0, sizeof(vc));
-	vc.pipeline_id = visdn_chan->sp_pipeline_id;
+	vc.pipeline_id = visdn_chan->up_pipeline_id;
 
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_OPEN,
 						 (caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_PIPELINE_OPEN, sp): %s\n",
 			strerror(errno));
-		goto err_ioctl_enable_sp;
+		goto err_ioctl_enable_up;
 	}
 
 	memset(&vc, 0, sizeof(vc));
@@ -3958,14 +4099,14 @@ static int visdn_connect_channels_with_ec(
 
 
 	memset(&vc, 0, sizeof(vc));
-	vc.pipeline_id = visdn_chan->sp_pipeline_id;
+	vc.pipeline_id = visdn_chan->up_pipeline_id;
 
 	if (ioctl(visdn.router_control_fd, VISDN_IOC_PIPELINE_START,
 						 (caddr_t)&vc) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VISDN_PIPELINE_START, sp): %s\n",
 			strerror(errno));
-		goto err_ioctl_enable_sp;
+		goto err_ioctl_enable_up;
 	}
 
 	memset(&vc, 0, sizeof(vc));
@@ -3994,16 +4135,17 @@ static int visdn_connect_channels_with_ec(
 
 	return 0;
 
-err_ioctl_connect_sp_ec:
+err_ioctl_connect_up_ec:
 err_ioctl_connect_ec_b:
-err_ioctl_enable_sp:
+err_ioctl_enable_up:
 err_ioctl_enable_b:
 err_ioctl:
-	close(visdn_chan->sp_fd);
+	close(visdn_chan->up_fd);
 err_open:
 
 	return -1;
 }
+#endif
 
 static void visdn_q931_connect_channel(
 	struct q931_channel *channel)
@@ -4023,51 +4165,59 @@ static void visdn_q931_connect_channel(
 
 	visdn_chan->channel_has_been_connected = TRUE;
 
-	char pipeline[100], dest[100];
-	snprintf(pipeline, sizeof(pipeline),
+	char dest[100];
+	snprintf(dest, sizeof(dest),
 		"%s/%s%d",
 		ic->intf->remote_port,
 		ic->intf->q931_intf->type == LAPD_INTF_TYPE_BRA ? "B" : "",
 		channel->id+1);
 
-	memset(dest, 0, sizeof(dest));
-	if (readlink(pipeline, dest, sizeof(dest) - 1) < 0) {
-		ast_log(LOG_ERROR, "readlink(%s): %s\n", pipeline, strerror(errno));
-		goto err_readlink;
-	}
-
-	char *chanid = strrchr(dest, '/');
-	if (!chanid || !strlen(chanid + 1)) {
-		ast_log(LOG_ERROR,
-			"Invalid chanid found in symlink %s\n",
-			dest);
-		goto err_invalid_chanid;
-	}
-
-	visdn_chan->bearer_channel_id = atoi(chanid + 1);
+	strncpy(visdn_chan->bearer_node_id, dest,
+			sizeof(visdn_chan->bearer_node_id));
 
 	if (visdn_chan->handle_stream) {
-		visdn_chan->sp_fd = open("/dev/visdn/streamport", O_RDWR);
-		if (visdn_chan->sp_fd < 0) {
+		if (visdn_chan->is_framed)
+			visdn_chan->up_fd = open(
+				"/dev/visdn/userport_hdlc", O_RDWR);
+		else
+			visdn_chan->up_fd = open(
+				"/dev/visdn/userport_stream", O_RDWR);
+
+		if (visdn_chan->up_fd < 0) {
 			ast_log(LOG_ERROR,
-				"Cannot open streamport: %s\n",
+				"Cannot open userport: %s\n",
 				strerror(errno));
 			goto err_open;
 		}
 
-		if (ioctl(visdn_chan->sp_fd, VISDN_SP_GET_CHANID,
-			(caddr_t)&visdn_chan->sp_channel_id) < 0) {
+char name[64];
+sprintf(name, "/tmp/stream-%d", channel->id + 1);
+
+visdn_chan->up_dump_fd = open(name, O_WRONLY | O_CREAT);
+if (visdn_chan->up_dump_fd < 0) {
+	ast_log(LOG_ERROR, "Open: %s\n", strerror(errno));
+}
+
+		ast_chan->fds[0] = visdn_chan->up_fd;
+
+		struct vup_ctl vup_ctl;
+		if (ioctl(visdn_chan->up_fd, VISDN_UP_GET_NODEID,
+			(caddr_t)&vup_ctl) < 0) {
 
 			ast_log(LOG_ERROR,
-				"ioctl(VISDN_IOC_GET_CHANID): %s\n",
+				"ioctl(VISDN_IOC_GET_NODEID): %s\n",
 				strerror(errno));
 			goto err_ioctl;
 		}
 
+		snprintf(visdn_chan->up_node_id,
+			sizeof(visdn_chan->up_node_id),
+			"/sys/%s", vup_ctl.node_id);
+
 		/* FIXME TODO FIXME XXX Handle return value */
-		if (ic->echocancel)
+/*		if (ic->echocancel)
 			visdn_connect_channels_with_ec(visdn_chan);
-		else
+		else*/
 			visdn_connect_channels(visdn_chan);
 	}
 
@@ -4077,8 +4227,7 @@ static void visdn_q931_connect_channel(
 
 err_ioctl:
 err_open:
-err_invalid_chanid:
-err_readlink:
+//err_invalid_chanid:
 
 	ast_mutex_unlock(&ast_chan->lock);
 }
@@ -4209,7 +4358,7 @@ static void visdn_logger(int level, const char *format, ...)
 
 void visdn_q931_timer_update()
 {
-	pthread_kill(visdn_q931_thread, SIGURG);
+	pthread_kill(visdn.q931_thread, SIGURG);
 }
 
 static void visdn_q931_ccb_receive()
@@ -4698,10 +4847,10 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 			"Options              : %s\n"
 			"Is voice             : %s\n"
 			"Handle stream        : %s\n"
-			"Streamport Chanid    : %06d\n"
-			"EC NearEnd Chanid    : %06d\n"
-			"EC FarEnd Chanid     : %06d\n"
-			"Bearer Chanid        : %06d\n"
+			"Streamport NodeID    : %s\n"
+//			"EC NearEnd Chanid    : %06d\n"
+//			"EC FarEnd Chanid     : %06d\n"
+			"Bearer NodeID        : %s\n"
 			"In-band informations : %s\n"
 			"DTMF Deferred        : %s\n",
 			visdn_chan->number,
@@ -4709,10 +4858,10 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 			visdn_chan->options,
 			visdn_chan->is_voice ? "Yes" : "No",
 			visdn_chan->handle_stream ? "Yes" : "No",
-			visdn_chan->sp_channel_id,
-			visdn_chan->ec_ne_channel_id,
-			visdn_chan->ec_fe_channel_id,
-			visdn_chan->bearer_channel_id,
+			visdn_chan->up_node_id,
+//			visdn_chan->ec_ne_channel_id,
+//			visdn_chan->ec_fe_channel_id,
+			visdn_chan->bearer_node_id,
 			visdn_chan->inband_info ? "Yes" : "No",
 			visdn_chan->dtmf_deferred ? "Yes" : "No");
 
@@ -4874,6 +5023,7 @@ int load_module()
 {
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
+
 	ast_mutex_init(&visdn.lock);
 	ast_mutex_init(&visdn.usecnt_lock);
 
@@ -4983,7 +5133,7 @@ int load_module()
 
 	visdn.router_control_fd = open("/dev/visdn/router-control", O_RDWR);
 	if (visdn.router_control_fd < 0) {
-		ast_log(LOG_ERROR, "Unable to open timer: %s\n",
+		ast_log(LOG_ERROR, "Unable to open router-control: %s\n",
 			strerror(errno));
 		goto err_open_router_control;
 	}
@@ -4992,7 +5142,7 @@ int load_module()
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	if (ast_pthread_create(&visdn_q931_thread, &attr,
+	if (ast_pthread_create(&visdn.q931_thread, &attr,
 					visdn_q931_thread_main, NULL) < 0) {
 		ast_log(LOG_ERROR, "Unable to start q931 thread.\n");
 		goto err_thread_create;

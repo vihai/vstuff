@@ -23,8 +23,8 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include <linux/visdn/softcxc.h>
-#include <linux/visdn/cxc.h>
+//#include <linux/visdn/softcxc.h>
+//#include <linux/visdn/cxc.h>
 #include <linux/visdn/router.h>
 
 #include "visdnctl.h"
@@ -43,10 +43,10 @@ int disconnect_pipeline(int id)
 	struct visdn_connect connect;
 
 	printf("Disconnecting pipeline '%06d'\n", id);
-
+#if 0
 	connect.pipeline_id = id;
-	connect.src_chan_id = 0;
-	connect.dst_chan_id = 0;
+	connect.from_endpoint_id = 0;
+	connect.to_endpoint_id = 0;
 	connect.flags = 0;
 
 	if (ioctl(fd, VISDN_IOC_DISCONNECT, &connect) < 0) {
@@ -56,13 +56,14 @@ int disconnect_pipeline(int id)
 
 		return 1;
 	}
+#endif
 
 	close(fd);
 
 	return 0;
 }
 
-int disconnect_endpoint(const char *chan_id_str)
+int disconnect_endpoint(const char *endpoint_id_str)
 {
 	int fd = open(CXC_CONTROL_DEV, O_RDWR);
 	if (fd < 0) {
@@ -72,14 +73,15 @@ int disconnect_endpoint(const char *chan_id_str)
 		return 1;
 	}
 
+#if 0
 	struct visdn_connect connect;
 
-	int chan_id = decode_chan_id(chan_id_str);
+	int endpoint_id = decode_endpoint_id(endpoint_id_str);
 
-	printf("Disconnecting endpoint '%06d'\n", chan_id);
+	printf("Disconnecting endpoint '%06d'\n", endpoint_id);
 
-	connect.src_chan_id = chan_id;
-	connect.dst_chan_id = 0;
+	connect.from_endpoint_id = endpoint_id;
+	connect.to_endpoint_id = 0;
 	connect.flags = 0;
 
 	if (ioctl(fd, VISDN_IOC_DISCONNECT_ENDPOINT, &connect) < 0) {
@@ -88,7 +90,7 @@ int disconnect_endpoint(const char *chan_id_str)
 
 		return 1;
 	}
-
+#endif
 	close(fd);
 
 	return 0;

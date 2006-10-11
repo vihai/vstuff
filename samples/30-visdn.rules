@@ -1,4 +1,3 @@
 # Rules to create vISDN associated devices
 
 KERNEL="*", SUBSYSTEM="visdn", NAME="visdn/%k" GROUP="pbx" MODE="0660"
-KERNEL="*", SUBSYSTEM="visdn-timer", NAME="visdn/timers/%k", SYMLINK="visdn/timer" GROUP="pbx" MODE="0660"

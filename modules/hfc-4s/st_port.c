@@ -12,6 +12,8 @@
 
 #include <linux/kernel.h>
 
+#include <linux/kstreamer/pipeline.h>
+
 #include "st_port.h"
 #include "st_port_inline.h"
 #include "st_chan.h"
@@ -111,6 +113,7 @@ static ssize_t hfc_store_role(
 	}
 
 	hfc_st_port_update_st_ctrl0(port);
+	hfc_st_port_update_st_ctrl1(port);
 	hfc_st_port_update_st_clk_dly(port);
 
 	hfc_card_unlock(card);
@@ -403,10 +406,10 @@ void hfc_st_port_update_st_ctrl0(struct hfc_st_port *port)
 	if (port->sq_enabled)
 		st_ctrl0 |= hfc_A_ST_CTRL0_V_SQ_EN;
 
-	if (port->chans[B1].status != HFC_ST_CHAN_STATUS_FREE)
+	if (port->chans[B1].tx.status != HFC_ST_CHAN_STATUS_FREE)
 		st_ctrl0 |= hfc_A_ST_CTRL0_V_B1_EN;
 
-	if (port->chans[B2].status != HFC_ST_CHAN_STATUS_FREE)
+	if (port->chans[B2].tx.status != HFC_ST_CHAN_STATUS_FREE)
 		st_ctrl0 |= hfc_A_ST_CTRL0_V_B2_EN;
 
 	if (port->enable_96khz)
@@ -415,14 +418,23 @@ void hfc_st_port_update_st_ctrl0(struct hfc_st_port *port)
 	hfc_outb(port->card, hfc_A_ST_CTRL0, st_ctrl0);
 }
 
+void hfc_st_port_update_st_ctrl1(struct hfc_st_port *port)
+{
+	u8 st_ctrl1 = 0;
+
+	st_ctrl1 = hfc_A_ST_CTRL1_V_D_HI;
+
+	hfc_outb(port->card, hfc_A_ST_CTRL1, st_ctrl1);
+}
+
 void hfc_st_port_update_st_ctrl2(struct hfc_st_port *port)
 {
 	u8 st_ctrl2 = 0;
 
-	if (port->chans[B1].status != HFC_ST_CHAN_STATUS_FREE)
+	if (port->chans[B1].rx.status != HFC_ST_CHAN_STATUS_FREE)
 		st_ctrl2 |= hfc_A_ST_CTRL2_V_B1_RX_EN;
 
-	if (port->chans[B2].status != HFC_ST_CHAN_STATUS_FREE)
+	if (port->chans[B2].rx.status != HFC_ST_CHAN_STATUS_FREE)
 		st_ctrl2 |= hfc_A_ST_CTRL2_V_B2_RX_EN;
 
 	hfc_outb(port->card, hfc_A_ST_CTRL2, st_ctrl2);
@@ -475,25 +487,6 @@ static void hfc_st_port_update_led(struct hfc_st_port *port)
 	hfc_led_update(led);
 }
 
-static void hfc_st_port_fifo_update(struct hfc_st_port *port)
-{
-	int i;
-
-	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
-		struct hfc_sys_chan *sys_chan =
-				port->chans[i].connected_sys_chan;
-
-		if (sys_chan) {
-			hfc_fifo_select(&sys_chan->rx_fifo);
-			hfc_fifo_configure(&sys_chan->rx_fifo);
-
-			hfc_fifo_select(&sys_chan->tx_fifo);
-			hfc_fifo_configure(&sys_chan->tx_fifo);
-		}
-	}
-}
-
-
 static void hfc_st_port_state_change_nt(
 	struct hfc_st_port *port,
 	u8 old_state, u8 new_state)
@@ -523,8 +516,6 @@ static void hfc_st_port_state_change_nt(
 			visdn_port_error_indication(&port->visdn_port, 0);
 			visdn_port_deactivated(&port->visdn_port);
 			*/
-
-			hfc_st_port_fifo_update(port);
 		}
 	break;
 
@@ -532,13 +523,10 @@ static void hfc_st_port_state_change_nt(
 		del_timer(&port->timer_t1);
 
 		visdn_port_activated(&port->visdn_port);
-
-		hfc_st_port_fifo_update(port);
 	break;
 
 	case 4:
 		visdn_port_deactivated(&port->visdn_port);
-		hfc_st_port_fifo_update(port);
 	break;
 	}
 }
@@ -557,8 +545,6 @@ static void hfc_st_port_state_change_te(
 	case 1:
 		visdn_port_deactivated(&port->visdn_port);
 
-		hfc_st_port_fifo_update(port);
-
 		if (old_state != 3)
 			visdn_port_disconnected(&port->visdn_port);
 	break;
@@ -572,8 +558,6 @@ static void hfc_st_port_state_change_te(
 	case 3:
 		visdn_port_deactivated(&port->visdn_port);
 
-		hfc_st_port_fifo_update(port);
-
 		if (old_state == 8)
 			visdn_port_error_indication(&port->visdn_port, 2);
 	break;
@@ -585,8 +569,6 @@ static void hfc_st_port_state_change_te(
 
 	case 7:
 		visdn_port_activated(&port->visdn_port);
-
-		hfc_st_port_fifo_update(port);
 
 		if (old_state == 6 || old_state == 8)
 			visdn_port_error_indication(&port->visdn_port, 2);
@@ -674,11 +656,14 @@ static void hfc_st_port_state_change_work(void *data)
 }
 
 static void hfc_st_port_release(
-	struct visdn_port *port)
+	struct visdn_port *visdn_port)
 {
+	struct hfc_st_port *port =
+		container_of(visdn_port, struct hfc_st_port, visdn_port);
+
 	printk(KERN_DEBUG "hfc_st_port_release()\n");
 
-	// FIXME
+	kfree(port);
 }
 
 static int hfc_st_port_enable(
@@ -686,13 +671,14 @@ static int hfc_st_port_enable(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
+	int i;
 
 	hfc_card_lock(card);
 	hfc_st_port_select(port);
+	hfc_st_port_update_st_ctrl0(port);
+	hfc_st_port_update_st_ctrl1(port);
 	hfc_outb(port->card, hfc_A_ST_WR_STA, 0);
-
 	hfc_st_port_update_led(port);
-
 	hfc_card_unlock(card);
 
 	hfc_debug_st_port(port, 2, "enabled\n");
@@ -711,6 +697,9 @@ static int hfc_st_port_disable(
 	hfc_outb(port->card, hfc_A_ST_WR_STA,
 		hfc_A_ST_WR_STA_V_ST_SET_STA(0)|
 		hfc_A_ST_WR_STA_V_ST_LD_STA);
+
+	hfc_st_port_update_st_ctrl0(port);
+	hfc_st_port_update_st_ctrl1(port);
 
 	hfc_st_port_update_led(port);
 
@@ -764,12 +753,12 @@ void hfc_st_port_init(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
 	const char *name,
-	int id,
-	struct hfc_led *led)
+	int id)
 {
+	memset(port, 0, sizeof(*port));
+
 	port->card = card;
 	port->id = id;
-	port->led = led;
 
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
@@ -789,11 +778,9 @@ void hfc_st_port_init(
 	port->clock_delay = card->config->clk_dly_te;
 	port->sampling_comp = card->config->sampl_comp_te;
 
-	visdn_port_init(&port->visdn_port);
-	port->visdn_port.ops = &hfc_st_port_ops;
+	visdn_port_init(&port->visdn_port, &hfc_st_port_ops, name,
+			&card->pci_dev->dev.kobj);
 	port->visdn_port.driver_data = port;
-	port->visdn_port.device = &card->pci_dev->dev;
-	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
 
 	hfc_st_chan_init(&port->chans[D], port, "D", D,
 		hfc_D_CHAN_OFF + id*4, 2, 0, 16000);
@@ -807,6 +794,17 @@ void hfc_st_port_init(
 		0, 0, 0, 4000);
 }
 
+struct hfc_st_port *hfc_st_port_alloc(void)
+{
+	struct hfc_st_port *port;
+
+	port = kmalloc(sizeof(*port), GFP_KERNEL);
+	if (!port)
+		return NULL;
+
+	return port;
+}
+
 int hfc_st_port_register(
 	struct hfc_st_port *port)
 {
@@ -816,22 +814,27 @@ int hfc_st_port_register(
 	if (err < 0)
 		goto err_port_register;
 
+	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[D]);
 	if (err < 0)
 		goto err_chan_register_D;
 
+	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[B1]);
 	if (err < 0)
 		goto err_chan_register_B1;
 
+	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[B2]);
 	if (err < 0)
 		goto err_chan_register_B2;
 
+	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[E]);
 	if (err < 0)
 		goto err_chan_register_E;
 
+	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[SQ]);
 	if (err < 0)
 		goto err_chan_register_SQ;

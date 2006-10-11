@@ -62,7 +62,7 @@ static int vgsm_tty_open(
 		spin_lock(&vgsm_cards_list_lock);
 		list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
 			if (card->id == tty->index / 4) {
-				module = &card->modules[tty->index % 4];
+				module = card->modules[tty->index % 4];
 				break;
 			}
 		}
@@ -144,15 +144,15 @@ static int vgsm_tty_write(
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
 	if (from_user) {
-		copied_bytes = __kfifo_put_user(module->kfifo_tx,
+		copied_bytes = __kfifo_put_user(module->tx.fifo,
 					(unsigned char *)buf, count);
 	} else {
-		copied_bytes = __kfifo_put(module->kfifo_tx,
+		copied_bytes = __kfifo_put(module->tx.fifo,
 					(unsigned char *)buf, count);
 	}
 #else
 
-	copied_bytes = __kfifo_put(module->kfifo_tx,
+	copied_bytes = __kfifo_put(module->tx.fifo,
 				(unsigned char *)buf, count);
 #endif
 
@@ -165,7 +165,7 @@ static int vgsm_tty_write_room(struct tty_struct *tty)
 {
 	struct vgsm_module *module = tty->driver_data;
 
-	return module->kfifo_tx->size - kfifo_len(module->kfifo_tx);
+	return module->tx.fifo->size - kfifo_len(module->tx.fifo);
 }
 
 static void vgsm_tty_throttle(struct tty_struct *tty)
@@ -188,7 +188,7 @@ static int vgsm_tty_chars_in_buffer(struct tty_struct *tty)
 {
 	struct vgsm_module *module = tty->driver_data;
 
-	return kfifo_len(module->kfifo_tx);
+	return kfifo_len(module->tx.fifo);
 }
 
 static void vgsm_tty_flush_buffer(
@@ -196,7 +196,7 @@ static void vgsm_tty_flush_buffer(
 {
 	struct vgsm_module *module = tty->driver_data;
 
-	kfifo_reset(module->kfifo_tx);
+	kfifo_reset(module->tx.fifo);
 }
 
 static void vgsm_tty_wait_until_sent(
@@ -205,16 +205,16 @@ static void vgsm_tty_wait_until_sent(
 {
 	struct vgsm_module *module = tty->driver_data;
 
-	while(kfifo_len(module->kfifo_tx)) {
+	while(kfifo_len(module->tx.fifo)) {
 		DEFINE_WAIT(wait);
 
-		prepare_to_wait(&module->tx_wait_queue, &wait,
+		prepare_to_wait(&module->tx.wait_queue, &wait,
 			TASK_UNINTERRUPTIBLE);
 
-		if (kfifo_len(module->kfifo_tx))
+		if (kfifo_len(module->tx.fifo))
 			schedule_timeout(timeout);
 
-		finish_wait(&module->tx_wait_queue, &wait);
+		finish_wait(&module->tx.wait_queue, &wait);
 
 		if (signal_pending(current))
 			return;
@@ -246,7 +246,7 @@ static int vgsm_tty_do_codec_set(
 		}
 
 		/* codec's tx gain is analog rx gain */
-		module->tx_gain = cctl.value;
+		module->tx.codec_gain = cctl.value;
 	break;
 
 	case VGSM_CODEC_TXGAIN:
@@ -256,7 +256,7 @@ static int vgsm_tty_do_codec_set(
 		}
 
 		/* codec's rx gain is analog tx gain */
-		module->rx_gain = cctl.value;
+		module->rx.codec_gain = cctl.value;
 	break;
 
 	case VGSM_CODEC_DIG_LOOP:
@@ -447,6 +447,20 @@ err_copy_from_user:
 	return err;
 }
 
+static void my_fill_kobj_path(struct kobject *kobj, char *path, int length)
+{
+	struct kobject * parent;
+
+	--length;
+	for (parent = kobj; parent; parent = parent->parent) {
+		int cur = strlen(kobject_name(parent));
+		/* back up enough to print this name with '/' */
+		length -= cur;
+		strncpy (path + length, kobject_name(parent), cur);
+		*(path + --length) = '/';
+	}
+}
+
 static int vgsm_tty_ioctl(
 	struct tty_struct *tty,
 	struct file *file,
@@ -460,12 +474,19 @@ static int vgsm_tty_ioctl(
 
 	switch(cmd) {
 	case VGSM_IOC_GET_TX_FIFOLEN:
-		return put_user(kfifo_len(module->kfifo_tx),
+		return put_user(kfifo_len(module->tx.fifo),
 				(unsigned int *)arg);
 	break;
 
-	case VGSM_IOC_GET_CHANID:
-		return put_user(module->visdn_chan.id, (unsigned int *)arg);
+	case VGSM_IOC_GET_NODEID: {
+		struct vgsm_ctl ctl;
+		my_fill_kobj_path(&module->ks_node.kobj, ctl.node_id,
+						sizeof(ctl.node_id));
+
+		if (copy_to_user(&ctl, (const void *)arg, sizeof(ctl)))
+			return -EFAULT;
+
+	}
 	break;
 
 	case VGSM_IOC_CODEC_SET:

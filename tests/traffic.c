@@ -64,10 +64,6 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 	struct cmsghdr cmsg_in;
 	struct iovec iov_in;
 
-	struct msghdr msg_out;
-	struct cmsghdr cmsg_out;
-	struct iovec iov_out;
-
 	__u8 frame[65536];
 
 	iov_in.iov_base = frame;
@@ -80,6 +76,10 @@ void start_loopback(int s, const char *prefix, struct opts *opts)
 	msg_in.msg_control = &cmsg_in;
 	msg_in.msg_controllen = sizeof(cmsg_in);
 	msg_in.msg_flags = 0;
+
+	struct msghdr msg_out;
+	struct cmsghdr cmsg_out;
+	struct iovec iov_out;
 
 	iov_out.iov_base = frame;
 

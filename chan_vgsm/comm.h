@@ -20,9 +20,6 @@
 #include "longtime.h"
 #include "util.h"
 
-#define SEC 1000000LL
-#define MILLISEC 1000LL
-
 /* Error codes allocation:
  *
  *    0 to  999		Final messages

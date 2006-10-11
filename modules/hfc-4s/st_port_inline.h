@@ -15,7 +15,19 @@
 
 #include <linux/pci.h>
 
-#include "card_inline.h"
+#include "card.h"
+
+static inline struct hfc_st_port *hfc_st_port_get(struct hfc_st_port *port)
+{
+	visdn_port_get(&port->visdn_port);
+
+	return port;
+}
+
+static inline void hfc_st_port_put(struct hfc_st_port *port)
+{
+	visdn_port_put(&port->visdn_port);
+}
 
 static inline void hfc_st_port_select(struct hfc_st_port *port)
 {

@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -21,7 +21,7 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 
-#include <linux/visdn/core.h>
+#include <linux/kstreamer/kstreamer.h>
 
 #include "fifo.h"
 #include "fifo_inline.h"
@@ -35,7 +35,26 @@
 #include "sys_port.h"
 #include "sys_chan.h"
 #include "card.h"
-#include "card_inline.h"
+
+static void hfc_card_release(struct kref *kref)
+{
+	struct hfc_card *card = container_of(kref, struct hfc_card, kref);
+
+	kfree(card);
+}
+
+struct hfc_card *hfc_card_get(struct hfc_card *card)
+{
+	if (card)
+		kref_get(&card->kref);
+
+	return card;
+}
+
+void hfc_card_put(struct hfc_card *card)
+{
+	kref_put(&card->kref, hfc_card_release);
+}
 
 //----------------------------------------------------------------------------
 
@@ -66,9 +85,9 @@ static ssize_t hfc_store_double_clock(
 	hfc_card_lock(card);
 	card->double_clock = !!value;
 	card->quartz_49 = !!value;
-	hfc_update_r_ctrl(card);
-	hfc_softreset(card);
-	hfc_initialize_hw(card);
+	hfc_card_update_r_ctrl(card);
+	hfc_card_softreset(card);
+	hfc_card_initialize_hw(card);
 	hfc_card_unlock(card);
 
 	return count;
@@ -106,9 +125,9 @@ static ssize_t hfc_store_quartz_49(
 
 	hfc_card_lock(card);
 	card->quartz_49 = !!value;
-	hfc_update_r_brg_pcm_cfg(card);
-	hfc_softreset(card);
-	hfc_initialize_hw(card);
+	hfc_card_update_r_brg_pcm_cfg(card);
+	hfc_card_softreset(card);
+	hfc_card_initialize_hw(card);
 	hfc_card_unlock(card);
 
 	return count;
@@ -229,7 +248,7 @@ static ssize_t hfc_store_bert_mode(
 
 	hfc_card_lock(card);
 	card->bert_mode = mode;
-	hfc_update_bert_wd_md(card, 0);
+	hfc_card_update_bert_wd_md(card, 0);
 	hfc_card_unlock(card);
 
 	return count;
@@ -259,7 +278,7 @@ static ssize_t hfc_store_bert_err(
 	struct hfc_card *card = pci_get_drvdata(pci_dev);
 
 	hfc_card_lock(card);
-	hfc_update_bert_wd_md(card, hfc_R_BERT_WD_MD_V_BERT_ERR);
+	hfc_card_update_bert_wd_md(card, hfc_R_BERT_WD_MD_V_BERT_ERR);
 	hfc_card_unlock(card);
 
 	return count;
@@ -395,11 +414,11 @@ static ssize_t hfc_store_ram_size(
 
 		card->ram_size = value;
 
-		hfc_update_r_ram_misc(card);
-		hfc_update_r_ctrl(card);
+		hfc_card_update_r_ram_misc(card);
+		hfc_card_update_r_ctrl(card);
 
-		hfc_softreset(card);
-		hfc_initialize_hw(card);
+		hfc_card_softreset(card);
+		hfc_card_initialize_hw(card);
 
 		hfc_card_unlock(card);
 
@@ -452,7 +471,7 @@ static ssize_t hfc_store_clock_source_config(
 		hfc_debug_card(card, 1, "Clock source set to %d\n", clock_source);
 	}
 
-	hfc_update_st_sync(card);
+	hfc_card_update_st_sync(card);
 	hfc_card_unlock(card);
 
 	return count;
@@ -551,7 +570,7 @@ void hfc_card_sysfs_delete_files(
  * HW routines
  ******************************************/
 
-void hfc_softreset(struct hfc_card *card)
+void hfc_card_softreset(struct hfc_card *card)
 {
 	hfc_msg_card(card, KERN_INFO, "resetting\n");
 
@@ -564,7 +583,7 @@ void hfc_softreset(struct hfc_card *card)
 	hfc_wait_busy(card);
 }
 
-void hfc_update_r_ctrl(struct hfc_card *card)
+void hfc_card_update_r_ctrl(struct hfc_card *card)
 {
 	u8 r_ctrl = 0;
 
@@ -580,7 +599,7 @@ void hfc_update_r_ctrl(struct hfc_card *card)
 	hfc_outb(card, hfc_R_CTRL, r_ctrl);
 }
 
-void hfc_update_r_brg_pcm_cfg(struct hfc_card *card)
+void hfc_card_update_r_brg_pcm_cfg(struct hfc_card *card)
 {
 	if (card->quartz_49)
 		hfc_outb(card, hfc_R_BRG_PCM_CFG,
@@ -592,9 +611,9 @@ void hfc_update_r_brg_pcm_cfg(struct hfc_card *card)
 			hfc_R_BRG_PCM_CFG_V_ADDR_WRDLY_3NS);
 }
 
-void hfc_update_r_ram_misc(struct hfc_card *card)
+void hfc_card_update_r_ram_misc(struct hfc_card *card)
 {
-	u8 ram_misc = hfc_R_RAM_MISC_V_FZ_MD;
+	u8 ram_misc = 0;//hfc_R_RAM_MISC_V_FZ_MD;
 
 	if (card->ram_size == 32)
 		ram_misc |= hfc_R_RAM_MISC_V_RAM_SZ_32K;
@@ -606,10 +625,10 @@ void hfc_update_r_ram_misc(struct hfc_card *card)
 	hfc_outb(card, hfc_R_RAM_MISC, ram_misc);
 }
 
-static void hfc_initialize_hw_nonsoft(struct hfc_card *card)
+static void hfc_card_initialize_hw_nonsoft(struct hfc_card *card)
 {
 	// FIFO RAM configuration
-	hfc_update_r_ram_misc(card);
+	hfc_card_update_r_ram_misc(card);
 
 	hfc_outb(card, hfc_R_FIFO_MD,
 			hfc_R_FIFO_MD_V_FIFO_MD_00 |
@@ -622,23 +641,24 @@ static void hfc_initialize_hw_nonsoft(struct hfc_card *card)
 	card->regs.irqmsk_misc = 0;
 	hfc_outb(card, hfc_R_IRQMSK_MISC, card->regs.irqmsk_misc);
 
-	hfc_update_r_ctrl(card);
-	hfc_update_r_brg_pcm_cfg(card);
+	hfc_card_update_r_ctrl(card);
+	hfc_card_update_r_brg_pcm_cfg(card);
 
 	// Here is the place to configure:
 	// R_CIRM
 }
 
-void hfc_update_pcm_md0(struct hfc_card *card, u8 otherbits)
+void hfc_card_update_pcm_md0(struct hfc_card *card, u8 otherbits)
 {
 	hfc_outb(card, hfc_R_PCM_MD0,
+//		hfc_R_PCM_MD0_V_F0_LEN |
 		otherbits |
 		(card->pcm_port.master ?
 			hfc_R_PCM_MD0_V_PCM_MD_MASTER :
 			hfc_R_PCM_MD0_V_PCM_MD_SLAVE));
 }
 
-void hfc_update_pcm_md1(struct hfc_card *card)
+void hfc_card_update_pcm_md1(struct hfc_card *card)
 {
 	u8 pcm_md1 = 0;
 	if (card->pcm_port.bitrate == 0) {
@@ -649,11 +669,11 @@ void hfc_update_pcm_md1(struct hfc_card *card)
 		pcm_md1 |= hfc_R_PCM_MD1_V_PCM_DR_8MBIT;
 	}
 
-	hfc_pcm_multireg_select(card, hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD1);
+	hfc_pcm_port_multireg_select(card, hfc_R_PCM_MD0_V_PCM_IDX_R_PCM_MD1);
 	hfc_outb(card, hfc_R_PCM_MD1, pcm_md1);
 }
 
-void hfc_update_st_sync(struct hfc_card *card)
+void hfc_card_update_st_sync(struct hfc_card *card)
 {
 	if (card->clock_source == -1)
 		hfc_outb(card, hfc_R_ST_SYNC,
@@ -664,14 +684,14 @@ void hfc_update_st_sync(struct hfc_card *card)
 			hfc_R_ST_SYNC_V_AUTO_SYNC_DISABLED);
 }
 
-void hfc_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
+void hfc_card_update_bert_wd_md(struct hfc_card *card, u8 otherbits)
 {
 	hfc_outb(card, hfc_R_BERT_WD_MD,
 		hfc_R_BERT_WD_MD_V_PAT_SEQ(card->bert_mode & 0x7) |
 		otherbits);
 }
 
-void hfc_initialize_hw(struct hfc_card *card)
+void hfc_card_initialize_hw(struct hfc_card *card)
 {
 	int i;
 
@@ -696,10 +716,10 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_TI_WD_V_EV_TS_8_192_S);
 //		hfc_R_TI_WD_V_EV_TS_1_MS);
 
-	hfc_update_pcm_md0(card, 0);
-	hfc_update_pcm_md1(card);
-	hfc_update_st_sync(card);
-	hfc_update_bert_wd_md(card, 0);
+	hfc_card_update_pcm_md0(card, 0);
+	hfc_card_update_pcm_md1(card);
+	hfc_card_update_st_sync(card);
+	hfc_card_update_bert_wd_md(card, 0);
 
 	hfc_outb(card, hfc_R_SCI_MSK,
 		hfc_R_SCI_MSK_V_SCI_MSK_ST0|
@@ -715,16 +735,30 @@ void hfc_initialize_hw(struct hfc_card *card)
 		hfc_R_GPIO_SEL_V_GPIO_SEL6 |
 		hfc_R_GPIO_SEL_V_GPIO_SEL7)*/
 
-
-	// Timer interrupt enabled
+	/* Timer interrupt enabled */
 	hfc_outb(card, hfc_R_IRQMSK_MISC,
 		hfc_R_IRQMSK_MISC_V_TI_IRQMSK);
 
+	/*
+	hfc_outb(card, hfc_R_RAM_ADDR2, 0x0);
+	hfc_outb(card, hfc_R_RAM_ADDR1, 0x18);
+	for(i=0; i<32; i++) {
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0x00 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0xff);
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0x40 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0xff);
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0x80 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0xff);
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0xc0 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0xff);
+	}
+	*/
+
 	for (i=0; i<card->num_st_ports; i++) {
-		hfc_st_port_select(&card->st_ports[i]);
-		hfc_st_port_update_st_ctrl0(&card->st_ports[i]);
-		hfc_st_port_update_st_ctrl2(&card->st_ports[i]);
-		hfc_st_port_update_st_clk_dly(&card->st_ports[i]);
+		hfc_st_port_select(card->st_ports[i]);
+		hfc_st_port_update_st_ctrl0(card->st_ports[i]);
+		hfc_st_port_update_st_ctrl2(card->st_ports[i]);
+		hfc_st_port_update_st_clk_dly(card->st_ports[i]);
 	}
 
 	if (card->num_st_ports == 4) {
@@ -733,7 +767,7 @@ void hfc_initialize_hw(struct hfc_card *card)
 			hfc_R_GPIO_SEL_V_GPIO_SEL5);
 	}
 
-	// Enable interrupts
+	/* Enable interrupts */
 	hfc_outb(card, hfc_R_IRQ_CTRL,
 		hfc_R_IRQ_CTRL_V_FIFO_IRQ|
 		hfc_R_IRQ_CTRL_V_GLOB_IRQ_EN|
@@ -746,18 +780,18 @@ void hfc_initialize_hw(struct hfc_card *card)
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_sys_chan *chan)
 {
-	if (visdn_leg_queue_stopped(&chan->visdn_chan.leg_b)) {
+/*	if (visdn_leg_queue_stopped(&chan->visdn_chan.leg_b)) {
 		hfc_fifo_select(&chan->tx_fifo);
 
 		if (hfc_fifo_free_frames(&chan->tx_fifo) &&
 		    hfc_fifo_free_tx(&chan->tx_fifo) > 20)
 			visdn_leg_wake_queue(&chan->visdn_chan.leg_b);
-	}
+	}*/
 }
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_sys_chan *chan)
 {
-	schedule_work(&chan->rx_work);
+	tasklet_schedule(&chan->rx.tasklet);
 }
 
 static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
@@ -853,8 +887,8 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (irq_sci) {
 		int i;
 		for (i=0; i<card->num_st_ports; i++) {
-			if (irq_sci & (1 << card->st_ports[i].id)) {
-				hfc_handle_state_interrupt(&card->st_ports[i]);
+			if (irq_sci & (1 << card->st_ports[i]->id)) {
+				hfc_handle_state_interrupt(card->st_ports[i]);
 			}
 		}
 	}
@@ -862,31 +896,33 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return IRQ_HANDLED;
 }
 
-int __devinit hfc_card_probe(
-	struct pci_dev *pci_dev,
-	const struct pci_device_id *device_id_entry)
+struct hfc_card *hfc_card_alloc(void)
 {
 	struct hfc_card *card;
-	int chip_type;
-	int revision;
-	int i;
-	int err;
 
 	card = kmalloc(sizeof(*card), GFP_KERNEL);
-	if (!card) {
-		hfc_msg(KERN_CRIT, "unable to kmalloc!\n");
-		err = -ENOMEM;
-		goto err_alloc_hfccard;
-	}
+	if (!card)
+		return NULL;
+
+	return card;
+}
+
+void hfc_card_init(
+	struct hfc_card *card,
+	struct pci_dev *pci_dev,
+	struct hfc_card_config *card_config)
+{
+	int i;
 
 	memset(card, 0, sizeof(*card));
+
+	kref_init(&card->kref);
 
 	spin_lock_init(&card->lock);
 
 	card->pci_dev = pci_dev;
-	pci_set_drvdata(pci_dev, card);
 
-	card->config = (struct hfc_card_config *)device_id_entry->driver_data;
+	card->config = card_config;
 
 	card->double_clock = card->config->double_clock;
 	card->quartz_49 = card->config->quartz_49;
@@ -895,30 +931,122 @@ int __devinit hfc_card_probe(
 	for(i=0; i<ARRAY_SIZE(card->leds); i++)
 		hfc_led_init(&card->leds[i], i, card);
 
-	// From here on hfc_msg_card may be used
+	hfc_switch_init(&card->hfcswitch, card);
 
-	if ((err = pci_enable_device(pci_dev))) {
+	hfc_sys_port_init(&card->sys_port, card, "sys");
+	hfc_pcm_port_init(&card->pcm_port, card, "pcm");
+}
+
+int hfc_card_register(struct hfc_card *card)
+{
+	int i;
+	int err;
+
+	hfc_card_get(card); /* Container is implicitly used */
+	err = hfc_switch_register(&card->hfcswitch);
+	if (err < 0)
+		goto err_switch_register;
+
+	hfc_card_get(card); /* Container is implicitly used */
+	err = hfc_sys_port_register(&card->sys_port);
+	if (err < 0)
+		goto err_sys_port_register;
+
+	hfc_card_get(card); /* Container is implicitly used */
+	err = hfc_pcm_port_register(&card->pcm_port);
+	if (err < 0)
+		goto err_pcm_port_register;
+
+	for (i=0; i<card->num_st_ports; i++) {
+		err = hfc_st_port_register(card->st_ports[i]);
+		if (err < 0) {
+			hfc_st_port_put(card->st_ports[i]);
+			card->st_ports[i] = NULL;
+			goto err_st_port_register;
+		}
+	}
+
+	err = hfc_card_sysfs_create_files(card);
+	if (err < 0)
+		goto err_card_sysfs_create_files;
+
+	hfc_msg_card(card, KERN_INFO,
+		"configured at mem %#lx (0x%p) IRQ %u\n",
+		card->io_bus_mem,
+		card->io_mem,
+		card->pci_dev->irq);
+
+	return 0;
+
+	hfc_card_sysfs_delete_files(card);
+err_card_sysfs_create_files:
+	for (i=card->num_st_ports - 1; i>=0; i--)
+		hfc_st_port_unregister(card->st_ports[i]);
+err_st_port_register:
+	hfc_pcm_port_unregister(&card->pcm_port);
+err_pcm_port_register:
+	hfc_sys_port_unregister(&card->sys_port);
+err_sys_port_register:
+	hfc_switch_unregister(&card->hfcswitch);
+err_switch_register:
+
+	hfc_msg(KERN_ERR, "HFC card at %s-%s registration failure: %d\n",
+		card->pci_dev->dev.bus->name,
+		card->pci_dev->dev.bus_id,
+		err);
+
+	return err;
+}
+
+void hfc_card_unregister(struct hfc_card *card)
+{
+	int i;
+
+	for(i=0; i<ARRAY_SIZE(card->leds); i++)
+		hfc_led_remove(&card->leds[i]);
+
+	hfc_card_sysfs_delete_files(card);
+
+	for (i=card->num_st_ports - 1; i>=0; i--)
+		hfc_st_port_unregister(card->st_ports[i]);
+
+	hfc_pcm_port_unregister(&card->pcm_port);
+	hfc_sys_port_unregister(&card->sys_port);
+
+	hfc_switch_unregister(&card->hfcswitch);
+}
+
+int hfc_card_probe(struct hfc_card *card)
+{
+	int chip_type;
+	int revision;
+	int i;
+	int err;
+
+	err = pci_enable_device(card->pci_dev);
+	if (err < 0) {
 		goto err_pci_enable_device;
 	}
 
-	pci_write_config_word(pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
+	pci_write_config_word(card->pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
 
-	if((err = pci_request_regions(pci_dev, hfc_DRIVER_NAME))) {
+	err = pci_request_regions(card->pci_dev, hfc_DRIVER_NAME);
+	if (err < 0) {
 		hfc_msg_card(card, KERN_CRIT,
 			"cannot request I/O memory region\n");
 		goto err_pci_request_regions;
 	}
 
-	pci_set_master(pci_dev);
+	pci_set_master(card->pci_dev);
 
-	if (!pci_dev->irq) {
+	if (!card->pci_dev->irq) {
 		hfc_msg_card(card, KERN_CRIT,
 			"PCI device does not have an assigned IRQ!\n");
 		err = -ENODEV;
 		goto err_noirq;
 	}
 
-	card->io_bus_mem = pci_resource_start(pci_dev,1);
+	card->io_bus_mem = pci_resource_start(card->pci_dev, 1);
 	if (!card->io_bus_mem) {
 		hfc_msg_card(card, KERN_CRIT,
 			"PCI device does not have an assigned"
@@ -954,6 +1082,18 @@ int __devinit hfc_card_probe(
 		goto err_unknown_chip;
 	}
 
+	for (i=0; i<card->num_st_ports; i++) {
+		char portid[10];
+
+		card->st_ports[i] = hfc_st_port_alloc();
+
+		snprintf(portid, sizeof(portid), "st%d", i);
+		hfc_st_port_init(card->st_ports[i], card, portid, i);
+		
+		if (card->num_st_ports == 4)
+			card->st_ports[i]->led = &card->leds[i];
+	}
+
 	revision = hfc_R_CHIP_RV_V_CHIP_RV(hfc_inb(card, hfc_R_CHIP_RV));
 
 	if (revision < 1)
@@ -970,95 +1110,36 @@ int __devinit hfc_card_probe(
 
 	// Initialize all the card's components
 
-	hfc_cxc_init(&card->cxc);
-
-	for (i=0; i<card->num_st_ports; i++) {
-		char portid[10];
-		snprintf(portid, sizeof(portid), "st%d", i);
-
-		hfc_st_port_init(&card->st_ports[i], card, portid, i,
-			card->num_st_ports == 4 ? &card->leds[i] : NULL);
-	}
-
-	hfc_sys_port_init(&card->sys_port, card, "sys");
-	hfc_pcm_port_init(&card->pcm_port, card, "pcm");
-
 	hfc_card_lock(card);
-	hfc_initialize_hw_nonsoft(card);
-	hfc_softreset(card);
-	hfc_initialize_hw(card);
+	hfc_card_initialize_hw_nonsoft(card);
+	hfc_card_softreset(card);
+	hfc_card_initialize_hw(card);
 	hfc_card_unlock(card);
-
-	// Ok, the hardware is ready and the data structures are initialized,
-	// we can now register to the system.
-
-	err = visdn_cxc_register(&card->cxc.visdn_cxc);
-	if (err < 0)
-		goto err_cxc_register;
-
-	err = hfc_sys_port_register(&card->sys_port);
-	if (err < 0)
-		goto err_sys_port_register;
-
-	err = hfc_pcm_port_register(&card->pcm_port);
-	if (err < 0)
-		goto err_pcm_port_register;
-
-	for (i=0; i<card->num_st_ports; i++) {
-		err = hfc_st_port_register(&card->st_ports[i]);
-		if (err < 0)
-			goto err_st_port_register;
-	}
-
-// -------------------------------------------------------
-
-	err = hfc_card_sysfs_create_files(card);
-	if (err < 0)
-		goto err_card_sysfs_create_files;
-
-	hfc_msg_card(card, KERN_INFO,
-		"configured at mem %#lx (0x%p) IRQ %u\n",
-		card->io_bus_mem,
-		card->io_mem,
-		card->pci_dev->irq);
 
 	return 0;
 
-	hfc_card_sysfs_delete_files(card);
-err_card_sysfs_create_files:
-	for (i=card->num_st_ports - 1; i>=0; i--)
-		hfc_st_port_unregister(&card->st_ports[i]);
-err_st_port_register:
-	hfc_pcm_port_unregister(&card->pcm_port);
-err_pcm_port_register:
-	hfc_sys_port_unregister(&card->sys_port);
-err_sys_port_register:
-	visdn_cxc_unregister(&card->cxc.visdn_cxc);
-err_cxc_register:
 err_unsupported_revision:
 err_unknown_chip:
-	free_irq(pci_dev->irq, card);
+	free_irq(card->pci_dev->irq, card);
 err_request_irq:
 	iounmap(card->io_mem);
 err_ioremap:
 err_noiobase:
 err_noirq:
-	pci_release_regions(pci_dev);
+	pci_release_regions(card->pci_dev);
 err_pci_request_regions:
 err_pci_enable_device:
-	pci_set_drvdata(pci_dev, NULL);
-	kfree(card);
-err_alloc_hfccard:
+	pci_set_drvdata(card->pci_dev, NULL);
 
 	hfc_msg(KERN_ERR, "HFC card at %s-%s initialization failure: %d\n",
-		pci_dev->dev.bus->name,
-		pci_dev->dev.bus_id,
+		card->pci_dev->dev.bus->name,
+		card->pci_dev->dev.bus_id,
 		err);
 
 	return err;
 }
 
-void __devexit hfc_card_remove(struct hfc_card *card)
+void hfc_card_remove(struct hfc_card *card)
 {
 	int i;
 
@@ -1066,29 +1147,21 @@ void __devexit hfc_card_remove(struct hfc_card *card)
 		"shutting down card at %p.\n",
 		card->io_mem);
 
-	// softreset clears all pending interrupts
+	/* softreset clears all pending interrupts */
 	hfc_card_lock(card);
-	hfc_softreset(card);
+	hfc_card_softreset(card);
 	hfc_card_unlock(card);
 
-	for(i=0; i<ARRAY_SIZE(card->leds); i++)
-		hfc_led_remove(&card->leds[i]);
+	/* There should be no interrupt from here on */
 
-	hfc_card_sysfs_delete_files(card);
-
-	for (i=card->num_st_ports - 1; i>=0; i--)
-		hfc_st_port_unregister(&card->st_ports[i]);
-
-	hfc_pcm_port_unregister(&card->pcm_port);
-	hfc_sys_port_unregister(&card->sys_port);
-	visdn_cxc_unregister(&card->cxc.visdn_cxc);
-
-	// There should be no interrupt from here on
+	for (i=0; i<card->num_st_ports; i++) {
+		hfc_st_port_put(card->st_ports[i]);
+		card->st_ports[i] = NULL;
+	}
 
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
 	free_irq(card->pci_dev->irq, card);
 	iounmap(card->io_mem);
 	pci_release_regions(card->pci_dev);
 	pci_disable_device(card->pci_dev);
-	kfree(card);
 }

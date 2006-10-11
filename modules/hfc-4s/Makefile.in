@@ -8,30 +8,29 @@ SOURCES = \
 	hfc-4s_main.c		\
 	card.c			\
 	fifo.c			\
-	cxc.c			\
+	switch.c		\
 	led.c			\
-	pcm_port.c		\
-	pcm_chan.c		\
 	st_port.c		\
 	st_chan.c		\
+	pcm_port.c		\
+	pcm_chan.c		\
 	sys_port.c		\
 	sys_chan.c
 
 DIST_HEADERS = \
 	card.h			\
-	card_inline.h		\
 	fifo.h			\
 	fifo_inline.h		\
-	cxc.h			\
+	switch.h		\
 	led.h			\
-	pcm_port.h		\
-	pcm_port_inline.h	\
-	pcm_chan.h		\
 	st_port.h		\
 	st_port_inline.h	\
 	st_chan.h		\
 	sys_port.h		\
 	sys_chan.h		\
+	pcm_chan.h		\
+	pcm_port.h		\
+	pcm_port_inline.h	\
 	module.h		\
 	util.h			\
 	regs.h
@@ -46,7 +45,7 @@ top_builddir = ../..
 VPATH = @srcdir@
 SHELL = @SHELL@
 
-EXTRA_CFLAGS= -I$(src)/../include/
+EXTRA_CFLAGS= -I$(src)/../include/ -O0
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE

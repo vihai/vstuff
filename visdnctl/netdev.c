@@ -61,8 +61,8 @@ static int netdev_do_create(
 
 	close(fd);
 
-	printf("D: %06d\n", create.d_chan);
-	printf("E: %06d\n", create.e_chan);
+	printf("D: %s\n", create.d_chan);
+	printf("E: %s\n", create.e_chan);
 
 	return 0;
 }

@@ -13,7 +13,7 @@
 #ifndef _HFC_ST_PORT_H
 #define _HFC_ST_PORT_H
 
-#include <linux/visdn/core.h>
+#include <linux/kstreamer/kstreamer.h>
 #include <linux/visdn/port.h>
 
 #include "st_chan.h"
@@ -63,15 +63,16 @@ struct hfc_st_port
 
 void hfc_st_port_check_l1_up(struct hfc_st_port *port);
 void hfc_st_port_update_st_ctrl0(struct hfc_st_port *port);
+void hfc_st_port_update_st_ctrl1(struct hfc_st_port *port);
 void hfc_st_port_update_st_ctrl2(struct hfc_st_port *port);
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port);
 
+struct hfc_st_port *hfc_st_port_alloc(void);
 void hfc_st_port_init(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
 	const char *name,
-	int id,
-	struct hfc_led *led);
+	int id);
 int hfc_st_port_register(
 	struct hfc_st_port *port);
 void hfc_st_port_unregister(

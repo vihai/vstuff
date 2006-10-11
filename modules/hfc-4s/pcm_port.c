@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -15,7 +15,6 @@
 #include "pcm_port.h"
 #include "pcm_chan.h"
 #include "card.h"
-#include "card_inline.h"
 
 //----------------------------------------------------------------------------
 
@@ -35,7 +34,6 @@ static ssize_t hfc_show_bitrate(
 	}
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", bitrate);
-
 }
 
 static ssize_t hfc_store_bitrate(
@@ -62,7 +60,9 @@ static ssize_t hfc_store_bitrate(
 		return -EINVAL;
 
 	for (i=0; i<port->num_chans; i++) {
-		hfc_pcm_chan_unregister(&port->chans[i]);
+		hfc_pcm_chan_unregister(port->chans[i]);
+		hfc_pcm_chan_put(port->chans[i]);
+		port->chans[i] = NULL;
 	}
 
 	hfc_card_lock(card);
@@ -71,22 +71,28 @@ static ssize_t hfc_store_bitrate(
 	hfc_outb(card, hfc_R_CIRM, 0);
 	mb();
 	hfc_wait_busy(card);
-	hfc_update_pcm_md0(card, 0);
-	hfc_update_pcm_md1(card);
+	hfc_card_update_pcm_md0(card, 0);
+	hfc_card_update_pcm_md1(card);
 
-// Temporary workaround for too big kmalloc
-	hfc_pcm_port_configure(port, 0);
-
-/*	switch(port->bitrate) {
-	case 0: hfc_pcm_port_configure(port, 32); break;
-	case 1: hfc_pcm_port_configure(port, 64); break;
-	case 2: hfc_pcm_port_configure(port, 128); break;
-	}*/
+	switch(port->bitrate) {
+	;
+	case 0: port->num_chans = 32; break;
+	case 1: port->num_chans = 64; break;
+	case 2: port->num_chans = 128; break;
+	}
 
 	hfc_card_unlock(card);
 
 	for (i=0; i<port->num_chans; i++) {
-		hfc_pcm_chan_register(&port->chans[i]);
+		char name[8];
+		snprintf(name, sizeof(name), "%d", i);
+
+		port->chans[i] = hfc_pcm_chan_alloc(GFP_KERNEL);
+		if (!port->chans[i])
+			return -ENOMEM;
+
+		hfc_pcm_chan_init(port->chans[i], port, name, i);
+		hfc_pcm_chan_register(port->chans[i]);
 	}
 
 	return count;
@@ -126,7 +132,7 @@ static ssize_t hfc_store_master(
 
 	hfc_card_lock(card);
 	port->master = value;
-	hfc_update_pcm_md0(card, 0);
+	hfc_card_update_pcm_md0(card, 0);
 	hfc_card_unlock(card);
 
 	return count;
@@ -296,42 +302,21 @@ void hfc_pcm_port_sysfs_delete_files(
 		&visdn_port_attr_master);
 }
 
-void hfc_pcm_port_configure(struct hfc_pcm_port *port, int slots)
-{
-	port->num_chans = slots;
-
-/*
-	for (i=0; i<port->num_chans; i++) {
-		hfc_pcm_port_configure_slot(&port->chans[i].rx_slot);
-		hfc_pcm_port_configure_slot(&port->chans[i].tx_slot);
-	}*/
-
-	
-}
-
 static void hfc_pcm_port_release(
 	struct visdn_port *visdn_port)
 {
+	struct hfc_pcm_port *port =
+		container_of(visdn_port, struct hfc_pcm_port, visdn_port);
+
 	printk(KERN_DEBUG "hfc_pcm_port_release()\n");
 
-	// FIXME
+	hfc_card_put(port->card);
 }
 
 struct visdn_port_ops hfc_pcm_port_ops = {
 	.owner		= THIS_MODULE,
 	.release	= hfc_pcm_port_release,
 };
-
-static inline void hfc_pcm_port_slot_init(
-	struct hfc_pcm_slot *slot,
-	struct hfc_pcm_chan *chan,
-	int hw_index,
-	enum hfc_direction direction)
-{
-	slot->chan = chan;
-	slot->hw_index = hw_index;
-	slot->direction = direction;
-}
 
 void hfc_pcm_port_init(
 	struct hfc_pcm_port *port,
@@ -342,18 +327,13 @@ void hfc_pcm_port_init(
 
 	port->card = card;
 
-	visdn_port_init(&port->visdn_port);
-	port->visdn_port.ops = &hfc_pcm_port_ops;
-	port->visdn_port.device = &card->pci_dev->dev;
-	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
+	visdn_port_init(&port->visdn_port,
+			&hfc_pcm_port_ops,
+			name,
+			&card->pci_dev->dev.kobj);
 
-	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
-		char chan_name[16];
-
-		snprintf(chan_name, sizeof(chan_name), "pcm%d", i);
-
-		hfc_pcm_chan_init(&port->chans[i], port, chan_name, i, i);
-	}
+	for (i=0; i<ARRAY_SIZE(port->chans); i++)
+		port->chans[i] = NULL;
 
 	port->num_chans = 0;
 }
@@ -364,6 +344,7 @@ int hfc_pcm_port_register(
 	int err;
 	int i;
 
+	hfc_card_get(port->card); /* Container is implicitly used */
 	err = visdn_port_register(&port->visdn_port);
 	if (err < 0)
 		goto err_port_register;
@@ -371,9 +352,10 @@ int hfc_pcm_port_register(
 	port->num_chans = 0;
 
 	for (i=0; i<port->num_chans; i++) {
-		err = hfc_pcm_chan_register(&port->chans[i]);
+		err = hfc_pcm_chan_register(port->chans[i]);
 		if (err < 0)
 			goto err_chan_register;
+
 	}
 
 	hfc_pcm_port_sysfs_create_files(port);
@@ -395,7 +377,9 @@ void hfc_pcm_port_unregister(
 	hfc_pcm_port_sysfs_delete_files(port);
 
 	for (i=0; i<port->num_chans; i++) {
-		hfc_pcm_chan_unregister(&port->chans[i]);
+		hfc_pcm_chan_unregister(port->chans[i]);
+		hfc_pcm_chan_put(port->chans[i]);
+		port->chans[i] = NULL;
 	}
 
 	visdn_port_unregister(&port->visdn_port);

@@ -10,6 +10,31 @@
  *
  */
 
+
+
+
+
+
+
+/*	hfc_outb(card, hfc_R_RAM_ADDR2, 0x0);
+	hfc_outb(card, hfc_R_RAM_ADDR1, 0x18);
+	for(i = port->id * 4; i < (port->id+1) * 4; i++) {
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0x00 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0x00);
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0x40 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0x00);
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0x80 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0x00);
+		hfc_outb(card, hfc_R_RAM_ADDR0, 0xc0 + i * 2);
+		hfc_outb(card, hfc_R_RAM_DATA, 0x00);
+	}*/
+
+
+
+
+
+
+
 #include <linux/kernel.h>
 #include <linux/delay.h>
 

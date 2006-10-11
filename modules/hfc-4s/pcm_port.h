@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,7 +13,7 @@
 #ifndef _HFC_PCM_PORT_H
 #define _HFC_PCM_PORT_H
 
-#include <linux/visdn/core.h>
+#include <linux/kstreamer/kstreamer.h>
 #include <linux/visdn/port.h>
 
 #include "util.h"
@@ -48,6 +48,8 @@
 
 struct hfc_pcm_port
 {
+	struct visdn_port visdn_port;
+
 	struct hfc_card *card;
 
 	int hw_index;
@@ -61,12 +63,8 @@ struct hfc_pcm_port
 	int bitrate;
 
 	int num_chans;
-	struct hfc_pcm_chan chans[1]; // Temporary workaroud for too big kmalloc
-
-	struct visdn_port visdn_port;
+	struct hfc_pcm_chan *chans[128];
 };
-
-void hfc_pcm_port_configure(struct hfc_pcm_port *port, int slots);
 
 void hfc_pcm_port_init(
 	struct hfc_pcm_port *port,

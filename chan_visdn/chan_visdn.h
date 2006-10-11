@@ -79,19 +79,22 @@ struct visdn_chan {
 
 	__u8 buf[512];
 
+	int is_framed;
 	int is_voice;
 	int handle_stream;
 
-	int sp_fd;
-	int ec_fd;
+	int up_fd;
+	int up_dump_fd;
+//	int ec_fd;
 
-	int sp_channel_id;
-	int ec_ne_channel_id;
-	int ec_fe_channel_id;
-	int bearer_channel_id;
+	char up_node_id[80];
+	char ec_ne_node_id[80];
+	char ec_fe_node_id[80];
+	char bearer_node_id[80];
 
-	int sp_pipeline_id;
-	int bearer_pipeline_id;
+	int up_bearer_pipeline_id;
+	int up_bearer_pipeline_started;
+	int bearer_up_pipeline_id;
 
 	int sending_complete;
 
@@ -116,6 +119,8 @@ struct visdn_chan {
 
 struct visdn_state
 {
+	pthread_t q931_thread;
+
 	ast_mutex_t lock;
 	ast_mutex_t usecnt_lock;
 
@@ -137,9 +142,6 @@ struct visdn_state
 	struct pollfd polls[100];
 	struct poll_info poll_infos[100];
 	int npolls;
-
-	int open_pending;
-	int open_pending_nextcheck;
 
 	int usecnt;
 	int netlink_socket;

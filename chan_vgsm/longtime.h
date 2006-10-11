@@ -13,6 +13,9 @@
 #ifndef _LONGTIME_H
 #define _LONGTIME_H
 
+#define SEC 1000000LL
+#define MILLISEC 1000LL
+
 typedef long long longtime_t;
 
 longtime_t longtime_now();

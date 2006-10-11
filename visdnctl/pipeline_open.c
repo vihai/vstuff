@@ -23,17 +23,13 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include <linux/visdn/softcxc.h>
-#include <linux/visdn/cxc.h>
 #include <linux/visdn/router.h>
 
 #include "visdnctl.h"
 #include "pipeline_open.h"
 
-static int do_pipeline_open(const char *chan_str)
+static int do_pipeline_open(const char *pipeline_str)
 {
-	int chan_id = decode_chan_id(chan_str);
-
 	int fd = open(CXC_CONTROL_DEV, O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr, "open failed: %s\n",
@@ -43,17 +39,17 @@ static int do_pipeline_open(const char *chan_str)
 	}
 
 	struct visdn_connect connect;
-	connect.src_chan_id = chan_id;
-	connect.dst_chan_id = 0;
+	connect.pipeline_id = atoi(pipeline_str);
+	strcpy(connect.from_endpoint, "");
+	strcpy(connect.to_endpoint, "");
 	connect.flags = 0;
 
-	if (ioctl(fd, VISDN_IOC_PIPELINE_START, &connect) < 0) {
-		fprintf(stderr, "ioctl(IOC_PIPELINE_START) failed: %s\n",
+	if (ioctl(fd, VISDN_IOC_PIPELINE_OPEN, &connect) < 0) {
+		fprintf(stderr, "ioctl(IOC_PIPELINE_OPEN) failed: %s\n",
 			strerror(errno));
 
 		return 1;
 	}
-
 	close(fd);
 
 	return 0;
@@ -62,7 +58,7 @@ static int do_pipeline_open(const char *chan_str)
 static int handle_pipeline_open(int argc, char *argv[], int optind)
 {
 	if (argc <= optind + 1)
-		print_usage("Missing first channel ID\n");
+		print_usage("Missing first endpoint ID\n");
 
 	return do_pipeline_open(argv[optind + 1]);
 }
@@ -70,10 +66,10 @@ static int handle_pipeline_open(int argc, char *argv[], int optind)
 static void usage(int argc, char *argv[])
 {
 	fprintf(stderr,
-		"  pipeline_open <chan>\n"
+		"  pipeline_open <endpoint>\n"
 		"\n"
-		"    Enable all the channels comprising a path to which\n"
-		"    chan belongs.\n");
+		"    Enable all the endpoints comprising a path to which\n"
+		"    endpoint belongs.\n");
 }
 
 struct module module_pipeline_open =

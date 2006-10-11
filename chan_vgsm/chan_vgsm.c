@@ -49,7 +49,7 @@
 
 #include <linux/vgsm.h>
 
-#include <linux/visdn/streamport.h>
+#include <linux/visdn/userport.h>
 #include <linux/visdn/router.h>
 
 #include "util.h"
@@ -1422,9 +1422,11 @@ static void vgsm_disconnect_channel(
 		return;
 
 	struct visdn_connect vc;
-	vc.pipeline_id = vgsm_chan->pipeline_id;
-	vc.src_chan_id = 0;
-	vc.dst_chan_id = 0;
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = vgsm_chan->sp_module_pipeline_id;
+	strcpy(vc.from_endpoint, "");
+	strcpy(vc.to_endpoint, "");
 	vc.flags = 0;
 
 	if (ioctl(vgsm.router_control_fd,
@@ -1432,7 +1434,23 @@ static void vgsm_disconnect_channel(
 			(caddr_t)&vc) < 0) {
 
 		ast_log(LOG_ERROR,
-			"ioctl(VISDN_IOC_DISCONNECT):"
+			"ioctl(VISDN_IOC_DISCONNECT, sp=>me):"
+			" %s\n",
+			strerror(errno));
+	}
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = vgsm_chan->module_sp_pipeline_id;
+	strcpy(vc.from_endpoint, "");
+	strcpy(vc.to_endpoint, "");
+	vc.flags = 0;
+
+	if (ioctl(vgsm.router_control_fd,
+			VISDN_IOC_DISCONNECT,
+			(caddr_t)&vc) < 0) {
+
+		ast_log(LOG_ERROR,
+			"ioctl(VISDN_IOC_DISCONNECT, me=>sp):"
 			" %s\n",
 			strerror(errno));
 	}

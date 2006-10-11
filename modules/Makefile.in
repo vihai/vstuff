@@ -7,8 +7,11 @@ SHELL = @SHELL@
 kblddir = @kblddir@
 DIST_COMMON = Makefile.in Kbuild
 
-SUBDIRS= core ec hfc-4s hfc-pci hfc-usb hfc-e1 kfifo lapd \
-	netdev ppp softcxc streamport timer-system vgsm
+SUBDIRS= kstreamer visdn hfc-4s softswitch netdev lapd userport \
+	milliwatt
+#	vgsm
+#ec hfc-pci hfc-usb hfc-e1 kfifo \
+#	 ppp
 
 
 # Use $(src) when we are run inside Kbuild
@@ -31,7 +34,7 @@ install: makefiles Kbuild
 clean: makefiles Kbuild
 	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
 
-Kbuild:
+Kbuild: Makefile
 	echo "" > Kbuild
 	for I in $(SUBDIRS) ; do \
 		echo "obj-m += $$I/" >> Kbuild ; \

@@ -1,11 +1,12 @@
 
 subdir = modules/vgsm
-MODULE = visdn-vgsm
+MODULE = vgsm
 
 SOURCES = \
 	vgsm_main.c	\
 	card.c		\
-	module.c
+	module.c	\
+	micro.c
 
 DIST_HEADERS = \
 	vgsm.h		\
@@ -13,6 +14,7 @@ DIST_HEADERS = \
 	card_inline.h	\
 	regs.h		\
 	module.h	\
+	micro.h		\
 	codec.h
 
 DIST_COMMON = Makefile.in
@@ -25,7 +27,7 @@ top_builddir = ../..
 VPATH = @srcdir@
 SHELL = @SHELL@
 
-EXTRA_CFLAGS= -I$(src)/../include/ -I$(src)/../linux_compat/
+EXTRA_CFLAGS= -I$(src)/../include/ -I$(src)/../linux_compat/ -O0
 
 ifeq (@enable_debug_code@,yes)
 EXTRA_CFLAGS+=-DDEBUG_CODE

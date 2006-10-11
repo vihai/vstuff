@@ -1,0 +1,81 @@
+
+subdir = modules/milliwatt
+MODULE = ks-milliwatt
+SOURCES = milliwatt_main.c
+DIST_HEADERS = milliwatt.h
+DIST_COMMON = Makefile.in
+DIST_SOURCES = $(SOURCES)
+
+@SET_MAKE@
+srcdir = @srcdir@
+top_srcdir = @top_srcdir@
+top_builddir = ../..
+VPATH = @srcdir@
+SHELL = @SHELL@
+
+EXTRA_CFLAGS=				\
+	-I$(src)/../include/		\
+	-I$(src)/../linux_compat/
+
+ifeq (@enable_debug_code@,yes)
+EXTRA_CFLAGS+=-DDEBUG_CODE
+endif
+
+ifeq (@enable_debug_defaults@,yes)
+EXTRA_CFLAGS+=-DDEBUG_DEFAULTS
+endif
+
+obj-m	:= $(MODULE).o
+$(MODULE)-y	:= ${SOURCES:.c=.o}
+
+kblddir = @kblddir@
+modules_dir = ${shell cd .. ; pwd}
+
+all:
+	$(MAKE) -C $(kblddir) modules M=$(modules_dir)
+
+install:
+	$(MAKE) -C $(kblddir) modules_install M=$(modules_dir)
+
+clean:
+	$(MAKE) -C $(kblddir) clean M=$(modules_dir)
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
+	@case '$?' in \
+	  *config.status*) \
+	    cd $(top_builddir) && $(MAKE) am--refresh;; \
+	  *) \
+	    echo ' cd $(top_builddir) && $(SHELL) ./config.status'; \
+	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ ;; \
+	esac;
+
+DISTFILES=$(DIST_COMMON) $(DIST_SOURCES) $(DIST_HEADERS) $(EXTRA_DIST)
+
+distdir: $(DISTFILES)
+	@srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`; \
+	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's|.|.|g'`; \
+	list='$(DISTFILES)'; for file in $$list; do \
+	  case $$file in \
+	    $(srcdir)/*) file=`echo "$$file" | sed "s|^$$srcdirstrip/||"`;; \
+	    $(top_srcdir)/*) file=`echo "$$file" | sed "s|^$$topsrcdirstrip/|$(top_builddir)/|"`;; \
+	  esac; \
+	  if test -f $$file || test -d $$file; then d=.; else d=$(srcdir); fi; \
+	  dir=`echo "$$file" | sed -e 's,/[^/]*$$,,'`; \
+	  if test "$$dir" != "$$file" && test "$$dir" != "."; then \
+	    dir="/$$dir"; \
+	    $(mkdir_p) "$(distdir)$$dir"; \
+	  else \
+	    dir=''; \
+	  fi; \
+	  if test -d $$d/$$file; then \
+	    if test -d $(srcdir)/$$file && test $$d != $(srcdir); then \
+	      cp -pR $(srcdir)/$$file $(distdir)$$dir || exit 1; \
+	    fi; \
+	    cp -pR $$d/$$file $(distdir)$$dir || exit 1; \
+	  else \
+	    test -f $(distdir)/$$file \
+	    || cp -p $$d/$$file $(distdir)/$$file \
+	    || exit 1; \
+	  fi; \
+	done

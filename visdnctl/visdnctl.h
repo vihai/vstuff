@@ -47,6 +47,6 @@ struct module
 extern int verbosity;
 
 extern void print_usage(const char *fmt, ...);
-extern int decode_chan_id(const char *chan_str);
+//extern int decode_endpoint_id(const char *chan_str);
 
 #endif

@@ -24,6 +24,7 @@
 #include <linux/interrupt.h>
 
 #include "module.h"
+#include "micro.h"
 
 #define vgsm_msg_card(card, level, format, arg...)	\
 	printk(level vgsm_DRIVER_PREFIX			\
@@ -56,6 +57,7 @@ enum vgsm_card_flags
 struct vgsm_card
 {
 	struct list_head cards_list_node;
+	struct kref kref;
 
 	spinlock_t lock;
 
@@ -81,7 +83,7 @@ struct vgsm_card
 	struct vgsm_micro micros[2];
 
 	int num_modules;
-	struct vgsm_module modules[4];
+	struct vgsm_module *modules[4];
 
 	struct {
 		u8 mask0;
@@ -95,27 +97,8 @@ struct vgsm_card
 	struct timer_list maint_timer;
 };
 
-struct vgsm_micro_message
-{
-	union {
-	struct {
-#if defined(__BIG_ENDIAN_BITFIELD)
-	u8 cmd:2;	/* Command */
-	u8 cmd_dep:3;	/* cmd dependent */
-	u8 numbytes:3;	/* data length */
-	
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
-	u8 numbytes:3;	/* data length */
-	u8 cmd_dep:3;	/* cmd dependent */
-	u8 cmd:2;	/* Command */
-#endif
-	u8 payload[7];
-	};
-
-	u8 raw[8];
-	};
-
-} __attribute__ ((__packed__));
+struct vgsm_card *vgsm_card_get(struct vgsm_card *card);
+void vgsm_card_put(struct vgsm_card *card);
 
 int vgsm_card_probe(
 	struct pci_dev *pci_dev, 
@@ -123,17 +106,12 @@ int vgsm_card_probe(
 
 void vgsm_card_remove(struct vgsm_card *card);
 
-void vgsm_send_msg(
-	struct vgsm_micro *micro,
-	struct vgsm_micro_message *msg);
-void vgsm_send_get_fw_ver(
-	struct vgsm_micro *micro);
-void vgsm_send_fw_upgrade(
-	struct vgsm_micro *micro);
-
 void vgsm_update_mask0(struct vgsm_card *card);
 
 void vgsm_codec_reset(struct vgsm_card *card);
 void vgsm_update_codec(struct vgsm_module *module);
+
+void vgsm_write_msg(
+	struct vgsm_card *card, struct vgsm_micro_message *msg);
 
 #endif

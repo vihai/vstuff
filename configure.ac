@@ -390,9 +390,8 @@ AM_CONDITIONAL(driver_vgsm,
 	test -n "`echo $drivers | grep vgsm`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
-		scripts/Makefile
-		scripts/visdn_configurator
-		samples/Makefile
+		libskb/Makefile
+		libkstreamer/Makefile
 		libq931/Makefile
 		chan_visdn/Makefile
 		chan_vgsm/Makefile
@@ -400,23 +399,27 @@ AC_CONFIG_FILES([Makefile
 		visdnctl/Makefile
 		vgsmctl/Makefile
 		pppd_plugin/Makefile
+		samples/Makefile
 		tests/Makefile
 		modules/include/kernel_config.h
 		modules/Makefile
+		modules/kstreamer/Makefile
+		modules/visdn/Makefile
+		modules/lapd/Makefile
+		modules/kfifo/Makefile
+		modules/softswitch/Makefile
+		modules/userport/Makefile
+		modules/netdev/Makefile
+		modules/ppp/Makefile
+		modules/ec/Makefile
+		modules/milliwatt/Makefile
 		modules/hfc-4s/Makefile
 		modules/hfc-e1/Makefile
 		modules/hfc-pci/Makefile
 		modules/hfc-usb/Makefile
 		modules/vgsm/Makefile
-		modules/lapd/Makefile
-		modules/kfifo/Makefile
-		modules/softcxc/Makefile
-		modules/core/Makefile
-		modules/streamport/Makefile
-		modules/timer-system/Makefile
-		modules/netdev/Makefile
-		modules/ppp/Makefile
-		modules/ec/Makefile
+		scripts/Makefile
+		scripts/visdn_configurator
 		doxygen.conf
 		visdn.spec])
 

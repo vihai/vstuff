@@ -456,6 +456,9 @@ int lapd_rcv(
 	struct lapd_prim_hdr *hdr;
 	int queued;
 
+	if (!dev)
+		goto not_up;
+
 	/* Ignore frames not destined to us */
 	if (skb->pkt_type != PACKET_HOST)
 		goto not_ours;
@@ -526,6 +529,7 @@ err_small_frame:
 err_share_check:
 	kfree_skb(skb);
 not_ours:
+not_up:
 
 	return 0;
 }

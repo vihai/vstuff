@@ -1936,9 +1936,8 @@ static int __init lapd_init(void)
 	int err;
 
 	int i;
-	for (i=0; i< ARRAY_SIZE(lapd_hash); i++) {
+	for (i=0; i< ARRAY_SIZE(lapd_hash); i++)
 		INIT_HLIST_HEAD(&lapd_hash[i]);
-	}
 
 	lapd_out_init();
 

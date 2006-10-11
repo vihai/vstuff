@@ -48,4 +48,7 @@
 #define FUNC_DEBUG() do {} while(0)
 #endif
 
+#define SEC 1000000LL
+#define MILLISEC 1000LL
+
 #endif

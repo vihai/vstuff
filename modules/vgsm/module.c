@@ -22,22 +22,19 @@
 #include <linux/fs.h>
 #include <linux/tty.h>
 
+#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/node.h>
+#include <linux/kstreamer/pipeline.h>
+#include <linux/kstreamer/streamframe.h>
+#include <linux/kstreamer/softswitch.h>
+
 #include <linux/visdn/port.h>
-#include <linux/visdn/chan.h>
-#include <linux/visdn/softcxc.h>
 
 #include "vgsm.h"
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"
 #include "module.h"
-
-#define VGSM_FIFO_JITBUFF_LOW 10
-#define VGSM_FIFO_JITBUFF_HIGH 300
-#define VGSM_FIFO_JITBUFF_HIGHDROP 500 
-#define VGSM_FIFO_JITBUFF_AVG \
-		((VGSM_FIFO_JITBUFF_LOW + VGSM_FIFO_JITBUFF_HIGH) / 2)
-
 
 #ifdef DEBUG_CODE
 #define vgsm_debug_module(module, dbglevel, format, arg...)		\
@@ -48,7 +45,7 @@
 			format,						\
 			(module)->card->pci_dev->dev.bus->name,		\
 			(module)->card->pci_dev->dev.bus_id,		\
-			(module)->visdn_chan.name,			\
+			kobject_name(&(module)->ks_node.kobj),	\
 			## arg)
 
 #else
@@ -62,13 +59,8 @@
 		format,							\
 		(module)->card->pci_dev->dev.bus->name,			\
 		(module)->card->pci_dev->dev.bus_id,			\
-		(module)->visdn_chan.name,				\
+		kobject_name(&(module)->ks_node.kobj),		\
 		## arg)
-
-#define chan_to_module(chan)       \
-		container_of(chan, struct vgsm_module, visdn_chan)
-#define port_to_module(port)       \
-		container_of(port, struct vgsm_module, visdn_port)
 
 void vgsm_module_send_set_padding_timeout(
 	struct vgsm_module *module,
@@ -459,129 +451,216 @@ void vgsm_module_init(
 	module->id = id;
 	module->timeslot_offset = 3 - id;
 
-	/* Initializing kfifo spinlock */
-	spin_lock_init(&module->kfifo_tx_lock);
-
 	init_completion(&module->read_status_completion);
-
-	/* Initializing wait queue */
-	init_waitqueue_head(&module->tx_wait_queue);
 
 	init_timer(&module->ack_timeout_timer);
 	module->ack_timeout_timer.function = vgsm_module_ack_timeout_timer;
 	module->ack_timeout_timer.data = (unsigned long)module;
 
-	module->rx_fifo_pos = 0;
-	module->rx_fifo_cycles = 0;
-	module->rx_fifo_min = INT_MAX;
-	module->rx_fifo_max = 0;
-	module->rx_fifo_size = card->readdma_size / 4;
-
-	module->tx_fifo_pos = 0;
-	module->tx_fifo_cycles = 0;
-	module->tx_fifo_min = INT_MAX;
-	module->tx_fifo_max = 0;
-	module->tx_fifo_size = card->writedma_size / 4;
-
-	module->rx_gain = 0xFF;
-	module->tx_gain = 0xFF;
-
 	module->anal_loop = FALSE;
 	module->dig_loop = FALSE;
 
-	visdn_port_init(&module->visdn_port);
-	module->visdn_port.ops = &vgsm_port_ops;
-	module->visdn_port.driver_data = module;
-	module->visdn_port.device = &card->pci_dev->dev;
-	snprintf(module->visdn_port.name,
-		sizeof(module->visdn_port.name),
-		"gsm%d", id);
+	ks_node_init(&module->ks_node,
+			&vgsm_module_node_ops, name,
+			&card->pci_dev->dev.kobj);
 
-	visdn_chan_init(&module->visdn_chan);
-
-	module->visdn_chan.ops = &vgsm_chan_ops;
-	module->visdn_chan.port = &module->visdn_port;
-	module->visdn_chan.chan_class = NULL;
-
-	module->visdn_chan.leg_a.cxc = &vsc_softcxc.cxc;
-	module->visdn_chan.leg_a.ops = &vgsm_chan_leg_ops;
-	module->visdn_chan.leg_a.framing = VISDN_LEG_FRAMING_NONE;
-	module->visdn_chan.leg_a.framing_avail = VISDN_LEG_FRAMING_NONE;
-	module->visdn_chan.leg_a.mtu = -1;
-
-	module->visdn_chan.leg_b.cxc = NULL;
-	module->visdn_chan.leg_b.ops = NULL;
-	module->visdn_chan.leg_b.framing = VISDN_LEG_FRAMING_NONE;
-	module->visdn_chan.leg_b.framing_avail = VISDN_LEG_FRAMING_NONE;
-	module->visdn_chan.leg_b.mtu = -1;
-
-	snprintf(module->visdn_chan.name,
-		sizeof(module->visdn_chan.name),
-		"audio%d", id);
-	module->visdn_chan.driver_data = module;
+	vgsm_module_rx_init(&module->rx, module);
+	vgsm_module_tx_init(&module->tx, module);
 }
 
-int vgsm_module_alloc(
-	struct vgsm_module *module)
+struct vgsm_module *vgsm_module_alloc(
+	struct vgsm_card *card,
+	struct vgsm_micro *micro,
+	int id,
+	const char *name)
+{
+	struct vgsm_module *module;
+
+	module = kmalloc(sizeof(*module), GFP_KERNEL);
+	if (!module)
+		goto err_kmalloc;
+
+	vgsm_module_init(module, card, micro, id, name);
+
+	module->tx.fifo = kfifo_alloc(
+				vgsm_SERIAL_BUFF, GFP_KERNEL,
+				&module->tx.fifo_lock);
+	if (IS_ERR(module->tx.fifo))
+		goto err_kfifo_tx;
+
+	return module;
+
+	kfifo_free(module->tx.fifo);
+err_kfifo_tx:
+	kfree(module);
+err_kmalloc:
+
+	return NULL;
+}
+
+static int vgsm_module_rx_register(struct vgsm_module_rx *module)
 {
 	int err;
 
-	module->kfifo_tx = kfifo_alloc(
-				vgsm_SERIAL_BUFF, GFP_KERNEL,
-				&module->kfifo_tx_lock);
-	if (IS_ERR(module->kfifo_tx)) {
-		err = -ENOMEM;
-		goto err_kfifo_tx;
-	}
+	err = ks_link_register(&module->ks_link);
+	if (err < 0)
+		goto err_link_register;
 
 	return 0;
 
-	kfifo_free(module->kfifo_tx);
-err_kfifo_tx:
+	ks_link_unregister(&module->ks_link);
+err_link_register:
 
 	return err;
 }
 
-void vgsm_module_dealloc(
-	struct vgsm_module *module)
+static void vgsm_module_rx_unregister(struct vgsm_module_rx *module)
 {
-	kfifo_free(module->kfifo_tx);
+	ks_link_unregister(&module->ks_link);
 }
 
-int vgsm_module_register(
-	struct vgsm_module *module)
+static int vgsm_module_tx_register(struct vgsm_module_tx *module)
 {
 	int err;
 
-	err = visdn_port_register(&module->visdn_port);
+	err = ks_link_register(&module->ks_link);
 	if (err < 0)
-		goto err_port_register;
+		goto err_link_register;
 
-	err = visdn_chan_register(&module->visdn_chan);
-	if (err < 0)
-		goto err_chan_register;
+	return 0;
+
+	ks_link_unregister(&module->ks_link);
+err_link_register:
+
+	return err;
+}
+
+static void vgsm_module_tx_unregister(struct vgsm_module_tx *module)
+{
+	ks_link_unregister(&module->ks_link);
+}
+
+int vgsm_module_register(struct vgsm_module *module)
+{
+	int err;
 
 	tty_register_device(vgsm_tty_driver,
 			module->card->id * 4 + module->id,
 			&module->card->pci_dev->dev);
 
+	/* Node is the object we are inheriting */
+	err = ks_node_register(&module->ks_node);
+	if (err < 0)
+		goto err_node_register;
+
+	vgsm_module_get(module);
+	err = vgsm_module_rx_register(&module->rx);
+	if (err < 0)
+		goto err_st_module_rx_register;
+
+	vgsm_module_get(module);
+	err = vgsm_module_tx_register(&module->tx);
+	if (err < 0)
+		goto err_st_module_tx_register;
+
 	return 0;
 
-	visdn_chan_unregister(&module->visdn_chan);
-err_chan_register:
-	visdn_port_unregister(&module->visdn_port);
-err_port_register:
+	vgsm_module_tx_unregister(&module->tx);
+err_st_module_tx_register:
+	vgsm_module_rx_unregister(&module->rx);
+err_st_module_rx_register:
+	ks_node_unregister(&module->ks_node);
+err_node_register:
 
 	return err;
 }
 
-void vgsm_module_unregister(
-	struct vgsm_module *module)
+void vgsm_module_unregister(struct vgsm_module *module)
 {
+	vgsm_module_tx_unregister(&module->tx);
+	vgsm_module_rx_unregister(&module->rx);
+
+	ks_node_unregister(&module->ks_node);
+
 	tty_unregister_device(vgsm_tty_driver,
 			module->card->id * 4 + module->id);
-
-	visdn_chan_unregister(&module->visdn_chan);
-	visdn_port_unregister(&module->visdn_port);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

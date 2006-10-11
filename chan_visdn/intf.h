@@ -22,8 +22,9 @@
 enum visdn_intf_status
 {
 	VISDN_INTF_STATUS_UNINITIALIZED,
-	VISDN_INTF_STATUS_OFFLINE,
-	VISDN_INTF_STATUS_ONLINE,
+	VISDN_INTF_STATUS_CONFIGURED,
+	VISDN_INTF_STATUS_OUT_OF_SERVICE,
+	VISDN_INTF_STATUS_ACTIVE,
 	VISDN_INTF_STATUS_FAILED,
 };
 
@@ -42,6 +43,8 @@ struct visdn_ic
 	int refcnt;
 
 	struct visdn_intf *intf;
+
+	enum visdn_intf_status initial_status;
 
 	int tei;
 
@@ -106,12 +109,11 @@ struct visdn_intf
 	int refcnt;
 	ast_mutex_t lock;
 
+	longtime_t timer_expiration;
 	enum visdn_intf_status status;
+	char *status_reason;
 
 	char name[IFNAMSIZ];
-
-	int configured;
-	int open_pending;
 
 	int mgmt_fd;
 
@@ -141,5 +143,7 @@ char *visdn_intf_complete(char *line, char *word, int pos, int state);
 
 void visdn_intf_cli_register(void);
 void visdn_intf_cli_unregister(void);
+
+longtime_t visdn_intf_run_timers(longtime_t usec_to_wait);
 
 #endif

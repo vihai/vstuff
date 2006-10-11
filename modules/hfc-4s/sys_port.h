@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,7 +13,7 @@
 #ifndef _HFC_SYS_PORT_H
 #define _HFC_SYS_PORT_H
 
-#include <linux/visdn/core.h>
+#include <linux/kstreamer/kstreamer.h>
 #include <linux/visdn/port.h>
 
 #include "util.h"
@@ -64,7 +64,7 @@ void hfc_sys_port_reconfigure(
 	int v_fifo_md,
 	int v_fifo_sz);
 
-void hfc_sys_port_upload_fsm(
+void hfc_sys_port_update_fsm(
 	struct hfc_sys_port *port);
 
 void hfc_sys_port_init(
@@ -75,5 +75,17 @@ int hfc_sys_port_register(
 	struct hfc_sys_port *port);
 void hfc_sys_port_unregister(
 	struct hfc_sys_port *port);
+
+static inline struct hfc_sys_port *hfc_sys_port_get(struct hfc_sys_port *port)
+{
+	visdn_port_get(&port->visdn_port);
+
+	return port;
+}
+
+static inline void hfc_sys_port_put(struct hfc_sys_port *port)
+{
+	visdn_port_put(&port->visdn_port);
+}
 
 #endif

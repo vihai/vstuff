@@ -14,9 +14,11 @@
 #ifndef _VGSM_INLINE_H
 #define _VGSM_INLINE_H
 
+#include <linux/delay.h>
 #include <asm/uaccess.h>
 
 #include "card.h"
+#include "regs.h"
 
 static inline unsigned int vgsm_inb(struct vgsm_card *card, int offset)
 {
@@ -48,6 +50,32 @@ static inline void vgsm_card_lock(struct vgsm_card *card)
 static inline void vgsm_card_unlock(struct vgsm_card *card)
 {
 	spin_unlock_bh(&card->lock);
+}
+
+static inline void vgsm_wait_e0(struct vgsm_card *card)
+{
+	int i;
+
+//	if (vgsm_inb(card, VGSM_PIB_E0))
+//		printk(KERN_DEBUG "E0 != 0 !!!\n");
+
+	for (i=0; i<100; i++) {
+
+		if (!vgsm_inb(card, VGSM_PIB_E0))
+			return;
+
+		udelay(10);
+	}
+
+	vgsm_msg(KERN_ERR, "Timeout waiting for E0 buffer\n");
+}
+
+/* Send interrupt to micros - 0x01 for Micro 0, 0x02 for micro 1 */
+static inline void vgsm_interrupt_micro(struct vgsm_card *card, 
+	u8 value)
+{
+	mb();
+	vgsm_outb(card, VGSM_PIB_E4, value);
 }
 
 #endif

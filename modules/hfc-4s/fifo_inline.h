@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,11 +13,11 @@
 #ifndef _HFC_FIFO_INLINE_H
 #define _HFC_FIFO_INLINE_H
 
-#include "card_inline.h"
+#include "card.h"
 
 static inline void hfc_fifo_next_frame(struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	hfc_outb(card, hfc_A_INC_RES_FIFO,
 		hfc_A_INC_RES_FIFO_V_INC_F);
@@ -45,7 +45,7 @@ static inline u8 F_inc(struct hfc_fifo *fifo, u8 f, u8 inc)
 	return newf;
 }
 
-static inline u16 hfc_fifo_used_rx(struct hfc_fifo *fifo)
+static inline u16 hfc_fifo_used(struct hfc_fifo *fifo)
 {
 	return (fifo->z1 - fifo->z2 + fifo->size) % fifo->size;
 }
@@ -57,7 +57,7 @@ static inline u16 hfc_fifo_get_frame_size(struct hfc_fifo *fifo)
  // be available, otherwise, the FIFO would always contain one byte, even
  // when Z1==Z2
 
-	return hfc_fifo_used_rx(fifo) + 1;
+	return hfc_fifo_used(fifo) + 1;
 }
 
 /*
@@ -66,10 +66,6 @@ static inline u8 hfc_fifo_u8(struct hfc_fifo *fifo, u16 z)
 	return *((u8 *)(fifo->z_base + z));
 }
 */
-static inline u16 hfc_fifo_used_tx(struct hfc_fifo *fifo)
-{
-	return (fifo->z1 - fifo->z2 + fifo->size) % fifo->size;
-}
 
 static inline u16 hfc_fifo_free_rx(struct hfc_fifo *fifo)
 {
@@ -115,7 +111,7 @@ static inline u8 hfc_fifo_free_frames(struct hfc_fifo *fifo)
 
 static inline void hfc_fifo_refresh_fz_cache(struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	// Se hfc-8s-4s.pdf par 4.4.7 for an explanation of this:
 	u16 prev_f1f2 = hfc_inw(card, hfc_A_F12);
@@ -136,7 +132,7 @@ static inline void hfc_fifo_refresh_fz_cache(struct hfc_fifo *fifo)
 
 static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	hfc_outb(card, hfc_R_FIFO,
 		hfc_R_FIFO_V_FIFO_NUM(fifo->hw_index) |
@@ -159,7 +155,7 @@ static inline void hfc_fifo_select(struct hfc_fifo *fifo)
 
 static inline void hfc_fifo_reset(struct hfc_fifo *fifo)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	hfc_outb(card, hfc_A_INC_RES_FIFO,
 		hfc_A_INC_RES_FIFO_V_RES_F);
@@ -171,7 +167,7 @@ static inline int hfc_fifo_mem_read(
 	struct hfc_fifo *fifo,
 	void *data, int size)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 #if 0
 	int i;
@@ -202,7 +198,7 @@ static inline int hfc_fifo_mem_read_dword(
 	struct hfc_fifo *fifo,
 	void *data, int size)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	union { u32 l; u8 b[4]; } word;
 
@@ -221,7 +217,7 @@ static inline int hfc_fifo_mem_read_to_user(
 	struct hfc_fifo *fifo,
 	void __user *data, int size)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 	int err;
 
 	int i;
@@ -240,16 +236,17 @@ static inline void hfc_fifo_mem_write(
 	struct hfc_fifo *fifo,
 	const void *data, int size)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
-#if 0
+#if 1
 	int i;
 	for (i=0; i<size; i++) {
 		hfc_outb(card,
 			hfc_A_FIFO_DATA0,
 			((u8 *)data)[i]);
 	}
-#endif
+
+#else
 
 	union { u32 l; u8 b[4]; } word;
 
@@ -264,13 +261,14 @@ static inline void hfc_fifo_mem_write(
 		hfc_outb(card, hfc_A_FIFO_DATA0, *((u8 *)data + pos));
 		pos++;
 	}
+#endif
 }
 
 static inline void hfc_fifo_mem_write_from_user(
 	struct hfc_fifo *fifo,
 	const void __user *data, int size)
 {
-	struct hfc_card *card = fifo->chan->port->card;
+	struct hfc_card *card = fifo->card;
 
 	int i;
 	for (i=0; i<size; i++) {

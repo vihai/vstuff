@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -42,7 +42,7 @@ enum hfc_fifo_connect_to
 struct hfc_sys_chan;
 struct hfc_fifo
 {
-	struct hfc_sys_chan *chan;
+	struct hfc_card *card;
 
 	int hw_index;
 	enum hfc_direction direction;
@@ -84,12 +84,11 @@ int hfc_fifo_get(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_put(struct hfc_fifo *fifo, void *data, int size);
 void hfc_fifo_drop(struct hfc_fifo *fifo, int size);
 void hfc_fifo_drop_frame(struct hfc_fifo *fifo);
-int hfc_fifo_is_running(struct hfc_fifo *fifo);
 void hfc_fifo_configure(
 	struct hfc_fifo *fifo);
 void hfc_fifo_init(
 	struct hfc_fifo *fifo,
-	struct hfc_sys_chan *chan,
+	struct hfc_card *card,
 	int hw_index,
 	enum hfc_direction direction);
 

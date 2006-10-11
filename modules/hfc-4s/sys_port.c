@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2005 Daniele Orlandi
+ * Copyright (C) 2004-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -12,10 +12,12 @@
 
 #include <linux/kernel.h>
 
+#include <linux/kstreamer/pipeline.h>
+
 #include "sys_port.h"
 #include "card.h"
-#include "card_inline.h"
 #include "fifo_inline.h"
+#include "pcm_port_inline.h"
 
 static struct hfc_fifo_config hfc_fifo_config[] = {
 	{ 0, 0, 0, 0x00, 0x0f, 32, 32,
@@ -153,9 +155,10 @@ static ssize_t hfc_show_fifo_state(
 	*buf = '\0';
 
 	sanprintf(buf, PAGE_SIZE,
-		"\n       Receive                      Transmit\n"
-		"FIFO#  F1 F2   Z1   Z2 Used Mode    F1 F2   Z1   Z2"
-		" Used Mode Connected\n");
+		"\n"
+		"    Receive                            Transmit\n"
+		" #  F1 F2   Z1   Z2 Used Mode Conn     F1 F2   Z1   Z2"
+		" Used Mode Conn\n");
 
 	hfc_card_lock(card);
 
@@ -163,14 +166,14 @@ static ssize_t hfc_show_fifo_state(
 //		if (!card->fifos[i][RX].used && !card->fifos[i][TX].used)
 //			continue;
 
-		struct hfc_fifo *fifo_rx = &port->chans[i].rx_fifo;
-		struct hfc_fifo *fifo_tx = &port->chans[i].tx_fifo;
+		struct hfc_fifo *fifo_rx = &port->chans[i].rx.fifo;
+		struct hfc_fifo *fifo_tx = &port->chans[i].tx.fifo;
 
 		union hfc_fgroup f;
 		union hfc_zgroup z;
 
 		sanprintf(buf, PAGE_SIZE,
-			"%2d   :", i);
+			"%2d:", i);
 
 		hfc_fifo_select(fifo_rx);
 
@@ -180,10 +183,37 @@ static ssize_t hfc_show_fifo_state(
 		sanprintf(buf, PAGE_SIZE,
 			" %02x %02x %04x %04x %4d %c%c%c  ",
 			f.f1, f.f2, z.z1, z.z2,
-			hfc_fifo_used_rx(fifo_rx),
+			hfc_fifo_used(fifo_rx),
 			fifo_rx->framer_enabled ? 'H' : ' ',
 			fifo_rx->enabled ? 'E' : ' ',
-			hfc_fifo_is_running(fifo_rx) ? 'R' : ' ');
+			fifo_rx->bit_reversed ? 'R' : ' ');
+
+		{
+		struct ks_link *prev_link;
+		prev_link = ks_pipeline_prev(&port->chans[i].rx.ks_link);
+
+		if (!prev_link) {
+			sanprintf(buf, PAGE_SIZE, "      ");
+		} else if (prev_link->ops == &hfc_st_chan_rx_link_ops) {
+			struct hfc_st_chan_rx *chan_rx =
+				container_of(prev_link, struct hfc_st_chan_rx,
+								ks_link);
+
+			sanprintf(buf, PAGE_SIZE,
+				"st%d:%-2s",
+				chan_rx->chan->port->id,
+				chan_rx->chan->ks_node.kobj.name);
+/*		} else if (prev_link->ops == &hfc_pcm_chan_rx_link_ops) {
+			struct hfc_pcm_chan_rx *chan_rx =
+				container_of(prev_link, struct hfc_pcm_chan_rx,
+								ks_link);
+
+			sanprintf(buf, PAGE_SIZE,
+				"pcm%d:%s",
+				chan_rx->chan->port->id,
+				chan_rx->chan->ks_node.kobj.name);*/
+		}
+		}
 
 		hfc_fifo_select(fifo_tx);
 
@@ -193,27 +223,37 @@ static ssize_t hfc_show_fifo_state(
 		sanprintf(buf, PAGE_SIZE,
 			"   %02x %02x %04x %04x %4d %c%c%c  ",
 			f.f1, f.f2, z.z1, z.z2,
-			hfc_fifo_used_tx(fifo_tx),
+			hfc_fifo_used(fifo_tx),
 			fifo_tx->framer_enabled ? 'H' : ' ',
 			fifo_tx->enabled ? 'E' : ' ',
-			hfc_fifo_is_running(fifo_tx) ? 'R' : ' ');
+			fifo_tx->bit_reversed ? 'R' : ' ');
 
-		if (fifo_rx->chan->connected_st_chan) {
+		{
+		struct ks_link *next_link;
+		next_link = ks_pipeline_next(&port->chans[i].tx.ks_link);
+
+		if (!next_link) {
+			sanprintf(buf, PAGE_SIZE, "\n");
+		} else if (next_link->ops == &hfc_st_chan_tx_link_ops) {
+			struct hfc_st_chan_tx *chan_tx =
+				container_of(next_link, struct hfc_st_chan_tx,
+								ks_link);
+
 			sanprintf(buf, PAGE_SIZE,
-				" st%d:%s",
-				fifo_rx->chan->connected_st_chan->port->id,
-				fifo_rx->chan->connected_st_chan->
-							visdn_chan.name);
-		}
+				"st%d:%-2s\n",
+				chan_tx->chan->port->id,
+				chan_tx->chan->ks_node.kobj.name);
+/*		} else if (next_link->ops == &hfc_pcm_chan_tx_link_ops) {
+			struct hfc_pcm_chan_tx *chan_tx =
+				container_of(next_link, struct hfc_pcm_chan_tx,
+								ks_link);
 
-		if (fifo_rx->chan->connected_pcm_chan) {
 			sanprintf(buf, PAGE_SIZE,
-				" pcm:%s",
-				fifo_rx->chan->connected_pcm_chan->
-							visdn_chan.name);
+				"pcm%d:%s\n",
+				chan_tx->chan->port->id,
+				chan_tx->chan->ks_node.kobj.name);*/
 		}
-
-		sanprintf(buf, PAGE_SIZE, "\n");
+		}
 	}
 
 	hfc_card_unlock(card);
@@ -243,35 +283,38 @@ static inline void hfc_fsm_select_entry(
 	mb();
 }
 
-void hfc_upload_fsm_entry(
+struct hfc_fsm_entry
+{
+	struct hfc_fifo *fifo;
+	int hfc_chan_hwindex;
+};
+
+static void hfc_upload_fsm_entry(
 	struct hfc_card *card,
-	struct hfc_fifo *fifo,
-	struct hfc_st_chan *chan,
-	struct hfc_fifo *next_fifo,
-	int index)
+	struct hfc_fsm_entry *entry,
+	struct hfc_fsm_entry *next_entry,
+	int fsm_index)
 {
 	u8 subch_bits;
 
 	hfc_debug_card(card, 3,
-		"Seq #%d fifo [%d,%s] <=> chan [%d,%s] (%d:%s) ",
-		index,
-		fifo->hw_index,
-		fifo->direction == RX ? "RX" : "TX",
-		chan->hw_index,
-		fifo->direction == RX ? "RX" : "TX",
-		chan->port->id,
-		chan->visdn_chan.name);
+		"Seq #%d fifo [%d,%s] <=> chan [%d,%s] ",
+		fsm_index,
+		entry->fifo->hw_index,
+		entry->fifo->direction == RX ? "RX" : "TX",
+		entry->hfc_chan_hwindex,
+		entry->fifo->direction == RX ? "RX" : "TX");
 
-	hfc_fsm_select_entry(card, index);
+	hfc_fsm_select_entry(card, fsm_index);
 
 	hfc_outb(card, hfc_A_CHANNEL,
-		(fifo->direction == RX ?
+		(entry->fifo->direction == RX ?
 			hfc_A_CHANNEL_V_CH_FDIR_RX :
 			hfc_A_CHANNEL_V_CH_FDIR_TX) |
 		hfc_A_CHANNEL_V_CH_FNUM(
-			chan->hw_index));
+			entry->hfc_chan_hwindex));
 
-	switch (fifo->subchannel_bit_count) {
+	switch (entry->fifo->subchannel_bit_count) {
 	case 1: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_1; break;
 	case 2: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_2; break;
 	case 3: subch_bits = hfc_A_SUBCH_CFG_V_BIT_CNT_3; break;
@@ -287,17 +330,17 @@ void hfc_upload_fsm_entry(
 
 	hfc_outb(card, hfc_A_SUBCH_CFG, subch_bits);
 
-	if (next_fifo) {
+	if (next_entry) {
 		hfc_outb(card, hfc_A_FIFO_SEQ,
-			(next_fifo->direction == RX ?
+			(next_entry->fifo->direction == RX ?
 				hfc_A_FIFO_SEQ_V_NEXT_FIFO_DIR_RX :
 				hfc_A_FIFO_SEQ_V_NEXT_FIFO_DIR_TX) |
 			hfc_A_FIFO_SEQ_V_NEXT_FIFO_NUM(
-				next_fifo->hw_index));
+				next_entry->fifo->hw_index));
 
 		hfc_debug_cont(3, "=> fifo [%d,%s]\n",
-			next_fifo->hw_index,
-			next_fifo->direction == RX ? "RX" : "TX");
+			next_entry->fifo->hw_index,
+			next_entry->fifo->direction == RX ? "RX" : "TX");
 
 	} else {
 		hfc_outb(card, hfc_A_FIFO_SEQ,
@@ -307,24 +350,16 @@ void hfc_upload_fsm_entry(
 	}
 }
 
-void hfc_sys_port_upload_fsm(
-	struct hfc_sys_port *port)
+static void hfc_sys_port_upload_fsm(
+	struct hfc_sys_port *port,
+	struct hfc_fsm_entry *entries,
+	int nentries)
 {
 	struct hfc_card *card = port->card;
-	struct hfc_fifo *fifos[64];
-	int nfifos = 0;
-
 	int i;
-	for (i=0; i<port->num_chans; i++) {
-		if (port->chans[i].connected_st_chan ||
-		    port->chans[i].connected_pcm_chan) {
-			fifos[nfifos++] = &port->chans[i].tx_fifo;
-			fifos[nfifos++] = &port->chans[i].rx_fifo;
-		}
-	}
 
 	// Nothing inserted, let's close the empty list :)
-	if (!nfifos) {
+	if (!nentries) {
 		hfc_fsm_select_entry(card, 0);
 
 		hfc_outb(card, hfc_A_FIFO_SEQ,
@@ -334,29 +369,133 @@ void hfc_sys_port_upload_fsm(
 	}
 
 	hfc_outb(card, hfc_R_FIRST_FIFO,
-		(fifos[0]->direction == RX ?
+		(entries[0].fifo->direction == RX ?
 			hfc_R_FIRST_FIFO_V_FIRST_FIFO_DIR_RX :
 			hfc_R_FIRST_FIFO_V_FIRST_FIFO_DIR_TX) |
-		hfc_R_FIRST_FIFO_V_FIRST_FIFO_NUM(fifos[0]->hw_index));
+		hfc_R_FIRST_FIFO_V_FIRST_FIFO_NUM(entries[0].fifo->hw_index));
 
-	{
-	int index = 0;
-	for (i=0; i<nfifos; i++) {
-		if (i < nfifos-1)
-			hfc_upload_fsm_entry(card, fifos[i],
-				fifos[i]->chan->connected_st_chan,
-					fifos[i+1], index);
+	for (i=0; i<nentries; i++) {
+
+		if (i < nentries-1)
+			hfc_upload_fsm_entry(card, &entries[i],
+					&entries[i+1], i);
 		else
-			hfc_upload_fsm_entry(card, fifos[i],
-				fifos[i]->chan->connected_st_chan,
-					NULL, index);
+			hfc_upload_fsm_entry(card, &entries[i],
+					NULL, i);
+	}
 
-		index++;
-	}
-	}
+	hfc_pcm_port_select_slot(card,
+		hfc_R_SLOT_V_SL_NUM(0) |
+		hfc_R_SLOT_V_SL_DIR_TX);
+	hfc_outb(card, hfc_A_SL_CFG,
+		hfc_A_SL_CFG_V_CH_SDIR_TX |
+		hfc_A_SL_CFG_V_CH_NUM(0) |
+		hfc_A_SL_CFG_V_ROUT_OUT_STIO1);
+
+	hfc_pcm_port_select_slot(card,
+		hfc_R_SLOT_V_SL_NUM(10) |
+		hfc_R_SLOT_V_SL_DIR_RX);
+	hfc_outb(card, hfc_A_SL_CFG,
+		hfc_A_SL_CFG_V_CH_SDIR_RX |
+		hfc_A_SL_CFG_V_CH_NUM(0) |
+		hfc_A_SL_CFG_V_ROUT_IN_STIO1);
 }
 
+void hfc_sys_port_update_fsm(
+	struct hfc_sys_port *port)
+{
+//	struct hfc_card *card = port->card;
+	struct hfc_fsm_entry *entries;
+	int nentries = 0;
+	int i;
 
+	BUG_ON(port->num_chans > 64);
+
+	entries = kmalloc(sizeof(*entries) * 64, GFP_ATOMIC);
+	if (!entries) {
+		WARN_ON(1);
+		return;
+	}
+	
+	for (i=0; i<port->num_chans; i++) {
+		// If FIFO open! FIXME TODO
+		if (1) {
+			struct ks_link *prev_link;
+
+			prev_link = ks_pipeline_prev(
+					&port->chans[i].rx.ks_link);
+
+			if (!prev_link) {
+			} else if (prev_link->ops == &hfc_st_chan_rx_link_ops) {
+
+				struct hfc_st_chan_rx *chan_rx =
+					container_of(prev_link,
+							struct hfc_st_chan_rx,
+							ks_link);
+
+				entries[nentries].fifo =
+						&port->chans[i].rx.fifo;
+				entries[nentries].hfc_chan_hwindex =
+						chan_rx->chan->hw_index;
+				nentries++;
+			} /*else if (prev_link->ops ==
+						&hfc_pcm_chan_rx_link_ops) {
+
+				 * ALLOCATE A HFC_CHAN
+				struct hfc_pcm_chan_rx *chan_rx =
+					container_of(prev_link,
+							struct hfc_pcm_chan_rx,
+							ks_link);
+
+				entries[nentries++].fifo =
+						&port->chans[i].rx.fifo;
+				entries[nentries].hfc_chan_hwindex =
+						chan_rx->hw_index;
+			} */ else
+				WARN_ON(1);
+		}
+
+		if (1) {
+			struct ks_link *next_link;
+
+			next_link = ks_pipeline_next(
+					&port->chans[i].tx.ks_link);
+
+			if (!next_link) {
+			} else if(next_link->ops == &hfc_st_chan_tx_link_ops) {
+
+				struct hfc_st_chan_tx *chan_tx =
+					container_of(next_link,
+							struct hfc_st_chan_tx,
+							ks_link);
+
+				entries[nentries].fifo =
+						&port->chans[i].tx.fifo;
+				entries[nentries].hfc_chan_hwindex =
+						chan_tx->chan->hw_index;
+				nentries++;
+			}/* else if (next_link->ops ==
+						&hfc_pcm_chan_tx_link_ops) {
+
+				 * ALLOCATE A HFC_CHAN
+				struct hfc_pcm_chan_tx *chan_tx =
+					container_of(next_link,
+							struct hfc_pcm_chan_tx,
+							ks_link);
+
+				entries[nentries++].fifo =
+						&port->chans[i].tx.fifo;
+				entries[nentries].hfc_chan_hwindex =
+						chan_tx->hw_index;
+			}*/ else
+				WARN_ON(1);
+		}
+	}
+
+	hfc_sys_port_upload_fsm(port, entries, nentries);
+
+	kfree(entries);
+}
 
 static void hfc_sys_port_configure_fifo(
 	struct hfc_fifo *fifo,
@@ -407,9 +546,9 @@ void hfc_sys_port_configure(
 		else
 			fzcfg = &fcfg->zone2;
 
-		hfc_sys_port_configure_fifo(&port->chans[i].rx_fifo,
+		hfc_sys_port_configure_fifo(&port->chans[i].rx.fifo,
 							fcfg, fzcfg);
-		hfc_sys_port_configure_fifo(&port->chans[i].tx_fifo,
+		hfc_sys_port_configure_fifo(&port->chans[i].tx.fifo,
 							fcfg, fzcfg);
 
 		hfc_debug_sys_port(port, 3,
@@ -443,9 +582,14 @@ void hfc_sys_port_reconfigure(
 }
 
 static void hfc_sys_port_release(
-	struct visdn_port *port)
+	struct visdn_port *visdn_port)
 {
+	struct hfc_sys_port *port =
+		container_of(visdn_port, struct hfc_sys_port, visdn_port);
+
 	printk(KERN_DEBUG "hfc_sys_port_release()\n");
+
+	hfc_card_put(port->card);
 }
 
 struct visdn_port_ops hfc_sys_port_ops = {
@@ -464,10 +608,8 @@ void hfc_sys_port_init(
 
 	port->card = card;
 
-	visdn_port_init(&port->visdn_port);
-	port->visdn_port.ops = &hfc_sys_port_ops;
-	port->visdn_port.device = &card->pci_dev->dev;
-	strncpy(port->visdn_port.name, name, sizeof(port->visdn_port.name));
+	visdn_port_init(&port->visdn_port, &hfc_sys_port_ops, name,
+			&card->pci_dev->dev.kobj);
 
 	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
 		char chan_name[16];
@@ -491,6 +633,7 @@ int hfc_sys_port_register(
 		goto err_port_register;
 
 	for (i=0; i<port->num_chans; i++) {
+		hfc_sys_port_get(port); /* Container is implicitly used */
 		err = hfc_sys_chan_register(&port->chans[i]);
 		if (err < 0)
 			goto err_chan_register;

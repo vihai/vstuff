@@ -16,7 +16,6 @@
 #include <linux/pci.h>
 
 #include "card.h"
-#include "card_inline.h"
 #include "led.h"
 
 void hfc_led_update(struct hfc_led *led)

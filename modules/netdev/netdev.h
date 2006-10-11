@@ -23,8 +23,8 @@ struct vnd_create
 	int protocol;
 	char devname[IFNAMSIZ];
 
-	int d_chan;
-	int e_chan;
+	char d_chan[80];
+	char e_chan[80];
 };
 
 #ifdef __KERNEL__
@@ -32,17 +32,15 @@ struct vnd_create
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 
-#include <linux/visdn/core.h>
-
 #define vnd_MODULE_NAME "visdn-netdev"
 #define vnd_MODULE_PREFIX vnd_MODULE_NAME ": "
 #define vnd_MODULE_DESCR "Netdevice gateway"
 
-#define VND_CHANNEL_SYMLINK "visdn_channel"
-#define VND_CHANNEL_SYMLINK_E "visdn_channel_e"
-
-#define VND_CHAN_HASHBITS 8
-#define VND_CHAN_HASHSIZE (1 << VND_CHAN_HASHBITS)
+#define VND_NODE_SYMLINK_D "ks_node_d"
+#define VND_NODE_SYMLINK_E "ks_node_e"
+#define VND_CONNECTED_NODE_SYMLINK_D "visdn_connected_node_d"
+#define VND_CONNECTED_NODE_SYMLINK_E "visdn_connected_node_e"
+#define VND_CONNECTED_PORT_SYMLINK "visdn_connected_port"
 
 enum vnd_netdevice_state
 {
@@ -58,12 +56,19 @@ struct vnd_netdevice
 
 	unsigned long state;
 
-	atomic_t refcnt;
+	struct kref kref;
 
-	int mtu;
+	char name[32];
 
-	struct visdn_chan visdn_chan;
-	struct visdn_chan visdn_chan_e;
+	struct ks_node ks_node_d;
+	struct ks_duplex ks_duplex_d;
+	struct ks_link ks_link_d_rx;
+	struct ks_link ks_link_d_tx;
+
+	struct ks_node ks_node_e;
+	struct ks_duplex ks_duplex_e;
+	struct ks_link ks_link_e_rx;
+	struct ks_link ks_link_e_tx;
 
 	struct visdn_port *remote_port; 
 
@@ -80,14 +85,31 @@ struct vnd_netdevice
 		printk(KERN_DEBUG vnd_MODULE_PREFIX		\
 			format,					\
 			## arg)
+
+#define vnd_debug_nd(nd, dbglevel, format, arg...)		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG vnd_MODULE_PREFIX		\
+			"%s: "					\
+			format,					\
+			(nd)->name,				\
+			## arg)
 #else
 #define vnd_debug(format, arg...) do {} while (0)
+#define vnd_debug_nd(format, arg...) do {} while (0)
 #endif
 
 #define vnd_msg(level, format, arg...)				\
 	printk(level vnd_MODULE_PREFIX				\
 		format,						\
 		## arg)
+
+#define vnd_msg_nd(nd, level, format, arg...)			\
+	printk(level vnd_MODULE_PREFIX				\
+		"%s: "						\
+		format,						\
+		(nd)->name					\
+		## arg)
+
 
 #endif
 

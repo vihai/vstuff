@@ -21,20 +21,9 @@
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 
-#include <linux/visdn/core.h>
+#include <linux/kstreamer/dynattr.h>
 
-#include "st_port.h"
-#include "st_port_inline.h"
-#include "pcm_port.h"
-#include "pcm_port_inline.h"
-#include "st_port.h"
-#include "st_chan.h"
-#include "sys_port.h"
-#include "sys_chan.h"
-#include "fifo.h"
-#include "fifo_inline.h"
 #include "card.h"
-#include "card_inline.h"
 
 #ifdef DEBUG_CODE
 #ifdef DEBUG_DEFAULTS
@@ -183,13 +172,39 @@ static int __devinit hfc_probe(
 {
 	int err;
 
-	err = hfc_card_probe(pci_dev, device_id_entry);
+	struct hfc_card *card;
+	card = hfc_card_alloc();
+	if (!card) {
+		err = -ENOMEM;
+		goto err_alloc_hfccard;
+	}
+
+	hfc_card_init(card,
+		pci_dev,
+		(struct hfc_card_config *)device_id_entry->driver_data);
+
+	err = hfc_card_probe(card);
 	if (err < 0)
 		goto err_card_probe;
 
+	pci_set_drvdata(pci_dev, card);
+
+	/* Ok, the hardware is ready and the data structures are initialized,
+	 * we can now register to the system.
+	 */
+
+	err = hfc_card_register(card);
+	if (err < 0)
+		goto err_card_register;
+
 	return 0;
 
+	hfc_card_unregister(card);
+err_card_register:
+	hfc_card_remove(card);
 err_card_probe:
+	hfc_card_put(card);
+err_alloc_hfccard:
 
 	return err;
 }
@@ -201,6 +216,7 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 	if (!card)
 		return;
 
+	hfc_card_unregister(card);
 	hfc_card_remove(card);
 }
 
@@ -245,11 +261,26 @@ DRIVER_ATTR(debug_level, S_IRUGO | S_IWUSR,
  * Module stuff
  ******************************************/
 
+struct ks_dynattr *hfc_hdlc_framer_class;
+struct ks_dynattr *hfc_octet_reverser_class;
+
 static int __init hfc_init_module(void)
 {
 	int err;
 
 	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " loading\n");
+
+	hfc_hdlc_framer_class = ks_dynattr_register("hdlc_framer");
+	if (!hfc_hdlc_framer_class) {
+		err = -ENOMEM;
+		goto err_register_hdlc_framer;
+	}
+
+	hfc_octet_reverser_class = ks_dynattr_register("octet_reverser");
+	if (!hfc_octet_reverser_class) {
+		err = -ENOMEM;
+		goto err_register_octet_reverser;
+	}
 
 	err = pci_register_driver(&hfc_driver);
 	if (err < 0)
@@ -269,6 +300,10 @@ static int __init hfc_init_module(void)
 		&driver_attr_debug_level);
 #endif
 err_pci_register_driver:
+	ks_dynattr_unregister(hfc_octet_reverser_class);
+err_register_octet_reverser:
+	ks_dynattr_unregister(hfc_hdlc_framer_class);
+err_register_hdlc_framer:
 
 	return err;
 }
@@ -284,6 +319,9 @@ static void __exit hfc_module_exit(void)
 #endif
 
 	pci_unregister_driver(&hfc_driver);
+
+	ks_dynattr_unregister(hfc_octet_reverser_class);
+	ks_dynattr_unregister(hfc_hdlc_framer_class);
 
 	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " unloaded\n");
 }

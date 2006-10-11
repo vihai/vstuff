@@ -20,6 +20,10 @@
 #include <unistd.h>
 #include <sys/poll.h>
 #include <sys/time.h>
+#include <sys/ioctl.h>
+
+#include <linux/visdn/router.h>
+#include <linux/visdn/userport.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
@@ -90,27 +94,90 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	int fd;
-	fd = open("/dev/visdn/timer", O_RDONLY);
-	if (fd < 0) {
-		printf("cannot open /dev/visdn/timer: %s\n", strerror(errno));
-
+	int fd1;
+	fd1 = open("/dev/visdn/userport_stream", O_RDWR);
+	if (fd1 < 0) {
+		perror("cannot open /dev/visdn/userport_stream");
 		return 1;
 	}
 
-	printf("This program calculates a statistic on userland jitter polling\n"
-		"the timer device. Calculating...\n");
+	int fd2;
+	fd2 = open("/dev/visdn/userport_stream", O_RDWR);
+	if (fd2 < 0) {
+		perror("cannot open /dev/visdn/userport_stream");
+		return 1;
+	}
 
-	struct pollfd pollfd = { fd, POLLIN, 0 };
+	int router_control_fd = open("/dev/visdn/router-control", O_RDWR);
+	if (router_control_fd < 0) {
+		perror("Unable to open router-control");
+		return 1;
+	}
+
+	struct vup_ctl vup_ctl;
+	if (ioctl(fd1, VISDN_UP_GET_NODEID, (caddr_t)&vup_ctl) < 0) {
+		perror("ioctl(VISDN_UP_GET_NODEID)");
+		return 1;
+	}
+
+	char node1_id[80];
+	snprintf(node1_id, sizeof(node1_id), "/sys/%s", vup_ctl.node_id);
+
+	printf("Created userport: %s\n", node1_id);
+
+	if (ioctl(fd2, VISDN_UP_GET_NODEID, (caddr_t)&vup_ctl) < 0) {
+		perror("ioctl(VISDN_UP_GET_NODEID)");
+		return 1;
+	}
+
+	char node2_id[80];
+	snprintf(node2_id, sizeof(node2_id), "/sys/%s", vup_ctl.node_id);
+
+	printf("Created userport: %s\n", node2_id);
+
+	struct visdn_connect vc;
+	memset(&vc, 0, sizeof(vc));
+	strncpy(vc.from_endpoint, node2_id,
+				sizeof(vc.from_endpoint));
+	strncpy(vc.to_endpoint, node1_id,
+				sizeof(vc.to_endpoint));
+
+	if (ioctl(router_control_fd, VISDN_IOC_CONNECT, (caddr_t) &vc) < 0) {
+		perror("ioctl(VISDN_CONNECT, sp=>br)");
+		return 1;
+	}
+
+	int pipeline_id = vc.pipeline_id;
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = pipeline_id;
+	if (ioctl(router_control_fd, VISDN_IOC_PIPELINE_OPEN,
+						(caddr_t)&vc) < 0) {
+		perror("ioctl(VISDN_PIPELINE_OPEN, sp=>br)");
+		return 1;
+	}
+
+	memset(&vc, 0, sizeof(vc));
+	vc.pipeline_id = pipeline_id;
+	if (ioctl(router_control_fd, VISDN_IOC_PIPELINE_START,
+						(caddr_t)&vc) < 0) {
+		perror("ioctl(VISDN_PIPELINE_START, sp=>br)");
+		return 1;
+	}
+
+	printf("This program calculates a statistic on userland jitter\n"
+		"polling the timer device. Calculating...\n");
+
+	struct pollfd pollfd = { fd1, POLLIN, 0 };
 	char junk;
 
 	// Synchronize with the timer
 	if (poll(&pollfd, 1, -1) < 0) {
-		printf("poll; %s\n", strerror(errno));
+		perror("poll");
 		return 1;
 	}
 
-	read(fd, &junk, 1);
+	read(fd1, &junk, 1);
 
 	int *frequencies = (int *)malloc(nclasses * sizeof(*frequencies));
 	int i;
@@ -124,11 +191,11 @@ int main(int argc, char *argv[])
 	double prepoll = double_now();
 	for (i=0; i < count; i++) {
 		if (poll(&pollfd, 1, -1) < 0) {
-			printf("poll: %s\n", strerror(errno));
+			perror("poll");
 			return 1;
 		}
 
-		read(fd, &junk, 1);
+		read(fd1, &junk, 1);
 
 		double delay = double_now() - prepoll;
 		prepoll = double_now();
