@@ -20,12 +20,13 @@
 #include <assert.h>
 #include <sys/poll.h>
 #include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <linux/types.h>
 #include <linux/netlink.h>
 
 /*#include <linux/kstreamer/router.h>
 #include <linux/kstreamer/dynattr.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/chan.h>
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/pipeline.h>
 #include <linux/kstreamer/netlink.h>*/
@@ -46,27 +47,11 @@
 struct opts
 {
 	int in;
+	BOOL in_reverser;
+	BOOL in_framer;
+
 	int out;
 } opts;
-
-static void pipeline_dump(struct ks_pipeline *pipeline)
-{
-	int i;
-	for(i=0; i<pipeline->links_cnt; i++) {
-
-		struct ks_link *link = pipeline->links[i];
-
-		printf("%s =>(%s)=> %s\n",
-			link->from->path,
-			link->path,
-			link->to->path);
-
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &link->dynattrs, node) {
-			printf("DYNATTR: %s\n", dynattr->dynattr->name);
-		}
-	}
-}
 
 int main(int argc, char *argv[])
 {
@@ -75,16 +60,9 @@ int main(int argc, char *argv[])
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 	setvbuf(stderr, (char *)NULL, _IONBF, 0);
 
-
 	opts.in = 1;
 	opts.out = 0;
 
-
-
-
-
-
-	
 
 	int mode;
 
@@ -177,41 +155,54 @@ int main(int argc, char *argv[])
 
 		in_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
 
-		ks_pipeline_create(conn, in_pipeline);
+		err = ks_pipeline_create(in_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr,
+				"Cannot create pipeline: %s\n",
+					strerror(-err));
+			return -err;
+		}
 
 		int i;
-		for(i=0; i<in_pipeline->links_cnt; i++) {
-			struct ks_link *link = in_pipeline->links[i];
+		for(i=0; i<in_pipeline->chans_cnt; i++) {
+			struct ks_chan *chan = in_pipeline->chans[i];
 
 			struct ks_dynattr_instance *dynattr;
-			list_for_each_entry(dynattr, &link->dynattrs, node) {
+			list_for_each_entry(dynattr, &chan->dynattrs, node) {
 				if (dynattr->dynattr == octet_reverser) {
 					struct octet_reverser_descr *descr =
 						(struct octet_reverser_descr *)
 						dynattr->payload;
 
-printf("DDDDDDDDDDDDDDDDDDDD %02x\n", descr->flags);
-					descr->flags |=
-						OCTET_REVERSER_FLAG_ENABLED;
-printf("DDDDDDDDDDDDDDDDDDDD %02x\n", descr->flags);
+//					descr->flags |=
+//						OCTET_REVERSER_FLAG_ENABLED;
+
+					descr->flags &=
+						~OCTET_REVERSER_FLAG_ENABLED;
+
 				} else if (dynattr->dynattr == hdlc_framer) {
 					struct hdlc_framer_descr *descr =
 						(struct hdlc_framer_descr *)
 						dynattr->payload;
 
-//					descr->flags |=
-//						HDLC_FRAMER_FLAG_ENABLED;
+					descr->flags |=
+						HDLC_FRAMER_FLAG_ENABLED;
+
+					descr->flags &=
+						~HDLC_FRAMER_FLAG_ENABLED;
 				}
 			}
 		}
 done:
 
-		ks_pipeline_update_links(conn, in_pipeline);
-printf("11111111111111111111\n");
+		ks_pipeline_update_chans(in_pipeline, conn);
 
 		in_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
-		ks_pipeline_update(conn, in_pipeline);
-printf("22222222222222222222\n");
+		err = ks_pipeline_update(in_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr, "Cannot start the pipeline\n");
+			return 1;
+		}
 	}
 
 	if (opts.out) {
@@ -224,14 +215,14 @@ printf("22222222222222222222\n");
 
 		out_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
 
-		ks_pipeline_create(conn, out_pipeline);
+		err = ks_pipeline_create(out_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr,
+				"Cannot create pipeline: %s\n",
+					strerror(-err));
+			return -err;
+		}
 	}
-
-/*	ks_send_topology_update_req(netlink_sock);
-
-	while(1) {
-		ks_netlink_receive(netlink_sock);
-	}*/
 
 	char buf[4096];
 	struct pollfd pollfd = { up_fd, POLLIN, 0 };
@@ -265,6 +256,19 @@ printf("22222222222222222222\n");
 #endif
 
 	sleep(10000);
+
+	in_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
+	err = ks_pipeline_update(in_pipeline, conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot stop the pipeline\n");
+		return 1;
+	}
+
+	err = ks_pipeline_destroy(in_pipeline, conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot destroy the pipeline\n");
+		return 1;
+	}
 
 	ks_conn_destroy(conn);
 

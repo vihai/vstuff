@@ -35,12 +35,12 @@ struct vss_softswitch
 //
 };
 
-struct vss_link_ops
+struct vss_chan_ops
 {
-	int (*push_frame)(struct ks_link *link, struct sk_buff *skb);
-	int (*push_raw)(struct ks_link *link,
+	int (*push_frame)(struct ks_chan *chan, struct sk_buff *skb);
+	int (*push_raw)(struct ks_chan *chan,
 			struct ks_streamframe *sb);
-	int (*get_pressure)(struct ks_link *link);
+	int (*get_pressure)(struct ks_chan *chan);
 /*
 
 	void (*rx_error)(struct visdn_leg *leg,
@@ -52,11 +52,11 @@ struct vss_link_ops
 
 extern struct vss_softswitch vss_softswitch;
 
-extern int vss_link_push_frame(struct ks_link *link, struct sk_buff *skb);
-extern int vss_link_push_raw(
-		struct ks_link *link,
+extern int vss_chan_push_frame(struct ks_chan *chan, struct sk_buff *skb);
+extern int vss_chan_push_raw(
+		struct ks_chan *chan,
 		struct ks_streamframe *sf);
-extern int vss_link_get_pressure(struct ks_link *link);
+extern int vss_chan_get_pressure(struct ks_chan *chan);
 
 #endif
 

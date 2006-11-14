@@ -18,7 +18,7 @@
 #include <linux/kfifo.h>
 
 #include <linux/kstreamer/node.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 
 #define vmw_MODULE_NAME "visdn-milliwatt"
 #define vmw_MODULE_PREFIX vmw_MODULE_NAME ": "
@@ -34,7 +34,7 @@ struct vmw_chan
 	struct list_head node;
 
 	struct ks_node ks_node;
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	int id;
 

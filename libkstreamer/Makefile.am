@@ -5,9 +5,10 @@ lib_LTLIBRARIES = libkstreamer.la
 libkstreamer_la_SOURCES = \
 	libkstreamer.c	\
 	dynattr.c	\
-	link.c		\
+	channel.c	\
 	netlink.c	\
-	request.c	\
+	xact.c		\
+	req.c		\
 	node.c		\
 	pipeline.c	\
 	conn.c		\
@@ -19,11 +20,12 @@ libkstreamer_ladir = libkstreamer
 nobase_include_HEADERS = \
 	dynattr.h	\
 	libkstreamer.h	\
-	link.h		\
+	channel.h	\
 	node.h		\
 	pipeline.h	\
 	conn.h		\
-	request.h	\
+	xact.h		\
+	req.h		\
 	router.h	\
 	util.h
 

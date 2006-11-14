@@ -22,7 +22,7 @@
 #include "util.h"
 #include "router.h"
 #include "node.h"
-#include "link.h"
+#include "channel.h"
 #include "pipeline.h"
 
 //#define DIJ_DEBUG
@@ -80,11 +80,11 @@ void router_run(
 
 		/* For each arch exiting from node 'min_cost_node' */
 
-		struct ks_link *arch;
-		for (i=0; i<ARRAY_SIZE(ks_links_hash); i++) {
+		struct ks_chan *arch;
+		for (i=0; i<ARRAY_SIZE(ks_chans_hash); i++) {
 			struct hlist_node *t; 
 
-			hlist_for_each_entry(arch, t, &ks_links_hash[i], node) {
+			hlist_for_each_entry(arch, t, &ks_chans_hash[i], node) {
 
 				if (arch->from != min_cost_node)
 					continue;

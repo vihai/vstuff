@@ -15,15 +15,15 @@
 
 #include <linux/kstreamer/kstreamer.h>
 #include <linux/kstreamer/node.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 
 #include "util.h"
 
 #define to_pcm_chan(chan)	\
 		container_of(chan, struct hfc_pcm_chan, visdn_chan)
 
-extern struct ks_link_ops hfc_pcm_chan_rx_link_ops;
-extern struct ks_link_ops hfc_pcm_chan_tx_link_ops;
+extern struct ks_chan_ops hfc_pcm_chan_rx_chan_ops;
+extern struct ks_chan_ops hfc_pcm_chan_tx_chan_ops;
 
 enum hfc_pcm_chan_status {
 	HFC_PCM_CHAN_STATUS_FREE,
@@ -33,7 +33,7 @@ enum hfc_pcm_chan_status {
 struct hfc_pcm_chan;
 struct hfc_pcm_chan_rx
 {
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	struct hfc_pcm_chan *chan;
 
@@ -42,7 +42,7 @@ struct hfc_pcm_chan_rx
 
 struct hfc_pcm_chan_tx
 {
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	struct hfc_pcm_chan *chan;
 

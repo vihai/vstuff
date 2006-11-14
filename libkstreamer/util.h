@@ -18,4 +18,6 @@
 #define FALSE 0
 #define TRUE  (!FALSE)
 
+typedef unsigned char BOOL;
+
 #endif

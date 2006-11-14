@@ -22,7 +22,7 @@
 #include <linux/crc32.h>
 
 #include <linux/kstreamer/kstreamer.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/duplex.h>
 #include <linux/kstreamer/pipeline.h>
 #include <linux/kstreamer/softswitch.h>
@@ -142,40 +142,40 @@ static struct vnd_netdevice *vnd_netdevice_get_by_name(const char *name)
 
 /*---------------------------------------------------------------------------*/
 
-static void vnd_link_d_rx_release(struct ks_link *ks_link)
+static void vnd_chan_d_rx_release(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_d_rx_release()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_d_rx_release()\n");
 
 	vnd_netdevice_put(netdevice);
 }
 
-static int vnd_link_d_rx_open(struct ks_link *ks_link)
+static int vnd_chan_d_rx_open(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_d_rx_open()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_d_rx_open()\n");
 
 	return 0;
 }
 
-static void vnd_link_d_rx_close(struct ks_link *ks_link)
+static void vnd_chan_d_rx_close(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_d_rx_close()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_d_rx_close()\n");
 }
 
-static int vnd_link_d_rx_push_frame(
-	struct ks_link *ks_link,
+static int vnd_chan_d_rx_push_frame(
+	struct ks_chan *ks_chan,
 	struct sk_buff *skb)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 	struct lapd_prim_hdr *prim_hdr;
 
 	netdevice->netdev->last_rx = jiffies;
@@ -195,10 +195,10 @@ static int vnd_link_d_rx_push_frame(
 	return netif_rx(skb);
 }
 
-static int vnd_link_d_rx_connect(struct ks_link *ks_link)
+static int vnd_chan_d_rx_connect(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
 	vnd_debug_nd(netdevice, 2, "D RX connected\n");
 
@@ -208,10 +208,10 @@ static int vnd_link_d_rx_connect(struct ks_link *ks_link)
 	return 0;
 }
 
-static void vnd_link_d_rx_disconnect(struct ks_link *ks_link)
+static void vnd_chan_d_rx_disconnect(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
 	vnd_debug_nd(netdevice, 2, "disconnected\n");
 
@@ -226,18 +226,18 @@ static void vnd_link_d_rx_disconnect(struct ks_link *ks_link)
 	*/
 }
 
-/*static void vnd_chan_wake_queue(struct ks_link *ks_link)
+/*static void vnd_chan_wake_queue(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice = ks_link->chan->driver_data;
+	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	netif_wake_queue(netdevice->netdev);
 }
 
 static void vnd_chan_rx_error(
-	struct ks_link *ks_link,
-	enum ks_link_rx_error_code code)
+	struct ks_chan *ks_chan,
+	enum ks_chan_rx_error_code code)
 {
-	struct vnd_netdevice *netdevice = ks_link->chan->driver_data;
+	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
 	case KS_RX_ERROR_DROPPED:
@@ -263,10 +263,10 @@ static void vnd_chan_rx_error(
 }
 
 static void vnd_chan_tx_error(
-	struct ks_link *ks_link,
-	enum ks_link_tx_error_code code)
+	struct ks_chan *ks_chan,
+	enum ks_chan_tx_error_code code)
 {
-	struct vnd_netdevice *netdevice = ks_link->chan->driver_data;
+	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
 	case KS_TX_ERROR_FIFO_FULL:
@@ -276,17 +276,17 @@ static void vnd_chan_tx_error(
 	}
 }*/
 
-static struct ks_link_ops vnd_link_d_rx_ops = {
+static struct ks_chan_ops vnd_chan_d_rx_ops = {
 	.owner			= THIS_MODULE,
-	.release	  	= vnd_link_d_rx_release,
-	.connect	  	= vnd_link_d_rx_connect,
-	.disconnect		= vnd_link_d_rx_disconnect,
-	.open		  	= vnd_link_d_rx_open,
-	.close			= vnd_link_d_rx_close,
+	.release	  	= vnd_chan_d_rx_release,
+	.connect	  	= vnd_chan_d_rx_connect,
+	.disconnect		= vnd_chan_d_rx_disconnect,
+	.open		  	= vnd_chan_d_rx_open,
+	.close			= vnd_chan_d_rx_close,
 };
 
-static struct vss_link_ops vnd_link_d_rx_node_ops = {
-	.push_frame		= vnd_link_d_rx_push_frame,
+static struct vss_chan_ops vnd_chan_d_rx_node_ops = {
+	.push_frame		= vnd_chan_d_rx_push_frame,
 
 //	.rx_error		= vnd_chan_rx_error,
 //	.tx_error		= vnd_chan_tx_error,
@@ -294,24 +294,24 @@ static struct vss_link_ops vnd_link_d_rx_node_ops = {
 
 /*---------------------------------------------------------------------------*/
 
-static void vnd_link_d_tx_release(struct ks_link *ks_link)
+static void vnd_chan_d_tx_release(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_d_tx_release()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_d_tx_release()\n");
 
 	vnd_netdevice_put(netdevice);
 }
 
-static int vnd_link_d_tx_open(struct ks_link *ks_link)
+static int vnd_chan_d_tx_open(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
-	struct ks_pipeline *pipeline = netdevice->ks_link_d_tx.pipeline;
+	struct ks_pipeline *pipeline = netdevice->ks_chan_d_tx.pipeline;
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_d_tx_open()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_d_tx_open()\n");
 
 	if (!test_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state)) {
 		rtnl_lock();
@@ -324,12 +324,12 @@ static int vnd_link_d_tx_open(struct ks_link *ks_link)
 	return 0;
 }
 
-static void vnd_link_d_tx_close(struct ks_link *ks_link)
+static void vnd_chan_d_tx_close(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_d_tx_close()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_d_tx_close()\n");
 
 	if (netdevice->remote_port)
 		visdn_port_put(netdevice->remote_port);
@@ -349,11 +349,11 @@ static void print_kobj_path(struct kobject *kobj)
 	printk("\n");
 }
 
-static int vnd_link_d_tx_connect(struct ks_link *ks_link)
+static int vnd_chan_d_tx_connect(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
-	struct ks_pipeline *pipeline = netdevice->ks_link_d_tx.pipeline;
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
+	struct ks_pipeline *pipeline = netdevice->ks_chan_d_tx.pipeline;
 	struct ks_node *remote_node;
 	struct kobject *cur;
 	int err;
@@ -367,7 +367,7 @@ static int vnd_link_d_tx_connect(struct ks_link *ks_link)
 		&remote_node->kobj,
 			VND_CONNECTED_NODE_SYMLINK_D);
 	if (err < 0)
-		goto err_create_connected_node_link;
+		goto err_create_connected_node_chan;
 
 	cur = &remote_node->kobj;
 	while(cur && cur->kset->ktype != &visdn_port_ktype)
@@ -386,7 +386,7 @@ static int vnd_link_d_tx_connect(struct ks_link *ks_link)
 		&netdevice->remote_port->kobj,
 			VND_CONNECTED_PORT_SYMLINK);
 	if (err < 0)
-		goto err_create_port_link;
+		goto err_create_port_chan;
 
 	/* Ensure the queue status is restored */
 	netif_wake_queue(netdevice->netdev);
@@ -395,19 +395,19 @@ static int vnd_link_d_tx_connect(struct ks_link *ks_link)
 
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_PORT_SYMLINK);
-err_create_port_link:
+err_create_port_chan:
 err_no_port:
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_D);
-err_create_connected_node_link:
+err_create_connected_node_chan:
 
 	return err;
 }
 
-static void vnd_link_d_tx_disconnect(struct ks_link *ks_link)
+static void vnd_chan_d_tx_disconnect(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
 	vnd_debug_nd(netdevice, 2, "disconnected\n");
 
@@ -428,36 +428,36 @@ static void vnd_link_d_tx_disconnect(struct ks_link *ks_link)
 	rtnl_unlock();*/
 }
 
-static int vnd_link_d_tx_start(struct ks_link *ks_link)
+static int vnd_chan_d_tx_start(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
 	netif_start_queue(netdevice->netdev);
 
 	return 0;
 }
 
-static void vnd_link_d_tx_stop(struct ks_link *ks_link)
+static void vnd_chan_d_tx_stop(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_d_tx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
 	netif_stop_queue(netdevice->netdev);
 }
 
-/*static void vnd_chan_wake_queue(struct ks_link *ks_link)
+/*static void vnd_chan_wake_queue(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice = ks_link->chan->driver_data;
+	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	netif_wake_queue(netdevice->netdev);
 }
 
 static void vnd_chan_tx_error(
-	struct ks_link *ks_link,
-	enum ks_link_tx_error_code code)
+	struct ks_chan *ks_chan,
+	enum ks_chan_tx_error_code code)
 {
-	struct vnd_netdevice *netdevice = ks_link->chan->driver_data;
+	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
 	case KS_RX_ERROR_DROPPED:
@@ -483,10 +483,10 @@ static void vnd_chan_tx_error(
 }
 
 static void vnd_chan_tx_error(
-	struct ks_link *ks_link,
-	enum ks_link_tx_error_code code)
+	struct ks_chan *ks_chan,
+	enum ks_chan_tx_error_code code)
 {
-	struct vnd_netdevice *netdevice = ks_link->chan->driver_data;
+	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
 	case KS_TX_ERROR_FIFO_FULL:
@@ -496,54 +496,54 @@ static void vnd_chan_tx_error(
 	}
 }*/
 
-static struct ks_link_ops vnd_link_d_tx_ops = {
+static struct ks_chan_ops vnd_chan_d_tx_ops = {
 	.owner			= THIS_MODULE,
-	.release	  	= vnd_link_d_tx_release,
-	.connect	  	= vnd_link_d_tx_connect,
-	.disconnect		= vnd_link_d_tx_disconnect,
-	.open		  	= vnd_link_d_tx_open,
-	.close			= vnd_link_d_tx_close,
-	.start		  	= vnd_link_d_tx_start,
-	.stop			= vnd_link_d_tx_stop,
+	.release	  	= vnd_chan_d_tx_release,
+	.connect	  	= vnd_chan_d_tx_connect,
+	.disconnect		= vnd_chan_d_tx_disconnect,
+	.open		  	= vnd_chan_d_tx_open,
+	.close			= vnd_chan_d_tx_close,
+	.start		  	= vnd_chan_d_tx_start,
+	.stop			= vnd_chan_d_tx_stop,
 };
 
 /*---------------------------------------------------------------------------*/
 
-static void vnd_link_e_rx_release(struct ks_link *ks_link)
+static void vnd_chan_e_rx_release(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_e_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_e_rx_release()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_release()\n");
 
 	vnd_netdevice_put(netdevice);
 }
 
-static int vnd_link_e_rx_open(struct ks_link *ks_link)
+static int vnd_chan_e_rx_open(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_e_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_e_rx_open()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_open()\n");
 
 	return 0;
 }
 
-static void vnd_link_e_rx_close(struct ks_link *ks_link)
+static void vnd_chan_e_rx_close(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_e_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_e_rx_close()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_close()\n");
 }
 
-static int vnd_link_e_rx_push_frame(
-	struct ks_link *ks_link,
+static int vnd_chan_e_rx_push_frame(
+	struct ks_chan *ks_chan,
 	struct sk_buff *skb)
 {
 	struct lapd_prim_hdr *prim_hdr;
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_e_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
 	/* If frame matches a previously sent frame, it is our echo, so,
 	 * we may ignore it */
@@ -567,11 +567,11 @@ static int vnd_link_e_rx_push_frame(
 	return netif_rx(skb);
 }
 
-static int vnd_link_e_rx_connect(struct ks_link *ks_link)
+static int vnd_chan_e_rx_connect(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_e_rx);
-	struct ks_pipeline *pipeline = netdevice->ks_link_d_tx.pipeline;
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
+	struct ks_pipeline *pipeline = netdevice->ks_chan_d_tx.pipeline;
 	struct ks_node *remote_node;
 	int err;
 
@@ -584,7 +584,7 @@ static int vnd_link_e_rx_connect(struct ks_link *ks_link)
 		&remote_node->kobj,
 			VND_CONNECTED_NODE_SYMLINK_E);
 	if (err < 0)
-		goto err_create_connected_node_link;
+		goto err_create_connected_node_chan;
 
 	/* Ensure the queue status is restored */
 	netif_wake_queue(netdevice->netdev);
@@ -593,33 +593,33 @@ static int vnd_link_e_rx_connect(struct ks_link *ks_link)
 
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_E);
-err_create_connected_node_link:
+err_create_connected_node_chan:
 
 	return err;
 }
 
-static void vnd_link_e_rx_disconnect(struct ks_link *ks_link)
+static void vnd_chan_e_rx_disconnect(struct ks_chan *ks_chan)
 {
 	struct vnd_netdevice *netdevice =
-		container_of(ks_link, struct vnd_netdevice, ks_link_e_rx);
+		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
-	vnd_debug_nd(netdevice, 3, "vnd_link_e_rx_disconnect()\n");
+	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_disconnect()\n");
 
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_E);
 }
 
-static struct ks_link_ops vnd_link_e_rx_ops = {
+static struct ks_chan_ops vnd_chan_e_rx_ops = {
 	.owner			= THIS_MODULE,
-	.release	  	= vnd_link_e_rx_release,
-	.connect	  	= vnd_link_e_rx_connect,
-	.disconnect		= vnd_link_e_rx_disconnect,
-	.open		  	= vnd_link_e_rx_open,
-	.close			= vnd_link_e_rx_close,
+	.release	  	= vnd_chan_e_rx_release,
+	.connect	  	= vnd_chan_e_rx_connect,
+	.disconnect		= vnd_chan_e_rx_disconnect,
+	.open		  	= vnd_chan_e_rx_open,
+	.close			= vnd_chan_e_rx_close,
 };
 
-static struct vss_link_ops vnd_link_e_rx_node_ops = {
-	.push_frame		= vnd_link_e_rx_push_frame,
+static struct vss_chan_ops vnd_chan_e_rx_node_ops = {
+	.push_frame		= vnd_chan_e_rx_push_frame,
 
 //	.rx_error		= vnd_chan_rx_error,
 //	.tx_error		= vnd_chan_tx_error,
@@ -711,24 +711,24 @@ static int vnd_netdev_open(struct net_device *netdev)
 	set_bit(VND_NETDEVICE_STATE_RTNL_HELD, &netdevice->state);
 
 	/* RX */
-	pipeline_rx = netdevice->ks_link_d_rx.pipeline;
+	pipeline_rx = netdevice->ks_chan_d_rx.pipeline;
 	if (!pipeline_rx) {
 		err = -ENODEV;
 		goto err_no_pipeline_rx;
 	}
 
-	err = ks_pipeline_setstatus(pipeline_rx, KS_PIPELINE_STATUS_FLOWING);
+	err = ks_pipeline_change_status(pipeline_rx, KS_PIPELINE_STATUS_FLOWING);
 	if (err < 0)
 		goto err_pipeline_start_rx;
 
 	/* TX */
-	pipeline_tx = netdevice->ks_link_d_tx.pipeline;
+	pipeline_tx = netdevice->ks_chan_d_tx.pipeline;
 	if (!pipeline_tx) {
 		err = -ENODEV;
 		goto err_no_pipeline_tx;
 	}
 
-	err = ks_pipeline_setstatus(pipeline_tx, KS_PIPELINE_STATUS_FLOWING);
+	err = ks_pipeline_change_status(pipeline_tx, KS_PIPELINE_STATUS_FLOWING);
 	if (err < 0)
 		goto err_pipeline_start_tx;
 
@@ -740,11 +740,11 @@ static int vnd_netdev_open(struct net_device *netdev)
 
 	return 0;
 
-	ks_pipeline_setstatus(pipeline_tx, KS_PIPELINE_STATUS_CONNECTED);
+	ks_pipeline_change_status(pipeline_tx, KS_PIPELINE_STATUS_CONNECTED);
 err_pipeline_start_tx:
 //	ks_pipeline_put(pipeline_tx);
 err_no_pipeline_tx:
-	ks_pipeline_setstatus(pipeline_rx, KS_PIPELINE_STATUS_CONNECTED);
+	ks_pipeline_change_status(pipeline_rx, KS_PIPELINE_STATUS_CONNECTED);
 err_pipeline_start_rx:
 //	ks_pipeline_put(pipeline_rx);
 err_no_pipeline_rx:
@@ -761,16 +761,16 @@ static int vnd_netdev_stop(struct net_device *netdev)
 	cancel_delayed_work(&netdevice->promiscuity_change_work);
 	flush_scheduled_work();
 
-	if (netdevice->ks_link_d_rx.pipeline)
-		ks_pipeline_setstatus(netdevice->ks_link_d_rx.pipeline,
+	if (netdevice->ks_chan_d_rx.pipeline)
+		ks_pipeline_change_status(netdevice->ks_chan_d_rx.pipeline,
 				KS_PIPELINE_STATUS_CONNECTED);
 
-	if (netdevice->ks_link_d_tx.pipeline)
-		ks_pipeline_setstatus(netdevice->ks_link_d_tx.pipeline,
+	if (netdevice->ks_chan_d_tx.pipeline)
+		ks_pipeline_change_status(netdevice->ks_chan_d_tx.pipeline,
 				KS_PIPELINE_STATUS_CONNECTED);
 
-	if (netdevice->ks_link_e_rx.pipeline)
-		ks_pipeline_setstatus(netdevice->ks_link_e_rx.pipeline,
+	if (netdevice->ks_chan_e_rx.pipeline)
+		ks_pipeline_change_status(netdevice->ks_chan_e_rx.pipeline,
 				KS_PIPELINE_STATUS_CONNECTED);
 
 	return 0;
@@ -797,7 +797,7 @@ static int vnd_netdev_hard_start_xmit(
 	switch(prim_hdr->primitive_type) {
 	case LAPD_PH_DATA_REQUEST:
 		skb_pull(skb, sizeof(struct lapd_prim_hdr));
-		res = vss_link_push_frame(&netdevice->ks_link_d_tx, skb);
+		res = vss_chan_push_frame(&netdevice->ks_chan_d_tx, skb);
 		switch(res) {
 		case KS_TX_OK:
 			return NETDEV_TX_OK;
@@ -864,14 +864,14 @@ static void vnd_promiscuity_change_work(void *data)
 	struct vnd_netdevice *netdevice = data;
 	struct ks_pipeline *pipeline;
 
-	pipeline = netdevice->ks_link_e_rx.pipeline;
+	pipeline = netdevice->ks_chan_e_rx.pipeline;
 	if (pipeline) {
 		if (netdevice->netdev->flags & IFF_PROMISC) {
 			// FIXME: Handle failures
-			ks_pipeline_setstatus(pipeline,
+			ks_pipeline_change_status(pipeline,
 					KS_PIPELINE_STATUS_FLOWING);
 		} else if(!(netdevice->netdev->flags & IFF_PROMISC)) {
-			ks_pipeline_setstatus(pipeline,
+			ks_pipeline_change_status(pipeline,
 					KS_PIPELINE_STATUS_CONNECTED);
 		}
 	}
@@ -910,8 +910,8 @@ static int vnd_netdev_change_mtu(
 	struct vnd_netdevice *netdevice = netdev->priv;
 
 	// LOCKING*********** FIXME
-	if (netdevice->ks_link_d_tx.pipeline &&
-	    new_mtu <= netdevice->ks_link_d_tx.pipeline->mtu)
+	if (netdevice->ks_chan_d_tx.pipeline &&
+	    new_mtu <= netdevice->ks_chan_d_tx.pipeline->mtu)
 		netdev->mtu = new_mtu;
 	else
 		return -EINVAL;
@@ -1127,26 +1127,26 @@ static void vnd_netdevice_init(
 			"duplex",
 			&netdevice->ks_node_d.kobj);
 	
-	ks_link_init(&netdevice->ks_link_d_rx,
-			&vnd_link_d_rx_ops, "rx",
+	ks_chan_init(&netdevice->ks_chan_d_rx,
+			&vnd_chan_d_rx_ops, "rx",
 			&netdevice->ks_duplex_d,
 			&netdevice->ks_duplex_d.kobj,
 			&vss_softswitch.ks_node,
 			&netdevice->ks_node_d);
 
-	netdevice->ks_link_d_rx.from_ops = &vnd_link_d_rx_node_ops;
-/*	netdevice->ks_link_d_rx.framed_mtu = -1;
-	netdevice->ks_link_d_rx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
+	netdevice->ks_chan_d_rx.from_ops = &vnd_chan_d_rx_node_ops;
+/*	netdevice->ks_chan_d_rx.framed_mtu = -1;
+	netdevice->ks_chan_d_rx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
-	ks_link_init(&netdevice->ks_link_d_tx,
-			&vnd_link_d_tx_ops, "tx",
+	ks_chan_init(&netdevice->ks_chan_d_tx,
+			&vnd_chan_d_tx_ops, "tx",
 			&netdevice->ks_duplex_d,
 			&netdevice->ks_duplex_d.kobj,
 			&netdevice->ks_node_d,
 			&vss_softswitch.ks_node);
 
-/*	netdevice->ks_link_d_tx.framed_mtu = -1;
-	netdevice->ks_link_d_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
+/*	netdevice->ks_chan_d_tx.framed_mtu = -1;
+	netdevice->ks_chan_d_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
 	/*************** E channel ***************/
 
@@ -1168,16 +1168,16 @@ static void vnd_netdevice_init(
 			"duplex",
 			&netdevice->ks_node_e.kobj);
 	
-	ks_link_init(&netdevice->ks_link_e_rx,
-			&vnd_link_e_rx_ops, "rx",
+	ks_chan_init(&netdevice->ks_chan_e_rx,
+			&vnd_chan_e_rx_ops, "rx",
 			&netdevice->ks_duplex_e,
 			&netdevice->ks_duplex_e.kobj,
 			&vss_softswitch.ks_node,
 			&netdevice->ks_node_e);
 
-	netdevice->ks_link_e_rx.from_ops = &vnd_link_e_rx_node_ops;
-/*	netdevice->ks_link_e_rx.framed_mtu = -1;
-	netdevice->ks_link_e_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
+	netdevice->ks_chan_e_rx.from_ops = &vnd_chan_e_rx_node_ops;
+/*	netdevice->ks_chan_e_rx.framed_mtu = -1;
+	netdevice->ks_chan_e_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
 	/*****************************************/
 	
@@ -1251,14 +1251,14 @@ static int vnd_netdevice_register(
 		goto err_ks_duplex_d_register;
 
 	vnd_netdevice_get(netdevice); /* Container is implicitly used */
-	err = ks_link_register(&netdevice->ks_link_d_rx);
+	err = ks_chan_register(&netdevice->ks_chan_d_rx);
 	if (err < 0)
-		goto err_ks_link_d_rx_register;
+		goto err_ks_chan_d_rx_register;
 
 	vnd_netdevice_get(netdevice); /* Container is implicitly used */
-	err = ks_link_register(&netdevice->ks_link_d_tx);
+	err = ks_chan_register(&netdevice->ks_chan_d_tx);
 	if (err < 0)
-		goto err_ks_link_d_tx_register;
+		goto err_ks_chan_d_tx_register;
 
 	/* E channel */
 
@@ -1273,9 +1273,9 @@ static int vnd_netdevice_register(
 		goto err_ks_duplex_e_register;
 
 	vnd_netdevice_get(netdevice); /* Container is implicitly used */
-	err = ks_link_register(&netdevice->ks_link_e_rx);
+	err = ks_chan_register(&netdevice->ks_chan_e_rx);
 	if (err < 0)
-		goto err_ks_link_e_rx_register;
+		goto err_ks_chan_e_rx_register;
 
 	{
 	netdevice->type = create->protocol;
@@ -1318,18 +1318,18 @@ static int vnd_netdevice_register(
 		&netdevice->ks_node_d.kobj,
 			VND_NODE_SYMLINK_D);
 	if (err < 0)
-		goto err_create_symlink_d;
+		goto err_create_symchan_d;
 
 	err = sysfs_create_link(
 		&netdevice->netdev->class_dev.kobj,
 		&netdevice->ks_node_e.kobj,
 			VND_NODE_SYMLINK_E);
 	if (err < 0)
-		goto err_create_symlink_e;
+		goto err_create_symchan_e;
 
 /*	{
 	char tmpstr[80];
-	d_path(netdevice->ks_link_d_tx.kobj.dentry, sysfs_mount, tmpstr, sizeof(tmpstr));
+	d_path(netdevice->ks_chan_d_tx.kobj.dentry, sysfs_mount, tmpstr, sizeof(tmpstr));
 
 	printk(KERN_CRIT, "AAAAAAAAAAAAAAAAa %s\n", tmpstr);
 	}*/
@@ -1339,30 +1339,30 @@ static int vnd_netdevice_register(
 	sysfs_remove_link(
 		&netdevice->netdev->class_dev.kobj,
 		VND_NODE_SYMLINK_E);
-err_create_symlink_e:
+err_create_symchan_e:
 	sysfs_remove_link(
 		&netdevice->netdev->class_dev.kobj,
 		VND_NODE_SYMLINK_D);
-err_create_symlink_d:
+err_create_symchan_d:
 	unregister_netdev(netdevice->netdev);
 err_register_netdev:
 	free_netdev(netdevice->netdev);
 err_alloc_netdev:
-	ks_link_unregister(&netdevice->ks_link_e_rx);
-	ks_link_put(&netdevice->ks_link_e_rx);
-err_ks_link_e_rx_register:
+	ks_chan_unregister(&netdevice->ks_chan_e_rx);
+	ks_chan_put(&netdevice->ks_chan_e_rx);
+err_ks_chan_e_rx_register:
 	ks_duplex_unregister(&netdevice->ks_duplex_e);
 	ks_duplex_put(&netdevice->ks_duplex_e);
 err_ks_duplex_e_register:
 	ks_node_unregister(&netdevice->ks_node_e);
 	ks_node_put(&netdevice->ks_node_e);
 err_ks_node_e_register:
-	ks_link_unregister(&netdevice->ks_link_d_tx);
-	ks_link_put(&netdevice->ks_link_d_tx);
-err_ks_link_d_tx_register:
-	ks_link_unregister(&netdevice->ks_link_d_rx);
-	ks_link_put(&netdevice->ks_link_d_rx);
-err_ks_link_d_rx_register:
+	ks_chan_unregister(&netdevice->ks_chan_d_tx);
+	ks_chan_put(&netdevice->ks_chan_d_tx);
+err_ks_chan_d_tx_register:
+	ks_chan_unregister(&netdevice->ks_chan_d_rx);
+	ks_chan_put(&netdevice->ks_chan_d_rx);
+err_ks_chan_d_rx_register:
 	ks_duplex_unregister(&netdevice->ks_duplex_d);
 	ks_duplex_put(&netdevice->ks_duplex_d);
 err_ks_duplex_d_register:
@@ -1393,8 +1393,8 @@ static void vnd_netdevice_unregister(struct vnd_netdevice *netdevice)
 	unregister_netdev(netdevice->netdev);
 
 	/* E channel */
-	ks_link_unregister(&netdevice->ks_link_e_rx);
-	ks_link_put(&netdevice->ks_link_e_rx);
+	ks_chan_unregister(&netdevice->ks_chan_e_rx);
+	ks_chan_put(&netdevice->ks_chan_e_rx);
 
 	ks_duplex_unregister(&netdevice->ks_duplex_e);
 	ks_duplex_put(&netdevice->ks_duplex_e);
@@ -1403,11 +1403,11 @@ static void vnd_netdevice_unregister(struct vnd_netdevice *netdevice)
 	ks_node_put(&netdevice->ks_node_e);
 
 	/* D channel */
-	ks_link_unregister(&netdevice->ks_link_d_tx);
-	ks_link_put(&netdevice->ks_link_d_tx);
+	ks_chan_unregister(&netdevice->ks_chan_d_tx);
+	ks_chan_put(&netdevice->ks_chan_d_tx);
 
-	ks_link_unregister(&netdevice->ks_link_d_rx);
-	ks_link_put(&netdevice->ks_link_d_rx);
+	ks_chan_unregister(&netdevice->ks_chan_d_rx);
+	ks_chan_put(&netdevice->ks_chan_d_rx);
 
 	ks_duplex_unregister(&netdevice->ks_duplex_d);
 	ks_duplex_put(&netdevice->ks_duplex_d);

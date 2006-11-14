@@ -62,13 +62,13 @@ struct vnd_netdevice
 
 	struct ks_node ks_node_d;
 	struct ks_duplex ks_duplex_d;
-	struct ks_link ks_link_d_rx;
-	struct ks_link ks_link_d_tx;
+	struct ks_chan ks_chan_d_rx;
+	struct ks_chan ks_chan_d_tx;
 
 	struct ks_node ks_node_e;
 	struct ks_duplex ks_duplex_e;
-	struct ks_link ks_link_e_rx;
-	struct ks_link ks_link_e_tx;
+	struct ks_chan ks_chan_e_rx;
+	struct ks_chan ks_chan_e_tx;
 
 	struct visdn_port *remote_port; 
 

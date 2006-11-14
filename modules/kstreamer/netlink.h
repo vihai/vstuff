@@ -27,15 +27,17 @@
 
 extern struct sock *ksnl;
 
+#define KS_NETLINK_BASE 16
+#define KS_NETLINK_OBJS 32
+
 enum ks_netlink_message_type
 {
-	KS_NETLINK_BASE = 16,
-
-	KS_NETLINK_BEGIN = 16,
+	KS_NETLINK_VERSION = KS_NETLINK_BASE,
+	KS_NETLINK_BEGIN,
 	KS_NETLINK_COMMIT,
 	KS_NETLINK_ABORT,
 
-	KS_NETLINK_DYNATTR_NEW = 32,
+	KS_NETLINK_DYNATTR_NEW = KS_NETLINK_OBJS,
 	KS_NETLINK_DYNATTR_DEL,
 	KS_NETLINK_DYNATTR_GET,
 	KS_NETLINK_DYNATTR_SET,
@@ -45,10 +47,10 @@ enum ks_netlink_message_type
 	KS_NETLINK_NODE_GET,
 	KS_NETLINK_NODE_SET,
 
-	KS_NETLINK_LINK_NEW,
-	KS_NETLINK_LINK_DEL,
-	KS_NETLINK_LINK_GET,
-	KS_NETLINK_LINK_SET,
+	KS_NETLINK_CHAN_NEW,
+	KS_NETLINK_CHAN_DEL,
+	KS_NETLINK_CHAN_GET,
+	KS_NETLINK_CHAN_SET,
 
 	KS_NETLINK_PIPELINE_NEW,
 	KS_NETLINK_PIPELINE_DEL,
@@ -59,6 +61,14 @@ enum ks_netlink_message_type
 enum ks_netlink_groups
 {
 	KS_NETLINK_GROUP_TOPOLOGY = 1 << 0,
+};
+
+struct ks_netlink_version_response
+{
+	__u8 major;
+	__u8 minor;
+	__u8 service;
+	__u8 reserved;
 };
 
 struct ks_attr
@@ -90,6 +100,7 @@ struct ks_attr
 
 #define KS_ATTRS(r) ((struct ks_attr *)(((char *)(r)) + NLMSG_LENGTH(0)))
 #define KS_PAYLOAD(n) NLMSG_PAYLOAD(n, 0)
+#define KS_DATA(n) (NLMSG_DATA(n) + 0)
 
 /*#define KS_ATTRS(r) \
 	((struct ks_attr *)(((char *)(r)) + \
@@ -110,19 +121,19 @@ struct ks_sock
 
 };
 
-enum ks_netlink_xact_flags
+enum ks_xact_flags
 {
 	KS_XACT_FLAGS_WRITE,
 	KS_XACT_FLAGS_PERSISTENT,
 };
 
-struct ks_netlink_xact
+struct ks_xact
 {
 	struct hlist_node node;
 
 	atomic_t refcnt;
 
-	struct sk_buff *dump_skb;
+	struct sk_buff *out_skb;
 
 	u32 pid;
 	u32 id;
@@ -137,7 +148,7 @@ struct ks_command
 
 	int (*handler)(
 		struct ks_command *cmd,
-		struct ks_netlink_xact *xact,
+		struct ks_xact *xact,
 		struct nlmsghdr *nlh);
 
 	int flags;
@@ -172,10 +183,11 @@ int ks_netlink_put_attr(
 	void *data,
 	int data_len);
 
-void ks_netlink_xact_send_control(struct ks_netlink_xact *xact,
+void ks_xact_send_control(struct ks_xact *xact,
 		enum ks_netlink_message_type message_type, u16 flags);
-void ks_netlink_xact_need_skb(struct ks_netlink_xact *xact);
-void ks_netlink_xact_flush(struct ks_netlink_xact *xact);
+void ks_xact_send_error(struct ks_xact *xact, int error);
+void ks_xact_need_skb(struct ks_xact *xact);
+void ks_xact_flush(struct ks_xact *xact);
 
 int ks_netlink_modinit(void);
 void ks_netlink_modexit(void);

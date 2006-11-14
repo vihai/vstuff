@@ -13,14 +13,15 @@
 #ifndef _LIBKSTREAMER_NETLINK_H
 #define _LIBKSTREAMER_NETLINK_H
 
+#include <linux/types.h>
+
 #include "conn.h"
+
+struct sk_buff;
 
 struct nlmsghdr *ks_nlmsg_put(
 	struct sk_buff *skb, __u32 pid, __u32 seq,
 	__u16 message_type, __u16 flags, int payload_size);
-
-int ks_send_topology_update_req(struct ks_conn *conn);
-int ks_send_noop(struct ks_conn *conn);
 
 int ks_netlink_put_attr(
 	struct sk_buff *skb,
@@ -28,8 +29,9 @@ int ks_netlink_put_attr(
 	void *data,
 	int data_len);
 
+int ks_send_next_packet(struct ks_conn *conn);
 void ks_netlink_receive(struct ks_conn *conn);
-void ks_netlink_waitloop(struct ks_conn *conn);
-int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
+
+//int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
 
 #endif

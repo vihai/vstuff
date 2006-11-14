@@ -165,31 +165,32 @@ err_alloc_skb:
 	return err;
 }
 
-void ks_dynattr_netlink_dump(struct ks_netlink_xact *xact)
+void ks_dynattr_netlink_dump(struct ks_xact *xact)
 {
 	struct ks_dynattr *dynattr;
 	int err;
 	int i;
-       
+
 	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
 		struct hlist_node *t;
 
 		hlist_for_each_entry(dynattr, t, &ks_dynattrs_hash[i], node) {
-			ks_netlink_xact_need_skb(xact);
-			if (!xact->dump_skb)
+			ks_xact_need_skb(xact);
+			if (!xact->out_skb)
 				return;
 
-			err = ks_dynattr_netlink_fill_msg(dynattr, xact->dump_skb,
+			err = ks_dynattr_netlink_fill_msg(dynattr,
+						xact->out_skb,
 						KS_NETLINK_DYNATTR_NEW,
 						xact->pid,
 						0,
 						NLM_F_MULTI);
 			if (err < 0)
-				ks_netlink_xact_flush(xact);
+				ks_xact_flush(xact);
 		}
 	}
 
-	ks_netlink_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
 }
 
 struct ks_dynattr *ks_dynattr_register(const char *name)

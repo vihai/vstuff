@@ -90,7 +90,7 @@ EXPORT_SYMBOL(visdn_call_notifiers);
 
 #else
 
-static struct notifier_head *visdn_notify_chain;
+static struct notifier_block *visdn_notify_chain;
 
 int visdn_register_notifier(struct notifier_block *nb)
 {

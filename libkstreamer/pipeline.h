@@ -37,8 +37,8 @@ struct ks_pipeline
 
 	enum ks_pipeline_status status;
 
-	struct ks_link *links[32];
-	int links_cnt;
+	struct ks_chan *chans[32];
+	int chans_cnt;
 };
 
 struct ks_pipeline *ks_pipeline_alloc(void);
@@ -64,15 +64,12 @@ void ks_pipeline_update_from_nlmsg(
 	struct ks_pipeline *pipeline,
 	struct nlmsghdr *nlh);
 
-int ks_pipeline_create(
-	struct ks_conn *conn,
-	struct ks_pipeline *pipeline);
+int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn);
+int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn);
+int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn);
 
-int ks_pipeline_update_links(
-	struct ks_conn *conn,
-	struct ks_pipeline *pipeline);
-int ks_pipeline_update(
-	struct ks_conn *conn,
-	struct ks_pipeline *pipeline);
+int ks_pipeline_update_chans(
+	struct ks_pipeline *pipeline,
+	struct ks_conn *conn);
 
 #endif

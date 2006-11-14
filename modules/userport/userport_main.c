@@ -122,35 +122,35 @@ static struct ks_node_ops vup_chan_node_ops = {
 
 /*---------------------------------------------------------------------------*/
 
-static void vup_chan_rx_link_release(struct ks_link *ks_link)
+static void vup_chan_rx_chan_release(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_rx_link_release()\n");
+	vup_debug(3, "vup_chan_rx_chan_release()\n");
 
-	kfree(ks_link);
+	kfree(ks_chan);
 }
 
-static int vup_chan_rx_link_connect(struct ks_link *ks_link)
+static int vup_chan_rx_chan_connect(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_rx_link_connect()\n");
+	vup_debug(3, "vup_chan_rx_chan_connect()\n");
 
 	return 0;
 }
 
-static void vup_chan_rx_link_disconnect(struct ks_link *ks_link)
+static void vup_chan_rx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_rx_link_disconnect()\n");
+	vup_debug(3, "vup_chan_rx_chan_disconnect()\n");
 }
 
-static int vup_chan_rx_link_open(struct ks_link *ks_link)
+static int vup_chan_rx_chan_open(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_rx_link_open()\n");
+	vup_debug(3, "vup_chan_rx_chan_open()\n");
 
 	return 0;
 }
 
-static void vup_chan_rx_link_close(struct ks_link *ks_link)
+static void vup_chan_rx_chan_close(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_rx_link_close()\n");
+	vup_debug(3, "vup_chan_rx_chan_close()\n");
 }
 
 static void vup_timer_func(unsigned long data)
@@ -160,16 +160,16 @@ static void vup_timer_func(unsigned long data)
 	chan->stimulus_timer.expires += HZ / chan->stimulus_frequency;
 
 	/* Some locking to access .pipeline??? XXX FIXME TODO */
-	ks_pipeline_stimulate(chan->ks_link_rx->pipeline);
+	ks_pipeline_stimulate(chan->ks_chan_rx->pipeline);
 
 	add_timer(&chan->stimulus_timer);
 }
 
-static int vup_chan_rx_link_start(struct ks_link *ks_link)
+static int vup_chan_rx_chan_start(struct ks_chan *ks_chan)
 {
-	struct vup_chan *chan = ks_link->driver_data;
+	struct vup_chan *chan = ks_chan->driver_data;
 
-	vup_debug(3, "vup_chan_rx_link_start()\n");
+	vup_debug(3, "vup_chan_rx_chan_start()\n");
 
 	chan->stimulus_timer.expires = jiffies;
 	chan->stimulus_timer.function = vup_timer_func;
@@ -180,82 +180,82 @@ static int vup_chan_rx_link_start(struct ks_link *ks_link)
 	return 0;
 }
 
-static void vup_chan_rx_link_stop(struct ks_link *ks_link)
+static void vup_chan_rx_chan_stop(struct ks_chan *ks_chan)
 {
-	struct vup_chan *chan = ks_link->driver_data;
+	struct vup_chan *chan = ks_chan->driver_data;
 
-	vup_debug(3, "vup_chan_rx_link_stop()\n");
+	vup_debug(3, "vup_chan_rx_chan_stop()\n");
 
 	del_timer_sync(&chan->stimulus_timer);
 }
 
-struct ks_link_ops vup_chan_rx_link_ops = {
+struct ks_chan_ops vup_chan_rx_chan_ops = {
 	.owner		= THIS_MODULE,
 
-	.release	= vup_chan_rx_link_release,
-	.connect	= vup_chan_rx_link_connect,
-	.disconnect	= vup_chan_rx_link_disconnect,
-	.open		= vup_chan_rx_link_open,
-	.close		= vup_chan_rx_link_close,
-	.start		= vup_chan_rx_link_start,
-	.stop		= vup_chan_rx_link_stop,
+	.release	= vup_chan_rx_chan_release,
+	.connect	= vup_chan_rx_chan_connect,
+	.disconnect	= vup_chan_rx_chan_disconnect,
+	.open		= vup_chan_rx_chan_open,
+	.close		= vup_chan_rx_chan_close,
+	.start		= vup_chan_rx_chan_start,
+	.stop		= vup_chan_rx_chan_stop,
 };
 
 /*---------------------------------------------------------------------------*/
 
-static void vup_chan_tx_link_release(struct ks_link *ks_link)
+static void vup_chan_tx_chan_release(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_release()\n");
+	vup_debug(3, "vup_chan_tx_chan_release()\n");
 
-	kfree(ks_link);
+	kfree(ks_chan);
 }
 
-static int vup_chan_tx_link_connect(struct ks_link *ks_link)
+static int vup_chan_tx_chan_connect(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_connect()\n");
+	vup_debug(3, "vup_chan_tx_chan_connect()\n");
 
 	return 0;
 }
 
-static void vup_chan_tx_link_disconnect(struct ks_link *ks_link)
+static void vup_chan_tx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_disconnect()\n");
+	vup_debug(3, "vup_chan_tx_chan_disconnect()\n");
 }
 
-static int vup_chan_tx_link_open(struct ks_link *ks_link)
+static int vup_chan_tx_chan_open(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_open()\n");
+	vup_debug(3, "vup_chan_tx_chan_open()\n");
 
 	return 0;
 }
 
-static void vup_chan_tx_link_close(struct ks_link *ks_link)
+static void vup_chan_tx_chan_close(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_close()\n");
+	vup_debug(3, "vup_chan_tx_chan_close()\n");
 }
 
-static int vup_chan_tx_link_start(struct ks_link *ks_link)
+static int vup_chan_tx_chan_start(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_start()\n");
+	vup_debug(3, "vup_chan_tx_chan_start()\n");
 
 	return 0;
 }
 
-static void vup_chan_tx_link_stop(struct ks_link *ks_link)
+static void vup_chan_tx_chan_stop(struct ks_chan *ks_chan)
 {
-	vup_debug(3, "vup_chan_tx_link_stop()\n");
+	vup_debug(3, "vup_chan_tx_chan_stop()\n");
 }
 
-struct ks_link_ops vup_chan_tx_link_ops = {
+struct ks_chan_ops vup_chan_tx_chan_ops = {
 	.owner		= THIS_MODULE,
 
-	.release	= vup_chan_tx_link_release,
-	.connect	= vup_chan_tx_link_connect,
-	.disconnect	= vup_chan_tx_link_disconnect,
-	.open		= vup_chan_tx_link_open,
-	.close		= vup_chan_tx_link_close,
-	.start		= vup_chan_tx_link_start,
-	.stop		= vup_chan_tx_link_stop,
+	.release	= vup_chan_tx_chan_release,
+	.connect	= vup_chan_tx_chan_connect,
+	.disconnect	= vup_chan_tx_chan_disconnect,
+	.open		= vup_chan_tx_chan_open,
+	.close		= vup_chan_tx_chan_close,
+	.start		= vup_chan_tx_chan_start,
+	.stop		= vup_chan_tx_chan_stop,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -311,15 +311,15 @@ static inline void vup_chan_h223_put(struct vup_chan *chan, u8 c)
 }
 */
 
-static int vup_chan_rx_link_push_raw(
-	struct ks_link *ks_link,
+static int vup_chan_rx_chan_push_raw(
+	struct ks_chan *ks_chan,
 	struct ks_streamframe *sf)
 {
-	struct vup_chan *chan = ks_link->driver_data;
+	struct vup_chan *chan = ks_chan->driver_data;
 
 #if 0
 	if (chan->type == VISDN_LINK_FRAMING_H223A &&
-	    ks_link->pipeline->framing == VISDN_LINK_FRAMING_NONE) {
+	    ks_chan->pipeline->framing == VISDN_LINK_FRAMING_NONE) {
 
 		/* H.223A framer */
 
@@ -337,11 +337,11 @@ static int vup_chan_rx_link_push_raw(
 	return 0;
 }
 
-static int vup_chan_rx_link_push_frame(
-	struct ks_link *ks_link,
+static int vup_chan_rx_chan_push_frame(
+	struct ks_chan *ks_chan,
 	struct sk_buff *skb)
 {
-	struct vup_chan *chan = ks_link->driver_data;
+	struct vup_chan *chan = ks_chan->driver_data;
 
 	skb_queue_tail(&chan->read_queue, skb);
 	wake_up(&chan->read_wait_queue);
@@ -349,10 +349,10 @@ static int vup_chan_rx_link_push_frame(
 	return 0;
 }
 
-struct vss_link_ops vup_chan_rx_link_node_ops =
+struct vss_chan_ops vup_chan_rx_chan_node_ops =
 {
-	.push_frame	= vup_chan_rx_link_push_frame,
-	.push_raw	= vup_chan_rx_link_push_raw,
+	.push_frame	= vup_chan_rx_chan_push_frame,
+	.push_raw	= vup_chan_rx_chan_push_raw,
 };
 
 
@@ -549,26 +549,26 @@ static int vup_chan_register(struct vup_chan *chan)
 	if (err < 0)
 		goto err_node_register;
 
-	if (chan->ks_link_rx) {
-		err = ks_link_register(chan->ks_link_rx);
+	if (chan->ks_chan_rx) {
+		err = ks_chan_register(chan->ks_chan_rx);
 		if (err < 0)
-			goto err_link_rx_register;
+			goto err_chan_rx_register;
 	}
 
-	if (chan->ks_link_tx) {
-		err = ks_link_register(chan->ks_link_tx);
+	if (chan->ks_chan_tx) {
+		err = ks_chan_register(chan->ks_chan_tx);
 		if (err < 0)
-			goto err_link_tx_register;
+			goto err_chan_tx_register;
 	}
 
 	return 0;
 
-	if (chan->ks_link_tx)
-		ks_link_unregister(chan->ks_link_tx);
-err_link_tx_register:
-	if (chan->ks_link_rx)
-		ks_link_unregister(chan->ks_link_rx);
-err_link_rx_register:
+	if (chan->ks_chan_tx)
+		ks_chan_unregister(chan->ks_chan_tx);
+err_chan_tx_register:
+	if (chan->ks_chan_rx)
+		ks_chan_unregister(chan->ks_chan_rx);
+err_chan_rx_register:
 	ks_node_unregister(&chan->ks_node);
 err_node_register:
 	kfifo_free(chan->read_fifo);
@@ -583,11 +583,11 @@ err_fifo_rx_alloc:
 
 static void vup_chan_unregister(struct vup_chan *chan)
 {
-	if (chan->ks_link_tx)
-		ks_link_unregister(chan->ks_link_tx);
+	if (chan->ks_chan_tx)
+		ks_chan_unregister(chan->ks_chan_tx);
 
-	if (chan->ks_link_rx)
-		ks_link_unregister(chan->ks_link_rx);
+	if (chan->ks_chan_rx)
+		ks_chan_unregister(chan->ks_chan_rx);
 
 	ks_node_unregister(&chan->ks_node);
 
@@ -618,43 +618,43 @@ static int vup_cdev_open(
 
 	if ((file->f_flags & O_ACCMODE) == O_RDONLY ||
 	    (file->f_flags & O_ACCMODE) == O_RDWR) {
-		chan->ks_link_rx = kmalloc(sizeof(*chan->ks_link_rx),
+		chan->ks_chan_rx = kmalloc(sizeof(*chan->ks_chan_rx),
 						GFP_KERNEL);
-		if (!chan->ks_link_rx) {
+		if (!chan->ks_chan_rx) {
 			err = -ENOMEM;
-			goto err_alloc_link_rx;
+			goto err_alloc_chan_rx;
 		}
 	
-		ks_link_init(chan->ks_link_rx, &vup_chan_rx_link_ops,
+		ks_chan_init(chan->ks_chan_rx, &vup_chan_rx_chan_ops,
 				"rx", NULL,
 				&chan->ks_node.kobj,
 				&vss_softswitch.ks_node,
 				&chan->ks_node);
 
-		chan->ks_link_rx->driver_data = chan;
-		chan->ks_link_rx->from_ops = &vup_chan_rx_link_node_ops;
-/*		chan->ks_link_rx->framed_mtu = -1;
-		chan->ks_link_rx->framing_avail = framing;*/
+		chan->ks_chan_rx->driver_data = chan;
+		chan->ks_chan_rx->from_ops = &vup_chan_rx_chan_node_ops;
+/*		chan->ks_chan_rx->framed_mtu = -1;
+		chan->ks_chan_rx->framing_avail = framing;*/
 	}
 
 	if ((file->f_flags & O_ACCMODE) == O_WRONLY ||
 	    (file->f_flags & O_ACCMODE) == O_RDWR) {
-		chan->ks_link_tx = kmalloc(sizeof(*chan->ks_link_tx),
+		chan->ks_chan_tx = kmalloc(sizeof(*chan->ks_chan_tx),
 						GFP_KERNEL);
-		if (!chan->ks_link_tx) {
+		if (!chan->ks_chan_tx) {
 			err = -ENOMEM;
-			goto err_alloc_link_tx;
+			goto err_alloc_chan_tx;
 		}
 	
-		ks_link_init(chan->ks_link_tx, &vup_chan_tx_link_ops,
+		ks_chan_init(chan->ks_chan_tx, &vup_chan_tx_chan_ops,
 				"tx", NULL,
 				&chan->ks_node.kobj,
 				&chan->ks_node,
 				&vss_softswitch.ks_node);
 
-		chan->ks_link_tx->driver_data = chan;
-/*		chan->ks_link_tx.framed_mtu = -1;
-		chan->ks_link_tx.framing_avail = framing;*/
+		chan->ks_chan_tx->driver_data = chan;
+/*		chan->ks_chan_tx.framed_mtu = -1;
+		chan->ks_chan_tx.framing_avail = framing;*/
 	}
 
 	err = vup_chan_register(chan);
@@ -690,12 +690,12 @@ err_fifo_tx_alloc:
 	kfifo_free(chan->read_fifo);
 err_fifo_rx_alloc:*/
 
-	if (chan->ks_link_tx)
-		ks_link_put(chan->ks_link_tx);
-err_alloc_link_tx:
-	if (chan->ks_link_rx)
-		ks_link_put(chan->ks_link_rx);
-err_alloc_link_rx:
+	if (chan->ks_chan_tx)
+		ks_chan_put(chan->ks_chan_tx);
+err_alloc_chan_tx:
+	if (chan->ks_chan_rx)
+		ks_chan_put(chan->ks_chan_rx);
+err_alloc_chan_rx:
 	vup_chan_unregister(chan);
 err_chan_register:
 	vup_chan_put(chan);
@@ -713,14 +713,14 @@ static int vup_cdev_release(
 
 	vup_chan_unregister(chan);
 
-	if (chan->ks_link_tx) {
-		ks_link_put(chan->ks_link_tx);
-		chan->ks_link_tx = NULL;
+	if (chan->ks_chan_tx) {
+		ks_chan_put(chan->ks_chan_tx);
+		chan->ks_chan_tx = NULL;
 	}
 
-	if (chan->ks_link_rx) {
-		ks_link_put(chan->ks_link_rx);
-		chan->ks_link_rx = NULL;
+	if (chan->ks_chan_rx) {
+		ks_chan_put(chan->ks_chan_rx);
+		chan->ks_chan_rx = NULL;
 	}
 
 //	kfifo_free(chan->tx_fifo);
@@ -764,11 +764,11 @@ static ssize_t vup_cdev_read(
 	struct vup_chan *chan = file->private_data;
 	int copied;
 
-	if (!chan->ks_link_rx)
+	if (!chan->ks_chan_rx)
 		return -EBADF;
 
-	if (!chan->ks_link_rx->pipeline ||
-	     chan->ks_link_rx->pipeline->status != KS_PIPELINE_STATUS_FLOWING)
+	if (!chan->ks_chan_rx->pipeline ||
+	     chan->ks_chan_rx->pipeline->status != KS_PIPELINE_STATUS_FLOWING)
 		return -ENOTCONN;
 
 	if (chan->framed) {
@@ -827,7 +827,7 @@ static ssize_t vup_cdev_write_stream(
 	ssize_t copied_bytes;
 	int err;
 
-	if (!chan->ks_link_tx) {
+	if (!chan->ks_chan_tx) {
 		err = -EBADF;
 		goto err_no_write;
 	}
@@ -847,15 +847,15 @@ static ssize_t vup_cdev_write_stream(
 
 	sf->len = copied_bytes;
 
-	err = vss_link_push_raw(chan->ks_link_tx, sf);
+	err = vss_chan_push_raw(chan->ks_chan_tx, sf);
 	if (err < 0)
-		goto err_vss_link_push_raw;
+		goto err_vss_chan_push_raw;
 
 	ks_sf_put(sf);
 
 	return copied_bytes;
 
-err_vss_link_push_raw:
+err_vss_chan_push_raw:
 err_copy_from_user:
 	ks_sf_put(sf);
 err_sf_alloc:
@@ -875,7 +875,7 @@ static ssize_t vup_cdev_write_frame(
 	int res;
 	int err;
 
-	if (!chan->ks_link_tx) {
+	if (!chan->ks_chan_tx) {
 		err = -EBADF;
 		goto err_no_write;
 	}
@@ -891,7 +891,7 @@ static ssize_t vup_cdev_write_frame(
 		goto err_copy_from_user;
 	}
 
-	res = vss_link_push_frame(chan->ks_link_tx, skb);
+	res = vss_chan_push_frame(chan->ks_chan_tx, skb);
 	switch(res) {
 	case KS_TX_OK:
 		return count;
@@ -919,11 +919,11 @@ static ssize_t vup_cdev_write(
 {
 	struct vup_chan *chan = file->private_data;
 
-	if (!chan->ks_link_tx)
+	if (!chan->ks_chan_tx)
 		return -EBADF;
 
-	if (!chan->ks_link_tx->pipeline ||
-	     chan->ks_link_tx->pipeline->status != KS_PIPELINE_STATUS_FLOWING)
+	if (!chan->ks_chan_tx->pipeline ||
+	     chan->ks_chan_tx->pipeline->status != KS_PIPELINE_STATUS_FLOWING)
 		return -ENOTCONN;
 
 	if (chan->framed)
@@ -978,8 +978,8 @@ static int vup_cdev_ioctl(
 	case KS_UP_GET_PRESSURE: {
 		int pressure;
 
-		if (chan->ks_link_tx)
-			pressure = vss_link_get_pressure(chan->ks_link_tx);
+		if (chan->ks_chan_tx)
+			pressure = vss_chan_get_pressure(chan->ks_chan_tx);
 		else
 			pressure = 0;
 
@@ -1004,7 +1004,7 @@ static unsigned int vup_cdev_poll(
 
 	poll_wait(file, &chan->read_wait_queue, wait);
 
-	if (chan->ks_link_rx) {
+	if (chan->ks_chan_rx) {
 		if (chan->framed) {
 			if (!skb_queue_empty(&chan->read_queue))
 				return POLLIN | POLLRDNORM;

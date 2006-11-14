@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT(visdn, head, daniele@orlandi.com)
+AC_INIT(vstuff, head, daniele@orlandi.com)
 AC_CONFIG_AUX_DIR(config)
 AM_INIT_AUTOMAKE
 
@@ -421,7 +421,7 @@ AC_CONFIG_FILES([Makefile
 		scripts/Makefile
 		scripts/visdn_configurator
 		doxygen.conf
-		visdn.spec])
+		vstuff.spec])
 
 #		modules/hfc-e1/Makefile
 

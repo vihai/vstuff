@@ -13,7 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/pipeline.h>
 #include <linux/kstreamer/streamframe.h>
 #include <linux/kstreamer/dynattr.h>
@@ -62,7 +62,7 @@
 
 static ssize_t hfc_show_rx_fifo_size(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -80,7 +80,7 @@ static VISDN_CHAN_ATTR(rx_fifo_size, S_IRUGO,
 
 static ssize_t hfc_show_rx_fifo_used(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -96,7 +96,7 @@ static ssize_t hfc_show_rx_fifo_used(
 
 static ssize_t hfc_store_rx_fifo_used(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	const char *buf,
 	size_t count)
 {
@@ -118,7 +118,7 @@ static VISDN_CHAN_ATTR(rx_fifo_used, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_rx_fifo_min(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -133,7 +133,7 @@ static VISDN_CHAN_ATTR(rx_fifo_min, S_IRUGO,
 
 static ssize_t hfc_show_rx_fifo_max(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -148,7 +148,7 @@ static VISDN_CHAN_ATTR(rx_fifo_max, S_IRUGO,
 
 static ssize_t hfc_show_tx_fifo_size(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -166,7 +166,7 @@ static VISDN_CHAN_ATTR(tx_fifo_size, S_IRUGO,
 
 static ssize_t hfc_show_tx_fifo_used(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -183,7 +183,7 @@ static ssize_t hfc_show_tx_fifo_used(
 
 static ssize_t hfc_store_tx_fifo_used(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	const char *buf,
 	size_t count)
 {
@@ -205,7 +205,7 @@ static VISDN_CHAN_ATTR(tx_fifo_used, S_IRUGO | S_IWUSR,
 
 static ssize_t hfc_show_tx_fifo_min(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -220,7 +220,7 @@ static VISDN_CHAN_ATTR(tx_fifo_min, S_IRUGO,
 
 static ssize_t hfc_show_tx_fifo_max(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -235,7 +235,7 @@ static VISDN_CHAN_ATTR(tx_fifo_max, S_IRUGO,
 
 static ssize_t hfc_show_rx_subchannel_bit_start(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -252,7 +252,7 @@ static VISDN_CHAN_ATTR(rx_subchannel_bit_start, S_IRUGO,
 
 static ssize_t hfc_show_tx_subchannel_bit_start(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -269,7 +269,7 @@ static VISDN_CHAN_ATTR(tx_subchannel_bit_start, S_IRUGO,
 
 static ssize_t hfc_show_rx_subchannel_bit_count(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -286,7 +286,7 @@ static VISDN_CHAN_ATTR(rx_subchannel_bit_count, S_IRUGO,
 
 static ssize_t hfc_show_tx_subchannel_bit_count(
 	struct visdn_chan *visdn_chan,
-	struct ks_link_attribute *attr,
+	struct ks_chan_attribute *attr,
 	char *buf)
 {
 	struct hfc_sys_chan *chan = to_sys_chan(visdn_chan);
@@ -302,44 +302,44 @@ static VISDN_CHAN_ATTR(tx_subchannel_bit_count, S_IRUGO,
 /*---------------------------------------------------------------------------*/
 #endif
 
-static struct ks_link_attribute *hfc_sys_chan_rx_attributes[] =
+static struct ks_chan_attribute *hfc_sys_chan_rx_attributes[] =
 {
 /*
-	&ks_link_attr_rx_fifo_size,
-	&ks_link_attr_rx_fifo_used,
-	&ks_link_attr_rx_fifo_min,
-	&ks_link_attr_rx_fifo_max,
+	&ks_chan_attr_rx_fifo_size,
+	&ks_chan_attr_rx_fifo_used,
+	&ks_chan_attr_rx_fifo_min,
+	&ks_chan_attr_rx_fifo_max,
 
-	&ks_link_attr_tx_fifo_size,
-	&ks_link_attr_tx_fifo_used,
-	&ks_link_attr_tx_fifo_min,
-	&ks_link_attr_tx_fifo_max,
+	&ks_chan_attr_tx_fifo_size,
+	&ks_chan_attr_tx_fifo_used,
+	&ks_chan_attr_tx_fifo_min,
+	&ks_chan_attr_tx_fifo_max,
 
-	&ks_link_attr_rx_subchannel_bit_start,
-	&ks_link_attr_tx_subchannel_bit_start,
-	&ks_link_attr_rx_subchannel_bit_count,
-	&ks_link_attr_tx_subchannel_bit_count,
+	&ks_chan_attr_rx_subchannel_bit_start,
+	&ks_chan_attr_tx_subchannel_bit_start,
+	&ks_chan_attr_rx_subchannel_bit_count,
+	&ks_chan_attr_tx_subchannel_bit_count,
 */
 	NULL
 };
 
-static struct ks_link_attribute *hfc_sys_chan_tx_attributes[] =
+static struct ks_chan_attribute *hfc_sys_chan_tx_attributes[] =
 {
 /*
-	&ks_link_attr_rx_fifo_size,
-	&ks_link_attr_rx_fifo_used,
-	&ks_link_attr_rx_fifo_min,
-	&ks_link_attr_rx_fifo_max,
+	&ks_chan_attr_rx_fifo_size,
+	&ks_chan_attr_rx_fifo_used,
+	&ks_chan_attr_rx_fifo_min,
+	&ks_chan_attr_rx_fifo_max,
 
-	&ks_link_attr_tx_fifo_size,
-	&ks_link_attr_tx_fifo_used,
-	&ks_link_attr_tx_fifo_min,
-	&ks_link_attr_tx_fifo_max,
+	&ks_chan_attr_tx_fifo_size,
+	&ks_chan_attr_tx_fifo_used,
+	&ks_chan_attr_tx_fifo_min,
+	&ks_chan_attr_tx_fifo_max,
 
-	&ks_link_attr_rx_subchannel_bit_start,
-	&ks_link_attr_tx_subchannel_bit_start,
-	&ks_link_attr_rx_subchannel_bit_count,
-	&ks_link_attr_tx_subchannel_bit_count,
+	&ks_chan_attr_rx_subchannel_bit_start,
+	&ks_chan_attr_tx_subchannel_bit_start,
+	&ks_chan_attr_rx_subchannel_bit_count,
+	&ks_chan_attr_tx_subchannel_bit_count,
 */
 	NULL
 };
@@ -358,19 +358,19 @@ static void hfc_sys_chan_duplex_release(struct ks_duplex *duplex)
 
 /*------------------------------- RX Link -----------------------------------*/
 
-static void hfc_sys_chan_rx_link_release(struct ks_link *ks_link)
+static void hfc_sys_chan_rx_chan_release(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 
-	hfc_msg_sys_chan(chan, KERN_DEBUG, "hfc_sys_chan_rx_link_release()\n");
+	hfc_msg_sys_chan(chan, KERN_DEBUG, "hfc_sys_chan_rx_chan_release()\n");
 
 	hfc_sys_chan_put(chan);
 }
 
-static int hfc_sys_chan_rx_link_connect(struct ks_link *ks_link)
+static int hfc_sys_chan_rx_chan_connect(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 
 	hfc_debug_sys_chan(chan, 2, "RX connected\n");
@@ -381,20 +381,20 @@ static int hfc_sys_chan_rx_link_connect(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_sys_chan_rx_link_disconnect(struct ks_link *ks_link)
+static void hfc_sys_chan_rx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 
 	hfc_debug_sys_chan(chan, 2, "RX disconnected\n");
 }
 
-static int hfc_sys_chan_rx_link_open(struct ks_link *ks_link)
+static int hfc_sys_chan_rx_chan_open(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
-	struct ks_link *prev_link;
+	struct ks_chan *prev_chan;
 	int err;
 
 	hfc_card_lock(card);
@@ -402,31 +402,31 @@ static int hfc_sys_chan_rx_link_open(struct ks_link *ks_link)
 	chan_rx->fifo.subchannel_bit_start = 0;
 	chan_rx->fifo.subchannel_bit_count = 8;
 
-	prev_link = ks_pipeline_prev(ks_link);
-	if (prev_link && prev_link->ops == &hfc_st_chan_rx_link_ops) {
+	prev_chan = ks_pipeline_prev(ks_chan);
+	if (prev_chan && prev_chan->ops == &hfc_st_chan_rx_chan_ops) {
 			struct hfc_st_chan_rx *st_chan_rx =
-				container_of(prev_link, struct hfc_st_chan_rx,
-								ks_link);
+				container_of(prev_chan, struct hfc_st_chan_rx,
+								ks_chan);
 
 		chan_rx->fifo.subchannel_bit_start =
 			st_chan_rx->chan->subchannel_bit_start;
 
 		chan_rx->fifo.subchannel_bit_count =
 			st_chan_rx->chan->subchannel_bit_count;
-	} else if (prev_link && prev_link->ops == &hfc_pcm_chan_rx_link_ops) {
+	} else if (prev_chan && prev_chan->ops == &hfc_pcm_chan_rx_chan_ops) {
 //			struct hfc_pcm_chan_rx *pcm_chan_rx =
-//				container_of(prev_link, struct hfc_pcm_chan_rx,
-//								ks_link);
+//				container_of(prev_chan, struct hfc_pcm_chan_rx,
+//								ks_chan);
 
 		chan_rx->fifo.subchannel_bit_start = 0;
 		chan_rx->fifo.subchannel_bit_count = 8;
 	}
 
 	/*
-	if (chan_rx->ks_link.pipeline->framing == VISDN_LINK_FRAMING_NONE) {
+	if (chan_rx->ks_chan.pipeline->framing == VISDN_LINK_FRAMING_NONE) {
 		chan_rx->fifo.framer_enabled = FALSE;
 		chan_rx->fifo.bit_reversed = TRUE;
-	} else if (chan_rx->ks_link.pipeline->framing ==
+	} else if (chan_rx->ks_chan.pipeline->framing ==
 						VISDN_LINK_FRAMING_HDLC) {
 		chan_rx->fifo.framer_enabled = TRUE;
 		chan_rx->fifo.bit_reversed = FALSE;
@@ -451,9 +451,9 @@ static int hfc_sys_chan_rx_link_open(struct ks_link *ks_link)
 	return err;
 }
 
-static void hfc_sys_chan_rx_link_close(struct ks_link *ks_link)
+static void hfc_sys_chan_rx_chan_close(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -464,9 +464,9 @@ static void hfc_sys_chan_rx_link_close(struct ks_link *ks_link)
 	hfc_debug_sys_chan(chan, 1, "RX channel closed.\n");
 }
 
-static int hfc_sys_chan_rx_link_start(struct ks_link *ks_link)
+static int hfc_sys_chan_rx_chan_start(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -485,9 +485,9 @@ static int hfc_sys_chan_rx_link_start(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_sys_chan_rx_link_stop(struct ks_link *ks_link)
+static void hfc_sys_chan_rx_chan_stop(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -504,9 +504,9 @@ static void hfc_sys_chan_rx_link_stop(struct ks_link *ks_link)
 	hfc_debug_sys_chan(chan, 1, "RX channel stopped\n");
 }
 
-static void hfc_sys_chan_rx_link_stimulus(struct ks_link *ks_link)
+static void hfc_sys_chan_rx_chan_stimulus(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
 	int copied_octets;
@@ -540,24 +540,24 @@ static void hfc_sys_chan_rx_link_stimulus(struct ks_link *ks_link)
 
 	hfc_card_unlock(card);
 
-	vss_link_push_raw(ks_link, sf);
+	vss_chan_push_raw(ks_chan, sf);
 
 	ks_sf_put(sf);
 }
 
-static int hfc_sys_chan_rx_link_get_attr_count(struct ks_link *link)
+static int hfc_sys_chan_rx_chan_get_attr_count(struct ks_chan *chan)
 {
 	return 2;
 }
 
-static int hfc_sys_chan_rx_link_get_attr(
-	struct ks_link *ks_link,
+static int hfc_sys_chan_rx_chan_get_attr(
+	struct ks_chan *ks_chan,
 	int index,
 	__u16 *type,
 	void *buf,
 	int *len)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 
 	switch(index) {
 	case 0: {
@@ -597,13 +597,13 @@ static int hfc_sys_chan_rx_link_get_attr(
 	return 0;
 }
 
-static int hfc_sys_chan_rx_link_set_attr(
-	struct ks_link *ks_link,
+static int hfc_sys_chan_rx_chan_set_attr(
+	struct ks_chan *ks_chan,
 	__u16 type,
 	void *buf,
 	int len)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 
 	if (type == hfc_hdlc_framer_class->id) {
 		struct hdlc_framer_descr *descr = buf;
@@ -623,45 +623,44 @@ static int hfc_sys_chan_rx_link_set_attr(
 		chan_rx->fifo.bit_reversed =
 			!!(descr->flags & OCTET_REVERSER_FLAG_ENABLED);
 
-		printk(KERN_DEBUG "UUUUUUUUUUUUUUUUUUUu %d\n", chan_rx->fifo.bit_reversed);
 	} else
 		return -ENOENT;
 
 	return 0;
 }
 
-static struct ks_link_ops hfc_sys_chan_rx_link_ops =
+static struct ks_chan_ops hfc_sys_chan_rx_chan_ops =
 {
 	.owner		= THIS_MODULE,
 
-	.release	= hfc_sys_chan_rx_link_release,
-	.connect	= hfc_sys_chan_rx_link_connect,
-	.disconnect	= hfc_sys_chan_rx_link_disconnect,
-	.open		= hfc_sys_chan_rx_link_open,
-	.close		= hfc_sys_chan_rx_link_close,
-	.start		= hfc_sys_chan_rx_link_start,
-	.stop		= hfc_sys_chan_rx_link_stop,
-	.stimulus	= hfc_sys_chan_rx_link_stimulus,
-	.get_attr_count	= hfc_sys_chan_rx_link_get_attr_count,
-	.get_attr	= hfc_sys_chan_rx_link_get_attr,
-	.set_attr	= hfc_sys_chan_rx_link_set_attr,
+	.release	= hfc_sys_chan_rx_chan_release,
+	.connect	= hfc_sys_chan_rx_chan_connect,
+	.disconnect	= hfc_sys_chan_rx_chan_disconnect,
+	.open		= hfc_sys_chan_rx_chan_open,
+	.close		= hfc_sys_chan_rx_chan_close,
+	.start		= hfc_sys_chan_rx_chan_start,
+	.stop		= hfc_sys_chan_rx_chan_stop,
+	.stimulus	= hfc_sys_chan_rx_chan_stimulus,
+	.get_attr_count	= hfc_sys_chan_rx_chan_get_attr_count,
+	.get_attr	= hfc_sys_chan_rx_chan_get_attr,
+	.set_attr	= hfc_sys_chan_rx_chan_set_attr,
 };
 
 /*------------------------------- TX Link -----------------------------------*/
 
-static void hfc_sys_chan_tx_link_release(struct ks_link *ks_link)
+static void hfc_sys_chan_tx_chan_release(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_link);
+	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 
-	hfc_msg_sys_chan(chan, KERN_DEBUG, "hfc_sys_chan_tx_link_release()\n");
+	hfc_msg_sys_chan(chan, KERN_DEBUG, "hfc_sys_chan_tx_chan_release()\n");
 
 	hfc_sys_chan_put(chan);
 }
 
-static int hfc_sys_chan_tx_link_connect(struct ks_link *ks_link)
+static int hfc_sys_chan_tx_chan_connect(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 
 	hfc_debug_sys_chan(chan, 2, "TX connected\n");
@@ -672,20 +671,20 @@ static int hfc_sys_chan_tx_link_connect(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_sys_chan_tx_link_disconnect(struct ks_link *ks_link)
+static void hfc_sys_chan_tx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 
 	hfc_debug_sys_chan(chan, 2, "TX disconnected\n");
 }
 
-static int hfc_sys_chan_tx_link_open(struct ks_link *ks_link)
+static int hfc_sys_chan_tx_chan_open(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
-	struct ks_link *next_link;
+	struct ks_chan *next_chan;
 	int err;
 
 	hfc_card_lock(card);
@@ -693,21 +692,21 @@ static int hfc_sys_chan_tx_link_open(struct ks_link *ks_link)
 	chan_tx->fifo.subchannel_bit_start = 0;
 	chan_tx->fifo.subchannel_bit_count = 8;
 
-	next_link = ks_pipeline_next(ks_link);
-	if (next_link && next_link->ops == &hfc_st_chan_tx_link_ops) {
+	next_chan = ks_pipeline_next(ks_chan);
+	if (next_chan && next_chan->ops == &hfc_st_chan_tx_chan_ops) {
 			struct hfc_st_chan_tx *st_chan_tx =
-				container_of(next_link, struct hfc_st_chan_tx,
-								ks_link);
+				container_of(next_chan, struct hfc_st_chan_tx,
+								ks_chan);
 
 		chan_tx->fifo.subchannel_bit_start =
 			st_chan_tx->chan->subchannel_bit_start;
 
 		chan_tx->fifo.subchannel_bit_count =
 			st_chan_tx->chan->subchannel_bit_count;
-	} else if (next_link && next_link->ops == &hfc_pcm_chan_rx_link_ops) {
+	} else if (next_chan && next_chan->ops == &hfc_pcm_chan_rx_chan_ops) {
 //			struct hfc_pcm_chan_rx *pcm_chan_rx =
-//				container_of(next_link, struct hfc_pcm_chan_rx,
-//								ks_link);
+//				container_of(next_chan, struct hfc_pcm_chan_rx,
+//								ks_chan);
 	}
 
 	hfc_sys_port_update_fsm(chan->port);
@@ -725,9 +724,9 @@ static int hfc_sys_chan_tx_link_open(struct ks_link *ks_link)
 	return err;
 }
 
-static void hfc_sys_chan_tx_link_close(struct ks_link *ks_link)
+static void hfc_sys_chan_tx_chan_close(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -738,9 +737,9 @@ static void hfc_sys_chan_tx_link_close(struct ks_link *ks_link)
 	hfc_debug_sys_chan(chan, 1, "TX channel closed.\n");
 }
 
-static int hfc_sys_chan_tx_link_start(struct ks_link *ks_link)
+static int hfc_sys_chan_tx_chan_start(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -760,9 +759,9 @@ static int hfc_sys_chan_tx_link_start(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_sys_chan_tx_link_stop(struct ks_link *ks_link)
+static void hfc_sys_chan_tx_chan_stop(struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -779,11 +778,11 @@ static void hfc_sys_chan_tx_link_stop(struct ks_link *ks_link)
 	hfc_debug_sys_chan(chan, 1, "TX channel stopped\n");
 }
 
-static int hfc_sys_chan_tx_link_push_frame(
-	struct ks_link *ks_link,
+static int hfc_sys_chan_tx_chan_push_frame(
+	struct ks_chan *ks_chan,
 	struct sk_buff *skb)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_fifo *fifo = &chan_tx->fifo;
 	struct hfc_card *card = chan->port->card;
@@ -865,11 +864,11 @@ err_no_free_tx:
 	return KS_TX_BUSY;
 }
 
-static int hfc_sys_chan_tx_link_push_raw(
-	struct ks_link *ks_link,
+static int hfc_sys_chan_tx_chan_push_raw(
+	struct ks_chan *ks_chan,
 	struct ks_streamframe *sf)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_fifo *fifo = &chan_tx->fifo;
 	struct hfc_card *card = chan->port->card;
@@ -893,10 +892,10 @@ static int hfc_sys_chan_tx_link_push_raw(
 	return copied_octets;
 }
 
-static int hfc_sys_chan_tx_link_get_pressure(
-	struct ks_link *ks_link)
+static int hfc_sys_chan_tx_chan_get_pressure(
+	struct ks_chan *ks_chan)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
 	int pressure;
@@ -909,19 +908,19 @@ static int hfc_sys_chan_tx_link_get_pressure(
 	return pressure;
 }
 
-static int hfc_sys_chan_tx_link_get_attr_count(struct ks_link *link)
+static int hfc_sys_chan_tx_chan_get_attr_count(struct ks_chan *chan)
 {
 	return 2;
 }
 
-static int hfc_sys_chan_tx_link_get_attr(
-	struct ks_link *ks_link,
+static int hfc_sys_chan_tx_chan_get_attr(
+	struct ks_chan *ks_chan,
 	int index,
 	__u16 *type,
 	void *buf,
 	int *len)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 
 	switch(index) {
 	case 0: {
@@ -961,13 +960,13 @@ static int hfc_sys_chan_tx_link_get_attr(
 	return 0;
 }
 
-static int hfc_sys_chan_tx_link_set_attr(
-	struct ks_link *ks_link,
+static int hfc_sys_chan_tx_chan_set_attr(
+	struct ks_chan *ks_chan,
 	__u16 type,
 	void *buf,
 	int len)
 {
-	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_link);
+	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 
 	if (type == hfc_hdlc_framer_class->id) {
 		struct hdlc_framer_descr *descr = buf;
@@ -993,27 +992,27 @@ static int hfc_sys_chan_tx_link_set_attr(
 	return 0;
 }
 
-struct ks_link_ops hfc_sys_chan_tx_link_ops =
+struct ks_chan_ops hfc_sys_chan_tx_chan_ops =
 {
 	.owner		= THIS_MODULE,
 
-	.release	= hfc_sys_chan_tx_link_release,
-	.connect	= hfc_sys_chan_tx_link_connect,
-	.disconnect	= hfc_sys_chan_tx_link_disconnect,
-	.open		= hfc_sys_chan_tx_link_open,
-	.close		= hfc_sys_chan_tx_link_close,
-	.start		= hfc_sys_chan_tx_link_start,
-	.stop		= hfc_sys_chan_tx_link_stop,
-	.get_attr_count	= hfc_sys_chan_tx_link_get_attr_count,
-	.get_attr	= hfc_sys_chan_tx_link_get_attr,
-	.set_attr	= hfc_sys_chan_tx_link_set_attr,
+	.release	= hfc_sys_chan_tx_chan_release,
+	.connect	= hfc_sys_chan_tx_chan_connect,
+	.disconnect	= hfc_sys_chan_tx_chan_disconnect,
+	.open		= hfc_sys_chan_tx_chan_open,
+	.close		= hfc_sys_chan_tx_chan_close,
+	.start		= hfc_sys_chan_tx_chan_start,
+	.stop		= hfc_sys_chan_tx_chan_stop,
+	.get_attr_count	= hfc_sys_chan_tx_chan_get_attr_count,
+	.get_attr	= hfc_sys_chan_tx_chan_get_attr,
+	.set_attr	= hfc_sys_chan_tx_chan_set_attr,
 };
 
-struct vss_link_ops hfc_sys_chan_tx_node_ops =
+struct vss_chan_ops hfc_sys_chan_tx_node_ops =
 {
-	.push_frame	= hfc_sys_chan_tx_link_push_frame,
-	.push_raw	= hfc_sys_chan_tx_link_push_raw,
-	.get_pressure	= hfc_sys_chan_tx_link_get_pressure,
+	.push_frame	= hfc_sys_chan_tx_chan_push_frame,
+	.push_raw	= hfc_sys_chan_tx_chan_push_raw,
+	.get_pressure	= hfc_sys_chan_tx_chan_get_pressure,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -1171,7 +1170,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 
 	hfc_fifo_next_frame(fifo);
 
-	vss_link_push_frame(&chan_rx->ks_link, skb);
+	vss_chan_push_frame(&chan_rx->ks_chan, skb);
 
 /*	if (chan->connected_st_chan) {
 		struct hfc_led *led =
@@ -1212,8 +1211,8 @@ static void hfc_sys_chan_rx_init(
 {
 	chan_rx->chan = chan;
 
-	ks_link_init(&chan_rx->ks_link,
-			&hfc_sys_chan_rx_link_ops, "rx",
+	ks_chan_init(&chan_rx->ks_chan,
+			&hfc_sys_chan_rx_chan_ops, "rx",
 			&chan->ks_duplex,
 			&chan->ks_duplex.kobj,
 			&chan->port->card->hfcswitch.ks_node,
@@ -1221,8 +1220,8 @@ static void hfc_sys_chan_rx_init(
 
 	hfc_fifo_init(&chan_rx->fifo, chan->port->card, fifo_hwid, RX);
 
-/*	chan_rx->ks_link.framed_mtu = -1;
-	chan_rx->ks_link.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+/*	chan_rx->ks_chan.framed_mtu = -1;
+	chan_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
 
 	tasklet_init(&chan_rx->tasklet,
 		hfc_sys_chan_rx_tasklet,
@@ -1236,17 +1235,17 @@ static void hfc_sys_chan_tx_init(
 {
 	chan_tx->chan = chan;
 
-	ks_link_init(&chan_tx->ks_link,
-			&hfc_sys_chan_tx_link_ops, "tx",
+	ks_chan_init(&chan_tx->ks_chan,
+			&hfc_sys_chan_tx_chan_ops, "tx",
 			&chan->ks_duplex,
 			&chan->ks_duplex.kobj,
 			&vss_softswitch.ks_node,
 			&chan->port->card->hfcswitch.ks_node);
 
-	chan_tx->ks_link.from_ops = &hfc_sys_chan_tx_node_ops;
+	chan_tx->ks_chan.from_ops = &hfc_sys_chan_tx_node_ops;
 
-/*	chan_tx->ks_link.framed_mtu = -1;
-	chan_tx->ks_link.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+/*	chan_tx->ks_chan.framed_mtu = -1;
+	chan_tx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
 
 	hfc_fifo_init(&chan_tx->fifo, chan->port->card, fifo_hwid, TX);
 }
@@ -1273,16 +1272,16 @@ static int hfc_sys_chan_rx_register(struct hfc_sys_chan_rx *chan_rx)
 {
 	int err;
 	
-	err = ks_link_register(&chan_rx->ks_link);
+	err = ks_chan_register(&chan_rx->ks_chan);
 	if (err < 0)
-		goto err_link_register;
+		goto err_chan_register;
 
 	{
-	struct ks_link_attribute **attr = hfc_sys_chan_rx_attributes;
+	struct ks_chan_attribute **attr = hfc_sys_chan_rx_attributes;
 
 	while(*attr) {
-		ks_link_create_file(
-			&chan_rx->ks_link,
+		ks_chan_create_file(
+			&chan_rx->ks_chan,
 			*attr);
 
 		attr++;
@@ -1291,43 +1290,43 @@ static int hfc_sys_chan_rx_register(struct hfc_sys_chan_rx *chan_rx)
 
 	return 0;
 
-	ks_link_unregister(&chan_rx->ks_link);
-err_link_register:
+	ks_chan_unregister(&chan_rx->ks_chan);
+err_chan_register:
 
 	return err;
 }
 
 static void hfc_sys_chan_rx_unregister(struct hfc_sys_chan_rx *chan_rx)
 {
-	struct ks_link_attribute **attr = hfc_sys_chan_rx_attributes;
+	struct ks_chan_attribute **attr = hfc_sys_chan_rx_attributes;
 
 	while(*attr) {
-		ks_link_remove_file(
-			&chan_rx->ks_link,
+		ks_chan_remove_file(
+			&chan_rx->ks_chan,
 			*attr);
 
 		attr++;
 	}
 
-	ks_link_unregister(&chan_rx->ks_link);
+	ks_chan_unregister(&chan_rx->ks_chan);
 }
 
 static int hfc_sys_chan_tx_register(struct hfc_sys_chan_tx *chan_tx)
 {
 	int err;
 
-//	chan_tx->ks_link.framed_mtu = chan_tx->fifo.size;
+//	chan_tx->ks_chan.framed_mtu = chan_tx->fifo.size;
 
-	err = ks_link_register(&chan_tx->ks_link);
+	err = ks_chan_register(&chan_tx->ks_chan);
 	if (err < 0)
-		goto err_link_register;
+		goto err_chan_register;
 
 	{
-	struct ks_link_attribute **attr = hfc_sys_chan_tx_attributes;
+	struct ks_chan_attribute **attr = hfc_sys_chan_tx_attributes;
 
 	while(*attr) {
-		ks_link_create_file(
-			&chan_tx->ks_link,
+		ks_chan_create_file(
+			&chan_tx->ks_chan,
 			*attr);
 
 		attr++;
@@ -1336,25 +1335,25 @@ static int hfc_sys_chan_tx_register(struct hfc_sys_chan_tx *chan_tx)
 
 	return 0;
 
-	ks_link_unregister(&chan_tx->ks_link);
-err_link_register:
+	ks_chan_unregister(&chan_tx->ks_chan);
+err_chan_register:
 
 	return err;
 }
 
 static void hfc_sys_chan_tx_unregister(struct hfc_sys_chan_tx *chan_tx)
 {
-	struct ks_link_attribute **attr = hfc_sys_chan_tx_attributes;
+	struct ks_chan_attribute **attr = hfc_sys_chan_tx_attributes;
 
 	while(*attr) {
-		ks_link_remove_file(
-			&chan_tx->ks_link,
+		ks_chan_remove_file(
+			&chan_tx->ks_chan,
 			*attr);
 
 		attr++;
 	}
 
-	ks_link_unregister(&chan_tx->ks_link);
+	ks_chan_unregister(&chan_tx->ks_chan);
 }
 
 int hfc_sys_chan_register(

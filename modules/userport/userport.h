@@ -27,7 +27,7 @@ struct vup_ctl
 #include <linux/kfifo.h>
 
 #include <linux/kstreamer/node.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 
 #define vup_MODULE_NAME "visdn-userport"
 #define vup_MODULE_PREFIX vup_MODULE_NAME ": "
@@ -52,8 +52,8 @@ struct vup_chan
 	struct list_head node;
 
 	struct ks_node ks_node;
-	struct ks_link *ks_link_rx;
-	struct ks_link *ks_link_tx;
+	struct ks_chan *ks_chan_rx;
+	struct ks_chan *ks_chan_tx;
 
 	int id;
 

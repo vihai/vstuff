@@ -14,6 +14,7 @@
 #define _LIBKSTREAMER_NODE_H
 
 #include <linux/types.h>
+#include <sys/socket.h>
 #include <linux/netlink.h>
 
 #include <linux/kstreamer/node.h>
@@ -42,7 +43,7 @@ struct ks_node
 	int router_done;
 
 	struct ks_node *router_prev;
-	struct ks_link *router_prev_thru;
+	struct ks_chan *router_prev_thru;
 };
 
 struct ks_node *ks_node_alloc(void);

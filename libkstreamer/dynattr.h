@@ -13,6 +13,8 @@
 #ifndef _LIBKSTREAMER_DYNATTR_H
 #define _LIBKSTREAMER_DYNATTR_H
 
+#include <sys/socket.h>
+
 #include <linux/types.h>
 #include <linux/netlink.h>
 

@@ -18,7 +18,7 @@
 
 #include <linux/kstreamer/kstreamer.h>
 #include <linux/kstreamer/node.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/pipeline.h>
 #include <linux/kstreamer/streamframe.h>
 
@@ -30,100 +30,100 @@ EXPORT_SYMBOL(vss_softswitch);
 #define to_vss_softswitch(ks_node)	\
 		container_of((ks_node), struct vss_softswitch, ks_node)
 
-int vss_link_push_frame(struct ks_link *link, struct sk_buff *skb)
+int vss_chan_push_frame(struct ks_chan *chan, struct sk_buff *skb)
 {
-	struct ks_link *to_link;
+	struct ks_chan *to_chan;
 	int res;
 
-	BUG_ON(link->to != &vss_softswitch.ks_node);
+	BUG_ON(chan->to != &vss_softswitch.ks_node);
 
 	rcu_read_lock();
-	if (!link->pipeline ||
-	    link->pipeline_entry.next == &link->pipeline->entries) {
+	if (!chan->pipeline ||
+	    chan->pipeline_entry.next == &chan->pipeline->entries) {
 		rcu_read_unlock();
 		return -ENOTCONN;
 	}
 
-	to_link = list_entry(link->pipeline_entry.next, struct ks_link,
+	to_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
 							pipeline_entry);
 
-	if (!((struct vss_link_ops *)to_link->from_ops)->push_frame) {
+	if (!((struct vss_chan_ops *)to_chan->from_ops)->push_frame) {
 		rcu_read_unlock();
 		return -EOPNOTSUPP;
 	}
 
-	res = ((struct vss_link_ops *)to_link->from_ops)->
-			push_frame(to_link, skb);
+	res = ((struct vss_chan_ops *)to_chan->from_ops)->
+			push_frame(to_chan, skb);
 
 	rcu_read_unlock();
 
 	return res;
 }
-EXPORT_SYMBOL(vss_link_push_frame);
+EXPORT_SYMBOL(vss_chan_push_frame);
 
-int vss_link_push_raw(
-	struct ks_link *link,
+int vss_chan_push_raw(
+	struct ks_chan *chan,
 	struct ks_streamframe *sf)
 {
-	struct ks_link *to_link;
+	struct ks_chan *to_chan;
 	int res;
 
-	BUG_ON(link->to != &vss_softswitch.ks_node);
+	BUG_ON(chan->to != &vss_softswitch.ks_node);
 
 	rcu_read_lock();
-	if (!link->pipeline ||
-	    link->pipeline_entry.next == &link->pipeline->entries) {
+	if (!chan->pipeline ||
+	    chan->pipeline_entry.next == &chan->pipeline->entries) {
 		rcu_read_unlock();
 		return -ENOTCONN;
 	}
 
-	to_link = list_entry(link->pipeline_entry.next, struct ks_link,
+	to_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
 							pipeline_entry);
 
-	if (!((struct vss_link_ops *)to_link->from_ops)->push_raw) {
+	if (!((struct vss_chan_ops *)to_chan->from_ops)->push_raw) {
 		rcu_read_unlock();
 		return -EOPNOTSUPP;
 	}
 
-	res = ((struct vss_link_ops *)to_link->from_ops)->
-			push_raw(to_link, sf);
+	res = ((struct vss_chan_ops *)to_chan->from_ops)->
+			push_raw(to_chan, sf);
 
 	rcu_read_unlock();
 
 	return res;
 }
-EXPORT_SYMBOL(vss_link_push_raw);
+EXPORT_SYMBOL(vss_chan_push_raw);
 
-int vss_link_get_pressure(struct ks_link *link)
+int vss_chan_get_pressure(struct ks_chan *chan)
 {
-	struct ks_link *to_link;
+	struct ks_chan *to_chan;
 	int res;
 
-	BUG_ON(link->to != &vss_softswitch.ks_node);
+	BUG_ON(chan->to != &vss_softswitch.ks_node);
 
 	rcu_read_lock();
-	if (!link->pipeline ||
-	    link->pipeline_entry.next == &link->pipeline->entries) {
+	if (!chan->pipeline ||
+	    chan->pipeline_entry.next == &chan->pipeline->entries) {
 		rcu_read_unlock();
 		return -ENOTCONN;
 	}
 
-	to_link = list_entry(link->pipeline_entry.next, struct ks_link,
+	to_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
 							pipeline_entry);
 
-	if (!((struct vss_link_ops *)to_link->from_ops)->get_pressure) {
+	if (!((struct vss_chan_ops *)to_chan->from_ops)->get_pressure) {
 		rcu_read_unlock();
 		return -EOPNOTSUPP;
 	}
 
-	res = ((struct vss_link_ops *)to_link->from_ops)->
-			get_pressure(to_link);
+	res = ((struct vss_chan_ops *)to_chan->from_ops)->
+			get_pressure(to_chan);
 
 	rcu_read_unlock();
 
 	return res;
 }
-EXPORT_SYMBOL(vss_link_get_pressure);
+EXPORT_SYMBOL(vss_chan_get_pressure);
 
 static void vss_release(struct ks_node *node)
 {

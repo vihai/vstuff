@@ -17,22 +17,79 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <errno.h>
 
+#include <sys/socket.h>
 #include <linux/netlink.h>
 #include <linux/kstreamer/netlink.h>
 
+#include "libkstreamer.h"
 #include "conn.h"
-#include "request.h"
+#include "xact.h"
+#include "req.h"
 #include "util.h"
 
-void ks_conn_add_request(struct ks_conn *conn, struct ks_request *req)
+void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact)
 {
-	list_add_tail(&ks_request_get(req)->node, &conn->requests);
+	list_add_tail(&ks_xact_get(xact)->node, &conn->xacts);
+}
+
+int ks_conn_get_version(struct ks_conn *conn)
+{
+	int err;
+
+	struct ks_xact *xact = ks_xact_alloc(conn);
+	if (!xact) {
+		err = -ENOMEM;
+		goto err_xact_alloc;
+	}
+
+	err = ks_xact_begin(xact);
+	if (err < 0)
+		goto err_xact_begin;
+
+	struct ks_req *req;
+	req = ks_xact_queue_new_request(xact,
+			KS_NETLINK_VERSION,
+			NLM_F_REQUEST);
+	if (err < 0)
+		goto err_xact_queue_new_request;
+
+	ks_xact_run(xact);
+	ks_req_waitloop(req);
+
+	if (req->err < 0) {
+		err = req->err;
+		ks_req_put(req);
+		goto err_request_version;
+	}
+
+	memcpy(&conn->version, req->response_data, sizeof(conn->version));
+
+	ks_req_put(req);
+
+	err = ks_xact_commit(xact);
+	if (err < 0)
+		goto err_xact_commit;
+
+	ks_xact_put(xact);
+
+	return 0;
+
+err_xact_begin:
+err_xact_queue_new_request:
+err_request_version:
+err_xact_commit:
+	ks_xact_put(xact);
+err_xact_alloc:
+
+	return err;
 }
 
 struct ks_conn *ks_conn_create(void)
 {
 	struct ks_conn *conn;
+	int err;
 
 	conn = malloc(sizeof(*conn));
 	if (!conn)
@@ -40,10 +97,12 @@ struct ks_conn *ks_conn_create(void)
 
 	memset(conn, 0, sizeof(conn));
 
-	conn->state = KS_STATE_NULL;
+	conn->topology_state = KS_TOPOLOGY_STATE_NULL;
+	conn->state = KS_CONN_STATE_NULL;
 	conn->dump_packets = TRUE;
 	conn->seqnum = 1234;
-	INIT_LIST_HEAD(&conn->requests);
+	INIT_LIST_HEAD(&conn->xacts);
+	conn->pid = getpid();
 
 	conn->sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_KSTREAMER);
 	if (conn->sock < 0) {
@@ -62,7 +121,22 @@ struct ks_conn *ks_conn_create(void)
 		perror("Unable to bind netlink socket");
 		return NULL;
 	}
-	
+
+	err = ks_conn_get_version(conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot get version: %s\n", strerror(err));
+		return NULL;
+	}
+
+	if (conn->version.major > KS_LIB_VERSION_MAJOR) {
+		fprintf(stderr, "Unsupported kstreamer interface version"
+				" %u.%u.%u\n",
+				conn->version.major,
+				conn->version.minor,
+				conn->version.service);
+		return NULL;
+	}
+
 	return conn;
 }
 
@@ -71,5 +145,32 @@ void ks_conn_destroy(struct ks_conn *conn)
 	close(conn->sock);
 
 	free(conn);
+}
+
+static const char *ks_conn_state_to_text(enum ks_conn_state state)
+{
+	switch(state) {
+	case KS_CONN_STATE_NULL:
+		return "NULL";
+	case KS_CONN_STATE_IDLE:
+		return "IDLE";
+	case KS_CONN_STATE_WAITING_ACK:
+		return "WAITING_ACK";
+	case KS_CONN_STATE_WAITING_DONE:
+		return "WAITING_DONE";
+	}
+
+	return "*INVALID*";
+}
+
+void ks_conn_set_state(
+	struct ks_conn *conn,
+	enum ks_conn_state state)
+{
+	printf("Conn state changed from %s to %s\n",
+		ks_conn_state_to_text(conn->state),
+		ks_conn_state_to_text(state));
+
+	conn->state = state;
 }
 

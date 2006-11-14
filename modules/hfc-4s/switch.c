@@ -32,8 +32,8 @@ static void hfc_switch_release(struct ks_node *ks_node)
 
 static int hfc_switch_connect(
 	struct ks_node *ks_node,
-	struct ks_link *from,
-	struct ks_link *to)
+	struct ks_chan *from,
+	struct ks_chan *to)
 {
 //	struct hfc_switch *hfcswitch = to_hfc_switch(ks_node);
 //	struct hfc_card *card = hfcswitch->card;
@@ -48,30 +48,30 @@ printk(KERN_CRIT "%s/%s connected %s/%s to %s/%s\n",
 
 /*	hfc_card_lock(card);
 
-	if (from->ops == &hfc_st_chan_rx_link_ops) {
+	if (from->ops == &hfc_st_chan_rx_chan_ops) {
 		struct hfc_st_rx_chan* chan_rx = to_st_chan_rx(from);
 
-		if (to->ops == &hfc_st_chan_tx_link_ops) {
+		if (to->ops == &hfc_st_chan_tx_chan_ops) {
 
-		} else  if (to->ops == &hfc_pcm_chan_tx_link_ops) {
-		} else  if (to->ops == &hfc_sys_chan_tx_link_ops) {
+		} else  if (to->ops == &hfc_pcm_chan_tx_chan_ops) {
+		} else  if (to->ops == &hfc_sys_chan_tx_chan_ops) {
 		}
 
-	} else if (from->ops == &hfc_pcm_chan_rx_link_ops) {
+	} else if (from->ops == &hfc_pcm_chan_rx_chan_ops) {
 		struct hfc_pcm_chan_rx* chan_rx = to_pcm_chan_rx(from);
 
-		if (to->ops == &hfc_st_chan_tx_link_ops) {
-		} else  if (to->ops == &hfc_pcm_chan_tx_link_ops) {
-		} else  if (to->ops == &hfc_sys_chan_tx_link_ops) {
+		if (to->ops == &hfc_st_chan_tx_chan_ops) {
+		} else  if (to->ops == &hfc_pcm_chan_tx_chan_ops) {
+		} else  if (to->ops == &hfc_sys_chan_tx_chan_ops) {
 		}
 
-	} else if (from->ops == &hfc_sys_chan_rx_link_ops) {
+	} else if (from->ops == &hfc_sys_chan_rx_chan_ops) {
 		struct hfc_sys_chan_rx* chan_rx = to_sys_chan_rx(from);
 
-		if (to->ops == &hfc_st_chan_tx_link_ops) {
+		if (to->ops == &hfc_st_chan_tx_chan_ops) {
 			chan_rx->
-		} else  if (to->ops == &hfc_pcm_chan_tx_link_ops) {
-		} else  if (to->ops == &hfc_sys_chan_tx_link_ops) {
+		} else  if (to->ops == &hfc_pcm_chan_tx_chan_ops) {
+		} else  if (to->ops == &hfc_sys_chan_tx_chan_ops) {
 		}
 
 	} else
@@ -88,8 +88,8 @@ printk(KERN_CRIT "%s/%s connected %s/%s to %s/%s\n",
 
 static void hfc_switch_disconnect(
 	struct ks_node *hfcswitch,
-	struct ks_link *from,
-	struct ks_link *to)
+	struct ks_chan *from,
+	struct ks_chan *to)
 {
 }
 

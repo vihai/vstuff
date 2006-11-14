@@ -29,7 +29,7 @@ extern struct kset ks_nodes_kset;
 extern struct list_head ks_nodes_list;
 extern rwlock_t ks_nodes_list_lock;
 
-struct ks_link;
+struct ks_chan;
 struct ks_pipeline;
 
 struct ks_node;
@@ -42,52 +42,52 @@ struct ks_node_ops
 
 	int (*connect)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 	void (*disconnect)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 	int (*open)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 	void (*close)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 	int (*start)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 	void (*stop)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 	void (*stimulus)(
 		struct ks_node *node,
-		struct ks_link *link1,
-		struct ks_link *link2);
+		struct ks_chan *link1,
+		struct ks_chan *link2);
 
 /*	int (*frame_xmit)(
 		struct ks_node *node,
-		struct ks_link *src_link,
+		struct ks_chan *src_chan,
 		struct sk_buff *skb);
 
 	void (*rx_error)(
 		struct ks_node *node,
-		struct ks_link *src_link,
-		enum ks_link_rx_error_code code);
+		struct ks_chan *src_chan,
+		enum ks_chan_rx_error_code code);
 	void (*tx_error)(
 		struct ks_node *node,
-		struct ks_link *src_link,
-		enum ks_link_tx_error_code code);*/
+		struct ks_chan *src_chan,
+		enum ks_chan_tx_error_code code);*/
 };
 
 struct ks_duplex;
@@ -141,7 +141,7 @@ extern void ks_node_remove_file(
 	struct ks_node *node,
 	struct ks_node_attribute *attr);
 
-void ks_node_netlink_dump(struct ks_netlink_xact *xact);
+void ks_node_netlink_dump(struct ks_xact *xact);
 
 extern int ks_node_modinit(void);
 extern void ks_node_modexit(void);

@@ -447,18 +447,18 @@ static struct ks_node_ops hfc_st_chan_node_ops = {
 
 //----------------------------------------------------------------------------
 
-static void hfc_st_chan_rx_link_release(struct ks_link *ks_link)
+static void hfc_st_chan_rx_chan_release(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 
-	printk(KERN_DEBUG "hfc_st_chan_rx_link_release()\n");
+	printk(KERN_DEBUG "hfc_st_chan_rx_chan_release()\n");
 
 	hfc_st_chan_put(chan_rx->chan);
 }
 
-static int hfc_st_chan_rx_link_connect(struct ks_link *ks_link)
+static int hfc_st_chan_rx_chan_connect(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 	struct hfc_st_chan *chan = chan_rx->chan;
 
 	hfc_debug_st_chan(chan, 2, "RX connected\n");
@@ -466,17 +466,17 @@ static int hfc_st_chan_rx_link_connect(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_st_chan_rx_link_disconnect(struct ks_link *ks_link)
+static void hfc_st_chan_rx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 	struct hfc_st_chan *chan = chan_rx->chan;
 
 	hfc_debug_st_chan(chan, 2, "RX disconnected\n");
 }
 
-static int hfc_st_chan_rx_link_open(struct ks_link *ks_link)
+static int hfc_st_chan_rx_chan_open(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 	struct hfc_st_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
 	int err;
@@ -516,9 +516,9 @@ err_channel_busy:
 	return err;
 }
 
-static void hfc_st_chan_rx_link_close(struct ks_link *ks_link)
+static void hfc_st_chan_rx_chan_close(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 	struct hfc_st_chan *chan = chan_rx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -532,9 +532,9 @@ static void hfc_st_chan_rx_link_close(struct ks_link *ks_link)
 	hfc_debug_st_chan(chan, 1, "RX channel closed.\n");
 }
 
-static int hfc_st_chan_rx_link_start(struct ks_link *ks_link)
+static int hfc_st_chan_rx_chan_start(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 	struct hfc_st_chan *chan = chan_rx->chan;
 
 	hfc_debug_st_chan(chan, 1, "RX channel started.\n");
@@ -542,40 +542,40 @@ static int hfc_st_chan_rx_link_start(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_st_chan_rx_link_stop(struct ks_link *ks_link)
+static void hfc_st_chan_rx_chan_stop(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_link);
+	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 	struct hfc_st_chan *chan = chan_rx->chan;
 
 	hfc_debug_st_chan(chan, 1, "RX channel stopped\n");
 }
 
-struct ks_link_ops hfc_st_chan_rx_link_ops = {
+struct ks_chan_ops hfc_st_chan_rx_chan_ops = {
 	.owner			= THIS_MODULE,
 
-	.release		= hfc_st_chan_rx_link_release,
-	.connect		= hfc_st_chan_rx_link_connect,
-	.disconnect		= hfc_st_chan_rx_link_disconnect,
-	.open			= hfc_st_chan_rx_link_open,
-	.close			= hfc_st_chan_rx_link_close,
-	.start			= hfc_st_chan_rx_link_start,
-	.stop			= hfc_st_chan_rx_link_stop,
+	.release		= hfc_st_chan_rx_chan_release,
+	.connect		= hfc_st_chan_rx_chan_connect,
+	.disconnect		= hfc_st_chan_rx_chan_disconnect,
+	.open			= hfc_st_chan_rx_chan_open,
+	.close			= hfc_st_chan_rx_chan_close,
+	.start			= hfc_st_chan_rx_chan_start,
+	.stop			= hfc_st_chan_rx_chan_stop,
 };
 
 /*----------------------------------------------------------------------------*/
 
-static void hfc_st_chan_tx_link_release(struct ks_link *ks_link)
+static void hfc_st_chan_tx_chan_release(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 
-	printk(KERN_DEBUG "hfc_st_chan_tx_link_release()\n");
+	printk(KERN_DEBUG "hfc_st_chan_tx_chan_release()\n");
 
 	hfc_st_chan_put(chan_tx->chan);
 }
 
-static int hfc_st_chan_tx_link_connect(struct ks_link *ks_link)
+static int hfc_st_chan_tx_chan_connect(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 	struct hfc_st_chan *chan = chan_tx->chan;
 
 	hfc_debug_st_chan(chan, 2, "TX connected\n");
@@ -583,9 +583,9 @@ static int hfc_st_chan_tx_link_connect(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_st_chan_tx_link_disconnect(struct ks_link *ks_link)
+static void hfc_st_chan_tx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 	struct hfc_st_chan *chan = chan_tx->chan;
 
 	hfc_debug_st_chan(chan, 2, "TX disconnected\n");
@@ -604,9 +604,9 @@ static void hfc_st_chan_tx_link_disconnect(struct ks_link *ks_link)
 	}*/
 }
 
-static int hfc_st_chan_tx_link_open(struct ks_link *ks_link)
+static int hfc_st_chan_tx_chan_open(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 	struct hfc_st_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
 	int err;
@@ -647,9 +647,9 @@ err_channel_busy:
 	return err;
 }
 
-static void hfc_st_chan_tx_link_close(struct ks_link *ks_link)
+static void hfc_st_chan_tx_chan_close(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 	struct hfc_st_chan *chan = chan_tx->chan;
 	struct hfc_card *card = chan->port->card;
 
@@ -665,9 +665,9 @@ static void hfc_st_chan_tx_link_close(struct ks_link *ks_link)
 	hfc_debug_st_chan(chan, 1, "TX channel closed.\n");
 }
 
-static int hfc_st_chan_tx_link_start(struct ks_link *ks_link)
+static int hfc_st_chan_tx_chan_start(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 	struct hfc_st_chan *chan = chan_tx->chan;
 
 	hfc_debug_st_chan(chan, 1, "TX channel started.\n");
@@ -675,24 +675,24 @@ static int hfc_st_chan_tx_link_start(struct ks_link *ks_link)
 	return 0;
 }
 
-static void hfc_st_chan_tx_link_stop(struct ks_link *ks_link)
+static void hfc_st_chan_tx_chan_stop(struct ks_chan *ks_chan)
 {
-	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_link);
+	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 	struct hfc_st_chan *chan = chan_tx->chan;
 
 	hfc_debug_st_chan(chan, 1, "TX channel stopped\n");
 }
 
-struct ks_link_ops hfc_st_chan_tx_link_ops = {
+struct ks_chan_ops hfc_st_chan_tx_chan_ops = {
 	.owner			= THIS_MODULE,
 
-	.release		= hfc_st_chan_tx_link_release,
-	.connect		= hfc_st_chan_tx_link_connect,
-	.disconnect		= hfc_st_chan_tx_link_disconnect,
-	.open			= hfc_st_chan_tx_link_open,
-	.close			= hfc_st_chan_tx_link_close,
-	.start			= hfc_st_chan_tx_link_start,
-	.stop			= hfc_st_chan_tx_link_stop,
+	.release		= hfc_st_chan_tx_chan_release,
+	.connect		= hfc_st_chan_tx_chan_connect,
+	.disconnect		= hfc_st_chan_tx_chan_disconnect,
+	.open			= hfc_st_chan_tx_chan_open,
+	.close			= hfc_st_chan_tx_chan_close,
+	.start			= hfc_st_chan_tx_chan_start,
+	.stop			= hfc_st_chan_tx_chan_stop,
 };
 
 //----------------------------------------------------------------------------
@@ -720,15 +720,15 @@ void hfc_st_chan_rx_init(
 {
 	chan_rx->chan = chan;
 
-	ks_link_init(&chan_rx->ks_link,
-			&hfc_st_chan_rx_link_ops, "rx",
+	ks_chan_init(&chan_rx->ks_chan,
+			&hfc_st_chan_rx_chan_ops, "rx",
 			&chan->ks_duplex,
 			&chan->ks_node.kobj,
 			&chan->ks_node,
 			&chan->port->card->hfcswitch.ks_node);
 
-/*	chan_rx->ks_link.framed_mtu = -1;
-	chan_rx->ks_link.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+/*	chan_rx->ks_chan.framed_mtu = -1;
+	chan_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
 }
 
 void hfc_st_chan_tx_init(
@@ -737,15 +737,15 @@ void hfc_st_chan_tx_init(
 {
 	chan_tx->chan = chan;
 
-	ks_link_init(&chan_tx->ks_link,
-			&hfc_st_chan_tx_link_ops, "tx",
+	ks_chan_init(&chan_tx->ks_chan,
+			&hfc_st_chan_tx_chan_ops, "tx",
 			&chan->ks_duplex,
 			&chan->ks_node.kobj,
 			&chan->port->card->hfcswitch.ks_node,
 			&chan->ks_node);
 
-/*	chan_tx->ks_link.framed_mtu = -1;
-	chan_tx->ks_link.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+/*	chan_tx->ks_chan.framed_mtu = -1;
+	chan_tx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
 }
 
 void hfc_st_chan_init(
@@ -781,42 +781,42 @@ static int hfc_st_chan_rx_register(struct hfc_st_chan_rx *chan)
 {
 	int err;
 
-	err = ks_link_register(&chan->ks_link);
+	err = ks_chan_register(&chan->ks_chan);
 	if (err < 0)
-		goto err_link_register;
+		goto err_chan_register;
 
 	return 0;
 
-	ks_link_unregister(&chan->ks_link);
-err_link_register:
+	ks_chan_unregister(&chan->ks_chan);
+err_chan_register:
 
 	return err;
 }
 
 static void hfc_st_chan_rx_unregister(struct hfc_st_chan_rx *chan)
 {
-	ks_link_unregister(&chan->ks_link);
+	ks_chan_unregister(&chan->ks_chan);
 }
 
 static int hfc_st_chan_tx_register(struct hfc_st_chan_tx *chan)
 {
 	int err;
 
-	err = ks_link_register(&chan->ks_link);
+	err = ks_chan_register(&chan->ks_chan);
 	if (err < 0)
-		goto err_link_register;
+		goto err_chan_register;
 
 	return 0;
 
-	ks_link_unregister(&chan->ks_link);
-err_link_register:
+	ks_chan_unregister(&chan->ks_chan);
+err_chan_register:
 
 	return err;
 }
 
 static void hfc_st_chan_tx_unregister(struct hfc_st_chan_tx *chan)
 {
-	ks_link_unregister(&chan->ks_link);
+	ks_chan_unregister(&chan->ks_chan);
 }
 
 int hfc_st_chan_register(struct hfc_st_chan *chan)

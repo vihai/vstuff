@@ -25,7 +25,7 @@ enum ks_dynattr_attribute_type
 
 #include <linux/skbuff.h>
 
-struct ks_netlink_xact;
+struct ks_xact;
 
 struct ks_dynattr
 {
@@ -46,7 +46,7 @@ struct ks_dynattr_instance
 	int len;
 };
 
-void ks_dynattr_netlink_dump(struct ks_netlink_xact *xact);
+void ks_dynattr_netlink_dump(struct ks_xact *xact);
 
 extern struct ks_dynattr *ks_dynattr_register(const char *name);
 extern void ks_dynattr_unregister(struct ks_dynattr *dynattr);

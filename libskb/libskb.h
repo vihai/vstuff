@@ -13,6 +13,14 @@
 #ifndef _LIBSKB_H
 #define _LIBSKB_H
 
+#ifndef GFP_KERNEL
+#define GFP_KERNEL 0
+#endif
+
+#ifndef GFP_ATOMIC
+#define GFP_ATOMIC 1
+#endif
+
 struct sk_buff
 {
 	int size;
@@ -24,7 +32,7 @@ struct sk_buff
 	int len;
 };
 
-struct sk_buff *skb_alloc(int size, int gfp);
+struct sk_buff *alloc_skb(int size, int gfp);
 void kfree_skb(struct sk_buff *skb);
 void skb_trim(struct sk_buff *skb, unsigned int len);
 int skb_tailroom(const struct sk_buff *skb);

@@ -18,7 +18,7 @@
 #include "kstreamer.h"
 #include "kstreamer_priv.h"
 #include "node.h"
-#include "link.h"
+#include "channel.h"
 #include "pipeline.h"
 #include "router.h"
 
@@ -49,6 +49,25 @@ struct ks_pipeline *ks_pipeline_get_by_id(int id)
 	return pipeline;
 }
 
+
+struct ks_pipeline *ks_pipeline_get_by_nlid(struct nlmsghdr *nlh)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		if(attr->type == KS_PIPELINEATTR_ID) {
+			return ks_pipeline_get_by_id(
+					*(__u32 *)KS_ATTR_DATA(attr));
+		}
+	}
+
+	return NULL;
+}
+
 static int _ks_pipeline_new_id(void)
 {
 	static int cur_id;
@@ -73,7 +92,7 @@ static const char *ks_pipeline_status_to_text(
 	case KS_PIPELINE_STATUS_CONNECTED:
 		return "CONNECTED";
 	case KS_PIPELINE_STATUS_OPEN:
-	     	return "OPEN";
+		return "OPEN";
 	case KS_PIPELINE_STATUS_FLOWING:
 		return "FLOWING";
 	}
@@ -131,6 +150,65 @@ nlmsg_failure:
 	return err;
 }
 
+static int ks_pipeline_broadcast_netlink_notification(
+	struct ks_pipeline *pipeline,
+	enum ks_netlink_message_type message_type)
+{
+	struct sk_buff *skb;
+	int err = -EINVAL;
+
+	skb = alloc_skb(NLMSG_SPACE(257), GFP_KERNEL);
+	if (!skb) {
+	        netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
+		err = -ENOMEM;
+		goto err_alloc_skb;
+	}
+
+	NETLINK_CB(skb).pid = 0;
+	NETLINK_CB(skb).dst_pid = 0;
+	NETLINK_CB(skb).dst_group = KS_NETLINK_GROUP_TOPOLOGY;
+
+	err = ks_pipeline_write_to_nlmsg(pipeline, skb, message_type, 0, 0, 0);
+	if (err < 0)
+		goto err_fill_msg;
+
+	netlink_broadcast(ksnl, skb, 0,
+			KS_NETLINK_GROUP_TOPOLOGY,
+			GFP_KERNEL);
+
+	return 0;
+
+err_fill_msg:
+	kfree_skb(skb);
+err_alloc_skb:
+
+	return err;
+}
+
+static int ks_pipeline_xact_write(
+	struct ks_pipeline *pipeline,
+	struct ks_xact *xact,
+	enum ks_netlink_message_type message_type)
+{
+	int err = -EINVAL;
+
+retry:
+	ks_xact_need_skb(xact);
+	if (!xact->out_skb)
+		return -ENOMEM;
+
+	err = ks_pipeline_write_to_nlmsg(pipeline, xact->out_skb, message_type,
+						xact->pid, xact->id, 0);
+	if (err < 0) {
+		ks_xact_flush(xact);
+		goto retry;
+	}
+
+	ks_xact_flush(xact);
+
+	return 0;
+}
+
 struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 	struct nlmsghdr *nlh, int *err)
 {
@@ -153,30 +231,30 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 			status = *(__u32 *)KS_ATTR_DATA(attr);
 		break;
 
-		case KS_PIPELINEATTR_LINK_ID: {
-			struct ks_link *link;
+		case KS_PIPELINEATTR_CHAN_ID: {
+			struct ks_chan *chan;
 
 			if (pipeline->status != KS_PIPELINE_STATUS_NULL) {
 				*err = -EINVAL;
 				goto err_invalid_status;
 			}
 
-			link = ks_link_get_by_id(
+			chan = ks_chan_get_by_id(
 					*(__u32 *)KS_ATTR_DATA(attr));
-			if (!link) {
+			if (!chan) {
 				printk(KERN_CRIT "Link ID not found\n");
 				// FIXME
 				*err = -ENODEV;
-				goto err_link_not_found;
+				goto err_chan_not_found;
 			}
 
 			list_add_tail(
-				&ks_link_get(link)->pipeline_entry,
+				&ks_chan_get(chan)->pipeline_entry,
 				&pipeline->entries);
 
-			link->pipeline = ks_pipeline_get(pipeline);
+			chan->pipeline = ks_pipeline_get(pipeline);
 
-			ks_link_put(link);
+			ks_chan_put(chan);
 		}
 		break;
 
@@ -190,14 +268,14 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 		}
 	}
 
-	*err = ks_pipeline_setstatus(pipeline, status);
+	*err = ks_pipeline_change_status(pipeline, status);
 	if (*err < 0)
 		goto err_invalid_status;
 
 	return pipeline;
 
 err_unexpected_attribute:
-err_link_not_found:
+err_chan_not_found:
 err_invalid_status:
 	ks_pipeline_put(pipeline);
 	pipeline = NULL;
@@ -219,35 +297,12 @@ int ks_pipeline_update_from_nlsmsg(
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 		switch(attr->type) {
-		case KS_PIPELINEATTR_STATUS:
-			status = *(__u32 *)KS_ATTR_DATA(attr);
+		case KS_PIPELINEATTR_ID:
+			BUG_ON(*(__u32 *)KS_ATTR_DATA(attr) != pipeline->id);
 		break;
 
-		case KS_PIPELINEATTR_LINK_ID: {
-			struct ks_link *link;
-
-			if (pipeline->status != KS_PIPELINE_STATUS_NULL) {
-				err = -EINVAL;
-				goto err_invalid_status;
-			}
-
-			link = ks_link_get_by_id(
-					*(__u32 *)KS_ATTR_DATA(attr));
-			if (!link) {
-				printk(KERN_CRIT "Link ID not found\n");
-				err = -ENODEV;
-				// FIXME
-				goto err_link_not_found;
-			}
-
-			list_add_tail(
-				&ks_link_get(link)->pipeline_entry,
-				&pipeline->entries);
-
-			link->pipeline = ks_pipeline_get(pipeline);
-
-			ks_link_put(link);
-		}
+		case KS_PIPELINEATTR_STATUS:
+			status = *(__u32 *)KS_ATTR_DATA(attr);
 		break;
 
 		default:
@@ -260,76 +315,150 @@ int ks_pipeline_update_from_nlsmsg(
 		}
 	}
 
-	err = ks_pipeline_setstatus(pipeline, status);
+	err = ks_pipeline_change_status(pipeline, status);
 	if (err < 0)
 		goto err_invalid_status;
 
 	return 0;
 
 err_unexpected_attribute:
-err_link_not_found:
+err_chan_not_found:
 err_invalid_status:
 
 	return err;
 }
 
-static int ks_pipeline_netlink_notification(
-	struct ks_pipeline *pipeline,
-	enum ks_netlink_message_type message_type,
-	u32 pid)
+int ks_pipeline_cmd_new(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh)
 {
-	struct sk_buff *skb;
-	int err = -EINVAL;
+	struct ks_pipeline *pipeline;
+	int err;
 
-	skb = alloc_skb(NLMSG_SPACE(257), GFP_KERNEL);
-	if (!skb) {
-	        netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
-		err = -ENOMEM;
-		goto err_alloc_skb;
+	printk(KERN_DEBUG "==========> Pipeline NEW\n");
+
+	pipeline = ks_pipeline_create_from_nlmsg(nlh, &err);
+	if (!pipeline) {
+		// FIXME
+		return err;
 	}
 
-	NETLINK_CB(skb).pid = 0;
-	NETLINK_CB(skb).dst_pid = pid;
-	NETLINK_CB(skb).dst_group = pid ? KS_NETLINK_GROUP_TOPOLOGY : 0;
+	ks_pipeline_dump(pipeline);
 
-	err = ks_pipeline_write_to_nlmsg(pipeline, skb, message_type,
-						pid, 0, 0);
+	err = ks_pipeline_register(pipeline);
 	if (err < 0)
-		goto err_fill_msg;
+		goto err_pipeline_register;
 
-	netlink_broadcast(ksnl, skb, 0,
-		KS_NETLINK_GROUP_TOPOLOGY,
-		GFP_KERNEL);
+	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_NEW);
+
+	ks_pipeline_put(pipeline);
 
 	return 0;
 
-err_fill_msg:
-	kfree_skb(skb);
-err_alloc_skb:
+	ks_pipeline_unregister(pipeline);
+err_pipeline_register:
 
 	return err;
 }
 
-void ks_pipeline_netlink_dump(struct ks_netlink_xact *xact)
+int ks_pipeline_cmd_del(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh)
 {
 	struct ks_pipeline *pipeline;
 	int err;
-       
-	list_for_each_entry(pipeline, &ks_pipelines_kset.list, kobj.entry) {
-		ks_netlink_xact_need_skb(xact);
-		if (!xact->dump_skb)
-			return;
 
-		err = ks_pipeline_write_to_nlmsg(pipeline, xact->dump_skb,
+	printk(KERN_DEBUG "==========> Pipeline DEL\n");
+
+	pipeline = ks_pipeline_get_by_nlid(nlh);
+	if (!pipeline) {
+		err = -ENOENT;
+		goto err_pipeline_get;
+	}
+
+	if (pipeline->status != KS_PIPELINE_STATUS_NULL)
+		ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
+
+	ks_pipeline_unregister(pipeline);
+
+	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_DEL);
+
+	ks_pipeline_put(pipeline);
+
+	return 0;
+
+err_pipeline_update:
+	ks_pipeline_put(pipeline);
+err_pipeline_get:
+
+	return err;
+}
+
+int ks_pipeline_cmd_set(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh)
+{
+	struct ks_pipeline *pipeline;
+	int err;
+
+printk(KERN_DEBUG "==========> Pipeline SET\n");
+
+	pipeline = ks_pipeline_get_by_nlid(nlh);
+	if (!pipeline) {
+		err = -ENOENT;
+		goto err_pipeline_get;
+	}
+
+	err = ks_pipeline_update_from_nlsmsg(pipeline, nlh);
+	if (err < 0)
+		goto err_pipeline_update;
+
+	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_SET);
+
+	ks_pipeline_put(pipeline);
+
+	return 0;
+
+err_pipeline_update:
+	ks_pipeline_put(pipeline);
+err_pipeline_get:
+
+	return err;
+}
+
+int ks_pipeline_cmd_get(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh)
+{
+	struct ks_pipeline *pipeline;
+	int err;
+
+	printk(KERN_DEBUG "==========> Pipeline GET\n");
+
+	ks_xact_send_control(xact, KS_NETLINK_PIPELINE_GET,
+			NLM_F_ACK | NLM_F_MULTI);
+
+	list_for_each_entry(pipeline, &ks_pipelines_kset.list, kobj.entry) {
+		ks_xact_need_skb(xact);
+		if (!xact->out_skb)
+			return -ENOMEM;
+
+		err = ks_pipeline_write_to_nlmsg(pipeline, xact->out_skb,
 					KS_NETLINK_PIPELINE_NEW,
 					xact->pid,
 					0,
 					NLM_F_MULTI);
 		if (err < 0)
-			ks_netlink_xact_flush(xact);
+			ks_xact_flush(xact);
 	}
 
-	ks_netlink_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+
+	return 0;
 }
 
 void ks_pipeline_init(struct ks_pipeline *pipeline)
@@ -378,31 +507,32 @@ int ks_pipeline_register(struct ks_pipeline *pipeline)
 		goto err_kobject_add;
 
 /*	if (pipeline->duplex) {
-		err = sysfs_create_link(
+		err = sysfs_create_chan(
 			&pipeline->kobj,
 			&pipeline->duplex->kobj,
 			"duplex");
 		if (err < 0)
-			goto err_create_link_duplex;
+			goto err_create_chan_duplex;
 	}
 
 	BUG_ON(!pipeline->from);
-	err = sysfs_create_link(
+	err = sysfs_create_chan(
 		&pipeline->kobj,
 		&pipeline->from->kobj,
 		"from");
 	if (err < 0)
-		goto err_create_link_from;
+		goto err_create_chan_from;
 
 	BUG_ON(!pipeline->to);
-	err = sysfs_create_link(
+	err = sysfs_create_chan(
 		&pipeline->kobj,
 		&pipeline->to->kobj,
 		"to");
 	if (err < 0)
-		goto err_create_link_to;*/
+		goto err_create_chan_to;*/
 
-	ks_pipeline_netlink_notification(pipeline, KS_NETLINK_PIPELINE_NEW, 0);
+	ks_pipeline_broadcast_netlink_notification(
+			pipeline, KS_NETLINK_PIPELINE_NEW);
 
 	return 0;
 
@@ -412,7 +542,7 @@ err_create_pipeline_to:
 err_create_pipeline_from:
 	if (pipeline->duplex)
 		sysfs_remove_pipeline(&pipeline->kobj, "duplex");
-err_create_pipeline_link:*/
+err_create_pipeline_chan:*/
 	kobject_del(&pipeline->kobj);
 err_kobject_add:
 	down_write(&ks_pipelines_list_sem);
@@ -426,7 +556,8 @@ EXPORT_SYMBOL(ks_pipeline_register);
 
 void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 {
-	ks_pipeline_netlink_notification(pipeline, KS_NETLINK_PIPELINE_DEL, 0);
+	ks_pipeline_broadcast_netlink_notification(
+			pipeline, KS_NETLINK_PIPELINE_DEL);
 
 /*	sysfs_remove_pipeline(&pipeline->kobj, "to");
 	sysfs_remove_pipeline(&pipeline->kobj, "from");
@@ -434,7 +565,7 @@ void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 	if (pipeline->duplex)
 		sysfs_remove_pipeline(&pipeline->kobj, "duplex");*/
 
-	ks_pipeline_setstatus(pipeline, KS_PIPELINE_STATUS_NULL);
+	ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
 
 	kobject_del(&pipeline->kobj);
 
@@ -447,40 +578,40 @@ EXPORT_SYMBOL(ks_pipeline_unregister);
 
 void ks_pipeline_dump(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 
 	printk(KERN_CRIT " ");
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		printk("%s/%s/%s =====(%s/%s/%s)=====> ",
-			link->from->kobj.parent->parent->name,
-			link->from->kobj.parent->name,
-			link->from->kobj.name,
-			link->kobj.parent->parent->name,
-			link->kobj.parent->name,
-			link->kobj.name);
+			chan->from->kobj.parent->parent->name,
+			chan->from->kobj.parent->name,
+			chan->from->kobj.name,
+			chan->kobj.parent->parent->name,
+			chan->kobj.parent->name,
+			chan->kobj.name);
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link)
+	if (prev_chan)
 		printk("%s/%s\n",
-			prev_link->to->kobj.parent->name,
-			prev_link->to->kobj.name);
+			prev_chan->to->kobj.parent->name,
+			prev_chan->to->kobj.name);
 }
 
 #if 0
 static int ks_pipeline_negotiate_mtu(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
+	struct ks_chan *chan;
 	int min_mtu = 65536;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
-		if (link->framed_mtu != -1 &&
-		    link->framed_mtu < min_mtu)
-			min_mtu = link->framed_mtu;
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
+		if (chan->framed_mtu != -1 &&
+		    chan->framed_mtu < min_mtu)
+			min_mtu = chan->framed_mtu;
 	}
 
 	return min_mtu;
@@ -488,11 +619,11 @@ static int ks_pipeline_negotiate_mtu(struct ks_pipeline *pipeline)
 
 static int ks_pipeline_negotiate_framing(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
+	struct ks_chan *chan;
 	int framing = 0x7FFFFFFF;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
-		framing &= link->framing_avail;
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
+		framing &= chan->framing_avail;
 	}
 
 	return framing ? (1 << (ffs(framing) - 1)) : 0;
@@ -503,81 +634,83 @@ static int ks_pipeline_negotiate_framing(struct ks_pipeline *pipeline)
 
 static void ks_pipeline_connected_to_null(
 	struct ks_pipeline *pipeline,
-	struct ks_link *stop_at)
+	struct ks_chan *stop_at)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link == stop_at)
+		if (chan == stop_at)
 			goto done;
 
-		if (link->ops->disconnect)
-			link->ops->disconnect(link);
+		if (chan->ops->disconnect)
+			chan->ops->disconnect(chan);
 
-		if (link->from->ops->disconnect)
-			link->from->ops->disconnect(
-				link->from, link, prev_link);
+		if (chan->from->ops->disconnect)
+			chan->from->ops->disconnect(
+				chan->from, chan, prev_chan);
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link && prev_link->to->ops->disconnect)
-		prev_link->to->ops->disconnect(
-			prev_link->to, NULL, link);
+	if (prev_chan && prev_chan->to->ops->disconnect)
+		prev_chan->to->ops->disconnect(
+			prev_chan->to, NULL, chan);
 
 done:
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		struct ks_pipeline *pipeline = link->pipeline;
+		struct ks_pipeline *pipeline = chan->pipeline;
 
-		link->pipeline = NULL;
+		chan->pipeline = NULL;
 		wmb();
 
-		list_del_rcu(&link->pipeline_entry);
-		call_rcu(&link->pipeline_entry_rcu, ks_link_del_rcu);
+		list_del_rcu(&chan->pipeline_entry);
+		call_rcu(&chan->pipeline_entry_rcu, ks_chan_del_rcu);
 
 		ks_pipeline_put(pipeline);
 	}
+	rcu_read_unlock();
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_NULL);
 }
 
 static int ks_pipeline_null_to_connected(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 	int err;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link->from->ops->connect) {
-			err = link->from->ops->connect(
-				link->from, link, prev_link);
+		if (chan->from->ops->connect) {
+			err = chan->from->ops->connect(
+				chan->from, chan, prev_chan);
 			if (err < 0)
 				goto failed;
 		}
 
-		if (link->ops->connect) {
-			err = link->ops->connect(link);
+		if (chan->ops->connect) {
+			err = chan->ops->connect(chan);
 			if (err < 0) {
-				if (link->from->ops->disconnect)
-					link->from->ops->disconnect(link->from,
-							link, prev_link);
+				if (chan->from->ops->disconnect)
+					chan->from->ops->disconnect(chan->from,
+							chan, prev_chan);
 
 				goto failed;
 			}
 		}
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link &&
-	    prev_link->to->ops->connect)
-		prev_link->to->ops->connect(
-			prev_link->to, NULL, link);
+	if (prev_chan &&
+	    prev_chan->to->ops->connect)
+		prev_chan->to->ops->connect(
+			prev_chan->to, NULL, chan);
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_CONNECTED);
 
@@ -585,7 +718,7 @@ static int ks_pipeline_null_to_connected(struct ks_pipeline *pipeline)
 
 failed:
 
-	ks_pipeline_connected_to_null(pipeline, prev_link);
+	ks_pipeline_connected_to_null(pipeline, prev_chan);
 
 	return err;
 }
@@ -594,29 +727,29 @@ failed:
 
 static void ks_pipeline_open_to_connected(
 	struct ks_pipeline *pipeline,
-	struct ks_link *stop_at)
+	struct ks_chan *stop_at)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link == stop_at)
+		if (chan == stop_at)
 			goto done;
 
-		if (link->ops->close)
-			link->ops->close(link);
+		if (chan->ops->close)
+			chan->ops->close(chan);
 
-		if (link->from->ops->close)
-			link->from->ops->close(
-				link->from, link, prev_link);
+		if (chan->from->ops->close)
+			chan->from->ops->close(
+				chan->from, chan, prev_chan);
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link && prev_link->to->ops->close)
-		prev_link->to->ops->close(
-			prev_link->to, NULL, link);
+	if (prev_chan && prev_chan->to->ops->close)
+		prev_chan->to->ops->close(
+			prev_chan->to, NULL, chan);
 
 done:
 
@@ -625,39 +758,39 @@ done:
 
 static int ks_pipeline_connected_to_open(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 	int err;
 
 //	pipeline->mtu = ks_pipeline_negotiate_mtu(pipeline);
 //	pipeline->framing = ks_pipeline_negotiate_framing(pipeline);
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link->from->ops->open) {
-			err = link->from->ops->open(
-				link->from, link, prev_link);
+		if (chan->from->ops->open) {
+			err = chan->from->ops->open(
+				chan->from, chan, prev_chan);
 			if (err < 0)
 				goto failed;
 		}
 
-		if (link->ops->open) {
-			err = link->ops->open(link);
+		if (chan->ops->open) {
+			err = chan->ops->open(chan);
 			if (err < 0) {
-				if (link->from->ops->close)
-					link->from->ops->close(link->from,
-							link, prev_link);
+				if (chan->from->ops->close)
+					chan->from->ops->close(chan->from,
+							chan, prev_chan);
 
 				goto failed;
 			}
 		}
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link && prev_link->to->ops->open)
-		prev_link->to->ops->open(
-			prev_link->to, NULL, link);
+	if (prev_chan && prev_chan->to->ops->open)
+		prev_chan->to->ops->open(
+			prev_chan->to, NULL, chan);
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_OPEN);
 
@@ -665,7 +798,7 @@ static int ks_pipeline_connected_to_open(struct ks_pipeline *pipeline)
 
 failed:
 
-	ks_pipeline_open_to_connected(pipeline, prev_link);
+	ks_pipeline_open_to_connected(pipeline, prev_chan);
 
 	return err;
 }
@@ -674,29 +807,29 @@ failed:
 
 static void ks_pipeline_flowing_to_open(
 	struct ks_pipeline *pipeline,
-	struct ks_link *stop_at)
+	struct ks_chan *stop_at)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link == stop_at)
+		if (chan == stop_at)
 			goto done;
 
-		if (link->ops->stop)
-			link->ops->stop(link);
+		if (chan->ops->stop)
+			chan->ops->stop(chan);
 
-		if (link->from->ops->stop)
-			link->from->ops->stop(
-				link->from, link, prev_link);
+		if (chan->from->ops->stop)
+			chan->from->ops->stop(
+				chan->from, chan, prev_chan);
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link && prev_link->to->ops->stop)
-		prev_link->to->ops->stop(
-			prev_link->to, NULL, link);
+	if (prev_chan && prev_chan->to->ops->stop)
+		prev_chan->to->ops->stop(
+			prev_chan->to, NULL, chan);
 
 done:
 
@@ -705,36 +838,36 @@ done:
 
 static int ks_pipeline_open_to_flowing(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 	int err;
 
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link->from->ops->start) {
-			err = link->from->ops->start(
-				link->from, link, prev_link);
+		if (chan->from->ops->start) {
+			err = chan->from->ops->start(
+				chan->from, chan, prev_chan);
 			if (err < 0)
 				goto failed;
 		}
 
-		if (link->ops->start) {
-			err = link->ops->start(link);
+		if (chan->ops->start) {
+			err = chan->ops->start(chan);
 			if (err < 0) {
-				if (link->from->ops->stop)
-					link->from->ops->stop(link->from,
-							link, prev_link);
+				if (chan->from->ops->stop)
+					chan->from->ops->stop(chan->from,
+							chan, prev_chan);
 
 				goto failed;
 			}
 		}
 
-		prev_link = link;
+		prev_chan = chan;
 	}
 
-	if (prev_link && prev_link->to->ops->start)
-		prev_link->to->ops->start(
-			prev_link->to, NULL, link);
+	if (prev_chan && prev_chan->to->ops->start)
+		prev_chan->to->ops->start(
+			prev_chan->to, NULL, chan);
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_FLOWING);
 
@@ -742,12 +875,12 @@ static int ks_pipeline_open_to_flowing(struct ks_pipeline *pipeline)
 
 failed:
 
-	ks_pipeline_flowing_to_open(pipeline, prev_link);
+	ks_pipeline_flowing_to_open(pipeline, prev_chan);
 
 	return err;
 }
 
-int ks_pipeline_setstatus(
+int ks_pipeline_change_status(
 	struct ks_pipeline *pipeline,
 	enum ks_pipeline_status status)
 {
@@ -869,7 +1002,7 @@ failed:
 
 	return err;
 }
-EXPORT_SYMBOL(ks_pipeline_setstatus);
+EXPORT_SYMBOL(ks_pipeline_change_status);
 
 #if 0
 int ks_pipeline_connect(struct ks_pipeline *pipeline)
@@ -992,23 +1125,23 @@ EXPORT_SYMBOL(ks_pipeline_stop);
 
 void ks_pipeline_stimulate(struct ks_pipeline *pipeline)
 {
-	struct ks_link *link;
-	struct ks_link *prev_link = NULL;
+	struct ks_chan *chan;
+	struct ks_chan *prev_chan = NULL;
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(link, &pipeline->entries, pipeline_entry) {
+	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (link->ops->stimulus)
-			link->ops->stimulus(link);
+		if (chan->ops->stimulus)
+			chan->ops->stimulus(chan);
 
-		if (link->from->ops->stimulus)
-			link->from->ops->stimulus(
-				link->from, link, prev_link);
+		if (chan->from->ops->stimulus)
+			chan->from->ops->stimulus(
+				chan->from, chan, prev_chan);
 	}
 
-	if (prev_link && prev_link->to->ops->stimulus)
-		prev_link->to->ops->stimulus(
-			prev_link->to, NULL, link);
+	if (prev_chan && prev_chan->to->ops->stimulus)
+		prev_chan->to->ops->stimulus(
+			prev_chan->to, NULL, chan);
 
 	rcu_read_unlock();
 }
@@ -1024,61 +1157,61 @@ EXPORT_SYMBOL(ks_pipeline_stimulate);
 
 
 
-struct ks_link *ks_pipeline_prev(struct ks_link *link)
+struct ks_chan *ks_pipeline_prev(struct ks_chan *chan)
 {
 	// FIXME LOCKING!!!
 
-	if (!link->pipeline)
+	if (!chan->pipeline)
 		return NULL;
 
-	if (link->pipeline_entry.prev == &link->pipeline->entries)
+	if (chan->pipeline_entry.prev == &chan->pipeline->entries)
 		return NULL;
 
-	return list_entry(link->pipeline_entry.prev, struct ks_link,
+	return list_entry(chan->pipeline_entry.prev, struct ks_chan,
 						pipeline_entry);
 }
 EXPORT_SYMBOL(ks_pipeline_prev);
 
-struct ks_link *ks_pipeline_next(struct ks_link *link)
+struct ks_chan *ks_pipeline_next(struct ks_chan *chan)
 {
 
-	if (!link->pipeline)
+	if (!chan->pipeline)
 		return NULL;
 
-	if (link->pipeline_entry.next == &link->pipeline->entries)
+	if (chan->pipeline_entry.next == &chan->pipeline->entries)
 		return NULL;
 
-	return list_entry(link->pipeline_entry.next, struct ks_link,
+	return list_entry(chan->pipeline_entry.next, struct ks_chan,
 						pipeline_entry);
 }
 EXPORT_SYMBOL(ks_pipeline_next);
 
-struct ks_link *ks_pipeline_first_link(struct ks_pipeline *pipeline)
+struct ks_chan *ks_pipeline_first_chan(struct ks_pipeline *pipeline)
 {
 	if (pipeline->entries.next == &pipeline->entries)
 		return NULL;
 
-	return list_entry(pipeline->entries.next, struct ks_link,
+	return list_entry(pipeline->entries.next, struct ks_chan,
 						pipeline_entry);
 }
-EXPORT_SYMBOL(ks_pipeline_first_link);
+EXPORT_SYMBOL(ks_pipeline_first_chan);
 
-struct ks_link *ks_pipeline_last_link(struct ks_pipeline *pipeline)
+struct ks_chan *ks_pipeline_last_chan(struct ks_pipeline *pipeline)
 {
 	if (pipeline->entries.prev == &pipeline->entries)
 		return NULL;
 
-	return list_entry(pipeline->entries.prev, struct ks_link,
+	return list_entry(pipeline->entries.prev, struct ks_chan,
 						pipeline_entry);
 }
-EXPORT_SYMBOL(ks_pipeline_last_link);
+EXPORT_SYMBOL(ks_pipeline_last_chan);
 
 struct ks_node *ks_pipeline_first_node(struct ks_pipeline *pipeline)
 {
 	if (pipeline->entries.next == &pipeline->entries)
 		return NULL;
 
-	return list_entry(pipeline->entries.next, struct ks_link,
+	return list_entry(pipeline->entries.next, struct ks_chan,
 						pipeline_entry)->from;
 }
 EXPORT_SYMBOL(ks_pipeline_first_node);
@@ -1088,7 +1221,7 @@ struct ks_node *ks_pipeline_last_node(struct ks_pipeline *pipeline)
 	if (pipeline->entries.prev == &pipeline->entries)
 		return NULL;
 
-	return list_entry(pipeline->entries.prev, struct ks_link,
+	return list_entry(pipeline->entries.prev, struct ks_chan,
 						pipeline_entry)->to;
 }
 EXPORT_SYMBOL(ks_pipeline_last_node);

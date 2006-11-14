@@ -20,7 +20,7 @@ enum ks_pipeline_attribute_type
 	KS_PIPELINEATTR_ID = 1,
 	KS_PIPELINEATTR_PATH,
 	KS_PIPELINEATTR_STATUS,
-	KS_PIPELINEATTR_LINK_ID,
+	KS_PIPELINEATTR_CHAN_ID,
 };
 
 enum ks_pipeline_status
@@ -100,16 +100,24 @@ static inline void ks_pipeline_put(struct ks_pipeline *pipeline)
 		kobject_put(&pipeline->kobj);
 }
 
-void ks_pipeline_netlink_dump(struct ks_netlink_xact *xact);
-
 void ks_pipeline_dump(struct ks_pipeline *pipeline);
-int ks_pipeline_write_to_nlmsg(
-	struct ks_pipeline *pipeline,
-	struct sk_buff *skb,
-	enum ks_netlink_message_type message_type,
-	u32 pid, u32 seq, u16 flags);
-struct ks_pipeline *ks_pipeline_create_from_nlmsg(
-	struct nlmsghdr *nlh, int *err);
+
+int ks_pipeline_cmd_new(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh);
+int ks_pipeline_cmd_del(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh);
+int ks_pipeline_cmd_set(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh);
+int ks_pipeline_cmd_get(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh);
 
 //int ks_pipeline_connect(struct ks_pipeline *pipeline);
 //extern void ks_pipeline_disconnect(struct ks_pipeline *pipeline);
@@ -117,17 +125,17 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 //extern void ks_pipeline_close(struct ks_pipeline *pipeline);
 //extern int ks_pipeline_start(struct ks_pipeline *pipeline);
 //extern void ks_pipeline_stop(struct ks_pipeline *pipeline);
-extern int ks_pipeline_setstatus(
+extern int ks_pipeline_change_status(
 	struct ks_pipeline *pipeline,
 	enum ks_pipeline_status status);
 extern void ks_pipeline_stimulate(struct ks_pipeline *pipeline);
 
-extern struct ks_link *ks_pipeline_first_link(
+extern struct ks_chan *ks_pipeline_first_chan(
 		struct ks_pipeline *pipeline);
-extern struct ks_link *ks_pipeline_last_link(
+extern struct ks_chan *ks_pipeline_last_chan(
 		struct ks_pipeline *pipeline);
-extern struct ks_link *ks_pipeline_prev(struct ks_link *link);
-extern struct ks_link *ks_pipeline_next(struct ks_link *link);
+extern struct ks_chan *ks_pipeline_prev(struct ks_chan *chan);
+extern struct ks_chan *ks_pipeline_next(struct ks_chan *chan);
 extern struct ks_node *ks_pipeline_first_node(
 		struct ks_pipeline *pipeline);
 extern struct ks_node *ks_pipeline_last_node(

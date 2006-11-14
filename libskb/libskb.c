@@ -23,7 +23,7 @@
 
 #include "libskb.h"
 
-struct sk_buff *skb_alloc(int size, int gfp)
+struct sk_buff *alloc_skb(int size, int gfp)
 {
 	struct sk_buff *skb;
 

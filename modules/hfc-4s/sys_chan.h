@@ -16,7 +16,7 @@
 #include <linux/interrupt.h>
 
 #include <linux/kstreamer/kstreamer.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/dynattr.h>
 #include <linux/kstreamer/duplex.h>
 
@@ -27,10 +27,10 @@
 #include "fifo.h"
 
 #define to_sys_chan_rx(chan)	\
-		container_of(chan, struct hfc_sys_chan_rx, ks_link)
+		container_of(chan, struct hfc_sys_chan_rx, ks_chan)
 
 #define to_sys_chan_tx(chan)	\
-		container_of(chan, struct hfc_sys_chan_tx, ks_link)
+		container_of(chan, struct hfc_sys_chan_tx, ks_chan)
 
 /*#define to_sys_chan(chan)	\
 		container_of(chan, struct hfc_sys_chan, visdn_chan)*/
@@ -40,8 +40,8 @@ struct hfc_fifo;
 
 //extern struct visdn_chan_class hfc_sys_chan_class;
 
-extern struct ks_link_ops hfc_sys_chan_tx_link_ops;
-extern struct ks_link_ops hfc_sys_chan_rx_link_ops;
+//extern struct ks_chan_ops hfc_sys_chan_tx_chan_ops;
+//extern struct ks_chan_ops hfc_sys_chan_rx_chan_ops;
 
 struct hfc_sys_chan;
 
@@ -61,7 +61,7 @@ struct hfc_octet_reverser
 
 struct hfc_sys_chan_rx
 {
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	struct hfc_sys_chan *chan;
 
@@ -76,7 +76,7 @@ struct hfc_sys_chan_rx
 
 struct hfc_sys_chan_tx
 {
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	struct hfc_hdlc_framer hdlc_framer;
 	struct hfc_octet_reverser octet_reverser;

@@ -13,33 +13,55 @@
 #ifndef _LIBKSTREAMER_CONN_H
 #define _LIBKSTREAMER_CONN_H
 
-//#include "request.h"
+#include <linux/types.h>
 #include <list.h>
+
+#include <linux/kstreamer/netlink.h>
+
+enum ks_topology_state
+{
+	KS_TOPOLOGY_STATE_NULL,
+	KS_TOPOLOGY_STATE_SYNCING,
+	KS_TOPOLOGY_STATE_SYNCHED,
+};
 
 enum ks_conn_state
 {
-	KS_STATE_NULL,
-	KS_STATE_SYNCING,
-	KS_STATE_IDLE,
+	KS_CONN_STATE_NULL,
+	KS_CONN_STATE_IDLE,
+	KS_CONN_STATE_WAITING_ACK,
+	KS_CONN_STATE_WAITING_DONE,
 };
 
 struct ks_conn
 {
+	enum ks_topology_state topology_state;
+
 	enum ks_conn_state state;
 
 	int sock;
 
+	struct ks_netlink_version_response version;
+
 	int seqnum;
+	__u32 pid;
 
 	int dump_packets;
 
-	struct list_head requests;
+	struct list_head xacts;
+
+	struct ks_xact *cur_xact;
+	struct ks_req *cur_req;
 };
 
-struct ks_request;
+struct ks_req;
 
 struct ks_conn *ks_conn_create(void);
 void ks_conn_destroy(struct ks_conn *conn);
-void ks_conn_add_request(struct ks_conn *conn, struct ks_request *req);
+void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
+
+void ks_conn_set_state(
+	struct ks_conn *conn,
+	enum ks_conn_state state);
 
 #endif

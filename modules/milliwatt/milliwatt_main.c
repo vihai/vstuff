@@ -110,57 +110,57 @@ static struct ks_node_ops vmw_chan_node_ops = {
 
 /*---------------------------------------------------------------------------*/
 
-static void vmw_chan_tx_link_release(struct ks_link *ks_link)
+static void vmw_chan_tx_chan_release(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_connect()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_connect()\n");
 }
 
-static int vmw_chan_tx_link_connect(struct ks_link *ks_link)
+static int vmw_chan_tx_chan_connect(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_connect()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_connect()\n");
 
 	return 0;
 }
 
-static void vmw_chan_tx_link_disconnect(struct ks_link *ks_link)
+static void vmw_chan_tx_chan_disconnect(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_disconnect()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_disconnect()\n");
 }
 
-static int vmw_chan_tx_link_open(struct ks_link *ks_link)
+static int vmw_chan_tx_chan_open(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_open()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_open()\n");
 
 	return 0;
 }
 
-static void vmw_chan_tx_link_close(struct ks_link *ks_link)
+static void vmw_chan_tx_chan_close(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_close()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_close()\n");
 }
 
-static int vmw_chan_tx_link_start(struct ks_link *ks_link)
+static int vmw_chan_tx_chan_start(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_start()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_start()\n");
 
 	return 0;
 }
 
-static void vmw_chan_tx_link_stop(struct ks_link *ks_link)
+static void vmw_chan_tx_chan_stop(struct ks_chan *ks_chan)
 {
-	vmw_debug(3, "vmw_chan_tx_link_stop()\n");
+	vmw_debug(3, "vmw_chan_tx_chan_stop()\n");
 }
 
-struct ks_link_ops vmw_chan_tx_link_ops = {
+struct ks_chan_ops vmw_chan_tx_chan_ops = {
 	.owner		= THIS_MODULE,
 
-	.release	= vmw_chan_tx_link_release,
-	.connect	= vmw_chan_tx_link_connect,
-	.disconnect	= vmw_chan_tx_link_disconnect,
-	.open		= vmw_chan_tx_link_open,
-	.close		= vmw_chan_tx_link_close,
-	.start		= vmw_chan_tx_link_start,
-	.stop		= vmw_chan_tx_link_stop,
+	.release	= vmw_chan_tx_chan_release,
+	.connect	= vmw_chan_tx_chan_connect,
+	.disconnect	= vmw_chan_tx_chan_disconnect,
+	.open		= vmw_chan_tx_chan_open,
+	.close		= vmw_chan_tx_chan_close,
+	.start		= vmw_chan_tx_chan_start,
+	.stop		= vmw_chan_tx_chan_stop,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -172,13 +172,13 @@ static void vmw_chan_init(struct vmw_chan *chan)
 	ks_node_init(&chan->ks_node, &vmw_chan_node_ops, "milliwatt",
 			&ks_system_device.kobj);
 
-	ks_link_init(&chan->ks_link, &vmw_chan_tx_link_ops, "tx", NULL,
+	ks_chan_init(&chan->ks_chan, &vmw_chan_tx_chan_ops, "tx", NULL,
 			&chan->ks_node.kobj,
 			&chan->ks_node,
 			&vss_softswitch.ks_node);
 
-/*	chan->ks_link.framed_mtu = -1;
-	chan->ks_link.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+/*	chan->ks_chan.framed_mtu = -1;
+	chan->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
 }
 
 static int vmw_chan_register(struct vmw_chan *chan)
@@ -196,14 +196,14 @@ static int vmw_chan_register(struct vmw_chan *chan)
 		goto err_node_register;
 
 	vmw_chan_get(chan);
-	err = ks_link_register(&chan->ks_link);
+	err = ks_chan_register(&chan->ks_chan);
 	if (err < 0)
-		goto err_link_register;
+		goto err_chan_register;
 
 	return 0;
 
-	ks_link_unregister(&chan->ks_link);
-err_link_register:
+	ks_chan_unregister(&chan->ks_chan);
+err_chan_register:
 	ks_node_unregister(&chan->ks_node);
 err_node_register:
 	down_write(&vmw_chans_list_sem);
@@ -216,7 +216,7 @@ err_node_register:
 
 static void vmw_chan_unregister(struct vmw_chan *chan)
 {
-	ks_link_unregister(&chan->ks_link);
+	ks_chan_unregister(&chan->ks_chan);
 	ks_node_unregister(&chan->ks_node);
 
 	down_write(&vmw_chans_list_sem);
@@ -253,15 +253,15 @@ static void vmw_chan_unregister(struct vmw_chan *chan)
 
 	sf->len = copied_bytes;
 
-	err = vss_link_push_raw(&chan->ks_link, sf);
+	err = vss_chan_push_raw(&chan->ks_chan, sf);
 	if (err < 0)
-		goto err_vss_link_push_raw;
+		goto err_vss_chan_push_raw;
 
 	visdn_sf_put(sf);
 
 	return copied_bytes;
 
-err_vss_link_push_raw:
+err_vss_chan_push_raw:
 err_copy_from_user:
 	visdn_sf_put(sf);
 err_sf_alloc:

@@ -189,24 +189,24 @@ static ssize_t hfc_show_fifo_state(
 			fifo_rx->bit_reversed ? 'R' : ' ');
 
 		{
-		struct ks_link *prev_link;
-		prev_link = ks_pipeline_prev(&port->chans[i].rx.ks_link);
+		struct ks_chan *prev_chan;
+		prev_chan = ks_pipeline_prev(&port->chans[i].rx.ks_chan);
 
-		if (!prev_link) {
+		if (!prev_chan) {
 			sanprintf(buf, PAGE_SIZE, "      ");
-		} else if (prev_link->ops == &hfc_st_chan_rx_link_ops) {
+		} else if (prev_chan->ops == &hfc_st_chan_rx_chan_ops) {
 			struct hfc_st_chan_rx *chan_rx =
-				container_of(prev_link, struct hfc_st_chan_rx,
-								ks_link);
+				container_of(prev_chan, struct hfc_st_chan_rx,
+								ks_chan);
 
 			sanprintf(buf, PAGE_SIZE,
 				"st%d:%-2s",
 				chan_rx->chan->port->id,
 				chan_rx->chan->ks_node.kobj.name);
-/*		} else if (prev_link->ops == &hfc_pcm_chan_rx_link_ops) {
+/*		} else if (prev_chan->ops == &hfc_pcm_chan_rx_chan_ops) {
 			struct hfc_pcm_chan_rx *chan_rx =
-				container_of(prev_link, struct hfc_pcm_chan_rx,
-								ks_link);
+				container_of(prev_chan, struct hfc_pcm_chan_rx,
+								ks_chan);
 
 			sanprintf(buf, PAGE_SIZE,
 				"pcm%d:%s",
@@ -229,24 +229,24 @@ static ssize_t hfc_show_fifo_state(
 			fifo_tx->bit_reversed ? 'R' : ' ');
 
 		{
-		struct ks_link *next_link;
-		next_link = ks_pipeline_next(&port->chans[i].tx.ks_link);
+		struct ks_chan *next_chan;
+		next_chan = ks_pipeline_next(&port->chans[i].tx.ks_chan);
 
-		if (!next_link) {
+		if (!next_chan) {
 			sanprintf(buf, PAGE_SIZE, "\n");
-		} else if (next_link->ops == &hfc_st_chan_tx_link_ops) {
+		} else if (next_chan->ops == &hfc_st_chan_tx_chan_ops) {
 			struct hfc_st_chan_tx *chan_tx =
-				container_of(next_link, struct hfc_st_chan_tx,
-								ks_link);
+				container_of(next_chan, struct hfc_st_chan_tx,
+								ks_chan);
 
 			sanprintf(buf, PAGE_SIZE,
 				"st%d:%-2s\n",
 				chan_tx->chan->port->id,
 				chan_tx->chan->ks_node.kobj.name);
-/*		} else if (next_link->ops == &hfc_pcm_chan_tx_link_ops) {
+/*		} else if (next_chan->ops == &hfc_pcm_chan_tx_chan_ops) {
 			struct hfc_pcm_chan_tx *chan_tx =
-				container_of(next_link, struct hfc_pcm_chan_tx,
-								ks_link);
+				container_of(next_chan, struct hfc_pcm_chan_tx,
+								ks_chan);
 
 			sanprintf(buf, PAGE_SIZE,
 				"pcm%d:%s\n",
@@ -420,32 +420,32 @@ void hfc_sys_port_update_fsm(
 	for (i=0; i<port->num_chans; i++) {
 		// If FIFO open! FIXME TODO
 		if (1) {
-			struct ks_link *prev_link;
+			struct ks_chan *prev_chan;
 
-			prev_link = ks_pipeline_prev(
-					&port->chans[i].rx.ks_link);
+			prev_chan = ks_pipeline_prev(
+					&port->chans[i].rx.ks_chan);
 
-			if (!prev_link) {
-			} else if (prev_link->ops == &hfc_st_chan_rx_link_ops) {
+			if (!prev_chan) {
+			} else if (prev_chan->ops == &hfc_st_chan_rx_chan_ops) {
 
 				struct hfc_st_chan_rx *chan_rx =
-					container_of(prev_link,
+					container_of(prev_chan,
 							struct hfc_st_chan_rx,
-							ks_link);
+							ks_chan);
 
 				entries[nentries].fifo =
 						&port->chans[i].rx.fifo;
 				entries[nentries].hfc_chan_hwindex =
 						chan_rx->chan->hw_index;
 				nentries++;
-			} /*else if (prev_link->ops ==
-						&hfc_pcm_chan_rx_link_ops) {
+			} /*else if (prev_chan->ops ==
+						&hfc_pcm_chan_rx_chan_ops) {
 
 				 * ALLOCATE A HFC_CHAN
 				struct hfc_pcm_chan_rx *chan_rx =
-					container_of(prev_link,
+					container_of(prev_chan,
 							struct hfc_pcm_chan_rx,
-							ks_link);
+							ks_chan);
 
 				entries[nentries++].fifo =
 						&port->chans[i].rx.fifo;
@@ -456,32 +456,32 @@ void hfc_sys_port_update_fsm(
 		}
 
 		if (1) {
-			struct ks_link *next_link;
+			struct ks_chan *next_chan;
 
-			next_link = ks_pipeline_next(
-					&port->chans[i].tx.ks_link);
+			next_chan = ks_pipeline_next(
+					&port->chans[i].tx.ks_chan);
 
-			if (!next_link) {
-			} else if(next_link->ops == &hfc_st_chan_tx_link_ops) {
+			if (!next_chan) {
+			} else if(next_chan->ops == &hfc_st_chan_tx_chan_ops) {
 
 				struct hfc_st_chan_tx *chan_tx =
-					container_of(next_link,
+					container_of(next_chan,
 							struct hfc_st_chan_tx,
-							ks_link);
+							ks_chan);
 
 				entries[nentries].fifo =
 						&port->chans[i].tx.fifo;
 				entries[nentries].hfc_chan_hwindex =
 						chan_tx->chan->hw_index;
 				nentries++;
-			}/* else if (next_link->ops ==
-						&hfc_pcm_chan_tx_link_ops) {
+			}/* else if (next_chan->ops ==
+						&hfc_pcm_chan_tx_chan_ops) {
 
 				 * ALLOCATE A HFC_CHAN
 				struct hfc_pcm_chan_tx *chan_tx =
-					container_of(next_link,
+					container_of(next_chan,
 							struct hfc_pcm_chan_tx,
-							ks_link);
+							ks_chan);
 
 				entries[nentries++].fifo =
 						&port->chans[i].tx.fifo;

@@ -230,14 +230,14 @@ static void q931_ieid_fill_diagnostic_from_list(
 			
 			diagnostics[*diagnostics_len] =
 			       Q931_IE_SHIFT | 0x08 | entry->codeset;
-			*diagnostics_len++;
+			(*diagnostics_len)++;
 		}
 
 		if (*diagnostics_len >= max_len)
 			return;
 
 		diagnostics[*diagnostics_len] = entry->id;
-		*diagnostics_len++;
+		(*diagnostics_len)++;
 	}
 }
 

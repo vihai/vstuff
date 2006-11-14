@@ -264,26 +264,26 @@ err_alloc_skb:
 	return err;
 }
 
-void ks_node_netlink_dump(struct ks_netlink_xact *xact)
+void ks_node_netlink_dump(struct ks_xact *xact)
 {
 	struct ks_node *node;
 	int err;
 
 	list_for_each_entry(node, &ks_nodes_kset.list, kobj.entry) {
-		ks_netlink_xact_need_skb(xact);
-		if (!xact->dump_skb)
+		ks_xact_need_skb(xact);
+		if (!xact->out_skb)
 			return;
 
-		err = ks_node_write_to_nlmsg(node, xact->dump_skb,
+		err = ks_node_write_to_nlmsg(node, xact->out_skb,
 					KS_NETLINK_NODE_NEW,
 					xact->pid,
 					0,
 					NLM_F_MULTI);
 		if (err < 0)
-			ks_netlink_xact_flush(xact);
+			ks_xact_flush(xact);
 	}
 
-	ks_netlink_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
 }
 
 int ks_node_register(struct ks_node *node)

@@ -5,7 +5,7 @@ EXTRA_DIST =					\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)				\
 	$(noinst_DATA)				\
-	visdn.spec				\
+	vstuff.spec				\
 	visdn-init				\
 	visdn-sleep.diff			\
 	visdn-sysconfig				\
@@ -13,6 +13,7 @@ EXTRA_DIST =					\
 	modules/include/kernel_config.h.in	\
 	modules/include/linux/lapd.h		\
 	modules/include/linux/vgsm.h		\
+	modules/include/linux/kstreamer/*.h	\
 	modules/include/linux/visdn/*.h		\
 	docs/*					\
 	vgsm_firmware/*.img			\
@@ -27,11 +28,11 @@ endif
 SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
-SUBDIRS += scripts samples visdnctl vgsmctl
+SUBDIRS += scripts samples #visdnctl vgsmctl
 
 if asterisk_modules
-SUBDIRS += chan_visdn
-SUBDIRS += chan_vgsm
+#SUBDIRS += chan_visdn
+#SUBDIRS += chan_vgsm
 #SUBDIRS += app_visdn_ppp
 endif
 

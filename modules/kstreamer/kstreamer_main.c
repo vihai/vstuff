@@ -26,7 +26,7 @@
 #include "kstreamer.h"
 #include "kstreamer_priv.h"
 #include "node.h"
-#include "link.h"
+#include "channel.h"
 #include "duplex.h"
 #include "pipeline.h"
 #include "netlink.h"
@@ -75,9 +75,9 @@ static int __init ks_init_module(void)
 	if (err < 0)
 		goto err_node_modinit;
 
-	err = ks_link_modinit();
+	err = ks_chan_modinit();
 	if (err < 0)
-		goto err_link_modinit;
+		goto err_chan_modinit;
 
 	err = ks_pipeline_modinit();
 	if (err < 0)
@@ -99,8 +99,8 @@ err_netlink_modinit:
 err_duplex_modinit:
 	ks_pipeline_modexit();
 err_pipeline_modinit:
-	ks_link_modexit();
-err_link_modinit:
+	ks_chan_modexit();
+err_chan_modinit:
 	ks_node_modexit();
 err_node_modinit:
 	device_unregister(&ks_system_device);
@@ -118,7 +118,7 @@ static void __exit ks_module_exit(void)
 	ks_netlink_modexit();
 	ks_duplex_modexit();
 	ks_pipeline_modexit();
-	ks_link_modexit();
+	ks_chan_modexit();
 	ks_node_modexit();
 
 	device_unregister(&ks_system_device);
