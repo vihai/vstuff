@@ -10,6 +10,7 @@
  *
  */
 
+#include <string.h>
 #include <ctype.h>
 
 #include "pin.h"

@@ -1,5 +1,13 @@
-
-AM_CFLAGS = -D_REENTRANT -Wall
+#
+# vstuff
+#
+# Copyright (C) 2004-2006 Daniele Orlandi
+#
+# Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+#
+# This program is free software and may be modified and distributed
+# under the terms and conditions of the GNU General Public License.
+#
 
 pppdplugins_LTLIBRARIES = visdn.la
 visdn_la_SOURCES = visdn.c
@@ -11,3 +19,9 @@ INCLUDES =					\
 
 visdn_la_LIBADD =
 visdn_la_LDFLAGS = -module -avoid-version -no-undefined
+
+AM_CFLAGS = -D_REENTRANT -DGNU_SOURCE -Wall
+
+if !inline
+AM_CFLAGS += -fno-inline
+endif

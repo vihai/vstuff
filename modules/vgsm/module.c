@@ -22,13 +22,11 @@
 #include <linux/fs.h>
 #include <linux/tty.h>
 
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/pipeline.h>
 #include <linux/kstreamer/streamframe.h>
 #include <linux/kstreamer/softswitch.h>
-
-#include <linux/visdn/port.h>
 
 #include "vgsm.h"
 #include "card.h"
@@ -62,6 +60,16 @@
 		kobject_name(&(module)->ks_node.kobj),		\
 		## arg)
 
+struct vgsm_module *vgsm_module_get(struct vgsm_module *module)
+{
+	return vgsm_card_get(module->card) ? module : NULL;
+}
+
+void vgsm_module_put(struct vgsm_module *module)
+{
+	vgsm_card_put(module->card);
+}
+
 void vgsm_module_send_set_padding_timeout(
 	struct vgsm_module *module,
 	u8 timeout)
@@ -77,7 +85,7 @@ void vgsm_module_send_set_padding_timeout(
 		msg.numbytes = 1;
 
 	msg.payload[0] = timeout;
-	
+
 	vgsm_send_msg(module->micro, &msg);
 }
 
@@ -107,11 +115,11 @@ void vgsm_module_send_power_get(
 	struct vgsm_module *module)
 {
 	struct vgsm_micro_message msg = { };
-	
+
 	msg.cmd = VGSM_CMD_MAINT;
 	msg.cmd_dep = VGSM_CMD_MAINT_POWER_GET;
 	msg.numbytes = 0;
-	
+
 	vgsm_send_msg(module->micro, &msg);
 }
 
@@ -150,299 +158,431 @@ void vgsm_module_send_onoff(
 	vgsm_send_msg(module->micro, &msg);
 }
 
-static void vgsm_port_release(
-	struct visdn_port *port)
-{
-	printk(KERN_DEBUG "vgsm_port_release()\n");
-}
-
-static int vgsm_port_enable(
-	struct visdn_port *visdn_port)
-{
-	struct vgsm_module *module = port_to_module(visdn_port);
-	struct vgsm_card *card = module->card;
-
-	vgsm_card_lock(card);
-
-
-	vgsm_card_unlock(card);
-
-	vgsm_debug_module(module, 2, "enabled\n");
-
-	return 0;
-}
-
-static int vgsm_port_disable(
-	struct visdn_port *visdn_port)
-{
-	struct vgsm_module *module = port_to_module(visdn_port);
-	struct vgsm_card *card = module->card;
-
-	vgsm_card_lock(card);
-
-	vgsm_card_unlock(card);
-
-	vgsm_debug_module(module, 2, "disabled\n");
-
-	return 0;
-}
-
-struct visdn_port_ops vgsm_port_ops = {
-	.owner		= THIS_MODULE,
-	.release	= vgsm_port_release,
-	.enable		= vgsm_port_enable,
-	.disable	= vgsm_port_disable,
-};
-
-static void vgsm_chan_release(struct visdn_chan *chan)
-{
-	printk(KERN_DEBUG "vgsm_chan_release()\n");
-
-	// FIXME
-}
-
-static int vgsm_chan_open(struct visdn_chan *visdn_chan)
-{
-	struct vgsm_module *module = chan_to_module(visdn_chan);
-
-	vgsm_debug_module(module, 1, "channel opened.\n");
-
-	return 0;
-}
-
-static int vgsm_chan_close(struct visdn_chan *visdn_chan)
-{
-	struct vgsm_module *module = chan_to_module(visdn_chan);
-
-	vgsm_debug_module(module, 1, "channel closed.\n");
-
-	return 0;
-}
-
-static int vgsm_chan_start(struct visdn_chan *visdn_chan)
-{
-	struct vgsm_module *module = chan_to_module(visdn_chan);
-	struct vgsm_card *card = module->card;
-	int i;
-
-	vgsm_card_lock(card);
-
-	for(i=module->timeslot_offset; i < card->writedma_size; i+=4)
-		*(u8 *)(card->writedma_mem + i) = 0x2a;
-
-	module->rx_fifo_pos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
-				(u32)card->readdma_bus_mem) / 4;
-	module->tx_fifo_pos = ((le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
-			(u32)card->writedma_bus_mem + VGSM_FIFO_JITBUFF_AVG) %
-			card->writedma_size) / 4;
-
-	vgsm_update_mask0(card);
-	vgsm_card_unlock(card);
-
-	vgsm_debug_module(module, 1, "channel started.\n");
-
-	return 0;
-}
-
-static int vgsm_chan_stop(struct visdn_chan *visdn_chan)
-{
-	struct vgsm_module *module = chan_to_module(visdn_chan);
-	struct vgsm_card *card = module->card;
-
-	vgsm_card_lock(card);
-	vgsm_update_mask0(card);
-	vgsm_card_unlock(card);
-
-	vgsm_debug_module(module, 1, "channel stopped.\n");
-
-	return 0;
-}
-
-static int vgsm_chan_leg_connect(
-	struct visdn_leg *visdn_leg,
-	struct visdn_leg *visdn_leg2)
-{
-	struct vgsm_module *module = chan_to_module(visdn_leg->chan);
-
-	vgsm_debug_module(module, 2, "leg A connecting to %s\n",
-		visdn_leg2->chan->kobj.name);
-
-	return 0;
-}
-
-static void vgsm_chan_leg_disconnect(
-	struct visdn_leg *visdn_leg,
-	struct visdn_leg *visdn_leg2)
-{
-}
-
-static ssize_t vgsm_chan_leg_read(
-	struct visdn_leg *visdn_leg,
-	void *buf, size_t count)
-{
-	struct vgsm_module *module = chan_to_module(visdn_leg->chan);
-	struct vgsm_card *card = module->card;
-	size_t copied_octets = 0;
-	int inpos;
-	u8 *bufp = buf;
-
-	vgsm_card_lock(card);
-
-	inpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
-				card->readdma_bus_mem) / 4;
-
-	while(module->rx_fifo_pos != inpos && copied_octets < count) {
-		*bufp++ = *(u8 *)(card->readdma_mem +
-				(module->rx_fifo_pos * 4) +
-				module->timeslot_offset);
-		module->rx_fifo_pos++;
-
-		if (module->rx_fifo_pos >= module->rx_fifo_size)
-			module->rx_fifo_pos = 0;
-
-		copied_octets++;
-	}
-
-	vgsm_card_unlock(card);
-
-	return copied_octets;
-}
-
-static void vgsm_chan_fifo_write(
-	struct vgsm_module *module,
-	const u8 *buf,
-	size_t count)
-{
-	struct vgsm_card *card = module->card;
-	int i;
-
-	for (i=0; i<count; i++) {
-		*(u8 *)(card->writedma_mem + (module->tx_fifo_pos * 4) +
-			module->timeslot_offset) = *(buf + i);
-
-		module->tx_fifo_pos++;
-
-		if (module->tx_fifo_pos >= module->tx_fifo_size)
-			module->tx_fifo_pos = 0;
-	}
-}
-
-static ssize_t vgsm_chan_leg_write(
-	struct visdn_leg *visdn_leg,
-	const void *buf, size_t count)
-{
-	struct vgsm_module *module = chan_to_module(visdn_leg->chan);
-	struct vgsm_card *card = module->card;
-	size_t copied_octets = 0;
-	int outpos;
-	int used_octs;
-
-	vgsm_card_lock(card);
-
-	outpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
-				card->writedma_bus_mem) / 4;
-
-	used_octs = (module->tx_fifo_pos - outpos + module->tx_fifo_size) %
-			module->tx_fifo_size;
-
-#if 0
-	printk(KERN_DEBUG "U=%d in=%d out=%d count=%d\n",
-		used_octs, module->tx_fifo_pos, outpos, count);
-#endif
-
-	module->tx_fifo_cycles++;
-	if (module->tx_fifo_cycles >= 10) {
-		if (module->tx_fifo_min < VGSM_FIFO_JITBUFF_LOW) {
-			u8 foo = ((u8 *)buf)[0];
-			vgsm_chan_fifo_write(module, &foo, 1);
-
-#if 0
-			printk(KERN_DEBUG "TX FIFO under low-mark:"
-						" added one sample\n");
-#endif
-		}
-
-		module->tx_fifo_cycles = 0;
-		module->tx_fifo_min = INT_MAX;
-		module->tx_fifo_max = 0;
-	}
-
-	if (used_octs > VGSM_FIFO_JITBUFF_HIGHDROP && count > 0) {
-		module->tx_fifo_pos = outpos + VGSM_FIFO_JITBUFF_LOW;
-
-#if 0
-		printk(KERN_DEBUG "FIFO Underrun\n");
-#endif
-
-	} else if (used_octs > VGSM_FIFO_JITBUFF_HIGH && count > 0) {
-		count--;
-
-#if 0
-		printk(KERN_DEBUG "TX FIFO %d over high-mark:"
-				" dropped one sample\n",
-				used_octs);
-#endif
-	}
-
-	vgsm_chan_fifo_write(module, buf, count);
-
-	vgsm_card_unlock(card);
-
-	return copied_octets;
-}
-
-struct visdn_chan_ops vgsm_chan_ops =
-{
-	.owner		= THIS_MODULE,
-
-	.release	= vgsm_chan_release,
-	.open		= vgsm_chan_open,
-	.close		= vgsm_chan_close,
-	.start		= vgsm_chan_start,
-	.stop		= vgsm_chan_stop,
-};
-
-struct visdn_leg_ops vgsm_chan_leg_ops = {
-	.owner		= THIS_MODULE,
-
-	.connect	= vgsm_chan_leg_connect,
-	.disconnect	= vgsm_chan_leg_disconnect,
-
-	.read		= vgsm_chan_leg_read,
-	.write		= vgsm_chan_leg_write,
-};
-
 static void vgsm_module_ack_timeout_timer(unsigned long data)
 {
 	struct vgsm_module *module = (struct vgsm_module *)data;
 
 	printk(KERN_ERR "Timeout waiting for ACK\n");
 
-	kfifo_reset(module->kfifo_tx);
+	kfifo_reset(module->tx.fifo);
 	clear_bit(VGSM_MODULE_STATUS_TX_ACK_PENDING, &module->status);
 
-	wake_up(&module->tx_wait_queue);
+	wake_up(&module->tx.wait_queue);
 	tasklet_schedule(&module->card->tx_tasklet);
 }
 
-void vgsm_micro_init(
-	struct vgsm_micro *micro,
-	struct vgsm_card *card,
-	int id)
+/*------------------------------------------------------------------------*/
+
+static void vgsm_module_rx_chan_release(struct ks_chan *ks_chan)
 {
-	memset(micro, 0, sizeof(*micro));
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
 
-	micro->card = card;
-	micro->id = id;
+	vgsm_debug_module(module, 2, "RX released\n");
 
-	init_completion(&micro->fw_upgrade_ready);
+	vgsm_module_put(module_rx->module);
 }
+
+static int vgsm_module_rx_chan_connect(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+
+	vgsm_debug_module(module, 2, "RX connected\n");
+
+	return 0;
+}
+
+static void vgsm_module_rx_chan_disconnect(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+
+	vgsm_debug_module(module, 2, "RX disconnected\n");
+}
+
+static int vgsm_module_rx_chan_open(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+
+	vgsm_debug_module(module, 1, "RX opened.\n");
+
+	return 0;
+}
+
+static void vgsm_module_rx_chan_close(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+
+	vgsm_debug_module(module, 1, "RX closed.\n");
+}
+
+static int vgsm_module_rx_chan_start(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+	struct vgsm_card *card = module->card;
+
+	vgsm_card_lock(card);
+
+	module_rx->fifo_pos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
+				card->readdma_bus_mem) / 4;
+
+	vgsm_update_mask0(card);
+	vgsm_card_unlock(card);
+
+	vgsm_debug_module(module, 1, "RX started.\n");
+
+	return 0;
+}
+
+static void vgsm_module_rx_chan_stop(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+	struct vgsm_card *card = module->card;
+
+	vgsm_card_lock(card);
+	vgsm_update_mask0(card);
+	vgsm_card_unlock(card);
+
+	vgsm_debug_module(module, 1, "RX stopped.\n");
+}
+
+static void vgsm_module_rx_chan_stimulus(
+	struct ks_chan *ks_chan)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+	struct vgsm_module *module = module_rx->module;
+	struct vgsm_card *card = module->card;
+	size_t copied_octets = 0;
+	int inpos;
+	u8 *bufp;
+
+	struct ks_streamframe *sf;
+
+	sf = ks_sf_alloc();
+	if (!sf)
+		return;
+
+	bufp = sf->data;
+
+	vgsm_card_lock(card);
+
+	inpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
+				card->readdma_bus_mem) / 4;
+
+	while(module_rx->fifo_pos != inpos && copied_octets < sf->size) {
+
+		*bufp++ = *(u8 *)(card->readdma_mem +
+				(module_rx->fifo_pos * 4) +
+				module->timeslot_offset);
+
+		module_rx->fifo_pos++;
+
+		if (module_rx->fifo_pos >= module_rx->fifo_size)
+			module_rx->fifo_pos = 0;
+
+		sf->len++;
+	}
+
+	vgsm_card_unlock(card);
+
+	vss_chan_push_raw(ks_chan, sf);
+
+	ks_sf_put(sf);
+}
+
+
+static struct ks_chan_ops vgsm_module_rx_chan_ops = {
+	.owner		= THIS_MODULE,
+
+	.release	= vgsm_module_rx_chan_release,
+	.connect	= vgsm_module_rx_chan_connect,
+	.disconnect	= vgsm_module_rx_chan_disconnect,
+	.open		= vgsm_module_rx_chan_open,
+	.close		= vgsm_module_rx_chan_close,
+	.start		= vgsm_module_rx_chan_start,
+	.stop		= vgsm_module_rx_chan_stop,
+	.stimulus	= vgsm_module_rx_chan_stimulus,
+};
+
+
+static void vgsm_module_rx_init(
+	struct vgsm_module_rx *module_rx,
+	struct vgsm_module *module)
+{
+	module_rx->module = module;
+
+	module_rx->fifo_pos = 0;
+	module_rx->fifo_size = module->card->readdma_size / 4;
+
+	module_rx->codec_gain = 0xff;
+
+	ks_chan_init(&module_rx->ks_chan,
+			&vgsm_module_rx_chan_ops, "rx",
+			NULL,
+			&module->ks_node.kobj,
+			&module->ks_node,
+			&vss_softswitch.ks_node);
+
+/*	module_rx->ks_chan.framed_mtu = -1;
+	module_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+}
+
+/*----------------------------------------------------------------------------*/
+
+static void vgsm_module_tx_chan_release(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+
+	kfifo_free(module_tx->fifo);
+
+	vgsm_module_put(module);
+}
+
+static int vgsm_module_tx_chan_connect(struct ks_chan *ks_chan)
+{
+	return 0;
+}
+
+static void vgsm_module_tx_chan_disconnect(struct ks_chan *ks_chan)
+{
+}
+
+static int vgsm_module_tx_chan_open(struct ks_chan *ks_chan)
+{
+	return 0;
+}
+
+static void vgsm_module_tx_chan_close(struct ks_chan *ks_chan)
+{
+}
+
+static int vgsm_module_tx_chan_start(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+	struct vgsm_card *card = module->card;
+	int i;
+
+	vgsm_card_lock(card);
+
+	/* Fill FIFO with a-law silence */
+	for(i=module->timeslot_offset; i < card->writedma_size; i+=4)
+		*(u8 *)(card->writedma_mem + i) = 0x2a;
+
+	module_tx->fifo_pos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
+				card->writedma_bus_mem) / 4;
+
+	vgsm_update_mask0(card);
+	vgsm_card_unlock(card);
+
+	vgsm_debug_module(module, 1, "TX module started.\n");
+
+	return 0;
+}
+
+static void vgsm_module_tx_chan_stop(struct ks_chan *ks_chan)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+	struct vgsm_card *card = module->card;
+
+	vgsm_card_lock(card);
+	vgsm_update_mask0(card);
+	vgsm_card_unlock(card);
+
+	vgsm_debug_module(module, 1, "TX module stopped.\n");
+}
+
+static void vgsm_module_fifo_write(
+	struct vgsm_module_tx *module_tx,
+	const u8 *buf,
+	size_t count)
+{
+	struct vgsm_module *module = module_tx->module;
+	struct vgsm_card *card = module->card;
+	int i;
+
+	for (i=0; i<count; i++) {
+		*(u8 *)(card->writedma_mem + (module_tx->fifo_pos * 4) +
+			module->timeslot_offset) = *(buf + i);
+
+		module_tx->fifo_pos++;
+
+		if (module_tx->fifo_pos >= module_tx->fifo_size)
+			module_tx->fifo_pos = 0;
+	}
+}
+
+static ssize_t vgsm_module_tx_chan_push_raw(
+	struct ks_chan *ks_chan,
+	struct ks_streamframe *sf)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+	struct vgsm_card *card = module->card;
+	size_t copied_octets = 0;
+
+	vgsm_card_lock(card);
+
+	vgsm_module_fifo_write(module_tx, sf->data, sf->len);
+
+	vgsm_card_unlock(card);
+
+	return copied_octets;
+}
+
+static int vgsm_module_tx_chan_get_pressure(
+	struct ks_chan *ks_chan)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+	struct vgsm_card *card = module->card;
+	int outpos;
+	int pressure;
+
+	vgsm_card_lock(card);
+
+	outpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
+				card->writedma_bus_mem) / 4;
+
+	pressure = (module_tx->fifo_pos - outpos + module_tx->fifo_size) %
+			module_tx->fifo_size;
+
+	vgsm_card_unlock(card);
+
+	return pressure;
+}
+
+static struct ks_chan_ops vgsm_module_tx_chan_ops = {
+	.owner		= THIS_MODULE,
+
+	.release	= vgsm_module_tx_chan_release,
+	.connect	= vgsm_module_tx_chan_connect,
+	.disconnect	= vgsm_module_tx_chan_disconnect,
+	.open		= vgsm_module_tx_chan_open,
+	.close		= vgsm_module_tx_chan_close,
+	.start		= vgsm_module_tx_chan_start,
+	.stop		= vgsm_module_tx_chan_stop,
+};
+
+static struct vss_chan_ops vgsm_module_tx_node_ops =
+{
+	.push_raw	= vgsm_module_tx_chan_push_raw,
+	.get_pressure	= vgsm_module_tx_chan_get_pressure,
+};
+
+static void vgsm_module_tx_init(
+	struct vgsm_module_tx *module_tx,
+	struct vgsm_module *module)
+{
+	module_tx->module = module;
+
+	spin_lock_init(&module_tx->fifo_lock);
+
+	init_waitqueue_head(&module_tx->wait_queue);
+
+	module_tx->fifo_pos = 0;
+	module_tx->fifo_size = module->card->writedma_size / 4;
+	module_tx->codec_gain = 0xff;
+
+	ks_chan_init(&module_tx->ks_chan,
+			&vgsm_module_tx_chan_ops, "tx",
+			NULL,
+			&module->ks_node.kobj,
+			&vss_softswitch.ks_node,
+			&module->ks_node);
+
+	module_tx->ks_chan.from_ops = &vgsm_module_tx_node_ops;
+/*	module_tx->ks_chan.framed_mtu = -1;
+	module_tx->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+}
+
+static int vgsm_module_rx_register(struct vgsm_module_rx *module)
+{
+	int err;
+
+	err = ks_chan_register(&module->ks_chan);
+	if (err < 0)
+		goto err_chan_register;
+
+	return 0;
+
+	ks_chan_unregister(&module->ks_chan);
+err_chan_register:
+
+	return err;
+}
+
+static void vgsm_module_rx_unregister(struct vgsm_module_rx *module)
+{
+	ks_chan_unregister(&module->ks_chan);
+}
+
+static int vgsm_module_tx_register(struct vgsm_module_tx *module)
+{
+	int err;
+
+	err = ks_chan_register(&module->ks_chan);
+	if (err < 0)
+		goto err_chan_register;
+
+	return 0;
+
+	ks_chan_unregister(&module->ks_chan);
+err_chan_register:
+
+	return err;
+}
+
+static void vgsm_module_tx_unregister(struct vgsm_module_tx *module)
+{
+	ks_chan_unregister(&module->ks_chan);
+}
+
+
+
+
+static void vgsm_module_node_release(struct ks_node *node)
+{
+	struct vgsm_module *module =
+		container_of(node, struct vgsm_module, ks_node);
+
+	printk(KERN_DEBUG "vgsm_module_node_release()\n");
+
+	vgsm_module_put(module);
+}
+
+static struct ks_node_ops vgsm_module_node_ops = {
+	.owner			= THIS_MODULE,
+
+	.release		= vgsm_module_node_release,
+};
 
 void vgsm_module_init(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
 	struct vgsm_micro *micro,
-	int id)
+	int id,
+	const char *name)
 {
 	memset(module, 0, sizeof(*module));
 
@@ -498,47 +638,7 @@ err_kmalloc:
 	return NULL;
 }
 
-static int vgsm_module_rx_register(struct vgsm_module_rx *module)
-{
-	int err;
-
-	err = ks_link_register(&module->ks_link);
-	if (err < 0)
-		goto err_link_register;
-
-	return 0;
-
-	ks_link_unregister(&module->ks_link);
-err_link_register:
-
-	return err;
-}
-
-static void vgsm_module_rx_unregister(struct vgsm_module_rx *module)
-{
-	ks_link_unregister(&module->ks_link);
-}
-
-static int vgsm_module_tx_register(struct vgsm_module_tx *module)
-{
-	int err;
-
-	err = ks_link_register(&module->ks_link);
-	if (err < 0)
-		goto err_link_register;
-
-	return 0;
-
-	ks_link_unregister(&module->ks_link);
-err_link_register:
-
-	return err;
-}
-
-static void vgsm_module_tx_unregister(struct vgsm_module_tx *module)
-{
-	ks_link_unregister(&module->ks_link);
-}
+/*------------------------------------------------------------------------*/
 
 int vgsm_module_register(struct vgsm_module *module)
 {
@@ -585,82 +685,3 @@ void vgsm_module_unregister(struct vgsm_module *module)
 	tty_unregister_device(vgsm_tty_driver,
 			module->card->id * 4 + module->id);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

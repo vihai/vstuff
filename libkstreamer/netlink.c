@@ -27,6 +27,7 @@
 
 #include <libskb.h>
 
+#include "libkstreamer.h"
 #include "netlink.h"
 #include "dynattr.h"
 #include "node.h"
@@ -72,13 +73,13 @@ static const char *ks_netlink_message_type_to_string(
 	case KS_NETLINK_NODE_SET:
 		return "NODE_SET";
 	case KS_NETLINK_CHAN_GET:
-		return "LINK_GET";
+		return "CHAN_GET";
 	case KS_NETLINK_CHAN_NEW:
-		return "LINK_GET";
+		return "CHAN_NEW";
 	case KS_NETLINK_CHAN_DEL:
-		return "LINK_DEL";
+		return "CHAN_DEL";
 	case KS_NETLINK_CHAN_SET:
-		return "LINK_SET";
+		return "CHAN_SET";
 	case KS_NETLINK_PIPELINE_GET:
 		return "PIPELINE_GET";
 	case KS_NETLINK_PIPELINE_NEW:
@@ -135,42 +136,42 @@ int ks_netlink_put_attr(
 
 static void ks_dump_nlh(struct nlmsghdr *nlh)
 {
-	printf("  Message type: %s (%d)\n",
+	fprintf(stderr, "  Message type: %s (%d)\n",
 		ks_netlink_message_type_to_string(nlh->nlmsg_type),
 		nlh->nlmsg_type);
 
-	printf("  PID: %d\n",
+	fprintf(stderr, "  PID: %d\n",
 		nlh->nlmsg_pid);
 
-	printf("  Sequence number: %d\n",
+	fprintf(stderr, "  Sequence number: %d\n",
 		nlh->nlmsg_seq);
 
-	printf("  Flags: ");
+	fprintf(stderr, "  Flags: ");
 	if (nlh->nlmsg_flags & NLM_F_REQUEST)
-		printf("NLM_F_REQUEST ");
+		fprintf(stderr, "NLM_F_REQUEST ");
 	if (nlh->nlmsg_flags & NLM_F_MULTI)
-		printf("NLM_F_MULTI ");
+		fprintf(stderr, "NLM_F_MULTI ");
 	if (nlh->nlmsg_flags & NLM_F_ACK)
-		printf("NLM_F_ACK ");
+		fprintf(stderr, "NLM_F_ACK ");
 	if (nlh->nlmsg_flags & NLM_F_ECHO)
-		printf("NLM_F_ECHO ");
+		fprintf(stderr, "NLM_F_ECHO ");
 	if (nlh->nlmsg_flags & NLM_F_ROOT)
-		printf("NLM_F_ROOT ");
+		fprintf(stderr, "NLM_F_ROOT ");
 	if (nlh->nlmsg_flags & NLM_F_MATCH)
-		printf("NLM_F_MATCH ");
+		fprintf(stderr, "NLM_F_MATCH ");
 	if (nlh->nlmsg_flags & NLM_F_ATOMIC)
-		printf("NLM_F_ATOMIC ");
-	printf("\n");
+		fprintf(stderr, "NLM_F_ATOMIC ");
+	fprintf(stderr, "\n");
 
 	/*
 	__u8 *payload = KS_DATA(nlh);
 	int payload_len = KS_PAYLOAD(nlh);
 	int i;
 
-	printf("  ");
+	fprintf(stderr, "  ");
 	for(i=0; i<payload_len; i++)
-		printf("%02x ", payload[i]);
-	printf("\n");
+		fprintf(stderr, "%02x ", payload[i]);
+	fprintf(stderr, "\n");
 	*/
 }
 
@@ -194,7 +195,7 @@ static int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	msg.msg_iovlen = 1;
 	msg.msg_flags = 0;
 
-	printf("\n"
+	fprintf(stderr, "\n"
 	       ">>>--------- Sending packet len = %d -------->>>\n", skb->len);
 
 	struct nlmsghdr *nlh;
@@ -205,7 +206,7 @@ static int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	     nlh = NLMSG_NEXT(nlh, len_left))
 		ks_dump_nlh(nlh);
 
-	printf(">>>------------------------------------------<<<\n");
+	fprintf(stderr, ">>>------------------------------------------<<<\n");
 
 	int len = sendmsg(conn->sock, &msg, 0);
 	if(len < 0) {
@@ -326,6 +327,9 @@ static void ks_netlink_receive_unicast(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
+	if (conn->cur_xact && nlh->nlmsg_type == KS_NETLINK_BEGIN)
+		conn->cur_xact->autocommit = FALSE;
+
 	switch(conn->state) {
 	case KS_CONN_STATE_NULL:
 		fprintf(stderr, "Unexpected message in state NULL\n");
@@ -416,26 +420,13 @@ static void ks_netlink_receive_unicast(
 	break;
 	}
 
-	switch(nlh->nlmsg_type) {
-	case NLMSG_NOOP:
-	case NLMSG_OVERRUN:
-	break;
-
-	case NLMSG_ERROR:
-		printf("ERRRRRRRRRRRRROR! %d\n", *((int *)NLMSG_DATA(nlh)));
-	break;
-
-	case NLMSG_DONE:
-	break;
-
-	case KS_NETLINK_ABORT:
-	case KS_NETLINK_COMMIT:
+	if (conn->cur_xact &&
+	    (conn->cur_xact->autocommit ||
+	    nlh->nlmsg_type == KS_NETLINK_COMMIT)) {
 
 		conn->cur_xact->state = KS_XACT_STATE_COMPLETED;
-
 		ks_xact_put(conn->cur_xact);
 		conn->cur_xact = NULL;
-	break;
 	}
 }
 
@@ -443,6 +434,7 @@ static void ks_netlink_receive_multicast(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
+	ks_topology_update(conn, nlh);
 }
 
 void ks_netlink_receive_msg(
@@ -454,8 +446,8 @@ void ks_netlink_receive_msg(
 	__u8 *data = NLMSG_DATA(nlh);
 	int i;
 	for(i=0; i<len; i++)
-		printf("%02x ", *(data + i));
-	printf("\n");
+		fprintf(stderr, "%02x ", *(data + i));
+	fprintf(stderr, "\n");
 #endif
 
 	ks_dump_nlh(nlh);
@@ -492,8 +484,8 @@ void ks_netlink_receive(struct ks_conn *conn)
 		return;
 	}
 
-	printf("\n"
-	       "<<<--------- Received packet len = %d --------<<<\n", len);
+	fprintf(stderr, "\n"
+	       "<<<--------- Received packet len = %d groups = %d--------<<<\n", len, src_sa.nl_groups);
 
 	struct nlmsghdr *nlh;
 	int len_left = len;
@@ -503,5 +495,5 @@ void ks_netlink_receive(struct ks_conn *conn)
 	     nlh = NLMSG_NEXT(nlh, len_left))
 		ks_netlink_receive_msg(conn, nlh, &src_sa);
 
-	printf("<<<-------------------------------------------<<<\n");
+	fprintf(stderr, "<<<-------------------------------------------<<<\n");
 }

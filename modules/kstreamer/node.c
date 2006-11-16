@@ -245,7 +245,7 @@ static int ks_node_netlink_notification(
 
 	NETLINK_CB(skb).pid = 0;
 	NETLINK_CB(skb).dst_pid = pid;
-	NETLINK_CB(skb).dst_group = pid ? KS_NETLINK_GROUP_TOPOLOGY : 0;
+	NETLINK_CB(skb).dst_group = pid ? 0 : KS_NETLINK_GROUP_TOPOLOGY;
 
 	err = ks_node_write_to_nlmsg(node, skb, message_type, pid, 0, 0);
 	if (err < 0)

@@ -38,8 +38,11 @@ int debug_level = 0;
 
 static struct pci_device_id vgsm_ids[] = {
 	{ 0xe159, 0x0001, 0xa100, 0x0001, 0, 0, 0 },
-	{ 0xe159, 0x0001, 0xa120, 0x0001, 0, 0, 0 },
 	{ 0xe159, 0x0001, 0xa10d, 0x0001, 0, 0, 0 },
+	{ 0xe159, 0x0001, 0xa110, 0x0001, 0, 0, 0 },
+	{ 0xe159, 0x0001, 0xa120, 0x0001, 0, 0, 0 },
+	{ 0xe159, 0x0001, 0xa130, 0x0001, 0, 0, 0 },
+	{ 0xe159, 0x0001, 0xa149, 0x0001, 0, 0, 0 },
 	{ 0, },
 };
 
@@ -447,20 +450,6 @@ err_copy_from_user:
 	return err;
 }
 
-static void my_fill_kobj_path(struct kobject *kobj, char *path, int length)
-{
-	struct kobject * parent;
-
-	--length;
-	for (parent = kobj; parent; parent = parent->parent) {
-		int cur = strlen(kobject_name(parent));
-		/* back up enough to print this name with '/' */
-		length -= cur;
-		strncpy (path + length, kobject_name(parent), cur);
-		*(path + --length) = '/';
-	}
-}
-
 static int vgsm_tty_ioctl(
 	struct tty_struct *tty,
 	struct file *file,
@@ -478,15 +467,8 @@ static int vgsm_tty_ioctl(
 				(unsigned int *)arg);
 	break;
 
-	case VGSM_IOC_GET_NODEID: {
-		struct vgsm_ctl ctl;
-		my_fill_kobj_path(&module->ks_node.kobj, ctl.node_id,
-						sizeof(ctl.node_id));
-
-		if (copy_to_user(&ctl, (const void *)arg, sizeof(ctl)))
-			return -EFAULT;
-
-	}
+	case VGSM_IOC_GET_NODEID:
+		return put_user(module->ks_node.id, (int __user *)arg);
 	break;
 
 	case VGSM_IOC_CODEC_SET:
@@ -543,7 +525,7 @@ static struct tty_operations vgsm_tty_ops =
 };
 
 /* Do probing type stuff here */
-static int vgsm_probe(struct pci_dev *pci_dev, 
+static int vgsm_probe(struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry)
 {
 	int err;
@@ -571,10 +553,10 @@ static void vgsm_remove(struct pci_dev *pci_dev)
 
 static struct pci_driver vgsm_driver =
 {
-	.name = 	vgsm_DRIVER_NAME,
-	.id_table = 	vgsm_ids,
-	.probe = 	vgsm_probe,
-	.remove =	vgsm_remove,
+	.name		= vgsm_DRIVER_NAME,
+	.id_table	= vgsm_ids,
+	.probe		= vgsm_probe,
+	.remove		= vgsm_remove,
 };
 
 #ifdef DEBUG_CODE

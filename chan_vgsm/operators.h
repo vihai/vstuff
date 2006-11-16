@@ -16,19 +16,31 @@
 
 #include <list.h>
 
+struct vgsm_operator_country
+{
+	struct list_head node;
+
+	__u16 mcc;
+
+	char *name;
+};
+
 struct vgsm_operator_info
 {
 	struct list_head node;
 
-	char id[8];
+	__u16 mcc;
+	__u16 mnc;
+
 	char *name;
 	char *name_short;
-	char *country;
 	char *date;
 	char *bands;
+
+	struct vgsm_operator_country *country;
 };
 
-struct vgsm_operator_info *vgsm_operators_search(const char *id);
+struct vgsm_operator_info *vgsm_operators_search(__u16 mcc, __u16 mnc);
 
 void vgsm_operators_init(void);
 

@@ -13,12 +13,18 @@
 #ifndef _HDLC_FRAMER_H
 #define _HDLC_FRAMER_H
 
-#define HDLC_FRAMER_FLAG_ENABLED	(1 << 0)
-#define HDLC_FRAMER_FLAG_HARDWARE	(1 << 1)
-
 struct hdlc_framer_descr
 {
-	__u32 flags;
+	__u8 hardware:1;
+	__u8 enabled:1;
+	__u32 :30;
+};
+
+struct hdlc_deframer_descr
+{
+	__u8 hardware:1;
+	__u8 enabled:1;
+	__u32 :30;
 };
 
 #endif

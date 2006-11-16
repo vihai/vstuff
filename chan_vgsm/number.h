@@ -39,10 +39,21 @@ enum vgsm_numbering_plan
 	VGSM_NP_RESERVED		= 0xf,
 };
 
+struct vgsm_number
+{
+	char digits[32];
+	enum vgsm_numbering_plan np;
+	enum vgsm_type_of_number ton;
+};
+
 int vgsm_number_parse(
-	const char *num,
-	char *addr, int addr_len,
-	enum vgsm_numbering_plan *np,
-	enum vgsm_type_of_number *ton);
+	struct vgsm_number *number,
+	const char *string);
+
+void vgsm_number_copy(struct vgsm_number *dst, const struct vgsm_number *src);
+const char *vgsm_number_prefix(struct vgsm_number *number);
+
+const char *vgsm_type_of_number_to_text(enum vgsm_type_of_number ton);
+const char *vgsm_numbering_plan_to_text(enum vgsm_numbering_plan np);
 
 #endif

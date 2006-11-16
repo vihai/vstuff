@@ -15,6 +15,28 @@
 
 #include "number.h"
 
+#define VGSM_SMS_MT_DELIVER		0x0
+#define VGSM_SMS_MT_DELIVER_REPORT	0x0
+#define VGSM_SMS_MT_SUBMIT		0x1
+#define VGSM_SMS_MT_SUBMIT_REPORT	0x1
+#define VGSM_SMS_MT_STATUS_REPORT	0x2
+#define VGSM_SMS_MT_COMMAND		0x2
+#define VGSM_SMS_MT_RESERVED		0x3
+
+enum vgsm_sms_udh_iei
+{
+	VGSM_SMS_UDH_IEI_CONCATENATED_SMS		= 0x00,
+	VGSM_SMS_UDH_IEI_SPECIAL_SMS_INDICATION		= 0x01,
+	VGSM_SMS_UDH_IEI_RESERVED			= 0x02,
+	VGSM_SMS_UDH_IEI_NOT_USED			= 0x03,
+	VGSM_SMS_UDH_IEI_APPLICATION_PORT_8		= 0x04,
+	VGSM_SMS_UDH_IEI_APPLICATION_PORT_16		= 0x05,
+	VGSM_SMS_UDH_IEI_SMCC_CONTROL_PARAMETERS	= 0x06,
+	VGSM_SMS_UDH_IEI_UDH_SOURCE_INDICATOR		= 0x07,
+	VGSM_SMS_UDH_IEI_CONCATENATED_16BIT		= 0x08,
+	VGSM_SMS_UDH_IEI_WCMP				= 0x09,
+};
+
 struct vgsm_type_of_address
 {
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -25,48 +47,6 @@ struct vgsm_type_of_address
 	__u8 numbering_plan_identificator:4;
 	__u8 type_of_number:3;
 	__u8 ext:1;
-#else
-#error Unsupported byte order
-#endif
-} __attribute__ ((__packed__));
-
-struct vgsm_sms_deliver_pdu
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-	__u8 tp_rp:1;
-	__u8 tp_udhi:1;
-	__u8 tp_sri:1;
-	__u8 :2;
-	__u8 tp_mms:1;
-	__u8 tp_mti:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
-	__u8 tp_mti:2;
-	__u8 tp_mms:1;
-	__u8 :2;
-	__u8 tp_sri:1;
-	__u8 tp_udhi:1;
-	__u8 tp_rp:1;
-#else
-#error Unsupported byte order
-#endif
-} __attribute__ ((__packed__));
-
-struct vgsm_sms_submit_pdu
-{
-#if __BYTE_ORDER == __BIG_ENDIAN
-	__u8 tp_rp:1;
-	__u8 tp_udhi:1;
-	__u8 tp_srr:1;
-	__u8 tp_vpf:2;
-	__u8 tp_rd:1;
-	__u8 tp_mti:2;
-#elif __BYTE_ORDER == __LITTLE_ENDIAN
-	__u8 tp_mti:2;
-	__u8 tp_rd:1;
-	__u8 tp_vpf:2;
-	__u8 tp_srr:1;
-	__u8 tp_udhi:1;
-	__u8 tp_rp:1;
 #else
 #error Unsupported byte order
 #endif
@@ -280,43 +260,8 @@ struct vgsm_sms_data_coding_scheme_1111
 #endif
 } __attribute__ ((__packed__));
 
-struct vgsm_sms
-{
-	int refcnt;
+const char *vgsm_sms_alphabet_to_text(enum vgsm_sms_dcs_alphabet value);
+const char *vgsm_sms_udh_iei_to_text(int value);
 
-	struct vgsm_module *module;
-
-	char smcc[32];
-	enum vgsm_type_of_number smcc_ton;
-	enum vgsm_numbering_plan smcc_np;
-
-	char sender[32];
-	enum vgsm_type_of_number sender_ton;
-	enum vgsm_numbering_plan sender_np;
-
-	char dest[32];
-	enum vgsm_type_of_number dest_ton;
-	enum vgsm_numbering_plan dest_np;
-
-	time_t timestamp;
-	int timezone;
-
-	int message_class;
-
-	int pdu_len;
-	int pdu_tp_len;
-	void *pdu;
-
-	wchar_t *text;
-};
-
-struct vgsm_sms *vgsm_sms_alloc(void);
-struct vgsm_sms *vgsm_sms_get(struct vgsm_sms *sms);
-void vgsm_sms_put(struct vgsm_sms *sms);
-#define vgsm_sms_put_null(s)	do { vgsm_sms_put(s); s = NULL; } while(0)
-
-struct vgsm_sms *vgsm_decode_sms_pdu(const char *text_pdu);
-int vgsm_sms_spool(struct vgsm_sms *sms);
-int vgsm_sms_prepare(struct vgsm_sms *sms);
 
 #endif

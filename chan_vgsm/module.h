@@ -19,6 +19,7 @@
 
 #include "longtime.h"
 #include "comm.h" 
+#include "number.h" 
 
 enum vgsm_module_status
 {
@@ -26,6 +27,7 @@ enum vgsm_module_status
 	VGSM_MODULE_STATUS_OFF,
 	VGSM_MODULE_STATUS_POWERING_ON,
 	VGSM_MODULE_STATUS_POWERING_OFF,
+	VGSM_MODULE_STATUS_RESETTING,
 	VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
 	VGSM_MODULE_STATUS_INITIALIZING,
 	VGSM_MODULE_STATUS_READY,
@@ -62,22 +64,22 @@ enum vgsm_operator_status
 
 struct vgsm_net_cell
 {
-	int mcc;
-	int mnc;
-	int lac;
-	int id;
-	int bsic;
-	int arfcn;
-	int rx_lev;
+	__u16 mcc;
+	__u16 mnc;
+	__u16 lac;
+	__u16 id;
+	__u16 bsic;
+	__u16 arfcn;
+	__u16 rx_lev;
 };
 
 struct vgsm_counter
 {
 	struct list_head node;
 
-	int location;
-	int reason;
-	int count;
+	__u16 location;
+	__u16 reason;
+	__u32 count;
 };
 
 enum vgsm_call_direction
@@ -122,6 +124,15 @@ struct vgsm_call
 	int channel_assigned;
 
 	int updated;
+
+//	struct vgsm_chan *vgsm_chan;
+};
+
+struct vgsm_cbm_recorded
+{
+	struct list_head node;
+
+	wchar_t *text;
 };
 
 struct vgsm_module;
@@ -136,15 +147,18 @@ struct vgsm_module_config
 	char context[AST_MAX_EXTENSION];
 
 	char pin[16];
-	int rx_gain;
-	int tx_gain;
-	enum vgsm_operator_selection operator_selection;
-	char operator_id[8];
-	BOOL set_clock;
+	__u8 rx_gain;
+	__u8 tx_gain;
 
+	BOOL set_clock;
 	BOOL poweroff_on_exit;
 
-	char sms_service_center[32];
+	enum vgsm_operator_selection operator_selection;
+	__s16 operator_mcc;
+	__s16 operator_mnc;
+
+	struct vgsm_number smcc_address;
+
 	char sms_sender_domain[64];
 	char sms_recipient_address[64];
 
@@ -170,16 +184,19 @@ struct vgsm_module
 
 	char *lockdown_reason;
 	int power_attempts;
+	int failure_count;
+	int failure_attempts;
 
 	struct vgsm_call calls[4];
 
+	struct vgsm_chan *incoming_call;
 	struct vgsm_chan *vgsm_chan;
+	BOOL call_present;
 
 	BOOL sending_sms;
 
+	int fd;
 	struct vgsm_comm comm;
-
-	struct list_head counters;
 
 	pthread_t monitor_thread;
 
@@ -195,11 +212,15 @@ struct vgsm_module
 		char imsi[32];
 		char card_id[32];
 		int remaining_attempts;
+		struct vgsm_number smcc_address;
+
+		struct vgsm_sim *sim;
 	} sim;
 
 	struct {
 		enum vgsm_net_status status;
-		char operator_id[6];
+		__u16 mcc;
+		__u16 mnc;
 
 		struct vgsm_net_cell sci;
 
@@ -219,21 +240,38 @@ struct vgsm_module
 
 		int ncells;
 	} net;
-};
 
-#define vgsm_module_put_null(i)	do { vgsm_module_put(i); i = NULL; } while(0)
+	struct {
+		int inbound;
+		int outbound;
+		struct list_head inbound_counters;
+		struct list_head outbound_counters;
+
+	} stats;
+
+	BOOL debug_sms;
+	BOOL debug_cbm;
+};
 
 extern struct vgsm_urc_class vgsm_module_urcs[];
 
 struct vgsm_module_config *vgsm_module_config_alloc(void);
 struct vgsm_module_config *vgsm_module_config_get(
 	struct vgsm_module_config *module_config);
-void vgsm_module_config_put(struct vgsm_module_config *module_config);
+void _vgsm_module_config_put(struct vgsm_module_config *module_config);
+#define vgsm_module_config_put(module_config) \
+	do {						\
+		_vgsm_module_config_put(module_config);	\
+		(module_config) = NULL;			\
+	} while(0)
+
 void vgsm_module_config_default(struct vgsm_module_config *mc);
 
 struct vgsm_module *vgsm_module_alloc(void);
 struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
-void vgsm_module_put(struct vgsm_module *module);
+void _vgsm_module_put(struct vgsm_module *module);
+#define vgsm_module_put(module) \
+	do { _vgsm_module_put(module); (module) = NULL; } while(0)
 
 struct vgsm_module *vgsm_module_get_by_name(const char *name);
 
@@ -250,12 +288,14 @@ void vgsm_module_set_status_reason(
 
 void vgsm_module_reload(struct ast_config *cfg);
 
-void vgsm_module_hangup(struct vgsm_module *module);
+void vgsm_module_chup_complete(struct vgsm_req *req, void *data);
+
 void vgsm_module_counter_inc(
 	struct vgsm_module *module,
+	BOOL outbound,
 	int location,
 	int reason);
-void vgsm_module_unexpected_error(struct vgsm_module *module, int err);
+void vgsm_module_failure(struct vgsm_module *module, int err);
 
 const char *vgsm_module_error_to_text(int code);
 

@@ -26,15 +26,20 @@
 
 void ks_update_topology(struct ks_conn *conn);
 
-/*struct ks_xact *ks_send_topology_update_req(
-	struct ks_conn *conn, int *err);*/
-
-int ks_send_noop(struct ks_conn *conn);
-
 struct ks_pipeline *ks_connect(
 	struct ks_conn *conn,
 	struct ks_node *src_node,
 	struct ks_node *dst_node,
 	int *err);
+
+#ifdef _LIBKSTREAMER_PRIVATE_
+
+int ks_send_noop(struct ks_conn *conn);
+
+void ks_topology_update(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+#endif
 
 #endif

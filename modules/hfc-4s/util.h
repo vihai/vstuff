@@ -59,6 +59,7 @@ extern int debug_level;
 enum hfc_direction { RX = 0, TX = 1 };
 
 extern struct ks_dynattr *hfc_hdlc_framer_class;
+extern struct ks_dynattr *hfc_hdlc_deframer_class;
 extern struct ks_dynattr *hfc_octet_reverser_class;
 
 #endif

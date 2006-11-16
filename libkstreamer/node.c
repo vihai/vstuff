@@ -176,7 +176,7 @@ struct ks_node *ks_node_create_from_nlmsg(struct nlmsghdr *nlh)
 			struct ks_dynattr *dynattr;
 			dynattr = ks_dynattr_get_by_id(attr->type);
 			if (!dynattr) {
-				printf("   Attribute %d unknown\n", attr->type);
+				fprintf(stderr, "   Attribute %d unknown\n", attr->type);
 				break;
 			}
 
@@ -212,12 +212,12 @@ void ks_node_update_from_nlmsg(struct ks_node *node, struct nlmsghdr *nlh)
 
 void ks_node_dump(struct ks_node *node)
 {
-	printf("  ID    : 0x%08x\n", node->id);
-	printf("  Path  : '%s'\n", node->path);
+	fprintf(stderr, "  ID    : 0x%08x\n", node->id);
+	fprintf(stderr, "  Path  : '%s'\n", node->path);
 
 	int i;
 	for (i=0; i<node->dynattrs_cnt; i++) {
-		printf("  Dynattr: %s\n", node->dynattrs[i]->name);
+		fprintf(stderr, "  Dynattr: %s\n", node->dynattrs[i]->name);
 	}
 }
 

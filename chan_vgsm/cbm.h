@@ -13,7 +13,7 @@
 #ifndef _VGSM_CBM_H
 #define _VGSM_CBM_H
 
-enum vgsm_cbm_serial_geoscopes
+enum vgsm_cbm_geoscopes
 {
 	VGSM_CBM_GS_IMMEDIATE_CELL		= 0x0,
 	VGSM_CBM_GS_NORMAL_PLMN			= 0x1,
@@ -48,6 +48,26 @@ struct vgsm_cbm_data_coding_scheme
 #error Unsupported byte order
 #endif
 } __attribute__ ((__packed__));
+
+enum vgsm_cbm_dcs_language
+{
+	VGSM_CBM_DCS_LANG_GERMAN	= 0x0,
+	VGSM_CBM_DCS_LANG_ENGLISH	= 0x1,
+	VGSM_CBM_DCS_LANG_ITALIAN	= 0x2,
+	VGSM_CBM_DCS_LANG_FRENCH	= 0x3,
+	VGSM_CBM_DCS_LANG_SPANISH	= 0x4,
+	VGSM_CBM_DCS_LANG_DUTCH		= 0x5,
+	VGSM_CBM_DCS_LANG_SWEDISH	= 0x6,
+	VGSM_CBM_DCS_LANG_DANISH	= 0x7,
+	VGSM_CBM_DCS_LANG_PORTUGUESE	= 0x8,
+	VGSM_CBM_DCS_LANG_FINNISH	= 0x9,
+	VGSM_CBM_DCS_LANG_NORWEGIAN	= 0xa,
+	VGSM_CBM_DCS_LANG_GREEK		= 0xb,
+	VGSM_CBM_DCS_LANG_TURKISH	= 0xc,
+	VGSM_CBM_DCS_LANG_HUNGARIAN	= 0xd,
+	VGSM_CBM_DCS_LANG_POLISH	= 0xe,
+	VGSM_CBM_DCS_LANG_UNSPECIFIED	= 0xf
+};
 
 struct vgsm_cbm_data_coding_scheme_0000
 {
@@ -149,9 +169,12 @@ struct vgsm_cbm
 {
 	int refcnt;
 
-	struct vgsm_interface *intf;
+	struct vgsm_module *module;
 
-	enum vgsm_cbm_serial_geoscopes geoscope;
+	int pdu_len;
+	void *pdu;
+
+	enum vgsm_cbm_geoscopes geoscope;
 	int message_code;
 	int update_number;
 
@@ -160,8 +183,12 @@ struct vgsm_cbm
 	int pages;
 	int page;
 
-	int pdu_len;
-	void *pdu;
+
+	int coding_group;
+	enum vgsm_cbm_dcs_language language;
+	BOOL compressed;
+	int message_class;
+	enum vgsm_cbm_dcs_alphabet alphabet;
 
 	wchar_t *text;
 };
@@ -170,5 +197,10 @@ struct vgsm_cbm *vgsm_cbm_alloc(void);
 struct vgsm_cbm *vgsm_cbm_get(struct vgsm_cbm *cbm);
 void vgsm_cbm_put(struct vgsm_cbm *cbm);
 struct vgsm_cbm *vgsm_decode_cbm_pdu(const char *text_pdu);
+void vgsm_cbm_dump(struct vgsm_cbm *cbm);
+
+const char *vgsm_cbm_geoscope_to_text(enum vgsm_cbm_geoscopes gs);
+const char *vgsm_cbm_language_to_text(enum vgsm_cbm_dcs_language value);
+const char *vgsm_cbm_alphabet_to_text(enum vgsm_cbm_dcs_alphabet value);
 
 #endif

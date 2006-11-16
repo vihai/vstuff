@@ -7,9 +7,16 @@ SHELL = @SHELL@
 kblddir = @kblddir@
 DIST_COMMON = Makefile.in Kbuild
 
-SUBDIRS= kstreamer visdn hfc-4s softswitch netdev lapd userport \
-	milliwatt
-#	vgsm
+SUBDIRS=\
+	kstreamer		\
+	visdn			\
+	hfc-4s			\
+	softswitch		\
+	netdev			\
+	lapd			\
+	userport		\
+	milliwatt		\
+	vgsm
 #ec hfc-pci hfc-usb hfc-e1 kfifo \
 #	 ppp
 
@@ -33,6 +40,11 @@ install: makefiles Kbuild
 
 clean: makefiles Kbuild
 	$(MAKE) -C $(kblddir) clean M=${abssrcdir}
+
+distclean: clean
+	rm Makefile
+	rm Kbuild
+	rm Modules.symvers
 
 Kbuild: Makefile
 	echo "" > Kbuild

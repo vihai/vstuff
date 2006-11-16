@@ -27,7 +27,7 @@
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/pipeline.h>
 
@@ -49,7 +49,7 @@ static void vgsm_read_msg(
 	msg->raw[4] = ioread8(card->io_mem + VGSM_PIB_D0);
 	msg->raw[5] = ioread8(card->io_mem + VGSM_PIB_D4);
 	msg->raw[6] = ioread8(card->io_mem + VGSM_PIB_D8);
-	msg->raw[7] = ioread8(card->io_mem + VGSM_PIB_DC);	
+	msg->raw[7] = ioread8(card->io_mem + VGSM_PIB_DC);
 
 #if 0
 	printk(KERN_DEBUG "RX MSG: %02x %02x %02x %02x %02x %02x %02x %02x\n",
@@ -89,28 +89,28 @@ void vgsm_write_msg(
 	iowrite8(msg->raw[7], card->io_mem + VGSM_PIB_DC);
 }
 
-/*
+#if 0
 static void vgsm_send_codec_resync(
 	struct vgsm_card *card,
-	u8 reg_address, 
+	u8 reg_address,
 	u8 reg_data)
 {
 	struct vgsm_micro_message msg = { };
-	
+
 	msg.cmd = VGSM_CMD_MAINT;
 	msg.cmd_dep = VGSM_CMD_MAINT_CODEC_SET;
 	msg.numbytes = 2;
-	
+
 	msg.payload[0] = 0x00;
 	msg.payload[1] = 0x00;
 
 	vgsm_send_msg(card, 0, &msg);
 }
-*/
+#endif
 
 static void vgsm_send_codec_setreg(
 	struct vgsm_card *card,
-	u8 reg_address, 
+	u8 reg_address,
 	u8 reg_data)
 {
 	struct vgsm_micro_message msg = { };
@@ -118,7 +118,7 @@ static void vgsm_send_codec_setreg(
 	msg.cmd = VGSM_CMD_MAINT;
 	msg.cmd_dep = VGSM_CMD_MAINT_CODEC_SET;
 	msg.numbytes = 2;
-	
+
 	msg.payload[0] = reg_address | 0x40;
 	msg.payload[1] = reg_data;
 
@@ -126,17 +126,17 @@ static void vgsm_send_codec_setreg(
 	vgsm_send_msg(&card->micros[0], &msg);
 	vgsm_card_unlock(card);
 }
-	
+
 static void vgsm_send_codec_getreg(
 	struct vgsm_card *card,
 	u8 reg_address)
 {
 	struct vgsm_micro_message msg = { };
-	
+
 	msg.cmd = VGSM_CMD_MAINT;
 	msg.cmd_dep = VGSM_CMD_MAINT_CODEC_GET;
 	msg.numbytes = 1;
-	
+
 	msg.payload[0] = reg_address | 0x80 | 0x40;
 
 	vgsm_send_msg(&card->micros[0], &msg);
@@ -153,8 +153,9 @@ void vgsm_update_mask0(struct vgsm_card *card)
 
 	for(i=0; i<card->num_modules; i++) {
 
-		if (card->modules[i]->rx.ks_link.pipeline->status ==
-			KS_PIPELINE_STATUS_FLOWING) {
+		if (card->modules[i]->rx.ks_chan.pipeline &&
+		    card->modules[i]->rx.ks_chan.pipeline->status ==
+					KS_PIPELINE_STATUS_FLOWING) {
 
 			card->regs.mask0 |=
 				VGSM_INT1STAT_WR_REACH_INT |
@@ -181,7 +182,7 @@ void vgsm_update_codec(struct vgsm_module *module)
 					module->rx.codec_gain);
 
 		card->regs.codec_loop &= ~(VGSM_CODEC_LOOPB_AL0 |
-			       		VGSM_CODEC_LOOPB_DL0);
+					VGSM_CODEC_LOOPB_DL0);
 
 		if (module->anal_loop)
 			card->regs.codec_loop |= VGSM_CODEC_LOOPB_AL0;
@@ -290,7 +291,7 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 
 				u8 buf[7];
 				int bytes_to_send =
-				       	__kfifo_get(module->tx.fifo, buf, 7);
+					__kfifo_get(module->tx.fifo, buf, 7);
 
 				wake_up(&module->tx.wait_queue);
 
@@ -340,15 +341,15 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		VGSM_AUXC_4_IN |
 		VGSM_AUXC_5_IN |
 		VGSM_AUXC_6_IN |
-		VGSM_AUXC_7_IN); 
+		VGSM_AUXC_7_IN);
 
 	/* Configure serial port for MSB->LSB operation */
 	vgsm_outb(card, VGSM_SERCTL,
 		VGSM_SERCTL_SHIFT_IN_MSB_FIRST |
-		VGSM_SERCTL_SHIFT_OUT_MSB_FIRST); 
+		VGSM_SERCTL_SHIFT_OUT_MSB_FIRST);
 
 	/* Delay FSC by 0 so it's properly aligned */
-	vgsm_outb(card, VGSM_FSCDELAY, 0x0); 
+	vgsm_outb(card, VGSM_FSCDELAY, 0x0);
 
 	/* Setup DMA bus addresses on Tiger 320*/
 
@@ -358,7 +359,7 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_outl(card, VGSM_DMA_WR_END,
 		cpu_to_le32(card->writedma_bus_mem + card->writedma_size - 4));
 
-	vgsm_outl(card, VGSM_DMA_RD_START, cpu_to_le32(card->readdma_bus_mem));	
+	vgsm_outl(card, VGSM_DMA_RD_START, cpu_to_le32(card->readdma_bus_mem));
 	vgsm_outl(card, VGSM_DMA_RD_INT,
 		cpu_to_le32(card->readdma_bus_mem + card->readdma_size / 2));
 	vgsm_outl(card, VGSM_DMA_RD_END,
@@ -531,14 +532,14 @@ printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
 	}
 }
 
-static irqreturn_t vgsm_interrupt(int irq, 
-	void *dev_id, 
+static irqreturn_t vgsm_interrupt(int irq,
+	void *dev_id,
 	struct pt_regs *regs)
 {
 	struct vgsm_card *card = dev_id;
 	u8 int0stat;
 	u8 int1stat;
-	
+
 	if (unlikely(!card)) {
 		vgsm_msg(KERN_CRIT,
 			"spurious interrupt (IRQ %d)\n",
@@ -657,7 +658,7 @@ void vgsm_codec_reset(
 		VGSM_CODEC_CONFIG_AMU_ALAW);
 //		VGSM_CODEC_CONFIG_STA);
 	mb();
-	
+
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_DIR_0,
 		VGSM_CODEC_DIR_0_IO_0);
@@ -681,19 +682,19 @@ void vgsm_codec_reset(
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_DXA3,
 		VGSM_CODEC_DXA3_ENA | VGSM_CODEC_DXA3_TS(3));
-	
+
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_DRA0,
 		VGSM_CODEC_DRA0_ENA | VGSM_CODEC_DRA0_TS(0));
-	
+
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_DRA1,
 		VGSM_CODEC_DRA1_ENA | VGSM_CODEC_DRA1_TS(1));
-	
+
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_DRA2,
 		VGSM_CODEC_DRA2_ENA | VGSM_CODEC_DRA2_TS(2));
-	
+
 	vgsm_send_codec_setreg(card,
 		VGSM_CODEC_DRA3,
 		VGSM_CODEC_DRA3_ENA | VGSM_CODEC_DRA3_TS(3));
@@ -707,7 +708,7 @@ void vgsm_codec_reset(
 static struct vgsm_card *vgsm_card_alloc(void)
 {
 	struct vgsm_card *card;
-	
+
 	card = kmalloc(sizeof(*card), GFP_KERNEL);
 	if (!card)
 		return NULL;
@@ -777,7 +778,7 @@ static void vgsm_card_init(
 }
 
 int vgsm_card_probe(
-	struct pci_dev *pci_dev, 
+	struct pci_dev *pci_dev,
 	const struct pci_device_id *ent)
 {
 	struct vgsm_card *card;
@@ -851,7 +852,7 @@ int vgsm_card_probe(
 		card->io_bus_mem, card->io_mem);
 
 
-	/* Allocate enough DMA memory for 4 modules, receive and transmit.  
+	/* Allocate enough DMA memory for 4 modules, receive and transmit.
 	* Each sample written by PCI bridge is 32 bits, 8 bits/module */
 
 	/* READ DMA */
@@ -958,7 +959,7 @@ err_request_irq:
 	card->writedma_mem, card->writedma_bus_mem);
 err_alloc_writedma:
 	pci_free_consistent(pci_dev, card->readdma_size,
-	card->readdma_mem, card->readdma_bus_mem);		
+	card->readdma_mem, card->readdma_bus_mem);
 err_alloc_readdma:
 	iounmap(card->io_mem);
 err_ioremap:
@@ -976,7 +977,7 @@ err_module_register:
 	kfree(card);
 err_card_alloc:
 
-	return err;	
+	return err;
 }
 
 void vgsm_card_remove(struct vgsm_card *card)
@@ -1061,7 +1062,7 @@ void vgsm_card_remove(struct vgsm_card *card)
 		 card->writedma_mem, card->writedma_bus_mem);
 
 	pci_free_consistent(card->pci_dev, card->readdma_size,
-		card->readdma_mem, card->readdma_bus_mem);				
+		card->readdma_mem, card->readdma_bus_mem);
 	/* Unmap */
 	iounmap(card->io_mem);
 

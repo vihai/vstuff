@@ -11,34 +11,99 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "util.h"
 #include "number.h"
 
+const char *vgsm_type_of_number_to_text(enum vgsm_type_of_number ton)
+{
+	switch(ton) {
+	case VGSM_TON_UNKNOWN:
+		return "Unknown";
+	case VGSM_TON_INTERNATIONAL:
+		return "International";
+	case VGSM_TON_NATIONAL:
+		return "National";
+	case VGSM_TON_NETWORK_SPECIFIC:
+		return "Network specific";
+	case VGSM_TON_SUBSCRIBER:
+		return "Subscriber";
+	case VGSM_TON_ALPHANUMERIC:
+		return "Alphanumeric";
+	case VGSM_TON_ABBREVIATED:
+		return "Abbreviated";
+	case VGSM_TON_RESERVED:
+		return "Reserved";
+	default:
+		return "*UNKNOWN*";
+	}
+}
+
+const char *vgsm_numbering_plan_to_text(enum vgsm_numbering_plan np)
+{
+	switch(np) {
+	case VGSM_NP_UNKNOWN:
+		return "Unknown";
+	case VGSM_NP_ISDN:
+		return "ISDN telephony";
+	case VGSM_NP_DATA:
+		return "Data";
+	case VGSM_NP_TELEX:
+		return "Telex";
+	case VGSM_NP_NATIONAL:
+		return "National";
+	case VGSM_NP_PRIVATE:
+		return "Private";
+	case VGSM_NP_ERMES:
+		return "ERMES";
+	case VGSM_NP_RESERVED:
+		return "Reserved";
+	default:
+		return "*UNKNOWN*";
+	}
+}
+
 int vgsm_number_parse(
-	const char *num,
-	char *addr, int addr_len,
-	enum vgsm_numbering_plan *np,
-	enum vgsm_type_of_number *ton)
+	struct vgsm_number *number,
+	const char *string)
 {
 	// FIXME TODO: Better validity checking
 
-	assert(num);
-	assert(addr);
-	assert(np);
-	assert(ton);
+	assert(number);
+	assert(string);
 
-	*np = VGSM_NP_ISDN;
+	number->np = VGSM_NP_ISDN;
 
-	if (num[0] == '+') {
-		strncpy(addr, num + 1, addr_len);
-		*ton = VGSM_TON_INTERNATIONAL;
+	if (string[0] == '+') {
+		strncpy(number->digits, string + 1, sizeof(number->digits));
+		number->ton = VGSM_TON_INTERNATIONAL;
 	} else {
-		strncpy(addr, num, addr_len);
-		*ton = VGSM_TON_NATIONAL;
+		strncpy(number->digits, string, sizeof(number->digits));
+		number->ton = VGSM_TON_NATIONAL;
 	}
 
 	return 0;
 }
 
+void vgsm_number_copy(struct vgsm_number *dst, const struct vgsm_number *src)
+{
+	assert(dst);
+	assert(src);
+
+	memcpy(dst, src, sizeof(*dst));
+}
+
+const char *vgsm_number_prefix(struct vgsm_number *number)
+{
+	/* We probably need to handle national numbers but they are
+	 * currently unused in our test networks
+	 */
+
+	if ((number->np == VGSM_NP_ISDN || number->np == VGSM_NP_UNKNOWN) &&
+	    number->ton == VGSM_TON_INTERNATIONAL)
+		return "+";
+	else
+		return "";
+}

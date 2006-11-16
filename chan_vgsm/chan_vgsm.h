@@ -17,6 +17,7 @@
 #define VGSM_CHAN_TYPE "VGSM"
 #define VGSM_CONFIG_FILE "vgsm.conf"
 #define VGSM_OP_CONFIG_FILE "vgsm_operators.conf"
+#define VGSM_OP_COUNTRY_CONFIG_FILE "vgsm_countries.conf"
 
 #include <asterisk/channel.h>
 
@@ -31,21 +32,30 @@
 
 struct vgsm_chan {
 	int refcnt; /* workaround for missing asterisk refcounting */
+	ast_cond_t refcnt_decremented_cond;
 
 	struct ast_channel *ast_chan;
+
+	BOOL outbound;
 
 	struct vgsm_module *module;
 	struct vgsm_module_config *mc;
 
-	int sp_fd;
+	struct vgsm_huntgroup *huntgroup;
+	struct vgsm_module *hg_first_module;
 
-	char sp_node_id[80];
-	char module_node_id[80];
+	int up_fd;
 
-	int sp_module_pipeline_id;
-	int module_sp_pipeline_id;
+	struct ks_node *up_node;
+	struct ks_node *module_node;
+
+	struct ks_pipeline *rx_pipeline;
+	struct ks_pipeline *tx_pipeline;
 
 	char calling_number[21];
+
+	struct ast_frame frame_out;
+	__u8 frame_out_buf[512];
 
 	struct ast_dsp *dsp;
 };
@@ -57,23 +67,31 @@ struct vgsm_state
 	struct vgsm_module_config *default_mc;
 	struct list_head ifs;
 
+	struct list_head huntgroups_list;
+
+	struct list_head op_countries_list;
 	struct list_head op_list;
 
 	ast_mutex_t usecnt_lock;
 	int usecnt;
 
-	int router_control_fd;
+	struct ks_conn *ks_conn;
 
-	int debug_generic;
-	int debug_serial;
+	BOOL debug_generic;
+	BOOL debug_timer;
 
 	char sms_spooler[32];
 	char sms_spooler_pars[32];
 };
 
 struct vgsm_chan *vgsm_chan_get(struct vgsm_chan *vgsm_chan);
-void vgsm_chan_put(struct vgsm_chan *vgsm_chan);
+void _vgsm_chan_put(struct vgsm_chan *vgsm_chan);
+#define vgsm_chan_put(vgsm_chan) \
+	do { _vgsm_chan_put(vgsm_chan); (vgsm_chan) = NULL; } while(0)
+
 struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module);
+
+void vgsm_ast_chan_destroy(struct ast_channel *ast_chan);
 
 static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)
 {

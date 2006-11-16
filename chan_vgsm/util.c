@@ -125,6 +125,7 @@ int char_to_hexdigit(char c)
 const char *get_token(const char **s, char *token, int token_size)
 {
 	const char *p = *s;
+	const char *old_s = *s;
 	char *token_p = token;
 
 	for(;;) {
@@ -142,8 +143,10 @@ const char *get_token(const char **s, char *token, int token_size)
 				p++;
 		}
 
-		if (!*p)
+		if (!*p) {
+			*s = p;
 			break;
+		}
 
 		if (*p == ',') {
 			*s = p + 1;
@@ -156,6 +159,9 @@ const char *get_token(const char **s, char *token, int token_size)
 		if (token_p == token + token_size - 2)
 			break;
 	}
+
+	if (*s == old_s)
+		return NULL;
 
 	*token_p = '\0';
 

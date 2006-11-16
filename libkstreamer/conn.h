@@ -52,6 +52,9 @@ struct ks_conn
 
 	struct ks_xact *cur_xact;
 	struct ks_req *cur_req;
+
+	void (*xact_wait)(struct ks_xact *xact);
+	void (*req_wait)(struct ks_req *req);
 };
 
 struct ks_req;
@@ -59,6 +62,8 @@ struct ks_req;
 struct ks_conn *ks_conn_create(void);
 void ks_conn_destroy(struct ks_conn *conn);
 void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
+
+int ks_conn_sync(struct ks_conn *conn);
 
 void ks_conn_set_state(
 	struct ks_conn *conn,

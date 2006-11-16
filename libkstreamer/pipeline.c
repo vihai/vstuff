@@ -161,9 +161,9 @@ static const char *ks_pipeline_status_to_string(
 
 void ks_pipeline_dump(struct ks_pipeline *pipeline)
 {
-	printf("  ID    : 0x%08x\n", pipeline->id);
-	printf("  Path  : '%s'\n", pipeline->path);
-	printf("  Status: %s\n",
+	fprintf(stderr, "  ID    : 0x%08x\n", pipeline->id);
+	fprintf(stderr, "  Path  : '%s'\n", pipeline->path);
+	fprintf(stderr, "  Status: %s\n",
 		ks_pipeline_status_to_string(pipeline->status));
 
 	int i;
@@ -171,14 +171,14 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 
 		struct ks_chan *chan = pipeline->chans[i];
 
-		printf("%s =>(%s)=> %s\n",
+		fprintf(stderr, "%s =>(%s)=> %s\n",
 			chan->from->path,
 			chan->path,
 			chan->to->path);
 
 		struct ks_dynattr_instance *dynattr;
 		list_for_each_entry(dynattr, &chan->dynattrs, node) {
-			printf("  DynAttr: %s\n", dynattr->dynattr->name);
+			fprintf(stderr, "  DynAttr: %s\n", dynattr->dynattr->name);
 		}
 	}
 }
@@ -217,7 +217,7 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(struct nlmsghdr *nlh)
 		break;
 
 		default:
-			printf("   Attribute '%s'\n",
+			fprintf(stderr, "   Attribute '%s'\n",
 				ks_netlink_pipeline_attr_to_string(
 					attr->type));
 		}
@@ -256,7 +256,7 @@ void ks_pipeline_update_from_nlmsg(
 		break;
 
 		default:
-			printf("   Attribute '%s'\n",
+			fprintf(stderr, "   Attribute '%s'\n",
 				ks_netlink_pipeline_attr_to_string(
 					attr->type));
 		}
@@ -340,15 +340,11 @@ int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
 		goto err_xact_alloc;
 	}
 
-	err = ks_xact_begin(xact);
-	if (err < 0)
-		goto err_xact_begin;
-
 	struct ks_req *req;
 	req = ks_pipeline_queue_create(pipeline, xact);
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	if (req->err < 0) {
 		err = req->err;
@@ -361,15 +357,9 @@ int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
 
 	ks_req_put(req);
 
-	err = ks_xact_commit(xact);
-	if (err < 0)
-		goto err_xact_commit;
-
 	return 0;
 
-err_xact_commit:
 err_create_failed:
-err_xact_begin:
 	ks_xact_put(xact);
 err_xact_alloc:
 
@@ -450,15 +440,11 @@ int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn)
 		goto err_xact_alloc;
 	}
 
-	err = ks_xact_begin(xact);
-	if (err < 0)
-		goto err_xact_begin;
-
 	struct ks_req *req;
 	req = ks_pipeline_queue_update(pipeline, xact);
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	if (req->err < 0) {
 		err = req->err;
@@ -471,15 +457,9 @@ int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn)
 
 	ks_req_put(req);
 
-	err = ks_xact_commit(xact);
-	if (err < 0)
-		goto err_xact_commit;
-
 	return 0;
 
-err_xact_commit:
 err_update_failed:
-err_xact_begin:
 	ks_xact_put(xact);
 err_xact_alloc:
 
@@ -553,15 +533,11 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn)
 		goto err_xact_alloc;
 	}
 
-	err = ks_xact_begin(xact);
-	if (err < 0)
-		goto err_xact_begin;
-
 	struct ks_req *req;
 	req = ks_pipeline_queue_destroy(pipeline, xact);
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	if (req->err < 0) {
 		err = req->err;
@@ -574,15 +550,9 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn)
 
 	ks_req_put(req);
 
-	err = ks_xact_commit(xact);
-	if (err < 0)
-		goto err_xact_commit;
-
 	return 0;
 
-err_xact_commit:
 err_destroy_failed:
-err_xact_begin:
 	ks_xact_put(xact);
 err_xact_alloc:
 
@@ -614,7 +584,7 @@ int ks_pipeline_update_chans(
 		req = ks_chan_queue_update(chan, xact);
 
 		ks_xact_run(xact);
-		ks_req_waitloop(req);
+		ks_req_wait(req);
 
 		if (req->err < 0) {
 			err = req->err;

@@ -15,8 +15,6 @@
 #ifndef _VGSM_H
 #define _VGSM_H
 
-#include <linux/spinlock.h>
-
 #define VGSM_IOC_GET_NODEID		_IOR(0xd1, 0, unsigned int)
 #define VGSM_IOC_CODEC_SET		_IOR(0xd1, 1, unsigned int)
 #define VGSM_IOC_POWER_GET		_IOR(0xd1, 2, unsigned int)
@@ -55,6 +53,8 @@ enum vgsm_codec_parameter
 };
 
 #ifdef __KERNEL__
+
+#include <linux/spinlock.h>
 
 #define vgsm_DRIVER_NAME "vgsm-pci"
 #define vgsm_DRIVER_PREFIX vgsm_DRIVER_NAME ": "

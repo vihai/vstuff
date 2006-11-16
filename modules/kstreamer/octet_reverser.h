@@ -13,12 +13,11 @@
 #ifndef _OCTET_REVERSER_H
 #define _OCTET_REVERSER_H
 
-#define OCTET_REVERSER_FLAG_ENABLED	(1 << 0)
-#define OCTET_REVERSER_FLAG_HARDWARE	(1 << 1)
-
 struct octet_reverser_descr
 {
-	__u32 flags;
+	__u8 hardware:1;
+	__u8 enabled:1;
+	__u32 :30;
 };
 
 #endif

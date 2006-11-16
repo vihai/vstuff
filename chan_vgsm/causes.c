@@ -199,6 +199,9 @@ static const char *vgsm_cause_reason_8_to_text(int cause)
 		return "No route to destination";
 	case 6:
 		return "Channel unacceptable";
+	case 7:
+		return "Call awarded and being delivered in an established"
+			" channel";
 	case 8:
 		return "Operator determined barring";
 	case 16:
@@ -255,6 +258,8 @@ static const char *vgsm_cause_reason_8_to_text(int cause)
 		return "Service or option not available, unspecified";
 	case 65:
 		return "Bearer service not implemented";
+	case 66:
+		return "Channel type not implemented";
 	case 68:
 		return "ACM equal or greater than ACMmax";
 	case 69:
@@ -266,6 +271,18 @@ static const char *vgsm_cause_reason_8_to_text(int cause)
 		return "service or option not implemented, unspecified";
 	case 81:
 		return "Invalid transaction identifier value";
+	case 82:
+		return "Identified channel does not exist";
+	case 83:
+		return " A suspended call exists, but this call identity does"
+			" not";
+	case 84:
+		return "Call identity in use";
+	case 85:
+		return "No call suspended";
+	case 86:
+		return "Call having the requested call identity has been"
+			" cleared";
 	case 87:
 		return "User not member of CUG";
 	case 88:
@@ -762,29 +779,7 @@ const char *vgsm_cause_location_to_text(int location)
 	case 248:
 		return "SIEMENS cause for IP via AT commands";
 	case 1000:
-		return "Asterisk";
-	default:
-		return "*UNKNOWN*";
-	}
-}
-
-static const char *vgsm_cause_reason_1000_to_text(int cause)
-{
-	switch(cause) {
-	case VGSM_CAUSE_REASON_NORMAL_CALL_CLEARING:
-		return "Normal call clearing";
-	case VGSM_CAUSE_REASON_NO_RESOURCES:
-		return "No resources";
-	case VGSM_CAUSE_REASON_SLCC_ERROR:
-		return "Unexpected SLCC error";
-	case VGSM_CAUSE_REASON_MODULE_NOT_READY:
-		return "Module not ready";
-	case VGSM_CAUSE_REASON_UNSUPPORTED_BEARER_TYPE:
-		return "Unsupported bearer type";
-	case VGSM_CAUSE_REASON_USER_BUSY:
-		return "User busy";
-	case VGSM_CAUSE_REASON_CONGESTION:
-		return "Congestion";
+		return "Local";
 	default:
 		return "*UNKNOWN*";
 	}
@@ -839,7 +834,8 @@ const char *vgsm_cause_reason_to_text(int location, int cause)
 		return vgsm_cause_reason_248_to_text(cause);
 
 	case 1000:
-		return vgsm_cause_reason_1000_to_text(cause);
+		/* Same encoding as 8, standard L3 causes */
+		return vgsm_cause_reason_8_to_text(cause);
 	default:
 		return NULL;
 	}

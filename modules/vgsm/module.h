@@ -20,7 +20,7 @@
 
 #include <linux/kstreamer/kstreamer.h>
 #include <linux/kstreamer/node.h>
-#include <linux/kstreamer/link.h>
+#include <linux/kstreamer/channel.h>
 
 enum vgsm_module_status
 {
@@ -35,7 +35,7 @@ struct vgsm_card;
 
 struct vgsm_module_rx
 {
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	struct vgsm_module *module;
 
@@ -47,10 +47,10 @@ struct vgsm_module_rx
 
 struct vgsm_module_tx
 {
-	struct ks_link ks_link;
+	struct ks_chan ks_chan;
 
 	struct vgsm_module *module;
-	
+
 	int fifo_pos;
 	int fifo_size;
 

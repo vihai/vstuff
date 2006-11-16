@@ -70,7 +70,7 @@ void router_run(
 			break;
 
 #ifdef DIJ_DEBUG
-		printf(	
+		fprintf(stderr, 	
 			"Min cost (%d) node = %s\n",
 			min_cost_node->router_cost,
 			min_cost_node->path);
@@ -93,7 +93,7 @@ void router_run(
 					continue;*/
 
 #ifdef DIJ_DEBUG
-				printf(
+				fprintf(stderr, 
 					"    Arch (%s) from"
 					" node (%s) to node (%s),"
 					" cost = %d\n",
@@ -117,7 +117,7 @@ void router_run(
 					arch->to->router_prev_thru = arch;
 
 #ifdef DIJ_DEBUG
-					printf(
+					fprintf(stderr, 
 						"        => Relaxing node (%s)"
 						" new cost = %d\n",
 						arch->to->path,

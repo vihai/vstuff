@@ -23,6 +23,7 @@
 #include <sys/socket.h>
 #include <linux/types.h>
 #include <linux/netlink.h>
+#include <getopt.h>
 
 /*#include <linux/kstreamer/router.h>
 #include <linux/kstreamer/dynattr.h>
@@ -44,14 +45,184 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+typedef unsigned char BOOL;
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef TRUE
+#define TRUE (!FALSE)
+#endif
+
 struct opts
 {
-	int in;
-	BOOL in_reverser;
-	BOOL in_framer;
+	const char *node_name;
+	BOOL binary;
 
-	int out;
+	struct ks_dynattr *hdlc_framer;
+	struct ks_dynattr *hdlc_deframer;
+	struct ks_dynattr *octet_reverser;
+
+	BOOL in;
+	BOOL enable_in_octet_reverser;
+	BOOL enable_in_hdlc_deframer;
+	struct octet_reverser_descr *in_octet_reverser;
+	struct hdlc_deframer_descr *in_hdlc_deframer;
+
+	BOOL out;
+	BOOL enable_out_octet_reverser;
+	BOOL enable_out_hdlc_framer;
+	struct octet_reverser_descr *out_octet_reverser;
+	struct hdlc_framer_descr *out_hdlc_framer;
+
 } opts;
+
+void print_usage(const char *progname)
+{
+	fprintf(stderr,
+"%s: <channel>\n"
+"	(--)\n"
+"\n"
+"	--binary		Enable binary output\n",
+		progname);
+
+	exit(1);
+}
+
+int configure_in_pipeline(struct ks_pipeline *pipeline)
+{
+
+	int i;
+	for(i=0; i<pipeline->chans_cnt; i++) {
+		struct ks_chan *chan = pipeline->chans[i];
+
+		struct ks_dynattr_instance *dynattr;
+		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+			if (dynattr->dynattr == opts.octet_reverser) {
+
+				struct octet_reverser_descr *descr =
+					(struct octet_reverser_descr *)
+					dynattr->payload;
+
+				if (!opts.in_octet_reverser ||
+				    descr->hardware)
+					opts.in_octet_reverser = descr;
+
+			} else if (dynattr->dynattr == opts.hdlc_deframer) {
+
+				struct hdlc_deframer_descr *descr =
+					(struct hdlc_deframer_descr *)
+					dynattr->payload;
+
+				if (!opts.in_hdlc_deframer ||
+				    descr->hardware)
+					opts.in_hdlc_deframer = descr;
+			}
+		}
+	}
+
+	if (opts.enable_in_hdlc_deframer) {
+		if (!opts.hdlc_deframer) {
+			fprintf(stderr,
+				"No HDLC framer attribute found\n");
+			return -ENODEV;
+		}
+
+		if (!opts.in_hdlc_deframer) {
+			fprintf(stderr,
+				"No HDLC framer along the pipeline\n");
+			return -ENODEV;
+		}
+
+		opts.in_hdlc_deframer->enabled = TRUE;
+	}
+
+	if (opts.enable_in_octet_reverser) {
+		if (!opts.octet_reverser) {
+			fprintf(stderr, "No octet reverser attribute found\n");
+			return -ENODEV;
+		}
+
+		if (!opts.in_octet_reverser) {
+			fprintf(stderr,
+				"No octet reverser along the pipeline\n");
+			return -ENODEV;
+		}
+
+		opts.in_octet_reverser->enabled = TRUE;
+	}
+
+	return 0;
+}
+
+int configure_out_pipeline(struct ks_pipeline *pipeline)
+{
+
+	int i;
+
+	for(i=0; i<pipeline->chans_cnt; i++) {
+		struct ks_chan *chan = pipeline->chans[i];
+
+		struct ks_dynattr_instance *dynattr;
+		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+			if (dynattr->dynattr == opts.octet_reverser) {
+
+				struct octet_reverser_descr *descr =
+					(struct octet_reverser_descr *)
+					dynattr->payload;
+
+				if (!opts.out_octet_reverser ||
+				    descr->hardware)
+					opts.out_octet_reverser = descr;
+
+			} else if (dynattr->dynattr == opts.hdlc_framer) {
+
+				struct hdlc_framer_descr *descr =
+					(struct hdlc_framer_descr *)
+					dynattr->payload;
+
+				if (!opts.out_hdlc_framer ||
+				    descr->hardware)
+					opts.out_hdlc_framer = descr;
+			}
+		}
+	}
+
+	if (opts.enable_out_hdlc_framer) {
+		if (!opts.hdlc_deframer) {
+			fprintf(stderr,
+				"No HDLC deframer attribute found\n");
+			return -ENODEV;
+		}
+
+		if (!opts.out_hdlc_framer) {
+			fprintf(stderr,
+				"No HDLC deframer along the pipeline\n");
+			return -ENODEV;
+		}
+
+		opts.out_hdlc_framer->enabled = TRUE;
+	}
+
+	if (opts.enable_out_octet_reverser) {
+		if (!opts.octet_reverser) {
+			fprintf(stderr, "No octet reverser attribute found\n");
+			return -ENODEV;
+		}
+
+		if (!opts.out_octet_reverser) {
+			fprintf(stderr,
+				"No octet reverser along the pipeline\n");
+			return -ENODEV;
+		}
+
+		opts.out_octet_reverser->enabled = TRUE;
+	}
+
+	return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -62,6 +233,59 @@ int main(int argc, char *argv[])
 
 	opts.in = 1;
 	opts.out = 0;
+
+	struct option options[] = {
+		{ "binary", no_argument, 0, 0 },
+		{ "in-hdlc-deframer", no_argument, 0, 0 },
+		{ "in-octet-reverser", no_argument, 0, 0 },
+		{ "out-hdlc-deframer", no_argument, 0, 0 },
+		{ "out-octet-reverser", no_argument, 0, 0 },
+		{ }
+	};
+
+	int c;
+	int optidx;
+
+	for(;;) {
+		struct option no_opt ={ "", no_argument, 0, 0 };
+		struct option *opt;
+
+		c = getopt_long(argc, argv, "", options,
+			&optidx);
+
+		if (c == -1)
+			break;
+
+		opt = c ? &no_opt : &options[optidx];
+
+		if (!strcmp(opt->name, "binary"))
+			opts.binary = TRUE;
+		else if (!strcmp(opt->name, "in-hdlc-deframer"))
+			opts.enable_in_hdlc_deframer = TRUE;
+		else if (!strcmp(opt->name, "in-octet-reverser"))
+			opts.enable_in_octet_reverser = TRUE;
+		else if (!strcmp(opt->name, "out-hdlc-framer"))
+			opts.enable_out_hdlc_framer = TRUE;
+		else if (!strcmp(opt->name, "out-octet-reverser"))
+			opts.enable_out_octet_reverser = TRUE;
+		else {
+			if (c)
+				fprintf(stderr,"Unknow option -%c\n", c);
+			else
+				fprintf(stderr, "Unknow option %s\n",
+					opt->name);
+
+			print_usage(argv[0]);
+			return 1;
+		}
+	}
+
+	if (optind < argc) {
+		opts.node_name = argv[optind];
+	} else {
+		fprintf(stderr,"Missing required interface name\n");
+		print_usage(argv[0]);
+	}
 
 
 	int mode;
@@ -98,6 +322,10 @@ int main(int argc, char *argv[])
 
 	ks_update_topology(conn);
 
+	opts.hdlc_framer = ks_dynattr_get_by_name("hdlc_framer");
+	opts.hdlc_deframer = ks_dynattr_get_by_name("hdlc_deframer");
+	opts.octet_reverser = ks_dynattr_get_by_name("octet_reverser");
+
 	struct ks_node *node_up;
 	node_up = ks_node_get_by_id(node_up_id);
 	if (!node_up) {
@@ -107,10 +335,10 @@ int main(int argc, char *argv[])
 
 	struct ks_node *node;
 
-	if (!strncmp(argv[1], "/sys/", 5)) {
+	if (!strncmp(opts.node_name, "/sys/", 5)) {
 		char *path;
 
-		path = realpath(argv[1], NULL);
+		path = realpath(opts.node_name, NULL);
 		if (!path) {
 			fprintf(stderr, "Cannot allocate real path\n");
 			return 1;
@@ -120,31 +348,15 @@ int main(int argc, char *argv[])
 
 		free(path);
 	} else {
-		node = ks_node_get_by_id(atoi(argv[1]));
+		node = ks_node_get_by_id(atoi(opts.node_name));
 	}
 
 	if (!node) {
-		fprintf(stderr, "Cannot find node '%s'\n", argv[1]);
+		fprintf(stderr, "Cannot find node '%s'\n", opts.node_name);
 		return 1;
 	}
 
-	struct ks_dynattr *hdlc_framer;
-	hdlc_framer = ks_dynattr_get_by_name("hdlc_framer");
-	if (!hdlc_framer) {
-		fprintf(stderr, "No HDLC framer attribute found\n");
-		return 1;
-	}
-
-	struct ks_dynattr *octet_reverser;
-	octet_reverser = ks_dynattr_get_by_name("octet_reverser");
-	if (!octet_reverser) {
-		fprintf(stderr, "No octet reverser attribute found\n");
-		return 1;
-	}
-
-	struct ks_pipeline *in_pipeline;
-	struct ks_pipeline *out_pipeline;
-
+	struct ks_pipeline *in_pipeline = NULL;
 	if (opts.in) {
 		in_pipeline = ks_connect(conn, node, node_up, &err);
 		if (!in_pipeline) {
@@ -160,40 +372,12 @@ int main(int argc, char *argv[])
 			fprintf(stderr,
 				"Cannot create pipeline: %s\n",
 					strerror(-err));
-			return -err;
+			return 1;
 		}
 
-		int i;
-		for(i=0; i<in_pipeline->chans_cnt; i++) {
-			struct ks_chan *chan = in_pipeline->chans[i];
-
-			struct ks_dynattr_instance *dynattr;
-			list_for_each_entry(dynattr, &chan->dynattrs, node) {
-				if (dynattr->dynattr == octet_reverser) {
-					struct octet_reverser_descr *descr =
-						(struct octet_reverser_descr *)
-						dynattr->payload;
-
-//					descr->flags |=
-//						OCTET_REVERSER_FLAG_ENABLED;
-
-					descr->flags &=
-						~OCTET_REVERSER_FLAG_ENABLED;
-
-				} else if (dynattr->dynattr == hdlc_framer) {
-					struct hdlc_framer_descr *descr =
-						(struct hdlc_framer_descr *)
-						dynattr->payload;
-
-					descr->flags |=
-						HDLC_FRAMER_FLAG_ENABLED;
-
-					descr->flags &=
-						~HDLC_FRAMER_FLAG_ENABLED;
-				}
-			}
-		}
-done:
+		err = configure_in_pipeline(in_pipeline);
+		if (err < 0)
+			return 1;
 
 		ks_pipeline_update_chans(in_pipeline, conn);
 
@@ -205,6 +389,7 @@ done:
 		}
 	}
 
+	struct ks_pipeline *out_pipeline = NULL;
 	if (opts.out) {
 		out_pipeline = ks_connect(conn, node_up, node, &err);
 		if (!out_pipeline) {
@@ -222,12 +407,22 @@ done:
 					strerror(-err));
 			return -err;
 		}
+
+		configure_out_pipeline(out_pipeline);
+
+		ks_pipeline_update_chans(out_pipeline, conn);
+
+		out_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
+		err = ks_pipeline_update(out_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr, "Cannot start the pipeline\n");
+			return 1;
+		}
 	}
 
 	char buf[4096];
 	struct pollfd pollfd = { up_fd, POLLIN, 0 };
 
-#if 1
 	while(1) {
 		if (poll(&pollfd, 1, -1) < 0) {
 			perror("poll");
@@ -235,15 +430,19 @@ done:
 		}
 
 		int nread = read(up_fd, buf, sizeof(buf));
-		printf(" %d: ", nread);
 
-		int i;
-		for (i=0; i<min(8, nread); i++)
-			printf("%02x", *(__u8 *)(buf + i));
+		if (opts.binary)
+			write(1, buf, nread);
+		else {
+			printf(" %d: ", nread);
 
-		printf("\n");
+			int i;
+			for (i=0; i<min(8, nread); i++)
+				printf("%02x", *(__u8 *)(buf + i));
+
+			printf("\n");
+		}
 	}
-#endif
 
 #if 0
 	int i;
@@ -255,19 +454,34 @@ done:
 	}
 #endif
 
-	sleep(10000);
+	if (in_pipeline) {
+		in_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
+		err = ks_pipeline_update(in_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr, "Cannot stop the pipeline\n");
+			return 1;
+		}
 
-	in_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
-	err = ks_pipeline_update(in_pipeline, conn);
-	if (err < 0) {
-		fprintf(stderr, "Cannot stop the pipeline\n");
-		return 1;
+		err = ks_pipeline_destroy(in_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr, "Cannot destroy the pipeline\n");
+			return 1;
+		}
 	}
 
-	err = ks_pipeline_destroy(in_pipeline, conn);
-	if (err < 0) {
-		fprintf(stderr, "Cannot destroy the pipeline\n");
-		return 1;
+	if (out_pipeline) {
+		out_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
+		err = ks_pipeline_update(out_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr, "Cannot stop the pipeline\n");
+			return 1;
+		}
+
+		err = ks_pipeline_destroy(out_pipeline, conn);
+		if (err < 0) {
+			fprintf(stderr, "Cannot destroy the pipeline\n");
+			return 1;
+		}
 	}
 
 	ks_conn_destroy(conn);

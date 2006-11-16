@@ -34,7 +34,7 @@ void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact)
 	list_add_tail(&ks_xact_get(xact)->node, &conn->xacts);
 }
 
-int ks_conn_get_version(struct ks_conn *conn)
+int ks_conn_sync(struct ks_conn *conn)
 {
 	int err;
 
@@ -44,19 +44,49 @@ int ks_conn_get_version(struct ks_conn *conn)
 		goto err_xact_alloc;
 	}
 
-	err = ks_xact_begin(xact);
-	if (err < 0)
-		goto err_xact_begin;
+	struct ks_req *req;
+	req = ks_xact_queue_new_request(xact,
+			NLMSG_NOOP,
+			NLM_F_REQUEST);
+
+	ks_xact_run(xact);
+	ks_req_wait(req);
+
+	if (req->err < 0) {
+		err = req->err;
+		ks_req_put(req);
+		goto err_request_version;
+	}
+
+	ks_req_put(req);
+	ks_xact_put(xact);
+
+	return 0;
+
+err_request_version:
+	ks_xact_put(xact);
+err_xact_alloc:
+
+	return err;
+}
+
+static int ks_conn_get_version(struct ks_conn *conn)
+{
+	int err;
+
+	struct ks_xact *xact = ks_xact_alloc(conn);
+	if (!xact) {
+		err = -ENOMEM;
+		goto err_xact_alloc;
+	}
 
 	struct ks_req *req;
 	req = ks_xact_queue_new_request(xact,
 			KS_NETLINK_VERSION,
 			NLM_F_REQUEST);
-	if (err < 0)
-		goto err_xact_queue_new_request;
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	if (req->err < 0) {
 		err = req->err;
@@ -68,18 +98,11 @@ int ks_conn_get_version(struct ks_conn *conn)
 
 	ks_req_put(req);
 
-	err = ks_xact_commit(xact);
-	if (err < 0)
-		goto err_xact_commit;
-
 	ks_xact_put(xact);
 
 	return 0;
 
-err_xact_begin:
-err_xact_queue_new_request:
 err_request_version:
-err_xact_commit:
 	ks_xact_put(xact);
 err_xact_alloc:
 
@@ -95,7 +118,7 @@ struct ks_conn *ks_conn_create(void)
 	if (!conn)
 		return NULL;
 
-	memset(conn, 0, sizeof(conn));
+	memset(conn, 0, sizeof(*conn));
 
 	conn->topology_state = KS_TOPOLOGY_STATE_NULL;
 	conn->state = KS_CONN_STATE_NULL;
@@ -103,6 +126,9 @@ struct ks_conn *ks_conn_create(void)
 	conn->seqnum = 1234;
 	INIT_LIST_HEAD(&conn->xacts);
 	conn->pid = getpid();
+
+	conn->xact_wait = ks_xact_wait_default;
+	conn->req_wait = ks_req_wait_default;
 
 	conn->sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_KSTREAMER);
 	if (conn->sock < 0) {
@@ -167,7 +193,7 @@ void ks_conn_set_state(
 	struct ks_conn *conn,
 	enum ks_conn_state state)
 {
-	printf("Conn state changed from %s to %s\n",
+	fprintf(stderr, "Conn state changed from %s to %s\n",
 		ks_conn_state_to_text(conn->state),
 		ks_conn_state_to_text(state));
 

@@ -27,23 +27,14 @@
 #include "util.h"
 #include "xact.h"
 
-static int ks_topology_callback(
-	struct ks_req *req,
-	struct nlmsghdr *nlh,
-	void *data)
+void ks_topology_update(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
-	struct ks_xact *xact = req->xact;
-	struct ks_conn *conn = xact->conn;
-
 	switch(nlh->nlmsg_type) {
 	case NLMSG_NOOP:
 	case NLMSG_OVERRUN:
-	break;
-
 	case NLMSG_ERROR:
-		printf("ERRRRRRRRRRRRROR! %d\n", *((int *)NLMSG_DATA(nlh)));
-	break;
-
 	case NLMSG_DONE:
 	break;
 
@@ -254,6 +245,17 @@ static int ks_topology_callback(
 	}
 	break;
 	}
+}
+
+static int ks_topology_callback(
+	struct ks_req *req,
+	struct nlmsghdr *nlh,
+	void *data)
+{
+	struct ks_xact *xact = req->xact;
+	struct ks_conn *conn = xact->conn;
+
+	ks_topology_update(conn, nlh);
 
 	return 0;
 }
@@ -353,7 +355,7 @@ void ks_update_topology(struct ks_conn *conn)
 	struct ks_xact *xact;
 	xact = ks_send_topology_update_req(conn, &err);
 
-	ks_xact_waitloop(xact);
+	ks_xact_wait(xact);
 	ks_xact_put(xact);
 }
 

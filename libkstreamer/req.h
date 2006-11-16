@@ -49,6 +49,12 @@ extern struct ks_req ks_nomem_request;
 struct ks_req *ks_req_alloc(struct ks_xact *xact);
 struct ks_req *ks_req_get(struct ks_req *req);
 void ks_req_put(struct ks_req *req);
-void ks_req_waitloop(struct ks_req *req);
+void ks_req_wait(struct ks_req *req);
+
+#ifdef _LIBKSTREAMER_PRIVATE_
+
+void ks_req_wait_default(struct ks_req *req);
+
+#endif
 
 #endif

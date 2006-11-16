@@ -624,7 +624,7 @@ static int vup_cdev_open(
 			err = -ENOMEM;
 			goto err_alloc_chan_rx;
 		}
-	
+
 		ks_chan_init(chan->ks_chan_rx, &vup_chan_rx_chan_ops,
 				"rx", NULL,
 				&chan->ks_node.kobj,
@@ -645,7 +645,7 @@ static int vup_cdev_open(
 			err = -ENOMEM;
 			goto err_alloc_chan_tx;
 		}
-	
+
 		ks_chan_init(chan->ks_chan_tx, &vup_chan_tx_chan_ops,
 				"tx", NULL,
 				&chan->ks_node.kobj,
@@ -658,7 +658,7 @@ static int vup_cdev_open(
 	}
 
 	err = vup_chan_register(chan);
-       	if (err < 0)
+	if (err < 0)
 		goto err_chan_register;
 
 /*	err = ks_chan_create_file(&chan->ks_chan,
@@ -743,7 +743,8 @@ ssize_t __kfifo_get_user(
 
 	/* first get the data from fifo->out until the end of the buffer */
 	l = min(len, (ssize_t)(fifo->size - (fifo->out & (fifo->size - 1))));
-	if (copy_to_user(buffer, fifo->buffer + (fifo->out & (fifo->size - 1)), l))
+	if (copy_to_user(buffer, fifo->buffer + (fifo->out & (fifo->size - 1)),
+									l))
 		return -EFAULT;
 
 	/* then get the rest (if any) from the beginning of the buffer */
@@ -804,7 +805,8 @@ ssize_t __kfifo_put_user(
 
 	/* first put the data starting from fifo->in to buffer end */
 	l = min(len, (ssize_t)(fifo->size - (fifo->in & (fifo->size - 1))));
-	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)), buffer, l))
+	if (copy_from_user(fifo->buffer + (fifo->in & (fifo->size - 1)),
+								buffer, l))
 		return -EFAULT;
 
 	/* then put the rest (if any) at the beginning of the buffer */

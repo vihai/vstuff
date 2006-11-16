@@ -49,6 +49,7 @@ struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
 	xact->conn = conn;
 	xact->id = conn->seqnum;
 	xact->state = KS_XACT_STATE_NULL;
+	xact->autocommit = TRUE;
 
 	return xact;
 }
@@ -129,7 +130,7 @@ int ks_xact_begin(struct ks_xact *xact)
 		return req->err;
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	return 0;
 }
@@ -143,7 +144,7 @@ int ks_xact_commit(struct ks_xact *xact)
 		return req->err;
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	return 0;
 }
@@ -157,7 +158,7 @@ int ks_xact_abort(struct ks_xact *xact)
 		return req->err;
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	return 0;
 }
@@ -193,10 +194,15 @@ int ks_xact_run(struct ks_xact *xact)
 	return 0;
 }
 
-void ks_xact_waitloop(struct ks_xact *xact)
+void ks_xact_wait_default(struct ks_xact *xact)
 {
 	while(xact->state != KS_XACT_STATE_COMPLETED)
 		ks_netlink_receive(xact->conn);
+}
+
+void ks_xact_wait(struct ks_xact *xact)
+{
+	xact->conn->xact_wait(xact);
 }
 
 void ks_xact_need_skb(struct ks_xact *xact)

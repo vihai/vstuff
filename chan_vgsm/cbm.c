@@ -26,8 +26,7 @@
 #include "cbm.h"
 #include "7bit.h"
 
-static const char *vgsm_cbm_serial_geoscope_to_text(
-	enum vgsm_cbm_serial_geoscopes gs)
+const char *vgsm_cbm_geoscope_to_text(enum vgsm_cbm_geoscopes gs)
 {
 	switch(gs) {
 	case VGSM_CBM_GS_IMMEDIATE_CELL:
@@ -42,6 +41,63 @@ static const char *vgsm_cbm_serial_geoscope_to_text(
 		return "*UNKNOWN*";
 	}
 }
+
+const char *vgsm_cbm_language_to_text(enum vgsm_cbm_dcs_language value)
+{
+	switch(value) {
+	case VGSM_CBM_DCS_LANG_GERMAN:
+		return "german";
+	case VGSM_CBM_DCS_LANG_ENGLISH:
+		return "english";
+	case VGSM_CBM_DCS_LANG_ITALIAN:
+		return "italian";
+	case VGSM_CBM_DCS_LANG_FRENCH:
+		return "french";
+	case VGSM_CBM_DCS_LANG_SPANISH:
+		return "spanish";
+	case VGSM_CBM_DCS_LANG_DUTCH:
+		return "dutch";
+	case VGSM_CBM_DCS_LANG_SWEDISH:
+		return "swedish";
+	case VGSM_CBM_DCS_LANG_DANISH:
+		return "danish";
+	case VGSM_CBM_DCS_LANG_PORTUGUESE:
+		return "portuguese";
+	case VGSM_CBM_DCS_LANG_FINNISH:
+		return "finnish";
+	case VGSM_CBM_DCS_LANG_NORWEGIAN:
+		return "norwegian";
+	case VGSM_CBM_DCS_LANG_GREEK:
+		return "greek";
+	case VGSM_CBM_DCS_LANG_TURKISH:
+		return "turkish";
+	case VGSM_CBM_DCS_LANG_HUNGARIAN:
+		return "hungarian";
+	case VGSM_CBM_DCS_LANG_POLISH:
+		return "polish";
+	case VGSM_CBM_DCS_LANG_UNSPECIFIED:
+		return "unspecified";
+	}
+
+	return "*INVALID*";
+};
+
+const char *vgsm_cbm_alphabet_to_text(enum vgsm_cbm_dcs_alphabet value)
+{
+	switch(value) {
+	case VGSM_CBM_DCS_ALPHABET_DEFAULT:
+		return "default";
+	case VGSM_CBM_DCS_ALPHABET_8_BIT_DATA:
+		return "8-bit data";
+	case VGSM_CBM_DCS_ALPHABET_UCS2:
+		return "ucs2";
+	case VGSM_CBM_DCS_ALPHABET_RESERVED:
+		return "reserved";
+	}
+
+	return "*INVALID*";
+};
+
 
 struct vgsm_cbm *vgsm_cbm_alloc(void)
 {
@@ -151,30 +207,26 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 
 	/* Content */
 
-	ast_verbose("Cell broadcast: GS=%s CODE=%d UPDATE=%d"
-			" MSGID=%d PAGE=%d/%d\n",
-		vgsm_cbm_serial_geoscope_to_text(cbm->geoscope),
-		cbm->message_code,
-		cbm->update_number,
-		cbm->message_id,
-		cbm->page, cbm->pages);
-
 	wchar_t content[100];
+
+	cbm->coding_group = dcs->coding_group;
+	cbm->language = VGSM_CBM_DCS_LANG_UNSPECIFIED;
+	cbm->compressed = FALSE;
+	cbm->message_class = -1;
+	cbm->alphabet = VGSM_CBM_DCS_ALPHABET_DEFAULT;
 
 	if (dcs->coding_group == 0x0) {
 		struct vgsm_cbm_data_coding_scheme_0000 *dcs2 =
 			(struct vgsm_cbm_data_coding_scheme_0000 *)dcs;
 
+		cbm->language = dcs2->language;
 
-		ast_verbose("  DCS (group 0000) Language = %d\n",
-			dcs2->language);
-
-		cbm->text = malloc(sizeof(wchar_t) * (82 + 1));
+		cbm->text = malloc(sizeof(wchar_t) * (93 + 1));
 		if (!cbm->text)
 			goto err_cbm_text_alloc;
 
-		vgsm_7bit_to_wc(pdu + pos, 82,
-			cbm->text, 82 + 1);
+		vgsm_7bit_to_wc(pdu + pos, 93, 0,
+			cbm->text, 93 + 1);
 
 	} else if (dcs->coding_group == 0x4 ||
 	           dcs->coding_group == 0x5 ||
@@ -184,27 +236,32 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 		struct vgsm_cbm_data_coding_scheme_01xx *dcs2 =
 			(struct vgsm_cbm_data_coding_scheme_01xx *)dcs;
 
-		ast_verbose("  DCS (group 01xx) compression=%d",
-			dcs2->compressed);
+		cbm->compressed = dcs2->compressed;
 
 		if (dcs2->has_class)
-			ast_verbose(" class=%d", dcs2->message_class);
+			cbm->message_class = dcs2->message_class;
+		else
+			cbm->message_class = -1;
 
-		ast_verbose(" alphabet=%d\n", dcs2->message_alphabet);
+		cbm->alphabet = dcs2->message_alphabet;
 
 		if (dcs2->compressed) {
-			ast_verbose(
+			ast_log(LOG_NOTICE,
 				"Compressed messages are not supported,"
 				" ignoring\n");
-		} else if (dcs2->message_alphabet ==
+
+			goto err_unsupported_compression;
+		}
+
+		if (dcs2->message_alphabet ==
 				VGSM_CBM_DCS_ALPHABET_DEFAULT) {
 
-			cbm->text = malloc(sizeof(wchar_t) * (82 + 1));
+			cbm->text = malloc(sizeof(wchar_t) * (93 + 1));
 			if (!cbm->text)
 				goto err_cbm_text_alloc;
 
-			vgsm_7bit_to_wc(pdu + pos, 82,
-				cbm->text, 82 + 1);
+			vgsm_7bit_to_wc(pdu + pos, 93, 0,
+				cbm->text, 93 + 1);
 
 		} else if (dcs2->message_alphabet ==
 				VGSM_CBM_DCS_ALPHABET_8_BIT_DATA) {
@@ -214,21 +271,22 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 		} else if (dcs2->message_alphabet ==
 				VGSM_CBM_DCS_ALPHABET_UCS2) {
 
-			cbm->text = malloc(sizeof(wchar_t) * (82 + 1));
+			cbm->text = malloc(sizeof(wchar_t) * (41 + 1));
 			if (!cbm->text)
 				goto err_cbm_text_alloc;
 
 			int i;
-			for (i=0; i<82; i++) {
+			for (i=0; i<41; i++) {
 				content[i] = (*(pdu + pos + i * 2) << 8) |
 						*(pdu + pos + i * 2 + 1);
 			}
 
-			content[82] = L'\0';
+			content[41] = L'\0';
 		}
 	} else if (dcs->coding_group == 0xe) {
 
-		ast_verbose("=====> DCS (group 1110) not supported, sorry\n");
+		ast_log(LOG_NOTICE,
+			"=====> DCS (group 1110) not supported, sorry\n");
 
 		goto err_unsupported_coding;
 
@@ -237,9 +295,7 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 		struct vgsm_cbm_data_coding_scheme_1111 *dcs2 =
 			(struct vgsm_cbm_data_coding_scheme_1111 *)dcs;
 
-		ast_verbose("=====> DCS (group 1111) coding=%s class=%d\n",
-			dcs2->message_coding ? "8-bit data" : "Default",
-			dcs2->message_class);
+		cbm->message_class = dcs2->message_class;
 
 		if (dcs2->message_coding) {
 
@@ -250,15 +306,60 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 			if (!cbm->text)
 				goto err_cbm_text_alloc;
 
-			vgsm_7bit_to_wc(pdu + pos, 82,
+			vgsm_7bit_to_wc(pdu + pos, 82, 0,
 				cbm->text, 82 + 1);
 		}
 	} else {
-		ast_verbose("Unsupported coding group %02x, ignoring message\n",
+		ast_log(LOG_NOTICE,
+			"Unsupported coding group %02x, ignoring message\n",
 			dcs->coding_group);
 
 		goto err_unsupported_coding;
 	}
+
+	return cbm;
+
+	if (cbm->text) {
+		free(cbm->text);
+		cbm->text = NULL;
+	}
+err_cbm_text_alloc:
+err_unsupported_compression:
+err_unsupported_coding:
+	free(cbm->pdu);
+	cbm->pdu = NULL;
+err_malloc_pdu:
+err_invalid_pdu:
+	vgsm_cbm_put(cbm);
+err_cbm_alloc:
+
+	return NULL;
+}
+
+void vgsm_cbm_dump(struct vgsm_cbm *cbm)
+{
+	ast_verbose(
+		"---- Cell Broadcast: ----------\n"
+		"  GeoScope = %s\n"
+		"  Code = %d\n"
+		"  Update = %d\n"
+		"  Message ID = %d\n"
+		"  Page = %d/%d\n"
+		"  Data Coding Scheme Group = %01x\n"
+		"  Language = %s\n"
+		"  Compression = %s\n"
+		"  Class = %d\n"
+		"  Alphabet = %s\n",
+		vgsm_cbm_geoscope_to_text(cbm->geoscope),
+		cbm->message_code,
+		cbm->update_number,
+		cbm->message_id,
+		cbm->page, cbm->pages,
+		cbm->coding_group,
+		vgsm_cbm_language_to_text(cbm->language),
+		cbm->compressed ? "Yes" : "No",
+		cbm->message_class,
+		vgsm_cbm_alphabet_to_text(cbm->alphabet));
 
 	if (cbm->text) {
 		wchar_t tmpstr[170];
@@ -271,7 +372,7 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 		if (len < 0) {
 			ast_log(LOG_ERROR, "Error converting string: %s\n",
 				strerror(errno));
-			goto err_payload_conversion;
+			return;
 		}
 
 		tmpstr_p = tmpstr;
@@ -279,26 +380,11 @@ struct vgsm_cbm *vgsm_decode_cbm_pdu(
 
 		wcsrtombs(mbs, &tmpstr_p, len + 1, &ps);
 
-		ast_verbose("CONTENT = '%s'\n", mbs);
+		ast_verbose("  '%s'\n", mbs);
 
 		free(mbs);
 	}
 
-	return cbm;
-
-err_payload_conversion:
-	if (cbm->text) {
-		free(cbm->text);
-		cbm->text = NULL;
-	}
-err_cbm_text_alloc:
-err_unsupported_coding:
-	free(cbm->pdu);
-	cbm->pdu = NULL;
-err_malloc_pdu:
-err_invalid_pdu:
-	vgsm_cbm_put(cbm);
-err_cbm_alloc:
-
-	return NULL;
+	ast_verbose("-------------------------------\n\n");
 }
+

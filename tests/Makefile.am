@@ -1,5 +1,13 @@
-
-AM_CFLAGS = -D_REENTRANT -Wall
+#
+# vstuff
+#
+# Copyright (C) 2004-2006 Daniele Orlandi
+#
+# Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+#
+# This program is free software and may be modified and distributed
+# under the terms and conditions of the GNU General Public License.
+#
 
 bin_PROGRAMS = vgsm_stress sniffer # jitter traffic listener
 
@@ -28,3 +36,8 @@ sniffer_LDADD = \
 
 vgsm_stress_SOURCES = vgsm_stress.c
 
+AM_CFLAGS = -D_REENTRANT -DGNU_SOURCE -Wall
+
+if !inline
+AM_CFLAGS += -fno-inline
+endif

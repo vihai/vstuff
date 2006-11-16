@@ -186,7 +186,7 @@ struct ks_chan *ks_chan_create_from_nlmsg(struct nlmsghdr *nlh)
 			struct ks_dynattr *dynattr_class;
 			dynattr_class = ks_dynattr_get_by_id(attr->type);
 			if (!dynattr_class) {
-				printf("   Attribute %d unknown\n", attr->type);
+				fprintf(stderr, "   Attribute %d unknown\n", attr->type);
 				break;
 			}
 
@@ -248,30 +248,30 @@ void ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
 
 void ks_chan_dump(struct ks_chan *chan)
 {
-	printf("  ID    : 0x%08x\n", chan->id);
-	printf("  Path  : '%s'\n", chan->path);
+	fprintf(stderr, "  ID    : 0x%08x\n", chan->id);
+	fprintf(stderr, "  Path  : '%s'\n", chan->path);
 
 	if (chan->from)
-		printf("  From  : 0x%08x (%s)\n",
+		fprintf(stderr, "  From  : 0x%08x (%s)\n",
 			chan->from->id, chan->from->path);
 
 	if (chan->to)
-		printf("  To    : 0x%08x (%s)\n",
+		fprintf(stderr, "  To    : 0x%08x (%s)\n",
 			chan->to->id, chan->to->path);
 
 	struct ks_dynattr_instance *dynattr;
 	list_for_each_entry(dynattr, &chan->dynattrs, node) {
-		printf("  Dynattr: %s\n", dynattr->dynattr->name);
+		fprintf(stderr, "  Dynattr: %s\n", dynattr->dynattr->name);
 
-		printf("  Data: ");
+		fprintf(stderr, "  Data: ");
 
 		int i;
 		for(i=0; i<dynattr->len; i++) {
-			printf("%02x ",
+			fprintf(stderr, "%02x ",
 				*(dynattr->payload + i));
 		}
 
-		printf("\n");
+		fprintf(stderr, "\n");
 	}
 }
 
@@ -352,15 +352,11 @@ int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn)
 		goto err_xact_alloc;
 	}
 
-	err = ks_xact_begin(xact);
-	if (err < 0)
-		goto err_xact_begin;
-
 	struct ks_req *req;
 	req = ks_chan_queue_update(chan, xact);
 
 	ks_xact_run(xact);
-	ks_req_waitloop(req);
+	ks_req_wait(req);
 
 	if (req->err < 0) {
 		err = req->err;
@@ -373,15 +369,9 @@ int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn)
 
 	ks_req_put(req);
 
-	err = ks_xact_commit(xact);
-	if (err < 0)
-		goto err_xact_commit;
-
 	return 0;
 
-err_xact_commit:
 err_update_failed:
-err_xact_begin:
 	ks_xact_put(xact);
 err_xact_alloc:
 

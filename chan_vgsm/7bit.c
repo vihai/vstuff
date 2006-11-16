@@ -14,15 +14,27 @@
 #include "7bit.h"
 #include "gsm_charset.h"
 
-void vgsm_7bit_to_wc(const __u8 *buf, int septets, wchar_t *out, int outsize)
+int vgsm_octets_to_septets(int octets)
+{
+	return ((octets * 8) / 7) + (((octets * 8) % 7) ? 1 : 0);
+}
+
+int vgsm_septets_to_octets(int septets)
+{
+	return (septets * 7) / 8 + (((septets * 7) % 8) ? 1 : 0);
+}
+
+void vgsm_7bit_to_wc(
+	const __u8 *buf, int septets, int offset,
+	wchar_t *out, int outsize)
 {
 	int i;
 	int outlen = 0;
 
 	for(i=0; (i < outsize - 1) && (i < septets); i++) {
-		int j = ((i+1)*7)/8;
+		int j = ((i + 1 + offset) * 7) / 8;
 
-		int shift = 8 - (i % 8);
+		int shift = 8 - ((i + offset) % 8);
 		__u16 mask = 0x7f << shift;
 		__u16 val = (j ? (*(buf + j-1)) : 0) |
 		       	*(buf + j) << 8;
@@ -56,14 +68,8 @@ void vgsm_write_septet(__u8 *out, int septet, char c)
 	}
 }
 
-int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out)
+int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
 {
-	int i;
-	int octets = ((inlen + 1) * 7) / 8;
-
-	for(i=0; i < octets; i++)
-		out[i] = 0x00;
-
 	int inpos = 0;
 	int outsep = 0;
 	while(inpos < inlen) {
@@ -78,14 +84,14 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out)
 			continue;
 		}
 
-		vgsm_write_septet(out, outsep, c);
+		vgsm_write_septet(out, outsep + offset, c);
 		outsep++;
 
 		if (c2) {
-			vgsm_write_septet(out, outsep, c2);
+			vgsm_write_septet(out, outsep + offset, c2);
 			outsep++;
 		}
 	}
 
-	return octets;
+	return inlen;
 }

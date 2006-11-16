@@ -1,3 +1,14 @@
+#
+# vstuff
+#
+# Copyright (C) 2004-2006 Daniele Orlandi
+#
+# Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+#
+# This program is free software and may be modified and distributed
+# under the terms and conditions of the GNU General Public License.
+#
+
 noinst_DATA =					\
 	include/list.h
 
@@ -32,7 +43,7 @@ SUBDIRS += scripts samples #visdnctl vgsmctl
 
 if asterisk_modules
 #SUBDIRS += chan_visdn
-#SUBDIRS += chan_vgsm
+SUBDIRS += chan_vgsm
 #SUBDIRS += app_visdn_ppp
 endif
 

@@ -266,7 +266,7 @@ int ks_cmd_done(
 
 int ks_cmd_begin(
 	struct ks_command *cmd,
-       	struct ks_xact *xact,
+	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 printk(KERN_DEBUG "Xact Begin\n");
@@ -274,6 +274,18 @@ printk(KERN_DEBUG "Xact Begin\n");
 	xact->flags |= KS_XACT_FLAGS_PERSISTENT;
 
 	ks_xact_send_control(xact, KS_NETLINK_BEGIN, NLM_F_ACK);
+
+	return 0;
+}
+
+int ks_cmd_noop(
+	struct ks_command *cmd,
+	struct ks_xact *xact,
+	struct nlmsghdr *nlh)
+{
+printk(KERN_DEBUG "NOOP\n");
+
+	ks_xact_send_control(xact, NLMSG_NOOP, NLM_F_ACK);
 
 	return 0;
 }
@@ -395,6 +407,7 @@ int ks_cmd_not_implemented(
 struct ks_command ks_commands[] =
 {
 	{ NLMSG_DONE, ks_cmd_done, 0 },
+	{ NLMSG_NOOP, ks_cmd_noop, 0 },
 
 	{ KS_NETLINK_VERSION, ks_cmd_version_request, 0 },
 	{ KS_NETLINK_BEGIN, ks_cmd_begin, 0 },
@@ -481,7 +494,17 @@ printk(KERN_DEBUG "ERRRRRRR = %d\n", err);
 	}
 
 	ks_xact_flush(xact);
+
+	if (!(xact->flags & KS_XACT_FLAGS_PERSISTENT)) {
+		spin_lock(&ks_xacts_hash_lock);
+		hlist_del(&xact->node);
+		spin_unlock(&ks_xacts_hash_lock);
+		ks_xact_put(xact);
+	}
+
 	ks_xact_put(xact);
+
+printk(KERN_DEBUG "Xact Committed\n");
 
 /*	if (!(xact->flags & KS_XACT_FLAGS_PERSISTENT))
 		if (xact->mode == KS_MODE_WRITE)

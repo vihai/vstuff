@@ -42,6 +42,7 @@ struct ks_xact
 	struct sk_buff *out_skb;
 
 	enum ks_xact_state state;
+	BOOL autocommit;
 
 	struct list_head requests;
 	struct list_head requests_sent;
@@ -71,7 +72,13 @@ struct ks_req *ks_xact_queue_new_request_callback(
 
 int ks_xact_run(struct ks_xact *xact);
 
-void ks_xact_waitloop(struct ks_xact *xact);
+void ks_xact_wait(struct ks_xact *xact);
+
+#ifdef _LIBKSTREAMER_PRIVATE_
+
+void ks_xact_wait_default(struct ks_xact *xact);
 void ks_xact_need_skb(struct ks_xact *xact);
+
+#endif
 
 #endif

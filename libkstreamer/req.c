@@ -74,8 +74,13 @@ void ks_req_put(struct ks_req *req)
 	}
 }
 
-void ks_req_waitloop(struct ks_req *req)
+void ks_req_wait_default(struct ks_req *req)
 {
 	while(!req->completed)
 		ks_netlink_receive(req->xact->conn);
+}
+
+void ks_req_wait(struct ks_req *req)
+{
+	req->xact->conn->req_wait(req);
 }

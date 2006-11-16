@@ -145,7 +145,7 @@ static int ks_dynattr_netlink_notification(
 
 	NETLINK_CB(skb).pid = 0;
 	NETLINK_CB(skb).dst_pid = pid;
-	NETLINK_CB(skb).dst_group = pid ? KS_NETLINK_GROUP_TOPOLOGY : 0;
+	NETLINK_CB(skb).dst_group = pid ? 0 : KS_NETLINK_GROUP_TOPOLOGY;
 
 	err = ks_dynattr_netlink_fill_msg(
 			dynattr, skb, message_type, pid, 0, 0);

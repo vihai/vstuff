@@ -160,7 +160,7 @@ void ks_dynattr_update_from_nlmsg(
 		break;
 
 		default:
-			printf("   Attribute '%s' unknown\n",
+			fprintf(stderr, "   Attribute '%s' unknown\n",
 				ks_netlink_dynattr_attr_to_string(
 					attr->type));
 		}
@@ -198,7 +198,7 @@ struct ks_dynattr *ks_dynattr_create_from_nlmsg(struct nlmsghdr *nlh)
 		break;
 
 		default:
-			printf("   Attribute '%s'\n",
+			fprintf(stderr, "   Attribute '%s'\n",
 				ks_netlink_dynattr_attr_to_string(
 					attr->type));
 		}
@@ -209,7 +209,7 @@ struct ks_dynattr *ks_dynattr_create_from_nlmsg(struct nlmsghdr *nlh)
 
 void ks_dynattr_dump(struct ks_dynattr *dynattr)
 {
-	printf("  ID    : 0x%08x\n", dynattr->id);
-	printf("  Name  : '%s'\n", dynattr->name);
+	fprintf(stderr, "  ID    : 0x%08x\n", dynattr->id);
+	fprintf(stderr, "  Name  : '%s'\n", dynattr->name);
 }
 

@@ -20,6 +20,36 @@
 #include "longtime.h"
 #include "util.h"
 
+#ifdef DEBUG_CODE
+#define vgsm_comm_debug_messages(comm, format, arg...)		\
+	if ((comm)->debug_messages)				\
+		ast_verbose("vgsm: %s: "			\
+			format,					\
+			(comm)->name,				\
+			## arg)
+
+#define vgsm_comm_debug_characters(comm, format, arg...)	\
+	if ((comm)->debug_characters)				\
+		ast_verbose("vgsm: %s: "			\
+			format,					\
+			(comm)->name,				\
+			## arg)
+
+#define vgsm_comm_debug_timer(comm, format, arg...)		\
+	if ((comm)->debug_timer)				\
+		ast_verbose("vgsm: %s: "			\
+			format,					\
+			(comm)->name,				\
+			## arg)
+#else
+#define vgsm_comm_debug_messages(comm, format, arg...)		\
+	do {} while(0);
+#define vgsm_comm_debug_characters(comm, format, arg...)	\
+	do {} while(0);
+#define vgsm_comm_debug_timer(format, arg...)			\
+	do {} while(0);
+#endif
+
 /* Error codes allocation:
  *
  *    0 to  999		Final messages
@@ -51,11 +81,13 @@ enum vgsm_req_codes
 
 enum vgsm_comm_state
 {
-	VGSM_PS_BITBUCKET,
+	VGSM_PS_CLOSED,
+	VGSM_PS_FAILED,
 	VGSM_PS_RECOVERING,
 	VGSM_PS_IDLE,
 	VGSM_PS_READING_URC,
 	VGSM_PS_AWAITING_SMS_ECHO,
+	VGSM_PS_AWAITING_SMS_ECHO_1A,
 	VGSM_PS_AWAITING_ECHO,
 	VGSM_PS_AWAITING_ECHO_READING_URC,
 	VGSM_PS_READING_RESPONSE,
@@ -88,6 +120,9 @@ struct vgsm_req
 	int ready;
 	ast_cond_t ready_cond;
 
+	void (*completion_func)(struct vgsm_req *req, void *data);
+	void *completion_data;
+
 	int timeout;
 
 	struct list_head lines;
@@ -109,10 +144,12 @@ struct vgsm_comm
 
 	int fd;
 
-	int enabled;
+	BOOL enabled;
 
 	enum vgsm_comm_state state;
-	ast_cond_t state_change_cond;
+	ast_mutex_t state_lock;
+
+	ast_cond_t close_cond;
 
 	longtime_t timer_expiration;
 
@@ -125,6 +162,10 @@ struct vgsm_comm
 	struct vgsm_req *current_urc;
 
 	struct vgsm_urc_class *urc_classes;
+
+	BOOL debug_messages;
+	BOOL debug_characters;
+	BOOL debug_timer;
 };
 
 void vgsm_comm_init(struct vgsm_comm *comm, struct vgsm_urc_class *urcs);
@@ -134,8 +175,18 @@ struct vgsm_req *vgsm_req_make_va(
 	int timeout,
 	const char *sms_pdu,
 	int sms_pdu_len,
+	void (*completion_func)(struct vgsm_req *req, void *data),
+	void *completion_data,
 	const char *fmt,
 	va_list ap);
+
+struct vgsm_req *vgsm_req_make_callback(
+	struct vgsm_comm *comm,
+	void (*completion_func)(struct vgsm_req *req, void *data),
+	void *completion_data,
+	int timeout,
+	const char *fmt, ...)
+	__attribute__ ((format (printf, 5, 6)));
 
 struct vgsm_req *vgsm_req_make(
 	struct vgsm_comm *comm,
@@ -173,13 +224,15 @@ const struct vgsm_req_line *vgsm_req_last_line(
 	const struct vgsm_req *req);
 
 struct vgsm_req *vgsm_req_get(struct vgsm_req *req);
-void vgsm_req_put(struct vgsm_req *req);
-#define vgsm_req_put_null(req)	do { vgsm_req_put(req); req = NULL; } while(0)
+void _vgsm_req_put(struct vgsm_req *req);
+#define vgsm_req_put(req) \
+	do { _vgsm_req_put(req); (req) = NULL; } while(0)
+
 int vgsm_req_status(struct vgsm_req *req);
 
 void vgsm_comm_wakeup(struct vgsm_comm *comm);
-void vgsm_comm_disable(struct vgsm_comm *comm);
-void vgsm_comm_enable(struct vgsm_comm *comm);
+void vgsm_comm_open(struct vgsm_comm *comm, int fd);
+void vgsm_comm_close(struct vgsm_comm *comm);
 int vgsm_comm_thread_create();
 
 #endif

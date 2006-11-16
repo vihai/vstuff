@@ -368,6 +368,26 @@ fi
 
 #-----------------------------------------------------------------------------
 
+AC_ARG_ENABLE(
+	[inline],
+	AC_HELP_STRING(
+		[--disable-inline],
+		[Disable code inlining where possible (for debugging)]))
+
+AM_CONDITIONAL(inline, test "$enable_inline" != no)
+
+#-----------------------------------------------------------------------------
+
+AC_ARG_ENABLE(
+	[astmm],
+	AC_HELP_STRING(
+		[--enable-astmm],
+		[Enable Asterisk's Memory Debugger]))
+
+AM_CONDITIONAL(astmm, test "$enable_astmm" = yes)
+
+#-----------------------------------------------------------------------------
+
 drivers="hfc-pci, hfc-4s, hfc-usb"
 
 AC_ARG_ENABLE(

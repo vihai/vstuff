@@ -386,6 +386,9 @@ static void hfc_sys_chan_rx_chan_disconnect(struct ks_chan *ks_chan)
 	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 	struct hfc_sys_chan *chan = chan_rx->chan;
 
+	chan_rx->fifo.bit_reversed = FALSE;
+	chan_rx->fifo.framer_enabled = FALSE;
+
 	hfc_debug_sys_chan(chan, 2, "RX disconnected\n");
 }
 
@@ -561,17 +564,17 @@ static int hfc_sys_chan_rx_chan_get_attr(
 
 	switch(index) {
 	case 0: {
-		struct hdlc_framer_descr *descr = buf;
+		struct hdlc_deframer_descr *descr = buf;
 
-		if (*len < sizeof(struct hdlc_framer_descr))
+		if (*len < sizeof(struct hdlc_deframer_descr))
 			return -ENOSPC;
 
-		*type = hfc_hdlc_framer_class->id;
-		*len = sizeof(struct hdlc_framer_descr);
+		*type = hfc_hdlc_deframer_class->id;
+		*len = sizeof(struct hdlc_deframer_descr);
 
-		descr->flags = HDLC_FRAMER_FLAG_HARDWARE |
-				(chan_rx->fifo.framer_enabled ?
-					HDLC_FRAMER_FLAG_ENABLED : 0);
+		memset(descr, 0, sizeof(*descr));
+		descr->hardware = 1;
+		descr->enabled = chan_rx->fifo.framer_enabled ? 1 : 0;
 	}
 	break;
 
@@ -584,9 +587,9 @@ static int hfc_sys_chan_rx_chan_get_attr(
 		*type = hfc_octet_reverser_class->id;
 		*len = sizeof(struct octet_reverser_descr);
 
-		descr->flags = OCTET_REVERSER_FLAG_HARDWARE |
-				(chan_rx->fifo.bit_reversed ?
-					OCTET_REVERSER_FLAG_ENABLED : 0);
+		memset(descr, 0, sizeof(*descr));
+		descr->hardware = 1;
+		descr->enabled = chan_rx->fifo.bit_reversed ? 1 : 0;
 	}
 	break;
 
@@ -605,14 +608,13 @@ static int hfc_sys_chan_rx_chan_set_attr(
 {
 	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 
-	if (type == hfc_hdlc_framer_class->id) {
-		struct hdlc_framer_descr *descr = buf;
+	if (type == hfc_hdlc_deframer_class->id) {
+		struct hdlc_deframer_descr *descr = buf;
 
-		if (len < sizeof(struct hdlc_framer_descr))
+		if (len < sizeof(struct hdlc_deframer_descr))
 			return -EINVAL;
 
-		chan_rx->fifo.framer_enabled =
-			!!(descr->flags & HDLC_FRAMER_FLAG_ENABLED);
+		chan_rx->fifo.framer_enabled = descr->enabled;
 
 	} else if (type == hfc_octet_reverser_class->id) {
 		struct octet_reverser_descr *descr = buf;
@@ -620,8 +622,7 @@ static int hfc_sys_chan_rx_chan_set_attr(
 		if (len < sizeof(struct octet_reverser_descr))
 			return -EINVAL;
 
-		chan_rx->fifo.bit_reversed =
-			!!(descr->flags & OCTET_REVERSER_FLAG_ENABLED);
+		chan_rx->fifo.bit_reversed = descr->enabled;
 
 	} else
 		return -ENOENT;
@@ -675,6 +676,9 @@ static void hfc_sys_chan_tx_chan_disconnect(struct ks_chan *ks_chan)
 {
 	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 	struct hfc_sys_chan *chan = chan_tx->chan;
+
+	chan_tx->fifo.bit_reversed = FALSE;
+	chan_tx->fifo.framer_enabled = FALSE;
 
 	hfc_debug_sys_chan(chan, 2, "TX disconnected\n");
 }
@@ -932,9 +936,9 @@ static int hfc_sys_chan_tx_chan_get_attr(
 		*type = hfc_hdlc_framer_class->id;
 		*len = sizeof(struct hdlc_framer_descr);
 
-		descr->flags = HDLC_FRAMER_FLAG_HARDWARE |
-				(chan_tx->fifo.framer_enabled ?
-					HDLC_FRAMER_FLAG_ENABLED : 0);
+		memset(descr, 0, sizeof(*descr));
+		descr->hardware = 1;
+		descr->enabled = chan_tx->fifo.framer_enabled ? 1 : 0;
 	}
 	break;
 
@@ -947,9 +951,9 @@ static int hfc_sys_chan_tx_chan_get_attr(
 		*type = hfc_octet_reverser_class->id;
 		*len = sizeof(struct octet_reverser_descr);
 
-		descr->flags = OCTET_REVERSER_FLAG_HARDWARE |
-				(chan_tx->fifo.bit_reversed ?
-					OCTET_REVERSER_FLAG_ENABLED : 0);
+		memset(descr, 0, sizeof(*descr));
+		descr->hardware = 1;
+		descr->enabled = chan_tx->fifo.bit_reversed ? 1 : 0;
 	}
 	break;
 
@@ -974,8 +978,7 @@ static int hfc_sys_chan_tx_chan_set_attr(
 		if (len < sizeof(struct hdlc_framer_descr))
 			return -EINVAL;
 
-		chan_tx->fifo.framer_enabled =
-			!!(descr->flags & HDLC_FRAMER_FLAG_ENABLED);
+		chan_tx->fifo.framer_enabled = descr->enabled;
 
 	} else if (type == hfc_octet_reverser_class->id) {
 
@@ -984,8 +987,7 @@ static int hfc_sys_chan_tx_chan_set_attr(
 		if (len < sizeof(struct octet_reverser_descr))
 			return -EINVAL;
 
-		chan_tx->fifo.bit_reversed =
-			!!(descr->flags & OCTET_REVERSER_FLAG_ENABLED);
+		chan_tx->fifo.bit_reversed = descr->enabled;
 	} else
 		return -ENOENT;
 
