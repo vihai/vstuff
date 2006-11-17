@@ -16,7 +16,8 @@ SUBDIRS=\
 	lapd			\
 	userport		\
 	milliwatt		\
-	vgsm
+	vgsm			\
+	vgsm2
 #ec hfc-pci hfc-usb hfc-e1 kfifo \
 #	 ppp
 
