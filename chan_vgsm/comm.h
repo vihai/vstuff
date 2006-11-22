@@ -18,6 +18,7 @@
 #include <list.h>
 
 #include "longtime.h"
+#include "timer.h"
 #include "util.h"
 
 #ifdef DEBUG_CODE
@@ -151,7 +152,7 @@ struct vgsm_comm
 
 	ast_cond_t close_cond;
 
-	longtime_t timer_expiration;
+	struct vgsm_timer timer;
 
 	char buf[2048];
 
@@ -168,7 +169,8 @@ struct vgsm_comm
 	BOOL debug_timer;
 };
 
-void vgsm_comm_init(struct vgsm_comm *comm, struct vgsm_urc_class *urcs);
+int vgsm_comm_init(struct vgsm_comm *comm, struct vgsm_urc_class *urcs);
+void vgsm_comm_destroy(struct vgsm_comm *comm);
 
 struct vgsm_req *vgsm_req_make_va(
 	struct vgsm_comm *comm,
@@ -234,5 +236,6 @@ void vgsm_comm_wakeup(struct vgsm_comm *comm);
 void vgsm_comm_open(struct vgsm_comm *comm, int fd);
 void vgsm_comm_close(struct vgsm_comm *comm);
 int vgsm_comm_thread_create();
+void vgsm_comm_thread_destroy();
 
 #endif

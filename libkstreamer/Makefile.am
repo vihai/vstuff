@@ -35,7 +35,8 @@ nobase_include_HEADERS = \
 	xact.h		\
 	req.h		\
 	router.h	\
-	util.h
+	util.h		\
+	logging.h
 
 INCLUDES =					\
 	-I$(top_builddir)			\

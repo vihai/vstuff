@@ -62,6 +62,7 @@
 #include "operators.h"
 #include "pin.h"
 #include "sim.h"
+#include "timer.h"
 
 #define FAILED_RETRY_TIME (5 * SEC)
 #define READY_UPDATE_TIME (30 * SEC)
@@ -649,7 +650,7 @@ static int vgsm_module_config_from_var(
 	struct vgsm_module_config *mc,
 	struct ast_variable *var)
 {
-	if (!strcasecmp(var->name, "device")) { 
+	if (!strcasecmp(var->name, "device")) {
 		strncpy(mc->device_filename, var->value,
 			sizeof(mc->device_filename));
 	} else if (!strcasecmp(var->name, "context")) {
@@ -694,19 +695,19 @@ static int vgsm_module_config_from_var(
 				var->value);
 		}
 
-	} else if (!strcasecmp(var->name, "sms_service_center")) { 
+	} else if (!strcasecmp(var->name, "sms_service_center")) {
 		vgsm_number_parse(&mc->smcc_address, var->value);
-	} else if (!strcasecmp(var->name, "sms_sender_domain")) { 
+	} else if (!strcasecmp(var->name, "sms_sender_domain")) {
 		strncpy(mc->sms_sender_domain, var->value,
 			sizeof(mc->sms_sender_domain));
-	} else if (!strcasecmp(var->name, "sms_recipient_address")) { 
+	} else if (!strcasecmp(var->name, "sms_recipient_address")) {
 		strncpy(mc->sms_recipient_address, var->value,
 			sizeof(mc->sms_recipient_address));
-	} else if (!strcasecmp(var->name, "dtmf_quelch")) { 
+	} else if (!strcasecmp(var->name, "dtmf_quelch")) {
 		mc->dtmf_quelch = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "dtmf_mutemax")) { 
+	} else if (!strcasecmp(var->name, "dtmf_mutemax")) {
 		mc->dtmf_mutemax = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "dtmf_relax")) { 
+	} else if (!strcasecmp(var->name, "dtmf_relax")) {
 		mc->dtmf_relax = ast_true(var->value);
 	} else {
 		return -1;
@@ -751,8 +752,9 @@ static void vgsm_module_reconfigure(
 	struct ast_config *cfg,
 	const char *name)
 {
-	/* Allocate a new module configuration */
+	int err;
 
+	/* Allocate a new module configuration */
 	struct vgsm_module_config *mc;
 	mc = vgsm_module_config_alloc();
 	if (!mc) {
@@ -771,7 +773,7 @@ static void vgsm_module_reconfigure(
 				"Unknown configuration variable %s\n",
 				var->name);
 		}
-		
+
 		var = var->next;
 	}
 
@@ -790,7 +792,9 @@ static void vgsm_module_reconfigure(
 
 		strncpy(module->name, name, sizeof(module->name));
 
-		vgsm_comm_init(&module->comm, vgsm_module_urcs);
+		err = vgsm_comm_init(&module->comm, vgsm_module_urcs);
+		if (err < 0)
+			goto err_comm_init;
 
 		list_add_tail(&module->ifs_node, &vgsm.ifs);
 
@@ -815,6 +819,8 @@ static void vgsm_module_reconfigure(
 
 	return;
 
+	vgsm_comm_destroy(&module->comm);
+err_comm_init:
 	vgsm_module_put(module);
 err_module_alloc:
 	vgsm_module_config_put(mc);
@@ -853,6 +859,12 @@ void vgsm_module_reload(struct ast_config *cfg)
 	}
 }
 
+static void vgsm_module_timers_updated(struct vgsm_timerset *set)
+{
+}
+
+static void vgsm_module_timer(void *data);
+
 struct vgsm_module *vgsm_module_alloc(void)
 {
 	struct vgsm_module *module;
@@ -871,11 +883,15 @@ struct vgsm_module *vgsm_module_alloc(void)
 	INIT_LIST_HEAD(&module->stats.outbound_counters);
 
 	module->status = VGSM_MODULE_STATUS_CLOSED;
-	module->timer_expiration = -1;
 
 	module->monitor_thread = AST_PTHREADT_NULL;
 
 	module->fd = -1;
+
+	vgsm_timerset_init(&module->timerset, vgsm_module_timers_updated);
+
+	vgsm_timer_init(&module->timer, &module->timerset, "module",
+			vgsm_module_timer, module);
 
 	module->sim.sim = vgsm_sim_alloc(&module->comm);
 	if (!module->sim.sim)
@@ -914,6 +930,8 @@ void _vgsm_module_put(struct vgsm_module *module)
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
 	if (!refcnt) {
+		vgsm_comm_destroy(&module->comm);
+
 		if (module->lockdown_reason)
 			free(module->lockdown_reason);
 
@@ -959,7 +977,7 @@ void vgsm_module_set_status(
 	ast_mutex_lock(&module->lock);
 
 	if (timeout >= 0) {
-		module->timer_expiration = longtime_now() + timeout;
+		vgsm_timer_start_delta(&module->timer, timeout);
 
 		vgsm_debug_generic(
 			"vGSM module '%s' changed state from %s to %s"
@@ -969,7 +987,7 @@ void vgsm_module_set_status(
 			vgsm_module_status_to_text(status),
 			timeout / 1000000.0);
 	} else {
-		module->timer_expiration = -1;
+		vgsm_timer_stop(&module->timer);
 
 		vgsm_debug_generic(
 			"vGSM module '%s' changed state from %s to %s\n",
@@ -1072,7 +1090,7 @@ static void vgsm_module_ignite(
 	struct vgsm_module *module)
 {
 	if (ioctl(module->fd, VGSM_IOC_POWER_IGN, 0) < 0)
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 			"Error turning on module: ioctl(POWER_IGN): %s",
 			strerror(errno));
 }
@@ -1081,7 +1099,7 @@ static void vgsm_module_emerg_off(
 	struct vgsm_module *module)
 {
 	if (ioctl(module->fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0)
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 			"Error turning off module: ioctl(POWER_EMERG_OFF): %s",
 			strerror(errno));
 }
@@ -1095,7 +1113,7 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 	ast_cli(fd,
 		"\n"
 		"---- Module '%s' ----\n"
-	      	"  Device : %s\n"
+		"  Device : %s\n"
 		"  Context: %s\n"
 		"  RX-gain: %d\n"
 		"  TX-gain: %d\n"
@@ -1654,7 +1672,7 @@ static int vgsm_show_module_network(int fd, struct vgsm_module *module)
 		vgsm_net_status_to_text(module->net.status));
 
 	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-            module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING)
+	    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING)
 		goto out;
 
 	struct vgsm_operator_info *op_info;
@@ -1806,7 +1824,7 @@ static int vgsm_show_module_statistics(int fd, struct vgsm_module *module)
 		return RESULT_FAILURE;
 	}
 
-	ast_cli(fd, "Total call duration: %s\n", 
+	ast_cli(fd, "Total call duration: %s\n",
 		vgsm_req_first_line(req)->text + strlen("^STCD: "));
 
 	vgsm_req_put(req);
@@ -1823,7 +1841,7 @@ static int vgsm_show_module_statistics(int fd, struct vgsm_module *module)
 		return RESULT_FAILURE;
 	}
 
-	ast_cli(fd, "Last call duration: %s\n", 
+	ast_cli(fd, "Last call duration: %s\n",
 		vgsm_req_first_line(req)->text + strlen("^SLCD: "));
 
 	vgsm_req_put(req);
@@ -2639,7 +2657,7 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 		 */
 
 		if (vgsm_chan->ast_chan->_state == AST_STATE_RESERVED) {
- 			/* If only a +CRING has been received, no pbx has yet
+			/* If only a +CRING has been received, no pbx has yet
 			 * been started on the ast_chan, so, do a manual
 			 * cleanup
 			 */
@@ -2650,7 +2668,7 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 			vgsm_ast_chan_destroy(vgsm_chan->ast_chan);
 			vgsm_chan->ast_chan = NULL;
 		} else {
-			vgsm_chan->ast_chan->hangupcause = 
+			vgsm_chan->ast_chan->hangupcause =
 				vgsm_cause_to_ast_cause(location, reason);
 
 			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
@@ -2827,7 +2845,7 @@ static void vgsm_update_module_by_creg(
 	}
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		// Update Net Info FIXME TODO
 	}
 
@@ -2904,7 +2922,7 @@ static void handle_unsolicited_creg(
 		vgsm_net_status_to_text(module->net.status));
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING)
+	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING)
 		vgsm_update_cops(module);
 
 	ast_mutex_unlock(&module->lock);
@@ -3303,7 +3321,7 @@ static void vgsm_handle_slcc_update(
 				" requesting HANGUP\n");
 
 			vgsm_module_received_hangup(module);
-        	}
+		}
 	break;
 
 	case VGSM_CALL_STATE_ACTIVE: {
@@ -4248,7 +4266,7 @@ static int vgsm_module_pin_check_and_input(
 				"SIM requires PUK2");
 		res = -1;
 	} else {
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 				"Unknown response '%s'", first_line->text);
 
 		res = -1;
@@ -4876,7 +4894,7 @@ static void vgsm_module_open(
 
 	module->fd = open(mc->device_filename, O_RDWR);
 	if (module->fd < 0) {
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 				"Error opening device: open(%s): %s",
 				mc->device_filename,
 				strerror(errno));
@@ -4939,7 +4957,7 @@ static void vgsm_module_open(
 	newtio.c_cc[VWERASE]	= 0;
 	newtio.c_cc[VLNEXT]	= 0;
 	newtio.c_cc[VEOL2]	= 0;
-	
+
 	tcflush(module->fd, TCIFLUSH);
 	tcsetattr(module->fd, TCSANOW, &newtio);
 
@@ -4949,7 +4967,7 @@ static void vgsm_module_open(
 
 	int val;
 	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 			"Error getting power status:"
 			" ioctl(POWER_GET): %s",
 			strerror(errno));
@@ -5005,7 +5023,7 @@ static void vgsm_module_initialize(
 	vgsm_module_set_status(module, VGSM_MODULE_STATUS_INITIALIZING, -1);
 
 	if (vgsm_module_codec_init(module, mc) < 0) {
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 				"Error configuring CODEC");
 
 		goto initialization_failure;
@@ -5013,7 +5031,7 @@ static void vgsm_module_initialize(
 
 	int val;
 	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		vgsm_module_failure_text(module, 
+		vgsm_module_failure_text(module,
 			"Error getting power status: ioctl(POWER_GET): %s",
 			strerror(errno));
 
@@ -5024,7 +5042,7 @@ static void vgsm_module_initialize(
 		ast_log(LOG_NOTICE,
 			"Module '%s' is not powered on, re-igniting\n",
 			module->name);
-		
+
 		module->power_attempts = 0;
 		vgsm_module_set_status(module, VGSM_MODULE_STATUS_POWERING_ON,
 						POWERING_ON_TIMEOUT);
@@ -5081,9 +5099,10 @@ initialization_failure:
 		vgsm_module_failure_text(module, "");
 }
 
-static void vgsm_module_monitor_timer(
-	struct vgsm_module *module)
+static void vgsm_module_timer(void *data)
 {
+	struct vgsm_module *module = data;
+
 	switch(module->status) {
 	case VGSM_MODULE_STATUS_CLOSED:
 		vgsm_module_open(module);
@@ -5198,30 +5217,21 @@ static void *vgsm_module_monitor_thread_main(void *data)
 	struct vgsm_module *module = (struct vgsm_module *)data;
 
 	for(;;) {
-		ast_mutex_lock(&module->lock);
+		vgsm_timerset_run(&module->timerset);
 
-		if (module->timer_expiration != -1) {
-			longtime_t timeout = module->timer_expiration -
-						longtime_now();
-			if (timeout < 0) {
-				module->timer_expiration = -1;
-				ast_mutex_unlock(&module->lock);
+		longtime_t timeout = vgsm_timerset_next(&module->timerset);
 
-				vgsm_module_monitor_timer(module);
-			} else if (timeout > 100000000) {
-				ast_mutex_unlock(&module->lock);
+		if (vgsm.debug_timer)
+			ast_verbose(
+				"vgsm: module handler sleeping for %lld ms\n",
+				timeout / 1000);
 
-				sleep(timeout / 1000000);
-			} else {
-				ast_mutex_unlock(&module->lock);
-
-				usleep(timeout);
-			}
-		} else {
-			ast_mutex_unlock(&module->lock);
-
+		if (timeout > 100000000)
+			sleep(timeout / 1000000);
+		else if (timeout >= 0)
+			usleep(timeout);
+		else
 			sleep(3600);
-		}
 	}
 
 	return NULL;
@@ -5290,7 +5300,7 @@ int vgsm_module_module_load(void)
 		err = -1;
 		goto err_comm_thread_create;
 	}
-	
+
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -5300,6 +5310,7 @@ int vgsm_module_module_load(void)
 		ast_pthread_create(&module->monitor_thread, &attr,
 			vgsm_module_monitor_thread_main, module);
 	}
+	pthread_attr_destroy(&attr);
 
 	ast_cli_register(&show_vgsm_modules);
 	ast_cli_register(&vgsm_forwarding);

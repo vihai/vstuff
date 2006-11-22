@@ -31,22 +31,21 @@
 #include "dynattr.h"
 #include "req.h"
 #include "xact.h"
+#include "logging.h"
 
-#define PIPELINE_HASHBITS 8
-#define PIPELINE_HASHSIZE ((1 << PIPELINE_HASHBITS) - 1)
-
-static struct hlist_head ks_pipelines_hash[PIPELINE_HASHSIZE];
-
-static inline struct hlist_head *ks_pipeline_get_hash(int id)
+static inline struct hlist_head *ks_pipeline_get_hash(
+	struct ks_conn *conn, int id)
 {
-	return &ks_pipelines_hash[id & (PIPELINE_HASHSIZE - 1)];
+	return &conn->pipelines_hash[id & (PIPELINE_HASHSIZE - 1)];
 }
 
-void ks_pipeline_add(struct ks_pipeline *pipeline)
+void ks_pipeline_add(struct ks_pipeline *pipeline, struct ks_conn *conn)
 {
+	pipeline->conn = conn;
+
 	hlist_add_head(
 		&ks_pipeline_get(pipeline)->node,
-		ks_pipeline_get_hash(pipeline->id));
+		ks_pipeline_get_hash(conn, pipeline->id));
 }
 
 void ks_pipeline_del(struct ks_pipeline *pipeline)
@@ -56,12 +55,15 @@ void ks_pipeline_del(struct ks_pipeline *pipeline)
 	ks_pipeline_put(pipeline);
 }
 
-struct ks_pipeline *ks_pipeline_get_by_id(int id)
+struct ks_pipeline *ks_pipeline_get_by_id(
+	struct ks_conn *conn,
+	int id)
 {
 	struct ks_pipeline *pipeline;
 	struct hlist_node *t;
 
-	hlist_for_each_entry(pipeline, t, ks_pipeline_get_hash(id), node) {
+	hlist_for_each_entry(pipeline, t, ks_pipeline_get_hash(conn, id),
+								node) {
 		if (pipeline->id == id)
 			return ks_pipeline_get(pipeline);
 	}
@@ -69,7 +71,9 @@ struct ks_pipeline *ks_pipeline_get_by_id(int id)
 	return NULL;
 }
 
-struct ks_pipeline *ks_pipeline_get_by_nlid(struct nlmsghdr *nlh)
+struct ks_pipeline *ks_pipeline_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
@@ -79,7 +83,7 @@ struct ks_pipeline *ks_pipeline_get_by_nlid(struct nlmsghdr *nlh)
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		if(attr->type == KS_PIPELINEATTR_ID)
-			return ks_pipeline_get_by_id(
+			return ks_pipeline_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 	}
 
@@ -159,11 +163,13 @@ static const char *ks_pipeline_status_to_string(
 	return "*INVALID*";
 }
 
-void ks_pipeline_dump(struct ks_pipeline *pipeline)
+void ks_pipeline_dump(
+	struct ks_pipeline *pipeline,
+	struct ks_conn *conn)
 {
-	fprintf(stderr, "  ID    : 0x%08x\n", pipeline->id);
-	fprintf(stderr, "  Path  : '%s'\n", pipeline->path);
-	fprintf(stderr, "  Status: %s\n",
+	report_conn(conn, LOG_DEBUG, "  ID    : 0x%08x\n", pipeline->id);
+	report_conn(conn, LOG_DEBUG, "  Path  : '%s'\n", pipeline->path);
+	report_conn(conn, LOG_DEBUG, "  Status: %s\n",
 		ks_pipeline_status_to_string(pipeline->status));
 
 	int i;
@@ -171,19 +177,21 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 
 		struct ks_chan *chan = pipeline->chans[i];
 
-		fprintf(stderr, "%s =>(%s)=> %s\n",
+		report_conn(conn, LOG_DEBUG, "%s =>(%s)=> %s\n",
 			chan->from->path,
 			chan->path,
 			chan->to->path);
 
 		struct ks_dynattr_instance *dynattr;
 		list_for_each_entry(dynattr, &chan->dynattrs, node) {
-			fprintf(stderr, "  DynAttr: %s\n", dynattr->dynattr->name);
+			report_conn(conn, LOG_DEBUG, "  DynAttr: %s\n", dynattr->dynattr->name);
 		}
 	}
 }
 
-struct ks_pipeline *ks_pipeline_create_from_nlmsg(struct nlmsghdr *nlh)
+struct ks_pipeline *ks_pipeline_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
 	struct ks_pipeline *pipeline;
 
@@ -217,7 +225,7 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(struct nlmsghdr *nlh)
 		break;
 
 		default:
-			fprintf(stderr, "   Attribute '%s'\n",
+			report_conn(conn, LOG_ERR, "   Attribute '%s'\n",
 				ks_netlink_pipeline_attr_to_string(
 					attr->type));
 		}
@@ -228,6 +236,7 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(struct nlmsghdr *nlh)
 
 void ks_pipeline_update_from_nlmsg(
 	struct ks_pipeline *pipeline,
+	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
@@ -256,7 +265,7 @@ void ks_pipeline_update_from_nlmsg(
 		break;
 
 		default:
-			fprintf(stderr, "   Attribute '%s'\n",
+			report_conn(conn, LOG_ERR, "   Attribute '%s'\n",
 				ks_netlink_pipeline_attr_to_string(
 					attr->type));
 		}
@@ -304,7 +313,7 @@ static int ks_pipeline_create_handle_response(
 	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_NEW)
 		return 0;
 
-	ks_pipeline_update_from_nlmsg(pipeline, nlh);
+	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
 
 	return 0;
 }
@@ -343,7 +352,7 @@ int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	struct ks_req *req;
 	req = ks_pipeline_queue_create(pipeline, xact);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	if (req->err < 0) {
@@ -376,7 +385,7 @@ static int ks_pipeline_update_handle_response(
 	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_SET)
 		return 0;
 
-	ks_pipeline_update_from_nlmsg(pipeline, nlh);
+	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
 
 	return 0;
 }
@@ -443,7 +452,7 @@ int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	struct ks_req *req;
 	req = ks_pipeline_queue_update(pipeline, xact);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	if (req->err < 0) {
@@ -476,7 +485,7 @@ static int ks_pipeline_destroy_handle_response(
 	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_DEL)
 		return 0;
 
-	ks_pipeline_update_from_nlmsg(pipeline, nlh);
+	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
 
 	return 0;
 }
@@ -536,7 +545,7 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	struct ks_req *req;
 	req = ks_pipeline_queue_destroy(pipeline, xact);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	if (req->err < 0) {
@@ -583,7 +592,6 @@ int ks_pipeline_update_chans(
 		struct ks_req *req;
 		req = ks_chan_queue_update(chan, xact);
 
-		ks_xact_run(xact);
 		ks_req_wait(req);
 
 		if (req->err < 0) {

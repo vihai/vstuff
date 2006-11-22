@@ -476,7 +476,11 @@ void vgsm_module_init(
 	u16 rx_fifo_base,
 	u16 rx_fifo_size,
 	u16 tx_fifo_base,
-	u16 tx_fifo_size)
+	u16 tx_fifo_size,
+	u16 asc0_base,
+	u16 asc1_base,
+	u16 sim_base,
+	u16 mesim_base)
 {
 	memset(module, 0, sizeof(*module));
 
@@ -490,10 +494,44 @@ void vgsm_module_init(
 			&card->pci_dev->dev.kobj);
 
 	memset(&module->asc0, 0, sizeof(module->asc0));
-	module->asc0.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
-	module->asc0.uartclk = 1152000 * 16;
+	module->asc0.iotype = UPIO_MEM;
+	module->asc0.mapbase = module->card->io_bus_mem + asc0_base;
+	module->asc0.membase = module->card->io_mem + asc0_base;
+	module->asc0.regshift = 0;
 	module->asc0.irq = card->pci_dev->irq;
 	module->asc0.dev = &card->pci_dev->dev;
+	module->asc0.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
+	module->asc0.uartclk = 1152000 * 16;
+
+	memset(&module->asc1, 0, sizeof(module->asc1));
+	module->asc1.iotype = UPIO_MEM;
+	module->asc1.mapbase = module->card->io_bus_mem + asc1_base;
+	module->asc1.membase = module->card->io_mem + asc1_base;
+	module->asc1.regshift = 0;
+	module->asc1.irq = card->pci_dev->irq;
+	module->asc1.dev = &card->pci_dev->dev;
+	module->asc1.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
+	module->asc1.uartclk = 1152000 * 16;
+
+	memset(&module->sim, 0, sizeof(module->sim));
+	module->sim.iotype = UPIO_MEM;
+	module->sim.mapbase = module->card->io_bus_mem + sim_base;
+	module->sim.membase = module->card->io_mem + sim_base;
+	module->sim.regshift = 0;
+	module->sim.irq = card->pci_dev->irq;
+	module->sim.dev = &card->pci_dev->dev;
+	module->sim.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
+	module->sim.uartclk = 1152000 * 16;
+
+	memset(&module->mesim, 0, sizeof(module->mesim));
+	module->mesim.iotype = UPIO_MEM;
+	module->mesim.mapbase = module->card->io_bus_mem + mesim_base;
+	module->mesim.membase = module->card->io_mem + mesim_base;
+	module->mesim.regshift = 0;
+	module->mesim.irq = card->pci_dev->irq;
+	module->mesim.dev = &card->pci_dev->dev;
+	module->mesim.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
+	module->mesim.uartclk = 1152000 * 16;
 
 	vgsm_module_rx_init(&module->rx, module, rx_fifo_base, rx_fifo_size);
 	vgsm_module_tx_init(&module->tx, module, tx_fifo_base, tx_fifo_size);
@@ -506,7 +544,11 @@ struct vgsm_module *vgsm_module_alloc(
 	u16 rx_fifo_base,
 	u16 rx_fifo_size,
 	u16 tx_fifo_base,
-	u16 tx_fifo_size)
+	u16 tx_fifo_size,
+	u16 asc0_base,
+	u16 asc1_base,
+	u16 sim_base,
+	u16 mesim_base)
 {
 	struct vgsm_module *module;
 
@@ -516,7 +558,9 @@ struct vgsm_module *vgsm_module_alloc(
 
 	vgsm_module_init(module, card, id, name,
 			rx_fifo_base, rx_fifo_size,
-			tx_fifo_base, tx_fifo_size);
+			tx_fifo_base, tx_fifo_size,
+			asc0_base, asc1_base,
+			sim_base, mesim_base);
 
 	return module;
 

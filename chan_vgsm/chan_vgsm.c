@@ -51,10 +51,22 @@
 
 #include <linux/kstreamer/userport.h>
 
-#include <linux/kstreamer/hdlc_framer.h>
-#include <linux/kstreamer/octet_reverser.h>
+/* FUCK YOU ASTERSISK */
+#undef pthread_mutex_t
+#undef pthread_mutex_lock
+#undef pthread_mutex_unlock
+#undef pthread_mutex_trylock
+#undef pthread_mutex_init
+#undef pthread_mutex_destroy
+#undef pthread_cond_t
+#undef pthread_cond_init
+#undef pthread_cond_destroy
+#undef pthread_cond_signal
+#undef pthread_cond_broadcast
+#undef pthread_cond_wait
+#undef pthread_cond_timedwait
 
-#include <libkstreamer.h>
+#include <res_kstreamer.h>
 
 
 #include "util.h"
@@ -93,7 +105,7 @@
  *
  * There no one-to-one relationship between them as the module exists even
  * if no call is present, a ast_chan is actually a call... or a channel?
- * or half a call? who knows.... 
+ * or half a call? who knows....
  *
  * Anyway, since our callbacks do get invoked with the ast_chan->lock acquired,
  * Asterisk is forcing us to follow its locking model.
@@ -120,7 +132,7 @@
  * The values contained in a vgsm_module_config instance are read-only,
  * procedures which want a stable configuration may simply take a reference
  * to the vgsm_module_config object and keep it for as long as it is needed.
- * For example, a snapshot of the configuration is taken into the channel 
+ * For example, a snapshot of the configuration is taken into the channel
  * structure and kept for as long as the call lasts.
  *
  */
@@ -129,8 +141,12 @@ struct vgsm_state vgsm = {
 	.usecnt = 0,
 #ifdef DEBUG_DEFAULTS
 	.debug_generic = TRUE,
+	.debug_timer = FALSE,
+	.debug_jitbuf = TRUE,
 #else
 	.debug_generic = FALSE,
+	.debug_timer = FALSE,
+	.debug_jitbuf = FALSE,
 #endif
 
 };
@@ -428,7 +444,7 @@ static void vgsm_reload_config(void)
 
 		return;
 	}
-	
+
 	struct ast_variable *var;
 	var = ast_variable_browse(cfg, "general");
 	while (var) {
@@ -448,6 +464,55 @@ static void vgsm_reload_config(void)
 
 	vgsm_operators_init();
 }
+
+/*---------------------------------------------------------------------------*/
+
+static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
+{
+	ast_mutex_lock(&vgsm.lock);
+	vgsm.debug_generic = TRUE;
+	ast_mutex_unlock(&vgsm.lock);
+
+	ast_cli(fd, "vGSM debugging enabled\n");
+
+	return RESULT_SUCCESS;
+}
+
+static char debug_vgsm_generic_help[] =
+"Usage: debug vgsm generic\n"
+"\n"
+"	Debug generic vGSM events, including modules state change\n";
+
+static struct ast_cli_entry debug_vgsm_generic =
+{
+	{ "debug", "vgsm", "generic", NULL },
+	do_debug_vgsm_generic,
+	"Enables generic vGSM debugging",
+	debug_vgsm_generic_help,
+	NULL
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
+{
+	ast_mutex_lock(&vgsm.lock);
+	vgsm.debug_generic = FALSE;
+	ast_mutex_unlock(&vgsm.lock);
+
+	ast_cli(fd, "vGSM debugging disabled\n");
+
+	return RESULT_SUCCESS;
+}
+
+static struct ast_cli_entry no_debug_vgsm_generic =
+{
+	{ "no", "debug", "vgsm", "generic", NULL },
+	do_no_debug_vgsm_generic,
+	"Disables generic vGSM debugging",
+	NULL,
+	NULL
+};
 
 /*---------------------------------------------------------------------------*/
 
@@ -500,10 +565,10 @@ static struct ast_cli_entry no_debug_vgsm_timer =
 
 /*---------------------------------------------------------------------------*/
 
-static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
+static int do_debug_vgsm_jitbuf(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.lock);
-	vgsm.debug_generic = TRUE;
+	vgsm.debug_jitbuf = TRUE;
 	ast_mutex_unlock(&vgsm.lock);
 
 	ast_cli(fd, "vGSM debugging enabled\n");
@@ -511,26 +576,26 @@ static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char debug_vgsm_generic_help[] =
-"Usage: debug vgsm generic\n"
+static char debug_vgsm_jitbuf_help[] =
+"Usage: debug vgsm jitbuf\n"
 "\n"
-"	Debug generic vGSM events, including modules state change\n";
+"	Debug vGSM jitter buffer\n";
 
-static struct ast_cli_entry debug_vgsm_generic =
+static struct ast_cli_entry debug_vgsm_jitbuf =
 {
-	{ "debug", "vgsm", "generic", NULL },
-	do_debug_vgsm_generic,
-	"Enables generic vGSM debugging",
-	debug_vgsm_generic_help,
+	{ "debug", "vgsm", "jitbuf", NULL },
+	do_debug_vgsm_jitbuf,
+	"Enables jitbuf vGSM debugging",
+	debug_vgsm_jitbuf_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
+static int do_no_debug_vgsm_jitbuf(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.lock);
-	vgsm.debug_generic = FALSE;
+	vgsm.debug_jitbuf = FALSE;
 	ast_mutex_unlock(&vgsm.lock);
 
 	ast_cli(fd, "vGSM debugging disabled\n");
@@ -538,11 +603,11 @@ static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry no_debug_vgsm_generic =
+static struct ast_cli_entry no_debug_vgsm_jitbuf =
 {
-	{ "no", "debug", "vgsm", "generic", NULL },
-	do_no_debug_vgsm_generic,
-	"Disables generic vGSM debugging",
+	{ "no", "debug", "vgsm", "jitbuf", NULL },
+	do_no_debug_vgsm_jitbuf,
+	"Disables vGSM jitter buffer debugging",
 	NULL,
 	NULL
 };
@@ -647,11 +712,11 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	slen = mbstowcs(NULL, argv[5], 0);
 	if(slen == -1)
 		goto err_invalid_mbstring;
- 
+
 	sms->text = malloc((slen + 1) * sizeof(wchar_t));
 	if(!sms->text)
 		goto err_malloc_sms_text;
- 
+
 	mbstowcs(sms->text, argv[5], slen);
 	sms->text[slen] = L'\0';
 
@@ -674,7 +739,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	vgsm_req_put(req);
 
 	module->sending_sms = FALSE;
- 
+
 	return RESULT_SUCCESS;
 
 err_make_req:
@@ -1040,7 +1105,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_get_module_node_id;
 	}
 
-	vgsm_chan->module_node = ks_node_get_by_id(node_id);
+	vgsm_chan->module_node = ks_node_get_by_id(ks_conn, node_id);
 	if (!vgsm_chan->module_node) {
 		ast_log(LOG_ERROR, "Module's node not found\n");
 		goto err_module_node_not_found;
@@ -1064,9 +1129,9 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_get_up_node_id;
 	}
 
-	ks_conn_sync(vgsm.ks_conn);
+	ks_conn_sync(ks_conn);
 
-	vgsm_chan->up_node = ks_node_get_by_id(node_id);
+	vgsm_chan->up_node = ks_node_get_by_id(ks_conn, node_id);
 	if (!vgsm_chan->up_node) {
 		ast_log(LOG_ERROR, "Userport's node not found\n");
 		goto err_up_node_not_found;
@@ -1076,7 +1141,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 			vgsm_chan->up_node->id,
 			vgsm_chan->module_node->id);
 
-	vgsm_chan->rx_pipeline = ks_connect(vgsm.ks_conn,
+	vgsm_chan->rx_pipeline = ks_connect(ks_conn,
 					vgsm_chan->module_node,
 					vgsm_chan->up_node, &err);
 	if (!vgsm_chan->rx_pipeline) {
@@ -1086,7 +1151,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_module_up_connect;
 	}
 
-	err = ks_pipeline_create(vgsm_chan->rx_pipeline, vgsm.ks_conn);
+	err = ks_pipeline_create(vgsm_chan->rx_pipeline, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot create pipeline: %s\n",
@@ -1094,18 +1159,18 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_rx_pipeline_create;
 	}
 
-	ks_pipeline_update_chans(vgsm_chan->rx_pipeline, vgsm.ks_conn);
+	ks_pipeline_update_chans(vgsm_chan->rx_pipeline, ks_conn);
 
 	vgsm_chan->rx_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
 
-	err = ks_pipeline_update(vgsm_chan->rx_pipeline, vgsm.ks_conn);
+	err = ks_pipeline_update(vgsm_chan->rx_pipeline, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 				"Cannot start the pipeline\n");
 		goto err_rx_pipeline_update;
 	}
 
-	vgsm_chan->tx_pipeline = ks_connect(vgsm.ks_conn,
+	vgsm_chan->tx_pipeline = ks_connect(ks_conn,
 					vgsm_chan->up_node,
 					vgsm_chan->module_node, &err);
 	if (!vgsm_chan->tx_pipeline) {
@@ -1115,7 +1180,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_up_module_connect;
 	}
 
-	err = ks_pipeline_create(vgsm_chan->tx_pipeline, vgsm.ks_conn);
+	err = ks_pipeline_create(vgsm_chan->tx_pipeline, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot create pipeline: %s\n",
@@ -1123,11 +1188,11 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_tx_pipeline_create;
 	}
 
-	ks_pipeline_update_chans(vgsm_chan->tx_pipeline, vgsm.ks_conn);
+	ks_pipeline_update_chans(vgsm_chan->tx_pipeline, ks_conn);
 
 	vgsm_chan->tx_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
 
-	err = ks_pipeline_update(vgsm_chan->tx_pipeline, vgsm.ks_conn);
+	err = ks_pipeline_update(vgsm_chan->tx_pipeline, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 				"Cannot start the pipeline\n");
@@ -1606,13 +1671,13 @@ static void vgsm_disconnect_channel(
 
 	if (vgsm_chan->rx_pipeline) {
 		vgsm_chan->rx_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
-		err = ks_pipeline_update(vgsm_chan->rx_pipeline, vgsm.ks_conn);
+		err = ks_pipeline_update(vgsm_chan->rx_pipeline, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot stop the pipeline\n");
 			return;
 		}
 
-		err = ks_pipeline_destroy(vgsm_chan->rx_pipeline, vgsm.ks_conn);
+		err = ks_pipeline_destroy(vgsm_chan->rx_pipeline, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot destroy the pipeline\n");
 			return;
@@ -1624,13 +1689,13 @@ static void vgsm_disconnect_channel(
 
 	if (vgsm_chan->tx_pipeline) {
 		vgsm_chan->tx_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
-		err = ks_pipeline_update(vgsm_chan->tx_pipeline, vgsm.ks_conn);
+		err = ks_pipeline_update(vgsm_chan->tx_pipeline, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot stop the pipeline\n");
 			return;
 		}
 
-		err = ks_pipeline_destroy(vgsm_chan->tx_pipeline, vgsm.ks_conn);
+		err = ks_pipeline_destroy(vgsm_chan->tx_pipeline, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot destroy the pipeline\n");
 			return;
@@ -1797,9 +1862,15 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 }
 
 #define FIFO_JITTBUFF_LOW 10
-#define FIFO_JITTBUFF_HIGH 20
+#define FIFO_JITTBUFF_HIGH 100
 #define FIFO_JITTBUFF_AVG \
 		((FIFO_JITTBUFF_LOW + FIFO_JITTBUFF_HIGH) / 2)
+
+#define vgsm_debug_jitbuf(format, arg...)			\
+	if (vgsm.debug_jitbuf)					\
+		ast_verbose("vgsm: "				\
+			format,					\
+			## arg)
 
 static int vgsm_write(
 	struct ast_channel *ast_chan,
@@ -1848,6 +1919,9 @@ ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
         int len = frame->datalen;
 	__u8 *buf = frame->data;
 
+	if (!len)
+		return 0;
+
 	int pressure;
 	if (ioctl(vgsm_chan->up_fd, KS_UP_GET_PRESSURE, &pressure)) {
 		ast_log(LOG_ERROR, "ioctl(KS_UP_GET_PRESSURE): %s\n",
@@ -1856,18 +1930,18 @@ ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 
 	if (pressure < FIFO_JITTBUFF_LOW) {
 		int diff = (FIFO_JITTBUFF_LOW - pressure);
-		buf = malloc(len + diff);
+		buf = alloca(len + diff);
 		memset(buf, 0x2a, diff);
 		memcpy(buf + diff, frame->data, len);
 		len += diff;
 
-#if 1
-		ast_verbose("TX under low-mark: added %d samples\n", diff);
-#endif
+		vgsm_debug_jitbuf("TX under low-mark: added %d samples\n",
+				diff);
 	}
 
 	if (pressure > FIFO_JITTBUFF_HIGH && len > 0) {
-		ast_verbose("TX %d over high-mark: dropped %d samples\n",
+		vgsm_debug_jitbuf(
+			"TX %d over high-mark: dropped %d samples\n",
 			pressure - FIFO_JITTBUFF_HIGH,
 			min(len, pressure - FIFO_JITTBUFF_HIGH));
 
@@ -2166,8 +2240,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 				module = vgsm_module_get(tm);
 				break;
-        		}
-        		ast_mutex_unlock(&tm->lock);
+			}
+			ast_mutex_unlock(&tm->lock);
 		}
 		ast_mutex_unlock(&vgsm.lock);
 
@@ -2427,15 +2501,6 @@ int load_module()
 	vgsm.default_mc = vgsm_module_config_alloc();
 	vgsm_module_config_default(vgsm.default_mc);
 
-	vgsm.ks_conn = ks_conn_create();
-	if (!vgsm.ks_conn) {
-		ast_log(LOG_ERROR, "Unable to connect to kstreamer\n");
-		err = -1;
-		goto err_ks_conn_create;
-	}
-
-	ks_update_topology(vgsm.ks_conn);
-
 	vgsm_reload_config();
 
 	if (ast_channel_register(&vgsm_tech)) {
@@ -2453,6 +2518,8 @@ int load_module()
 	ast_cli_register(&no_debug_vgsm_generic);
 	ast_cli_register(&debug_vgsm_timer);
 	ast_cli_register(&no_debug_vgsm_timer);
+	ast_cli_register(&debug_vgsm_jitbuf);
+	ast_cli_register(&no_debug_vgsm_jitbuf);
 	ast_cli_register(&vgsm_reload);
 	ast_cli_register(&vgsm_send_sms);
 	ast_cli_register(&vgsm_pin_input);
@@ -2482,13 +2549,13 @@ err_channel_register:
 	ast_cli_unregister(&vgsm_pin_input);
 	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&vgsm_reload);
+	ast_cli_unregister(&no_debug_vgsm_jitbuf);
+	ast_cli_unregister(&debug_vgsm_jitbuf);
 	ast_cli_unregister(&no_debug_vgsm_timer);
 	ast_cli_unregister(&debug_vgsm_timer);
 	ast_cli_unregister(&no_debug_vgsm_generic);
 	ast_cli_unregister(&debug_vgsm_generic);
 
-	ks_conn_destroy(vgsm.ks_conn);
-err_ks_conn_create:
 	vgsm_module_config_put(vgsm.default_mc);
 
 	return err;
@@ -2505,14 +2572,14 @@ int unload_module(void)
 	ast_cli_unregister(&vgsm_pin_input);
 	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&vgsm_reload);
+	ast_cli_unregister(&no_debug_vgsm_jitbuf);
+	ast_cli_unregister(&debug_vgsm_jitbuf);
 	ast_cli_unregister(&no_debug_vgsm_timer);
 	ast_cli_unregister(&debug_vgsm_timer);
 	ast_cli_unregister(&no_debug_vgsm_generic);
 	ast_cli_unregister(&debug_vgsm_generic);
 
 	ast_channel_unregister(&vgsm_tech);
-
-	ks_conn_destroy(vgsm.ks_conn);
 
 	vgsm_module_config_put(vgsm.default_mc);
 

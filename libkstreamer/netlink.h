@@ -13,6 +13,8 @@
 #ifndef _LIBKSTREAMER_NETLINK_H
 #define _LIBKSTREAMER_NETLINK_H
 
+#ifdef _LIBKSTREAMER_PRIVATE_
+
 #include <linux/types.h>
 
 #include "conn.h"
@@ -29,9 +31,10 @@ int ks_netlink_put_attr(
 	void *data,
 	int data_len);
 
-int ks_send_next_packet(struct ks_conn *conn);
 void ks_netlink_receive(struct ks_conn *conn);
 
-//int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
+int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
+
+#endif
 
 #endif

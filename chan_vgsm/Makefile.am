@@ -31,6 +31,7 @@ chan_vgsm_la_SOURCES =\
 	base64.c		\
 	quotprint.c		\
 	longtime.c		\
+	timer.c			\
 	util.c
 
 noinst_HEADERS =\
@@ -54,6 +55,7 @@ noinst_HEADERS =\
 	base64.h		\
 	quotprint.h		\
 	longtime.h		\
+	timer.h			\
 	util.h
 
 INCLUDES =					\
@@ -61,7 +63,7 @@ INCLUDES =					\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\
 	-I$(top_builddir)/libkstreamer/		\
-	-I$(top_builddir)/libskb/		\
+	-I$(top_builddir)/res_kstreamer/	\
 	-I$(astincdir)
 
 chan_vgsm_la_LIBADD = ../libkstreamer/libkstreamer.la ../libskb/libskb.la

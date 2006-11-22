@@ -1,5 +1,5 @@
 /*
- * Userland Kstreamer Helper Routines
+ * vGSM channel driver for Asterisk
  *
  * Copyright (C) 2006 Daniele Orlandi
  *
@@ -10,11 +10,13 @@
  *
  */
 
-#ifndef _LIBKSTREAMER_ROUTER_H
-#define _LIBKSTREAMER_ROUTER_H
+#ifndef _RES_KSTREAMER_H
+#define _RES_KSTREAMER_H
 
-struct ks_node;
+#include <libkstreamer.h>
+#include <libskb.h>
 
-void router_run(struct ks_node *start, struct ks_node *to);
+extern struct ks_conn *ks_conn;
 
 #endif
+

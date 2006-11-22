@@ -119,6 +119,23 @@ int vgsm_card_probe(
 		  VGSM_FIFO_TX_3_BASE, VGSM_FIFO_TX_3_SIZE }
 	};
 
+	const struct {
+		u16 asc0_base;
+		u16 asc1_base;
+		u16 sim_base;
+		u16 mesim_base;
+	} uart_config[] = {
+		{ VGSM_UART_ASC0_0_BASE, VGSM_UART_ASC1_0_BASE,
+		  VGSM_UART_SIM_0_BASE, VGSM_UART_MESIM_0_BASE },
+		{ VGSM_UART_ASC0_1_BASE, VGSM_UART_ASC1_1_BASE,
+		  VGSM_UART_SIM_1_BASE, VGSM_UART_MESIM_1_BASE },
+		{ VGSM_UART_ASC0_2_BASE, VGSM_UART_ASC1_2_BASE,
+		  VGSM_UART_SIM_2_BASE, VGSM_UART_MESIM_2_BASE },
+		{ VGSM_UART_ASC0_3_BASE, VGSM_UART_ASC1_3_BASE,
+		  VGSM_UART_SIM_3_BASE, VGSM_UART_MESIM_3_BASE }
+	};
+
+
 	card = kmalloc(sizeof(*card), GFP_KERNEL);
 	if (!card) {
 		err = -ENOMEM;
@@ -138,7 +155,11 @@ int vgsm_card_probe(
 					fifo_config[i].rx_base,
 					fifo_config[i].rx_size,
 					fifo_config[i].tx_base,
-					fifo_config[i].tx_size);
+					fifo_config[i].tx_size,
+					uart_config[i].asc0_base,
+					uart_config[i].asc1_base,
+					uart_config[i].sim_base,
+					uart_config[i].mesim_base);
 		if (!card->modules[i]) {
 			err = -ENOMEM;
 			goto err_modules_alloc;

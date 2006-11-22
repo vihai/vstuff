@@ -29,14 +29,61 @@
 #include "netlink.h"
 #include "req.h"
 #include "xact.h"
+#include "logging.h"
 
-struct hlist_head ks_chans_hash[CHAN_HASHSIZE];
-
-static inline struct hlist_head *ks_chan_get_hash(int id)
+static inline struct hlist_head *ks_chan_get_hash(
+	struct ks_conn *conn, int id)
 {
-	return &ks_chans_hash[id & (CHAN_HASHSIZE - 1)];
+	return &conn->chans_hash[id & (DYNATTR_HASHSIZE - 1)];
 }
 
+void ks_chan_add(struct ks_chan *chan, struct ks_conn *conn)
+{
+	chan->conn = conn;
+
+	hlist_add_head(
+		&ks_chan_get(chan)->node,
+		ks_chan_get_hash(conn, chan->id));
+}
+
+void ks_chan_del(struct ks_chan *chan)
+{
+	hlist_del(&chan->node);
+
+	ks_chan_put(chan);
+}
+
+struct ks_chan *ks_chan_get_by_id(struct ks_conn *conn, int id)
+{
+	struct ks_chan *chan;
+	struct hlist_node *t;
+
+	hlist_for_each_entry(chan, t, ks_chan_get_hash(conn, id), node) {
+		if (chan->id == id)
+			return ks_chan_get(chan);
+	}
+
+	return NULL;
+}
+
+struct ks_chan *ks_chan_get_by_nlid(struct ks_conn *conn, struct nlmsghdr *nlh)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		if(attr->type == KS_CHANATTR_ID)
+			return ks_chan_get_by_id(conn,
+					*(__u32 *)KS_ATTR_DATA(attr));
+	}
+
+	return NULL;
+}
+
+#if 0
 const char *ks_netlink_chan_attr_to_string(
 		enum ks_chan_attribute_type type)
 {
@@ -53,49 +100,7 @@ const char *ks_netlink_chan_attr_to_string(
 
 	return "UNKNOWN";
 }
-
-void ks_chan_add(struct ks_chan *chan)
-{
-	hlist_add_head(
-		&ks_chan_get(chan)->node,
-		ks_chan_get_hash(chan->id));
-}
-
-void ks_chan_del(struct ks_chan *chan)
-{
-	hlist_del(&chan->node);
-
-	ks_chan_put(chan);
-}
-
-struct ks_chan *ks_chan_get_by_id(int id)
-{
-	struct ks_chan *chan;
-	struct hlist_node *t;
-
-	hlist_for_each_entry(chan, t, ks_chan_get_hash(id), node) {
-		if (chan->id == id)
-			return ks_chan_get(chan);
-	}
-
-	return NULL;
-}
-
-struct ks_chan *ks_chan_get_by_nlid(struct nlmsghdr *nlh)
-{
-	struct ks_attr *attr;
-	int attrs_len = KS_PAYLOAD(nlh);
-
-	for (attr = KS_ATTRS(nlh);
-	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
-
-		if(attr->type == KS_CHANATTR_ID)
-			return ks_chan_get_by_id(*(__u32 *)KS_ATTR_DATA(attr));
-	}
-
-	return NULL;
-}
+#endif
 
 struct ks_chan *ks_chan_alloc(void)
 {
@@ -142,7 +147,9 @@ void ks_chan_put(struct ks_chan *chan)
 	}
 }
 
-struct ks_chan *ks_chan_create_from_nlmsg(struct nlmsghdr *nlh)
+struct ks_chan *ks_chan_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
 	struct ks_chan *chan;
 
@@ -150,7 +157,7 @@ struct ks_chan *ks_chan_create_from_nlmsg(struct nlmsghdr *nlh)
 	if (!chan)
 		return NULL;
 
-	ks_chan_update_from_nlmsg(chan, nlh);
+	ks_chan_update_from_nlmsg(chan, conn, nlh);
 
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
@@ -173,20 +180,21 @@ struct ks_chan *ks_chan_create_from_nlmsg(struct nlmsghdr *nlh)
 		break;
 
 		case KS_CHANATTR_FROM:
-			chan->from = ks_node_get_by_id(
+			chan->from = ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		break;
 
 		case KS_CHANATTR_TO:
-			chan->to = ks_node_get_by_id(
+			chan->to = ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		break;
 
 		default: {
 			struct ks_dynattr *dynattr_class;
-			dynattr_class = ks_dynattr_get_by_id(attr->type);
+			dynattr_class = ks_dynattr_get_by_id(conn, attr->type);
 			if (!dynattr_class) {
-				fprintf(stderr, "   Attribute %d unknown\n", attr->type);
+				report_conn(conn, LOG_WARNING,
+					"Attribute %d unknown\n", attr->type);
 				break;
 			}
 
@@ -211,7 +219,10 @@ struct ks_chan *ks_chan_create_from_nlmsg(struct nlmsghdr *nlh)
 	return chan;
 }
 
-void ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
+void ks_chan_update_from_nlmsg(
+	struct ks_chan *chan,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
@@ -246,32 +257,34 @@ void ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
 	}
 }
 
-void ks_chan_dump(struct ks_chan *chan)
+void ks_chan_dump(
+	struct ks_chan *chan,
+	struct ks_conn *conn)
 {
-	fprintf(stderr, "  ID    : 0x%08x\n", chan->id);
-	fprintf(stderr, "  Path  : '%s'\n", chan->path);
+	report_conn(conn, LOG_DEBUG, "  ID    : 0x%08x\n", chan->id);
+	report_conn(conn, LOG_DEBUG, "  Path  : '%s'\n", chan->path);
 
 	if (chan->from)
-		fprintf(stderr, "  From  : 0x%08x (%s)\n",
+		report_conn(conn, LOG_DEBUG, "  From  : 0x%08x (%s)\n",
 			chan->from->id, chan->from->path);
 
 	if (chan->to)
-		fprintf(stderr, "  To    : 0x%08x (%s)\n",
+		report_conn(conn, LOG_DEBUG, "  To    : 0x%08x (%s)\n",
 			chan->to->id, chan->to->path);
 
 	struct ks_dynattr_instance *dynattr;
 	list_for_each_entry(dynattr, &chan->dynattrs, node) {
-		fprintf(stderr, "  Dynattr: %s\n", dynattr->dynattr->name);
+		report_conn(conn, LOG_DEBUG, "  Dynattr: %s\n", dynattr->dynattr->name);
 
-		fprintf(stderr, "  Data: ");
+		report_conn(conn, LOG_DEBUG, "  Data: ");
 
 		int i;
 		for(i=0; i<dynattr->len; i++) {
-			fprintf(stderr, "%02x ",
+			report_conn(conn, LOG_DEBUG, "%02x ",
 				*(dynattr->payload + i));
 		}
 
-		fprintf(stderr, "\n");
+		report_conn(conn, LOG_DEBUG, "\n");
 	}
 }
 
@@ -285,7 +298,7 @@ static int ks_chan_update_handle_response(
 	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_SET)
 		return 0;
 
-	ks_chan_update_from_nlmsg(chan, nlh);
+	ks_chan_update_from_nlmsg(chan, req->xact->conn, nlh);
 
 	return 0;
 }
@@ -355,7 +368,7 @@ int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn)
 	struct ks_req *req;
 	req = ks_chan_queue_update(chan, xact);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	if (req->err < 0) {

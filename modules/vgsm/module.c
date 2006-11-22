@@ -417,7 +417,18 @@ static void vgsm_module_fifo_write(
 {
 	struct vgsm_module *module = module_tx->module;
 	struct vgsm_card *card = module->card;
+	u32 outpos;
 	int i;
+
+	outpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
+				card->writedma_bus_mem) / 4;
+
+	if (module_tx->fifo_underrun ||
+	    ((module_tx->fifo_pos - outpos + module_tx->fifo_size) %
+	    module_tx->fifo_size) > module_tx->fifo_size / 2) {
+		module_tx->fifo_pos = outpos;
+		module_tx->fifo_underrun = FALSE;
+	}
 
 	for (i=0; i<count; i++) {
 		*(u8 *)(card->writedma_mem + (module_tx->fifo_pos * 4) +
@@ -456,7 +467,7 @@ static int vgsm_module_tx_chan_get_pressure(
 		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
 	struct vgsm_module *module = module_tx->module;
 	struct vgsm_card *card = module->card;
-	int outpos;
+	u32 outpos;
 	int pressure;
 
 	vgsm_card_lock(card);
@@ -466,6 +477,13 @@ static int vgsm_module_tx_chan_get_pressure(
 
 	pressure = (module_tx->fifo_pos - outpos + module_tx->fifo_size) %
 			module_tx->fifo_size;
+
+	if (module_tx->fifo_underrun ||
+	    pressure > module_tx->fifo_size / 2) {
+		module_tx->fifo_pos = outpos;
+		module_tx->fifo_underrun = FALSE;
+		pressure = 0;
+	}
 
 	vgsm_card_unlock(card);
 
@@ -501,6 +519,7 @@ static void vgsm_module_tx_init(
 	init_waitqueue_head(&module_tx->wait_queue);
 
 	module_tx->fifo_pos = 0;
+	module_tx->fifo_underrun = FALSE;
 	module_tx->fifo_size = module->card->writedma_size / 4;
 	module_tx->codec_gain = 0xff;
 

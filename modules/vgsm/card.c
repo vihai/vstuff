@@ -127,6 +127,7 @@ static void vgsm_send_codec_setreg(
 	vgsm_card_unlock(card);
 }
 
+#if 0
 static void vgsm_send_codec_getreg(
 	struct vgsm_card *card,
 	u8 reg_address)
@@ -141,6 +142,7 @@ static void vgsm_send_codec_getreg(
 
 	vgsm_send_msg(&card->micros[0], &msg);
 }
+#endif
 
 void vgsm_update_mask0(struct vgsm_card *card)
 {
@@ -570,6 +572,24 @@ static irqreturn_t vgsm_interrupt(int irq,
 		for(i=card->writedma_size / 2;
 		   i < card->writedma_size - 1; i++)
 			*(u8 *)(card->writedma_mem + i) = 0x2a;
+	}
+
+	if ((int0stat & VGSM_INT1STAT_WR_REACH_INT) ||
+	    (int0stat & VGSM_INT1STAT_WR_REACH_END)) {
+
+		int i;
+
+		u32 outpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
+				card->writedma_bus_mem) / 4;
+
+		for(i=0; i<card->num_modules; i++) {
+			struct vgsm_module_tx *tx = &card->modules[i]->tx;
+
+			if (((tx->fifo_pos - outpos + tx->fifo_size) %
+			    tx->fifo_size) >= tx->fifo_size / 2)
+				tx->fifo_underrun = TRUE;
+		}
+
 	}
 
 	if (int0stat & VGSM_INT1STAT_PCI_MASTER_ABORT)

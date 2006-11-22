@@ -415,6 +415,7 @@ AC_CONFIG_FILES([Makefile
 		libskb/Makefile
 		libkstreamer/Makefile
 		libq931/Makefile
+		res_kstreamer/Makefile
 		chan_visdn/Makefile
 		chan_vgsm/Makefile
 		app_visdn_ppp/Makefile

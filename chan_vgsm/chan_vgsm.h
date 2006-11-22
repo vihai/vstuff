@@ -23,8 +23,8 @@
 
 #include <list.h>
 
-#include "module.h" 
-#include "comm.h" 
+#include "module.h"
+#include "comm.h"
 
 #ifndef AST_CONTROL_DISCONNECT
 #define AST_CONTROL_DISCONNECT 43
@@ -75,9 +75,8 @@ struct vgsm_state
 	ast_mutex_t usecnt_lock;
 	int usecnt;
 
-	struct ks_conn *ks_conn;
-
 	BOOL debug_generic;
+	BOOL debug_jitbuf;
 	BOOL debug_timer;
 
 	char sms_spooler[32];

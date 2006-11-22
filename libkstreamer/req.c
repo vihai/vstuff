@@ -45,6 +45,9 @@ struct ks_req *ks_req_alloc(struct ks_xact *xact)
 	req->xact = xact;
 	req->id = xact->conn->seqnum++;
 
+	pthread_mutex_init(&req->completed_lock, NULL);
+	pthread_cond_init(&req->completed_cond, NULL);
+
 	return req;
 }
 
@@ -65,6 +68,10 @@ void ks_req_put(struct ks_req *req)
 	req->refcnt--;
 
 	if (!req->refcnt) {
+
+		pthread_mutex_destroy(&req->completed_lock);
+		pthread_cond_destroy(&req->completed_cond);
+
 		if (req->response_data) {
 			free(req->response_data);
 			req->response_data = NULL;
@@ -74,13 +81,11 @@ void ks_req_put(struct ks_req *req)
 	}
 }
 
-void ks_req_wait_default(struct ks_req *req)
-{
-	while(!req->completed)
-		ks_netlink_receive(req->xact->conn);
-}
-
 void ks_req_wait(struct ks_req *req)
 {
-	req->xact->conn->req_wait(req);
+	pthread_mutex_lock(&req->completed_lock);
+	while(!req->completed) {
+		pthread_cond_wait(&req->completed_cond, &req->completed_lock);
+	}
+	pthread_mutex_unlock(&req->completed_lock);
 }

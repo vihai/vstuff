@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/netlink.h>
@@ -24,6 +25,7 @@
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
+#include "conn.h"
 
 //#define DIJ_DEBUG
 
@@ -34,10 +36,16 @@ void router_run(
 	int i;
 	struct ks_node *node;
 
-	for (i=0; i<ARRAY_SIZE(ks_nodes_hash); i++) {
-		struct hlist_node *t; 
+	assert(start->conn);
+	assert(to->conn);
+	assert(start->conn == to->conn);
 
-		hlist_for_each_entry(node, t, &ks_nodes_hash[i], node) {
+	struct ks_conn *conn = start->conn;
+
+	for (i=0; i<ARRAY_SIZE(conn->nodes_hash); i++) {
+		struct hlist_node *t;
+
+		hlist_for_each_entry(node, t, &conn->nodes_hash[i], node) {
 			node->router_cost = INT_MAX;
 			node->router_done = FALSE;
 			node->router_prev = NULL;
@@ -51,14 +59,16 @@ void router_run(
 		struct ks_node *min_cost_node = NULL;
 
 		/* Extract the node with lowest cost */
-		for (i=0; i<ARRAY_SIZE(ks_nodes_hash); i++) {
+		for (i=0; i<ARRAY_SIZE(conn->nodes_hash); i++) {
 			struct ks_node *node;
-			struct hlist_node *t; 
+			struct hlist_node *t;
 
-			hlist_for_each_entry(node, t, &ks_nodes_hash[i], node) {
+			hlist_for_each_entry(node, t, &conn->nodes_hash[i],
+									node) {
 				if (!node->router_done &&
 				    (!min_cost_node ||
-				    node->router_cost < min_cost_node->router_cost))
+				    node->router_cost <
+						min_cost_node->router_cost))
 					min_cost_node = node;
 			}
 		}
@@ -70,7 +80,7 @@ void router_run(
 			break;
 
 #ifdef DIJ_DEBUG
-		fprintf(stderr, 	
+		report_conn(conn, LOG_DEBUG,
 			"Min cost (%d) node = %s\n",
 			min_cost_node->router_cost,
 			min_cost_node->path);
@@ -81,10 +91,11 @@ void router_run(
 		/* For each arch exiting from node 'min_cost_node' */
 
 		struct ks_chan *arch;
-		for (i=0; i<ARRAY_SIZE(ks_chans_hash); i++) {
-			struct hlist_node *t; 
+		for (i=0; i<ARRAY_SIZE(conn->chans_hash); i++) {
+			struct hlist_node *t;
 
-			hlist_for_each_entry(arch, t, &ks_chans_hash[i], node) {
+			hlist_for_each_entry(arch, t, &conn->chans_hash[i],
+								node) {
 
 				if (arch->from != min_cost_node)
 					continue;
@@ -93,7 +104,7 @@ void router_run(
 					continue;*/
 
 #ifdef DIJ_DEBUG
-				fprintf(stderr, 
+				report_conn(conn, LOG_DEBUG,
 					"    Arch (%s) from"
 					" node (%s) to node (%s),"
 					" cost = %d\n",
@@ -106,7 +117,7 @@ void router_run(
 				if (arch->cost != INT_MAX &&
 				    min_cost_node->router_cost != INT_MAX &&
 				    arch->to->router_cost >
-				    	min_cost_node->router_cost +
+					min_cost_node->router_cost +
 						arch->cost) {
 
 					arch->to->router_cost =
@@ -117,7 +128,7 @@ void router_run(
 					arch->to->router_prev_thru = arch;
 
 #ifdef DIJ_DEBUG
-					fprintf(stderr, 
+					report_conn(conn, LOG_DEBUG,
 						"        => Relaxing node (%s)"
 						" new cost = %d\n",
 						arch->to->path,
@@ -128,4 +139,3 @@ void router_run(
 		}
 	}
 }
-

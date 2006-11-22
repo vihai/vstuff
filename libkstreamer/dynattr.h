@@ -22,11 +22,15 @@
 
 #include <list.h>
 
+struct ks_conn;
+
 struct ks_dynattr
 {
 	struct hlist_node node;
 
 	int refcnt;
+
+	struct ks_conn *conn;
 
 	__u32 id;
 	char *name;
@@ -47,20 +51,35 @@ struct ks_dynattr *ks_dynattr_alloc(void);
 struct ks_dynattr *ks_dynattr_get(struct ks_dynattr *dynattr);
 void ks_dynattr_put(struct ks_dynattr *dynattr);
 
-const char *ks_netlink_dynattr_attr_to_string(
-		enum ks_dynattr_attribute_type type);
+struct ks_dynattr *ks_dynattr_get_by_id(
+	struct ks_conn *conn,
+	int id);
+struct ks_dynattr *ks_dynattr_get_by_name(
+	struct ks_conn *conn,
+	const char *name);
 
-void ks_dynattr_add(struct ks_dynattr *dynattr);
-void ks_dynattr_del(struct ks_dynattr *dynattr);
-struct ks_dynattr *ks_dynattr_get_by_id(int id);
-struct ks_dynattr *ks_dynattr_get_by_nlid(struct nlmsghdr *nlh);
-struct ks_dynattr *ks_dynattr_get_by_name(const char *name);
-
-struct ks_dynattr *ks_dynattr_create_from_nlmsg(struct nlmsghdr *nlh);
-void ks_dynattr_update_from_nlmsg(
+void ks_dynattr_dump(
 	struct ks_dynattr *dynattr,
+	struct ks_conn *conn);
+
+#ifdef _LIBKSTREAMER_PRIVATE_
+
+void ks_dynattr_add(struct ks_dynattr *dynattr, struct ks_conn *conn);
+void ks_dynattr_del(struct ks_dynattr *dynattr);
+
+struct ks_dynattr *ks_dynattr_get_by_nlid(
+	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 
-void ks_dynattr_dump(struct ks_dynattr *dynattr);
+struct ks_dynattr *ks_dynattr_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+void ks_dynattr_update_from_nlmsg(
+	struct ks_dynattr *dynattr,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+#endif
 
 #endif

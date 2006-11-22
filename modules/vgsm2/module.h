@@ -84,7 +84,11 @@ void vgsm_module_init(
 	u16 rx_fifo_base,
 	u16 rx_fifo_size,
 	u16 tx_fifo_base,
-	u16 tx_fifo_size);
+	u16 tx_fifo_size,
+	u16 asc0_base,
+	u16 asc1_base,
+	u16 sim_base,
+	u16 mesim_base);
 struct vgsm_module *vgsm_module_alloc(
 	struct vgsm_card *card,
 	int id,
@@ -92,7 +96,11 @@ struct vgsm_module *vgsm_module_alloc(
 	u16 rx_fifo_base,
 	u16 rx_fifo_size,
 	u16 tx_fifo_base,
-	u16 tx_fifo_size);
+	u16 tx_fifo_size,
+	u16 asc0_base,
+	u16 asc1_base,
+	u16 sim_base,
+	u16 mesim_base);
 int vgsm_module_register(struct vgsm_module *module);
 void vgsm_module_unregister(struct vgsm_module *module);
 

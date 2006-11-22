@@ -15,7 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <errno.h>
+#include <unistd.h>
 #include <assert.h>
 
 #include <sys/socket.h>
@@ -41,6 +43,7 @@ struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
 
 	memset(xact, 0, sizeof(*xact));
 
+	pthread_mutex_init(&xact->requests_lock, NULL);
 	INIT_LIST_HEAD(&xact->requests);
 	INIT_LIST_HEAD(&xact->requests_sent);
 	INIT_LIST_HEAD(&xact->requests_done);
@@ -48,8 +51,11 @@ struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
 	xact->refcnt = 1;
 	xact->conn = conn;
 	xact->id = conn->seqnum;
-	xact->state = KS_XACT_STATE_NULL;
 	xact->autocommit = TRUE;
+
+	xact->state = KS_XACT_STATE_NULL;
+	pthread_mutex_init(&xact->state_lock, NULL);
+	pthread_cond_init(&xact->state_cond, NULL);
 
 	return xact;
 }
@@ -72,15 +78,26 @@ void ks_xact_put(struct ks_xact *xact)
 
 	xact->refcnt--;
 
-	if (!xact->refcnt)
+	if (!xact->refcnt) {
+		pthread_cond_destroy(&xact->state_cond);
+		pthread_mutex_destroy(&xact->state_lock);
+
+		pthread_mutex_destroy(&xact->requests_lock);
+
 		free(xact);
+	}
 }
 
 void ks_xact_queue_request(
 	struct ks_xact *xact,
 	struct ks_req *req)
 {
+	pthread_mutex_lock(&xact->requests_lock);
 	list_add_tail(&ks_req_get(req)->node, &xact->requests);
+	pthread_mutex_unlock(&xact->requests_lock);
+
+	char junk = 0;
+	write(xact->conn->alert_write, &junk, sizeof(junk));
 }
 
 struct ks_req *ks_xact_queue_new_request(
@@ -116,7 +133,9 @@ struct ks_req *ks_xact_queue_new_request_callback(
 	req->flags = flags;
 	req->response_callback = callback;
 
+	pthread_mutex_lock(&xact->requests_lock);
 	list_add_tail(&ks_req_get(req)->node, &xact->requests);
+	pthread_mutex_unlock(&xact->requests_lock);
 
 	return req;
 }
@@ -129,7 +148,7 @@ int ks_xact_begin(struct ks_xact *xact)
 	if (req->err < 0)
 		return req->err;
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	return 0;
@@ -143,7 +162,6 @@ int ks_xact_commit(struct ks_xact *xact)
 	if (req->err < 0)
 		return req->err;
 
-	ks_xact_run(xact);
 	ks_req_wait(req);
 
 	return 0;
@@ -157,7 +175,6 @@ int ks_xact_abort(struct ks_xact *xact)
 	if (req->err < 0)
 		return req->err;
 
-	ks_xact_run(xact);
 	ks_req_wait(req);
 
 	return 0;
@@ -181,28 +198,25 @@ struct ks_req *ks_xact_queue_abort(struct ks_xact *xact)
 						NLM_F_REQUEST);
 }
 
-int ks_xact_run(struct ks_xact *xact)
+int ks_xact_submit(struct ks_xact *xact)
 {
-	if (xact->state == KS_XACT_STATE_NULL) {
-		ks_conn_add_xact(xact->conn, xact);
+	assert(xact->state == KS_XACT_STATE_NULL);
 
-		xact->state = KS_XACT_STATE_ACTIVE;
-	}
+	ks_conn_add_xact(xact->conn, xact);
+	xact->state = KS_XACT_STATE_ACTIVE;
 
-	ks_send_next_packet(xact->conn);
+	char junk = 0;
+	write(xact->conn->alert_write, junk, sizeof(junk));
 
 	return 0;
 }
 
-void ks_xact_wait_default(struct ks_xact *xact)
-{
-	while(xact->state != KS_XACT_STATE_COMPLETED)
-		ks_netlink_receive(xact->conn);
-}
-
 void ks_xact_wait(struct ks_xact *xact)
 {
-	xact->conn->xact_wait(xact);
+	pthread_mutex_lock(&xact->state_lock);
+	while(xact->state != KS_XACT_STATE_COMPLETED)
+		pthread_cond_wait(&xact->state_cond, &xact->state_lock);
+	pthread_mutex_unlock(&xact->state_lock);
 }
 
 void ks_xact_need_skb(struct ks_xact *xact)

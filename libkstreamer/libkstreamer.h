@@ -19,6 +19,10 @@
 #include "pipeline.h"
 #include "dynattr.h"
 #include "router.h"
+#include "netlink.h"
+#include "req.h"
+#include "xact.h"
+#include "logging.h"
 
 #define KS_LIB_VERSION_MAJOR 0
 #define KS_LIB_VERSION_MINOR 0

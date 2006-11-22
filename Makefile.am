@@ -42,6 +42,7 @@ SUBDIRS += libq931
 SUBDIRS += scripts samples #visdnctl vgsmctl
 
 if asterisk_modules
+SUBDIRS += res_kstreamer
 #SUBDIRS += chan_visdn
 SUBDIRS += chan_vgsm
 #SUBDIRS += app_visdn_ppp

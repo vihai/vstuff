@@ -15,7 +15,7 @@
 #define _VGSM_REGS_H
 
 /* Tiger 320 registers */
-#define VGSM_CNTL    		0x00
+#define VGSM_CNTL		0x00
 #define VGSM_CNTL_EXTRST		(1 << 0)
 #define VGSM_CNTL_DMA_RST		(1 << 1)
 #define VGSM_CNTL_SERIAL_RST		(1 << 2)
@@ -30,7 +30,7 @@
 #define VGSM_DMA_OPER_DMA_ENABLE	(1 << 0)
 #define VGSM_DMA_OPER_DMA_RESTART	(1 << 1)
 
-#define VGSM_AUXC    		0x02
+#define VGSM_AUXC		0x02
 #define VGSM_AUXC_0_IN		(0 << 0)
 #define VGSM_AUXC_0_OUT		(1 << 0)
 #define VGSM_AUXC_1_IN		(0 << 1)
@@ -48,9 +48,9 @@
 #define VGSM_AUXC_7_IN		(0 << 7)
 #define VGSM_AUXC_7_OUT		(1 << 7)
 
-#define VGSM_AUXD    		0x03
+#define VGSM_AUXD		0x03
 
-#define VGSM_MASK0   		0x04
+#define VGSM_MASK0		0x04
 #define VGSM_MASK0_DMA_WR_INT		(1 << 0)
 #define VGSM_MASK0_DMA_WR_END		(1 << 1)
 #define VGSM_MASK0_DMA_RD_INT		(1 << 2)
@@ -58,8 +58,8 @@
 #define VGSM_MASK0_PCI_MASTER_ABORT	(1 << 4)
 #define VGSM_MASK0_PCI_TARGET_ABORT	(1 << 5)
 
-#define VGSM_MASK1   		0x05
-#define VGSM_INT0STAT 		0x06
+#define VGSM_MASK1		0x05
+#define VGSM_INT0STAT		0x06
 
 #define VGSM_INT1STAT		0x07
 #define VGSM_INT1STAT_WR_REACH_INT	(1 << 0)
@@ -114,7 +114,7 @@
 #define VGSM_PIB_F0		0xF0
 #define VGSM_PIB_F4		0xF4
 #define VGSM_PIB_F8		0xF8
-#define VGSM_PIB_FC		0xFC	
+#define VGSM_PIB_FC		0xFC
 
 #define VGSM_CMD_S0		0x0
 #define VGSM_CMD_S1		0x1

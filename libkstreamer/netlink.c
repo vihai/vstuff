@@ -134,48 +134,49 @@ int ks_netlink_put_attr(
 	return 0;
 }
 
-static void ks_dump_nlh(struct nlmsghdr *nlh)
+static void ks_dump_nlh(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
-	fprintf(stderr, "  Message type: %s (%d)\n",
+	char flags[256];
+
+	snprintf(flags, sizeof(flags),
+		"%s%s%s%s%s%s%s",
+		nlh->nlmsg_flags & NLM_F_REQUEST ? "NLM_F_REQUEST" : "",
+		nlh->nlmsg_flags & NLM_F_MULTI ? "NLM_F_MULTI" : "",
+		nlh->nlmsg_flags & NLM_F_ACK ? "NLM_F_ACK" : "",
+		nlh->nlmsg_flags & NLM_F_ECHO ? "NLM_F_ECHO" : "",
+		nlh->nlmsg_flags & NLM_F_ROOT ? "NLM_F_ROOT" : "",
+		nlh->nlmsg_flags & NLM_F_MATCH ? "NLM_F_MATCH" : "",
+		nlh->nlmsg_flags & NLM_F_ATOMIC ? "NLM_F_ATOMIC" : "");
+
+	report_conn(conn, LOG_DEBUG,
+		"  Message type: %s (%d)\n"
+		"  PID: %d\n"
+		"  Sequence number: %d\n"
+		"  Flags: %s\n",
 		ks_netlink_message_type_to_string(nlh->nlmsg_type),
-		nlh->nlmsg_type);
-
-	fprintf(stderr, "  PID: %d\n",
-		nlh->nlmsg_pid);
-
-	fprintf(stderr, "  Sequence number: %d\n",
-		nlh->nlmsg_seq);
-
-	fprintf(stderr, "  Flags: ");
-	if (nlh->nlmsg_flags & NLM_F_REQUEST)
-		fprintf(stderr, "NLM_F_REQUEST ");
-	if (nlh->nlmsg_flags & NLM_F_MULTI)
-		fprintf(stderr, "NLM_F_MULTI ");
-	if (nlh->nlmsg_flags & NLM_F_ACK)
-		fprintf(stderr, "NLM_F_ACK ");
-	if (nlh->nlmsg_flags & NLM_F_ECHO)
-		fprintf(stderr, "NLM_F_ECHO ");
-	if (nlh->nlmsg_flags & NLM_F_ROOT)
-		fprintf(stderr, "NLM_F_ROOT ");
-	if (nlh->nlmsg_flags & NLM_F_MATCH)
-		fprintf(stderr, "NLM_F_MATCH ");
-	if (nlh->nlmsg_flags & NLM_F_ATOMIC)
-		fprintf(stderr, "NLM_F_ATOMIC ");
-	fprintf(stderr, "\n");
-
-	/*
+		nlh->nlmsg_type,
+		nlh->nlmsg_pid,
+		nlh->nlmsg_seq,
+		flags);
+#if 0
 	__u8 *payload = KS_DATA(nlh);
 	int payload_len = KS_PAYLOAD(nlh);
+	char *payload_text = alloca(payload_len * 3 + 1);
 	int i;
 
-	fprintf(stderr, "  ");
 	for(i=0; i<payload_len; i++)
-		fprintf(stderr, "%02x ", payload[i]);
-	fprintf(stderr, "\n");
-	*/
+		sprintf(pl + i * 3, "%02x ", payload[i]);
+
+	report_conn(conn, LOG_DEBUG,
+		"  Payload: %s\n",
+		payload_text);
+#endif
+
 }
 
-static int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
+int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 {
 	struct sockaddr_nl dest_sa;
 	memset (&dest_sa, 0, sizeof(dest_sa));
@@ -195,8 +196,9 @@ static int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	msg.msg_iovlen = 1;
 	msg.msg_flags = 0;
 
-	fprintf(stderr, "\n"
-	       ">>>--------- Sending packet len = %d -------->>>\n", skb->len);
+	report_conn(conn, LOG_DEBUG,
+		"\n"
+		">>>--------- Sending packet len = %d -------->>>\n", skb->len);
 
 	struct nlmsghdr *nlh;
 	int len_left = skb->len;
@@ -204,9 +206,10 @@ static int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	for (nlh = skb->data;
 	     NLMSG_OK(nlh, len_left);
 	     nlh = NLMSG_NEXT(nlh, len_left))
-		ks_dump_nlh(nlh);
+		ks_dump_nlh(conn, nlh);
 
-	fprintf(stderr, ">>>------------------------------------------<<<\n");
+	report_conn(conn, LOG_DEBUG,
+		">>>------------------------------------------<<<\n");
 
 	int len = sendmsg(conn->sock, &msg, 0);
 	if(len < 0) {
@@ -219,97 +222,16 @@ static int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	return 0;
 }
 
-static void ks_xact_flush(struct ks_xact *xact)
-{
-	if (xact->out_skb) {
-		if (xact->out_skb->len) {
-			ks_netlink_sendmsg(xact->conn, xact->out_skb);
-			xact->out_skb = NULL;
-		}
-	} else {
-		kfree_skb(xact->out_skb);
-		xact->out_skb = NULL;
-	}
-}
-
-int ks_send_next_packet(struct ks_conn *conn)
-{
-	//int size = 0;
-	int err;
-
-	if (!conn->cur_xact) {
-		if (list_empty(&conn->xacts))
-			return 0;
-
-		conn->cur_xact = list_entry(conn->xacts.next, struct ks_xact,
-									node);
-		list_del(&conn->cur_xact->node);
-	}
-
-	struct ks_xact *xact = conn->cur_xact;
-
-	if (list_empty(&xact->requests))
-		return 0;
-
-	if (!list_empty(&xact->requests_sent))
-		return 0;
-
-	struct ks_req *req;
-	/*list_for_each_entry(req, &xact->requests, node)
-		size += NLMSG_ALIGN(NLMSG_LENGTH(0));*/
-
-	struct ks_req *t;
-	list_for_each_entry_safe(req, t, &xact->requests, node) {
-retry:
-		ks_xact_need_skb(xact);
-		if (!xact->out_skb)
-			return -ENOMEM;
-
-		void *oldtail = xact->out_skb->tail;
-
-		struct nlmsghdr *nlh;
-		nlh = ks_nlmsg_put(xact->out_skb, xact->conn->pid, req->id,
-						req->type, req->flags, 0);
-		if (!nlh) {
-			ks_xact_flush(xact);
-			goto retry;
-		}
-
-		if (req->request_fill_callback) {
-			ks_xact_need_skb(xact);
-			if (!xact->out_skb)
-				return -ENOMEM;
-
-			err = req->request_fill_callback(req, xact->out_skb,
-								req->data);
-			if (err == -ENOBUFS) {
-				skb_trim(xact->out_skb,
-					oldtail - xact->out_skb->data);
-				ks_xact_flush(xact);
-				goto retry;
-			} else if (err < 0)
-				return err;
-		}
-
-		nlh->nlmsg_len = xact->out_skb->tail - oldtail;
-
-		list_del(&req->node);
-		list_add_tail(&req->node, &xact->requests_sent);
-	}
-
-	ks_xact_flush(xact);
-
-	ks_conn_set_state(conn, KS_CONN_STATE_WAITING_ACK);
-
-	return 0;
-}
-
 static void ks_netlink_request_complete(
 	struct ks_conn *conn,
 	int err)
 {
 	conn->cur_req->err = err;
+
+	pthread_mutex_lock(&conn->cur_req->completed_lock);
 	conn->cur_req->completed = TRUE;
+	pthread_mutex_unlock(&conn->cur_req->completed_lock);
+	pthread_cond_broadcast(&conn->cur_req->completed_cond);
 
 	ks_req_put(conn->cur_req);
 	conn->cur_req = NULL;
@@ -319,7 +241,6 @@ static void ks_netlink_request_complete(
 			KS_CONN_STATE_WAITING_ACK);
 	} else {
 		ks_conn_set_state(conn, KS_CONN_STATE_IDLE);
-		ks_send_next_packet(conn);
 	}
 }
 
@@ -332,11 +253,13 @@ static void ks_netlink_receive_unicast(
 
 	switch(conn->state) {
 	case KS_CONN_STATE_NULL:
-		fprintf(stderr, "Unexpected message in state NULL\n");
+		report_conn(conn, LOG_ERR,
+			"Unexpected message in state NULL\n");
 	break;
 
 	case KS_CONN_STATE_IDLE:
-		fprintf(stderr, "Unexpected message in state IDLE\n");
+		report_conn(conn, LOG_ERR,
+			"Unexpected message in state IDLE\n");
 	break;
 
 	case KS_CONN_STATE_WAITING_ACK: {
@@ -349,7 +272,9 @@ static void ks_netlink_receive_unicast(
 		conn->cur_req = list_entry(conn->cur_xact->requests_sent.next,
 						struct ks_req, node);
 
+		pthread_mutex_lock(&conn->cur_xact->requests_lock);
 		list_del(&conn->cur_req->node);
+		pthread_mutex_unlock(&conn->cur_xact->requests_lock);
 
 		if (nlh->nlmsg_type == NLMSG_ERROR) {
 			ks_netlink_request_complete(conn,
@@ -359,7 +284,8 @@ static void ks_netlink_receive_unicast(
 		}
 
 		if (nlh->nlmsg_type != conn->cur_req->type) {
-			fprintf(stderr, "Message type different: %d %d\n",
+			report_conn(conn, LOG_ERR,
+				"Message type different: %d %d\n",
 				nlh->nlmsg_type, conn->cur_req->type);
 
 			break;
@@ -424,7 +350,10 @@ static void ks_netlink_receive_unicast(
 	    (conn->cur_xact->autocommit ||
 	    nlh->nlmsg_type == KS_NETLINK_COMMIT)) {
 
+		pthread_mutex_lock(&conn->cur_xact->state_lock);
 		conn->cur_xact->state = KS_XACT_STATE_COMPLETED;
+		pthread_mutex_unlock(&conn->cur_xact->state_lock);
+		pthread_cond_broadcast(&conn->cur_xact->state_cond);
 		ks_xact_put(conn->cur_xact);
 		conn->cur_xact = NULL;
 	}
@@ -437,7 +366,7 @@ static void ks_netlink_receive_multicast(
 	ks_topology_update(conn, nlh);
 }
 
-void ks_netlink_receive_msg(
+static void ks_netlink_receive_msg(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh,
 	struct sockaddr_nl *src_sa)
@@ -446,11 +375,11 @@ void ks_netlink_receive_msg(
 	__u8 *data = NLMSG_DATA(nlh);
 	int i;
 	for(i=0; i<len; i++)
-		fprintf(stderr, "%02x ", *(data + i));
-	fprintf(stderr, "\n");
+		report_conn(conn, LOG_DEBUG, "%02x ", *(data + i));
+	report_conn(conn, LOG_DEBUG, "\n");
 #endif
 
-	ks_dump_nlh(nlh);
+	ks_dump_nlh(conn, nlh);
 
 	if (src_sa->nl_groups)
 		ks_netlink_receive_multicast(conn, nlh);
@@ -484,8 +413,9 @@ void ks_netlink_receive(struct ks_conn *conn)
 		return;
 	}
 
-	fprintf(stderr, "\n"
-	       "<<<--------- Received packet len = %d groups = %d--------<<<\n", len, src_sa.nl_groups);
+	report_conn(conn, LOG_DEBUG, "\n"
+		"<<<--------- Received packet len = %d groups = %d--------<<<\n"
+		,len, src_sa.nl_groups);
 
 	struct nlmsghdr *nlh;
 	int len_left = len;
@@ -495,5 +425,6 @@ void ks_netlink_receive(struct ks_conn *conn)
 	     nlh = NLMSG_NEXT(nlh, len_left))
 		ks_netlink_receive_msg(conn, nlh, &src_sa);
 
-	fprintf(stderr, "<<<-------------------------------------------<<<\n");
+	report_conn(conn, LOG_DEBUG,
+		"<<<-------------------------------------------<<<\n");
 }

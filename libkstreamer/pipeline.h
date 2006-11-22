@@ -23,11 +23,13 @@
 
 #include <libskb.h>
 
-#include "conn.h"
+struct ks_conn;
 
 struct ks_pipeline
 {
 	struct hlist_node node;
+
+	struct ks_conn *conn;
 
 	int refcnt;
 
@@ -45,24 +47,13 @@ struct ks_pipeline *ks_pipeline_alloc(void);
 struct ks_pipeline *ks_pipeline_get(struct ks_pipeline *pipeline);
 void ks_pipeline_put(struct ks_pipeline *pipeline);
 
-void ks_pipeline_add(struct ks_pipeline *pipeline);
-void ks_pipeline_del(struct ks_pipeline *pipeline);
-struct ks_pipeline *ks_pipeline_get_by_id(int id);
-struct ks_pipeline *ks_pipeline_get_by_nlid(struct nlmsghdr *nlh);
-const char *ks_netlink_pipeline_attr_to_string(
-		enum ks_pipeline_attribute_type type);
-void ks_pipeline_dump(struct ks_pipeline *pipeline);
-struct ks_pipeline *ks_pipeline_alloc(void);
+struct ks_pipeline *ks_pipeline_get_by_id(
+	struct ks_conn *conn,
+	int id);
 
-int ks_pipeline_write_to_nlmsg(
+void ks_pipeline_dump(
 	struct ks_pipeline *pipeline,
-	struct sk_buff *skb,
-	enum ks_netlink_message_type message_type,
-	__u32 pid, __u32 seq, __u16 flags);
-struct ks_pipeline *ks_pipeline_create_from_nlmsg(struct nlmsghdr *nlh);
-void ks_pipeline_update_from_nlmsg(
-	struct ks_pipeline *pipeline,
-	struct nlmsghdr *nlh);
+	struct ks_conn *conn);
 
 int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn);
 int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn);
@@ -71,5 +62,25 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn);
 int ks_pipeline_update_chans(
 	struct ks_pipeline *pipeline,
 	struct ks_conn *conn);
+
+#ifdef _LIBKSTREAMER_PRIVATE_
+
+void ks_pipeline_add(struct ks_pipeline *pipeline, struct ks_conn *conn);
+void ks_pipeline_del(struct ks_pipeline *pipeline);
+
+struct ks_pipeline *ks_pipeline_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+struct ks_pipeline *ks_pipeline_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+void ks_pipeline_update_from_nlmsg(
+	struct ks_pipeline *pipeline,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+#endif
 
 #endif

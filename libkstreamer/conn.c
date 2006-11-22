@@ -18,6 +18,10 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <signal.h>
+#include <poll.h>
+#include <fcntl.h>
 
 #include <sys/socket.h>
 #include <linux/netlink.h>
@@ -28,10 +32,13 @@
 #include "xact.h"
 #include "req.h"
 #include "util.h"
+#include "logging.h"
 
 void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact)
 {
+	pthread_mutex_lock(&conn->xacts_lock);
 	list_add_tail(&ks_xact_get(xact)->node, &conn->xacts);
+	pthread_mutex_unlock(&conn->xacts_lock);
 }
 
 int ks_conn_sync(struct ks_conn *conn)
@@ -49,13 +56,13 @@ int ks_conn_sync(struct ks_conn *conn)
 			NLMSG_NOOP,
 			NLM_F_REQUEST);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	if (req->err < 0) {
 		err = req->err;
 		ks_req_put(req);
-		goto err_request_version;
+		goto err_request_noop;
 	}
 
 	ks_req_put(req);
@@ -63,7 +70,7 @@ int ks_conn_sync(struct ks_conn *conn)
 
 	return 0;
 
-err_request_version:
+err_request_noop:
 	ks_xact_put(xact);
 err_xact_alloc:
 
@@ -85,7 +92,7 @@ static int ks_conn_get_version(struct ks_conn *conn)
 			KS_NETLINK_VERSION,
 			NLM_F_REQUEST);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 	ks_req_wait(req);
 
 	if (req->err < 0) {
@@ -94,7 +101,8 @@ static int ks_conn_get_version(struct ks_conn *conn)
 		goto err_request_version;
 	}
 
-	memcpy(&conn->version, req->response_data, sizeof(conn->version));
+	memcpy(&conn->version, req->response_data,
+		sizeof(conn->version));
 
 	ks_req_put(req);
 
@@ -109,10 +117,17 @@ err_xact_alloc:
 	return err;
 }
 
+static void ks_report_default(int level, const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	vfprintf(stderr, format, ap);
+	va_end(ap);
+}
+
 struct ks_conn *ks_conn_create(void)
 {
 	struct ks_conn *conn;
-	int err;
 
 	conn = malloc(sizeof(*conn));
 	if (!conn)
@@ -127,13 +142,222 @@ struct ks_conn *ks_conn_create(void)
 	INIT_LIST_HEAD(&conn->xacts);
 	conn->pid = getpid();
 
-	conn->xact_wait = ks_xact_wait_default;
-	conn->req_wait = ks_req_wait_default;
+	pthread_mutex_init(&conn->topology_lock, NULL);
+	pthread_mutex_init(&conn->xacts_lock, NULL);
+
+	conn->report_func = ks_report_default;
+
+	return conn;
+}
+
+static void ks_xact_flush(struct ks_xact *xact)
+{
+	if (xact->out_skb) {
+		if (xact->out_skb->len) {
+			ks_netlink_sendmsg(xact->conn, xact->out_skb);
+			xact->out_skb = NULL;
+		}
+	} else {
+		kfree_skb(xact->out_skb);
+		xact->out_skb = NULL;
+	}
+}
+
+static int ks_conn_send_next_packet(struct ks_conn *conn)
+{
+	//int size = 0;
+	int err;
+
+	pthread_mutex_lock(&conn->xacts_lock);
+	if (!conn->cur_xact) {
+		if (list_empty(&conn->xacts)) {
+			pthread_mutex_unlock(&conn->xacts_lock);
+
+			return 0;
+		}
+
+		conn->cur_xact = list_entry(conn->xacts.next, struct ks_xact,
+									node);
+		list_del(&conn->cur_xact->node);
+
+	}
+	pthread_mutex_unlock(&conn->xacts_lock);
+
+	struct ks_xact *xact = conn->cur_xact;
+
+	if (list_empty(&xact->requests))
+		return 0;
+
+	if (!list_empty(&xact->requests_sent))
+		return 0;
+
+	struct ks_req *req;
+	/*list_for_each_entry(req, &xact->requests, node)
+		size += NLMSG_ALIGN(NLMSG_LENGTH(0));*/
+
+	struct ks_req *t;
+	list_for_each_entry_safe(req, t, &xact->requests, node) {
+retry:
+		ks_xact_need_skb(xact);
+		if (!xact->out_skb)
+			return -ENOMEM;
+
+		void *oldtail = xact->out_skb->tail;
+
+		struct nlmsghdr *nlh;
+		nlh = ks_nlmsg_put(xact->out_skb, xact->conn->pid, req->id,
+						req->type, req->flags, 0);
+		if (!nlh) {
+			ks_xact_flush(xact);
+			goto retry;
+		}
+
+		if (req->request_fill_callback) {
+			ks_xact_need_skb(xact);
+			if (!xact->out_skb)
+				return -ENOMEM;
+
+			err = req->request_fill_callback(req, xact->out_skb,
+								req->data);
+			if (err == -ENOBUFS) {
+				skb_trim(xact->out_skb,
+					oldtail - xact->out_skb->data);
+				ks_xact_flush(xact);
+				goto retry;
+			} else if (err < 0)
+				return err;
+		}
+
+		nlh->nlmsg_len = xact->out_skb->tail - oldtail;
+
+		pthread_mutex_lock(&xact->requests_lock);
+		list_del(&req->node);
+		list_add_tail(&req->node, &xact->requests_sent);
+		pthread_mutex_unlock(&xact->requests_lock);
+	}
+
+	ks_xact_flush(xact);
+
+	ks_conn_set_state(conn, KS_CONN_STATE_WAITING_ACK);
+
+	return 0;
+}
+
+void *ks_protocol_thread_main(void *data)
+{
+	struct ks_conn *conn = data;
+
+	struct pollfd pollfds[2];
+
+	pollfds[0].fd = conn->alert_read;
+	pollfds[0].events = POLLHUP | POLLERR | POLLIN;
+
+	pollfds[1].fd = conn->sock;
+	pollfds[1].events = POLLHUP | POLLERR | POLLIN;
+
+	conn->state = KS_CONN_STATE_IDLE;
+
+	for(;;) {
+		int res;
+		res = poll(pollfds, ARRAY_SIZE(pollfds), -1);
+		if (res < 0) {
+			report_conn(conn, LOG_WARNING,
+				"kstreamer: Error polling: %s\n",
+				strerror(errno));
+
+			continue;
+		}
+
+		if (pollfds[0].revents & POLLHUP ||
+		    pollfds[0].revents & POLLERR ||
+		    pollfds[0].revents & POLLNVAL) {
+			report_conn(conn, LOG_ERR,
+				 "kstreamer: poll alert fd error\n");
+
+			 return NULL;
+		}
+
+		if (pollfds[0].revents & POLLIN) {
+			char junk;
+			read(conn->alert_read, &junk, sizeof(junk));
+
+			if (conn->state == KS_CONN_STATE_IDLE)
+				ks_conn_send_next_packet(conn);
+		}
+
+		if (pollfds[1].revents & POLLHUP ||
+		    pollfds[1].revents & POLLERR ||
+		    pollfds[1].revents & POLLNVAL) {
+			report_conn(conn, LOG_ERR,
+				 "kstreamer: poll error\n");
+
+			 return NULL;
+		}
+
+		if (pollfds[1].revents & POLLIN)
+			ks_netlink_receive(conn);
+	}
+
+	return NULL;
+}
+
+int ks_conn_establish(struct ks_conn *conn)
+{
+	int err;
+
+	int filedes[2];
+	if (pipe(filedes) < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot create alert pipe: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_pipe;
+	}
+
+	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_0;
+	}
+
+	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_1;
+	}
+
+	conn->alert_read = filedes[0];
+	conn->alert_write = filedes[1];
+
+	pthread_attr_t attr;
+	err = pthread_attr_init(&attr);
+	if (err < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot create thread attributes: %s\n",
+			strerror(errno));
+		goto err_pthread_attr_init;
+	}
+
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	err = pthread_create(&conn->protocol_thread, &attr,
+				ks_protocol_thread_main, conn);
+	if (err < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot create thread: %s\n",
+			strerror(errno));
+		goto err_pthread_create;
+	}
 
 	conn->sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_KSTREAMER);
 	if (conn->sock < 0) {
 		perror("Unable to open kstreamer socket");
-		return NULL;
+		err = -errno;
+		goto err_socket;
 	}
 
 	struct sockaddr_nl bind_sa;
@@ -145,29 +369,58 @@ struct ks_conn *ks_conn_create(void)
 	if (bind(conn->sock, (struct sockaddr *)&bind_sa,
 						sizeof(bind_sa)) < 0) {
 		perror("Unable to bind netlink socket");
-		return NULL;
+		err = -errno;
+		goto err_bind;
 	}
 
 	err = ks_conn_get_version(conn);
 	if (err < 0) {
-		fprintf(stderr, "Cannot get version: %s\n", strerror(err));
-		return NULL;
+		report_conn(conn, LOG_ERR,
+			"Cannot get version: %s\n", strerror(-err));
+		goto err_get_version;
 	}
 
 	if (conn->version.major > KS_LIB_VERSION_MAJOR) {
-		fprintf(stderr, "Unsupported kstreamer interface version"
-				" %u.%u.%u\n",
-				conn->version.major,
-				conn->version.minor,
-				conn->version.service);
-		return NULL;
+		report_conn(conn, LOG_ERR,
+			"Unsupported kstreamer interface version"
+			" %u.%u.%u\n",
+			conn->version.major,
+			conn->version.minor,
+			conn->version.service);
+		err = -EINVAL;
+		goto err_invalid_version;
 	}
 
-	return conn;
+	return 0;
+
+err_invalid_version:
+err_get_version:
+err_bind:
+	close(conn->sock);
+err_socket:
+        pthread_kill(conn->protocol_thread, SIGTERM);
+err_pthread_create:
+	pthread_attr_destroy(&attr);
+err_pthread_attr_init:
+err_fcntl_1:
+err_fcntl_0:
+	close(conn->alert_read);
+	close(conn->alert_write);
+err_pipe:
+
+	return err;
 }
 
 void ks_conn_destroy(struct ks_conn *conn)
 {
+        pthread_kill(conn->protocol_thread, SIGTERM);
+
+	close(conn->alert_read);
+	close(conn->alert_write);
+
+	pthread_mutex_destroy(&conn->xacts_lock);
+	pthread_mutex_destroy(&conn->topology_lock);
+
 	close(conn->sock);
 
 	free(conn);
@@ -193,10 +446,9 @@ void ks_conn_set_state(
 	struct ks_conn *conn,
 	enum ks_conn_state state)
 {
-	fprintf(stderr, "Conn state changed from %s to %s\n",
+	report_conn(conn, LOG_DEBUG, "Conn state changed from %s to %s\n",
 		ks_conn_state_to_text(conn->state),
 		ks_conn_state_to_text(state));
 
 	conn->state = state;
 }
-

@@ -13,6 +13,8 @@
 #ifndef _LIBKSTREAMER_REQUEST_H
 #define _LIBKSTREAMER_REQUEST_H
 
+#include <pthread.h>
+
 #include <list.h>
 
 #include "util.h"
@@ -29,7 +31,10 @@ struct ks_req
 
 	int id;
 
-	BOOL completed;
+	pthread_mutex_t completed_lock;
+	pthread_cond_t completed_cond;
+	KSBOOL completed;
+
 	int err;
 
 	void *data;
@@ -52,8 +57,6 @@ void ks_req_put(struct ks_req *req);
 void ks_req_wait(struct ks_req *req);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
-
-void ks_req_wait_default(struct ks_req *req);
 
 #endif
 

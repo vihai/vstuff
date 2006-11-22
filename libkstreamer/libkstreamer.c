@@ -26,11 +26,14 @@
 #include "pipeline.h"
 #include "util.h"
 #include "xact.h"
+#include "logging.h"
 
 void ks_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
+	pthread_mutex_lock(&conn->topology_lock);
+
 	switch(nlh->nlmsg_type) {
 	case NLMSG_NOOP:
 	case NLMSG_OVERRUN:
@@ -40,20 +43,20 @@ void ks_topology_update(
 
 	case KS_NETLINK_ABORT:
 	case KS_NETLINK_COMMIT:
-		fprintf(stderr, "Unexpected COMMIT/ABORT message\n");
+		report_conn(conn, LOG_ERR, "Unexpected COMMIT/ABORT message\n");
 	break;
 
 	case KS_NETLINK_DYNATTR_NEW: {
 		struct ks_dynattr *dynattr;
-		dynattr = ks_dynattr_create_from_nlmsg(nlh);
+		dynattr = ks_dynattr_create_from_nlmsg(conn, nlh);
 		if (!dynattr) {
 			// FIXME
 		}
 
 		if (conn->dump_packets)
-			ks_dynattr_dump(dynattr);
+			ks_dynattr_dump(dynattr, conn);
 
-		ks_dynattr_add(dynattr);
+		ks_dynattr_add(dynattr, conn);
 		ks_dynattr_put(dynattr);
 	}
 	break;
@@ -61,14 +64,14 @@ void ks_topology_update(
 	case KS_NETLINK_DYNATTR_DEL: {
 		struct ks_dynattr *dynattr;
 
-		dynattr = ks_dynattr_get_by_nlid(nlh);
+		dynattr = ks_dynattr_get_by_nlid(conn, nlh);
 		if (!dynattr) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
 		if (conn->dump_packets)
-			ks_dynattr_dump(dynattr);
+			ks_dynattr_dump(dynattr, conn);
 
 		ks_dynattr_del(dynattr);
 		ks_dynattr_put(dynattr);
@@ -78,16 +81,16 @@ void ks_topology_update(
 	case KS_NETLINK_DYNATTR_SET: {
 		struct ks_dynattr *dynattr;
 
-		dynattr = ks_dynattr_get_by_nlid(nlh);
+		dynattr = ks_dynattr_get_by_nlid(conn, nlh);
 		if (!dynattr) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
-		ks_dynattr_update_from_nlmsg(dynattr, nlh);
+		ks_dynattr_update_from_nlmsg(dynattr, conn, nlh);
 
 		if (conn->dump_packets)
-			ks_dynattr_dump(dynattr);
+			ks_dynattr_dump(dynattr, conn);
 
 		ks_dynattr_put(dynattr);
 	}
@@ -96,15 +99,15 @@ void ks_topology_update(
 	case KS_NETLINK_NODE_NEW: {
 		struct ks_node *node;
 
-		node = ks_node_create_from_nlmsg(nlh);
+		node = ks_node_create_from_nlmsg(conn, nlh);
 		if (!node) {
 			// FIXME
 		}
 
 		if (conn->dump_packets)
-			ks_node_dump(node);
+			ks_node_dump(node, conn);
 
-		ks_node_add(node);
+		ks_node_add(node, conn);
 		ks_node_put(node);
 	}
 	break;
@@ -112,14 +115,14 @@ void ks_topology_update(
 	case KS_NETLINK_NODE_DEL: {
 		struct ks_node *node;
 
-		node = ks_node_get_by_nlid(nlh);
+		node = ks_node_get_by_nlid(conn, nlh);
 		if (!node) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
 		if (conn->dump_packets)
-			ks_node_dump(node);
+			ks_node_dump(node, conn);
 
 		ks_node_del(node);
 		ks_node_put(node);
@@ -129,16 +132,16 @@ void ks_topology_update(
 	case KS_NETLINK_NODE_SET: {
 		struct ks_node *node;
 
-		node = ks_node_get_by_nlid(nlh);
+		node = ks_node_get_by_nlid(conn, nlh);
 		if (!node) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
-		ks_node_update_from_nlmsg(node, nlh);
+		ks_node_update_from_nlmsg(node, conn, nlh);
 
 		if (conn->dump_packets)
-			ks_node_dump(node);
+			ks_node_dump(node, conn);
 
 		ks_node_put(node);
 	}
@@ -147,15 +150,15 @@ void ks_topology_update(
 	case KS_NETLINK_CHAN_NEW: {
 		struct ks_chan *chan;
 
-		chan = ks_chan_create_from_nlmsg(nlh);
+		chan = ks_chan_create_from_nlmsg(conn, nlh);
 		if (!chan) {
 			// FIXME
 		}
 
 		if (conn->dump_packets)
-			ks_chan_dump(chan);
+			ks_chan_dump(chan, conn);
 
-		ks_chan_add(chan); // CHECK FOR DUPEs
+		ks_chan_add(chan, conn); // CHECK FOR DUPEs
 		ks_chan_put(chan);
 	}
 	break;
@@ -163,14 +166,14 @@ void ks_topology_update(
 	case KS_NETLINK_CHAN_DEL: {
 		struct ks_chan *chan;
 
-		chan = ks_chan_get_by_nlid(nlh);
+		chan = ks_chan_get_by_nlid(conn, nlh);
 		if (!chan) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
 		if (conn->dump_packets)
-			ks_chan_dump(chan);
+			ks_chan_dump(chan, conn);
 
 		ks_chan_del(chan);
 		ks_chan_put(chan);
@@ -180,16 +183,16 @@ void ks_topology_update(
 	case KS_NETLINK_CHAN_SET: {
 		struct ks_chan *chan;
 
-		chan = ks_chan_get_by_nlid(nlh);
+		chan = ks_chan_get_by_nlid(conn, nlh);
 		if (!chan) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
-		ks_chan_update_from_nlmsg(chan, nlh);
+		ks_chan_update_from_nlmsg(chan, conn, nlh);
 
 		if (conn->dump_packets)
-			ks_chan_dump(chan);
+			ks_chan_dump(chan, conn);
 
 		ks_chan_put(chan);
 	}
@@ -197,15 +200,15 @@ void ks_topology_update(
 
 	case KS_NETLINK_PIPELINE_NEW: {
 		struct ks_pipeline *pipeline;
-		pipeline = ks_pipeline_create_from_nlmsg(nlh);
+		pipeline = ks_pipeline_create_from_nlmsg(conn, nlh);
 		if (!pipeline) {
 			// FIXME
 		}
 
 		if (conn->dump_packets)
-			ks_pipeline_dump(pipeline);
+			ks_pipeline_dump(pipeline, conn);
 
-		ks_pipeline_add(pipeline);
+		ks_pipeline_add(pipeline, conn);
 		ks_pipeline_put(pipeline);
 	}
 	break;
@@ -213,14 +216,14 @@ void ks_topology_update(
 	case KS_NETLINK_PIPELINE_DEL: {
 		struct ks_pipeline *pipeline;
 
-		pipeline = ks_pipeline_get_by_nlid(nlh);
+		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
 		if (!pipeline) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
 		if (conn->dump_packets)
-			ks_pipeline_dump(pipeline);
+			ks_pipeline_dump(pipeline, conn);
 
 		ks_pipeline_del(pipeline);
 		ks_pipeline_put(pipeline);
@@ -230,21 +233,23 @@ void ks_topology_update(
 	case KS_NETLINK_PIPELINE_SET: {
 		struct ks_pipeline *pipeline;
 
-		pipeline = ks_pipeline_get_by_nlid(nlh);
+		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
 		if (!pipeline) {
-			fprintf(stderr, "Sync lost\n");
+			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
-		ks_pipeline_update_from_nlmsg(pipeline, nlh);
+		ks_pipeline_update_from_nlmsg(pipeline, conn, nlh);
 
 		if (conn->dump_packets)
-			ks_pipeline_dump(pipeline);
+			ks_pipeline_dump(pipeline, conn);
 
 		ks_pipeline_put(pipeline);
 	}
 	break;
 	}
+
+	pthread_mutex_unlock(&conn->topology_lock);
 }
 
 static int ks_topology_callback(
@@ -332,7 +337,7 @@ struct ks_xact *ks_send_topology_update_req(
 	}
 	ks_req_put(req);
 
-	ks_xact_run(xact);
+	ks_xact_submit(xact);
 
 	return xact;
 

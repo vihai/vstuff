@@ -53,6 +53,7 @@ struct vgsm_module_tx
 
 	int fifo_pos;
 	int fifo_size;
+	BOOL fifo_underrun;
 
 	struct kfifo *fifo;
 	spinlock_t fifo_lock;

@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-bin_PROGRAMS = vgsm_stress sniffer # jitter traffic listener
+bin_PROGRAMS = vgsm_stress sniffer ksmonitor # jitter traffic listener
 
 INCLUDES = \
 	-I$(top_srcdir)/include/		\
@@ -23,6 +23,13 @@ INCLUDES = \
 
 sniffer_SOURCES = sniffer.c
 sniffer_LDADD = \
+	-lpthread	\
+	$(top_srcdir)/libskb/libskb.la	\
+	$(top_srcdir)/libkstreamer/libkstreamer.la
+
+ksmonitor_SOURCES = ksmonitor.c
+ksmonitor_LDADD = \
+	-lpthread	\
 	$(top_srcdir)/libskb/libskb.la	\
 	$(top_srcdir)/libkstreamer/libkstreamer.la
 

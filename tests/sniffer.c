@@ -320,14 +320,20 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	err = ks_conn_establish(conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot connect kstreamer library\n");
+		return 1;
+	}
+
 	ks_update_topology(conn);
 
-	opts.hdlc_framer = ks_dynattr_get_by_name("hdlc_framer");
-	opts.hdlc_deframer = ks_dynattr_get_by_name("hdlc_deframer");
-	opts.octet_reverser = ks_dynattr_get_by_name("octet_reverser");
+	opts.hdlc_framer = ks_dynattr_get_by_name(conn, "hdlc_framer");
+	opts.hdlc_deframer = ks_dynattr_get_by_name(conn, "hdlc_deframer");
+	opts.octet_reverser = ks_dynattr_get_by_name(conn, "octet_reverser");
 
 	struct ks_node *node_up;
-	node_up = ks_node_get_by_id(node_up_id);
+	node_up = ks_node_get_by_id(conn, node_up_id);
 	if (!node_up) {
 		fprintf(stderr, "Cannot find UP node\n");
 		return 1;
@@ -344,11 +350,11 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 
-		node = ks_node_get_by_path(path + 4);
+		node = ks_node_get_by_path(conn, path + 4);
 
 		free(path);
 	} else {
-		node = ks_node_get_by_id(atoi(opts.node_name));
+		node = ks_node_get_by_id(conn, atoi(opts.node_name));
 	}
 
 	if (!node) {

@@ -21,16 +21,86 @@
 #include <linux/kstreamer/netlink.h>
 
 #include "node.h"
+#include "conn.h"
 #include "dynattr.h"
 #include "util.h"
+#include "logging.h"
 
-struct hlist_head ks_nodes_hash[NODE_HASHSIZE];
-
-static inline struct hlist_head *ks_node_get_hash(int id)
+static inline struct hlist_head *ks_node_get_hash(
+	struct ks_conn *conn, int id)
 {
-	return &ks_nodes_hash[id & (NODE_HASHSIZE - 1)];
+	return &conn->nodes_hash[id & (NODE_HASHSIZE - 1)];
 }
 
+void ks_node_add(struct ks_node *node, struct ks_conn *conn)
+{
+	node->conn = conn;
+
+	hlist_add_head(
+		&ks_node_get(node)->node,
+		ks_node_get_hash(conn, node->id));
+}
+
+void ks_node_del(struct ks_node *node)
+{
+	hlist_del(&node->node);
+
+	ks_node_put(node);
+}
+
+struct ks_node *ks_node_get_by_path(
+	struct ks_conn *conn,
+	const char *path)
+{
+	struct ks_node *node;
+	struct hlist_node *t;
+
+	int i;
+	for(i=0; i<ARRAY_SIZE(conn->nodes_hash); i++) {
+		hlist_for_each_entry(node, t, &conn->nodes_hash[i], node) {
+			if (!strcmp(node->path, path))
+				return ks_node_get(node);
+		}
+	}
+
+	return NULL;
+}
+
+struct ks_node *ks_node_get_by_id(
+	struct ks_conn *conn,
+	int id)
+{
+	struct ks_node *node;
+	struct hlist_node *t;
+
+	hlist_for_each_entry(node, t, ks_node_get_hash(conn, id), node) {
+		if (node->id == id)
+			return ks_node_get(node);
+	}
+
+	return NULL;
+}
+
+struct ks_node *ks_node_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		if(attr->type == KS_NODEATTR_ID)
+			return ks_node_get_by_id(conn,
+					*(__u32 *)KS_ATTR_DATA(attr));
+	}
+
+	return NULL;
+}
+
+#if 0
 const char *ks_netlink_node_attr_to_string(
 		enum ks_node_attribute_type type)
 {
@@ -43,74 +113,16 @@ const char *ks_netlink_node_attr_to_string(
 
 	return "*INVALID*";
 }
-
-void ks_node_add(struct ks_node *node)
-{
-	hlist_add_head(
-		&ks_node_get(node)->node,
-		ks_node_get_hash(node->id));
-}
-
-void ks_node_del(struct ks_node *node)
-{
-	hlist_del(&node->node);
-
-	ks_node_put(node);
-}
-
-struct ks_node *ks_node_get_by_path(const char *path)
-{
-	struct ks_node *node;
-	struct hlist_node *t;
-
-	int i;
-	for(i=0; i<ARRAY_SIZE(ks_nodes_hash); i++) {
-		hlist_for_each_entry(node, t, &ks_nodes_hash[i], node) {
-			if (!strcmp(node->path, path))
-				return ks_node_get(node);
-		}
-	}
-
-	return NULL;
-}
-
-struct ks_node *ks_node_get_by_id(int id)
-{
-	struct ks_node *node;
-	struct hlist_node *t;
-
-	hlist_for_each_entry(node, t, ks_node_get_hash(id), node) {
-		if (node->id == id)
-			return ks_node_get(node);
-	}
-
-	return NULL;
-}
-
-struct ks_node *ks_node_get_by_nlid(struct nlmsghdr *nlh)
-{
-	struct ks_attr *attr;
-	int attrs_len = KS_PAYLOAD(nlh);
-
-	for (attr = KS_ATTRS(nlh);
-	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) { 
-
-		if(attr->type == KS_NODEATTR_ID)
-			return ks_node_get_by_id(*(__u32 *)KS_ATTR_DATA(attr));
-	}
-
-	return NULL;
-}
+#endif
 
 struct ks_node *ks_node_alloc(void)
 {
 	struct ks_node *node;
-	
+
 	node = malloc(sizeof(*node));
 	if (!node)
 		return NULL;
-	
+
 	memset(node, 0, sizeof(*node));
 
 	node->refcnt = 1;
@@ -137,12 +149,14 @@ void ks_node_put(struct ks_node *node)
 	if (!node->refcnt) {
 		if (node->path)
 			free(node->path);
-		
+
 		free(node);
 	}
 }
 
-struct ks_node *ks_node_create_from_nlmsg(struct nlmsghdr *nlh)
+struct ks_node *ks_node_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
 	struct ks_node *node;
 
@@ -157,7 +171,7 @@ struct ks_node *ks_node_create_from_nlmsg(struct nlmsghdr *nlh)
 
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) { 
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		switch(attr->type) {
 		case KS_NODEATTR_ID:
@@ -174,9 +188,10 @@ struct ks_node *ks_node_create_from_nlmsg(struct nlmsghdr *nlh)
 
 		default: {
 			struct ks_dynattr *dynattr;
-			dynattr = ks_dynattr_get_by_id(attr->type);
+			dynattr = ks_dynattr_get_by_id(conn, attr->type);
 			if (!dynattr) {
-				fprintf(stderr, "   Attribute %d unknown\n", attr->type);
+				report_conn(conn, LOG_ERR,
+					"Attribute %d unknown\n", attr->type);
 				break;
 			}
 
@@ -188,7 +203,10 @@ struct ks_node *ks_node_create_from_nlmsg(struct nlmsghdr *nlh)
 	return node;
 }
 
-void ks_node_update_from_nlmsg(struct ks_node *node, struct nlmsghdr *nlh)
+void ks_node_update_from_nlmsg(
+	struct ks_node *node,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
@@ -197,7 +215,7 @@ void ks_node_update_from_nlmsg(struct ks_node *node, struct nlmsghdr *nlh)
 
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) { 
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		switch(attr->type) {
 		case KS_NODEATTR_ID:
@@ -210,14 +228,16 @@ void ks_node_update_from_nlmsg(struct ks_node *node, struct nlmsghdr *nlh)
 	}
 }
 
-void ks_node_dump(struct ks_node *node)
+void ks_node_dump(
+	struct ks_node *node,
+	struct ks_conn *conn)
 {
-	fprintf(stderr, "  ID    : 0x%08x\n", node->id);
-	fprintf(stderr, "  Path  : '%s'\n", node->path);
+	report_conn(conn, LOG_DEBUG, "  ID    : 0x%08x\n", node->id);
+	report_conn(conn, LOG_DEBUG, "  Path  : '%s'\n", node->path);
 
 	int i;
 	for (i=0; i<node->dynattrs_cnt; i++) {
-		fprintf(stderr, "  Dynattr: %s\n", node->dynattrs[i]->name);
+		report_conn(conn, LOG_DEBUG, "  Dynattr: %s\n", node->dynattrs[i]->name);
 	}
 }
 

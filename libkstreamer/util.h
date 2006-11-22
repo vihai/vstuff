@@ -18,6 +18,6 @@
 #define FALSE 0
 #define TRUE  (!FALSE)
 
-typedef unsigned char BOOL;
+typedef unsigned char KSBOOL;
 
 #endif

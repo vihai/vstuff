@@ -21,16 +21,15 @@
 
 #include <list.h>
 
-#define NODE_HASHBITS 8
-#define NODE_HASHSIZE ((1 << NODE_HASHBITS) - 1)
-
-extern struct hlist_head ks_nodes_hash[NODE_HASHSIZE];
+struct ks_conn;
 
 struct ks_node
 {
 	struct hlist_node node;
 
 	int refcnt;
+
+	struct ks_conn *conn;
 
 	__u32 id;
 
@@ -50,21 +49,34 @@ struct ks_node *ks_node_alloc(void);
 struct ks_node *ks_node_get(struct ks_node *node);
 void ks_node_put(struct ks_node *node);
 
-struct ks_node *ks_node_get_by_id(int id);
-struct ks_node *ks_node_get_by_path(const char *path);
-struct ks_node *ks_node_get_by_nlid(struct nlmsghdr *nlh);
+struct ks_node *ks_node_get_by_id(
+	struct ks_conn *conn,
+	int id);
 
-void ks_node_dump(struct ks_node *node);
+struct ks_node *ks_node_get_by_path(
+	struct ks_conn *conn,
+	const char *path);
+
+void ks_node_dump(
+	struct ks_node *node,
+	struct ks_conn *conn);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 
-const char *ks_netlink_node_attr_to_string(
-		enum ks_node_attribute_type type);
-void ks_node_add(struct ks_node *node);
+void ks_node_add(struct ks_node *node, struct ks_conn *conn);
 void ks_node_del(struct ks_node *node);
 
-void ks_node_update_from_nlmsg(struct ks_node *node, struct nlmsghdr *nlh);
-struct ks_node *ks_node_create_from_nlmsg(struct nlmsghdr *nlh);
+struct ks_node *ks_node_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+struct ks_node *ks_node_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+void ks_node_update_from_nlmsg(
+	struct ks_node *node,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
 
 #endif
 

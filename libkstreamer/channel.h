@@ -23,18 +23,16 @@
 
 #include <list.h>
 
-#include "conn.h"
-
-#define CHAN_HASHBITS 8
-#define CHAN_HASHSIZE ((1 << CHAN_HASHBITS) - 1)
-
-extern struct hlist_head ks_chans_hash[CHAN_HASHSIZE];
+struct ks_xact;
+struct ks_conn;
 
 struct ks_chan
 {
 	struct hlist_node node;
 
 	int refcnt;
+
+	struct ks_conn *conn;
 
 	__u32 id;
 
@@ -57,23 +55,38 @@ struct ks_chan *ks_chan_alloc(void);
 struct ks_chan *ks_chan_get(struct ks_chan *chan);
 void ks_chan_put(struct ks_chan *chan);
 
-const char *ks_netlink_chan_attr_to_string(
-		enum ks_chan_attribute_type type);
+struct ks_chan *ks_chan_get_by_id(
+	struct ks_conn *conn,
+	int id);
 
-void ks_chan_add(struct ks_chan *chan);
-void ks_chan_del(struct ks_chan *chan);
-struct ks_chan *ks_chan_get_by_id(int id);
-struct ks_chan *ks_chan_get_by_nlid(struct nlmsghdr *nlh);
-
-void ks_chan_dump(struct ks_chan *chan);
-
-struct ks_chan *ks_chan_create_from_nlmsg(struct nlmsghdr *nlh);
-void ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh);
+void ks_chan_dump(
+	struct ks_chan *chan,
+	struct ks_conn *conn);
 
 struct ks_req *ks_chan_queue_update(
 	struct ks_chan *chan,
 	struct ks_xact *xact);
 
+#ifdef _LIBKSTREAMER_PRIVATE_
+
+void ks_chan_add(struct ks_chan *chan, struct ks_conn *conn);
+void ks_chan_del(struct ks_chan *chan);
+
+struct ks_chan *ks_chan_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
 int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn);
+
+struct ks_chan *ks_chan_create_from_nlmsg(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+void ks_chan_update_from_nlmsg(
+	struct ks_chan *chan,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
+#endif
 
 #endif

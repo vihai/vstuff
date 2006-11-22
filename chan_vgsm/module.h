@@ -18,8 +18,9 @@
 #include <list.h>
 
 #include "longtime.h"
-#include "comm.h" 
-#include "number.h" 
+#include "timer.h"
+#include "comm.h"
+#include "number.h"
 
 enum vgsm_module_status
 {
@@ -180,7 +181,9 @@ struct vgsm_module
 	char name[64];
 
 	enum vgsm_module_status status;
-	longtime_t timer_expiration;
+
+	struct vgsm_timerset timerset;
+	struct vgsm_timer timer;
 
 	char *lockdown_reason;
 	int power_attempts;

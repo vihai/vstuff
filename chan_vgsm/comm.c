@@ -48,6 +48,11 @@ static pthread_t vgsm_comm_thread = AST_PTHREADT_NULL;
 static pthread_t vgsm_comm_urc_thread = AST_PTHREADT_NULL;
 static pthread_t vgsm_comm_completion_thread = AST_PTHREADT_NULL;
 
+static int vgsm_comm_thread_alert_read;
+static int vgsm_comm_thread_alert_write;
+
+static struct vgsm_timerset vgsm_timerset;
+
 static struct list_head vgsm_comm_urc_queue =
 			LIST_HEAD_INIT(vgsm_comm_urc_queue);
 AST_MUTEX_DEFINE_STATIC(vgsm_comm_urc_queue_lock);
@@ -58,20 +63,34 @@ static struct list_head vgsm_comm_completion_queue =
 AST_MUTEX_DEFINE_STATIC(vgsm_comm_completion_queue_lock);
 ast_cond_t vgsm_comm_completion_queue_cond;
 
-void vgsm_comm_init(
+static void vgsm_comm_timer(void *data);
+
+int vgsm_comm_init(
 	struct vgsm_comm *comm,
 	struct vgsm_urc_class *urc_classes)
 {
+	int err;
+
 	comm->fd = -1;
 	comm->urc_classes = urc_classes;
 	comm->state = VGSM_PS_CLOSED;
-	comm->timer_expiration = -1;
 
 	ast_mutex_init(&comm->state_lock);
 
 	ast_cond_init(&comm->close_cond, NULL);
 
 	INIT_LIST_HEAD(&comm->requests_queue);
+
+	vgsm_timer_init(&comm->timer, &vgsm_timerset, "comm",
+			vgsm_comm_timer, comm);
+
+	return 0;
+
+	return err;
+}
+
+void vgsm_comm_destroy(struct vgsm_comm *comm)
+{
 }
 
 struct vgsm_req *vgsm_req_get(struct vgsm_req *req)
@@ -157,6 +176,20 @@ static const char *vgsm_comm_state_to_text(
 	return "*UNKNOWN*";
 }
 
+enum vgsm_thread_signal
+{
+	VGSM_THREAD_SIGNAL_REQUEST,
+	VGSM_THREAD_SIGNAL_TIMER,
+	VGSM_THREAD_SIGNAL_REFRESH,
+};
+
+void vgsm_comm_signal_thread(enum vgsm_thread_signal signal)
+{
+	__u8 sig = signal;
+
+	write(vgsm_comm_thread_alert_write, &sig, sizeof(sig));
+}
+
 static void vgsm_parser_change_state(
 	struct vgsm_comm *comm,
 	enum vgsm_comm_state newstate,
@@ -167,13 +200,13 @@ static void vgsm_parser_change_state(
 	if (timeout == -1) {
 		strcpy(tmpstr, ", no timeout");
 
-		comm->timer_expiration = -1;
+		vgsm_timer_stop(&comm->timer);
 	} else if (timeout != -2) {
 		snprintf(tmpstr, sizeof(tmpstr),
 			", timeout = %lldms",
 			timeout / 1000);
 
-		comm->timer_expiration = longtime_now() + timeout;
+		vgsm_timer_start_delta(&comm->timer, timeout);
 	}
 
 	vgsm_comm_debug_characters(comm,
@@ -187,17 +220,9 @@ static void vgsm_parser_change_state(
 	ast_mutex_unlock(&comm->state_lock);
 }
 
-void vgsm_comm_wakeup(struct vgsm_comm *comm)
-{
-	pthread_kill(vgsm_comm_thread, SIGURG);
-}
-
-BOOL comm_refresh_pending;
-
 void vgsm_comm_refresh(struct vgsm_comm *comm)
 {
-	comm_refresh_pending = TRUE;
-	vgsm_comm_wakeup(comm);
+	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_REFRESH);
 }
 
 void vgsm_comm_close(struct vgsm_comm *comm)
@@ -370,7 +395,7 @@ struct vgsm_req *vgsm_req_make_va(
 	list_add_tail(&vgsm_req_get(req)->node, &comm->requests_queue);
 	ast_mutex_unlock(&comm->requests_queue_lock);
 
-	vgsm_comm_wakeup(comm);
+	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_REQUEST);
 
 	return req;
 }
@@ -723,7 +748,7 @@ cusd_workaround:;
 				VGSM_PS_READING_URC,
 				READING_URC_TIMEOUT);
 
-		comm->timer_expiration = longtime_now() + URC_TIMEOUT;
+		vgsm_timer_start_delta(&comm->timer, URC_TIMEOUT);
 	} else {
 		ast_mutex_lock(&vgsm_comm_urc_queue_lock);
 		list_add_tail(&urc->node, &vgsm_comm_urc_queue);
@@ -760,7 +785,7 @@ static int vgsm_match_urc_cont(struct vgsm_comm *comm)
 	list_add_tail(&req_line->node, &comm->current_urc->lines);
 
 	if (comm->state == VGSM_PS_AWAITING_ECHO_READING_URC)
-		comm->timer_expiration = longtime_now() + ECHO_TIMEOUT;
+		vgsm_timer_start_delta(&comm->timer, ECHO_TIMEOUT);
 
 	assert(comm->current_urc->urc_class->detect_end);
 
@@ -967,8 +992,10 @@ static void vgsm_flush_requests(struct vgsm_comm *comm)
 	}
 }
 
-static void vgsm_comm_timed_out(struct vgsm_comm *comm)
+static void vgsm_comm_timer(void *data)
 {
+	struct vgsm_comm *comm = data;
+
 	switch(comm->state) {
 	case VGSM_PS_RECOVERING:
 		if (comm->current_req) {
@@ -1047,28 +1074,78 @@ static void vgsm_comm_timed_out(struct vgsm_comm *comm)
 	}
 }
 
+enum vgsm_poll_type
+{
+	VGSM_POLL_TYPE_ASC0,
+	VGSM_POLL_TYPE_ASC1,
+	VGSM_POLL_TYPE_ALERT,
+};
+
+struct vgsm_poll_info
+{
+	struct vgsm_module *module;
+	enum vgsm_poll_type type;
+};
+
 static void *vgsm_comm_thread_main(void *data)
 {
-	struct pollfd polls[64];
-	struct vgsm_module *modules[64];
+	struct pollfd *polls = NULL;
+	struct vgsm_poll_info *poll_infos = NULL;
 	int npolls = 0;
+	struct vgsm_module **modules = NULL;
+	int nmodules = 0;
 	int i;
 
 refresh:
 
-	comm_refresh_pending = FALSE;
-
-	for(i=0; i<npolls; i++) {
-		vgsm_module_put(modules[i]);
+	if (polls) {
+		free(polls);
+		polls = NULL;
 	}
 
-	npolls = 0;
+	if (poll_infos) {
+		for(i=0; i<npolls; i++)
+			if (poll_infos[i].module)
+				vgsm_module_put(poll_infos[i].module);
 
-	ast_mutex_lock(&vgsm.lock);
+		free(poll_infos);
+		poll_infos = NULL;
+	}
+
+	if (modules) {
+		for(i=0; i<nmodules; i++)
+			vgsm_module_put(modules[i]);
+
+		free(modules);
+		modules = NULL;
+	}
+
+	nmodules = 0;
 	struct vgsm_module *module;
+	ast_mutex_lock(&vgsm.lock);
+	list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		nmodules++;
+
+	polls = malloc(sizeof(*polls) * (nmodules + 1));
+	if (!polls)
+		abort();
+
+	poll_infos = malloc(sizeof(*poll_infos) * (nmodules + 1));
+	if (!poll_infos)
+		abort();
+
+	modules = malloc(sizeof(*modules) * nmodules);
+	if (!modules)
+		abort();
+
+	npolls = 0;
+	nmodules = 0;
 	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
 
 		struct vgsm_comm *comm = &module->comm;
+
+		modules[nmodules] = vgsm_module_get(module);
+		nmodules++;
 
 		if (!comm->enabled && comm->state != VGSM_PS_CLOSED) {
 			vgsm_parser_change_state(comm, VGSM_PS_CLOSED, -1);
@@ -1099,19 +1176,28 @@ refresh:
 
 		polls[npolls].fd = comm->fd;
 		polls[npolls].events = POLLHUP | POLLERR | POLLIN;
-
-		modules[npolls] = vgsm_module_get(module);
-
+		poll_infos[npolls].type = VGSM_POLL_TYPE_ASC0;
+		poll_infos[npolls].module = vgsm_module_get(module);
 		npolls++;
 	}
+
 	ast_mutex_unlock(&vgsm.lock);
+
+	polls[npolls].fd = vgsm_comm_thread_alert_read;
+	polls[npolls].events = POLLHUP | POLLERR | POLLIN;
+	poll_infos[npolls].type = VGSM_POLL_TYPE_ALERT;
+	poll_infos[npolls].module = NULL;
+	npolls++;
 
 	for(;;) {
 		int i;
-		longtime_t now = longtime_now();
-		longtime_t timeout = -1;
 
-		for (i=0; i<npolls; i++) {
+		vgsm_timerset_run(&vgsm_timerset);
+
+		/* Submit a pending request if the comm is idle or drop it
+		 * if not ready
+		 */
+		for (i=0; i<nmodules; i++) {
 			struct vgsm_comm *comm = &modules[i]->comm;
 
 			if (comm->state == VGSM_PS_IDLE)
@@ -1121,15 +1207,7 @@ refresh:
 				vgsm_flush_requests(comm);
 		}
 
-		for (i=0; i<npolls; i++) {
-			struct vgsm_comm *comm = &modules[i]->comm;
-
-			if (comm->timer_expiration != -1 &&
-			    comm->timer_expiration - now > 0 &&
-			    (comm->timer_expiration - now < timeout ||
-			     timeout == -1))
-				timeout = comm->timer_expiration - now;
-		}
+		longtime_t timeout = vgsm_timerset_next(&vgsm_timerset);
 
 		int timeout_ms;
 		if (timeout == -1)
@@ -1141,38 +1219,39 @@ refresh:
 			ast_verbose("vgsm: set poll timeout = %d ms\n",
 				timeout_ms);
 
-		if (comm_refresh_pending)
-			goto refresh;
-
 		int res = poll(polls, npolls, timeout_ms);
-		if (res < 0 && errno != EINTR) {
-
+		if (res < 0) {
 			ast_log(LOG_WARNING, "vgsm: Error polling: %s\n",
 				strerror(errno));
 
 			goto refresh;
 		}
 
-		now = longtime_now();
-
 		for (i=0; i<npolls; i++) {
-			struct vgsm_comm *comm = &modules[i]->comm;
+			struct vgsm_comm *comm = &poll_infos[i].module->comm;
 
-			if (comm->timer_expiration != -1 &&
-			    comm->timer_expiration < now)
-				vgsm_comm_timed_out(comm);
+			if (poll_infos[i].type == VGSM_POLL_TYPE_ASC0) {
 
-			if (polls[i].revents & POLLIN)
-				vgsm_receive(comm);
+				if (polls[i].revents & POLLIN)
+					vgsm_receive(comm);
 
-			if (polls[i].revents & POLLHUP ||
-			    polls[i].revents & POLLERR ||
-			    polls[i].revents & POLLNVAL)
-				comm_refresh_pending = TRUE;
+			} else if (poll_infos[i].type == VGSM_POLL_TYPE_ALERT) {
+				if (polls[i].revents & POLLIN) {
+					__u8 signal;
+
+					read(vgsm_comm_thread_alert_read,
+						&signal, sizeof(signal));
+
+					switch(signal) {
+					case VGSM_THREAD_SIGNAL_REQUEST:
+					case VGSM_THREAD_SIGNAL_TIMER:
+					break;
+					case VGSM_THREAD_SIGNAL_REFRESH:
+						goto refresh;
+					}
+				}
+			}
 		}
-
-		if (comm_refresh_pending)
-			goto refresh;
 	}
 }
 
@@ -1248,30 +1327,88 @@ static void *vgsm_comm_completion_thread_main(void *data)
 	}
 }
 
+static void vgsm_timers_updated(struct vgsm_timerset *set)
+{
+	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_TIMER);
+}
+
 int vgsm_comm_thread_create()
 {
+	int err;
+
+	vgsm_timerset_init(&vgsm_timerset, vgsm_timers_updated);
+
 	ast_cond_init(&vgsm_comm_urc_queue_cond, NULL);
 	ast_cond_init(&vgsm_comm_completion_queue_cond, NULL);
+
+	int filedes[2];
+	if (pipe(filedes) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot create alert pipe: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_pipe;
+	}
+
+	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_0;
+	}
+
+	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_1;
+	}
+
+	vgsm_comm_thread_alert_read = filedes[0];
+	vgsm_comm_thread_alert_write = filedes[1];
 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-	int err;
 	err = ast_pthread_create(&vgsm_comm_thread, &attr,
 						vgsm_comm_thread_main, NULL);
 	if (err < 0)
-		return err;
+		goto err_pthread_create_comm;
 
 	err = ast_pthread_create(&vgsm_comm_urc_thread, &attr,
 					vgsm_comm_urc_thread_main, NULL);
 	if (err < 0)
-		return err;
+		goto err_pthread_create_urc;
 
 	err = ast_pthread_create(&vgsm_comm_completion_thread, &attr,
 					vgsm_comm_completion_thread_main, NULL);
 	if (err < 0)
-		return err;
+		goto err_pthread_create_completion;
+
+	pthread_attr_destroy(&attr);
 
 	return 0;
+
+	pthread_kill(vgsm_comm_completion_thread, SIGTERM);
+err_pthread_create_completion:
+	pthread_kill(vgsm_comm_urc_thread, SIGTERM);
+err_pthread_create_urc:
+	pthread_kill(vgsm_comm_thread, SIGTERM);
+err_pthread_create_comm:
+err_fcntl_1:
+err_fcntl_0:
+	close(vgsm_comm_thread_alert_read);
+	close(vgsm_comm_thread_alert_write);
+err_pipe:
+
+	return err;
+}
+
+void vgsm_comm_thread_destroy(void)
+{
+	close(vgsm_comm_thread_alert_read);
+	close(vgsm_comm_thread_alert_write);
 }
