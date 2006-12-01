@@ -10,8 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +29,7 @@
 #include "dynattr.h"
 #include "req.h"
 #include "xact.h"
+#include "router.h"
 #include "logging.h"
 
 static inline struct hlist_head *ks_pipeline_get_hash(
@@ -69,6 +68,50 @@ struct ks_pipeline *ks_pipeline_get_by_id(
 	}
 
 	return NULL;
+}
+
+struct ks_pipeline *ks_pipeline_get_by_path(
+	struct ks_conn *conn,
+	const char *path)
+{
+	struct ks_pipeline *pipeline;
+	struct hlist_node *t;
+
+	int i;
+	for(i=0; i<ARRAY_SIZE(conn->pipelines_hash); i++) {
+		hlist_for_each_entry(pipeline, t, &conn->pipelines_hash[i],
+								node) {
+			if (!strcmp(pipeline->path, path))
+				return ks_pipeline_get(pipeline);
+		}
+	}
+
+	return NULL;
+}
+
+struct ks_pipeline *ks_pipeline_get_by_string(
+	struct ks_conn *conn,
+	const char *pipeline_str)
+{
+	struct ks_pipeline *pipeline;
+
+	if (pipeline_str[0] == '/') {
+		char *real_path;
+
+		real_path = realpath(pipeline_str, NULL);
+		if (!real_path) {
+			report_conn(conn, LOG_WARNING,
+				"Cannot resolve path '%s': %s\n",
+				pipeline_str, strerror(errno));
+			return NULL;
+		}
+
+		pipeline = ks_pipeline_get_by_path(conn, real_path + 4);
+		free(real_path);
+	} else
+		pipeline = ks_pipeline_get_by_id(conn, atoi(pipeline_str));
+
+	return pipeline;
 }
 
 struct ks_pipeline *ks_pipeline_get_by_nlid(
@@ -184,10 +227,91 @@ void ks_pipeline_dump(
 
 		struct ks_dynattr_instance *dynattr;
 		list_for_each_entry(dynattr, &chan->dynattrs, node) {
-			report_conn(conn, LOG_DEBUG, "  DynAttr: %s\n", dynattr->dynattr->name);
+			report_conn(conn, LOG_DEBUG,
+				"  DynAttr: %s\n", dynattr->dynattr->name);
 		}
 	}
 }
+
+#if 0
+int ks_pipeline_descr_do_autoroute(
+	struct ks_pipeline_descr *pd,
+	struct ks_conn *conn,
+	int pos)
+{
+	int err;
+
+	pthread_mutex_lock(&conn->topology_lock);
+
+	struct ks_node *src_node;
+	struct ks_node *dst_node;
+
+	if (pos == 0)
+		src_node = pd->ep1;
+	else
+		src_node = pd->chans[pos-1]->from;
+
+	if (pos == pd->nchans-1)
+		dst_node = pd->ep2;
+	else
+		dst_node = pd->chans[pos]->to;
+
+	ks_router_run(src_node, dst_node);
+
+	int path_len = 0;
+	struct ks_node *node;
+	for(node = dst_node; node->router_prev;
+	    node = node->router_prev, path_len++);
+
+	if (node != src_node) {
+		err = -EHOSTUNREACH;
+		goto err_no_path;
+	}
+
+	/* Make space in the array for path_len-1 chans ad one slot is
+	 * altready free, as it contains NULL
+	 */
+
+	int i;
+	for(i=pd->nchans-1; i>pos; i--) {
+		pd->chans[i] = pd->chans[i-path_len-1];
+		pd->pars[i] = pd->pars[i-path_len-1];
+	}
+
+	pd->nchans += path_len-1;
+
+	for(node = dst_node, i=pos+path_len-1; node->router_prev;
+	    node = node->router_prev, i--) {
+		pd->chans[i] = node->router_prev_thru;
+		pd->pars[i] = pd->pars[pos];
+	}
+
+	pthread_mutex_unlock(&conn->topology_lock);
+
+	return 0;
+
+err_no_path:
+	pthread_mutex_unlock(&conn->topology_lock);
+
+	return err;
+}
+
+int ks_pipeline_descr_autoroute(
+	struct ks_pipeline_descr *pd,
+	struct ks_conn *conn)
+{
+	int i;
+	for (i=0; i<pd->nchans; i++) {
+
+		if (pd->chans[i] == NULL) {
+			ks_pipeline_descr_do_autoroute(pd, conn, i);
+			break;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 	struct ks_conn *conn,
@@ -620,3 +744,45 @@ err_xact_alloc:
 
 	return err;
 }
+
+int ks_pipeline_autoroute(
+	struct ks_pipeline *pipeline,
+	struct ks_conn *conn,
+	struct ks_node *src_node,
+	struct ks_node *dst_node)
+{
+	int err;
+
+	pthread_mutex_lock(&conn->topology_lock);
+
+	ks_router_run(src_node, dst_node);
+
+	int nchans = 0;
+	struct ks_node *node;
+	for(node = dst_node; node->router_prev;
+	    node = node->router_prev, nchans++);
+
+	if (node != src_node) {
+		err = -EHOSTUNREACH;
+		goto err_no_path;
+	}
+
+	int i;
+	for(node = dst_node, i=0; node->router_prev;
+	    node = node->router_prev, i++) {
+		pipeline->chans[pipeline->chans_cnt + nchans - i - 1] =
+			node->router_prev_thru;
+	}
+
+	pipeline->chans_cnt += nchans;
+
+	pthread_mutex_unlock(&conn->topology_lock);
+
+	return 0;
+
+err_no_path:
+	pthread_mutex_unlock(&conn->topology_lock);
+
+	return err;
+}
+

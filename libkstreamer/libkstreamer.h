@@ -23,18 +23,14 @@
 #include "req.h"
 #include "xact.h"
 #include "logging.h"
+#include "pd_grammar.h"
+#include "pd_parser.h"
 
 #define KS_LIB_VERSION_MAJOR 0
 #define KS_LIB_VERSION_MINOR 0
 #define KS_LIB_VERSION_SERVICE 0
 
 void ks_update_topology(struct ks_conn *conn);
-
-struct ks_pipeline *ks_connect(
-	struct ks_conn *conn,
-	struct ks_node *src_node,
-	struct ks_node *dst_node,
-	int *err);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 

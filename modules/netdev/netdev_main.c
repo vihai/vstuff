@@ -185,8 +185,8 @@ static int vnd_chan_d_rx_push_frame(
 
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->pkt_type = PACKET_HOST;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	skb_push(skb, sizeof(struct lapd_prim_hdr));
 	prim_hdr = (struct lapd_prim_hdr *)skb->data;
@@ -557,8 +557,8 @@ static int vnd_chan_e_rx_push_frame(
 
 	skb->protocol = htons(ETH_P_LAPD);
 	skb->dev = netdevice->netdev;
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
 	skb->pkt_type = PACKET_OTHERHOST;
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
 
 	skb_push(skb, sizeof(struct lapd_prim_hdr));
 	prim_hdr = (struct lapd_prim_hdr *)skb->data;
@@ -1189,7 +1189,7 @@ static void vnd_netdevice_init(
 static struct vnd_netdevice *vnd_netdevice_alloc(const char *name)
 {
 	struct vnd_netdevice *netdevice;
-	
+
 	netdevice = kmalloc(sizeof(*netdevice), GFP_KERNEL);
 	if (!netdevice)
 		return NULL;
@@ -1231,7 +1231,7 @@ static int vnd_netdevice_register(
 		spin_unlock_irqrestore(&vnd_netdevices_list_lock, flags);
 		goto err_already_exists;
 	}
-	
+
 	list_add_tail(&vnd_netdevice_get(netdevice)->list_node,
 			&vnd_netdevices_list);
 
@@ -1296,7 +1296,7 @@ static int vnd_netdevice_register(
 	netdevice->netdev->set_multicast_list = vnd_netdev_set_multicast_list;
 	netdevice->netdev->do_ioctl = vnd_netdev_do_ioctl;
 	netdevice->netdev->change_mtu = vnd_netdev_change_mtu;
-	netdevice->netdev->features = NETIF_F_NO_CSUM;
+	netdevice->netdev->features = 0;
 
 	memset(netdevice->netdev->dev_addr, 0,
 		sizeof(netdevice->netdev->dev_addr));

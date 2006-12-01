@@ -10,8 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -206,7 +204,7 @@ int ks_xact_submit(struct ks_xact *xact)
 	xact->state = KS_XACT_STATE_ACTIVE;
 
 	char junk = 0;
-	write(xact->conn->alert_write, junk, sizeof(junk));
+	write(xact->conn->alert_write, &junk, sizeof(junk));
 
 	return 0;
 }

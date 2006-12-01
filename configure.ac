@@ -19,6 +19,9 @@ AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 AC_PROG_AWK
 
+AC_PROG_YACC
+AC_PROG_LEX
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netinet/in.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
@@ -412,6 +415,7 @@ AM_CONDITIONAL(driver_vgsm2,
 	test -n "`echo $drivers | grep vgsm2`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
+		tools/Makefile
 		libskb/Makefile
 		libkstreamer/Makefile
 		libq931/Makefile
@@ -419,6 +423,7 @@ AC_CONFIG_FILES([Makefile
 		chan_visdn/Makefile
 		chan_vgsm/Makefile
 		app_visdn_ppp/Makefile
+		kstool/Makefile
 		visdnctl/Makefile
 		vgsmctl/Makefile
 		pppd_plugin/Makefile

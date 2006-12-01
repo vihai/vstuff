@@ -23,48 +23,42 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include <linux/visdn/router.h>
+#include <libkstreamer.h>
 
-#include "visdnctl.h"
-#include "pipeline_start.h"
+#include "kstool.h"
+#include "pipeline_open.h"
 
 static int do_pipeline_start(const char *pipeline_str)
 {
-	int fd = open(CXC_CONTROL_DEV, O_RDWR);
-	if (fd < 0) {
-		fprintf(stderr, "open failed: %s\n",
-			strerror(errno));
+	struct ks_pipeline *pipeline;
+	int err;
 
+	pipeline = ks_pipeline_get_by_string(glob.conn, pipeline_str);
+	if (!pipeline) {
+		fprintf(stderr, "Cannot find pipeline '%s'\n", pipeline_str);
 		return 1;
 	}
 
-	struct visdn_connect connect;
-	connect.pipeline_id = atoi(pipeline_str);
-	strcpy(connect.from_endpoint, "");
-	strcpy(connect.to_endpoint, "");
-	connect.flags = 0;
+	pipeline->status = KS_PIPELINE_STATUS_FLOWING;
 
-	if (ioctl(fd, VISDN_IOC_PIPELINE_START, &connect) < 0) {
-		fprintf(stderr, "ioctl(IOC_PIPELINE_START) failed: %s\n",
-			strerror(errno));
-
+	err = ks_pipeline_update(pipeline, glob.conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot update the pipeline\n");
 		return 1;
 	}
-
-	close(fd);
 
 	return 0;
 }
 
-static int handle_pipeline_start(int argc, char *argv[], int optind)
+static int handle_pipeline_start(int optind)
 {
-	if (argc <= optind + 1)
+	if (glob.argc <= optind + 1)
 		print_usage("Missing first endpoint ID\n");
 
-	return do_pipeline_start(argv[optind + 1]);
+	return do_pipeline_start(glob.argv[optind + 1]);
 }
 
-static void usage(int argc, char *argv[])
+static void usage()
 {
 	fprintf(stderr,
 		"  pipeline_start <endpoint>\n"

@@ -1,5 +1,5 @@
 /*
- * vISDN - Controlling program
+ * 
  *
  * Copyright (C) 2005-2006 Daniele Orlandi
  *
@@ -23,14 +23,23 @@
 
 #include <getopt.h>
 
-#include "visdnctl.h"
-#include "netdev.h"
+#include <linux/kstreamer/hdlc_framer.h>
+#include <linux/kstreamer/octet_reverser.h>
 
-int global_argc;
-char **global_argv;
+#include <list.h>
 
-int verbosity = 0;
-struct list_head modules = LIST_HEAD_INIT(modules);
+#include <libskb.h>
+#include <libkstreamer.h>
+
+#include "kstool.h"
+#include "connect.h"
+#include "disconnect.h"
+#include "pipeline_start.h"
+#include "pipeline_stop.h"
+#include "pipeline_open.h"
+#include "pipeline_close.h"
+
+struct global_state glob;
 
 void print_usage(const char *fmt, ...)
 {
@@ -45,14 +54,14 @@ void print_usage(const char *fmt, ...)
 		"    -v --verbose: Increase verbosity level\n"
 		"\n"
 		"Commands:\n\n",
-		global_argv[0]);
+		glob.argv[0]);
 
 	struct module *module;
-	list_for_each_entry(module, &modules, node) {
+	list_for_each_entry(module, &glob.modules, node) {
 		printf("\n");
 
 		if (module->usage)
-			module->usage(global_argc, global_argv);
+			module->usage();
 	}
 
 	if (fmt) {
@@ -63,47 +72,25 @@ void print_usage(const char *fmt, ...)
 	exit(1);
 }
 
-#if 0
-int decode_endpoint_id(const char *endpoint_str)
-{
-	int endpoint_id;
-
-	if (endpoint_str[0] == '/') {
-		char real_path[PATH_MAX];
-
-		if (!realpath(endpoint_str, real_path)) {
-			fprintf(stderr, "Cannot resolve path '%s': %s\n",
-				endpoint_str, strerror(errno));
-			return 1;
-		}
-
-		endpoint_id = atoi(basename(real_path));
-
-		if (!endpoint_id) {
-			fprintf(stderr, "Cannot get id from '%s': %s\n",
-				real_path, strerror(errno));
-			return 1;
-		}
-	} else {
-		endpoint_id = atoi(endpoint_str);
-	}
-
-	return endpoint_id;
-}
-#endif
-
 int main(int argc, char *argv[])
 {
 	const char *command = NULL;
 	int c;
 	int optidx;
 
-	global_argc = argc;
-	global_argv = argv;
+	memset(&glob, 0, sizeof(glob));
+	glob.argc = argc;
+	glob.argv = argv;
+	INIT_LIST_HEAD(&glob.modules);
 
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
-	list_add_tail(&module_netdev.node, &modules);
+	list_add_tail(&module_connect.node, &glob.modules);
+	list_add_tail(&module_disconnect.node, &glob.modules);
+	list_add_tail(&module_pipeline_open.node, &glob.modules);
+	list_add_tail(&module_pipeline_close.node, &glob.modules);
+	list_add_tail(&module_pipeline_start.node, &glob.modules);
+	list_add_tail(&module_pipeline_stop.node, &glob.modules);
 
 	struct option options[] = {
 		{ "verbose", no_argument, 0, 0 },
@@ -121,7 +108,7 @@ int main(int argc, char *argv[])
 
 		if (c == 'v' || (c == 0 &&
 		    !strcmp(options[optidx].name, "verbose"))) {
-			verbosity++;
+			glob.verbosity++;
 		} else {
 			if (c) {
 				print_usage("Unknow option '%c'\n", c);
@@ -138,11 +125,33 @@ int main(int argc, char *argv[])
 
 	command = argv[optind];
 
+	glob.conn = ks_conn_create();
+	if (!glob.conn) {
+		fprintf(stderr, "Cannot initialize kstreamer library\n");
+		return 1;
+	}
+
+	int err;
+	err = ks_conn_establish(glob.conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot connect kstreamer library\n");
+		return 1;
+	}
+
+	ks_update_topology(glob.conn);
+
+	glob.hdlc_framer =
+		ks_dynattr_get_by_name(glob.conn, "hdlc_framer");
+	glob.hdlc_deframer =
+		ks_dynattr_get_by_name(glob.conn, "hdlc_deframer");
+	glob.octet_reverser =
+		ks_dynattr_get_by_name(glob.conn, "octet_reverser");
+
 	struct module *module;
-	list_for_each_entry(module, &modules, node) {
+	list_for_each_entry(module, &glob.modules, node) {
 		if (!strcasecmp(command, module->cmd) &&
 		    module->do_it) {
-			return module->do_it(argc, argv, optind);
+			return module->do_it(optind);
 		}
 	}
 

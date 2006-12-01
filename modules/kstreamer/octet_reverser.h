@@ -13,7 +13,7 @@
 #ifndef _OCTET_REVERSER_H
 #define _OCTET_REVERSER_H
 
-struct octet_reverser_descr
+struct ks_octet_reverser_descr
 {
 	__u8 hardware:1;
 	__u8 enabled:1;

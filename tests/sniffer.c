@@ -10,7 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -25,12 +24,12 @@
 #include <linux/netlink.h>
 #include <getopt.h>
 
-/*#include <linux/kstreamer/router.h>
+#include <linux/kstreamer/router.h>
 #include <linux/kstreamer/dynattr.h>
-#include <linux/kstreamer/chan.h>
+#include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
+#include <linux/kstreamer/netlink.h>
 #include <linux/kstreamer/pipeline.h>
-#include <linux/kstreamer/netlink.h>*/
 #include <linux/kstreamer/userport.h>
 
 #include <linux/kstreamer/hdlc_framer.h>
@@ -46,6 +45,7 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 typedef unsigned char BOOL;
+
 #ifndef FALSE
 #define FALSE 0
 #endif
@@ -66,14 +66,14 @@ struct opts
 	BOOL in;
 	BOOL enable_in_octet_reverser;
 	BOOL enable_in_hdlc_deframer;
-	struct octet_reverser_descr *in_octet_reverser;
-	struct hdlc_deframer_descr *in_hdlc_deframer;
+	struct ks_octet_reverser_descr *in_octet_reverser;
+	struct ks_hdlc_deframer_descr *in_hdlc_deframer;
 
 	BOOL out;
 	BOOL enable_out_octet_reverser;
 	BOOL enable_out_hdlc_framer;
-	struct octet_reverser_descr *out_octet_reverser;
-	struct hdlc_framer_descr *out_hdlc_framer;
+	struct ks_octet_reverser_descr *out_octet_reverser;
+	struct ks_hdlc_framer_descr *out_hdlc_framer;
 
 } opts;
 
@@ -101,8 +101,8 @@ int configure_in_pipeline(struct ks_pipeline *pipeline)
 
 			if (dynattr->dynattr == opts.octet_reverser) {
 
-				struct octet_reverser_descr *descr =
-					(struct octet_reverser_descr *)
+				struct ks_octet_reverser_descr *descr =
+					(struct ks_octet_reverser_descr *)
 					dynattr->payload;
 
 				if (!opts.in_octet_reverser ||
@@ -111,8 +111,8 @@ int configure_in_pipeline(struct ks_pipeline *pipeline)
 
 			} else if (dynattr->dynattr == opts.hdlc_deframer) {
 
-				struct hdlc_deframer_descr *descr =
-					(struct hdlc_deframer_descr *)
+				struct ks_hdlc_deframer_descr *descr =
+					(struct ks_hdlc_deframer_descr *)
 					dynattr->payload;
 
 				if (!opts.in_hdlc_deframer ||
@@ -169,8 +169,8 @@ int configure_out_pipeline(struct ks_pipeline *pipeline)
 
 			if (dynattr->dynattr == opts.octet_reverser) {
 
-				struct octet_reverser_descr *descr =
-					(struct octet_reverser_descr *)
+				struct ks_octet_reverser_descr *descr =
+					(struct ks_octet_reverser_descr *)
 					dynattr->payload;
 
 				if (!opts.out_octet_reverser ||
@@ -179,8 +179,8 @@ int configure_out_pipeline(struct ks_pipeline *pipeline)
 
 			} else if (dynattr->dynattr == opts.hdlc_framer) {
 
-				struct hdlc_framer_descr *descr =
-					(struct hdlc_framer_descr *)
+				struct ks_hdlc_framer_descr *descr =
+					(struct ks_hdlc_framer_descr *)
 					dynattr->payload;
 
 				if (!opts.out_hdlc_framer ||
@@ -231,10 +231,12 @@ int main(int argc, char *argv[])
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 	setvbuf(stderr, (char *)NULL, _IONBF, 0);
 
-	opts.in = 1;
+	opts.in = 0;
 	opts.out = 0;
 
 	struct option options[] = {
+		{ "in", no_argument, 0, 0 },
+		{ "out", no_argument, 0, 0 },
 		{ "binary", no_argument, 0, 0 },
 		{ "in-hdlc-deframer", no_argument, 0, 0 },
 		{ "in-octet-reverser", no_argument, 0, 0 },
@@ -258,7 +260,11 @@ int main(int argc, char *argv[])
 
 		opt = c ? &no_opt : &options[optidx];
 
-		if (!strcmp(opt->name, "binary"))
+		if (!strcmp(opt->name, "in"))
+			opts.in = TRUE;
+		else if (!strcmp(opt->name, "out"))
+			opts.out = TRUE;
+		else if (!strcmp(opt->name, "binary"))
 			opts.binary = TRUE;
 		else if (!strcmp(opt->name, "in-hdlc-deframer"))
 			opts.enable_in_hdlc_deframer = TRUE;
@@ -280,13 +286,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (optind < argc) {
+	if (optind < argc)
 		opts.node_name = argv[optind];
-	} else {
-		fprintf(stderr,"Missing required interface name\n");
-		print_usage(argv[0]);
-	}
-
 
 	int mode;
 
@@ -300,8 +301,8 @@ int main(int argc, char *argv[])
 		assert(0);
 
 	int up_fd;
-	up_fd = open("/dev/ks/userport_stream", mode);
-	//up_fd = open("/dev/ks/userport_frame", mode);
+	//up_fd = open("/dev/ks/userport_stream", mode);
+	up_fd = open("/dev/ks/userport_frame", mode);
 	if (up_fd < 0) {
 		perror("cannot open /dev/ks/userport_stream");
 		return 1;
@@ -339,33 +340,45 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	struct ks_node *node;
+	printf("node: 0x%08x\n", node_up->id);
 
-	if (!strncmp(opts.node_name, "/sys/", 5)) {
-		char *path;
+	struct ks_node *node = NULL;
 
-		path = realpath(opts.node_name, NULL);
-		if (!path) {
-			fprintf(stderr, "Cannot allocate real path\n");
-			return 1;
+	if (opts.node_name) {
+		if (!strncmp(opts.node_name, "/sys/", 5)) {
+			char *path;
+
+			path = realpath(opts.node_name, NULL);
+			if (!path) {
+				fprintf(stderr, "Cannot allocate real path\n");
+				return 1;
+			}
+
+			node = ks_node_get_by_path(conn, path + 4);
+
+			free(path);
+		} else {
+			node = ks_node_get_by_id(conn, atoi(opts.node_name));
 		}
 
-		node = ks_node_get_by_path(conn, path + 4);
-
-		free(path);
-	} else {
-		node = ks_node_get_by_id(conn, atoi(opts.node_name));
-	}
-
-	if (!node) {
-		fprintf(stderr, "Cannot find node '%s'\n", opts.node_name);
-		return 1;
+		if (!node) {
+			fprintf(stderr,
+				"Cannot find node '%s'\n", opts.node_name);
+			return 1;
+		}
 	}
 
 	struct ks_pipeline *in_pipeline = NULL;
-	if (opts.in) {
-		in_pipeline = ks_connect(conn, node, node_up, &err);
+	if (node && opts.in) {
+		in_pipeline = ks_pipeline_alloc();
 		if (!in_pipeline) {
+			fprintf(stderr,
+				"Cannot alloc in pipeline\n");
+			return 1;
+		}
+
+		err = ks_pipeline_autoroute(in_pipeline, conn, node, node_up);
+		if (err < 0) {
 			fprintf(stderr,
 				"Cannot connect nodes: %s\n", strerror(-err));
 			return 1;
@@ -396,9 +409,16 @@ int main(int argc, char *argv[])
 	}
 
 	struct ks_pipeline *out_pipeline = NULL;
-	if (opts.out) {
-		out_pipeline = ks_connect(conn, node_up, node, &err);
+	if (node && opts.out) {
+		out_pipeline = ks_pipeline_alloc();
 		if (!out_pipeline) {
+			fprintf(stderr,
+				"Cannot alloc in pipeline\n");
+			return 1;
+		}
+
+		err = ks_pipeline_autoroute(out_pipeline, conn, node_up, node);
+		if (err < 0) {
 			fprintf(stderr,
 				"Cannot connect nodes: %s\n", strerror(-err));
 			return 1;

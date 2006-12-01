@@ -564,13 +564,13 @@ static int hfc_sys_chan_rx_chan_get_attr(
 
 	switch(index) {
 	case 0: {
-		struct hdlc_deframer_descr *descr = buf;
+		struct ks_hdlc_deframer_descr *descr = buf;
 
-		if (*len < sizeof(struct hdlc_deframer_descr))
+		if (*len < sizeof(struct ks_hdlc_deframer_descr))
 			return -ENOSPC;
 
 		*type = hfc_hdlc_deframer_class->id;
-		*len = sizeof(struct hdlc_deframer_descr);
+		*len = sizeof(struct ks_hdlc_deframer_descr);
 
 		memset(descr, 0, sizeof(*descr));
 		descr->hardware = 1;
@@ -579,13 +579,13 @@ static int hfc_sys_chan_rx_chan_get_attr(
 	break;
 
 	case 1: {
-		struct octet_reverser_descr *descr = buf;
+		struct ks_octet_reverser_descr *descr = buf;
 
-		if (*len < sizeof(struct octet_reverser_descr))
+		if (*len < sizeof(struct ks_octet_reverser_descr))
 			return -ENOSPC;
 
 		*type = hfc_octet_reverser_class->id;
-		*len = sizeof(struct octet_reverser_descr);
+		*len = sizeof(struct ks_octet_reverser_descr);
 
 		memset(descr, 0, sizeof(*descr));
 		descr->hardware = 1;
@@ -609,17 +609,17 @@ static int hfc_sys_chan_rx_chan_set_attr(
 	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 
 	if (type == hfc_hdlc_deframer_class->id) {
-		struct hdlc_deframer_descr *descr = buf;
+		struct ks_hdlc_deframer_descr *descr = buf;
 
-		if (len < sizeof(struct hdlc_deframer_descr))
+		if (len < sizeof(struct ks_hdlc_deframer_descr))
 			return -EINVAL;
 
 		chan_rx->fifo.framer_enabled = descr->enabled;
 
 	} else if (type == hfc_octet_reverser_class->id) {
-		struct octet_reverser_descr *descr = buf;
+		struct ks_octet_reverser_descr *descr = buf;
 
-		if (len < sizeof(struct octet_reverser_descr))
+		if (len < sizeof(struct ks_octet_reverser_descr))
 			return -EINVAL;
 
 		chan_rx->fifo.bit_reversed = descr->enabled;
@@ -791,6 +791,9 @@ static int hfc_sys_chan_tx_chan_push_frame(
 	struct hfc_fifo *fifo = &chan_tx->fifo;
 	struct hfc_card *card = chan->port->card;
 
+	/* Remove CRC, the hardware is going to generate one for us */
+	int frame_len = skb->len - 2;
+
 	hfc_card_lock(card);
 	hfc_fifo_select(fifo);
 	/*
@@ -805,10 +808,10 @@ static int hfc_sys_chan_tx_chan_push_frame(
 		//visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
 	}
 
-	if (hfc_fifo_free_tx(fifo) < skb->len) {
+	if (hfc_fifo_free_tx(fifo) < frame_len) {
 		hfc_debug_sys_chan(chan, 3,
 			"TX FIFO full (%d < %d), throttling\n",
-			hfc_fifo_free_tx(fifo), skb->len);
+			hfc_fifo_free_tx(fifo), frame_len);
 
 		//visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
 
@@ -821,7 +824,7 @@ static int hfc_sys_chan_tx_chan_push_frame(
 #ifdef DEBUG_CODE
 	if (debug_level == 3) {
 		hfc_fifo_refresh_fz_cache(fifo);
-		hfc_debug_sys_chan(chan, 3, "TX len %2d: ", skb->len);
+		hfc_debug_sys_chan(chan, 3, "TX len %2d: ", frame_len);
 
 	} else if (debug_level >= 4) {
 		hfc_fifo_refresh_fz_cache(fifo);
@@ -829,19 +832,19 @@ static int hfc_sys_chan_tx_chan_push_frame(
 			"TX (f1=%02x, f2=%02x, z1(f1)=%04x, z2(f2)=%04x)"
 			" len %2d: ",
 			fifo->f1, fifo->f2, fifo->z1, fifo->z2,
-			skb->len);
+			frame_len);
 	}
 
 	if (debug_level >= 3) {
 		int i;
-		for (i=0; i<skb->len; i++)
+		for (i=0; i<frame_len; i++)
 			printk("%02x",((u8 *)skb->data)[i]);
 
 		printk("\n");
 	}
 #endif
 
-	hfc_fifo_mem_write(fifo, skb->data, skb->len);
+	hfc_fifo_mem_write(fifo, skb->data, frame_len);
 	hfc_fifo_next_frame(fifo);
 
 	hfc_card_unlock(card);
@@ -928,13 +931,13 @@ static int hfc_sys_chan_tx_chan_get_attr(
 
 	switch(index) {
 	case 0: {
-		struct hdlc_framer_descr *descr = buf;
+		struct ks_hdlc_framer_descr *descr = buf;
 
-		if (*len < sizeof(struct hdlc_framer_descr))
+		if (*len < sizeof(struct ks_hdlc_framer_descr))
 			return -ENOSPC;
 
 		*type = hfc_hdlc_framer_class->id;
-		*len = sizeof(struct hdlc_framer_descr);
+		*len = sizeof(struct ks_hdlc_framer_descr);
 
 		memset(descr, 0, sizeof(*descr));
 		descr->hardware = 1;
@@ -943,13 +946,13 @@ static int hfc_sys_chan_tx_chan_get_attr(
 	break;
 
 	case 1: {
-		struct octet_reverser_descr *descr = buf;
+		struct ks_octet_reverser_descr *descr = buf;
 
-		if (*len < sizeof(struct octet_reverser_descr))
+		if (*len < sizeof(struct ks_octet_reverser_descr))
 			return -ENOSPC;
 
 		*type = hfc_octet_reverser_class->id;
-		*len = sizeof(struct octet_reverser_descr);
+		*len = sizeof(struct ks_octet_reverser_descr);
 
 		memset(descr, 0, sizeof(*descr));
 		descr->hardware = 1;
@@ -973,18 +976,18 @@ static int hfc_sys_chan_tx_chan_set_attr(
 	struct hfc_sys_chan_tx *chan_tx = to_sys_chan_tx(ks_chan);
 
 	if (type == hfc_hdlc_framer_class->id) {
-		struct hdlc_framer_descr *descr = buf;
+		struct ks_hdlc_framer_descr *descr = buf;
 
-		if (len < sizeof(struct hdlc_framer_descr))
+		if (len < sizeof(struct ks_hdlc_framer_descr))
 			return -EINVAL;
 
 		chan_tx->fifo.framer_enabled = descr->enabled;
 
 	} else if (type == hfc_octet_reverser_class->id) {
 
-		struct octet_reverser_descr *descr = buf;
+		struct ks_octet_reverser_descr *descr = buf;
 
-		if (len < sizeof(struct octet_reverser_descr))
+		if (len < sizeof(struct ks_octet_reverser_descr))
 			return -EINVAL;
 
 		chan_tx->fifo.bit_reversed = descr->enabled;
@@ -1081,7 +1084,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 	struct hfc_fifo *fifo = &chan->rx.fifo;
 	int frame_size;
 	struct sk_buff *skb;
-	struct { u8 crc[2], stat; } __attribute((packed)) stat;
+	u8 stat;
 
 	hfc_card_lock(card);
 
@@ -1104,6 +1107,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 //				VISDN_RX_ERROR_LENGTH);
 
 		goto err_invalid_frame;
+
 	} else if(frame_size == 3) {
 		hfc_debug_sys_chan(chan, 3,
 			"empty frame received\n");
@@ -1114,7 +1118,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 		goto err_empty_frame;
 	}
 
-	skb = visdn_alloc_skb(frame_size - 3);
+	skb = visdn_alloc_skb(frame_size - 1);
 
 	if (!skb) {
 		hfc_msg_sys_chan(chan, KERN_ERR,
@@ -1126,7 +1130,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 		goto err_alloc_skb;
 	}
 
-	hfc_fifo_mem_read(fifo, skb_put(skb, frame_size - 3), frame_size - 3);
+	hfc_fifo_mem_read(fifo, skb_put(skb, frame_size - 1), frame_size - 1);
 
 	hfc_fifo_mem_read(fifo, &stat, sizeof(stat));
 
@@ -1143,14 +1147,14 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 
 	if (debug_level >= 3) {
 		int i;
-		for (i=0; i<frame_size - 3; i++)
+		for (i=0; i<frame_size - 1; i++)
 			printk("%02x", ((u8 *)skb->data)[i]);
 
-		printk("%02x%02x %02x\n", stat.crc[0], stat.crc[1], stat.stat);
+		printk(" %02x\n", stat);
 	}
 #endif
 
-	if (stat.stat == 0xff) {
+	if (stat == 0xff) {
 		// Frame abort detected
 
 		hfc_debug_sys_chan(chan, 3, "Frame abort detected\n");
@@ -1160,7 +1164,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 
 		goto err_frame_abort;
 
-	} else if (stat.stat != 0x00) {
+	} else if (stat != 0x00) {
 		// CRC not ok, frame broken, skipping
 		hfc_debug_sys_chan(chan, 2, "Received frame with wrong CRC\n");
 
@@ -1174,7 +1178,8 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 
 	vss_chan_push_frame(&chan_rx->ks_chan, skb);
 
-/*	if (chan->connected_st_chan) {
+#if 0
+	if (chan->connected_st_chan) {
 		struct hfc_led *led =
 			chan->connected_st_chan->port->led;
 
@@ -1184,7 +1189,8 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 			led->flashes = 1;
 			hfc_led_update(led);
 		}
-	}*/
+	}
+#endif
 
 	goto all_went_well;
 
@@ -1273,7 +1279,7 @@ void hfc_sys_chan_init(
 static int hfc_sys_chan_rx_register(struct hfc_sys_chan_rx *chan_rx)
 {
 	int err;
-	
+
 	err = ks_chan_register(&chan_rx->ks_chan);
 	if (err < 0)
 		goto err_chan_register;

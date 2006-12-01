@@ -95,7 +95,7 @@ nobase_include_HEADERS =			\
 	libq931/timer.h				\
 	libq931/util.h
 
-AM_CFLAGS = -D_REENTRANT -DGNU_SOURCE -Wall
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
 if !inline
 AM_CFLAGS += -fno-inline

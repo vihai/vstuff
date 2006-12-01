@@ -15,6 +15,6 @@
 
 struct ks_node;
 
-void router_run(struct ks_node *start, struct ks_node *to);
+void ks_router_run(struct ks_node *start, struct ks_node *to);
 
 #endif

@@ -1,0 +1,104 @@
+
+%name ks_pd_parser_
+
+%token_prefix TK_
+
+%extra_argument {struct ks_pd *pd}
+
+%token_type {struct ks_pd_token *}
+%default_type {struct ks_pd_token *}
+%token_destructor { ks_pd_token_destroy($$); }
+%parse_accept { pd->failed = FALSE; }
+%parse_failure { pd->failed = TRUE; pd->failure_reason = "Invalid pipeline"; }
+%stack_overflow { pd->failed = TRUE; pd->failure_reason = "Stack overflow"; }
+
+%dummy_token SPACE
+%dummy_token ILLEGAL
+
+%include {
+#include <stdlib.h>
+#include <string.h>
+
+#include "pd_parser.h"
+}
+
+%left COMMA.
+%left EQ.
+%left LPAREN.
+%left RPAREN.
+%left GT.
+
+%start_symbol pipeline
+%type pipeline {struct ks_pd_pipeline *}
+
+pipeline(A) ::= nodeid(EP1) GT chanlist(CH) GT nodeid(EP2). {
+	A = malloc(sizeof(*A));
+
+	A->ep1 = EP1;
+	A->ep2 = EP2;
+	A->channels = CH;
+
+	pd->pipeline = A;
+}
+
+nodeid(A) ::= STRING(X). { A=X; }
+nodeid(A) ::= IDENTIFIER(X). { A=X; }
+nodeid(A) ::= INTEGER(X). { A=X; }
+nodeid(A) ::= HEXINT(X). { A=X; }
+
+%type chanlist {struct ks_pd_channels *}
+chanlist(A) ::= chandescr(CHAN). {
+	A = malloc(sizeof(*A));
+	INIT_LIST_HEAD(&A->list);
+	list_add(&CHAN->node, &A->list);
+}
+
+chanlist(A) ::= chanlist(B) GT chandescr(CHAN). {
+	A = B;
+	list_add(&CHAN->node, &A->list);
+}
+
+%type chandescr {struct ks_pd_channel *}
+chandescr(A) ::= chanid(ID). {
+	A = malloc(sizeof(*A));
+	A->name = ID;
+}
+
+chandescr(A) ::= chanid(ID) LPAREN parameters(PARS) RPAREN. {
+	A = malloc(sizeof(*A));
+	A->name = ID;
+	A->parameters = PARS;
+}
+
+chanid(A) ::= STRING(X). { A=X; }
+chanid(A) ::= IDENTIFIER(X). { A=X; }
+chanid(A) ::= INTEGER(X). { A=X; }
+chanid(A) ::= HEXINT(X). { A=X; }
+
+%type parameters {struct ks_pd_parameters *}
+parameters(A) ::= assignment(ASS). {
+	A = malloc(sizeof(*A));
+
+	INIT_LIST_HEAD(&A->list);
+	list_add(&ASS->node, &A->list);
+}
+
+parameters(A) ::= parameters(B) COMMA assignment(ASS). {
+	A = B;
+	list_add(&ASS->node, &A->list);
+}
+
+%type assignment {struct ks_pd_parameter *}
+
+assignment(A) ::= IDENTIFIER(NAME) EQ STRING(VALUE). {
+	A = malloc(sizeof(*A));
+	A->name = NAME;
+	A->value = VALUE;
+}
+
+assignment(A) ::= IDENTIFIER(NAME) EQ INTEGER(VALUE). {
+	A = malloc(sizeof(*A));
+	A->name = NAME;
+	A->value = VALUE;
+}
+

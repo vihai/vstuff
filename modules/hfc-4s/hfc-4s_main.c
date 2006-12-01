@@ -66,7 +66,7 @@ int debug_level = 0;
 #endif
 
 #ifndef PCI_VENDOR_ID_HST_HFC_4S
-#define PCI_VENDOR_ID_HST_HFC_4S 	0x0007
+#define PCI_VENDOR_ID_HST_HFC_4S	0x0007
 #endif
 
 static struct pci_device_id hfc_pci_ids[] = {

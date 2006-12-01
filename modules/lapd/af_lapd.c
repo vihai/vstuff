@@ -377,10 +377,12 @@ static int lapd_ioctl(
 		        if (lapd_frame_type(hdr->control) ==
 				LAPD_FRAME_TYPE_UFRAME)
 				size = skb->len -
-					sizeof(struct lapd_data_hdr);
+					sizeof(struct lapd_data_hdr) -
+					sizeof(u16);
 			else
 				size = skb->len -
-					sizeof(struct lapd_data_hdr_e);
+					sizeof(struct lapd_data_hdr_e) -
+					sizeof(u16);
 		}
 		spin_unlock_bh(&sk->sk_receive_queue.lock);
 
@@ -651,7 +653,8 @@ static int lapd_recvmsg(struct kiocb *iocb, struct socket *sock,
 			hdrsize = sizeof(struct lapd_data_hdr_e);
 		}
 
-		copied = skb->len - hdrsize;
+		/* Remove header and CRC */
+		copied = skb->len - hdrsize - sizeof(u16);
 		if (copied > size) {
 			copied = size;
 			msg->msg_flags |= MSG_TRUNC;

@@ -10,8 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +62,63 @@ struct ks_chan *ks_chan_get_by_id(struct ks_conn *conn, int id)
 	}
 
 	return NULL;
+}
+
+struct ks_chan *ks_chan_get_by_path(
+	struct ks_conn *conn,
+	const char *path)
+{
+	struct ks_chan *chan;
+	struct hlist_node *t;
+
+	int i;
+	for(i=0; i<ARRAY_SIZE(conn->chans_hash); i++) {
+		hlist_for_each_entry(chan, t, &conn->chans_hash[i], node) {
+			if (!strcmp(chan->path, path))
+				return ks_chan_get(chan);
+		}
+	}
+
+	return NULL;
+}
+
+struct ks_chan *ks_chan_get_by_token(
+	struct ks_conn *conn,
+	struct ks_pd_token *token)
+{
+	struct ks_chan *chan;
+
+	switch(token->id) {
+	case TK_STRING: {
+		char *real_path;
+		real_path = realpath(token->text, NULL);
+		if (!real_path) {
+			report_conn(conn, LOG_WARNING,
+				"Cannot resolve path '%s': %s\n",
+				token->text, strerror(errno));
+			return NULL;
+		}
+
+		chan = ks_chan_get_by_path(conn, real_path + strlen("/sys"));
+		free(real_path);
+	}
+	break;
+
+	case TK_INTEGER:
+		chan = ks_chan_get_by_id(conn, atoi(token->text));
+	break;
+
+	case TK_HEXINT:
+		printf("NOT IMPLEMENTED!\n");
+		chan = NULL;
+	break;
+
+	default:
+		assert(0);
+		chan = NULL;
+	}
+
+	return chan;
 }
 
 struct ks_chan *ks_chan_get_by_nlid(struct ks_conn *conn, struct nlmsghdr *nlh)

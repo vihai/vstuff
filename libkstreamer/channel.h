@@ -23,6 +23,9 @@
 
 #include <list.h>
 
+#include "pd_grammar.h"
+#include "pd_parser.h"
+
 struct ks_xact;
 struct ks_conn;
 
@@ -58,6 +61,12 @@ void ks_chan_put(struct ks_chan *chan);
 struct ks_chan *ks_chan_get_by_id(
 	struct ks_conn *conn,
 	int id);
+struct ks_chan *ks_chan_get_by_path(
+	struct ks_conn *conn,
+	const char *path);
+struct ks_chan *ks_chan_get_by_token(
+	struct ks_conn *conn,
+	struct ks_pd_token *token);
 
 void ks_chan_dump(
 	struct ks_chan *chan,

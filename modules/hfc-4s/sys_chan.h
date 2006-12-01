@@ -48,15 +48,15 @@ struct hfc_sys_chan;
 struct hfc_hdlc_framer
 {
 	struct ks_dynattr_instance dynattr;
-	
-	struct hdlc_framer_descr descr;
+
+	struct ks_hdlc_framer_descr descr;
 };
 
 struct hfc_octet_reverser
 {
 	struct ks_dynattr_instance dynattr;
-	
-	struct octet_reverser_descr descr;
+
+	struct ks_octet_reverser_descr descr;
 };
 
 struct hfc_sys_chan_rx

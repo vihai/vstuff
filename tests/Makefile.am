@@ -43,7 +43,7 @@ ksmonitor_LDADD = \
 
 vgsm_stress_SOURCES = vgsm_stress.c
 
-AM_CFLAGS = -D_REENTRANT -DGNU_SOURCE -Wall
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
 if !inline
 AM_CFLAGS += -fno-inline

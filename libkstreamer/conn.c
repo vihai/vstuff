@@ -10,8 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,7 +119,16 @@ static void ks_report_default(int level, const char *format, ...)
 {
 	va_list ap;
 	va_start(ap, format);
-	vfprintf(stderr, format, ap);
+
+	switch(level) {
+	case KS_LOG_DEBUG:
+        break;
+
+	default:
+		vfprintf(stderr, format, ap);
+	break;
+	}
+
 	va_end(ap);
 }
 

@@ -20,7 +20,7 @@ INCLUDES =					\
 visdn_la_LIBADD =
 visdn_la_LDFLAGS = -module -avoid-version -no-undefined
 
-AM_CFLAGS = -D_REENTRANT -DGNU_SOURCE -Wall
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
 if !inline
 AM_CFLAGS += -fno-inline

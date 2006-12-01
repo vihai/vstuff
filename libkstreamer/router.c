@@ -10,8 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +27,7 @@
 
 //#define DIJ_DEBUG
 
-void router_run(
+void ks_router_run(
 	struct ks_node *start,
 	struct ks_node *to)
 {

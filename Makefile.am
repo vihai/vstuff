@@ -30,7 +30,7 @@ EXTRA_DIST =					\
 	vgsm_firmware/*.img			\
 	vgsm_firmware/README
 
-SUBDIRS =
+SUBDIRS = tools
 
 if kernel_modules
 SUBDIRS += modules
@@ -39,7 +39,7 @@ endif
 SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
-SUBDIRS += scripts samples #visdnctl vgsmctl
+SUBDIRS += scripts samples kstool #visdnctl vgsmctl
 
 if asterisk_modules
 SUBDIRS += res_kstreamer

@@ -524,7 +524,7 @@ int lapd_utme_handle_frame(struct sk_buff *skb)
 	struct lapd_tei_mgmt_frame *tm =
 		(struct lapd_tei_mgmt_frame *)skb->data;
 
-	if (skb->len < sizeof(*tm)) {
+	if (skb->len < sizeof(*tm) + sizeof(u16)) {
 		lapd_msg_dev(dev, KERN_ERR,
 			"frame too small (%d octets)\n",
 			skb->len);

@@ -10,16 +10,7 @@
  *
  */
 
-#define _GNU_SOURCE
 #include <stdlib.h>
-/*#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/poll.h>
-#include <sys/ioctl.h>
-#include <linux/types.h>*/
 
 #include "libskb.h"
 

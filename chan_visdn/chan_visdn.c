@@ -3308,7 +3308,7 @@ static void visdn_q931_setup_indication(
 	visdn_chan->ic = visdn_ic_get(ic);
 
 	struct ast_channel *ast_chan;
-	ast_chan = visdn_new(visdn_chan, AST_STATE_OFFHOOK);
+	ast_chan = visdn_new(visdn_chan, AST_STATE_RING);
 	if (!ast_chan)
 		goto err_visdn_new;
 

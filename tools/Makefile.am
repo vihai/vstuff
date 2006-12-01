@@ -9,16 +9,10 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-lib_LTLIBRARIES = libskb.la
+sbin_PROGRAMS = lemon
 
-libskb_la_SOURCES = libskb.c
+INCLUDES =
 
-libskb_ladir = libskb
+lemon_SOURCES = lemon.c
 
-nobase_include_HEADERS = libskb.h
-
-AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
-
-if !inline
-AM_CFLAGS += -fno-inline
-endif
+AM_CFLAGS = -Wall

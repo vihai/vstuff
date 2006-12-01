@@ -1304,7 +1304,7 @@ static int lapd_socket_handle_sframe(
 		lapd_sframe_function_name(lapd_sframe_function(hdr->control)),
 		hdr->s.n_r);
 
-	if (skb->len != 4) {
+	if (skb->len != 6) {
 		lapd_debug_dlc(lapd_sock,
 			"received s-frame with wrong size (%d), rejecting\n",
 			skb->len);
@@ -1675,7 +1675,7 @@ static int lapd_socket_handle_uframe(
 	lapd_debug_ls(lapd_sock, "received u-frame\n");
 
 	if (lapd_uframe_function(hdr->control) != LAPD_UFRAME_FUNC_UI &&
-	    skb->len != 3) {
+	    skb->len != 5) {
 		lapd_debug_ls(lapd_sock,
 			"received u-frame with wrong size (%d), rejecting\n",
 			skb->len);
@@ -1738,7 +1738,7 @@ int lapd_dlc_recv(
 		/* Handle primitives from Layer Management to datalink
 		 * procedures
 		 */
-		
+
 		struct lapd_mdl_primitive *pri =
 			(struct lapd_mdl_primitive *)skb->data;
 

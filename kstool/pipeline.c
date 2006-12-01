@@ -23,9 +23,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include <linux/visdn/router.h>
-
-#include "visdnctl.h"
+#include "kstool.h"
 #include "pipeline_open.h"
 #include "pipeline_close.h"
 #include "pipeline_start.h"

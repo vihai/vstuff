@@ -10,11 +10,10 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <assert.h>
 
 #include <linux/kstreamer/node.h>
@@ -25,6 +24,9 @@
 #include "dynattr.h"
 #include "util.h"
 #include "logging.h"
+
+#include "pd_grammar.h"
+#include "pd_parser.h"
 
 static inline struct hlist_head *ks_node_get_hash(
 	struct ks_conn *conn, int id)
@@ -48,6 +50,21 @@ void ks_node_del(struct ks_node *node)
 	ks_node_put(node);
 }
 
+struct ks_node *ks_node_get_by_id(
+	struct ks_conn *conn,
+	int id)
+{
+	struct ks_node *node;
+	struct hlist_node *t;
+
+	hlist_for_each_entry(node, t, ks_node_get_hash(conn, id), node) {
+		if (node->id == id)
+			return ks_node_get(node);
+	}
+
+	return NULL;
+}
+
 struct ks_node *ks_node_get_by_path(
 	struct ks_conn *conn,
 	const char *path)
@@ -66,19 +83,48 @@ struct ks_node *ks_node_get_by_path(
 	return NULL;
 }
 
-struct ks_node *ks_node_get_by_id(
+struct ks_node *ks_node_get_by_token(
 	struct ks_conn *conn,
-	int id)
+	struct ks_pd_token *token)
 {
 	struct ks_node *node;
-	struct hlist_node *t;
 
-	hlist_for_each_entry(node, t, ks_node_get_hash(conn, id), node) {
-		if (node->id == id)
-			return ks_node_get(node);
+	switch(token->id) {
+	case TK_STRING: {
+		char *real_path;
+		real_path = realpath(token->text, NULL);
+		if (!real_path) {
+			report_conn(conn, LOG_WARNING,
+				"Cannot resolve path '%s': %s\n",
+				token->text, strerror(errno));
+			return NULL;
+		}
+
+		node = ks_node_get_by_path(conn, real_path + strlen("/sys"));
+		free(real_path);
+	}
+	break;
+
+	case TK_INTEGER:
+		node = ks_node_get_by_id(conn, atoi(token->text));
+	break;
+
+	case TK_HEXINT: {
+		int id;
+
+		if (sscanf(token->text, "0x%x", &id) < 1)
+			node = NULL;
+		else
+			node = ks_node_get_by_id(conn, id);
+	}
+	break;
+
+	default:
+		assert(0);
+		node = NULL;
 	}
 
-	return NULL;
+	return node;
 }
 
 struct ks_node *ks_node_get_by_nlid(

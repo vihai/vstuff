@@ -113,8 +113,6 @@ static int new_digit(
 	int called_number_size,
 	char digit, int *retval)
 {
-	ast_setstate(chan, AST_STATE_DIALING);
-
 	if (digit) {
 		if(strlen(called_number) >= called_number_size - 1) {
 			ast_log(LOG_NOTICE,
@@ -221,7 +219,6 @@ static int new_digit(
 				called_number, 1,
 				chan->cid.cid_num)) {
 
-				ast_setstate(chan, AST_STATE_RING);
 				ast_indicate(chan, AST_CONTROL_PROCEEDING);
 
 				chan->priority = 0;

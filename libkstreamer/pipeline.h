@@ -23,6 +23,8 @@
 
 #include <libskb.h>
 
+#include "util.h"
+
 struct ks_conn;
 
 struct ks_pipeline
@@ -50,6 +52,12 @@ void ks_pipeline_put(struct ks_pipeline *pipeline);
 struct ks_pipeline *ks_pipeline_get_by_id(
 	struct ks_conn *conn,
 	int id);
+struct ks_pipeline *ks_pipeline_get_by_path(
+	struct ks_conn *conn,
+	const char *path);
+struct ks_pipeline *ks_pipeline_get_by_string(
+	struct ks_conn *conn,
+	const char *pipeline_str);
 
 void ks_pipeline_dump(
 	struct ks_pipeline *pipeline,
@@ -62,6 +70,19 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn);
 int ks_pipeline_update_chans(
 	struct ks_pipeline *pipeline,
 	struct ks_conn *conn);
+
+struct ks_node;
+int ks_pipeline_autoroute(
+	struct ks_pipeline *pipeline,
+	struct ks_conn *conn,
+	struct ks_node *src_node,
+	struct ks_node *dst_node);
+
+struct ks_pipeline_par
+{
+	char *name;
+	char *value;
+};
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 

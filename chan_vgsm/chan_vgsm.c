@@ -1141,20 +1141,28 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 			vgsm_chan->up_node->id,
 			vgsm_chan->module_node->id);
 
-	vgsm_chan->rx_pipeline = ks_connect(ks_conn,
-					vgsm_chan->module_node,
-					vgsm_chan->up_node, &err);
+	vgsm_chan->rx_pipeline = ks_pipeline_alloc();
 	if (!vgsm_chan->rx_pipeline) {
+		ast_log(LOG_ERROR,
+			"Cannot allocate pipeline\n");
+
+		goto err_rx_pipeline_alloc;
+	}
+
+	err = ks_pipeline_autoroute(vgsm_chan->rx_pipeline, ks_conn,
+				vgsm_chan->module_node,
+				vgsm_chan->up_node);
+	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot connect nodes: %s\n", strerror(-err));
 
-		goto err_module_up_connect;
+		goto err_rx_pipeline_connect;
 	}
 
 	err = ks_pipeline_create(vgsm_chan->rx_pipeline, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot create pipeline: %s\n",
+			"Cannot create RX pipeline: %s\n",
 			strerror(-err));
 		goto err_rx_pipeline_create;
 	}
@@ -1166,18 +1174,26 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	err = ks_pipeline_update(vgsm_chan->rx_pipeline, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-				"Cannot start the pipeline\n");
+				"Cannot start the RX pipeline\n");
 		goto err_rx_pipeline_update;
 	}
 
-	vgsm_chan->tx_pipeline = ks_connect(ks_conn,
-					vgsm_chan->up_node,
-					vgsm_chan->module_node, &err);
+	vgsm_chan->tx_pipeline = ks_pipeline_alloc();
 	if (!vgsm_chan->tx_pipeline) {
+		ast_log(LOG_ERROR,
+			"Cannot allocate TX pipeline\n");
+
+		goto err_tx_pipeline_alloc;
+	}
+
+	err = ks_pipeline_autoroute(vgsm_chan->tx_pipeline, ks_conn,
+				vgsm_chan->up_node,
+				vgsm_chan->module_node);
+	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot connect nodes: %s\n", strerror(-err));
 
-		goto err_up_module_connect;
+		goto err_tx_pipeline_connect;
 	}
 
 	err = ks_pipeline_create(vgsm_chan->tx_pipeline, ks_conn);
@@ -1203,14 +1219,16 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 err_tx_pipeline_update:
 err_tx_pipeline_create:
+err_tx_pipeline_connect:
 	ks_pipeline_put(vgsm_chan->tx_pipeline);
 	vgsm_chan->tx_pipeline = NULL;
-err_up_module_connect:
+err_tx_pipeline_alloc:
 err_rx_pipeline_update:
 err_rx_pipeline_create:
+err_rx_pipeline_connect:
 	ks_pipeline_put(vgsm_chan->rx_pipeline);
 	vgsm_chan->rx_pipeline = NULL;
-err_module_up_connect:
+err_rx_pipeline_alloc:
 err_up_node_not_found:
 err_get_up_node_id:
 	close(vgsm_chan->up_fd);

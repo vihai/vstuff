@@ -21,6 +21,8 @@
 
 #include <list.h>
 
+#include "pd_parser.h"
+
 struct ks_conn;
 
 struct ks_node
@@ -52,10 +54,12 @@ void ks_node_put(struct ks_node *node);
 struct ks_node *ks_node_get_by_id(
 	struct ks_conn *conn,
 	int id);
-
 struct ks_node *ks_node_get_by_path(
 	struct ks_conn *conn,
 	const char *path);
+struct ks_node *ks_node_get_by_token(
+	struct ks_conn *conn,
+	struct ks_pd_token *token);
 
 void ks_node_dump(
 	struct ks_node *node,

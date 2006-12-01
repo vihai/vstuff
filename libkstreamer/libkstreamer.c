@@ -1,5 +1,5 @@
 /*
- * Socket Buffer Userland Implementation
+ * 
  *
  * Copyright (C) 2006 Daniele Orlandi
  *
@@ -10,8 +10,6 @@
  *
  */
 
-#define _GNU_SOURCE
-#define _LIBKSTREAMER_PRIVATE_
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -363,85 +361,3 @@ void ks_update_topology(struct ks_conn *conn)
 	ks_xact_wait(xact);
 	ks_xact_put(xact);
 }
-
-#if 0
-int ks_send_noop(struct ks_conn *conn)
-{
-	int err;
-
-	struct sk_buff *skb;
-	skb = skb_alloc(NLMSG_SPACE(0), 0);
-	if (!skb) {
-		err = -ENOMEM;
-		goto err_skb_alloc;
-	}
-
-	struct ks_req *req;
-	req = ks_req_alloc(conn);
-	if (!req) {
-		err = -ENOMEM;
-		goto err_request_alloc;
-	}
-
-	ks_nlmsg_put(skb, getpid(), req->id, NLMSG_NOOP, NLM_F_REQUEST, 0);
-
-	ks_req_send(req, conn, skb);
-	ks_req_put(req);
-
-	ks_netlink_sendmsg(conn, skb);
-
-	kfree_skb(skb);
-
-	return 0;
-
-	ks_req_put(req);
-err_request_alloc:
-	kfree_skb(skb);
-err_skb_alloc:
-
-	return err;
-}
-#endif
-
-
-struct ks_pipeline *ks_connect(
-	struct ks_conn *conn,
-	struct ks_node *src_node,
-	struct ks_node *dst_node,
-	int *err)
-{
-	int pipeline_cnt = 0;
-
-	router_run(src_node, dst_node);
-
-	struct ks_node *node;
-	for(node = dst_node; node->router_prev;
-	    node = node->router_prev, pipeline_cnt++);
-
-	if (node != src_node) {
-		if (err)
-			*err = -EHOSTUNREACH;
-
-		return NULL;
-	}
-
-	struct ks_pipeline *pipeline = ks_pipeline_alloc();
-	if (!pipeline) {
-		if (err)
-			*err = -ENOMEM;
-
-		return NULL;
-	}
-
-	int i;
-	for(node = dst_node, i=0; node->router_prev;
-	    node = node->router_prev, i++) {
-		pipeline->chans[pipeline_cnt - i - 1] =
-			node->router_prev_thru;
-	}
-
-	pipeline->chans_cnt = pipeline_cnt;
-
-	return pipeline;
-}
-

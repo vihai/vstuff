@@ -347,8 +347,8 @@ static int lapd_ph_data_indication(struct sk_buff *skb)
 	struct lapd_data_hdr *hdr;
 	int queued;
 
-	/* Minimum frame is header + 2 CRC <- not sent by driver */
-	if (skb->len < sizeof(struct lapd_data_hdr)) /* + 2) */
+	/* Minimum frame is header + CRC-16 */
+	if (skb->len < sizeof(struct lapd_data_hdr) + sizeof(u16))
 		goto err_small_frame;
 
 	hdr = (struct lapd_data_hdr *)skb->data;

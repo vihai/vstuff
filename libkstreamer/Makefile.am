@@ -9,6 +9,8 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
+BUILT_SOURCES = pd_parser.h
+
 lib_LTLIBRARIES = libkstreamer.la
 
 libkstreamer_la_SOURCES = \
@@ -21,7 +23,9 @@ libkstreamer_la_SOURCES = \
 	node.c		\
 	pipeline.c	\
 	conn.c		\
-	router.c
+	router.c	\
+	pd_grammar.y	\
+	pd_parser.c
 
 libkstreamer_ladir = libkstreamer
 
@@ -36,7 +40,15 @@ nobase_include_HEADERS = \
 	req.h		\
 	router.h	\
 	util.h		\
-	logging.h
+	logging.h	\
+	pd_grammar.h	\
+	pd_parser.h
+
+CLEANFILES = pd_grammar.c pd_grammar.out
+EXTRA_DIST = pd_grammar.y
+
+pd_grammar.c pd_grammar.h: pd_grammar.y
+	../tools/lemon pd_grammar.y
 
 INCLUDES =					\
 	-I$(top_builddir)			\
@@ -46,7 +58,7 @@ INCLUDES =					\
 
 libkstreamer_la_LDFLAGS = -module -avoid-version -no-undefined
 
-AM_CFLAGS = -D_REENTRANT -DGNU_SOURCE -Wall
+AM_CFLAGS = -Wall -D_REENTRANT -D_GNU_SOURCE -D_LIBKSTREAMER_PRIVATE_
 
 if !inline
 AM_CFLAGS += -fno-inline
