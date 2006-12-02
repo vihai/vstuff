@@ -423,7 +423,7 @@ printk(KERN_DEBUG "Mod %d: MSG: %c%c%c%c%c%c%c\n",
 
 	if (test_bit(VGSM_MODULE_STATUS_RUNNING, &module->status)) {
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,17)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,16)
 		unsigned char *dest;
 		int to_read = tty_prepare_flip_string(
 				module->tty, &dest, msg->numbytes);
