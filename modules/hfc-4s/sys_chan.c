@@ -425,20 +425,6 @@ static int hfc_sys_chan_rx_chan_open(struct ks_chan *ks_chan)
 		chan_rx->fifo.subchannel_bit_count = 8;
 	}
 
-	/*
-	if (chan_rx->ks_chan.pipeline->framing == VISDN_LINK_FRAMING_NONE) {
-		chan_rx->fifo.framer_enabled = FALSE;
-		chan_rx->fifo.bit_reversed = TRUE;
-	} else if (chan_rx->ks_chan.pipeline->framing ==
-						VISDN_LINK_FRAMING_HDLC) {
-		chan_rx->fifo.framer_enabled = TRUE;
-		chan_rx->fifo.bit_reversed = FALSE;
-	} else {
-		err = -EINVAL;
-		goto err_invalid_framing;
-	}
-	*/
-
 	hfc_sys_port_update_fsm(chan->port);
 
 	hfc_card_unlock(card);
@@ -608,6 +594,8 @@ static int hfc_sys_chan_rx_chan_set_attr(
 {
 	struct hfc_sys_chan_rx *chan_rx = to_sys_chan_rx(ks_chan);
 
+printk(KERN_DEBUG "BBBBBBBBBB %d %d %d\n", type, hfc_hdlc_deframer_class->id, hfc_octet_reverser_class->id);
+
 	if (type == hfc_hdlc_deframer_class->id) {
 		struct ks_hdlc_deframer_descr *descr = buf;
 
@@ -618,6 +606,8 @@ static int hfc_sys_chan_rx_chan_set_attr(
 
 	} else if (type == hfc_octet_reverser_class->id) {
 		struct ks_octet_reverser_descr *descr = buf;
+
+printk(KERN_DEBUG "CCCCCCCCCC %d %d\n", descr->hardware, descr->enabled);
 
 		if (len < sizeof(struct ks_octet_reverser_descr))
 			return -EINVAL;
@@ -1036,46 +1026,6 @@ struct ks_duplex_ops hfc_sys_chan_duplex_ops =
 
 /*---------------------------------------------------------------------------*/
 
-#if 0
-static ssize_t hfc_sys_chan_read(
-	struct visdn_leg *visdn_leg,
-	void *buf, size_t count)
-{
-	struct hfc_sys_chan *chan = to_sys_chan(visdn_leg->chan);
-	struct hfc_card *card = chan->port->card;
-	int copied_octets;
-	int available_octets;
-
-	hfc_card_lock(card);
-
-	hfc_fifo_select(&chan->rx_fifo);
-
-	available_octets = hfc_fifo_used(&chan->rx_fifo);
-
-	copied_octets = available_octets < count ? available_octets : count;
-
-	if (available_octets > chan->rx_fifo.stats_max)
-		chan->rx_fifo.stats_max = available_octets;
-
-	if (available_octets - copied_octets < chan->rx_fifo.stats_min)
-		chan->rx_fifo.stats_min = available_octets - copied_octets;
-
-	chan->rx_fifo.stats_cycles++;
-
-	hfc_fifo_mem_read(&chan->rx_fifo, buf, copied_octets);
-
-	hfc_card_unlock(card);
-
-	return copied_octets;
-}
-
-static ssize_t hfc_sys_chan_write(
-	struct visdn_leg *visdn_leg,
-	const void *buf, size_t count)
-{
-}
-#endif
-
 static void hfc_sys_chan_rx_tasklet(unsigned long data)
 {
 	struct hfc_sys_chan_rx *chan_rx = (struct hfc_sys_chan_rx *)data;
@@ -1228,8 +1178,7 @@ static void hfc_sys_chan_rx_init(
 
 	hfc_fifo_init(&chan_rx->fifo, chan->port->card, fifo_hwid, RX);
 
-/*	chan_rx->ks_chan.framed_mtu = -1;
-	chan_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+	chan_rx->ks_chan.mtu = -1;
 
 	tasklet_init(&chan_rx->tasklet,
 		hfc_sys_chan_rx_tasklet,
@@ -1252,8 +1201,7 @@ static void hfc_sys_chan_tx_init(
 
 	chan_tx->ks_chan.from_ops = &hfc_sys_chan_tx_node_ops;
 
-/*	chan_tx->ks_chan.framed_mtu = -1;
-	chan_tx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
+	chan_tx->ks_chan.mtu = -1;
 
 	hfc_fifo_init(&chan_tx->fifo, chan->port->card, fifo_hwid, TX);
 }
@@ -1323,7 +1271,7 @@ static int hfc_sys_chan_tx_register(struct hfc_sys_chan_tx *chan_tx)
 {
 	int err;
 
-//	chan_tx->ks_chan.framed_mtu = chan_tx->fifo.size;
+	chan_tx->ks_chan.mtu = chan_tx->fifo.size;
 
 	err = ks_chan_register(&chan_tx->ks_chan);
 	if (err < 0)

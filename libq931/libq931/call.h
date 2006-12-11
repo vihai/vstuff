@@ -217,9 +217,10 @@ void _q931_call_start_timer(
 			&(call)->timer,				\
 			(call)->intf->timer);			\
 		report_call(call, LOG_DEBUG,			\
-			"%s:%d Timer %s started\n",		\
+			"%s:%d Timer %s started (%lld us)\n",	\
 			__FILE__,__LINE__,			\
-			#timer);				\
+			#timer,					\
+			(call)->intf->timer);			\
 	} while(0)
 
 #define q931_call_restart_timer(call, timer)			\
@@ -228,9 +229,10 @@ void _q931_call_start_timer(
 			&(call)->timer,				\
 			(call)->intf->timer);			\
 		report_call(call, LOG_DEBUG,			\
-			"%s:%d Timer %s restarted\n",		\
+			"%s:%d Timer %s restarted (%lld us)\n",	\
 			__FILE__,__LINE__,			\
-			#timer);				\
+			#timer,					\
+			(call)->intf->timer);			\
 	} while(0)
 
 void _q931_call_stop_timer(

@@ -58,6 +58,7 @@ struct opts
 {
 	const char *node_name;
 	BOOL binary;
+	BOOL framed;
 
 	struct ks_dynattr *hdlc_framer;
 	struct ks_dynattr *hdlc_deframer;
@@ -238,6 +239,7 @@ int main(int argc, char *argv[])
 		{ "in", no_argument, 0, 0 },
 		{ "out", no_argument, 0, 0 },
 		{ "binary", no_argument, 0, 0 },
+		{ "framed", no_argument, 0, 0 },
 		{ "in-hdlc-deframer", no_argument, 0, 0 },
 		{ "in-octet-reverser", no_argument, 0, 0 },
 		{ "out-hdlc-deframer", no_argument, 0, 0 },
@@ -266,6 +268,8 @@ int main(int argc, char *argv[])
 			opts.out = TRUE;
 		else if (!strcmp(opt->name, "binary"))
 			opts.binary = TRUE;
+		else if (!strcmp(opt->name, "framed"))
+			opts.framed = TRUE;
 		else if (!strcmp(opt->name, "in-hdlc-deframer"))
 			opts.enable_in_hdlc_deframer = TRUE;
 		else if (!strcmp(opt->name, "in-octet-reverser"))
@@ -301,8 +305,11 @@ int main(int argc, char *argv[])
 		assert(0);
 
 	int up_fd;
-	//up_fd = open("/dev/ks/userport_stream", mode);
-	up_fd = open("/dev/ks/userport_frame", mode);
+	if (opts.framed)
+		up_fd = open("/dev/ks/userport_frame", mode);
+	else
+		up_fd = open("/dev/ks/userport_stream", mode);
+
 	if (up_fd < 0) {
 		perror("cannot open /dev/ks/userport_stream");
 		return 1;
@@ -346,17 +353,7 @@ int main(int argc, char *argv[])
 
 	if (opts.node_name) {
 		if (!strncmp(opts.node_name, "/sys/", 5)) {
-			char *path;
-
-			path = realpath(opts.node_name, NULL);
-			if (!path) {
-				fprintf(stderr, "Cannot allocate real path\n");
-				return 1;
-			}
-
-			node = ks_node_get_by_path(conn, path + 4);
-
-			free(path);
+			node = ks_node_get_by_path(conn, opts.node_name);
 		} else {
 			node = ks_node_get_by_id(conn, atoi(opts.node_name));
 		}

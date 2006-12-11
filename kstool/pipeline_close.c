@@ -23,11 +23,36 @@
 #include <dirent.h>
 #include <fcntl.h>
 
+#include <libkstreamer.h>
+
 #include "kstool.h"
 #include "pipeline_close.h"
 
 static int do_pipeline_close(const char *pipeline_str)
 {
+	struct ks_pipeline *pipeline;
+	int err;
+
+	pipeline = ks_pipeline_get_by_string(glob.conn, pipeline_str);
+	if (!pipeline) {
+		fprintf(stderr, "Cannot find pipeline '%s'\n", pipeline_str);
+		return 1;
+	}
+
+	if (pipeline->status != KS_PIPELINE_STATUS_OPEN) {
+		ks_pipeline_put(pipeline);
+		fprintf(stderr, "Pipeline is not ready\n");
+		return 1;
+	}
+
+	pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
+
+	err = ks_pipeline_update(pipeline, glob.conn);
+	if (err < 0) {
+		fprintf(stderr, "Cannot update the pipeline\n");
+		return 1;
+	}
+
 	return 0;
 }
 

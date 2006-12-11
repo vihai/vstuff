@@ -274,6 +274,23 @@ static void ks_netlink_receive_unicast(
 		list_del(&conn->cur_req->node);
 		pthread_mutex_unlock(&conn->cur_xact->requests_lock);
 
+		if (conn->cur_req->response_callback) {
+			conn->cur_req->response_callback(conn->cur_req, nlh,
+							conn->cur_req->data);
+		} else {
+			conn->cur_req->response_data =
+				malloc(KS_PAYLOAD(nlh));
+
+			if (!conn->cur_req->response_data) {
+				//FIXME
+				abort();
+			}
+
+			memcpy(conn->cur_req->response_data,
+					NLMSG_DATA(nlh),
+					NLMSG_PAYLOAD(nlh, 0));
+		}
+
 		if (nlh->nlmsg_type == NLMSG_ERROR) {
 			ks_netlink_request_complete(conn,
 				-*((__u32 *)NLMSG_DATA(nlh)));
@@ -288,25 +305,6 @@ static void ks_netlink_receive_unicast(
 
 			break;
 		}
-
-		if (!conn->cur_req->response_callback) {
-
-			conn->cur_req->response_data =
-				malloc(KS_PAYLOAD(nlh));
-
-			if (!conn->cur_req->response_data) {
-				//FIXME
-				abort();
-			}
-
-			memcpy(conn->cur_req->response_data,
-					NLMSG_DATA(nlh),
-					KS_PAYLOAD(nlh));
-		}
-
-		if (conn->cur_req->response_callback)
-			conn->cur_req->response_callback(conn->cur_req, nlh,
-							conn->cur_req->data);
 
 		if (nlh->nlmsg_flags & NLM_F_MULTI) {
 			ks_conn_set_state(conn,
@@ -371,10 +369,12 @@ static void ks_netlink_receive_msg(
 {
 #if 0
 	__u8 *data = NLMSG_DATA(nlh);
+	__u8 *text = alloca(NLMSG_PAYLOAD(nlh, 0) * 3 + 1);
 	int i;
-	for(i=0; i<len; i++)
-		report_conn(conn, LOG_DEBUG, "%02x ", *(data + i));
-	report_conn(conn, LOG_DEBUG, "\n");
+	for(i=0; i<NLMSG_PAYLOAD(nlh, 0); i++)
+		sprintf(text + i * 3, "%02x ", *(data + i));
+
+	report_conn(conn, LOG_DEBUG, "%s\n", text);
 #endif
 
 	ks_dump_nlh(conn, nlh);

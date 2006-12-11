@@ -24,7 +24,8 @@
 
 struct kset ks_pipelines_kset;
 
-struct list_head ks_pipelines_list = LIST_HEAD_INIT(ks_pipelines_list);
+struct list_head ks_pipelines_list =
+	LIST_HEAD_INIT(ks_pipelines_list);
 DECLARE_RWSEM(ks_pipelines_list_sem);
 
 struct ks_pipeline *_ks_pipeline_search_by_id(int id)
@@ -133,10 +134,29 @@ int ks_pipeline_write_to_nlmsg(
 		goto err_put_attr;
 
 	if (message_type != KS_NETLINK_PIPELINE_DEL) {
+		err = ks_netlink_put_attr(skb, KS_PIPELINEATTR_STATUS,
+						&pipeline->status,
+						sizeof(pipeline->status));
+		if (err < 0)
+			goto err_put_attr;
+
 		err = ks_netlink_put_attr_path(skb, KS_PIPELINEATTR_PATH,
 						&pipeline->kobj);
 		if (err < 0)
 			goto err_put_attr;
+
+
+		{
+		struct ks_chan *chan;
+		list_for_each_entry(chan, &pipeline->entries, pipeline_entry) {
+			err = ks_netlink_put_attr(skb,
+						KS_PIPELINEATTR_CHAN_ID,
+						&chan->id,
+						sizeof(chan->id));
+			if (err < 0)
+				goto err_put_attr;
+			}
+		}
 	}
 
 	nlh->nlmsg_len = skb->tail - oldtail;
@@ -210,16 +230,17 @@ retry:
 }
 
 struct ks_pipeline *ks_pipeline_create_from_nlmsg(
-	struct nlmsghdr *nlh, int *err)
+	struct nlmsghdr *nlh, int *errp)
 {
 	struct ks_pipeline *pipeline;
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
 	enum ks_pipeline_status status = KS_PIPELINE_STATUS_NULL;
+	int err;
 
 	pipeline = ks_pipeline_alloc();
 	if (!pipeline) {
-		*err = -ENOMEM;
+		err = -ENOMEM;
 		goto err_pipeline_alloc;
 	}
 
@@ -235,7 +256,7 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 			struct ks_chan *chan;
 
 			if (pipeline->status != KS_PIPELINE_STATUS_NULL) {
-				*err = -EINVAL;
+				err = -EINVAL;
 				goto err_invalid_status;
 			}
 
@@ -244,8 +265,15 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 			if (!chan) {
 				printk(KERN_CRIT "Link ID not found\n");
 				// FIXME
-				*err = -ENODEV;
+				err = -ENODEV;
 				goto err_chan_not_found;
+			}
+
+			if (chan->pipeline) {
+printk(KERN_DEBUG "Channel is busy\n");
+				err = -EBUSY;
+				ks_chan_put(chan);
+				goto err_chan_is_busy;
 			}
 
 			list_add_tail(
@@ -262,25 +290,39 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 			printk(KERN_CRIT "  Unexpected attribute %d\n",
 					attr->type);
 
-			*err = -EINVAL;
+			err = -EINVAL;
 			goto err_unexpected_attribute;
 		break;
 		}
 	}
 
-	*err = ks_pipeline_change_status(pipeline, status);
-	if (*err < 0)
+	if (status == KS_PIPELINE_STATUS_NULL)
+		status = KS_PIPELINE_STATUS_CONNECTED;
+
+	err = ks_pipeline_change_status(pipeline, status);
+	if (err < 0)
 		goto err_invalid_status;
 
 	return pipeline;
 
 err_unexpected_attribute:
+err_chan_is_busy:
 err_chan_not_found:
 err_invalid_status:
+	{
+	struct ks_chan *chan, *t;
+	list_for_each_entry_safe(chan, t, &pipeline->entries,
+						pipeline_entry) {
+		chan->pipeline = NULL;
+		ks_chan_put(chan);
+	}
+	}
+
 	ks_pipeline_put(pipeline);
 	pipeline = NULL;
 err_pipeline_alloc:
 
+	*errp = err;
 	return NULL;
 }
 
@@ -475,7 +517,7 @@ void ks_pipeline_init(struct ks_pipeline *pipeline)
 	pipeline->status = KS_PIPELINE_STATUS_NULL;
 }
 
-struct ks_pipeline *ks_pipeline_alloc()
+struct ks_pipeline *ks_pipeline_alloc(void)
 {
 	struct ks_pipeline *pipeline;
 
@@ -602,33 +644,19 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 			prev_chan->to->kobj.name);
 }
 
-#if 0
 static int ks_pipeline_negotiate_mtu(struct ks_pipeline *pipeline)
 {
 	struct ks_chan *chan;
 	int min_mtu = 65536;
 
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
-		if (chan->framed_mtu != -1 &&
-		    chan->framed_mtu < min_mtu)
-			min_mtu = chan->framed_mtu;
+		if (chan->mtu != -1 &&
+		    chan->mtu < min_mtu)
+			min_mtu = chan->mtu;
 	}
 
 	return min_mtu;
 }
-
-static int ks_pipeline_negotiate_framing(struct ks_pipeline *pipeline)
-{
-	struct ks_chan *chan;
-	int framing = 0x7FFFFFFF;
-
-	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
-		framing &= chan->framing_avail;
-	}
-
-	return framing ? (1 << (ffs(framing) - 1)) : 0;
-}
-#endif
 
 /*-------------------------- NULL <=> CONNECTED -----------------------------*/
 
@@ -762,8 +790,7 @@ static int ks_pipeline_connected_to_open(struct ks_pipeline *pipeline)
 	struct ks_chan *prev_chan = NULL;
 	int err;
 
-//	pipeline->mtu = ks_pipeline_negotiate_mtu(pipeline);
-//	pipeline->framing = ks_pipeline_negotiate_framing(pipeline);
+	pipeline->mtu = ks_pipeline_negotiate_mtu(pipeline);
 
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
@@ -816,6 +843,10 @@ static void ks_pipeline_flowing_to_open(
 
 		if (chan == stop_at)
 			goto done;
+
+printk(KERN_DEBUG "CHAN = %p\n", chan);
+printk(KERN_DEBUG "CHAN->OPS = %p\n", chan->ops);
+printk(KERN_DEBUG "CHAN->OPS->STOP = %p\n", chan->ops->stop);
 
 		if (chan->ops->stop)
 			chan->ops->stop(chan);

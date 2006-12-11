@@ -726,9 +726,6 @@ void hfc_st_chan_rx_init(
 			&chan->ks_node.kobj,
 			&chan->ks_node,
 			&chan->port->card->hfcswitch.ks_node);
-
-/*	chan_rx->ks_chan.framed_mtu = -1;
-	chan_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
 }
 
 void hfc_st_chan_tx_init(
@@ -743,9 +740,6 @@ void hfc_st_chan_tx_init(
 			&chan->ks_node.kobj,
 			&chan->port->card->hfcswitch.ks_node,
 			&chan->ks_node);
-
-/*	chan_tx->ks_chan.framed_mtu = -1;
-	chan_tx->ks_chan.framing_avail = VISDN_LINK_FRAMING_ANY;*/
 }
 
 void hfc_st_chan_init(

@@ -46,11 +46,11 @@ struct vgsm_chan {
 
 	int up_fd;
 
-	struct ks_node *up_node;
-	struct ks_node *module_node;
+	struct ks_node *node_userport;
+	struct ks_node *node_module;
 
-	struct ks_pipeline *rx_pipeline;
-	struct ks_pipeline *tx_pipeline;
+	struct ks_pipeline *pipeline_rx;
+	struct ks_pipeline *pipeline_tx;
 
 	char calling_number[21];
 
@@ -89,8 +89,6 @@ void _vgsm_chan_put(struct vgsm_chan *vgsm_chan);
 	do { _vgsm_chan_put(vgsm_chan); (vgsm_chan) = NULL; } while(0)
 
 struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module);
-
-void vgsm_ast_chan_destroy(struct ast_channel *ast_chan);
 
 static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)
 {

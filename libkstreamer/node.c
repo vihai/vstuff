@@ -69,16 +69,31 @@ struct ks_node *ks_node_get_by_path(
 	struct ks_conn *conn,
 	const char *path)
 {
+	char *real_path;
+	real_path = realpath(path, NULL);
+	if (!real_path) {
+		report_conn(conn, LOG_WARNING,
+			"Cannot resolve path '%s': %s\n",
+			path, strerror(errno));
+		return NULL;
+	}
+
+	char *sys_path = real_path + strlen("/sys");
+
 	struct ks_node *node;
 	struct hlist_node *t;
 
 	int i;
 	for(i=0; i<ARRAY_SIZE(conn->nodes_hash); i++) {
 		hlist_for_each_entry(node, t, &conn->nodes_hash[i], node) {
-			if (!strcmp(node->path, path))
+			if (!strcmp(node->path, sys_path)) {
+				free(real_path);
 				return ks_node_get(node);
+			}
 		}
 	}
+
+	free(real_path);
 
 	return NULL;
 }
@@ -90,19 +105,8 @@ struct ks_node *ks_node_get_by_token(
 	struct ks_node *node;
 
 	switch(token->id) {
-	case TK_STRING: {
-		char *real_path;
-		real_path = realpath(token->text, NULL);
-		if (!real_path) {
-			report_conn(conn, LOG_WARNING,
-				"Cannot resolve path '%s': %s\n",
-				token->text, strerror(errno));
-			return NULL;
-		}
-
-		node = ks_node_get_by_path(conn, real_path + strlen("/sys"));
-		free(real_path);
-	}
+	case TK_STRING:
+		node = ks_node_get_by_path(conn, token->text);
 	break;
 
 	case TK_INTEGER:

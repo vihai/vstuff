@@ -17,7 +17,7 @@
 #define KS_UP_GET_NODEID	_IOR(0xd0, 0x20, unsigned int)
 #define KS_UP_GET_PRESSURE	_IOR(0xd0, 0x21, unsigned int)
 
-struct vup_ctl
+struct ksup_ctl
 {
 	__u32 node_id;
 };
@@ -29,16 +29,16 @@ struct vup_ctl
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/channel.h>
 
-#define vup_MODULE_NAME "visdn-userport"
-#define vup_MODULE_PREFIX vup_MODULE_NAME ": "
-#define vup_MODULE_DESCR "vISDN userport module"
+#define ksup_MODULE_NAME "visdn-userport"
+#define ksup_MODULE_PREFIX ksup_MODULE_NAME ": "
+#define ksup_MODULE_DESCR "vISDN userport module"
 
 #define SB_CHAN_HASHBITS 8
 #define SB_CHAN_HASHSIZE (1 << SB_CHAN_HASHBITS)
 
-#define to_vup_chan(vchan) container_of((vchan), struct vup_chan, visdn_chan)
+#define to_ksup_chan(vchan) container_of((vchan), struct ksup_chan, visdn_chan)
 
-enum vup_h223_rx_state
+enum ksup_h223_rx_state
 {
 	VUP_H223_STATE_HUNTING1,
 	VUP_H223_STATE_HUNTING2,
@@ -47,7 +47,7 @@ enum vup_h223_rx_state
 	VUP_H223_STATE_DROPPING,
 };
 
-struct vup_chan
+struct ksup_chan
 {
 	struct list_head node;
 
@@ -67,21 +67,21 @@ struct vup_chan
 	wait_queue_head_t read_wait_queue;
 	struct sk_buff_head read_queue;
 
-	enum vup_h223_rx_state h223_rx_state;
+	enum ksup_h223_rx_state h223_rx_state;
 };
 
 #if defined(DEBUG_CODE) && defined(DEBUG_DEFAULTS)
-#define vup_debug(dbglevel, format, arg...)			\
+#define ksup_debug(dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)				\
-		printk(KERN_DEBUG vup_MODULE_PREFIX		\
+		printk(KERN_DEBUG ksup_MODULE_PREFIX		\
 			format,					\
 			## arg)
 #else
-#define vup_debug(format, arg...) do {} while (0)
+#define ksup_debug(format, arg...) do {} while (0)
 #endif
 
-#define vup_msg(level, format, arg...)				\
-	printk(level vup_MODULE_PREFIX				\
+#define ksup_msg(level, format, arg...)				\
+	printk(level ksup_MODULE_PREFIX				\
 		format,						\
 		## arg)
 

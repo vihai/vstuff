@@ -43,6 +43,8 @@ struct ks_chan
 	struct ks_node *from;
 	struct ks_node *to;
 
+	struct ks_pipeline *pipeline;
+
 	struct list_head dynattrs;
 
 	int router_cost;

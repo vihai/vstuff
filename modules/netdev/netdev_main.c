@@ -498,12 +498,12 @@ static void vnd_chan_tx_error(
 
 static struct ks_chan_ops vnd_chan_d_tx_ops = {
 	.owner			= THIS_MODULE,
-	.release	  	= vnd_chan_d_tx_release,
-	.connect	  	= vnd_chan_d_tx_connect,
+	.release		= vnd_chan_d_tx_release,
+	.connect		= vnd_chan_d_tx_connect,
 	.disconnect		= vnd_chan_d_tx_disconnect,
-	.open		  	= vnd_chan_d_tx_open,
+	.open			= vnd_chan_d_tx_open,
 	.close			= vnd_chan_d_tx_close,
-	.start		  	= vnd_chan_d_tx_start,
+	.start			= vnd_chan_d_tx_start,
 	.stop			= vnd_chan_d_tx_stop,
 };
 
@@ -611,10 +611,10 @@ static void vnd_chan_e_rx_disconnect(struct ks_chan *ks_chan)
 
 static struct ks_chan_ops vnd_chan_e_rx_ops = {
 	.owner			= THIS_MODULE,
-	.release	  	= vnd_chan_e_rx_release,
-	.connect	  	= vnd_chan_e_rx_connect,
+	.release		= vnd_chan_e_rx_release,
+	.connect		= vnd_chan_e_rx_connect,
 	.disconnect		= vnd_chan_e_rx_disconnect,
-	.open		  	= vnd_chan_e_rx_open,
+	.open			= vnd_chan_e_rx_open,
 	.close			= vnd_chan_e_rx_close,
 };
 
@@ -717,7 +717,8 @@ static int vnd_netdev_open(struct net_device *netdev)
 		goto err_no_pipeline_rx;
 	}
 
-	err = ks_pipeline_change_status(pipeline_rx, KS_PIPELINE_STATUS_FLOWING);
+	err = ks_pipeline_change_status(pipeline_rx,
+			KS_PIPELINE_STATUS_FLOWING);
 	if (err < 0)
 		goto err_pipeline_start_rx;
 
@@ -728,7 +729,8 @@ static int vnd_netdev_open(struct net_device *netdev)
 		goto err_no_pipeline_tx;
 	}
 
-	err = ks_pipeline_change_status(pipeline_tx, KS_PIPELINE_STATUS_FLOWING);
+	err = ks_pipeline_change_status(pipeline_tx,
+			KS_PIPELINE_STATUS_FLOWING);
 	if (err < 0)
 		goto err_pipeline_start_tx;
 
@@ -985,7 +987,7 @@ static void vnd_send_primitive(
 
 		if (netdevice->remote_port != port)
 			continue;
-		
+
 		skb = alloc_skb(sizeof(struct lapd_ctrl_hdr), GFP_ATOMIC);
 		if (!skb) {
 			spin_unlock_irqrestore(&vnd_netdevices_list_lock,
@@ -1126,7 +1128,7 @@ static void vnd_netdevice_init(
 			&vnd_duplex_d_ops,
 			"duplex",
 			&netdevice->ks_node_d.kobj);
-	
+
 	ks_chan_init(&netdevice->ks_chan_d_rx,
 			&vnd_chan_d_rx_ops, "rx",
 			&netdevice->ks_duplex_d,
@@ -1167,7 +1169,7 @@ static void vnd_netdevice_init(
 			&vnd_duplex_e_ops,
 			"duplex",
 			&netdevice->ks_node_e.kobj);
-	
+
 	ks_chan_init(&netdevice->ks_chan_e_rx,
 			&vnd_chan_e_rx_ops, "rx",
 			&netdevice->ks_duplex_e,
@@ -1180,7 +1182,7 @@ static void vnd_netdevice_init(
 	netdevice->ks_chan_e_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
 	/*****************************************/
-	
+
 	INIT_WORK(&netdevice->promiscuity_change_work,
 		vnd_promiscuity_change_work,
 		netdevice);

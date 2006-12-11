@@ -90,6 +90,8 @@ void ks_xact_queue_request(
 	struct ks_xact *xact,
 	struct ks_req *req)
 {
+	assert(xact->state != KS_XACT_STATE_COMPLETED);
+
 	pthread_mutex_lock(&xact->requests_lock);
 	list_add_tail(&ks_req_get(req)->node, &xact->requests);
 	pthread_mutex_unlock(&xact->requests_lock);
@@ -102,6 +104,8 @@ struct ks_req *ks_xact_queue_new_request(
 	struct ks_xact *xact,
 	__u16 type, __u16 flags)
 {
+	assert(xact->state != KS_XACT_STATE_COMPLETED);
+
 	struct ks_req *req;
 	req = ks_req_alloc(xact);
 	if (!req)
@@ -168,6 +172,7 @@ int ks_xact_commit(struct ks_xact *xact)
 int ks_xact_abort(struct ks_xact *xact)
 {
 	struct ks_req *req;
+
 	req = ks_xact_queue_new_request(xact, KS_NETLINK_ABORT,
 						NLM_F_REQUEST);
 	if (req->err < 0)

@@ -39,7 +39,7 @@ static const int base64_value[256] = {
 static const char base64_code[] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-void base64_decode(const char *src, char *dest, int dest_size)
+void base64_decode(const __u8 *src, char *dest, int dest_size)
 {
 	assert(src);
 
@@ -74,7 +74,7 @@ void base64_decode(const char *src, char *dest, int dest_size)
 	dest[outpos] = 0;
 }
 
-void base64_encode(const char *src, char *dest, int dest_size)
+void base64_encode(const __u8 *src, char *dest, int dest_size)
 {
 	__u32 bits = 0;
 	int char_count = 0;

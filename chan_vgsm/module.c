@@ -2665,7 +2665,9 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 			vgsm_module_put(vgsm_chan->module);
 			vgsm_chan->module = NULL;
 
-			vgsm_ast_chan_destroy(vgsm_chan->ast_chan);
+			vgsm_chan_put(vgsm_chan->ast_chan->tech_pvt);
+			vgsm_chan->ast_chan->tech_pvt = NULL;
+			ast_channel_free(vgsm_chan->ast_chan);
 			vgsm_chan->ast_chan = NULL;
 		} else {
 			vgsm_chan->ast_chan->hangupcause =

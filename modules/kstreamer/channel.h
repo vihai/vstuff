@@ -81,8 +81,9 @@ struct ks_chan_ops
 	void (*stimulus)(struct ks_chan *chan);
 
 	int (*get_attr_count)(struct ks_chan *chan);
-	int (*get_attr)(struct ks_chan *chan, int index, u16 *type, void *buf, int *len);
-	int (*set_attr)(struct ks_chan *chan, u16 type, void *buf, int len);
+	int (*get_attr)(struct ks_chan *chan, int index, u16 *type,
+			void *buf, int *len);
+	int (*set_attr)(struct ks_chan *chan, u16 type, void *buf,int len);
 };
 
 /*
@@ -107,6 +108,8 @@ struct ks_chan
 
 	struct ks_node *to;
 //	void *to_ops;
+
+	int mtu;
 
 	struct ks_pipeline *pipeline;
 	struct list_head pipeline_entry;

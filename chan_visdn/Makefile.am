@@ -33,6 +33,9 @@ INCLUDES =					\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\
+	-I$(top_builddir)/libkstreamer/		\
+	-I$(top_builddir)/libskb/		\
+	-I$(top_builddir)/res_kstreamer/	\
 	-I$(top_builddir)/libq931/		\
 	-I$(astincdir)
 

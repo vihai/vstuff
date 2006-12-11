@@ -66,7 +66,7 @@ static int lapd_pass_frame_to_socket(
 	return queued;
 }
 
-static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
+static void lapd_socketless_reply_dm(struct sk_buff *skb)
 {
 	struct sk_buff *rskb;
 	struct lapd_data_hdr *rhdr;
@@ -99,7 +99,7 @@ static inline void lapd_socketless_reply_dm(struct sk_buff *skb)
  * the application crashes and the TEs try to re-establsh multiple-frame mode.
  */
 
-static inline void lapd_handle_socketless_frame(struct sk_buff *skb)
+static void lapd_handle_socketless_frame(struct sk_buff *skb)
 {
 	struct lapd_data_hdr *hdr = (struct lapd_data_hdr *)skb->data;
 
@@ -117,7 +117,7 @@ static inline void lapd_handle_socketless_frame(struct sk_buff *skb)
  * Frames are serialized when relative to the same socket
  */
 
-static inline int lapd_pass_frame_to_socket_nt(
+static int lapd_pass_frame_to_socket_nt(
 	struct sk_buff *skb)
 {
 	struct lapd_sock *listening_lapd_sock = NULL;
@@ -139,7 +139,7 @@ static inline int lapd_pass_frame_to_socket_nt(
 			}
 
 			if (lapd_sock->sapi == hdr->addr.sapi &&
-		 	    lapd_sock->tei == hdr->addr.tei) {
+			    lapd_sock->tei == hdr->addr.tei) {
 
 				skb->sk = sk;
 

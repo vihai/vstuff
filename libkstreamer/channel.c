@@ -1,5 +1,5 @@
 /*
- * Userland Kstreamer Helper Routines
+ * Userland Kstreamer interface entity
  *
  * Copyright (C) 2006 Daniele Orlandi
  *
@@ -68,16 +68,31 @@ struct ks_chan *ks_chan_get_by_path(
 	struct ks_conn *conn,
 	const char *path)
 {
+	char *real_path;
+	real_path = realpath(path, NULL);
+	if (!real_path) {
+		report_conn(conn, LOG_WARNING,
+			"Cannot resolve path '%s': %s\n",
+			path, strerror(errno));
+		return NULL;
+	}
+
+	char *sys_path = real_path + strlen("/sys");
+
 	struct ks_chan *chan;
 	struct hlist_node *t;
 
 	int i;
 	for(i=0; i<ARRAY_SIZE(conn->chans_hash); i++) {
 		hlist_for_each_entry(chan, t, &conn->chans_hash[i], node) {
-			if (!strcmp(chan->path, path))
+			if (!strcmp(chan->path, sys_path)) {
+				free(real_path);
 				return ks_chan_get(chan);
+			}
 		}
 	}
+
+	free(real_path);
 
 	return NULL;
 }
@@ -168,6 +183,7 @@ struct ks_chan *ks_chan_alloc(void)
 	memset(chan, 0, sizeof(*chan));
 
 	chan->refcnt = 1;
+	chan->cost = 1000;
 
 	INIT_LIST_HEAD(&chan->dynattrs);
 
@@ -329,17 +345,17 @@ void ks_chan_dump(
 
 	struct ks_dynattr_instance *dynattr;
 	list_for_each_entry(dynattr, &chan->dynattrs, node) {
-		report_conn(conn, LOG_DEBUG, "  Dynattr: %s\n", dynattr->dynattr->name);
 
-		report_conn(conn, LOG_DEBUG, "  Data: ");
+		__u8 *text = alloca(dynattr->len * 2 + 1);
 
 		int i;
-		for(i=0; i<dynattr->len; i++) {
-			report_conn(conn, LOG_DEBUG, "%02x ",
-				*(dynattr->payload + i));
-		}
+		for(i=0; i<dynattr->len; i++)
+			sprintf(text + i * 2, "%02x", *(dynattr->payload + i));
 
-		report_conn(conn, LOG_DEBUG, "\n");
+		report_conn(conn, LOG_DEBUG,
+			"  Dynattr: %s (%s)\n",
+			dynattr->dynattr->name,
+			text);
 	}
 }
 

@@ -100,12 +100,12 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 
 	sms->alphabet = VGSM_SMS_DCS_ALPHABET_DEFAULT;
 	wchar_t *c = sms->text;
-	char c1, c2;
+	unsigned char c1, c2;
 
 	while(*c != L'\0') {
 		if (vgsm_wc_to_gsm(*c, &c1, &c2) == 0) {
 			ast_log(LOG_DEBUG,
-				"Cannot translate character 0x%08x to GSM "
+				"Cannot translate character 0x%08lx to GSM "
 				"alphabet, switching to UCS2\n", *c);
 
 			sms->alphabet = VGSM_SMS_DCS_ALPHABET_UCS2;
@@ -239,8 +239,8 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 
 	if (sms->alphabet == VGSM_SMS_DCS_ALPHABET_UCS2) {
 
-		char *inbuf = (char *)sms->text;
-		char *outbuf = pdu + pos + udh_len;
+		unsigned char *inbuf = (char *)sms->text;
+		unsigned char *outbuf = pdu + pos + udh_len;
 		size_t inbytes = wcslen(sms->text) * sizeof(wchar_t);
 		size_t outbytes_avail = max_len - pos - udh_len - 1;
 		size_t outbytes_left = outbytes_avail;
@@ -278,7 +278,7 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 	assert(pos <= max_len);
 
 	sms->pdu_len = pos;
-	
+
 	return 0;
 
 err_iconv:

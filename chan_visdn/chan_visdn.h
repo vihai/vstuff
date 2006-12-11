@@ -63,7 +63,7 @@ struct visdn_suspended_call
 {
 	struct list_head node;
 
-	struct ast_channel *ast_chan;
+	struct visdn_chan *visdn_chan;
 	struct q931_channel *q931_chan;
 
 	char call_identity[10];
@@ -73,11 +73,13 @@ struct visdn_suspended_call
 };
 
 struct visdn_chan {
+
+	int refcnt; /* workaround for missing asterisk refcounting */
+	ast_cond_t refcnt_decremented_cond;
+
 	struct ast_channel *ast_chan;
 	struct q931_call *q931_call;
 	struct visdn_suspended_call *suspended_call;
-
-	__u8 buf[512];
 
 	int is_framed;
 	int is_voice;
@@ -87,14 +89,13 @@ struct visdn_chan {
 	int up_dump_fd;
 //	int ec_fd;
 
-	char up_node_id[80];
-	char ec_ne_node_id[80];
-	char ec_fe_node_id[80];
-	char bearer_node_id[80];
+	struct ks_node *node_userport;
+	struct ks_node *node_bearer;
 
-	int up_bearer_pipeline_id;
-	int up_bearer_pipeline_started;
-	int bearer_up_pipeline_id;
+	struct ks_pipeline *pipeline_rx;
+	struct ks_pipeline *pipeline_tx;
+
+//	int up_bearer_pipeline_started;
 
 	int sending_complete;
 
@@ -109,12 +110,15 @@ struct visdn_chan {
 	char dtmf_queue[20];
 	int dtmf_deferred;
 
-	struct ast_dsp *dsp;
-
 	struct visdn_ic *ic;
 
 	struct visdn_huntgroup *huntgroup;
 	struct visdn_intf *hg_first_intf;
+
+	__u8 frame_out_buf[512];
+
+	struct ast_frame frame_out;
+	struct ast_dsp *dsp;
 };
 
 struct visdn_state
@@ -122,6 +126,8 @@ struct visdn_state
 	pthread_t q931_thread;
 
 	ast_mutex_t lock;
+
+	int usecnt;
 	ast_mutex_t usecnt_lock;
 
 	int have_to_exit;
@@ -143,7 +149,6 @@ struct visdn_state
 	struct poll_info poll_infos[100];
 	int npolls;
 
-	int usecnt;
 	int netlink_socket;
 
 	int router_control_fd;
@@ -158,6 +163,11 @@ struct visdn_state
 extern struct visdn_state visdn;
 
 void refresh_polls_list();
+
+struct visdn_chan *visdn_chan_get(struct visdn_chan *visdn_chan);
+#define visdn_chan_put(chan) \
+	do { _visdn_chan_put(chan); (chan) = NULL; } while(0)
+void _visdn_chan_put(struct visdn_chan *visdn_chan);
 
 static inline struct visdn_chan *to_visdn_chan(struct ast_channel *ast_chan)
 {

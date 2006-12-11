@@ -51,6 +51,12 @@ void ks_pipeline_del(struct ks_pipeline *pipeline)
 {
 	hlist_del(&pipeline->node);
 
+	int i;
+	for (i=0; i<pipeline->chans_cnt; i++)
+		pipeline->chans[i]->pipeline = NULL;
+
+	pipeline->chans_cnt = 0;
+
 	ks_pipeline_put(pipeline);
 }
 
@@ -144,7 +150,7 @@ const char *ks_netlink_pipeline_attr_to_string(
 	case KS_PIPELINEATTR_STATUS:
 		return "Status";
 	case KS_PIPELINEATTR_CHAN_ID:
-		return "Link ID";
+		return "Chan ID";
 	}
 
 	return "UNKNOWN";
@@ -348,6 +354,24 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 					KS_ATTR_PAYLOAD(attr));
 		break;
 
+		case KS_PIPELINEATTR_CHAN_ID: {
+			struct ks_chan *chan;
+			chan = ks_chan_get_by_id(conn,
+					*(__u32 *)KS_ATTR_DATA(attr));
+			if (!chan) {
+				report_conn(conn, LOG_ERR,
+					"Channel 0x%08x not found!\n",
+					*(__u32 *)KS_ATTR_DATA(attr));
+				break;
+			}
+
+			pipeline->chans[pipeline->chans_cnt] = chan;
+			pipeline->chans_cnt++;
+
+			chan->pipeline = pipeline;
+		}
+		break;
+
 		default:
 			report_conn(conn, LOG_ERR, "   Attribute '%s'\n",
 				ks_netlink_pipeline_attr_to_string(
@@ -386,6 +410,10 @@ void ks_pipeline_update_from_nlmsg(
 
 			pipeline->path = strndup(KS_ATTR_DATA(attr),
 					KS_ATTR_PAYLOAD(attr));
+		break;
+
+		case KS_PIPELINEATTR_CHAN_ID:
+			// Not supported
 		break;
 
 		default:
@@ -482,8 +510,6 @@ int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	if (req->err < 0) {
 		err = req->err;
 		ks_req_put(req);
-
-		ks_xact_abort(xact);
 
 		goto err_create_failed;
 	}
@@ -583,8 +609,6 @@ int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn)
 		err = req->err;
 		ks_req_put(req);
 
-		ks_xact_abort(xact);
-
 		goto err_update_failed;
 	}
 
@@ -676,8 +700,6 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn)
 		err = req->err;
 		ks_req_put(req);
 
-		ks_xact_abort(xact);
-
 		goto err_destroy_failed;
 	}
 
@@ -713,6 +735,8 @@ int ks_pipeline_update_chans(
 
 		struct ks_chan *chan = pipeline->chans[i];
 
+		ks_chan_dump(chan, conn);
+
 		struct ks_req *req;
 		req = ks_chan_queue_update(chan, xact);
 
@@ -721,8 +745,6 @@ int ks_pipeline_update_chans(
 		if (req->err < 0) {
 			err = req->err;
 			ks_req_put(req);
-
-			ks_xact_abort(xact);
 
 			goto err_update_failed;
 		}

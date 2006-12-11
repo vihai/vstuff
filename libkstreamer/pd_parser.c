@@ -253,7 +253,7 @@ struct ks_pd *ks_pd_parse(const char *str)
 	if (!parser)
 		return NULL;
 
-	ks_pd_parser_Trace(stdout, "ksps: ");
+//	ks_pd_parser_Trace(stdout, "ksps: ");
 
 	const char *pos = str;
 	while(*pos) {

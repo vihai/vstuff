@@ -24,8 +24,9 @@
 #include "channel.h"
 #include "pipeline.h"
 #include "conn.h"
+#include "logging.h"
 
-//#define DIJ_DEBUG
+#define DIJ_DEBUG
 
 void ks_router_run(
 	struct ks_node *start,
@@ -34,6 +35,7 @@ void ks_router_run(
 	int i;
 	struct ks_node *node;
 
+	assert(start);
 	assert(start->conn);
 	assert(to->conn);
 	assert(start->conn == to->conn);
@@ -98,8 +100,8 @@ void ks_router_run(
 				if (arch->from != min_cost_node)
 					continue;
 
-/*				if (arch->pipeline)
-					continue;*/
+				if (arch->pipeline)
+					continue;
 
 #ifdef DIJ_DEBUG
 				report_conn(conn, LOG_DEBUG,

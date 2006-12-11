@@ -120,14 +120,14 @@ static void ks_report_default(int level, const char *format, ...)
 	va_list ap;
 	va_start(ap, format);
 
-	switch(level) {
+/*	switch(level) {
 	case KS_LOG_DEBUG:
         break;
 
-	default:
+	default:*/
 		vfprintf(stderr, format, ap);
-	break;
-	}
+//	break;
+//	}
 
 	va_end(ap);
 }
@@ -186,7 +186,6 @@ static int ks_conn_send_next_packet(struct ks_conn *conn)
 		conn->cur_xact = list_entry(conn->xacts.next, struct ks_xact,
 									node);
 		list_del(&conn->cur_xact->node);
-
 	}
 	pthread_mutex_unlock(&conn->xacts_lock);
 

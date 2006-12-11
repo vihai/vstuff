@@ -99,7 +99,6 @@ static int apply_parameters_to_autorouted(
 	list_for_each_entry(par, &pars->list, node) {
 		if (!strcmp(par->name->text, "hdlc_framer")) {
 
-
 			if (!glob.hdlc_framer) {
 				fprintf(stderr,
 					"No HDLC framer attribute found\n");

@@ -33,6 +33,8 @@ void lapd_out_queue_flush(struct lapd_device *dev)
 		prim_hdr = (struct lapd_prim_hdr *)skb->data;
 		prim_hdr->primitive_type = LAPD_PH_DATA_REQUEST;
 
+		memset(skb_put(skb, sizeof(u16)), 0, sizeof(u16));
+
 		dev_queue_xmit(skb);
 	}
 
@@ -107,6 +109,8 @@ void lapd_ph_data_request(struct sk_buff *skb)
 		skb_push(skb, sizeof(struct lapd_prim_hdr));
 		prim_hdr = (struct lapd_prim_hdr *)skb->data;
 		prim_hdr->primitive_type = LAPD_PH_DATA_REQUEST;
+
+		memset(skb_put(skb, sizeof(u16)), 0, sizeof(u16));
 
 		err = dev_queue_xmit(skb);
 		if (err < 0) {

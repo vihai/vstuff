@@ -68,7 +68,6 @@
 
 #include <res_kstreamer.h>
 
-
 #include "util.h"
 #include "chan_vgsm.h"
 #include "module.h"
@@ -153,14 +152,6 @@ struct vgsm_state vgsm = {
 
 static const struct ast_channel_tech vgsm_tech;
 
-void vgsm_ast_chan_destroy(struct ast_channel *ast_chan)
-{
-	vgsm_chan_put(ast_chan->tech_pvt);
-	ast_chan->tech_pvt = NULL;
-
-	ast_channel_free(ast_chan);
-}
-
 static struct ast_channel *vgsm_ast_chan_alloc(
 	struct vgsm_chan *vgsm_chan)
 {
@@ -196,7 +187,7 @@ err_channel_alloc:
 	return NULL;
 }
 
-static struct vgsm_chan *vgsm_chan_alloc()
+static struct vgsm_chan *vgsm_chan_alloc(void)
 {
 	struct vgsm_chan *vgsm_chan;
 
@@ -217,10 +208,6 @@ static struct vgsm_chan *vgsm_chan_alloc()
 
 	ast_dsp_set_features(vgsm_chan->dsp, DSP_FEATURE_DTMF_DETECT);
 
-	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan);
-	if (!vgsm_chan->ast_chan)
-		goto err_vgsm_ast_chan_alloc;
-
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	vgsm.usecnt++;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
@@ -228,9 +215,6 @@ static struct vgsm_chan *vgsm_chan_alloc()
 
 	return vgsm_chan;
 
-	vgsm_ast_chan_destroy(vgsm_chan->ast_chan);
-	vgsm_chan->ast_chan = NULL;
-err_vgsm_ast_chan_alloc:
 	ast_dsp_free(vgsm_chan->dsp);
 	vgsm_chan->dsp = NULL;
 err_dsp_new:
@@ -286,6 +270,11 @@ void _vgsm_chan_put(struct vgsm_chan *vgsm_chan)
 		if (vgsm_chan->hg_first_module) {
 			vgsm_module_put(vgsm_chan->hg_first_module);
 			vgsm_chan->hg_first_module = NULL;
+		}
+
+		if (vgsm_chan->mc) {
+			vgsm_module_config_put(vgsm_chan->mc);
+			vgsm_chan->mc = NULL;
 		}
 
 		free(vgsm_chan);
@@ -1105,8 +1094,8 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_get_module_node_id;
 	}
 
-	vgsm_chan->module_node = ks_node_get_by_id(ks_conn, node_id);
-	if (!vgsm_chan->module_node) {
+	vgsm_chan->node_module = ks_node_get_by_id(ks_conn, node_id);
+	if (!vgsm_chan->node_module) {
 		ast_log(LOG_ERROR, "Module's node not found\n");
 		goto err_module_node_not_found;
 	}
@@ -1131,104 +1120,108 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 	ks_conn_sync(ks_conn);
 
-	vgsm_chan->up_node = ks_node_get_by_id(ks_conn, node_id);
-	if (!vgsm_chan->up_node) {
+	vgsm_chan->node_userport = ks_node_get_by_id(ks_conn, node_id);
+	if (!vgsm_chan->node_userport) {
 		ast_log(LOG_ERROR, "Userport's node not found\n");
 		goto err_up_node_not_found;
 	}
 
 	vgsm_debug_generic("Connecting userport %06d to chan %06d\n",
-			vgsm_chan->up_node->id,
-			vgsm_chan->module_node->id);
+			vgsm_chan->node_userport->id,
+			vgsm_chan->node_module->id);
 
-	vgsm_chan->rx_pipeline = ks_pipeline_alloc();
-	if (!vgsm_chan->rx_pipeline) {
+	/* Create RX pipeline */
+	vgsm_chan->pipeline_rx = ks_pipeline_alloc();
+	if (!vgsm_chan->pipeline_rx) {
 		ast_log(LOG_ERROR,
 			"Cannot allocate pipeline\n");
 
-		goto err_rx_pipeline_alloc;
+		goto err_pipeline_rx_alloc;
 	}
 
-	err = ks_pipeline_autoroute(vgsm_chan->rx_pipeline, ks_conn,
-				vgsm_chan->module_node,
-				vgsm_chan->up_node);
+	err = ks_pipeline_autoroute(vgsm_chan->pipeline_rx, ks_conn,
+				vgsm_chan->node_module,
+				vgsm_chan->node_userport);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot connect nodes: %s\n", strerror(-err));
 
-		goto err_rx_pipeline_connect;
+		goto err_pipeline_rx_connect;
 	}
 
-	err = ks_pipeline_create(vgsm_chan->rx_pipeline, ks_conn);
+	err = ks_pipeline_create(vgsm_chan->pipeline_rx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot create RX pipeline: %s\n",
 			strerror(-err));
-		goto err_rx_pipeline_create;
+		goto err_pipeline_rx_create;
 	}
 
-	ks_pipeline_update_chans(vgsm_chan->rx_pipeline, ks_conn);
+	ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
 
-	vgsm_chan->rx_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
-
-	err = ks_pipeline_update(vgsm_chan->rx_pipeline, ks_conn);
-	if (err < 0) {
-		ast_log(LOG_ERROR,
-				"Cannot start the RX pipeline\n");
-		goto err_rx_pipeline_update;
-	}
-
-	vgsm_chan->tx_pipeline = ks_pipeline_alloc();
-	if (!vgsm_chan->tx_pipeline) {
+	/* Create TX pipeline */
+	vgsm_chan->pipeline_tx = ks_pipeline_alloc();
+	if (!vgsm_chan->pipeline_tx) {
 		ast_log(LOG_ERROR,
 			"Cannot allocate TX pipeline\n");
 
-		goto err_tx_pipeline_alloc;
+		goto err_pipeline_tx_alloc;
 	}
 
-	err = ks_pipeline_autoroute(vgsm_chan->tx_pipeline, ks_conn,
-				vgsm_chan->up_node,
-				vgsm_chan->module_node);
+	err = ks_pipeline_autoroute(vgsm_chan->pipeline_tx, ks_conn,
+				vgsm_chan->node_userport,
+				vgsm_chan->node_module);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot connect nodes: %s\n", strerror(-err));
 
-		goto err_tx_pipeline_connect;
+		goto err_pipeline_tx_connect;
 	}
 
-	err = ks_pipeline_create(vgsm_chan->tx_pipeline, ks_conn);
+	err = ks_pipeline_create(vgsm_chan->pipeline_tx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot create pipeline: %s\n",
 			strerror(-err));
-		goto err_tx_pipeline_create;
+		goto err_pipeline_tx_create;
 	}
 
-	ks_pipeline_update_chans(vgsm_chan->tx_pipeline, ks_conn);
+	ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
 
-	vgsm_chan->tx_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
+	/* Start RX pipelines */
+	vgsm_chan->pipeline_rx->status = KS_PIPELINE_STATUS_FLOWING;
 
-	err = ks_pipeline_update(vgsm_chan->tx_pipeline, ks_conn);
+	err = ks_pipeline_update(vgsm_chan->pipeline_rx, ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+				"Cannot start the RX pipeline\n");
+		goto err_pipeline_rx_update;
+	}
+
+	/* Start TX pipelines */
+	vgsm_chan->pipeline_tx->status = KS_PIPELINE_STATUS_FLOWING;
+
+	err = ks_pipeline_update(vgsm_chan->pipeline_tx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 				"Cannot start the pipeline\n");
-		goto err_tx_pipeline_update;
+		goto err_pipeline_tx_update;
 	}
 
 	return 0;
 
-err_tx_pipeline_update:
-err_tx_pipeline_create:
-err_tx_pipeline_connect:
-	ks_pipeline_put(vgsm_chan->tx_pipeline);
-	vgsm_chan->tx_pipeline = NULL;
-err_tx_pipeline_alloc:
-err_rx_pipeline_update:
-err_rx_pipeline_create:
-err_rx_pipeline_connect:
-	ks_pipeline_put(vgsm_chan->rx_pipeline);
-	vgsm_chan->rx_pipeline = NULL;
-err_rx_pipeline_alloc:
+err_pipeline_tx_update:
+err_pipeline_rx_update:
+err_pipeline_tx_create:
+err_pipeline_tx_connect:
+	ks_pipeline_put(vgsm_chan->pipeline_tx);
+	vgsm_chan->pipeline_tx = NULL;
+err_pipeline_tx_alloc:
+err_pipeline_rx_create:
+err_pipeline_rx_connect:
+	ks_pipeline_put(vgsm_chan->pipeline_rx);
+	vgsm_chan->pipeline_rx = NULL;
+err_pipeline_rx_alloc:
 err_up_node_not_found:
 err_get_up_node_id:
 	close(vgsm_chan->up_fd);
@@ -1247,6 +1240,10 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 		ast_log(LOG_ERROR, "Cannot allocate vgsm_chan\n");
 		goto err_vgsm_chan_alloc;
 	}
+
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan);
+	if (!vgsm_chan->ast_chan)
+		goto err_vgsm_ast_chan_alloc;
 
 	vgsm_chan->outbound = FALSE;
 
@@ -1273,6 +1270,11 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 
 	return vgsm_chan;
 
+	vgsm_chan_put(vgsm_chan->ast_chan->tech_pvt);
+	vgsm_chan->ast_chan->tech_pvt = NULL;
+	ast_channel_free(vgsm_chan->ast_chan);
+	vgsm_chan->ast_chan = NULL;
+err_vgsm_ast_chan_alloc:
 	vgsm_module_put(vgsm_chan->module);
 	vgsm_chan->module = NULL;
 	vgsm_module_config_put(vgsm_chan->mc);
@@ -1687,40 +1689,40 @@ static void vgsm_disconnect_channel(
 	if (vgsm_chan->up_fd < 0)
 		return;
 
-	if (vgsm_chan->rx_pipeline) {
-		vgsm_chan->rx_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
-		err = ks_pipeline_update(vgsm_chan->rx_pipeline, ks_conn);
+	if (vgsm_chan->pipeline_rx) {
+		vgsm_chan->pipeline_rx->status = KS_PIPELINE_STATUS_CONNECTED;
+		err = ks_pipeline_update(vgsm_chan->pipeline_rx, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot stop the pipeline\n");
 			return;
 		}
 
-		err = ks_pipeline_destroy(vgsm_chan->rx_pipeline, ks_conn);
+		err = ks_pipeline_destroy(vgsm_chan->pipeline_rx, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot destroy the pipeline\n");
 			return;
 		}
 
-		ks_pipeline_put(vgsm_chan->rx_pipeline);
-		vgsm_chan->rx_pipeline = NULL;
+		ks_pipeline_put(vgsm_chan->pipeline_rx);
+		vgsm_chan->pipeline_rx = NULL;
 	}
 
-	if (vgsm_chan->tx_pipeline) {
-		vgsm_chan->tx_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
-		err = ks_pipeline_update(vgsm_chan->tx_pipeline, ks_conn);
+	if (vgsm_chan->pipeline_tx) {
+		vgsm_chan->pipeline_tx->status = KS_PIPELINE_STATUS_CONNECTED;
+		err = ks_pipeline_update(vgsm_chan->pipeline_tx, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot stop the pipeline\n");
 			return;
 		}
 
-		err = ks_pipeline_destroy(vgsm_chan->tx_pipeline, ks_conn);
+		err = ks_pipeline_destroy(vgsm_chan->pipeline_tx, ks_conn);
 		if (err < 0) {
 			ast_log(LOG_ERROR, "Cannot destroy the pipeline\n");
 			return;
 		}
 
-		ks_pipeline_put(vgsm_chan->tx_pipeline);
-		vgsm_chan->tx_pipeline = NULL;
+		ks_pipeline_put(vgsm_chan->pipeline_tx);
+		vgsm_chan->pipeline_tx = NULL;
 	}
 
 	if (close(vgsm_chan->up_fd) < 0) {
@@ -1737,10 +1739,11 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	vgsm_debug_generic("%s: hangup\n", ast_chan->name);
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-
 	assert(vgsm_chan);
 
 	ast_mutex_lock(&ast_chan->lock);
+
+	ast_setstate(ast_chan, AST_STATE_DOWN);
 
 	if (vgsm_chan->module) {
 
@@ -1780,7 +1783,6 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	 * control back to Assterisk (which will free the ast_chan structure
 	 * we have to wait until all threads have released their reference.
 	 */
-
 	ast_mutex_unlock(&ast_chan->lock);
 	int res = 0;
 	struct timespec timeout;
@@ -1991,21 +1993,26 @@ static struct ast_channel *vgsm_request(
 		goto err_vgsm_chan_alloc;
 	}
 
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan);
+	if (!vgsm_chan->ast_chan)
+		goto err_vgsm_ast_chan_alloc;
+
 	vgsm_chan->outbound = TRUE;
 
 	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
-	snprintf(ast_chan->name,
-		sizeof(ast_chan->name),
-		"VGSM/null");
+	snprintf(ast_chan->name, sizeof(ast_chan->name), "VGSM/null");
 
 	vgsm_chan_put(vgsm_chan);
 
 	return ast_chan;
 
-	vgsm_ast_chan_destroy(vgsm_chan->ast_chan);
+	vgsm_chan_put(vgsm_chan->ast_chan->tech_pvt);
+	vgsm_chan->ast_chan->tech_pvt = NULL;
+	ast_channel_free(vgsm_chan->ast_chan);
 	vgsm_chan->ast_chan = NULL;
+err_vgsm_ast_chan_alloc:
 	vgsm_chan_put(vgsm_chan);
 err_vgsm_chan_alloc:
 err_unsupported_format:
@@ -2142,7 +2149,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		}
 	}
 
-	iconv_t cd = iconv_open("WCHAR_T", charset);
+	iconv_t cd;
+	cd = iconv_open("WCHAR_T", charset);
 	if (cd < 0) {
 		ast_cli(s->fd, "Status: 503\n");
 
@@ -2273,7 +2281,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	module->sending_sms = TRUE;
 
-	struct vgsm_sms_submit *sms = vgsm_sms_submit_alloc();
+	struct vgsm_sms_submit *sms;
+	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
 		ast_mutex_unlock(&module->lock);
 
@@ -2501,7 +2510,7 @@ static void vgsm_shutdown(void)
 	vgsm_module_shutdown_all();
 }
 
-int load_module()
+int load_module(void)
 {
 	int err;
 
@@ -2611,7 +2620,7 @@ int reload(void)
 	return 0;
 }
 
-int usecount()
+int usecount(void)
 {
 	int res;
 	ast_mutex_lock(&vgsm.usecnt_lock);
@@ -2620,12 +2629,12 @@ int usecount()
 	return res;
 }
 
-char *description()
+char *description(void)
 {
 	return VGSM_DESCRIPTION;
 }
 
-char *key()
+char *key(void)
 {
 	return ASTERISK_GPL_KEY;
 }

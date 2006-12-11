@@ -239,7 +239,9 @@ retry:
 	nlh = NLMSG_PUT(xact->out_skb, xact->pid, xact->id,
 			NLMSG_ERROR, sizeof(int));
 	nlh->nlmsg_flags = 0;
-	*(int *)(NLMSG_DATA(nlh)) = -error;
+
+printk(KERN_DEBUG "ERRRRRRRRRRRRRRROR = %d\n", error);
+	*((int *)NLMSG_DATA(nlh)) = -error;
 
 	return;
 
@@ -258,7 +260,7 @@ static void ks_xact_add(struct ks_xact *xact)
 
 int ks_cmd_done(
 	struct ks_command *cmd,
-       	struct ks_xact *xact,
+	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	return 0;

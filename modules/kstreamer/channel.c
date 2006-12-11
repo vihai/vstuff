@@ -366,6 +366,8 @@ void ks_chan_init(
 	chan->from = ks_node_get(from);
 	chan->to = ks_node_get(to);
 
+	chan->mtu = -1;
+
 	INIT_LIST_HEAD(&chan->pipeline_entry);
 	INIT_RCU_HEAD(&chan->pipeline_entry_rcu);
 }
@@ -417,7 +419,7 @@ int ks_chan_write_to_nlmsg(
 				attrs_cnt = chan->ops->get_attr_count(chan);
 
 			for (i=0; i<attrs_cnt; i++) {
-				
+
 				u8 buf[32];
 				u16 type;
 				int len = sizeof(buf);
@@ -452,7 +454,7 @@ static int ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
 
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) { 
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		switch(attr->type) {
 		case KS_CHANATTR_ID:
@@ -463,6 +465,8 @@ static int ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
 		break;
 
 		default:
+printk(KERN_DEBUG "AAAAAAAAAAAAAAAAA %d %08x %p %p\n", attr->type, *(u32 *)KS_ATTR_DATA(attr), chan->ops, chan->ops->set_attr);
+
 			if (chan->ops->set_attr) {
 				int err;
 
@@ -694,6 +698,22 @@ void ks_chan_unregister(struct ks_chan *chan)
 	list_del(&chan->node);
 	ks_chan_put(chan);
 	write_unlock(&ks_chans_list_lock);
+
+	if (atomic_read(&chan->kobj.kref.refcount) > 1) {
+
+		/* Usually 50ms are enough */
+		msleep(50);
+
+		while(atomic_read(&chan->kobj.kref.refcount) > 1) {
+			ks_msg(KERN_WARNING,
+				"Waiting for channel"
+				" refcnt to become 1"
+				" (now %d)\n",
+				atomic_read(&chan->kobj.kref.refcount));
+
+			msleep(5000);
+		}
+	}
 }
 EXPORT_SYMBOL(ks_chan_unregister);
 

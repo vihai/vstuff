@@ -422,7 +422,8 @@ void hfc_st_port_update_st_ctrl1(struct hfc_st_port *port)
 {
 	u8 st_ctrl1 = 0;
 
-	st_ctrl1 = hfc_A_ST_CTRL1_V_D_HI;
+	if (port->chans[D].tx.status == HFC_ST_CHAN_STATUS_FREE)
+		st_ctrl1 = hfc_A_ST_CTRL1_V_D_HI;
 
 	hfc_outb(port->card, hfc_A_ST_CTRL1, st_ctrl1);
 }

@@ -1,3 +1,14 @@
+/*
+ * Kstreamer helper functions for Asterisk
+ *
+ * Copyright (C) 2006 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
+ */
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -60,7 +71,7 @@ struct ks_conn *ks_conn;
 //LOCAL_USER_DECL;
 
 #ifdef DEBUG_DEFAULTS
-BOOL debug = TRUE;
+BOOL debug = FALSE;
 #else
 BOOL debug = FALSE;
 #endif

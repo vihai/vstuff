@@ -22,7 +22,7 @@ struct q931_timer
 	struct list_head node;
 
 	const char *name;
-	
+
 	int pending;
 
 	longtime_t expires;

@@ -30,6 +30,8 @@
 #define FALSE 0
 #endif
 
+#define BOOL char
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 #ifdef DEBUG_CODE
