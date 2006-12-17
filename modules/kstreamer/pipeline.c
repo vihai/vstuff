@@ -364,7 +364,6 @@ int ks_pipeline_update_from_nlsmsg(
 	return 0;
 
 err_unexpected_attribute:
-err_chan_not_found:
 err_invalid_status:
 
 	return err;
@@ -431,7 +430,6 @@ int ks_pipeline_cmd_del(
 
 	return 0;
 
-err_pipeline_update:
 	ks_pipeline_put(pipeline);
 err_pipeline_get:
 

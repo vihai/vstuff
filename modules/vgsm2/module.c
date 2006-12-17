@@ -195,7 +195,7 @@ static void vgsm_module_rx_chan_stimulus(
 
 	vgsm_card_unlock(card);
 
-	vss_chan_push_raw(ks_chan, sf);
+	kss_chan_push_raw(ks_chan, sf);
 
 	ks_sf_put(sf);
 }
@@ -231,7 +231,7 @@ static void vgsm_module_rx_init(
 			NULL,
 			&module->ks_node.kobj,
 			&module->ks_node,
-			&vss_softswitch.ks_node);
+			&kss_softswitch.ks_node);
 
 /*	module_rx->ks_chan.framed_mtu = -1;
 	module_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
@@ -379,7 +379,7 @@ static struct ks_chan_ops vgsm_module_tx_chan_ops = {
 	.stop		= vgsm_module_tx_chan_stop,
 };
 
-static struct vss_chan_ops vgsm_module_tx_node_ops =
+static struct kss_chan_from_ops vgsm_module_tx_node_ops =
 {
 	.push_raw	= vgsm_module_tx_chan_push_raw,
 	.get_pressure	= vgsm_module_tx_chan_get_pressure,
@@ -401,7 +401,7 @@ static void vgsm_module_tx_init(
 			&vgsm_module_tx_chan_ops, "tx",
 			NULL,
 			&module->ks_node.kobj,
-			&vss_softswitch.ks_node,
+			&kss_softswitch.ks_node,
 			&module->ks_node);
 
 	module_tx->ks_chan.from_ops = &vgsm_module_tx_node_ops;

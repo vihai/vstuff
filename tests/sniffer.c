@@ -20,6 +20,7 @@
 #include <sys/poll.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/signal.h>
 #include <linux/types.h>
 #include <linux/netlink.h>
 #include <getopt.h>
@@ -54,29 +55,44 @@ typedef unsigned char BOOL;
 #define TRUE (!FALSE)
 #endif
 
+enum write_from
+{
+	WRITE_FROM_NONE,
+	WRITE_FROM_STDIN,
+	WRITE_FROM_FILE,
+	WRITE_FROM_LOOPBACK,
+};
+
 struct opts
 {
 	const char *node_name;
-	BOOL binary;
 	BOOL framed;
+
+	BOOL read_to_stdout;
+	BOOL read_to_stdout_binary;
+	const char *read_to_file;
+
+	enum write_from write_from;
+	const char *write_from_file;
 
 	struct ks_dynattr *hdlc_framer;
 	struct ks_dynattr *hdlc_deframer;
 	struct ks_dynattr *octet_reverser;
 
-	BOOL in;
 	BOOL enable_in_octet_reverser;
 	BOOL enable_in_hdlc_deframer;
 	struct ks_octet_reverser_descr *in_octet_reverser;
 	struct ks_hdlc_deframer_descr *in_hdlc_deframer;
 
-	BOOL out;
 	BOOL enable_out_octet_reverser;
 	BOOL enable_out_hdlc_framer;
 	struct ks_octet_reverser_descr *out_octet_reverser;
 	struct ks_hdlc_framer_descr *out_hdlc_framer;
 
-} opts;
+} opts =
+{
+	.write_from = WRITE_FROM_NONE,
+};
 
 void print_usage(const char *progname)
 {
@@ -86,8 +102,6 @@ void print_usage(const char *progname)
 "\n"
 "	--binary		Enable binary output\n",
 		progname);
-
-	exit(1);
 }
 
 int configure_in_pipeline(struct ks_pipeline *pipeline)
@@ -225,20 +239,29 @@ int configure_out_pipeline(struct ks_pipeline *pipeline)
 	return 0;
 }
 
+BOOL have_to_exit = FALSE;
+
+static void signal_handler(int signal)
+{
+	have_to_exit = TRUE;
+}
+
 int main(int argc, char *argv[])
 {
 	int err;
 
+	signal(SIGHUP, signal_handler);
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
+	signal(SIGQUIT, signal_handler);
+
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 	setvbuf(stderr, (char *)NULL, _IONBF, 0);
 
-	opts.in = 0;
-	opts.out = 0;
-
 	struct option options[] = {
-		{ "in", no_argument, 0, 0 },
-		{ "out", no_argument, 0, 0 },
-		{ "binary", no_argument, 0, 0 },
+		{ "read-to-stdout", optional_argument, 0, 0 },
+		{ "read-to-file", required_argument, 0, 0 },
+		{ "write-from", required_argument, 0, 0 },
 		{ "framed", no_argument, 0, 0 },
 		{ "in-hdlc-deframer", no_argument, 0, 0 },
 		{ "in-octet-reverser", no_argument, 0, 0 },
@@ -262,13 +285,22 @@ int main(int argc, char *argv[])
 
 		opt = c ? &no_opt : &options[optidx];
 
-		if (!strcmp(opt->name, "in"))
-			opts.in = TRUE;
-		else if (!strcmp(opt->name, "out"))
-			opts.out = TRUE;
-		else if (!strcmp(opt->name, "binary"))
-			opts.binary = TRUE;
-		else if (!strcmp(opt->name, "framed"))
+		if (!strcmp(opt->name, "read-to-stdout"))
+			opts.read_to_stdout = TRUE;
+		else if (!strcmp(opt->name, "read-to-stdout-binary")) {
+			opts.read_to_stdout_binary = TRUE;
+		} else if (!strcmp(opt->name, "read-to-file")) {
+			opts.read_to_file = optarg;
+		} else if (!strcmp(opt->name, "write-from")) {
+			if (!strcmp(optarg, "stdin"))
+				opts.write_from = WRITE_FROM_STDIN;
+			else if (!strcmp(optarg, "loopback"))
+				opts.write_from = WRITE_FROM_LOOPBACK;
+			else {
+				opts.write_from = WRITE_FROM_FILE;
+				opts.write_from_file = optarg;
+			}
+		} else if (!strcmp(opt->name, "framed"))
 			opts.framed = TRUE;
 		else if (!strcmp(opt->name, "in-hdlc-deframer"))
 			opts.enable_in_hdlc_deframer = TRUE;
@@ -295,14 +327,19 @@ int main(int argc, char *argv[])
 
 	int mode;
 
-	if (opts.in && opts.out)
+	if ((opts.read_to_stdout ||
+	     opts.read_to_file) &&
+	     opts.write_from != WRITE_FROM_NONE) {
 		mode = O_RDWR;
-	else if (opts.in)
+	} else if (opts.read_to_stdout ||
+		   opts.read_to_file)
 		mode = O_RDONLY;
-	else if (opts.out)
+	else if (opts.write_from != WRITE_FROM_NONE)
 		mode = O_WRONLY;
-	else
-		assert(0);
+	else {
+		print_usage(argv[0]);
+		return 1;
+	}
 
 	int up_fd;
 	if (opts.framed)
@@ -312,6 +349,21 @@ int main(int argc, char *argv[])
 
 	if (up_fd < 0) {
 		perror("cannot open /dev/ks/userport_stream");
+		return 1;
+	}
+
+	if (fcntl(up_fd, F_SETFL, O_NONBLOCK) < 0) {
+		perror("fcntl(r_filedes, O_NONBLOCK)");
+		return 1;
+	}
+
+	if (fcntl(0, F_SETFL, O_NONBLOCK) < 0) {
+		perror("fcntl(0, O_NONBLOCK)");
+		return 1;
+	}
+
+	if (fcntl(1, F_SETFL, O_NONBLOCK) < 0) {
+		perror("fcntl(1, O_NONBLOCK)");
 		return 1;
 	}
 
@@ -352,7 +404,7 @@ int main(int argc, char *argv[])
 	struct ks_node *node = NULL;
 
 	if (opts.node_name) {
-		if (!strncmp(opts.node_name, "/sys/", 5)) {
+		if (!strncmp(opts.node_name, "/", 1)) {
 			node = ks_node_get_by_path(conn, opts.node_name);
 		} else {
 			node = ks_node_get_by_id(conn, atoi(opts.node_name));
@@ -366,7 +418,11 @@ int main(int argc, char *argv[])
 	}
 
 	struct ks_pipeline *in_pipeline = NULL;
-	if (node && opts.in) {
+	if (node &&
+	    (opts.read_to_stdout ||
+	     opts.read_to_file)) {
+
+		mode = O_RDWR;
 		in_pipeline = ks_pipeline_alloc();
 		if (!in_pipeline) {
 			fprintf(stderr,
@@ -406,7 +462,7 @@ int main(int argc, char *argv[])
 	}
 
 	struct ks_pipeline *out_pipeline = NULL;
-	if (node && opts.out) {
+	if (node && opts.write_from != WRITE_FROM_NONE) {
 		out_pipeline = ks_pipeline_alloc();
 		if (!out_pipeline) {
 			fprintf(stderr,
@@ -421,8 +477,7 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 
-		out_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
-
+		out_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
 		err = ks_pipeline_create(out_pipeline, conn);
 		if (err < 0) {
 			fprintf(stderr,
@@ -446,24 +501,47 @@ int main(int argc, char *argv[])
 	char buf[4096];
 	struct pollfd pollfd = { up_fd, POLLIN, 0 };
 
-	while(1) {
+	while(!have_to_exit) {
 		if (poll(&pollfd, 1, -1) < 0) {
+			if (errno == EINTR)
+				continue;
+
 			perror("poll");
 			return 1;
 		}
 
-		int nread = read(up_fd, buf, sizeof(buf));
+		int nread = 0;
 
-		if (opts.binary)
-			write(1, buf, nread);
-		else {
-			printf(" %d: ", nread);
+		if (in_pipeline) {
+			nread = read(up_fd, buf, sizeof(buf));
 
-			int i;
-			for (i=0; i<min(8, nread); i++)
-				printf("%02x", *(__u8 *)(buf + i));
+			if (opts.read_to_stdout_binary)
+				write(1, buf, nread);
+			else {
+				printf(" %d: ", nread);
 
-			printf("\n");
+				int i;
+				for (i=0; i<min(8, nread); i++)
+					printf("%02x", *(__u8 *)(buf + i));
+
+				printf("\n");
+			}
+		}
+
+		if (opts.write_from == WRITE_FROM_STDIN) {
+			nread = read(0, buf, 160);
+
+			int nwrote = 0;
+			if (nread > 0)
+				nwrote = write(up_fd, buf, nread);
+
+			printf("Nwrote = %d\n", nwrote);
+		} else if (opts.write_from == WRITE_FROM_FILE) {
+
+		} else if (opts.write_from == WRITE_FROM_LOOPBACK) {
+
+			if (nread > 0)
+				write(up_fd, buf, nread);
 		}
 	}
 

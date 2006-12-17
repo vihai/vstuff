@@ -2362,11 +2362,11 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	char *content_te = astman_get_header(m, "Content-Transfer-Encoding");
 	size_t content_size;
-	char *content_raw;
+	__u8 *content_raw;
 
 	if (!strlen(content_te)) {
 		content_size = strlen(content);
-		content_raw = (char *)content; // Okay to drop const
+		content_raw = (__u8 *)content; // Okay to drop const
 
 	} else if(!strcasecmp(content_te, "hex")) {
 		content_size = strlen(content) / 2;

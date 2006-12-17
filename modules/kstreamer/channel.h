@@ -36,31 +36,6 @@ extern struct kset ks_chans_kset;
 extern struct list_head ks_chans_list;
 extern rwlock_t ks_chans_list_lock;
 
-/*
-
-enum ks_leg_rx_error_code
-{
-	KS_RX_ERROR_DROPPED,
-	KS_RX_ERROR_LENGTH,
-	KS_RX_ERROR_CRC,
-	KS_RX_ERROR_FR_ABORT,
-};
-
-enum ks_leg_tx_error_code
-{
-	KS_TX_ERROR_FIFO_FULL,
-};
-
-*/
-
-enum ks_push_frame_return_codes
-{
-	KS_TX_OK,
-	KS_TX_BUSY,
-	KS_TX_LOCKED,
-};
-
-struct ks_chan;
 struct ks_chan;
 
 struct ks_chan_ops
@@ -107,7 +82,7 @@ struct ks_chan
 	void *from_ops;
 
 	struct ks_node *to;
-//	void *to_ops;
+	void *to_ops;
 
 	int mtu;
 

@@ -13,6 +13,6 @@
 #ifndef _VGSM_QUOTPRINT_H
 #define _VGSM_QUOTPRINT_H
 
-int quoted_printable_decode(const char *src, char *dest, int dest_size);
+int quoted_printable_decode(const char *src, __u8 *dest, int dest_size);
 
 #endif

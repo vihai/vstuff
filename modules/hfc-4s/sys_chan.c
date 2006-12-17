@@ -529,7 +529,7 @@ static void hfc_sys_chan_rx_chan_stimulus(struct ks_chan *ks_chan)
 
 	hfc_card_unlock(card);
 
-	vss_chan_push_raw(ks_chan, sf);
+	kss_chan_push_raw(ks_chan, sf);
 
 	ks_sf_put(sf);
 }
@@ -796,6 +796,7 @@ static int hfc_sys_chan_tx_chan_push_frame(
 			"TX FIFO frames full, throttling\n");
 
 		//visdn_leg_stop_queue(&chan->visdn_chan.leg_b);
+		goto err_no_free_frames;
 	}
 
 	if (hfc_fifo_free_tx(fifo) < frame_len) {
@@ -808,7 +809,7 @@ static int hfc_sys_chan_tx_chan_push_frame(
 		//visdn_leg_tx_error(&chan->visdn_chan.leg_b,
 		//		VISDN_TX_ERROR_FIFO_FULL);
 
-		goto err_no_free_tx;
+		goto err_no_free_space;
 	}
 
 #ifdef DEBUG_CODE
@@ -853,12 +854,13 @@ static int hfc_sys_chan_tx_chan_push_frame(
 		}
 	}*/
 
-	return KS_TX_OK;
+	return KSS_TX_OK;
 
-err_no_free_tx:
+err_no_free_space:
+err_no_free_frames:
 	hfc_card_unlock(card);
 
-	return KS_TX_BUSY;
+	return KSS_TX_FULL;
 }
 
 static int hfc_sys_chan_tx_chan_push_raw(
@@ -1003,7 +1005,7 @@ struct ks_chan_ops hfc_sys_chan_tx_chan_ops =
 	.set_attr	= hfc_sys_chan_tx_chan_set_attr,
 };
 
-struct vss_chan_ops hfc_sys_chan_tx_node_ops =
+struct kss_chan_from_ops hfc_sys_chan_tx_node_ops =
 {
 	.push_frame	= hfc_sys_chan_tx_chan_push_frame,
 	.push_raw	= hfc_sys_chan_tx_chan_push_raw,
@@ -1126,7 +1128,7 @@ static void hfc_sys_chan_rx_tasklet(unsigned long data)
 
 	hfc_fifo_next_frame(fifo);
 
-	vss_chan_push_frame(&chan_rx->ks_chan, skb);
+	kss_chan_push_frame(&chan_rx->ks_chan, skb);
 
 #if 0
 	if (chan->connected_st_chan) {
@@ -1174,7 +1176,7 @@ static void hfc_sys_chan_rx_init(
 			&chan->ks_duplex,
 			&chan->ks_duplex.kobj,
 			&chan->port->card->hfcswitch.ks_node,
-			&vss_softswitch.ks_node);
+			&kss_softswitch.ks_node);
 
 	hfc_fifo_init(&chan_rx->fifo, chan->port->card, fifo_hwid, RX);
 
@@ -1196,7 +1198,7 @@ static void hfc_sys_chan_tx_init(
 			&hfc_sys_chan_tx_chan_ops, "tx",
 			&chan->ks_duplex,
 			&chan->ks_duplex.kobj,
-			&vss_softswitch.ks_node,
+			&kss_softswitch.ks_node,
 			&chan->port->card->hfcswitch.ks_node);
 
 	chan_tx->ks_chan.from_ops = &hfc_sys_chan_tx_node_ops;

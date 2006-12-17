@@ -145,7 +145,7 @@ struct visdn_ic *visdn_ic_get(struct visdn_ic *ic)
 {
 	assert(ic);
 	assert(ic->refcnt > 0);
-	
+
 	ast_mutex_lock(&visdn.usecnt_lock);
 	ic->refcnt++;
 	ast_mutex_unlock(&visdn.usecnt_lock);
@@ -382,6 +382,7 @@ static void visdn_ic_copy(
 	dst->dlc_autorelease_time = src->dlc_autorelease_time;
 	dst->echocancel = src->echocancel;
 	dst->echocancel_taps = src->echocancel_taps;
+
 	dst->T301 = src->T301;
 	dst->T302 = src->T302;
 	dst->T303 = src->T303;
@@ -717,7 +718,7 @@ static void visdn_intf_reconfigure(
 	const char *name)
 {
 	/* Allocate a new interface */
-	
+
 	struct visdn_ic *ic;
 	ic = visdn_ic_alloc();
 	if (!ic)

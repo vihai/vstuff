@@ -18,7 +18,7 @@
 
 #include "util.h"
 
-int quoted_printable_decode(const __u8 *src, char *dest, int dest_size)
+int quoted_printable_decode(const __u8 *src, __u8 *dest, int dest_size)
 {
 	const __u8 *inp;
 	__u8 *olddest = dest;

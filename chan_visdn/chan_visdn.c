@@ -218,6 +218,11 @@ void _visdn_chan_put(struct visdn_chan *visdn_chan)
 			visdn_chan->ic = NULL;
 		}
 
+		if (visdn_chan->bc) {
+			_q931_ie_put(&visdn_chan->bc->ie);
+			visdn_chan->bc = NULL;
+		}
+
 		free(visdn_chan);
 
 		ast_mutex_lock(&visdn.usecnt_lock);
@@ -546,10 +551,11 @@ static int visdn_q931_is_number_complete(
 	struct q931_call *q931_call)
 {
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	if (!visdn_chan)
 		return FALSE;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 
@@ -736,6 +742,67 @@ static int char_to_hexdigit(char c)
 	return -1;
 }
 
+#define AST_FORMAT_RAW_H223 (1 << 21)
+
+static int visdn_chan_update_bc_cache(
+	struct visdn_chan *visdn_chan,
+	struct q931_ie_bearer_capability *bc)
+{
+	if (bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
+	    bc->user_information_layer_1_protocol ==
+			Q931_IE_BC_UIL1P_UNUSED) {
+
+		ast_log(LOG_DEBUG,
+			"Bearer capability is PPP, not handling stream\n");
+
+		visdn_chan->supports_inband_tones = FALSE;
+		visdn_chan->is_framed = TRUE;
+		visdn_chan->handle_stream = FALSE;
+
+		visdn_chan->ast_frame_type = 0; // Not handling stream
+		visdn_chan->ast_frame_subclass = 0;
+
+	} else if (bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
+	           bc->user_information_layer_1_protocol ==
+			Q931_IE_BC_UIL1P_G7XX_VIDEO) {
+
+ast_log(LOG_NOTICE, "Video going through!\n");
+
+/*		if (visdn_numbers_list_match(&ic->trans_numbers_list,
+						called_number)) {*/
+
+		visdn_chan->supports_inband_tones = FALSE;
+		visdn_chan->is_framed = FALSE;
+		visdn_chan->handle_stream = TRUE;
+
+		visdn_chan->ast_frame_type = AST_FRAME_VIDEO;
+		visdn_chan->ast_frame_subclass = AST_FORMAT_RAW_H223;
+
+	} else if (bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_SPEECH ||
+		    bc->information_transfer_capability ==
+			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
+
+		visdn_chan->supports_inband_tones = TRUE;
+		visdn_chan->is_framed = FALSE;
+		visdn_chan->handle_stream = TRUE;
+
+		visdn_chan->ast_frame_type = AST_FRAME_VOICE;
+
+		if (bc->user_information_layer_1_protocol ==
+						Q931_IE_BC_UIL1P_G711_ULAW)
+			visdn_chan->ast_frame_subclass = AST_FORMAT_ULAW;
+		else
+			visdn_chan->ast_frame_subclass = AST_FORMAT_ALAW;
+
+	} else
+		return FALSE;
+
+	return TRUE;
+}
+
 static int visdn_request_call(
 	struct visdn_chan *visdn_chan,
 	struct visdn_intf *intf,
@@ -795,25 +862,15 @@ static int visdn_request_call(
 			goto bc_failure;
 		}
 
-		if (bc->information_transfer_capability ==
-					Q931_IE_BC_ITC_SPEECH ||
-		    bc->information_transfer_capability ==
-					Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
-			visdn_chan->is_framed = FALSE;
-			visdn_chan->is_voice = TRUE;
-			visdn_chan->handle_stream = TRUE;
-		} else if (bc->information_transfer_capability ==
-				Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
-                           bc->user_information_layer_1_protocol ==
-				Q931_IE_BC_UIL1P_G7XX_VIDEO) {
-
-			visdn_chan->is_voice = FALSE;
-			visdn_chan->is_framed = FALSE;
-			visdn_chan->handle_stream = TRUE;
+		if (!visdn_chan_update_bc_cache(visdn_chan, bc)) {
+			ast_log(LOG_WARNING,
+					"BEARERCAP_RAW is not supported\n");
+			goto bc_failure;
 		}
 
-		q931_ies_add_put(&ies, &bc->ie);
+		visdn_chan->bc = bc;
 
+		q931_ies_add(&ies, &bc->ie);
 	} else {
 bc_failure:;
 		struct q931_ie_bearer_capability *bc;
@@ -828,21 +885,12 @@ bc_failure:;
 		bc->user_information_layer_2_protocol = Q931_IE_BC_UIL2P_UNUSED;
 		bc->user_information_layer_3_protocol = Q931_IE_BC_UIL3P_UNUSED;
 
-		visdn_chan->is_voice = TRUE;
-		visdn_chan->is_framed = FALSE;
-		visdn_chan->handle_stream = TRUE;
-
 		if (options) {
 			if (strchr(options, 'D')) {
 				bc->information_transfer_capability =
 					Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
 				bc->user_information_layer_1_protocol =
 					Q931_IE_BC_UIL1P_UNUSED;
-
-				visdn_chan->is_voice = FALSE;
-				visdn_chan->is_framed = TRUE;
-				visdn_chan->handle_stream = FALSE;
-				visdn_chan->handle_stream = TRUE;
 			}
 
 			if (strchr(options, 'V')) {
@@ -850,14 +898,16 @@ bc_failure:;
 					Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL;
 				bc->user_information_layer_1_protocol =
 					Q931_IE_BC_UIL1P_G7XX_VIDEO;
-
-				visdn_chan->is_voice = FALSE;
-				visdn_chan->is_framed = FALSE;
-				visdn_chan->handle_stream = TRUE;
 			}
 		}
 
-		q931_ies_add_put(&ies, &bc->ie);
+		visdn_chan->bc = bc;
+
+		q931_ies_add(&ies, &bc->ie);
+
+		BOOL supported = visdn_chan_update_bc_cache(visdn_chan, bc);
+
+		assert(supported);
 	}
 
 	/* ------------- High Layer Compatibility ---------------- */
@@ -1719,7 +1769,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 							VISDN_CHAN_TYPE)) {
 			pi->progress_description =
 				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
-		} else if (visdn_chan->is_voice) {
+		} else if (visdn_chan->supports_inband_tones) {
 			pi->progress_description =
 				Q931_IE_PI_PD_IN_BAND_INFORMATION;
 		}
@@ -2093,30 +2143,7 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return &f;
 	}
 
-	if (visdn_chan->up_dump_fd >= 0) {
-		write(visdn_chan->up_dump_fd, visdn_chan->frame_out_buf, nread);
-	}
-
-	if (visdn_chan->is_framed) {
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-
-		ast_verbose(VERBOSE_PREFIX_3 "R %.3f %04d ",
-			t/1000000.0,
-			nread);
-
-		int i;
-		for (i=0; i<nread; i++) {
-			ast_verbose("%02x", ((__u8 *)visdn_chan)[i]);
-		}
-
-		ast_verbose("\n");
-
-		return &f;
-	} else {
-
-#if 1
+#if 0
 struct timeval tv;
 gettimeofday(&tv, NULL);
 ast_verbose("R %.3f %4d     %02x%02x%02x%02x%02x%02x%02x%02x\n",
@@ -2140,19 +2167,18 @@ for(i=0; i<nread; i++)
 ast_verbose("\n");
 #endif
 
-		f.frametype = AST_FRAME_VOICE;
-		f.subclass = AST_FORMAT_ALAW;
-		f.samples = nread;
-		f.datalen = nread;
-		f.data = visdn_chan->frame_out_buf;
-		f.offset = 0;
+	f.frametype = visdn_chan->ast_frame_type;
+	f.subclass = visdn_chan->ast_frame_subclass;
+	f.samples = nread;
+	f.datalen = nread;
+	f.data = visdn_chan->frame_out_buf;
+	f.offset = 0;
 
 /*		struct ast_frame *f2 =
 			ast_dsp_process(ast_chan, visdn_chan->dsp, &f);
 		return f2;*/
 
-		return &f;
-	}
+	return &f;
 }
 
 #define FIFO_JITTBUFF_LOW 10
@@ -2207,6 +2233,7 @@ static int visdn_write(
 
 	if (pressure < FIFO_JITTBUFF_LOW) {
 		int diff = (FIFO_JITTBUFF_LOW - pressure);
+
 		buf = malloc(len + diff);
 		memset(buf, 0x2a, diff);
 		memcpy(buf + diff, frame->data, len);
@@ -2247,7 +2274,7 @@ static int visdn_write(
 		ast_log(LOG_ERROR, "write(): %s\n", strerror(errno));
 	}
 
-#if 1
+#if 0
 struct timeval tv;
 gettimeofday(&tv, NULL);
 ast_verbose("W %.3f %4d %3d %02x%02x%02x%02x%02x%02x%02x%02x\n",
@@ -2697,10 +2724,11 @@ static void visdn_q931_alerting_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	if (!ast_chan)
+	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_handle_eventual_progind(visdn_chan, ies);
@@ -2719,10 +2747,11 @@ static void visdn_q931_connect_indication(
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	if (!ast_chan)
+	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 
@@ -2772,12 +2801,13 @@ static void visdn_q931_disconnect_indication(
 	const struct q931_ies *ies)
 {
 	struct visdn_chan *visdn_chan = q931_call->pvt;
+
+	if (!visdn_chan)
+		return;
+
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	FUNC_DEBUG();
-
-	if (!ast_chan)
-		return;
 
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_handle_eventual_progind(visdn_chan, ies);
@@ -2808,10 +2838,11 @@ static void visdn_q931_info_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	if (!ast_chan)
+	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	if (q931_call->state != U2_OVERLAP_SENDING &&
 	    q931_call->state != N2_OVERLAP_SENDING &&
@@ -2854,9 +2885,8 @@ static void visdn_q931_more_info_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	if (!ast_chan)
+	if (!visdn_chan)
 		return;
 
 	if (visdn_chan->sent_digits < strlen(visdn_chan->number)) {
@@ -2901,10 +2931,11 @@ static void visdn_q931_proceeding_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	if (!ast_chan)
+	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_handle_eventual_progind(visdn_chan, ies);
@@ -2922,10 +2953,11 @@ static void visdn_q931_progress_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	if (!ast_chan)
+	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_handle_eventual_progind(visdn_chan, ies);
@@ -2995,6 +3027,9 @@ static void visdn_q931_reject_indication(
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
+	if (!visdn_chan)
+		return;
+
 	visdn_hunt_next_or_hangup(visdn_chan, ies);
 }
 
@@ -3021,6 +3056,9 @@ static void visdn_q931_release_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
+
+	if (!visdn_chan)
+		return;
 
 	visdn_hunt_next_or_hangup(visdn_chan, ies);
 }
@@ -3188,14 +3226,15 @@ static void visdn_q931_setup_confirm(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
+
+	if (!visdn_chan)
+		return;
+
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	if (q931_call->intf->role == LAPD_INTF_ROLE_NT)
 		q931_send_primitive(q931_call,
 				Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
-
-	if (!ast_chan)
-		return;
 
 	ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 
@@ -3518,6 +3557,9 @@ static void visdn_q931_setup_indication(
 		}
 	}
 
+	/* Bearer Capability is a mandatory IE. q.931 should never let us
+	 * receive a message coming from an invalid frame
+	 */
 	assert(bc);
 
 	char called_number[32] = "";
@@ -3557,51 +3599,8 @@ static void visdn_q931_setup_indication(
 			"_BEARERCAP_RAW", raw_bc_text);
 	}
 
-	if (bc->information_transfer_capability ==
-			Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
-	    bc->user_information_layer_1_protocol ==
-			Q931_IE_BC_UIL1P_UNUSED) {
+	if (!visdn_chan_update_bc_cache(visdn_chan, bc)) {
 
-		ast_log(LOG_DEBUG,
-			"Bearer capability is PPP, not handling stream\n");
-
-		pbx_builtin_setvar_helper(ast_chan,
-			"_BEARERCAP_CLASS", "data");
-
-		visdn_chan->is_voice = FALSE;
-		visdn_chan->is_framed = TRUE;
-		visdn_chan->handle_stream = FALSE;
-		q931_call->tones_option = FALSE;
-	} else if (bc->information_transfer_capability ==
-			Q931_IE_BC_ITC_UNRESTRICTED_DIGITAL &&
-	           bc->user_information_layer_1_protocol ==
-			Q931_IE_BC_UIL1P_G7XX_VIDEO) {
-
-ast_log(LOG_NOTICE, "Video going through!\n");
-
-/*		if (visdn_numbers_list_match(&ic->trans_numbers_list,
-						called_number)) {*/
-		pbx_builtin_setvar_helper(ast_chan,
-			"_BEARERCAP_CLASS", "video");
-
-		visdn_chan->is_voice = TRUE;
-		visdn_chan->is_framed = FALSE;
-		visdn_chan->handle_stream = TRUE;
-		q931_call->tones_option = FALSE;
-
-	} else if (bc->information_transfer_capability ==
-			Q931_IE_BC_ITC_SPEECH ||
-		    bc->information_transfer_capability ==
-			Q931_IE_BC_ITC_3_1_KHZ_AUDIO) {
-
-		visdn_chan->is_voice = TRUE;
-		visdn_chan->is_framed = FALSE;
-		visdn_chan->handle_stream = TRUE;
-		q931_call->tones_option = ic->tones_option;
-
-		pbx_builtin_setvar_helper(ast_chan,
-			"_BEARERCAP_CLASS", "voice");
-	} else {
 		visdn_debug("Unsupported bearer capability, rejecting call\n");
 
 		Q931_DECLARE_IES(ies);
@@ -3619,6 +3618,14 @@ ast_log(LOG_NOTICE, "Video going through!\n");
 
 		goto err_unsupported_bearercap;
 	}
+
+	if (visdn_chan->supports_inband_tones)
+		q931_call->tones_option = ic->tones_option;
+	else
+		q931_call->tones_option = FALSE;
+
+	q931_ie_get(&bc->ie);
+	visdn_chan->bc = bc;
 
 	/* ------ Handle HLC ------ */
 	if (hlc) {
@@ -3844,7 +3851,7 @@ no_cgpn:;
 			q931_ies_add_put(&ies_proc, &cause->ie);
 
 			Q931_DECLARE_IES(ies_disc);
-			if (visdn_chan->is_voice) {
+			if (visdn_chan->supports_inband_tones) {
 				struct q931_ie_progress_indicator *pi =
 					q931_ie_progress_indicator_alloc();
 				pi->coding_standard = Q931_IE_PI_CS_CCITT;
@@ -3935,15 +3942,15 @@ static void visdn_q931_suspend_indication(
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
-
 	enum q931_ie_cause_value cause;
 
-	if (!ast_chan) {
+	if (!visdn_chan) {
 		ast_log(LOG_WARNING, "Unexpexted ast_chan missing\n");
 		cause = Q931_IE_C_CV_RESOURCES_UNAVAILABLE;
 		goto err_ast_chan;
 	}
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	struct q931_ie_call_identity *ci = NULL;
 
@@ -4331,14 +4338,6 @@ static void visdn_q931_connect_channel(
 		goto err_open_userport;
 	}
 
-char name[64];
-sprintf(name, "/tmp/stream-%d", channel->id + 1);
-
-visdn_chan->up_dump_fd = open(name, O_WRONLY | O_CREAT);
-if (visdn_chan->up_dump_fd < 0) {
-	ast_log(LOG_ERROR, "Open: %s\n", strerror(errno));
-}
-
 	ast_chan->fds[0] = visdn_chan->up_fd;
 
 	__u32 node_id;
@@ -4519,12 +4518,13 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 	FUNC_DEBUG();
 
 	struct visdn_chan *visdn_chan = channel->call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	// Unfortunately, after ast_hangup the channel is not valid
 	// anymore and we cannot generate further tones thought we should
 	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	switch (tone) {
 	case Q931_TONE_DIAL:
@@ -5102,7 +5102,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 		ast_cli(fd,
 			"Number               : %s%s\n"
 			"Options              : %s\n"
-			"Is voice             : %s\n"
+			"Supports inband tones: %s\n"
 			"Handle stream        : %s\n"
 			"Streamport NodeID    : 0x%08x\n"
 //			"EC NearEnd Chanid    : %06d\n"
@@ -5113,7 +5113,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 			visdn_chan->number,
 			visdn_chan->sending_complete ? " (SC)" : "",
 			visdn_chan->options,
-			visdn_chan->is_voice ? "Yes" : "No",
+			visdn_chan->supports_inband_tones ? "Yes" : "No",
 			visdn_chan->handle_stream ? "Yes" : "No",
 			visdn_chan->node_userport ?
 				visdn_chan->node_userport->id : -1,

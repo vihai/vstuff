@@ -82,11 +82,15 @@ struct visdn_chan {
 	struct visdn_suspended_call *suspended_call;
 
 	int is_framed;
-	int is_voice;
+	int supports_inband_tones;
+
+	struct q931_ie_bearer_capability *bc;
+	int ast_frame_type;
+	int ast_frame_subclass;
+
 	int handle_stream;
 
 	int up_fd;
-	int up_dump_fd;
 //	int ec_fd;
 
 	struct ks_node *node_userport;

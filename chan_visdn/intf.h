@@ -118,7 +118,7 @@ struct visdn_intf
 	int mgmt_fd;
 
 	struct visdn_ic *current_ic;
-	
+
 	struct list_head suspended_calls;
 
 	struct q931_interface *q931_intf;

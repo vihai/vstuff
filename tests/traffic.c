@@ -365,7 +365,8 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 	int expected = -1;
 	for (i=0;;i++) {
 		if (poll(&polls, 1, -1) < 0) {
-			fprintf(stderr, "%spoll: %s\n", prefix, strerror(errno));
+			fprintf(stderr, "%spoll: %s\n", prefix,
+						strerror(errno));
 			exit(1);
 		}
 
@@ -383,7 +384,7 @@ void start_sink(int s, const char *prefix, struct opts *opts)
 					break;
 				} else if (errno == EALREADY) {
 					printf("%sDL-ESTABLISH-INDICATION\n",
-						       		prefix);
+								prefix);
 					continue;
 				} else if (errno == ENOTCONN) {
 					printf("%sDL-RELEASE-CONFIRM\n",
@@ -496,7 +497,10 @@ void start_accept_loop(int argc, char *argv[], struct opts *opts)
 		exit(1);
 	}
 
-	listen(accept_socket, 10);
+	if (listen(accept_socket, 10) < 0) {
+		fprintf(stderr, "listen: %s\n", strerror(errno));
+		exit(1);
+	}
 
 	struct pollfd polls;
 
@@ -653,7 +657,7 @@ int main(int argc, char *argv[])
 
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
-	memset(&opts, 0x00, sizeof(opts));
+	memset(&opts, 0, sizeof(opts));
 	opts.mode = MODE_SINK;
 	opts.frame_type = FRAME_TYPE_IFRAME;
 	opts.frame_size = 100;
@@ -678,49 +682,43 @@ int main(int argc, char *argv[])
 	int optidx;
 
 	for(;;) {
+		struct option no_opt ={ "", no_argument, 0, 0 };
+		struct option *opt;
+
 		c = getopt_long(argc, argv, "l:i:udb", options,
 			&optidx);
 
 		if (c == -1)
 			break;
 
-		if (c == 'a' || (c == 0 &&
-		    !strcmp(options[optidx].name, "listen"))) {
+		opt = c ? &no_opt : &options[optidx];
+
+		if (c == 'a' || !strcmp(opt->name, "listen")) {
 			opts.listen = 1;
-		} else if (c == 't' || (c == 0 &&
-		    !strcmp(options[optidx].name, "tei"))) {
+		} else if (c == 't' || !strcmp(opt->name, "tei")) {
 			opts.tei = atoi(optarg);
-		} else if (c == 'l' || (c == 0 &&
-		    !strcmp(options[optidx].name, "length"))) {
+		} else if (c == 'l' || !strcmp(opt->name, "length")) {
 			opts.frame_size = atoi(optarg);
-		} else if (c == 'i' || (c == 0 &&
-		    !strcmp(options[optidx].name, "interval"))) {
+		} else if (c == 'i' || !strcmp(opt->name, "interval")) {
 			opts.interval = atoi(optarg);
-		} else if (c == 0 &&
-		    !strcmp(options[optidx].name, "sink")) {
-				opts.mode = MODE_SINK;
-		} else if (c == 0 &&
-		    !strcmp(options[optidx].name, "source")) {
-				opts.mode = MODE_SOURCE;
-		} else if (c == 0 &&
-		    !strcmp(options[optidx].name, "loopback")) {
-				opts.mode = MODE_LOOPBACK;
-		} else if (c == 0 &&
-		    !strcmp(options[optidx].name, "null")) {
-				opts.mode = MODE_NULL;
-		} else if (c == 'd' || (c == 0 &&
-		    !strcmp(options[optidx].name, "debug"))) {
+		} else if (c == 0 && !strcmp(opt->name, "sink")) {
+			opts.mode = MODE_SINK;
+		} else if (c == 0 && !strcmp(opt->name, "source")) {
+			opts.mode = MODE_SOURCE;
+		} else if (c == 0 && !strcmp(opt->name, "loopback")) {
+			opts.mode = MODE_LOOPBACK;
+		} else if (c == 0 && !strcmp(opt->name, "null")) {
+			opts.mode = MODE_NULL;
+		} else if (c == 'd' || !strcmp(opt->name, "debug")) {
 			opts.socket_debug = 1;
-		} else if (c == 'u' || (c == 0 &&
-		    !strcmp(options[optidx].name, "uframe"))) {
+		} else if (c == 'u' || !strcmp(opt->name, "uframe")) {
 			opts.frame_type = FRAME_TYPE_UFRAME;
 		} else {
 			if (c)
 				fprintf(stderr,"Unknow option -%c\n", c);
 			else
-				fprintf(stderr,
-					"Unknow option %s\n",
-					options[optidx].name);
+				fprintf(stderr, "Unknow option %s\n",
+							opt->name);
 
 			print_usage(argv[0]);
 			return 1;

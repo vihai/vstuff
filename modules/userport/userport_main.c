@@ -349,7 +349,7 @@ static int ksup_chan_rx_chan_push_frame(
 	return 0;
 }
 
-struct vss_chan_ops ksup_chan_rx_chan_node_ops =
+struct kss_chan_from_ops ksup_chan_rx_chan_node_ops =
 {
 	.push_frame	= ksup_chan_rx_chan_push_frame,
 	.push_raw	= ksup_chan_rx_chan_push_raw,
@@ -628,7 +628,7 @@ static int ksup_cdev_open(
 		ks_chan_init(chan->ks_chan_rx, &ksup_chan_rx_chan_ops,
 				"rx", NULL,
 				&chan->ks_node.kobj,
-				&vss_softswitch.ks_node,
+				&kss_softswitch.ks_node,
 				&chan->ks_node);
 
 		chan->ks_chan_rx->driver_data = chan;
@@ -650,7 +650,7 @@ static int ksup_cdev_open(
 				"tx", NULL,
 				&chan->ks_node.kobj,
 				&chan->ks_node,
-				&vss_softswitch.ks_node);
+				&kss_softswitch.ks_node);
 
 		chan->ks_chan_tx->driver_data = chan;
 /*		chan->ks_chan_tx.framed_mtu = -1;
@@ -849,15 +849,15 @@ static ssize_t ksup_cdev_write_stream(
 
 	sf->len = copied_bytes;
 
-	err = vss_chan_push_raw(chan->ks_chan_tx, sf);
+	err = kss_chan_push_raw(chan->ks_chan_tx, sf);
 	if (err < 0)
-		goto err_vss_chan_push_raw;
+		goto err_kss_chan_push_raw;
 
 	ks_sf_put(sf);
 
 	return copied_bytes;
 
-err_vss_chan_push_raw:
+err_kss_chan_push_raw:
 err_copy_from_user:
 	ks_sf_put(sf);
 err_sf_alloc:
@@ -893,12 +893,12 @@ static ssize_t ksup_cdev_write_frame(
 		goto err_copy_from_user;
 	}
 
-	res = vss_chan_push_frame(chan->ks_chan_tx, skb);
+	res = kss_chan_push_frame(chan->ks_chan_tx, skb);
 	switch(res) {
-	case KS_TX_OK:
+	case KSS_TX_OK:
 		return count;
-	case KS_TX_BUSY:
-	case KS_TX_LOCKED:
+	case KSS_TX_BUSY:
+	case KSS_TX_LOCKED:
 		kfree_skb(skb);
 		return -EBUSY;
 	}
@@ -981,7 +981,7 @@ static int ksup_cdev_ioctl(
 		int pressure;
 
 		if (chan->ks_chan_tx)
-			pressure = vss_chan_get_pressure(chan->ks_chan_tx);
+			pressure = kss_chan_get_pressure(chan->ks_chan_tx);
 		else
 			pressure = 0;
 

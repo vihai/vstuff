@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-bin_PROGRAMS = vgsm_stress sniffer ksmonitor # jitter traffic listener
+bin_PROGRAMS = vgsm_stress sniffer ksmonitor traffic # jitter  listener
 
 INCLUDES = \
 	-I$(top_srcdir)/include/		\

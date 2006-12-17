@@ -24,18 +24,45 @@
 
 #include "softswitch.h"
 
-struct vss_softswitch vss_softswitch;
-EXPORT_SYMBOL(vss_softswitch);
+struct kss_softswitch kss_softswitch;
+EXPORT_SYMBOL(kss_softswitch);
 
-#define to_vss_softswitch(ks_node)	\
-		container_of((ks_node), struct vss_softswitch, ks_node)
+#define to_kss_softswitch(ks_node)	\
+		container_of((ks_node), struct kss_softswitch, ks_node)
 
-int vss_chan_push_frame(struct ks_chan *chan, struct sk_buff *skb)
+void kss_chan_wake_queue(struct ks_chan *chan)
+{
+	struct ks_chan *from_chan;
+
+	BUG_ON(chan->to != &kss_softswitch.ks_node);
+
+	rcu_read_lock();
+	if (!chan->pipeline ||
+	    chan->pipeline_entry.next == &chan->pipeline->entries) {
+		rcu_read_unlock();
+		return;
+	}
+
+	from_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
+							pipeline_entry);
+
+	if (!((struct kss_chan_to_ops *)from_chan->to_ops)->wake_queue) {
+		rcu_read_unlock();
+		return;
+	}
+
+	((struct kss_chan_to_ops *)from_chan->to_ops)->wake_queue(from_chan);
+
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL(kss_chan_wake_queue);
+
+int kss_chan_push_frame(struct ks_chan *chan, struct sk_buff *skb)
 {
 	struct ks_chan *to_chan;
 	int res;
 
-	BUG_ON(chan->to != &vss_softswitch.ks_node);
+	BUG_ON(chan->to != &kss_softswitch.ks_node);
 
 	rcu_read_lock();
 	if (!chan->pipeline ||
@@ -47,28 +74,28 @@ int vss_chan_push_frame(struct ks_chan *chan, struct sk_buff *skb)
 	to_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
 							pipeline_entry);
 
-	if (!((struct vss_chan_ops *)to_chan->from_ops)->push_frame) {
+	if (!((struct kss_chan_from_ops *)to_chan->from_ops)->push_frame) {
 		rcu_read_unlock();
 		return -EOPNOTSUPP;
 	}
 
-	res = ((struct vss_chan_ops *)to_chan->from_ops)->
+	res = ((struct kss_chan_from_ops *)to_chan->from_ops)->
 			push_frame(to_chan, skb);
 
 	rcu_read_unlock();
 
 	return res;
 }
-EXPORT_SYMBOL(vss_chan_push_frame);
+EXPORT_SYMBOL(kss_chan_push_frame);
 
-int vss_chan_push_raw(
+int kss_chan_push_raw(
 	struct ks_chan *chan,
 	struct ks_streamframe *sf)
 {
 	struct ks_chan *to_chan;
 	int res;
 
-	BUG_ON(chan->to != &vss_softswitch.ks_node);
+	BUG_ON(chan->to != &kss_softswitch.ks_node);
 
 	rcu_read_lock();
 	if (!chan->pipeline ||
@@ -80,26 +107,26 @@ int vss_chan_push_raw(
 	to_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
 							pipeline_entry);
 
-	if (!((struct vss_chan_ops *)to_chan->from_ops)->push_raw) {
+	if (!((struct kss_chan_from_ops *)to_chan->from_ops)->push_raw) {
 		rcu_read_unlock();
 		return -EOPNOTSUPP;
 	}
 
-	res = ((struct vss_chan_ops *)to_chan->from_ops)->
+	res = ((struct kss_chan_from_ops *)to_chan->from_ops)->
 			push_raw(to_chan, sf);
 
 	rcu_read_unlock();
 
 	return res;
 }
-EXPORT_SYMBOL(vss_chan_push_raw);
+EXPORT_SYMBOL(kss_chan_push_raw);
 
-int vss_chan_get_pressure(struct ks_chan *chan)
+int kss_chan_get_pressure(struct ks_chan *chan)
 {
 	struct ks_chan *to_chan;
 	int res;
 
-	BUG_ON(chan->to != &vss_softswitch.ks_node);
+	BUG_ON(chan->to != &kss_softswitch.ks_node);
 
 	rcu_read_lock();
 	if (!chan->pipeline ||
@@ -111,27 +138,27 @@ int vss_chan_get_pressure(struct ks_chan *chan)
 	to_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
 							pipeline_entry);
 
-	if (!((struct vss_chan_ops *)to_chan->from_ops)->get_pressure) {
+	if (!((struct kss_chan_from_ops *)to_chan->from_ops)->get_pressure) {
 		rcu_read_unlock();
 		return -EOPNOTSUPP;
 	}
 
-	res = ((struct vss_chan_ops *)to_chan->from_ops)->
+	res = ((struct kss_chan_from_ops *)to_chan->from_ops)->
 			get_pressure(to_chan);
 
 	rcu_read_unlock();
 
 	return res;
 }
-EXPORT_SYMBOL(vss_chan_get_pressure);
+EXPORT_SYMBOL(kss_chan_get_pressure);
 
-static void vss_release(struct ks_node *node)
+static void kss_release(struct ks_node *node)
 {
-	printk(KERN_DEBUG "vss_release()\n");
+	printk(KERN_DEBUG "kss_release()\n");
 }
 
 #if 0
-static int vss_frame_xmit(
+static int kss_frame_xmit(
 	struct ks_node *ks_node,
 	struct visdn_leg *src_leg,
 	struct sk_buff *skb)
@@ -158,7 +185,7 @@ static int vss_frame_xmit(
 	return res;
 }
 	
-static void vss_start_queue(
+static void kss_start_queue(
 	struct ks_node *node,
 	struct visdn_leg *src_leg)
 {
@@ -180,7 +207,7 @@ static void vss_start_queue(
 	}
 }
 
-static void vss_stop_queue(
+static void kss_stop_queue(
 	struct ks_node *node,
 	struct visdn_leg *src_leg)
 {
@@ -202,7 +229,7 @@ static void vss_stop_queue(
 	}
 }
 
-static void vss_wake_queue(
+static void kss_wake_queue(
 	struct ks_node *node,
 	struct visdn_leg *src_leg)
 {
@@ -224,7 +251,7 @@ static void vss_wake_queue(
 	}
 }
 
-static void vss_rx_error(
+static void kss_rx_error(
 	struct ks_node *node,
 	struct visdn_leg *src_leg,
 	enum visdn_leg_rx_error_code code)
@@ -250,7 +277,7 @@ static void vss_rx_error(
 	}
 }
 
-static void vss_tx_error(
+static void kss_tx_error(
 	struct ks_node *node,
 	struct visdn_leg *src_leg,
 	enum visdn_leg_tx_error_code code)
@@ -274,51 +301,51 @@ static void vss_tx_error(
 }
 #endif 
 
-struct ks_node_ops vss_ops =
+struct ks_node_ops kss_ops =
 {
 	.owner		= THIS_MODULE,
-	.release	= vss_release,
-/*	.timer_func	= vss_timer_func,
+	.release	= kss_release,
+/*	.timer_func	= kss_timer_func,
 
-	.frame_xmit	= vss_frame_xmit,
+	.frame_xmit	= kss_frame_xmit,
 
-	.start_queue	= vss_start_queue,
-	.stop_queue	= vss_stop_queue,
-	.wake_queue	= vss_wake_queue,
+	.start_queue	= kss_start_queue,
+	.stop_queue	= kss_stop_queue,
+	.wake_queue	= kss_wake_queue,
 
-	.rx_error	= vss_rx_error,
-	.tx_error	= vss_tx_error,*/
+	.rx_error	= kss_rx_error,
+	.tx_error	= kss_tx_error,*/
 };
 
-static int __init vss_init_module(void)
+static int __init kss_init_module(void)
 {
 	int err;
 
-	memset(&vss_softswitch, 0, sizeof(vss_softswitch));
+	memset(&kss_softswitch, 0, sizeof(kss_softswitch));
 
-	ks_node_init(&vss_softswitch.ks_node,
-			&vss_ops, "softswitch",
+	ks_node_init(&kss_softswitch.ks_node,
+			&kss_ops, "softswitch",
 			NULL);
 
-	err = ks_node_register(&vss_softswitch.ks_node);
+	err = ks_node_register(&kss_softswitch.ks_node);
 	if (err < 0)
 		goto err_ks_node_register;
 
 	return 0;
 
-	ks_node_unregister(&vss_softswitch.ks_node);
+	ks_node_unregister(&kss_softswitch.ks_node);
 err_ks_node_register:
 
 	return err;
 }
-module_init(vss_init_module);
+module_init(kss_init_module);
 
-static void __exit vss_modexit(void)
+static void __exit kss_modexit(void)
 {
-	ks_node_unregister(&vss_softswitch.ks_node);
+	ks_node_unregister(&kss_softswitch.ks_node);
 }
-module_exit(vss_modexit);
+module_exit(kss_modexit);
 
-MODULE_DESCRIPTION(vss_MODULE_DESCR);
+MODULE_DESCRIPTION(kss_MODULE_DESCR);
 MODULE_AUTHOR("Daniele (Vihai) Orlandi <daniele@orlandi.com>");
 MODULE_LICENSE("GPL");

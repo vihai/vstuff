@@ -175,7 +175,7 @@ static void vmw_chan_init(struct vmw_chan *chan)
 	ks_chan_init(&chan->ks_chan, &vmw_chan_tx_chan_ops, "tx", NULL,
 			&chan->ks_node.kobj,
 			&chan->ks_node,
-			&vss_softswitch.ks_node);
+			&kss_softswitch.ks_node);
 
 /*	chan->ks_chan.framed_mtu = -1;
 	chan->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
@@ -253,15 +253,15 @@ static void vmw_chan_unregister(struct vmw_chan *chan)
 
 	sf->len = copied_bytes;
 
-	err = vss_chan_push_raw(&chan->ks_chan, sf);
+	err = kss_chan_push_raw(&chan->ks_chan, sf);
 	if (err < 0)
-		goto err_vss_chan_push_raw;
+		goto err_kss_chan_push_raw;
 
 	visdn_sf_put(sf);
 
 	return copied_bytes;
 
-err_vss_chan_push_raw:
+err_kss_chan_push_raw:
 err_copy_from_user:
 	visdn_sf_put(sf);
 err_sf_alloc:

@@ -89,12 +89,12 @@
 ; clip_enabled = Yes
 ;	Enabled Calling Line Identification Presentation service.
 ;	## role: network
-;	
+;
 ; clip_override = No
 ;	Override Calling Line Presentation Restriction and always present
 ;	the CLI.
 ;	## role: network
-;	
+;
 ; clip_default_name = ""
 ;	Name applied to CLIP information coming from the network
 ;	Default:
@@ -237,7 +237,7 @@ tones_option = yes
 outbound_called_ton = unknown
 force_outbound_cli =
 force_outbound_cli_ton = no
-clip_default_name = QuadBRI Port 0 
+clip_default_name = QuadBRI Port 0
 clip_default_number = 200
 clip_numbers = 200
 clir_mode = unrestricted_default

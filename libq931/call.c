@@ -360,8 +360,6 @@ void _q931_call_put(struct q931_call *call,
 			q931_dlc_put(call->dlc);
 		}
 
-		q931_intf_del_call(call);
-
 		free(call);
 	}
 }
@@ -369,6 +367,7 @@ void _q931_call_put(struct q931_call *call,
 void q931_call_release_reference(
 	struct q931_call *call)
 {
+	q931_intf_del_call(call);
 	q931_call_put(call);
 }
 

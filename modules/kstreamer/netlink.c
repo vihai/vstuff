@@ -27,18 +27,12 @@
 #include "pipeline.h"
 
 struct sock *ksnl;
+
 static struct workqueue_struct *ks_netlink_rcv_wq;
 
-#define KS_NETLINK_XACTS_HASHBITS	8
-#define KS_NETLINK_XACTS_HASHSIZE	((1 << KS_NETLINK_XACTS_HASHBITS) - 1)
-
-static struct hlist_head ks_xacts_hash[KS_NETLINK_XACTS_HASHSIZE];
-spinlock_t ks_xacts_hash_lock = SPIN_LOCK_UNLOCKED;
-
-static inline struct hlist_head *ks_xacts_get_hash(u32 pid)
-{
-	return &ks_xacts_hash[pid & (KS_NETLINK_XACTS_HASHSIZE - 1)];
-}
+static spinlock_t ks_cur_xact_lock = SPIN_LOCK_UNLOCKED;
+static struct ks_xact *cur_xact = NULL;
+static struct sk_buff_head ks_backlog;
 
 int ks_kobj_make_path(struct kobject *kobj, void *buf)
 {
@@ -128,6 +122,7 @@ static struct ks_xact *ks_xact_alloc(u32 pid, u32 id)
 	return xact;
 }
 
+#if 0
 static struct ks_xact *ks_xact_get(struct ks_xact *xact)
 {
 	BUG_ON(!xact);
@@ -138,6 +133,7 @@ static struct ks_xact *ks_xact_get(struct ks_xact *xact)
 
 	return xact;
 }
+#endif
 
 static void ks_xact_put(struct ks_xact *xact)
 {
@@ -153,24 +149,6 @@ static void ks_xact_put(struct ks_xact *xact)
 	}
 }
 
-
-static struct ks_xact *ks_xact_get_by_pid(u32 pid)
-{
-	struct ks_xact *xact;
-	struct hlist_node *t;
-
-	spin_lock(&ks_xacts_hash_lock);
-	hlist_for_each_entry(xact, t, ks_xacts_get_hash(pid), node) {
-		if (xact->pid == pid) {
-			ks_xact_get(xact);
-			spin_unlock(&ks_xacts_hash_lock);
-			return xact;
-		}
-	}
-	spin_unlock(&ks_xacts_hash_lock);
-
-	return NULL;
-}
 
 void ks_xact_need_skb(struct ks_xact *xact)
 {
@@ -250,14 +228,6 @@ nlmsg_failure:
 	goto retry;
 }
 
-static void ks_xact_add(struct ks_xact *xact)
-{
-	spin_lock(&ks_xacts_hash_lock);
-	hlist_add_head(&ks_xact_get(xact)->node,
-			ks_xacts_get_hash(xact->pid));
-	spin_unlock(&ks_xacts_hash_lock);
-}
-
 int ks_cmd_done(
 	struct ks_command *cmd,
 	struct ks_xact *xact,
@@ -335,13 +305,7 @@ printk(KERN_DEBUG "Xact Committing\n");
 
 	ks_xact_send_control(xact, KS_NETLINK_COMMIT, NLM_F_ACK);
 
-	spin_lock(&ks_xacts_hash_lock);
-	hlist_del(&xact->node);
-	spin_unlock(&ks_xacts_hash_lock);
-
-//	up_read(&kstreamer_subsys.rwsem);
-
-	ks_xact_put(xact);
+	xact->flags |= KS_XACT_FLAGS_COMPLETED;
 
 printk(KERN_DEBUG "Xact Committed\n");
 
@@ -355,13 +319,7 @@ int ks_cmd_abort(
 {
 	ks_xact_send_control(xact, KS_NETLINK_ABORT, NLM_F_ACK);
 
-	spin_lock(&ks_xacts_hash_lock);
-	hlist_del(&xact->node);
-	spin_unlock(&ks_xacts_hash_lock);
-
-//	up_read(&kstreamer_subsys.rwsem);
-
-	ks_xact_put(xact);
+	xact->flags |= KS_XACT_FLAGS_COMPLETED;
 
 	return 0;
 }
@@ -441,7 +399,6 @@ static int ks_netlink_rcv_msg(
 	struct sk_buff *skb,
 	struct nlmsghdr *nlh)
 {
-	struct ks_xact *xact;
 	struct ks_command *cmd = NULL;
 	int i;
 	int err;
@@ -461,59 +418,32 @@ static int ks_netlink_rcv_msg(
 	if (!cmd)
 		return -EINVAL;
 
-	xact = ks_xact_get_by_pid(nlh->nlmsg_pid);
-	if (!xact) {
-		xact = ks_xact_alloc(nlh->nlmsg_pid, nlh->nlmsg_seq);
-		if (!xact)
-			return -ENOMEM;
+	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid) {
 
-		ks_xact_add(xact);
+		skb_queue_tail(&ks_backlog, skb);
 
-/*		if (cmd->flags & KS_CMD_WR)
-			xact->flags |= KS_XACT_FLAGS_WRITE;
+	} else {
+		if (!cur_xact) {
+			cur_xact = ks_xact_alloc(nlh->nlmsg_pid,
+						nlh->nlmsg_seq);
+			if (!cur_xact)
+				return -ENOMEM;
+		}
 
-		if (nlh->nlmsg_type == KS_BEGIN_READ ||
-		    nlh->nlmsg_type == KS_BEGIN_WRITE) {
-			xact->flags |= KS_XACT_FLAGS_PERSISTENT;
+		err = cmd->handler(cmd, cur_xact, nlh);
+		if (err < 0)
+			ks_xact_send_error(cur_xact, err);
 
-		if (xact->flags & KS_XACT_FLAGS_WRITE)
-			down_write(&kstreamer_subsys.rwsem);
-		else
-			down_read(&kstreamer_subsys.rwsem);*/
+		ks_xact_flush(cur_xact);
+
+		if (!(cur_xact->flags & KS_XACT_FLAGS_PERSISTENT) ||
+		     cur_xact->flags & KS_XACT_FLAGS_COMPLETED) {
+			spin_lock(&ks_cur_xact_lock);
+			ks_xact_put(cur_xact);
+			cur_xact = NULL;
+			spin_unlock(&ks_cur_xact_lock);
+		}
 	}
-
-/*	if (!(xact->flags & KS_XACT_FLAGS_PERSISTENT))
-		if (xact->flags & KS_XACT_FLAGS_WRITE)
-			down_write(&kstreamer_subsys.rwsem);
-		else
-			down_read(&kstreamer_subsys.rwsem);
-	}*/
-
-	err = cmd->handler(cmd, xact, nlh);
-	if (err < 0) {
-printk(KERN_DEBUG "ERRRRRRR = %d\n", err);
-		ks_xact_send_error(xact, err);
-	}
-
-	ks_xact_flush(xact);
-
-	if (!(xact->flags & KS_XACT_FLAGS_PERSISTENT)) {
-		spin_lock(&ks_xacts_hash_lock);
-		hlist_del(&xact->node);
-		spin_unlock(&ks_xacts_hash_lock);
-		ks_xact_put(xact);
-	}
-
-	ks_xact_put(xact);
-
-printk(KERN_DEBUG "Xact Committed\n");
-
-/*	if (!(xact->flags & KS_XACT_FLAGS_PERSISTENT))
-		if (xact->mode == KS_MODE_WRITE)
-			up_write(&kstreamer_subsys.rwsem);
-		else
-			up_read(&kstreamer_subsys.rwsem);
-	}*/
 
 	return 0;
 }
@@ -538,13 +468,19 @@ static int ks_netlink_rcv_skb(struct sk_buff *skb)
 		err = ks_netlink_rcv_msg(skb, nlh);
 		if (err < 0)
 			netlink_ack(skb, nlh, err);
-//		else if (nlh->nlmsg_flags & NLM_F_ACK)
-//			netlink_ack(skb, nlh, 0);
 
 		skb_pull(skb, rlen);
 	}
 
 	return 0;
+}
+
+static void ks_run_backlog(void)
+{
+	struct sk_buff *skb;
+
+	while ((skb = skb_dequeue(&ks_backlog)))
+		ks_netlink_rcv_skb(skb);
 }
 
 static void ks_netlink_rcv_work_func(void *data)
@@ -555,6 +491,11 @@ static void ks_netlink_rcv_work_func(void *data)
 		ks_netlink_rcv_skb(skb);
 		kfree_skb(skb);
 	}
+
+	if (!cur_xact)
+		ks_run_backlog();
+
+
 }
 
 static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func, NULL);
@@ -570,9 +511,7 @@ int ks_netlink_modinit(void)
 {
 	int err;
 
-	int i;
-	for (i=0; i<ARRAY_SIZE(ks_xacts_hash); i++)
-		INIT_HLIST_HEAD(&ks_xacts_hash[i]);
+	skb_queue_head_init(&ks_backlog);
 
 	ks_netlink_rcv_wq = create_workqueue("ksnl");
 	if (!ks_netlink_rcv_wq) {
@@ -587,7 +526,7 @@ int ks_netlink_modinit(void)
 		err = -ENOMEM;
 		goto err_netlink_kernel_create;
 	}
-		
+
 	netlink_set_nonroot(NETLINK_KSTREAMER, NL_NONROOT_RECV);
 
 	return 0;

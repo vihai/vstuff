@@ -201,25 +201,25 @@ enum q931_ie_bearer_capability_parity_information
 
 enum q931_ie_bearer_capability_duplex_mode
 {
-	Q931_IE_BC_DM_HALF_DUPLEX  	= 0x0,
-	Q931_IE_BC_DM_FULL_DUPLEX  	= 0x1
+	Q931_IE_BC_DM_HALF_DUPLEX	= 0x0,
+	Q931_IE_BC_DM_FULL_DUPLEX	= 0x1
 };
 
 enum q931_ie_bearer_capability_modem_type
 {
-	Q931_IE_BC_MT_V_21	  	= 0x0,
-	Q931_IE_BC_MT_V_22	  	= 0x1,
-	Q931_IE_BC_MT_V_22_BIS  	= 0x2,
-	Q931_IE_BC_MT_V_23	  	= 0x3,
-	Q931_IE_BC_MT_V_26	  	= 0x4,
-	Q931_IE_BC_MT_V_26_BIS	  	= 0x5,
-	Q931_IE_BC_MT_V_26_TER	  	= 0x6,
-	Q931_IE_BC_MT_V_27	  	= 0x7,
-	Q931_IE_BC_MT_V_27_BIS	  	= 0x8,
-	Q931_IE_BC_MT_V_27_TER	  	= 0x9,
-	Q931_IE_BC_MT_V_29	  	= 0xa,
-	Q931_IE_BC_MT_V_32	  	= 0xb,
-	Q931_IE_BC_MT_V_35	  	= 0xc,
+	Q931_IE_BC_MT_V_21		= 0x0,
+	Q931_IE_BC_MT_V_22		= 0x1,
+	Q931_IE_BC_MT_V_22_BIS		= 0x2,
+	Q931_IE_BC_MT_V_23		= 0x3,
+	Q931_IE_BC_MT_V_26		= 0x4,
+	Q931_IE_BC_MT_V_26_BIS		= 0x5,
+	Q931_IE_BC_MT_V_26_TER		= 0x6,
+	Q931_IE_BC_MT_V_27		= 0x7,
+	Q931_IE_BC_MT_V_27_BIS		= 0x8,
+	Q931_IE_BC_MT_V_27_TER		= 0x9,
+	Q931_IE_BC_MT_V_29		= 0xa,
+	Q931_IE_BC_MT_V_32		= 0xb,
+	Q931_IE_BC_MT_V_35		= 0xc,
 };
 
 enum q931_ie_bearer_capability_user_information_layer_2_protocol
@@ -281,7 +281,7 @@ int q931_ie_bearer_capability_read_from_buf(
 	int len,
 	void (*report_func)(int level, const char *format, ...),
 	struct q931_interface *intf);
-	
+
 int q931_ie_bearer_capability_write_to_buf(
 	const struct q931_ie *ie,
 	void *buf,

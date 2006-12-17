@@ -240,22 +240,22 @@ static void vnd_chan_rx_error(
 	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
-	case KS_RX_ERROR_DROPPED:
+	case KSS_RX_ERROR_DROPPED:
 		netdevice->stats.rx_errors++;
 		netdevice->stats.rx_dropped++;
 	break;
 
-	case KS_RX_ERROR_LENGTH:
+	case KSS_RX_ERROR_LENGTH:
 		netdevice->stats.rx_errors++;
 		netdevice->stats.rx_length_errors++;
 	break;
 
-	case KS_RX_ERROR_CRC:
+	case KSS_RX_ERROR_CRC:
 		netdevice->stats.rx_errors++;
 		netdevice->stats.rx_crc_errors++;
 	break;
 
-	case KS_RX_ERROR_FR_ABORT:
+	case KSS_RX_ERROR_FR_ABORT:
 		netdevice->stats.rx_errors++;
 		netdevice->stats.collisions++;
 	break;
@@ -269,7 +269,7 @@ static void vnd_chan_tx_error(
 	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
-	case KS_TX_ERROR_FIFO_FULL:
+	case KSS_TX_ERROR_FIFO_FULL:
 		netdevice->stats.tx_errors++;
 		netdevice->stats.tx_fifo_errors++;
 	break;
@@ -285,7 +285,7 @@ static struct ks_chan_ops vnd_chan_d_rx_ops = {
 	.close			= vnd_chan_d_rx_close,
 };
 
-static struct vss_chan_ops vnd_chan_d_rx_node_ops = {
+static struct kss_chan_from_ops vnd_chan_d_rx_softswitch_ops = {
 	.push_frame		= vnd_chan_d_rx_push_frame,
 
 //	.rx_error		= vnd_chan_rx_error,
@@ -430,20 +430,26 @@ static void vnd_chan_d_tx_disconnect(struct ks_chan *ks_chan)
 
 static int vnd_chan_d_tx_start(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice =
-		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
-	netif_start_queue(netdevice->netdev);
+//	netif_start_queue(netdevice->netdev);
 
 	return 0;
 }
 
 static void vnd_chan_d_tx_stop(struct ks_chan *ks_chan)
 {
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
+}
+
+static void vnd_chan_d_tx_wake_queue(struct ks_chan *ks_chan)
+{
 	struct vnd_netdevice *netdevice =
 		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_tx);
 
-	netif_stop_queue(netdevice->netdev);
+	netif_wake_queue(netdevice->netdev);
 }
 
 /*static void vnd_chan_wake_queue(struct ks_chan *ks_chan)
@@ -460,22 +466,22 @@ static void vnd_chan_tx_error(
 	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
-	case KS_RX_ERROR_DROPPED:
+	case KSS_RX_ERROR_DROPPED:
 		netdevice->stats.tx_errors++;
 		netdevice->stats.tx_dropped++;
 	break;
 
-	case KS_RX_ERROR_LENGTH:
+	case KSS_RX_ERROR_LENGTH:
 		netdevice->stats.tx_errors++;
 		netdevice->stats.tx_length_errors++;
 	break;
 
-	case KS_RX_ERROR_CRC:
+	case KSS_RX_ERROR_CRC:
 		netdevice->stats.tx_errors++;
 		netdevice->stats.tx_crc_errors++;
 	break;
 
-	case KS_RX_ERROR_FR_ABORT:
+	case KSS_RX_ERROR_FR_ABORT:
 		netdevice->stats.tx_errors++;
 		netdevice->stats.collisions++;
 	break;
@@ -489,7 +495,7 @@ static void vnd_chan_tx_error(
 	struct vnd_netdevice *netdevice = ks_chan->chan->driver_data;
 
 	switch(code) {
-	case KS_TX_ERROR_FIFO_FULL:
+	case KSS_TX_ERROR_FIFO_FULL:
 		netdevice->stats.tx_errors++;
 		netdevice->stats.tx_fifo_errors++;
 	break;
@@ -505,6 +511,13 @@ static struct ks_chan_ops vnd_chan_d_tx_ops = {
 	.close			= vnd_chan_d_tx_close,
 	.start			= vnd_chan_d_tx_start,
 	.stop			= vnd_chan_d_tx_stop,
+};
+
+static struct kss_chan_to_ops vnd_chan_d_tx_softswitch_ops = {
+	.wake_queue		= vnd_chan_d_tx_wake_queue,
+
+//	.rx_error		= vnd_chan_rx_error,
+//	.tx_error		= vnd_chan_tx_error,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -618,7 +631,7 @@ static struct ks_chan_ops vnd_chan_e_rx_ops = {
 	.close			= vnd_chan_e_rx_close,
 };
 
-static struct vss_chan_ops vnd_chan_e_rx_node_ops = {
+static struct kss_chan_from_ops vnd_chan_e_rx_node_ops = {
 	.push_frame		= vnd_chan_e_rx_push_frame,
 
 //	.rx_error		= vnd_chan_rx_error,
@@ -799,14 +812,18 @@ static int vnd_netdev_hard_start_xmit(
 	switch(prim_hdr->primitive_type) {
 	case LAPD_PH_DATA_REQUEST:
 		skb_pull(skb, sizeof(struct lapd_prim_hdr));
-		res = vss_chan_push_frame(&netdevice->ks_chan_d_tx, skb);
+		res = kss_chan_push_frame(&netdevice->ks_chan_d_tx, skb);
 		switch(res) {
-		case KS_TX_OK:
+		case KSS_TX_OK:
 			return NETDEV_TX_OK;
-		case KS_TX_BUSY:
+		case KSS_TX_FULL:
+			netif_stop_queue(netdevice->netdev);
 			skb_push(skb, sizeof(struct lapd_prim_hdr));
 			return NETDEV_TX_BUSY;
-		case KS_TX_LOCKED:
+		case KSS_TX_BUSY:
+			skb_push(skb, sizeof(struct lapd_prim_hdr));
+			return NETDEV_TX_BUSY;
+		case KSS_TX_LOCKED:
 			skb_push(skb, sizeof(struct lapd_prim_hdr));
 			return NETDEV_TX_LOCKED;
 		default:
@@ -1133,10 +1150,10 @@ static void vnd_netdevice_init(
 			&vnd_chan_d_rx_ops, "rx",
 			&netdevice->ks_duplex_d,
 			&netdevice->ks_duplex_d.kobj,
-			&vss_softswitch.ks_node,
+			&kss_softswitch.ks_node,
 			&netdevice->ks_node_d);
 
-	netdevice->ks_chan_d_rx.from_ops = &vnd_chan_d_rx_node_ops;
+	netdevice->ks_chan_d_rx.from_ops = &vnd_chan_d_rx_softswitch_ops;
 /*	netdevice->ks_chan_d_rx.framed_mtu = -1;
 	netdevice->ks_chan_d_rx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
@@ -1145,8 +1162,9 @@ static void vnd_netdevice_init(
 			&netdevice->ks_duplex_d,
 			&netdevice->ks_duplex_d.kobj,
 			&netdevice->ks_node_d,
-			&vss_softswitch.ks_node);
+			&kss_softswitch.ks_node);
 
+	netdevice->ks_chan_d_tx.to_ops = &vnd_chan_d_tx_softswitch_ops;
 /*	netdevice->ks_chan_d_tx.framed_mtu = -1;
 	netdevice->ks_chan_d_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
@@ -1174,7 +1192,7 @@ static void vnd_netdevice_init(
 			&vnd_chan_e_rx_ops, "rx",
 			&netdevice->ks_duplex_e,
 			&netdevice->ks_duplex_e.kobj,
-			&vss_softswitch.ks_node,
+			&kss_softswitch.ks_node,
 			&netdevice->ks_node_e);
 
 	netdevice->ks_chan_e_rx.from_ops = &vnd_chan_e_rx_node_ops;

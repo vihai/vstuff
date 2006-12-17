@@ -125,6 +125,7 @@ enum ks_xact_flags
 {
 	KS_XACT_FLAGS_WRITE,
 	KS_XACT_FLAGS_PERSISTENT,
+	KS_XACT_FLAGS_COMPLETED,
 };
 
 struct ks_xact

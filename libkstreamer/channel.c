@@ -350,7 +350,8 @@ void ks_chan_dump(
 
 		int i;
 		for(i=0; i<dynattr->len; i++)
-			sprintf(text + i * 2, "%02x", *(dynattr->payload + i));
+			sprintf((char *)text + i * 2,
+				"%02x", *(dynattr->payload + i));
 
 		report_conn(conn, LOG_DEBUG,
 			"  Dynattr: %s (%s)\n",
