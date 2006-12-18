@@ -11,8 +11,7 @@
 
 astmod_LTLIBRARIES = app_visdn_ppp.la
 app_visdn_ppp_la_SOURCES = app_visdn_ppp.c
-
-INCLUDES =					\
+app_visdn_ppp_la_CPPFLAGS =\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\

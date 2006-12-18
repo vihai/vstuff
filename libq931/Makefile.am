@@ -11,8 +11,6 @@
 
 lib_LTLIBRARIES = libq931.la
 
-INCLUDES = -I$(top_srcdir)/modules/include/
-
 libq931_la_SOURCES =			\
 	lib.c				\
 	input.c				\
@@ -50,10 +48,6 @@ libq931_la_SOURCES =			\
 	ie_sending_complete.c		\
 	call_inline.h			\
 	ces_inline.h
-
-libq931_la_LDFLAGS = -version-info 0:0:0
-
-libq931_ladir = libq931
 
 nobase_include_HEADERS =			\
 	libq931/call.h				\
@@ -94,6 +88,13 @@ nobase_include_HEADERS =			\
 	libq931/proto.h				\
 	libq931/timer.h				\
 	libq931/util.h
+
+libq931_la_LDFLAGS = -version-info 0:0:0
+
+libq931_ladir = libq931
+
+libq931_la_CPPFLAGS=\
+	-I$(top_srcdir)/modules/include/
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

@@ -11,19 +11,19 @@
 
 sbin_PROGRAMS = visdnctl
 
-INCLUDES = \
-	-I$(top_srcdir)/include/		\
-	-I$(top_srcdir)/modules/include/
-
 visdnctl_SOURCES = \
 	visdnctl.c		\
 	netdev.c
 
-visdnctl_LDADD =
-
 noinst_HEADERS = \
 	visdnctl.h		\
 	netdev.h
+
+visdnctl_CPPFLAGS = \
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/
+
+visdnctl_LDADD =
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

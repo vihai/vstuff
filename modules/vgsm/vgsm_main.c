@@ -602,12 +602,16 @@ static int __init vgsm_init(void)
 	vgsm_tty_driver->owner = THIS_MODULE;
 	vgsm_tty_driver->driver_name = vgsm_DRIVER_NAME;
 	vgsm_tty_driver->name = "vgsm";
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
 	vgsm_tty_driver->devfs_name = "vgsm/";
+	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS ;
+#else
+	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW;
+#endif
 	vgsm_tty_driver->major = 0;
 	vgsm_tty_driver->minor_start = 0;
 	vgsm_tty_driver->type = TTY_DRIVER_TYPE_SERIAL;
 	vgsm_tty_driver->subtype = SERIAL_TYPE_NORMAL;
-	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS ;
 	vgsm_tty_driver->init_termios = tty_std_termios;
 	vgsm_tty_driver->init_termios.c_cflag =
 				B38400 | CS8 | CREAD | HUPCL | CLOCAL;

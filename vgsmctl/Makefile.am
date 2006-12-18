@@ -11,10 +11,6 @@
 
 sbin_PROGRAMS = vgsmctl
 
-INCLUDES = \
-	-I$(top_srcdir)/include/		\
-	-I$(top_srcdir)/modules/include/
-
 vgsmctl_SOURCES = \
 	vgsmctl.c	\
 	codec.c		\
@@ -32,6 +28,10 @@ noinst_HEADERS = \
 	pad_timeout.h	\
 	fw_version.h	\
 	fw_upgrade.h
+
+vgsmctl_CPPFLAGS = \
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

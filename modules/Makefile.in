@@ -8,6 +8,7 @@ kblddir = @kblddir@
 DIST_COMMON = Makefile.in Kbuild
 
 SUBDIRS=\
+	kfifo			\
 	kstreamer		\
 	visdn			\
 	hfc-4s			\
@@ -16,8 +17,8 @@ SUBDIRS=\
 	lapd			\
 	userport		\
 	milliwatt		\
-	vgsm			\
-	vgsm2
+	vgsm			
+#	vgsm2
 #ec hfc-pci hfc-usb hfc-e1 kfifo \
 #	 ppp
 

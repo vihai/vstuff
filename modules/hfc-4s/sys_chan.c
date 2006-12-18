@@ -858,6 +858,9 @@ static int hfc_sys_chan_tx_chan_push_frame(
 
 err_no_free_space:
 err_no_free_frames:
+
+	set_bit(HFC_SYS_CHAN_TX_STATUS_STOPPED, &chan_tx->status);
+
 	hfc_card_unlock(card);
 
 	return KSS_TX_FULL;
@@ -1187,6 +1190,23 @@ static void hfc_sys_chan_rx_init(
 		(unsigned long)chan_rx);
 }
 
+static void hfc_sys_chan_tx_wake_tasklet(unsigned long data)
+{
+	struct hfc_sys_chan_tx *chan_tx = (struct hfc_sys_chan_tx *)data;
+	struct hfc_sys_chan *chan = chan_tx->chan;
+	struct hfc_card *card = chan->port->card;
+
+	hfc_card_lock(card);
+
+	hfc_fifo_select(&chan_tx->fifo);
+
+	if (hfc_fifo_free_frames(&chan_tx->fifo) &&
+	    hfc_fifo_free_tx(&chan_tx->fifo) > 20)
+		kss_chan_wake_queue(&chan_tx->ks_chan);
+
+	hfc_card_unlock(card);
+}
+
 static void hfc_sys_chan_tx_init(
 	struct hfc_sys_chan_tx *chan_tx,
 	struct hfc_sys_chan *chan,
@@ -1206,6 +1226,10 @@ static void hfc_sys_chan_tx_init(
 	chan_tx->ks_chan.mtu = -1;
 
 	hfc_fifo_init(&chan_tx->fifo, chan->port->card, fifo_hwid, TX);
+
+	tasklet_init(&chan_tx->wake_tasklet,
+		hfc_sys_chan_tx_wake_tasklet,
+		(unsigned long)chan_tx);
 }
 
 void hfc_sys_chan_init(

@@ -1969,9 +1969,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
-	ast_mutex_lock(&visdn.lock);
-	if (visdn_chan->q931_call &&
-	    visdn_chan->q931_call->intf) {
+	ast_mutex_lock(&ast_chan->lock);
+	if (visdn_chan->q931_call) {
 
 		struct q931_call *q931_call = visdn_chan->q931_call;
 
@@ -2045,22 +2044,13 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 
 		Q931_UNDECLARE_IES(ies);
 
-
-
-	}
-
-	if (visdn_chan->q931_call) {
 		/* Detach module and channel */
-
 		visdn_chan_put(visdn_chan->q931_call->pvt);
 		visdn_chan->q931_call->pvt = NULL;
 
 		q931_call_put(visdn_chan->q931_call);
 		visdn_chan->q931_call = NULL;
 	}
-	ast_mutex_unlock(&visdn.lock);
-
-	ast_mutex_lock(&ast_chan->lock);
 
 	if (visdn_chan->suspended_call) {
 		// We are responsible for the channel
@@ -4502,10 +4492,11 @@ static void visdn_q931_disconnect_channel(
 		return;
 
 	struct visdn_chan *visdn_chan = channel->call->pvt;
-	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	if (!visdn_chan)
 		return;
+
+	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_disconnect_chan_from_visdn(visdn_chan);

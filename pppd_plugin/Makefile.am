@@ -12,7 +12,7 @@
 pppdplugins_LTLIBRARIES = visdn.la
 visdn_la_SOURCES = visdn.c
 
-INCLUDES =					\
+visdn_la_CPPFLAGS=\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/modules/include/	\
 	-I$(pppdincdir)

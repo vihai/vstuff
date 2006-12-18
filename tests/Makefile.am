@@ -11,13 +11,6 @@
 
 bin_PROGRAMS = vgsm_stress sniffer ksmonitor traffic # jitter  listener
 
-INCLUDES = \
-	-I$(top_srcdir)/include/		\
-	-I$(top_srcdir)/modules/include/	\
-	-I$(top_srcdir)/libskb/			\
-	-I$(top_srcdir)/libkstreamer/		\
-	-I$(top_srcdir)/libq931/
-
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
 
@@ -26,12 +19,22 @@ sniffer_LDADD = \
 	-lpthread	\
 	$(top_srcdir)/libskb/libskb.la	\
 	$(top_srcdir)/libkstreamer/libkstreamer.la
+sniffer_CPPFLAGS=\
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/	\
+	-I$(top_srcdir)/libskb/			\
+	-I$(top_srcdir)/libkstreamer/
 
 ksmonitor_SOURCES = ksmonitor.c
 ksmonitor_LDADD = \
 	-lpthread	\
 	$(top_srcdir)/libskb/libskb.la	\
 	$(top_srcdir)/libkstreamer/libkstreamer.la
+ksmonitor_CPPFLAGS=\
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/	\
+	-I$(top_srcdir)/libskb/			\
+	-I$(top_srcdir)/libkstreamer/
 
 #framesniffer_SOURCES = framesniffer.c
 #framesniffer_LDADD =
@@ -39,9 +42,18 @@ ksmonitor_LDADD = \
 #listener_SOURCES = listener.c
 #listener_LDADD = -lasound
 #
-#traffic_SOURCES = traffic.c
+
+traffic_SOURCES = traffic.c
+traffic_CPPFLAGS=\
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/	\
+	-I$(top_srcdir)/libskb/			\
+	-I$(top_srcdir)/libkstreamer/
 
 vgsm_stress_SOURCES = vgsm_stress.c
+vgsm_stress_CPPFLAGS=\
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

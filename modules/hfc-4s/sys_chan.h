@@ -74,6 +74,8 @@ struct hfc_sys_chan_rx
 	struct tasklet_struct tasklet;
 };
 
+#define HFC_SYS_CHAN_TX_STATUS_STOPPED (1 << 0)
+
 struct hfc_sys_chan_tx
 {
 	struct ks_chan ks_chan;
@@ -85,11 +87,15 @@ struct hfc_sys_chan_tx
 
 	struct hfc_fifo fifo;
 
+	unsigned long status;
+
 	int fifo_pos;
 	int fifo_size;
 	int fifo_cycles;
 	int fifo_min;
 	int fifo_max;
+
+	struct tasklet_struct wake_tasklet;
 };
 
 struct hfc_sys_port;

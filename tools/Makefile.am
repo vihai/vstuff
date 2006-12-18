@@ -11,8 +11,7 @@
 
 sbin_PROGRAMS = lemon
 
-INCLUDES =
-
 lemon_SOURCES = lemon.c
+lemon_CPPFLAGS=
 
 AM_CFLAGS = -Wall

@@ -22,6 +22,7 @@
 #include <linux/workqueue.h>
 
 #include <linux/kstreamer/kstreamer.h>
+#include <linux/kstreamer/softswitch.h>
 
 #include "fifo.h"
 #include "fifo_inline.h"
@@ -780,13 +781,9 @@ void hfc_card_initialize_hw(struct hfc_card *card)
 
 static inline void hfc_handle_fifo_tx_interrupt(struct hfc_sys_chan *chan)
 {
-/*	if (visdn_leg_queue_stopped(&chan->visdn_chan.leg_b)) {
-		hfc_fifo_select(&chan->tx_fifo);
-
-		if (hfc_fifo_free_frames(&chan->tx_fifo) &&
-		    hfc_fifo_free_tx(&chan->tx_fifo) > 20)
-			visdn_leg_wake_queue(&chan->visdn_chan.leg_b);
-	}*/
+	if (test_and_clear_bit(HFC_SYS_CHAN_TX_STATUS_STOPPED,
+					&chan->tx.status))
+		tasklet_schedule(&chan->tx.wake_tasklet);
 }
 
 static inline void hfc_handle_fifo_rx_interrupt(struct hfc_sys_chan *chan)

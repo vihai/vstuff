@@ -11,12 +11,6 @@
 
 sbin_PROGRAMS = kstool
 
-INCLUDES = \
-	-I$(top_srcdir)/include/		\
-	-I$(top_srcdir)/modules/include/	\
-	-I$(top_srcdir)/libskb/			\
-	-I$(top_srcdir)/libkstreamer/
-
 kstool_SOURCES = \
 	kstool.c		\
 	connect.c		\
@@ -39,6 +33,12 @@ noinst_HEADERS = \
 	pipeline_close.h	\
 	pipeline_start.h	\
 	pipeline_stop.h
+
+kstool_CPPFLAGS=\
+	-I$(top_srcdir)/include/		\
+	-I$(top_srcdir)/modules/include/	\
+	-I$(top_srcdir)/libskb/			\
+	-I$(top_srcdir)/libkstreamer/
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

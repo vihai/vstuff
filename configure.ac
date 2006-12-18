@@ -1,7 +1,7 @@
 AC_PREREQ(2.59)
 AC_INIT(vstuff, head, daniele@orlandi.com)
 AC_CONFIG_AUX_DIR(config)
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE(-Wall)
 
 AC_CONFIG_SRCDIR([chan_visdn/chan_visdn.c])
 AC_CONFIG_HEADER([config.h])

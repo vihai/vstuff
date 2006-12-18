@@ -9,8 +9,6 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-BUILT_SOURCES = pd_parser.h
-
 lib_LTLIBRARIES = libkstreamer.la
 
 libkstreamer_la_SOURCES = \
@@ -24,7 +22,6 @@ libkstreamer_la_SOURCES = \
 	pipeline.c	\
 	conn.c		\
 	router.c	\
-	pd_grammar.y	\
 	pd_parser.c
 
 libkstreamer_ladir = libkstreamer
@@ -44,13 +41,17 @@ nobase_include_HEADERS = \
 	pd_grammar.h	\
 	pd_parser.h
 
-CLEANFILES = pd_grammar.c pd_grammar.out
-EXTRA_DIST = pd_grammar.y
+CLEANFILES = pd_grammar.c pd_grammar.h pd_grammar.out
+EXTRA_DIST = pd_grammar.lem
 
-pd_grammar.c pd_grammar.h: pd_grammar.y
-	../tools/lemon pd_grammar.y
+BUILT_SOURCES = pd_grammar.c
 
-INCLUDES =					\
+pd_grammar.c pd_grammar.h: pd_grammar.lem
+	../tools/lemon pd_grammar.lem
+
+libkstreamer_la_LIBADD = pd_grammar.o
+
+CPPFLAGS= \
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/libskb/		\

@@ -29,7 +29,7 @@ noinst_HEADERS = \
 	numbers_list.h	\
 	util.h
 
-INCLUDES =					\
+chan_visdn_la_CPPFLAGS=\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\

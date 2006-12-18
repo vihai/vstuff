@@ -34,16 +34,16 @@ void kss_chan_wake_queue(struct ks_chan *chan)
 {
 	struct ks_chan *from_chan;
 
-	BUG_ON(chan->to != &kss_softswitch.ks_node);
+	BUG_ON(chan->from != &kss_softswitch.ks_node);
 
 	rcu_read_lock();
 	if (!chan->pipeline ||
-	    chan->pipeline_entry.next == &chan->pipeline->entries) {
+	    chan->pipeline_entry.prev == &chan->pipeline->entries) {
 		rcu_read_unlock();
 		return;
 	}
 
-	from_chan = list_entry(chan->pipeline_entry.next, struct ks_chan,
+	from_chan = list_entry(chan->pipeline_entry.prev, struct ks_chan,
 							pipeline_entry);
 
 	if (!((struct kss_chan_to_ops *)from_chan->to_ops)->wake_queue) {

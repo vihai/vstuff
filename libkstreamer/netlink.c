@@ -19,6 +19,7 @@
 
 #include <sys/socket.h>
 
+#include <linux/types.h>
 #include <linux/netlink.h>
 
 #include <linux/kstreamer/netlink.h>

@@ -245,7 +245,12 @@ static int ks_node_netlink_notification(
 
 	NETLINK_CB(skb).pid = 0;
 	NETLINK_CB(skb).dst_pid = pid;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+	NETLINK_CB(skb).dst_groups = pid ? 0 : (1 << KS_NETLINK_GROUP_TOPOLOGY);
+#else
 	NETLINK_CB(skb).dst_group = pid ? 0 : KS_NETLINK_GROUP_TOPOLOGY;
+#endif
 
 	err = ks_node_write_to_nlmsg(node, skb, message_type, pid, 0, 0);
 	if (err < 0)
