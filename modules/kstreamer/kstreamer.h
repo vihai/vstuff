@@ -15,6 +15,8 @@
 
 #ifdef __KERNEL__
 
+extern struct class ks_system_class;
+
 extern struct subsystem kstreamer_subsys;
 
 extern struct device ks_system_device;

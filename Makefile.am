@@ -45,12 +45,12 @@ if asterisk_modules
 SUBDIRS += res_kstreamer
 #SUBDIRS += chan_visdn
 SUBDIRS += chan_vgsm
-#SUBDIRS += app_visdn_ppp
+SUBDIRS += app_visdn_ppp
 SUBDIRS += app_pipe
 endif
 
 if pppd_plugin
-#SUBDIRS += pppd_plugin
+SUBDIRS += pppd_plugin
 endif
 
 if tests

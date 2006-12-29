@@ -329,7 +329,7 @@ AC_MSG_RESULT([$pppdconfdir])
 
 fi
 
-AM_CONDITIONAL(pppd_plugin, test "$enable_pppd" = "yes")
+AM_CONDITIONAL(pppd_plugin, test "$enable_pppd" != "no")
 
 #-----------------------------------------------------------------------------
 
@@ -339,7 +339,7 @@ AC_ARG_ENABLE(
 		[--enable-tests],
 		[Enable testing tools]))
 
-AM_CONDITIONAL(tests, test "$enable_tests" = yes)
+AM_CONDITIONAL(tests, test "$enable_tests" != "no")
 
 #-----------------------------------------------------------------------------
 

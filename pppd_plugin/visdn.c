@@ -20,13 +20,16 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 
+#include <linux/kstreamer/ppp.h>
+
+#include <linux/kstreamer/hdlc_framer.h>
+
+#include <libskb.h>
+#include <libkstreamer.h>
+
 #include "pppd.h"
 #include "fsm.h"
 #include "lcp.h"
-
-#include <linux/visdn/cxc.h>
-#include <linux/visdn/router.h>
-#include <linux/visdn/ppp.h>
 
 static int device_got_set = 0;
 
@@ -85,47 +88,174 @@ static void visdn_process_extra_options(void)
 
 #include <unistd.h>
 
-int control_fd;
-int ppp_channel_id;
-int ppp_conn_id;
-
 static int visdn_connect(void)
 {
+	int err;
+
 	int fd;
+
 	dbglog("PPPovISDN - visdn_connect('%s')", devnam);
 
 	if (!device_got_set)
 		fatal("No device specified");
 
-	control_fd = open("/dev/visdn/router-control", O_RDWR);
-	if (control_fd < 0)
-		fatal("failed to open router-control: %m");
+	struct ks_conn *conn;
+	conn = ks_conn_create();
+	if (!conn)
+		fatal("Cannot initialize kstreamer library");
 
-	fd = open("/dev/visdn/ppp", O_RDWR);
+	dbglog("PPPovISDN - 1");
+
+	err = ks_conn_establish(conn);
+	if (err < 0)
+		fatal("Cannot connect kstreamer library");
+
+	ks_update_topology(conn);
+	dbglog("PPPovISDN - 2");
+
+	struct ks_dynattr *hdlc_framer;
+	hdlc_framer = ks_dynattr_get_by_name(conn, "hdlc_framer");
+	if (!hdlc_framer)
+		fatal("No HDLC framer attribute found");
+
+	struct ks_dynattr *hdlc_deframer;
+	hdlc_deframer = ks_dynattr_get_by_name(conn, "hdlc_deframer");
+	if (!hdlc_deframer)
+		fatal("No HDLC deframer attribute found");
+
+	fd = open("/dev/ks/ppp", O_RDWR);
 	if (fd < 0)
 		fatal("failed to open ppp-control device: %m");
 
+	ks_conn_sync(conn);
+
+	int ppp_node_id;
 	if (ioctl(fd, VISDN_PPP_GET_CHANID,
-			(caddr_t)&ppp_channel_id) < 0)
+			(caddr_t)&ppp_node_id) < 0)
 		fatal("ioctl(VISDN_IOC_GET_CHANID): %m");
+
+	struct ks_node *node_bearer;
+	node_bearer = ks_node_get_by_id(conn, atoi(devnam));
+	if (!node_bearer)
+		fatal("Cannot find bearer node");
+
+	struct ks_node *node_ppp;
+	node_ppp = ks_node_get_by_id(conn, ppp_node_id);
+	if (!node_ppp)
+		fatal("Cannot find PPP node");
+
 
 	dbglog("PPPovISDN - control device opened successfully");
 
-	struct visdn_connect vc;
-	memset(&vc, 0, sizeof(vc));
-	vc.src_chan_id = ppp_channel_id;
-	vc.dst_chan_id = atoi(devnam);
+	/***************** IN PIPELINE ********************/
+	struct ks_pipeline *in_pipeline;
+	in_pipeline = ks_pipeline_alloc();
+	if (!in_pipeline)
+		fatal("Cannot alloc in pipeline");
 
-	if (ioctl(fd, VISDN_IOC_CONNECT, (caddr_t)&vc) < 0)
-		fatal("ioctl(VISDN_CONNECT): %m\n");
+	err = ks_pipeline_autoroute(in_pipeline, conn, node_bearer, node_ppp);
+	if (err < 0)
+		fatal("Cannot connect nodes: %s", strerror(-err));
 
-	ppp_conn_id = vc.pipeline_id;
+	in_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
 
-	if (ioctl(fd, VISDN_IOC_PIPELINE_OPEN, NULL) < 0)
-		fatal("ioctl(VISDN_PIPELINE_OPEN): %m\n");
+	err = ks_pipeline_create(in_pipeline, conn);
+	if (err < 0)
+		fatal("Cannot create pipeline: %s", strerror(-err));
 
-	if (ioctl(fd, VISDN_IOC_PIPELINE_START, NULL) < 0)
-		fatal("ioctl(VISDN_PIPELINE_START): %m\n");
+	int i;
+	struct ks_hdlc_deframer_descr *in_hdlc_deframer = NULL;
+	for(i=0; i<in_pipeline->chans_cnt; i++) {
+		struct ks_chan *chan = in_pipeline->chans[i];
+
+		struct ks_dynattr_instance *dynattr;
+		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+			if (dynattr->dynattr == hdlc_deframer) {
+
+				struct ks_hdlc_deframer_descr *descr =
+					(struct ks_hdlc_deframer_descr *)
+					dynattr->payload;
+
+				if (!in_hdlc_deframer ||
+				    descr->hardware)
+					in_hdlc_deframer = descr;
+			}
+		}
+	}
+
+	if (!in_hdlc_deframer)
+		fatal("No HDLC framer along the pipeline");
+
+	in_hdlc_deframer->enabled = TRUE;
+
+	ks_pipeline_update_chans(in_pipeline, conn);
+
+	in_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
+	err = ks_pipeline_update(in_pipeline, conn);
+	if (err < 0)
+		fatal("Cannot start the in pipeline");
+
+
+
+
+
+
+
+
+
+
+	/***************** OUT PIPELINE ********************/
+
+	struct ks_pipeline *out_pipeline;
+	out_pipeline = ks_pipeline_alloc();
+	if (!out_pipeline)
+		fatal("Cannot alloc in pipeline");
+
+	err = ks_pipeline_autoroute(out_pipeline, conn, node_ppp, node_bearer);
+	if (err < 0)
+		fatal("Cannot connect nodes: %s", strerror(-err));
+
+	out_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
+	err = ks_pipeline_create(out_pipeline, conn);
+	if (err < 0)
+		fatal("Cannot create pipeline: %s", strerror(-err));
+
+	struct ks_hdlc_framer_descr *out_hdlc_framer = NULL;
+	for(i=0; i<out_pipeline->chans_cnt; i++) {
+		struct ks_chan *chan = out_pipeline->chans[i];
+
+		struct ks_dynattr_instance *dynattr;
+		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+			if (dynattr->dynattr == hdlc_framer) {
+
+				struct ks_hdlc_framer_descr *descr =
+					(struct ks_hdlc_framer_descr *)
+					dynattr->payload;
+
+				if (!out_hdlc_framer ||
+				    descr->hardware)
+					out_hdlc_framer = descr;
+			}
+		}
+	}
+
+	if (!out_hdlc_framer)
+		fatal("No HDLC deframer along the pipeline");
+
+	out_hdlc_framer->enabled = TRUE;
+
+	ks_pipeline_update_chans(out_pipeline, conn);
+
+	out_pipeline->status = KS_PIPELINE_STATUS_FLOWING;
+	err = ks_pipeline_update(out_pipeline, conn);
+	if (err < 0)
+		fatal("Cannot start the pipeline");
+
+
+
+
 
 	dbglog("PPPovISDN - channel connected to ppp device");
 

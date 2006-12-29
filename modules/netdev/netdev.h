@@ -23,8 +23,8 @@ struct vnd_create
 	int protocol;
 	char devname[IFNAMSIZ];
 
-	char d_chan[80];
-	char e_chan[80];
+	int d_chan;
+	int e_chan;
 };
 
 #ifdef __KERNEL__

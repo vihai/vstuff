@@ -1,6 +1,6 @@
 
 subdir = modules/ppp
-MODULE = visdn-ppp
+MODULE = ks-ppp
 
 SOURCES = ppp_main.c
 DIST_HEADERS = ppp.h

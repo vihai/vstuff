@@ -50,6 +50,7 @@ static struct list_head vnd_netdevices_list =
 					LIST_HEAD_INIT(vnd_netdevices_list);
 static spinlock_t vnd_netdevices_list_lock = SPIN_LOCK_UNLOCKED;
 
+#if 0
 static void visdn_make_kobj_path(
 	struct kobject *kobj, char *path, int max_length)
 {
@@ -78,6 +79,7 @@ static void visdn_make_kobj_path(
 		*(path + --pos) = '/';
 	}
 }
+#endif
 
 static void vnd_netdevice_release(
 	struct kref *kref)
@@ -335,6 +337,7 @@ static void vnd_chan_d_tx_close(struct ks_chan *ks_chan)
 		visdn_port_put(netdevice->remote_port);
 }
 
+#if 0
 static void print_kobj_path(struct kobject *kobj)
 {
 	struct kobject *parent;
@@ -348,6 +351,7 @@ static void print_kobj_path(struct kobject *kobj)
 
 	printk("\n");
 }
+#endif
 
 static int vnd_chan_d_tx_connect(struct ks_chan *ks_chan)
 {
@@ -1471,11 +1475,8 @@ static int vnd_cdev_ioctl_do_create(
 	if (err < 0)
 		goto err_netdevice_register;
 
-	visdn_make_kobj_path(&netdevice->ks_node_d.kobj,
-		create.d_chan, sizeof(create.d_chan));
-
-	visdn_make_kobj_path(&netdevice->ks_node_e.kobj,
-		create.e_chan, sizeof(create.e_chan));
+	create.d_chan = netdevice->ks_node_d.id;
+	create.e_chan = netdevice->ks_node_e.id;
 
 	if (copy_to_user((void *)arg, &create, sizeof(create))) {
 		err = -EFAULT;

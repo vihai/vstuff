@@ -1,3 +1,0 @@
-# Rules to create vISDN associated devices
-
-KERNEL="*", SUBSYSTEM="visdn", NAME="visdn/%k" GROUP="pbx" MODE="0660"

@@ -48,11 +48,25 @@ static void ks_system_device_release(struct device *cd)
 struct device ks_system_device;
 EXPORT_SYMBOL(ks_system_device);
 
+static void ks_system_class_release(struct class_device *cd)
+{
+}
+
+struct class ks_system_class = {
+	.name = "kstreamer",
+	.release = ks_system_class_release,
+};
+EXPORT_SYMBOL(ks_system_class);
+
 static int __init ks_init_module(void)
 {
 	int err;
 
 	ks_msg(KERN_INFO, "loading\n");
+
+	err = class_register(&ks_system_class);
+	if (err < 0)
+		goto err_class_register;
 
 	err = subsystem_register(&kstreamer_subsys);
 	if (err < 0)
@@ -107,6 +121,8 @@ err_node_modinit:
 err_system_device_register:
 	subsystem_unregister(&kstreamer_subsys);
 err_subsystem_register:
+	class_unregister(&ks_system_class);
+err_class_register:
 
 	return err;
 }
@@ -124,6 +140,8 @@ static void __exit ks_module_exit(void)
 	device_unregister(&ks_system_device);
 
 	subsystem_unregister(&kstreamer_subsys);
+
+	class_unregister(&ks_system_class);
 
 	ks_msg(KERN_INFO, "unloaded\n");
 }

@@ -13,6 +13,8 @@
 #ifndef _HDLC_FRAMER_H
 #define _HDLC_FRAMER_H
 
+#include <linux/types.h>
+
 struct ks_hdlc_framer_descr
 {
 	__u8 hardware:1;

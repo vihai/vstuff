@@ -1,7 +1,7 @@
 /*
  * vISDN gateway between vISDN's crossconnector and Linux's ppp subsystem
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2006 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -28,7 +28,7 @@
 #define SB_CHAN_HASHBITS 8
 #define SB_CHAN_HASHSIZE (1 << SB_CHAN_HASHBITS)
 
-#define to_vppp_chan(vchan) container_of(vchan, struct vppp_chan, visdn_chan)
+#define to_vppp_chan(vchan) container_of(vchan, struct vppp_chan, ks_chan)
 
 enum vppp_chan_status
 {
@@ -37,7 +37,11 @@ enum vppp_chan_status
 
 struct vppp_chan
 {
-	struct visdn_chan visdn_chan;
+	struct kref kref;
+
+	struct ks_node ks_node;
+	struct ks_chan ks_chan_rx;
+	struct ks_chan ks_chan_tx;
 
 	struct ppp_channel ppp_chan;
 
@@ -57,8 +61,14 @@ struct vppp_chan
 		printk(KERN_DEBUG vppp_MODULE_PREFIX		\
 			format,					\
 			## arg)
+#define vppp_debug_chan(chan, dbglevel, format, arg...)		\
+	if (debug_level >= dbglevel)				\
+		printk(KERN_DEBUG vppp_MODULE_PREFIX		\
+			format,					\
+			## arg)
 #else
 #define vppp_debug(format, arg...) do {} while (0)
+#define vppp_debug_chan(chan, format, arg...) do {} while (0)
 #endif
 
 #define vppp_msg(level, format, arg...)				\

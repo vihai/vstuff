@@ -22,7 +22,8 @@ libkstreamer_la_SOURCES = \
 	pipeline.c	\
 	conn.c		\
 	router.c	\
-	pd_parser.c
+	pd_parser.c	\
+	pd_grammar.lem
 
 libkstreamer_ladir = libkstreamer
 
@@ -46,12 +47,16 @@ EXTRA_DIST = pd_grammar.lem
 
 BUILT_SOURCES = pd_grammar.c
 
+CPPFLAGS= \
+	-I$(top_builddir)			\
+	-I$(top_builddir)/include/
+
 pd_grammar.c pd_grammar.h: pd_grammar.lem
 	../tools/lemon pd_grammar.lem
 
 libkstreamer_la_LIBADD = pd_grammar.o
 
-CPPFLAGS= \
+libkstreamer_la_CPPFLAGS= \
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/libskb/		\

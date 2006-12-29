@@ -43,16 +43,6 @@ static struct class_device ksup_frame_class_dev;
 struct list_head ksup_chans_list = LIST_HEAD_INIT(ksup_chans_list);
 DECLARE_RWSEM(ksup_chans_list_sem);
 
-static void ksup_class_release(struct class_device *cd)
-{
-}
-
-struct class ksup_class = {
-	.name = "ks_userport",
-	.release = ksup_class_release,
-};
-EXPORT_SYMBOL(ksup_class);
-
 static struct ksup_chan *ksup_chan_get(struct ksup_chan *chan)
 {
 	if (ks_node_get(&chan->ks_node))
@@ -1050,10 +1040,6 @@ static int __init ksup_init_module(void)
 
 	ksup_msg(KERN_INFO, ksup_MODULE_DESCR " loading\n");
 
-	err = class_register(&ksup_class);
-	if (err < 0)
-		goto err_class_register;
-
 	err = alloc_chrdev_region(&ksup_first_dev, 0, 3, ksup_MODULE_NAME);
 	if (err < 0)
 		goto err_register_chrdev;
@@ -1069,7 +1055,7 @@ static int __init ksup_init_module(void)
 	snprintf(ksup_stream_class_dev.class_id,
 		sizeof(ksup_stream_class_dev.class_id),
 		"userport_stream");
-	ksup_stream_class_dev.class = &ksup_class;
+	ksup_stream_class_dev.class = &ks_system_class;
 	ksup_stream_class_dev.dev = NULL;
 #ifdef HAVE_CLASS_DEV_DEVT
 	ksup_stream_class_dev.devt = ksup_first_dev;
@@ -1091,7 +1077,7 @@ static int __init ksup_init_module(void)
 	snprintf(ksup_frame_class_dev.class_id,
 		sizeof(ksup_frame_class_dev.class_id),
 		"userport_frame");
-	ksup_frame_class_dev.class = &ksup_class;
+	ksup_frame_class_dev.class = &ks_system_class;
 	ksup_frame_class_dev.dev = NULL;
 #ifdef HAVE_CLASS_DEV_DEVT
 	ksup_frame_class_dev.devt = ksup_first_dev + 1;
@@ -1131,8 +1117,6 @@ err_stream_class_device_create_file:
 err_cdev_add:
 	unregister_chrdev_region(ksup_first_dev, 3);
 err_register_chrdev:
-	class_unregister(&ksup_class);
-err_class_register:
 
 	return err;
 }
@@ -1159,8 +1143,6 @@ static void __exit ksup_module_exit(void)
 
 	cdev_del(&ksup_cdev);
 	unregister_chrdev_region(ksup_first_dev, 3);
-
-	class_unregister(&ksup_class);
 
 	ksup_msg(KERN_INFO, ksup_MODULE_DESCR " unloaded\n");
 }

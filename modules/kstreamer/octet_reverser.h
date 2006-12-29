@@ -13,6 +13,8 @@
 #ifndef _OCTET_REVERSER_H
 #define _OCTET_REVERSER_H
 
+#include <linux/types.h>
+
 struct ks_octet_reverser_descr
 {
 	__u8 hardware:1;

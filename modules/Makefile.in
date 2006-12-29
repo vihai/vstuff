@@ -17,10 +17,10 @@ SUBDIRS=\
 	lapd			\
 	userport		\
 	milliwatt		\
-	vgsm			
-#	vgsm2
+	vgsm			\
+	vgsm2			\
+	ppp
 #ec hfc-pci hfc-usb hfc-e1 kfifo \
-#	 ppp
 
 
 # Use $(src) when we are run inside Kbuild

@@ -20,6 +20,23 @@
 #include <asterisk/options.h>
 #include <asterisk/logger.h>
 
+/* FUCK YOU ASTERSISK */
+#undef pthread_mutex_t
+#undef pthread_mutex_lock
+#undef pthread_mutex_unlock
+#undef pthread_mutex_trylock
+#undef pthread_mutex_init
+#undef pthread_mutex_destroy
+#undef pthread_cond_t
+#undef pthread_cond_init
+#undef pthread_cond_destroy
+#undef pthread_cond_signal
+#undef pthread_cond_broadcast
+#undef pthread_cond_wait
+#undef pthread_cond_timedwait
+
+#include <libkstreamer.h>
+
 #include <chan_visdn.h>
 
 #include "../config.h"
@@ -119,9 +136,9 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	struct visdn_chan *visdn_chan = to_visdn_chan(chan);
 
-	if (!visdn_chan->bearer_channel_id) {
+	if (!visdn_chan->node_bearer) {
 		ast_log(LOG_WARNING,
-			"vISDN crossconnector channel ID not present\n");
+			"vISDN bearer channel not present\n");
 		ast_mutex_unlock(&chan->lock);
 		return -1;
 	}
@@ -147,7 +164,7 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	char chan_id_arg[10];
 	snprintf(chan_id_arg, sizeof(chan_id_arg),
-		"%06d", visdn_chan->bearer_channel_id);
+		"%06d", visdn_chan->node_bearer->id);
 
 	argv[argc++] = "plugin";
 	argv[argc++] = "visdn.so";
