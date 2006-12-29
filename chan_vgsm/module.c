@@ -3614,12 +3614,6 @@ static void handle_unsolicited_ciev_call(
 			continue;
 		}
 
-		if (!get_token(&pars_ptr, field, sizeof(field))) {
-			ast_log(LOG_ERROR, "Cannot parse SLCC '%s' number\n",
-				line->text);
-			continue;
-		}
-
 		if (module->calls[idx].state != VGSM_CALL_STATE_UNUSED) {
 			/* This is a new call */
 		}
