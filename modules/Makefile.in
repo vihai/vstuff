@@ -19,6 +19,7 @@ SUBDIRS=\
 	milliwatt		\
 	vgsm			\
 	vgsm2			\
+	vdsp			\
 	ppp
 #ec hfc-pci hfc-usb hfc-e1 kfifo \
 

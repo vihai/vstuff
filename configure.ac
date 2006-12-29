@@ -398,7 +398,7 @@ AC_ARG_ENABLE(
 	AC_HELP_STRING(
 		[--enable-drivers=<list>],
 		[Enable drivers (comma separated list of driver names), \
-		currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1, vgsm, vgsm2]),
+		currently supported: hfc-usb, hfc-pci, hfc-4s, hfc-e1, vgsm, vgsm2, vdsp]),
 	drivers="$enableval")
 
 AM_CONDITIONAL(driver_hfc_usb,
@@ -413,6 +413,8 @@ AM_CONDITIONAL(driver_vgsm,
 	test -n "`echo $drivers | grep vgsm`" || test "$drivers" = "all")
 AM_CONDITIONAL(driver_vgsm2,
 	test -n "`echo $drivers | grep vgsm2`" || test "$drivers" = "all")
+AM_CONDITIONAL(driver_vdsp,
+	test -n "`echo $drivers | grep vdsp`" || test "$drivers" = "all")
 
 AC_CONFIG_FILES([Makefile
 		tools/Makefile
@@ -448,6 +450,7 @@ AC_CONFIG_FILES([Makefile
 		modules/hfc-usb/Makefile
 		modules/vgsm/Makefile
 		modules/vgsm2/Makefile
+		modules/vdsp/Makefile
 		scripts/Makefile
 		scripts/visdn_configurator
 		doxygen.conf
