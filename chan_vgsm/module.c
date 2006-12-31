@@ -1068,7 +1068,7 @@ void vgsm_module_failure(struct vgsm_module *module, int err)
 	ast_mutex_unlock(&module->lock);
 }
 
-char *vgsm_module_completion(char *line, char *word, int state)
+char *vgsm_module_completion(const char *line, const char *word, int state)
 {
 	int which = 0;
 
@@ -1977,7 +1977,8 @@ err_module_not_found:
 }
 
 static char *show_vgsm_modules_complete(
-		char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
 				"statistics", "calls" };
@@ -2083,7 +2084,8 @@ err_no_module_name:
 }
 
 static char *vgsm_forwarding_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	char *commands[] = { "query", "off" };
 	int i;
@@ -2257,7 +2259,9 @@ err_no_module_name:
 	return err;
 }
 
-static char *vgsm_module_complete(char *line, char *word, int pos, int state)
+static char *vgsm_module_complete(
+	const char *line, const char *word,
+	int pos, int state)
 {
 	char *commands[] = { "power", "reset" };
 	char *power_commands[] = { "on", "off" };
@@ -2439,7 +2443,7 @@ static int no_debug_vgsm_module_func(int fd, int argc, char *argv[])
 }
 
 static char *debug_module_category_complete(
-	char *line, char *word, int state)
+	const char *line, const char *word, int state)
 {
 	char *commands[] = { "atcommands", "serial", "sms", "cbm" };
 	int i;
@@ -2453,7 +2457,8 @@ static char *debug_module_category_complete(
 }
 
 static char *debug_module_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 
 	switch(pos) {
@@ -2467,7 +2472,8 @@ static char *debug_module_complete(
 }
 
 static char *no_debug_module_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 
 	switch(pos) {

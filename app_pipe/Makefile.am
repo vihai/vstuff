@@ -12,6 +12,7 @@
 astmod_LTLIBRARIES = app_pipe.la
 app_pipe_la_SOURCES = app_pipe.c
 app_pipe_la_CPPFLAGS =\
+	-DAST_MODULE=\"app_pipe\"		\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\

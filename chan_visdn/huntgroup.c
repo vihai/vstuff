@@ -10,8 +10,6 @@
  *
  */
 
-//#include <asterisk/astmm.h>
-
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -20,17 +18,12 @@
 #include <stdarg.h>
 #include <ctype.h>
 
-#include "../config.h"
-
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
 #include <asterisk/config.h>
 #include <asterisk/logger.h>
 #include <asterisk/module.h>
-//#include <asterisk/pbx.h>
 #include <asterisk/options.h>
-//#include <asterisk/utils.h>
-//#include <asterisk/callerid.h>
 #include <asterisk/cli.h>
 
 #include "chan_visdn.h"

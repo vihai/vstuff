@@ -29,8 +29,7 @@
 
 #include <asm/types.h>
 
-#include "../config.h"
-
+#include <asterisk.h>
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
 #include <asterisk/config.h>
@@ -46,6 +45,7 @@
 #include <asterisk/dsp.h>
 #include <asterisk/causes.h>
 #include <asterisk/manager.h>
+#include <asterisk/version.h>
 
 #include <linux/vgsm.h>
 
@@ -153,19 +153,44 @@ struct vgsm_state vgsm = {
 static const struct ast_channel_tech vgsm_tech;
 
 static struct ast_channel *vgsm_ast_chan_alloc(
-	struct vgsm_chan *vgsm_chan)
+	struct vgsm_chan *vgsm_chan,
+	int state,
+	struct vgsm_module *module,
+	int line)
 {
 	struct ast_channel *ast_chan;
+
+#if ASTERISK_VERSION_NUM < 010400
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
 		goto err_channel_alloc;
 	}
 
+	ast_setstate(ast_chan, state);
+
+	snprintf(ast_chan->name, sizeof(ast_chan->name),
+		"VGSM/%s/%d",
+		module ? module->name : "null",
+		line);
+#else
+	ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+				"VGSM/%s/%d",
+				module ? module->name : "null",
+				line);
+	if (!ast_chan) {
+		ast_log(LOG_WARNING, "Unable to allocate channel\n");
+		goto err_channel_alloc;
+	}
+#endif
+
 	/* Reference is not taken, as ast_chan is an embedded object */
 	ast_chan->tech_pvt = vgsm_chan_get(vgsm_chan);
 	ast_chan->tech = &vgsm_tech;
+
+#if ASTERISK_VERSION_NUM < 010400
 	ast_chan->type = VGSM_CHAN_TYPE;
+#endif
 
 	ast_chan->fds[0] = -1;
 
@@ -367,7 +392,7 @@ err_missing_module:
 	return err;
 }
 
-static char *vgsm_pin_set_complete(char *line, char *word, int pos, int state)
+static char *vgsm_pin_set_complete(const char *line, const char *word, int pos, int state)
 {
 	char *commands[] = { "enabled", "disabled" };
 	int i;
@@ -750,7 +775,9 @@ err_missing_module:
 	return err;
 }
 
-static char *vgsm_send_sms_complete(char *line, char *word, int pos, int state)
+static char *vgsm_send_sms_complete(
+	const char *line, const char *word,
+	int pos, int state)
 {
 	switch(pos) {
 	case 3:
@@ -909,7 +936,9 @@ err_no_module_name:
 	return err;
 }
 
-static char *vgsm_pin_input_complete(char *line, char *word, int pos, int state)
+static char *vgsm_pin_input_complete(
+	const char *line, const char *word,
+	int pos, int state)
 {
 	switch(pos) {
 	case 3:
@@ -1049,7 +1078,9 @@ err_no_module_name:
 	return err;
 }
 
-static char *vgsm_puk_input_complete(char *line, char *word, int pos, int state)
+static char *vgsm_puk_input_complete(
+	const char *line, const char *word,
+	int pos, int state)
 {
 	switch(pos) {
 	case 3:
@@ -1241,7 +1272,10 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 		goto err_vgsm_chan_alloc;
 	}
 
-	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan);
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan,
+						AST_STATE_RESERVED,
+						module, 1);
+
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 
@@ -1258,15 +1292,10 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 
 	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 
-	ast_setstate(ast_chan, AST_STATE_RESERVED);
-
 	strcpy(ast_chan->exten, "s");
 	strncpy(ast_chan->context, vgsm_chan->mc->context,
 					sizeof(ast_chan->context));
 	ast_chan->priority = 1;
-
-	snprintf(ast_chan->name, sizeof(ast_chan->name),
-		"VGSM/%s/%d", module->name, 1);
 
 	return vgsm_chan;
 
@@ -1560,7 +1589,15 @@ struct ast_frame *vgsm_exception(struct ast_channel *ast_chan)
 }
 
 /* We are called with chan->lock'ed */
+#if ASTERISK_VERSION_NUM < 010400
 static int vgsm_indicate(struct ast_channel *ast_chan, int condition)
+#else
+static int vgsm_indicate(
+	struct ast_channel *ast_chan,
+	int condition,
+	const void *data,
+	size_t datalen)
+#endif
 {
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 	//struct vgsm_module *module = vgsm_chan->module;
@@ -1993,16 +2030,13 @@ static struct ast_channel *vgsm_request(
 		goto err_vgsm_chan_alloc;
 	}
 
-	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan);
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN, NULL, 0);
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 
 	vgsm_chan->outbound = TRUE;
 
 	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
-	ast_setstate(ast_chan, AST_STATE_DOWN);
-
-	snprintf(ast_chan->name, sizeof(ast_chan->name), "VGSM/null");
 
 	vgsm_chan_put(vgsm_chan);
 
@@ -2033,10 +2067,15 @@ static const struct ast_channel_tech vgsm_tech = {
 	.indicate	= vgsm_indicate,
 	.transfer	= vgsm_transfer,
 	.fixup		= vgsm_fixup,
-	.send_digit	= vgsm_send_digit,
 	.bridge		= vgsm_bridge,
 	.send_text	= vgsm_sendtext,
 	.setoption	= vgsm_setoption,
+
+#if ASTERISK_VERSION_NUM < 010400
+	.send_digit	= vgsm_send_digit,
+#else
+	.send_digit_end	= vgsm_send_digit,
+#endif
 };
 
 /***********************************************/
@@ -2112,14 +2151,14 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 {
 	const char *number = astman_get_header(m, "To");
 	if (!strlen(number)) {
-		ast_cli(s->fd, "Status: 510\n");
+		astman_append(s, "Status: 510\n");
 		astman_send_error(s, m, "To: header missing");
 		goto err_missing_destination;
 	}
 
 	const char *content = astman_get_header(m, "Content");
 	if (!strlen(content)) {
-		ast_cli(s->fd, "Status: 509\n");
+		astman_append(s, "Status: 509\n");
 		astman_send_error(s, m, "Content: header missing");
 		goto err_missing_content;
 	}
@@ -2129,13 +2168,13 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	char *lasts;
 	char *type = strtok_r(content_type_a, " \t;", &lasts);
 	if (!type) {
-		ast_cli(s->fd, "Status: 504\n");
+		astman_append(s, "Status: 504\n");
 		astman_send_error(s, m, "Invalid content-type");
 		goto err_invalid_content_type;
 	}
 
 	if (strcasecmp(type, "text/plain")) {
-		ast_cli(s->fd, "Status: 505\n");
+		astman_append(s, "Status: 505\n");
 		astman_send_error(s, m, "Unsupported content-type");
 		goto err_unsupported_content_type;
 	}
@@ -2152,7 +2191,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	iconv_t cd;
 	cd = iconv_open("WCHAR_T", charset);
 	if (cd < 0) {
-		ast_cli(s->fd, "Status: 503\n");
+		astman_append(s, "Status: 503\n");
 
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
@@ -2177,7 +2216,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		struct vgsm_huntgroup *hg;
 		hg = vgsm_hg_get_by_name(hg_name);
 		if (!hg) {
-			ast_cli(s->fd, "Status: 508\n");
+			astman_append(s, "Status: 508\n");
 			astman_send_error(s, m, "Cannot find huntgroup");
 
 			ast_mutex_unlock(&vgsm.lock);
@@ -2205,7 +2244,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		ast_mutex_unlock(&vgsm.lock);
 
 		if (!module) {
-			ast_cli(s->fd, "Status: 404\n");
+			astman_append(s, "Status: 404\n");
 			astman_send_error(s, m,
 				"Cannot find an available module");
 			goto err_module_not_found;
@@ -2216,7 +2255,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		module = vgsm_module_get_by_name(module_str);
 		if (!module) {
-			ast_cli(s->fd, "Status: 501\n");
+			astman_append(s, "Status: 501\n");
 			astman_send_error(s, m, "501 Cannot find module");
 			goto err_module_not_found;
 		}
@@ -2226,7 +2265,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		if (module->status != VGSM_MODULE_STATUS_READY) {
 			ast_mutex_unlock(&module->lock);
 
-			ast_cli(s->fd, "Status: 401\n");
+			astman_append(s, "Status: 401\n");
 			astman_send_error(s, m, "Module is not ready");
 			goto err_module_not_ready;
 		}
@@ -2235,7 +2274,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
 			ast_mutex_unlock(&module->lock);
 
-			ast_cli(s->fd, "Status: 402\n");
+			astman_append(s, "Status: 402\n");
 			astman_send_error(s, m, "Module is not registered");
 			goto err_module_not_registered;
 		}
@@ -2243,7 +2282,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		if (module->sending_sms) {
 			ast_mutex_unlock(&module->lock);
 
-			ast_cli(s->fd, "Status: 403\n");
+			astman_append(s, "Status: 403\n");
 			astman_send_error(s, m,
 				"403 Module is already sending a message");
 			goto err_module_sending_sms;
@@ -2272,7 +2311,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		ast_mutex_unlock(&vgsm.lock);
 
 		if (!module) {
-			ast_cli(s->fd, "Status: 404\n");
+			astman_append(s, "Status: 404\n");
 			astman_send_error(s, m,
 				"Cannot find an available module");
 			goto err_module_not_found;
@@ -2286,7 +2325,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (!sms) {
 		ast_mutex_unlock(&module->lock);
 
-		ast_cli(s->fd, "Status: 405\n");
+		astman_append(s, "Status: 405\n");
 		astman_send_error(s, m, "Cannot allocate message");
 		goto err_sms_alloc;
 	}
@@ -2304,7 +2343,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	} else {
 		ast_mutex_unlock(&module->lock);
 
-		ast_cli(s->fd, "Status: 502\n");
+		astman_append(s, "Status: 502\n");
 		astman_send_error(s, m, "Services Center number not set");
 		goto err_no_smcc;
 	}
@@ -2392,7 +2431,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		quoted_printable_decode(content, content_raw, content_size + 1);
 
 	} else {
-		ast_cli(s->fd, "Status: 506\n");
+		astman_append(s, "Status: 506\n");
 		astman_send_error(s, m,
 			"Unsupported Content-Transfer-Encoding");
 		goto err_unsupported_cte;
@@ -2405,7 +2444,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	sms->text = malloc(outbytes_avail);
 	if (!sms->text) {
-		ast_cli(s->fd, "Status: 406\n");
+		astman_append(s, "Status: 406\n");
 		astman_send_error(s, m, "Out of memory");
 		iconv_close(cd);
 		goto err_text_malloc;
@@ -2413,7 +2452,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	char *outbuf = (char *)sms->text;
 	if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes_left) < 0) {
-		ast_cli(s->fd, "Status: 507\n");
+		astman_append(s, "Status: 507\n");
 
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
@@ -2438,7 +2477,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (res != VGSM_RESP_OK) {
 		vgsm_req_put(req);
 
-		ast_cli(s->fd, "Status: %c00\n",
+		astman_append(s, "Status: %c00\n",
 			vgsm_cms_error_fatal(res) ? '5' : '4');
 
 		char tmpstr[256];
@@ -2458,12 +2497,12 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_WARNING, "Cannot parse +CMGS: '%s'\n", pars);
 	} else {
-		ast_cli(s->fd, "X-SMS-Reference: %u\n", atoi(field));
+		astman_append(s, "X-SMS-Reference: %u\n", atoi(field));
 	}
 
 	vgsm_req_put(req);
 
-	ast_cli(s->fd, "Status: 201\n");
+	astman_append(s, "Status: 201\n");
 	astman_send_ack(s, m, "Message sent");
 
 	module->sending_sms = FALSE;
@@ -2510,7 +2549,11 @@ static void vgsm_shutdown(void)
 	vgsm_module_shutdown_all();
 }
 
+#if ASTERISK_VERSION_NUM < 010400
 int load_module(void)
+#else
+static int vgsm_load_module(void)
+#endif
 {
 	int err;
 
@@ -2588,7 +2631,11 @@ err_channel_register:
 	return err;
 }
 
+#if ASTERISK_VERSION_NUM < 010400
 int unload_module(void)
+#else
+static int vgsm_unload_module(void)
+#endif
 {
 	vgsm_module_module_unload();
 
@@ -2613,12 +2660,18 @@ int unload_module(void)
 	return 0;
 }
 
+#if ASTERISK_VERSION_NUM < 010400
 int reload(void)
+#else
+static int vgsm_reload_module(void)
+#endif
 {
 	vgsm_reload_config();
 
 	return 0;
 }
+
+#if ASTERISK_VERSION_NUM < 010400
 
 int usecount(void)
 {
@@ -2638,3 +2691,14 @@ char *key(void)
 {
 	return ASTERISK_GPL_KEY;
 }
+
+#else
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY,
+		AST_MODFLAG_GLOBAL_SYMBOLS,
+		"Kstreamer handler",
+		.load = vgsm_load_module,
+		.unload = vgsm_unload_module,
+		.reload = vgsm_reload_module,
+	);
+#endif

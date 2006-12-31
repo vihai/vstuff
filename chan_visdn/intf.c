@@ -10,8 +10,6 @@
  *
  */
 
-//#include <asterisk/astmm.h>
-
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -31,8 +29,6 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
-
-#include "../config.h"
 
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
@@ -1090,7 +1086,9 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 
 }
 
-char *visdn_intf_complete(char *line, char *word, int pos, int state)
+char *visdn_intf_complete(
+	const char *line, const char *word,
+	int pos, int state)
 {
 	int which = 0;
 
@@ -1110,7 +1108,7 @@ char *visdn_intf_complete(char *line, char *word, int pos, int state)
 }
 
 static char *complete_show_visdn_interfaces(
-		char *line, char *word, int pos, int state)
+	const char *line, const char *word, int pos, int state)
 {
 	if (pos != 3)
 		return NULL;

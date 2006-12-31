@@ -30,6 +30,7 @@ noinst_HEADERS = \
 	util.h
 
 chan_visdn_la_CPPFLAGS=\
+	-DAST_MODULE=\"chan_visdn\"		\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\

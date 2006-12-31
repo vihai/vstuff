@@ -59,6 +59,7 @@ noinst_HEADERS =\
 	util.h
 
 chan_vgsm_la_CPPFLAGS=\
+	-DAST_MODULE=\"chan_vgsm\"		\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\

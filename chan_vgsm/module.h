@@ -304,7 +304,7 @@ const char *vgsm_module_error_to_text(int code);
 
 void vgsm_module_shutdown_all(void);
 
-char *vgsm_module_completion(char *line, char *word, int state);
+char *vgsm_module_completion(const char *line, const char *word, int state);
 
 int vgsm_module_module_load(void);
 int vgsm_module_module_unload(void);

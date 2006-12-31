@@ -239,8 +239,8 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 
 	if (sms->alphabet == VGSM_SMS_DCS_ALPHABET_UCS2) {
 
-		__u8 *inbuf = sms->text;
-		__u8 *outbuf = pdu + pos + udh_len;
+		char *inbuf = (char *)sms->text;
+		char *outbuf = (char *)(pdu + pos + udh_len);
 		size_t inbytes = wcslen(sms->text) * sizeof(wchar_t);
 		size_t outbytes_avail = max_len - pos - udh_len - 1;
 		size_t outbytes_left = outbytes_avail;

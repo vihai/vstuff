@@ -10,8 +10,6 @@
  *
  */
 
-//#include <asterisk/astmm.h>
-
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -36,8 +34,6 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
-
-#include "../config.h"
 
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
@@ -127,7 +123,10 @@ struct visdn_state visdn = {
 #endif
 };
 
-static struct ast_channel *visdn_ast_chan_alloc(struct visdn_chan *visdn_chan);
+static struct ast_channel *visdn_ast_chan_alloc(
+	struct visdn_chan *visdn_chan,
+	int state,
+	struct q931_call *call);
 
 static struct visdn_chan *visdn_chan_alloc(void)
 {
@@ -235,19 +234,57 @@ void _visdn_chan_put(struct visdn_chan *visdn_chan)
 static const struct ast_channel_tech visdn_tech;
 
 static struct ast_channel *visdn_ast_chan_alloc(
-	struct visdn_chan *visdn_chan)
+	struct visdn_chan *visdn_chan,
+	int state,
+	struct q931_call *call)
 {
 	struct ast_channel *ast_chan;
+
+#if ASTERISK_VERSION_NUM < 010400
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
 		goto err_channel_alloc;
 	}
 
+	ast_setstate(ast_chan, state);
+
+	if (call) {
+		snprintf(ast_chan->name, sizeof(ast_chan->name),
+			"VISDN/%s/%d.%c",
+			call->intf->name,
+			call->call_reference,
+			call->direction == Q931_CALL_DIRECTION_INBOUND ?
+					'I' : 'O');
+	} else {
+		snprintf(ast_chan->name, sizeof(ast_chan->name),
+			"VISDN/null");
+	}
+#else
+	if (call) {
+		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+			"VISDN/%s/%d.%c",
+			call->intf->name,
+			call->call_reference,
+			call->direction == Q931_CALL_DIRECTION_INBOUND ?
+					'I' : 'O');
+	} else {
+		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL, "VISDN/null");
+	}
+
+	if (!ast_chan) {
+		ast_log(LOG_WARNING, "Unable to allocate channel\n");
+		goto err_channel_alloc;
+	}
+#endif
+
 	/* Reference is not taken, as ast_chan is an embedded object */
 	ast_chan->tech_pvt = visdn_chan_get(visdn_chan);
 	ast_chan->tech = &visdn_tech;
+
+#if ASTERISK_VERSION_NUM < 010400
 	ast_chan->type = VISDN_CHAN_TYPE;
+#endif
 
 	ast_chan->fds[0] = -1;
 
@@ -820,7 +857,7 @@ static int visdn_request_call(
 	Q931_DECLARE_IES(ies);
 
 	/* ------------- Bearer Capability ---------------- */
-	char *raw_bc = pbx_builtin_getvar_helper(ast_chan, "BEARERCAP_RAW");
+	const char *raw_bc = pbx_builtin_getvar_helper(ast_chan, "BEARERCAP_RAW");
 	if (raw_bc) {
 		visdn_debug("Taking bearer capability from bridged channel\n");
 
@@ -911,7 +948,7 @@ bc_failure:;
 	}
 
 	/* ------------- High Layer Compatibility ---------------- */
-	char *raw_hlc = pbx_builtin_getvar_helper(ast_chan, "HLC_RAW");
+	const char *raw_hlc = pbx_builtin_getvar_helper(ast_chan, "HLC_RAW");
 	if (raw_hlc) {
 		visdn_debug("Taking HLC from bridged channel\n");
 
@@ -968,7 +1005,7 @@ hlc_failure:;
 	}
 
 	/* ------------- Low Layer Compatibility ---------------- */
-	char *raw_llc = pbx_builtin_getvar_helper(ast_chan, "LLC_RAW");
+	const char *raw_llc = pbx_builtin_getvar_helper(ast_chan, "LLC_RAW");
 	if (raw_llc) {
 		visdn_debug("Taking LLC from bridged channel\n");
 
@@ -1382,8 +1419,6 @@ static int visdn_answer(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
-	FUNC_DEBUG();
-
 	ast_indicate(ast_chan, -1);
 
 	if (!visdn_chan) {
@@ -1578,14 +1613,19 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 	return NULL;
 }
 
-/* We are called with chan->lock'ed */
+#if ASTERISK_VERSION_NUM < 010400
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
+#else
+static int visdn_indicate(
+	struct ast_channel *ast_chan,
+	int condition,
+	const void *data,
+	size_t datalen)
+#endif
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	const struct tone_zone_sound *tone = NULL;
 	int res = 0;
-
-	FUNC_DEBUG("%d", condition);
 
 	switch(condition) {
 	case -1:
@@ -1653,8 +1693,8 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 		struct q931_ie_progress_indicator *pi = NULL;
 
 		if (ast_bridged_channel(ast_chan) &&
-		   strcmp(ast_bridged_channel(ast_chan)->type,
-							VISDN_CHAN_TYPE)) {
+		   strcmp(ast_bridged_channel(ast_chan)->tech->type,
+						VISDN_CHAN_TYPE)) {
 
 			visdn_debug("Channel is not VISDN, sending"
 					" progress indicator\n");
@@ -1765,7 +1805,7 @@ static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 					visdn_chan->q931_call);
 
 		if (ast_bridged_channel(ast_chan) &&
-		   strcmp(ast_bridged_channel(ast_chan)->type,
+		   strcmp(ast_bridged_channel(ast_chan)->tech->type,
 							VISDN_CHAN_TYPE)) {
 			pi->progress_description =
 				Q931_IE_PI_PD_CALL_NOT_END_TO_END; // FIXME
@@ -1843,8 +1883,6 @@ static int visdn_transfer(
 
 static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 {
-	FUNC_DEBUG("%c", digit);
-
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_ic *ic = visdn_chan->ic;
@@ -1963,8 +2001,6 @@ static void visdn_disconnect_chan_from_visdn(
 
 static int visdn_hangup(struct ast_channel *ast_chan)
 {
-	FUNC_DEBUG("%s", ast_chan->name);
-
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
@@ -2107,8 +2143,6 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 	ast_chan->tech_pvt = NULL;
 
 	ast_mutex_unlock(&ast_chan->lock);
-
-	FUNC_DEBUG("%s DONE", ast_chan->name);
 
 	return 0;
 }
@@ -2298,14 +2332,12 @@ static struct ast_channel *visdn_request(
 		goto err_visdn_chan_alloc;
 	}
 
-	visdn_chan->ast_chan = visdn_ast_chan_alloc(visdn_chan);
+	visdn_chan->ast_chan = visdn_ast_chan_alloc(visdn_chan,
+					AST_STATE_DOWN, NULL);
 	if (!visdn_chan->ast_chan)
 		goto err_visdn_ast_chan_alloc;
 
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
-	ast_setstate(ast_chan, AST_STATE_DOWN);
-
-	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/null");
 
 	visdn_chan_put(visdn_chan);
 
@@ -2336,10 +2368,15 @@ static const struct ast_channel_tech visdn_tech = {
 	.indicate	= visdn_indicate,
 	.transfer	= visdn_transfer,
 	.fixup		= visdn_fixup,
-	.send_digit	= visdn_send_digit,
 	.bridge		= visdn_bridge,
 	.send_text	= visdn_sendtext,
 	.setoption	= visdn_setoption,
+
+#if ASTERISK_VERSION_NUM < 010400
+	.send_digit	= visdn_send_digit,
+#else
+	.send_digit_end	= visdn_send_digit,
+#endif
 };
 
 #define MAX_PAYLOAD 1024
@@ -2711,8 +2748,6 @@ static void visdn_q931_alerting_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -2732,8 +2767,6 @@ static void visdn_q931_connect_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	q931_send_primitive(q931_call, Q931_CCB_SETUP_COMPLETE_REQUEST, NULL);
 
 	struct visdn_chan *visdn_chan = q931_call->pvt;
@@ -2797,8 +2830,6 @@ static void visdn_q931_disconnect_indication(
 
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	FUNC_DEBUG();
-
 	ast_mutex_lock(&ast_chan->lock);
 	visdn_handle_eventual_progind(visdn_chan, ies);
 	visdn_set_hangupcause_by_ies(visdn_chan, ies);
@@ -2818,15 +2849,12 @@ static void visdn_q931_error_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
 }
 
 static void visdn_q931_info_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -2872,8 +2900,6 @@ static void visdn_q931_more_info_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *user_ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -2911,15 +2937,12 @@ static void visdn_q931_notify_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
 }
 
 static void visdn_q931_proceeding_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -2940,8 +2963,6 @@ static void visdn_q931_progress_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -3013,8 +3034,6 @@ static void visdn_q931_reject_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -3028,8 +3047,6 @@ static void visdn_q931_release_confirm(
 	const struct q931_ies *ies,
 	enum q931_release_confirm_status status)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
@@ -3043,8 +3060,6 @@ static void visdn_q931_release_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -3058,8 +3073,6 @@ static void visdn_q931_resume_confirm(
 	const struct q931_ies *ies,
 	enum q931_resume_confirm_status status)
 {
-	FUNC_DEBUG();
-
 	if (status == Q931_RESUME_CONFIRM_ERROR) {
 		// Detach q.931 call from channel and hangup channel
 	}
@@ -3069,8 +3082,6 @@ static void visdn_q931_resume_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	enum q931_ie_cause_value cause;
 
 	if (callpvt_to_astchan(q931_call)) {
@@ -3126,7 +3137,8 @@ static void visdn_q931_resume_indication(
 
 	if (ast_bridged_channel(suspended_call->visdn_chan->ast_chan)) {
 		if (!strcmp(ast_bridged_channel(
-				suspended_call->visdn_chan->ast_chan)->type,
+				suspended_call->visdn_chan->ast_chan)->
+								tech->type,
 							VISDN_CHAN_TYPE)) {
 			// Wow, the remote channel is ISDN too, let's notify it!
 
@@ -3213,8 +3225,6 @@ static void visdn_q931_setup_confirm(
 	const struct q931_ies *ies,
 	enum q931_setup_confirm_status status)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 
 	if (!visdn_chan)
@@ -3418,7 +3428,8 @@ struct visdn_chan *visdn_alloc_inbound_call(struct q931_call *q931_call)
 		goto err_visdn_chan_alloc;
 	}
 
-	visdn_chan->ast_chan = visdn_ast_chan_alloc(visdn_chan);
+	visdn_chan->ast_chan = visdn_ast_chan_alloc(visdn_chan,
+					AST_STATE_RING, q931_call);
 	if (!visdn_chan->ast_chan)
 		goto err_visdn_ast_chan_alloc;
 
@@ -3438,16 +3449,9 @@ struct visdn_chan *visdn_alloc_inbound_call(struct q931_call *q931_call)
 
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
-	ast_setstate(ast_chan, AST_STATE_RING);
 	ast_chan->rings = 1;
 
 	q931_call->pvt = visdn_chan_get(visdn_chan);
-
-	snprintf(ast_chan->name, sizeof(ast_chan->name), "VISDN/%s/%d.%c",
-		q931_call->intf->name,
-		q931_call->call_reference,
-		q931_call->direction ==
-			Q931_CALL_DIRECTION_INBOUND ? 'I' : 'O');
 
 	strncpy(ast_chan->context,
 		ic->context,
@@ -3456,7 +3460,7 @@ struct visdn_chan *visdn_alloc_inbound_call(struct q931_call *q931_call)
 	strcpy(ast_chan->exten, "s");
 	ast_chan->priority = 1;
 
-	strncpy(ast_chan->language, ic->language, sizeof(ast_chan->language));
+	//strncpy(ast_chan->language, ic->language, sizeof(ast_chan->language)); FIXME
 
 	return visdn_chan;
 
@@ -3480,8 +3484,6 @@ static void visdn_q931_setup_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	assert(!q931_call->pvt);
 
 	struct visdn_chan *visdn_chan;
@@ -3905,7 +3907,6 @@ static void visdn_q931_status_indication(
 	const struct q931_ies *ies,
 	enum q931_status_indication_status status)
 {
-	FUNC_DEBUG();
 }
 
 static void visdn_q931_suspend_confirm(
@@ -3913,8 +3914,6 @@ static void visdn_q931_suspend_confirm(
 	const struct q931_ies *ies,
 	enum q931_suspend_confirm_status status)
 {
-	FUNC_DEBUG();
-
 	if (status == Q931_SUSPEND_CONFIRM_OK) {
 		// Detach q.931 call from channel and hangup channel
 	}
@@ -3929,8 +3928,6 @@ static void visdn_q931_suspend_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = q931_call->pvt;
 	enum q931_ie_cause_value cause;
 
@@ -3990,9 +3987,13 @@ static void visdn_q931_suspend_indication(
 	q931_send_primitive(q931_call, Q931_CCB_SUSPEND_RESPONSE, NULL);
 
 	if (ast_bridged_channel(ast_chan)) {
+#if ASTERISK_VERSION_NUM < 010400
 		ast_moh_start(ast_bridged_channel(ast_chan), NULL);
+#else
+		ast_moh_start(ast_bridged_channel(ast_chan), NULL, NULL);
+#endif
 
-		if (!strcmp(ast_bridged_channel(ast_chan)->type,
+		if (!strcmp(ast_bridged_channel(ast_chan)->tech->type,
 							VISDN_CHAN_TYPE)) {
 			// Wow, the remote channel is ISDN too, let's notify it!
 
@@ -4050,26 +4051,6 @@ static void visdn_q931_timeout_indication(
 	struct q931_call *q931_call,
 	const struct q931_ies *ies)
 {
-	FUNC_DEBUG();
-}
-
-static int visdn_connect_channels(
-	struct visdn_chan *visdn_chan)
-{
-//	visdn_debug("Connecting userport %s to chan %s\n",
-//			visdn_chan->up_node_id,
-//			visdn_chan->bearer_node_id);
-
-	// FIXME
-
-	//visdn_chan->up_bearer_pipeline_id = vc.pipeline_id;
-	//visdn_chan->bearer_up_pipeline_id = vc.pipeline_id;
-
-
-	return 0;
-
-
-	return -1;
 }
 
 #if 0
@@ -4284,8 +4265,6 @@ static void visdn_q931_connect_channel(
 	struct visdn_ic *ic = visdn_chan->ic;
 	int err;
 
-	FUNC_DEBUG();
-
 	if (!visdn_chan)
 		return;
 
@@ -4486,8 +4465,6 @@ err_bearer_node_not_found:
 static void visdn_q931_disconnect_channel(
 	struct q931_channel *channel)
 {
-	FUNC_DEBUG();
-
 	if (!channel->call)
 		return;
 
@@ -4506,8 +4483,6 @@ static void visdn_q931_disconnect_channel(
 static void visdn_q931_start_tone(struct q931_channel *channel,
 	enum q931_tone_type tone)
 {
-	FUNC_DEBUG();
-
 	struct visdn_chan *visdn_chan = channel->call->pvt;
 
 	// Unfortunately, after ast_hangup the channel is not valid
@@ -4539,8 +4514,6 @@ static void visdn_q931_start_tone(struct q931_channel *channel,
 
 static void visdn_q931_stop_tone(struct q931_channel *channel)
 {
-	FUNC_DEBUG();
-
 	if (!channel->call)
 		return;
 
@@ -4557,19 +4530,16 @@ static void visdn_q931_management_restart_confirm(
 	struct q931_global_call *gc,
 	const struct q931_chanset *chanset)
 {
-	FUNC_DEBUG();
 }
 
 static void visdn_q931_timeout_management_indication(
 	struct q931_global_call *gc)
 {
-	FUNC_DEBUG();
 }
 
 static void visdn_q931_status_management_indication(
 	struct q931_global_call *gc)
 {
-	FUNC_DEBUG();
 }
 
 static void visdn_logger(int level, const char *format, ...)
@@ -5123,7 +5093,8 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 }
 
 static char *complete_show_visdn_calls(
-		char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	int which = 0;
 
@@ -5269,7 +5240,11 @@ static struct ast_cli_entry show_visdn_calls =
 
 /*---------------------------------------------------------------------------*/
 
+#if ASTERISK_VERSION_NUM < 010400
 int load_module(void)
+#else
+static int visdn_load_module(void)
+#endif
 {
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
@@ -5431,7 +5406,11 @@ err_pipe_ccb_q931:
 	return -1;
 }
 
+#if ASTERISK_VERSION_NUM < 010400
 int unload_module(void)
+#else
+static int visdn_unload_module(void)
+#endif
 {
 	visdn_ic_put(visdn.default_ic);
 
@@ -5459,12 +5438,18 @@ int unload_module(void)
 	return 0;
 }
 
+#if ASTERISK_VERSION_NUM < 010400
 int reload(void)
+#else
+static int visdn_reload_module(void)
+#endif
 {
 	visdn_reload_config();
 
 	return 0;
 }
+
+#if ASTERISK_VERSION_NUM < 010400
 
 int usecount(void)
 {
@@ -5484,3 +5469,14 @@ char *key(void)
 {
 	return ASTERISK_GPL_KEY;
 }
+
+#else
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY,
+		AST_MODFLAG_GLOBAL_SYMBOLS,
+		"vISDN channel",
+		.load = visdn_load_module,
+		.unload = visdn_unload_module,
+		.reload = visdn_reload_module,
+	);
+#endif

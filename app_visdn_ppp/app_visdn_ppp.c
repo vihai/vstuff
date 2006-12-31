@@ -19,6 +19,7 @@
 #include <asterisk/module.h>
 #include <asterisk/options.h>
 #include <asterisk/logger.h>
+#include <asterisk/version.h>
 
 /* FUCK YOU ASTERSISK */
 #undef pthread_mutex_t
@@ -39,17 +40,6 @@
 
 #include <chan_visdn.h>
 
-#include "../config.h"
-
-#ifdef HAVE_ASTERISK_VERSION_H
-#include <asterisk/version.h>
-#endif
-
-#ifndef ASTERISK_VERSION_NUM
-#include <asterisk/channel_pvt.h>
-#endif
-
-static char *tdesc = "vISDN";
 static char *app = "vISDNppp";
 static char *synopsis = "Runs pppd and connects channel to visdn-ppp gateway";
 
@@ -58,10 +48,6 @@ static char *descrip =
 " visdn-ppp channel. pppd must support visdn.so plugin.\n"
 "Arguments are passed to pppd and should be separated by | characters.\n"
 "Always returns -1.\n";
-
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 #define PPP_MAX_ARGS	32
 #define PPP_EXEC	"/usr/sbin/pppd"
@@ -112,9 +98,7 @@ static pid_t spawn_ppp(
 static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 {
 	int res=-1;
-	struct localuser *u;
 	struct ast_frame *f;
-	LOCAL_USER_ADD(u);
 
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
@@ -231,34 +215,45 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 		}
 	}
 
-	LOCAL_USER_REMOVE(u);
 	return res;
 }
 
-int unload_module(void)
-{
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
-}
-
+#if ASTERISK_VERSION_NUM < 010400
 int load_module(void)
+#else
+static int visdn_ppp_load_module(void)
+#endif
 {
 	return ast_register_application(app, visdn_ppp_exec, synopsis, descrip);
 }
 
-char *description(void)
+#if ASTERISK_VERSION_NUM < 010400
+int unload_module(void)
+#else
+static int visdn_ppp_unload_module(void)
+#endif
 {
-	return tdesc;
+	return ast_unregister_application(app);
 }
 
-int usecount(void)
+#if ASTERISK_VERSION_NUM < 010400
+
+char *description(void)
 {
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
+	return "vISDN PPP handler";
 }
 
 char *key()
 {
 	return ASTERISK_GPL_KEY;
 }
+
+#else
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY,
+		AST_MODFLAG_GLOBAL_SYMBOLS,
+		"vISDN PPP handler",
+		.load = visdn_ppp_load_module,
+		.unload = visdn_ppp_unload_module,
+	);
+#endif

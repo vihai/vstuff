@@ -12,6 +12,7 @@
 astmod_LTLIBRARIES = app_visdn_ppp.la
 app_visdn_ppp_la_SOURCES = app_visdn_ppp.c
 app_visdn_ppp_la_CPPFLAGS =\
+	-DAST_MODULE=\"app_visdn_ppp\"		\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/modules/include/	\
 	-I$(top_builddir)/libq931/		\

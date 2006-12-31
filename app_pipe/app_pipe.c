@@ -32,20 +32,13 @@
 #include <asterisk/logger.h>
 #include <asterisk/version.h>
 
-#include "../config.h"
-
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-static char *tdesc = "Pipe";
 static char *app = "Pipe";
 static char *synopsis = "Test application";
 
 static char *descrip =
 "\n";
-
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
 
 static int get_max_fds(void)
 {
@@ -163,9 +156,7 @@ static pid_t spawn_handler(
 static int handler_exec(struct ast_channel *chan, void *data)
 {
 	int res=-1;
-	struct localuser *u;
 	struct ast_frame *f;
-	LOCAL_USER_ADD(u);
 
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
@@ -245,8 +236,6 @@ ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 			f->offset = 0;
 			f->mallocd = 0;
 			f->src = "app_pipe";
-			f->next = NULL;
-			f->prev = NULL;
 			f->delivery.tv_sec = 0;
 			f->delivery.tv_usec = 0;
 
@@ -290,35 +279,46 @@ ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 		}
 	}
 
-	LOCAL_USER_REMOVE(u);
 	return res;
 }
 
-int unload_module(void)
-{
-	STANDARD_HANGUP_LOCALUSERS;
-	return ast_unregister_application(app);
-}
-
+#if ASTERISK_VERSION_NUM < 010400
 int load_module(void)
+#else
+static int app_pipe_load_module(void)
+#endif
 {
 	return ast_register_application(app, handler_exec,
 					synopsis, descrip);
 }
 
-char *description(void)
+#if ASTERISK_VERSION_NUM < 010400
+int unload_module(void)
+#else
+static int app_pipe_unload_module(void)
+#endif
 {
-	return tdesc;
+	return ast_unregister_application(app);
 }
 
-int usecount(void)
+#if ASTERISK_VERSION_NUM < 010400
+
+char *description(void)
 {
-	int res;
-	STANDARD_USECOUNT(res);
-	return res;
+	return "Pipe";
 }
 
 char *key(void)
 {
 	return ASTERISK_GPL_KEY;
 }
+
+#else
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY,
+		AST_MODFLAG_GLOBAL_SYMBOLS,
+		"Pipe Application",
+		.load = app_pipe_load_module,
+		.unload = app_pipe_unload_module,
+	);
+#endif

@@ -13,6 +13,8 @@
 #ifndef _LONGTIME_H
 #define _LONGTIME_H
 
+#include <sys/time.h>
+
 #define SEC 1000000LL
 #define MILLISEC 1000LL
 

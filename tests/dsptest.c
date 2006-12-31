@@ -259,25 +259,15 @@ struct c6412
 	unsigned long mem_base;
 };
 
-static inline lo(__u16 val)
-{
-	return val & 0x00ff;
-}
-
-static inline hi(__u16 val)
-{
-	return val >> 8;
-}
-
-static void writeb(void *addr, __u8 val)
+/*static void writeb(void *addr, __u8 val)
 {
 	*(volatile __u8 *)addr = val;
-}
+}*/
 
-static void writew(void *addr, __u16 val)
+/*static void writew(void *addr, __u16 val)
 {
 	*(volatile __u16 *)addr = val;
-}
+}*/
 
 static void writel(void *addr, __u32 val)
 {
@@ -289,10 +279,10 @@ static __u8 readb(void *addr)
 	return *(volatile __u8 *)addr;
 }
 
-static __u16 readw(void *addr)
+/*static __u16 readw(void *addr)
 {
 	return *(volatile __u16 *)addr;
-}
+}*/
 
 static __u32 readl(void *addr)
 {
@@ -304,7 +294,7 @@ static __u32 reg_readl(struct c6412 *c, __u32 addr)
 	return *(volatile __u32 *)(c->regs + addr - 0x1800000);
 }
 
-static __u32 reg_writel(struct c6412 *c, __u32 addr, __u32 val)
+static void reg_writel(struct c6412 *c, __u32 addr, __u32 val)
 {
 	*(volatile __u32 *)(c->regs + addr - 0x1800000) = val;
 }
@@ -406,11 +396,9 @@ int eeprom_read(struct c6412 *c6412, __u16 *data, int start, int len)
 
 static void print_info(struct c6412 *c6412)
 {
-	int i;
-
 	__u32 devstat = reg_readl(c6412, R_DEVSTAT);
 
-	if (devstat & 0x00000fff != 0x00000754) {
+	if ((devstat & 0x00000fff) != 0x00000754) {
 		printf("Invalid DEVSTAT: %#08x != %#08x\n",
 			devstat, 0x00000754);
 		return;
@@ -784,17 +772,17 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (sscanf(argv[optind], "%x", &c6412.regs_base) < 1) {
+	if (sscanf(argv[optind], "%lx", &c6412.regs_base) < 1) {
 		fprintf(stderr, "Invalid base address\n");
 		return 1;
 	}
-	printf("Registers base address = 0x%08x\n", c6412.regs_base);
+	printf("Registers base address = 0x%08lx\n", c6412.regs_base);
 
-	if (sscanf(argv[optind + 1], "%x", &c6412.mem_base) < 1) {
+	if (sscanf(argv[optind + 1], "%lx", &c6412.mem_base) < 1) {
 		fprintf(stderr, "Invalid base address\n");
 		return 1;
 	}
-	printf("Memory base address = 0x%08x\n", c6412.mem_base);
+	printf("Memory base address = 0x%08lx\n", c6412.mem_base);
 
 	if (argc < optind + 1) {
 		fprintf(stderr, "Command not specified\n");
@@ -827,4 +815,6 @@ int main(int argc, char *argv[])
 //	check_eeprom(&c6412);
 	upload_firmware(&c6412);
 //	check_emif(&c6412);
+
+	return 0;
 }

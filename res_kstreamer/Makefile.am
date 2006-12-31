@@ -17,6 +17,7 @@ noinst_HEADERS =\
 	util.h
 
 res_kstreamer_la_CPPFLAGS=\
+	-DAST_MODULE=\"res_kstreamer\"		\
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/modules/include/	\

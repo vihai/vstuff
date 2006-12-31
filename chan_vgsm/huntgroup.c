@@ -275,7 +275,8 @@ void vgsm_hg_reload(struct ast_config *cfg)
 /*---------------------------------------------------------------------------*/
 
 static char *complete_show_vgsm_huntgroups(
-		char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	if (pos != 3)
 		return NULL;

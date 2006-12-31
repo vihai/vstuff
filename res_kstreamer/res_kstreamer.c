@@ -31,6 +31,8 @@
 #include <asterisk/options.h>
 #include <asterisk/logger.h>
 #include <asterisk/cli.h>
+#include <asterisk/version.h>
+#include <asterisk/app.h>
 
 /* FUCK YOU ASTERSISK */
 #undef pthread_mutex_t
@@ -53,16 +55,6 @@
 #include "res_kstreamer.h"
 
 #include "util.h"
-
-#include "../config.h"
-
-#ifdef HAVE_ASTERISK_VERSION_H
-#include <asterisk/version.h>
-#endif
-
-#ifndef ASTERISK_VERSION_NUM
-#include <asterisk/channel_pvt.h>
-#endif
 
 struct ks_conn *ks_conn;
 
@@ -141,7 +133,8 @@ static int ks_show_kstreamer_dynattrs_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_dynattrs_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	/*
 	int i;
@@ -192,7 +185,8 @@ static int ks_show_kstreamer_nodes_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_nodes_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	/*
 	int i;
@@ -243,7 +237,8 @@ static int ks_show_kstreamer_chans_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_chans_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	/*
 	int i;
@@ -295,7 +290,8 @@ static int ks_show_kstreamer_pipelines_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_pipelines_complete(
-	char *line, char *word, int pos, int state)
+	const char *line, const char *word,
+	int pos, int state)
 {
 	/*
 	int i;
@@ -325,7 +321,11 @@ static struct ast_cli_entry ks_show_kstreamer_pipelines =
 
 /*---------------------------------------------------------------------------*/
 
+#if ASTERISK_VERSION_NUM < 010400
 int load_module(void)
+#else
+static int ks_load_module(void)
+#endif
 {
 	int err;
 
@@ -366,7 +366,11 @@ err_ks_conn_create:
 	return -1;
 }
 
+#if ASTERISK_VERSION_NUM < 010400
 int unload_module(void)
+#else
+static int ks_unload_module(void)
+#endif
 {
 	ast_cli_unregister(&ks_show_kstreamer_pipelines);
 	ast_cli_unregister(&ks_show_kstreamer_chans);
@@ -377,6 +381,8 @@ int unload_module(void)
 
 	return 0;
 }
+
+#if ASTERISK_VERSION_NUM < 010400
 
 char *description(void)
 {
@@ -393,3 +399,13 @@ char *key()
 {
 	return ASTERISK_GPL_KEY;
 }
+
+#else
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY,
+		AST_MODFLAG_GLOBAL_SYMBOLS,
+		"Kstreamer handler",
+		.load = ks_load_module,
+		.unload = ks_unload_module,
+	);
+#endif
