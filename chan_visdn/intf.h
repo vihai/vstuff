@@ -140,7 +140,11 @@ void visdn_ic_put(struct visdn_ic *ic);
 void visdn_ic_setdefault(struct visdn_ic *ic);
 
 char *visdn_intf_complete(
+#if SAFE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state);
 
 void visdn_intf_cli_register(void);

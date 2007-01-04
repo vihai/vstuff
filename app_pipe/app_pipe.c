@@ -32,6 +32,12 @@
 #include <asterisk/logger.h>
 #include <asterisk/version.h>
 
+#if defined(AST_MODULE_INFO)
+#define SANE_ASTERISK_VERSION_NUM 0x00010400
+#else
+#define SANE_ASTERISK_VERSION_NUM 0x00010200
+#endif
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 static char *app = "Pipe";
@@ -282,7 +288,7 @@ ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 	return res;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int load_module(void)
 #else
 static int app_pipe_load_module(void)
@@ -292,7 +298,7 @@ static int app_pipe_load_module(void)
 					synopsis, descrip);
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int unload_module(void)
 #else
 static int app_pipe_unload_module(void)
@@ -301,7 +307,7 @@ static int app_pipe_unload_module(void)
 	return ast_unregister_application(app);
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 
 char *description(void)
 {

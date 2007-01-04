@@ -1087,7 +1087,11 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 }
 
 char *visdn_intf_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	int which = 0;
@@ -1108,7 +1112,12 @@ char *visdn_intf_complete(
 }
 
 static char *complete_show_visdn_interfaces(
-	const char *line, const char *word, int pos, int state)
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
 {
 	if (pos != 3)
 		return NULL;

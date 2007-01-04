@@ -29,7 +29,6 @@
 
 #include <asm/types.h>
 
-#include <asterisk.h>
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
 #include <asterisk/config.h>
@@ -65,6 +64,13 @@
 #undef pthread_cond_broadcast
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
+
+#if defined(AST_MODULE_INFO)
+#define SANE_ASTERISK_VERSION_NUM 0x00010400
+#include <asterisk.h>
+#else
+#define SANE_ASTERISK_VERSION_NUM 0x00010200
+#endif
 
 #include <res_kstreamer.h>
 
@@ -160,7 +166,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 {
 	struct ast_channel *ast_chan;
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
@@ -188,7 +194,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 	ast_chan->tech_pvt = vgsm_chan_get(vgsm_chan);
 	ast_chan->tech = &vgsm_tech;
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 	ast_chan->type = VGSM_CHAN_TYPE;
 #endif
 
@@ -392,7 +398,13 @@ err_missing_module:
 	return err;
 }
 
-static char *vgsm_pin_set_complete(const char *line, const char *word, int pos, int state)
+static char *vgsm_pin_set_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
 {
 	char *commands[] = { "enabled", "disabled" };
 	int i;
@@ -776,7 +788,11 @@ err_missing_module:
 }
 
 static char *vgsm_send_sms_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	switch(pos) {
@@ -937,7 +953,11 @@ err_no_module_name:
 }
 
 static char *vgsm_pin_input_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	switch(pos) {
@@ -1079,7 +1099,11 @@ err_no_module_name:
 }
 
 static char *vgsm_puk_input_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	switch(pos) {
@@ -1589,7 +1613,7 @@ struct ast_frame *vgsm_exception(struct ast_channel *ast_chan)
 }
 
 /* We are called with chan->lock'ed */
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 static int vgsm_indicate(struct ast_channel *ast_chan, int condition)
 #else
 static int vgsm_indicate(
@@ -2071,7 +2095,7 @@ static const struct ast_channel_tech vgsm_tech = {
 	.send_text	= vgsm_sendtext,
 	.setoption	= vgsm_setoption,
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 	.send_digit	= vgsm_send_digit,
 #else
 	.send_digit_end	= vgsm_send_digit,
@@ -2146,6 +2170,18 @@ BOOL vgsm_cms_error_fatal(int res)
 
 	return FALSE;
 }
+
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+static void astman_append(struct mansession *s, const char *fmt, ...)
+{
+	va_list ap;
+	char tmpstr[256];
+
+	va_start(ap, fmt);
+	vsnprintf(tmpstr, sizeof(tmpstr), fmt, ap);
+	va_end(ap);
+}
+#endif
 
 static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 {
@@ -2549,7 +2585,7 @@ static void vgsm_shutdown(void)
 	vgsm_module_shutdown_all();
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int load_module(void)
 #else
 static int vgsm_load_module(void)
@@ -2631,7 +2667,7 @@ err_channel_register:
 	return err;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int unload_module(void)
 #else
 static int vgsm_unload_module(void)
@@ -2660,7 +2696,7 @@ static int vgsm_unload_module(void)
 	return 0;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int reload(void)
 #else
 static int vgsm_reload_module(void)
@@ -2671,7 +2707,7 @@ static int vgsm_reload_module(void)
 	return 0;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 
 int usecount(void)
 {

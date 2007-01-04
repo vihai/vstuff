@@ -36,6 +36,12 @@
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
+#if defined(AST_MODULE_INFO)
+#define SANE_ASTERISK_VERSION_NUM 0x00010400
+#else
+#define SANE_ASTERISK_VERSION_NUM 0x00010200
+#endif
+
 #include <libkstreamer.h>
 
 #include <chan_visdn.h>
@@ -105,7 +111,7 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	ast_mutex_lock(&chan->lock);
 
-#ifdef ASTERISK_VERSION_NUM
+#ifdef SANE_ASTERISK_VERSION_NUM
 	if (strcmp(chan->tech->type, "VISDN")) {
 #else
 	if (strcmp(chan->type, "VISDN")) {
@@ -218,7 +224,7 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 	return res;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int load_module(void)
 #else
 static int visdn_ppp_load_module(void)
@@ -227,7 +233,7 @@ static int visdn_ppp_load_module(void)
 	return ast_register_application(app, visdn_ppp_exec, synopsis, descrip);
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int unload_module(void)
 #else
 static int visdn_ppp_unload_module(void)
@@ -236,7 +242,7 @@ static int visdn_ppp_unload_module(void)
 	return ast_unregister_application(app);
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 
 char *description(void)
 {

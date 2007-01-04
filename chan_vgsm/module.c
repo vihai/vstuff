@@ -1977,7 +1977,11 @@ err_module_not_found:
 }
 
 static char *show_vgsm_modules_complete(
+#if ASTERISK_VERSION_NUM < 010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
@@ -2084,7 +2088,11 @@ err_no_module_name:
 }
 
 static char *vgsm_forwarding_complete(
+#if ASTERISK_VERSION_NUM < 010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	char *commands[] = { "query", "off" };
@@ -2260,7 +2268,11 @@ err_no_module_name:
 }
 
 static char *vgsm_module_complete(
+#if ASTERISK_VERSION_NUM < 010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	char *commands[] = { "power", "reset" };
@@ -2443,7 +2455,12 @@ static int no_debug_vgsm_module_func(int fd, int argc, char *argv[])
 }
 
 static char *debug_module_category_complete(
-	const char *line, const char *word, int state)
+#if ASTERISK_VERSION_NUM < 010400
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int state)
 {
 	char *commands[] = { "atcommands", "serial", "sms", "cbm" };
 	int i;
@@ -2457,7 +2474,11 @@ static char *debug_module_category_complete(
 }
 
 static char *debug_module_complete(
+#if ASTERISK_VERSION_NUM < 010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 
@@ -2472,7 +2493,11 @@ static char *debug_module_complete(
 }
 
 static char *no_debug_module_complete(
+#if ASTERISK_VERSION_NUM < 010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 

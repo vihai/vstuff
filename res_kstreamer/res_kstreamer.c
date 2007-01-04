@@ -49,7 +49,6 @@
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
-
 #include <libkstreamer.h>
 
 #include "res_kstreamer.h"
@@ -58,20 +57,17 @@
 
 struct ks_conn *ks_conn;
 
-//STANDARD_LOCAL_USER;
-
-//LOCAL_USER_DECL;
-
 #ifdef DEBUG_DEFAULTS
 BOOL debug = FALSE;
 #else
 BOOL debug = FALSE;
 #endif
 
-int reload(void)
-{
-	return 0;
-};
+#if defined(AST_MODULE_INFO)
+#define SANE_ASTERISK_VERSION_NUM 0x00010400
+#else
+#define SANE_ASTERISK_VERSION_NUM 0x00010200
+#endif
 
 static void ks_logger(int level, const char *format, ...)
 {
@@ -133,7 +129,11 @@ static int ks_show_kstreamer_dynattrs_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_dynattrs_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	/*
@@ -185,7 +185,11 @@ static int ks_show_kstreamer_nodes_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_nodes_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	/*
@@ -237,7 +241,11 @@ static int ks_show_kstreamer_chans_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_chans_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	/*
@@ -290,7 +298,11 @@ static int ks_show_kstreamer_pipelines_func(int fd, int argc, char *argv[])
 }
 
 static char *ks_show_kstreamer_pipelines_complete(
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+	char *line, char *word,
+#else
 	const char *line, const char *word,
+#endif
 	int pos, int state)
 {
 	/*
@@ -321,7 +333,7 @@ static struct ast_cli_entry ks_show_kstreamer_pipelines =
 
 /*---------------------------------------------------------------------------*/
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int load_module(void)
 #else
 static int ks_load_module(void)
@@ -366,7 +378,7 @@ err_ks_conn_create:
 	return -1;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 int unload_module(void)
 #else
 static int ks_unload_module(void)
@@ -382,7 +394,7 @@ static int ks_unload_module(void)
 	return 0;
 }
 
-#if ASTERISK_VERSION_NUM < 010400
+#if SANE_ASTERISK_VERSION_NUM < 0x00010400
 
 char *description(void)
 {
