@@ -42,25 +42,24 @@ nobase_include_HEADERS = \
 	pd_grammar.h	\
 	pd_parser.h
 
-CLEANFILES = pd_grammar.c pd_grammar.h pd_grammar.out
-EXTRA_DIST = pd_grammar.lem
-
-BUILT_SOURCES = pd_grammar.c
-
-CPPFLAGS= \
-	-I$(top_builddir)			\
-	-I$(top_builddir)/include/
-
-pd_grammar.c pd_grammar.h: pd_grammar.lem
-	../tools/lemon pd_grammar.lem
-
-libkstreamer_la_LIBADD = pd_grammar.o
-
 libkstreamer_la_CPPFLAGS= \
 	-I$(top_builddir)			\
 	-I$(top_builddir)/include/		\
 	-I$(top_builddir)/libskb/		\
 	-I$(top_builddir)/modules/include/
+
+CLEANFILES = pd_grammar.c pd_grammar.h pd_grammar.out
+EXTRA_DIST = pd_grammar.lem
+
+BUILT_SOURCES = pd_grammar.c
+
+pd_grammar.c pd_grammar.h: pd_grammar.lem
+	../tools/lemon pd_grammar.lem
+
+pd_grammar.$(OBJEXT): pd_grammar.c
+	$(CC) -c pd_grammar.c -o $@ $(libkstreamer_la_CPPFLAGS)
+
+libkstreamer_la_LIBADD = pd_grammar.o
 
 libkstreamer_la_LDFLAGS = -module -avoid-version -no-undefined
 
