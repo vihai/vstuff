@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -20,7 +20,6 @@
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
-#include "router.h"
 
 struct kset ks_pipelines_kset;
 
@@ -268,14 +267,11 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 			chan = ks_chan_get_by_id(
 					*(__u32 *)KS_ATTR_DATA(attr));
 			if (!chan) {
-				printk(KERN_CRIT "Link ID not found\n");
-				// FIXME
 				err = -ENODEV;
 				goto err_chan_not_found;
 			}
 
 			if (chan->pipeline) {
-printk(KERN_DEBUG "Channel is busy\n");
 				err = -EBUSY;
 				ks_chan_put(chan);
 				goto err_chan_is_busy;
@@ -292,7 +288,7 @@ printk(KERN_DEBUG "Channel is busy\n");
 		break;
 
 		default:
-			printk(KERN_CRIT "  Unexpected attribute %d\n",
+			ks_msg(KERN_WARNING, "Unexpected attribute %d\n",
 					attr->type);
 
 			err = -EINVAL;
@@ -353,7 +349,7 @@ int ks_pipeline_update_from_nlsmsg(
 		break;
 
 		default:
-			printk(KERN_CRIT "  Unexpected attribute %d\n",
+			ks_msg(KERN_WARNING, "Unexpected attribute %d\n",
 					attr->type);
 
 			err = -EINVAL;
@@ -381,8 +377,6 @@ int ks_pipeline_cmd_new(
 {
 	struct ks_pipeline *pipeline;
 	int err;
-
-	printk(KERN_DEBUG "==========> Pipeline NEW\n");
 
 	pipeline = ks_pipeline_create_from_nlmsg(nlh, &err);
 	if (!pipeline) {
@@ -416,8 +410,6 @@ int ks_pipeline_cmd_del(
 	struct ks_pipeline *pipeline;
 	int err;
 
-	printk(KERN_DEBUG "==========> Pipeline DEL\n");
-
 	pipeline = ks_pipeline_get_by_nlid(nlh);
 	if (!pipeline) {
 		err = -ENOENT;
@@ -449,8 +441,6 @@ int ks_pipeline_cmd_set(
 	struct ks_pipeline *pipeline;
 	int err;
 
-printk(KERN_DEBUG "==========> Pipeline SET\n");
-
 	pipeline = ks_pipeline_get_by_nlid(nlh);
 	if (!pipeline) {
 		err = -ENOENT;
@@ -481,8 +471,6 @@ int ks_pipeline_cmd_get(
 {
 	struct ks_pipeline *pipeline;
 	int err;
-
-	printk(KERN_DEBUG "==========> Pipeline GET\n");
 
 	ks_xact_send_control(xact, KS_NETLINK_PIPELINE_GET,
 			NLM_F_ACK | NLM_F_MULTI);
@@ -551,43 +539,11 @@ int ks_pipeline_register(struct ks_pipeline *pipeline)
 	if (err < 0)
 		goto err_kobject_add;
 
-/*	if (pipeline->duplex) {
-		err = sysfs_create_chan(
-			&pipeline->kobj,
-			&pipeline->duplex->kobj,
-			"duplex");
-		if (err < 0)
-			goto err_create_chan_duplex;
-	}
-
-	BUG_ON(!pipeline->from);
-	err = sysfs_create_chan(
-		&pipeline->kobj,
-		&pipeline->from->kobj,
-		"from");
-	if (err < 0)
-		goto err_create_chan_from;
-
-	BUG_ON(!pipeline->to);
-	err = sysfs_create_chan(
-		&pipeline->kobj,
-		&pipeline->to->kobj,
-		"to");
-	if (err < 0)
-		goto err_create_chan_to;*/
-
 	ks_pipeline_broadcast_netlink_notification(
 			pipeline, KS_NETLINK_PIPELINE_NEW);
 
 	return 0;
 
-/*	sysfs_remove_pipeline(&pipeline->kobj, "to");
-err_create_pipeline_to:
-	sysfs_remove_pipeline(&pipeline->kobj, "from");
-err_create_pipeline_from:
-	if (pipeline->duplex)
-		sysfs_remove_pipeline(&pipeline->kobj, "duplex");
-err_create_pipeline_chan:*/
 	kobject_del(&pipeline->kobj);
 err_kobject_add:
 	down_write(&ks_pipelines_list_sem);
@@ -603,12 +559,6 @@ void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 {
 	ks_pipeline_broadcast_netlink_notification(
 			pipeline, KS_NETLINK_PIPELINE_DEL);
-
-/*	sysfs_remove_pipeline(&pipeline->kobj, "to");
-	sysfs_remove_pipeline(&pipeline->kobj, "from");
-
-	if (pipeline->duplex)
-		sysfs_remove_pipeline(&pipeline->kobj, "duplex");*/
 
 	ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
 
@@ -626,7 +576,7 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 	struct ks_chan *chan;
 	struct ks_chan *prev_chan = NULL;
 
-	printk(KERN_CRIT " ");
+	printk(KERN_DEBUG " ");
 
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
@@ -847,10 +797,6 @@ static void ks_pipeline_flowing_to_open(
 		if (chan == stop_at)
 			goto done;
 
-printk(KERN_DEBUG "CHAN = %p\n", chan);
-printk(KERN_DEBUG "CHAN->OPS = %p\n", chan->ops);
-printk(KERN_DEBUG "CHAN->OPS->STOP = %p\n", chan->ops->stop);
-
 		if (chan->ops->stop)
 			chan->ops->stop(chan);
 
@@ -1038,125 +984,6 @@ failed:
 }
 EXPORT_SYMBOL(ks_pipeline_change_status);
 
-#if 0
-int ks_pipeline_connect(struct ks_pipeline *pipeline)
-{
-	int err = 0;
-
-	down_write(&pipeline->lock);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_NULL) {
-		err = ks_pipeline_null_to_connected(pipeline);
-		if (err < 0)
-			goto failed;
-	}
-
-failed:
-	up_write(&pipeline->lock);
-
-	return err;
-}
-
-void ks_pipeline_disconnect(struct ks_pipeline *pipeline)
-{
-	down_write(&pipeline->lock);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_FLOWING)
-		ks_pipeline_flowing_to_open(pipeline, NULL);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_OPEN)
-		ks_pipeline_open_to_connected(pipeline, NULL);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_CONNECTED)
-		ks_pipeline_connected_to_null(pipeline, NULL);
-
-	up_write(&pipeline->lock);
-}
-EXPORT_SYMBOL(ks_pipeline_disconnect);
-
-int ks_pipeline_open(struct ks_pipeline *pipeline)
-{
-	int err = 0;
-
-	down_write(&pipeline->lock);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_NULL) {
-		err = ks_pipeline_null_to_connected(pipeline);
-		if (err < 0)
-			goto failed;
-	}
-
-	if (pipeline->status == KS_PIPELINE_STATUS_CONNECTED) {
-		err = ks_pipeline_connected_to_open(pipeline);
-		if (err < 0)
-			goto failed;
-	}
-
-failed:
-
-	up_write(&pipeline->lock);
-
-	return err;
-}
-EXPORT_SYMBOL(ks_pipeline_open);
-
-void ks_pipeline_close(struct ks_pipeline *pipeline)
-{
-	down_write(&pipeline->lock);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_FLOWING)
-		ks_pipeline_flowing_to_open(pipeline, NULL);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_OPEN)
-		ks_pipeline_open_to_connected(pipeline, NULL);
-
-	up_write(&pipeline->lock);
-}
-EXPORT_SYMBOL(ks_pipeline_close);
-
-int ks_pipeline_start(struct ks_pipeline *pipeline)
-{
-	int err = 0;
-
-	down_write(&pipeline->lock);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_NULL) {
-		err = ks_pipeline_null_to_connected(pipeline);
-		if (err < 0)
-			goto failed;
-	}
-
-	if (pipeline->status == KS_PIPELINE_STATUS_CONNECTED) {
-		err = ks_pipeline_connected_to_open(pipeline);
-		if (err < 0)
-			goto failed;
-	}
-
-	if (pipeline->status == KS_PIPELINE_STATUS_OPEN) {
-		err = ks_pipeline_open_to_flowing(pipeline);
-		if (err < 0)
-			goto failed;
-	}
-
-failed:
-	up_write(&pipeline->lock);
-
-	return err;
-}
-EXPORT_SYMBOL(ks_pipeline_start);
-
-void ks_pipeline_stop(struct ks_pipeline *pipeline)
-{
-	down_write(&pipeline->lock);
-
-	if (pipeline->status == KS_PIPELINE_STATUS_FLOWING)
-		ks_pipeline_flowing_to_open(pipeline, NULL);
-
-	up_write(&pipeline->lock);
-}
-EXPORT_SYMBOL(ks_pipeline_stop);
-#endif
-
 void ks_pipeline_stimulate(struct ks_pipeline *pipeline)
 {
 	struct ks_chan *chan;
@@ -1180,16 +1007,6 @@ void ks_pipeline_stimulate(struct ks_pipeline *pipeline)
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL(ks_pipeline_stimulate);
-
-
-
-
-
-
-
-
-
-
 
 struct ks_chan *ks_pipeline_prev(struct ks_chan *chan)
 {
@@ -1262,25 +1079,6 @@ EXPORT_SYMBOL(ks_pipeline_last_node);
 
 /*---------------------------------------------------------------------------*/
 
-static ssize_t ks_pipeline_show_framing(
-	struct ks_pipeline *pipeline,
-	struct ks_pipeline_attribute *attr,
-	char *buf)
-{
-	int len;
-
-	// FIXME LOCKING
-	len = snprintf(buf, PAGE_SIZE, "%d\n", pipeline->framing);
-
-	return len;
-}
-
-static KS_PIPELINE_ATTR(framing, S_IRUGO,
-		ks_pipeline_show_framing,
-		NULL);
-
-/*---------------------------------------------------------------------------*/
-
 static ssize_t ks_pipeline_show_mtu(
 	struct ks_pipeline *pipeline,
 	struct ks_pipeline_attribute *attr,
@@ -1321,7 +1119,6 @@ static KS_PIPELINE_ATTR(status, S_IRUGO,
 
 static struct attribute *ks_pipeline_default_attrs[] =
 {
-	&ks_pipeline_attr_framing.attr,
 	&ks_pipeline_attr_mtu.attr,
 	&ks_pipeline_attr_status.attr,
 	NULL,
@@ -1379,7 +1176,7 @@ static void ks_pipeline_release(struct kobject *kobj)
 {
 	struct ks_pipeline *pipeline = to_ks_pipeline(kobj);
 
-	printk(KERN_CRIT "pipeline release\n");
+printk(KERN_CRIT "pipeline release\n");
 
 	kfree(pipeline);
 }

@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * KStreamer kernel infrastructure core
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *

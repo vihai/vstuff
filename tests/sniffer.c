@@ -25,7 +25,6 @@
 #include <linux/netlink.h>
 #include <getopt.h>
 
-#include <linux/kstreamer/router.h>
 #include <linux/kstreamer/dynattr.h>
 #include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>

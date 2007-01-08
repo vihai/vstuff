@@ -1,7 +1,7 @@
 /*
- * Cologne Chip's HFC-4S and HFC-8S vISDN driver
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *

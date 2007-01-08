@@ -95,3 +95,4 @@ visdnctl/Makefile
 visdnctl/Makefile.in
 visdnctl/visdnctl
 
+modules/Modules.symvers

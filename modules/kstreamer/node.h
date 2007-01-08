@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -38,7 +38,6 @@ struct ks_node_ops
 	struct module *owner;
 
 	void (*release)(struct ks_node *node);
-//	void (*timer_func)(struct ks_node *node);
 
 	int (*connect)(
 		struct ks_node *node,
@@ -74,20 +73,6 @@ struct ks_node_ops
 		struct ks_node *node,
 		struct ks_chan *link1,
 		struct ks_chan *link2);
-
-/*	int (*frame_xmit)(
-		struct ks_node *node,
-		struct ks_chan *src_chan,
-		struct sk_buff *skb);
-
-	void (*rx_error)(
-		struct ks_node *node,
-		struct ks_chan *src_chan,
-		enum ks_chan_rx_error_code code);
-	void (*tx_error)(
-		struct ks_node *node,
-		struct ks_chan *src_chan,
-		enum ks_chan_tx_error_code code);*/
 };
 
 struct ks_duplex;

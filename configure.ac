@@ -424,7 +424,6 @@ AC_CONFIG_FILES([Makefile
 		res_kstreamer/Makefile
 		chan_visdn/Makefile
 		chan_vgsm/Makefile
-		app_visdn_ppp/Makefile
 		app_pipe/Makefile
 		kstool/Makefile
 		visdnctl/Makefile

@@ -100,9 +100,6 @@ libq931:
 - When we receive a SETUP_ACK after having sent DISCONNECT what should we do?
   Send STATUS? Ignore it?
 
-app_visdn_ppp:
---------------
-
 timer:
 ------
 

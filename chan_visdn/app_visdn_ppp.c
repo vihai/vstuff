@@ -1,3 +1,14 @@
+/*
+ * vISDN channel driver for Asterisk
+ *
+ * Copyright (C) 2004-2007 Daniele Orlandi
+ *
+ * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+ *
+ * This program is free software and may be modified and distributed
+ * under the terms and conditions of the GNU General Public License.
+ *
+ */
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -44,16 +55,15 @@
 
 #include <libkstreamer.h>
 
-#include <chan_visdn.h>
+#include "chan_visdn.h"
 
-static char *app = "vISDNppp";
-static char *synopsis = "Runs pppd and connects channel to visdn-ppp gateway";
+#define VISDN_PPP_APP_NAME "vISDNppp"
 
 static char *descrip = 
-"  vISDNppp(args): Spawns pppd and connects the channel to a newly created\n"
-" visdn-ppp channel. pppd must support visdn.so plugin.\n"
-"Arguments are passed to pppd and should be separated by | characters.\n"
-"Always returns -1.\n";
+"vISDNppp(args): Spawns pppd and connects the channel to a newly created\n"
+"  visdn-ppp channel. pppd must support visdn.so plugin.\n"
+"  Arguments are passed to pppd and should be separated by | characters.\n"
+"  Always returns -1.\n";
 
 #define PPP_MAX_ARGS	32
 #define PPP_EXEC	"/usr/sbin/pppd"
@@ -205,15 +215,21 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 			if (option_verbose > 2) {
 				if (WIFEXITED(status)) {
 					ast_verbose(VERBOSE_PREFIX_3
-						"PPP on %s terminated with status %d\n",
-						chan->name, WEXITSTATUS(status));
+						"PPP on %s terminated with "
+						"status %d\n",
+						chan->name,
+						WEXITSTATUS(status));
+
 				} else if (WIFSIGNALED(status)) {
 					ast_verbose(VERBOSE_PREFIX_3
-						"PPP on %s terminated with signal %d\n", 
-						chan->name, WTERMSIG(status));
+						"PPP on %s terminated with "
+						"signal %d\n", 
+						chan->name,
+						WTERMSIG(status));
 				} else {
 					ast_verbose(VERBOSE_PREFIX_3
-						"PPP on %s terminated weirdly.\n", chan->name);
+						"PPP on %s terminated "
+						"weirdly.\n", chan->name);
 				}
 			}
 
@@ -224,42 +240,16 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 	return res;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
-int load_module(void)
-#else
-static int visdn_ppp_load_module(void)
-#endif
+int visdn_ppp_load_module(void)
 {
-	return ast_register_application(app, visdn_ppp_exec, synopsis, descrip);
+	return ast_register_application(
+			VISDN_PPP_APP_NAME,
+			visdn_ppp_exec,
+			"Runs pppd and connects channel to visdn-ppp gateway",
+			descrip);
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
-int unload_module(void)
-#else
-static int visdn_ppp_unload_module(void)
-#endif
+int visdn_ppp_unload_module(void)
 {
-	return ast_unregister_application(app);
+	return ast_unregister_application(VISDN_PPP_APP_NAME);
 }
-
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
-
-char *description(void)
-{
-	return "vISDN PPP handler";
-}
-
-char *key()
-{
-	return ASTERISK_GPL_KEY;
-}
-
-#else
-
-AST_MODULE_INFO(ASTERISK_GPL_KEY,
-		AST_MODFLAG_GLOBAL_SYMBOLS,
-		"vISDN PPP handler",
-		.load = visdn_ppp_load_module,
-		.unload = visdn_ppp_unload_module,
-	);
-#endif

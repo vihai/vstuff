@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -61,13 +61,6 @@ struct ks_chan_ops
 	int (*set_attr)(struct ks_chan *chan, u16 type, void *buf,int len);
 };
 
-/*
-enum ks_leg_status
-{
-	KS_LEG_STATUS_QUEUE_STOPPED,
-};
-*/
-
 struct ks_chan
 {
 	struct kobject kobj;
@@ -122,17 +115,6 @@ extern void ks_chan_remove_file(
 	struct ks_chan *chan,
 	struct ks_chan_attribute * attr);
 
-/*
-extern int ks_leg_frame_xmit(
-	struct ks_leg *leg,
-	struct sk_buff *skb);
-extern void ks_leg_rx_error(
-	struct ks_leg *leg,
-	enum ks_leg_rx_error_code code);
-extern void ks_leg_tx_error(
-	struct ks_leg *leg,
-	enum ks_leg_tx_error_code code);
-*/
 void ks_chan_init(
 	struct ks_chan *chan,
 	struct ks_chan_ops *ops,
@@ -163,17 +145,14 @@ static inline struct ks_chan *ks_chan_get(struct ks_chan *chan)
 
 static inline void ks_chan_put(struct ks_chan *chan)
 {
-//	ks_debug(3, "ks_chan_put() refcnt=%d\n",
-//			atomic_read(&chan->kobj.kref.refcount) - 1);
+#if 0
+	ks_debug(3, "ks_chan_put() refcnt=%d\n",
+			atomic_read(&chan->kobj.kref.refcount) - 1);
+#endif
 
 	if (chan)
 		kobject_put(&chan->kobj);
 }
-
-/*static inline int ks_leg_queue_stopped(struct ks_leg *leg)
-{
-	return test_bit(KS_LEG_STATUS_QUEUE_STOPPED, &leg->status);
-}*/
 
 void ks_chan_del_rcu(struct rcu_head *head);
 

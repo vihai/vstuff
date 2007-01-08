@@ -1,7 +1,7 @@
 /*
- * Userland Kstreamer interface entity
+ * Userland Kstreamer interface
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *

@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -53,8 +53,6 @@ struct ks_pipeline
 
 	struct file *file;
 
-//	enum ks_pipeline_payload payload;
-	int framing;
 	int mtu;
 };
 
@@ -119,12 +117,6 @@ int ks_pipeline_cmd_get(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 
-//int ks_pipeline_connect(struct ks_pipeline *pipeline);
-//extern void ks_pipeline_disconnect(struct ks_pipeline *pipeline);
-//extern int ks_pipeline_open(struct ks_pipeline *pipeline);
-//extern void ks_pipeline_close(struct ks_pipeline *pipeline);
-//extern int ks_pipeline_start(struct ks_pipeline *pipeline);
-//extern void ks_pipeline_stop(struct ks_pipeline *pipeline);
 extern int ks_pipeline_change_status(
 	struct ks_pipeline *pipeline,
 	enum ks_pipeline_status status);

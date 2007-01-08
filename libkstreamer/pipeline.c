@@ -1,7 +1,7 @@
 /*
- * Userland Kstreamer Helper Routines
+ * Userland Kstreamer interface
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -238,86 +238,6 @@ void ks_pipeline_dump(
 		}
 	}
 }
-
-#if 0
-int ks_pipeline_descr_do_autoroute(
-	struct ks_pipeline_descr *pd,
-	struct ks_conn *conn,
-	int pos)
-{
-	int err;
-
-	pthread_mutex_lock(&conn->topology_lock);
-
-	struct ks_node *src_node;
-	struct ks_node *dst_node;
-
-	if (pos == 0)
-		src_node = pd->ep1;
-	else
-		src_node = pd->chans[pos-1]->from;
-
-	if (pos == pd->nchans-1)
-		dst_node = pd->ep2;
-	else
-		dst_node = pd->chans[pos]->to;
-
-	ks_router_run(src_node, dst_node);
-
-	int path_len = 0;
-	struct ks_node *node;
-	for(node = dst_node; node->router_prev;
-	    node = node->router_prev, path_len++);
-
-	if (node != src_node) {
-		err = -EHOSTUNREACH;
-		goto err_no_path;
-	}
-
-	/* Make space in the array for path_len-1 chans ad one slot is
-	 * altready free, as it contains NULL
-	 */
-
-	int i;
-	for(i=pd->nchans-1; i>pos; i--) {
-		pd->chans[i] = pd->chans[i-path_len-1];
-		pd->pars[i] = pd->pars[i-path_len-1];
-	}
-
-	pd->nchans += path_len-1;
-
-	for(node = dst_node, i=pos+path_len-1; node->router_prev;
-	    node = node->router_prev, i--) {
-		pd->chans[i] = node->router_prev_thru;
-		pd->pars[i] = pd->pars[pos];
-	}
-
-	pthread_mutex_unlock(&conn->topology_lock);
-
-	return 0;
-
-err_no_path:
-	pthread_mutex_unlock(&conn->topology_lock);
-
-	return err;
-}
-
-int ks_pipeline_descr_autoroute(
-	struct ks_pipeline_descr *pd,
-	struct ks_conn *conn)
-{
-	int i;
-	for (i=0; i<pd->nchans; i++) {
-
-		if (pd->chans[i] == NULL) {
-			ks_pipeline_descr_do_autoroute(pd, conn, i);
-			break;
-		}
-	}
-
-	return 0;
-}
-#endif
 
 struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 	struct ks_conn *conn,

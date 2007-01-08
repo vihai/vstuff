@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -218,7 +218,6 @@ retry:
 			NLMSG_ERROR, sizeof(int));
 	nlh->nlmsg_flags = 0;
 
-printk(KERN_DEBUG "ERRRRRRRRRRRRRRROR = %d\n", error);
 	*((int *)NLMSG_DATA(nlh)) = -error;
 
 	return;
@@ -241,8 +240,6 @@ int ks_cmd_begin(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-printk(KERN_DEBUG "Xact Begin\n");
-
 	xact->flags |= KS_XACT_FLAGS_PERSISTENT;
 
 	ks_xact_send_control(xact, KS_NETLINK_BEGIN, NLM_F_ACK);
@@ -255,8 +252,6 @@ int ks_cmd_noop(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-printk(KERN_DEBUG "NOOP\n");
-
 	ks_xact_send_control(xact, NLMSG_NOOP, NLM_F_ACK);
 
 	return 0;
@@ -269,8 +264,6 @@ int ks_cmd_version_request(
 {
 	struct ks_netlink_version_response *vr;
 	struct nlmsghdr *nlh;
-
-printk(KERN_DEBUG "Version request\n");
 
 retry:
 
@@ -301,13 +294,9 @@ int ks_cmd_commit(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-printk(KERN_DEBUG "Xact Committing\n");
-
 	ks_xact_send_control(xact, KS_NETLINK_COMMIT, NLM_F_ACK);
 
 	xact->flags |= KS_XACT_FLAGS_COMPLETED;
-
-printk(KERN_DEBUG "Xact Committed\n");
 
 	return 0;
 }
@@ -329,8 +318,6 @@ int ks_dynattr_cmd_get(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	printk(KERN_DEBUG "==========> Dynattr GET\n");
-
 	ks_xact_send_control(xact, KS_NETLINK_DYNATTR_GET,
 			NLM_F_ACK | NLM_F_MULTI);
 
@@ -344,8 +331,6 @@ int ks_node_cmd_get(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	printk(KERN_DEBUG "==========> Node GET\n");
-
 	ks_xact_send_control(xact, KS_NETLINK_NODE_GET,
 			NLM_F_ACK | NLM_F_MULTI);
 
@@ -359,7 +344,8 @@ int ks_cmd_not_implemented(
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	printk(KERN_DEBUG "kstreamer command %d\n", cmd->message_type);
+	ks_msg(KERN_INFO, "command %d not implemented\n",
+		cmd->message_type);
 
 	return 0;
 };

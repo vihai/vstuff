@@ -53,6 +53,12 @@
 #define FAILED_RETRY_TIME (30 * SEC)
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
+#if defined(AST_MODULE_INFO)
+#define SANE_ASTERISK_VERSION_NUM 0x00010400
+#else
+#define SANE_ASTERISK_VERSION_NUM 0x00010200
+#endif
+
 struct visdn_intf *visdn_intf_alloc(void)
 {
 	struct visdn_intf *intf;

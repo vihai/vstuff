@@ -1,7 +1,7 @@
 /*
- * vISDN KSTREAMS/q.921 protocol implementation
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _FAKE_NETLINK_H
-#define _FAKE_NETLINK_H
+#ifndef _KS_NETLINK_H
+#define _KS_NETLINK_H
 
 #include <linux/types.h>
 

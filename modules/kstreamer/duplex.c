@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -133,7 +133,7 @@ static void ks_duplex_release(struct kobject *kobj)
 	if (duplex->ops->release)
 		duplex->ops->release(duplex);
 	else {
-		ks_msg(KERN_ERR, "vISDN duplex '%s' does not have a"
+		ks_msg(KERN_ERR, "Duplex '%s' does not have a"
 			" release() function, it is broken and must be"
 			" fixed.\n",
 			duplex->kobj.name);

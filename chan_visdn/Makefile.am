@@ -1,7 +1,7 @@
 #
-# vstuff
+# vISDN channel driver for Asterisk
 #
-# Copyright (C) 2004-2006 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -17,6 +17,7 @@ chan_visdn_la_SOURCES = \
 	ton.c		\
 	overlap.c	\
 	disconnect.c	\
+	app_visdn_ppp.c \
 	numbers_list.c
 
 noinst_HEADERS = \
@@ -27,6 +28,7 @@ noinst_HEADERS = \
 	overlap.h	\
 	disconnect.h	\
 	numbers_list.h	\
+	app_visdn_ppp.h \
 	util.h
 
 chan_visdn_la_CPPFLAGS=\

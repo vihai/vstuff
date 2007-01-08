@@ -1,7 +1,7 @@
 /*
- * Userland Kstreamer interface
+ * vISDN channel driver for Asterisk
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,11 +10,10 @@
  *
  */
 
-#ifndef _LIBKSTREAMER_ROUTER_H
-#define _LIBKSTREAMER_ROUTER_H
+#ifndef _APP_VISDN_PPP_H
+#define _APP_VISDN_PPP_H
 
-struct ks_node;
-
-void ks_router_run(struct ks_node *start, struct ks_node *to);
+int visdn_ppp_load_module(void);
+int visdn_ppp_unload_module(void);
 
 #endif

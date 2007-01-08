@@ -1,7 +1,7 @@
 /*
- * vISDN low-level drivers infrastructure core
+ * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -86,155 +86,6 @@ static int _ks_chan_new_id(void)
 			return cur_id;
 	}
 }
-
-#if 0
-int ks_chan_frame_xmit(
-	struct ks_chan *chan,
-	struct sk_buff *skb)
-{
-	if (!chan->cxc->ops || !chan->cxc->ops->frame_xmit) {
-		WARN_ON(1);
-		return -ENODEV;
-	}
-
-	return chan->cxc->ops->frame_xmit(chan->cxc, chan, skb);
-}
-EXPORT_SYMBOL(ks_chan_frame_xmit);
-
-void ks_chan_start_queue(
-	struct ks_chan *chan)
-{
-	unsigned long flags;
-
-	if (!chan->cxc->ops || !chan->cxc->ops->start_queue) {
-		WARN_ON(1);
-		return;
-	}
-
-	spin_lock_irqsave(&chan->queue_stopped_lock, flags);
-	chan->cxc->ops->start_queue(chan->cxc, chan);
-	clear_bit(KS_CHAN_STATUS_QUEUE_STOPPED, &chan->status);
-	spin_unlock_irqrestore(&chan->queue_stopped_lock, flags);
-}
-EXPORT_SYMBOL(ks_chan_start_queue);
-
-void ks_chan_stop_queue(
-	struct ks_chan *chan)
-{
-	unsigned long flags;
-
-	if (!chan->cxc->ops || !chan->cxc->ops->stop_queue) {
-		WARN_ON(1);
-		return;
-	}
-
-	spin_lock_irqsave(&chan->queue_stopped_lock, flags);
-	chan->cxc->ops->stop_queue(chan->cxc, chan);
-	set_bit(KS_CHAN_STATUS_QUEUE_STOPPED, &chan->status);
-	spin_unlock_irqrestore(&chan->queue_stopped_lock, flags);
-}
-EXPORT_SYMBOL(ks_chan_stop_queue);
-
-void ks_chan_wake_queue(
-	struct ks_chan *chan)
-{
-	unsigned long flags;
-
-	if (!chan->cxc->ops || !chan->cxc->ops->wake_queue) {
-		WARN_ON(1);
-		return;
-	}
-
-	spin_lock_irqsave(&chan->queue_stopped_lock, flags);
-	chan->cxc->ops->wake_queue(chan->cxc, chan);
-	clear_bit(KS_CHAN_STATUS_QUEUE_STOPPED, &chan->status);
-	spin_unlock_irqrestore(&chan->queue_stopped_lock, flags);
-}
-EXPORT_SYMBOL(ks_chan_wake_queue);
-
-void ks_chan_rx_error(
-	struct ks_chan *chan,
-	enum ks_chan_rx_error_code code)
-{
-	if (!chan->cxc->ops || !chan->cxc->ops->rx_error) {
-		WARN_ON(1);
-		return;
-	}
-
-	chan->cxc->ops->rx_error(chan->cxc, chan, code);
-}
-EXPORT_SYMBOL(ks_chan_rx_error);
-
-void ks_chan_tx_error(
-	struct ks_chan *chan,
-	enum ks_chan_tx_error_code code)
-{
-	if (!chan->cxc->ops || !chan->cxc->ops->tx_error) {
-		WARN_ON(1);
-		return;
-	}
-
-	chan->cxc->ops->tx_error(chan->cxc, chan, code);
-}
-EXPORT_SYMBOL(ks_chan_tx_error);
-
-//----------------------------------------------------------------------------
-
-static ssize_t ks_chan_show_framing(
-	struct ks_chan *chan,
-	struct ks_chan_attribute *attr,
-	char *buf)
-{
-	int len;
-
-	len = snprintf(buf, PAGE_SIZE, "%s\n",
-			ks_framing_to_string(chan->framing));
-
-	return len;
-}
-
-static ssize_t ks_chan_store_framing(
-	struct ks_chan *chan,
-	struct ks_chan_attribute *attr,
-	const char *buf,
-	size_t count)
-{
-	int err;
-	int len = count;
-
-	while(len > 0) {
-		if (buf[len - 1] != '\r' && buf[len - 1] != '\n')
-			break;
-
-		len--;
-	}
-
-	if (!strncmp(buf, "none", len) &&
-			chan->framing_avail & KS_CHAN_FRAMING_NONE)
-		chan->framing = KS_CHAN_FRAMING_NONE;
-	else if (!strncmp(buf, "async", len) &&
-			chan->framing_avail & KS_CHAN_FRAMING_ASYNC)
-		chan->framing = KS_CHAN_FRAMING_ASYNC;
-	else if (!strncmp(buf, "hdlc", len) &&
-			chan->framing_avail & KS_CHAN_FRAMING_HDLC)
-		chan->framing = KS_CHAN_FRAMING_HDLC;
-	else {
-		err = -EINVAL;
-		goto err_invalid_framing;
-	}
-
-	return count;
-
-err_invalid_framing:
-
-	return err;
-}
-
-static KS_CHAN_ATTR(framing, S_IRUGO | S_IWUSR,
-		ks_chan_show_framing,
-		ks_chan_store_framing);
-#endif
-//----------------------------------------------------------------------------
 
 int sanprintf(char *buf, int bufsize, const char *fmt, ...)
 {
@@ -465,8 +316,6 @@ static int ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
 		break;
 
 		default:
-printk(KERN_DEBUG "AAAAAAAAAAAAAAAAA %d %08x %p %p\n", attr->type, *(u32 *)KS_ATTR_DATA(attr), chan->ops, chan->ops->set_attr);
-
 			if (chan->ops->set_attr) {
 				int err;
 
@@ -474,9 +323,8 @@ printk(KERN_DEBUG "AAAAAAAAAAAAAAAAA %d %08x %p %p\n", attr->type, *(u32 *)KS_AT
 							KS_ATTR_DATA(attr),
 							KS_ATTR_PAYLOAD(attr));
 
-				if (err < 0) {
-					// FIXME
-				}
+				if (err < 0)
+					return err;
 			}
 		}
 	}
@@ -554,8 +402,6 @@ int ks_chan_cmd_get(
 	struct ks_chan *chan;
 	int err;
 
-	printk(KERN_DEBUG "==========> Chan GET\n");
-
 	ks_xact_send_control(xact, KS_NETLINK_CHAN_GET,
 			NLM_F_ACK | NLM_F_MULTI);
 
@@ -585,8 +431,6 @@ int ks_chan_cmd_set(
 {
 	struct ks_chan *chan;
 	int err;
-
-printk(KERN_DEBUG "==========> Link SET\n");
 
 	chan = ks_chan_get_by_nlid(nlh);
 	if (!chan) {

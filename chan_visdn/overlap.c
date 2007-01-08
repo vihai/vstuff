@@ -34,10 +34,6 @@
 #include "huntgroup.h"
 #include "util.h"
 
-STANDARD_LOCAL_USER;
-
-LOCAL_USER_DECL;
-
 static int supports_overlapping(
 	struct ast_channel *chan,
 	char *called_number)
@@ -235,10 +231,8 @@ static int new_digit(
 
 static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 {
-	struct localuser *u;
 	int retval = -1;
 	int do_exit = FALSE;
-	LOCAL_USER_ADD(u);
 
 	char called_number[32] = "";
 
@@ -256,7 +250,6 @@ static int visdn_exec_overlap_dial(struct ast_channel *chan, void *data)
 		ast_frfree(f);
 	}
 
-	LOCAL_USER_REMOVE(u);
 	return retval;
 }
 
