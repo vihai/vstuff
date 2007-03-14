@@ -75,7 +75,7 @@ struct hfc_st_chan {
 //	int native_bitrate;
 };
 
-extern void hfc_st_chan_init(
+struct hfc_st_chan *hfc_st_chan_create(
 	struct hfc_st_chan *chan,
 	struct hfc_st_port *port,
 	const char *name,
@@ -87,6 +87,7 @@ extern void hfc_st_chan_init(
 
 int hfc_st_chan_register(struct hfc_st_chan *chan);
 void hfc_st_chan_unregister(struct hfc_st_chan *chan);
+void hfc_st_chan_destroy(struct hfc_st_chan *chan);
 
 static inline struct hfc_st_chan *hfc_st_chan_get(struct hfc_st_chan *chan)
 {
@@ -98,6 +99,32 @@ static inline struct hfc_st_chan *hfc_st_chan_get(struct hfc_st_chan *chan)
 static inline void hfc_st_chan_put(struct hfc_st_chan *chan)
 {
 	ks_node_put(&chan->ks_node);
+}
+
+static inline struct hfc_st_chan_rx *hfc_st_chan_rx_get(
+	struct hfc_st_chan_rx *chan)
+{
+	ks_chan_get(&chan->ks_chan);
+
+	return chan;
+}
+
+static inline void hfc_st_chan_rx_put(struct hfc_st_chan_rx *chan)
+{
+	ks_chan_put(&chan->ks_chan);
+}
+
+static inline struct hfc_st_chan_tx *hfc_st_chan_tx_get(
+	struct hfc_st_chan_tx *chan)
+{
+	ks_chan_get(&chan->ks_chan);
+
+	return chan;
+}
+
+static inline void hfc_st_chan_tx_put(struct hfc_st_chan_tx *chan)
+{
+	ks_chan_put(&chan->ks_chan);
 }
 
 #endif

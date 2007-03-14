@@ -108,13 +108,15 @@ struct hfc_card
 struct hfc_card *hfc_card_get(struct hfc_card *card);
 void hfc_card_put(struct hfc_card *card);
 
-struct hfc_card *hfc_card_alloc(void);
-void hfc_card_init(
+struct hfc_card *hfc_card_create(
 	struct hfc_card *card,
 	struct pci_dev *pci_dev,
 	struct hfc_card_config *card_config);
+void hfc_card_destroy(struct hfc_card *card);
+
 int hfc_card_register(struct hfc_card *card);
 void hfc_card_unregister(struct hfc_card *card);
+
 int hfc_card_probe(struct hfc_card *card);
 void hfc_card_remove(struct hfc_card *card);
 

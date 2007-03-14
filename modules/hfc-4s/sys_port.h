@@ -67,14 +67,13 @@ void hfc_sys_port_reconfigure(
 void hfc_sys_port_update_fsm(
 	struct hfc_sys_port *port);
 
-void hfc_sys_port_init(
+void hfc_sys_port_create(
 	struct hfc_sys_port *port,
 	struct hfc_card *card,
 	const char *name);
-int hfc_sys_port_register(
-	struct hfc_sys_port *port);
-void hfc_sys_port_unregister(
-	struct hfc_sys_port *port);
+int hfc_sys_port_register(struct hfc_sys_port *port);
+void hfc_sys_port_unregister(struct hfc_sys_port *port);
+void hfc_sys_port_destroy(struct hfc_sys_port *port);
 
 static inline struct hfc_sys_port *hfc_sys_port_get(struct hfc_sys_port *port)
 {

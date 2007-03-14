@@ -599,24 +599,29 @@ struct visdn_port_ops hfc_sys_port_ops = {
 	.disable	= NULL,
 };
 
-void hfc_sys_port_init(
+void hfc_sys_port_create(
 	struct hfc_sys_port *port,
 	struct hfc_card *card,
 	const char *name)
 {
 	int i;
 
+	BUG_ON(!port); /* Dynamic allocation not supported */
+
 	port->card = card;
 
-	visdn_port_init(&port->visdn_port, &hfc_sys_port_ops, name,
+	visdn_port_create(&port->visdn_port, &hfc_sys_port_ops, name,
 			&card->pci_dev->dev.kobj);
+
+	port->visdn_port.type = "SYS";
 
 	for (i=0; i<ARRAY_SIZE(port->chans); i++) {
 		char chan_name[16];
 
 		snprintf(chan_name, sizeof(chan_name), "sys%d", i);
 
-		hfc_sys_chan_init(&port->chans[i], port, chan_name, i);
+		hfc_card_get(port->card);
+		hfc_sys_chan_create(&port->chans[i], port, chan_name, i);
 	}
 
 	port->num_chans = 0;
@@ -660,8 +665,7 @@ err_port_register:
 	return err;
 }
 
-void hfc_sys_port_unregister(
-	struct hfc_sys_port *port)
+void hfc_sys_port_unregister(struct hfc_sys_port *port)
 {
 	int i;
 	struct visdn_port_attribute **attr = hfc_sys_port_attributes;
@@ -679,4 +683,14 @@ void hfc_sys_port_unregister(
 	}
 
 	visdn_port_unregister(&port->visdn_port);
+}
+
+void hfc_sys_port_destroy(struct hfc_sys_port *port)
+{
+	int i;
+
+	for (i=0; i<port->num_chans; i++)
+		hfc_sys_chan_destroy(&port->chans[i]);
+
+	visdn_port_destroy(&port->visdn_port);
 }

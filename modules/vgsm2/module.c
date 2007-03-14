@@ -1,7 +1,7 @@
 /*
  * VoiSmart vGSM-II board driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -129,11 +129,7 @@ static int vgsm_module_rx_chan_start(struct ks_chan *ks_chan)
 	struct vgsm_card *card = module->card;
 
 	vgsm_card_lock(card);
-
-//	module_rx->fifo_out = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
-//				card->readdma_bus_mem) / 4;
-
-//	vgsm_update_mask0(card);
+	module_rx->fifo_out = vgsm_inl(card, VGSM_R_ME_FIFO_RX_IN(module->id));
 	vgsm_card_unlock(card);
 
 	vgsm_debug_module(module, 1, "RX started.\n");
@@ -162,7 +158,6 @@ static void vgsm_module_rx_chan_stimulus(
 		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
 	struct vgsm_module *module = module_rx->module;
 	struct vgsm_card *card = module->card;
-	size_t copied_octets = 0;
 	int inpos;
 	u8 *bufp;
 
@@ -176,21 +171,24 @@ static void vgsm_module_rx_chan_stimulus(
 
 	vgsm_card_lock(card);
 
-//	inpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
-//				card->readdma_bus_mem) / 4;
+	inpos = vgsm_inl(card, VGSM_R_ME_FIFO_RX_IN(module->id));
 
-	while(module_rx->fifo_out != inpos && copied_octets < sf->size) {
+	while(module_rx->fifo_out != inpos && sf->len < sf->size) {
 
-//		*bufp++ = *(u8 *)(card->readdma_mem +
-//				(module_rx->fifo_out * 4) +
-//				module->timeslot_offset);
+		if (sf->size - sf->len < sizeof(s16))
+			break;
 
-		module_rx->fifo_out++;
+		*(s16 *)(sf->data + sf->len) =
+			*(volatile s16 *)(card->fifo_mem +
+				module_rx->fifo_base +
+				module_rx->fifo_out);
+
+		sf->len += sizeof(s16);
+
+		module_rx->fifo_out += sizeof(s16);
 
 		if (module_rx->fifo_out >= module_rx->fifo_size)
 			module_rx->fifo_out = 0;
-
-		sf->len++;
 	}
 
 	vgsm_card_unlock(card);
@@ -214,27 +212,34 @@ static struct ks_chan_ops vgsm_module_rx_chan_ops = {
 	.stimulus	= vgsm_module_rx_chan_stimulus,
 };
 
-static void vgsm_module_rx_init(
+static struct vgsm_module_rx *vgsm_module_rx_create(
 	struct vgsm_module_rx *module_rx,
 	struct vgsm_module *module,
-	u16 fifo_base,
+	u32 fifo_base,
 	u16 fifo_size)
 {
+	BUG_ON(!module_rx); /* Dynamic allocation not implemented */
+	BUG_ON(!module);
+
 	module_rx->module = module;
 
 	module_rx->fifo_base = fifo_base;
 	module_rx->fifo_size = fifo_size;
 	module_rx->fifo_out = 0;
 
-	ks_chan_init(&module_rx->ks_chan,
+	ks_chan_create(&module_rx->ks_chan,
 			&vgsm_module_rx_chan_ops, "rx",
 			NULL,
 			&module->ks_node.kobj,
 			&module->ks_node,
 			&kss_softswitch.ks_node);
 
-/*	module_rx->ks_chan.framed_mtu = -1;
-	module_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+	return module_rx;
+}
+
+static void vgsm_module_rx_destroy(struct vgsm_module_rx *module_rx)
+{
+	ks_chan_destroy(&module_rx->ks_chan);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -272,7 +277,7 @@ static int vgsm_module_tx_chan_start(struct ks_chan *ks_chan)
 		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
 	struct vgsm_module *module = module_tx->module;
 	struct vgsm_card *card = module->card;
-	int i;
+//	int i;
 
 	vgsm_card_lock(card);
 
@@ -305,26 +310,6 @@ static void vgsm_module_tx_chan_stop(struct ks_chan *ks_chan)
 	vgsm_debug_module(module, 1, "TX module stopped.\n");
 }
 
-static void vgsm_module_fifo_write(
-	struct vgsm_module_tx *module_tx,
-	const u8 *buf,
-	size_t count)
-{
-	struct vgsm_module *module = module_tx->module;
-	struct vgsm_card *card = module->card;
-	int i;
-
-	for (i=0; i<count; i++) {
-//		*(u8 *)(card->writedma_mem + (module_tx->fifo_in * 4) +
-//			module->timeslot_offset) = *(buf + i);
-
-		module_tx->fifo_in++;
-
-		if (module_tx->fifo_in >= module_tx->fifo_size)
-			module_tx->fifo_in = 0;
-	}
-}
-
 static ssize_t vgsm_module_tx_chan_push_raw(
 	struct ks_chan *ks_chan,
 	struct ks_streamframe *sf)
@@ -333,15 +318,26 @@ static ssize_t vgsm_module_tx_chan_push_raw(
 		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
 	struct vgsm_module *module = module_tx->module;
 	struct vgsm_card *card = module->card;
-	size_t copied_octets = 0;
+	int i;
 
 	vgsm_card_lock(card);
 
-	vgsm_module_fifo_write(module_tx, sf->data, sf->len);
+	for (i=0; i<sf->len; i+=sizeof(s16)) {
+		*(volatile s16 *)(card->fifo_mem +
+			module_tx->fifo_base +
+			module_tx->fifo_in) = *(s16 *)(sf->data + i);
+
+		module_tx->fifo_in += sizeof(s16);
+
+		if (module_tx->fifo_in >= module_tx->fifo_size)
+			module_tx->fifo_in = 0;
+	}
+
+	vgsm_outl(card, VGSM_R_ME_FIFO_TX_IN(module->id), module_tx->fifo_in);
 
 	vgsm_card_unlock(card);
 
-	return copied_octets;
+	return sf->len;
 }
 
 static int vgsm_module_tx_chan_get_pressure(
@@ -356,8 +352,7 @@ static int vgsm_module_tx_chan_get_pressure(
 
 	vgsm_card_lock(card);
 
-//	outpos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
-//				card->writedma_bus_mem) / 4;
+	outpos = vgsm_inl(card, VGSM_R_ME_FIFO_TX_OUT(module->id));
 
 	pressure = (module_tx->fifo_in - outpos + module_tx->fifo_size) %
 			module_tx->fifo_size;
@@ -385,19 +380,22 @@ static struct kss_chan_from_ops vgsm_module_tx_node_ops =
 	.get_pressure	= vgsm_module_tx_chan_get_pressure,
 };
 
-static void vgsm_module_tx_init(
+static struct vgsm_module_tx *vgsm_module_tx_create(
 	struct vgsm_module_tx *module_tx,
 	struct vgsm_module *module,
-	u16 fifo_base,
+	u32 fifo_base,
 	u16 fifo_size)
 {
+	BUG_ON(!module_tx); /* Dynamic allocation not implemented */
+	BUG_ON(!module);
+
 	module_tx->module = module;
 
 	module_tx->fifo_base = fifo_base;
 	module_tx->fifo_size = fifo_size;
 	module_tx->fifo_in = 0;
 
-	ks_chan_init(&module_tx->ks_chan,
+	ks_chan_create(&module_tx->ks_chan,
 			&vgsm_module_tx_chan_ops, "tx",
 			NULL,
 			&module->ks_node.kobj,
@@ -405,6 +403,13 @@ static void vgsm_module_tx_init(
 			&module->ks_node);
 
 	module_tx->ks_chan.from_ops = &vgsm_module_tx_node_ops;
+
+	return module_tx;
+}
+
+static void vgsm_module_tx_destroy(struct vgsm_module_tx *module_tx)
+{
+	ks_chan_destroy(&module_tx->ks_chan);
 }
 
 static int vgsm_module_rx_register(struct vgsm_module_rx *module)
@@ -449,8 +454,12 @@ static void vgsm_module_tx_unregister(struct vgsm_module_tx *module)
 	ks_chan_unregister(&module->ks_chan);
 }
 
+BOOL vgsm_module_power_get(struct vgsm_module *module)
+{
+	u32 me_status = vgsm_inl(module->card, VGSM_R_ME_STATUS(module->id));
 
-
+	return !!(me_status & VGSM_R_ME_STATUS_V_VDD);
+}
 
 static void vgsm_module_node_release(struct ks_node *node)
 {
@@ -459,7 +468,7 @@ static void vgsm_module_node_release(struct ks_node *node)
 
 	printk(KERN_DEBUG "vgsm_module_node_release()\n");
 
-	vgsm_module_put(module);
+	kfree(module);
 }
 
 static struct ks_node_ops vgsm_module_node_ops = {
@@ -468,20 +477,199 @@ static struct ks_node_ops vgsm_module_node_ops = {
 	.release		= vgsm_module_node_release,
 };
 
-void vgsm_module_init(
+
+static int vgsm_module_ioctl_power_get(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+
+	u32 me_status = vgsm_inl(card, VGSM_R_ME_STATUS(module->id));
+
+	return put_user(me_status & VGSM_R_ME_STATUS_V_VDD, (int __user *)arg);
+}
+
+static int vgsm_module_ioctl_power_ign(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	u32 old_me_status;
+
+	vgsm_card_lock(module->card);
+	old_me_status = vgsm_inl(card, VGSM_R_ME_SETUP(module->id));
+	vgsm_outl(card, VGSM_R_ME_SETUP(module->id),
+			old_me_status | VGSM_R_ME_SETUP_V_ON);
+	vgsm_card_unlock(module->card);
+
+	msleep(100);
+
+	vgsm_card_lock(module->card);
+	old_me_status = vgsm_inl(card, VGSM_R_ME_SETUP(module->id));
+	vgsm_outl(card, VGSM_R_ME_SETUP(module->id),
+			old_me_status & ~VGSM_R_ME_SETUP_V_ON);
+	vgsm_card_unlock(module->card);
+
+	return 0;
+}
+
+static int vgsm_module_ioctl_emerg_off(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	u32 old_me_status;
+
+	vgsm_card_lock(module->card);
+	old_me_status = vgsm_inl(card, VGSM_R_ME_SETUP(module->id));
+	vgsm_outl(card, VGSM_R_ME_SETUP(module->id),
+			old_me_status | VGSM_R_ME_SETUP_V_EMERG_OFF);
+	vgsm_card_unlock(module->card);
+
+	msleep(3200);
+
+	vgsm_card_lock(module->card);
+	old_me_status = vgsm_inl(card, VGSM_R_ME_SETUP(module->id));
+	vgsm_outl(card, VGSM_R_ME_SETUP(module->id),
+			old_me_status & ~VGSM_R_ME_SETUP_V_EMERG_OFF);
+	vgsm_card_unlock(module->card);
+
+	return 0;
+}
+
+static int vgsm_module_ioctl_get_fw_version(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	u32 version = vgsm_inl(card, VGSM_R_VERSION);
+
+	return put_user(version, (int __user *)arg);
+}
+
+static int vgsm_module_ioctl_sim_route(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+
+	if (arg == -1)
+		module->route_to_sim = 0xf;
+	if (arg == -2)
+		module->route_to_sim = module->id;
+	if (arg < card->sims_number)
+		module->route_to_sim = arg;
+	else
+		return -EINVAL;
+
+	vgsm_card_update_router(card);
+
+	return 0;
+}
+
+static int vgsm_module_ioctl(
+	struct vgsm_uart *uart,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module = container_of(uart, struct vgsm_module, asc0);
+
+	switch(cmd) {
+	case VGSM_IOC_GET_INTERFACE_VERSION:
+		return put_user(2, (int __user *)arg);
+	break;
+
+	case VGSM_IOC_GET_NODEID:
+		return put_user(module->ks_node.id, (int __user *)arg);
+	break;
+
+	case VGSM_IOC_POWER_GET:
+		return vgsm_module_ioctl_power_get(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_POWER_IGN:
+		return vgsm_module_ioctl_power_ign(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_POWER_EMERG_OFF:
+		return vgsm_module_ioctl_emerg_off(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_VERSION:
+		return vgsm_module_ioctl_get_fw_version(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_SIM_ROUTE:
+		return vgsm_module_ioctl_sim_route(module, cmd, arg);
+	break;
+
+//	case VGSM_IOC_FW_UPGRADE:
+//		return vgsm_tty_do_fw_upgrade(module, cmd, arg);
+//	break;
+	}
+
+	return -ENOIOCTLCMD;
+}
+
+
+
+static struct uart_driver vgsm_uart_driver_asc0 =
+{
+	.owner			= THIS_MODULE,
+	.driver_name		= "vgsm_me",
+	.dev_name		= "vgsm_me",
+	.major			= 0,
+	.minor			= 0,
+	.nr			= 32,
+	.cons			= NULL,
+};
+
+static struct uart_driver vgsm_uart_driver_asc1 =
+{
+	.owner			= THIS_MODULE,
+	.driver_name		= "vgsm_mea",
+	.dev_name		= "vgsm_mea",
+	.major			= 0,
+	.minor			= 0,
+	.nr			= 32,
+	.cons			= NULL,
+};
+
+static struct uart_driver vgsm_uart_driver_mesim =
+{
+	.owner			= THIS_MODULE,
+	.driver_name		= "vgsm_mesim",
+	.dev_name		= "vgsm_mesim",
+	.major			= 0,
+	.minor			= 0,
+	.nr			= 32,
+	.cons			= NULL,
+};
+
+struct vgsm_module *vgsm_module_create(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
 	int id,
 	const char *name,
-	u16 rx_fifo_base,
-	u16 rx_fifo_size,
-	u16 tx_fifo_base,
-	u16 tx_fifo_size,
-	u16 asc0_base,
-	u16 asc1_base,
-	u16 sim_base,
-	u16 mesim_base)
+	u32 rx_fifo_base,
+	u32 rx_fifo_size,
+	u32 tx_fifo_base,
+	u32 tx_fifo_size,
+	u32 asc0_base,
+	u32 asc1_base,
+	u32 mesim_base)
 {
+	BUG_ON(module); /* Static allocation not implemented */
+
+	module = kmalloc(sizeof(*module), GFP_KERNEL);
+	if (!module)
+		goto err_kmalloc;
+
 	memset(module, 0, sizeof(*module));
 
 	module->card = card;
@@ -489,78 +677,45 @@ void vgsm_module_init(
 
 //	init_completion(&module->read_status_completion);
 
-	ks_node_init(&module->ks_node,
+	ks_node_create(&module->ks_node,
 			&vgsm_module_node_ops, name,
 			&card->pci_dev->dev.kobj);
 
-	memset(&module->asc0, 0, sizeof(module->asc0));
-	module->asc0.iotype = UPIO_MEM;
-	module->asc0.mapbase = module->card->io_bus_mem + asc0_base;
-	module->asc0.membase = module->card->io_mem + asc0_base;
-	module->asc0.regshift = 0;
-	module->asc0.irq = card->pci_dev->irq;
-	module->asc0.dev = &card->pci_dev->dev;
-	module->asc0.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
-	module->asc0.uartclk = 1152000 * 16;
+	vgsm_uart_create(&module->asc0,
+		&vgsm_uart_driver_asc0,
+		module->card->regs_bus_mem + asc0_base,
+		module->card->regs_mem + asc0_base,
+		card->pci_dev->irq,
+		&card->pci_dev->dev,
+		card->id * 4 + module->id,
+		FALSE,
+		vgsm_module_ioctl);
 
-	memset(&module->asc1, 0, sizeof(module->asc1));
-	module->asc1.iotype = UPIO_MEM;
-	module->asc1.mapbase = module->card->io_bus_mem + asc1_base;
-	module->asc1.membase = module->card->io_mem + asc1_base;
-	module->asc1.regshift = 0;
-	module->asc1.irq = card->pci_dev->irq;
-	module->asc1.dev = &card->pci_dev->dev;
-	module->asc1.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
-	module->asc1.uartclk = 1152000 * 16;
+	vgsm_uart_create(&module->asc1,
+		&vgsm_uart_driver_asc1,
+		module->card->regs_bus_mem + asc1_base,
+		module->card->regs_mem + asc1_base,
+		card->pci_dev->irq,
+		&card->pci_dev->dev,
+		card->id * 4 + module->id,
+		FALSE,
+		NULL);
 
-	memset(&module->sim, 0, sizeof(module->sim));
-	module->sim.iotype = UPIO_MEM;
-	module->sim.mapbase = module->card->io_bus_mem + sim_base;
-	module->sim.membase = module->card->io_mem + sim_base;
-	module->sim.regshift = 0;
-	module->sim.irq = card->pci_dev->irq;
-	module->sim.dev = &card->pci_dev->dev;
-	module->sim.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
-	module->sim.uartclk = 1152000 * 16;
+	vgsm_uart_create(&module->mesim,
+		&vgsm_uart_driver_mesim,
+		module->card->regs_bus_mem + mesim_base,
+		module->card->regs_mem + mesim_base,
+		card->pci_dev->irq,
+		&card->pci_dev->dev,
+		card->id * 4 + module->id,
+		TRUE,
+		NULL);
 
-	memset(&module->mesim, 0, sizeof(module->mesim));
-	module->mesim.iotype = UPIO_MEM;
-	module->mesim.mapbase = module->card->io_bus_mem + mesim_base;
-	module->mesim.membase = module->card->io_mem + mesim_base;
-	module->mesim.regshift = 0;
-	module->mesim.irq = card->pci_dev->irq;
-	module->mesim.dev = &card->pci_dev->dev;
-	module->mesim.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF | UPF_SHARE_IRQ;
-	module->mesim.uartclk = 1152000 * 16;
+	vgsm_module_get(module);
+	vgsm_module_rx_create(&module->rx, module, rx_fifo_base, rx_fifo_size);
 
-	vgsm_module_rx_init(&module->rx, module, rx_fifo_base, rx_fifo_size);
-	vgsm_module_tx_init(&module->tx, module, tx_fifo_base, tx_fifo_size);
-}
-
-struct vgsm_module *vgsm_module_alloc(
-	struct vgsm_card *card,
-	int id,
-	const char *name,
-	u16 rx_fifo_base,
-	u16 rx_fifo_size,
-	u16 tx_fifo_base,
-	u16 tx_fifo_size,
-	u16 asc0_base,
-	u16 asc1_base,
-	u16 sim_base,
-	u16 mesim_base)
-{
-	struct vgsm_module *module;
-
-	module = kmalloc(sizeof(*module), GFP_KERNEL);
-	if (!module)
-		goto err_kmalloc;
-
-	vgsm_module_init(module, card, id, name,
-			rx_fifo_base, rx_fifo_size,
-			tx_fifo_base, tx_fifo_size,
-			asc0_base, asc1_base,
-			sim_base, mesim_base);
+	vgsm_module_get(module);
+	vgsm_module_tx_create(&module->tx, module, tx_fifo_base, tx_fifo_size);
 
 	return module;
 
@@ -570,72 +725,57 @@ err_kmalloc:
 	return NULL;
 }
 
+
+void vgsm_module_destroy(struct vgsm_module *module)
+{
+	vgsm_uart_destroy(&module->mesim);
+	vgsm_uart_destroy(&module->asc1);
+	vgsm_uart_destroy(&module->asc0);
+
+	vgsm_module_tx_destroy(&module->tx);
+	vgsm_module_rx_destroy(&module->rx);
+
+	ks_node_destroy(&module->ks_node);
+}
+
 /*------------------------------------------------------------------------*/
 
 int vgsm_module_register(struct vgsm_module *module)
 {
 	int err;
 
-	tty_register_device(vgsm_tty_driver,
-			module->card->id * 4 + module->id,
-			&module->card->pci_dev->dev);
-
 	/* Node is the object we are inheriting */
 	err = ks_node_register(&module->ks_node);
 	if (err < 0)
 		goto err_node_register;
 
-	vgsm_module_get(module);
 	err = vgsm_module_rx_register(&module->rx);
 	if (err < 0)
 		goto err_st_module_rx_register;
 
-	vgsm_module_get(module);
 	err = vgsm_module_tx_register(&module->tx);
 	if (err < 0)
 		goto err_st_module_tx_register;
 
-/*	module->asc0_line = serial8250_register_port(&module->asc0);
-	if (module->asc0_line < 0) {
-		printk(KERN_WARNING "Cannot register serial port ASC0: %d\n",
-			module->asc0_line);
-		err = module->asc0_line;
+	err = vgsm_uart_register(&module->asc0);
+	if (err < 0)
 		goto err_register_asc0;
-	}
 
-	module->asc1_line = serial8250_register_port(&module->asc1);
-	if (module->asc1_line < 0) {
-		printk(KERN_WARNING "Cannot register serial port ASC1: %d\n",
-			module->asc1_line);
-		err = module->asc1_line;
+	err = vgsm_uart_register(&module->asc1);
+	if (err < 0)
 		goto err_register_asc1;
-	}
 
-	module->sim_line = serial8250_register_port(&module->sim);
-	if (module->sim_line < 0) {
-		printk(KERN_WARNING "Cannot register serial port: %d\n",
-			module->sim_line);
-		err = module->sim_line;
-		goto err_register_sim;
-	}
-
-	module->mesim_line = serial8250_register_port(&module->mesim);
-	if (module->mesim_line < 0) {
-		printk(KERN_WARNING "Cannot register serial port: %d\n",
-			module->mesim_line);
-		err = module->mesim_line;
+	err = vgsm_uart_register(&module->mesim);
+	if (err < 0)
 		goto err_register_mesim;
-	}
-*/
+
 	return 0;
 
-	serial8250_unregister_port(module->mesim_line);
+	vgsm_uart_unregister(&module->mesim);
 err_register_mesim:
-	serial8250_unregister_port(module->sim_line);
-err_register_sim:
-	serial8250_unregister_port(module->asc1_line);
+	vgsm_uart_unregister(&module->asc1);
 err_register_asc1:
-	serial8250_unregister_port(module->asc0_line);
+	vgsm_uart_unregister(&module->asc0);
 err_register_asc0:
 	vgsm_module_tx_unregister(&module->tx);
 err_st_module_tx_register:
@@ -649,16 +789,47 @@ err_node_register:
 
 void vgsm_module_unregister(struct vgsm_module *module)
 {
-/*	serial8250_unregister_port(module->mesim_line);
-	serial8250_unregister_port(module->sim_line);
-	serial8250_unregister_port(module->asc1_line);
-	serial8250_unregister_port(module->asc0_line);*/
+	vgsm_uart_unregister(&module->mesim);
+	vgsm_uart_unregister(&module->asc1);
+	vgsm_uart_unregister(&module->asc0);
 
 	vgsm_module_tx_unregister(&module->tx);
 	vgsm_module_rx_unregister(&module->rx);
 
 	ks_node_unregister(&module->ks_node);
+}
 
-	tty_unregister_device(vgsm_tty_driver,
-			module->card->id * 4 + module->id);
+int __init vgsm_module_modinit(void)
+{
+	int err;
+
+	err = uart_register_driver(&vgsm_uart_driver_asc0);
+	if (err < 0)
+		goto err_register_driver_asc0;
+
+	err = uart_register_driver(&vgsm_uart_driver_asc1);
+	if (err < 0)
+		goto err_register_driver_asc1;
+
+	err = uart_register_driver(&vgsm_uart_driver_mesim);
+	if (err < 0)
+		goto err_register_driver_mesim;
+
+	return 0;
+
+	uart_unregister_driver(&vgsm_uart_driver_mesim);
+err_register_driver_mesim:
+	uart_unregister_driver(&vgsm_uart_driver_asc1);
+err_register_driver_asc1:
+	uart_unregister_driver(&vgsm_uart_driver_asc0);
+err_register_driver_asc0:
+
+	return err;
+}
+
+void __exit vgsm_module_modexit(void)
+{
+	uart_unregister_driver(&vgsm_uart_driver_mesim);
+	uart_unregister_driver(&vgsm_uart_driver_asc1);
+	uart_unregister_driver(&vgsm_uart_driver_asc0);
 }

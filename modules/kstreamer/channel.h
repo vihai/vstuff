@@ -115,7 +115,7 @@ extern void ks_chan_remove_file(
 	struct ks_chan *chan,
 	struct ks_chan_attribute * attr);
 
-void ks_chan_init(
+extern struct ks_chan *ks_chan_create(
 	struct ks_chan *chan,
 	struct ks_chan_ops *ops,
 	const char *name,
@@ -123,6 +123,8 @@ void ks_chan_init(
 	struct kobject *parent,
 	struct ks_node *from,
 	struct ks_node *to);
+extern void ks_chan_destroy(struct ks_chan *chan);
+
 extern int ks_chan_register(struct ks_chan *chan);
 extern void ks_chan_unregister(struct ks_chan *chan);
 

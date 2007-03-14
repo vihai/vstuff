@@ -166,6 +166,8 @@ static struct pci_device_id hfc_pci_ids[] = {
 
 MODULE_DEVICE_TABLE(pci, hfc_pci_ids);
 
+atomic_t module_refcnt;
+
 static int __devinit hfc_probe(
 	struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry)
@@ -173,15 +175,13 @@ static int __devinit hfc_probe(
 	int err;
 
 	struct hfc_card *card;
-	card = hfc_card_alloc();
-	if (!card) {
-		err = -ENOMEM;
-		goto err_alloc_hfccard;
-	}
-
-	hfc_card_init(card,
+	card = hfc_card_create(NULL,
 		pci_dev,
 		(struct hfc_card_config *)device_id_entry->driver_data);
+	if (!card) {
+		err = -ENOMEM;
+		goto err_card_create;
+	}
 
 	err = hfc_card_probe(card);
 	if (err < 0)
@@ -204,7 +204,7 @@ err_card_register:
 	hfc_card_remove(card);
 err_card_probe:
 	hfc_card_put(card);
-err_alloc_hfccard:
+err_card_create:
 
 	return err;
 }
@@ -218,6 +218,7 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 
 	hfc_card_unregister(card);
 	hfc_card_remove(card);
+	hfc_card_destroy(card);
 }
 
 static struct pci_driver hfc_driver = {
@@ -271,6 +272,8 @@ static int __init hfc_init_module(void)
 
 	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " loading\n");
 
+	atomic_set(&module_refcnt, 0);
+
 	hfc_hdlc_framer_class = ks_dynattr_register("hdlc_framer");
 	if (!hfc_hdlc_framer_class) {
 		err = -ENOMEM;
@@ -321,6 +324,8 @@ module_init(hfc_init_module);
 
 static void __exit hfc_module_exit(void)
 {
+printk(KERN_DEBUG "module_exit()\n");
+
 #ifdef DEBUG_CODE
 	driver_remove_file(
 		&hfc_driver.driver,

@@ -434,15 +434,15 @@ static void hfc_st_chan_node_release(struct ks_node *node)
 	struct hfc_st_chan *chan = container_of(node, struct hfc_st_chan,
 							ks_node);
 
-	printk(KERN_DEBUG "hfc_st_chan_node_release()\n");
+printk(KERN_DEBUG "hfc_st_chan_node_release()\n");
 
 	hfc_st_port_put(chan->port);
 }
 
 static struct ks_node_ops hfc_st_chan_node_ops = {
-	.owner			= THIS_MODULE,
-
-	.release		= hfc_st_chan_node_release,
+	.owner		= THIS_MODULE,
+	.refcnt		= &module_refcnt,
+	.release	= hfc_st_chan_node_release,
 };
 
 //----------------------------------------------------------------------------
@@ -451,9 +451,9 @@ static void hfc_st_chan_rx_chan_release(struct ks_chan *ks_chan)
 {
 	struct hfc_st_chan_rx *chan_rx = to_st_chan_rx(ks_chan);
 
-	printk(KERN_DEBUG "hfc_st_chan_rx_chan_release()\n");
+printk(KERN_DEBUG "hfc_st_chan_rx_chan_release()\n");
 
-	hfc_st_chan_put(chan_rx->chan);
+	hfc_st_port_put(chan_rx->chan->port);
 }
 
 static int hfc_st_chan_rx_chan_connect(struct ks_chan *ks_chan)
@@ -568,9 +568,9 @@ static void hfc_st_chan_tx_chan_release(struct ks_chan *ks_chan)
 {
 	struct hfc_st_chan_tx *chan_tx = to_st_chan_tx(ks_chan);
 
-	printk(KERN_DEBUG "hfc_st_chan_tx_chan_release()\n");
+printk(KERN_DEBUG "hfc_st_chan_tx_chan_release()\n");
 
-	hfc_st_chan_put(chan_tx->chan);
+	hfc_st_port_put(chan_tx->chan->port);
 }
 
 static int hfc_st_chan_tx_chan_connect(struct ks_chan *ks_chan)
@@ -702,47 +702,57 @@ static void hfc_st_chan_duplex_release(struct ks_duplex *ks_duplex)
 	struct hfc_st_chan *chan = container_of(ks_duplex,
 					struct hfc_st_chan, ks_duplex);
 
-	printk(KERN_DEBUG "hfc_st_chan_duplex_release()\n");
+printk(KERN_DEBUG "hfc_st_chan_duplex_release()\n");
 
-	hfc_st_chan_put(chan);
+	hfc_st_port_put(chan->port);
 }
 
-struct ks_duplex_ops hfc_st_chan_duplex_ops =
+static struct ks_duplex_ops hfc_st_chan_duplex_ops =
 {
-	.owner			= THIS_MODULE,
+	.owner		= THIS_MODULE,
 
-	.release		= hfc_st_chan_duplex_release,
+	.release	= hfc_st_chan_duplex_release,
 };
 
-void hfc_st_chan_rx_init(
+static struct hfc_st_chan_rx *hfc_st_chan_rx_create(
 	struct hfc_st_chan_rx *chan_rx,
 	struct hfc_st_chan *chan)
 {
+	BUG_ON(!chan_rx); /* Dynamic allocation not supported */
+	BUG_ON(!chan);
+
 	chan_rx->chan = chan;
 
-	ks_chan_init(&chan_rx->ks_chan,
+	ks_chan_create(&chan_rx->ks_chan,
 			&hfc_st_chan_rx_chan_ops, "rx",
 			&chan->ks_duplex,
 			&chan->ks_node.kobj,
 			&chan->ks_node,
 			&chan->port->card->hfcswitch.ks_node);
+
+	return chan_rx;
 }
 
-void hfc_st_chan_tx_init(
+static struct hfc_st_chan_tx *hfc_st_chan_tx_create(
 	struct hfc_st_chan_tx *chan_tx,
 	struct hfc_st_chan *chan)
 {
+	BUG_ON(!chan_tx); /* Dynamic allocation not supported */
+	BUG_ON(!chan);
+
 	chan_tx->chan = chan;
 
-	ks_chan_init(&chan_tx->ks_chan,
+	ks_chan_create(&chan_tx->ks_chan,
 			&hfc_st_chan_tx_chan_ops, "tx",
 			&chan->ks_duplex,
 			&chan->ks_node.kobj,
 			&chan->port->card->hfcswitch.ks_node,
 			&chan->ks_node);
+
+	return chan_tx;
 }
 
-void hfc_st_chan_init(
+struct hfc_st_chan *hfc_st_chan_create(
 	struct hfc_st_chan *chan,
 	struct hfc_st_port *port,
 	const char *name,
@@ -752,23 +762,33 @@ void hfc_st_chan_init(
 	int subchannel_bit_start,
 	int native_bitrate)
 {
+	BUG_ON(!chan); /* Dynamic allocation not supported */
+	BUG_ON(!port);
+	BUG_ON(!name);
+
 	chan->port = port;
 	chan->id = id;
 	chan->hw_index = hw_index;
 	chan->subchannel_bit_count = subchannel_bit_count;
 	chan->subchannel_bit_start = subchannel_bit_start;
 
-	ks_node_init(&chan->ks_node,
+	ks_node_create(&chan->ks_node,
 			&hfc_st_chan_node_ops, name,
 			&port->visdn_port.kobj);
 
-	ks_duplex_init(&chan->ks_duplex,
+	hfc_st_port_get(port);
+	ks_duplex_create(&chan->ks_duplex,
 			&hfc_st_chan_duplex_ops,
 			"duplex",
 			&chan->ks_node.kobj);
 
-	hfc_st_chan_rx_init(&chan->rx, chan);
-	hfc_st_chan_tx_init(&chan->tx, chan);
+	hfc_st_port_get(chan->port);
+	hfc_st_chan_rx_create(&chan->rx, chan);
+
+	hfc_st_port_get(chan->port);
+	hfc_st_chan_tx_create(&chan->tx, chan);
+
+	return chan;
 }
 
 static int hfc_st_chan_rx_register(struct hfc_st_chan_rx *chan)
@@ -792,6 +812,11 @@ static void hfc_st_chan_rx_unregister(struct hfc_st_chan_rx *chan)
 	ks_chan_unregister(&chan->ks_chan);
 }
 
+static void hfc_st_chan_rx_destroy(struct hfc_st_chan_rx *chan)
+{
+	ks_chan_destroy(&chan->ks_chan);
+}
+
 static int hfc_st_chan_tx_register(struct hfc_st_chan_tx *chan)
 {
 	int err;
@@ -813,6 +838,11 @@ static void hfc_st_chan_tx_unregister(struct hfc_st_chan_tx *chan)
 	ks_chan_unregister(&chan->ks_chan);
 }
 
+static void hfc_st_chan_tx_destroy(struct hfc_st_chan_tx *chan)
+{
+	ks_chan_destroy(&chan->ks_chan);
+}
+
 int hfc_st_chan_register(struct hfc_st_chan *chan)
 {
 	int err;
@@ -821,17 +851,14 @@ int hfc_st_chan_register(struct hfc_st_chan *chan)
 	if (err < 0)
 		goto err_node_register;
 
-	hfc_st_chan_get(chan);
 	err = ks_duplex_register(&chan->ks_duplex);
 	if (err < 0)
 		goto err_duplex_register;
 
-	hfc_st_chan_get(chan);
 	err = hfc_st_chan_rx_register(&chan->rx);
 	if (err < 0)
 		goto err_st_chan_rx_register;
 
-	hfc_st_chan_get(chan);
 	err = hfc_st_chan_tx_register(&chan->tx);
 	if (err < 0)
 		goto err_st_chan_tx_register;
@@ -895,4 +922,14 @@ void hfc_st_chan_unregister(struct hfc_st_chan *chan)
 
 	ks_duplex_unregister(&chan->ks_duplex);
 	ks_node_unregister(&chan->ks_node);
+}
+
+void hfc_st_chan_destroy(struct hfc_st_chan *chan)
+{
+	hfc_st_chan_tx_destroy(&chan->tx);
+	hfc_st_chan_rx_destroy(&chan->rx);
+
+	ks_duplex_destroy(&chan->ks_duplex);
+
+	ks_node_destroy(&chan->ks_node);
 }

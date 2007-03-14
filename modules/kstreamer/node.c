@@ -51,7 +51,6 @@ struct ks_node *ks_node_get_by_id(int id)
 	return node;
 }
 
-
 static int _ks_node_new_id(void)
 {
 	static int cur_id;
@@ -148,12 +147,8 @@ static void ks_node_release(struct kobject *kobj)
 
 	if (node->ops->release)
 		node->ops->release(node);
-	else {
-		ks_msg(KERN_ERR, "Node '%s' does not have a release()"
-			" function, it is broken and must be fixed.\n",
-			node->kobj.name);
-		WARN_ON(1);
-	}
+	else
+		kfree(node);
 }
 
 static struct attribute *ks_node_default_attrs[] =
@@ -167,16 +162,21 @@ static struct kobj_type ks_node_ktype = {
 	.default_attrs	= ks_node_default_attrs,
 };
 
-void ks_node_init(
+struct ks_node *ks_node_create(
 	struct ks_node *node,
 	struct ks_node_ops *ops,
 	const char *name,
 	struct kobject *parent)
 {
-	BUG_ON(!node);
 	BUG_ON(!ops);
 	BUG_ON(!ops->owner);
 	BUG_ON(!name);
+
+	if (!node) {
+		node = kmalloc(sizeof(*node), GFP_KERNEL);
+		if (!node)
+			return NULL;
+	}
 
 	memset(node, 0, sizeof(*node));
 
@@ -187,8 +187,10 @@ void ks_node_init(
 	kobject_set_name(&node->kobj, "%s", name);
 
 	node->ops = ops;
+
+	return node;
 }
-EXPORT_SYMBOL(ks_node_init);
+EXPORT_SYMBOL(ks_node_create);
 
 int ks_node_write_to_nlmsg(
 	struct ks_node *node,
@@ -333,6 +335,13 @@ void ks_node_unregister(struct ks_node *node)
 	write_unlock(&ks_nodes_list_lock);
 }
 EXPORT_SYMBOL(ks_node_unregister);
+
+void ks_node_destroy(struct ks_node *node)
+{
+	ks_kobj_waitref(&node->kobj);
+	ks_node_put(node);
+}
+EXPORT_SYMBOL(ks_node_destroy);
 
 int ks_node_create_file(
 	struct ks_node *node,

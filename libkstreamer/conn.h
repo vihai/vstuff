@@ -73,6 +73,7 @@ struct ks_conn
 	__u32 pid;
 
 	int dump_packets;
+	int debug_state;
 
 	pthread_t protocol_thread;
 	int alert_read;
@@ -86,6 +87,11 @@ struct ks_conn
 
 	void (*report_func)(int level, const char *format, ...)
 		__attribute__ ((format (printf, 2, 3)));
+
+	void (*topology_event_callback)(
+		struct ks_conn *conn,
+		int message_type,
+		void *object);
 };
 
 struct ks_req;
@@ -109,6 +115,11 @@ void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
 void ks_conn_set_state(
 	struct ks_conn *conn,
 	enum ks_conn_state state);
+
+void ks_conn_topology_updated(
+	struct ks_conn *conn,
+	int message_type,
+	void *object);
 
 #endif
 

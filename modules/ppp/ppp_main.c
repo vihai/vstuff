@@ -386,12 +386,12 @@ int vppp_cdev_open(
 	skb_queue_head_init(&chan->rx_queue);
 	spin_lock_init(&chan->rx_queue_lock);
 
-	ks_node_init(&chan->ks_node,
+	ks_node_create(&chan->ks_node,
 		&vppp_node_ops, "paperino",
 		&ks_system_device.kobj);
 
 	/* RX */
-	ks_chan_init(&chan->ks_chan_rx,
+	ks_chan_create(&chan->ks_chan_rx,
 			&vppp_chan_rx_ops, "rx",
 			NULL,
 			&chan->ks_node.kobj,
@@ -401,7 +401,7 @@ int vppp_cdev_open(
 	chan->ks_chan_rx.from_ops = &vppp_chan_rx_softswitch_ops;
 
 	/* TX */
-	ks_chan_init(&chan->ks_chan_tx,
+	ks_chan_create(&chan->ks_chan_tx,
 			&vppp_chan_tx_ops, "tx",
 			NULL,
 			&chan->ks_node.kobj,

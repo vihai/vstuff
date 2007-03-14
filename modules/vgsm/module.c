@@ -2,7 +2,7 @@
  * VoiSmart GSM board vISDN driver
  *
  * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *          Massimo Mazzeo <mmazzeo@voismart.it>
@@ -318,10 +318,13 @@ static struct ks_chan_ops vgsm_module_rx_chan_ops = {
 };
 
 
-static void vgsm_module_rx_init(
+static struct vgsm_module_rx *vgsm_module_rx_create(
 	struct vgsm_module_rx *module_rx,
 	struct vgsm_module *module)
 {
+	BUG_ON(!module_rx); /* Dynamic allocation not implemented */
+	BUG_ON(!module);
+
 	module_rx->module = module;
 
 	module_rx->fifo_pos = 0;
@@ -329,15 +332,14 @@ static void vgsm_module_rx_init(
 
 	module_rx->codec_gain = 0xff;
 
-	ks_chan_init(&module_rx->ks_chan,
+	ks_chan_create(&module_rx->ks_chan,
 			&vgsm_module_rx_chan_ops, "rx",
 			NULL,
 			&module->ks_node.kobj,
 			&module->ks_node,
 			&kss_softswitch.ks_node);
 
-/*	module_rx->ks_chan.framed_mtu = -1;
-	module_rx->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+	return module_rx;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -508,10 +510,13 @@ static struct kss_chan_from_ops vgsm_module_tx_node_ops =
 	.get_pressure	= vgsm_module_tx_chan_get_pressure,
 };
 
-static void vgsm_module_tx_init(
+static struct vgsm_module_tx *vgsm_module_tx_create(
 	struct vgsm_module_tx *module_tx,
 	struct vgsm_module *module)
 {
+	BUG_ON(!module_tx); /* Dyanmic allocation not implemented */
+	BUG_ON(!module);
+
 	module_tx->module = module;
 
 	spin_lock_init(&module_tx->fifo_lock);
@@ -523,7 +528,7 @@ static void vgsm_module_tx_init(
 	module_tx->fifo_size = module->card->writedma_size / 4;
 	module_tx->codec_gain = 0xff;
 
-	ks_chan_init(&module_tx->ks_chan,
+	ks_chan_create(&module_tx->ks_chan,
 			&vgsm_module_tx_chan_ops, "tx",
 			NULL,
 			&module->ks_node.kobj,
@@ -531,8 +536,8 @@ static void vgsm_module_tx_init(
 			&module->ks_node);
 
 	module_tx->ks_chan.from_ops = &vgsm_module_tx_node_ops;
-/*	module_tx->ks_chan.framed_mtu = -1;
-	module_tx->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+
+	return module_tx;
 }
 
 static int vgsm_module_rx_register(struct vgsm_module_rx *module)
@@ -596,13 +601,15 @@ static struct ks_node_ops vgsm_module_node_ops = {
 	.release		= vgsm_module_node_release,
 };
 
-void vgsm_module_init(
+struct vgsm_module *vgsm_module_create(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
 	struct vgsm_micro *micro,
 	int id,
 	const char *name)
 {
+	BUG_ON(!module); /* Dynamic allocation not implemented */
+
 	memset(module, 0, sizeof(*module));
 
 	module->micro = micro;
@@ -619,12 +626,14 @@ void vgsm_module_init(
 	module->anal_loop = FALSE;
 	module->dig_loop = FALSE;
 
-	ks_node_init(&module->ks_node,
+	ks_node_create(&module->ks_node,
 			&vgsm_module_node_ops, name,
 			&card->pci_dev->dev.kobj);
 
-	vgsm_module_rx_init(&module->rx, module);
-	vgsm_module_tx_init(&module->tx, module);
+	vgsm_module_rx_create(&module->rx, module);
+	vgsm_module_tx_create(&module->tx, module);
+
+	return module;
 }
 
 struct vgsm_module *vgsm_module_alloc(
@@ -639,7 +648,7 @@ struct vgsm_module *vgsm_module_alloc(
 	if (!module)
 		goto err_kmalloc;
 
-	vgsm_module_init(module, card, micro, id, name);
+	vgsm_module_create(module, card, micro, id, name);
 
 	module->tx.fifo = kfifo_alloc(
 				vgsm_SERIAL_BUFF, GFP_KERNEL,

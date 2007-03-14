@@ -85,6 +85,7 @@ tests/ksmonitor
 tests/sniffer
 tests/traffic
 tests/vgsm_stress
+tests/vgsm2test
 tools/Makefile
 tools/Makefile.in
 tools/lemon
@@ -94,5 +95,6 @@ vgsmctl/vgsmctl
 visdnctl/Makefile
 visdnctl/Makefile.in
 visdnctl/visdnctl
+visdn_netdev_ctl/visdn_netdev_ctl
 
 modules/Modules.symvers

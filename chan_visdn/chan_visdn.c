@@ -72,12 +72,6 @@
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
-#if defined(AST_MODULE_INFO)
-#define SANE_ASTERISK_VERSION_NUM 0x00010400
-#else
-#define SANE_ASTERISK_VERSION_NUM 0x00010200
-#endif
-
 #include <res_kstreamer.h>
 
 #include <libq931/lib.h>
@@ -246,7 +240,7 @@ static struct ast_channel *visdn_ast_chan_alloc(
 {
 	struct ast_channel *ast_chan;
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
@@ -288,7 +282,7 @@ static struct ast_channel *visdn_ast_chan_alloc(
 	ast_chan->tech_pvt = visdn_chan_get(visdn_chan);
 	ast_chan->tech = &visdn_tech;
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	ast_chan->type = VISDN_CHAN_TYPE;
 #endif
 
@@ -1619,7 +1613,7 @@ struct ast_frame *visdn_exception(struct ast_channel *ast_chan)
 	return NULL;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 static int visdn_indicate(struct ast_channel *ast_chan, int condition)
 #else
 static int visdn_indicate(
@@ -2378,7 +2372,7 @@ static const struct ast_channel_tech visdn_tech = {
 	.send_text	= visdn_sendtext,
 	.setoption	= visdn_setoption,
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	.send_digit	= visdn_send_digit,
 #else
 	.send_digit_end	= visdn_send_digit,
@@ -3993,7 +3987,7 @@ static void visdn_q931_suspend_indication(
 	q931_send_primitive(q931_call, Q931_CCB_SUSPEND_RESPONSE, NULL);
 
 	if (ast_bridged_channel(ast_chan)) {
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 		ast_moh_start(ast_bridged_channel(ast_chan), NULL);
 #else
 		ast_moh_start(ast_bridged_channel(ast_chan), NULL, NULL);
@@ -5099,7 +5093,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 }
 
 static char *complete_show_visdn_calls(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -5250,7 +5244,7 @@ static struct ast_cli_entry show_visdn_calls =
 
 /*---------------------------------------------------------------------------*/
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int load_module(void)
 #else
 static int visdn_load_module(void)
@@ -5416,7 +5410,7 @@ err_pipe_ccb_q931:
 	return -1;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int unload_module(void)
 #else
 static int visdn_unload_module(void)
@@ -5448,7 +5442,7 @@ static int visdn_unload_module(void)
 	return 0;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int reload(void)
 #else
 static int visdn_reload_module(void)
@@ -5459,7 +5453,7 @@ static int visdn_reload_module(void)
 	return 0;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 
 int usecount(void)
 {

@@ -1,7 +1,7 @@
 /*
  * vISDN low-level drivers infrastructure core
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -25,6 +25,49 @@
 #include "visdn_priv.h"
 #include "port.h"
 
+
+struct list_head visdn_ports_list = LIST_HEAD_INIT(visdn_ports_list);
+DEFINE_RWLOCK(visdn_ports_list_lock);
+
+struct visdn_port *_visdn_port_search_by_id(int id)
+{
+	struct visdn_port *port;
+	list_for_each_entry(port, &visdn_ports_list, node) {
+		if (port->id == id)
+			return port;
+	}
+
+	return NULL;
+}
+
+struct visdn_port *visdn_port_get_by_id(int id)
+{
+	struct visdn_port *port;
+
+	read_lock(&visdn_ports_list_lock);
+	port = visdn_port_get(_visdn_port_search_by_id(id));
+	read_unlock(&visdn_ports_list_lock);
+
+	return port;
+}
+
+static int _visdn_port_new_id(void)
+{
+	static int cur_id;
+
+	for (;;) {
+		/* Maybe reusing port ids would be better */
+
+		if (++cur_id <= 0)
+			cur_id = 1;
+
+		if (!_visdn_port_search_by_id(cur_id))
+			return cur_id;
+	}
+}
+
+/*---------------------------------------------------------------------------*/
+
 static ssize_t visdn_port_show_enabled(
 	struct visdn_port *port,
 	struct visdn_port_attribute *attr,
@@ -40,8 +83,6 @@ static ssize_t visdn_port_show_enabled(
 
 	return len;
 }
-
-/*---------------------------------------------------------------------------*/
 
 static ssize_t visdn_port_store_enabled(
 	struct visdn_port *port,
@@ -84,9 +125,26 @@ static VISDN_PORT_ATTR(enabled, S_IRUGO | S_IWUSR,
 		visdn_port_show_enabled,
 		visdn_port_store_enabled);
 
+/*---------------------------------------------------------------------------*/
+
+static ssize_t visdn_port_show_type(
+	struct visdn_port *port,
+	struct visdn_port_attribute *attr,
+	char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", port->type);
+}
+
+static VISDN_PORT_ATTR(type, S_IRUGO,
+		visdn_port_show_type,
+		NULL);
+
+/*---------------------------------------------------------------------------*/
+
 static struct attribute *visdn_port_default_attrs[] =
 {
 	&visdn_port_attr_enabled.attr,
+	&visdn_port_attr_type.attr,
 	NULL,
 };
 
@@ -180,16 +238,21 @@ void visdn_port_deactivate(struct visdn_port *port)
 }
 EXPORT_SYMBOL(visdn_port_deactivate);
 
-void visdn_port_init(
+struct visdn_port *visdn_port_create(
 	struct visdn_port *port,
 	struct visdn_port_ops *ops,
 	const char *name,
 	struct kobject *parent)
 {
-	BUG_ON(!port);
 	BUG_ON(!ops);
 	BUG_ON(!ops->owner);
 	BUG_ON(!parent);
+
+	if (!port) {
+		port = kmalloc(sizeof(*port), GFP_KERNEL);
+		if (!port)
+			return NULL;
+	}
 
 	memset(port, 0, sizeof(*port));
 
@@ -198,72 +261,96 @@ void visdn_port_init(
 	kobj_set_kset_s(port, visdn_ports_subsys);
 	port->kobj.parent = parent;
 
+	port->type = "";
+
 	port->ops = ops;
 
-//	INIT_LIST_HEAD(&port->channels);
-
-//	init_MUTEX(&port->sem);
+	return port;
 }
-EXPORT_SYMBOL(visdn_port_init);
+EXPORT_SYMBOL(visdn_port_create);
 
 int visdn_port_register(struct visdn_port *port)
 {
 	int err;
+	char idtext[9];
 
 	BUG_ON(!port);
 
 	visdn_debug(3, "visdn_port_register()\n");
 
+	write_lock(&visdn_ports_list_lock);
+	port->id = _visdn_port_new_id();
+	list_add_tail(&visdn_port_get(port)->node,
+		&visdn_ports_list);
+	write_unlock(&visdn_ports_list_lock);
+
 	err = kobject_add(&port->kobj);
 	if (err < 0)
 		goto err_kobject_add;
 
-/*	if (port->device) {
-		err = sysfs_create_link(
-			&port->kobj,
-			&port->device->kobj,
-			"device");
-		if (err < 0)
-			goto err_create_link_device;
+	sprintf(idtext, "%08x", port->id);
 
-		err = sysfs_create_link(
-			&port->device->kobj,
-			&port->kobj,
-			port->kobj.name);
-		if (err < 0)
-			goto err_create_link_device_parent;
-	}*/
+	err = sysfs_create_link(
+		&visdn_ports_subsys.kset.kobj,
+		&port->kobj,
+		idtext);
+	if (err < 0)
+		goto err_create_subsys_link;
 
 	visdn_call_notifiers(VISDN_EVENT_PORT_REGISTERED, port);
 
 	return 0;
 
-/*	if (port->device)
-		sysfs_remove_link(&port->device->kobj, port->kobj.name);
-err_create_link_device_parent:
-	if (port->device)
-		sysfs_remove_link(&port->kobj, "device");
-err_create_link_device:*/
+	sysfs_remove_link(&visdn_ports_subsys.kset.kobj, idtext);
+err_create_subsys_link:
 	kobject_del(&port->kobj);
 err_kobject_add:
+	write_lock(&visdn_ports_list_lock);
+	list_del(&port->node);
+	visdn_port_put(port);
+	write_unlock(&visdn_ports_list_lock);
 
 	return err;
 }
 EXPORT_SYMBOL(visdn_port_register);
 
-void visdn_port_unregister(
-	struct visdn_port *port)
+void visdn_port_unregister(struct visdn_port *port)
 {
+	char idtext[9];
+
 	visdn_call_notifiers(VISDN_EVENT_PORT_UNREGISTERED, port);
 
-/*	if (port->device) {
-		sysfs_remove_link(&port->device->kobj, port->kobj.name);
-		sysfs_remove_link(&port->kobj, "device");
-	}*/
+	sprintf(idtext, "%08x", port->id);
+	sysfs_remove_link(&visdn_ports_subsys.kset.kobj, idtext);
 
 	kobject_del(&port->kobj);
+
+	write_lock(&visdn_ports_list_lock);
+	list_del(&port->node);
+	visdn_port_put(port);
+	write_unlock(&visdn_ports_list_lock);
 }
 EXPORT_SYMBOL(visdn_port_unregister);
+
+void visdn_port_destroy(struct visdn_port *port)
+{
+
+	if (atomic_read(&port->kobj.kref.refcount) > 1) {
+		msleep(50);
+
+		while(atomic_read(&port->kobj.kref.refcount) > 1) {
+			printk(KERN_WARNING
+				"Waiting for '%s' refcnt to become 1 (now %d)",
+				kobject_name(&port->kobj),
+				atomic_read(&port->kobj.kref.refcount));
+
+			msleep(1000);
+		}
+	}
+
+	visdn_port_put(port);
+}
+EXPORT_SYMBOL(visdn_port_destroy);
 
 int visdn_port_create_file(
 	struct visdn_port *port,
@@ -345,15 +432,12 @@ static void visdn_port_release(struct kobject *kobj)
 
 	if (port->ops->release)
 		port->ops->release(port);
-	else {
-		visdn_msg(KERN_ERR, "vISDN port '%s' does not have a release()"
-			" function, it is broken and must be fixed.\n",
-			port->kobj.name);
-		WARN_ON(1);
-	}
+	else
+		kfree(port);
 }
 
-struct kobj_type visdn_port_ktype = {
+struct kobj_type visdn_port_ktype =
+{
 	.release	= visdn_port_release,
 	.sysfs_ops	= &visdn_port_sysfs_ops,
 	.default_attrs	= visdn_port_default_attrs,

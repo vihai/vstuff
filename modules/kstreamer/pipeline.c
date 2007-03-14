@@ -242,7 +242,7 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 	enum ks_pipeline_status status = KS_PIPELINE_STATUS_NULL;
 	int err;
 
-	pipeline = ks_pipeline_alloc();
+	pipeline = ks_pipeline_create(NULL);
 	if (!pipeline) {
 		err = -ENOMEM;
 		goto err_pipeline_alloc;
@@ -494,8 +494,16 @@ int ks_pipeline_cmd_get(
 	return 0;
 }
 
-void ks_pipeline_init(struct ks_pipeline *pipeline)
+struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 {
+	BUG_ON(pipeline); /* Static alloction not supported */
+
+	if (!pipeline) {
+		pipeline = kmalloc(sizeof(*pipeline), GFP_KERNEL);
+		if (!pipeline)
+			return NULL;
+	}
+
 	memset(pipeline, 0, sizeof(*pipeline));
 
 	kobject_init(&pipeline->kobj);
@@ -506,17 +514,6 @@ void ks_pipeline_init(struct ks_pipeline *pipeline)
 	init_rwsem(&pipeline->lock);
 
 	pipeline->status = KS_PIPELINE_STATUS_NULL;
-}
-
-struct ks_pipeline *ks_pipeline_alloc(void)
-{
-	struct ks_pipeline *pipeline;
-
-	pipeline = kmalloc(sizeof(*pipeline), GFP_KERNEL);
-	if (!pipeline)
-		return NULL;
-
-	ks_pipeline_init(pipeline);
 
 	return pipeline;
 }
@@ -570,6 +567,13 @@ void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 	up_write(&ks_pipelines_list_sem);
 }
 EXPORT_SYMBOL(ks_pipeline_unregister);
+
+void ks_pipeline_destroy(struct ks_pipeline *pipeline)
+{
+	ks_kobj_waitref(&pipeline->kobj);
+	ks_pipeline_put(pipeline);
+}
+EXPORT_SYMBOL(ks_pipeline_destroy);
 
 void ks_pipeline_dump(struct ks_pipeline *pipeline)
 {

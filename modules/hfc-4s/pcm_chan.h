@@ -61,14 +61,11 @@ struct hfc_pcm_chan {
 	struct hfc_pcm_chan_tx tx;
 };
 
-struct hfc_pcm_chan *hfc_pcm_chan_alloc(int flags);
-void hfc_pcm_chan_init(
+struct hfc_pcm_chan *hfc_pcm_chan_create(
 	struct hfc_pcm_chan *chan,
 	struct hfc_pcm_port *port,
 	const char *name,
 	int timeslot);
-int hfc_pcm_chan_register(struct hfc_pcm_chan *chan);
-void hfc_pcm_chan_unregister(struct hfc_pcm_chan *chan);
 
 static inline struct hfc_pcm_chan *hfc_pcm_chan_get(struct hfc_pcm_chan *chan)
 {
@@ -80,6 +77,35 @@ static inline struct hfc_pcm_chan *hfc_pcm_chan_get(struct hfc_pcm_chan *chan)
 static inline void hfc_pcm_chan_put(struct hfc_pcm_chan *chan)
 {
 	ks_node_put(&chan->ks_node);
+}
+
+int hfc_pcm_chan_register(struct hfc_pcm_chan *chan);
+void hfc_pcm_chan_unregister(struct hfc_pcm_chan *chan);
+
+static inline struct hfc_pcm_chan_rx *hfc_pcm_chan_rx_get(
+	struct hfc_pcm_chan_rx *chan)
+{
+	ks_chan_get(&chan->ks_chan);
+
+	return chan;
+}
+
+static inline void hfc_pcm_chan_rx_put(struct hfc_pcm_chan_rx *chan)
+{
+	ks_chan_put(&chan->ks_chan);
+}
+
+static inline struct hfc_pcm_chan_tx *hfc_pcm_chan_tx_get(
+	struct hfc_pcm_chan_tx *chan)
+{
+	ks_chan_get(&chan->ks_chan);
+
+	return chan;
+}
+
+static inline void hfc_pcm_chan_tx_put(struct hfc_pcm_chan_tx *chan)
+{
+	ks_chan_put(&chan->ks_chan);
 }
 
 #endif

@@ -195,20 +195,25 @@ int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	msg.msg_iovlen = 1;
 	msg.msg_flags = 0;
 
-	report_conn(conn, LOG_DEBUG,
-		"\n"
-		">>>--------- Sending packet len = %d -------->>>\n", skb->len);
+	if (conn->dump_packets)
+		report_conn(conn, LOG_DEBUG,
+			"\n"
+			">>>--------- Sending packet len = %d -------->>>\n",
+			skb->len);
 
 	struct nlmsghdr *nlh;
 	int len_left = skb->len;
 
-	for (nlh = skb->data;
-	     NLMSG_OK(nlh, len_left);
-	     nlh = NLMSG_NEXT(nlh, len_left))
-		ks_dump_nlh(conn, nlh);
+	if (conn->dump_packets) {
+		for (nlh = skb->data;
+		     NLMSG_OK(nlh, len_left);
+		     nlh = NLMSG_NEXT(nlh, len_left))
+			ks_dump_nlh(conn, nlh);
+	}
 
-	report_conn(conn, LOG_DEBUG,
-		">>>------------------------------------------<<<\n");
+	if (conn->dump_packets)
+		report_conn(conn, LOG_DEBUG,
+			">>>------------------------------------------<<<\n");
 
 	int len = sendmsg(conn->sock, &msg, 0);
 	if(len < 0) {
@@ -378,7 +383,8 @@ static void ks_netlink_receive_msg(
 	report_conn(conn, LOG_DEBUG, "%s\n", text);
 #endif
 
-	ks_dump_nlh(conn, nlh);
+	if (conn->dump_packets)
+		ks_dump_nlh(conn, nlh);
 
 	if (src_sa->nl_groups)
 		ks_netlink_receive_multicast(conn, nlh);
@@ -412,9 +418,11 @@ void ks_netlink_receive(struct ks_conn *conn)
 		return;
 	}
 
-	report_conn(conn, LOG_DEBUG, "\n"
-		"<<<--------- Received packet len = %d groups = %d--------<<<\n"
-		,len, src_sa.nl_groups);
+	if (conn->dump_packets)
+		report_conn(conn, LOG_DEBUG, "\n"
+			"<<<--------- Received packet len = %d groups = %d"
+			"--------<<<\n"
+			,len, src_sa.nl_groups);
 
 	struct nlmsghdr *nlh;
 	int len_left = len;
@@ -424,6 +432,7 @@ void ks_netlink_receive(struct ks_conn *conn)
 	     nlh = NLMSG_NEXT(nlh, len_left))
 		ks_netlink_receive_msg(conn, nlh, &src_sa);
 
-	report_conn(conn, LOG_DEBUG,
-		"<<<-------------------------------------------<<<\n");
+	if (conn->dump_packets)
+		report_conn(conn, LOG_DEBUG,
+			"<<<-------------------------------------------<<<\n");
 }

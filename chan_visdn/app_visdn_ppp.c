@@ -47,12 +47,6 @@
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
-#if defined(AST_MODULE_INFO)
-#define SANE_ASTERISK_VERSION_NUM 0x00010400
-#else
-#define SANE_ASTERISK_VERSION_NUM 0x00010200
-#endif
-
 #include <libkstreamer.h>
 
 #include "chan_visdn.h"
@@ -121,10 +115,10 @@ static int visdn_ppp_exec(struct ast_channel *chan, void *data)
 
 	ast_mutex_lock(&chan->lock);
 
-#ifdef SANE_ASTERISK_VERSION_NUM
-	if (strcmp(chan->tech->type, "VISDN")) {
-#else
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	if (strcmp(chan->type, "VISDN")) {
+#else
+	if (strcmp(chan->tech->type, "VISDN")) {
 #endif
 		ast_log(LOG_WARNING,
 			"Only VISDN channels may be connected to"

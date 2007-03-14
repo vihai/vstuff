@@ -47,15 +47,12 @@ struct visdn_port
 	struct list_head node;
 	struct kobject kobj;
 
-//	struct list_head channels;
+	int id;
+	const char *type;
 
 	struct visdn_port_ops *ops;
 
-//	struct device *device;
-
 	void *driver_data;
-
-//	struct semaphore sem;
 
 	int enabled;
 };
@@ -87,13 +84,16 @@ extern void visdn_port_remove_file(
 	struct visdn_port *port,
 	struct visdn_port_attribute *attr);
 
-extern void visdn_port_init(
+extern struct visdn_port *visdn_port_create(
 	struct visdn_port *visdn_port,
 	struct visdn_port_ops *visdn_port_ops,
 	const char *name,
 	struct kobject *parent);
-extern int visdn_port_register(struct visdn_port *visdn_port);
-extern void visdn_port_unregister(struct visdn_port *visdn_port);
+extern void visdn_port_destroy(struct visdn_port *port);
+
+extern int visdn_port_register(struct visdn_port *port);
+extern void visdn_port_unregister(struct visdn_port *port);
+extern void visdn_port_waitrelease(struct visdn_port *port);
 
 extern int visdn_port_modinit(void);
 extern void visdn_port_modexit(void);

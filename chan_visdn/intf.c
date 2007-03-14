@@ -53,12 +53,6 @@
 #define FAILED_RETRY_TIME (30 * SEC)
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
-#if defined(AST_MODULE_INFO)
-#define SANE_ASTERISK_VERSION_NUM 0x00010400
-#else
-#define SANE_ASTERISK_VERSION_NUM 0x00010200
-#endif
-
 struct visdn_intf *visdn_intf_alloc(void)
 {
 	struct visdn_intf *intf;
@@ -1093,7 +1087,7 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 }
 
 char *visdn_intf_complete(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -1118,7 +1112,7 @@ char *visdn_intf_complete(
 }
 
 static char *complete_show_visdn_interfaces(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,

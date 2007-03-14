@@ -1,7 +1,7 @@
 /*
  * VoiSmart vGSM-II board driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -29,13 +29,15 @@
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"
+#include "module.h"
+#include "sim.h"
 
 #ifdef DEBUG_CODE
 int debug_level = 0;
 #endif
 
 static struct pci_device_id vgsm_ids[] = {
-	{ 0xe159, 0x0001, 0xa100, 0x0001, 0, 0, 0 },
+	{ 0xf16a, 0x0004, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ 0, },
 };
 
@@ -93,18 +95,41 @@ static int vgsm_tty_ioctl(
 }
 #endif
 
-static int vgsm_probe(struct pci_dev *pci_dev,
+static int vgsm_probe(
+	struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry)
 {
 	int err;
+	static int numcards;
 
-	err = vgsm_card_probe(pci_dev, device_id_entry);
+	struct vgsm_card *card;
+
+	card = vgsm_card_create(NULL,
+		pci_dev,
+		numcards++);
+	if (!card) {
+		err = -ENOMEM;
+		goto err_card_create;
+	}
+
+	err = vgsm_card_probe(card);
 	if (err < 0)
 		goto err_card_probe;
 
+	pci_set_drvdata(pci_dev, card);
+
+	err = vgsm_card_register(card);
+	if (err < 0)
+		goto err_card_register;
+
 	return 0;
 
+	vgsm_card_unregister(card);
+err_card_register:
+	vgsm_card_remove(card);
 err_card_probe:
+	vgsm_card_put(card);
+err_card_create:
 
 	return err;
 }
@@ -116,7 +141,9 @@ static void vgsm_remove(struct pci_dev *pci_dev)
 	if (!card)
 		return;
 
+	vgsm_card_unregister(card);
 	vgsm_card_remove(card);
+	vgsm_card_destroy(card);
 }
 
 static struct pci_driver vgsm_driver =
@@ -156,11 +183,21 @@ DRIVER_ATTR(debug_level, S_IRUGO | S_IWUSR,
 	vgsm_store_debug_level);
 #endif
 
-
 static int __init vgsm_init(void)
 {
 	int err;
 
+	err = vgsm_card_modinit();
+	if (err < 0)
+		goto err_card_modinit;
+
+	err = vgsm_module_modinit();
+	if (err < 0)
+		goto err_module_modinit;
+
+	err = vgsm_sim_modinit();
+	if (err < 0)
+		goto err_sim_modinit;
 
 	err = pci_register_driver(&vgsm_driver);
 	if (err < 0)
@@ -184,6 +221,12 @@ static int __init vgsm_init(void)
 
 	pci_unregister_driver(&vgsm_driver);
 err_pci_register_driver:
+	vgsm_sim_modexit();
+err_sim_modinit:
+	vgsm_module_modexit();
+err_module_modinit:
+	vgsm_card_modexit();
+err_card_modinit:
 
 	return err;
 }
@@ -198,6 +241,10 @@ static void __exit vgsm_exit(void)
 #endif
 
 	pci_unregister_driver(&vgsm_driver);
+
+	vgsm_sim_modexit();
+	vgsm_module_modexit();
+	vgsm_card_modexit();
 
 	vgsm_msg(KERN_INFO, vgsm_DRIVER_DESCR " unloaded\n");
 }

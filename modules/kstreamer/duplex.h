@@ -91,11 +91,13 @@ static inline int ks_duplex_refcount(
 #endif
 }
 
-void ks_duplex_init(
+extern struct ks_duplex *ks_duplex_create(
 	struct ks_duplex *duplex,
 	struct ks_duplex_ops *ops,
 	const char *name,
 	struct kobject *parent);
+extern void ks_duplex_destroy(struct ks_duplex *duplex);
+
 extern int ks_duplex_register(struct ks_duplex *duplex);
 extern void ks_duplex_unregister(struct ks_duplex *duplex);
 

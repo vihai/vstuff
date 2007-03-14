@@ -893,23 +893,20 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return IRQ_HANDLED;
 }
 
-struct hfc_card *hfc_card_alloc(void)
-{
-	struct hfc_card *card;
-
-	card = kmalloc(sizeof(*card), GFP_KERNEL);
-	if (!card)
-		return NULL;
-
-	return card;
-}
-
-void hfc_card_init(
+struct hfc_card *hfc_card_create(
 	struct hfc_card *card,
 	struct pci_dev *pci_dev,
 	struct hfc_card_config *card_config)
 {
 	int i;
+
+	BUG_ON(card); /* Static allocation not supported */
+
+	if (!card) {
+		card = kmalloc(sizeof(*card), GFP_KERNEL);
+		if (!card)
+			return NULL;
+	}
 
 	memset(card, 0, sizeof(*card));
 
@@ -928,10 +925,12 @@ void hfc_card_init(
 	for(i=0; i<ARRAY_SIZE(card->leds); i++)
 		hfc_led_init(&card->leds[i], i, card);
 
-	hfc_switch_init(&card->hfcswitch, card);
+	hfc_switch_create(&card->hfcswitch, card);
 
-	hfc_sys_port_init(&card->sys_port, card, "sys");
-	hfc_pcm_port_init(&card->pcm_port, card, "pcm");
+	hfc_sys_port_create(&card->sys_port, card, "sys");
+	hfc_pcm_port_create(&card->pcm_port, card, "pcm");
+
+	return card;
 }
 
 int hfc_card_register(struct hfc_card *card)
@@ -956,11 +955,8 @@ int hfc_card_register(struct hfc_card *card)
 
 	for (i=0; i<card->num_st_ports; i++) {
 		err = hfc_st_port_register(card->st_ports[i]);
-		if (err < 0) {
-			hfc_st_port_put(card->st_ports[i]);
-			card->st_ports[i] = NULL;
+		if (err < 0)
 			goto err_st_port_register;
-		}
 	}
 
 	err = hfc_card_sysfs_create_files(card);
@@ -1004,6 +1000,7 @@ void hfc_card_unregister(struct hfc_card *card)
 
 	hfc_card_sysfs_delete_files(card);
 
+printk(KERN_DEBUG "hfc_card_unregister()\n");
 	for (i=card->num_st_ports - 1; i>=0; i--)
 		hfc_st_port_unregister(card->st_ports[i]);
 
@@ -1082,10 +1079,12 @@ int hfc_card_probe(struct hfc_card *card)
 	for (i=0; i<card->num_st_ports; i++) {
 		char portid[10];
 
-		card->st_ports[i] = hfc_st_port_alloc();
-
 		snprintf(portid, sizeof(portid), "st%d", i);
-		hfc_st_port_init(card->st_ports[i], card, portid, i);
+		card->st_ports[i] = hfc_st_port_create(NULL, card, portid, i);
+		if (!card->st_ports[i]) {
+			err = -ENOMEM;
+			goto err_st_port_create;
+		}
 		
 		if (card->num_st_ports == 4)
 			card->st_ports[i]->led = &card->leds[i];
@@ -1116,6 +1115,13 @@ int hfc_card_probe(struct hfc_card *card)
 	return 0;
 
 err_unsupported_revision:
+	for(i=0; i<card->num_st_ports; i++) {
+		if (card->st_ports[i]) {
+			hfc_st_port_put(card->st_ports[i]);
+			card->st_ports[i] = NULL;
+		}
+	}
+err_st_port_create:
 err_unknown_chip:
 	free_irq(card->pci_dev->irq, card);
 err_request_irq:
@@ -1138,8 +1144,6 @@ err_pci_enable_device:
 
 void hfc_card_remove(struct hfc_card *card)
 {
-	int i;
-
 	hfc_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n",
 		card->io_mem);
@@ -1151,14 +1155,30 @@ void hfc_card_remove(struct hfc_card *card)
 
 	/* There should be no interrupt from here on */
 
-	for (i=0; i<card->num_st_ports; i++) {
-		hfc_st_port_put(card->st_ports[i]);
-		card->st_ports[i] = NULL;
-	}
-
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
 	free_irq(card->pci_dev->irq, card);
 	iounmap(card->io_mem);
 	pci_release_regions(card->pci_dev);
 	pci_disable_device(card->pci_dev);
 }
+
+void hfc_card_destroy(struct hfc_card *card)
+{
+	int i;
+
+	/* Now put objects in a zombie state, releasing held
+	 * reference. Be sure to destroy in reverse order as the
+	 * kernel creates hidden kobj->parent reference.
+	 */
+
+	hfc_pcm_port_destroy(&card->pcm_port);
+	hfc_sys_port_destroy(&card->sys_port);
+
+	for (i=0; i<card->num_st_ports; i++) {
+		hfc_st_port_destroy(card->st_ports[i]);
+		card->st_ports[i] = NULL;
+	}
+
+	hfc_card_put(card);
+}
+

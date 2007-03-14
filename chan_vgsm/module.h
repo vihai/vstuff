@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -136,6 +136,9 @@ struct vgsm_cbm_recorded
 	wchar_t *text;
 };
 
+#define VGSM_SIM_ROUTE_EXTERNAL -1
+#define VGSM_SIM_ROUTE_DEFAULT -2
+
 struct vgsm_module;
 struct vgsm_module_config
 {
@@ -153,6 +156,8 @@ struct vgsm_module_config
 
 	BOOL set_clock;
 	BOOL poweroff_on_exit;
+
+	int route_to_sim;
 
 	enum vgsm_operator_selection operator_selection;
 	__s16 operator_mcc;
@@ -200,6 +205,8 @@ struct vgsm_module
 
 	int fd;
 	struct vgsm_comm comm;
+
+	int interface_version;
 
 	pthread_t monitor_thread;
 

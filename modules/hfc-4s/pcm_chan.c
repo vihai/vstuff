@@ -48,9 +48,12 @@
 
 static void hfc_pcm_chan_rx_chan_release(struct ks_chan *ks_chan)
 {
+	struct hfc_pcm_chan_rx *chan_rx =
+		container_of(ks_chan, struct hfc_pcm_chan_rx, ks_chan);
+
 	printk(KERN_DEBUG "hfc_pcm_chan_rx_chan_release()\n");
 
-	// FIXME
+	hfc_pcm_chan_put(chan_rx->chan);
 }
 
 static int hfc_pcm_chan_rx_chan_connect(struct ks_chan *ks_chan)
@@ -129,9 +132,12 @@ struct ks_chan_ops hfc_pcm_chan_rx_chan_ops = {
 
 static void hfc_pcm_chan_tx_chan_release(struct ks_chan *ks_chan)
 {
+	struct hfc_pcm_chan_tx *chan_tx =
+		container_of(ks_chan, struct hfc_pcm_chan_tx, ks_chan);
+
 	printk(KERN_DEBUG "hfc_pcm_chan_tx_chan_release()\n");
 
-	// FIXME
+	hfc_pcm_chan_put(chan_tx->chan);
 }
 
 static int hfc_pcm_chan_tx_chan_connect(struct ks_chan *ks_chan)
@@ -215,7 +221,10 @@ static void hfc_pcm_chan_node_release(struct ks_node *ks_node)
 
 	printk(KERN_DEBUG "hfc_pcm_chan_node_release()\n");
 
-	kfree(chan);
+	hfc_pcm_chan_rx_put(&chan->rx);
+	hfc_pcm_chan_tx_put(&chan->tx);
+
+	hfc_pcm_chan_put(chan);
 }
 
 static struct ks_node_ops hfc_pcm_chan_node_ops = {
@@ -226,32 +235,40 @@ static struct ks_node_ops hfc_pcm_chan_node_ops = {
 
 /*----------------------------------------------------------------------------*/
 
-void hfc_pcm_chan_rx_init(
+static struct hfc_pcm_chan_rx *hfc_pcm_chan_rx_create(
 	struct hfc_pcm_chan_rx *chan_rx,
 	struct hfc_pcm_chan *chan)
 {
+	BUG_ON(!chan_rx); /* Dynamic allocation not supported */
+
 	chan_rx->chan = chan;
 
-	ks_chan_init(&chan_rx->ks_chan,
+	ks_chan_create(&chan_rx->ks_chan,
 			&hfc_pcm_chan_rx_chan_ops, "rx",
 			NULL,
 			&chan->ks_node.kobj,
 			&chan->ks_node,
 			&chan->port->card->hfcswitch.ks_node);
+
+	return chan_rx;
 }
 
-void hfc_pcm_chan_tx_init(
+static struct hfc_pcm_chan_tx *hfc_pcm_chan_tx_create(
 	struct hfc_pcm_chan_tx *chan_tx,
 	struct hfc_pcm_chan *chan)
 {
+	BUG_ON(!chan_tx); /* Dynamic allocation not supported */
+
 	chan_tx->chan = chan;
 
-	ks_chan_init(&chan_tx->ks_chan,
+	ks_chan_create(&chan_tx->ks_chan,
 			&hfc_pcm_chan_tx_chan_ops, "tx",
 			NULL,
 			&chan->ks_node.kobj,
 			&chan->port->card->hfcswitch.ks_node,
 			&chan->ks_node);
+
+	return chan_tx;
 }
 
 static int hfc_pcm_chan_rx_register(struct hfc_pcm_chan_rx *chan)
@@ -296,26 +313,31 @@ static void hfc_pcm_chan_tx_unregister(struct hfc_pcm_chan_tx *chan)
 	ks_chan_unregister(&chan->ks_chan);
 }
 
-struct hfc_pcm_chan *hfc_pcm_chan_alloc(int flags)
-{
-	return kmalloc(sizeof(struct hfc_pcm_chan), flags);
-}
-
-void hfc_pcm_chan_init(
+struct hfc_pcm_chan *hfc_pcm_chan_create(
 	struct hfc_pcm_chan *chan,
 	struct hfc_pcm_port *port,
 	const char *name,
 	int timeslot)
 {
-	chan->port = port;
-	chan->timeslot= timeslot;
+	BUG_ON(chan); /* Static allocation not implemented */
 
-	ks_node_init(&chan->ks_node,
+	chan = kmalloc(sizeof(*chan), GFP_KERNEL);
+	if (!chan)
+		return NULL;
+
+	memset(chan, 0, sizeof(*chan));
+
+	chan->port = port;
+	chan->timeslot = timeslot;
+
+	ks_node_create(&chan->ks_node,
 			&hfc_pcm_chan_node_ops, name,
 			&port->visdn_port.kobj);
 
-	hfc_pcm_chan_rx_init(&chan->rx, chan);
-	hfc_pcm_chan_tx_init(&chan->tx, chan);
+	hfc_pcm_chan_rx_create(&chan->rx, chan);
+	hfc_pcm_chan_tx_create(&chan->tx, chan);
+
+	return chan;
 }
 
 int hfc_pcm_chan_register(struct hfc_pcm_chan *chan)

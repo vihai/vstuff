@@ -1,7 +1,7 @@
 #
-# vstuff
+# vISDN Netdev controlling tool
 #
-# Copyright (C) 2004-2006 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -9,21 +9,18 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-sbin_PROGRAMS = visdnctl
+sbin_PROGRAMS = visdn_netdev_ctl
 
-visdnctl_SOURCES = \
-	visdnctl.c		\
-	netdev.c
+visdn_netdev_ctl_SOURCES = \
+	visdn_netdev_ctl.c
 
-noinst_HEADERS = \
-	visdnctl.h		\
-	netdev.h
+noinst_HEADERS =
 
-visdnctl_CPPFLAGS = \
+visdn_netdev_ctl_CPPFLAGS = \
 	-I$(top_srcdir)/include/		\
 	-I$(top_srcdir)/modules/include/
 
-visdnctl_LDADD =
+visdn_netdev_ctl_LDADD =
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

@@ -1,18 +1,22 @@
 
 subdir = modules/vgsm2
-MODULE = visdn-vgsm2
+MODULE = vgsm2
 
 SOURCES = \
 	vgsm_main.c	\
 	card.c		\
-	module.c
+	module.c	\
+	sim.c		\
+	uart.c
 
 DIST_HEADERS = \
 	vgsm.h		\
 	card.h		\
 	card_inline.h	\
 	regs.h		\
-	module.h
+	module.h	\
+	sim.h		\
+	uart.h
 
 DIST_COMMON = Makefile.in
 DIST_SOURCES = $(SOURCES)

@@ -19,12 +19,12 @@ struct ks_streamframe *ks_sf_alloc(void)
 {
 	struct ks_streamframe *sf;
 
-	sf = kmalloc(512, GFP_ATOMIC);
+	sf = kmalloc(1024, GFP_ATOMIC);
 	if (!sf)
 		return NULL;
 
 	atomic_set(&sf->refcnt, 1);
-	sf->size = 512 - sizeof(*sf);
+	sf->size = 1024 - sizeof(*sf);
 	sf->len = 0;
 
 	return sf;

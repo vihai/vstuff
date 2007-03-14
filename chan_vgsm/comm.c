@@ -284,7 +284,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 
 	sleep(1);
 */
-	const char *cmd = "AT E1 V1 Q0 \\Q1\r";
+	const char *cmd = "AT E1 V1 Q0\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
 			"%s: write to module failed: %s\n",
@@ -1040,7 +1040,10 @@ static void vgsm_comm_timer(void *data)
 				unprintable_escape(buf, tmpstr,
 					sizeof(tmpstr)));
 
-			write(comm->fd, buf, strlen(buf));
+//			write(comm->fd, buf, strlen(buf));
+			int i;
+			for(i=0; i<strlen(buf); i++)
+				write(comm->fd, &buf[i], 1);
 
 			vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO,
 						ECHO_TIMEOUT);

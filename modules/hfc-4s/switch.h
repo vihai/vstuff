@@ -23,7 +23,7 @@ struct hfc_switch
 	struct hfc_card *card;
 };
 
-void hfc_switch_init(
+struct hfc_switch *hfc_switch_create(
 	struct hfc_switch *hfcswitch,
 	struct hfc_card *card);
 

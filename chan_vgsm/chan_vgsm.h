@@ -52,6 +52,8 @@ struct vgsm_chan {
 	struct ks_pipeline *pipeline_rx;
 	struct ks_pipeline *pipeline_tx;
 
+	char called_number[21];
+
 	char calling_number[21];
 
 	struct ast_frame frame_out;

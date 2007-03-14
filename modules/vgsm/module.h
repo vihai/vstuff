@@ -104,19 +104,16 @@ void vgsm_module_send_set_padding_timeout(
 void vgsm_module_send_power_get(
 	struct vgsm_module *module);
 
-struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
-void vgsm_module_put(struct vgsm_module *module);
-void vgsm_module_init(
+struct vgsm_module *vgsm_module_create(
 	struct vgsm_module *module,
 	struct vgsm_card *card,
 	struct vgsm_micro *micro,
 	int id,
 	const char *name);
-struct vgsm_module *vgsm_module_alloc(
-	struct vgsm_card *card,
-	struct vgsm_micro *micro,
-	int id,
-	const char *name);
+
+struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
+void vgsm_module_put(struct vgsm_module *module);
+
 int vgsm_module_register(struct vgsm_module *module);
 void vgsm_module_unregister(struct vgsm_module *module);
 

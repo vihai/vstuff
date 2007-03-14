@@ -426,7 +426,7 @@ AC_CONFIG_FILES([Makefile
 		chan_vgsm/Makefile
 		app_pipe/Makefile
 		kstool/Makefile
-		visdnctl/Makefile
+		visdn_netdev_ctl/Makefile
 		vgsmctl/Makefile
 		pppd_plugin/Makefile
 		samples/Makefile

@@ -165,20 +165,21 @@ struct ks_chan_ops vmw_chan_tx_chan_ops = {
 
 /*---------------------------------------------------------------------------*/
 
-static void vmw_chan_init(struct vmw_chan *chan)
+static struct vmw_chan *vmw_chan_create(struct vmw_chan *chan)
 {
+	BUG_ON(!chan); /* Dynamic allocation not implemented */
+
 	memset(chan, 0, sizeof(*chan));
 
-	ks_node_init(&chan->ks_node, &vmw_chan_node_ops, "milliwatt",
+	ks_node_create(&chan->ks_node, &vmw_chan_node_ops, "milliwatt",
 			&ks_system_device.kobj);
 
-	ks_chan_init(&chan->ks_chan, &vmw_chan_tx_chan_ops, "tx", NULL,
+	ks_chan_create(&chan->ks_chan, &vmw_chan_tx_chan_ops, "tx", NULL,
 			&chan->ks_node.kobj,
 			&chan->ks_node,
 			&kss_softswitch.ks_node);
 
-/*	chan->ks_chan.framed_mtu = -1;
-	chan->ks_chan.framing_avail = VISDN_LINK_FRAMING_NONE;*/
+	return chan;
 }
 
 static int vmw_chan_register(struct vmw_chan *chan)
@@ -287,7 +288,7 @@ static int __init vmw_init_module(void)
 		goto err_alloc_chan;
 	}
 
-	vmw_chan_init(chan);
+	vmw_chan_create(chan);
 
 	err = vmw_chan_register(chan);
        	if (err < 0)

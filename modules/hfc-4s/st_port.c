@@ -662,7 +662,7 @@ static void hfc_st_port_release(
 	struct hfc_st_port *port =
 		container_of(visdn_port, struct hfc_st_port, visdn_port);
 
-	printk(KERN_DEBUG "hfc_st_port_release()\n");
+printk(KERN_DEBUG "hfc_st_port_release()\n");
 
 	kfree(port);
 }
@@ -672,7 +672,6 @@ static int hfc_st_port_enable(
 {
 	struct hfc_st_port *port = to_st_port(visdn_port);
 	struct hfc_card *card = port->card;
-	int i;
 
 	hfc_card_lock(card);
 	hfc_st_port_select(port);
@@ -750,12 +749,18 @@ struct visdn_port_ops hfc_st_port_ops = {
 	.deactivate	= hfc_st_port_deactivate,
 };
 
-void hfc_st_port_init(
+struct hfc_st_port *hfc_st_port_create(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
 	const char *name,
 	int id)
 {
+	BUG_ON(port);
+
+	port = kmalloc(sizeof(*port), GFP_KERNEL);
+	if (!port)
+		return NULL;
+
 	memset(port, 0, sizeof(*port));
 
 	port->card = card;
@@ -779,35 +784,31 @@ void hfc_st_port_init(
 	port->clock_delay = card->config->clk_dly_te;
 	port->sampling_comp = card->config->sampl_comp_te;
 
-	visdn_port_init(&port->visdn_port, &hfc_st_port_ops, name,
+	visdn_port_create(&port->visdn_port, &hfc_st_port_ops, name,
 			&card->pci_dev->dev.kobj);
+	port->visdn_port.type = "BRI";
 	port->visdn_port.driver_data = port;
 
-	hfc_st_chan_init(&port->chans[D], port, "D", D,
+	hfc_st_port_get(port);
+	hfc_st_chan_create(&port->chans[D], port, "D", D,
 		hfc_D_CHAN_OFF + id*4, 2, 0, 16000);
-	hfc_st_chan_init(&port->chans[B1], port, "B1", B1,
+	hfc_st_port_get(port);
+	hfc_st_chan_create(&port->chans[B1], port, "B1", B1,
 		hfc_B1_CHAN_OFF + id*4, 8, 0, 64000);
-	hfc_st_chan_init(&port->chans[B2], port, "B2", B2,
+	hfc_st_port_get(port);
+	hfc_st_chan_create(&port->chans[B2], port, "B2", B2,
 		hfc_B2_CHAN_OFF + id*4, 8, 0, 64000);
-	hfc_st_chan_init(&port->chans[E], port, "E", E,
+	hfc_st_port_get(port);
+	hfc_st_chan_create(&port->chans[E], port, "E", E,
 		hfc_E_CHAN_OFF + id*4, 2, 0, 16000);
-	hfc_st_chan_init(&port->chans[SQ], port, "SQ", SQ,
+	hfc_st_port_get(port);
+	hfc_st_chan_create(&port->chans[SQ], port, "SQ", SQ,
 		0, 0, 0, 4000);
-}
-
-struct hfc_st_port *hfc_st_port_alloc(void)
-{
-	struct hfc_st_port *port;
-
-	port = kmalloc(sizeof(*port), GFP_KERNEL);
-	if (!port)
-		return NULL;
 
 	return port;
 }
 
-int hfc_st_port_register(
-	struct hfc_st_port *port)
+int hfc_st_port_register(struct hfc_st_port *port)
 {
 	int err;
 
@@ -815,27 +816,22 @@ int hfc_st_port_register(
 	if (err < 0)
 		goto err_port_register;
 
-	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[D]);
 	if (err < 0)
 		goto err_chan_register_D;
 
-	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[B1]);
 	if (err < 0)
 		goto err_chan_register_B1;
 
-	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[B2]);
 	if (err < 0)
 		goto err_chan_register_B2;
 
-	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[E]);
 	if (err < 0)
 		goto err_chan_register_E;
 
-	hfc_st_port_get(port); /* Container is implicitly used */
 	err = hfc_st_chan_register(&port->chans[SQ]);
 	if (err < 0)
 		goto err_chan_register_SQ;
@@ -870,8 +866,7 @@ err_port_register:
 	return err;
 }
 
-void hfc_st_port_unregister(
-	struct hfc_st_port *port)
+void hfc_st_port_unregister(struct hfc_st_port *port)
 {
 	struct visdn_port_attribute **attr = hfc_st_port_attributes;
 
@@ -896,4 +891,15 @@ void hfc_st_port_unregister(
 	hfc_st_chan_unregister(&port->chans[D]);
 
 	visdn_port_unregister(&port->visdn_port);
+}
+
+void hfc_st_port_destroy(struct hfc_st_port *port)
+{
+	hfc_st_chan_destroy(&port->chans[D]);
+	hfc_st_chan_destroy(&port->chans[B1]);
+	hfc_st_chan_destroy(&port->chans[B2]);
+	hfc_st_chan_destroy(&port->chans[E]);
+	hfc_st_chan_destroy(&port->chans[SQ]);
+
+	visdn_port_destroy(&port->visdn_port);
 }

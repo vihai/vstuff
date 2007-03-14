@@ -1140,17 +1140,17 @@ static void vnd_netdevice_init(
 		"%s_d",
 		name);
 
-	ks_node_init(&netdevice->ks_node_d,
+	ks_node_create(&netdevice->ks_node_d,
 			&vnd_node_d_ops, tmpstr,
 			&visdn_system_device.kobj);
 	}
 
-	ks_duplex_init(&netdevice->ks_duplex_d,
+	ks_duplex_create(&netdevice->ks_duplex_d,
 			&vnd_duplex_d_ops,
 			"duplex",
 			&netdevice->ks_node_d.kobj);
 
-	ks_chan_init(&netdevice->ks_chan_d_rx,
+	ks_chan_create(&netdevice->ks_chan_d_rx,
 			&vnd_chan_d_rx_ops, "rx",
 			&netdevice->ks_duplex_d,
 			&netdevice->ks_duplex_d.kobj,
@@ -1158,10 +1158,8 @@ static void vnd_netdevice_init(
 			&netdevice->ks_node_d);
 
 	netdevice->ks_chan_d_rx.from_ops = &vnd_chan_d_rx_softswitch_ops;
-/*	netdevice->ks_chan_d_rx.framed_mtu = -1;
-	netdevice->ks_chan_d_rx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
-	ks_chan_init(&netdevice->ks_chan_d_tx,
+	ks_chan_create(&netdevice->ks_chan_d_tx,
 			&vnd_chan_d_tx_ops, "tx",
 			&netdevice->ks_duplex_d,
 			&netdevice->ks_duplex_d.kobj,
@@ -1169,8 +1167,6 @@ static void vnd_netdevice_init(
 			&kss_softswitch.ks_node);
 
 	netdevice->ks_chan_d_tx.to_ops = &vnd_chan_d_tx_softswitch_ops;
-/*	netdevice->ks_chan_d_tx.framed_mtu = -1;
-	netdevice->ks_chan_d_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
 	/*************** E channel ***************/
 
@@ -1182,17 +1178,17 @@ static void vnd_netdevice_init(
 		"%s_e",
 		name);
 
-	ks_node_init(&netdevice->ks_node_e,
+	ks_node_create(&netdevice->ks_node_e,
 			&vnd_node_e_ops, tmpstr,
 			&visdn_system_device.kobj);
 	}
 
-	ks_duplex_init(&netdevice->ks_duplex_e,
+	ks_duplex_create(&netdevice->ks_duplex_e,
 			&vnd_duplex_e_ops,
 			"duplex",
 			&netdevice->ks_node_e.kobj);
 
-	ks_chan_init(&netdevice->ks_chan_e_rx,
+	ks_chan_create(&netdevice->ks_chan_e_rx,
 			&vnd_chan_e_rx_ops, "rx",
 			&netdevice->ks_duplex_e,
 			&netdevice->ks_duplex_e.kobj,
@@ -1200,8 +1196,6 @@ static void vnd_netdevice_init(
 			&netdevice->ks_node_e);
 
 	netdevice->ks_chan_e_rx.from_ops = &vnd_chan_e_rx_node_ops;
-/*	netdevice->ks_chan_e_rx.framed_mtu = -1;
-	netdevice->ks_chan_e_tx.framing_avail = VISDN_LINK_FRAMING_HDLC;*/
 
 	/*****************************************/
 

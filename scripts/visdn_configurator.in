@@ -1,27 +1,24 @@
-#!/bin/bash
+#! /bin/bash
 
-prefix=@prefix@
-exec_prefix=@exec_prefix@
+prefix=/usr/local
+exec_prefix=${prefix}
 
-VISDN_DIR=@visdnhwconfdir@
+VISDN_DIR=/etc/visdn
 
-VISDNCTL=@sbindir@/visdnctl
-#VISDNCTL="echo visdnctl"
+VISDNCTL=${exec_prefix}/sbin/visdnctl
+VISDNCTL="echo visdnctl"
 
+modprobe kstreamer
+modprobe ks-userport
+modprobe ks-ppp
+modprobe visdn
 modprobe visdn-netdev
-modprobe visdn-streamport
-modprobe visdn-ppp
-modprobe visdn-timer-system
-modprobe visdn-ec
-modprobe visdn-hfc-4s
-modprobe visdn-hfc-pci
-modprobe visdn-hfc-usb
-modprobe visdn-hfc-e1
 
 NETDEV_CONTROL_DEVICE="/dev/visdn/netdev-control"
-ROUTER_CONTROL_DEVICE="/dev/visdn/router-control"
+USERPORT_FRAME_DEVICE="/dev/ks/userport_frame"
+USERPORT_STREAM_DEVICE="/dev/ks/userport_stream"
 
-function check_device()
+check_device()
 {
 	if [ ! -c "$FILENAME" ]; then
 		echo "File $FILENAME is not a character device";
@@ -29,7 +26,7 @@ function check_device()
 	fi
 }
 
-function wait_for_device()
+wait_for_device()
 {
 	local FILENAME=$1
 
@@ -56,7 +53,7 @@ function wait_for_device()
 	check_device "$FILENAME"
 }
 
-function set_attribute()
+set_attribute()
 {
 	local NAME=$1
 	local VALUE=$2
@@ -75,7 +72,7 @@ function set_attribute()
 	echo "$VALUE" > "$NAME"
 }
 
-function read_netdev_block
+read_netdev_block()
 {
 	local NETDEV_REQ_DEVNAME=$1
 	local NETDEV_PROTOCOL="lapd"
@@ -84,27 +81,24 @@ function read_netdev_block
 
 	local LINE
 	while read -u 9 LINE; do
-		if [[ $LINE =~ '</(.*)>' ]]; then
-			if [ "${BASH_REMATCH[1]}" == 'netdev' ]; then
-				$VISDNCTL netdev create \
+		if [[ "$LINE" =~ '</(.*)>' ]]; then
+			if [[ "${BASH_REMATCH[1]}" == 'netdev' ]]; then
+				$NETDEVCTL create \
 					"$NETDEV_REQ_DEVNAME" \
 					"$NETDEV_PROTOCOL" || return
 
-				$VISDNCTL netdev \
-					set $NETDEV_DEVNAME type $NETDEV_TYPE
+				$NETDEVCTL set $NETDEV_DEVNAME type $NETDEV_TYPE
 
-				$VISDNCTL netdev \
-					set $NETDEV_DEVNAME role $NETDEV_ROLE
+				$NETDEVCTL set $NETDEV_DEVNAME role $NETDEV_ROLE
 
-				$VISDNCTL netdev \
-					set $NETDEV_DEVNAME mode $NETDEV_MODE
+				$NETDEVCTL set $NETDEV_DEVNAME mode $NETDEV_MODE
 
 				return
 			else
 				echo "Invalid block closing tag '$BASH_REMATCH'"
 				exit 1
 			fi
-		elif [[ $LINE =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
+		elif [[ "$LINE" =~ '[	 ]*([a-zA-Z]+)[	 ]+(.*)' ]]; then
 			case "${BASH_REMATCH[1]}" in
 			protocol) NETDEV_PROTOCOL=${BASH_REMATCH[2]} ;;
 			type) NETDEV_TYPE=${BASH_REMATCH[2]} ;;
@@ -121,7 +115,7 @@ function read_netdev_block
 	echo "Unexpected EOF in netdev block"
 }
 
-function handle_netdev_connectmodule
+handle_netdev_connectmodule()
 {
 	local CHANNEL=$1
 	local PARAMETERS=$2
@@ -132,21 +126,21 @@ function handle_netdev_connectmodule
 	fi
 
 	if [ "${BASH_REMATCH[2]}" = "echo" ]; then
-		$VISDNCTL connect \
+		$NETDEVCTL connect \
 			"$CHANNEL" \
 			"/sys/class/net/${BASH_REMATCH[1]}/visdn_channel_e" ||
 				return
 	else
-		$VISDNCTL connect \
+		$NETDEVCTL connect \
 			"$CHANNEL" \
 			"/sys/class/net/${BASH_REMATCH[1]}/visdn_channel" ||
 				return
 	fi
 
-	$VISDNCTL netdev set "${BASH_REMATCH[1]}" up
+	$NETDEVCTL netdev set "${BASH_REMATCH[1]}" up
 }
 
-function handle_connectmodule
+handle_connectmodule()
 {
 	local CHANNEL=$1
 	local MODULE=$2
@@ -161,7 +155,7 @@ function handle_connectmodule
 	esac
 }
 
-function read_chan_block
+read_chan_block()
 {
 	local CHAN_NAME=$1
 
@@ -214,7 +208,7 @@ function read_chan_block
 	echo "Unexpected EOF in netdev block"
 }
 
-function read_port_block
+read_port_block()
 {
 	local PORT_NAME=$1
 
@@ -273,7 +267,8 @@ function read_port_block
 }
 
 wait_for_device $NETDEV_CONTROL_DEVICE
-wait_for_device $ROUTER_CONTROL_DEVICE
+wait_for_device $USERPORT_FRAME_DEVICE
+wait_for_device $USERPORT_STREAM_DEVICE
 
 for CARD in `ls $VISDN_DIR`; do
 	if [[ ! "$CARD" =~ '^device-([a-z0-9]+)-(.*)$' ]]; then

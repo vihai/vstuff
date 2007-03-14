@@ -110,15 +110,12 @@ struct hfc_sys_chan {
 	struct hfc_sys_chan_tx tx;
 };
 
-extern void hfc_sys_chan_init(
+struct hfc_sys_chan *hfc_sys_chan_create(
 	struct hfc_sys_chan *chan,
 	struct hfc_sys_port *port,
 	const char *name,
 	int id);
-extern int hfc_sys_chan_register(
-	struct hfc_sys_chan *chan);
-extern void hfc_sys_chan_unregister(
-	struct hfc_sys_chan *chan);
+void hfc_sys_chan_destroy(struct hfc_sys_chan *chan);
 
 static inline struct hfc_sys_chan *hfc_sys_chan_get(struct hfc_sys_chan *chan)
 {
@@ -130,6 +127,37 @@ static inline struct hfc_sys_chan *hfc_sys_chan_get(struct hfc_sys_chan *chan)
 static inline void hfc_sys_chan_put(struct hfc_sys_chan *chan)
 {
 	ks_duplex_put(&chan->ks_duplex);
+}
+
+extern int hfc_sys_chan_register(
+	struct hfc_sys_chan *chan);
+extern void hfc_sys_chan_unregister(
+	struct hfc_sys_chan *chan);
+
+static inline struct hfc_sys_chan_rx *hfc_sys_chan_rx_get(
+	struct hfc_sys_chan_rx *chan)
+{
+	ks_chan_get(&chan->ks_chan);
+
+	return chan;
+}
+
+static inline void hfc_sys_chan_rx_put(struct hfc_sys_chan_rx *chan)
+{
+	ks_chan_put(&chan->ks_chan);
+}
+
+static inline struct hfc_sys_chan_tx *hfc_sys_chan_tx_get(
+	struct hfc_sys_chan_tx *chan)
+{
+	ks_chan_get(&chan->ks_chan);
+
+	return chan;
+}
+
+static inline void hfc_sys_chan_tx_put(struct hfc_sys_chan_tx *chan)
+{
+	ks_chan_put(&chan->ks_chan);
 }
 
 #endif

@@ -1,7 +1,7 @@
 /*
  * VoiSmart vGSM-II board driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -20,17 +20,29 @@
 #include <linux/interrupt.h>
 
 #include "module.h"
+#include "sim.h"
+
+#ifdef DEBUG_CODE
+#define vgsm_debug_card(card, dbglevel, format, arg...)			\
+	if (debug_level >= dbglevel)					\
+		printk(KERN_DEBUG vgsm_DRIVER_PREFIX			\
+			"%s-%s: "					\
+			format,						\
+			(card)->pci_dev->dev.bus->name,		\
+			(card)->pci_dev->dev.bus_id,		\
+			## arg)
+
+#else
+#define vgsm_debug_card(card, dbglevel, format, arg...) do {} while (0)
+#endif
 
 #define vgsm_msg_card(card, level, format, arg...)	\
 	printk(level vgsm_DRIVER_PREFIX			\
-		"%s-%s "				\
+		"%s:%s: "				\
 		format,					\
 		(card)->pci_dev->dev.bus->name,		\
 		(card)->pci_dev->dev.bus_id,		\
 		## arg)
-
-
-#define vgsm_PCI_MEM_SIZE		0x00010000
 
 enum vgsm_card_flags
 {
@@ -50,24 +62,41 @@ struct vgsm_card
 
 	unsigned long flags;
 
-	unsigned long io_bus_mem;
-	void *io_mem;
+	unsigned long regs_bus_mem;
+	void *regs_mem;
 
-	int num_modules;
+	unsigned long fifo_bus_mem;
+	void *fifo_mem;
+
+	u8 mes_number;
+	u8 sims_number;
+
 	struct vgsm_module *modules[4];
+	struct vgsm_sim sims[4];
 
 	struct {
 		u8 mask0;
 	} regs;
 };
 
+void vgsm_card_update_router(struct vgsm_card *card);
+
 struct vgsm_card *vgsm_card_get(struct vgsm_card *card);
 void vgsm_card_put(struct vgsm_card *card);
 
-int vgsm_card_probe(
+struct vgsm_card *vgsm_card_create(
+	struct vgsm_card *card,
 	struct pci_dev *pci_dev,
-	const struct pci_device_id *ent);
+	int id);
+void vgsm_card_destroy(struct vgsm_card *card);
 
+int vgsm_card_register(struct vgsm_card *card);
+void vgsm_card_unregister(struct vgsm_card *card);
+
+int vgsm_card_probe(struct vgsm_card *card);
 void vgsm_card_remove(struct vgsm_card *card);
+
+int __init vgsm_card_modinit(void);
+void __exit vgsm_card_modexit(void);
 
 #endif

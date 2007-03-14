@@ -36,6 +36,7 @@ struct ks_node;
 struct ks_node_ops
 {
 	struct module *owner;
+	atomic_t *refcnt;
 
 	void (*release)(struct ks_node *node);
 
@@ -109,11 +110,13 @@ struct ks_node_attribute {
 	struct ks_node_attribute ks_node_attr_##_name = \
 		__ATTR(_name,_mode,_show,_store)
 
-void ks_node_init(
+extern struct ks_node *ks_node_create(
 	struct ks_node *node,
 	struct ks_node_ops *ops,
 	const char *name,
 	struct kobject *parent);
+extern void ks_node_destroy(struct ks_node *node);
+
 extern int ks_node_register(struct ks_node *node);
 extern void ks_node_unregister(struct ks_node *node);
 

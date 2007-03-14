@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -65,11 +65,9 @@
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
-#if defined(AST_MODULE_INFO)
-#define SANE_ASTERISK_VERSION_NUM 0x00010400
-#include <asterisk.h>
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 #else
-#define SANE_ASTERISK_VERSION_NUM 0x00010200
+#include <asterisk.h>
 #endif
 
 #include <res_kstreamer.h>
@@ -166,7 +164,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 {
 	struct ast_channel *ast_chan;
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	ast_chan = ast_channel_alloc(1);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
@@ -194,7 +192,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 	ast_chan->tech_pvt = vgsm_chan_get(vgsm_chan);
 	ast_chan->tech = &vgsm_tech;
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	ast_chan->type = VGSM_CHAN_TYPE;
 #endif
 
@@ -202,11 +200,22 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 
 	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
 
-	ast_chan->nativeformats = AST_FORMAT_ALAW;
-	ast_chan->readformat = AST_FORMAT_ALAW;
-	ast_chan->rawreadformat = AST_FORMAT_ALAW;
-	ast_chan->writeformat = AST_FORMAT_ALAW;
-	ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+/*	if (module->interface_version == 1) {
+		ast_chan->nativeformats = AST_FORMAT_ALAW;
+		ast_chan->readformat = AST_FORMAT_ALAW;
+		ast_chan->rawreadformat = AST_FORMAT_ALAW;
+		ast_chan->writeformat = AST_FORMAT_ALAW;
+		ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+	} else {*/
+		ast_chan->nativeformats = AST_FORMAT_SLINEAR;
+		ast_chan->readformat = AST_FORMAT_SLINEAR;
+		ast_chan->rawreadformat = AST_FORMAT_SLINEAR;
+		ast_chan->writeformat = AST_FORMAT_SLINEAR;
+		ast_chan->rawwriteformat = AST_FORMAT_SLINEAR;
+//	}
+
+	ast_set_read_format(ast_chan, ast_chan->readformat);
+	ast_set_write_format(ast_chan, ast_chan->writeformat);
 
 	return ast_chan;
 
@@ -399,7 +408,7 @@ err_missing_module:
 }
 
 static char *vgsm_pin_set_complete(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -788,7 +797,7 @@ err_missing_module:
 }
 
 static char *vgsm_send_sms_complete(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -953,7 +962,7 @@ err_no_module_name:
 }
 
 static char *vgsm_pin_input_complete(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -1099,7 +1108,7 @@ err_no_module_name:
 }
 
 static char *vgsm_puk_input_complete(
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -1387,88 +1396,16 @@ static int vgsm_call(
 	int timeout)
 {
 	int err;
-	char *dest = strdupa(orig_dest);
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-
-	// Parse destination and obtain module name + number
-	const char *module_name;
-	const char *number;
-	char *stringp = dest;
+	struct vgsm_module *module = vgsm_chan->module;
 
 	assert(ast_chan->_state == AST_STATE_DOWN);
-
-	module_name = strsep(&stringp, "/");
-	if (!module_name) {
-		ast_log(LOG_WARNING,
-			"Invalid destination '%s' format (module/number)\n",
-			dest);
-
-		err = -1;
-		goto err_invalid_destination;
-	}
-
-	number = strsep(&stringp, "/");
-	if (!number) {
-		ast_log(LOG_WARNING,
-			"Invalid destination '%s' format (module/number)\n",
-			dest);
-
-		err = -1;
-		goto err_invalid_format;
-	}
-
-	struct vgsm_module *module;
-
-	if (!strncasecmp(module_name, VGSM_HUNTGROUP_PREFIX,
-			strlen(VGSM_HUNTGROUP_PREFIX))) {
-
-		const char *hg_name = module_name +
-					strlen(VGSM_HUNTGROUP_PREFIX);
-		struct vgsm_huntgroup *hg;
-		hg = vgsm_hg_get_by_name(hg_name);
-		if (!hg) {
-			ast_log(LOG_ERROR, "Cannot find huntgroup '%s'\n",
-				hg_name);
-
-			ast_chan->hangupcause = AST_CAUSE_BUSY;
-
-			err = -1;
-			goto err_huntgroup_not_found;
-		}
-
-		module = vgsm_hg_hunt(hg, NULL, NULL);
-		if (!module) {
-			vgsm_debug_generic("Cannot hunt in huntgroup %s\n",
-					hg_name);
-
-			err = -1;
-			goto err_no_module_available;
-		}
-
-		assert(!vgsm_chan->hg_first_module);
-		assert(!vgsm_chan->huntgroup);
-
-		vgsm_chan->hg_first_module = vgsm_module_get(module);
-		vgsm_chan->huntgroup = vgsm_hg_get(hg);
-
-		vgsm_hg_put(hg);
-	} else {
-		module = vgsm_module_get_by_name(module_name);
-		if (!module) {
-			ast_log(LOG_WARNING, "Module %s not found\n",
-				module_name);
-			err = -1;
-			goto err_module_not_found;
-		}
-	}
-
-	ast_mutex_lock(&module->lock);
 
 	if (module->status != VGSM_MODULE_STATUS_READY) {
 		ast_mutex_unlock(&module->lock);
 
-		ast_log(LOG_DEBUG, "Module %s is not ready\n", module_name);
+		ast_log(LOG_DEBUG, "Module %s is not ready\n", module->name);
 		err = -1;
 		goto err_module_not_ready;
 	}
@@ -1478,7 +1415,7 @@ static int vgsm_call(
 		ast_mutex_unlock(&module->lock);
 
 		ast_log(LOG_DEBUG, "Module %s not registered\n",
-			module_name);
+			module->name);
 		err = -1;
 		goto err_module_not_registered;
 	}
@@ -1487,7 +1424,7 @@ static int vgsm_call(
 		ast_mutex_unlock(&module->lock);
 
 		ast_log(LOG_DEBUG, "Module %s is busy (call present)\n",
-			module_name);
+			module->name);
 		err = -1;
 		goto err_module_busy;
 	}
@@ -1505,7 +1442,7 @@ static int vgsm_call(
 		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
 	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", dest, ast_chan->name);
+		ast_log(LOG_DEBUG, "Calling %s on %s\n", vgsm_chan->called_number, ast_chan->name);
 
 	char newname[40];
 	snprintf(newname, sizeof(newname), "VGSM/%s/%d", module->name, 1);
@@ -1526,10 +1463,10 @@ static int vgsm_call(
 			180 * SEC, "ATD%c%s;",
 			((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
 				AST_PRES_ALLOWED) ? 'i' : 'I',
-			number);
+			vgsm_chan->called_number);
 	if (!req) {
 		ast_log(LOG_ERROR, "%s: Unable to dial: ATD failed\n",
-			module_name);
+			module->name);
 
 		err = -1;
 		goto err_atd_failed;
@@ -1548,12 +1485,6 @@ err_atd_failed:
 err_module_busy:
 err_module_not_registered:
 err_module_not_ready:
-	vgsm_module_put(module);
-err_module_not_found:
-err_no_module_available:
-err_huntgroup_not_found:
-err_invalid_format:
-err_invalid_destination:
 
 	return err;
 }
@@ -1613,7 +1544,7 @@ struct ast_frame *vgsm_exception(struct ast_channel *ast_chan)
 }
 
 /* We are called with chan->lock'ed */
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 static int vgsm_indicate(struct ast_channel *ast_chan, int condition)
 #else
 static int vgsm_indicate(
@@ -1912,7 +1843,9 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		return f;
 	}
 
-#if 0
+#if 1
+{
+__u8 *buf = vgsm_chan->frame_out_buf;
 struct timeval tv;
 gettimeofday(&tv, NULL);
 unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
@@ -1927,11 +1860,12 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 	*(__u8 *)(buf + 6),
 	*(__u8 *)(buf + 7),
 	nread);
+}
 #endif
 
 	f->frametype = AST_FRAME_VOICE;
-	f->subclass = AST_FORMAT_ALAW;
-	f->samples = nread;
+	f->subclass = AST_FORMAT_SLINEAR;
+	f->samples = nread / 2;
 	f->datalen = nread;
 	f->data = vgsm_chan->frame_out_buf;
 	f->offset = 0;
@@ -1967,7 +1901,8 @@ static int vgsm_write(
 		return 0;
 	}
 
-	if (frame->subclass != AST_FORMAT_ALAW) {
+	if (frame->subclass != AST_FORMAT_ALAW &&
+	    frame->subclass != AST_FORMAT_SLINEAR) {
 		ast_log(LOG_WARNING,
 			"Cannot handle frames in %d format\n",
 			frame->subclass);
@@ -2039,28 +1974,117 @@ ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 static struct ast_channel *vgsm_request(
 	const char *type, int format, void *data, int *cause)
 {
-	struct vgsm_chan *vgsm_chan;
+	int err;
 
-	if (!(format & AST_FORMAT_ALAW)) {
+printf("FORMAAAAAAAAAAAAT = %08x\n", format);
+
+	if (!(format & (AST_FORMAT_ALAW | AST_FORMAT_SLINEAR))) {
 		ast_log(LOG_NOTICE,
 			"Asked to get a channel of unsupported format '%d'\n",
 			format);
+		err = -1;
 		goto err_unsupported_format;
 	}
 
+	// Parse destination and obtain module name + number
+	const char *module_name;
+	const char *number;
+	char *stringp = data;
+
+	module_name = strsep(&stringp, "/");
+	if (!module_name) {
+		ast_log(LOG_WARNING,
+			"Invalid destination '%s' format (module/number)\n",
+			(char *)data);
+
+		err = -1;
+		goto err_invalid_destination;
+	}
+
+	number = strsep(&stringp, "/");
+	if (!number) {
+		ast_log(LOG_WARNING,
+			"Invalid destination '%s' format (module/number)\n",
+			(char *)data);
+
+		err = -1;
+		goto err_invalid_format;
+	}
+
+	struct vgsm_module *module;
+	struct vgsm_module *hg_first_module = NULL;
+	struct vgsm_huntgroup *huntgroup = NULL;
+
+	if (!strncasecmp(module_name, VGSM_HUNTGROUP_PREFIX,
+			strlen(VGSM_HUNTGROUP_PREFIX))) {
+
+		const char *hg_name = module_name +
+					strlen(VGSM_HUNTGROUP_PREFIX);
+		struct vgsm_huntgroup *hg;
+		hg = vgsm_hg_get_by_name(hg_name);
+		if (!hg) {
+			ast_log(LOG_ERROR, "Cannot find huntgroup '%s'\n",
+				hg_name);
+
+			err = -1;
+			goto err_huntgroup_not_found;
+		}
+
+		module = vgsm_hg_hunt(hg, NULL, NULL);
+		if (!module) {
+			vgsm_debug_generic("Cannot hunt in huntgroup %s\n",
+					hg_name);
+
+			err = -1;
+			goto err_no_module_available;
+		}
+
+		hg_first_module = vgsm_module_get(module);
+		huntgroup = vgsm_hg_get(hg);
+
+		vgsm_hg_put(hg);
+	} else {
+		module = vgsm_module_get_by_name(module_name);
+		if (!module) {
+			ast_log(LOG_WARNING, "Module %s not found\n",
+				module_name);
+			err = -1;
+			goto err_module_not_found;
+		}
+	}
+
+	ast_mutex_lock(&module->lock);
+
+
+
+
+
+
+
+
+	struct vgsm_chan *vgsm_chan;
 	vgsm_chan = vgsm_chan_alloc();
 	if (!vgsm_chan) {
 		ast_log(LOG_ERROR, "Cannot allocate vgsm_chan\n");
 		goto err_vgsm_chan_alloc;
 	}
 
-	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN, NULL, 0);
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN, module, 1);
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 
 	vgsm_chan->outbound = TRUE;
 
 	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
+
+
+
+	snprintf(vgsm_chan->called_number, sizeof(vgsm_chan->called_number),
+		"%s", number);
+
+	vgsm_chan->module = module;
+	vgsm_chan->hg_first_module = hg_first_module;
+	vgsm_chan->huntgroup = huntgroup;
 
 	vgsm_chan_put(vgsm_chan);
 
@@ -2073,6 +2097,12 @@ static struct ast_channel *vgsm_request(
 err_vgsm_ast_chan_alloc:
 	vgsm_chan_put(vgsm_chan);
 err_vgsm_chan_alloc:
+	vgsm_module_put(module);
+err_module_not_found:
+err_no_module_available:
+err_huntgroup_not_found:
+err_invalid_format:
+err_invalid_destination:
 err_unsupported_format:
 
 	return NULL;
@@ -2081,7 +2111,7 @@ err_unsupported_format:
 static const struct ast_channel_tech vgsm_tech = {
 	.type		= VGSM_CHAN_TYPE,
 	.description	= VGSM_DESCRIPTION,
-	.capabilities	= AST_FORMAT_ALAW,
+	.capabilities	= /*AST_FORMAT_ALAW |*/ AST_FORMAT_SLINEAR,
 	.requester	= vgsm_request,
 	.call		= vgsm_call,
 	.hangup		= vgsm_hangup,
@@ -2095,7 +2125,7 @@ static const struct ast_channel_tech vgsm_tech = {
 	.send_text	= vgsm_sendtext,
 	.setoption	= vgsm_setoption,
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	.send_digit	= vgsm_send_digit,
 #else
 	.send_digit_end	= vgsm_send_digit,
@@ -2171,7 +2201,7 @@ BOOL vgsm_cms_error_fatal(int res)
 	return FALSE;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 static void astman_append(struct mansession *s, const char *fmt, ...)
 {
 	va_list ap;
@@ -2585,7 +2615,7 @@ static void vgsm_shutdown(void)
 	vgsm_module_shutdown_all();
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int load_module(void)
 #else
 static int vgsm_load_module(void)
@@ -2667,7 +2697,7 @@ err_channel_register:
 	return err;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int unload_module(void)
 #else
 static int vgsm_unload_module(void)
@@ -2696,7 +2726,7 @@ static int vgsm_unload_module(void)
 	return 0;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int reload(void)
 #else
 static int vgsm_reload_module(void)
@@ -2707,7 +2737,7 @@ static int vgsm_reload_module(void)
 	return 0;
 }
 
-#if SANE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 
 int usecount(void)
 {

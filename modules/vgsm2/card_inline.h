@@ -1,7 +1,7 @@
 /*
  * VoiSmart vGSM-II board driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -19,22 +19,22 @@
 
 static inline unsigned int vgsm_inb(struct vgsm_card *card, int offset)
 {
-	return ioread8(card->io_mem + offset);
+	return ioread8(card->regs_mem + offset);
 }
 
 static inline void vgsm_outb(struct vgsm_card *card, int offset, u8 value)
 {
-	iowrite8(value, card->io_mem + offset);
+	iowrite8(value, card->regs_mem + offset);
 }
 
 static inline unsigned int vgsm_inl(struct vgsm_card *card, int offset)
 {
-	return ioread32(card->io_mem + offset);
+	return ioread32(card->regs_mem + offset);
 }
 
 static inline void vgsm_outl(struct vgsm_card *card, int offset, u32 value)
 {
-	iowrite32(value, card->io_mem + offset);
+	iowrite32(value, card->regs_mem + offset);
 }
 
 static inline void vgsm_card_lock(struct vgsm_card *card)

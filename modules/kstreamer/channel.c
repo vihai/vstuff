@@ -163,13 +163,8 @@ static void ks_chan_release(struct kobject *kobj)
 
 	if (chan->ops->release)
 		chan->ops->release(chan);
-	else {
-		ks_msg(KERN_ERR, "vISDN chan '%s' does not have a"
-			" release() function, it is broken and must be"
-			" fixed.\n",
-			chan->kobj.name);
-		WARN_ON(1);
-	}
+	else
+		kfree(chan);
 }
 
 void ks_chan_del_rcu(struct rcu_head *head)
@@ -188,7 +183,7 @@ static struct kobj_type ks_chan_ktype = {
 	.default_attrs	= ks_chan_default_attrs,
 };
 
-void ks_chan_init(
+struct ks_chan *ks_chan_create(
 	struct ks_chan *chan,
 	struct ks_chan_ops *ops,
 	const char *name,
@@ -197,12 +192,17 @@ void ks_chan_init(
 	struct ks_node *from,
 	struct ks_node *to)
 {
-	BUG_ON(!chan);
 	BUG_ON(!ops);
 	BUG_ON(!ops->owner);
 	BUG_ON(!name);
 	BUG_ON(!from);
 	BUG_ON(!to);
+
+	if (!chan) {
+		chan = kmalloc(sizeof(*chan), GFP_KERNEL);
+		if (!chan)
+			return NULL;
+	}
 
 	memset(chan, 0, sizeof(*chan));
 
@@ -221,8 +221,10 @@ void ks_chan_init(
 
 	INIT_LIST_HEAD(&chan->pipeline_entry);
 	INIT_RCU_HEAD(&chan->pipeline_entry_rcu);
+
+	return chan;
 }
-EXPORT_SYMBOL(ks_chan_init);
+EXPORT_SYMBOL(ks_chan_create);
 
 int ks_chan_write_to_nlmsg(
 	struct ks_chan *chan,
@@ -547,24 +549,15 @@ void ks_chan_unregister(struct ks_chan *chan)
 	list_del(&chan->node);
 	ks_chan_put(chan);
 	write_unlock(&ks_chans_list_lock);
-
-	if (atomic_read(&chan->kobj.kref.refcount) > 1) {
-
-		/* Usually 50ms are enough */
-		msleep(50);
-
-		while(atomic_read(&chan->kobj.kref.refcount) > 1) {
-			ks_msg(KERN_WARNING,
-				"Waiting for channel"
-				" refcnt to become 1"
-				" (now %d)\n",
-				atomic_read(&chan->kobj.kref.refcount));
-
-			msleep(5000);
-		}
-	}
 }
 EXPORT_SYMBOL(ks_chan_unregister);
+
+void ks_chan_destroy(struct ks_chan *chan)
+{
+	ks_kobj_waitref(&chan->kobj);
+	ks_chan_put(chan);
+}
+EXPORT_SYMBOL(ks_chan_destroy);
 
 int ks_chan_create_file(
 	struct ks_chan *chan,

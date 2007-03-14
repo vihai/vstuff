@@ -29,17 +29,22 @@ static struct attribute *ks_duplex_default_attrs[] =
 	NULL,
 };
 
-void ks_duplex_init(
+struct ks_duplex *ks_duplex_create(
 	struct ks_duplex *duplex,
 	struct ks_duplex_ops *ops,
 	const char *name,
 	struct kobject *parent)
 {
-	BUG_ON(!duplex);
 	BUG_ON(!ops);
 	BUG_ON(!ops->owner);
 	BUG_ON(!name);
 	BUG_ON(!parent);
+
+	if (!duplex) {
+		duplex = kmalloc(sizeof(*duplex), GFP_KERNEL);
+		if (!duplex)
+			return NULL;
+	}
 
 	memset(duplex, 0, sizeof(*duplex));
 
@@ -49,8 +54,10 @@ void ks_duplex_init(
 	duplex->kobj.parent = parent;
 
 	duplex->ops = ops;
+
+	return duplex;
 }
-EXPORT_SYMBOL(ks_duplex_init);
+EXPORT_SYMBOL(ks_duplex_create);
 
 int ks_duplex_register(struct ks_duplex *duplex)
 {
@@ -71,12 +78,18 @@ err_kobject_add:
 }
 EXPORT_SYMBOL(ks_duplex_register);
 
-void ks_duplex_unregister(
-	struct ks_duplex *duplex)
+void ks_duplex_unregister(struct ks_duplex *duplex)
 {
 	kobject_del(&duplex->kobj);
 }
 EXPORT_SYMBOL(ks_duplex_unregister);
+
+void ks_duplex_destroy(struct ks_duplex *duplex)
+{
+	ks_kobj_waitref(&duplex->kobj);
+	ks_duplex_put(duplex);
+}
+EXPORT_SYMBOL(ks_duplex_destroy);
 
 #define to_ks_duplex_attr(_attr) \
 	container_of(_attr, struct ks_duplex_attribute, attr)
@@ -132,13 +145,8 @@ static void ks_duplex_release(struct kobject *kobj)
 
 	if (duplex->ops->release)
 		duplex->ops->release(duplex);
-	else {
-		ks_msg(KERN_ERR, "Duplex '%s' does not have a"
-			" release() function, it is broken and must be"
-			" fixed.\n",
-			duplex->kobj.name);
-		WARN_ON(1);
-	}
+	else
+		kfree(duplex);
 }
 
 static struct kobj_type ks_duplex_ktype = {

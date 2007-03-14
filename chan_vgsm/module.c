@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -46,6 +46,7 @@
 #include <asterisk/dsp.h>
 #include <asterisk/causes.h>
 #include <asterisk/manager.h>
+#include <asterisk/version.h>
 
 #include <linux/vgsm.h>
 
@@ -82,6 +83,7 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->tx_gain = 255;
 	mc->set_clock = 0;
 	mc->poweroff_on_exit = TRUE;
+	mc->route_to_sim = -2;
 	mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
 
 	strcpy(mc->smcc_address.digits, "");
@@ -665,6 +667,13 @@ static int vgsm_module_config_from_var(
 		mc->set_clock = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "poweroff_on_exit")) {
 		mc->poweroff_on_exit = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "sim")) {
+		if (!strcasecmp(var->value, "external"))
+			mc->route_to_sim = VGSM_SIM_ROUTE_EXTERNAL;
+		else if (!strcasecmp(var->value, "default"))
+			mc->route_to_sim = VGSM_SIM_ROUTE_DEFAULT;
+		else
+			mc->route_to_sim = atoi(var->value);
 	} else if (!strcasecmp(var->name, "operator_selection")) {
 		if (!strcasecmp(var->value, "auto"))
 			mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
@@ -731,6 +740,7 @@ static void vgsm_module_config_copy(
 	dst->tx_gain = src->tx_gain;
 	dst->set_clock = src->set_clock;
 	dst->poweroff_on_exit = src->poweroff_on_exit;
+	dst->route_to_sim = src->route_to_sim;
 	dst->operator_selection = src->operator_selection;
 
 	dst->operator_mcc = src->operator_mcc;
@@ -1129,6 +1139,13 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 		mc->set_clock ? "YES" : "NO",
 		mc->poweroff_on_exit ? "YES" : "NO",
 		vgsm_module_status_to_text(module->status));
+
+	if (mc->route_to_sim == VGSM_SIM_ROUTE_EXTERNAL)
+		ast_cli(fd, "  Route to sim: external\n");
+	else if (mc->route_to_sim == VGSM_SIM_ROUTE_DEFAULT)
+		ast_cli(fd, "  Route to sim: default\n");
+	else
+		ast_cli(fd, "  Route to sim: %d\n", mc->route_to_sim);
 
 	switch(module->status) {
 	case VGSM_MODULE_STATUS_CLOSED:
@@ -1977,7 +1994,7 @@ err_module_not_found:
 }
 
 static char *show_vgsm_modules_complete(
-#if ASTERISK_VERSION_NUM < 010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -2088,7 +2105,7 @@ err_no_module_name:
 }
 
 static char *vgsm_forwarding_complete(
-#if ASTERISK_VERSION_NUM < 010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -2268,7 +2285,7 @@ err_no_module_name:
 }
 
 static char *vgsm_module_complete(
-#if ASTERISK_VERSION_NUM < 010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -2455,7 +2472,7 @@ static int no_debug_vgsm_module_func(int fd, int argc, char *argv[])
 }
 
 static char *debug_module_category_complete(
-#if ASTERISK_VERSION_NUM < 010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -2474,7 +2491,7 @@ static char *debug_module_category_complete(
 }
 
 static char *debug_module_complete(
-#if ASTERISK_VERSION_NUM < 010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -2493,7 +2510,7 @@ static char *debug_module_complete(
 }
 
 static char *no_debug_module_complete(
-#if ASTERISK_VERSION_NUM < 010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
@@ -4407,10 +4424,17 @@ static int vgsm_module_prepin_configure(
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
-	/* Select audio path 1 */
-	err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SAIC=2,1,1");
-	if (err != VGSM_RESP_OK)
-		goto err_no_req;
+	if (module->interface_version == 1) {
+		/* Select audio path 1 */
+		err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SAIC=2,1,1");
+		if (err != VGSM_RESP_OK)
+			goto err_no_req;
+	} else {
+		/* Select DAI audio  */
+		err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SAIC=1");
+		if (err != VGSM_RESP_OK)
+			goto err_no_req;
+	}
 
 	/* Set audio input */
 	err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SNFI=2,32767");
@@ -4419,7 +4443,7 @@ static int vgsm_module_prepin_configure(
 
 	/* Set audio output */
 	err = vgsm_req_make_wait_result(comm, 10 * SEC,
-			"AT^SNFO=2,4096,5792,8192,11584,32767,4,0");
+			"AT^SNFO=1,4096,5792,8192,11584,16384,4,0");
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
@@ -4603,7 +4627,7 @@ static int vgsm_module_configure(
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
-	sleep(2); // Let the module flush CBM
+	sleep(1); // Let the module flush CBM
 
 	/* Save the current configuration */
 	err = vgsm_req_make_wait_result(comm, 5 * SEC, "AT&W");
@@ -4771,28 +4795,15 @@ static int vgsm_module_update_static_info(
 	vgsm_req_put(req);
 
 	/*--------*/
-
-no_sim:
-
-	return 0;
-
-err_failure:
-
-	return -1;
-}
-
-static int vgsm_module_update_post_simbusy_info(
-	struct vgsm_module *module,
-	struct vgsm_module_config *mc)
-{
-	struct vgsm_comm *comm = &module->comm;
-	struct vgsm_req *req;
-	int err;
-
-	/*--------*/
+retry_csca:
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CSCA?");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
+		if (err == CME_ERROR(14)) { // SIM busy
+			sleep(1);
+			goto retry_csca;
+		}
+
 		vgsm_module_failure(module, err);
 		vgsm_req_put(req);
 		goto err_failure;
@@ -4823,6 +4834,7 @@ static int vgsm_module_update_post_simbusy_info(
 
 	vgsm_req_put(req);
 
+no_sim:
 
 	return 0;
 
@@ -4886,12 +4898,14 @@ static int vgsm_module_init_at_interface(
 	int err;
 
 	err = vgsm_req_make_wait_result(comm, 200 * MILLISEC,
-		"AT Z0 E1 V1 Q0 \\Q1");
+		"AT Z0 E1 V1 Q0 \\Q%d",
+		module->interface_version == 1 ? 1 : 3);
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
 	err = vgsm_req_make_wait_result(comm, 200 * MILLISEC,
-		"AT+IPR=38400");
+		"AT+IPR=%d",
+		module->interface_version == 1 ? 38400 : 230400);
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
@@ -4909,7 +4923,7 @@ err_no_req:
 	return -1;
 }
 
-static void vgsm_module_open(
+static int vgsm_module_open(
 	struct vgsm_module *module)
 {
 	assert(module->fd == -1);
@@ -4919,23 +4933,62 @@ static void vgsm_module_open(
 	mc = vgsm_module_config_get(module->current_config);
 	ast_mutex_unlock(&module->lock);
 
-	module->fd = open(mc->device_filename, O_RDWR);
+	module->fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (module->fd < 0) {
-		vgsm_module_failure_text(module,
-				"Error opening device: open(%s): %s",
+		char tmpstr[64];
+		snprintf(tmpstr, sizeof(tmpstr),
+			"Error opening device: open(%s): %s",
 				mc->device_filename,
 				strerror(errno));
+
+		vgsm_module_set_status_reason(module,
+			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
+			tmpstr);
 
 		goto err_module_open;
 	}
 
 	module->comm.name = module->name;
 
+	if (ioctl(module->fd, VGSM_IOC_GET_INTERFACE_VERSION,
+			&module->interface_version) < 0) {
+		module->interface_version = 1;
+	}
+
+	tcflush(module->fd, TCIOFLUSH);
+
+/*	int flags = fcntl(module->fd, F_GETFL, O_NONBLOCK);
+	if (flags < 0) {
+		vgsm_module_failure_text(module,
+			"Error getting file flags:"
+			" fcntl(F_GETFL): %s",
+			strerror(errno));
+
+		goto err_fcntl_getfl;
+	}
+
+	if (fcntl(module->fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
+		vgsm_module_failure_text(module,
+			"Error setting file flags:"
+			" fcntl(F_SETFL): %s",
+			strerror(errno));
+
+		goto err_fcntl_setfl;
+	}*/
+
 	struct termios newtio;
 	bzero(&newtio, sizeof(newtio));
-	
-	newtio.c_cflag = B38400 | CRTSCTS | CS8 | CLOCAL | CREAD;
-	newtio.c_iflag = IXON | IXOFF;
+
+	newtio.c_cflag = CS8 | CREAD | HUPCL;
+
+	if (module->interface_version == 1) {
+		newtio.c_cflag |= B38400 | CLOCAL;
+		newtio.c_iflag = IXON | IXOFF;
+	} else {
+		newtio.c_cflag |= B230400 | CRTSCTS;
+		newtio.c_iflag = 0;
+	}
+
 	newtio.c_oflag = 0;
 	newtio.c_lflag = 0;
 	
@@ -4957,36 +5010,19 @@ static void vgsm_module_open(
 	newtio.c_cc[VLNEXT]	= 0;
 	newtio.c_cc[VEOL2]	= 0;
 	
-	tcflush(module->fd, TCIFLUSH);
-	tcsetattr(module->fd, TCSANOW, &newtio);
+	if (tcsetattr(module->fd, TCSANOW, &newtio) < 0) {
+		char tmpstr[64];
+		snprintf(tmpstr, sizeof(tmpstr),
+			"Error setting tty's attributes: tcsetattr(%s): %s",
+				mc->device_filename,
+				strerror(errno));
 
-	bzero(&newtio, sizeof(newtio));
-	
-	newtio.c_cflag = B38400 | CRTSCTS | CS8 | CLOCAL | CREAD;
-	newtio.c_iflag = IXON | IXOFF;
-	newtio.c_oflag = 0;
-	newtio.c_lflag = 0;
-	
-	newtio.c_cc[VINTR]	= 0;
-	newtio.c_cc[VQUIT]	= 0;
-	newtio.c_cc[VERASE]	= 0;
-	newtio.c_cc[VKILL]	= 0;
-	newtio.c_cc[VEOF]	= 4;
-	newtio.c_cc[VTIME]	= 0;
-	newtio.c_cc[VMIN]	= 1;
-	newtio.c_cc[VSWTC]	= 0;
-	newtio.c_cc[VSTART]	= 0;
-	newtio.c_cc[VSTOP]	= 0;
-	newtio.c_cc[VSUSP]	= 0;
-	newtio.c_cc[VEOL]	= 0;
-	newtio.c_cc[VREPRINT]	= 0;
-	newtio.c_cc[VDISCARD]	= 0;
-	newtio.c_cc[VWERASE]	= 0;
-	newtio.c_cc[VLNEXT]	= 0;
-	newtio.c_cc[VEOL2]	= 0;
+		vgsm_module_set_status_reason(module,
+			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
+			tmpstr);
 
-	tcflush(module->fd, TCIFLUSH);
-	tcsetattr(module->fd, TCSANOW, &newtio);
+		goto err_tcsetattr;
+	}
 
 	/***************/
 
@@ -5024,9 +5060,10 @@ static void vgsm_module_open(
 
 	vgsm_module_config_put(mc);
 
-	return;
+	return 0;
 
 err_ioctl_power_get:
+err_tcsetattr:
 	vgsm_comm_close(&module->comm);
 
 	close(module->fd);
@@ -5034,7 +5071,7 @@ err_ioctl_power_get:
 err_module_open:
 	vgsm_module_config_put(mc);
 
-	return;
+	return -1;
 }
 
 static void vgsm_module_initialize(
@@ -5049,11 +5086,22 @@ static void vgsm_module_initialize(
 
 	vgsm_module_set_status(module, VGSM_MODULE_STATUS_INITIALIZING, -1);
 
-	if (vgsm_module_codec_init(module, mc) < 0) {
-		vgsm_module_failure_text(module,
-				"Error configuring CODEC");
+	if (module->interface_version == 1) {
+		if (vgsm_module_codec_init(module, mc) < 0) {
+			vgsm_module_failure_text(module,
+					"Error configuring CODEC");
 
-		goto initialization_failure;
+			goto initialization_failure;
+		}
+	} else {
+		if (ioctl(module->fd, VGSM_IOC_SIM_ROUTE,
+						mc->route_to_sim) < 0) {
+			ast_log(LOG_ERROR,
+				"ioctl(IOC_SIM_ROUTE) failed: %s\n",
+				strerror(errno));
+
+			goto initialization_failure;
+		}
 	}
 
 	int val;
@@ -5095,11 +5143,6 @@ static void vgsm_module_initialize(
 		goto initialization_failure;
 
 	if (vgsm_module_update_net_info(module) < 0)
-		goto initialization_failure;
-
-	sleep(5); // Wait for SIM to become idle
-
-	if (vgsm_module_update_post_simbusy_info(module, mc) < 0)
 		goto initialization_failure;
 
 	module->failure_attempts = 0;

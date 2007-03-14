@@ -15,11 +15,15 @@
 
 #ifdef __KERNEL__
 
+#include <linux/kobject.h>
+
 extern struct class ks_system_class;
 
 extern struct subsystem kstreamer_subsys;
 
 extern struct device ks_system_device;
+
+void ks_kobj_waitref(struct kobject *kobj);
 
 #endif
 

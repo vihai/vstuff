@@ -462,6 +462,10 @@ static int vgsm_tty_ioctl(
 //		return -ENOIOCTLCMD;
 
 	switch(cmd) {
+	case VGSM_IOC_GET_INTERFACE_VERSION:
+		return put_user(1, (int __user *)arg);
+	break;
+
 	case VGSM_IOC_GET_TX_FIFOLEN:
 		return put_user(kfifo_len(module->tx.fifo),
 				(unsigned int *)arg);

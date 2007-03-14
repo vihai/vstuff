@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -67,15 +67,17 @@ void hfc_st_port_update_st_ctrl1(struct hfc_st_port *port);
 void hfc_st_port_update_st_ctrl2(struct hfc_st_port *port);
 void hfc_st_port_update_st_clk_dly(struct hfc_st_port *port);
 
-struct hfc_st_port *hfc_st_port_alloc(void);
-void hfc_st_port_init(
+struct hfc_st_port *hfc_st_port_create(
 	struct hfc_st_port *port,
 	struct hfc_card *card,
 	const char *name,
 	int id);
-int hfc_st_port_register(
-	struct hfc_st_port *port);
-void hfc_st_port_unregister(
-	struct hfc_st_port *port);
+
+int hfc_st_port_register(struct hfc_st_port *port);
+void hfc_st_port_unregister(struct hfc_st_port *port);
+void hfc_st_port_destroy(struct hfc_st_port *port);
+
+struct hfc_st_port *hfc_st_port_mem_get(struct hfc_st_port *port);
+void hfc_st_port_mem_put(struct hfc_st_port *port);
 
 #endif

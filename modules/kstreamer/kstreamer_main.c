@@ -48,6 +48,22 @@ static void ks_system_device_release(struct device *cd)
 struct device ks_system_device;
 EXPORT_SYMBOL(ks_system_device);
 
+void ks_kobj_waitref(struct kobject *kobj)
+{
+	if (atomic_read(&kobj->kref.refcount) > 1) {
+		msleep(50);
+
+		while(atomic_read(&kobj->kref.refcount) > 1) {
+			ks_msg(KERN_WARNING,
+				"Waiting for '%s' refcnt to become 1 (now %d)",
+				kobject_name(kobj),
+				atomic_read(&kobj->kref.refcount));
+
+			msleep(1000);
+		}
+	}
+}
+
 static void ks_system_class_release(struct class_device *cd)
 {
 }

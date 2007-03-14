@@ -133,6 +133,15 @@ static void ks_report_default(int level, const char *format, ...)
 	va_end(ap);
 }
 
+void ks_conn_topology_updated(
+	struct ks_conn *conn,
+	int message_type,
+	void *object)
+{
+	if (conn->topology_event_callback)
+		conn->topology_event_callback(conn, message_type, object);
+}
+
 struct ks_conn *ks_conn_create(void)
 {
 	struct ks_conn *conn;
@@ -145,7 +154,10 @@ struct ks_conn *ks_conn_create(void)
 
 	conn->topology_state = KS_TOPOLOGY_STATE_NULL;
 	conn->state = KS_CONN_STATE_NULL;
-	conn->dump_packets = TRUE;
+
+	conn->dump_packets = FALSE;
+	conn->debug_state = FALSE;
+
 	conn->seqnum = 1234;
 	INIT_LIST_HEAD(&conn->xacts);
 	conn->pid = getpid();
@@ -453,9 +465,11 @@ void ks_conn_set_state(
 	struct ks_conn *conn,
 	enum ks_conn_state state)
 {
-	report_conn(conn, LOG_DEBUG, "Conn state changed from %s to %s\n",
-		ks_conn_state_to_text(conn->state),
-		ks_conn_state_to_text(state));
+	if (conn->debug_state)
+		report_conn(conn, LOG_DEBUG,
+			"Conn state changed from %s to %s\n",
+			ks_conn_state_to_text(conn->state),
+			ks_conn_state_to_text(state));
 
 	conn->state = state;
 }

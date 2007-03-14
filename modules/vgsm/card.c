@@ -928,8 +928,9 @@ int vgsm_card_probe(
 
 		snprintf(name, sizeof(name), "gsm%d", i);
 
-		card->modules[i] = vgsm_module_alloc(
-				card, &card->micros[i/2], i, name);
+		card->modules[i] = vgsm_module_create(
+					NULL, card, &card->micros[i/2],
+					i, name);
 		if (!card->modules[i]) {
 			err = -ENOMEM;
 			goto err_modules_alloc;

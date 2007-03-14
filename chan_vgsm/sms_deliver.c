@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -513,29 +513,31 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 
 	fprintf(f, "\n");
 
-	char outbuffer[1000];
-	char *inbuf = (char *)sms->text;
-	char *outbuf = outbuffer;
-	size_t inbytes = (wcslen(sms->text) + 1) * sizeof(wchar_t);
-	size_t outbytes_avail = sizeof(outbuffer);
-	size_t outbytes_left = outbytes_avail;
+	if (sms->text) {
+		char outbuffer[1000];
+		char *inbuf = (char *)sms->text;
+		char *outbuf = outbuffer;
+		size_t inbytes = (wcslen(sms->text) + 1) * sizeof(wchar_t);
+		size_t outbytes_avail = sizeof(outbuffer);
+		size_t outbytes_left = outbytes_avail;
 
-	iconv_t cd = iconv_open("UTF-8", "WCHAR_T");
-	if (cd < 0) {
-		ast_log(LOG_ERROR, "Cannot open iconv context; %s\n",
-			strerror(errno));
-		return -1;
+		iconv_t cd = iconv_open("UTF-8", "WCHAR_T");
+		if (cd < 0) {
+			ast_log(LOG_ERROR, "Cannot open iconv context; %s\n",
+				strerror(errno));
+			return -1;
+		}
+
+		if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes_left) < 0) {
+			ast_log(LOG_ERROR, "Cannot iconv; %s\n",
+				strerror(errno));
+			return -1;
+		}
+
+		iconv_close(cd);
+		
+		fprintf(f, "%s\n", outbuffer);
 	}
-
-	if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes_left) < 0) {
-		ast_log(LOG_ERROR, "Cannot iconv; %s\n",
-			strerror(errno));
-		return -1;
-	}
-
-	iconv_close(cd);
-	
-	fprintf(f, "%s\n", outbuffer);
 
 	setlocale(LC_CTYPE, loc);
 

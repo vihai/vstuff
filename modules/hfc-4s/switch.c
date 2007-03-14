@@ -102,14 +102,17 @@ static struct ks_node_ops hfc_switch_ops =
 	.disconnect	= hfc_switch_disconnect,
 };
 
-void hfc_switch_init(
+struct hfc_switch *hfc_switch_create(
 	struct hfc_switch *hfcswitch,
 	struct hfc_card *card)
 {
 	hfcswitch->card = card;
 
-	ks_node_init(&hfcswitch->ks_node, &hfc_switch_ops, "hfc-switch",
+	ks_node_create(&hfcswitch->ks_node, &hfc_switch_ops,
+			"hfc-switch",
 			&card->pci_dev->dev.kobj);
+
+	return hfcswitch;
 }
 
 int hfc_switch_register(struct hfc_switch *hfcswitch)

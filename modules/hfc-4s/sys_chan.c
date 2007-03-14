@@ -353,7 +353,10 @@ static void hfc_sys_chan_duplex_release(struct ks_duplex *duplex)
 
 	printk(KERN_DEBUG "hfc_sys_chan_duplex_release()\n");
 
-	hfc_sys_port_put(chan->port);
+	hfc_sys_chan_rx_put(&chan->rx);
+	hfc_sys_chan_tx_put(&chan->tx);
+
+	hfc_card_put(chan->port->card);
 }
 
 /*------------------------------- RX Link -----------------------------------*/
@@ -365,7 +368,7 @@ static void hfc_sys_chan_rx_chan_release(struct ks_chan *ks_chan)
 
 	hfc_msg_sys_chan(chan, KERN_DEBUG, "hfc_sys_chan_rx_chan_release()\n");
 
-	hfc_sys_chan_put(chan);
+	hfc_card_put(chan->port->card);
 }
 
 static int hfc_sys_chan_rx_chan_connect(struct ks_chan *ks_chan)
@@ -646,7 +649,7 @@ static void hfc_sys_chan_tx_chan_release(struct ks_chan *ks_chan)
 
 	hfc_msg_sys_chan(chan, KERN_DEBUG, "hfc_sys_chan_tx_chan_release()\n");
 
-	hfc_sys_chan_put(chan);
+	hfc_card_put(chan->port->card);
 }
 
 static int hfc_sys_chan_tx_chan_connect(struct ks_chan *ks_chan)
@@ -1167,14 +1170,16 @@ all_went_well:
 	hfc_card_unlock(card);
 }
 
-static void hfc_sys_chan_rx_init(
+static void hfc_sys_chan_rx_create(
 	struct hfc_sys_chan_rx *chan_rx,
 	struct hfc_sys_chan *chan,
 	int fifo_hwid)
 {
+	BUG_ON(!chan_rx); /* Dynamic allocation not supported */
+
 	chan_rx->chan = chan;
 
-	ks_chan_init(&chan_rx->ks_chan,
+	ks_chan_create(&chan_rx->ks_chan,
 			&hfc_sys_chan_rx_chan_ops, "rx",
 			&chan->ks_duplex,
 			&chan->ks_duplex.kobj,
@@ -1207,14 +1212,16 @@ static void hfc_sys_chan_tx_wake_tasklet(unsigned long data)
 	hfc_card_unlock(card);
 }
 
-static void hfc_sys_chan_tx_init(
+static void hfc_sys_chan_tx_create(
 	struct hfc_sys_chan_tx *chan_tx,
 	struct hfc_sys_chan *chan,
 	int fifo_hwid)
 {
+	BUG_ON(!chan_tx); /* Dynamic allocation not supported */
+
 	chan_tx->chan = chan;
 
-	ks_chan_init(&chan_tx->ks_chan,
+	ks_chan_create(&chan_tx->ks_chan,
 			&hfc_sys_chan_tx_chan_ops, "tx",
 			&chan->ks_duplex,
 			&chan->ks_duplex.kobj,
@@ -1232,22 +1239,26 @@ static void hfc_sys_chan_tx_init(
 		(unsigned long)chan_tx);
 }
 
-void hfc_sys_chan_init(
+struct hfc_sys_chan *hfc_sys_chan_create(
 	struct hfc_sys_chan *chan,
 	struct hfc_sys_port *port,
 	const char *name,
 	int fifo_hwid)
 {
+	BUG_ON(!chan); /* Dynamic allocation not supported */
+
 	chan->port = port;
 //	chan->id = id;
 
-	ks_duplex_init(&chan->ks_duplex,
+	ks_duplex_create(&chan->ks_duplex,
 			&hfc_sys_chan_duplex_ops,
 			name,
 			&port->visdn_port.kobj);
 
-	hfc_sys_chan_rx_init(&chan->rx, chan, fifo_hwid);
-	hfc_sys_chan_tx_init(&chan->tx, chan, fifo_hwid);
+	hfc_sys_chan_rx_create(&chan->rx, chan, fifo_hwid);
+	hfc_sys_chan_tx_create(&chan->tx, chan, fifo_hwid);
+
+	return chan;
 }
 
 static int hfc_sys_chan_rx_register(struct hfc_sys_chan_rx *chan_rx)
@@ -1291,6 +1302,11 @@ static void hfc_sys_chan_rx_unregister(struct hfc_sys_chan_rx *chan_rx)
 	}
 
 	ks_chan_unregister(&chan_rx->ks_chan);
+}
+
+static void hfc_sys_chan_rx_destroy(struct hfc_sys_chan_rx *chan_rx)
+{
+	ks_chan_destroy(&chan_rx->ks_chan);
 }
 
 static int hfc_sys_chan_tx_register(struct hfc_sys_chan_tx *chan_tx)
@@ -1338,6 +1354,11 @@ static void hfc_sys_chan_tx_unregister(struct hfc_sys_chan_tx *chan_tx)
 	ks_chan_unregister(&chan_tx->ks_chan);
 }
 
+static void hfc_sys_chan_tx_destroy(struct hfc_sys_chan_tx *chan_tx)
+{
+	ks_chan_destroy(&chan_tx->ks_chan);
+}
+
 int hfc_sys_chan_register(
 	struct hfc_sys_chan *chan)
 {
@@ -1369,11 +1390,18 @@ err_sys_chan_rx_register:
 	return err;
 }
 
-void hfc_sys_chan_unregister(
-	struct hfc_sys_chan *chan)
+void hfc_sys_chan_unregister(struct hfc_sys_chan *chan)
 {
 	hfc_sys_chan_tx_unregister(&chan->tx);
 	hfc_sys_chan_rx_unregister(&chan->rx);
 
 	ks_duplex_unregister(&chan->ks_duplex);
+}
+
+void hfc_sys_chan_destroy(struct hfc_sys_chan *chan)
+{
+	hfc_sys_chan_tx_destroy(&chan->tx);
+	hfc_sys_chan_rx_destroy(&chan->rx);
+
+	ks_duplex_destroy(&chan->ks_duplex);
 }

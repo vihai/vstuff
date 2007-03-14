@@ -39,11 +39,12 @@ endif
 SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
-SUBDIRS += scripts samples kstool visdnctl vgsmctl
+SUBDIRS += scripts samples kstool vgsmctl
+SUBDIRS += visdn_netdev_ctl
 
 if asterisk_modules
 SUBDIRS += res_kstreamer
-#SUBDIRS += chan_visdn
+SUBDIRS += chan_visdn
 SUBDIRS += chan_vgsm
 SUBDIRS += app_pipe
 endif

@@ -479,7 +479,7 @@ static VISDN_LINK_ATTR(tx_fifo_usage, S_IRUGO | S_IWUSR,
 		ksup_store_tx_fifo_usage);
 */
 
-static void ksup_chan_init(
+static void ksup_chan_create(
 	struct ksup_chan *chan,
 	int framed)
 {
@@ -499,7 +499,7 @@ static void ksup_chan_init(
 		goto err_fifo_tx_alloc;
 	}*/
 
-	ks_node_init(&chan->ks_node, &ksup_chan_node_ops, "",
+	ks_node_create(&chan->ks_node, &ksup_chan_node_ops, "",
 			&ks_system_device.kobj);
 }
 
@@ -511,7 +511,7 @@ static struct ksup_chan *ksup_chan_alloc(int framed)
 	if (!chan)
 		return NULL;
 
-	ksup_chan_init(chan, framed);
+	ksup_chan_create(chan, framed);
 
 	return chan;
 }
@@ -615,7 +615,7 @@ static int ksup_cdev_open(
 			goto err_alloc_chan_rx;
 		}
 
-		ks_chan_init(chan->ks_chan_rx, &ksup_chan_rx_chan_ops,
+		ks_chan_create(chan->ks_chan_rx, &ksup_chan_rx_chan_ops,
 				"rx", NULL,
 				&chan->ks_node.kobj,
 				&kss_softswitch.ks_node,
@@ -636,7 +636,7 @@ static int ksup_cdev_open(
 			goto err_alloc_chan_tx;
 		}
 
-		ks_chan_init(chan->ks_chan_tx, &ksup_chan_tx_chan_ops,
+		ks_chan_create(chan->ks_chan_tx, &ksup_chan_tx_chan_ops,
 				"tx", NULL,
 				&chan->ks_node.kobj,
 				&chan->ks_node,

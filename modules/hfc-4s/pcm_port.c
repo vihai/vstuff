@@ -87,12 +87,12 @@ static ssize_t hfc_store_bitrate(
 		char name[8];
 		snprintf(name, sizeof(name), "%d", i);
 
-		port->chans[i] = hfc_pcm_chan_alloc(GFP_KERNEL);
+		port->chans[i] = hfc_pcm_chan_create(NULL, port, name, i);
 		if (!port->chans[i])
 			return -ENOMEM;
 
-		hfc_pcm_chan_init(port->chans[i], port, name, i);
 		hfc_pcm_chan_register(port->chans[i]);
+		// FIXME error handling
 	}
 
 	return count;
@@ -318,24 +318,30 @@ struct visdn_port_ops hfc_pcm_port_ops = {
 	.release	= hfc_pcm_port_release,
 };
 
-void hfc_pcm_port_init(
+struct hfc_pcm_port *hfc_pcm_port_create(
 	struct hfc_pcm_port *port,
 	struct hfc_card *card,
 	const char *name)
 {
 	int i;
 
+	BUG_ON(!port); /* Dynamic allocation not supported */
+
 	port->card = card;
 
-	visdn_port_init(&port->visdn_port,
+	visdn_port_create(&port->visdn_port,
 			&hfc_pcm_port_ops,
 			name,
 			&card->pci_dev->dev.kobj);
+
+	port->visdn_port.type = "PCM";
 
 	for (i=0; i<ARRAY_SIZE(port->chans); i++)
 		port->chans[i] = NULL;
 
 	port->num_chans = 0;
+
+	return port;
 }
 
 int hfc_pcm_port_register(
@@ -383,4 +389,9 @@ void hfc_pcm_port_unregister(
 	}
 
 	visdn_port_unregister(&port->visdn_port);
+}
+
+void hfc_pcm_port_destroy(struct hfc_pcm_port *port)
+{
+	visdn_port_destroy(&port->visdn_port);
 }

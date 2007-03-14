@@ -66,13 +66,12 @@ struct hfc_pcm_port
 	struct hfc_pcm_chan *chans[128];
 };
 
-void hfc_pcm_port_init(
+struct hfc_pcm_port *hfc_pcm_port_create(
 	struct hfc_pcm_port *port,
 	struct hfc_card *card,
 	const char *name);
-int hfc_pcm_port_register(
-	struct hfc_pcm_port *port);
-void hfc_pcm_port_unregister(
-	struct hfc_pcm_port *port);
+int hfc_pcm_port_register(struct hfc_pcm_port *port);
+void hfc_pcm_port_unregister(struct hfc_pcm_port *port);
+void hfc_pcm_port_destroy(struct hfc_pcm_port *port);
 
 #endif

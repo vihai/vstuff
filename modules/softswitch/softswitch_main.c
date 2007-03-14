@@ -323,7 +323,7 @@ static int __init kss_init_module(void)
 
 	memset(&kss_softswitch, 0, sizeof(kss_softswitch));
 
-	ks_node_init(&kss_softswitch.ks_node,
+	ks_node_create(&kss_softswitch.ks_node,
 			&kss_ops, "softswitch",
 			NULL);
 
@@ -343,6 +343,8 @@ module_init(kss_init_module);
 static void __exit kss_modexit(void)
 {
 	ks_node_unregister(&kss_softswitch.ks_node);
+
+	ks_node_put(&kss_softswitch.ks_node);
 }
 module_exit(kss_modexit);
 

@@ -1,7 +1,7 @@
 /*
  * VoiSmart vGSM-II board driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -33,10 +33,137 @@
 
 static int vgsm_initialize_hw(struct vgsm_card *card)
 {
+	int i;
+
+	/* Reset all subsystems */
+	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_RESET);
+	msleep(10); // FIXME!!!
+	vgsm_outl(card, VGSM_R_SERVICE, 0);
+
+	vgsm_outl(card, VGSM_R_SIM_ROUTER,
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE(0, 0) |
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE(1, 1) |
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE(2, 2) |
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE(3, 3));
+
+	for(i=0; i<card->sims_number; i++)
+  	      vgsm_outl(card, VGSM_R_SIM_SETUP(i),
+				VGSM_R_SIM_SETUP_V_VCC |
+				VGSM_R_SIM_SETUP_V_3V);
+
+	/* Set LEDs */
+	vgsm_outl(card, VGSM_R_LED_SRC,
+		VGSM_R_LED_SRC_V_STATUS_G);
+
+	vgsm_outl(card, VGSM_R_LED_USER,
+		VGSM_R_LED_USER_V_STATUS_G);
+
+	/* Enable interrupts */
+	for(i=0; i<card->mes_number; i++) {
+		if (card->modules[i]) {
+			vgsm_outl(card, VGSM_R_ME_INT_ENABLE(i),
+				VGSM_R_ME_INT_ENABLE_V_VCC |
+				VGSM_R_ME_INT_ENABLE_V_VDDLP |
+				VGSM_R_ME_INT_ENABLE_V_CCVCC |
+				VGSM_R_ME_INT_ENABLE_V_DAI_RX_INT |
+				VGSM_R_ME_INT_ENABLE_V_DAI_RX_END |
+				VGSM_R_ME_INT_ENABLE_V_DAI_TX_INT |
+				VGSM_R_ME_INT_ENABLE_V_DAI_TX_END |
+				VGSM_R_ME_INT_ENABLE_V_UART_ASC0 |
+				VGSM_R_ME_INT_ENABLE_V_UART_ASC1 |
+				VGSM_R_ME_INT_ENABLE_V_UART_MESIM);
+
+			vgsm_outl(card, VGSM_R_ME_FIFO_SETUP(i),
+				VGSM_R_ME_FIFO_SETUP_V_RX_LINEAR |
+				VGSM_R_ME_FIFO_SETUP_V_TX_LINEAR);
+		}
+	}
+
+	for(i=0; i<card->sims_number; i++) {
+		vgsm_outl(card, VGSM_R_SIM_INT_ENABLE(i),
+			VGSM_R_SIM_INT_ENABLE_V_CCIN |
+			VGSM_R_SIM_INT_ENABLE_V_UART);
+	}
+
+	vgsm_outl(card, VGSM_R_INT_ENABLE,
+		(card->modules[0] ? VGSM_R_INT_ENABLE_V_ME(0) : 0) |
+		(card->modules[1] ? VGSM_R_INT_ENABLE_V_ME(1) : 0) |
+		(card->modules[2] ? VGSM_R_INT_ENABLE_V_ME(2) : 0) |
+		(card->modules[3] ? VGSM_R_INT_ENABLE_V_ME(3) : 0) |
+		VGSM_R_INT_ENABLE_V_SIM(0) |
+		VGSM_R_INT_ENABLE_V_SIM(1) |
+		VGSM_R_INT_ENABLE_V_SIM(2) |
+		VGSM_R_INT_ENABLE_V_SIM(3));
 
 	vgsm_msg(KERN_DEBUG, "VGSM card initialized\n");
 
 	return 0;
+}
+
+static void vgsm_me_interrupt(struct vgsm_card *card, int id)
+{
+	struct vgsm_module *module = card->modules[id];
+	u32 me_int_status = vgsm_inl(card, VGSM_R_ME_INT_STATUS(id));
+	u32 me_status = vgsm_inl(card, VGSM_R_ME_STATUS(id));
+
+	if (!module)
+		return;
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_UART_ASC0)
+		vgsm_uart_interrupt(&module->asc0);
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_UART_ASC1)
+		vgsm_uart_interrupt(&module->asc1);
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_UART_MESIM)
+		vgsm_uart_interrupt(&module->mesim);
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_VDD)
+		vgsm_debug_card(card, 1,
+			"ME VDD changed from: %d to %d\n",
+			!(me_status & VGSM_R_ME_STATUS_V_VDD),
+			!!(me_status & VGSM_R_ME_STATUS_V_VDD));
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_VDDLP)
+		vgsm_debug_card(card, 1,
+			"ME VDDLP changed from: %d to %d\n",
+			!(me_status & VGSM_R_ME_STATUS_V_VDDLP),
+			!!(me_status & VGSM_R_ME_STATUS_V_VDDLP));
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_CCVCC)
+		vgsm_debug_card(card, 1,
+			"ME CCVCC changed from: %d to %d\n",
+			!(me_status & VGSM_R_ME_STATUS_V_VDD),
+			!!(me_status & VGSM_R_ME_STATUS_V_VDD));
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_DAI_RX_INT)
+		vgsm_debug_card(card, 3, "DAI RX INT\n");
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_DAI_RX_END)
+		vgsm_debug_card(card, 3, "DAI RX END\n");
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_DAI_TX_INT)
+		vgsm_debug_card(card, 3, "DAI TX INT\n");
+
+	if (me_int_status & VGSM_R_ME_INT_STATUS_V_DAI_TX_END)
+		vgsm_debug_card(card, 3, "DAI TX END\n");
+}
+
+static void vgsm_sim_interrupt(struct vgsm_sim *sim)
+{
+	struct vgsm_card *card = sim->card;
+
+	u32 sim_int_status = vgsm_inl(card, VGSM_R_SIM_INT_STATUS(sim->id));
+	u32 sim_status = vgsm_inl(card, VGSM_R_SIM_STATUS(sim->id));
+
+	if (sim_int_status & VGSM_R_SIM_INT_STATUS_V_UART)
+		vgsm_uart_interrupt(&sim->uart);
+
+	if (sim_int_status & VGSM_R_SIM_INT_STATUS_V_CCIN)
+		vgsm_debug_card(card, 1,
+			"SIM CCIN changed from: %d to %d\n",
+			!(sim_status & VGSM_R_SIM_STATUS_V_CCIN),
+			!!(sim_status & VGSM_R_SIM_STATUS_V_CCIN));
 }
 
 static irqreturn_t vgsm_interrupt(int irq,
@@ -44,6 +171,8 @@ static irqreturn_t vgsm_interrupt(int irq,
 	struct pt_regs *regs)
 {
 	struct vgsm_card *card = dev_id;
+	u32 int_status;
+	int i;
 
 	if (unlikely(!card)) {
 		vgsm_msg(KERN_CRIT,
@@ -52,11 +181,34 @@ static irqreturn_t vgsm_interrupt(int irq,
 		return IRQ_NONE;
 	}
 
-//	if (!myirq)
+	int_status = vgsm_inl(card, VGSM_R_INT_STATUS);
+	if (!int_status)
 		return IRQ_NONE;
 
+	for(i=0; i<card->mes_number; i++) {
+		if (int_status & VGSM_R_INT_STATUS_V_ME(i))
+			vgsm_me_interrupt(card, i);
+	}
+
+	for(i=0; i<card->sims_number; i++) {
+		if (int_status & VGSM_R_INT_STATUS_V_SIM(i))
+			vgsm_sim_interrupt(&card->sims[i]);
+	}
 
 	return IRQ_HANDLED;
+}
+
+void vgsm_card_update_router(struct vgsm_card *card)
+{
+	u32 reg = 0;
+	int i;
+
+	for(i=0; i<card->mes_number; i++) {
+		if (card->modules[i])
+			reg |= card->modules[i]->route_to_sim << (i*4);
+	}
+
+	vgsm_outl(card, VGSM_R_SIM_ROUTER, reg);
 }
 
 static void vgsm_card_release(struct kref *kref)
@@ -79,137 +231,109 @@ void vgsm_card_put(struct vgsm_card *card)
 	kref_put(&card->kref, vgsm_card_release);
 }
 
-static void vgsm_card_init(
+struct vgsm_card *vgsm_card_create(
 	struct vgsm_card *card,
 	struct pci_dev *pci_dev,
 	int id)
 {
+	BUG_ON(card); /* Static allocation not supported */
+
+	if (!card) {
+		card = kmalloc(sizeof(*card), GFP_KERNEL);
+		if (!card)
+			return NULL;
+	}
+
 	memset(card, 0, sizeof(*card));
 
-	card->pci_dev = pci_dev;
-	pci_set_drvdata(pci_dev, card);
+	kref_init(&card->kref);
 
+	card->pci_dev = pci_dev;
 	card->id = id;
 
 	spin_lock_init(&card->lock);
+
+	return card;
 }
 
-int vgsm_card_probe(
-	struct pci_dev *pci_dev,
-	const struct pci_device_id *ent)
+void vgsm_card_destroy(struct vgsm_card *card)
 {
-	struct vgsm_card *card;
-	static int numcards;
+	int i;
+
+	for(i=card->mes_number-1; i>=0; i--) {
+		if (card->modules[i])
+			vgsm_module_destroy(card->modules[i]);
+	}
+
+	for(i=card->sims_number-1; i>=0; i--)
+		vgsm_sim_destroy(&card->sims[i]);
+
+	vgsm_card_put(card);
+}
+
+
+int vgsm_card_probe(struct vgsm_card *card)
+{
 	int err;
 	int i;
 
-	const struct {
-		u16 rx_base;
-		u16 rx_size;
-		u16 tx_base;
-		u16 tx_size;
-	} fifo_config[] = {
-		{ VGSM_FIFO_RX_0_BASE, VGSM_FIFO_RX_0_SIZE,
-		  VGSM_FIFO_TX_0_BASE, VGSM_FIFO_TX_0_SIZE },
-		{ VGSM_FIFO_RX_1_BASE, VGSM_FIFO_RX_1_SIZE,
-		  VGSM_FIFO_TX_1_BASE, VGSM_FIFO_TX_1_SIZE },
-		{ VGSM_FIFO_RX_2_BASE, VGSM_FIFO_RX_2_SIZE,
-		  VGSM_FIFO_TX_2_BASE, VGSM_FIFO_TX_2_SIZE },
-		{ VGSM_FIFO_RX_3_BASE, VGSM_FIFO_RX_3_SIZE,
-		  VGSM_FIFO_TX_3_BASE, VGSM_FIFO_TX_3_SIZE }
-	};
-
-	const struct {
-		u16 asc0_base;
-		u16 asc1_base;
-		u16 sim_base;
-		u16 mesim_base;
-	} uart_config[] = {
-		{ VGSM_UART_ASC0_0_BASE, VGSM_UART_ASC1_0_BASE,
-		  VGSM_UART_SIM_0_BASE, VGSM_UART_MESIM_0_BASE },
-		{ VGSM_UART_ASC0_1_BASE, VGSM_UART_ASC1_1_BASE,
-		  VGSM_UART_SIM_1_BASE, VGSM_UART_MESIM_1_BASE },
-		{ VGSM_UART_ASC0_2_BASE, VGSM_UART_ASC1_2_BASE,
-		  VGSM_UART_SIM_2_BASE, VGSM_UART_MESIM_2_BASE },
-		{ VGSM_UART_ASC0_3_BASE, VGSM_UART_ASC1_3_BASE,
-		  VGSM_UART_SIM_3_BASE, VGSM_UART_MESIM_3_BASE }
-	};
-
-
-	card = kmalloc(sizeof(*card), GFP_KERNEL);
-	if (!card) {
-		err = -ENOMEM;
-		goto err_card_alloc;
-	}
-
-	vgsm_card_init(card, pci_dev, numcards++);
-
-	card->num_modules = 4; /* DO MODULE PROBING! FIXME TODO */
-
-	for (i=0; i<card->num_modules; i++) {
-		char name[8];
-
-		snprintf(name, sizeof(name), "gsm%d", i);
-
-		card->modules[i] = vgsm_module_alloc(card, i, name,
-					fifo_config[i].rx_base,
-					fifo_config[i].rx_size,
-					fifo_config[i].tx_base,
-					fifo_config[i].tx_size,
-					uart_config[i].asc0_base,
-					uart_config[i].asc1_base,
-					uart_config[i].sim_base,
-					uart_config[i].mesim_base);
-		if (!card->modules[i]) {
-			err = -ENOMEM;
-			goto err_modules_alloc;
-		}
-	}
-
 	/* From here on vgsm_msg_card may be used */
 
-	err = pci_enable_device(pci_dev);
+	err = pci_enable_device(card->pci_dev);
 	if (err < 0)
 		goto err_pci_enable_device;
 
-	pci_write_config_word(pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
+	pci_write_config_word(card->pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
 
-	err = pci_request_regions(pci_dev, vgsm_DRIVER_NAME);
+	err = pci_request_regions(card->pci_dev, vgsm_DRIVER_NAME);
 	if(err < 0) {
 		vgsm_msg_card(card, KERN_CRIT,
 			     "cannot request I/O memory region\n");
 		goto err_pci_request_regions;
 	}
 
-	pci_set_master(pci_dev);
-
-	if (!pci_dev->irq) {
+	if (!card->pci_dev->irq) {
 		vgsm_msg_card(card, KERN_CRIT,
 			     "No IRQ assigned to card!\n");
 		err = -ENODEV;
 		goto err_noirq;
 	}
 
-	card->io_bus_mem = pci_resource_start(pci_dev, 1);
-	if (!card->io_bus_mem) {
+	card->regs_bus_mem = pci_resource_start(card->pci_dev, 0);
+	if (!card->regs_bus_mem) {
 		vgsm_msg_card(card, KERN_CRIT,
 			     "No IO memory assigned to card\n");
 		err = -ENODEV;
-		goto err_noiobase;
+		goto err_no_regs_base;
 	}
 
 	/* Note: rember to not directly access address returned by ioremap */
-	card->io_mem = ioremap(card->io_bus_mem, vgsm_PCI_MEM_SIZE);
+	card->regs_mem = ioremap(card->regs_bus_mem, 0x10000);
 
-	if(!card->io_mem) {
+	if(!card->regs_mem) {
 		vgsm_msg_card(card, KERN_CRIT,
 			     "Cannot ioremap I/O memory\n");
 		err = -ENODEV;
-		goto err_ioremap;
+		goto err_ioremap_regs;
 	}
 
-	vgsm_msg(KERN_DEBUG, "vGSM-II card found at 0x%08lx mapped at %p\n",
-		card->io_bus_mem, card->io_mem);
+	card->fifo_bus_mem = pci_resource_start(card->pci_dev, 1);
+	if (!card->fifo_bus_mem) {
+		vgsm_msg_card(card, KERN_CRIT,
+			     "No FIFO memory assigned to card\n");
+		err = -ENODEV;
+		goto err_no_fifo_base;
+	}
+
+	/* Note: rember to not directly access address returned by ioremap */
+	card->fifo_mem = ioremap(card->fifo_bus_mem, 0x10000);
+
+	if(!card->fifo_mem) {
+		vgsm_msg_card(card, KERN_CRIT,
+			     "Cannot ioremap FIFO memory\n");
+		err = -ENODEV;
+		goto err_ioremap_fifo;
+	}
 
 	/* Requesting IRQ */
 	err = request_irq(card->pci_dev->irq, &vgsm_interrupt,
@@ -220,67 +344,124 @@ int vgsm_card_probe(
 		goto err_request_irq;
 	}
 
+	{
+	__u32 r_version = vgsm_inl(card, VGSM_R_VERSION);
+	__u32 r_serial = vgsm_inl(card, VGSM_R_SERIAL);
+	__u32 r_info = vgsm_inl(card, VGSM_R_INFO);
+	card->sims_number = (r_info & 0x000000f0) >> 4;
+	card->mes_number = (r_info & 0x0000000f) >> 0;
+
+	if (card->sims_number > 8)
+		return -EINVAL;
+
+	if (card->mes_number > 8)
+		return -EINVAL;
+
+	vgsm_msg_card(card, KERN_INFO,
+		"vGSM-II card found at %#0lx\n",
+		card->regs_bus_mem);
+
+	vgsm_msg_card(card, KERN_INFO,
+		"HW version: %d.%d.%d\n",
+		(r_version & 0x00ff0000) >> 16,
+		(r_version & 0x0000ff00) >>  8,
+		(r_version & 0x000000ff) >>  0);
+
+	if (r_serial)
+		vgsm_msg_card(card, KERN_INFO,
+			"Serial number: %d\n", r_serial);
+
+	vgsm_msg_card(card, KERN_INFO,
+		"GSM module sockets: %d\n",
+		card->mes_number);
+
+	vgsm_msg_card(card, KERN_INFO,
+		"SIM module sockets: %d\n",
+		card->sims_number);
+	}
+
+	for(i=0; i<card->mes_number; i++) {
+
+		u32 me_status = vgsm_inl(card, VGSM_R_ME_STATUS(i));
+
+		if (me_status & VGSM_R_ME_STATUS_V_VDDLP) {
+
+			u32 fifo_size = vgsm_inl(card, VGSM_R_ME_FIFO_SIZE(i));
+
+			char tmpstr[8];
+			snprintf(tmpstr, sizeof(tmpstr), "gsm%d", i);
+
+			card->modules[i] = vgsm_module_create(
+						NULL, card, i, tmpstr,
+						VGSM_FIFO_RX_BASE(i),
+						VGSM_R_ME_FIFO_SIZE_V_RX_SIZE(fifo_size),
+						VGSM_FIFO_TX_BASE(i),
+						VGSM_R_ME_FIFO_SIZE_V_TX_SIZE(fifo_size),
+						VGSM_ME_ASC0_BASE(i),
+						VGSM_ME_ASC1_BASE(i),
+						VGSM_ME_SIM_BASE(i));
+			if (!card->modules[i]) {
+				err = -ENOMEM;
+				goto err_module_create;
+			}
+
+			vgsm_msg_card(card, KERN_INFO,
+				"Module %d is installed and powered %s\n", i,
+				vgsm_module_power_get(card->modules[i]) ? "ON" : "OFF");
+
+			vgsm_msg_card(card, KERN_INFO,
+				"Module %d RX_FIFO=0x%04x TX_FIFO=%04x\n", i,
+				VGSM_R_ME_FIFO_SIZE_V_RX_SIZE(fifo_size),
+				VGSM_R_ME_FIFO_SIZE_V_TX_SIZE(fifo_size));
+		} else {
+			vgsm_msg_card(card, KERN_INFO,
+				"Module %d is not installed\n", i);
+		}
+	}
+
+	for(i=0; i<card->sims_number; i++)
+		vgsm_sim_create(&card->sims[i], card, i, VGSM_SIM_UART_BASE(i));
+
 	vgsm_initialize_hw(card);
 
 	/* Enable interrupts */
 //	card->regs.mask0 = 0;
 //	vgsm_outb(card, VGSM_MASK0, card->regs.mask0);
 
-	for (i=0; i<card->num_modules; i++) {
-		err = vgsm_module_register(card->modules[i]);
-		if (err < 0)
-			goto err_module_register;
-	}
-
-	spin_lock(&vgsm_cards_list_lock);
-	list_add_tail(&card->cards_list_node, &vgsm_cards_list);
-	spin_unlock(&vgsm_cards_list_lock);
-
 	return 0;
 
-//	free_irq(pci_dev->irq, card);
+	free_irq(card->pci_dev->irq, card);
 err_request_irq:
-	iounmap(card->io_mem);
-err_ioremap:
-err_noiobase:
+	iounmap(card->fifo_mem);
+err_ioremap_fifo:
+err_no_fifo_base:
+	iounmap(card->regs_mem);
+err_ioremap_regs:
+err_no_regs_base:
 err_noirq:
-	pci_release_regions(pci_dev);
+	pci_release_regions(card->pci_dev);
 err_pci_request_regions:
 err_pci_enable_device:
-err_module_register:
-	for(i=card->num_modules; i>=0; i--) {
+err_module_create:
+	for(i=card->mes_number-1; i>=0; i--) {
 		if (card->modules[i])
-			vgsm_module_unregister(card->modules[i]);
+			vgsm_module_destroy(card->modules[i]);
 	}
-err_modules_alloc:
-	for(i=card->num_modules; i>=0; i--) {
-		if (card->modules[i])
-			vgsm_module_put(card->modules[i]);
-	}
-	kfree(card);
-err_card_alloc:
 
 	return err;
 }
 
 void vgsm_card_remove(struct vgsm_card *card)
 {
-	int i;
+//	int i;
 	int shutting_down = FALSE;
 
 	/* Clean up any allocated resources and stuff here */
 
 	vgsm_msg_card(card, KERN_INFO,
-		"shutting down card at %p.\n", card->io_mem);
+		"shutting down card at %p.\n", card->regs_mem);
 
 	set_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags);
-
-	spin_lock(&vgsm_cards_list_lock);
-	list_del(&card->cards_list_node);
-	spin_unlock(&vgsm_cards_list_lock);
-
-	for(i=0; i<card->num_modules; i++) {
-		vgsm_module_unregister(card->modules[i]);
 
 #if 0
 		vgsm_card_lock(card);
@@ -309,8 +490,8 @@ void vgsm_card_remove(struct vgsm_card *card)
 				" emergency shutdown\n",
 				card->modules[i].id);
 		}
-#endif
 	}
+#endif
 
 	if (shutting_down) {
 #if 0
@@ -326,6 +507,8 @@ void vgsm_card_remove(struct vgsm_card *card)
 	}
 
 	/* Disable IRQs */
+	vgsm_outl(card, VGSM_R_INT_ENABLE, 0);
+
 	/* Reset FPGA  */
 
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
@@ -334,14 +517,75 @@ void vgsm_card_remove(struct vgsm_card *card)
 	free_irq(card->pci_dev->irq, card);
 
 	/* Unmap */
-	iounmap(card->io_mem);
+	iounmap(card->fifo_mem);
+	iounmap(card->regs_mem);
 
 	pci_release_regions(card->pci_dev);
 
 	pci_disable_device(card->pci_dev);
-
-	for(i=card->num_modules; i>=0; i--)
-		vgsm_module_put(card->modules[i]);
-
-	kfree(card);
 }
+
+int vgsm_card_register(struct vgsm_card *card)
+{
+	int err;
+	int i;
+
+	spin_lock(&vgsm_cards_list_lock);
+	list_add_tail(&card->cards_list_node, &vgsm_cards_list);
+	spin_unlock(&vgsm_cards_list_lock);
+
+	for (i=0; i<card->sims_number; i++) {
+		err = vgsm_sim_register(&card->sims[i]);
+		if (err < 0)
+			goto err_register_sim;
+	}
+
+	for (i=0; i<card->mes_number; i++) {
+		if (card->modules[i]) {
+			err = vgsm_module_register(card->modules[i]);
+			if (err < 0)
+				goto err_module_register;
+		}
+	}
+
+	return 0;
+
+err_register_sim:
+	for(--i; i>=0; i--)
+		vgsm_sim_unregister(&card->sims[i]);
+err_module_register:
+	for(--i; i>=0; i--) {
+		if (card->modules[i])
+			vgsm_module_unregister(card->modules[i]);
+	}
+
+	return err;
+}
+
+void vgsm_card_unregister(struct vgsm_card *card)
+{
+	int i;
+
+	spin_lock(&vgsm_cards_list_lock);
+	list_del(&card->cards_list_node);
+	spin_unlock(&vgsm_cards_list_lock);
+
+	for(i=card->sims_number-1; i>=0; i--)
+		vgsm_sim_unregister(&card->sims[i]);
+
+	for(i=card->mes_number-1; i>=0; i--) {
+		if (card->modules[i])
+			vgsm_module_unregister(card->modules[i]);
+	}
+
+}
+
+int __init vgsm_card_modinit(void)
+{
+	return 1;
+}
+
+void __exit vgsm_card_modexit(void)
+{
+}
+

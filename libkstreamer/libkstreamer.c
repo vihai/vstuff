@@ -55,6 +55,7 @@ void ks_topology_update(
 			ks_dynattr_dump(dynattr, conn);
 
 		ks_dynattr_add(dynattr, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
 		ks_dynattr_put(dynattr);
 	}
 	break;
@@ -71,6 +72,7 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_dynattr_dump(dynattr, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
 		ks_dynattr_del(dynattr);
 		ks_dynattr_put(dynattr);
 	}
@@ -90,6 +92,8 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_dynattr_dump(dynattr, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
+
 		ks_dynattr_put(dynattr);
 	}
 	break;
@@ -106,6 +110,7 @@ void ks_topology_update(
 			ks_node_dump(node, conn);
 
 		ks_node_add(node, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 		ks_node_put(node);
 	}
 	break;
@@ -122,6 +127,7 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_node_dump(node, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 		ks_node_del(node);
 		ks_node_put(node);
 	}
@@ -141,6 +147,8 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_node_dump(node, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
+
 		ks_node_put(node);
 	}
 	break;
@@ -157,6 +165,7 @@ void ks_topology_update(
 			ks_chan_dump(chan, conn);
 
 		ks_chan_add(chan, conn); // CHECK FOR DUPEs
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 		ks_chan_put(chan);
 	}
 	break;
@@ -173,6 +182,7 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_chan_dump(chan, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 		ks_chan_del(chan);
 		ks_chan_put(chan);
 	}
@@ -192,6 +202,8 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_chan_dump(chan, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
+
 		ks_chan_put(chan);
 	}
 	break;
@@ -207,6 +219,7 @@ void ks_topology_update(
 			ks_pipeline_dump(pipeline, conn);
 
 		ks_pipeline_add(pipeline, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
 		ks_pipeline_put(pipeline);
 	}
 	break;
@@ -223,6 +236,7 @@ void ks_topology_update(
 		if (conn->dump_packets)
 			ks_pipeline_dump(pipeline, conn);
 
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
 		ks_pipeline_del(pipeline);
 		ks_pipeline_put(pipeline);
 	}
@@ -241,6 +255,8 @@ void ks_topology_update(
 
 		if (conn->dump_packets)
 			ks_pipeline_dump(pipeline, conn);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
 
 		ks_pipeline_put(pipeline);
 	}
