@@ -23,7 +23,7 @@
 #include <linux/fs.h>
 #include <linux/bitops.h>
 
-#include "vgsm.h"
+#include "vgsm2.h"
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"

@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _VGSM_H
-#define _VGSM_H
+#ifndef _VGSM2_H
+#define _VGSM2_H
 
 #define VGSM_IOC_GET_INTERFACE_VERSION	_IOR(0xd1, 0, unsigned int)
 #define VGSM_IOC_GET_NODEID		_IOR(0xd1, 1, unsigned int)
@@ -66,7 +66,8 @@ extern int debug_level;
 extern struct list_head vgsm_cards_list;
 extern spinlock_t vgsm_cards_list_lock;
 
-extern struct tty_driver *vgsm_tty_driver;
+extern struct ks_dynattr *vgsm_amu_compander_class;
+extern struct ks_dynattr *vgsm_amu_decompander_class;
 
 #endif
 

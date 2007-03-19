@@ -3,14 +3,14 @@ subdir = modules/vgsm2
 MODULE = vgsm2
 
 SOURCES = \
-	vgsm_main.c	\
+	vgsm2_main.c	\
 	card.c		\
 	module.c	\
 	sim.c		\
 	uart.c
 
 DIST_HEADERS = \
-	vgsm.h		\
+	vgsm2.h		\
 	card.h		\
 	card_inline.h	\
 	regs.h		\

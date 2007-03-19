@@ -26,7 +26,7 @@
 #include <linux/kstreamer/streamframe.h>
 #include <linux/kstreamer/softswitch.h>
 
-#include "vgsm.h"
+#include "vgsm2.h"
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"
@@ -68,6 +68,23 @@ void vgsm_module_put(struct vgsm_module *module)
 	vgsm_card_put(module->card);
 }
 
+static void vgsm_module_update_fifo_setup(struct vgsm_module *module)
+{
+	struct vgsm_card *card = module->card;
+
+	vgsm_outl(card, VGSM_R_ME_FIFO_SETUP(module->id),
+		module->rx.compander_enabled ?
+			(module->rx.compander_mu_mode ?
+				VGSM_R_ME_FIFO_SETUP_V_RX_MULAW :
+				VGSM_R_ME_FIFO_SETUP_V_RX_ALAW) :
+			VGSM_R_ME_FIFO_SETUP_V_RX_LINEAR |
+		module->tx.compander_enabled ?
+			(module->tx.compander_mu_mode ?
+				VGSM_R_ME_FIFO_SETUP_V_TX_MULAW :
+				VGSM_R_ME_FIFO_SETUP_V_TX_ALAW) :
+			VGSM_R_ME_FIFO_SETUP_V_TX_LINEAR);
+}
+
 /*------------------------------------------------------------------------*/
 
 static void vgsm_module_rx_chan_release(struct ks_chan *ks_chan)
@@ -89,6 +106,9 @@ static int vgsm_module_rx_chan_connect(struct ks_chan *ks_chan)
 
 	vgsm_debug_module(module, 2, "RX connected\n");
 
+	module_rx->compander_enabled = FALSE;
+	module_rx->compander_mu_mode = FALSE;
+
 	return 0;
 }
 
@@ -108,6 +128,8 @@ static int vgsm_module_rx_chan_open(struct ks_chan *ks_chan)
 	struct vgsm_module *module = module_rx->module;
 
 	vgsm_debug_module(module, 1, "RX opened.\n");
+
+	vgsm_module_update_fifo_setup(module);
 
 	return 0;
 }
@@ -160,6 +182,8 @@ static void vgsm_module_rx_chan_stimulus(
 	struct vgsm_card *card = module->card;
 	int inpos;
 	u8 *bufp;
+	int sample_size = module_rx->compander_enabled ?
+				sizeof(s8) : sizeof(u16);
 
 	struct ks_streamframe *sf;
 
@@ -175,17 +199,24 @@ static void vgsm_module_rx_chan_stimulus(
 
 	while(module_rx->fifo_out != inpos && sf->len < sf->size) {
 
-		if (sf->size - sf->len < sizeof(s16))
+		if (sf->size - sf->len < sample_size)
 			break;
 
-		*(s16 *)(sf->data + sf->len) =
-			*(volatile s16 *)(card->fifo_mem +
-				module_rx->fifo_base +
-				module_rx->fifo_out);
+		if (sample_size == 1) {
+			*(u8 *)(sf->data + sf->len) =
+				*(volatile u8 *)(card->fifo_mem +
+					module_rx->fifo_base +
+					module_rx->fifo_out);
+		} else {
+			*(s16 *)(sf->data + sf->len) =
+				*(volatile s16 *)(card->fifo_mem +
+					module_rx->fifo_base +
+					module_rx->fifo_out);
+		}
 
-		sf->len += sizeof(s16);
+		sf->len += sample_size;
 
-		module_rx->fifo_out += sizeof(s16);
+		module_rx->fifo_out += sample_size;
 
 		if (module_rx->fifo_out >= module_rx->fifo_size)
 			module_rx->fifo_out = 0;
@@ -198,6 +229,67 @@ static void vgsm_module_rx_chan_stimulus(
 	ks_sf_put(sf);
 }
 
+static int vgsm_module_rx_chan_get_attr_count(struct ks_chan *chan)
+{
+	return 1;
+}
+
+static int vgsm_module_rx_chan_get_attr(
+	struct ks_chan *ks_chan,
+	int index,
+	__u16 *type,
+	void *buf,
+	int *len)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+
+	switch(index) {
+	case 0: {
+		struct ks_amu_compander_descr *descr = buf;
+
+		if (*len < sizeof(*descr))
+			return -ENOSPC;
+
+		*type = vgsm_amu_compander_class->id;
+		*len = sizeof(*descr);
+
+		memset(descr, 0, sizeof(*descr));
+		descr->hardware = 1;
+		descr->enabled = module_rx->compander_enabled;
+		descr->mu_mode = module_rx->compander_mu_mode;
+	}
+	break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int vgsm_module_rx_chan_set_attr(
+	struct ks_chan *ks_chan,
+	__u16 type,
+	void *buf,
+	int len)
+{
+	struct vgsm_module_rx *module_rx =
+		container_of(ks_chan, struct vgsm_module_rx, ks_chan);
+
+	if (type == vgsm_amu_compander_class->id) {
+		struct ks_amu_compander_descr *descr = buf;
+
+		if (len < sizeof(*descr))
+			return -EINVAL;
+
+		module_rx->compander_enabled = descr->enabled;
+		module_rx->compander_mu_mode = descr->mu_mode;
+	} else
+		return -ENOENT;
+
+	return 0;
+}
 
 static struct ks_chan_ops vgsm_module_rx_chan_ops = {
 	.owner		= THIS_MODULE,
@@ -210,6 +302,10 @@ static struct ks_chan_ops vgsm_module_rx_chan_ops = {
 	.start		= vgsm_module_rx_chan_start,
 	.stop		= vgsm_module_rx_chan_stop,
 	.stimulus	= vgsm_module_rx_chan_stimulus,
+
+	.get_attr_count	= vgsm_module_rx_chan_get_attr_count,
+	.get_attr	= vgsm_module_rx_chan_get_attr,
+	.set_attr	= vgsm_module_rx_chan_set_attr,
 };
 
 static struct vgsm_module_rx *vgsm_module_rx_create(
@@ -250,25 +346,52 @@ static void vgsm_module_tx_chan_release(struct ks_chan *ks_chan)
 		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
 	struct vgsm_module *module = module_tx->module;
 
-	vgsm_module_put(module);
+	vgsm_debug_module(module, 2, "TX released\n");
 }
 
 static int vgsm_module_tx_chan_connect(struct ks_chan *ks_chan)
 {
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+
+	vgsm_debug_module(module, 2, "TX connected\n");
+
+	module_tx->compander_enabled = FALSE;
+	module_tx->compander_mu_mode = FALSE;
+
 	return 0;
 }
 
 static void vgsm_module_tx_chan_disconnect(struct ks_chan *ks_chan)
 {
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+
+	vgsm_debug_module(module, 2, "TX disconnected\n");
 }
 
 static int vgsm_module_tx_chan_open(struct ks_chan *ks_chan)
 {
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+
+	vgsm_debug_module(module, 2, "TX open\n");
+
+	vgsm_module_update_fifo_setup(module);
+
 	return 0;
 }
 
 static void vgsm_module_tx_chan_close(struct ks_chan *ks_chan)
 {
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+	struct vgsm_module *module = module_tx->module;
+
+	vgsm_debug_module(module, 2, "TX close\n");
 }
 
 static int vgsm_module_tx_chan_start(struct ks_chan *ks_chan)
@@ -319,15 +442,24 @@ static ssize_t vgsm_module_tx_chan_push_raw(
 	struct vgsm_module *module = module_tx->module;
 	struct vgsm_card *card = module->card;
 	int i;
+	int sample_size = module_tx->compander_enabled ?
+				sizeof(u8) : sizeof(s16);
 
 	vgsm_card_lock(card);
 
-	for (i=0; i<sf->len; i+=sizeof(s16)) {
-		*(volatile s16 *)(card->fifo_mem +
-			module_tx->fifo_base +
-			module_tx->fifo_in) = *(s16 *)(sf->data + i);
+	for (i=0; i<sf->len; i += sample_size) {
 
-		module_tx->fifo_in += sizeof(s16);
+		if (sample_size == 1) {
+			*(volatile u8 *)(card->fifo_mem +
+				module_tx->fifo_base +
+				module_tx->fifo_in) = *(u8 *)(sf->data + i);
+		} else {
+			*(volatile s16 *)(card->fifo_mem +
+				module_tx->fifo_base +
+				module_tx->fifo_in) = *(s16 *)(sf->data + i);
+		}
+
+		module_tx->fifo_in += sample_size;
 
 		if (module_tx->fifo_in >= module_tx->fifo_size)
 			module_tx->fifo_in = 0;
@@ -362,6 +494,68 @@ static int vgsm_module_tx_chan_get_pressure(
 	return pressure;
 }
 
+static int vgsm_module_tx_chan_get_attr_count(struct ks_chan *chan)
+{
+	return 1;
+}
+
+static int vgsm_module_tx_chan_get_attr(
+	struct ks_chan *ks_chan,
+	int index,
+	__u16 *type,
+	void *buf,
+	int *len)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+
+	switch(index) {
+	case 0: {
+		struct ks_amu_decompander_descr *descr = buf;
+
+		if (*len < sizeof(*descr))
+			return -ENOSPC;
+
+		*type = vgsm_amu_decompander_class->id;
+		*len = sizeof(*descr);
+
+		memset(descr, 0, sizeof(*descr));
+		descr->hardware = 1;
+		descr->enabled = module_tx->compander_enabled;
+		descr->mu_mode = module_tx->compander_mu_mode;
+	}
+	break;
+
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int vgsm_module_tx_chan_set_attr(
+	struct ks_chan *ks_chan,
+	__u16 type,
+	void *buf,
+	int len)
+{
+	struct vgsm_module_tx *module_tx =
+		container_of(ks_chan, struct vgsm_module_tx, ks_chan);
+
+	if (type == vgsm_amu_decompander_class->id) {
+		struct ks_amu_decompander_descr *descr = buf;
+
+		if (len < sizeof(*descr))
+			return -EINVAL;
+
+		module_tx->compander_enabled = descr->enabled;
+		module_tx->compander_mu_mode = descr->mu_mode;
+	} else
+		return -ENOENT;
+
+	return 0;
+}
+
 static struct ks_chan_ops vgsm_module_tx_chan_ops = {
 	.owner		= THIS_MODULE,
 
@@ -372,6 +566,10 @@ static struct ks_chan_ops vgsm_module_tx_chan_ops = {
 	.close		= vgsm_module_tx_chan_close,
 	.start		= vgsm_module_tx_chan_start,
 	.stop		= vgsm_module_tx_chan_stop,
+
+	.get_attr_count	= vgsm_module_tx_chan_get_attr_count,
+	.get_attr	= vgsm_module_tx_chan_get_attr,
+	.set_attr	= vgsm_module_tx_chan_set_attr,
 };
 
 static struct kss_chan_from_ops vgsm_module_tx_node_ops =

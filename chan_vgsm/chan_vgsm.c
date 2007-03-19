@@ -49,6 +49,7 @@
 #include <linux/vgsm.h>
 
 #include <linux/kstreamer/userport.h>
+#include <linux/kstreamer/amu_compander.h>
 
 /* FUCK YOU ASTERSISK */
 #undef pthread_mutex_t
@@ -160,7 +161,8 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 	struct vgsm_chan *vgsm_chan,
 	int state,
 	struct vgsm_module *module,
-	int line)
+	int line,
+	int format)
 {
 	struct ast_channel *ast_chan;
 
@@ -200,19 +202,33 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 
 	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
 
-/*	if (module->interface_version == 1) {
+	if (module->interface_version == 1) {
 		ast_chan->nativeformats = AST_FORMAT_ALAW;
 		ast_chan->readformat = AST_FORMAT_ALAW;
 		ast_chan->rawreadformat = AST_FORMAT_ALAW;
 		ast_chan->writeformat = AST_FORMAT_ALAW;
 		ast_chan->rawwriteformat = AST_FORMAT_ALAW;
-	} else {*/
-		ast_chan->nativeformats = AST_FORMAT_SLINEAR;
-		ast_chan->readformat = AST_FORMAT_SLINEAR;
-		ast_chan->rawreadformat = AST_FORMAT_SLINEAR;
-		ast_chan->writeformat = AST_FORMAT_SLINEAR;
-		ast_chan->rawwriteformat = AST_FORMAT_SLINEAR;
-//	}
+	} else {
+		ast_chan->nativeformats =
+			AST_FORMAT_SLINEAR | AST_FORMAT_ALAW | AST_FORMAT_ULAW;
+
+		if (format & AST_FORMAT_SLINEAR) {
+			ast_chan->readformat = AST_FORMAT_SLINEAR;
+			ast_chan->rawreadformat = AST_FORMAT_SLINEAR;
+			ast_chan->writeformat = AST_FORMAT_SLINEAR;
+			ast_chan->rawwriteformat = AST_FORMAT_SLINEAR;
+		} else if (format & AST_FORMAT_ALAW) {
+			ast_chan->readformat = AST_FORMAT_ALAW;
+			ast_chan->rawreadformat = AST_FORMAT_ALAW;
+			ast_chan->writeformat = AST_FORMAT_ALAW;
+			ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+		} else if (format & AST_FORMAT_ULAW) {
+			ast_chan->readformat = AST_FORMAT_ULAW;
+			ast_chan->rawreadformat = AST_FORMAT_ULAW;
+			ast_chan->writeformat = AST_FORMAT_ULAW;
+			ast_chan->rawwriteformat = AST_FORMAT_ULAW;
+		}
+	}
 
 	ast_set_read_format(ast_chan, ast_chan->readformat);
 	ast_set_write_format(ast_chan, ast_chan->writeformat);
@@ -1143,6 +1159,113 @@ static struct ast_cli_entry vgsm_puk_input =
 
 /*---------------------------------------------------------------------------*/
 
+static int vgsm_pipeline_set_amu_compander(
+	struct ks_pipeline *pipeline,
+	BOOL enabled,
+	BOOL mu_mode)
+{
+	/* TODO: Do this only once */
+	struct ks_dynattr *amu_compander_attr;
+
+	amu_compander_attr = ks_dynattr_get_by_name(ks_conn, "amu_compander");
+	if (!amu_compander_attr) {
+		ast_log(LOG_ERROR,
+			"Cannot find amu_compander attr\n");
+		goto err_missing_amu_compander;
+	}
+
+	struct ks_amu_compander_descr *amu_compander = NULL;
+
+	int i;
+	for(i=0; i<pipeline->chans_cnt; i++) {
+		struct ks_chan *chan = pipeline->chans[i];
+		struct ks_dynattr_instance *dynattr;
+
+		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+			if (dynattr->dynattr == amu_compander_attr) {
+
+				struct ks_amu_compander_descr *descr =
+					(struct ks_amu_compander_descr *)
+					dynattr->payload;
+
+				if (!amu_compander || descr->hardware)
+					amu_compander = descr;
+			}
+		}
+	}
+
+	if (!amu_compander) {
+		ast_log(LOG_ERROR,
+			"Cannot find amu_compander along the pipeline\n");
+		goto err_missing_amu_compander_in_pipeline;
+	}
+
+	amu_compander->enabled = enabled;
+	amu_compander->mu_mode = mu_mode;
+
+	return 0;
+
+err_missing_amu_compander_in_pipeline:
+err_missing_amu_compander:
+
+	return -1;
+}
+
+static int vgsm_pipeline_set_amu_decompander(
+	struct ks_pipeline *pipeline,
+	BOOL enabled,
+	BOOL mu_mode)
+{
+	/* TODO: Do this only once */
+	struct ks_dynattr *amu_decompander_attr;
+
+	amu_decompander_attr = ks_dynattr_get_by_name(ks_conn,
+						"amu_decompander");
+	if (!amu_decompander_attr) {
+		ast_log(LOG_ERROR,
+			"Cannot find amu_decompander attr\n");
+		goto err_missing_amu_decompander;
+	}
+
+	struct ks_amu_decompander_descr *amu_decompander = NULL;
+
+	int i;
+	for(i=0; i<pipeline->chans_cnt; i++) {
+		struct ks_chan *chan = pipeline->chans[i];
+		struct ks_dynattr_instance *dynattr;
+
+		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+			if (dynattr->dynattr == amu_decompander_attr) {
+
+				struct ks_amu_decompander_descr *descr =
+					(struct ks_amu_decompander_descr *)
+					dynattr->payload;
+
+				if (!amu_decompander || descr->hardware)
+					amu_decompander = descr;
+			}
+		}
+	}
+
+	if (!amu_decompander) {
+		ast_log(LOG_ERROR,
+			"Cannot find amu_decompander along the pipeline\n");
+		goto err_missing_amu_decompander_in_pipeline;
+	}
+
+	amu_decompander->enabled = enabled;
+	amu_decompander->mu_mode = mu_mode;
+
+	return 0;
+
+err_missing_amu_decompander_in_pipeline:
+err_missing_amu_decompander:
+
+	return -1;
+}
+
 static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 {
 	__u32 node_id;
@@ -1221,6 +1344,14 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_rx_create;
 	}
 
+	if (vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
+			vgsm_chan->ast_chan->readformat != AST_FORMAT_SLINEAR,
+			vgsm_chan->ast_chan->readformat == AST_FORMAT_ULAW)) {
+		ast_log(LOG_ERROR,
+			"Cannot enable RX amu_compander\n");
+		goto err_pipeline_rx_amu_compander_enable;
+	}
+
 	ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
 
 	/* Create TX pipeline */
@@ -1250,6 +1381,14 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_tx_create;
 	}
 
+	if (vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
+			vgsm_chan->ast_chan->writeformat != AST_FORMAT_SLINEAR,
+			vgsm_chan->ast_chan->writeformat == AST_FORMAT_ULAW)) {
+		ast_log(LOG_ERROR,
+			"Cannot enable TX amu_decompander\n");
+		goto err_pipeline_tx_decompander_enable;
+	}
+
 	ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
 
 	/* Start RX pipelines */
@@ -1276,11 +1415,13 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 err_pipeline_tx_update:
 err_pipeline_rx_update:
+err_pipeline_tx_decompander_enable:
 err_pipeline_tx_create:
 err_pipeline_tx_connect:
 	ks_pipeline_put(vgsm_chan->pipeline_tx);
 	vgsm_chan->pipeline_tx = NULL;
 err_pipeline_tx_alloc:
+err_pipeline_rx_amu_compander_enable:
 err_pipeline_rx_create:
 err_pipeline_rx_connect:
 	ks_pipeline_put(vgsm_chan->pipeline_rx);
@@ -1307,7 +1448,7 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 
 	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan,
 						AST_STATE_RESERVED,
-						module, 1);
+						module, 1, AST_FORMAT_SLINEAR);
 
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
@@ -1864,7 +2005,7 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 #endif
 
 	f->frametype = AST_FRAME_VOICE;
-	f->subclass = AST_FORMAT_SLINEAR;
+	f->subclass = ast_chan->readformat;
 	f->samples = nread / 2;
 	f->datalen = nread;
 	f->data = vgsm_chan->frame_out_buf;
@@ -1902,6 +2043,7 @@ static int vgsm_write(
 	}
 
 	if (frame->subclass != AST_FORMAT_ALAW &&
+	    frame->subclass != AST_FORMAT_ULAW &&
 	    frame->subclass != AST_FORMAT_SLINEAR) {
 		ast_log(LOG_WARNING,
 			"Cannot handle frames in %d format\n",
@@ -1976,9 +2118,11 @@ static struct ast_channel *vgsm_request(
 {
 	int err;
 
-printf("FORMAAAAAAAAAAAAT = %08x\n", format);
+printf("FORMAAAAAAAAAAAAT = %08x %08x %08x %08x\n", format, AST_FORMAT_ALAW, AST_FORMAT_ULAW, AST_FORMAT_SLINEAR);
 
-	if (!(format & (AST_FORMAT_ALAW | AST_FORMAT_SLINEAR))) {
+	if (!(format & (AST_FORMAT_ALAW |
+			AST_FORMAT_ULAW |
+			AST_FORMAT_SLINEAR))) {
 		ast_log(LOG_NOTICE,
 			"Asked to get a channel of unsupported format '%d'\n",
 			format);
@@ -2069,7 +2213,7 @@ printf("FORMAAAAAAAAAAAAT = %08x\n", format);
 		goto err_vgsm_chan_alloc;
 	}
 
-	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN, module, 1);
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN, module, 1, format);
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 
@@ -2111,7 +2255,9 @@ err_unsupported_format:
 static const struct ast_channel_tech vgsm_tech = {
 	.type		= VGSM_CHAN_TYPE,
 	.description	= VGSM_DESCRIPTION,
-	.capabilities	= /*AST_FORMAT_ALAW |*/ AST_FORMAT_SLINEAR,
+	.capabilities	= AST_FORMAT_ALAW |
+			  AST_FORMAT_ULAW |
+			  AST_FORMAT_SLINEAR,
 	.requester	= vgsm_request,
 	.call		= vgsm_call,
 	.hangup		= vgsm_hangup,

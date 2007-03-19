@@ -15,6 +15,9 @@
 
 #include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
+#include <linux/kstreamer/dynattr.h>
+
+#include <linux/kstreamer/amu_compander.h>
 
 #include "uart.h"
 
@@ -26,22 +29,44 @@ enum vgsm_module_status
 
 struct vgsm_card;
 
+struct vgsm_amu_compander
+{
+	struct ks_dynattr_instance dynattr;
+	struct ks_amu_compander_descr descr;
+};
+
 struct vgsm_module_rx
 {
 	struct ks_chan ks_chan;
 
+	struct vgsm_amu_compander amu_compander;
+
 	struct vgsm_module *module;
+
+	BOOL compander_enabled;
+	BOOL compander_mu_mode;
 
 	u16 fifo_size;
 	u32 fifo_base;
 	u32 fifo_out;
 };
 
+struct vgsm_amu_decompander
+{
+	struct ks_dynattr_instance dynattr;
+	struct ks_amu_compander_descr descr;
+};
+
 struct vgsm_module_tx
 {
 	struct ks_chan ks_chan;
 
+	struct vgsm_amu_decompander amu_decompander;
+
 	struct vgsm_module *module;
+
+	BOOL compander_enabled;
+	BOOL compander_mu_mode;
 
 	u16 fifo_size;
 	u32 fifo_base;

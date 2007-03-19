@@ -25,7 +25,9 @@
 #include <linux/tty_driver.h>
 #include <linux/serial.h>
 
-#include "vgsm.h"
+#include <linux/kstreamer/dynattr.h>
+
+#include "vgsm2.h"
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"
@@ -42,8 +44,6 @@ static struct pci_device_id vgsm_ids[] = {
 };
 
 MODULE_DEVICE_TABLE(pci, vgsm_ids);
-
-struct tty_driver *vgsm_tty_driver;
 
 struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
 spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
@@ -183,9 +183,24 @@ DRIVER_ATTR(debug_level, S_IRUGO | S_IWUSR,
 	vgsm_store_debug_level);
 #endif
 
+struct ks_dynattr *vgsm_amu_compander_class;
+struct ks_dynattr *vgsm_amu_decompander_class;
+
 static int __init vgsm_init(void)
 {
 	int err;
+
+	vgsm_amu_compander_class = ks_dynattr_register("amu_compander");
+	if (!vgsm_amu_compander_class) {
+		err = -ENOMEM;
+		goto err_register_amu_compander;
+	}
+
+	vgsm_amu_decompander_class = ks_dynattr_register("amu_decompander");
+	if (!vgsm_amu_decompander_class) {
+		err = -ENOMEM;
+		goto err_register_amu_decompander;
+	}
 
 	err = vgsm_card_modinit();
 	if (err < 0)
@@ -227,6 +242,10 @@ err_sim_modinit:
 err_module_modinit:
 	vgsm_card_modexit();
 err_card_modinit:
+	ks_dynattr_unregister(vgsm_amu_decompander_class);
+err_register_amu_decompander:
+	ks_dynattr_unregister(vgsm_amu_compander_class);
+err_register_amu_compander:
 
 	return err;
 }
@@ -245,6 +264,9 @@ static void __exit vgsm_exit(void)
 	vgsm_sim_modexit();
 	vgsm_module_modexit();
 	vgsm_card_modexit();
+
+	ks_dynattr_unregister(vgsm_amu_decompander_class);
+	ks_dynattr_unregister(vgsm_amu_compander_class);
 
 	vgsm_msg(KERN_INFO, vgsm_DRIVER_DESCR " unloaded\n");
 }
