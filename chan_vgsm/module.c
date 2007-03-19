@@ -156,12 +156,12 @@ static const char *vgsm_module_operator_selection_to_text(
 	switch(selection) {
 	case VGSM_OPSEL_AUTOMATIC:
 		return "Automatic";
-	case VGSM_OPSEL_MANUAL_UNLOCKED:
-		return "Manual unlocked";
+	case VGSM_OPSEL_MANUAL:
+		return "Manual";
 	case VGSM_OPSEL_MANUAL_FALLBACK:
 		return "Manual with fallback";
-	case VGSM_OPSEL_MANUAL_LOCKED:
-		return "Manual locked";
+	case VGSM_OPSEL_DEREGISTERED:
+		return "Deregistered";
 	}
 
 	return "*UNKNOWN*";
@@ -677,12 +677,12 @@ static int vgsm_module_config_from_var(
 	} else if (!strcasecmp(var->name, "operator_selection")) {
 		if (!strcasecmp(var->value, "auto"))
 			mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
-		else if (!strcasecmp(var->value, "manual_unlocked"))
-			mc->operator_selection = VGSM_OPSEL_MANUAL_UNLOCKED;
+		else if (!strcasecmp(var->value, "manual"))
+			mc->operator_selection = VGSM_OPSEL_MANUAL;
 		else if (!strcasecmp(var->value, "manual_fallback"))
 			mc->operator_selection = VGSM_OPSEL_MANUAL_FALLBACK;
-		else if (!strcasecmp(var->value, "manual_locked"))
-			mc->operator_selection = VGSM_OPSEL_MANUAL_LOCKED;
+		else if (!strcasecmp(var->value, "deregistered"))
+			mc->operator_selection = VGSM_OPSEL_DEREGISTERED;
 		else
 			ast_log(LOG_WARNING,
 				"Operator selection '%s' unknown\n",
@@ -2230,6 +2230,43 @@ static int vgsm_module_reset(
 	return RESULT_SUCCESS;
 }
 
+static int vgsm_module_operator(
+	int fd, int argc, char *argv[],
+	struct vgsm_module *module)
+{
+	struct vgsm_comm *comm = &module->comm;
+	int err;
+
+	if (!strcasecmp(argv[4], "auto")) {
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=0,2");
+	} else if (!strcasecmp(argv[4], "none")) {
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=2,2");
+	} else {
+		int lai = atoi(argv[4]);
+		int mode;
+
+		if (argc > 5 && !strcasecmp(argv[5], "fallback"))
+			mode = 4;
+		else
+			mode = 1;
+
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=%d,2,%05u",
+			mode, lai);
+	}
+
+	if (err != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_module_error_to_text(err),
+			err);
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
 static int vgsm_module_func(int fd, int argc, char *argv[])
 {
 	int err;
@@ -2259,6 +2296,8 @@ static int vgsm_module_func(int fd, int argc, char *argv[])
 		err = vgsm_module_power(fd, argc, argv, module);
 	else if (!strcasecmp(argv[3], "reset"))
 		err = vgsm_module_reset(fd, argc, argv, module);
+	else if (!strcasecmp(argv[3], "operator"))
+		err = vgsm_module_operator(fd, argc, argv, module);
 	else {
 		ast_mutex_unlock(&module->lock);
 		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
@@ -2292,7 +2331,7 @@ static char *vgsm_module_complete(
 #endif
 	int pos, int state)
 {
-	char *commands[] = { "power", "reset" };
+	char *commands[] = { "power", "reset", "operator" };
 	char *power_commands[] = { "on", "off" };
 	int i;
 
@@ -2318,13 +2357,23 @@ static char *vgsm_module_complete(
 }
 
 static char vgsm_module_help[] =
-"Usage: vgsm module <module> <power <on|off>|reset>\n"
+"Usage: vgsm module <module> <command>\n"
 "\n"
-"	Power on, off or reset the specified module.\n"
+"	Commands:\n"
+"	power <on|off>\n"
+"		Power on, off or reset the specified module.\n"
 "\n"
-"	Power-off will be graceful (requesting de-registration from the\n"
-"	network. If, however, the module is not responding, the module\n"
-"	will be forcibly shut down.\n";
+"		Power-off will be graceful (requesting de-registration from\n"
+"		the network. If, however, the module is not responding,\n"
+"		the module will be forcibly shut down.\n"
+"\n"
+"	operator <auto | none | LAI> [fallback]\n"
+"		Changes the operator selection mode.\n"
+"		auto: Automatically select the best operator\n"
+"		none: Deregister and disable further registration attempts\n"
+"		LAI: Manually select the operator specified by LAI (MCC+MNC).\n"
+"			If 'fallback' is specified, fall back to automatic if\n"
+"			the manually selected operator is not available.\n";
 
 static struct ast_cli_entry vgsm_module =
 {
@@ -4500,23 +4549,21 @@ static int vgsm_module_configure(
 			comm, 180 * SEC, "AT+COPS=0,2");
 	break;
 
-	case VGSM_OPSEL_MANUAL_UNLOCKED:
+	case VGSM_OPSEL_MANUAL:
 		err = vgsm_req_make_wait_result(
 			comm, 180 * SEC, "AT+COPS=1,2,%03u%02u",
 			mc->operator_mcc,
 			mc->operator_mnc);
 	break;
 
+	case VGSM_OPSEL_DEREGISTERED:
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=2,2");
+	break;
+
 	case VGSM_OPSEL_MANUAL_FALLBACK:
 		err = vgsm_req_make_wait_result(
 			comm, 180 * SEC, "AT+COPS=4,2,%03u%02u",
-			mc->operator_mcc,
-			mc->operator_mnc);
-	break;
-
-	case VGSM_OPSEL_MANUAL_LOCKED:
-		err = vgsm_req_make_wait_result(
-			comm, 180 * SEC, "AT+COPS=5,2,%03u%02u",
 			mc->operator_mcc,
 			mc->operator_mnc);
 	break;

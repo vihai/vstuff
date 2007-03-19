@@ -687,7 +687,7 @@ struct vgsm_module *vgsm_module_create(
 		module->card->regs_mem + asc0_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 4 + module->id,
+		card->id * 8 + module->id,
 		FALSE,
 		vgsm_module_ioctl);
 
@@ -697,7 +697,7 @@ struct vgsm_module *vgsm_module_create(
 		module->card->regs_mem + asc1_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 4 + module->id,
+		card->id * 8 + module->id,
 		FALSE,
 		NULL);
 
@@ -707,7 +707,7 @@ struct vgsm_module *vgsm_module_create(
 		module->card->regs_mem + mesim_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 4 + module->id,
+		card->id * 8 + module->id,
 		TRUE,
 		NULL);
 

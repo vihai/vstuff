@@ -50,9 +50,9 @@ enum vgsm_net_status
 enum vgsm_operator_selection
 {
 	VGSM_OPSEL_AUTOMATIC = 0,
-	VGSM_OPSEL_MANUAL_UNLOCKED = 1,
+	VGSM_OPSEL_MANUAL = 1,
+	VGSM_OPSEL_DEREGISTERED = 2,
 	VGSM_OPSEL_MANUAL_FALLBACK = 4,
-	VGSM_OPSEL_MANUAL_LOCKED = 5,
 };
 
 enum vgsm_operator_status

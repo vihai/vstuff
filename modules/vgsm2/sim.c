@@ -88,7 +88,7 @@ struct vgsm_sim *vgsm_sim_create(
 		sim->card->regs_mem + uart_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 4 + sim->id,
+		card->id * 8 + sim->id,
 		FALSE,
 		NULL);
 

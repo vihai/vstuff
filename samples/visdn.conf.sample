@@ -24,7 +24,7 @@
 ;	List the members (interface names) belonging to the huntgroup.
 ;	The order is preserved in the hunting process.
 ;
-; Here follow the configuration directives available in [global] and
+; Here follows the configuration directives available in [global] and
 ; interface-specific sections. "role" indicates for which interface role
 ; the directive is meaningful.
 ;
