@@ -97,6 +97,10 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->dtmf_quelch = FALSE;
 	mc->dtmf_mutemax = FALSE;
 	mc->dtmf_relax = FALSE;
+
+	mc->amr_enabled = TRUE;
+	mc->gsm_hr_enabled = TRUE;
+	mc->gsm_preferred = VGSM_CODEC_GSM_FR;
 }
 
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
@@ -718,6 +722,19 @@ static int vgsm_module_config_from_var(
 		mc->dtmf_mutemax = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "dtmf_relax")) {
 		mc->dtmf_relax = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "amr_enabled")) {
+		mc->amr_enabled = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "gsm_hr_enabled")) {
+		mc->gsm_hr_enabled = ast_true(var->value);
+	} else if (!strcasecmp(var->name, "gsm_preferred")) {
+		if (strcasecmp(var->value, "hr"))
+			mc->gsm_preferred = VGSM_CODEC_GSM_HR;
+		else if (strcasecmp(var->value, "fr"))
+			mc->gsm_preferred = VGSM_CODEC_GSM_FR;
+		else
+			ast_log(LOG_ERROR,
+				"Unknown preferred coded '%s'\n",
+				var->value);
 	} else {
 		return -1;
 	}
@@ -756,6 +773,10 @@ static void vgsm_module_config_copy(
 	dst->dtmf_quelch = src->dtmf_quelch;
 	dst->dtmf_mutemax = src->dtmf_mutemax;
 	dst->dtmf_relax = src->dtmf_relax;
+
+	dst->amr_enabled = src->amr_enabled;
+	dst->gsm_hr_enabled = src->gsm_hr_enabled;
+	dst->gsm_preferred = src->gsm_preferred;
 }
 
 static void vgsm_module_reconfigure(
@@ -4437,6 +4458,28 @@ static int vgsm_module_prepin_configure(
 	/* Enable call list unsolicited messages */
 	err = vgsm_req_make_wait_result(comm, 5 * SEC,
 			"AT^SCFG=\"URC/CallStatus/CIEV\",\"verbose\"");
+	if (err != VGSM_RESP_OK)
+		goto err_no_req;
+
+	/* Configure AMR codec */
+	err = vgsm_req_make_wait_result(comm, 5 * SEC,
+			"AT^SCFG=\"Audio/AMR\",\"%s\"",
+			mc->amr_enabled ? "enabled" : "disabled");
+	if (err != VGSM_RESP_OK)
+		goto err_no_req;
+	
+	/* Configure GSM codec */
+	int csv_mode = 0;
+	if (!mc->gsm_hr_enabled)
+		csv_mode = 2;
+	else if (mc->gsm_preferred == VGSM_CODEC_GSM_FR)
+		csv_mode = 0;
+	else if (mc->gsm_preferred == VGSM_CODEC_GSM_HR)
+		csv_mode = 1;
+	
+	err = vgsm_req_make_wait_result(comm, 5 * SEC,
+			"AT^SCFG=\"Call/SpeechVersion1\",\"%d\"",
+			csv_mode);
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 

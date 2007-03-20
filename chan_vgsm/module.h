@@ -22,6 +22,15 @@
 #include "comm.h"
 #include "number.h"
 
+enum vgsm_codec
+{
+	VGSM_CODEC_GSM_EFR,
+	VGSM_CODEC_GSM_FR,
+	VGSM_CODEC_GSM_HR,
+	VGSM_CODEC_AMR_HR,
+	VGSM_CODEC_AMR_FR,
+};
+
 enum vgsm_module_status
 {
 	VGSM_MODULE_STATUS_CLOSED,
@@ -171,6 +180,11 @@ struct vgsm_module_config
 	BOOL dtmf_quelch;
 	BOOL dtmf_mutemax;
 	BOOL dtmf_relax;
+
+	BOOL amr_enabled;
+	BOOL gsm_fr_enabled;
+	BOOL gsm_hr_enabled;
+	enum vgsm_codec gsm_preferred;
 };
 
 struct vgsm_module
