@@ -275,7 +275,7 @@ void vgsm_hg_reload(struct ast_config *cfg)
 /*---------------------------------------------------------------------------*/
 
 static char *complete_show_vgsm_huntgroups(
-#if SAFE_ASTERISK_VERSION_NUM < 0x00010400
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
