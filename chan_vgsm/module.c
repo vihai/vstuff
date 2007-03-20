@@ -1920,6 +1920,42 @@ static int vgsm_show_module_calls(int fd, struct vgsm_module *module)
 	return RESULT_SUCCESS;
 }
 
+static int vgsm_show_module_moni(int fd, struct vgsm_module *module)
+{
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^MONI");
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put(req);
+		return RESULT_FAILURE;
+	}
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node)
+		ast_cli(fd, "%s\n", line->text);
+
+	vgsm_req_put(req);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_show_module_smong(int fd, struct vgsm_module *module)
+{
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SMONG");
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put(req);
+		return RESULT_FAILURE;
+	}
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node)
+		ast_cli(fd, "%s\n", line->text);
+
+	vgsm_req_put(req);
+
+	return RESULT_SUCCESS;
+}
+
 static int vgsm_show_module_summary(int fd, struct vgsm_module *module)
 {
 	ast_mutex_lock(&module->lock);
@@ -1986,6 +2022,10 @@ static int show_vgsm_modules_cli(int fd, int argc, char *argv[])
 				err = vgsm_show_module_statistics(fd, module);
 			else if (!strcasecmp(argv[4], "calls"))
 				err = vgsm_show_module_calls(fd, module);
+			else if (!strcasecmp(argv[4], "moni"))
+				err = vgsm_show_module_moni(fd, module);
+			else if (!strcasecmp(argv[4], "smong"))
+				err = vgsm_show_module_smong(fd, module);
 			else {
 				ast_cli(fd, "Command '%s' unrecognized\n",
 					argv[4]);
@@ -2023,7 +2063,7 @@ static char *show_vgsm_modules_complete(
 	int pos, int state)
 {
 	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
-				"statistics", "calls" };
+				"statistics", "calls", "moni", "smong" };
 	int i;
 
 	switch(pos) {
