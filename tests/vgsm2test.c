@@ -947,8 +947,8 @@ static int t_serial_number(struct vgsm_card *card, int par)
 				"Please enter serial #:");
 	} else {
 		char c = requester(REQ_DIALOG_BG,
-			"Serial number already set to %d,"
-			" do you to skip programming?", serial);
+			"Serial number already set to %d."
+			" SKIP programming?", serial);
 
 		if (c == 'n' || c == 'N')
 			str = requester_str(REQ_DIALOG_BG,
@@ -1204,6 +1204,46 @@ askagain:;
 	return 0;
 }
 
+static int t_leds_red(struct vgsm_card *card, int par)
+{
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+	vgsm_outl(card, VGSM_R_LED_USER, 0x55555555);
+
+askagain:;
+	char c = requester(REQ_DIALOG_BG,
+			"Are LEDs all red [y/n] ? ");
+	if (c == 'y' || c == 'Y')
+		;
+	else if (c == 'n' || c == 'N')
+		return -1;
+	else
+		goto askagain;
+
+	vgsm_outl(card, VGSM_R_LED_SRC, 0);
+
+	return 0;
+}
+
+static int t_leds_green(struct vgsm_card *card, int par)
+{
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+	vgsm_outl(card, VGSM_R_LED_USER, 0xaaaaaaaa);
+
+askagain:;
+	char c = requester(REQ_DIALOG_BG,
+			"Are LEDs all green [y/n] ? ");
+	if (c == 'y' || c == 'Y')
+		;
+	else if (c == 'n' || c == 'N')
+		return -1;
+	else
+		goto askagain;
+
+	vgsm_outl(card, VGSM_R_LED_SRC, 0);
+
+	return 0;
+}
+
 static int t_leds_orange(struct vgsm_card *card, int par)
 {
 	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
@@ -1211,7 +1251,7 @@ static int t_leds_orange(struct vgsm_card *card, int par)
 
 askagain:;
 	char c = requester(REQ_DIALOG_BG,
-			"Are LEDs all orange/yellow [y/n] ? ");
+			"Are LEDs all orange [y/n] ? ");
 	if (c == 'y' || c == 'Y')
 		;
 	else if (c == 'n' || c == 'N')
@@ -1575,6 +1615,8 @@ struct test tests[] =
 	{ 0x00000050, "Register access (pattern 2)", t_reg_access_2 },
 	{ 0x00000060, "Register access (pattern 3)", t_reg_access_3 },
 	{ 0x00001010, "LEDs off", t_leds_off },
+	{ 0x00001020, "LEDs red", t_leds_red },
+	{ 0x00001020, "LEDs green", t_leds_green },
 	{ 0x00001020, "LEDs orange", t_leds_orange },
 //	{ 0x00001030, "LEDs flashing", t_leds_flashing },
 #endif
