@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-bin_PROGRAMS = vgsm_stress sniffer ksmonitor traffic dsptest # jitter  listener
+bin_PROGRAMS = vgsm2test vgsm_stress sniffer ksmonitor traffic dsptest # jitter  listener
 
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
@@ -57,6 +57,10 @@ vgsm_stress_CPPFLAGS=\
 
 dsptest_SOURCES = dsptest.c
 dsptest_CPPFLAGS=
+
+vgsm2test_SOURCES = vgsm2test.c
+vgsm2test_CPPFLAGS =
+vgsm2test_LDADD = -lncurses -lform
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
