@@ -96,5 +96,7 @@ visdnctl/Makefile
 visdnctl/Makefile.in
 visdnctl/visdnctl
 visdn_netdev_ctl/visdn_netdev_ctl
-
 modules/Modules.symvers
+docs/doxy/html
+vstuff-*.tar.gz
+vstuff-*.tar.bz2

@@ -3,7 +3,7 @@ subdir = modules/visdn
 MODULE = visdn
 
 SOURCES = visdn_main.c port.c
-DIST_HEADERS = visdn.h visdn_mod.h
+DIST_HEADERS = visdn.h port.h visdn_priv.h
 DIST_SOURCES = $(SOURCES)
 DIST_COMMON = Makefile.in
 

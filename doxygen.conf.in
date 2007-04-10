@@ -452,9 +452,15 @@ INPUT = \
 	libq931 \
 	libq931/libq931 \
 	vgsmctl \
-	visdnctl \
 	pppd_plugin \
-	modules
+	modules \
+	app_pipe \
+	visdn_netdev_ctl \
+	libskb \
+	kstool \
+	libkstreamer \
+	vgsmctl \
+	res_kstreamer
 
 # If the value of the INPUT tag contains directories, you can use the 
 # FILE_PATTERNS tag to specify one or more wildcard pattern (like *.cpp 
