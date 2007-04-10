@@ -36,7 +36,7 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	int i;
 
 	/* Reset all subsystems */
-	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_RESET);
+	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
 	msleep(10); // FIXME!!!
 	vgsm_outl(card, VGSM_R_SERVICE, 0);
 
@@ -49,7 +49,8 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	for(i=0; i<card->sims_number; i++)
   	      vgsm_outl(card, VGSM_R_SIM_SETUP(i),
 				VGSM_R_SIM_SETUP_V_VCC |
-				VGSM_R_SIM_SETUP_V_3V);
+				VGSM_R_SIM_SETUP_V_3V |
+				VGSM_R_SIM_SETUP_V_CLOCK_ME);
 
 	/* Set LEDs */
 	vgsm_outl(card, VGSM_R_LED_SRC,
@@ -62,7 +63,7 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	for(i=0; i<card->mes_number; i++) {
 		if (card->modules[i]) {
 			vgsm_outl(card, VGSM_R_ME_INT_ENABLE(i),
-				VGSM_R_ME_INT_ENABLE_V_VCC |
+				VGSM_R_ME_INT_ENABLE_V_VDD |
 				VGSM_R_ME_INT_ENABLE_V_VDDLP |
 				VGSM_R_ME_INT_ENABLE_V_CCVCC |
 				VGSM_R_ME_INT_ENABLE_V_DAI_RX_INT |
@@ -200,15 +201,15 @@ static irqreturn_t vgsm_interrupt(int irq,
 
 void vgsm_card_update_router(struct vgsm_card *card)
 {
-	u32 reg = 0;
+	u32 sim_router = 0;
 	int i;
 
 	for(i=0; i<card->mes_number; i++) {
 		if (card->modules[i])
-			reg |= card->modules[i]->route_to_sim << (i*4);
+			sim_router |= card->modules[i]->route_to_sim << (i*4);
 	}
 
-	vgsm_outl(card, VGSM_R_SIM_ROUTER, reg);
+	vgsm_outl(card, VGSM_R_SIM_ROUTER, sim_router);
 }
 
 static void vgsm_card_release(struct kref *kref)

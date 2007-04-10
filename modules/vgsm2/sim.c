@@ -69,6 +69,91 @@ static struct uart_driver vgsm_uart_driver_sim =
 	.cons			= NULL,
 };
 
+static void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
+{
+	struct vgsm_card *card = sim->card;
+	u32 reg;
+	int i;
+
+	for(i=0; i<card->mes_number; i++) {
+		if (card->modules[i]->route_to_sim == sim->id) {
+			vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id),
+				VGSM_R_SIM_SETUP_V_CLOCK_ME);
+			return;
+		}
+	}
+
+	switch(sim->clock) {
+	case 3571200: reg = VGSM_R_SIM_SETUP_V_CLOCK_3_5; break;
+	case 4000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_4; break;
+	case 5000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_5; break;
+	case 7142400: reg = VGSM_R_SIM_SETUP_V_CLOCK_7_1; break;
+	case 8000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_8; break;
+	case 10000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_10; break;
+	case 14284800: reg = VGSM_R_SIM_SETUP_V_CLOCK_14; break;
+	case 16000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_16; break;
+	case 20000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_20; break;
+	default: reg = VGSM_R_SIM_SETUP_V_CLOCK_3_5; break;
+	}
+
+	vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id), reg);
+}
+
+static int vgsm_sim_ioctl_sim_get_clock(
+	struct vgsm_sim *sim,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	return put_user(sim->clock, (int __user *)arg);
+}
+
+static int vgsm_sim_ioctl_sim_set_clock(
+	struct vgsm_sim *sim,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	if (arg <= 3571200)
+		sim->clock = 3571200;
+	else if (arg <= 4000000)
+		sim->clock = 4000000;
+	else if (arg <= 5000000)
+		sim->clock = 5000000;
+	else if (arg <= 7142400)
+		sim->clock = 7142400;
+	else if (arg <= 8000000)
+		sim->clock = 8000000;
+	else if (arg <= 10000000)
+		sim->clock = 10000000;
+	else if (arg <= 14284800)
+		sim->clock = 14284800;
+	else if (arg <= 16000000)
+		sim->clock = 16000000;
+	else /*if (arg <= 20000000)*/
+		sim->clock = 20000000;
+
+	vgsm_sim_update_sim_setup(sim);
+
+	return 0;
+}
+
+static int vgsm_sim_ioctl(
+	struct vgsm_uart *uart,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_sim *sim = container_of(uart, struct vgsm_sim, uart);
+
+	switch(cmd) {
+	case VGSM_IOC_SIM_GET_CLOCK:
+		return vgsm_sim_ioctl_sim_get_clock(sim, cmd, arg);
+	case VGSM_IOC_SIM_SET_CLOCK:
+		return vgsm_sim_ioctl_sim_set_clock(sim, cmd, arg);
+	break;
+	}
+
+	return -ENOIOCTLCMD;
+}
+
 struct vgsm_sim *vgsm_sim_create(
 	struct vgsm_sim *sim,
 	struct vgsm_card *card,
@@ -90,7 +175,7 @@ struct vgsm_sim *vgsm_sim_create(
 		&card->pci_dev->dev,
 		card->id * 8 + sim->id,
 		FALSE,
-		NULL);
+		vgsm_sim_ioctl);
 
 	return sim;
 }

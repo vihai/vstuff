@@ -22,9 +22,11 @@ struct vgsm_sim
 {
 	int id;
 
-	struct vgsm_card * card;
+	struct vgsm_card *card;
 
 	struct vgsm_uart uart;
+
+	int clock;
 };
 
 struct vgsm_sim *vgsm_sim_create(
