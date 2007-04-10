@@ -5227,7 +5227,9 @@ static void vgsm_module_initialize(
 		if (ioctl(module->fd, VGSM_IOC_SIM_ROUTE,
 						mc->route_to_sim) < 0) {
 			ast_log(LOG_ERROR,
-				"ioctl(IOC_SIM_ROUTE) failed: %s\n",
+				"%s: ioctl(IOC_SIM_ROUTE, %d) failed: %s\n",
+				module->name,
+				mc->route_to_sim,
 				strerror(errno));
 
 			goto initialization_failure;
@@ -5237,7 +5239,8 @@ static void vgsm_module_initialize(
 	int val;
 	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
 		vgsm_module_failure_text(module,
-			"Error getting power status: ioctl(POWER_GET): %s",
+			"%s: Error getting power status: ioctl(POWER_GET): %s",
+			module->name,
 			strerror(errno));
 
 		goto initialization_failure;
@@ -5245,7 +5248,7 @@ static void vgsm_module_initialize(
 
 	if (!val) {
 		ast_log(LOG_NOTICE,
-			"Module '%s' is not powered on, re-igniting\n",
+			"%s: is not powered on, re-igniting\n",
 			module->name);
 
 		module->power_attempts = 0;
