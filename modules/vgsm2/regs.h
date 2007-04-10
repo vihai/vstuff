@@ -111,7 +111,7 @@
 
 #define VGSM_R_STATUS 0x0080
 #define VGSM_R_STATUS_V_BUSY			(1 << 0)
-#define VGSM_R_STATUS_V_SIM_PLL_LOCKED		(1 << 1)
+#define VGSM_R_STATUS_V_PLL_LOCKED		(1 << 1)
 
 #define VGSM_R_INFO 0x0084
 #define VGSM_R_INFO_V_ME_CNT(n)			((n) & 0x0f >> 0)
@@ -121,17 +121,34 @@
 #define VGSM_R_SERIAL 0x008c
 
 #define VGSM_R_SERVICE 0x0090
-#define VGSM_R_SERVICE_RESET			(1 << 0)
-#define VGSM_R_SERVICE_RECONFIGURE_FPGA		(1 << 4)
+#define VGSM_R_SERVICE_V_RESET			(1 << 0)
+#define VGSM_R_SERVICE_V_RECONFIG		(1 << 1)
 
 #define VGSM_R_TEST 0x0094
 
 #define VGSM_R_ASMI_CTL 0x0100
-#define VGSM_R_ASMI_CTL_V_RDEN			(1 << 0)
-#define VGSM_R_ASMI_CTL_V_READ			(1 << 1)
-#define VGSM_R_ASMI_CTL_V_READ_SID		(1 << 2)
-#define VGSM_R_ASMI_CTL_V_BUSY			(1 << 0)
-#define VGSM_R_ASMI_CTL_V_DATA_VALID		(1 << 1)
+#define VGSM_R_ASMI_CTL_V_DATAIN(v)		((v) << 0)
+#define VGSM_R_ASMI_CTL_V_START			(1 << 16)
+#define VGSM_R_ASMI_CTL_V_RDEN			(1 << 17)
+#define VGSM_R_ASMI_CTL_V_READ			(1 << 18)
+#define VGSM_R_ASMI_CTL_V_WREN			(1 << 19)
+#define VGSM_R_ASMI_CTL_V_WRITE			(1 << 20)
+#define VGSM_R_ASMI_CTL_V_READ_SID		(1 << 21)
+#define VGSM_R_ASMI_CTL_V_READ_STATUS		(1 << 22)
+#define VGSM_R_ASMI_CTL_V_SECTOR_PROTECT	(1 << 23)
+#define VGSM_R_ASMI_CTL_V_SECTOR_ERASE		(1 << 24)
+#define VGSM_R_ASMI_CTL_V_BULK_ERASE		(1 << 25)
+
+
+#define VGSM_R_ASMI_STA 0x0100
+#define VGSM_R_ASMI_STA_V_DATAOUT(v)		((v) & 0xff)
+#define VGSM_R_ASMI_STA_V_EPCS_ID(v)		(((v) & 0xff00) >> 8)
+#define VGSM_R_ASMI_STA_V_STATUS(v)		(((v) & 0xff0000) >> 16)
+#define VGSM_R_ASMI_STA_V_RUNNING		(1 << 24)
+#define VGSM_R_ASMI_STA_V_BUSY			(1 << 25)
+#define VGSM_R_ASMI_STA_V_DATA_VALID		(1 << 26)
+#define VGSM_R_ASMI_STA_V_ILLEGAL_ERASE		(1 << 27)
+#define VGSM_R_ASMI_STA_V_ILLEGAL_WRITE		(1 << 28)
 
 #define VGSM_R_ASMI_ADDR 0x0104
 #define VGSM_R_ASMI_IO 0x0108
@@ -144,6 +161,17 @@
 #define VGSM_R_SIM_SETUP(n) (VGSM_SIM_BASE(n) + 0x0000)
 #define VGSM_R_SIM_SETUP_V_VCC		(1 << 0)
 #define VGSM_R_SIM_SETUP_V_3V		(1 << 1)
+#define VGSM_R_SIM_SETUP_V_CLOCK(n)	((n) << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_ME	(0x0 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_3_5	(0x1 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_4	(0x2 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_5	(0x3 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_7_1	(0x4 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_8	(0x5 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_10	(0x6 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_14	(0x7 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_16	(0x8 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_20	(0x9 << 4)
 
 #define VGSM_R_SIM_STATUS(n) (VGSM_SIM_BASE(n) + 0x0004)
 #define VGSM_R_SIM_STATUS_V_CCIN	(1 << 0)
@@ -185,13 +213,13 @@
 #define VGSM_R_ME_INT_STATUS_V_UART_MESIM	(1 << 26)
 
 #define VGSM_R_ME_INT_ENABLE(n) (VGSM_ME_BASE(n) + 0x000c)
-#define VGSM_R_ME_INT_ENABLE_V_VCC		(1 << 0)
-#define VGSM_R_ME_INT_ENABLE_V_VDDLP	(1 << 1)
-#define VGSM_R_ME_INT_ENABLE_V_CCVCC	(1 << 2)
-#define VGSM_R_ME_INT_ENABLE_V_DAI_RX_INT	(1 << 15)
-#define VGSM_R_ME_INT_ENABLE_V_DAI_RX_END	(1 << 16)
-#define VGSM_R_ME_INT_ENABLE_V_DAI_TX_INT	(1 << 17)
-#define VGSM_R_ME_INT_ENABLE_V_DAI_TX_END	(1 << 18)
+#define VGSM_R_ME_INT_ENABLE_V_VDD		(1 << 0)
+#define VGSM_R_ME_INT_ENABLE_V_VDDLP		(1 << 1)
+#define VGSM_R_ME_INT_ENABLE_V_CCVCC		(1 << 2)
+#define VGSM_R_ME_INT_ENABLE_V_DAI_RX_INT	(1 << 16)
+#define VGSM_R_ME_INT_ENABLE_V_DAI_RX_END	(1 << 17)
+#define VGSM_R_ME_INT_ENABLE_V_DAI_TX_INT	(1 << 18)
+#define VGSM_R_ME_INT_ENABLE_V_DAI_TX_END	(1 << 19)
 #define VGSM_R_ME_INT_ENABLE_V_UART_ASC0	(1 << 24)
 #define VGSM_R_ME_INT_ENABLE_V_UART_ASC1	(1 << 25)
 #define VGSM_R_ME_INT_ENABLE_V_UART_MESIM	(1 << 26)
