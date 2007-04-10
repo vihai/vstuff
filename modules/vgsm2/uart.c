@@ -43,7 +43,7 @@
 
 static u8 uart_in(struct vgsm_uart *up, int offset)
 {
-	u8 r= readl(up->port.membase + (offset << 2));
+	u8 r = readl(up->port.membase + (offset << 2));
 //printk(KERN_DEBUG "IN 0x%08x = %02x\n", up->port.membase + (offset << 2), r);
 
 	return r;
@@ -176,7 +176,6 @@ static void transmit_chars(struct vgsm_uart *up)
 
 	if (up->port.x_char) {
 		uart_out(up, UART_TX, up->port.x_char);
-printk(KERN_DEBUG "E:%02x\n", up->port.x_char);
 		up->port.icount.tx++;
 		up->port.x_char = 0;
 		return;
@@ -360,14 +359,13 @@ static int vgsm_uart_startup(struct uart_port *port)
 
 	up->mcr = 0;
 
-	uart_out(up, UART_LCR, up->lcr | UART_LCR_DLAB);/* set DLAB */
-
+	uart_out(up, UART_LCR, up->lcr | UART_LCR_DLAB);
 	if (up->sim_mode)
 		vgsm_uart_dl_write(up, VGSM_UART_CLOCK / (8636 * 16));
 	else
 		vgsm_uart_dl_write(up, VGSM_UART_CLOCK / (9600 * 16));
+	uart_out(up, UART_LCR, up->lcr);
 
-	uart_out(up, UART_LCR, up->lcr);		/* reset DLAB */
 	/*
 	 * Clear the FIFO buffers and disable them.
 	 * (they will be reenabled in set_termios())
@@ -476,25 +474,19 @@ static void vgsm_uart_set_termios(struct uart_port *port, struct termios *termio
 	unsigned int baud, quot;
 
 	switch (termios->c_cflag & CSIZE) {
-	case CS5:
-		cval = UART_LCR_WLEN5;
-		break;
-	case CS6:
-		cval = UART_LCR_WLEN6;
-		break;
-	case CS7:
-		cval = UART_LCR_WLEN7;
-		break;
+	case CS5: cval = UART_LCR_WLEN5; break;
+	case CS6: cval = UART_LCR_WLEN6; break;
+	case CS7: cval = UART_LCR_WLEN7; break;
 	default:
-	case CS8:
-		cval = UART_LCR_WLEN8;
-		break;
+	case CS8: cval = UART_LCR_WLEN8; break;
 	}
 
 	if (termios->c_cflag & CSTOPB)
 		cval |= UART_LCR_STOP;
+
 	if (termios->c_cflag & PARENB)
 		cval |= UART_LCR_PARITY;
+
 	if (!(termios->c_cflag & PARODD))
 		cval |= UART_LCR_EPAR;
 #ifdef CMSPAR
@@ -569,21 +561,22 @@ static void vgsm_uart_set_termios(struct uart_port *port, struct termios *termio
 
 	uart_out(up, UART_IER, up->ier);
 
-	uart_out(up, UART_LCR, cval | UART_LCR_DLAB);/* set DLAB */
-	if (up->sim_mode)
-		vgsm_uart_dl_write(up, VGSM_UART_CLOCK / (8636 * 16));
-	else
+	if (!up->sim_mode) {
+		uart_out(up, UART_LCR, cval | UART_LCR_DLAB);
 		vgsm_uart_dl_write(up, quot);
-	uart_out(up, UART_LCR, cval);		/* reset DLAB */
+		uart_out(up, UART_LCR, cval);
+	}
 
-	up->lcr = cval;					/* Save LCR */
+	/* Save LCR */
+	up->lcr = cval;
 
 	if (fcr & UART_FCR_ENABLE_FIFO) {
 		/* emulated UARTs (Lucent Venus 167x) need two steps */
 		uart_out(up, UART_FCR, UART_FCR_ENABLE_FIFO);
 	}
 
-	uart_out(up, UART_FCR, fcr);		/* set fcr */
+	/* set fcr */
+	uart_out(up, UART_FCR, fcr);
 
 	vgsm_uart_set_mctrl(&up->port, up->port.mctrl);
 
