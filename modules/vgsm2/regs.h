@@ -123,6 +123,7 @@
 #define VGSM_R_SERVICE 0x0090
 #define VGSM_R_SERVICE_V_RESET			(1 << 0)
 #define VGSM_R_SERVICE_V_RECONFIG		(1 << 1)
+#define VGSM_R_SERVICE_V_BIG_ENDIAN		(1 << 2)
 
 #define VGSM_R_TEST 0x0094
 

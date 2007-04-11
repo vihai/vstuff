@@ -43,7 +43,15 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	/* Reset all subsystems */
 	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
 	msleep(10); // FIXME!!!
+
+#ifdef __LITTLE_ENDIAN
 	vgsm_outl(card, VGSM_R_SERVICE, 0);
+#elif __BIG_ENDIAN
+	vgsm_outl(card, VGSM_R_SERVICE,
+		VGSM_R_SERVICE_V_BIG_ENDIAN);
+#else
+#error Unsupported endianness
+#endif
 
 	vgsm_outl(card, VGSM_R_SIM_ROUTER,
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE(0, 0) |
