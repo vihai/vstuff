@@ -1881,8 +1881,16 @@ static int visdn_transfer(
 	return -1;
 }
 
+#if ASTERISK_VERSION_NUM < 10402 
 static int visdn_send_digit(struct ast_channel *ast_chan, char digit)
 {
+#else
+static int visdn_send_digit(
+	struct ast_channel *ast_chan,
+	char digit,
+	unsigned int duration)
+{
+#endif
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
 	struct q931_call *q931_call = visdn_chan->q931_call;
 	struct visdn_ic *ic = visdn_chan->ic;

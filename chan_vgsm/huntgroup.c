@@ -27,6 +27,7 @@
 #include <asterisk/module.h>
 #include <asterisk/options.h>
 #include <asterisk/cli.h>
+#include <asterisk/version.h>
 
 #include "chan_vgsm.h"
 #include "util.h"
@@ -333,7 +334,7 @@ static int do_show_vgsm_huntgroups(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char show_vgsm_huntgroups_help[] =
+static const char show_vgsm_huntgroups_help[] =
 "Usage: show vgsm huntgroups [<huntgroup>]\n"
 "\n"
 "	Displays detailed informations on vGSM's huntgroup or lists all the\n"

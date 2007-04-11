@@ -1796,13 +1796,26 @@ static int vgsm_transfer(
 	return -1;
 }
 
+#if ASTERISK_VERSION_NUM < 10402 
 static int vgsm_send_digit(struct ast_channel *ast_chan, char digit)
 {
+	int duration = 300;
+#else
+static int vgsm_send_digit(
+	struct ast_channel *ast_chan,
+	char digit,
+	unsigned int duration)
+{
+#endif
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 	struct vgsm_module *module = vgsm_chan->module;
 
+	if (duration < 300)
+		duration = 300;
+
+	/* VTS takes duration in 1/100 sec */
 	_vgsm_req_put(vgsm_req_make(
-		&module->comm, 2 * SEC, "AT+VTS=%c", digit));
+		&module->comm, 2 * SEC, "AT+VTS=%c,%d", digit, duration / 100));
 
 	return 0;
 }
@@ -1984,7 +1997,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		return f;
 	}
 
-#if 1
+#if 0
 {
 __u8 *buf = vgsm_chan->frame_out_buf;
 struct timeval tv;
@@ -2117,8 +2130,6 @@ static struct ast_channel *vgsm_request(
 	const char *type, int format, void *data, int *cause)
 {
 	int err;
-
-printf("FORMAAAAAAAAAAAAT = %08x %08x %08x %08x\n", format, AST_FORMAT_ALAW, AST_FORMAT_ULAW, AST_FORMAT_SLINEAR);
 
 	if (!(format & (AST_FORMAT_ALAW |
 			AST_FORMAT_ULAW |
@@ -2359,7 +2370,11 @@ static void astman_append(struct mansession *s, const char *fmt, ...)
 }
 #endif
 
+#if ASTERISK_VERSION_NUM >= 10402
+static int manager_vgsm_sms_tx(struct mansession *s, const struct message *m)
+#else
 static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
+#endif
 {
 	const char *number = astman_get_header(m, "To");
 	if (!strlen(number)) {
@@ -2586,23 +2601,23 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (strlen(validity_period_str))
 		sms->validity_period = atoi(validity_period_str);
 
-	char *class_str = astman_get_header(m, "X-SMS-Class");
+	const char *class_str = astman_get_header(m, "X-SMS-Class");
 	if (strlen(class_str))
 		sms->message_class = atoi(class_str);
 	else
 		sms->message_class = 1;
 
-	char *concatenate_refid_str =
+	const char *concatenate_refid_str =
 		astman_get_header(m, "X-SMS-Concatenate-RefID");
 	if (strlen(concatenate_refid_str))
 		sms->udh_concatenate_refnum = atoi(concatenate_refid_str);
 
-	char *concatenate_maxmsg_str =
+	const char *concatenate_maxmsg_str =
 		astman_get_header(m, "X-SMS-Concatenate-Total-Messages");
 	if (strlen(concatenate_maxmsg_str))
 		sms->udh_concatenate_maxmsg = atoi(concatenate_maxmsg_str);
 
-	char *concatenate_seqnum_str =
+	const char *concatenate_seqnum_str =
 		astman_get_header(m, "X-SMS-Concatenate-Sequence-Number");
 	if (strlen(concatenate_seqnum_str))
 		sms->udh_concatenate_seqnum = atoi(concatenate_seqnum_str);
@@ -2611,7 +2626,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	ast_mutex_unlock(&module->lock);
 
-	char *content_te = astman_get_header(m, "Content-Transfer-Encoding");
+	const char *content_te =
+		astman_get_header(m, "Content-Transfer-Encoding");
 	size_t content_size;
 	__u8 *content_raw;
 
