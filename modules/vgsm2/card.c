@@ -285,11 +285,25 @@ void vgsm_card_destroy(struct vgsm_card *card)
 	vgsm_card_put(card);
 }
 
+static void vgsm_card_asmi_waitbusy(struct vgsm_card *card)
+{
+	int i;
+	for(i=0; i<1000 &&
+		(vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING);
+		i++)
+		msleep(10);
+}
+
 
 int vgsm_card_probe(struct vgsm_card *card)
 {
 	int err;
 	int i;
+
+	union {
+		__u32 serial;
+		__u8 octets[4];
+	} s;
 
 	/* From here on vgsm_msg_card may be used */
 
@@ -360,7 +374,6 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	{
 	__u32 r_version = vgsm_inl(card, VGSM_R_VERSION);
-	__u32 r_serial = vgsm_inl(card, VGSM_R_SERIAL);
 	__u32 r_info = vgsm_inl(card, VGSM_R_INFO);
 	card->sims_number = (r_info & 0x000000f0) >> 4;
 	card->mes_number = (r_info & 0x0000000f) >> 0;
@@ -381,9 +394,25 @@ int vgsm_card_probe(struct vgsm_card *card)
 		(r_version & 0x0000ff00) >>  8,
 		(r_version & 0x000000ff) >>  0);
 
-	if (r_serial)
+	for(i=0; i<sizeof(s);i++) {
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, 0x70000 + i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+			VGSM_R_ASMI_CTL_V_RDEN |
+			VGSM_R_ASMI_CTL_V_READ |
+			VGSM_R_ASMI_CTL_V_START);
+
+		vgsm_card_asmi_waitbusy(card);
+
+		s.octets[i] = VGSM_R_ASMI_STA_V_DATAOUT(
+				vgsm_inl(card, VGSM_R_ASMI_STA));
+
+	}
+
+	card->serial_number = s.serial;
+
+	if (card->serial_number)
 		vgsm_msg_card(card, KERN_INFO,
-			"Serial number: %d\n", r_serial);
+			"Serial number: %d\n", card->serial_number);
 
 	vgsm_msg_card(card, KERN_INFO,
 		"GSM module sockets: %d\n",
@@ -437,10 +466,6 @@ int vgsm_card_probe(struct vgsm_card *card)
 		vgsm_sim_create(&card->sims[i], card, i, VGSM_SIM_UART_BASE(i));
 
 	vgsm_initialize_hw(card);
-
-	/* Enable interrupts */
-//	card->regs.mask0 = 0;
-//	vgsm_outb(card, VGSM_MASK0, card->regs.mask0);
 
 	return 0;
 

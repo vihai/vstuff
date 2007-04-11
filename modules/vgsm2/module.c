@@ -171,7 +171,6 @@ static void vgsm_module_rx_chan_stop(struct ks_chan *ks_chan)
 	struct vgsm_card *card = module->card;
 
 	vgsm_card_lock(card);
-//	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
 
 	vgsm_debug_module(module, 1, "RX stopped.\n");
@@ -415,7 +414,6 @@ static int vgsm_module_tx_chan_start(struct ks_chan *ks_chan)
 //	module_tx->fifo_in = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
 //				card->writedma_bus_mem) / 4;
 
-//	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
 
 	vgsm_debug_module(module, 1, "TX module started.\n");
@@ -431,7 +429,6 @@ static void vgsm_module_tx_chan_stop(struct ks_chan *ks_chan)
 	struct vgsm_card *card = module->card;
 
 	vgsm_card_lock(card);
-//	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
 
 	vgsm_debug_module(module, 1, "TX module stopped.\n");

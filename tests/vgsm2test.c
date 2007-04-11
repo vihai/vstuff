@@ -346,6 +346,61 @@ static char *requester_str(int color, char *fmt, ...)
 	return s;
 }
 
+static int card_waitbusy(struct vgsm_card *card)
+{
+	int i;
+	for(i=0; i<1000 &&
+		(vgsm_inl(card, VGSM_R_STATUS) & VGSM_R_STATUS_V_BUSY);
+		i++)
+		usleep(10000);
+
+	if (i==1000)
+		return -1;
+	else
+		return 0;
+}
+
+
+static int asmi_waitbusy(struct vgsm_card *card)
+{
+	int i;
+	for(i=0; i<1000 &&
+		(vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING);
+		i++)
+		usleep(10000);
+
+	if (i==1000)
+		return -1;
+	else
+		return 0;
+}
+
+static __u32 serial_read(struct vgsm_card *card)
+{
+	int i;
+	union {
+		__u32 serial;
+		__u8 octets[4];
+	} s;
+
+	for(i=0; i<sizeof(s);i++) {
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, 0x70000 + i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+			VGSM_R_ASMI_CTL_V_RDEN |
+			VGSM_R_ASMI_CTL_V_READ |
+			VGSM_R_ASMI_CTL_V_START);
+
+		if (asmi_waitbusy(card) < 0)
+			return -1;
+
+		s.octets[i] = VGSM_R_ASMI_STA_V_DATAOUT(
+				vgsm_inl(card, VGSM_R_ASMI_STA));
+	}
+
+	return s.serial;
+}
+
+
 static void print_info(struct vgsm_card *card)
 {
 	werase(infowin);
@@ -366,7 +421,7 @@ static void print_info(struct vgsm_card *card)
 		(version & 0x0000ff00) >>  8,
 		(version & 0x000000ff) >>  0);
 
-	__u32 serial = vgsm_inl(card, VGSM_R_SERIAL);
+	__u32 serial = serial_read(card);
 	if (serial != 0xffffffff)
 		mvwprintw(infowin, 3, 2, "Serial#: %08d", serial);
 	else
@@ -517,35 +572,6 @@ static int t_dai_speed(struct vgsm_card *card, int par)
 			speed);
 
 	return 0;
-}
-
-static int card_waitbusy(struct vgsm_card *card)
-{
-	int i;
-	for(i=0; i<1000 &&
-		(vgsm_inl(card, VGSM_R_STATUS) & VGSM_R_STATUS_V_BUSY);
-		i++)
-		usleep(10000);
-
-	if (i==1000)
-		return -1;
-	else
-		return 0;
-}
-
-
-static int asmi_waitbusy(struct vgsm_card *card)
-{
-	int i;
-	for(i=0; i<1000 &&
-		(vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING);
-		i++)
-		usleep(10000);
-
-	if (i==1000)
-		return -1;
-	else
-		return 0;
 }
 
 int sanprintf(char *buf, int bufsize, const char *fmt, ...)
@@ -812,21 +838,6 @@ static int program_serial(struct vgsm_card *card, __u32 serial)
 	}
 	log_info("OK\n");
 
-	log_info("Resetting card...");
-	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
-	vgsm_outl(card, VGSM_R_SERVICE, 0);
-	log_info("OK\n");
-
-	if (card_waitbusy(card) < 0)
-		TEST_FAILED("Timeout waiting card to be initialized");
-
-	log_info("Checking serial number...");
-	__u32 curserial = vgsm_inl(card, VGSM_R_SERIAL);
-	if (curserial != serial)
-		TEST_FAILED("Serial number not correctly programmed"
-				" (read 0x%08x)", curserial);
-	log_info("OK (%08d)\n", curserial);
-
 	return 0;
 }
 
@@ -941,7 +952,7 @@ static int t_reg_values(struct vgsm_card *card, int par)
 static int t_serial_number(struct vgsm_card *card, int par)
 {
 	char *str = NULL;
-	__u32 serial = vgsm_inl(card, VGSM_R_SERIAL);
+	__u32 serial = serial_read(card);
 	if (serial == 0xffffffff) {
 		str = requester_str(REQ_DIALOG_BG,
 				"Please enter serial #:");

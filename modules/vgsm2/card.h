@@ -74,9 +74,7 @@ struct vgsm_card
 	struct vgsm_module *modules[4];
 	struct vgsm_sim sims[4];
 
-	struct {
-		u8 mask0;
-	} regs;
+	u32 serial_number;
 };
 
 void vgsm_card_update_router(struct vgsm_card *card);

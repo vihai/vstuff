@@ -118,7 +118,6 @@
 #define VGSM_R_INFO_V_SIM_CNT(n)		((n) & 0xf0 >> 4)
 
 #define VGSM_R_VERSION 0x0088
-#define VGSM_R_SERIAL 0x008c
 
 #define VGSM_R_SERVICE 0x0090
 #define VGSM_R_SERVICE_V_RESET			(1 << 0)
