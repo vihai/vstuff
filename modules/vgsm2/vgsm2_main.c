@@ -24,6 +24,8 @@
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/serial.h>
+#include <linux/termios.h>
+#include <linux/serial_core.h>
 
 #include <linux/kstreamer/dynattr.h>
 

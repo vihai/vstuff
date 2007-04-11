@@ -24,6 +24,7 @@
 #include <linux/serial.h>
 #include <linux/nmi.h>
 #include <linux/mutex.h>
+#include <linux/version.h>
 
 #include <asm/io.h>
 
@@ -85,7 +86,19 @@ static void vgsm_uart_stop_tx(struct uart_port *port)
 	}
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+static void vgsm_uart_stop_tx_compat(
+	struct uart_port *port, unsigned int tty_stop)
+{
+	vgsm_uart_stop_tx(port);
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+static void vgsm_uart_start_tx(struct uart_port *port, unsigned int tty_start)
+#else
 static void vgsm_uart_start_tx(struct uart_port *port)
+#endif
 {
 	struct vgsm_uart *up =
 		container_of(port, struct vgsm_uart, port);
@@ -114,6 +127,25 @@ static void vgsm_uart_enable_ms(struct uart_port *port)
 	up->ier |= UART_IER_MSI;
 	uart_out(up, UART_IER, up->ier);
 }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+static inline void
+uart_insert_char(struct uart_port *port, unsigned int status,
+                 unsigned int overrun, unsigned int ch, unsigned int flag)
+{
+	struct tty_struct *tty = port->info->tty;
+	
+	if ((status & port->ignore_status_mask & ~overrun) == 0)
+		tty_insert_flip_char(tty, ch, flag);
+	
+	/*
+	 * Overrun is special.  Since it's reported immediately,
+	 * it doesn't affect the current character.
+	 */
+	if (status & ~port->ignore_status_mask & overrun)
+		tty_insert_flip_char(tty, 0, TTY_OVERRUN);
+}
+#endif
 
 static void receive_chars(struct vgsm_uart *up, u8 *status)
 {
@@ -502,8 +534,7 @@ static void vgsm_uart_set_termios(struct uart_port *port, struct termios *termio
 	quot = uart_get_divisor(port, baud);
 
 
-	fcr = UART_FCR_ENABLE_FIFO |
-		(baud >= 2400 ? UART_FCR_R_TRIG_10 : UART_FCR_TRIGGER_1);
+	fcr = UART_FCR_ENABLE_FIFO | 0x80;
 
 	/*
 	 * Ok, we're now changing the port state.  Do it with
@@ -625,7 +656,11 @@ static struct uart_ops vgsm_uart_ops = {
 	.tx_empty	= vgsm_uart_tx_empty,
 	.set_mctrl	= vgsm_uart_set_mctrl,
 	.get_mctrl	= vgsm_uart_get_mctrl,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+	.stop_tx	= vgsm_uart_stop_tx_compat,
+#else
 	.stop_tx	= vgsm_uart_stop_tx,
+#endif
 	.start_tx	= vgsm_uart_start_tx,
 	.stop_rx	= vgsm_uart_stop_rx,
 	.enable_ms	= vgsm_uart_enable_ms,

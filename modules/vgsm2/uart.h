@@ -13,8 +13,6 @@
 #ifndef _VGSM_UART_H
 #define _VGSM_UART_H
 
-#include <linux/serial_core.h>
-
 struct vgsm_uart
 {
 	struct uart_port port;

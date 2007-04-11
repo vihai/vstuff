@@ -22,6 +22,11 @@
 #include <linux/ctype.h>
 #include <linux/fs.h>
 #include <linux/bitops.h>
+#include <linux/tty.h>
+#include <linux/tty_driver.h>
+#include <linux/serial.h>
+#include <linux/termios.h>
+#include <linux/serial_core.h>
 
 #include "vgsm2.h"
 #include "card.h"
