@@ -227,11 +227,8 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 			ast_chan->rawreadformat = AST_FORMAT_ULAW;
 			ast_chan->writeformat = AST_FORMAT_ULAW;
 			ast_chan->rawwriteformat = AST_FORMAT_ULAW;
-		}
+		}	
 	}
-
-	ast_set_read_format(ast_chan, ast_chan->readformat);
-	ast_set_write_format(ast_chan, ast_chan->writeformat);
 
 	return ast_chan;
 
@@ -1345,8 +1342,10 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	}
 
 	if (vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
-			vgsm_chan->ast_chan->readformat != AST_FORMAT_SLINEAR,
-			vgsm_chan->ast_chan->readformat == AST_FORMAT_ULAW)) {
+			vgsm_chan->ast_chan->rawreadformat !=
+						AST_FORMAT_SLINEAR,
+			vgsm_chan->ast_chan->rawreadformat ==
+						AST_FORMAT_ULAW)) {
 		ast_log(LOG_ERROR,
 			"Cannot enable RX amu_compander\n");
 		goto err_pipeline_rx_amu_compander_enable;
@@ -1382,8 +1381,10 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	}
 
 	if (vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
-			vgsm_chan->ast_chan->writeformat != AST_FORMAT_SLINEAR,
-			vgsm_chan->ast_chan->writeformat == AST_FORMAT_ULAW)) {
+			vgsm_chan->ast_chan->rawwriteformat !=
+						AST_FORMAT_SLINEAR,
+			vgsm_chan->ast_chan->rawwriteformat ==
+						AST_FORMAT_ULAW)) {
 		ast_log(LOG_ERROR,
 			"Cannot enable TX amu_decompander\n");
 		goto err_pipeline_tx_decompander_enable;
@@ -2018,7 +2019,7 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 #endif
 
 	f->frametype = AST_FRAME_VOICE;
-	f->subclass = ast_chan->readformat;
+	f->subclass = ast_chan->rawreadformat;
 	f->samples = nread / 2;
 	f->datalen = nread;
 	f->data = vgsm_chan->frame_out_buf;
@@ -2266,9 +2267,9 @@ err_unsupported_format:
 static const struct ast_channel_tech vgsm_tech = {
 	.type		= VGSM_CHAN_TYPE,
 	.description	= VGSM_DESCRIPTION,
-	.capabilities	= AST_FORMAT_ALAW |
-			  AST_FORMAT_ULAW |
-			  AST_FORMAT_SLINEAR,
+	.capabilities	= AST_FORMAT_SLINEAR |
+			  AST_FORMAT_ALAW |
+			  AST_FORMAT_ULAW;
 	.requester	= vgsm_request,
 	.call		= vgsm_call,
 	.hangup		= vgsm_hangup,
