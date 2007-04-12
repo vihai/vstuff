@@ -2269,7 +2269,7 @@ static const struct ast_channel_tech vgsm_tech = {
 	.description	= VGSM_DESCRIPTION,
 	.capabilities	= AST_FORMAT_SLINEAR |
 			  AST_FORMAT_ALAW |
-			  AST_FORMAT_ULAW;
+			  AST_FORMAT_ULAW,
 	.requester	= vgsm_request,
 	.call		= vgsm_call,
 	.hangup		= vgsm_hangup,
