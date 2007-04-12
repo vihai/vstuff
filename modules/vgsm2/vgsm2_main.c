@@ -50,53 +50,6 @@ MODULE_DEVICE_TABLE(pci, vgsm_ids);
 struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
 spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
 
-#if 0
-static int vgsm_tty_ioctl(
-	struct tty_struct *tty,
-	struct file *file,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct vgsm_module *module = tty->driver_data;
-
-//	if (test_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags))
-//		return -ENOIOCTLCMD;
-
-	switch(cmd) {
-	case VGSM_IOC_GET_TX_FIFOLEN:
-		return put_user(kfifo_len(module->kfifo_tx),
-				(unsigned int *)arg);
-	break;
-
-	case VGSM_IOC_GET_CHANID:
-		return put_user(module->visdn_chan.id, (unsigned int *)arg);
-	break;
-
-	case VGSM_IOC_POWER_GET:
-		return vgsm_tty_do_power_get(module, cmd, arg);
-	break;
-
-	case VGSM_IOC_POWER_IGN:
-		return vgsm_tty_do_power_ign(module, cmd, arg);
-	break;
-
-	case VGSM_IOC_POWER_EMERG_OFF:
-		return vgsm_tty_do_emerg_off(module, cmd, arg);
-	break;
-
-	case VGSM_IOC_FW_VERSION:
-		return vgsm_tty_do_fw_version(module, cmd, arg);
-	break;
-
-	case VGSM_IOC_FW_UPGRADE:
-		return vgsm_tty_do_fw_upgrade(module, cmd, arg);
-	break;
-	}
-
-	return -ENOIOCTLCMD;
-}
-#endif
-
 static int vgsm_probe(
 	struct pci_dev *pci_dev,
 	const struct pci_device_id *device_id_entry)

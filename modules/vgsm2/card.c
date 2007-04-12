@@ -285,15 +285,144 @@ void vgsm_card_destroy(struct vgsm_card *card)
 	vgsm_card_put(card);
 }
 
-static void vgsm_card_asmi_waitbusy(struct vgsm_card *card)
+static int vgsm_card_asmi_waitbusy(struct vgsm_card *card)
 {
 	int i;
-	for(i=0; i<1000 &&
-		(vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING);
-		i++)
-		msleep(10);
+
+	if (vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING) {
+
+		for(i=0; i<100 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
+				VGSM_R_ASMI_STA_V_RUNNING); i++)
+			udelay(5);
+
+		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
+				VGSM_R_ASMI_STA_V_RUNNING); i++)
+			msleep(10);
+
+		if (i == 500)
+			return -ETIMEDOUT;
+	}
+
+	return 0;
 }
 
+int vgsm_card_ioctl_fw_version(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	u32 version = vgsm_inl(card, VGSM_R_VERSION);
+
+	return put_user(version, (int __user *)arg);
+}
+
+int vgsm_card_ioctl_fw_upgrade(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	struct vgsm2_fw_header fwh;
+	int err;
+	int i;
+
+	if (copy_from_user(&fwh, (void *)arg, sizeof(fwh))) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+	}
+
+	vgsm_msg_card(card, KERN_INFO,
+		"Firmware programming started (%d bytes)...\n",
+		fwh.size);
+
+	for(i=0; i<0x60000; i+=0x10000) {
+		vgsm_msg_card(card, KERN_INFO,
+			"Erasing sector 0x%05x\n", i);
+
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+				VGSM_R_ASMI_CTL_V_WREN |
+				VGSM_R_ASMI_CTL_V_SECTOR_ERASE |
+				VGSM_R_ASMI_CTL_V_START);
+
+		err = vgsm_card_asmi_waitbusy(card);
+		if (err < 0)
+			goto err_timeout;
+	}
+
+	for(i=0; i<fwh.size; i++) {
+		u8 b;
+
+		if (copy_from_user(&b,
+				(void *)(arg + sizeof(fwh) + i),
+				sizeof(b))) {
+			err = -EFAULT;
+			goto err_copy_from_user_payload;
+		}
+
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+				VGSM_R_ASMI_CTL_V_WREN |
+				VGSM_R_ASMI_CTL_V_WRITE |
+				VGSM_R_ASMI_CTL_V_START |
+				VGSM_R_ASMI_CTL_V_DATAIN(b));
+
+		err = vgsm_card_asmi_waitbusy(card);
+		if (err < 0)
+			goto err_timeout;
+	}
+
+	vgsm_msg_card(card, KERN_INFO,
+		"Firmware programming completed\n");
+
+	set_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags);
+
+	return 0; 
+
+err_timeout:
+err_copy_from_user_payload:
+err_copy_from_user:
+
+	return err;
+}
+
+int vgsm_card_ioctl_fw_read(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+	int err;
+	int i;
+
+	for(i=0; i<0x60000; i++) {
+		u8 b;
+
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+			VGSM_R_ASMI_CTL_V_RDEN |
+			VGSM_R_ASMI_CTL_V_READ |
+			VGSM_R_ASMI_CTL_V_START);
+
+		vgsm_card_asmi_waitbusy(card);
+
+		b = VGSM_R_ASMI_STA_V_DATAOUT(
+				vgsm_inl(card, VGSM_R_ASMI_STA));
+
+		if (copy_to_user((void __user *)(arg + i),
+				&b, sizeof(b))) {
+			err = -EFAULT;
+			goto err_copy_to_user_payload;
+		}
+	}
+
+	return i; 
+
+err_copy_to_user_payload:
+
+	return err;
+}
 
 int vgsm_card_probe(struct vgsm_card *card)
 {
@@ -548,7 +677,15 @@ void vgsm_card_remove(struct vgsm_card *card)
 	/* Disable IRQs */
 	vgsm_outl(card, VGSM_R_INT_ENABLE, 0);
 
-	/* Reset FPGA  */
+	if (test_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags)) {
+
+		vgsm_msg_card(card, KERN_INFO,
+			"Reconfiguring FPGA. PCI rescan or reboot required\n");
+
+		vgsm_outl(card,
+			VGSM_R_SERVICE,
+			VGSM_R_SERVICE_V_RECONFIG);
+	}
 
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, 0);
 

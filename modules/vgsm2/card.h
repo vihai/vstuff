@@ -47,6 +47,7 @@
 enum vgsm_card_flags
 {
 	VGSM_CARD_FLAGS_SHUTTING_DOWN,
+	VGSM_CARD_FLAGS_RECONFIG_PENDING,
 };
 
 struct vgsm_card
@@ -87,6 +88,19 @@ struct vgsm_card *vgsm_card_create(
 	struct pci_dev *pci_dev,
 	int id);
 void vgsm_card_destroy(struct vgsm_card *card);
+
+int vgsm_card_ioctl_fw_version(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg);
+int vgsm_card_ioctl_fw_upgrade(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg);
+int vgsm_card_ioctl_fw_read(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg);
 
 int vgsm_card_register(struct vgsm_card *card);
 void vgsm_card_unregister(struct vgsm_card *card);

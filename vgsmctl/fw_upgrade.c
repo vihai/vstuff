@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005-2006 Daniele Orlandi
+ * Copyright (C) 2005-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -32,6 +32,7 @@
 #include <list.h>
 
 #include <linux/vgsm.h>
+#include <linux/vgsm2.h>
 
 #include <zlib.h>
 
@@ -44,7 +45,7 @@ struct fw_file_header
 	__u32 crc;
 	__u32 size;
 	__u8 version[3];
-	__u8 reserved[17];
+	__u8 reserved[14];
 };
 
 static int do_fw_upgrade(
@@ -91,12 +92,26 @@ static int do_fw_upgrade(
 		return 1;
 	}
 
-	if (ntohl(ffh.magic) != 0x92e3299a) {
+	int interface_version;
+	if (ioctl(fd, VGSM_IOC_GET_INTERFACE_VERSION,
+		&interface_version) < 0) {
+		interface_version = 1;
+	}
+
+	if (interface_version != 1 &&
+	    interface_version != 2) {
+		fprintf(stderr, "Unsupported interface version %d\n",
+			interface_version);
+		return 1;
+	}
+
+	__u32 expected_magic = 0x92e3299a;
+	if (ntohl(ffh.magic) != expected_magic) {
 		fprintf(stderr,
 			"Firmware '%s' has invalid magic (0x%08x != 0x%08x)\n",
 			filename,
 			ntohl(ffh.magic),
-			0x92e3299a);
+			expected_magic);
 
 		return 1;
 	}
@@ -135,6 +150,9 @@ static int do_fw_upgrade(
 	}
 
 	__u32 crc = crc32(0, fwb->data, fwb->size);
+
+	printf("CRC: 0x%08x\n", crc);
+
 	if (ntohl(ffh.crc) != crc) {
 		fprintf(stderr,
 			"Firmware '%s' has invalid CRC"
@@ -153,13 +171,63 @@ static int do_fw_upgrade(
 
 	fwb->checksum &= 0x00ff;
 
-	printf("Checksum: 0x%04x\n", fwb->checksum);
+	if (interface_version == 1) {
+		printf("Checksum: 0x%04x\n", fwb->checksum);
+	}
+
+	__u32 cur_version;
+	if (ioctl(fd, VGSM_IOC_FW_VERSION, &cur_version) < 0) {
+		fprintf(stderr, "ioctl(IOC_FW_VERSION) failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	}
+
+	printf("Current version: %d.%d.%d\n",
+		(cur_version & 0x00ff0000) >> 16,
+		(cur_version & 0x0000ff00) >> 8,
+		(cur_version & 0x000000ff) >> 0);
+
+	printf("Version to program: %d.%d.%d\n",
+		ffh.version[0],
+		ffh.version[1],
+		ffh.version[2]);
+
+	printf("Updating firmware (this may take a while)...");
 
 	if (ioctl(fd, VGSM_IOC_FW_UPGRADE, fwb) < 0) {
 		fprintf(stderr, "ioctl(IOC_FW_UPGRADE) failed: %s\n",
 			strerror(errno));
 
 		return 1;
+	}
+
+	printf("OK\n");
+
+	if (interface_version == 2) {
+		__u8 cmp[0x100000];
+
+		printf("Comparing firmware (this may take a while)...");
+
+		if (ioctl(fd, VGSM_IOC_FW_READ, cmp) < 0) {
+			fprintf(stderr, "ioctl(IOC_FW_READ) failed: %s\n",
+				strerror(errno));
+
+			return 1;
+		}
+
+		int i;
+		for(i=0; i<fwb->size; i++) {
+			if (fwb->data[i] != cmp[i]) {
+				fprintf(stderr,
+					"Compare 0x%08x: 0x%08x != 0x%08x\n",
+					i, cmp[i], fwb->data[i]);
+
+				return 1;
+			}
+		}
+
+		printf("OK\n");
 	}
 
 	return 0;

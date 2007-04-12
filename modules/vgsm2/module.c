@@ -739,17 +739,6 @@ static int vgsm_module_ioctl_emerg_off(
 	return 0;
 }
 
-static int vgsm_module_ioctl_get_fw_version(
-	struct vgsm_module *module,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct vgsm_card *card = module->card;
-	u32 version = vgsm_inl(card, VGSM_R_VERSION);
-
-	return put_user(version, (int __user *)arg);
-}
-
 static int vgsm_module_ioctl_sim_route(
 	struct vgsm_module *module,
 	unsigned int cmd,
@@ -799,17 +788,21 @@ static int vgsm_module_ioctl(
 		return vgsm_module_ioctl_emerg_off(module, cmd, arg);
 	break;
 
-	case VGSM_IOC_FW_VERSION:
-		return vgsm_module_ioctl_get_fw_version(module, cmd, arg);
-	break;
-
 	case VGSM_IOC_SIM_ROUTE:
 		return vgsm_module_ioctl_sim_route(module, cmd, arg);
 	break;
 
-//	case VGSM_IOC_FW_UPGRADE:
-//		return vgsm_tty_do_fw_upgrade(module, cmd, arg);
-//	break;
+	case VGSM_IOC_FW_VERSION:
+		return vgsm_card_ioctl_fw_version(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_UPGRADE:
+		return vgsm_card_ioctl_fw_upgrade(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_READ:
+		return vgsm_card_ioctl_fw_read(module, cmd, arg);
+	break;
 	}
 
 	return -ENOIOCTLCMD;
