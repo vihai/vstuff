@@ -77,16 +77,16 @@ static void vgsm_module_update_fifo_setup(struct vgsm_module *module)
 	struct vgsm_card *card = module->card;
 
 	vgsm_outl(card, VGSM_R_ME_FIFO_SETUP(module->id),
-		module->rx.compander_enabled ?
+		(module->rx.compander_enabled ?
 			(module->rx.compander_mu_mode ?
 				VGSM_R_ME_FIFO_SETUP_V_RX_MULAW :
 				VGSM_R_ME_FIFO_SETUP_V_RX_ALAW) :
-			VGSM_R_ME_FIFO_SETUP_V_RX_LINEAR |
-		module->tx.compander_enabled ?
+			VGSM_R_ME_FIFO_SETUP_V_RX_LINEAR) |
+		(module->tx.compander_enabled ?
 			(module->tx.compander_mu_mode ?
 				VGSM_R_ME_FIFO_SETUP_V_TX_MULAW :
 				VGSM_R_ME_FIFO_SETUP_V_TX_ALAW) :
-			VGSM_R_ME_FIFO_SETUP_V_TX_LINEAR);
+			VGSM_R_ME_FIFO_SETUP_V_TX_LINEAR));
 }
 
 /*------------------------------------------------------------------------*/
@@ -807,8 +807,6 @@ static int vgsm_module_ioctl(
 
 	return -ENOIOCTLCMD;
 }
-
-
 
 static struct uart_driver vgsm_uart_driver_asc0 =
 {
