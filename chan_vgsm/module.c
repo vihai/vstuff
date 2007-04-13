@@ -49,6 +49,7 @@
 #include <asterisk/version.h>
 
 #include <linux/vgsm.h>
+#include <linux/vgsm2.h>
 
 #include "util.h"
 #include "chan_vgsm.h"

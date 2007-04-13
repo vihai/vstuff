@@ -443,7 +443,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
 
 	err = pci_request_regions(card->pci_dev, vgsm_DRIVER_NAME);
-	if(err < 0) {
+	if (err < 0) {
 		vgsm_msg_card(card, KERN_CRIT,
 			     "cannot request I/O memory region\n");
 		goto err_pci_request_regions;
@@ -507,11 +507,15 @@ int vgsm_card_probe(struct vgsm_card *card)
 	card->sims_number = (r_info & 0x000000f0) >> 4;
 	card->mes_number = (r_info & 0x0000000f) >> 0;
 
-	if (card->sims_number > 8)
-		return -EINVAL;
+	if (card->sims_number > 8) {
+		err = -EINVAL;
+		goto err_sims_number_invalid;
+	}
 
-	if (card->mes_number > 8)
-		return -EINVAL;
+	if (card->mes_number > 8) {
+		err = -EINVAL;
+		goto err_mes_number_invalid;
+	}
 
 	vgsm_msg_card(card, KERN_INFO,
 		"vGSM-II card found at %#0lx\n",
@@ -598,6 +602,13 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	return 0;
 
+err_module_create:
+	for(i=card->mes_number-1; i>=0; i--) {
+		if (card->modules[i])
+			vgsm_module_destroy(card->modules[i]);
+	}
+err_mes_number_invalid:
+err_sims_number_invalid:
 	free_irq(card->pci_dev->irq, card);
 err_request_irq:
 	iounmap(card->fifo_mem);
@@ -610,11 +621,6 @@ err_noirq:
 	pci_release_regions(card->pci_dev);
 err_pci_request_regions:
 err_pci_enable_device:
-err_module_create:
-	for(i=card->mes_number-1; i>=0; i--) {
-		if (card->modules[i])
-			vgsm_module_destroy(card->modules[i]);
-	}
 
 	return err;
 }
