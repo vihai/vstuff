@@ -2056,9 +2056,13 @@ static int vgsm_write(
 		return 0;
 	}
 
-	if (frame->subclass != AST_FORMAT_ALAW &&
-	    frame->subclass != AST_FORMAT_ULAW &&
-	    frame->subclass != AST_FORMAT_SLINEAR) {
+	int sample_size;
+	if (frame->subclass == AST_FORMAT_ALAW ||
+	    frame->subclass == AST_FORMAT_ULAW)
+		sample_size = sizeof(__u8);
+	else if (frame->subclass == AST_FORMAT_SLINEAR)
+		sample_size = sizeof(__s16);
+	else {
 		ast_log(LOG_WARNING,
 			"Cannot handle frames in %d format\n",
 			frame->subclass);
@@ -2070,23 +2074,6 @@ static int vgsm_write(
 //			"Attempting to write on unconnected channel\n");
 		return 0;
 	}
-
-#if 0
-struct timeval tv;
-gettimeofday(&tv, NULL);
-unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
-	t/1000000.0,
-	*(__u8 *)(frame->data + 0),
-	*(__u8 *)(frame->data + 1),
-	*(__u8 *)(frame->data + 2),
-	*(__u8 *)(frame->data + 3),
-	*(__u8 *)(frame->data + 4),
-	*(__u8 *)(frame->data + 5),
-	*(__u8 *)(frame->data + 6),
-	*(__u8 *)(frame->data + 7),
-	frame->datalen);
-#endif
 
         int len = frame->datalen;
 	__u8 *buf = frame->data;
@@ -2100,24 +2087,55 @@ ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 						strerror(errno));
 	}
 
+	pressure = pressure / sample_size;
+
+#if 0
+struct timeval tv;
+gettimeofday(&tv, NULL);
+unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %3d %d %d %d\n",
+	t/1000000.0,
+	*(__u8 *)(frame->data + 0),
+	*(__u8 *)(frame->data + 1),
+	*(__u8 *)(frame->data + 2),
+	*(__u8 *)(frame->data + 3),
+	*(__u8 *)(frame->data + 4),
+	*(__u8 *)(frame->data + 5),
+	*(__u8 *)(frame->data + 6),
+	*(__u8 *)(frame->data + 7),
+	frame->datalen,
+	pressure,
+	frame->samples, frame->offset);
+#endif
+
 	if (pressure < FIFO_JITTBUFF_LOW) {
 		int diff = (FIFO_JITTBUFF_LOW - pressure);
-		buf = alloca(len + diff);
-		memset(buf, 0x2a, diff);
-		memcpy(buf + diff, frame->data, len);
-		len += diff;
+		int diff_octs = diff * sample_size;
+
+		buf = alloca(len + diff_octs);
+
+		if (frame->subclass == AST_FORMAT_SLINEAR)
+			memset(buf, 0x00, diff_octs);
+		else
+			memset(buf, 0x2a, diff_octs);
+
+		memcpy(buf + diff_octs, frame->data, len);
+		len += diff_octs;
 
 		vgsm_debug_jitbuf("TX under low-mark: added %d samples\n",
 				diff);
 	}
 
 	if (pressure > FIFO_JITTBUFF_HIGH && len > 0) {
+		int drop = min(len, (pressure - FIFO_JITTBUFF_HIGH) *
+							sample_size);
+
 		vgsm_debug_jitbuf(
 			"TX %d over high-mark: dropped %d samples\n",
 			pressure - FIFO_JITTBUFF_HIGH,
-			min(len, pressure - FIFO_JITTBUFF_HIGH));
+			drop);
 
-		len = max(0, len - (pressure - FIFO_JITTBUFF_HIGH));
+		len = max(0, len - drop);
 	}
 
 	if (write(vgsm_chan->up_fd, buf, len) < 0) {
