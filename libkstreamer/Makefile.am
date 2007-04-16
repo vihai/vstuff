@@ -49,7 +49,7 @@ libkstreamer_la_CPPFLAGS= \
 	-I$(top_builddir)/libskb/		\
 	-I$(top_builddir)/modules/include/
 
-CLEANFILES = pd_grammar.c pd_grammar.h pd_grammar.out
+CLEANFILES = pd_grammar.c pd_grammar.h pd_grammar.out libkstreamer_la-pd_grammar.lo
 EXTRA_DIST = pd_grammar.lem
 
 BUILT_SOURCES = pd_grammar.c
@@ -57,10 +57,11 @@ BUILT_SOURCES = pd_grammar.c
 pd_grammar.c pd_grammar.h: pd_grammar.lem
 	../tools/lemon pd_grammar.lem
 
-pd_grammar.$(OBJEXT): pd_grammar.c
-	$(CC) -c pd_grammar.c -o $@ $(libkstreamer_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+libkstreamer_la-pd_grammar.lo: pd_grammar.c
+	if $(LIBTOOL) --mode=compile --tag=CC $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libkstreamer_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libkstreamer_la-pd_grammar.lo -MD -MP -MF "$(DEPDIR)/libkstreamer_la-pd_grammar.Tpo" -c -o libkstreamer_la-pd_grammar.lo `test -f 'pd_grammar.c' || echo '$(srcdir)/'`pd_grammar.c; \
+	then mv -f "$(DEPDIR)/libkstreamer_la-pd_grammar.Tpo" "$(DEPDIR)/libkstreamer_la-pd_grammar.Plo"; else rm -f "$(DEPDIR)/libkstreamer_la-pd_grammar.Tpo"; exit 1; fi
 
-libkstreamer_la_LIBADD = pd_grammar.o
+libkstreamer_la_LIBADD = libkstreamer_la-pd_grammar.lo
 
 libkstreamer_la_LDFLAGS = -module -avoid-version -no-undefined
 
