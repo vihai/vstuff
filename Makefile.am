@@ -24,6 +24,7 @@ EXTRA_DIST =					\
 	modules/include/kernel_config.h.in	\
 	modules/include/linux/lapd.h		\
 	modules/include/linux/vgsm.h		\
+	modules/include/linux/vgsm2.h		\
 	modules/include/linux/kstreamer/*.h	\
 	modules/include/linux/visdn/*.h		\
 	docs/*					\

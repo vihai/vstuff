@@ -58,7 +58,7 @@ pd_grammar.c pd_grammar.h: pd_grammar.lem
 	../tools/lemon pd_grammar.lem
 
 pd_grammar.$(OBJEXT): pd_grammar.c
-	$(CC) -c pd_grammar.c -o $@ $(libkstreamer_la_CPPFLAGS)
+	$(CC) -c pd_grammar.c -o $@ $(libkstreamer_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 
 libkstreamer_la_LIBADD = pd_grammar.o
 

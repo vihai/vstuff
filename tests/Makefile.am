@@ -60,6 +60,7 @@ dsptest_CPPFLAGS=
 
 vgsm2test_SOURCES = vgsm2test.c
 vgsm2test_CPPFLAGS =
+vgsm2test_INCLUDES = longtime.h
 vgsm2test_LDADD = -lncurses -lform
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
