@@ -14,6 +14,8 @@ bin_PROGRAMS = vgsm2test vgsm_stress sniffer ksmonitor traffic dsptest # jitter 
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
 
+nobase_include_HEADERS = longtime.h
+
 sniffer_SOURCES = sniffer.c
 sniffer_LDADD = \
 	-lpthread	\
@@ -60,7 +62,6 @@ dsptest_CPPFLAGS=
 
 vgsm2test_SOURCES = vgsm2test.c
 vgsm2test_CPPFLAGS =
-vgsm2test_INCLUDES = longtime.h
 vgsm2test_LDADD = -lncurses -lform
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall

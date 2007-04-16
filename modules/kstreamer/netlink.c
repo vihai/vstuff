@@ -506,7 +506,7 @@ int ks_netlink_modinit(void)
 	}
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, ks_netlink_rcv);
 #else
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, 0,

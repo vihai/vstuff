@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include <linux/delay.h>
 #include <linux/workqueue.h>
+#include <linux/kref.h>
 
 #include <linux/kstreamer/dynattr.h>
 

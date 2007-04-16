@@ -186,7 +186,7 @@ static int ks_pipeline_broadcast_netlink_notification(
 	NETLINK_CB(skb).pid = 0;
 	NETLINK_CB(skb).dst_pid = 0;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	NETLINK_CB(skb).dst_groups = (1 << KS_NETLINK_GROUP_TOPOLOGY);
 #else
 	NETLINK_CB(skb).dst_group = KS_NETLINK_GROUP_TOPOLOGY;

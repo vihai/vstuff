@@ -22,8 +22,6 @@
 #include <linux/serial_reg.h>
 #include <linux/serial_core.h>
 #include <linux/serial.h>
-#include <linux/nmi.h>
-#include <linux/mutex.h>
 #include <linux/version.h>
 
 #include <asm/io.h>
@@ -676,7 +674,7 @@ static struct uart_ops vgsm_uart_ops = {
 	.ioctl		= vgsm_uart_ioctl,
 };
 
-static DEFINE_MUTEX(serial_mutex);
+static DECLARE_MUTEX(serial_mutex);
 
 struct vgsm_uart *vgsm_uart_create(
 	struct vgsm_uart *uart,

@@ -27,7 +27,7 @@
 
 
 struct list_head visdn_ports_list = LIST_HEAD_INIT(visdn_ports_list);
-DEFINE_RWLOCK(visdn_ports_list_lock);
+rwlock_t visdn_ports_list_lock = RW_LOCK_UNLOCKED;
 
 struct visdn_port *_visdn_port_search_by_id(int id)
 {
