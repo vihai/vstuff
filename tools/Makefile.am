@@ -14,4 +14,8 @@ sbin_PROGRAMS = lemon
 lemon_SOURCES = lemon.c
 lemon_CPPFLAGS=
 
+EXTRA_DIST = lempar.c
+
 AM_CFLAGS = -Wall
+
+dist-hook: lemon

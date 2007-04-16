@@ -1,7 +1,7 @@
 #
 # vstuff
 #
-# Copyright (C) 2006 Daniele Orlandi
+# Copyright (C) 2006-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -37,6 +37,7 @@ nobase_include_HEADERS = \
 	xact.h		\
 	req.h		\
 	router.h	\
+	netlink.h	\
 	util.h		\
 	logging.h	\
 	pd_grammar.h	\
