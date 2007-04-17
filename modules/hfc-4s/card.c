@@ -12,7 +12,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -541,16 +541,32 @@ int hfc_card_sysfs_create_files(
 	struct hfc_card *card)
 {
 	struct device_attribute **attr = hfc_card_attributes;
+	int err;
 
 	while(*attr) {
-		device_create_file(
+		err = device_create_file(
 			&card->pci_dev->dev,
 			*attr);
+
+		if (err < 0)
+			goto err_create_file;
 
 		attr++;
 	}
 
 	return 0;
+
+err_create_file:
+
+	while(*attr != *hfc_card_attributes) {
+		device_remove_file(
+			&card->pci_dev->dev,
+			*attr);
+
+		attr--;
+	}
+
+	return err;
 }
 
 void hfc_card_sysfs_delete_files(
@@ -797,7 +813,7 @@ static inline void hfc_handle_timer_interrupt(struct hfc_card *card)
 
 static inline void hfc_handle_state_interrupt(struct hfc_st_port *port)
 {
-	schedule_work(&port->state_change_work);
+	schedule_delayed_work(&port->state_change_work, 0);
 }
 
 static inline void hfc_handle_fifo_block_interrupt(
@@ -848,7 +864,11 @@ static inline void hfc_handle_fifo_block_interrupt(
  *
  */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
 static irqreturn_t hfc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+#else
+static irqreturn_t hfc_interrupt(int irq, void *dev_id)
+#endif
 {
 	struct hfc_card *card = dev_id;
 

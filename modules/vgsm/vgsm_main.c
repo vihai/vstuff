@@ -12,7 +12,7 @@
  *
  */
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -135,7 +135,7 @@ ssize_t __kfifo_put_user(
 
 static int vgsm_tty_write(
 	struct tty_struct *tty,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
 	int from_user,
 #endif
 	const unsigned char *buf,
@@ -145,7 +145,7 @@ static int vgsm_tty_write(
 	struct vgsm_card *card = module->card;
 	int copied_bytes = 0;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
 	if (from_user) {
 		copied_bytes = __kfifo_put_user(module->tx.fifo,
 					(unsigned char *)buf, count);
@@ -282,6 +282,37 @@ err_copy_from_user:
 
 	return err;
 }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+unsigned long wait_for_completion_timeout(
+	struct completion *x, unsigned long timeout)
+{
+	might_sleep();
+
+	spin_lock_irq(&x->wait.lock);
+	if (!x->done) {
+		DECLARE_WAITQUEUE(wait, current);
+
+		wait.flags |= WQ_FLAG_EXCLUSIVE;
+		__add_wait_queue_tail(&x->wait, &wait);
+		do {
+			__set_current_state(TASK_UNINTERRUPTIBLE);
+			spin_unlock_irq(&x->wait.lock);
+			timeout = schedule_timeout(timeout);
+			spin_lock_irq(&x->wait.lock);
+			if (!timeout) {
+				__remove_wait_queue(&x->wait, &wait);
+				goto out;
+			}
+		} while (!x->done);
+		__remove_wait_queue(&x->wait, &wait);
+	}
+	x->done--;
+out:
+	spin_unlock_irq(&x->wait.lock);
+	return timeout;
+}
+#endif
 
 static int vgsm_tty_do_power_get(
 	struct vgsm_module *module,
@@ -507,9 +538,15 @@ static int vgsm_tty_ioctl(
 	return -ENOIOCTLCMD;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void vgsm_tty_set_termios(
 	struct tty_struct *tty,
-	struct termios * old)
+	struct termios *old)
+#else
+static void vgsm_tty_set_termios(
+	struct tty_struct *tty,
+	struct ktermios *old)
+#endif
 {
 }
 
@@ -630,9 +667,11 @@ static int __init vgsm_init(void)
 		goto err_pci_register_driver;
 
 #ifdef DEBUG_CODE
-	driver_create_file(
+	err = driver_create_file(
 		&vgsm_driver.driver,
 		&driver_attr_debug_level);
+	if (err < 0)
+		goto err_create_file_debug_level;
 #endif
 
 	vgsm_msg(KERN_INFO, vgsm_DRIVER_DESCR " loaded\n");
@@ -643,6 +682,7 @@ static int __init vgsm_init(void)
 	driver_remove_file(
 		&vgsm_driver.driver,
 		&driver_attr_debug_level);
+err_create_file_debug_level:
 #endif
 
 	pci_unregister_driver(&vgsm_driver);

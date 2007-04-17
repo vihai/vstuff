@@ -27,7 +27,7 @@
 struct kset ks_nodes_kset;
 
 struct list_head ks_nodes_list = LIST_HEAD_INIT(ks_nodes_list);
-DEFINE_RWLOCK(ks_nodes_list_lock);
+rwlock_t ks_nodes_list_lock = RW_LOCK_UNLOCKED;
 
 struct ks_node *_ks_node_search_by_id(int id)
 {
@@ -246,7 +246,10 @@ static int ks_node_netlink_notification(
 	}
 
 	NETLINK_CB(skb).pid = 0;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	NETLINK_CB(skb).dst_pid = pid;
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	NETLINK_CB(skb).dst_groups = pid ? 0 : (1 << KS_NETLINK_GROUP_TOPOLOGY);

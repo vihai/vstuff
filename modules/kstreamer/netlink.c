@@ -469,7 +469,11 @@ static void ks_run_backlog(void)
 		ks_netlink_rcv_skb(skb);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void ks_netlink_rcv_work_func(void *data)
+#else
+static void ks_netlink_rcv_work_func(struct work_struct *work)
+#endif
 {
 	struct sk_buff *skb;
 
@@ -484,7 +488,11 @@ static void ks_netlink_rcv_work_func(void *data)
 
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func, NULL);
+#else
+static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func);
+#endif
 
 static void ks_netlink_rcv(struct sock *sk, int len)
 {

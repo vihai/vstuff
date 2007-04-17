@@ -144,7 +144,10 @@ static int ks_dynattr_netlink_notification(
 	}
 
 	NETLINK_CB(skb).pid = 0;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	NETLINK_CB(skb).dst_pid = pid;
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	NETLINK_CB(skb).dst_groups = pid ? 0 : (1 << KS_NETLINK_GROUP_TOPOLOGY);

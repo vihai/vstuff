@@ -156,8 +156,8 @@ static void vnd_chan_d_rx_release(struct ks_chan *ks_chan)
 
 static int vnd_chan_d_rx_open(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice =
-		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
 	vnd_debug_nd(netdevice, 3, "vnd_chan_d_rx_open()\n");
 
@@ -166,8 +166,8 @@ static int vnd_chan_d_rx_open(struct ks_chan *ks_chan)
 
 static void vnd_chan_d_rx_close(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice =
-		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
 	vnd_debug_nd(netdevice, 3, "vnd_chan_d_rx_close()\n");
 }
@@ -212,8 +212,8 @@ static int vnd_chan_d_rx_connect(struct ks_chan *ks_chan)
 
 static void vnd_chan_d_rx_disconnect(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice =
-		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_d_rx);
 
 	vnd_debug_nd(netdevice, 2, "disconnected\n");
 
@@ -538,8 +538,8 @@ static void vnd_chan_e_rx_release(struct ks_chan *ks_chan)
 
 static int vnd_chan_e_rx_open(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice =
-		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
 	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_open()\n");
 
@@ -548,8 +548,8 @@ static int vnd_chan_e_rx_open(struct ks_chan *ks_chan)
 
 static void vnd_chan_e_rx_close(struct ks_chan *ks_chan)
 {
-	struct vnd_netdevice *netdevice =
-		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
+//	struct vnd_netdevice *netdevice =
+//		container_of(ks_chan, struct vnd_netdevice, ks_chan_e_rx);
 
 	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_close()\n");
 }
@@ -871,7 +871,7 @@ static void vnd_netdev_set_multicast_list(
 	struct vnd_netdevice *netdevice = netdev->priv;
 
 	vnd_netdevice_get(netdevice);
-	if (!schedule_work(&netdevice->promiscuity_change_work))
+	if (!schedule_delayed_work(&netdevice->promiscuity_change_work, 0))
 		vnd_netdevice_put(netdevice);
 }
 
@@ -882,9 +882,18 @@ static void vnd_netdev_set_multicast_list(
    This function is a little racy but races shouldn't be much harmful
 */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void vnd_promiscuity_change_work(void *data)
 {
 	struct vnd_netdevice *netdevice = data;
+#else
+static void vnd_promiscuity_change_work(struct work_struct *work)
+{
+	struct vnd_netdevice *netdevice =
+		container_of((struct delayed_work *)work,
+				struct vnd_netdevice,
+				promiscuity_change_work);
+#endif
 	struct ks_pipeline *pipeline;
 
 	pipeline = netdevice->ks_chan_e_rx.pipeline;
@@ -1199,9 +1208,14 @@ static void vnd_netdevice_init(
 
 	/*****************************************/
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	INIT_WORK(&netdevice->promiscuity_change_work,
 		vnd_promiscuity_change_work,
 		netdevice);
+#else
+	INIT_DELAYED_WORK(&netdevice->promiscuity_change_work,
+		vnd_promiscuity_change_work);
+#endif
 }
 
 static struct vnd_netdevice *vnd_netdevice_alloc(const char *name)

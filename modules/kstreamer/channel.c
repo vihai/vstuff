@@ -32,7 +32,7 @@
 struct kset ks_chans_kset;
 
 struct list_head ks_chans_list = LIST_HEAD_INIT(ks_chans_list);
-DEFINE_RWLOCK(ks_chans_list_lock);
+rwlock_t ks_chans_list_lock = RW_LOCK_UNLOCKED;
 
 struct ks_chan *_ks_chan_search_by_id(int id)
 {
@@ -349,7 +349,10 @@ static int ks_chan_netlink_broadcast_notification(
 	}
 
 	NETLINK_CB(skb).pid = 0;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	NETLINK_CB(skb).dst_pid = 0;
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	NETLINK_CB(skb).dst_groups = (1 << KS_NETLINK_GROUP_TOPOLOGY);

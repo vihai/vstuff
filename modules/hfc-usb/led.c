@@ -12,7 +12,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/pci.h>
 
 #include "card.h"

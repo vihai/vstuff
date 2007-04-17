@@ -12,7 +12,7 @@
  *
  */
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -534,9 +534,11 @@ printk(KERN_DEBUG "Received ACK from module %d\n\n", module->id);
 	}
 }
 
-static irqreturn_t vgsm_interrupt(int irq,
-	void *dev_id,
-	struct pt_regs *regs)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
+static irqreturn_t vgsm_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+#else
+static irqreturn_t vgsm_interrupt(int irq, void *dev_id)
+#endif
 {
 	struct vgsm_card *card = dev_id;
 	u8 int0stat;

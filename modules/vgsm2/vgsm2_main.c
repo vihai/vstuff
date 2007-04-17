@@ -10,7 +10,7 @@
  *
  */
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -174,9 +174,11 @@ static int __init vgsm_init(void)
 		goto err_pci_register_driver;
 
 #ifdef DEBUG_CODE
-	driver_create_file(
+	err = driver_create_file(
 		&vgsm_driver.driver,
 		&driver_attr_debug_level);
+	if (err < 0)
+		goto err_create_file_debug_level;
 #endif
 
 	vgsm_msg(KERN_INFO, vgsm_DRIVER_DESCR " loaded\n");
@@ -187,6 +189,7 @@ static int __init vgsm_init(void)
 	driver_remove_file(
 		&vgsm_driver.driver,
 		&driver_attr_debug_level);
+err_create_file_debug_level:
 #endif
 
 	pci_unregister_driver(&vgsm_driver);

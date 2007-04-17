@@ -74,7 +74,11 @@ struct vnd_netdevice
 
 	struct net_device_stats stats;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	struct work_struct promiscuity_change_work;
+#else
+	struct delayed_work promiscuity_change_work;
+#endif
 
 	u32 last_crc;
 };

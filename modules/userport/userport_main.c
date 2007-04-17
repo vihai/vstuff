@@ -17,6 +17,7 @@
 #include <linux/kdev_t.h>
 #include <linux/device.h>
 #include <linux/list.h>
+#include <linux/poll.h>
 
 #include <linux/kstreamer/kstreamer.h>
 #include <linux/kstreamer/node.h>
@@ -769,7 +770,7 @@ static ssize_t ksup_cdev_read(
 		if (!skb)
 			return 0;
 
-		copied = min(count, skb->len);
+		copied = min((unsigned int)count, skb->len);
 
 		if (copy_to_user(buf, skb->data, copied)) {
 			kfree_skb(skb);
@@ -986,9 +987,15 @@ static int ksup_cdev_ioctl(
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static unsigned int ksup_cdev_poll(
 	struct file *file,
 	poll_table *wait)
+#else
+static unsigned int ksup_cdev_poll(
+	struct file *file,
+	struct poll_table_struct *wait)
+#endif
 {
 	struct ksup_chan *chan = file->private_data;
 

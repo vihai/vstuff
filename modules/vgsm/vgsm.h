@@ -59,6 +59,7 @@ enum vgsm_codec_parameter
 
 #ifdef __KERNEL__
 
+#include <linux/version.h>
 #include <linux/spinlock.h>
 
 #define vgsm_DRIVER_NAME "vgsm-pci"
@@ -98,6 +99,11 @@ extern struct list_head vgsm_cards_list;
 extern spinlock_t vgsm_cards_list_lock;
 
 extern struct tty_driver *vgsm_tty_driver;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+unsigned long wait_for_completion_timeout(
+	struct completion *x, unsigned long timeout);
+#endif
 
 #endif
 

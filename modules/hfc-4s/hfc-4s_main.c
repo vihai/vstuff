@@ -12,7 +12,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -301,6 +301,8 @@ static int __init hfc_init_module(void)
 	err = driver_create_file(
 		&hfc_driver.driver,
 		&driver_attr_debug_level);
+	if (err < 0)
+		goto err_create_file_debug_level;
 #endif
 
 	return 0;
@@ -309,6 +311,7 @@ static int __init hfc_init_module(void)
 	driver_remove_file(
 		&hfc_driver.driver,
 		&driver_attr_debug_level);
+err_create_file_debug_level:
 #endif
 err_pci_register_driver:
 	ks_dynattr_unregister(hfc_octet_reverser_class);

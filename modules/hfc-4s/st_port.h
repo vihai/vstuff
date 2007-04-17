@@ -56,7 +56,11 @@ struct hfc_st_port
 
 	struct hfc_led *led;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	struct work_struct state_change_work;
+#else
+	struct delayed_work state_change_work;
+#endif
 
 	struct visdn_port visdn_port;
 };

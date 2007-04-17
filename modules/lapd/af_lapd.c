@@ -1,7 +1,7 @@
 /*
  * vISDN LAPD/q.921 protocol implementation
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -14,7 +14,7 @@
 #define SOCK_DEBUGGING
 #endif
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/module.h>
 #include <linux/termios.h>
 #include <linux/tcp.h>
@@ -1923,11 +1923,23 @@ struct packet_type lapd_packet_type = {
 	.func		= lapd_rcv,
 };
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void lapd_watchdog(void *data);
+#else
+static void lapd_watchdog(struct work_struct *work);
+#endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 DECLARE_WORK(lapd_watchdog_work, lapd_watchdog, NULL);
+#else
+DECLARE_DELAYED_WORK(lapd_watchdog_work, lapd_watchdog);
+#endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void lapd_watchdog(void *data)
+#else
+static void lapd_watchdog(struct work_struct *work)
+#endif
 {
 	lapd_ntme_audit();
 
@@ -1969,7 +1981,7 @@ static int __init lapd_init(void)
 
 	lapd_proc_init();
 
-	schedule_work(&lapd_watchdog_work);
+	schedule_delayed_work(&lapd_watchdog_work, 0);
 
 	return 0;
 

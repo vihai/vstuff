@@ -612,9 +612,19 @@ static void hfc_st_port_timer_t3(unsigned long data)
 /* TODO: use a tasklet here, or better, add a queue of state changes, otherwise
  * we may miss state changes.
  */
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void hfc_st_port_state_change_work(void *data)
 {
 	struct hfc_st_port *port = data;
+#else
+static void hfc_st_port_state_change_work(struct work_struct *work)
+{
+	struct hfc_st_port *port =
+		container_of(container_of(work, struct delayed_work, work),
+			struct hfc_st_port, state_change_work);
+#endif
+
 	struct hfc_card *card = port->card;
 	u8 rd_sta;
 	u8 old_state;
@@ -766,9 +776,14 @@ struct hfc_st_port *hfc_st_port_create(
 	port->card = card;
 	port->id = id;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	INIT_WORK(&port->state_change_work,
 		hfc_st_port_state_change_work,
 		port);
+#else
+	INIT_DELAYED_WORK(&port->state_change_work,
+		hfc_st_port_state_change_work);
+#endif
 
 	init_timer(&port->timer_t1);
 	port->timer_t1.function = hfc_st_port_timer_t1;

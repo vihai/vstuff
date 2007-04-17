@@ -1,7 +1,7 @@
 /*
  * VoiSmart vDSP board driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,7 +10,7 @@
  *
  */
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -22,6 +22,7 @@
 #include <linux/ctype.h>
 #include <linux/fs.h>
 #include <linux/bitops.h>
+#include <linux/version.h>
 
 #include "vdsp.h"
 #include "card.h"
@@ -38,9 +39,11 @@ static int vdsp_initialize_hw(struct vdsp_card *card)
 	return 0;
 }
 
-static irqreturn_t vdsp_interrupt(int irq,
-	void *dev_id,
-	struct pt_regs *regs)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)
+static irqreturn_t vdsp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+#else
+static irqreturn_t vdsp_interrupt(int irq, void *dev_id)
+#endif
 {
 	struct vdsp_card *card = dev_id;
 

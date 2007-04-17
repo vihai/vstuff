@@ -12,7 +12,7 @@
  *
  */
 
-#include <linux/config.h>
+#include <linux/autoconf.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -443,7 +443,7 @@ static void vgsm_module_fifo_write(
 	}
 }
 
-static ssize_t vgsm_module_tx_chan_push_raw(
+static int vgsm_module_tx_chan_push_raw(
 	struct ks_chan *ks_chan,
 	struct ks_streamframe *sf)
 {

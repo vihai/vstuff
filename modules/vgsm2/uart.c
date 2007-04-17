@@ -84,7 +84,7 @@ static void vgsm_uart_stop_tx(struct uart_port *port)
 	}
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 static void vgsm_uart_stop_tx_compat(
 	struct uart_port *port, unsigned int tty_stop)
 {
@@ -92,7 +92,7 @@ static void vgsm_uart_stop_tx_compat(
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 static void vgsm_uart_start_tx(struct uart_port *port, unsigned int tty_start)
 #else
 static void vgsm_uart_start_tx(struct uart_port *port)
@@ -494,8 +494,17 @@ static void vgsm_uart_shutdown(struct uart_port *port)
 	uart_in(up, UART_RX);
 }
 
-static void vgsm_uart_set_termios(struct uart_port *port, struct termios *termios,
-		       struct termios *old)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+static void vgsm_uart_set_termios(
+	struct uart_port *port,
+	struct termios *termios,
+	struct termios *old)
+#else
+static void vgsm_uart_set_termios(
+	struct uart_port *port,
+	struct ktermios *termios,
+	struct ktermios *old)
+#endif
 {
 	struct vgsm_uart *up =
 		container_of(port, struct vgsm_uart, port);
@@ -654,7 +663,7 @@ static struct uart_ops vgsm_uart_ops = {
 	.tx_empty	= vgsm_uart_tx_empty,
 	.set_mctrl	= vgsm_uart_set_mctrl,
 	.get_mctrl	= vgsm_uart_get_mctrl,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	.stop_tx	= vgsm_uart_stop_tx_compat,
 #else
 	.stop_tx	= vgsm_uart_stop_tx,
@@ -673,8 +682,6 @@ static struct uart_ops vgsm_uart_ops = {
 	.verify_port	= vgsm_uart_verify_port,
 	.ioctl		= vgsm_uart_ioctl,
 };
-
-static DECLARE_MUTEX(serial_mutex);
 
 struct vgsm_uart *vgsm_uart_create(
 	struct vgsm_uart *uart,
@@ -721,16 +728,12 @@ int vgsm_uart_register(struct vgsm_uart *uart)
 {
 	int err;
 
-	mutex_lock(&serial_mutex);
 	err = uart_add_one_port(uart->driver, &uart->port);
-	mutex_unlock(&serial_mutex);
 
 	return err;
 }
 
 void vgsm_uart_unregister(struct vgsm_uart *uart)
 {
-	mutex_lock(&serial_mutex);
 	uart_remove_one_port(uart->driver, &uart->port);
-	mutex_unlock(&serial_mutex);
 }

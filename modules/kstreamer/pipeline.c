@@ -83,6 +83,7 @@ static int _ks_pipeline_new_id(void)
 	}
 }
 
+#if 0
 static const char *ks_pipeline_status_to_text(
 	enum ks_pipeline_status status)
 {
@@ -99,6 +100,7 @@ static const char *ks_pipeline_status_to_text(
 
 	return "*INVALID*";
 }
+#endif
 
 static void ks_pipeline_set_status(
 	struct ks_pipeline *pipeline,
@@ -184,7 +186,10 @@ static int ks_pipeline_broadcast_netlink_notification(
 	}
 
 	NETLINK_CB(skb).pid = 0;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 	NETLINK_CB(skb).dst_pid = 0;
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	NETLINK_CB(skb).dst_groups = (1 << KS_NETLINK_GROUP_TOPOLOGY);
