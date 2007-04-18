@@ -411,6 +411,8 @@ int ks_chan_cmd_get(
 			NLM_F_ACK | NLM_F_MULTI);
 
 	list_for_each_entry(chan, &ks_chans_kset.list, kobj.entry) {
+
+retry:
 		ks_xact_need_skb(xact);
 		if (!xact->out_skb)
 			return -ENOMEM;
@@ -420,8 +422,10 @@ int ks_chan_cmd_get(
 					xact->pid,
 					0,
 					NLM_F_MULTI);
-		if (err < 0)
+		if (err < 0) {
 			ks_xact_flush(xact);
+			goto retry;
+		}
 	}
 
 	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);

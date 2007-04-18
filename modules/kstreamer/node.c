@@ -280,6 +280,8 @@ void ks_node_netlink_dump(struct ks_xact *xact)
 	int err;
 
 	list_for_each_entry(node, &ks_nodes_kset.list, kobj.entry) {
+
+retry:
 		ks_xact_need_skb(xact);
 		if (!xact->out_skb)
 			return;
@@ -289,8 +291,10 @@ void ks_node_netlink_dump(struct ks_xact *xact)
 					xact->pid,
 					0,
 					NLM_F_MULTI);
-		if (err < 0)
+		if (err < 0) {
 			ks_xact_flush(xact);
+			goto retry;
+		}
 	}
 
 	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);

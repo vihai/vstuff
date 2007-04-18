@@ -183,6 +183,8 @@ void ks_dynattr_netlink_dump(struct ks_xact *xact)
 		struct hlist_node *t;
 
 		hlist_for_each_entry(dynattr, t, &ks_dynattrs_hash[i], node) {
+
+retry:
 			ks_xact_need_skb(xact);
 			if (!xact->out_skb)
 				return;
@@ -193,8 +195,10 @@ void ks_dynattr_netlink_dump(struct ks_xact *xact)
 						xact->pid,
 						0,
 						NLM_F_MULTI);
-			if (err < 0)
+			if (err < 0) {
 				ks_xact_flush(xact);
+				goto retry;
+			}
 		}
 	}
 
