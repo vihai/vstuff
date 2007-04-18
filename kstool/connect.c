@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005-2006 Daniele Orlandi
+ * Copyright (C) 2005-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -163,7 +163,7 @@ static int do_connect(const char *pipeline_descr)
 		return 1;
 	}
 
-	ks_pd_dump(pd);
+	ks_pd_dump(pd, glob.conn, KS_LOG_DEBUG);
 
 	struct ks_pipeline *pipeline;
 	pipeline = ks_pipeline_alloc();
@@ -230,8 +230,14 @@ static int do_connect(const char *pipeline_descr)
 			} else
 				dst_node = ep2;
 
-			ks_pipeline_autoroute(pipeline, glob.conn,
+			err = ks_pipeline_autoroute(pipeline, glob.conn,
 				src_node, dst_node);
+			if (err < 0) {
+				fprintf(stderr,
+					"Cannot autoroute channels: %s\n",
+					strerror(-err));
+				return 1;
+			}
 
 			if (pd_chan->parameters) {
 				err = apply_parameters_to_autorouted(
@@ -256,7 +262,7 @@ static int do_connect(const char *pipeline_descr)
 		}
 	}
 
-	ks_pipeline_dump(pipeline, glob.conn);
+	ks_pipeline_dump(pipeline, glob.conn, KS_LOG_INFO);
 
 	pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
 

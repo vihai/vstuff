@@ -280,14 +280,16 @@ void ks_node_update_from_nlmsg(
 
 void ks_node_dump(
 	struct ks_node *node,
-	struct ks_conn *conn)
+	struct ks_conn *conn,
+	int level)
 {
-	report_conn(conn, LOG_DEBUG, "  ID    : 0x%08x\n", node->id);
-	report_conn(conn, LOG_DEBUG, "  Path  : '%s'\n", node->path);
+	report_conn(conn, level, "  ID    : 0x%08x\n", node->id);
+	report_conn(conn, level, "  Path  : '%s'\n", node->path);
 
 	int i;
 	for (i=0; i<node->dynattrs_cnt; i++) {
-		report_conn(conn, LOG_DEBUG, "  Dynattr: %s\n", node->dynattrs[i]->name);
+		report_conn(conn, level,
+			"  Dynattr: %s\n", node->dynattrs[i]->name);
 	}
 }
 

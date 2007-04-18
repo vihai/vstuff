@@ -47,7 +47,7 @@ void ks_router_run(
 
 		hlist_for_each_entry(node, t, &conn->nodes_hash[i], node) {
 			node->router_cost = INT_MAX;
-			node->router_done = FALSE;
+			node->router_visited = FALSE;
 			node->router_prev = NULL;
 			node->router_prev_thru = NULL;
 		}
@@ -65,7 +65,7 @@ void ks_router_run(
 
 			hlist_for_each_entry(node, t, &conn->nodes_hash[i],
 									node) {
-				if (!node->router_done &&
+				if (!node->router_visited &&
 				    (!min_cost_node ||
 				    node->router_cost <
 						min_cost_node->router_cost))
@@ -79,14 +79,12 @@ void ks_router_run(
 		if (min_cost_node == to)
 			break;
 
-#ifdef DIJ_DEBUG
-		report_conn(conn, LOG_DEBUG,
+		debug_conn(conn, debug_router,
 			"Min cost (%d) node = %s\n",
 			min_cost_node->router_cost,
 			min_cost_node->path);
-#endif
 
-		min_cost_node->router_done = TRUE;
+		min_cost_node->router_visited = TRUE;
 
 		/* For each arch exiting from node 'min_cost_node' */
 
@@ -103,8 +101,7 @@ void ks_router_run(
 				if (arch->pipeline)
 					continue;
 
-#ifdef DIJ_DEBUG
-				report_conn(conn, LOG_DEBUG,
+				debug_conn(conn, debug_router,
 					"    Arch (%s) from"
 					" node (%s) to node (%s),"
 					" cost = %d\n",
@@ -112,7 +109,6 @@ void ks_router_run(
 					arch->from->path,
 					arch->to->path,
 					arch->cost);
-#endif
 
 				if (arch->cost != INT_MAX &&
 				    min_cost_node->router_cost != INT_MAX &&
@@ -127,13 +123,11 @@ void ks_router_run(
 					arch->to->router_prev = min_cost_node;
 					arch->to->router_prev_thru = arch;
 
-#ifdef DIJ_DEBUG
-					report_conn(conn, LOG_DEBUG,
+					debug_conn(conn, debug_router,
 						"        => Relaxing node (%s)"
 						" new cost = %d\n",
 						arch->to->path,
 						arch->to->router_cost);
-#endif
 			}
 		}
 		}

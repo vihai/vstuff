@@ -330,17 +330,18 @@ void ks_chan_update_from_nlmsg(
 
 void ks_chan_dump(
 	struct ks_chan *chan,
-	struct ks_conn *conn)
+	struct ks_conn *conn,
+	int level)
 {
-	report_conn(conn, LOG_DEBUG, "  ID    : 0x%08x\n", chan->id);
-	report_conn(conn, LOG_DEBUG, "  Path  : '%s'\n", chan->path);
+	report_conn(conn, level, "  ID    : 0x%08x\n", chan->id);
+	report_conn(conn, level, "  Path  : '%s'\n", chan->path);
 
 	if (chan->from)
-		report_conn(conn, LOG_DEBUG, "  From  : 0x%08x (%s)\n",
+		report_conn(conn, level, "  From  : 0x%08x (%s)\n",
 			chan->from->id, chan->from->path);
 
 	if (chan->to)
-		report_conn(conn, LOG_DEBUG, "  To    : 0x%08x (%s)\n",
+		report_conn(conn, level, "  To    : 0x%08x (%s)\n",
 			chan->to->id, chan->to->path);
 
 	struct ks_dynattr_instance *dynattr;
@@ -353,7 +354,7 @@ void ks_chan_dump(
 			sprintf((char *)text + i * 2,
 				"%02x", *(dynattr->payload + i));
 
-		report_conn(conn, LOG_DEBUG,
+		report_conn(conn, level,
 			"  Dynattr: %s (%s)\n",
 			dynattr->dynattr->name,
 			text);

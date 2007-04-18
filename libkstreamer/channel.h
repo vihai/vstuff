@@ -72,7 +72,8 @@ struct ks_chan *ks_chan_get_by_token(
 
 void ks_chan_dump(
 	struct ks_chan *chan,
-	struct ks_conn *conn);
+	struct ks_conn *conn,
+	int level);
 
 struct ks_req *ks_chan_queue_update(
 	struct ks_chan *chan,

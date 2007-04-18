@@ -61,7 +61,8 @@ struct ks_pipeline *ks_pipeline_get_by_string(
 
 void ks_pipeline_dump(
 	struct ks_pipeline *pipeline,
-	struct ks_conn *conn);
+	struct ks_conn *conn,
+	int level);
 
 int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn);
 int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn);

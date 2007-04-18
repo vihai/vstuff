@@ -217,9 +217,10 @@ struct ks_dynattr *ks_dynattr_create_from_nlmsg(
 
 void ks_dynattr_dump(
 	struct ks_dynattr *dynattr,
-	struct ks_conn *conn)
+	struct ks_conn *conn,
+	int level)
 {
-	report_conn(conn, LOG_DEBUG,
+	report_conn(conn, level,
 		"  ID    : 0x%08x\n"
 		"  Name  : '%s'\n",
 		dynattr->id,

@@ -60,7 +60,8 @@ struct ks_dynattr *ks_dynattr_get_by_name(
 
 void ks_dynattr_dump(
 	struct ks_dynattr *dynattr,
-	struct ks_conn *conn);
+	struct ks_conn *conn,
+	int level);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 

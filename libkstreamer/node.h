@@ -41,7 +41,7 @@ struct ks_node
 	int dynattrs_cnt;
 
 	int router_cost;
-	int router_done;
+	int router_visited;
 
 	struct ks_node *router_prev;
 	struct ks_chan *router_prev_thru;
@@ -63,7 +63,8 @@ struct ks_node *ks_node_get_by_token(
 
 void ks_node_dump(
 	struct ks_node *node,
-	struct ks_conn *conn);
+	struct ks_conn *conn,
+	int level);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 

@@ -72,7 +72,8 @@ struct ks_conn
 	int seqnum;
 	__u32 pid;
 
-	int dump_packets;
+	int debug_netlink;
+	int debug_router;
 	int debug_state;
 
 	pthread_t protocol_thread;
@@ -109,6 +110,16 @@ int ks_conn_sync(struct ks_conn *conn);
 		"ks: "							\
 		format,							\
 		## arg)
+
+#define debug_conn(conn, flag, format, arg...)				\
+	do {								\
+		if ((conn)->flag) {					\
+			(conn)->report_func(LOG_DEBUG,			\
+				"ks: "					\
+				format,					\
+				## arg);				\
+		}							\
+	} while(0)
 
 void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
 

@@ -22,6 +22,7 @@
 
 #include "util.h"
 #include "logging.h"
+#include "conn.h"
 
 #include "pd_grammar.h"
 #include "pd_parser.h"
@@ -210,7 +211,7 @@ void ks_pd_token_destroy(struct ks_pd_token *token)
 	free(token);
 }
 
-void ks_pd_dump(struct ks_pd *pd)
+void ks_pd_dump(struct ks_pd *pd, struct ks_conn *conn, int level)
 {
 	if (pd->failed) {
 		printf("FAILED RESULT!\n");
@@ -219,24 +220,29 @@ void ks_pd_dump(struct ks_pd *pd)
 
 	struct ks_pd_pipeline *pipeline = pd->pipeline;
 
-	printf("EP1 = %s\n", pipeline->ep1->text);
+	report_conn(conn, level,
+		"EP1 = %s\n", pipeline->ep1->text);
 
 	struct ks_pd_channel *chan;
 	list_for_each_entry(chan, &pipeline->channels->list, node) {
 
-		printf("CHAN = %s\n", chan->name->text);
+		report_conn(conn, level,
+			"CHAN = %s\n", chan->name->text);
 
 		if (!chan->parameters)
 			continue;
 
 		struct ks_pd_parameter *par;
 		list_for_each_entry(par, &chan->parameters->list, node) {
-			printf("  PAR = %s=%s\n",
+			report_conn(conn, level,
+				"  PAR = %s=%s\n",
 				par->name->text,
 				par->value->text);
 		}
 	}
-	printf("EP2 = %s\n", pipeline->ep2->text);
+
+	report_conn(conn, level,
+		"EP2 = %s\n", pipeline->ep2->text);
 }
 
 struct ks_pd *ks_pd_parse(const char *str)

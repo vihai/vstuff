@@ -214,11 +214,12 @@ static const char *ks_pipeline_status_to_string(
 
 void ks_pipeline_dump(
 	struct ks_pipeline *pipeline,
-	struct ks_conn *conn)
+	struct ks_conn *conn,
+	int level)
 {
-	report_conn(conn, LOG_DEBUG, "  ID    : 0x%08x\n", pipeline->id);
-	report_conn(conn, LOG_DEBUG, "  Path  : '%s'\n", pipeline->path);
-	report_conn(conn, LOG_DEBUG, "  Status: %s\n",
+	report_conn(conn, level, "  ID    : 0x%08x\n", pipeline->id);
+	report_conn(conn, level, "  Path  : '%s'\n", pipeline->path);
+	report_conn(conn, level, "  Status: %s\n",
 		ks_pipeline_status_to_string(pipeline->status));
 
 	int i;
@@ -226,14 +227,14 @@ void ks_pipeline_dump(
 
 		struct ks_chan *chan = pipeline->chans[i];
 
-		report_conn(conn, LOG_DEBUG, "%s =>(%s)=> %s\n",
+		report_conn(conn, level, "%s =>(%s)=> %s\n",
 			chan->from->path,
 			chan->path,
 			chan->to->path);
 
 		struct ks_dynattr_instance *dynattr;
 		list_for_each_entry(dynattr, &chan->dynattrs, node) {
-			report_conn(conn, LOG_DEBUG,
+			report_conn(conn, level,
 				"  DynAttr: %s\n", dynattr->dynattr->name);
 		}
 	}
@@ -655,7 +656,7 @@ int ks_pipeline_update_chans(
 
 		struct ks_chan *chan = pipeline->chans[i];
 
-		ks_chan_dump(chan, conn);
+		ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		struct ks_req *req;
 		req = ks_chan_queue_update(chan, xact);

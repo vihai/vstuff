@@ -195,7 +195,7 @@ int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	msg.msg_iovlen = 1;
 	msg.msg_flags = 0;
 
-	if (conn->dump_packets)
+	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
 			"\n"
 			">>>--------- Sending packet len = %d -------->>>\n",
@@ -204,14 +204,14 @@ int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 	struct nlmsghdr *nlh;
 	int len_left = skb->len;
 
-	if (conn->dump_packets) {
+	if (conn->debug_netlink) {
 		for (nlh = skb->data;
 		     NLMSG_OK(nlh, len_left);
 		     nlh = NLMSG_NEXT(nlh, len_left))
 			ks_dump_nlh(conn, nlh);
 	}
 
-	if (conn->dump_packets)
+	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
 			">>>------------------------------------------<<<\n");
 
@@ -383,7 +383,7 @@ static void ks_netlink_receive_msg(
 	report_conn(conn, LOG_DEBUG, "%s\n", text);
 #endif
 
-	if (conn->dump_packets)
+	if (conn->debug_netlink)
 		ks_dump_nlh(conn, nlh);
 
 	if (src_sa->nl_groups)
@@ -418,7 +418,7 @@ void ks_netlink_receive(struct ks_conn *conn)
 		return;
 	}
 
-	if (conn->dump_packets)
+	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG, "\n"
 			"<<<--------- Received packet len = %d groups = %d"
 			"--------<<<\n"
@@ -432,7 +432,7 @@ void ks_netlink_receive(struct ks_conn *conn)
 	     nlh = NLMSG_NEXT(nlh, len_left))
 		ks_netlink_receive_msg(conn, nlh, &src_sa);
 
-	if (conn->dump_packets)
+	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
 			"<<<-------------------------------------------<<<\n");
 }

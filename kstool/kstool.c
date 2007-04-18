@@ -72,6 +72,23 @@ void print_usage(const char *fmt, ...)
 	exit(1);
 }
 
+static void ks_report_func(int level, const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+
+	switch(level) {
+//	case KS_LOG_DEBUG:
+//        break;
+
+	default:
+		vfprintf(stderr, format, ap);
+	break;
+	}
+
+	va_end(ap);
+}
+
 int main(int argc, char *argv[])
 {
 	const char *command = NULL;
@@ -96,8 +113,6 @@ int main(int argc, char *argv[])
 		{ "verbose", no_argument, 0, 0 },
 		{ }
 	};
-
-	setvbuf(stdout, (char *)NULL, _IONBF, 0);
 
 	for(;;) {
 		c = getopt_long(argc, argv, "v", options,
@@ -130,6 +145,10 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Cannot initialize kstreamer library\n");
 		return 1;
 	}
+
+	glob.conn->report_func = ks_report_func;
+	glob.conn->debug_netlink = TRUE;
+	glob.conn->debug_router = TRUE;
 
 	int err;
 	err = ks_conn_establish(glob.conn);

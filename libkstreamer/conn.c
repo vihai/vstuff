@@ -121,14 +121,14 @@ static void ks_report_default(int level, const char *format, ...)
 	va_list ap;
 	va_start(ap, format);
 
-/*	switch(level) {
+	switch(level) {
 	case KS_LOG_DEBUG:
         break;
 
-	default:*/
+	default:
 		vfprintf(stderr, format, ap);
-//	break;
-//	}
+	break;
+	}
 
 	va_end(ap);
 }
@@ -155,7 +155,8 @@ struct ks_conn *ks_conn_create(void)
 	conn->topology_state = KS_TOPOLOGY_STATE_NULL;
 	conn->state = KS_CONN_STATE_NULL;
 
-	conn->dump_packets = FALSE;
+	conn->debug_netlink = FALSE;
+	conn->debug_router = FALSE;
 	conn->debug_state = FALSE;
 
 	conn->seqnum = 1234;
@@ -465,8 +466,7 @@ void ks_conn_set_state(
 	struct ks_conn *conn,
 	enum ks_conn_state state)
 {
-	if (conn->debug_state)
-		report_conn(conn, LOG_DEBUG,
+	debug_conn(conn, debug_state,
 			"Conn state changed from %s to %s\n",
 			ks_conn_state_to_text(conn->state),
 			ks_conn_state_to_text(state));

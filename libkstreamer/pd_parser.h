@@ -69,7 +69,9 @@ struct ks_pd
 };
 
 struct ks_pd *ks_pd_parse(const char *str);
-void ks_pd_dump(struct ks_pd *pd);
+
+struct ks_conn;
+void ks_pd_dump(struct ks_pd *pd, struct ks_conn *conn, int level);
 
 void ks_pd_token_destroy(struct ks_pd_token *token);
 

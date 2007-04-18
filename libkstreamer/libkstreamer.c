@@ -51,8 +51,8 @@ void ks_topology_update(
 			// FIXME
 		}
 
-		if (conn->dump_packets)
-			ks_dynattr_dump(dynattr, conn);
+		if (conn->debug_netlink)
+			ks_dynattr_dump(dynattr, conn, LOG_DEBUG);
 
 		ks_dynattr_add(dynattr, conn);
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
@@ -69,8 +69,8 @@ void ks_topology_update(
 			break;
 		}
 
-		if (conn->dump_packets)
-			ks_dynattr_dump(dynattr, conn);
+		if (conn->debug_netlink)
+			ks_dynattr_dump(dynattr, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
 		ks_dynattr_del(dynattr);
@@ -89,8 +89,8 @@ void ks_topology_update(
 
 		ks_dynattr_update_from_nlmsg(dynattr, conn, nlh);
 
-		if (conn->dump_packets)
-			ks_dynattr_dump(dynattr, conn);
+		if (conn->debug_netlink)
+			ks_dynattr_dump(dynattr, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
 
@@ -106,8 +106,8 @@ void ks_topology_update(
 			// FIXME
 		}
 
-		if (conn->dump_packets)
-			ks_node_dump(node, conn);
+		if (conn->debug_netlink)
+			ks_node_dump(node, conn, LOG_DEBUG);
 
 		ks_node_add(node, conn);
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
@@ -124,8 +124,8 @@ void ks_topology_update(
 			break;
 		}
 
-		if (conn->dump_packets)
-			ks_node_dump(node, conn);
+		if (conn->debug_netlink)
+			ks_node_dump(node, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 		ks_node_del(node);
@@ -144,8 +144,8 @@ void ks_topology_update(
 
 		ks_node_update_from_nlmsg(node, conn, nlh);
 
-		if (conn->dump_packets)
-			ks_node_dump(node, conn);
+		if (conn->debug_netlink)
+			ks_node_dump(node, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 
@@ -161,8 +161,8 @@ void ks_topology_update(
 			// FIXME
 		}
 
-		if (conn->dump_packets)
-			ks_chan_dump(chan, conn);
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		ks_chan_add(chan, conn); // CHECK FOR DUPEs
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
@@ -179,8 +179,8 @@ void ks_topology_update(
 			break;
 		}
 
-		if (conn->dump_packets)
-			ks_chan_dump(chan, conn);
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 		ks_chan_del(chan);
@@ -199,8 +199,8 @@ void ks_topology_update(
 
 		ks_chan_update_from_nlmsg(chan, conn, nlh);
 
-		if (conn->dump_packets)
-			ks_chan_dump(chan, conn);
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 
@@ -215,8 +215,8 @@ void ks_topology_update(
 			// FIXME
 		}
 
-		if (conn->dump_packets)
-			ks_pipeline_dump(pipeline, conn);
+		if (conn->debug_netlink)
+			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
 
 		ks_pipeline_add(pipeline, conn);
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
@@ -233,8 +233,8 @@ void ks_topology_update(
 			break;
 		}
 
-		if (conn->dump_packets)
-			ks_pipeline_dump(pipeline, conn);
+		if (conn->debug_netlink)
+			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
 		ks_pipeline_del(pipeline);
@@ -253,8 +253,8 @@ void ks_topology_update(
 
 		ks_pipeline_update_from_nlmsg(pipeline, conn, nlh);
 
-		if (conn->dump_packets)
-			ks_pipeline_dump(pipeline, conn);
+		if (conn->debug_netlink)
+			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
 
