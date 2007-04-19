@@ -608,7 +608,11 @@ struct vgsm_module *vgsm_module_create(
 	int id,
 	const char *name)
 {
-	BUG_ON(!module); /* Dynamic allocation not implemented */
+	BUG_ON(module); /* Status allocation not implemented */
+
+	module = kmalloc(sizeof(*module), GFP_KERNEL);
+	if (!module)
+		goto err_kmalloc;
 
 	memset(module, 0, sizeof(*module));
 
@@ -634,6 +638,11 @@ struct vgsm_module *vgsm_module_create(
 	vgsm_module_tx_create(&module->tx, module);
 
 	return module;
+
+	kfree(module);
+err_kmalloc:
+
+	return NULL;
 }
 
 struct vgsm_module *vgsm_module_alloc(
