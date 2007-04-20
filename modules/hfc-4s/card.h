@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -60,6 +60,7 @@ struct hfc_card_config
 	u8 clk_dly_te;
 	u8 sampl_comp_nt;
 	u8 sampl_comp_te;
+	u8 ports_map;
 };
 
 struct hfc_card

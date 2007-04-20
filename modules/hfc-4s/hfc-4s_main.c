@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -46,6 +46,10 @@ int debug_level = 0;
 #define PCI_SUBDEVICE_ID_CCD_BERONET	0xb520
 #endif
 
+#ifndef PCI_SUBDEVICE_ID_CCD_BERONET2
+#define PCI_SUBDEVICE_ID_CCD_BERONET2	0xb566
+#endif
+
 #ifndef PCI_SUBDEVICE_ID_CCD_JUNGHANNS
 #define PCI_SUBDEVICE_ID_CCD_JUNGHANNS	0xb550
 #endif
@@ -84,7 +88,8 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.clk_dly_te = 0xe,
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			 }
+			.ports_map = 0xff,
+			}
 	},
 	{
 		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
@@ -99,7 +104,24 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.clk_dly_te = 0xe,
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			 }
+			.ports_map = 0xff,
+			}
+	},
+	{
+		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
+		PCI_VENDOR_ID_CCD, PCI_SUBDEVICE_ID_CCD_BERONET2, 0, 0,
+		(unsigned long)&(struct hfc_card_config) {
+			.double_clock = 0,
+			.quartz_49 = 1,
+			.ram_size = 32,
+			.pwm0 = 0x1e,
+			.pwm1 = 0x1e,
+			.clk_dly_nt = 0xc,
+			.clk_dly_te = 0xe,
+			.sampl_comp_nt = 0x6,
+			.sampl_comp_te = 0x6,
+			.ports_map = 0x05,
+			}
 	},
 	{
 		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
@@ -115,7 +137,8 @@ static struct pci_device_id hfc_pci_ids[] = {
 			// Implement LED scheme
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			 }
+			.ports_map = 0xff,
+			}
 	},
 	{
 		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
@@ -130,7 +153,8 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.clk_dly_te = 0xf,
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			 }
+			.ports_map = 0xff,
+			}
 	},
 	{
 		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_4S,
@@ -145,7 +169,8 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.clk_dly_te = 0xf,
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			 }
+			.ports_map = 0xff,
+			}
 	},
 	{
 		PCI_VENDOR_ID_CCD, PCI_DEVICE_ID_CCD_HFC_8S,
@@ -160,7 +185,8 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.clk_dly_te = 0xe,
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			 }
+			.ports_map = 0xff,
+			}
 	},
 	{0,}
 };
@@ -223,10 +249,10 @@ static void __devexit hfc_remove(struct pci_dev *pci_dev)
 }
 
 static struct pci_driver hfc_driver = {
-	.name     = hfc_DRIVER_NAME,
-	.id_table = hfc_pci_ids,
-	.probe    = hfc_probe,
-	.remove   = hfc_remove,
+	.name		= hfc_DRIVER_NAME,
+	.id_table	= hfc_pci_ids,
+	.probe		= hfc_probe,
+	.remove		= hfc_remove,
 };
 
 

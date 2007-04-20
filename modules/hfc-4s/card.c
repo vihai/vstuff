@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -772,10 +772,12 @@ void hfc_card_initialize_hw(struct hfc_card *card)
 	*/
 
 	for (i=0; i<card->num_st_ports; i++) {
-		hfc_st_port_select(card->st_ports[i]);
-		hfc_st_port_update_st_ctrl0(card->st_ports[i]);
-		hfc_st_port_update_st_ctrl2(card->st_ports[i]);
-		hfc_st_port_update_st_clk_dly(card->st_ports[i]);
+		if (card->st_ports[i]) {
+			hfc_st_port_select(card->st_ports[i]);
+			hfc_st_port_update_st_ctrl0(card->st_ports[i]);
+			hfc_st_port_update_st_ctrl2(card->st_ports[i]);
+			hfc_st_port_update_st_clk_dly(card->st_ports[i]);
+		}
 	}
 
 	if (card->num_st_ports == 4) {
@@ -904,7 +906,8 @@ static irqreturn_t hfc_interrupt(int irq, void *dev_id)
 	if (irq_sci) {
 		int i;
 		for (i=0; i<card->num_st_ports; i++) {
-			if (irq_sci & (1 << card->st_ports[i]->id)) {
+			if (card->st_ports[i] &&
+			    (irq_sci & (1 << card->st_ports[i]->id))) {
 				hfc_handle_state_interrupt(card->st_ports[i]);
 			}
 		}
@@ -974,9 +977,11 @@ int hfc_card_register(struct hfc_card *card)
 		goto err_pcm_port_register;
 
 	for (i=0; i<card->num_st_ports; i++) {
-		err = hfc_st_port_register(card->st_ports[i]);
-		if (err < 0)
-			goto err_st_port_register;
+		if (card->st_ports[i]) {
+			err = hfc_st_port_register(card->st_ports[i]);
+			if (err < 0)
+				goto err_st_port_register;
+		}
 	}
 
 	err = hfc_card_sysfs_create_files(card);
@@ -994,7 +999,8 @@ int hfc_card_register(struct hfc_card *card)
 	hfc_card_sysfs_delete_files(card);
 err_card_sysfs_create_files:
 	for (i=card->num_st_ports - 1; i>=0; i--)
-		hfc_st_port_unregister(card->st_ports[i]);
+		if (card->st_ports[i])
+			hfc_st_port_unregister(card->st_ports[i]);
 err_st_port_register:
 	hfc_pcm_port_unregister(&card->pcm_port);
 err_pcm_port_register:
@@ -1022,7 +1028,8 @@ void hfc_card_unregister(struct hfc_card *card)
 
 printk(KERN_DEBUG "hfc_card_unregister()\n");
 	for (i=card->num_st_ports - 1; i>=0; i--)
-		hfc_st_port_unregister(card->st_ports[i]);
+		if (card->st_ports[i])
+			hfc_st_port_unregister(card->st_ports[i]);
 
 	hfc_pcm_port_unregister(&card->pcm_port);
 	hfc_sys_port_unregister(&card->sys_port);
@@ -1099,15 +1106,20 @@ int hfc_card_probe(struct hfc_card *card)
 	for (i=0; i<card->num_st_ports; i++) {
 		char portid[10];
 
-		snprintf(portid, sizeof(portid), "st%d", i);
-		card->st_ports[i] = hfc_st_port_create(NULL, card, portid, i);
-		if (!card->st_ports[i]) {
-			err = -ENOMEM;
-			goto err_st_port_create;
-		}
+		if (card->config->ports_map & (1 << i)) {
+
+			snprintf(portid, sizeof(portid), "st%d", i);
+
+			card->st_ports[i] = hfc_st_port_create(NULL, card,
+								portid, i);
+			if (!card->st_ports[i]) {
+				err = -ENOMEM;
+				goto err_st_port_create;
+			}
 		
-		if (card->num_st_ports == 4)
-			card->st_ports[i]->led = &card->leds[i];
+			if (card->num_st_ports == 4)
+				card->st_ports[i]->led = &card->leds[i];
+		}
 	}
 
 	revision = hfc_R_CHIP_RV_V_CHIP_RV(hfc_inb(card, hfc_R_CHIP_RV));
@@ -1195,8 +1207,10 @@ void hfc_card_destroy(struct hfc_card *card)
 	hfc_sys_port_destroy(&card->sys_port);
 
 	for (i=0; i<card->num_st_ports; i++) {
-		hfc_st_port_destroy(card->st_ports[i]);
-		card->st_ports[i] = NULL;
+		if (card->st_ports[i]) {
+			hfc_st_port_destroy(card->st_ports[i]);
+			card->st_ports[i] = NULL;
+		}
 	}
 
 	hfc_card_put(card);
