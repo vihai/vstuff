@@ -2,11 +2,11 @@
 TOP SECRET ------ DEVELOPERS ONLY ------- TOP SECRET
 
 So, if you're reading this document, you must be a developer, or some kind of
-super hacker who managed to checkout from the (public) Arch repository.
+super hacker who managed to checkout from the (public) bazaar repository.
 
 This package is based on the GNU Autotools, automake, autoconf, libtools, etc.
 
-The tree stored within the Arch archive needs to be "bootstrapped" in order to
+The tree stored within the bazaar archive needs to be "bootstrapped" in order to
 be "configure"able and compilable. The bootstrap script "bootstrap" will run
 aclocal, automake, autoconf, etc. in order to prepare the tree.
 
@@ -16,16 +16,23 @@ Release process
 
 This is a checklist to remind me the steps to release a new version:
 
-tla changes
-(check and commit, eventually)
-tla tag --setup $(tla logs -f | tail -n 1) visdn--release--VERSION
+For each tree in which there may there be some uncommitted changes do a
+"bzr status", check and eventually commit.
 
-Switch on nabla
+- Create a new branch for the release train:
 
-tla get visdn--release--VERSION
+VERSION=X.Y
+TREE=sftp://vstuff@repo.visdn.org/~/vstuff/release-$VERSION
+
+bzr branch vstuff-devel $TREE
+
+- Checkout locally the newly created branch
+
+bzr checkout $TREE vstuff-release-$VERSION
+
+cd vstuff-release-$VERSION
 vim configure.ac
-tla commit --seal -s "Version set and tree sealed"
-tla cacherev visdn--release--VERSION--base-0
+bzr commit -m "Version set"
 
 ./bootstrap
 ./configure
