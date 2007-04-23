@@ -109,22 +109,37 @@ int main(int argc, char *argv[])
 	list_add_tail(&module_pipeline_start.node, &glob.modules);
 	list_add_tail(&module_pipeline_stop.node, &glob.modules);
 
+	glob.conn = ks_conn_create();
+	if (!glob.conn) {
+		fprintf(stderr, "Cannot initialize kstreamer library\n");
+		return 1;
+	}
+
 	struct option options[] = {
 		{ "verbose", no_argument, 0, 0 },
+		{ "debug-netlink", no_argument, 0, 0 },
+		{ "debug-router", no_argument, 0, 0 },
 		{ }
 	};
 
 	for(;;) {
-		c = getopt_long(argc, argv, "v", options,
-			&optidx);
+		struct option no_opt ={ "", no_argument, 0, 0 };
+		struct option *opt;
+
+		c = getopt_long(argc, argv, "v", options, &optidx);
 
 		if (c == -1)
 			break;
 
-		if (c == 'v' || (c == 0 &&
-		    !strcmp(options[optidx].name, "verbose"))) {
+		opt = c ? &no_opt : &options[optidx];
+
+		if (c == 'v' || !strcmp(opt->name, "verbose"))
 			glob.verbosity++;
-		} else {
+		else if (!strcmp(opt->name, "debug-netlink"))
+			glob.conn->debug_netlink = TRUE;
+		else if (!strcmp(opt->name, "debug-router"))
+			glob.conn->debug_router = TRUE;
+		else {
 			if (c) {
 				print_usage("Unknow option '%c'\n", c);
 			} else {
@@ -140,15 +155,7 @@ int main(int argc, char *argv[])
 
 	command = argv[optind];
 
-	glob.conn = ks_conn_create();
-	if (!glob.conn) {
-		fprintf(stderr, "Cannot initialize kstreamer library\n");
-		return 1;
-	}
-
 	glob.conn->report_func = ks_report_func;
-	glob.conn->debug_netlink = TRUE;
-	glob.conn->debug_router = TRUE;
 
 	int err;
 	err = ks_conn_establish(glob.conn);
