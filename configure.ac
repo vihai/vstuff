@@ -1,3 +1,14 @@
+#
+# vStuff main Makefile
+#
+# Copyright (C) 2004-2007 Daniele Orlandi
+#
+# Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
+#
+# This program is free software and may be modified and distributed
+# under the terms and conditions of the GNU General Public License.
+#
+
 AC_PREREQ(2.59)
 AC_INIT(vstuff, head, daniele@orlandi.com)
 AC_CONFIG_AUX_DIR(config)
@@ -68,7 +79,7 @@ AC_ARG_WITH(
 	[kernel-build],
 	AC_HELP_STRING(
 		[--with-kernel-build=DIR],
-		[Specify kernel buildtree for external modules compilation]),
+		[Specify kernel build environment for external modules \								compilation]),
 	[kblddir=$withval],
 	[
 		if [[ -d "/lib/modules/`uname -r`/build" ]]; then
@@ -88,14 +99,14 @@ if [[ "$enable_kernel_modules" = "yes" -o \
 
 	if [[ ! -f "$kblddir/.config" ]]; then
 		AC_MSG_RESULT([failed!])
-		AC_MSG_ERROR([Kernel has not been configured \
+		AC_MSG_ERROR([Kernel build environment is missing .config \
 				(missing .config)])
 	fi
 
 	if [[ ! -f "$kblddir/include/linux/autoconf.h" ]]; then
 		AC_MSG_RESULT([failed!])
-		AC_MSG_ERROR([Kernel has not been compiled (missing \
-				include/linux/autoconf.h)])
+		AC_MSG_ERROR([Kernel build environment is missing \
+				include/linux/autoconf.h])
 	fi
 fi
 

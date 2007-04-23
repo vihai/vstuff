@@ -1,7 +1,7 @@
 #
 # vStuff main Makefile
 #
-# Copyright (C) 2004-2006-2007 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
