@@ -1,7 +1,7 @@
 #
 # vstuff
 #
-# Copyright (C) 2004-2006 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -18,7 +18,8 @@ kstool_SOURCES = \
 	pipeline_open.c		\
 	pipeline_close.c	\
 	pipeline_start.c	\
-	pipeline_stop.c
+	pipeline_stop.c		\
+	monitor.c
 
 kstool_LDADD = \
         -lpthread					\

@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-bin_PROGRAMS = vgsm2test vgsm_stress sniffer ksmonitor traffic dsptest # jitter  listener
+bin_PROGRAMS = vgsm2test vgsm_stress sniffer traffic dsptest # jitter  listener
 
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
@@ -22,17 +22,6 @@ sniffer_LDADD = \
 	$(top_srcdir)/libskb/libskb.la	\
 	$(top_srcdir)/libkstreamer/libkstreamer.la
 sniffer_CPPFLAGS=\
-	-I$(top_srcdir)/include/		\
-	-I$(top_srcdir)/modules/include/	\
-	-I$(top_srcdir)/libskb/			\
-	-I$(top_srcdir)/libkstreamer/
-
-ksmonitor_SOURCES = ksmonitor.c
-ksmonitor_LDADD = \
-	-lpthread	\
-	$(top_srcdir)/libskb/libskb.la	\
-	$(top_srcdir)/libkstreamer/libkstreamer.la
-ksmonitor_CPPFLAGS=\
 	-I$(top_srcdir)/include/		\
 	-I$(top_srcdir)/modules/include/	\
 	-I$(top_srcdir)/libskb/			\

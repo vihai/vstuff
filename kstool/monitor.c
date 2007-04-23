@@ -1,7 +1,7 @@
 /*
- * KStreamer streaming network topology monitor
+ * vISDN - Controlling program
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -11,48 +11,25 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <fcntl.h>
+#include <string.h>
 #include <assert.h>
-#include <getopt.h>
+#include <libgen.h>
+#include <signal.h>
 
-#include <sys/poll.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/signal.h>
-#include <linux/types.h>
-#include <linux/netlink.h>
+#include <dirent.h>
+#include <fcntl.h>
 
 #include <list.h>
 
 #include <libkstreamer.h>
 
-#define min(a,b) ((a) > (b) ? (b) : (a))
-
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-typedef unsigned char BOOL;
-#ifndef FALSE
-#define FALSE 0
-#endif
-
-#ifndef TRUE
-#define TRUE (!FALSE)
-#endif
-
-void print_usage(const char *progname)
-{
-	fprintf(stderr,
-"%s: \n"
-"	(--)\n"
-"\n",
-		progname);
-
-	exit(1);
-}
+#include "kstool.h"
+#include "monitor.h"
 
 BOOL have_to_exit = FALSE;
 
@@ -267,40 +244,34 @@ static void topology_event_handler_xml(
 	}
 }
 
-int main(int argc, char *argv[])
+static int handle_monitor(int optind)
 {
-	int err;
-
-	setvbuf(stdout, (char *)NULL, _IONBF, 0);
-	setvbuf(stderr, (char *)NULL, _IONBF, 0);
-
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 	signal(SIGQUIT, sig_handler);
 
-	struct ks_conn *conn;
-	conn = ks_conn_create();
-	if (!conn) {
-		fprintf(stderr, "Cannot initialize kstreamer library\n");
-		return 1;
-	}
+	glob.conn->topology_event_callback = topology_event_handler_xml;
 
-	//conn->dump_packets = TRUE;
-
-	err = ks_conn_establish(conn);
-	if (err < 0) {
-		fprintf(stderr, "Cannot connect kstreamer library\n");
-		return 1;
-	}
-
-	conn->topology_event_callback = topology_event_handler_xml;
-
-	ks_update_topology(conn);
+	ks_update_topology(glob.conn);
 
 	while(!have_to_exit)
 		sleep(3600);
 
-	ks_conn_destroy(conn);
-
 	return 0;
 }
+
+static void usage()
+{
+	fprintf(stderr,
+		"  monitor\n"
+		"\n"
+		"    Monitors kstreamer events and outputs them in XML-like"
+		"    format. An initial resync is also performed.\n");
+}
+
+struct module module_monitor =
+{
+	.cmd	= "monitor",
+	.do_it	= handle_monitor,
+	.usage	= usage,
+};

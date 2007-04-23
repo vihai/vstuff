@@ -38,6 +38,7 @@
 #include "pipeline_stop.h"
 #include "pipeline_open.h"
 #include "pipeline_close.h"
+#include "monitor.h"
 
 struct global_state glob;
 
@@ -108,6 +109,7 @@ int main(int argc, char *argv[])
 	list_add_tail(&module_pipeline_close.node, &glob.modules);
 	list_add_tail(&module_pipeline_start.node, &glob.modules);
 	list_add_tail(&module_pipeline_stop.node, &glob.modules);
+	list_add_tail(&module_monitor.node, &glob.modules);
 
 	glob.conn = ks_conn_create();
 	if (!glob.conn) {

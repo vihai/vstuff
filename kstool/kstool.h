@@ -26,6 +26,8 @@ typedef unsigned char BOOL;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+#define min(a,b) ((a) > (b) ? (b) : (a))
+
 struct global_state
 {
 	int argc;
