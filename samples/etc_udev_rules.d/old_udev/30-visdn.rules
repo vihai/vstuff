@@ -1,0 +1,2 @@
+KERNEL="ppp", NAME="visdn/%k" MODE="0660"
+KERNEL="netdev-control", NAME="visdn/%k" MODE="0660"

@@ -1,0 +1,1 @@
+KERNEL=="*", SUBSYSTEM=="kstreamer", NAME="ks/%k", GROUP="pbx", MODE="0660"

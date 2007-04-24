@@ -1,7 +1,7 @@
 #
 # vstuff
 #
-# Copyright (C) 2004-2006 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -9,6 +9,6 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-noinst_DATA = *
+noinst_DATA = * */*
 
 EXTRA_DIST = ${noinst_DATA}

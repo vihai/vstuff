@@ -1,6 +1,6 @@
 #! /bin/bash
 #
-# vGSM-II udev helper script
+# vGSM udev helper script
 #
 # Copyright (C) 2007 Daniele Orlandi
 #
@@ -13,7 +13,7 @@
 SYS_ROOT="/sys"
 BUS_TYPE=$PHYSDEVBUS
 BUS_LOCATION=$(basename "$PHYSDEVPATH")
-CONF_DIR="/etc/vgsm"
+CONF_DIR="/etc/vgsm/devices"
 
 SERIAL_NUMBER_FILE="$SYS_ROOT/$PHYSDEVPATH/serial_number"
 
@@ -21,8 +21,8 @@ if [ -f "$SERIAL_NUMBER_FILE" ]; then
 	SERIAL=$(<$SERIAL_NUMBER_FILE)
 fi
 
-CONF_FILE_LOC="$CONF_DIR/device-$BUS_TYPE-$BUS_LOCATION"
-CONF_FILE_SER="$CONF_DIR/device-serial-$SERIAL"
+CONF_FILE_LOC="$CONF_DIR/$BUS_TYPE-$BUS_LOCATION"
+CONF_FILE_SER="$CONF_DIR/serial-$SERIAL"
 
 if [ -f "$CONF_FILE_LOC" ]; then
 	CONF_FILE=$CONF_FILE_LOC

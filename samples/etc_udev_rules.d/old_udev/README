@@ -1,0 +1,6 @@
+
+These files contain rules to work around missing functionalities in udev before
+version 054.
+
+Please consider upgrading your udev as these rules are ugly hacks
+that may conflict with other device names.

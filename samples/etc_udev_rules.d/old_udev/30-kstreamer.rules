@@ -1,0 +1,3 @@
+KERNEL="userport_frame", NAME="ks/%k" MODE="0660"
+KERNEL="userport_stream", NAME="ks/%k" MODE="0660"
+

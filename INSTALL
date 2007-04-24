@@ -1,13 +1,16 @@
 Installation Instructions
 *************************
 
-Installing vISDN is not strightforward. I've made my best to keep it as
-self-contained and unintrusive as possible but, after all, this is a
-complete ISDN architecture which involves and hooks to many subsystems.
+This tree contains several subprojects. Configuration and building is common
+among the different subprojects while a specific install and configuration
+rocedure is present for each one.
 
--------------------------------------
+--------------------------------------
 Step 1: Configure the build system
--------------------------------------
+--------------------------------------
+
+Note: If you are working on a bzr-retrieved tree, please read the DEVELOPERS
+file in the root directory.
 
 cd into the untarred package tree and run ./configure
 
@@ -16,15 +19,15 @@ which introduce incompatible interface changes. Since they offer no way to
 know what changes have been introduced, if you're using that kernel you will
 probably need to add --with-kernel-have-sk-prot flag to configure invocation.
 
--------------------------------------
+--------------------------------------
 Step 2: Compile everything
--------------------------------------
+--------------------------------------
 
 Run "make" and check that everything gets compiled correctly.
 
--------------------------------------
-Step 3: Install
--------------------------------------
+--------------------------------------
+Step 3: Installation and configuration
+--------------------------------------
 
 Run "make install", if you "configure"d it correctly, kernel modules will
 be installed in the appropriate /lib/modules/ subdirectory, asterisk
@@ -41,30 +44,42 @@ ldconfig
 
 In order to update libraries cache
 
-udev
-----
 
-vISDN infrastructure and modules make use of several character devices
-which should be created in /dev.
-A udev ruleset is available as samples/30-visdn.rules, it should be
-installed in /etc/udev/rules.d or equivalent, before attempting to
-load the modules.
+3.1 kstreamer
+----------------------
 
-hotplug
--------
+kstreamer modules make use of character devices in /dev. In particular,
+ks-userport needs two character devices and application expects them to be
+found at /dev/ks/userport_stream and /dev/ks/userport_frame.
+
+To accomplish this, a udev rule must be installed in /etc/udev/rules.d
+
+In samples/etc_udev_rules.d/30-kstreamer.rules there is a sample ruleset file
+to create the devices in the appropriate places. Please adapt group and modes
+to your installation.
+
+Please note that if you are using udev older than 054 you will need to use
+special rules to work around some missing features in udev.
+
+
+3.2 vISDN
+----------------------
+
+As with kstreamer, some vISDN module (e.g. ppp) need to create devices in
+/dev, so, you need to install 30-visdn.rules
 
 Some distribution's (notably SuSE) net hotplug scripts may interfere
-with the initialization of vISDN, you may see the interfaces go
+with the initialization of vISDN. You may see the interfaces go
 down when you register them. I addedd an exception for visdn* interfaces
 in /etc/hotplug.d/net/50-ifup.hotplug to avoid it.
 
--------------------------------------
-Step 4: Configuration
--------------------------------------
 
-First of all you need to configure your hardware.
+3.2.1. Configuration
 
-You want to persistently identify the same board across reboots, however,
+The first step of vISDN configuration relates to how hardware cards get
+detected, named and configured at low-level.
+
+You will want to persistently identify the same board across reboots, however
 ISDN cards don't usually have a unique identificator, like the MAC address or
 a serial number. The only way to uniquely and persistently reference the cards
 is by using their PCI location. The PCI location is an identificator that
@@ -72,6 +87,10 @@ locates a PCI device amongs all the PCI buses connected to your host.
 
 Of course, if you move a card from one slot to another, its PCI location
 will change and you will have to update the configuration accordingly.
+
+Unfortunately a clear connection between the PCI location and the physical
+location is not always present. More than one PCI buses may be routed to the
+physical slots and the order is not necessarily respected.
 
 Find the PCI location of your ISDN card(s) using lspci:
 
@@ -85,12 +104,13 @@ Find the PCI location of your ISDN card(s) using lspci:
 
 The PCI location is the first sequence of digits, 0000:00:07.0 and 0000:00:09.0.
 
-Make /etc/visdn directory if missing and create one file for each PCI device.
-Name those files 'device-pci-PCILOCATION', so, in the former example you will
+Make /etc/visdn/devices directory if missing and create one file for each PCI
+device.
+Name those files 'pci-PCILOCATION', so, in the former example you will
 create two files:
 
-device-pci-0000:00:07.0
-device-pci-0000:00:09.0
+pci-0000:00:07.0
+pci-0000:00:09.0
 
 In samples/ there are two device configuration files to copy from; one is a
 sample for a HFC-S PCI A card, the other is for a HFC-4S card.
@@ -110,9 +130,7 @@ configuration files to be put in asterisk configuration directory. Edit
 them according to your configuration.
 
 
--------------------------------------
-Troubleshooting
--------------------------------------
+3.2.2. Troubleshooting
 
 --- TO BE WRITTEN ---
 
@@ -144,4 +162,63 @@ drwxr-xr-x   7 root root    0 Oct 19 21:37 st0
 -r--r--r--   1 root root 4096 Oct 19 21:40 subsystem_device
 -r--r--r--   1 root root 4096 Oct 19 21:40 subsystem_vendor
 -r--r--r--   1 root root 4096 Oct 19 21:40 vendor
+
+
+3.3 vGSM
+----------------------
+
+vGSM cards register several character devices, vGSM-I cards register one device
+for each ME while vGSM-II cards register three devices for each
+ME (ASC0, ASC1, MESIM) and one device for each SIM holder, thus, device naming
+becomes tricky.
+
+That is why a helper script lets you associate permanent names to devices. The
+script is located in samples/lib_udev/vgsm_helper 
+
+vGSM-I cards don't have a serial number programmed in the hardware so, the only
+reliable way to identify the card is through the PCI location.
+
+vGSM-II cards do have the serial number, so, it may be used to identify the card
+along with the PCI clocation.
+
+The PCI location is an identificator that locates a PCI device amongs all the
+PCI buses connected to your host.
+
+Of course, if you move a card from one slot to another, its PCI location
+will change and you will have to update the configuration accordingly.
+
+Unfortunately a clear connection between the PCI location and the physical
+location is not always present. More than one PCI buses may be routed to the
+physical slots and the order is not necessarily respected.
+
+Find the PCI location of your vGSM card(s) using lspci:
+
+# lspci
+[...]
+0000:00:0d.0 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+	(rev 01)
+[...]
+
+The PCI location is the first sequence of digits, in this example 0000:00:0d.0
+
+Make /etc/vgsm/devices directory if missing and create one file for each PCI
+device.
+Name those files 'pci-PCILOCATION', so, in the former example you will
+create one file:
+
+pci-0000:00:0d.0
+
+In samples/vgsm_device there are two device configuration files to copy from;
+one is a sample for a HFC-S PCI A card, the other is for a HFC-4S card.
+
+In /etc/asterisk (or wherever you have your Asterisk configuration files) you
+have to create these files:
+
+vgsm.conf
+vgsm_operators.conf
+vgsm_countries.conf
+
+In 'samples/etc_asterisk' you will find sample configuration files. Put them in
+Asterisk's configuration directoryu and edit them according to your
+configuration.
 
