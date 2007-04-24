@@ -682,7 +682,7 @@ int vgsm_module_register(struct vgsm_module *module)
 	int err;
 
 	tty_register_device(vgsm_tty_driver,
-			module->card->id * 4 + module->id,
+			module->card->id * 8 + module->id,
 			&module->card->pci_dev->dev);
 
 	/* Node is the object we are inheriting */
@@ -720,5 +720,5 @@ void vgsm_module_unregister(struct vgsm_module *module)
 	ks_node_unregister(&module->ks_node);
 
 	tty_unregister_device(vgsm_tty_driver,
-			module->card->id * 4 + module->id);
+			module->card->id * 8 + module->id);
 }

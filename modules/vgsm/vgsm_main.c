@@ -64,8 +64,8 @@ static int vgsm_tty_open(
 
 		spin_lock(&vgsm_cards_list_lock);
 		list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
-			if (card->id == tty->index / 4) {
-				module = card->modules[tty->index % 4];
+			if (card->id == tty->index / 8) {
+				module = card->modules[tty->index % 8];
 				break;
 			}
 		}
@@ -642,7 +642,7 @@ static int __init vgsm_init(void)
 
 	vgsm_tty_driver->owner = THIS_MODULE;
 	vgsm_tty_driver->driver_name = vgsm_DRIVER_NAME;
-	vgsm_tty_driver->name = "vgsm";
+	vgsm_tty_driver->name = "vgsm_me";
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
 	vgsm_tty_driver->devfs_name = "vgsm/";
 	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS ;
