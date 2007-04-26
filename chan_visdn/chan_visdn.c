@@ -260,7 +260,8 @@ static struct ast_channel *visdn_ast_chan_alloc(
 		snprintf(ast_chan->name, sizeof(ast_chan->name),
 			"VISDN/null");
 	}
-#else
+
+#elif ASTERISK_VERSION_NUM <= 10402
 	if (call) {
 		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
 			"VISDN/%s/%d.%c",
@@ -269,7 +270,27 @@ static struct ast_channel *visdn_ast_chan_alloc(
 			call->direction == Q931_CALL_DIRECTION_INBOUND ?
 					'I' : 'O');
 	} else {
-		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL, "VISDN/null");
+		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+							"VISDN/null");
+	}
+
+	if (!ast_chan) {
+		ast_log(LOG_WARNING, "Unable to allocate channel\n");
+		goto err_channel_alloc;
+	}
+
+#else
+	if (call) {
+		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+			NULL, NULL, NULL, 0,
+			"VISDN/%s/%d.%c",
+			call->intf->name,
+			call->call_reference,
+			call->direction == Q931_CALL_DIRECTION_INBOUND ?
+					'I' : 'O');
+	} else {
+		ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+					NULL, NULL, NULL, 0, "VISDN/null");
 	}
 
 	if (!ast_chan) {

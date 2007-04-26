@@ -179,8 +179,18 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 		"VGSM/%s/%d",
 		module ? module->name : "null",
 		line);
+#elif ASTERISK_VERSION_NUM < 10403
+	ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+				"VGSM/%s/%d",
+				module ? module->name : "null",
+				line);
+	if (!ast_chan) {
+		ast_log(LOG_WARNING, "Unable to allocate channel\n");
+		goto err_channel_alloc;
+	}
 #else
 	ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
+				NULL, NULL, NULL, 0,
 				"VGSM/%s/%d",
 				module ? module->name : "null",
 				line);
