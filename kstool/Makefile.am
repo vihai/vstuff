@@ -21,11 +21,6 @@ kstool_SOURCES = \
 	pipeline_stop.c		\
 	monitor.c
 
-kstool_LDADD = \
-        -lpthread					\
-        $(top_srcdir)/libskb/libskb.la			\
-        $(top_srcdir)/libkstreamer/libkstreamer.la
-
 noinst_HEADERS = \
 	kstool.h		\
 	connect.h		\
@@ -33,7 +28,13 @@ noinst_HEADERS = \
 	pipeline_open.h		\
 	pipeline_close.h	\
 	pipeline_start.h	\
-	pipeline_stop.h
+	pipeline_stop.h		\
+	monitor.h
+
+kstool_LDADD = \
+        -lpthread					\
+        $(top_srcdir)/libskb/libskb.la			\
+        $(top_srcdir)/libkstreamer/libkstreamer.la
 
 kstool_CPPFLAGS=\
 	-I$(top_srcdir)/include/		\
