@@ -173,7 +173,8 @@ ME (ASC0, ASC1, MESIM) and one device for each SIM holder, thus, device naming
 becomes tricky.
 
 That is why a helper script lets you associate permanent names to devices. The
-script is located in samples/lib_udev/vgsm_helper 
+script is located in samples/lib_udev/vgsm_helper and is referenced in
+30-vgsm.rules.
 
 vGSM-I cards don't have a serial number programmed in the hardware so, the only
 reliable way to identify the card is through the PCI location.
@@ -195,11 +196,11 @@ Find the PCI location of your vGSM card(s) using lspci:
 
 # lspci
 [...]
-0000:00:0d.0 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-	(rev 01)
+00:0d.0 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 [...]
 
-The PCI location is the first sequence of digits, in this example 0000:00:0d.0
+The PCI location is the first sequence of digits prepended by 0000:, in this
+example 0000:00:0d.0
 
 Make /etc/vgsm/devices directory if missing and create one file for each PCI
 device.
