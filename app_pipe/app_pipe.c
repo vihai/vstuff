@@ -158,6 +158,11 @@ static int handler_exec(struct ast_channel *chan, void *data)
 	int res=-1;
 	struct ast_frame *f;
 
+	ast_mutex_lock(&usecnt_lock);
+	usecnt++;
+	ast_mutex_unlock(&usecnt_lock);
+	ast_update_use_count();
+
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
 
@@ -175,8 +180,6 @@ static int handler_exec(struct ast_channel *chan, void *data)
 			break;
 
 		argv[argc++] = arg;
-
-ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 	}
 
 #if 0
@@ -193,7 +196,7 @@ ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 	pid_t pid = spawn_handler(chan, argv, argc, &rfd, &wfd, &efd);
 	if (pid < 0) {
 		ast_log(LOG_WARNING, "Failed to spawn handler\n");
-		return -1;
+		goto err_spawn_handler;
 	}
 
 	while(ast_waitfor(chan, -1) > -1) {
@@ -243,7 +246,7 @@ ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 				ast_log(LOG_WARNING,
 					"Failed to write frame to '%s': %s\n",
 					chan->name, strerror(errno));
-				return -1;
+				goto err_ast_write;
 			}
 		}
 
@@ -279,7 +282,17 @@ ast_log(LOG_NOTICE, "Arg %d = %s\n", argc, arg);
 		}
 	}
 
+	ast_mutex_lock(&usecnt_lock);
+	usecnt--;
+	ast_mutex_unlock(&usecnt_lock);
+	ast_update_use_count();
+
 	return res;
+
+err_ast_write:
+err_spawn_handler:
+
+	return -1;
 }
 
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
@@ -302,6 +315,15 @@ static int app_pipe_unload_module(void)
 }
 
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+
+int usecount(void)
+{
+	int res;
+	ast_mutex_lock(&vgsm.usecnt_lock);
+	res = vgsm.usecnt;
+	ast_mutex_unlock(&vgsm.usecnt_lock);
+	return res;
+}
 
 char *description(void)
 {
