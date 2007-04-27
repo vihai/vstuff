@@ -1,0 +1,26 @@
+# This is a sample configuration file for vGSM cards. The available parameters
+# are:
+#
+# name <cardname>
+#
+# The name will be prepended to devices in /dev/vgsm/
+# In this example, being bar the name, the devices will be named:
+#
+# /dev/vgsm/bar_me0
+# /dev/vgsm/bar_me1
+# /dev/vgsm/bar_me2
+# /dev/vgsm/bar_me3
+# /dev/vgsm/bar_mea0
+# /dev/vgsm/bar_mea1
+# /dev/vgsm/bar_mea2
+# /dev/vgsm/bar_mea3
+# /dev/vgsm/bar_mesim0
+# /dev/vgsm/bar_mesim1
+# /dev/vgsm/bar_mesim2
+# /dev/vgsm/bar_mesim3
+# /dev/vgsm/bar_sim0
+# /dev/vgsm/bar_sim1
+# /dev/vgsm/bar_sim2
+# /dev/vgsm/bar_sim3
+
+name bar

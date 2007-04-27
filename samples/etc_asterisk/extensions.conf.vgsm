@@ -1,0 +1,9 @@
+
+; Dialing out on a vGSM module is as_simple as:
+
+exten => _33.,1,Dial(VGSM/tim/${EXTEN})
+exten => _340.,1,Dial(VGSM/wind/${EXTEN})
+exten => _347.,1,Dial(VGSM/huntgroup:vodafone/${EXTEN})
+
+[vgsm_vodafone_in]
+exten => s,1,Dial(SIP/1234)

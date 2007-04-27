@@ -4,23 +4,23 @@
 # name <cardname>
 #
 # The name will be prepended to devices in /dev/vgsm/
-# In this example, being card0 the name, the devices will be named:
+# In this example, being foo the name, the devices will be named:
 #
-# /dev/vgsm/card0_me0
-# /dev/vgsm/card0_me1
-# /dev/vgsm/card0_me2
-# /dev/vgsm/card0_me3
-# /dev/vgsm/card0_mea0
-# /dev/vgsm/card0_mea1
-# /dev/vgsm/card0_mea2
-# /dev/vgsm/card0_mea3
-# /dev/vgsm/card0_mesim0
-# /dev/vgsm/card0_mesim1
-# /dev/vgsm/card0_mesim2
-# /dev/vgsm/card0_mesim3
-# /dev/vgsm/card0_sim0
-# /dev/vgsm/card0_sim1
-# /dev/vgsm/card0_sim2
-# /dev/vgsm/card0_sim3
+# /dev/vgsm/foo_me0
+# /dev/vgsm/foo_me1
+# /dev/vgsm/foo_me2
+# /dev/vgsm/foo_me3
+# /dev/vgsm/foo_mea0
+# /dev/vgsm/foo_mea1
+# /dev/vgsm/foo_mea2
+# /dev/vgsm/foo_mea3
+# /dev/vgsm/foo_mesim0
+# /dev/vgsm/foo_mesim1
+# /dev/vgsm/foo_mesim2
+# /dev/vgsm/foo_mesim3
+# /dev/vgsm/foo_sim0
+# /dev/vgsm/foo_sim1
+# /dev/vgsm/foo_sim2
+# /dev/vgsm/foo_sim3
 
-name card0
+name foo

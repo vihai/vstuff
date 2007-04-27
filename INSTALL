@@ -61,9 +61,22 @@ to your installation.
 Please note that if you are using udev older than 054 you will need to use
 special rules to work around some missing features in udev.
 
+Now load ks_userport module with:
+
+modprobe ks_userport
+
+In /dev you should see the two character devices being created:
+
+/dev/ks
+|-- userport_frame
+`-- userport_stream
+
 
 3.2 vISDN
 ----------------------
+
+vISDN is based on kstreamer so, be sure to have correctly configured it before
+proceeding.
 
 As with kstreamer, some vISDN module (e.g. ppp) need to create devices in
 /dev, so, you need to install 30-visdn.rules
@@ -167,14 +180,25 @@ drwxr-xr-x   7 root root    0 Oct 19 21:37 st0
 3.3 vGSM
 ----------------------
 
+vGSM drivers are based on kstreamer so, be sure to have correctly configured
+it before proceeding.
+
 vGSM cards register several character devices, vGSM-I cards register one device
 for each ME while vGSM-II cards register three devices for each
 ME (ASC0, ASC1, MESIM) and one device for each SIM holder, thus, device naming
 becomes tricky.
 
-That is why a helper script lets you associate permanent names to devices. The
-script is located in samples/lib_udev/vgsm_helper and is referenced in
-30-vgsm.rules.
+That is why a helper script for udev lets you associate permanent names to
+devices. The script is located in samples/lib_udev/vgsm_helper and is referenced
+in 30-vgsm.rules.
+
+Please note that these rules have only be tested with recent versions of udev.
+
+Install udev rule in samples/etc_udev_rules.d/30-vgsm to /etc/udev/rules.d/
+Install udev helper script in /lib/udev or where it is appropriate in your
+distribution.
+
+Identify your cards:
 
 vGSM-I cards don't have a serial number programmed in the hardware so, the only
 reliable way to identify the card is through the PCI location.
@@ -196,21 +220,38 @@ Find the PCI location of your vGSM card(s) using lspci:
 
 # lspci
 [...]
-00:0d.0 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+00:0d.0 Network controller: Tiger Jet Network Inc. Tiger3XX Modem/ISDN interface
+00:0e.0 Class ff00: Unknown device f16a:0004 (rev 01)
 [...]
 
+vGSM-I cards are marked Tiger Jet Network Inc.
+vGSM-II cards are marked ****************** FIXME
+
 The PCI location is the first sequence of digits prepended by 0000:, in this
-example 0000:00:0d.0
+example 0000:00:0d.0 and 0000:00:0e.0
 
-Make /etc/vgsm/devices directory if missing and create one file for each PCI
-device.
+Make /etc/vgsm/devices directory and create one file for each PCI device.
 Name those files 'pci-PCILOCATION', so, in the former example you will
-create one file:
+create two files:
 
-pci-0000:00:0d.0
+/etc/vgsm/
+`-- devices
+    |-- pci-0000:00:0d.0
+    `-- pci-0000:00:0e.0
 
-In samples/vgsm_device there are two device configuration files to copy from;
-one is a sample for a HFC-S PCI A card, the other is for a HFC-4S card.
+In samples/vgsm_device there are two sample device configuration files, one
+identifying the card by the PCI location ID and the other identifying the card
+by its serial number.
+
+You should now reboot or:
+
+1. reload udev rules with "udevcontrol reload_rules"
+2. Remove and re-insert vgsm or vgsm2 module
+
+If everyting is correct, you will see properly named device being
+created in /dev/vgsm/
+
+Asterisk confiuguration:
 
 In /etc/asterisk (or wherever you have your Asterisk configuration files) you
 have to create these files:
@@ -223,3 +264,5 @@ In 'samples/etc_asterisk' you will find sample configuration files. Put them in
 Asterisk's configuration directoryu and edit them according to your
 configuration.
 
+Finally start Asterisk and check that the modules get configured and initialized
+with "show vgsm modules"
