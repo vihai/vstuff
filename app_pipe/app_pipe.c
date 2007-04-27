@@ -158,11 +158,6 @@ static int handler_exec(struct ast_channel *chan, void *data)
 	int res=-1;
 	struct ast_frame *f;
 
-	ast_mutex_lock(&usecnt_lock);
-	usecnt++;
-	ast_mutex_unlock(&usecnt_lock);
-	ast_update_use_count();
-
 	if (chan->_state != AST_STATE_UP)
 		ast_answer(chan);
 
@@ -282,11 +277,6 @@ static int handler_exec(struct ast_channel *chan, void *data)
 		}
 	}
 
-	ast_mutex_lock(&usecnt_lock);
-	usecnt--;
-	ast_mutex_unlock(&usecnt_lock);
-	ast_update_use_count();
-
 	return res;
 
 err_ast_write:
@@ -318,11 +308,7 @@ static int app_pipe_unload_module(void)
 
 int usecount(void)
 {
-	int res;
-	ast_mutex_lock(&vgsm.usecnt_lock);
-	res = vgsm.usecnt;
-	ast_mutex_unlock(&vgsm.usecnt_lock);
-	return res;
+	return 0;
 }
 
 char *description(void)
