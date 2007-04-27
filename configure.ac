@@ -61,6 +61,35 @@ AC_CHECK_FUNCS([gettimeofday memset select socket strcasecmp strchr strdup strer
 visdnhwconfdir="$sysconfdir/visdn"
 AC_SUBST(visdnhwconfdir)
 
+#-------------------------------------------------------------------------
+
+AC_ARG_WITH(zlib,
+  AC_HELP_STRING( [--with-zlib@<:@=DIR@:>@],
+                  [use zlib (located in directory DIR, if supplied).  @<:@default=yes, if available@:>@]),
+[
+	if test $withval = no
+	then
+		want_zlib=no
+	elif test $withval = yes
+	then
+		want_zlib=yes
+	else
+		want_zlib=yes
+		zlib_dir=$withval
+	fi
+],[
+	want_zlib=yes
+	zlib_dir=
+])
+
+AC_MSG_CHECKING([zlib])
+AC_VSTUFF_ZLIB_CHECK
+
+if test "x$want_zlib" = "xno" ; then
+	AC_MSG_RESULT([failed!])
+	AC_MSG_ERROR([zlib not found])
+fi
+
 #-----------------------------------------------------------------------------
 
 AC_ARG_ENABLE(
