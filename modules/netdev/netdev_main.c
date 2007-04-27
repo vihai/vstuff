@@ -367,7 +367,11 @@ static int vnd_chan_d_tx_connect(struct ks_chan *ks_chan)
 	remote_node = ks_pipeline_last_node(pipeline);
 
 	err = sysfs_create_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		&remote_node->kobj,
 			VND_CONNECTED_NODE_SYMLINK_D);
 	if (err < 0)
@@ -386,7 +390,11 @@ static int vnd_chan_d_tx_connect(struct ks_chan *ks_chan)
 	netdevice->remote_port = visdn_port_get(to_visdn_port(cur));
 
 	err = sysfs_create_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		&netdevice->remote_port->kobj,
 			VND_CONNECTED_PORT_SYMLINK);
 	if (err < 0)
@@ -397,12 +405,23 @@ static int vnd_chan_d_tx_connect(struct ks_chan *ks_chan)
 
 	return 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_PORT_SYMLINK);
+#else
+	sysfs_remove_link(&netdevice->netdev->dev.kobj,
+			VND_CONNECTED_PORT_SYMLINK);
+#endif
+
 err_create_port_chan:
 err_no_port:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_D);
+#else
+	sysfs_remove_link(&netdevice->netdev->dev.kobj,
+			VND_CONNECTED_NODE_SYMLINK_D);
+#endif
 err_create_connected_node_chan:
 
 	return err;
@@ -415,12 +434,21 @@ static void vnd_chan_d_tx_disconnect(struct ks_chan *ks_chan)
 
 	vnd_debug_nd(netdevice, 2, "disconnected\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	if (netdevice->remote_port)
 		sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 				VND_CONNECTED_PORT_SYMLINK);
 
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_D);
+#else
+	if (netdevice->remote_port)
+		sysfs_remove_link(&netdevice->netdev->dev.kobj,
+				VND_CONNECTED_PORT_SYMLINK);
+
+	sysfs_remove_link(&netdevice->netdev->dev.kobj,
+			VND_CONNECTED_NODE_SYMLINK_D);
+#endif
 
 /*	SCHEDULE NETDEV DOWN OR CHECK A FLAG AND DON'T LOCK AGAIN IN
  *	vnd_netdev_stop, otherwise we deadlock
@@ -597,7 +625,11 @@ static int vnd_chan_e_rx_connect(struct ks_chan *ks_chan)
 	remote_node = ks_pipeline_last_node(pipeline);
 
 	err = sysfs_create_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		&remote_node->kobj,
 			VND_CONNECTED_NODE_SYMLINK_E);
 	if (err < 0)
@@ -608,8 +640,13 @@ static int vnd_chan_e_rx_connect(struct ks_chan *ks_chan)
 
 	return 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_E);
+#else
+	sysfs_remove_link(&netdevice->netdev->dev.kobj,
+			VND_CONNECTED_NODE_SYMLINK_E);
+#endif
 err_create_connected_node_chan:
 
 	return err;
@@ -622,8 +659,13 @@ static void vnd_chan_e_rx_disconnect(struct ks_chan *ks_chan)
 
 	vnd_debug_nd(netdevice, 3, "vnd_chan_e_rx_disconnect()\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 	sysfs_remove_link(&netdevice->netdev->class_dev.kobj,
 			VND_CONNECTED_NODE_SYMLINK_E);
+#else
+	sysfs_remove_link(&netdevice->netdev->dev.kobj,
+			VND_CONNECTED_NODE_SYMLINK_E);
+#endif
 }
 
 static struct ks_chan_ops vnd_chan_e_rx_ops = {
@@ -1346,14 +1388,22 @@ static int vnd_netdevice_register(
 	}
 
 	err = sysfs_create_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		&netdevice->ks_node_d.kobj,
 			VND_NODE_SYMLINK_D);
 	if (err < 0)
 		goto err_create_symchan_d;
 
 	err = sysfs_create_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		&netdevice->ks_node_e.kobj,
 			VND_NODE_SYMLINK_E);
 	if (err < 0)
@@ -1369,11 +1419,19 @@ static int vnd_netdevice_register(
 	return 0;
 
 	sysfs_remove_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		VND_NODE_SYMLINK_E);
 err_create_symchan_e:
 	sysfs_remove_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		VND_NODE_SYMLINK_D);
 err_create_symchan_d:
 	unregister_netdev(netdevice->netdev);
@@ -1415,11 +1473,19 @@ static void vnd_netdevice_unregister(struct vnd_netdevice *netdevice)
 	unsigned long flags;
 
 	sysfs_remove_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		VND_NODE_SYMLINK_E);
 
 	sysfs_remove_link(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,21)
 		&netdevice->netdev->class_dev.kobj,
+#else
+		&netdevice->netdev->dev.kobj,
+#endif
 		VND_NODE_SYMLINK_D);
 
 	unregister_netdev(netdevice->netdev);
