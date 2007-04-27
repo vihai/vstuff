@@ -120,7 +120,7 @@ static struct pci_device_id hfc_pci_ids[] = {
 			.clk_dly_te = 0xe,
 			.sampl_comp_nt = 0x6,
 			.sampl_comp_te = 0x6,
-			.ports_map = 0x05,
+			.ports_map = 0x03,
 			}
 	},
 	{
