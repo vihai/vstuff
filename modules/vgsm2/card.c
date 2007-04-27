@@ -247,6 +247,135 @@ void vgsm_card_put(struct vgsm_card *card)
 	kref_put(&card->kref, vgsm_card_release);
 }
 
+/*----------------------------------------------------------------------------*/
+
+static ssize_t vgsm_show_serial_number(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct vgsm_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%08x\n", card->serial_number);
+}
+
+static DEVICE_ATTR(serial_number, S_IRUGO,
+		vgsm_show_serial_number,
+		NULL);
+
+/*----------------------------------------------------------------------------*/
+
+static ssize_t vgsm_show_mes_number(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct vgsm_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", card->mes_number);
+}
+
+static DEVICE_ATTR(mes_number, S_IRUGO,
+		vgsm_show_mes_number,
+		NULL);
+
+/*----------------------------------------------------------------------------*/
+
+static ssize_t vgsm_show_sims_number(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct vgsm_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", card->sims_number);
+}
+
+static DEVICE_ATTR(sims_number, S_IRUGO,
+		vgsm_show_sims_number,
+		NULL);
+
+/*----------------------------------------------------------------------------*/
+
+static ssize_t vgsm_show_hw_version(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct vgsm_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE,
+		"%d.%d.%d\n",
+		(card->hw_version & 0x00ff0000) >> 16,
+		(card->hw_version & 0x0000ff00) >>  8,
+		(card->hw_version & 0x000000ff) >>  0);
+}
+
+static DEVICE_ATTR(hw_version, S_IRUGO,
+		vgsm_show_hw_version,
+		NULL);
+
+/*----------------------------------------------------------------------------*/
+
+static struct device_attribute *vgsm_card_attributes[] =
+{
+        &dev_attr_serial_number,
+        &dev_attr_mes_number,
+        &dev_attr_sims_number,
+        &dev_attr_hw_version,
+	NULL,
+};
+
+int vgsm_card_sysfs_create_files(
+	struct vgsm_card *card)
+{
+	struct device_attribute **attr = vgsm_card_attributes;
+	int err;
+
+	while(*attr) {
+		err = device_create_file(
+			&card->pci_dev->dev,
+			*attr);
+
+		if (err < 0)
+			goto err_create_file;
+
+		attr++;
+	}
+
+	return 0;
+
+err_create_file:
+
+	while(*attr != *vgsm_card_attributes) {
+		device_remove_file(
+			&card->pci_dev->dev,
+			*attr);
+
+		attr--;
+	}
+
+	return err;
+}
+
+void vgsm_card_sysfs_delete_files(
+	struct vgsm_card *card)
+{
+	struct device_attribute **attr = vgsm_card_attributes;
+
+	while(*attr) {
+		device_remove_file(
+			&card->pci_dev->dev,
+			*attr);
+
+		attr++;
+	}
+}
+
 struct vgsm_card *vgsm_card_create(
 	struct vgsm_card *card,
 	struct pci_dev *pci_dev,
@@ -504,10 +633,12 @@ int vgsm_card_probe(struct vgsm_card *card)
 	}
 
 	{
-	__u32 r_version = vgsm_inl(card, VGSM_R_VERSION);
 	__u32 r_info = vgsm_inl(card, VGSM_R_INFO);
 	card->sims_number = (r_info & 0x000000f0) >> 4;
 	card->mes_number = (r_info & 0x0000000f) >> 0;
+	}
+
+	card->hw_version = vgsm_inl(card, VGSM_R_VERSION);
 
 	if (card->sims_number > 8) {
 		err = -EINVAL;
@@ -525,9 +656,9 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	vgsm_msg_card(card, KERN_INFO,
 		"HW version: %d.%d.%d\n",
-		(r_version & 0x00ff0000) >> 16,
-		(r_version & 0x0000ff00) >>  8,
-		(r_version & 0x000000ff) >>  0);
+		(card->hw_version & 0x00ff0000) >> 16,
+		(card->hw_version & 0x0000ff00) >>  8,
+		(card->hw_version & 0x000000ff) >>  0);
 
 	for(i=0; i<sizeof(s);i++) {
 		vgsm_outl(card, VGSM_R_ASMI_ADDR, 0x70000 + i);
@@ -547,16 +678,15 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	if (card->serial_number)
 		vgsm_msg_card(card, KERN_INFO,
-			"Serial number: %d\n", card->serial_number);
+			"Serial number: %08X\n", card->serial_number);
 
 	vgsm_msg_card(card, KERN_INFO,
 		"GSM module sockets: %d\n",
 		card->mes_number);
 
 	vgsm_msg_card(card, KERN_INFO,
-		"SIM module sockets: %d\n",
+		"SIM sockets: %d\n",
 		card->sims_number);
-	}
 
 	for(i=0; i<card->mes_number; i++) {
 
@@ -732,8 +862,14 @@ int vgsm_card_register(struct vgsm_card *card)
 		}
 	}
 
+	err = vgsm_card_sysfs_create_files(card);
+	if (err < 0)
+		goto err_card_sysfs_create_files;
+
 	return 0;
 
+	vgsm_card_sysfs_delete_files(card);
+err_card_sysfs_create_files:
 err_register_sim:
 	for(--i; i>=0; i--)
 		vgsm_sim_unregister(&card->sims[i]);
@@ -749,6 +885,8 @@ err_module_register:
 void vgsm_card_unregister(struct vgsm_card *card)
 {
 	int i;
+
+	vgsm_card_sysfs_delete_files(card);
 
 	spin_lock(&vgsm_cards_list_lock);
 	list_del(&card->cards_list_node);

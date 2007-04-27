@@ -76,6 +76,7 @@ struct vgsm_card
 	struct vgsm_sim sims[4];
 
 	u32 serial_number;
+	u32 hw_version;
 };
 
 void vgsm_card_update_router(struct vgsm_card *card);
