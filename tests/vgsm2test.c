@@ -921,9 +921,11 @@ static int t_version(struct vgsm_card *card, int par)
 {
 	__u32 ver = vgsm_inl(card, VGSM_R_VERSION);
 
-	if ((ver & 0x00ffff00) != 0x00020400)
+	if ((ver & 0x00ffff00) != 0x00020400 &&
+	    (ver & 0x00ffff00) != 0x00020500 &&
+	    (ver & 0x00ffff00) != 0x00020600)
 		TEST_FAILED("This testing program does"
-			" support only 2.4.x trains");
+			" support only 2.4.x to 2.6.x trains");
 
 	return 0;
 }
