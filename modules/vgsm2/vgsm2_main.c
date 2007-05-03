@@ -40,8 +40,17 @@
 int debug_level = 0;
 #endif
 
+#ifndef PCI_VENDOR_ID_ESPIA
+#define PCI_VENDOR_ID_ESPIA	0x1ab9
+#endif
+
+#ifndef PCI_DEVICE_ID_ESPIA_VGSM2
+#define PCI_DEVICE_ID_ESPIA_VGSM2	0x08b4
+#endif
+
 static struct pci_device_id vgsm_ids[] = {
-	{ 0xf16a, 0x0004, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_ESPIA, PCI_DEVICE_ID_ESPIA_VGSM2,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
 	{ 0, },
 };
 
