@@ -2191,7 +2191,11 @@ static struct ast_cli_entry vgsm_forwarding =
 
 static int vgsm_module_power_on(int fd, struct vgsm_module *module)
 {
-	if (module->status == VGSM_MODULE_STATUS_POWERING_ON) {
+	if (module->status == VGSM_MODULE_STATUS_CLOSED ||
+	    module->status == VGSM_MODULE_STATUS_FAILED) {
+		ast_cli(fd, "Module is not available\n");
+		return RESULT_FAILURE;
+	} else if (module->status == VGSM_MODULE_STATUS_POWERING_ON) {
 		ast_cli(fd, "Module is already powering off\n");
 		return RESULT_FAILURE;
 	} else if (module->status != VGSM_MODULE_STATUS_OFF) {
@@ -2213,7 +2217,11 @@ static int vgsm_module_power_off(int fd, struct vgsm_module *module)
 {
 	struct vgsm_comm *comm = &module->comm;
 
-	if (module->status == VGSM_MODULE_STATUS_OFF) {
+	if (module->status == VGSM_MODULE_STATUS_CLOSED ||
+	    module->status == VGSM_MODULE_STATUS_FAILED) {
+		ast_cli(fd, "Module is not available\n");
+		return RESULT_FAILURE;
+	} else if (module->status == VGSM_MODULE_STATUS_OFF) {
 		ast_cli(fd, "Module is already powered off\n");
 		return RESULT_FAILURE;
 	} else if (module->status == VGSM_MODULE_STATUS_POWERING_OFF) {
@@ -2259,6 +2267,12 @@ static int vgsm_module_reset(
 {
 	struct vgsm_comm *comm = &module->comm;
 
+	if (module->status != VGSM_MODULE_STATUS_READY &&
+	    module->status != VGSM_MODULE_STATUS_WAITING_SIM &&
+	    module->status != VGSM_MODULE_STATUS_WAITING_PIN) {
+		ast_cli(fd, "Module is not available\n");
+		return RESULT_FAILURE;
+	}
 	vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_RESETTING,
 			RESET_TIMEOUT,
