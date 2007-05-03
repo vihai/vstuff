@@ -1353,14 +1353,18 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_rx_create;
 	}
 
-	if (vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
-			vgsm_chan->ast_chan->rawreadformat !=
-						AST_FORMAT_SLINEAR,
-			vgsm_chan->ast_chan->rawreadformat ==
-						AST_FORMAT_ULAW)) {
-		ast_log(LOG_ERROR,
-			"Cannot enable RX amu_compander\n");
-		goto err_pipeline_rx_amu_compander_enable;
+	if (vgsm_chan->module->interface_version == 2) {
+
+		err = vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
+				vgsm_chan->ast_chan->rawreadformat !=
+							AST_FORMAT_SLINEAR,
+				vgsm_chan->ast_chan->rawreadformat ==
+							AST_FORMAT_ULAW);
+		if (err < 0) {
+			ast_log(LOG_ERROR,
+				"Cannot enable RX amu_compander\n");
+			goto err_pipeline_rx_amu_compander_enable;
+		}
 	}
 
 	ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
@@ -1392,14 +1396,17 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_tx_create;
 	}
 
-	if (vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
-			vgsm_chan->ast_chan->rawwriteformat !=
-						AST_FORMAT_SLINEAR,
-			vgsm_chan->ast_chan->rawwriteformat ==
-						AST_FORMAT_ULAW)) {
-		ast_log(LOG_ERROR,
-			"Cannot enable TX amu_decompander\n");
-		goto err_pipeline_tx_decompander_enable;
+	if (vgsm_chan->module->interface_version == 2) {
+		err = vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
+				vgsm_chan->ast_chan->rawwriteformat !=
+							AST_FORMAT_SLINEAR,
+				vgsm_chan->ast_chan->rawwriteformat ==
+							AST_FORMAT_ULAW);
+		if (err < 0) {
+			ast_log(LOG_ERROR,
+				"Cannot enable TX amu_decompander\n");
+			goto err_pipeline_tx_decompander_enable;
+		}
 	}
 
 	ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
