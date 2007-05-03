@@ -1,11 +1,9 @@
 /*
- * VoiSmart GSM board driver
+ * VoiSmart vGSM-I card driver
  *
  * Copyright (C) 2005-2007 Daniele Orlandi
- * Copyright (C) 2005 Massimo Mazzeo
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
- *          Massimo Mazzeo <mmazzeo@voismart.it>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -65,7 +63,10 @@ static int vgsm_tty_open(
 		spin_lock(&vgsm_cards_list_lock);
 		list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
 			if (card->id == tty->index / 8) {
-				module = card->modules[tty->index % 8];
+
+				if (tty->index % 8 < card->num_modules)
+					module = card->modules[tty->index % 8];
+
 				break;
 			}
 		}

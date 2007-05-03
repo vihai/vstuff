@@ -1,11 +1,9 @@
 /*
- * VoiSmart GSM board vISDN driver
+ * VoiSmart vGSM-I card driver
  *
- * Copyright (C) 2005 Daniele Orlandi, Massimo Mazzeo
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2005-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
- *          Massimo Mazzeo <mmazzeo@voismart.it>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.
@@ -537,7 +535,18 @@ static struct vgsm_module_tx *vgsm_module_tx_create(
 
 	module_tx->ks_chan.from_ops = &vgsm_module_tx_node_ops;
 
+	module_tx->fifo = kfifo_alloc(
+				vgsm_SERIAL_BUFF, GFP_KERNEL,
+				&module_tx->fifo_lock);
+	if (IS_ERR(module_tx->fifo))
+		goto err_kfifo_tx;
+
 	return module_tx;
+
+	kfifo_free(module->tx.fifo);
+err_kfifo_tx:
+
+	return NULL;
 }
 
 static int vgsm_module_rx_register(struct vgsm_module_rx *module)
@@ -639,36 +648,6 @@ struct vgsm_module *vgsm_module_create(
 
 	return module;
 
-	kfree(module);
-err_kmalloc:
-
-	return NULL;
-}
-
-struct vgsm_module *vgsm_module_alloc(
-	struct vgsm_card *card,
-	struct vgsm_micro *micro,
-	int id,
-	const char *name)
-{
-	struct vgsm_module *module;
-
-	module = kmalloc(sizeof(*module), GFP_KERNEL);
-	if (!module)
-		goto err_kmalloc;
-
-	vgsm_module_create(module, card, micro, id, name);
-
-	module->tx.fifo = kfifo_alloc(
-				vgsm_SERIAL_BUFF, GFP_KERNEL,
-				&module->tx.fifo_lock);
-	if (IS_ERR(module->tx.fifo))
-		goto err_kfifo_tx;
-
-	return module;
-
-	kfifo_free(module->tx.fifo);
-err_kfifo_tx:
 	kfree(module);
 err_kmalloc:
 
