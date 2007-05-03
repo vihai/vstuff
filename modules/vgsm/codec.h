@@ -1,11 +1,9 @@
 /*
- * VoiSmart GSM board vISDN driver
+ * VoiSmart vGSM-I card driver
  *
- * Copyright (C) 2005-2006 Daniele Orlandi
- * Copyright (C) 2005 Massimo Mazzeo
+ * Copyright (C) 2005-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
- *          Massimo Mazzeo <mmazzeo@voismart.it>
  *
  * This program is free software and may be modified and distributed
  * under the terms and conditions of the GNU General Public License.

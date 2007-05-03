@@ -1,7 +1,7 @@
 /*
- * VoiSmart GSM board vISDN driver
+ * VoiSmart vGSM-I card driver
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -11,23 +11,6 @@
  */
 
 #include <linux/kernel.h>
-/*#include <linux/config.h>
-#include <linux/module.h>
-#include <linux/pci.h>
-#include <linux/init.h>
-#include <linux/interrupt.h>
-#include <linux/delay.h>
-#include <linux/wait.h>
-#include <linux/poll.h>
-#include <linux/ctype.h>
-#include <linux/fs.h>
-#include <linux/bitops.h>
-#include <linux/tty.h>
-#include <linux/tty_flip.h>
-
-#include "regs.h"
-#include "module.h"
-#include "codec.h"*/
 
 #include "vgsm.h"
 #include "card.h"
