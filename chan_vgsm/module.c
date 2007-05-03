@@ -832,7 +832,8 @@ static void vgsm_module_reconfigure(
 
 		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_CLOSED,
-				CLOSED_POSTPONE);
+				CLOSED_POSTPONE,
+				" ");
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -964,8 +965,8 @@ void _vgsm_module_put(struct vgsm_module *module)
 	if (!refcnt) {
 		vgsm_comm_destroy(&module->comm);
 
-		if (module->lockdown_reason)
-			free(module->lockdown_reason);
+		if (module->status_reason)
+			free(module->status_reason);
 
 		if (module->sim.sim) {
 			vgsm_sim_put(module->sim.sim);
@@ -1004,9 +1005,21 @@ struct vgsm_module *vgsm_module_get_by_name(const char *name)
 void vgsm_module_set_status(
 	struct vgsm_module *module,
 	enum vgsm_module_status status,
-	longtime_t timeout)
+	longtime_t timeout,
+	const char *fmt, ...)
 {
+	va_list ap;
+
 	ast_mutex_lock(&module->lock);
+
+	if (module->status_reason) {
+		free(module->status_reason);
+		module->status_reason = NULL;
+	}
+
+	va_start(ap, fmt);
+	vasprintf(&module->status_reason, fmt, ap);
+	va_end(ap);
 
 	if (timeout >= 0) {
 		vgsm_timer_start_delta(&module->timer, timeout);
@@ -1041,29 +1054,7 @@ void vgsm_module_set_status(
 	ast_mutex_unlock(&module->lock);
 }
 
-void vgsm_module_set_status_reason(
-	struct vgsm_module *module,
-	enum vgsm_module_status status,
-	longtime_t timeout,
-	const char *fmt, ...)
-{
-	va_list ap;
-
-	ast_mutex_lock(&module->lock);
-
-	if (module->lockdown_reason)
-		free(module->lockdown_reason);
-
-	va_start(ap, fmt);
-	vasprintf(&module->lockdown_reason, fmt, ap);
-	va_end(ap);
-
-	vgsm_module_set_status(module, status, timeout);
-
-	ast_mutex_unlock(&module->lock);
-}
-
-void vgsm_module_failure_text(struct vgsm_module *module,
+void vgsm_module_failed_text(struct vgsm_module *module,
 	const char *fmt,
 	...)
 {
@@ -1076,23 +1067,23 @@ void vgsm_module_failure_text(struct vgsm_module *module,
 	vsnprintf(tmpstr, sizeof(tmpstr), fmt, ap);
 	va_end(ap);
 
-	vgsm_module_set_status_reason(module,
+	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
 		tmpstr);
 }
 
-void vgsm_module_failure(struct vgsm_module *module, int err)
+void vgsm_module_failed(struct vgsm_module *module, int err)
 {
 	vgsm_comm_close(&module->comm);
 
 	ast_mutex_lock(&module->lock);
 
 	if (err == VGSM_RESP_FAILED)
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
 			"Communication error");
 	else
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
 			"Unexpected error: '%s'",
 			vgsm_module_error_to_text(err));
@@ -1122,7 +1113,7 @@ static void vgsm_module_ignite(
 	struct vgsm_module *module)
 {
 	if (ioctl(module->fd, VGSM_IOC_POWER_IGN, 0) < 0)
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 			"Error turning on module: ioctl(POWER_IGN): %s",
 			strerror(errno));
 }
@@ -1131,7 +1122,7 @@ static void vgsm_module_emerg_off(
 	struct vgsm_module *module)
 {
 	if (ioctl(module->fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0)
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 			"Error turning off module: ioctl(POWER_EMERG_OFF): %s",
 			strerror(errno));
 }
@@ -1169,25 +1160,12 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 	else
 		ast_cli(fd, "  Route to sim: %d\n", mc->route_to_sim);
 
-	switch(module->status) {
-	case VGSM_MODULE_STATUS_CLOSED:
-	case VGSM_MODULE_STATUS_OFF:
-	case VGSM_MODULE_STATUS_POWERING_ON:
-	case VGSM_MODULE_STATUS_POWERING_OFF:
-	case VGSM_MODULE_STATUS_RESETTING:
-	case VGSM_MODULE_STATUS_INITIALIZING:
-	case VGSM_MODULE_STATUS_WAITING_INITIALIZATION:
-		goto out;
 
-	case VGSM_MODULE_STATUS_FAILED:
-	case VGSM_MODULE_STATUS_WAITING_SIM:
-	case VGSM_MODULE_STATUS_WAITING_PIN:
-		ast_cli(fd, "  Reason: %s\n", module->lockdown_reason);
-		goto out;
+	if (module->status_reason)
+		ast_cli(fd, "  Reason: %s\n", module->status_reason);
 
-	case VGSM_MODULE_STATUS_READY:
-	break;
-	}
+	if (module->status != VGSM_MODULE_STATUS_READY)
+		goto out;
 
 	ast_cli(fd,
 		"  Model: %s %s\n"
@@ -1982,13 +1960,18 @@ static int vgsm_show_module_summary(int fd, struct vgsm_module *module)
 				ast_cli(fd, " %03u%02u", module->net.mcc,
 							module->net.mnc);
 		}
+
+		if (module->vgsm_chan)
+			ast_cli(fd, " - CALL[%s]",
+				module->vgsm_chan->ast_chan->name);
+
+		if (module->sending_sms)
+			ast_cli(fd, " - SENDING_SMS");
+
+	} else {
+		if (module->status_reason)
+			ast_cli(fd, "  %s", module->status_reason);
 	}
-
-	if (module->vgsm_chan)
-		ast_cli(fd, " - CALL[%s]", module->vgsm_chan->ast_chan->name);
-
-	if (module->sending_sms)
-		ast_cli(fd, " - SENDING_SMS");
 
 	ast_cli(fd, "\n");
 
@@ -2218,7 +2201,7 @@ static int vgsm_module_power_on(int fd, struct vgsm_module *module)
 
 	vgsm_module_ignite(module);
 
-	vgsm_module_set_status_reason(module,
+	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_POWERING_ON,
 		POWERING_ON_TIMEOUT,
 		"CLI request");
@@ -2238,7 +2221,7 @@ static int vgsm_module_power_off(int fd, struct vgsm_module *module)
 		return RESULT_FAILURE;
 	}
 
-	vgsm_module_set_status_reason(module,
+	vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_POWERING_OFF,
 			POWERING_OFF_TIMEOUT,
 			"CLI request");
@@ -2276,7 +2259,7 @@ static int vgsm_module_reset(
 {
 	struct vgsm_comm *comm = &module->comm;
 
-	vgsm_module_set_status_reason(module,
+	vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_RESETTING,
 			RESET_TIMEOUT,
 			"CLI request");
@@ -2729,7 +2712,7 @@ static int vgsm_retrieve_ceer(
 	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT+CEER");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
 		goto err_cerr;
 	}
@@ -3028,7 +3011,7 @@ static int vgsm_update_cops(
 	req = vgsm_req_make_wait(&module->comm, 180 * SEC, "AT+COPS?");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
 		goto err_cops;
 	}
@@ -3613,7 +3596,7 @@ static void handle_unsolicited_ciev_call(
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SLCC");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
 		return;
 	}
@@ -3890,7 +3873,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SMOND");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
 		goto err_moni;
 	}
@@ -4118,7 +4101,7 @@ static void handle_unsolicited_sysstart(
 
 	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
-		WAITING_INITIALIZATION_DELAY);
+		WAITING_INITIALIZATION_DELAY, NULL);
 }
 
 static void handle_unsolicited_shutdown(
@@ -4129,7 +4112,7 @@ static void handle_unsolicited_shutdown(
 
 	vgsm_debug_generic("Module powered off (^SHUTDOWN received)\n");
 
-	vgsm_module_set_status(module, VGSM_MODULE_STATUS_OFF, -1);
+	vgsm_module_set_status(module, VGSM_MODULE_STATUS_OFF, -1, NULL);
 }
 
 static void handle_unsolicited_slcc(
@@ -4181,11 +4164,12 @@ static void handle_unsolicited_scks(
 
 		vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
-			WAITING_INITIALIZATION_SIM_INSERTED_DELAY);
+			WAITING_INITIALIZATION_SIM_INSERTED_DELAY,
+			"SIM inserted");
 	} else {
 		module->sim.inserted = FALSE;
 
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_WAITING_SIM, -1,
 			"SIM removed");
 	}
@@ -4347,13 +4331,13 @@ static int vgsm_module_pin_check_and_input(
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SPIC");
 	err = vgsm_req_status(req);
 	if (err == CME_ERROR(10)) {
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_SIM, -1,
 				"SIM not present");
 		vgsm_req_put(req);
 		goto err_spic;
 	} else if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
 		goto err_spic;
 	}
@@ -4366,13 +4350,13 @@ static int vgsm_module_pin_check_and_input(
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	err = vgsm_req_status(req);
 	if (err == CME_ERROR(10)) {
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_SIM, -1,
 				"SIM not present");
 		vgsm_req_put(req);
 		goto err_spic;
 	} else if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
 		goto err_spic;
 	}
@@ -4384,7 +4368,7 @@ static int vgsm_module_pin_check_and_input(
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 
 		if (module->sim.remaining_attempts < 3) {
-			vgsm_module_set_status_reason(module,
+			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_PIN, -1,
 				"Input PIN manually");
 			res = -1;
@@ -4393,35 +4377,35 @@ static int vgsm_module_pin_check_and_input(
 					"AT+CPIN=\"%s\"", mc->pin);
 
 			if (err != VGSM_RESP_OK) {
-				vgsm_module_set_status_reason(module,
+				vgsm_module_set_status(module,
 					VGSM_MODULE_STATUS_WAITING_PIN, -1,
 					"SIM PIN refused (%s), input manually",
 					vgsm_module_error_to_text(err));
 				res = -1;
 			}
 		} else {
-			vgsm_module_set_status_reason(module,
+			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_PIN, -1,
 				"SIM PIN not configured, input manually");
 			res = -1;
 		}
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_PIN, -1,
 				"SIM requires PIN2");
 		res = -1;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_PIN, -1,
 				"SIM requires PUK, input manually");
 		res = -1;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_PIN, -1,
 				"SIM requires PUK2");
 		res = -1;
 	} else {
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 				"Unknown response '%s'", first_line->text);
 
 		res = -1;
@@ -4547,7 +4531,7 @@ static int vgsm_module_prepin_configure(
 			tm->tm_sec,
 			-(timezone / 3600) + tm->tm_isdst);
 		if (err != VGSM_RESP_OK) {
-			vgsm_module_failure(module, err);
+			vgsm_module_failed(module, err);
 			goto err_no_req;
 		}
 	}
@@ -4614,7 +4598,7 @@ static int vgsm_module_prepin_configure(
 
 err_no_req:
 
-	vgsm_module_failure(module, err);
+	vgsm_module_failed(module, err);
 
 	return -1;
 }
@@ -4678,12 +4662,12 @@ static int vgsm_module_configure(
 	/* Set SMS mode to PDU */
 	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT+CMGF=0");
 	if (err != VGSM_RESP_OK)
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 
 	/* Select message service  */
 	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT+CSMS=1");
 	if (err != VGSM_RESP_OK)
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 
 	/************ We now enable unsolicited responses ************/
 
@@ -4769,7 +4753,7 @@ static int vgsm_module_configure(
 
 err_no_req:
 
-	vgsm_module_failure(module, err);
+	vgsm_module_failed(module, err);
 
 	return -1;
 }
@@ -4786,9 +4770,9 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CGMI");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -4803,9 +4787,9 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CGMM");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -4820,9 +4804,9 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CGMR");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -4837,9 +4821,9 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CGSN");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -4854,9 +4838,9 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 100 * MILLISEC, "AT^SCKS?");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	if (strlen(vgsm_req_first_line(req)->text) > 7) {
@@ -4892,9 +4876,9 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CIMI");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -4909,13 +4893,13 @@ static int vgsm_module_update_static_info(
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CXXCID");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	if (strlen(vgsm_req_first_line(req)->text) < strlen("+CXXCID: "))
-		goto err_failure;
+		goto err_failed;
 
 	ast_mutex_lock(&module->lock);
 	strncpy(module->sim.card_id,
@@ -4935,9 +4919,9 @@ retry_csca:
 			goto retry_csca;
 		}
 
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		vgsm_req_put(req);
-		goto err_failure;
+		goto err_failed;
 	}
 
 	if (strlen(vgsm_req_first_line(req)->text) > strlen("+CSCA: ")) {
@@ -4969,7 +4953,7 @@ no_sim:
 
 	return 0;
 
-err_failure:
+err_failed:
 
 	return -1;
 }
@@ -4984,7 +4968,7 @@ static int vgsm_module_update_net_info(
 	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CREG?");
 	int res = vgsm_req_status(req);
 	if (res != VGSM_RESP_OK) {
-		vgsm_module_failure(module, res);
+		vgsm_module_failed(module, res);
 		vgsm_req_put(req);
 		err = -EIO;
 		goto err_creg_read_response;
@@ -5049,7 +5033,7 @@ static int vgsm_module_init_at_interface(
 
 err_no_req:
 
-	vgsm_module_failure(module, err);
+	vgsm_module_failed(module, err);
 
 	return -1;
 }
@@ -5072,7 +5056,7 @@ static int vgsm_module_open(
 				mc->device_filename,
 				strerror(errno));
 
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
 			tmpstr);
 
@@ -5090,7 +5074,7 @@ static int vgsm_module_open(
 
 /*	int flags = fcntl(module->fd, F_GETFL, O_NONBLOCK);
 	if (flags < 0) {
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 			"Error getting file flags:"
 			" fcntl(F_GETFL): %s",
 			strerror(errno));
@@ -5099,7 +5083,7 @@ static int vgsm_module_open(
 	}
 
 	if (fcntl(module->fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 			"Error setting file flags:"
 			" fcntl(F_SETFL): %s",
 			strerror(errno));
@@ -5148,7 +5132,7 @@ static int vgsm_module_open(
 				mc->device_filename,
 				strerror(errno));
 
-		vgsm_module_set_status_reason(module,
+		vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
 			tmpstr);
 
@@ -5161,7 +5145,7 @@ static int vgsm_module_open(
 
 	int val;
 	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 			"Error getting power status:"
 			" ioctl(POWER_GET): %s",
 			strerror(errno));
@@ -5176,7 +5160,7 @@ static int vgsm_module_open(
 
 		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
-				0);
+				0, NULL);
 	} else {
 		vgsm_module_ignite(module);
 
@@ -5185,8 +5169,10 @@ static int vgsm_module_open(
 		 * out and initialize it anyway.
 		 */
 		module->power_attempts = 0;
-		vgsm_module_set_status(module, VGSM_MODULE_STATUS_POWERING_ON,
-					POWERING_ON_TIMEOUT);
+		vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_POWERING_ON,
+				POWERING_ON_TIMEOUT,
+				NULL);
 	}
 
 	vgsm_module_config_put(mc);
@@ -5215,14 +5201,16 @@ static void vgsm_module_initialize(
 	mc = vgsm_module_config_get(module->current_config);
 	ast_mutex_unlock(&module->lock);
 
-	vgsm_module_set_status(module, VGSM_MODULE_STATUS_INITIALIZING, -1);
+	vgsm_module_set_status(module,
+		VGSM_MODULE_STATUS_INITIALIZING, -1,
+		NULL);
 
 	if (module->interface_version == 1) {
 		if (vgsm_module_codec_init(module, mc) < 0) {
-			vgsm_module_failure_text(module,
+			vgsm_module_failed_text(module,
 					"Error configuring CODEC");
 
-			goto initialization_failure;
+			goto initialization_failed;
 		}
 	} else {
 		if (ioctl(module->fd, VGSM_IOC_SIM_ROUTE,
@@ -5233,18 +5221,18 @@ static void vgsm_module_initialize(
 				mc->route_to_sim,
 				strerror(errno));
 
-			goto initialization_failure;
+			goto initialization_failed;
 		}
 	}
 
 	int val;
 	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
-		vgsm_module_failure_text(module,
+		vgsm_module_failed_text(module,
 			"%s: Error getting power status: ioctl(POWER_GET): %s",
 			module->name,
 			strerror(errno));
 
-		goto initialization_failure;
+		goto initialization_failed;
 	}
 
 	if (!val) {
@@ -5253,36 +5241,40 @@ static void vgsm_module_initialize(
 			module->name);
 
 		module->power_attempts = 0;
-		vgsm_module_set_status(module, VGSM_MODULE_STATUS_POWERING_ON,
-						POWERING_ON_TIMEOUT);
+		vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_POWERING_ON,
+				POWERING_ON_TIMEOUT,
+				"Power lost");
 
 		vgsm_module_ignite(module);
 
-		goto initialization_failure;
+		goto initialization_failed;
 	}
 
 	if (vgsm_module_init_at_interface(module, mc) < 0)
-		goto initialization_failure;
+		goto initialization_failed;
 
 	if (vgsm_module_prepin_configure(module, mc) < 0)
-		goto initialization_failure;
+		goto initialization_failed;
 
 	if (vgsm_module_pin_check_and_input(module, mc) < 0)
-		goto initialization_failure;
+		goto initialization_failed;
 
 	if (vgsm_module_configure(module, mc) < 0)
-		goto initialization_failure;
+		goto initialization_failed;
 
 	if (vgsm_module_update_static_info(module, mc) < 0)
-		goto initialization_failure;
+		goto initialization_failed;
 
 	if (vgsm_module_update_net_info(module) < 0)
-		goto initialization_failure;
+		goto initialization_failed;
 
 	module->failure_attempts = 0;
 
-	vgsm_module_set_status(module, VGSM_MODULE_STATUS_READY,
-						READY_UPDATE_TIME);
+	vgsm_module_set_status(module,
+		VGSM_MODULE_STATUS_READY,
+		READY_UPDATE_TIME,
+		" ");
 
 	vgsm_debug_generic("Module '%s' successfully initialized\n",
 		module->name);
@@ -5291,7 +5283,7 @@ static void vgsm_module_initialize(
 
 	return;
 
-initialization_failure:
+initialization_failed:
 
 	vgsm_module_config_put(mc);
 
@@ -5300,7 +5292,7 @@ initialization_failure:
 	 */
 
 	if (module->status == VGSM_MODULE_STATUS_INITIALIZING)
-		vgsm_module_failure_text(module, "");
+		vgsm_module_failed_text(module, "");
 }
 
 static void vgsm_module_timer(void *data)
@@ -5316,7 +5308,7 @@ static void vgsm_module_timer(void *data)
 	case VGSM_MODULE_STATUS_POWERING_ON: {
 		int val;
 		if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
-			vgsm_module_failure_text(module,
+			vgsm_module_failed_text(module,
 				"Error getting power status:"
 				" ioctl(POWER_GET): %s",
 				strerror(errno));
@@ -5330,7 +5322,7 @@ static void vgsm_module_timer(void *data)
 
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
-				0);
+				0, NULL);
 		} else {
 			module->power_attempts++;
 			if (module->power_attempts > 3) {
@@ -5338,7 +5330,7 @@ static void vgsm_module_timer(void *data)
 					"%s: Power-on permanently failed\n",
 					module->name);
 
-				vgsm_module_set_status_reason(module,
+				vgsm_module_set_status(module,
 					VGSM_MODULE_STATUS_OFF, -1,
 					"Power-on sequence failure");
 			} else {
@@ -5349,7 +5341,8 @@ static void vgsm_module_timer(void *data)
 
 				vgsm_module_set_status(module,
 					VGSM_MODULE_STATUS_POWERING_ON,
-					POWERING_ON_TIMEOUT);
+					POWERING_ON_TIMEOUT,
+					"Power-on sequence failed");
 
 				vgsm_module_ignite(module);
 			}
@@ -5361,7 +5354,8 @@ static void vgsm_module_timer(void *data)
 		vgsm_module_emerg_off(module);
 
 		vgsm_module_set_status(module,
-			VGSM_MODULE_STATUS_OFF, -1);
+			VGSM_MODULE_STATUS_OFF, -1,
+			" ");
 	break;
 
 	case VGSM_MODULE_STATUS_FAILED:
@@ -5371,7 +5365,9 @@ static void vgsm_module_timer(void *data)
 			module->fd = -1;
 
 			vgsm_module_set_status(module,
-				VGSM_MODULE_STATUS_CLOSED, 1 * SEC);
+				VGSM_MODULE_STATUS_CLOSED,
+				1 * SEC,
+				NULL);
 		} else {
 			module->failure_attempts = 0;
 
@@ -5383,7 +5379,8 @@ static void vgsm_module_timer(void *data)
 			vgsm_comm_open(&module->comm, module->fd);
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_POWERING_ON,
-				POWERING_ON_TIMEOUT);
+				POWERING_ON_TIMEOUT,
+				NULL);
 
 			vgsm_module_ignite(module);
 		}
@@ -5396,8 +5393,10 @@ static void vgsm_module_timer(void *data)
 	case VGSM_MODULE_STATUS_READY:
 		if (vgsm_module_update_net_info(module) >= 0) {
 			/* Re-arm timer */
-			vgsm_module_set_status(module, VGSM_MODULE_STATUS_READY,
-							READY_UPDATE_TIME);
+			vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_READY,
+				READY_UPDATE_TIME,
+				" ");
 		}
 	break;
 
@@ -5459,7 +5458,8 @@ void vgsm_module_shutdown_all(void)
 		    module->comm.fd >= 0) {
 			vgsm_module_set_status(module,
 					VGSM_MODULE_STATUS_POWERING_OFF,
-					POWERING_OFF_TIMEOUT);
+					POWERING_OFF_TIMEOUT,
+					"Asterisk shutdown");
 
 			_vgsm_req_put(vgsm_req_make(&module->comm,
 					3 * SEC, "AT^SMSO"));

@@ -204,7 +204,7 @@ struct vgsm_module
 	struct vgsm_timerset timerset;
 	struct vgsm_timer timer;
 
-	char *lockdown_reason;
+	char *status_reason;
 	int power_attempts;
 	int failure_count;
 	int failure_attempts;
@@ -300,10 +300,6 @@ void _vgsm_module_put(struct vgsm_module *module);
 struct vgsm_module *vgsm_module_get_by_name(const char *name);
 
 void vgsm_module_set_status(
-	struct vgsm_module *module,
-	enum vgsm_module_status status,
-	longtime_t timeout);
-void vgsm_module_set_status_reason(
 	struct vgsm_module *module,
 	enum vgsm_module_status status,
 	longtime_t timeout,

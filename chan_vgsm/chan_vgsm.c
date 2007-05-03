@@ -945,7 +945,8 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 		}
 
 		vgsm_module_set_status(module,
-			VGSM_MODULE_STATUS_WAITING_INITIALIZATION, -1);
+			VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
+			-1, "PIN entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
 		ast_cli(fd, "SIM requires PIN2");
@@ -1097,7 +1098,8 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 		}
 
 		vgsm_module_set_status(module,
-			VGSM_MODULE_STATUS_WAITING_INITIALIZATION, -1);
+			VGSM_MODULE_STATUS_WAITING_INITIALIZATION, -1,
+			"PUK entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
 		ast_cli(fd, "SIM requires PUK2");
