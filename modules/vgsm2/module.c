@@ -811,8 +811,8 @@ static int vgsm_module_ioctl(
 static struct uart_driver vgsm_uart_driver_asc0 =
 {
 	.owner			= THIS_MODULE,
-	.driver_name		= "vgsm_me",
-	.dev_name		= "vgsm_me",
+	.driver_name		= "vgsm2_me",
+	.dev_name		= "vgsm2_me",
 	.major			= 0,
 	.minor			= 0,
 	.nr			= 32,
@@ -822,8 +822,8 @@ static struct uart_driver vgsm_uart_driver_asc0 =
 static struct uart_driver vgsm_uart_driver_asc1 =
 {
 	.owner			= THIS_MODULE,
-	.driver_name		= "vgsm_mea",
-	.dev_name		= "vgsm_mea",
+	.driver_name		= "vgsm2_mea",
+	.dev_name		= "vgsm2_mea",
 	.major			= 0,
 	.minor			= 0,
 	.nr			= 32,
@@ -833,8 +833,8 @@ static struct uart_driver vgsm_uart_driver_asc1 =
 static struct uart_driver vgsm_uart_driver_mesim =
 {
 	.owner			= THIS_MODULE,
-	.driver_name		= "vgsm_mesim",
-	.dev_name		= "vgsm_mesim",
+	.driver_name		= "vgsm2_mesim",
+	.dev_name		= "vgsm2_mesim",
 	.major			= 0,
 	.minor			= 0,
 	.nr			= 32,

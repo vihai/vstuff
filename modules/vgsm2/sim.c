@@ -65,8 +65,8 @@
 static struct uart_driver vgsm_uart_driver_sim =
 {
 	.owner			= THIS_MODULE,
-	.driver_name		= "vgsm_sim",
-	.dev_name		= "vgsm_sim",
+	.driver_name		= "vgsm2_sim",
+	.dev_name		= "vgsm2_sim",
 	.major			= 0,
 	.minor			= 0,
 	.nr			= 32,
