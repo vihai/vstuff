@@ -126,6 +126,9 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 
 	mc->rx_calibrate = 32767;
 	mc->tx_calibrate = 16383;
+
+	mc->jitbuf_low = 10;
+	mc->jitbuf_high = 300;
 }
 
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
@@ -764,6 +767,10 @@ static int vgsm_module_config_from_var(
 		mc->rx_calibrate = atoi(var->value);
 	} else if (!strcasecmp(var->name, "tx_calibrate")) {
 		mc->tx_calibrate = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_low")) {
+		mc->jitbuf_low = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_high")) {
+		mc->jitbuf_high = atoi(var->value);
 	} else {
 		return -1;
 	}

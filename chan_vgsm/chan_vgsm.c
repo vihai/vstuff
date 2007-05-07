@@ -1999,11 +1999,6 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	return f2;
 }
 
-#define FIFO_JITTBUFF_LOW 10
-#define FIFO_JITTBUFF_HIGH 100
-#define FIFO_JITTBUFF_AVG \
-		((FIFO_JITTBUFF_LOW + FIFO_JITTBUFF_HIGH) / 2)
-
 #define vgsm_debug_jitbuf(module, format, arg...)			\
 	if ((module)->debug_jitbuf)					\
 		ast_verbose("vgsm: "				\
@@ -2078,8 +2073,10 @@ static int vgsm_write(
 			frame->samples, frame->offset);
 	}
 
-	if (pressure < FIFO_JITTBUFF_LOW) {
-		int diff = (FIFO_JITTBUFF_LOW - pressure);
+	struct vgsm_module_config *mc = vgsm_chan->mc;
+
+	if (pressure < mc->jitbuf_low) {
+		int diff = (mc->jitbuf_low - pressure);
 		int diff_octs = diff * sample_size;
 
 		buf = alloca(len + diff_octs);
@@ -2097,13 +2094,13 @@ static int vgsm_write(
 			diff);
 	}
 
-	if (pressure > FIFO_JITTBUFF_HIGH && len > 0) {
-		int drop = min(len, (pressure - FIFO_JITTBUFF_HIGH) *
+	if (pressure > mc->jitbuf_high && len > 0) {
+		int drop = min(len, (pressure - mc->jitbuf_high) *
 							sample_size);
 
 		vgsm_debug_jitbuf(vgsm_chan->module,
 			"TX %d over high-mark: dropped %d samples\n",
-			pressure - FIFO_JITTBUFF_HIGH,
+			pressure - mc->jitbuf_high,
 			drop);
 
 		len = max(0, len - drop);

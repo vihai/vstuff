@@ -188,6 +188,9 @@ struct vgsm_module_config
 
 	int rx_calibrate;
 	int tx_calibrate;
+
+	int jitbuf_low;
+	int jitbuf_high;
 };
 
 struct vgsm_module
