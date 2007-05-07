@@ -102,6 +102,9 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->amr_enabled = TRUE;
 	mc->gsm_hr_enabled = TRUE;
 	mc->gsm_preferred = VGSM_CODEC_GSM_FR;
+
+	mc->rx_calibrate = 32767;
+	mc->tx_calibrate = 16383;
 }
 
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
@@ -736,6 +739,10 @@ static int vgsm_module_config_from_var(
 			ast_log(LOG_ERROR,
 				"Unknown preferred coded '%s'\n",
 				var->value);
+	} else if (!strcasecmp(var->name, "rx_calibrate")) {
+		mc->rx_calibrate = atoi(var->value);
+	} else if (!strcasecmp(var->name, "tx_calibrate")) {
+		mc->tx_calibrate = atoi(var->value);
 	} else {
 		return -1;
 	}
@@ -778,6 +785,9 @@ static void vgsm_module_config_copy(
 	dst->amr_enabled = src->amr_enabled;
 	dst->gsm_hr_enabled = src->gsm_hr_enabled;
 	dst->gsm_preferred = src->gsm_preferred;
+
+	dst->rx_calibrate = src->rx_calibrate;
+	dst->tx_calibrate = src->tx_calibrate;
 }
 
 static void vgsm_module_reconfigure(
@@ -4608,13 +4618,16 @@ static int vgsm_module_prepin_configure(
 	}
 
 	/* Set audio input */
-	err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SNFI=2,32767");
+	err = vgsm_req_make_wait_result(comm, 10 * SEC,
+			"AT^SNFI=2,%d",
+			mc->tx_calibrate);
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
 	/* Set audio output */
 	err = vgsm_req_make_wait_result(comm, 10 * SEC,
-			"AT^SNFO=1,4096,5792,8192,11584,16384,4,0");
+			"AT^SNFO=1,0,0,0,0,%d,4,0",
+			mc->rx_calibrate);
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 

@@ -185,6 +185,9 @@ struct vgsm_module_config
 	BOOL gsm_fr_enabled;
 	BOOL gsm_hr_enabled;
 	enum vgsm_codec gsm_preferred;
+
+	int rx_calibrate;
+	int tx_calibrate;
 };
 
 struct vgsm_module
