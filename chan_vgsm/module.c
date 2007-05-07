@@ -2509,6 +2509,38 @@ static int debug_vgsm_module_cbm(
 	return RESULT_SUCCESS;
 }
 
+static int debug_vgsm_module_jitbuf(
+	int fd, struct vgsm_module *module, BOOL enable)
+{
+	if (module) {
+		module->debug_jitbuf = enable;
+	} else {
+		ast_mutex_lock(&vgsm.lock);
+		struct vgsm_module *module;
+		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+			module->debug_jitbuf = enable;
+		ast_mutex_unlock(&vgsm.lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int debug_vgsm_module_frames(
+	int fd, struct vgsm_module *module, BOOL enable)
+{
+	if (module) {
+		module->debug_frames = enable;
+	} else {
+		ast_mutex_lock(&vgsm.lock);
+		struct vgsm_module *module;
+		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+			module->debug_frames = enable;
+		ast_mutex_unlock(&vgsm.lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
 static int debug_vgsm_module_all(int fd, BOOL enable)
 {
 	ast_mutex_lock(&vgsm.lock);
@@ -2517,6 +2549,7 @@ static int debug_vgsm_module_all(int fd, BOOL enable)
 		module->comm.debug_messages = enable;
 		module->debug_sms = enable;
 		module->debug_cbm = enable;
+		module->debug_jitbuf = enable;
 	}
 	ast_mutex_unlock(&vgsm.lock);
 
@@ -2553,6 +2586,10 @@ static int debug_vgsm_module_cli(int fd, int argc, char *argv[],
 			err = debug_vgsm_module_sms(fd, module, enable);
 		else if (!strcasecmp(argv[args], "cbm"))
 			err = debug_vgsm_module_cbm(fd, module, enable);
+		else if (!strcasecmp(argv[args], "jitbuf"))
+			err = debug_vgsm_module_jitbuf(fd, module, enable);
+		else if (!strcasecmp(argv[args], "frames"))
+			err = debug_vgsm_module_frames(fd, module, enable);
 		else {
 			ast_cli(fd, "Unrecognized category '%s'\n",
 					argv[args]);
@@ -2587,7 +2624,8 @@ static char *debug_module_category_complete(
 #endif
 	int state)
 {
-	char *commands[] = { "atcommands", "serial", "sms", "cbm" };
+	char *commands[] = { "atcommands", "serial", "sms", "cbm",
+				"jitbuf", "frames" };
 	int i;
 
 	for(i=state; i<ARRAY_SIZE(commands); i++) {
@@ -2637,7 +2675,7 @@ static char *no_debug_module_complete(
 }
 
 static char debug_vgsm_module_help[] =
-"Usage: debug vgsm module [module] [<atcommands|serial|sms|cbm>]\n"
+"Usage: debug vgsm module [<atcommands|serial|sms|cbm|jitbuf|frames> [module]]\n"
 "\n"
 "	Debug vGSM's module-related events\n"
 "\n"
@@ -2646,7 +2684,9 @@ static char debug_vgsm_module_help[] =
 "			and read()/write() calls. Caution: It can be very\n"
 "			verbose.\n"
 "	sms		SMS-DELIVER and SMS-STATUS-REPORT messages\n"
-"	cbm		Cell-broadcast messages\n";
+"	cbm		Cell-broadcast messages\n"
+"	jitbuf		Audio jitter buffer\n"
+"	frames		Audio frames\n";
 
 static struct ast_cli_entry debug_vgsm_module =
 {

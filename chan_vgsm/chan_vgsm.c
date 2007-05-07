@@ -146,11 +146,9 @@ struct vgsm_state vgsm = {
 #ifdef DEBUG_DEFAULTS
 	.debug_generic = TRUE,
 	.debug_timer = FALSE,
-	.debug_jitbuf = TRUE,
 #else
 	.debug_generic = FALSE,
 	.debug_timer = FALSE,
-	.debug_jitbuf = FALSE,
 #endif
 
 };
@@ -617,55 +615,6 @@ static struct ast_cli_entry no_debug_vgsm_timer =
 	{ "no", "debug", "vgsm", "timer", NULL },
 	do_no_debug_vgsm_timer,
 	"Disables debuggin of vGSM timer events",
-	NULL,
-	NULL
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int do_debug_vgsm_jitbuf(int fd, int argc, char *argv[])
-{
-	ast_mutex_lock(&vgsm.lock);
-	vgsm.debug_jitbuf = TRUE;
-	ast_mutex_unlock(&vgsm.lock);
-
-	ast_cli(fd, "vGSM debugging enabled\n");
-
-	return RESULT_SUCCESS;
-}
-
-static char debug_vgsm_jitbuf_help[] =
-"Usage: debug vgsm jitbuf\n"
-"\n"
-"	Debug vGSM jitter buffer\n";
-
-static struct ast_cli_entry debug_vgsm_jitbuf =
-{
-	{ "debug", "vgsm", "jitbuf", NULL },
-	do_debug_vgsm_jitbuf,
-	"Enables jitbuf vGSM debugging",
-	debug_vgsm_jitbuf_help,
-	NULL
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int do_no_debug_vgsm_jitbuf(int fd, int argc, char *argv[])
-{
-	ast_mutex_lock(&vgsm.lock);
-	vgsm.debug_jitbuf = FALSE;
-	ast_mutex_unlock(&vgsm.lock);
-
-	ast_cli(fd, "vGSM debugging disabled\n");
-
-	return RESULT_SUCCESS;
-}
-
-static struct ast_cli_entry no_debug_vgsm_jitbuf =
-{
-	{ "no", "debug", "vgsm", "jitbuf", NULL },
-	do_no_debug_vgsm_jitbuf,
-	"Disables vGSM jitter buffer debugging",
 	NULL,
 	NULL
 };
@@ -2017,25 +1966,25 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		return f;
 	}
 
-#if 0
-{
-__u8 *buf = vgsm_chan->frame_out_buf;
-struct timeval tv;
-gettimeofday(&tv, NULL);
-unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
-	t/1000000.0,
-	*(__u8 *)(buf + 0),
-	*(__u8 *)(buf + 1),
-	*(__u8 *)(buf + 2),
-	*(__u8 *)(buf + 3),
-	*(__u8 *)(buf + 4),
-	*(__u8 *)(buf + 5),
-	*(__u8 *)(buf + 6),
-	*(__u8 *)(buf + 7),
-	nread);
-}
-#endif
+	if (vgsm_chan->module->debug_frames) {
+		__u8 *buf = vgsm_chan->frame_out_buf;
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+
+		ast_verbose(VERBOSE_PREFIX_3
+			"R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
+			t/1000000.0,
+			*(__u8 *)(buf + 0),
+			*(__u8 *)(buf + 1),
+			*(__u8 *)(buf + 2),
+			*(__u8 *)(buf + 3),
+			*(__u8 *)(buf + 4),
+			*(__u8 *)(buf + 5),
+			*(__u8 *)(buf + 6),
+			*(__u8 *)(buf + 7),
+			nread);
+	}
 
 	f->frametype = AST_FRAME_VOICE;
 	f->subclass = ast_chan->rawreadformat;
@@ -2055,8 +2004,8 @@ ast_verbose(VERBOSE_PREFIX_3 "R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
 #define FIFO_JITTBUFF_AVG \
 		((FIFO_JITTBUFF_LOW + FIFO_JITTBUFF_HIGH) / 2)
 
-#define vgsm_debug_jitbuf(format, arg...)			\
-	if (vgsm.debug_jitbuf)					\
+#define vgsm_debug_jitbuf(module, format, arg...)			\
+	if ((module)->debug_jitbuf)					\
 		ast_verbose("vgsm: "				\
 			format,					\
 			## arg)
@@ -2108,24 +2057,26 @@ static int vgsm_write(
 
 	pressure = pressure / sample_size;
 
-#if 0
-struct timeval tv;
-gettimeofday(&tv, NULL);
-unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %3d %d %d %d\n",
-	t/1000000.0,
-	*(__u8 *)(frame->data + 0),
-	*(__u8 *)(frame->data + 1),
-	*(__u8 *)(frame->data + 2),
-	*(__u8 *)(frame->data + 3),
-	*(__u8 *)(frame->data + 4),
-	*(__u8 *)(frame->data + 5),
-	*(__u8 *)(frame->data + 6),
-	*(__u8 *)(frame->data + 7),
-	frame->datalen,
-	pressure,
-	frame->samples, frame->offset);
-#endif
+	if (vgsm_chan->module->debug_frames) {
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+		ast_verbose(VERBOSE_PREFIX_3
+			"W %.3f %02x%02x%02x%02x%02x%02x%02x%02x"
+			" %3d %d %d %d\n",
+			t/1000000.0,
+			*(__u8 *)(frame->data + 0),
+			*(__u8 *)(frame->data + 1),
+			*(__u8 *)(frame->data + 2),
+			*(__u8 *)(frame->data + 3),
+			*(__u8 *)(frame->data + 4),
+			*(__u8 *)(frame->data + 5),
+			*(__u8 *)(frame->data + 6),
+			*(__u8 *)(frame->data + 7),
+			frame->datalen,
+			pressure,
+			frame->samples, frame->offset);
+	}
 
 	if (pressure < FIFO_JITTBUFF_LOW) {
 		int diff = (FIFO_JITTBUFF_LOW - pressure);
@@ -2141,15 +2092,16 @@ ast_verbose(VERBOSE_PREFIX_3 "W %.3f %02x%02x%02x%02x%02x%02x%02x%02x %3d %d %d 
 		memcpy(buf + diff_octs, frame->data, len);
 		len += diff_octs;
 
-		vgsm_debug_jitbuf("TX under low-mark: added %d samples\n",
-				diff);
+		vgsm_debug_jitbuf(vgsm_chan->module,
+			"TX under low-mark: added %d samples\n",
+			diff);
 	}
 
 	if (pressure > FIFO_JITTBUFF_HIGH && len > 0) {
 		int drop = min(len, (pressure - FIFO_JITTBUFF_HIGH) *
 							sample_size);
 
-		vgsm_debug_jitbuf(
+		vgsm_debug_jitbuf(vgsm_chan->module,
 			"TX %d over high-mark: dropped %d samples\n",
 			pressure - FIFO_JITTBUFF_HIGH,
 			drop);
@@ -2854,8 +2806,6 @@ static int vgsm_load_module(void)
 	ast_cli_register(&no_debug_vgsm_generic);
 	ast_cli_register(&debug_vgsm_timer);
 	ast_cli_register(&no_debug_vgsm_timer);
-	ast_cli_register(&debug_vgsm_jitbuf);
-	ast_cli_register(&no_debug_vgsm_jitbuf);
 	ast_cli_register(&vgsm_reload);
 	ast_cli_register(&vgsm_send_sms);
 	ast_cli_register(&vgsm_pin_input);
@@ -2885,8 +2835,6 @@ err_channel_register:
 	ast_cli_unregister(&vgsm_pin_input);
 	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&vgsm_reload);
-	ast_cli_unregister(&no_debug_vgsm_jitbuf);
-	ast_cli_unregister(&debug_vgsm_jitbuf);
 	ast_cli_unregister(&no_debug_vgsm_timer);
 	ast_cli_unregister(&debug_vgsm_timer);
 	ast_cli_unregister(&no_debug_vgsm_generic);
@@ -2912,8 +2860,6 @@ static int vgsm_unload_module(void)
 	ast_cli_unregister(&vgsm_pin_input);
 	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&vgsm_reload);
-	ast_cli_unregister(&no_debug_vgsm_jitbuf);
-	ast_cli_unregister(&debug_vgsm_jitbuf);
 	ast_cli_unregister(&no_debug_vgsm_timer);
 	ast_cli_unregister(&debug_vgsm_timer);
 	ast_cli_unregister(&no_debug_vgsm_generic);

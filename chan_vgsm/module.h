@@ -275,6 +275,8 @@ struct vgsm_module
 
 	BOOL debug_sms;
 	BOOL debug_cbm;
+	BOOL debug_jitbuf;
+	BOOL debug_frames;
 };
 
 extern struct vgsm_urc_class vgsm_module_urcs[];
