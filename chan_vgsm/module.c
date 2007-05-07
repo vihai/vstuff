@@ -75,6 +75,27 @@
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 #define WAITING_INITIALIZATION_SIM_INSERTED_DELAY (5 * SEC)
 
+#ifdef DEBUG_CODE
+#define vgsm_debug_state(module, format, arg...)	\
+	if ((module)->debug_state)			\
+		ast_verbose("vgsm: %s: "		\
+			format,				\
+			(module)->name,			\
+			## arg)
+#define vgsm_debug_call(module, format, arg...)		\
+	if ((module)->debug_call)			\
+		ast_verbose("vgsm: %s: "		\
+			format,				\
+			(module)->name,			\
+			## arg)
+#else
+#define vgsm_debug_state(module, format, arg...)	\
+	do {} while(0);
+#define vgsm_debug_call(module, format, arg...)		\
+	do {} while(0);
+#endif
+
+
 void vgsm_module_config_default(struct vgsm_module_config *mc)
 {
 	strcpy(mc->context, "vgsm");
@@ -1034,19 +1055,17 @@ void vgsm_module_set_status(
 	if (timeout >= 0) {
 		vgsm_timer_start_delta(&module->timer, timeout);
 
-		vgsm_debug_generic(
-			"vGSM module '%s' changed state from %s to %s"
+		vgsm_debug_state(module,
+			"changed state from %s to %s"
 			" (timeout %.2fs)\n",
-			module->name,
 			vgsm_module_status_to_text(module->status),
 			vgsm_module_status_to_text(status),
 			timeout / 1000000.0);
 	} else {
 		vgsm_timer_stop(&module->timer);
 
-		vgsm_debug_generic(
-			"vGSM module '%s' changed state from %s to %s\n",
-			module->name,
+		vgsm_debug_state(module,
+			"changed state from %s to %s\n",
 			vgsm_module_status_to_text(module->status),
 			vgsm_module_status_to_text(status));
 	}
@@ -2455,6 +2474,38 @@ static struct ast_cli_entry vgsm_module =
 
 /*---------------------------------------------------------------------------*/
 
+static int debug_vgsm_module_state(
+	int fd, struct vgsm_module *module, BOOL enable)
+{
+	if (module) {
+		module->debug_state = enable;
+	} else {
+		ast_mutex_lock(&vgsm.lock);
+		struct vgsm_module *module;
+		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+			module->debug_state = enable;
+		ast_mutex_unlock(&vgsm.lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int debug_vgsm_module_call(
+	int fd, struct vgsm_module *module, BOOL enable)
+{
+	if (module) {
+		module->debug_call = enable;
+	} else {
+		ast_mutex_lock(&vgsm.lock);
+		struct vgsm_module *module;
+		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+			module->debug_call = enable;
+		ast_mutex_unlock(&vgsm.lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
 static int debug_vgsm_module_atcommands(
 	int fd, struct vgsm_module *module, BOOL enable)
 {
@@ -2588,7 +2639,11 @@ static int debug_vgsm_module_cli(int fd, int argc, char *argv[],
 			}
 		}
 
-		if (!strcasecmp(argv[args], "atcommands"))
+		if (!strcasecmp(argv[args], "state"))
+			err = debug_vgsm_module_state(fd, module, enable);
+		else if (!strcasecmp(argv[args], "call"))
+			err = debug_vgsm_module_call(fd, module, enable);
+		else if (!strcasecmp(argv[args], "atcommands"))
 			err = debug_vgsm_module_atcommands(fd, module, enable);
 		else if (!strcasecmp(argv[args], "serial"))
 			err = debug_vgsm_module_serial(fd, module, enable);
@@ -2634,8 +2689,8 @@ static char *debug_module_category_complete(
 #endif
 	int state)
 {
-	char *commands[] = { "atcommands", "serial", "sms", "cbm",
-				"jitbuf", "frames" };
+	char *commands[] = { "state", "call", "atcommands", "serial", "sms",
+				"cbm", "jitbuf", "frames" };
 	int i;
 
 	for(i=state; i<ARRAY_SIZE(commands); i++) {
@@ -2685,10 +2740,13 @@ static char *no_debug_module_complete(
 }
 
 static char debug_vgsm_module_help[] =
-"Usage: debug vgsm module [<atcommands|serial|sms|cbm|jitbuf|frames> [module]]\n"
+"Usage: debug vgsm module [<state | call | atcommands | serial | sms | cbm |\n"
+"			 jitbuf | frames> [module]]\n"
 "\n"
 "	Debug vGSM's module-related events\n"
 "\n"
+"	state		Module state transitions\n"
+"	call		Call-related messages\n"
 "	atcommands	AT-commands sent or received on the serial port\n"
 "	serial		low-level serial communication, including line buffer\n"
 "			and read()/write() calls. Caution: It can be very\n"
@@ -2812,7 +2870,7 @@ err_cerr:
 
 static void vgsm_module_received_hangup(struct vgsm_module *module)
 {
-	vgsm_debug_generic("%s: received hangup\n", module->name);
+	vgsm_debug_call(module, "received hangup\n");
 
 	/* First of all, retrieve the cause code. No-one will place
 	 * calls in between, because module->vgsm_chan is still set
@@ -2837,7 +2895,7 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 			vgsm_chan ? vgsm_chan->outbound : TRUE,
 			location, reason);
 
-		ast_log(LOG_DEBUG,
+		vgsm_debug_call(module,
 			"Call released, location '%s', cause '%s'\n",
 			vgsm_cause_location_to_text(location),
 			vgsm_cause_reason_to_text(location, reason));
@@ -2885,7 +2943,7 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 		vgsm_chan_put(vgsm_chan);
 	}
 
-	vgsm_debug_generic("%s: received hangup done\n", module->name);
+	vgsm_debug_call(module, "received hangup done\n");
 }
 
 static void handle_unsolicited_no_carrier(
@@ -2991,7 +3049,7 @@ static void handle_unsolicited_cring(
 	}
 
 	if (module->vgsm_chan) {
-		ast_log(LOG_DEBUG,
+		vgsm_debug_call(module,
 			"Received +CRING with an already active call\n");
 		goto err_call_already_present;
 	}
@@ -3124,9 +3182,8 @@ static void handle_unsolicited_creg(
 
 	vgsm_update_module_by_creg(module, pars, FALSE);
 
-	vgsm_debug_generic(
-		"Module '%s' registration %s\n",
-		module->name,
+	vgsm_debug_state(module,
+		"registration %s\n",
 		vgsm_net_status_to_text(module->net.status));
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
@@ -3175,7 +3232,7 @@ static void handle_unsolicited_clip(
 	if (ast_chan->_state == AST_STATE_RING) {
 		ast_mutex_unlock(&ast_chan->lock);
 
-		ast_log(LOG_DEBUG,
+		vgsm_debug_call(module,
 			"Call is already ringing, ignoring further +CRINGs\n");
 
 		goto already_ringing;
@@ -3183,7 +3240,7 @@ static void handle_unsolicited_clip(
 
 	if (ast_chan->_state != AST_STATE_RESERVED) {
 
-		ast_log(LOG_DEBUG,
+		vgsm_debug_call(module,
 			"Received +CLIP but active call"
 			" is not in RESERVED state (state=%d)\n",
 			ast_chan->_state);
@@ -3524,7 +3581,7 @@ static void vgsm_handle_slcc_update(
 	switch(call->state) {
 	case VGSM_CALL_STATE_UNUSED:
 		if (vgsm_chan) {
-			ast_log(LOG_DEBUG,
+			vgsm_debug_call(module,
 				"Call disappeared from SLCC,"
 				" requesting HANGUP\n");
 
@@ -3558,7 +3615,7 @@ static void vgsm_handle_slcc_update(
 	break;
 
 	case VGSM_CALL_STATE_HELD:
-		ast_log(LOG_DEBUG, "Unsupported state 1-held\n");
+		ast_log(LOG_WARNING, "Unsupported state 1-held\n");
 	break;
 
 	case VGSM_CALL_STATE_DIALING:
@@ -3617,35 +3674,45 @@ static void handle_unsolicited_ciev_battchg(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Battery level: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Battery level: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_signal(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Signal: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Signal: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_service(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Service: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Service: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_sounder(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Sounder: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Sounder: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_message(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Message: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Message: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_call(
@@ -3851,14 +3918,18 @@ static void handle_unsolicited_ciev_roam(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Roaming: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Roaming: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_smsfull(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("SMS memory full: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "SMS memory full: %s\n", pars);
 }
 
 static int vgsm_module_update_common_cell_info(
@@ -4060,42 +4131,54 @@ static void handle_unsolicited_ciev_audio(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Audio: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Audio: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_vmwait1(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Voicemail 1 waiting: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Voicemail 1 waiting: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_vmwait2(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Voicemail 2 waiting: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Voicemail 2 waiting: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_ciphcall(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Ciphercall: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Ciphercall: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_eons(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Enhanced Operator Name String: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Enhanced Operator Name String: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_nitz(
 	const struct vgsm_req *urc,
 	const char *pars)
 {
-	vgsm_debug_generic("Network Identity and Time Zone: %s\n", pars);
+	struct vgsm_module *module = to_module(urc->comm);
+
+	vgsm_debug_state(module, "Network Identity and Time Zone: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev(
@@ -4161,7 +4244,7 @@ static void handle_unsolicited_sysstart(
 	struct vgsm_comm *comm = urc->comm;
 	struct vgsm_module *module = to_module(comm);
 
-	vgsm_debug_generic("Module started (^SYSSTART received)\n");
+	vgsm_debug_state(module, "Module started (^SYSSTART received)\n");
 
 	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
@@ -4174,7 +4257,7 @@ static void handle_unsolicited_shutdown(
 	struct vgsm_comm *comm = urc->comm;
 	struct vgsm_module *module = to_module(comm);
 
-	vgsm_debug_generic("Module powered off (^SHUTDOWN received)\n");
+	vgsm_debug_state(module, "Module powered off (^SHUTDOWN received)\n");
 
 	vgsm_module_set_status(module, VGSM_MODULE_STATUS_OFF, -1, NULL);
 }
@@ -5221,7 +5304,7 @@ static int vgsm_module_open(
 	}
 
 	if (val) {
-		vgsm_debug_generic(
+		vgsm_debug_state(module,
 			"Module is already powered on, I'm not waiting"
 			" for SYSSTART\n");
 
@@ -5261,7 +5344,7 @@ err_module_open:
 static void vgsm_module_initialize(
 	struct vgsm_module *module)
 {
-	vgsm_debug_generic("Initializing module '%s'\n", module->name);
+	vgsm_debug_state(module, "Module initializing...\n");
 
 	ast_mutex_lock(&module->lock);
 	struct vgsm_module_config *mc;
@@ -5343,8 +5426,7 @@ static void vgsm_module_initialize(
 		READY_UPDATE_TIME,
 		" ");
 
-	vgsm_debug_generic("Module '%s' successfully initialized\n",
-		module->name);
+	vgsm_debug_state(module, "module successfully initialized\n");
 
 	vgsm_module_config_put(mc);
 
@@ -5384,8 +5466,7 @@ static void vgsm_module_timer(void *data)
 		}
 
 		if (val) {
-			vgsm_debug_generic("Module '%s': SYSTART missed\n",
-				module->name);
+			vgsm_debug_state(module, "SYSTART missed\n");
 
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_INITIALIZATION,

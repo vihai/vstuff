@@ -276,6 +276,8 @@ struct vgsm_module
 
 	} stats;
 
+	BOOL debug_state;
+	BOOL debug_call;
 	BOOL debug_sms;
 	BOOL debug_cbm;
 	BOOL debug_jitbuf;
