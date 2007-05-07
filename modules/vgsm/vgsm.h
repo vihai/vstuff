@@ -27,6 +27,7 @@
 //#define VGSM_IOC_SIM_GET_CLOCK		_IOR(0xd1, 11, unsigned int)
 //#define VGSM_IOC_SIM_SET_CLOCK		_IOR(0xd1, 12, unsigned int)
 //#define VGSM_IOC_FW_READ		_IOR(0xd1, 13, unsigned int)
+//#define VGSM_IOC_IDENTIFY		_IOR(0xd1, 14, unsigned int)
 
 struct vgsm_fw_header
 {

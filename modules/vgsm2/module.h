@@ -25,6 +25,7 @@ enum vgsm_module_status
 {
 	VGSM_MODULE_STATUS_RUNNING,
 	VGSM_MODULE_STATUS_ON,
+	VGSM_MODULE_STATUS_IDENTIFY,
 };
 
 struct vgsm_card;

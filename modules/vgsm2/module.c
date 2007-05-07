@@ -62,6 +62,49 @@
 		kobject_name(&(module)->ks_node.kobj),		\
 		## arg)
 
+/*---------------------------------------------------------------------------*/
+
+static ssize_t vgsm_module_identify_show(
+	struct ks_node *node,
+	struct ks_node_attribute *attr,
+	char *buf)
+{
+	struct vgsm_module *module =
+			container_of(node, struct vgsm_module, ks_node);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		test_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status) ? 1 : 0);
+}
+
+static ssize_t vgsm_module_identify_store(
+	struct ks_node *node,
+	struct ks_node_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct vgsm_module *module =
+			container_of(node, struct vgsm_module, ks_node);
+
+	unsigned int value;
+	if (sscanf(buf, "%02x", &value) < 1)
+		return -EINVAL;
+
+	if (value)
+		set_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status);
+	else
+		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status);
+
+	schedule_delayed_work(&vgsm_identify_work, 0);
+
+	return count;
+}
+
+static KS_NODE_ATTR(identify, S_IRUGO | S_IWUSR,
+		vgsm_module_identify_show,
+		vgsm_module_identify_store);
+
+/*---------------------------------------------------------------------------*/
+
 struct vgsm_module *vgsm_module_get(struct vgsm_module *module)
 {
 	return vgsm_card_get(module->card) ? module : NULL;
@@ -760,6 +803,21 @@ static int vgsm_module_ioctl_sim_route(
 	return 0;
 }
 
+static int vgsm_module_ioctl_identify(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	if (arg)
+		set_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status);
+	else
+		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status);
+
+	schedule_delayed_work(&vgsm_identify_work, 0);
+
+	return 0;
+}
+
 static int vgsm_module_ioctl(
 	struct vgsm_uart *uart,
 	unsigned int cmd,
@@ -793,15 +851,19 @@ static int vgsm_module_ioctl(
 	break;
 
 	case VGSM_IOC_FW_VERSION:
-		return vgsm_card_ioctl_fw_version(module, cmd, arg);
+		return vgsm_card_ioctl_fw_version(module->card, cmd, arg);
 	break;
 
 	case VGSM_IOC_FW_UPGRADE:
-		return vgsm_card_ioctl_fw_upgrade(module, cmd, arg);
+		return vgsm_card_ioctl_fw_upgrade(module->card, cmd, arg);
 	break;
 
 	case VGSM_IOC_FW_READ:
-		return vgsm_card_ioctl_fw_read(module, cmd, arg);
+		return vgsm_card_ioctl_fw_read(module->card, cmd, arg);
+	break;
+
+	case VGSM_IOC_IDENTIFY:
+		return vgsm_module_ioctl_identify(module, cmd, arg);
 	break;
 	}
 
@@ -959,8 +1021,14 @@ int vgsm_module_register(struct vgsm_module *module)
 	if (err < 0)
 		goto err_register_mesim;
 
+	err = ks_node_create_file(&module->ks_node, &ks_node_attr_identify);
+	if (err < 0)
+		goto err_create_file;
+
 	return 0;
 
+	ks_node_remove_file(&module->ks_node, &ks_node_attr_identify);
+err_create_file:
 	vgsm_uart_unregister(&module->mesim);
 err_register_mesim:
 	vgsm_uart_unregister(&module->asc1);
@@ -979,6 +1047,10 @@ err_node_register:
 
 void vgsm_module_unregister(struct vgsm_module *module)
 {
+	ks_node_remove_file(&module->ks_node, &ks_node_attr_identify);
+	sysfs_remove_link(&module->card->pci_dev->dev.kobj,
+			kobject_name(&module->ks_node.kobj));
+
 	vgsm_uart_unregister(&module->mesim);
 	vgsm_uart_unregister(&module->asc1);
 	vgsm_uart_unregister(&module->asc0);

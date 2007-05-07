@@ -24,6 +24,7 @@
 #define VGSM_IOC_SIM_GET_CLOCK		_IOR(0xd1, 11, unsigned int)
 #define VGSM_IOC_SIM_SET_CLOCK		_IOR(0xd1, 12, unsigned int)
 #define VGSM_IOC_FW_READ		_IOR(0xd1, 13, unsigned int)
+#define VGSM_IOC_IDENTIFY		_IOR(0xd1, 14, unsigned int)
 
 struct vgsm2_fw_header
 {
@@ -33,6 +34,8 @@ struct vgsm2_fw_header
 };
 
 #ifdef __KERNEL__
+
+#include <linux/version.h>
 
 #define vgsm_DRIVER_NAME "vgsm2"
 #define vgsm_DRIVER_PREFIX vgsm_DRIVER_NAME ": "
@@ -67,8 +70,11 @@ extern int debug_level;
 #define BOOL char
 #endif
 
-extern struct list_head vgsm_cards_list;
-extern spinlock_t vgsm_cards_list_lock;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+extern struct work_struct vgsm_identify_work;
+#else
+extern struct delayed_work vgsm_identify_work;
+#endif
 
 extern struct ks_dynattr *vgsm_amu_compander_class;
 extern struct ks_dynattr *vgsm_amu_decompander_class;

@@ -56,8 +56,81 @@ static struct pci_device_id vgsm_ids[] = {
 
 MODULE_DEVICE_TABLE(pci, vgsm_ids);
 
-struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
-spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+struct work_struct vgsm_identify_work;
+#else
+struct delayed_work vgsm_identify_work;
+#endif
+
+static int vgsm_identify_work_card(struct vgsm_card *card, int color)
+{
+	BOOL reschedule = FALSE;
+	u32 led_src = 0;
+	u32 led_user = 0;
+	int i;
+
+	for(i=0; i<card->mes_number; i++) {
+		if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
+		    (card->modules[i] &&
+		     test_bit(VGSM_MODULE_STATUS_IDENTIFY,
+					&card->modules[i]->status))) {
+
+			led_src |= 0xf << (i * 4);
+			led_user |= color << (i * 4);
+
+			if (card->modules[i]->route_to_sim >= 0) {
+				int sim = card->modules[i]->route_to_sim;
+
+				led_src |= 0x3 << ((sim * 2) + 16);
+				led_user |= (color & 0x3) << ((sim * 2) + 16);
+			}
+
+			reschedule = TRUE;
+		}
+	}
+
+	for(i=0; i<card->sims_number; i++) {
+		if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
+		    test_bit(VGSM_MODULE_STATUS_IDENTIFY,
+					&card->sims[i].status)) {
+
+			led_src |= 0x3 << ((i * 2) + 16);
+			led_user |= (color & 0x3) << ((i * 2) + 16);
+			reschedule = TRUE;
+		}
+	}
+
+	vgsm_outl(card, VGSM_R_LED_SRC, led_src);
+	vgsm_outl(card, VGSM_R_LED_USER, led_user);
+
+	return reschedule;
+}
+
+void vgsm_identify_work_func(void *data)
+{
+	struct vgsm_card *card;
+	BOOL reschedule = FALSE;
+	static u32 color;
+
+	spin_lock(&vgsm_cards_list_lock);
+	list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
+
+		if (test_bit(VGSM_CARD_FLAGS_READY, &card->flags)) 
+			reschedule = reschedule ||
+					vgsm_identify_work_card(card, color);
+	}
+	spin_unlock(&vgsm_cards_list_lock);
+
+	if (color == 0x0)
+		color = 0x55555555;
+	else if (color == 0x55555555)
+		color = 0xaaaaaaaa;
+	else
+		color = 0x0;
+
+	if (reschedule)
+		schedule_delayed_work(&vgsm_identify_work, HZ / 10);
+}
 
 static int vgsm_probe(
 	struct pci_dev *pci_dev,
@@ -153,6 +226,15 @@ struct ks_dynattr *vgsm_amu_decompander_class;
 static int __init vgsm_init(void)
 {
 	int err;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+	INIT_WORK(&vgsm_identify_work,
+		vgsm_identify_work_func,
+		NULL);
+#else
+	INIT_DELAYED_WORK(&vgsm_identify_work,
+		vgsm_identify_work_func);
+#endif
 
 	vgsm_amu_compander_class = ks_dynattr_register("amu_compander");
 	if (!vgsm_amu_compander_class) {

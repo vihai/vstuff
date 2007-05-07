@@ -18,14 +18,22 @@
 
 #include "uart.h"
 
+enum vgsm_sim_status
+{
+	VGSM_SIM_STATUS_IDENTIFY,
+};
+
 struct vgsm_sim
 {
+	struct kobject kobj;
+
 	int id;
 
 	struct vgsm_card *card;
 
 	struct vgsm_uart uart;
 
+	unsigned long status;
 	int clock;
 };
 

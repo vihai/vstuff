@@ -2318,6 +2318,34 @@ static int vgsm_module_reset(
 	return RESULT_SUCCESS;
 }
 
+static int vgsm_module_identify(
+	int fd, int argc, char *argv[],
+	struct vgsm_module *module)
+{
+	int value;
+
+	if (module->status == VGSM_MODULE_STATUS_CLOSED) {
+		ast_cli(fd, "Module is not available\n");
+		return RESULT_FAILURE;
+	}
+
+	if (!strcasecmp(argv[4], "on"))
+		value = 1;
+	else if (!strcasecmp(argv[4], "off"))
+		value = 0;
+	else {
+		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
+		return RESULT_SHOWUSAGE;
+	}
+
+	if (ioctl(module->fd, VGSM_IOC_IDENTIFY, value) < 0) {
+		ast_cli(fd, "ioctl(VGSM_IOC_IDENTIFY): %s\n", strerror(errno));
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
 static int vgsm_module_operator(
 	int fd, int argc, char *argv[],
 	struct vgsm_module *module)
@@ -2384,6 +2412,8 @@ static int vgsm_module_func(int fd, int argc, char *argv[])
 		err = vgsm_module_power(fd, argc, argv, module);
 	else if (!strcasecmp(argv[3], "reset"))
 		err = vgsm_module_reset(fd, argc, argv, module);
+	else if (!strcasecmp(argv[3], "identify"))
+		err = vgsm_module_identify(fd, argc, argv, module);
 	else if (!strcasecmp(argv[3], "operator"))
 		err = vgsm_module_operator(fd, argc, argv, module);
 	else {
@@ -2419,7 +2449,7 @@ static char *vgsm_module_complete(
 #endif
 	int pos, int state)
 {
-	char *commands[] = { "power", "reset", "operator" };
+	char *commands[] = { "power", "reset", "identify", "operator" };
 	char *power_commands[] = { "on", "off" };
 	int i;
 
@@ -2449,11 +2479,18 @@ static char vgsm_module_help[] =
 "\n"
 "	Commands:\n"
 "	power <on|off>\n"
-"		Power on, off or reset the specified module.\n"
+"		Power on or off the specified module.\n"
 "\n"
 "		Power-off will be graceful (requesting de-registration from\n"
 "		the network. If, however, the module is not responding,\n"
 "		the module will be forcibly shut down.\n"
+"\n"
+"	reset\n"
+"		Initiate ME software reset"
+"\n"
+"	identify <on|off>\n"
+"		Enables or disables frontal LED flashing to identify the\n"
+"		antenna connector associated with the specified module.\n"
 "\n"
 "	operator <auto | none | LAI> [fallback]\n"
 "		Changes the operator selection mode.\n"
@@ -2471,6 +2508,136 @@ static struct ast_cli_entry vgsm_module =
 	vgsm_module_help,
 	vgsm_module_complete
 };
+
+#if 0
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_sim_identify(
+	int fd, int argc, char *argv[],
+	struct vgsm_sim *sim)
+{
+	int value;
+
+
+	if (!strcasecmp(argv[4], "on"))
+		value = 1;
+	else if (!strcasecmp(argv[4], "off"))
+		value = 0;
+	else {
+		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
+		return RESULT_SHOWUSAGE;
+	}
+
+	if (ioctl(module->fd, VGSM_IOC_IDENTIFY, value) < 0) {
+		ast_cli(fd, "ioctl(VGSM_IOC_IDENTIFY): %s\n", strerror(errno));
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_sim_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 3) {
+		ast_cli(fd, "Missing sim name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_sim_name;
+	}
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing command\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_command;
+	}
+
+	struct vgsm_sim *sim;
+	sim = vgsm_sim_get_by_name(argv[2]);
+	if (!sim) {
+		ast_cli(fd, "Cannot find sim '%s'\n", argv[2]);
+		err = RESULT_FAILURE;
+		goto err_sim_not_found;
+	}
+
+	ast_mutex_lock(&sim->lock);
+	if (!strcasecmp(argv[3], "identify"))
+		err = vgsm_sim_identify(fd, argc, argv, sim);
+	else {
+		ast_mutex_unlock(&sim->lock);
+		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
+		err = RESULT_SHOWUSAGE;
+		goto err_unknown_command;
+	}
+	ast_mutex_unlock(&sim->lock);
+
+	if (err != RESULT_SUCCESS)
+		goto err_command;
+
+	vgsm_sim_put(sim);
+
+	return RESULT_SUCCESS;
+
+err_command:
+err_unknown_command:
+	vgsm_sim_put(sim);
+err_sim_not_found:
+err_no_command:
+err_no_sim_name:
+
+	return err;
+}
+
+static char *vgsm_sim_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "identify" };
+	char *power_commands[] = { "on", "off" };
+	char *identify_commands[] = { "on", "off" };
+	int i;
+
+	switch(pos) {
+	case 2:
+		return vgsm_sim_completion(line, word, state);
+	case 3:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	break;
+
+	case 4:
+		for(i=state; i<ARRAY_SIZE(power_commands); i++) {
+			if (!strncasecmp(word, power_commands[i], strlen(word)))
+				return strdup(power_commands[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
+static char vgsm_sim_help[] =
+"Usage: vgsm sim <sim> <command>\n"
+"\n"
+"	Commands:\n"
+"
+"	identify <on|off>\n";
+
+static struct ast_cli_entry vgsm_sim =
+{
+	{ "vgsm", "sim", NULL },
+	vgsm_sim_func,
+	"Power on or reset the specified sim",
+	vgsm_sim_help,
+	vgsm_sim_complete
+};
+#endif
 
 /*---------------------------------------------------------------------------*/
 

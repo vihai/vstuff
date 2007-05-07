@@ -158,6 +158,122 @@ static int vgsm_sim_ioctl(
 	return -ENOIOCTLCMD;
 }
 
+/*---------------------------------------------------------------------------*/
+
+struct vgsm_sim_attribute {
+	struct attribute attr;
+
+	ssize_t (*show)(
+		struct vgsm_sim *node,
+		struct vgsm_sim_attribute *attr,
+		char *buf);
+
+	ssize_t (*store)(
+		struct vgsm_sim *node,
+		struct vgsm_sim_attribute *attr,
+		const char *buf,
+		size_t count);
+};
+
+#define VGSM_SIM_ATTR(_name,_mode,_show,_store) \
+	struct vgsm_sim_attribute vgsm_sim_attr_##_name = \
+		__ATTR(_name,_mode,_show,_store)
+
+static ssize_t vgsm_sim_identify_show(
+	struct vgsm_sim *sim,
+	struct vgsm_sim_attribute *attr,
+	char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+		test_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status) ? 1 : 0);
+}
+
+static ssize_t vgsm_sim_identify_store(
+	struct vgsm_sim *sim,
+	struct vgsm_sim_attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	unsigned int value;
+	if (sscanf(buf, "%02x", &value) < 1)
+		return -EINVAL;
+
+	if (value)
+		set_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status);
+	else
+		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status);
+
+	schedule_delayed_work(&vgsm_identify_work, 0);
+
+	return count;
+}
+
+static VGSM_SIM_ATTR(identify, S_IRUGO | S_IWUSR,
+		vgsm_sim_identify_show,
+		vgsm_sim_identify_store);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t vgsm_sim_attr_show(
+	struct kobject *kobj,
+	struct attribute *attr,
+	char *buf)
+{
+	struct vgsm_sim_attribute *vgsm_sim_attr =
+			container_of(attr, struct vgsm_sim_attribute, attr);
+	struct vgsm_sim *vgsm_sim =
+			container_of(kobj, struct vgsm_sim, kobj);
+	ssize_t err;
+
+	if (vgsm_sim_attr->show)
+		err = vgsm_sim_attr->show(vgsm_sim, vgsm_sim_attr, buf);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static ssize_t vgsm_sim_attr_store(
+	struct kobject *kobj,
+	struct attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct vgsm_sim_attribute *vgsm_sim_attr =
+			container_of(attr, struct vgsm_sim_attribute, attr);
+	struct vgsm_sim *vgsm_sim =
+			container_of(kobj, struct vgsm_sim, kobj);
+	ssize_t err;
+
+	if (vgsm_sim_attr->store)
+		err = vgsm_sim_attr->store(vgsm_sim, vgsm_sim_attr, buf, count);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static struct sysfs_ops vgsm_sim_sysfs_ops = {
+	.show   = vgsm_sim_attr_show,
+	.store  = vgsm_sim_attr_store,
+};
+
+static void vgsm_sim_release(struct kobject *kobj)
+{
+}
+
+static struct attribute *vgsm_sim_default_attrs[] =
+{
+	&vgsm_sim_attr_identify.attr,
+	NULL,
+};
+
+static struct kobj_type vgsm_sim_ktype = {
+	.release	= vgsm_sim_release,
+	.sysfs_ops	= &vgsm_sim_sysfs_ops,
+	.default_attrs	= vgsm_sim_default_attrs,
+};
+
 struct vgsm_sim *vgsm_sim_create(
 	struct vgsm_sim *sim,
 	struct vgsm_card *card,
@@ -167,6 +283,12 @@ struct vgsm_sim *vgsm_sim_create(
 	BUG_ON(!sim); /* Dynamic allocation not implemented */
 
 	memset(sim, 0, sizeof(*sim));
+
+	kobject_init(&sim->kobj);
+	kobject_set_name(&sim->kobj, "sim%d", id);
+
+	sim->kobj.ktype = &vgsm_sim_ktype;
+	sim->kobj.parent = &card->pci_dev->dev.kobj;
 
 	sim->card = card;
 	sim->id = id;
@@ -184,7 +306,6 @@ struct vgsm_sim *vgsm_sim_create(
 	return sim;
 }
 
-
 void vgsm_sim_destroy(struct vgsm_sim *sim)
 {
 	vgsm_uart_destroy(&sim->uart);
@@ -200,8 +321,14 @@ int vgsm_sim_register(struct vgsm_sim *sim)
 	if (err < 0)
 		goto err_register_uart;
 
+	err = kobject_add(&sim->kobj);
+	if (err < 0)
+		goto err_kobject_add;
+
 	return 0;
 
+	kobject_del(&sim->kobj);
+err_kobject_add:
 	vgsm_uart_unregister(&sim->uart);
 err_register_uart:
 
@@ -210,6 +337,8 @@ err_register_uart:
 
 void vgsm_sim_unregister(struct vgsm_sim *sim)
 {
+	kobject_del(&sim->kobj);
+
 	vgsm_uart_unregister(&sim->uart);
 }
 

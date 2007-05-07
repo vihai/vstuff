@@ -34,6 +34,9 @@
 #include "regs.h"
 #include "module.h"
 
+struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
+spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
+
 /* HW initialization */
 
 static int vgsm_initialize_hw(struct vgsm_card *card)
@@ -321,12 +324,54 @@ static DEVICE_ATTR(hw_version, S_IRUGO,
 
 /*----------------------------------------------------------------------------*/
 
+static ssize_t vgsm_card_identify_attr_show(
+	struct device *device,
+	DEVICE_ATTR_COMPAT
+	char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct vgsm_card *card = pci_get_drvdata(pci_dev);
+
+	return snprintf(buf, PAGE_SIZE,
+		"%d\n",
+		test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ? 1 : 0);
+}
+
+static ssize_t vgsm_card_identify_attr_store(
+	struct device *device,
+	const char *buf,
+	size_t count)
+{
+	struct pci_dev *pci_dev = to_pci_dev(device);
+	struct vgsm_card *card = pci_get_drvdata(pci_dev);
+
+	unsigned int value;
+	if (sscanf(buf, "%02x", &value) < 1)
+		return -EINVAL;
+
+	if (value)
+		set_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags);
+	else
+		clear_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags);
+
+	schedule_delayed_work(&vgsm_identify_work, 0);
+
+	return count;
+}
+
+static DEVICE_ATTR(identify, S_IRUGO | S_IWUSR,
+		vgsm_card_identify_attr_show,
+		vgsm_card_identify_attr_store);
+
+/*----------------------------------------------------------------------------*/
+
 static struct device_attribute *vgsm_card_attributes[] =
 {
         &dev_attr_serial_number,
         &dev_attr_mes_number,
         &dev_attr_sims_number,
         &dev_attr_hw_version,
+        &dev_attr_identify,
 	NULL,
 };
 
@@ -438,22 +483,20 @@ static int vgsm_card_asmi_waitbusy(struct vgsm_card *card)
 }
 
 int vgsm_card_ioctl_fw_version(
-	struct vgsm_module *module,
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_card *card = module->card;
 	u32 version = vgsm_inl(card, VGSM_R_VERSION);
 
 	return put_user(version, (int __user *)arg);
 }
 
 int vgsm_card_ioctl_fw_upgrade(
-	struct vgsm_module *module,
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_card *card = module->card;
 	struct vgsm2_fw_header fwh;
 	int err;
 	int i;
@@ -519,11 +562,10 @@ err_copy_from_user:
 }
 
 int vgsm_card_ioctl_fw_read(
-	struct vgsm_module *module,
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_card *card = module->card;
 	int err;
 	int i;
 
@@ -732,6 +774,8 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	vgsm_initialize_hw(card);
 
+	set_bit(VGSM_CARD_FLAGS_READY, &card->flags);
+
 	return 0;
 
 err_module_create:
@@ -811,6 +855,8 @@ void vgsm_card_remove(struct vgsm_card *card)
 		}
 #endif
 	}
+
+	clear_bit(VGSM_CARD_FLAGS_READY, &card->flags);
 
 	/* Disable IRQs */
 	vgsm_outl(card, VGSM_R_INT_ENABLE, 0);

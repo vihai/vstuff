@@ -44,10 +44,16 @@
 		(card)->pci_dev->dev.bus_id,		\
 		## arg)
 
+
+extern struct list_head vgsm_cards_list;
+extern spinlock_t vgsm_cards_list_lock;
+
 enum vgsm_card_flags
 {
+	VGSM_CARD_FLAGS_READY,
 	VGSM_CARD_FLAGS_SHUTTING_DOWN,
 	VGSM_CARD_FLAGS_RECONFIG_PENDING,
+	VGSM_CARD_FLAGS_IDENTIFY,
 };
 
 struct vgsm_card
@@ -91,15 +97,15 @@ struct vgsm_card *vgsm_card_create(
 void vgsm_card_destroy(struct vgsm_card *card);
 
 int vgsm_card_ioctl_fw_version(
-	struct vgsm_module *module,
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg);
 int vgsm_card_ioctl_fw_upgrade(
-	struct vgsm_module *module,
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg);
 int vgsm_card_ioctl_fw_read(
-	struct vgsm_module *module,
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg);
 
