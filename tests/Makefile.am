@@ -51,7 +51,7 @@ dsptest_CPPFLAGS=
 
 vgsm2test_SOURCES = vgsm2test.c
 vgsm2test_CPPFLAGS =
-vgsm2test_LDADD = -lncurses -lform
+vgsm2test_LDADD = -lncurses -lform -lmenu
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

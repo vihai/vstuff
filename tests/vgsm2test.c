@@ -19,15 +19,20 @@
 #include <string.h>
 #include <signal.h>
 #include <limits.h>
+#include <ctype.h>
+#include <time.h>
+#include <dirent.h>
+#include <assert.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+
 #include <linux/types.h>
-#include <ctype.h>
-#include <time.h>
 
 #include <curses.h>
 #include <form.h>
+#include <menu.h>
 
 #include "../modules/vgsm2/regs.h"
 
@@ -57,9 +62,42 @@ typedef unsigned char BOOL;
 #define LSR		(5 << 2)
 #define MSR		(6 << 2)
 
+enum test_errors
+{
+	ERR_NOERR = 0,
+	ERR_INTERRUPTED = -1,
+	ERR_FAILED = -2,
+	ERR_NOT_DONE = -3,
+};
+
+struct resource
+{
+	__u64 begin;
+	__u64 end;
+	__u64 flags;
+};
+
+struct pci_device {
+	char *location;
+	__u32 vendor_id;
+	__u32 device_id;
+
+	int n_resources;
+	struct resource resources[8];
+};
+
+enum status
+{
+	STATUS_NOT_TESTED,
+	STATUS_TESTING,
+	STATUS_OK,
+	STATUS_FAILED,
+};
 
 struct vgsm_card
 {
+	struct pci_device *pci_device;
+
 	int memfd;
 
 	void *regs;
@@ -70,6 +108,8 @@ struct vgsm_card
 
 	char uartbuf[256];
 	int uartbuf_len;
+
+	enum status status;
 };
 
 int timed_out = 0;
@@ -85,6 +125,7 @@ static void sigint_handler(int signal)
 {
 	has_to_exit = 1;
 }
+
 
 /*static void writeb(void *addr, __u8 val)
 {
@@ -173,6 +214,7 @@ static int map_memory(struct vgsm_card *card)
 
 static WINDOW *infowin;
 static WINDOW *outwin;
+static WINDOW *funcbar;
 
 enum { DARK_BLUE, DARK_GREEN };
 enum { INFO_BG=1, OK_DIALOG_BG, REQ_DIALOG_BG, FAIL_DIALOG_BG };
@@ -192,7 +234,14 @@ static void log_info(char *fmt, ...)
 	wrefresh(outwin);
 }
 
-static char requester(int color, char *fmt, ...)
+static void update_funcbar(const char *text)
+{
+	werase(funcbar);
+	mvwprintw(funcbar, 0, 0, text);
+	wrefresh(funcbar);
+}
+
+static int requester(int color, char *fmt, ...)
 {
 	char *text;
 	va_list ap;
@@ -210,9 +259,16 @@ static char requester(int color, char *fmt, ...)
 	wrefresh(dgwin);
 	free(text);
 
-	char c =  wgetch(dgwin);
+	keypad(dgwin, TRUE);
+
+	int c =  wgetch(dgwin);
 
 	delwin(dgwin);
+
+	refresh();
+
+	if (c == KEY_F(10))
+		has_to_exit = TRUE;
 
 	return c;
 }
@@ -321,8 +377,12 @@ static char *requester_str(int color, char *fmt, ...)
 		case KEY_PPAGE: req = REQ_PREV_PAGE; break;
 		case KEY_NPAGE: req = REQ_NEXT_PAGE; break;
 
+		case KEY_F(10):
+			has_to_exit = TRUE;
+			done = 1;
+		break;
+
 		case '\r':
-		case 27:
 			done = 1;
 			req = REQ_VALIDATION;
 		break;
@@ -342,6 +402,8 @@ static char *requester_str(int color, char *fmt, ...)
 	free_form(form);
 	free_field(str);
 	delwin(win);
+
+	refresh();
 
 	return s;
 }
@@ -407,25 +469,35 @@ static void print_info(struct vgsm_card *card)
 	wborder(infowin, 0, 0, 0, 0, 0, 0, 0, 0);
 	mvwprintw(infowin, 0, 20, "vGSM-II testing tool");
 
-	__u32 info = vgsm_inl(card, VGSM_R_INFO);
+	if (card) {
+		__u32 info = vgsm_inl(card, VGSM_R_INFO);
 
-	mvwprintw(infowin, 1, 2, "MEs: %d - SIMs: %d",
-		VGSM_R_INFO_V_ME_CNT(info),
-		VGSM_R_INFO_V_SIM_CNT(info));
+		mvwprintw(infowin, 1, 2, "MEs: %d - SIMs: %d",
+			VGSM_R_INFO_V_ME_CNT(info),
+			VGSM_R_INFO_V_SIM_CNT(info));
 
-	__u32 version = vgsm_inl(card, VGSM_R_VERSION);
+		__u32 version = vgsm_inl(card, VGSM_R_VERSION);
 
-	mvwprintw(infowin, 2, 2,
-		"HW ver: %d.%d.%d",
-		(version & 0x00ff0000) >> 16,
-		(version & 0x0000ff00) >>  8,
-		(version & 0x000000ff) >>  0);
+		mvwprintw(infowin, 2, 2,
+			"HW ver: %d.%d.%d",
+			(version & 0x00ff0000) >> 16,
+			(version & 0x0000ff00) >>  8,
+			(version & 0x000000ff) >>  0);
 
-	__u32 serial = serial_read(card);
-	if (serial != 0xffffffff)
-		mvwprintw(infowin, 3, 2, "Serial#: %08d", serial);
-	else
-		mvwprintw(infowin, 3, 2, "Serial#: NOT SET");
+		__u32 serial = serial_read(card);
+		if (serial != 0xffffffff)
+			mvwprintw(infowin, 3, 2, "Serial#: %08d", serial);
+		else
+			mvwprintw(infowin, 3, 2, "Serial#: NOT SET");
+
+		mvwprintw(infowin, 1, 40, "PCI Location: %s",
+			card->pci_device->location);
+
+		mvwprintw(infowin, 2, 40, "Registers: 0x%08x",
+			card->regs_base);
+		mvwprintw(infowin, 3, 40, "FIFOs: 0x%08x",
+			card->fifo_base);
+	}
 
 	wrefresh(infowin);
 }
@@ -434,7 +506,7 @@ static void print_info(struct vgsm_card *card)
 	do { \
 		log_info("ERROR: " fmt "\n", \
 			## arg);\
-		return -1; \
+		return ERR_FAILED; \
 	} while(0)
 
 
@@ -846,6 +918,7 @@ static int t_asmi(struct vgsm_card *card, int par)
 
 	log_info("Resetting card...");
 	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
+	usleep(10000);
 	vgsm_outl(card, VGSM_R_SERVICE, 0);
 	if (card_waitbusy(card) < 0)
 		TEST_FAILED("Timeout waiting card to be initialized");
@@ -859,7 +932,6 @@ static int t_asmi(struct vgsm_card *card, int par)
 	__u8 buf[] = "Copyright (C) 2007 Daniele Orlandi, All Rights Reserved";
 
 	log_info("Erasing sector 6...");
-#if 1
 	vgsm_outl(card, VGSM_R_ASMI_ADDR, 0x60000);
 	vgsm_outl(card, VGSM_R_ASMI_CTL,
 		VGSM_R_ASMI_CTL_V_WREN |
@@ -867,8 +939,6 @@ static int t_asmi(struct vgsm_card *card, int par)
 		VGSM_R_ASMI_CTL_V_START);
 	if (asmi_waitbusy(card) < 0)
 		TEST_FAILED("Timeout waiting ASMI during read");
-#endif
-
 	log_info("OK\n");
 
 	log_info("Writing string at 0x60000...");
@@ -959,14 +1029,19 @@ static int t_serial_number(struct vgsm_card *card, int par)
 		str = requester_str(REQ_DIALOG_BG,
 				"Please enter serial #:");
 	} else {
-		char c = requester(REQ_DIALOG_BG,
+		int c = requester(REQ_DIALOG_BG,
 			"Serial number already set to %d."
-			" SKIP programming?", serial);
+			" SKIP programming? (y/n)", serial);
 
-		if (c == 'n' || c == 'N')
+		if (has_to_exit)
+			return ERR_INTERRUPTED;
+		else if (c == 'n' || c == 'N')
 			str = requester_str(REQ_DIALOG_BG,
 				"Please enter serial #:");
 	}
+
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
 
 	if (str) {
 		if (strlen(str)) {
@@ -1061,11 +1136,15 @@ retry:;
 		WINDOW *win = popup(REQ_DIALOG_BG,
 				"Please remove SIM holder #%d", sim);
 		while((vgsm_inl(card, VGSM_R_SIM_STATUS(sim)) &
-				VGSM_R_SIM_STATUS_V_CCIN))
+				VGSM_R_SIM_STATUS_V_CCIN)) {
 			usleep(10000);
 
+			if (has_to_exit)
+				return;
+		}
+
 		delwin(win);
-		wrefresh(outwin);
+		refresh();
 
 		__s64 start, now;
 		struct timeval tv;
@@ -1094,11 +1173,15 @@ retry:;
 				"Please insert SIM holder "
 				"with a valid SIM #%d", sim);
 		while(!(vgsm_inl(card, VGSM_R_SIM_STATUS(sim)) &
-				VGSM_R_SIM_STATUS_V_CCIN))
+				VGSM_R_SIM_STATUS_V_CCIN)) {
 			usleep(10000);
 
+			if (has_to_exit)
+				return;
+		}
+
 		delwin(win);
-		wrefresh(outwin);
+		refresh();
 
 		__s64 start, now;
 		struct timeval tv;
@@ -1119,38 +1202,85 @@ retry:;
 
 static int t_sim_holder(struct vgsm_card *card, int par)
 {
+	log_info("Checking that the SIM holder is removed...");
 	sim_holder_remove(card, par);
+	log_info("OK\n");
+
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+
+	log_info("Checking that the SIM holder is inserted...");
 	sim_holder_insert(card, par);
+	log_info("OK\n");
+
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
 
 	return 0;
 }
 
 static int t_sim_atr(struct vgsm_card *card, int par)
 {
+	log_info("Checking that the SIM holder is inserted...");
 	sim_holder_insert(card, par);
+	log_info("OK\n");
 
-	log_info("Setting SIM routing and power...");
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+
+	log_info("Configuring UART...");
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + FCR, 0x87); // Flush FIFOs
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + IER, 0x0);
+	vgsm_inl(card, VGSM_SIM_UART_BASE(par) + IIR);
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + LCR, 0x80); //Enable Latch
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + DLAB_MSB, 0);
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + DLAB_LSB, 217);
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + LCR, 0x03); //Disable Latch
+	log_info("OK\n");
+
+	log_info("Setting SIM routing...");
 	vgsm_outl(card, VGSM_R_SIM_ROUTER,
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(0) |
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(1) |
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(2) |
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(3));
+	log_info("OK\n");
 
+	log_info("Activating SIM reset...");
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + MCR, 0x01);
+	log_info("OK\n");
+
+	log_info("Powering-on SIM...");
+
+	vgsm_outl(card, VGSM_R_SIM_SETUP(par),
+			VGSM_R_SIM_SETUP_V_3V |
+			VGSM_R_SIM_SETUP_V_CLOCK_OFF);
+	usleep(30000);
+	vgsm_outl(card, VGSM_R_SIM_SETUP(par),
+			VGSM_R_SIM_SETUP_V_VCC |
+			VGSM_R_SIM_SETUP_V_3V |
+			VGSM_R_SIM_SETUP_V_CLOCK_OFF);
+	usleep(30000);
+	log_info("OK\n");
+
+	log_info("Activating 3.571 MHz SIM clock...");
 	vgsm_outl(card, VGSM_R_SIM_SETUP(par),
 			VGSM_R_SIM_SETUP_V_VCC |
 			VGSM_R_SIM_SETUP_V_3V |
 			VGSM_R_SIM_SETUP_V_CLOCK_3_5);
+	usleep(30000);
 	log_info("OK\n");
 
-	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + LCR, 0x80); //Enable Latch
-	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + DLAB_MSB, 0);
-	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + DLAB_LSB, 217);
-	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + LCR, 0x03); //Disable Latch
-
-	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + MCR, 0x04);
-	usleep(200000);
+	log_info("Flushing ATR buffer...");
+	usleep(300000);
 	uart_flush(card, VGSM_SIM_UART_BASE(par));
-	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + MCR, 0x0b);
+	log_info("OK\n");
+
+	log_info("Removing SIM reset...");
+	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + MCR, 0x03);
+	log_info("OK\n");
+
+	log_info("Reading ATR...");
 
 	__u8 atr[128];
 	int atr_pos = 0;
@@ -1184,7 +1314,6 @@ static int t_sim_atr(struct vgsm_card *card, int par)
 			TEST_FAILED("Timed out waiting for ATR from SIM");
 	}
 
-	log_info("ATR: ");
 	int i;
 	for(i=0; i<atr_pos; i++) {
 		log_info("%02x ", atr[i]);
@@ -1204,11 +1333,13 @@ static int t_leds_off(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
 
 askagain:;
-	char c = requester(REQ_DIALOG_BG, "Are LEDs all off [y/n] ?");
-	if (c == 'y' || c == 'Y')
+	int c = requester(REQ_DIALOG_BG, "Are LEDs all off [y/n] ?");
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+	else if (c == 'y' || c == 'Y')
 		;
 	else if (c == 'n' || c == 'N')
-		return -1;
+		TEST_FAILED("One LED is lit while it should be off");
 	else
 		goto askagain;
 
@@ -1223,12 +1354,15 @@ static int t_leds_red(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_R_LED_USER, 0x55555555);
 
 askagain:;
-	char c = requester(REQ_DIALOG_BG,
+	int c = requester(REQ_DIALOG_BG,
 			"Are LEDs all red [y/n] ? ");
-	if (c == 'y' || c == 'Y')
+
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+	else if (c == 'y' || c == 'Y')
 		;
 	else if (c == 'n' || c == 'N')
-		return -1;
+		TEST_FAILED("One LED is off or not red while it should be red");
 	else
 		goto askagain;
 
@@ -1243,12 +1377,16 @@ static int t_leds_green(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_R_LED_USER, 0xaaaaaaaa);
 
 askagain:;
-	char c = requester(REQ_DIALOG_BG,
+	int c = requester(REQ_DIALOG_BG,
 			"Are LEDs all green [y/n] ? ");
-	if (c == 'y' || c == 'Y')
+
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+	else if (c == 'y' || c == 'Y')
 		;
 	else if (c == 'n' || c == 'N')
-		return -1;
+		TEST_FAILED("One LED is off or not green while it should"
+				" be green");
 	else
 		goto askagain;
 
@@ -1263,12 +1401,16 @@ static int t_leds_orange(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
 
 askagain:;
-	char c = requester(REQ_DIALOG_BG,
+	int c = requester(REQ_DIALOG_BG,
 			"Are LEDs all orange [y/n] ? ");
-	if (c == 'y' || c == 'Y')
+
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+	else if (c == 'y' || c == 'Y')
 		;
 	else if (c == 'n' || c == 'N')
-		return -1;
+		TEST_FAILED("One LED is off or not orange while it should"
+				" be orange");
 	else
 		goto askagain;
 
@@ -1293,14 +1435,17 @@ retry:;
 	}
 
 askagain:;
-	char c = requester(REQ_DIALOG_BG,
+	int c = requester(REQ_DIALOG_BG,
 			"Did all LEDs flash [y/n/(r)etry] ? ");
-	if (c == 'y' || c == 'Y')
+	if (has_to_exit)
+		return ERR_INTERRUPTED;
+	else if (c == 'y' || c == 'Y')
 		;
 	else if (c == 'r' || c == 'R')
 		goto retry;
 	else if (c == 'n' || c == 'N')
-		return -1;
+		TEST_FAILED("One LED is not flashing or not orange while it "
+				" should be flashing");
 	else
 		goto askagain;
 
@@ -1334,7 +1479,7 @@ static int t_poweron(struct vgsm_card *card, int par)
 		vgsm_outl(card, VGSM_R_ME_SETUP(par),
 			VGSM_R_ME_SETUP_V_EMERG_OFF);
 
-		usleep(3500000);
+		usleep(3600000);
 		vgsm_outl(card, VGSM_R_ME_SETUP(par), 0);
 		log_info("OK\n");
 	}
@@ -1408,6 +1553,9 @@ static int t_poweron(struct vgsm_card *card, int par)
 
 static int t_uart_asc0(struct vgsm_card *card, int par)
 {
+	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + FCR, 0x87); // Flush FIFOs
+	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + IER, 0x0);
+	vgsm_inl(card,  VGSM_ME_ASC0_BASE(par) + IIR);
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + LCR, 0x80); //Enable Latch
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + DLAB_MSB, 0);
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + DLAB_LSB, 0x9);
@@ -1429,7 +1577,7 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 	for(i=0; i<20; i++) {
 		uart_write(card, VGSM_ME_ASC0_BASE(par), "AT\r");
 		if (uart_read(card, VGSM_ME_ASC0_BASE(par), "AT\r", buf) < 0)
-			return -1;
+			TEST_FAILED("Error reading from UART");
 		if (strlen(buf))
 			TEST_FAILED("Unexpected response: '%s'", buf);
 	}
@@ -1450,7 +1598,7 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 		TEST_FAILED("DSR should be asserted");
 	uart_write(card, VGSM_ME_ASC0_BASE(par), "AT&S1\r");
 	if (uart_read(card, VGSM_ME_ASC0_BASE(par), "AT&S1\r", buf) < 0)
-		return -1;
+		TEST_FAILED("Error reading from UART");
 	if (strlen(buf))
 		TEST_FAILED("Unexpected response: '%s'", buf);
 	usleep(10000);
@@ -1458,7 +1606,7 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 		TEST_FAILED("DSR should not be asserted");
 	uart_write(card, VGSM_ME_ASC0_BASE(par), "AT&S0\r");
 	if (uart_read(card, VGSM_ME_ASC0_BASE(par), "AT&S0\r", buf) < 0)
-		return -1;
+		TEST_FAILED("Error reading from UART");
 	usleep(10000);
 	if (strlen(buf))
 		TEST_FAILED("Unexpected response: '%s'", buf);
@@ -1474,7 +1622,7 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 		TEST_FAILED("DCD should not be asserted");
 	uart_write(card, VGSM_ME_ASC0_BASE(par), "AT&C0\r");
 	if (uart_read(card, VGSM_ME_ASC0_BASE(par), "AT&C0\r", buf) < 0)
-		return -1;
+		TEST_FAILED("Error reading from UART");
 	if (strlen(buf))
 		TEST_FAILED("Unexpected response: '%s'", buf);
 	usleep(10000);
@@ -1482,7 +1630,7 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 		TEST_FAILED("DCD should be asserted");
 	uart_write(card, VGSM_ME_ASC0_BASE(par), "AT&C1\r");
 	if (uart_read(card, VGSM_ME_ASC0_BASE(par), "AT&C1\r", buf) < 0)
-		return -1;
+		TEST_FAILED("Error reading from UART");
 	usleep(10000);
 	if (strlen(buf))
 		TEST_FAILED("Unexpected response: '%s'", buf);
@@ -1502,8 +1650,8 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 	uart_write(card, VGSM_ME_ASC0_BASE(par),
 		"AT+CCLK=\"02/01/01,00:00:00\"\r");
 	if (uart_read(card, VGSM_ME_ASC0_BASE(par),
-		"AT+CCLK=\"02/01/01,00:00:00\"\r", buf) < 0)
-		return -1;
+			"AT+CCLK=\"02/01/01,00:00:00\"\r", buf) < 0)
+		TEST_FAILED("Error reading from UART");
 	if (strlen(buf))
 		TEST_FAILED("Unexpected response: '%s'", buf);
 	usleep(10000);
@@ -1511,8 +1659,8 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 	uart_write(card, VGSM_ME_ASC0_BASE(par),
 		"AT+CALA=\"02/01/01,00:00:01\"\r");
 	if (uart_read(card, VGSM_ME_ASC0_BASE(par),
-		"AT+CALA=\"02/01/01,00:00:01\"\r", buf) < 0)
-		return -1;
+			"AT+CALA=\"02/01/01,00:00:01\"\r", buf) < 0)
+		TEST_FAILED("Error reading from UART");
 	if (strlen(buf))
 		TEST_FAILED("Unexpected response: '%s'", buf);
 
@@ -1561,6 +1709,9 @@ static int t_uart_asc1(struct vgsm_card *card, int par)
 	int speed = 9;
 
 retry:
+	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + FCR, 0x87); // Flush FIFOs
+	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + IER, 0x0);
+	vgsm_inl(card,  VGSM_ME_ASC1_BASE(par) + IIR);
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + LCR, 0x80); //Enable Latch
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + DLAB_MSB, 0);
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + DLAB_LSB, speed);
@@ -1586,7 +1737,7 @@ retry:
 			goto retry;
 		}
 
-		return -1;
+		TEST_FAILED("Error reading from UART");
 	}
 	log_info("Resetting: OK\n");
 
@@ -1595,7 +1746,7 @@ retry:
 	for(i=0; i<20; i++) {
 		uart_write(card, VGSM_ME_ASC1_BASE(par), "AT\r");
 		if (uart_read(card, VGSM_ME_ASC1_BASE(par), "AT\r", buf) < 0)
-			return -1;
+			TEST_FAILED("Error reading from UART");
 		if (strlen(buf))
 			TEST_FAILED("Unexpected response: '%s'", buf);
 	}
@@ -1680,78 +1831,309 @@ struct test tests[] =
 #endif
 };
 
+static struct pci_device *enumerate_pci(void)
+{
+	struct pci_device *devices = NULL;
+	int n_devices = 0;
+
+	const char *devices_dir = "/sys/bus/pci/devices/";
+
+	DIR *dir = opendir(devices_dir);
+	assert(dir);
+
+	struct dirent *dirent;
+	while((dirent = readdir(dir))) {
+
+		if (!strcmp(dirent->d_name, ".") ||
+		    !strcmp(dirent->d_name, ".."))
+			continue;
+
+		devices = realloc(devices, sizeof(*devices) * (n_devices + 2));
+
+		struct pci_device *device = &devices[n_devices];
+
+		memset(device, 0, sizeof(*device));
+		device->location = strdup(dirent->d_name);
+
+		{
+		char *filename;
+		asprintf(&filename, "%s/%s/vendor",
+			devices_dir, dirent->d_name);
+
+		int fd = open(filename, O_RDONLY);
+		if (fd < 0) {
+			perror("open()");
+			abort();
+		}
+
+		char buf[32];
+		if (read(fd, buf, sizeof(buf)) < 0) {
+			perror("read()");
+			abort();
+		}
+
+		close(fd);
+
+		sscanf(buf, "0x%04x", &device->vendor_id);
+		}
+
+		{
+		char *filename;
+		asprintf(&filename, "%s/%s/device",
+			devices_dir, dirent->d_name);
+
+		int fd = open(filename, O_RDONLY);
+		if (fd < 0) {
+			perror("open()");
+			abort();
+		}
+
+		char buf[32];
+		if (read(fd, buf, sizeof(buf)) < 0) {
+			perror("read()");
+			abort();
+		}
+
+		close(fd);
+
+		sscanf(buf, "0x%04x", &device->device_id);
+		}
+
+		{
+		char *filename;
+		asprintf(&filename, "%s/%s/resource",
+			devices_dir, dirent->d_name);
+
+		FILE *f = fopen(filename, "r");
+		if (!f) {
+			perror("fopen()");
+			abort();
+		}
+
+		char buf[80];
+		while (fgets(buf, sizeof(buf), f)) {
+
+			sscanf(buf, "0x%16llx 0x%16llx 0x%16llx",
+				&device->resources[device->n_resources].begin,
+				&device->resources[device->n_resources].end,
+				&device->resources[device->n_resources].flags);
+
+			if (device->resources[device->n_resources].flags)
+				device->n_resources++;
+		}
+
+		fclose(f);
+		}
+
+		n_devices++;
+		devices[n_devices].location = NULL;
+	}
+
+	closedir(dir);
+
+	return devices;
+}
+
+const char *status_to_text(enum status status)
+{
+	switch(status) {
+	case STATUS_NOT_TESTED:
+		return "Not tested";
+	case STATUS_TESTING:
+		return "Test in progress";
+	case STATUS_OK:
+		return "Tested OK";
+	case STATUS_FAILED:
+		return "Test FAILED!!!";
+	}
+
+	return "*UNKNOWN*";
+}
+
+static struct vgsm_card *select_card(
+	struct vgsm_card *cards, int n_cards, int cur_card)
+{
+	beep();
+
+	int width = 60;
+
+	WINDOW *win = newwin(LINES - 6, 0, 5, 0);
+	wbkgd(win, COLOR_PAIR(REQ_DIALOG_BG) | ' ');
+	wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
+	mvwaddstr(win, 1, 1, "Select one card:");
+
+	update_funcbar("F2 - Halt | F3 - Reboot | F10 - Exit");
+
+	keypad(win, TRUE);
+//	nodelay(win, FALSE);
+
+
+	ITEM **items = NULL;
+
+	int n_items = 0;
+	MENU *menu;
+	int i;
+
+	for(i=0; i<n_cards; i++) {
+
+		struct vgsm_card *card = &cards[i];
+
+		char *descr;
+		asprintf(&descr, "%s",
+			status_to_text(card->status));
+
+		items = realloc(items, sizeof(*items) * (n_items + 2));
+
+		items[n_items] = new_item(card->pci_device->location, descr);
+	
+		n_items++;
+		items[n_items] = NULL;
+	}
+	
+	menu = new_menu(items);
+
+	int rows, cols;
+	scale_menu(menu, &rows, &cols);
+	set_menu_win(menu, win);
+	set_menu_sub(menu, derwin(win, rows, cols, 2, 2));
+
+	post_menu(menu);
+
+	int done = 0;
+	int c = 0;
+	struct vgsm_card *card = NULL;
+
+	while(!done)
+	{
+		wrefresh(win);
+
+		c = wgetch(win);
+
+		switch(c) {
+		case KEY_DOWN:
+			menu_driver(menu, REQ_DOWN_ITEM);
+		break;
+
+		case KEY_UP:
+			menu_driver(menu, REQ_UP_ITEM);
+		break;
+
+		case '\r':
+			card = &cards[item_index(current_item(menu))];
+			goto out;
+		break;
+
+		case KEY_F(2):
+			system("/sbin/halt");
+			goto out;
+		break;
+
+		case KEY_F(3):
+			system("/sbin/reboot");
+			goto out;
+		break;
+
+		case KEY_F(10):
+			goto out;
+		break;
+		}
+	}	
+
+out:;
+
+	unpost_menu(menu);
+
+	for(i=0; i<n_items; i++)
+		free_item(items[i]);
+
+	free_menu(menu);
+
+	return card;
+}
+
+void card_test(struct vgsm_card *card)
+{
+	/* Make sure the card is out of reset */
+	vgsm_outl(card, VGSM_R_SERVICE, 0);
+
+	print_info(card);
+	update_funcbar(" F10 - Exit");
+
+	char tmpstr[64];
+	time_t now = time(NULL);
+	strftime(tmpstr, sizeof(tmpstr),
+		"%a, %d  %b  %Y  %H:%M:%S  %z",
+		gmtime(&now));
+	log_info("\n=========== Test session started %s ========\n\n",
+		tmpstr);
+
+	card->status = STATUS_TESTING;
+
+	int i;
+	for(i=0; i<ARRAY_SIZE(tests); i++) {
+
+retry:;
+		log_info("----------- %s ----------\n",
+			tests[i].name);
+
+		int err = tests[i].doit(card, tests[i].par);
+
+		if (err == ERR_FAILED) {
+			card->status = STATUS_FAILED;
+
+			log_info("#### TEST FAILED!!!\n\n");
+
+askagain:;
+			int c = requester(FAIL_DIALOG_BG,
+				"Test failed: (r)etry? (q)uit?...");
+			if (c == 'r' || c == 'R') {
+				goto retry;
+			} else if (c == 'q' || c == 'Q') {
+				break;
+			} else
+				goto askagain;
+
+		} else if (err == ERR_INTERRUPTED) {
+
+			card->status = STATUS_NOT_TESTED;
+
+			log_info("#### TEST INTERRUPTED\n\n");
+
+			break;
+		} else {
+			card->status = STATUS_OK;
+
+			log_info("#### OK\n\n");
+		}
+	}
+
+	now = time(NULL);
+	strftime(tmpstr, sizeof(tmpstr),
+		"%a, %d  %b  %Y  %H:%M:%S  %z",
+		gmtime(&now));
+
+	if (card->status == STATUS_OK) {
+		requester(OK_DIALOG_BG, "Test successful!"
+					" Press any key to continue...");
+		log_info("\n=========== Test session successfully "
+			"completed on %s ========\n\n",
+			tmpstr);
+	} else if (card->status == STATUS_NOT_TESTED) {
+		log_info("\n=========== Test session interrupted"
+			" %s ========\n\n",
+			tmpstr);
+	} else {
+		log_info("\n=========== Test session FAILED"
+			" %s ========\n\n",
+			tmpstr);
+
+		card->status = STATUS_FAILED;
+	}
+}
+
 int main(int argc, char *argv[])
 {
-	int c;
-	int optidx;
-	struct vgsm_card card = {};
 	char *report_file = NULL;
-
-	struct option options[] = {
-		{ "report", required_argument, 0, 0 },
-		{ }
-	};
-
-	for(;;) {
-		struct option no_opt ={ "", no_argument, 0, 0 };
-		struct option *opt;
-
-		c = getopt_long(argc, argv, "", options, &optidx);
-
-		if (c == -1)
-			break;
-
-		opt = c ? &no_opt : &options[optidx];
-
-		if (!strcmp(opt->name, "report"))
-			report_file = optarg;
-		else {
-			if (c) {
-				fprintf(stderr, "Unknow option '%c'\n", c);
-			} else {
-				fprintf(stderr, "Unknow option %s\n",
-					options[optidx].name);
-			}
-
-			return 1;
-		}
-	}
-
-	if (argc == 1) {
-		fprintf(stderr,
-			"Usage: %s <base>\n",
-			argv[0]);
-		return 1;
-	}
-
-	if (argc < optind + 1) {
-		fprintf(stderr, "Base addresses not specified\n");
-		return 1;
-	}
-
-	if (sscanf(argv[optind], "%lx", &card.regs_base) < 1) {
-		fprintf(stderr, "Invalid base address\n");
-		return 1;
-	}
-	printf("Registers base address = 0x%08lx\n", card.regs_base);
-
-	if (sscanf(argv[optind+1], "%lx", &card.fifo_base) < 1) {
-		fprintf(stderr, "Invalid fifo base address\n");
-		return 1;
-	}
-	printf("FIFO base address = 0x%08lx\n", card.fifo_base);
-
-	if (report_file) {
-		report_f = fopen(report_file, "w");
-		if (!report_f) {
-			fprintf(stderr, "Cannot open report file; %s\n",
-				strerror(errno));
-			return 1;
-		}
-	}
-
-	if (map_memory(&card))
-		return 1;
 
 	signal(SIGALRM, sigalarm_handler);
 	signal(SIGINT, sigint_handler);
@@ -1763,8 +2145,14 @@ int main(int argc, char *argv[])
 	keypad(stdscr, TRUE);  /* enable keyboard mapping */
 
 	infowin = derwin(stdscr, 5, 0, 0, 0);
-	outwin = derwin(stdscr, 0, 0, 5, 0);
+	syncok(infowin, TRUE);
+
+	outwin = derwin(stdscr, LINES - 6, 0, 5, 0);
 	scrollok(outwin, TRUE);
+	syncok(outwin, TRUE);
+
+	funcbar = derwin(stdscr, 1, 0, LINES - 1, 0);
+	syncok(funcbar, TRUE);
 
 	if (has_colors()) {
 		start_color();
@@ -1788,69 +2176,49 @@ int main(int argc, char *argv[])
 		wbkgd(outwin, COLOR_PAIR(COLOR_WHITE) | ' ');
 	}
 
+	struct vgsm_card *cards = NULL;
+	int n_cards = 0;
 
+	struct pci_device *devices = enumerate_pci();
+	struct pci_device *device = devices;
 
-	/* Make sure the card is out of reset */
-	vgsm_outl(&card, VGSM_R_SERVICE, 0);
+	while((device++)->location) {
 
-	print_info(&card);
+		if (device->vendor_id != 0x1ab9 ||
+		    device->device_id != 0x0001)
+			continue;
 
-	char tmpstr[64];
-	time_t now = time(NULL);
-	strftime(tmpstr, sizeof(tmpstr),
-		"%a, %d  %b  %Y  %H:%M:%S  %z",
-		gmtime(&now));
-	log_info("\n=========== Test session started %s ========\n\n",
-		tmpstr);
+		assert(device->n_resources == 2);
 
+		cards = realloc(cards, sizeof(*cards) * (n_cards + 2));
+		memset(&cards[n_cards], 0, sizeof(cards[0]));
 
-	int failed = 0;
-	int i;
-	for(i=0; i<ARRAY_SIZE(tests); i++) {
+		cards[n_cards].status = STATUS_NOT_TESTED;
+		cards[n_cards].pci_device = device;
+		cards[n_cards].regs_base = device->resources[0].begin;
+		cards[n_cards].fifo_base = device->resources[1].begin;
 
-retry:;
-		log_info("----------- %s ----------\n",
-			tests[i].name);
+		if (map_memory(&cards[n_cards]))
 
-		if (tests[i].doit(&card, tests[i].par) < 0) {
-			log_info("#### TEST FAILED!!!\n\n");
-			failed = 1;
-		} else if (has_to_exit) {
-			log_info("#### TEST INTERRUPTED\n\n");
-			failed = 1;
-		} else
-			log_info("#### OK\n\n");
+			return 1;
 
-		if (failed) {
-askagain:;
-			char c = requester(FAIL_DIALOG_BG,
-				"Test failed: (r)etry? (q)uit?...");
-			if (c == 'r' || c == 'R') {
-				failed = 0;
-				goto retry;
-			} else if (c == 'q' || c == 'Q') {
-				break;
-			} else
-				goto askagain;
-				
-		}
+		n_cards++;
 	}
 
-	now = time(NULL);
-	strftime(tmpstr, sizeof(tmpstr),
-		"%a, %d  %b  %Y  %H:%M:%S  %z",
-		gmtime(&now));
+	int cur_card = 0;
 
-	if (!failed) {
-		requester(OK_DIALOG_BG, "Test successful!"
-					" Press any key to continue...");
-		log_info("\n=========== Test session successfully "
-			"completed on %s ========\n\n",
-			tmpstr);
-	} else {
-		log_info("\n=========== Test session FAILED"
-			" %s ========\n\n",
-			tmpstr);
+	while(1) {
+		struct vgsm_card *card;
+
+		print_info(NULL);
+
+		card = select_card(cards, n_cards, cur_card);
+		if (!card)
+			break;
+
+		card_test(card);
+
+		has_to_exit = 0;
 	}
 
 	endwin();
