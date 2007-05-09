@@ -916,13 +916,13 @@ static int program_serial(struct vgsm_card *card, __u32 serial)
 static int t_asmi(struct vgsm_card *card, int par)
 {
 
-	log_info("Resetting card...");
+/*	log_info("Resetting card...");
 	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
 	usleep(10000);
 	vgsm_outl(card, VGSM_R_SERVICE, 0);
 	if (card_waitbusy(card) < 0)
 		TEST_FAILED("Timeout waiting card to be initialized");
-	log_info("OK\n");
+	log_info("OK\n");*/
 
 	log_info("Waiting for ASMI to be ready...");
 	if (asmi_waitbusy(card) < 0)
@@ -1494,15 +1494,10 @@ static int t_poweron(struct vgsm_card *card, int par)
 
 	log_info("Setting SIM routing and power...");
 	vgsm_outl(card, VGSM_R_SIM_ROUTER,
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(0, 0) |
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(1, 1) |
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(2, 2) |
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(3, 3));
-
-	vgsm_outl(card, VGSM_R_SIM_SETUP(par),
-		VGSM_R_SIM_SETUP_V_VCC |
-		VGSM_R_SIM_SETUP_V_3V |
-		VGSM_R_SIM_SETUP_V_CLOCK_ME);
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(0) |
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(1) |
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(2) |
+			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(3));
 	log_info("OK\n");
 
 	__s64 start, stop;
