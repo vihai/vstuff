@@ -172,6 +172,7 @@
 #define VGSM_R_SIM_SETUP_V_CLOCK_14	(0x7 << 4)
 #define VGSM_R_SIM_SETUP_V_CLOCK_16	(0x8 << 4)
 #define VGSM_R_SIM_SETUP_V_CLOCK_20	(0x9 << 4)
+#define VGSM_R_SIM_SETUP_V_CLOCK_OFF	(0xf << 4)
 
 #define VGSM_R_SIM_STATUS(n) (VGSM_SIM_BASE(n) + 0x0004)
 #define VGSM_R_SIM_STATUS_V_CCIN	(1 << 0)
