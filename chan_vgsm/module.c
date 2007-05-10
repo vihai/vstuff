@@ -816,6 +816,9 @@ static void vgsm_module_config_copy(
 
 	dst->rx_calibrate = src->rx_calibrate;
 	dst->tx_calibrate = src->tx_calibrate;
+
+	dst->jitbuf_low = src->jitbuf_low;
+	dst->jitbuf_high = src->jitbuf_high;
 }
 
 static void vgsm_module_reconfigure(
