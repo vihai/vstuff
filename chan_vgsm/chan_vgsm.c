@@ -2058,7 +2058,7 @@ static int vgsm_write(
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 		ast_verbose(VERBOSE_PREFIX_3
 			"W %.3f %02x%02x%02x%02x%02x%02x%02x%02x"
-			" %3d %d %d %d\n",
+			" %3d P%-3d S%-3d\n",
 			t/1000000.0,
 			*(__u8 *)(frame->data + 0),
 			*(__u8 *)(frame->data + 1),
@@ -2070,7 +2070,7 @@ static int vgsm_write(
 			*(__u8 *)(frame->data + 7),
 			frame->datalen,
 			pressure,
-			frame->samples, frame->offset);
+			frame->samples);
 	}
 
 	struct vgsm_module_config *mc = vgsm_chan->mc;
