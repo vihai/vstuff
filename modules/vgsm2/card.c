@@ -260,7 +260,7 @@ static ssize_t vgsm_show_serial_number(
 	struct pci_dev *pci_dev = to_pci_dev(device);
 	struct vgsm_card *card = pci_get_drvdata(pci_dev);
 
-	return snprintf(buf, PAGE_SIZE, "%08x\n", card->serial_number);
+	return snprintf(buf, PAGE_SIZE, "%08d\n", card->serial_number);
 }
 
 static DEVICE_ATTR(serial_number, S_IRUGO,
@@ -720,7 +720,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	if (card->serial_number)
 		vgsm_msg_card(card, KERN_INFO,
-			"Serial number: %08X\n", card->serial_number);
+			"Serial number: %08d\n", card->serial_number);
 
 	vgsm_msg_card(card, KERN_INFO,
 		"GSM module sockets: %d\n",
