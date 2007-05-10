@@ -128,7 +128,7 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->tx_calibrate = 16383;
 
 	mc->jitbuf_low = 10;
-	mc->jitbuf_high = 300;
+	mc->jitbuf_high = 80;
 }
 
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)

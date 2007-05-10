@@ -1966,6 +1966,19 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		return f;
 	}
 
+	int sample_size;
+	if (ast_chan->rawreadformat == AST_FORMAT_ALAW ||
+	    ast_chan->rawreadformat == AST_FORMAT_ULAW)
+		sample_size = sizeof(__u8);
+	else if (ast_chan->rawreadformat == AST_FORMAT_SLINEAR)
+		sample_size = sizeof(__s16);
+	else {
+		ast_log(LOG_WARNING,
+			"Cannot generate frames in %d format\n",
+			ast_chan->rawreadformat);
+		return NULL;
+	}
+
 	if (vgsm_chan->module->debug_frames) {
 		__u8 *buf = vgsm_chan->frame_out_buf;
 		struct timeval tv;
@@ -1973,7 +1986,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 
 		ast_verbose(VERBOSE_PREFIX_3
-			"R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d\n",
+			"R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d(%d)\n",
 			t/1000000.0,
 			*(__u8 *)(buf + 0),
 			*(__u8 *)(buf + 1),
@@ -1983,12 +1996,13 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 			*(__u8 *)(buf + 5),
 			*(__u8 *)(buf + 6),
 			*(__u8 *)(buf + 7),
-			nread);
+			nread,
+			nread / sample_size);
 	}
 
 	f->frametype = AST_FRAME_VOICE;
 	f->subclass = ast_chan->rawreadformat;
-	f->samples = nread / 2;
+	f->samples = nread / sample_size;
 	f->datalen = nread;
 	f->data = vgsm_chan->frame_out_buf;
 	f->offset = 0;
@@ -2038,10 +2052,7 @@ static int vgsm_write(
 		return 0;
 	}
 
-        int len = frame->datalen;
-	__u8 *buf = frame->data;
-
-	if (!len)
+	if (!frame->datalen)
 		return 0;
 
 	int pressure;
@@ -2052,13 +2063,16 @@ static int vgsm_write(
 
 	pressure = pressure / sample_size;
 
+	vgsm_chan->pressure_average =
+		((5 * vgsm_chan->pressure_average) + pressure) / 6;
+
 	if (vgsm_chan->module->debug_frames) {
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 		ast_verbose(VERBOSE_PREFIX_3
 			"W %.3f %02x%02x%02x%02x%02x%02x%02x%02x"
-			" %3d P%-3d S%-3d\n",
+			" %3d(%-3d) P%-3d PA%-3d\n",
 			t/1000000.0,
 			*(__u8 *)(frame->data + 0),
 			*(__u8 *)(frame->data + 1),
@@ -2069,11 +2083,15 @@ static int vgsm_write(
 			*(__u8 *)(frame->data + 6),
 			*(__u8 *)(frame->data + 7),
 			frame->datalen,
+			frame->samples,
 			pressure,
-			frame->samples);
+			vgsm_chan->pressure_average);
 	}
 
 	struct vgsm_module_config *mc = vgsm_chan->mc;
+
+        int len = frame->datalen;
+	__u8 *buf = frame->data;
 
 	if (pressure < mc->jitbuf_low) {
 		int diff = (mc->jitbuf_low - pressure);
@@ -2094,16 +2112,17 @@ static int vgsm_write(
 			diff);
 	}
 
-	if (pressure > mc->jitbuf_high && len > 0) {
-		int drop = min(len, (pressure - mc->jitbuf_high) *
-							sample_size);
+	if (vgsm_chan->pressure_average > mc->jitbuf_high) {
+
+		int drop = min(len / sample_size, (vgsm_chan->pressure_average -
+							mc->jitbuf_high));
 
 		vgsm_debug_jitbuf(vgsm_chan->module,
 			"TX %d over high-mark: dropped %d samples\n",
 			pressure - mc->jitbuf_high,
 			drop);
 
-		len = max(0, len - drop);
+		len = max(0, len - drop * sample_size);
 	}
 
 	if (write(vgsm_chan->up_fd, buf, len) < 0) {
@@ -2197,13 +2216,6 @@ static struct ast_channel *vgsm_request(
 
 	ast_mutex_lock(&module->lock);
 
-
-
-
-
-
-
-
 	struct vgsm_chan *vgsm_chan;
 	vgsm_chan = vgsm_chan_alloc();
 	if (!vgsm_chan) {
@@ -2211,7 +2223,8 @@ static struct ast_channel *vgsm_request(
 		goto err_vgsm_chan_alloc;
 	}
 
-	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN, module, 1, format);
+	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN,
+							module, 1, format);
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 

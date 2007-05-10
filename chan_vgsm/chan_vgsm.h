@@ -60,6 +60,8 @@ struct vgsm_chan {
 	__u8 frame_out_buf[512];
 
 	struct ast_dsp *dsp;
+
+	__u16 pressure_average;
 };
 
 struct vgsm_state
