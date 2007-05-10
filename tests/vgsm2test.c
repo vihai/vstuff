@@ -110,6 +110,8 @@ struct vgsm_card
 	int uartbuf_len;
 
 	enum status status;
+
+	__u32 serial;
 };
 
 int timed_out = 0;
@@ -463,7 +465,7 @@ static __u32 serial_read(struct vgsm_card *card)
 }
 
 
-static void print_info(struct vgsm_card *card)
+static void update_info(struct vgsm_card *card)
 {
 	werase(infowin);
 	wborder(infowin, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -484,9 +486,9 @@ static void print_info(struct vgsm_card *card)
 			(version & 0x0000ff00) >>  8,
 			(version & 0x000000ff) >>  0);
 
-		__u32 serial = serial_read(card);
-		if (serial != 0xffffffff)
-			mvwprintw(infowin, 3, 2, "Serial#: %08d", serial);
+		if (card->serial != 0xffffffff)
+			mvwprintw(infowin, 3, 2, "Serial#: %012u",
+							card->serial);
 		else
 			mvwprintw(infowin, 3, 2, "Serial#: NOT SET");
 
@@ -593,6 +595,7 @@ static int t_dai_speed(struct vgsm_card *card, int par)
 	gettimeofday(&tv, NULL);
 	start = tv.tv_sec * 1000000LL + tv.tv_usec;
 
+	log_info("Reading FIFO...");
 	for(k=0;k<ITER;k++) {
 		int i;
 		for(i=0; i<rx_fifo_size; i+=4) {
@@ -605,7 +608,7 @@ static int t_dai_speed(struct vgsm_card *card, int par)
 	stop = tv.tv_sec * 1000000LL + tv.tv_usec;
 	speed = ((float)ITER * sizeof(__u32) * rx_fifo_size) / (stop-start);
 
-	log_info("FIFO read speed: %.3f MB/s\n", speed);
+	log_info(" %.3f MB/s\n", speed);
 
 	if (speed < 15)
 		TEST_FAILED("Read speed not conformant (%.3f < 15 MB/s)\n",
@@ -622,6 +625,8 @@ static int t_dai_speed(struct vgsm_card *card, int par)
 	gettimeofday(&tv, NULL);
 	start = tv.tv_sec * 1000000LL + tv.tv_usec;
 
+	log_info("Writing FIFO...");
+
 	for(k=0;k<ITER;k++) {
 		int i;
 		for(i=0; i<tx_fifo_size; i+=4)
@@ -633,10 +638,10 @@ static int t_dai_speed(struct vgsm_card *card, int par)
 	stop = tv.tv_sec * 1000000LL + tv.tv_usec;
 	speed = ((float)ITER * sizeof(__u32) * tx_fifo_size) / (stop-start);
 
-	log_info("FIFO write speed: %.3f MB/s\n", speed);
+	log_info(" %.3f MB/s\n", speed);
 
-	if (speed < 50)
-		TEST_FAILED("Write speed not conformant (%.3f < 50 MB/s)\n",
+	if (speed < 25)
+		TEST_FAILED("Write speed not conformant (%.3f < 25 MB/s)\n",
 			speed);
 
 	if (speed > 70)
@@ -1002,21 +1007,29 @@ static int t_version(struct vgsm_card *card, int par)
 
 static int t_reg_values(struct vgsm_card *card, int par)
 {
+	log_info("Testing R_VERSION...");
 	__u32 version = vgsm_inl(card, VGSM_R_VERSION);
 	if (version & 0xff000000)
 		TEST_FAILED("R_VERSION 0x%08x & 0xff000000 != 0", version);
+	log_info("OK\n");
 
+	log_info("Testing R_INFO...");
 	__u32 info = vgsm_inl(card, VGSM_R_INFO);
 	if (info & 0xffffff00)
 		TEST_FAILED("R_INFO 0x%08x & 0xffffff00 != 0", info);
+	log_info("OK\n");
 
+	log_info("Testing R_SERVICE...");
 	__u32 service = vgsm_inl(card, VGSM_R_SERVICE);
 	if (service & 0xffffff00)
 		TEST_FAILED("R_SERVICE 0x%08x & 0xffffff00 != 0", service);
+	log_info("OK\n");
 
+	log_info("Testing R_STATUS...");
 	__u32 status = vgsm_inl(card, VGSM_R_STATUS);
 	if (status != 0x00000002)
 		TEST_FAILED("R_STATUS 0x%08x != 0x00000002", status);
+	log_info("OK\n");
 
 	return 0;
 }
@@ -1027,14 +1040,20 @@ static int t_serial_number(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
 
 	char *str = NULL;
-	__u32 serial = serial_read(card);
-	if (serial == 0xffffffff) {
+
+	log_info("Reading serial number...");
+	card->serial = serial_read(card);
+	log_info("%012u\n", card->serial);
+
+	update_info(card);
+
+	if (card->serial == 0xffffffff) {
 		str = requester_str(REQ_DIALOG_BG,
 				"Please enter serial #:");
 	} else {
 		int c = requester(REQ_DIALOG_BG,
-			"Serial number already set to %d."
-			" SKIP programming? (y/n)", serial);
+			"Serial number already set to %012u."
+			" SKIP programming? (y/n)", card->serial);
 
 		if (has_to_exit)
 			return ERR_INTERRUPTED;
@@ -1051,8 +1070,14 @@ static int t_serial_number(struct vgsm_card *card, int par)
 
 	if (str) {
 		if (strlen(str)) {
+
 			program_serial(card, atoi(str));
-			print_info(card);
+
+			log_info("Reading again serial number...");
+			card->serial = serial_read(card);
+			log_info("%012u\n", card->serial);
+
+			update_info(card);
 		}
 
 		free(str);
@@ -1064,6 +1089,8 @@ static int t_serial_number(struct vgsm_card *card, int par)
 static int t_reg_access_1(struct vgsm_card *card, int par)
 {
 	int cnt;
+
+	log_info("Reading/writing patterns to R_TEST...");
 
 	for(cnt=0; cnt<10000; cnt++) {
 
@@ -1082,12 +1109,16 @@ static int t_reg_access_1(struct vgsm_card *card, int par)
 		}
 	}
 
+	log_info("OK\n");
+
 	return 0;
 }
 
 static int t_reg_access_2(struct vgsm_card *card, int par)
 {
 	int cnt;
+
+	log_info("Reading/writing patterns to R_TEST...");
 
 	for(cnt=0; cnt<10000; cnt++) {
 
@@ -1106,12 +1137,16 @@ static int t_reg_access_2(struct vgsm_card *card, int par)
 		}
 	}
 
+	log_info("OK\n");
+
 	return 0;
 }
 
 static int t_reg_access_3(struct vgsm_card *card, int par)
 {
 	int cnt;
+
+	log_info("Reading/writing patterns to R_TEST...");
 
 	for(cnt=0; cnt<10000; cnt++) {
 
@@ -1129,6 +1164,8 @@ static int t_reg_access_3(struct vgsm_card *card, int par)
 					cnt, val, val2);
 		}
 	}
+
+	log_info("OK\n");
 
 	return 0;
 }
@@ -1234,7 +1271,7 @@ static int t_sim_atr(struct vgsm_card *card, int par)
 	if (has_to_exit)
 		return ERR_INTERRUPTED;
 
-	log_info("Configuring UART...");
+	log_info("Setting UART parameters...");
 	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + FCR, 0x87); // Flush FIFOs
 	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + IER, 0x0);
 	vgsm_inl(card, VGSM_SIM_UART_BASE(par) + IIR);
@@ -1242,7 +1279,7 @@ static int t_sim_atr(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + DLAB_MSB, 0);
 	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + DLAB_LSB, 217);
 	vgsm_outl(card, VGSM_SIM_UART_BASE(par) + LCR, 0x03); //Disable Latch
-	log_info("OK\n");
+	log_info("DONE\n");
 
 	log_info("Setting SIM routing...");
 	vgsm_outl(card, VGSM_R_SIM_ROUTER,
@@ -1335,8 +1372,12 @@ static int t_sim_atr(struct vgsm_card *card, int par)
 
 static int t_leds_off(struct vgsm_card *card, int par)
 {
+	log_info("Turning OFF all LEDs...");
 	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
 	vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
+	log_info("DONE\n");
+
+	log_info("Visual inspection...");
 
 askagain:;
 	int c = requester(REQ_DIALOG_BG, "Are LEDs all off [y/n] ?");
@@ -1349,6 +1390,8 @@ askagain:;
 	else
 		goto askagain;
 
+	log_info("OK\n");
+
 	vgsm_outl(card, VGSM_R_LED_SRC, 0);
 
 	return 0;
@@ -1356,8 +1399,12 @@ askagain:;
 
 static int t_leds_red(struct vgsm_card *card, int par)
 {
+	log_info("Turning ON all RED LEDs...");
 	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
 	vgsm_outl(card, VGSM_R_LED_USER, 0x55555555);
+	log_info("DONE\n");
+
+	log_info("Visual inspection...");
 
 askagain:;
 	int c = requester(REQ_DIALOG_BG,
@@ -1372,15 +1419,23 @@ askagain:;
 	else
 		goto askagain;
 
-	vgsm_outl(card, VGSM_R_LED_SRC, 0);
+	log_info("OK\n");
+
+	log_info("Turning OFF all LEDs...");
+	vgsm_outl(card, VGSM_R_LED_USER, 0);
+	log_info("DONE\n");
 
 	return 0;
 }
 
 static int t_leds_green(struct vgsm_card *card, int par)
 {
+	log_info("Turning ON all GREEN LEDs...");
 	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
 	vgsm_outl(card, VGSM_R_LED_USER, 0xaaaaaaaa);
+	log_info("OK\n");
+
+	log_info("Visual inspection...");
 
 askagain:;
 	int c = requester(REQ_DIALOG_BG,
@@ -1396,15 +1451,23 @@ askagain:;
 	else
 		goto askagain;
 
-	vgsm_outl(card, VGSM_R_LED_SRC, 0);
+	log_info("OK\n");
+
+	log_info("Turning OFF all LEDs...");
+	vgsm_outl(card, VGSM_R_LED_USER, 0);
+	log_info("DONE\n");
 
 	return 0;
 }
 
 static int t_leds_orange(struct vgsm_card *card, int par)
 {
+	log_info("Turning ON all RED+GREEN LEDs...");
 	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
 	vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
+	log_info("DONE\n");
+
+	log_info("Visual inspection...");
 
 askagain:;
 	int c = requester(REQ_DIALOG_BG,
@@ -1420,13 +1483,16 @@ askagain:;
 	else
 		goto askagain;
 
-	vgsm_outl(card, VGSM_R_LED_SRC, 0);
+	log_info("Turning OFF all LEDs...");
+	vgsm_outl(card, VGSM_R_LED_USER, 0);
+	log_info("DONE\n");
 
 	return 0;
 }
 
 static int t_leds_flashing(struct vgsm_card *card, int par)
 {
+	log_info("Flashing LEDs...");
 	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
 
 retry:;
@@ -1439,6 +1505,9 @@ retry:;
 		vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
 		usleep(100000);
 	}
+	log_info("DONE\n");
+
+	log_info("Visual inspection...");
 
 askagain:;
 	int c = requester(REQ_DIALOG_BG,
@@ -1455,7 +1524,11 @@ askagain:;
 	else
 		goto askagain;
 
-	vgsm_outl(card, VGSM_R_LED_SRC, 0);
+	log_info("OK\n");
+
+	log_info("Turning OFF all LEDs...");
+	vgsm_outl(card, VGSM_R_LED_USER, 0);
+	log_info("DONE\n");
 
 	return 0;
 }
@@ -1464,11 +1537,12 @@ static int t_module_vddlp(struct vgsm_card *card, int par)
 {
 	__u32 status;
 
+	log_info("Checking VddLp...");
 	status = vgsm_inl(card, VGSM_R_ME_STATUS(par));
 	if ((!status & VGSM_R_ME_STATUS_V_VDDLP))
-		TEST_FAILED("ME%d is missing VDDLP\n", par);
-	else
-		log_info("ME%d is installed and providing VDDLP\n", par);
+		TEST_FAILED("VddLp not present\n", par);
+
+	log_info("OK\n");
 
 	return 0;
 }
@@ -1504,7 +1578,7 @@ static int t_poweron(struct vgsm_card *card, int par)
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(1) |
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(2) |
 			VGSM_R_SIM_ROUTER_V_ME_SOURCE_UART(3));
-	log_info("OK\n");
+	log_info("DONE\n");
 
 	__s64 start, stop;
 	__s64 cts_start, cts_stop;
@@ -1554,6 +1628,7 @@ static int t_poweron(struct vgsm_card *card, int par)
 
 static int t_uart_asc0(struct vgsm_card *card, int par)
 {
+	log_info("Setting UART parameters...");
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + FCR, 0x87); // Flush FIFOs
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + IER, 0x0);
 	vgsm_inl(card,  VGSM_ME_ASC0_BASE(par) + IIR);
@@ -1562,8 +1637,11 @@ static int t_uart_asc0(struct vgsm_card *card, int par)
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + DLAB_LSB, 0x9);
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + LCR, 0x03); //Disable Latch
 	vgsm_outl(card, VGSM_ME_ASC0_BASE(par) + MCR, 0x0b);
+	log_info("DONE\n");
 
+	log_info("Flushing UART...");
 	uart_flush(card, VGSM_ME_ASC0_BASE(par));
+	log_info("DONE\n");
 
 	char buf[128] = "";
 
@@ -1710,6 +1788,7 @@ static int t_uart_asc1(struct vgsm_card *card, int par)
 	int speed = 9;
 
 retry:
+	log_info("Setting UART parameters...");
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + FCR, 0x87); // Flush FIFOs
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + IER, 0x0);
 	vgsm_inl(card,  VGSM_ME_ASC1_BASE(par) + IIR);
@@ -1718,8 +1797,11 @@ retry:
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + DLAB_LSB, speed);
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + LCR, 0x03); //Disable Latch
 	vgsm_outl(card, VGSM_ME_ASC1_BASE(par) + MCR, 0x0b);
+	log_info("DONE\n");
 
+	log_info("Flushing UART...");
 	uart_flush(card, VGSM_ME_ASC1_BASE(par));
+	log_info("DONE\n");
 
 	char buf[128] = "";
 
@@ -1866,6 +1948,7 @@ static struct pci_device *enumerate_pci(void)
 			perror("open()");
 			abort();
 		}
+		free(filename);
 
 		char buf[32];
 		if (read(fd, buf, sizeof(buf)) < 0) {
@@ -1888,6 +1971,7 @@ static struct pci_device *enumerate_pci(void)
 			perror("open()");
 			abort();
 		}
+		free(filename);
 
 		char buf[32];
 		if (read(fd, buf, sizeof(buf)) < 0) {
@@ -1910,6 +1994,7 @@ static struct pci_device *enumerate_pci(void)
 			perror("fopen()");
 			abort();
 		}
+		free(filename);
 
 		char buf[80];
 		while (fgets(buf, sizeof(buf), f)) {
@@ -1955,8 +2040,6 @@ static struct vgsm_card *select_card(
 	struct vgsm_card *cards, int n_cards, int cur_card)
 {
 	beep();
-
-	int width = 60;
 
 	WINDOW *win = newwin(LINES - 6, 0, 5, 0);
 	wbkgd(win, COLOR_PAIR(REQ_DIALOG_BG) | ' ');
@@ -2057,7 +2140,7 @@ void card_test(struct vgsm_card *card)
 	/* Make sure the card is out of reset */
 	vgsm_outl(card, VGSM_R_SERVICE, 0);
 
-	print_info(card);
+	update_info(card);
 	update_funcbar(" F10 - Exit");
 
 	char tmpstr[64];
@@ -2102,8 +2185,6 @@ askagain:;
 
 			break;
 		} else {
-			card->status = STATUS_OK;
-
 			log_info("#### OK\n\n");
 		}
 	}
@@ -2113,12 +2194,14 @@ askagain:;
 		"%a, %d  %b  %Y  %H:%M:%S  %z",
 		gmtime(&now));
 
-	if (card->status == STATUS_OK) {
-		requester(OK_DIALOG_BG, "Test successful!"
-					" Press any key to continue...");
+	if (card->status == STATUS_TESTING) {
+
+		card->status = STATUS_OK;
+
 		log_info("\n=========== Test session successfully "
 			"completed on %s ========\n\n",
 			tmpstr);
+
 	} else if (card->status == STATUS_NOT_TESTED) {
 		log_info("\n=========== Test session interrupted"
 			" %s ========\n\n",
@@ -2134,8 +2217,6 @@ askagain:;
 
 int main(int argc, char *argv[])
 {
-	char *report_file = NULL;
-
 	signal(SIGALRM, sigalarm_handler);
 	signal(SIGINT, sigint_handler);
 
@@ -2211,13 +2292,43 @@ int main(int argc, char *argv[])
 	while(1) {
 		struct vgsm_card *card;
 
-		print_info(NULL);
+		update_info(NULL);
 
 		card = select_card(cards, n_cards, cur_card);
 		if (!card)
 			break;
 
+		char date_str[64];
+		time_t now = time(NULL);
+		strftime(date_str, sizeof(date_str),
+			"%Y%m%d-%H%M%S",
+			gmtime(&now));
+
+		char *filename;
+		asprintf(&filename, "/var/vgsm2tester/XXXXXXXXXXXXXX-%s",
+			date_str);
+
+		report_f = fopen(filename, "w");
+		if (!report_f) {
+			perror("fopen()");
+			abort();
+		}
+
 		card_test(card);
+
+		char *filename2;
+		asprintf(&filename2, "/var/vgsm2tester/%012u-%s",
+			card->serial,
+			date_str);
+
+		if (rename(filename, filename2) < 0) {
+			perror("rename()");
+			abort();
+		}
+		free(filename2);
+		free(filename);
+
+		fclose(report_f);
 
 		has_to_exit = 0;
 	}
