@@ -1023,6 +1023,9 @@ static int t_reg_values(struct vgsm_card *card, int par)
 
 static int t_serial_number(struct vgsm_card *card, int par)
 {
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+	vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
+
 	char *str = NULL;
 	__u32 serial = serial_read(card);
 	if (serial == 0xffffffff) {
@@ -1042,6 +1045,9 @@ static int t_serial_number(struct vgsm_card *card, int par)
 
 	if (has_to_exit)
 		return ERR_INTERRUPTED;
+
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+	vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
 
 	if (str) {
 		if (strlen(str)) {
