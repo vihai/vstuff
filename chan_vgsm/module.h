@@ -325,7 +325,7 @@ void vgsm_module_counter_inc(
 	BOOL outbound,
 	int location,
 	int reason);
-void vgsm_module_failure(struct vgsm_module *module, int err);
+void vgsm_module_failed(struct vgsm_module *module, int err);
 
 const char *vgsm_module_error_to_text(int code);
 

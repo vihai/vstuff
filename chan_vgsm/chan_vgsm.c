@@ -869,7 +869,7 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	if (req->err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, req->err);
+		vgsm_module_failed(module, req->err);
 		err = RESULT_FAILURE;
 		goto err_req_make;
 	}
@@ -1014,7 +1014,7 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failure(module, err);
+		vgsm_module_failed(module, err);
 		err = RESULT_FAILURE;
 		goto err_req_make;
 	}
