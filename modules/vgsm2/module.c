@@ -791,9 +791,9 @@ static int vgsm_module_ioctl_sim_route(
 
 	if (arg == -1)
 		module->route_to_sim = 0xf;
-	if (arg == -2)
+	else if (arg == -2)
 		module->route_to_sim = module->id;
-	if (arg < card->sims_number)
+	else if (arg < card->sims_number)
 		module->route_to_sim = arg;
 	else
 		return -EINVAL;
@@ -823,7 +823,8 @@ static int vgsm_module_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = container_of(uart, struct vgsm_module, asc0);
+	struct vgsm_module *module =
+		container_of(uart, struct vgsm_module, asc0);
 
 	switch(cmd) {
 	case VGSM_IOC_GET_INTERFACE_VERSION:
