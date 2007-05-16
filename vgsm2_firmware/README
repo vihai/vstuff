@@ -17,6 +17,9 @@ below.
 
 Changelog:
 
+------- 2.6.2 ------
+- Status LEDs (red/green) were switched
+
 ------- 2.6.1 ------
 - If the SIM UARTs were misconfigured while the ME was directly connected to
   a SIM, the SIM-ME communication could have been disrupted.

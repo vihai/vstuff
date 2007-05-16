@@ -50,8 +50,8 @@
 #define VGSM_R_LED_SRC_V_TOP_2_G		(1 << 21)
 #define VGSM_R_LED_SRC_V_TOP_3_R		(1 << 22)
 #define VGSM_R_LED_SRC_V_TOP_3_G		(1 << 23)
-#define VGSM_R_LED_SRC_V_STATUS_G		(1 << 24)
-#define VGSM_R_LED_SRC_V_STATUS_R		(1 << 25)
+#define VGSM_R_LED_SRC_V_STATUS_R		(1 << 24)
+#define VGSM_R_LED_SRC_V_STATUS_G		(1 << 25)
 
 #define VGSM_R_LED_HARD 0x0034
 #define VGSM_R_LED_HARD_V_REAR_0_R0		(1 << 0)
