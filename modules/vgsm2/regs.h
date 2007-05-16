@@ -78,8 +78,8 @@
 #define VGSM_R_LED_HARD_V_TOP_2_G		(1 << 21)
 #define VGSM_R_LED_HARD_V_TOP_3_R		(1 << 22)
 #define VGSM_R_LED_HARD_V_TOP_3_G		(1 << 23)
-#define VGSM_R_LED_HARD_V_STATUS_G		(1 << 24)
-#define VGSM_R_LED_HARD_V_STATUS_R		(1 << 25)
+#define VGSM_R_LED_HARD_V_STATUS_R		(1 << 24)
+#define VGSM_R_LED_HARD_V_STATUS_G		(1 << 25)
 
 #define VGSM_R_LED_USER 0x0038
 #define VGSM_R_LED_USER_V_REAR_0_R0		(1 << 0)
@@ -106,8 +106,8 @@
 #define VGSM_R_LED_USER_V_TOP_2_G		(1 << 21)
 #define VGSM_R_LED_USER_V_TOP_3_R		(1 << 22)
 #define VGSM_R_LED_USER_V_TOP_3_G		(1 << 23)
-#define VGSM_R_LED_USER_V_STATUS_G		(1 << 24)
-#define VGSM_R_LED_USER_V_STATUS_R		(1 << 25)
+#define VGSM_R_LED_USER_V_STATUS_R		(1 << 24)
+#define VGSM_R_LED_USER_V_STATUS_G		(1 << 25)
 
 #define VGSM_R_STATUS 0x0080
 #define VGSM_R_STATUS_V_BUSY			(1 << 0)

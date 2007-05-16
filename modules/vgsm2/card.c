@@ -70,10 +70,11 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 
 	/* Set LEDs */
 	vgsm_outl(card, VGSM_R_LED_SRC,
-		VGSM_R_LED_SRC_V_STATUS_G);
+		VGSM_R_LED_SRC_V_STATUS_G |
+		VGSM_R_LED_SRC_V_STATUS_R);
 
 	vgsm_outl(card, VGSM_R_LED_USER,
-		VGSM_R_LED_USER_V_STATUS_G);
+		VGSM_R_LED_SRC_V_STATUS_G);
 
 	/* Enable interrupts */
 	for(i=0; i<card->mes_number; i++) {
