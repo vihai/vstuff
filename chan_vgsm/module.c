@@ -2288,6 +2288,9 @@ static int vgsm_module_power(
 	int fd, int argc, char *argv[],
 	struct vgsm_module *module)
 {
+	if (argc < 5)
+		return RESULT_SHOWUSAGE;
+
 	if (!strcasecmp(argv[4], "on"))
 		return vgsm_module_power_on(fd, module);
 	else if (!strcasecmp(argv[4], "off"))
@@ -2333,6 +2336,9 @@ static int vgsm_module_identify(
 	struct vgsm_module *module)
 {
 	int value;
+
+	if (argc < 5)
+		return RESULT_SHOWUSAGE;
 
 	if (module->status == VGSM_MODULE_STATUS_CLOSED) {
 		ast_cli(fd, "Module is not available\n");
