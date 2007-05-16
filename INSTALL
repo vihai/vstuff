@@ -14,6 +14,24 @@ file in the root directory.
 
 cd into the untarred package tree and run ./configure
 
+If your paths differ from the standard ones you may have to specify appropriate
+parameters to "configure". Run "./configure --help" to see a list of those
+parameters.
+
+Pay particular attention to the last lines of the configure's output, this is
+a sample output of a working configuration:
+
+checking kernel build directory... /lib/modules/2.6.20.3-ubuntu1/build
+checking asterisk modules directory... /usr/lib/asterisk/modules
+checking asterisk includes... /usr/include/
+checking asterisk/version.h usability... yes
+checking asterisk/version.h presence... yes
+checking for asterisk/version.h... yes
+checking asterisk configuration directory... /etc/asterisk
+checking pppd plugins directory... /usr/lib/pppd/2.4.4
+checking pppd includes directory...
+checking pppd config directory... /etc/ppp/
+
 NOTE: Fedora Core 3's 2.6.11 kernel has some of the 2.6.12's patches
 which introduce incompatible interface changes. Since they offer no way to
 know what changes have been introduced, if you're using that kernel you will
