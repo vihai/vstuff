@@ -72,6 +72,7 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
 {
 	int inpos = 0;
 	int outsep = 0;
+
 	while(inpos < inlen) {
 		__u8 c, c2;
 		wchar_t inwc = in[inpos++];
@@ -87,7 +88,7 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
 		vgsm_write_septet(out, outsep + offset, c);
 		outsep++;
 
-		if (c2) {
+		if (cnt == 2) {
 			vgsm_write_septet(out, outsep + offset, c2);
 			outsep++;
 		}
