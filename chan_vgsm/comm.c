@@ -361,11 +361,11 @@ struct vgsm_req *vgsm_req_make_va(
 
 	req = vgsm_req_alloc(comm);
 	if (!req)
-		return NULL;
+		goto err_req_alloc;
 
 	if (vsnprintf(req->request, sizeof(req->request), fmt, ap) >=
 						sizeof(req->request) - 2)
-		return NULL;
+		goto err_too_big;
 
 	strcat(req->request, "\r");
 
@@ -377,10 +377,8 @@ struct vgsm_req *vgsm_req_make_va(
 
 	if (sms_pdu && sms_pdu_len) {
 		req->sms_text_pdu = malloc((sms_pdu_len * 2) + 2);
-		if (!req->sms_text_pdu) {
-			vgsm_req_put(req);
-			return NULL;
-		}
+		if (!req->sms_text_pdu)
+			goto err_malloc_pdu;
 
 		int i;
 		for (i=0; i < sms_pdu_len; i++) {
@@ -398,6 +396,14 @@ struct vgsm_req *vgsm_req_make_va(
 	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_REQUEST);
 
 	return req;
+
+	free(req->sms_text_pdu);
+err_malloc_pdu:
+err_too_big:
+	vgsm_req_put(req);
+err_req_alloc:
+
+	return NULL;
 }
 
 struct vgsm_req *vgsm_req_make_callback(

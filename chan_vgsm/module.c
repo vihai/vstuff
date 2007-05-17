@@ -1058,9 +1058,11 @@ void vgsm_module_set_status(
 		module->status_reason = NULL;
 	}
 
-	va_start(ap, fmt);
-	vasprintf(&module->status_reason, fmt, ap);
-	va_end(ap);
+	if (fmt) {
+		va_start(ap, fmt);
+		vasprintf(&module->status_reason, fmt, ap);
+		va_end(ap);
+	}
 
 	if (timeout >= 0) {
 		vgsm_timer_start_delta(&module->timer, timeout);

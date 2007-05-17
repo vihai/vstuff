@@ -2289,10 +2289,6 @@ static const struct ast_channel_tech vgsm_tech = {
 #endif
 };
 
-/***********************************************/
-
-/*! \brief  manager_vgsm_sms_tx: Send a text sms with VGSM card ---*/
-
 BOOL vgsm_cms_error_fatal(int res)
 {
 	if (res < CMS_ERROR_BASE || res > CMS_ERROR_BASE + CMS_ERROR_SIZE)
@@ -2369,6 +2365,10 @@ static void astman_append(struct mansession *s, const char *fmt, ...)
 	va_end(ap);
 }
 #endif
+
+/***********************************************/
+
+/*! \brief  manager_vgsm_sms_tx: Send a text sms with VGSM card ---*/
 
 #if ASTERISK_VERSION_NUM >= 10402
 static int manager_vgsm_sms_tx(struct mansession *s, const struct message *m)
