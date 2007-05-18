@@ -626,19 +626,19 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	int err = RESULT_SUCCESS;
 
 	if (argc < 4) {
-		ast_cli(fd, "Missing module");
+		ast_cli(fd, "Missing module\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_missing_module;
 	}
 
 	if (argc < 5) {
-		ast_cli(fd, "Missing phone number");
+		ast_cli(fd, "Missing phone number\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_missing_number;
 	}
 
 	if (argc < 6) {
-		ast_cli(fd, "Missing text");
+		ast_cli(fd, "Missing text\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_missing_text;
 	}
@@ -695,14 +695,14 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	} else if (strlen(module->sim.smcc_address.digits)) {
 		vgsm_number_copy(&sms->smcc_address, &module->sim.smcc_address);
 	} else {
-		ast_cli(fd, "Services Center number not set");
+		ast_cli(fd, "Services Center number not set\n");
 		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_no_smcc;
 	}
 
 	if (vgsm_number_parse(&sms->dest, argv[4]) < 0) {
-		ast_cli(fd, "Number %s is invalid", argv[4]);
+		ast_cli(fd, "Number %s is invalid\n", argv[4]);
 		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_invalid_number;
@@ -727,7 +727,18 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	mbstowcs(sms->text, argv[5], slen);
 	sms->text[slen] = L'\0';
 
-	vgsm_sms_submit_prepare(sms);
+	err = vgsm_sms_submit_prepare(sms);
+	if (err == -ENOSPC) {
+		ast_cli(fd, "Message too big\n");
+		ast_mutex_unlock(&module->lock);
+		err = RESULT_FAILURE;
+		goto err_submit_prepare;
+	} else if (err < 0) {
+		ast_cli(fd, "Invalid message content\n");
+		ast_mutex_unlock(&module->lock);
+		err = RESULT_FAILURE;
+		goto err_submit_prepare;
+	}
 
 	struct vgsm_req *req = vgsm_req_make_sms(
 		&module->comm, 30 * SEC, sms->pdu, sms->pdu_len,
@@ -750,6 +761,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 
 err_make_req:
+err_submit_prepare:
 err_invalid_mbstring:
 err_malloc_sms_text:
 err_invalid_number:
@@ -898,19 +910,19 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 			-1, "PIN entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
-		ast_cli(fd, "SIM requires PIN2");
+		ast_cli(fd, "SIM requires PIN2\n");
 		err = RESULT_FAILURE;
 		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
-		ast_cli(fd, "SIM requires PUK");
+		ast_cli(fd, "SIM requires PUK\n");
 		err = RESULT_FAILURE;
 		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
-		ast_cli(fd, "SIM requires PUK2");
+		ast_cli(fd, "SIM requires PUK2\n");
 		err = RESULT_FAILURE;
 		goto err_not_waiting_pin;
 	} else {
-		ast_cli(fd, "Unknown response '%s'", first_line->text);
+		ast_cli(fd, "Unknown response '%s'\n", first_line->text);
 		err = RESULT_FAILURE;
 		goto err_unknown_response;
 	}
@@ -1027,11 +1039,11 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 		err = RESULT_FAILURE;
 		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
-		ast_cli(fd, "SIM requires PIN");
+		ast_cli(fd, "SIM requires PIN\n");
 		err = RESULT_FAILURE;
 		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
-		ast_cli(fd, "SIM requires PIN2");
+		ast_cli(fd, "SIM requires PIN2\n");
 		err = RESULT_FAILURE;
 		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
@@ -1051,11 +1063,11 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 			"PUK entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
-		ast_cli(fd, "SIM requires PUK2");
+		ast_cli(fd, "SIM requires PUK2\n");
 		err = RESULT_FAILURE;
 		goto err_invalid_state;
 	} else {
-		ast_cli(fd, "Unknown response '%s'", first_line->text);
+		ast_cli(fd, "Unknown response '%s'\n", first_line->text);
 
 		err = RESULT_FAILURE;
 		goto err_unknown_response;
@@ -2376,6 +2388,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, const struct message *m)
 static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 #endif
 {
+	int err;
+
 	const char *number = astman_get_header(m, "To");
 	if (!strlen(number)) {
 		astman_append(s, "Status: 510\n");
@@ -2692,7 +2706,19 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_iconv;
 	}
 
-	vgsm_sms_submit_prepare(sms);
+	err = vgsm_sms_submit_prepare(sms);
+	if (err == -ENOSPC) {
+		astman_append(s, "Status: 511\n");
+		astman_send_error(s, m, "Message too big");
+		iconv_close(cd);
+		goto err_submit_prepare;
+	} else if (err < 0) {
+		astman_append(s, "Status: 512\n");
+		astman_send_error(s, m,
+			"Unspecified message preparation error");
+		iconv_close(cd);
+		goto err_submit_prepare;
+	}
 
 	if (module->debug_sms)
 		vgsm_sms_submit_dump(sms);
@@ -2740,6 +2766,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	return 0;
 
 err_make_req:
+err_submit_prepare:
 	module->sending_sms = FALSE;
 err_iconv:
 	free(sms->text);

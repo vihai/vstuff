@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -9,6 +9,8 @@
  * under the terms and conditions of the GNU General Public License.
  *
  */
+
+#include <errno.h>
 
 #include "util.h"
 #include "7bit.h"
@@ -68,7 +70,8 @@ void vgsm_write_septet(__u8 *out, int septet, char c)
 	}
 }
 
-int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
+int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out,
+			int max_septets, int offset)
 {
 	int inpos = 0;
 	int outsep = 0;
@@ -76,8 +79,8 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
 	while(inpos < inlen) {
 		__u8 c, c2;
 		wchar_t inwc = in[inpos++];
-		int cnt = vgsm_wc_to_gsm(inwc, &c, &c2);
 
+		int cnt = vgsm_wc_to_gsm(inwc, &c, &c2);
 		if (cnt < 1) {
 			ast_log(LOG_NOTICE, "Cannot translate char %08x\n",
 				(int)inwc);
@@ -85,8 +88,14 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
 			continue;
 		}
 
+		if (outsep >= max_septets)
+			return -ENOSPC;
+
 		vgsm_write_septet(out, outsep + offset, c);
 		outsep++;
+
+		if (outsep >= max_septets)
+			return -ENOSPC;
 
 		if (cnt == 2) {
 			vgsm_write_septet(out, outsep + offset, c2);
@@ -94,5 +103,5 @@ int vgsm_wc_to_7bit(const wchar_t *in, int inlen, __u8 *out, int offset)
 		}
 	}
 
-	return inlen;
+	return outsep;
 }

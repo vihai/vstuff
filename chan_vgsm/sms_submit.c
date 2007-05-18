@@ -92,11 +92,10 @@ void _vgsm_sms_submit_put(struct vgsm_sms_submit *sms)
 
 int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 {
-	if (sms->pdu)
-		return -1;
+	int err;
 
-	if (!sms->text)
-		return -1;
+	assert(!sms->pdu);
+	assert(sms->text);
 
 	sms->alphabet = VGSM_SMS_DCS_ALPHABET_DEFAULT;
 	wchar_t *c = sms->text;
@@ -123,8 +122,10 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 		160;
 
 	__u8 *pdu = malloc(max_len);
-	if (!pdu)
+	if (!pdu) {
+		err = -ENOMEM;
 		goto err_alloc_pdu;
+	}
 
 	memset(pdu, 0, max_len);
 
@@ -142,8 +143,10 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 	smcc_toa->numbering_plan_identificator = sms->smcc_address.np;
 	smcc_toa->type_of_number = sms->smcc_address.ton;
 
-	if (vgsm_text_to_bcd(pdu + pos, sms->smcc_address.digits) < 0)
+	if (vgsm_text_to_bcd(pdu + pos, sms->smcc_address.digits) < 0) {
+		err = -EINVAL;
 		goto err_invalid_smcc;
+	}
 
 	pos += (strlen(sms->smcc_address.digits) + 1) / 2;
 
@@ -174,8 +177,10 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 	dest_toa->numbering_plan_identificator = sms->dest.np;
 	dest_toa->type_of_number = sms->dest.ton;
 
-	if (vgsm_text_to_bcd(pdu + pos, sms->dest.digits) < 0)
+	if (vgsm_text_to_bcd(pdu + pos, sms->dest.digits) < 0) {
+		err = -EINVAL;
 		goto err_invalid_dest;
+	}
 
 	pos += (strlen(sms->dest.digits) + 1) / 2;
 
@@ -249,6 +254,7 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 		if (cd < 0) {
 			ast_log(LOG_ERROR, "Cannot open iconv context: %s\n",
 				strerror(errno));
+			err = -EINVAL;
 			goto err_iconv_open;
 		}
 
@@ -256,6 +262,7 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 			ast_log(LOG_ERROR, "Cannot iconv; %s\n",
 				strerror(errno));
 			iconv_close(cd);
+			err = -EINVAL;
 			goto err_iconv;
 		}
 
@@ -264,13 +271,22 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 		*tp_udl_ptr = udh_len + outbytes_avail - outbytes_left;
 		pos += outbytes_avail - outbytes_left + udh_len;
 	} else {
-		*tp_udl_ptr = udh_len_septets + wcslen(sms->text);
+		int used_septets = vgsm_wc_to_7bit(sms->text, wcslen(sms->text),
+					pdu + pos,
+					160 - udh_len_septets,
+					udh_len_septets);
+		if (used_septets < 0) {
+			err = used_septets;
+			goto err_to_7bit;
+		}
 
-		vgsm_wc_to_7bit(sms->text, wcslen(sms->text),
-					pdu + pos, udh_len_septets);
+ast_log(LOG_NOTICE,
+	"UDL len7 = %d, wclen = %d, used7 = %d, max_len = %d, pos=%d, max7=%d\n",
+	udh_len_septets, wcslen(sms->text), used_septets, max_len, pos,
+	vgsm_octets_to_septets(max_len - pos) - udh_len_septets);
 
-		pos += vgsm_septets_to_octets(
-				udh_len_septets + wcslen(sms->text));
+		*tp_udl_ptr = udh_len_septets + used_septets;
+		pos += vgsm_septets_to_octets(used_septets);
 	}
 
 	sms->pdu_tp_len = pos - pre_tp_len;
@@ -281,6 +297,7 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 
 	return 0;
 
+err_to_7bit:
 err_iconv:
 err_iconv_open:
 err_invalid_dest:
@@ -289,7 +306,7 @@ err_invalid_smcc:
 	sms->pdu = NULL;
 err_alloc_pdu:
 
-	return -1;
+	return err;
 }
 
 void vgsm_sms_submit_dump(struct vgsm_sms_submit *sms)
