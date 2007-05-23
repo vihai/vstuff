@@ -818,6 +818,16 @@ static int vgsm_module_ioctl_identify(
 	return 0;
 }
 
+static int vgsm_module_ioctl_read_serial(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = module->card;
+
+	return put_user(card->serial_number, (int __user *)arg);
+}
+
 static int vgsm_module_ioctl(
 	struct vgsm_uart *uart,
 	unsigned int cmd,
@@ -865,6 +875,10 @@ static int vgsm_module_ioctl(
 
 	case VGSM_IOC_IDENTIFY:
 		return vgsm_module_ioctl_identify(module, cmd, arg);
+	break;
+
+	case VGSM_IOC_READ_SERIAL:
+		return vgsm_module_ioctl_read_serial(module, cmd, arg);
 	break;
 	}
 
