@@ -61,9 +61,9 @@ enum vgsm_codec_parameter
 #include <linux/version.h>
 #include <linux/spinlock.h>
 
-#define vgsm_DRIVER_NAME "vgsm-pci"
+#define vgsm_DRIVER_NAME "vgsm"
 #define vgsm_DRIVER_PREFIX vgsm_DRIVER_NAME ": "
-#define vgsm_DRIVER_DESCR "VoiSmart PCI GSM Wildcard Driver"
+#define vgsm_DRIVER_DESCR "VoiSmart vGSM-I card driver"
 
 #define vgsm_msg(level, format, arg...) \
 	printk(level vgsm_DRIVER_PREFIX format, ## arg)

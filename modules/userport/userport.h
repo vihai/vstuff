@@ -29,9 +29,9 @@ struct ksup_ctl
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/channel.h>
 
-#define ksup_MODULE_NAME "visdn-userport"
+#define ksup_MODULE_NAME "ks-userport"
 #define ksup_MODULE_PREFIX ksup_MODULE_NAME ": "
-#define ksup_MODULE_DESCR "vISDN userport module"
+#define ksup_MODULE_DESCR "kstreamer userport module"
 
 #define SB_CHAN_HASHBITS 8
 #define SB_CHAN_HASHSIZE (1 << SB_CHAN_HASHBITS)
