@@ -106,7 +106,11 @@ static int vgsm_identify_work_card(struct vgsm_card *card, int color)
 	return reschedule;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 void vgsm_identify_work_func(void *data)
+#else
+void vgsm_identify_work_func(struct work_struct *work)
+#endif
 {
 	struct vgsm_card *card;
 	BOOL reschedule = FALSE;

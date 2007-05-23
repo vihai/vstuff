@@ -340,6 +340,7 @@ static ssize_t vgsm_card_identify_attr_show(
 
 static ssize_t vgsm_card_identify_attr_store(
 	struct device *device,
+	DEVICE_ATTR_COMPAT
 	const char *buf,
 	size_t count)
 {
