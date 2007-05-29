@@ -681,6 +681,7 @@ int ks_pipeline_update_chans(
 
 err_xact_commit:
 err_update_failed:
+	ks_xact_abort(xact);
 err_xact_begin:
 	ks_xact_put(xact);
 err_xact_alloc:
