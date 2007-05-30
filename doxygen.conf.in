@@ -17,7 +17,7 @@
 # The PROJECT_NAME tag is a single word (or a sequence of words surrounded 
 # by quotes) that should identify the project.
 
-PROJECT_NAME           = "vISDN - Versatile ISDN for Linux"
+PROJECT_NAME           = "vstuff - vISDN, vGSM, vDSP..."
 PROJECT_NUMBER = @PACKAGE_VERSION@
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute) 
