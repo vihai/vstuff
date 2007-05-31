@@ -15,7 +15,11 @@
 
 #ifdef __KERNEL__
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
+#include <compat/kfifo.h>
+#else
 #include <linux/kfifo.h>
+#endif
 
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/channel.h>

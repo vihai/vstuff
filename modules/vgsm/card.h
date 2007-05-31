@@ -16,10 +16,15 @@
 #define _VGSM_CARD_H
 
 #include <linux/spinlock.h>
-#include <linux/kfifo.h>
 #include <linux/device.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
+#include <compat/kfifo.h>
+#else
+#include <linux/kfifo.h>
+#endif
 
 #include "module.h"
 #include "micro.h"

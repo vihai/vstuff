@@ -27,6 +27,10 @@
 
 #include "userport.h"
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
+#include <compat/kfifo_code.h>
+#endif
+
 #ifdef DEBUG_CODE
 #ifdef DEBUG_DEFAULTS
 int debug_level = 3;

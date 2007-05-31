@@ -37,6 +37,10 @@
 #include "micro.h"
 #include "codec.h"
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
+#include <compat/kfifo_code.h>
+#endif
+
 static void vgsm_read_msg(
 	struct vgsm_card *card, struct vgsm_micro_message *msg)
 {

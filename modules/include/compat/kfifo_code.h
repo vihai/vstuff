@@ -20,13 +20,11 @@
  */
 
 #include <linux/version.h>
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/err.h>
-#include <linux/kfifo.h>
+#include <compat/kfifo.h>
 
 /*
  * kfifo_init - allocates a new FIFO using a preallocated buffer
@@ -176,5 +174,3 @@ unsigned int __kfifo_get(struct kfifo *fifo,
 	return len;
 }
 EXPORT_SYMBOL(__kfifo_get);
-
-#endif

@@ -14,7 +14,6 @@
 #define _VGSM_CARD_H
 
 #include <linux/spinlock.h>
-#include <linux/kfifo.h>
 #include <linux/device.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
