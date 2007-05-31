@@ -16,6 +16,7 @@
 /* See core.h for IOC allocation */
 #define KS_UP_GET_NODEID	_IOR(0xd0, 0x20, unsigned int)
 #define KS_UP_GET_PRESSURE	_IOR(0xd0, 0x21, unsigned int)
+#define KS_UP_SET_FRAME_MODE	_IOR(0xd0, 0x22, unsigned int)
 
 struct ksup_ctl
 {
