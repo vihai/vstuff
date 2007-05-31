@@ -2401,6 +2401,26 @@ static int vgsm_module_operator(
 	return RESULT_SUCCESS;
 }
 
+static int vgsm_module_rawcommand(
+	int fd, int argc, char *argv[],
+	struct vgsm_module *module)
+{
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&module->comm, 5 * SEC, argv[4]);
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put(req);
+		return RESULT_FAILURE;
+	}
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node)
+		ast_cli(fd, "%s\n", line->text);
+
+	vgsm_req_put(req);
+
+	return RESULT_SUCCESS;
+}
+
 static int vgsm_module_func(int fd, int argc, char *argv[])
 {
 	int err;
@@ -2434,6 +2454,8 @@ static int vgsm_module_func(int fd, int argc, char *argv[])
 		err = vgsm_module_identify(fd, argc, argv, module);
 	else if (!strcasecmp(argv[3], "operator"))
 		err = vgsm_module_operator(fd, argc, argv, module);
+	else if (!strcasecmp(argv[3], "rawcommand"))
+		err = vgsm_module_rawcommand(fd, argc, argv, module);
 	else {
 		ast_mutex_unlock(&module->lock);
 		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
