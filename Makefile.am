@@ -20,7 +20,7 @@ EXTRA_DIST =					\
 	visdn-init				\
 	visdn-sleep.diff			\
 	visdn-sysconfig				\
-	modules/linux_compat/linux/kfifo.h	\
+	modules/include/compat/*		\
 	modules/include/kernel_config.h.in	\
 	modules/include/linux/lapd.h		\
 	modules/include/linux/vgsm.h		\

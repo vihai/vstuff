@@ -476,7 +476,6 @@ AC_CONFIG_FILES([Makefile
 		modules/kstreamer/Makefile
 		modules/visdn/Makefile
 		modules/lapd/Makefile
-		modules/kfifo/Makefile
 		modules/softswitch/Makefile
 		modules/userport/Makefile
 		modules/netdev/Makefile
