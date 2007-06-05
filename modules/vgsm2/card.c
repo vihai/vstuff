@@ -612,21 +612,24 @@ int vgsm_card_probe(struct vgsm_card *card)
 	/* From here on vgsm_msg_card may be used */
 
 	err = pci_enable_device(card->pci_dev);
-	if (err < 0)
+	if (err < 0) {
+		vgsm_msg_card(card, KERN_CRIT,
+			"Error enabling PCI device\n");
 		goto err_pci_enable_device;
+	}
 
 	pci_write_config_word(card->pci_dev, PCI_COMMAND, PCI_COMMAND_MEMORY);
 
 	err = pci_request_regions(card->pci_dev, vgsm_DRIVER_NAME);
 	if (err < 0) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "cannot request I/O memory region\n");
+			"cannot request I/O memory region\n");
 		goto err_pci_request_regions;
 	}
 
 	if (!card->pci_dev->irq) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "No IRQ assigned to card!\n");
+			"No IRQ assigned to card!\n");
 		err = -ENODEV;
 		goto err_noirq;
 	}
@@ -634,7 +637,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 	card->regs_bus_mem = pci_resource_start(card->pci_dev, 0);
 	if (!card->regs_bus_mem) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "No IO memory assigned to card\n");
+			"No IO memory assigned to card\n");
 		err = -ENODEV;
 		goto err_no_regs_base;
 	}
@@ -644,7 +647,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	if(!card->regs_mem) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "Cannot ioremap I/O memory\n");
+			"Cannot ioremap I/O memory\n");
 		err = -ENODEV;
 		goto err_ioremap_regs;
 	}
@@ -652,7 +655,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 	card->fifo_bus_mem = pci_resource_start(card->pci_dev, 1);
 	if (!card->fifo_bus_mem) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "No FIFO memory assigned to card\n");
+			"No FIFO memory assigned to card\n");
 		err = -ENODEV;
 		goto err_no_fifo_base;
 	}
@@ -662,7 +665,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	if(!card->fifo_mem) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "Cannot ioremap FIFO memory\n");
+			"Cannot ioremap FIFO memory\n");
 		err = -ENODEV;
 		goto err_ioremap_fifo;
 	}
@@ -672,7 +675,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 			  SA_SHIRQ, vgsm_DRIVER_NAME, card);
 	if (err < 0) {
 		vgsm_msg_card(card, KERN_CRIT,
-			     "unable to register irq\n");
+			"unable to register IRQ\n");
 		goto err_request_irq;
 	}
 
@@ -685,11 +688,13 @@ int vgsm_card_probe(struct vgsm_card *card)
 	card->hw_version = vgsm_inl(card, VGSM_R_VERSION);
 
 	if (card->sims_number > 8) {
+		WARN_ON(1);
 		err = -EINVAL;
 		goto err_sims_number_invalid;
 	}
 
 	if (card->mes_number > 8) {
+		WARN_ON(1);
 		err = -EINVAL;
 		goto err_mes_number_invalid;
 	}
@@ -723,6 +728,9 @@ int vgsm_card_probe(struct vgsm_card *card)
 	if (card->serial_number)
 		vgsm_msg_card(card, KERN_INFO,
 			"Serial number: %012u\n", card->serial_number);
+	else
+		vgsm_msg_card(card, KERN_INFO,
+			"Serial number: N/A\n");
 
 	vgsm_msg_card(card, KERN_INFO,
 		"GSM module sockets: %d\n",
@@ -763,11 +771,6 @@ int vgsm_card_probe(struct vgsm_card *card)
 				"Module %d is installed and powered %s\n", i,
 				vgsm_module_power_get(card->modules[i]) ?
 								"ON" : "OFF");
-
-			vgsm_msg_card(card, KERN_INFO,
-				"Module %d RX_FIFO=0x%04x TX_FIFO=%04x\n", i,
-				VGSM_R_ME_FIFO_SIZE_V_RX_SIZE(fifo_size),
-				VGSM_R_ME_FIFO_SIZE_V_TX_SIZE(fifo_size));
 		} else {
 			vgsm_msg_card(card, KERN_INFO,
 				"Module %d is not installed\n", i);
@@ -808,7 +811,7 @@ err_pci_enable_device:
 
 void vgsm_card_remove(struct vgsm_card *card)
 {
-//	int i;
+	int i;
 	int shutting_down = FALSE;
 
 	/* Clean up any allocated resources and stuff here */
@@ -818,47 +821,23 @@ void vgsm_card_remove(struct vgsm_card *card)
 
 	set_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags);
 
-#if 0
-		vgsm_card_lock(card);
-		vgsm_module_send_power_get(card->modules[i]);
-		vgsm_card_unlock(card);
+	for(i=0; i<card->mes_number; i++) {
+		if (card->modules[i]) {
+			struct vgsm_module *module = card->modules[i];
 
-		wait_for_completion_timeout(
-			&card->modules[i].read_status_completion, 2 * HZ);
+			u32 me_status =
+				vgsm_inl(card, VGSM_R_ME_STATUS(module->id));
 
-		if (test_bit(VGSM_MODULE_STATUS_ON,
-						&card->modules[i].status)) {
+			if (me_status & VGSM_R_ME_STATUS_V_VDD) {
+				vgsm_msg_card(card, KERN_NOTICE,
+					"Module %d has not been shut down,"
+					" forcing emergency shutdown\n",
+					module->id);
 
-			/* Force an emergency shutdown if the application did
-			 * not do its duty
-			 */
-
-			vgsm_card_lock(card);
-			vgsm_module_send_onoff(&card->modules[i],
-				VGSM_CMD_MAINT_ONOFF_EMERG_OFF);
-			vgsm_card_unlock(card);
-
-			shutting_down = TRUE;
-
-			vgsm_msg_card(card, KERN_NOTICE,
-				"Module %d has not been shut down, forcing"
-				" emergency shutdown\n",
-				card->modules[i].id);
+				vgsm_outl(card, VGSM_R_ME_SETUP(module->id),
+						VGSM_R_ME_SETUP_V_EMERG_OFF);
+			}
 		}
-	}
-#endif
-
-	if (shutting_down) {
-#if 0
-
-		msleep(3200);
-
-		for(i=0; i<card->num_modules; i++) {
-			vgsm_card_lock(card);
-			vgsm_module_send_onoff(&card->modules[i], 0);
-			vgsm_card_unlock(card);
-		}
-#endif
 	}
 
 	clear_bit(VGSM_CARD_FLAGS_READY, &card->flags);
