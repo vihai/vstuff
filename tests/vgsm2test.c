@@ -2264,7 +2264,7 @@ int main(int argc, char *argv[])
 	struct pci_device *devices = enumerate_pci();
 	struct pci_device *device = devices;
 
-	while((device++)->location) {
+	for(; device->location ; device++) {
 
 		if (device->vendor_id != 0x1ab9 ||
 		    device->device_id != 0x0001)
