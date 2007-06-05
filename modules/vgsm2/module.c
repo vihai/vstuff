@@ -892,7 +892,7 @@ static struct uart_driver vgsm_uart_driver_asc0 =
 	.dev_name		= "vgsm2_me",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 32,
+	.nr			= 128,
 	.cons			= NULL,
 };
 
@@ -903,7 +903,7 @@ static struct uart_driver vgsm_uart_driver_asc1 =
 	.dev_name		= "vgsm2_mea",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 32,
+	.nr			= 128,
 	.cons			= NULL,
 };
 
@@ -914,7 +914,7 @@ static struct uart_driver vgsm_uart_driver_mesim =
 	.dev_name		= "vgsm2_mesim",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 32,
+	.nr			= 128,
 	.cons			= NULL,
 };
 

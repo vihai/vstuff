@@ -113,7 +113,7 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		VGSM_R_INT_ENABLE_V_SIM(2) |
 		VGSM_R_INT_ENABLE_V_SIM(3));
 
-	vgsm_msg(KERN_DEBUG, "VGSM card initialized\n");
+	vgsm_msg(KERN_DEBUG, "vGSM-II card successfully initialized\n");
 
 	return 0;
 }
@@ -746,9 +746,11 @@ int vgsm_card_probe(struct vgsm_card *card)
 			card->modules[i] = vgsm_module_create(
 						NULL, card, i, tmpstr,
 						VGSM_FIFO_RX_BASE(i),
-						VGSM_R_ME_FIFO_SIZE_V_RX_SIZE(fifo_size),
+						VGSM_R_ME_FIFO_SIZE_V_RX_SIZE
+								(fifo_size),
 						VGSM_FIFO_TX_BASE(i),
-						VGSM_R_ME_FIFO_SIZE_V_TX_SIZE(fifo_size),
+						VGSM_R_ME_FIFO_SIZE_V_TX_SIZE
+								(fifo_size),
 						VGSM_ME_ASC0_BASE(i),
 						VGSM_ME_ASC1_BASE(i),
 						VGSM_ME_SIM_BASE(i));
@@ -759,7 +761,8 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 			vgsm_msg_card(card, KERN_INFO,
 				"Module %d is installed and powered %s\n", i,
-				vgsm_module_power_get(card->modules[i]) ? "ON" : "OFF");
+				vgsm_module_power_get(card->modules[i]) ?
+								"ON" : "OFF");
 
 			vgsm_msg_card(card, KERN_INFO,
 				"Module %d RX_FIFO=0x%04x TX_FIFO=%04x\n", i,
@@ -898,21 +901,30 @@ int vgsm_card_register(struct vgsm_card *card)
 
 	for (i=0; i<card->sims_number; i++) {
 		err = vgsm_sim_register(&card->sims[i]);
-		if (err < 0)
+		if (err < 0) {
+			vgsm_msg_card(card, KERN_ERR,
+				"SIM registration failed: %d\n", err);
 			goto err_register_sim;
+		}
 	}
 
 	for (i=0; i<card->mes_number; i++) {
 		if (card->modules[i]) {
 			err = vgsm_module_register(card->modules[i]);
-			if (err < 0)
+			if (err < 0) {
+				vgsm_msg_card(card, KERN_ERR,
+					"ME registration failed: %d\n", err);
 				goto err_module_register;
+			}
 		}
 	}
 
 	err = vgsm_card_sysfs_create_files(card);
-	if (err < 0)
+	if (err < 0) {
+		vgsm_msg_card(card, KERN_ERR,
+			"sysfs files creation failed: %d\n", err);
 		goto err_card_sysfs_create_files;
+	}
 
 	return 0;
 
