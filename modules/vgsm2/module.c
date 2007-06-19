@@ -198,6 +198,7 @@ static int vgsm_module_rx_chan_start(struct ks_chan *ks_chan)
 	struct vgsm_card *card = module->card;
 
 	vgsm_card_lock(card);
+	vgsm_module_update_fifo_setup(module);
 	module_rx->fifo_out = vgsm_inl(card, VGSM_R_ME_FIFO_RX_IN(module->id));
 	vgsm_card_unlock(card);
 
@@ -449,13 +450,20 @@ static int vgsm_module_tx_chan_start(struct ks_chan *ks_chan)
 //	int i;
 
 	vgsm_card_lock(card);
+	vgsm_module_update_fifo_setup(module);
 
-	/* Fill FIFO with a-law silence */
-//	for(i=module->timeslot_offset; i < card->writedma_size; i+=4)
-//		*(u8 *)(card->writedma_mem + i) = 0x2a;
+	if (module_tx->compander_enabled) {
+		if (module_tx->compander_mu_mode)
+			memset(card->fifo_mem + module_tx->fifo_base,
+				0xff, module_tx->fifo_size);
+		else
+			memset(card->fifo_mem + module_tx->fifo_base,
+				0x2a, module_tx->fifo_size);
+	} else
+		memset(card->fifo_mem + module_tx->fifo_base,
+			0x0, module_tx->fifo_size);
 
-//	module_tx->fifo_in = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_WR_CUR)) -
-//				card->writedma_bus_mem) / 4;
+	module_tx->fifo_in = vgsm_inl(card, VGSM_R_ME_FIFO_TX_OUT(module->id));
 
 	vgsm_card_unlock(card);
 
