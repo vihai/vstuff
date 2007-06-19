@@ -70,9 +70,9 @@ void ks_req_put(struct ks_req *req)
 		pthread_mutex_destroy(&req->completed_lock);
 		pthread_cond_destroy(&req->completed_cond);
 
-		if (req->response_data) {
-			free(req->response_data);
-			req->response_data = NULL;
+		if (req->response_payload) {
+			free(req->response_payload);
+			req->response_payload = NULL;
 		}
 
 		free(req);

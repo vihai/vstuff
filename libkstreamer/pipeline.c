@@ -345,48 +345,15 @@ void ks_pipeline_update_from_nlmsg(
 	}
 }
 
-static int ks_pipeline_create_payload_fill(
-	struct ks_req *req,
-	struct sk_buff *skb,
-	void *data)
-{
-	struct ks_pipeline *pipeline = data;
-	int err;
-
-	err = ks_netlink_put_attr(skb, KS_PIPELINEATTR_STATUS,
-			&pipeline->status,
-			sizeof(pipeline->status));
-	if (err < 0)
-		goto err_put_attr_status;
-
-	int i;
-	for(i=0; i<pipeline->chans_cnt; i++) {
-		err = ks_netlink_put_attr(skb, KS_PIPELINEATTR_CHAN_ID,
-				&pipeline->chans[i]->id,
-				sizeof(pipeline->chans[i]->id));
-		if (err < 0)
-			goto err_put_attr;
-	}
-
-	return 0;
-
-err_put_attr_status:
-err_put_attr:
-
-	return err;
-}
-
 static int ks_pipeline_create_handle_response(
 	struct ks_req *req,
-	struct nlmsghdr *nlh,
-	void *data)
+	struct nlmsghdr *nlh)
 {
-	struct ks_pipeline *pipeline = data;
-
-	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_NEW)
-		return 0;
+	struct ks_pipeline *pipeline = req->response_data;
 
 	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
+
+	ks_pipeline_put(pipeline);
 
 	return 0;
 }
@@ -399,17 +366,45 @@ struct ks_req *ks_pipeline_queue_create(
 
 	req = ks_req_alloc(xact);
 	if (!req)
-		return ks_req_get(&ks_nomem_request);
+		goto err_req_alloc;
 
 	req->type = KS_NETLINK_PIPELINE_NEW;
 	req->flags = NLM_F_REQUEST;
-	req->data = pipeline;
 	req->response_callback = ks_pipeline_create_handle_response;
-	req->request_fill_callback = ks_pipeline_create_payload_fill;
+	req->response_data = ks_pipeline_get(pipeline);
+
+	req->skb = alloc_skb(4096, GFP_KERNEL);
+	if (!req->skb)
+		goto err_skb_alloc;
+
+	int err;
+
+	err = ks_netlink_put_attr(req->skb, KS_PIPELINEATTR_STATUS,
+			&pipeline->status,
+			sizeof(pipeline->status));
+	if (err < 0)
+		goto err_put_attr_status;
+
+	int i;
+	for(i=0; i<pipeline->chans_cnt; i++) {
+		err = ks_netlink_put_attr(req->skb, KS_PIPELINEATTR_CHAN_ID,
+				&pipeline->chans[i]->id,
+				sizeof(pipeline->chans[i]->id));
+		if (err < 0)
+			goto err_put_attr;
+	}
 
 	ks_xact_queue_request(xact, req);
 
 	return req;
+
+err_put_attr_status:
+err_put_attr:
+err_skb_alloc:
+	ks_req_put(req);
+err_req_alloc:
+
+	return ks_req_get(&ks_nomem_request);
 }
 
 int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
@@ -448,45 +443,15 @@ err_xact_alloc:
 
 static int ks_pipeline_update_handle_response(
 	struct ks_req *req,
-	struct nlmsghdr *nlh,
-	void *data)
+	struct nlmsghdr *nlh)
 {
-	struct ks_pipeline *pipeline = data;
-
-	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_SET)
-		return 0;
+	struct ks_pipeline *pipeline = req->response_data;
 
 	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
 
-	return 0;
-}
-
-static int ks_pipeline_update_payload_fill(
-	struct ks_req *req,
-	struct sk_buff *skb,
-	void *data)
-{
-	struct ks_pipeline *pipeline = data;
-	int err;
-
-	err = ks_netlink_put_attr(skb, KS_PIPELINEATTR_ID,
-			&pipeline->id,
-			sizeof(pipeline->id));
-	if (err < 0)
-		goto err_put_attr_id;
-
-	err = ks_netlink_put_attr(skb, KS_PIPELINEATTR_STATUS,
-			&pipeline->status,
-			sizeof(pipeline->status));
-	if (err < 0)
-		goto err_put_attr_status;
+	ks_pipeline_put(pipeline);
 
 	return 0;
-
-err_put_attr_status:
-err_put_attr_id:
-
-	return err;
 }
 
 struct ks_req *ks_pipeline_queue_update(
@@ -497,17 +462,41 @@ struct ks_req *ks_pipeline_queue_update(
 
 	req = ks_req_alloc(xact);
 	if (!req)
-		return ks_req_get(&ks_nomem_request);
+		goto err_req_alloc;
 
 	req->type = KS_NETLINK_PIPELINE_SET;
 	req->flags = NLM_F_REQUEST;
-	req->data = pipeline;
 	req->response_callback = ks_pipeline_update_handle_response;
-	req->request_fill_callback = ks_pipeline_update_payload_fill;
+	req->response_data = ks_pipeline_get(pipeline);
+
+	req->skb = alloc_skb(4096, GFP_KERNEL);
+	if (!req->skb)
+		goto err_skb_alloc;
+	int err;
+
+	err = ks_netlink_put_attr(req->skb, KS_PIPELINEATTR_ID,
+			&pipeline->id,
+			sizeof(pipeline->id));
+	if (err < 0)
+		goto err_put_attr_id;
+
+	err = ks_netlink_put_attr(req->skb, KS_PIPELINEATTR_STATUS,
+			&pipeline->status,
+			sizeof(pipeline->status));
+	if (err < 0)
+		goto err_put_attr_status;
 
 	ks_xact_queue_request(xact, req);
 
 	return req;
+
+err_put_attr_status:
+err_put_attr_id:
+err_skb_alloc:
+	ks_req_put(req);
+err_req_alloc:
+
+	return ks_req_get(&ks_nomem_request);
 }
 
 int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn)
@@ -544,40 +533,75 @@ err_xact_alloc:
 	return err;
 }
 
+int ks_pipeline_restart(struct ks_pipeline *pipeline, struct ks_conn *conn)
+{
+	int err;
+
+	struct ks_xact *xact = ks_xact_alloc(conn);
+	if (!xact) {
+		err = -ENOMEM;
+		goto err_xact_alloc;
+	}
+
+	ks_req_put(ks_xact_queue_new_request(xact, KS_NETLINK_BEGIN,
+						NLM_F_REQUEST));
+
+	struct ks_req *req1;
+	pipeline->status = KS_PIPELINE_STATUS_OPEN;
+	req1 = ks_pipeline_queue_update(pipeline, xact);
+
+	struct ks_req *req2;
+	pipeline->status = KS_PIPELINE_STATUS_FLOWING;
+	req2 = ks_pipeline_queue_update(pipeline, xact);
+
+	ks_req_put(ks_xact_queue_new_request(xact, KS_NETLINK_COMMIT,
+						NLM_F_REQUEST));
+
+	ks_xact_submit(xact);
+
+	ks_req_wait(req1);
+	if (req1->err < 0) {
+		err = req1->err;
+		ks_req_put(req1);
+
+		goto err_update_failed_1;
+	}
+	ks_req_put(req1);
+
+	ks_req_wait(req2);
+	if (req2->err < 0) {
+		err = req2->err;
+		ks_req_put(req2);
+
+		goto err_update_failed_2;
+	}
+	ks_req_put(req2);
+
+	return 0;
+
+	ks_req_put(req1);
+err_update_failed_1:
+	ks_req_put(req2);
+err_update_failed_2:
+	ks_xact_abort(xact);
+//err_xact_begin:
+	ks_xact_put(xact);
+err_xact_alloc:
+
+	return err;
+}
+
 static int ks_pipeline_destroy_handle_response(
 	struct ks_req *req,
-	struct nlmsghdr *nlh,
-	void *data)
+	struct nlmsghdr *nlh)
 {
-	struct ks_pipeline *pipeline = data;
-
-	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_DEL)
-		return 0;
+	struct ks_pipeline *pipeline = req->response_data;
 
 	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
 
-	return 0;
-}
-
-static int ks_pipeline_destroy_payload_fill(
-	struct ks_req *req,
-	struct sk_buff *skb,
-	void *data)
-{
-	struct ks_pipeline *pipeline = data;
-	int err;
-
-	err = ks_netlink_put_attr(skb, KS_PIPELINEATTR_ID,
-			&pipeline->id,
-			sizeof(pipeline->id));
-	if (err < 0)
-		goto err_put_attr_id;
+	ks_pipeline_put(pipeline);
 
 	return 0;
-
-err_put_attr_id:
-
-	return err;
 }
 
 struct ks_req *ks_pipeline_queue_destroy(
@@ -588,17 +612,35 @@ struct ks_req *ks_pipeline_queue_destroy(
 
 	req = ks_req_alloc(xact);
 	if (!req)
-		return ks_req_get(&ks_nomem_request);
+		goto err_req_alloc;
 
 	req->type = KS_NETLINK_PIPELINE_DEL;
 	req->flags = NLM_F_REQUEST;
-	req->data = pipeline;
 	req->response_callback = ks_pipeline_destroy_handle_response;
-	req->request_fill_callback = ks_pipeline_destroy_payload_fill;
+	req->response_data = ks_pipeline_get(pipeline);
+
+	req->skb = alloc_skb(4096, GFP_KERNEL);
+	if (!req->skb)
+		goto err_skb_alloc;
+
+	int err;
+
+	err = ks_netlink_put_attr(req->skb, KS_PIPELINEATTR_ID,
+			&pipeline->id,
+			sizeof(pipeline->id));
+	if (err < 0)
+		goto err_put_attr_id;
 
 	ks_xact_queue_request(xact, req);
 
 	return req;
+
+err_put_attr_id:
+err_skb_alloc:
+	ks_req_put(req);
+err_req_alloc:
+
+	return ks_req_get(&ks_nomem_request);
 }
 
 int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn)
@@ -656,7 +698,8 @@ int ks_pipeline_update_chans(
 
 		struct ks_chan *chan = pipeline->chans[i];
 
-		ks_chan_dump(chan, conn, LOG_DEBUG);
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		struct ks_req *req;
 		req = ks_chan_queue_update(chan, xact);

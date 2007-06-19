@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,7 +13,7 @@
 #ifndef _CHAN_VGSM_H
 #define _CHAN_VGSM_H
 
-#define VGSM_DESCRIPTION "VoiSmart VGSM Channel For Asterisk"
+#define VGSM_DESCRIPTION "VoiSmart vGSM-I and vGSM-II channel driver"
 #define VGSM_CHAN_TYPE "VGSM"
 #define VGSM_CONFIG_FILE "vgsm.conf"
 #define VGSM_OP_CONFIG_FILE "vgsm_operators.conf"
@@ -62,6 +62,9 @@ struct vgsm_chan {
 	struct ast_dsp *dsp;
 
 	__u16 pressure_average;
+
+	int prev_rawwriteformat;
+	int prev_rawreadformat;
 };
 
 struct vgsm_state

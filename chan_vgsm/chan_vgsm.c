@@ -216,6 +216,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 		ast_chan->rawreadformat = AST_FORMAT_ALAW;
 		ast_chan->writeformat = AST_FORMAT_ALAW;
 		ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+		vgsm_chan->prev_rawwriteformat = AST_FORMAT_ALAW;
 	} else {
 		ast_chan->nativeformats =
 			AST_FORMAT_SLINEAR | AST_FORMAT_ALAW | AST_FORMAT_ULAW;
@@ -225,16 +226,22 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 			ast_chan->rawreadformat = AST_FORMAT_SLINEAR;
 			ast_chan->writeformat = AST_FORMAT_SLINEAR;
 			ast_chan->rawwriteformat = AST_FORMAT_SLINEAR;
+			vgsm_chan->prev_rawreadformat = AST_FORMAT_SLINEAR;
+			vgsm_chan->prev_rawwriteformat = AST_FORMAT_SLINEAR;
 		} else if (format & AST_FORMAT_ALAW) {
 			ast_chan->readformat = AST_FORMAT_ALAW;
 			ast_chan->rawreadformat = AST_FORMAT_ALAW;
 			ast_chan->writeformat = AST_FORMAT_ALAW;
 			ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+			vgsm_chan->prev_rawreadformat = AST_FORMAT_ALAW;
+			vgsm_chan->prev_rawwriteformat = AST_FORMAT_ALAW;
 		} else if (format & AST_FORMAT_ULAW) {
 			ast_chan->readformat = AST_FORMAT_ULAW;
 			ast_chan->rawreadformat = AST_FORMAT_ULAW;
 			ast_chan->writeformat = AST_FORMAT_ULAW;
 			ast_chan->rawwriteformat = AST_FORMAT_ULAW;
+			vgsm_chan->prev_rawreadformat = AST_FORMAT_ULAW;
+			vgsm_chan->prev_rawwriteformat = AST_FORMAT_ULAW;
 		}	
 	}
 
@@ -1952,30 +1959,51 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 {
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
+	struct ast_frame *frame = &vgsm_chan->frame_out;
 
-	struct ast_frame *f = &vgsm_chan->frame_out;
-
-	f->src = VGSM_CHAN_TYPE;
-	f->mallocd = 0;
-	f->delivery.tv_sec = 0;
-	f->delivery.tv_usec = 0;
+	frame->src = VGSM_CHAN_TYPE;
+	frame->mallocd = 0;
+	frame->delivery.tv_sec = 0;
+	frame->delivery.tv_usec = 0;
 
 	if (vgsm_chan->up_fd < 0) {
-		f->frametype = AST_FRAME_NULL;
-		f->subclass = 0;
-		f->samples = 0;
-		f->datalen = 0;
-		f->data = NULL;
-		f->offset = 0;
+		frame->frametype = AST_FRAME_NULL;
+		frame->subclass = 0;
+		frame->samples = 0;
+		frame->datalen = 0;
+		frame->data = NULL;
+		frame->offset = 0;
 
-		return f;
+		return frame;
+	}
+
+	if (ast_chan->rawreadformat != vgsm_chan->prev_rawreadformat) {
+		int err;
+		err = vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
+				ast_chan->rawreadformat != AST_FORMAT_SLINEAR,
+				ast_chan->rawreadformat == AST_FORMAT_ULAW);
+		if (err < 0)
+			ast_log(LOG_ERROR,
+				"Cannot set amu_decompander\n");
+
+		vgsm_chan->prev_rawreadformat = ast_chan->rawreadformat;
+
+		ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
+
+		err = ks_pipeline_restart(vgsm_chan->pipeline_rx, ks_conn);
+		if (err < 0)
+			ast_log(LOG_ERROR, "Cannot restart the pipeline\n");
+
+	        if (vgsm_chan->module->debug_frames)
+                	ast_verbose("Read format changed to %02x\n",
+					ast_chan->rawreadformat);
 	}
 
 	int nread = read(vgsm_chan->up_fd, vgsm_chan->frame_out_buf,
 					sizeof(vgsm_chan->frame_out_buf));
 	if (nread < 0) {
 //		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
-		return f;
+		return frame;
 	}
 
 	int sample_size;
@@ -1997,9 +2025,13 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		gettimeofday(&tv, NULL);
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 
-		ast_verbose(VERBOSE_PREFIX_3
-			"R %.3f %02x%02x%02x%02x%02x%02x%02x%02x %d(%d)\n",
+		ast_verbose(
+			"R %.3f     F%02x R%02x N%02x"
+			" %02x%02x%02x%02x%02x%02x%02x%02x"
+			" %d(%d)\n",
 			t/1000000.0,
+			ast_chan->readformat, ast_chan->rawreadformat,
+			ast_chan->nativeformats,
 			*(__u8 *)(buf + 0),
 			*(__u8 *)(buf + 1),
 			*(__u8 *)(buf + 2),
@@ -2012,15 +2044,15 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 			nread / sample_size);
 	}
 
-	f->frametype = AST_FRAME_VOICE;
-	f->subclass = ast_chan->rawreadformat;
-	f->samples = nread / sample_size;
-	f->datalen = nread;
-	f->data = vgsm_chan->frame_out_buf;
-	f->offset = 0;
+	frame->frametype = AST_FRAME_VOICE;
+	frame->subclass = ast_chan->rawreadformat;
+	frame->samples = nread / sample_size;
+	frame->datalen = nread;
+	frame->data = vgsm_chan->frame_out_buf;
+	frame->offset = 0;
 
 	struct ast_frame *f2;
-	f2 = ast_dsp_process(ast_chan, vgsm_chan->dsp, f);
+	f2 = ast_dsp_process(ast_chan, vgsm_chan->dsp, frame);
 
 	return f2;
 }
@@ -2045,22 +2077,71 @@ static int vgsm_write(
 		return 0;
 	}
 
+	if (!(frame->subclass & ast_chan->nativeformats)) {
+		char s1[128], s2[128], s3[128];
+		ast_log(LOG_WARNING, "Asked to transmit frame type %d,"
+			" while native formats is %s(%d)"
+			" read/write = %s(%d)/%s(%d)\n",
+			frame->subclass, 
+			ast_getformatname_multiple(s1, sizeof(s1) - 1,
+				ast_chan->nativeformats &
+					AST_FORMAT_AUDIO_MASK),
+			ast_chan->nativeformats & AST_FORMAT_AUDIO_MASK,
+			ast_getformatname_multiple(s2, sizeof(s2) - 1,
+				ast_chan->readformat),
+			ast_chan->readformat,
+			ast_getformatname_multiple(s3, sizeof(s3) - 1,
+				ast_chan->writeformat),
+			ast_chan->writeformat);
+
+		return 0;
+	}
+
+	if (ast_chan->rawwriteformat != vgsm_chan->prev_rawwriteformat) {
+		int err;
+		err = vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
+				vgsm_chan->ast_chan->rawwriteformat !=
+							AST_FORMAT_SLINEAR,
+				vgsm_chan->ast_chan->rawwriteformat ==
+							AST_FORMAT_ULAW);
+		if (err < 0)
+			ast_log(LOG_ERROR,
+				"Cannot set amu_decompander\n");
+
+		vgsm_chan->prev_rawwriteformat = ast_chan->rawwriteformat;
+
+		ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
+
+		err = ks_pipeline_restart(vgsm_chan->pipeline_rx, ks_conn);
+		if (err < 0)
+			ast_log(LOG_ERROR, "Cannot restart the pipeline\n");
+
+	        if (vgsm_chan->module->debug_frames)
+                	ast_verbose("Write format changed to %02x\n",
+					ast_chan->rawwriteformat);
+	}
+
+	if (frame->subclass != ast_chan->rawwriteformat) {
+		ast_log(LOG_WARNING, "Frame subclass %02x does not match"
+				" rawwriteformat %02x\n", 
+				frame->subclass, ast_chan->rawwriteformat);
+		return 0;
+	}
+
 	int sample_size;
 	if (frame->subclass == AST_FORMAT_ALAW ||
 	    frame->subclass == AST_FORMAT_ULAW)
 		sample_size = sizeof(__u8);
 	else if (frame->subclass == AST_FORMAT_SLINEAR)
 		sample_size = sizeof(__s16);
-	else {
-		ast_log(LOG_WARNING,
-			"Cannot handle frames in %d format\n",
-			frame->subclass);
+	else
 		return 0;
-	}
 
 	if (vgsm_chan->up_fd < 0) {
-//		ast_log(LOG_WARNING,
-//			"Attempting to write on unconnected channel\n");
+		if (vgsm_chan->module->debug_frames)
+			ast_verbose(
+				"Dropped frame write on unconnected channel\n");
+
 		return 0;
 	}
 
@@ -2082,10 +2163,15 @@ static int vgsm_write(
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
-		ast_verbose(VERBOSE_PREFIX_3
-			"W %.3f %02x%02x%02x%02x%02x%02x%02x%02x"
+		ast_verbose(
+			"W %.3f"
+			" S%02x F%02x R%02x N%02x"
+			" %02x%02x%02x%02x%02x%02x%02x%02x"
 			" %3d(%-3d) P%-3d PA%-3d\n",
 			t/1000000.0,
+			frame->subclass,
+			ast_chan->writeformat, ast_chan->rawwriteformat,
+			ast_chan->nativeformats,
 			*(__u8 *)(frame->data + 0),
 			*(__u8 *)(frame->data + 1),
 			*(__u8 *)(frame->data + 2),

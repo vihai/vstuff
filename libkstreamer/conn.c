@@ -100,7 +100,7 @@ static int ks_conn_get_version(struct ks_conn *conn)
 		goto err_request_version;
 	}
 
-	memcpy(&conn->version, req->response_data,
+	memcpy(&conn->version, req->response_payload,
 		sizeof(conn->version));
 
 	ks_req_put(req);
@@ -178,9 +178,6 @@ static void ks_xact_flush(struct ks_xact *xact)
 			ks_netlink_sendmsg(xact->conn, xact->out_skb);
 			xact->out_skb = NULL;
 		}
-	} else {
-		kfree_skb(xact->out_skb);
-		xact->out_skb = NULL;
 	}
 }
 
@@ -232,20 +229,20 @@ retry:
 			goto retry;
 		}
 
-		if (req->request_fill_callback) {
+		if (req->skb) {
 			ks_xact_need_skb(xact);
 			if (!xact->out_skb)
 				return -ENOMEM;
 
-			err = req->request_fill_callback(req, xact->out_skb,
-								req->data);
-			if (err == -ENOBUFS) {
+			if (req->skb->len >= skb_tailroom(xact->out_skb)) {
 				skb_trim(xact->out_skb,
 					oldtail - xact->out_skb->data);
 				ks_xact_flush(xact);
 				goto retry;
-			} else if (err < 0)
-				return err;
+			}
+
+			memcpy(skb_put(xact->out_skb, req->skb->len),
+				req->skb->data, req->skb->len); 
 		}
 
 		nlh->nlmsg_len = xact->out_skb->tail - oldtail;

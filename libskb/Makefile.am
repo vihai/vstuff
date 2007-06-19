@@ -17,6 +17,10 @@ libskb_ladir = libskb
 
 nobase_include_HEADERS = libskb.h
 
+libskb_la_CPPFLAGS= \
+	-I$(top_builddir)			\
+	-I$(top_builddir)/include/
+
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
 if !inline

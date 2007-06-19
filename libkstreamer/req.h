@@ -37,16 +37,14 @@ struct ks_req
 
 	int err;
 
-	void *data;
-	int (*response_callback)(struct ks_req *req, struct nlmsghdr *nlh,
-				void *data);
-	int (*request_fill_callback)(struct ks_req *req, struct sk_buff *skb,
-					void *data);
+	struct sk_buff *skb;
+	int (*response_callback)(struct ks_req *req, struct nlmsghdr *nlh);
+	void *response_data;
 
 	__u16 type;
 	__u16 flags;
 
-	void *response_data;
+	void *response_payload;
 };
 
 extern struct ks_req ks_nomem_request;

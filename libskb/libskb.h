@@ -13,6 +13,8 @@
 #ifndef _LIBSKB_H
 #define _LIBSKB_H
 
+#include <list.h>
+
 #ifndef GFP_KERNEL
 #define GFP_KERNEL 0
 #endif
@@ -23,6 +25,8 @@
 
 struct sk_buff
 {
+	struct list_head node;
+
 	int size;
 
 	void *data;

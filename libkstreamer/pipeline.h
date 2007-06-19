@@ -66,6 +66,7 @@ void ks_pipeline_dump(
 
 int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn);
 int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn);
+int ks_pipeline_restart(struct ks_pipeline *pipeline, struct ks_conn *conn);
 int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn);
 
 int ks_pipeline_update_chans(

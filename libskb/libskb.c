@@ -22,6 +22,8 @@ struct sk_buff *alloc_skb(int size, int gfp)
 	if (!skb)
 		return NULL;
 
+	INIT_LIST_HEAD(&skb->node);
+
 	skb->size = size;
 	skb->len = 0;
 

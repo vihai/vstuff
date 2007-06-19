@@ -363,10 +363,9 @@ void ks_chan_dump(
 
 static int ks_chan_update_handle_response(
 	struct ks_req *req,
-	struct nlmsghdr *nlh,
-	void *data)
+	struct nlmsghdr *nlh)
 {
-	struct ks_chan *chan = data;
+	struct ks_chan *chan = req->response_data;
 
 	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_SET)
 		return 0;
@@ -374,37 +373,6 @@ static int ks_chan_update_handle_response(
 	ks_chan_update_from_nlmsg(chan, req->xact->conn, nlh);
 
 	return 0;
-}
-
-static int ks_chan_update_payload_fill(
-	struct ks_req *req,
-	struct sk_buff *skb,
-	void *data)
-{
-	struct ks_chan *chan = data;
-	int err;
-
-	err = ks_netlink_put_attr(skb, KS_CHANATTR_ID,
-			&chan->id,
-			sizeof(chan->id));
-	if (err < 0)
-		goto err_put_attr_id;
-
-	struct ks_dynattr_instance *dynattr;
-	list_for_each_entry(dynattr, &chan->dynattrs, node) {
-
-		err = ks_netlink_put_attr(skb, dynattr->dynattr->id,
-				dynattr->payload, dynattr->len);
-		if (err < 0)
-			goto err_put_attr;
-	}
-
-	return 0;
-
-err_put_attr:
-err_put_attr_id:
-
-	return err;
 }
 
 struct ks_req *ks_chan_queue_update(
@@ -419,13 +387,37 @@ struct ks_req *ks_chan_queue_update(
 
 	req->type = KS_NETLINK_CHAN_SET;
 	req->flags = NLM_F_REQUEST;
-	req->data = chan;
 	req->response_callback = ks_chan_update_handle_response;
-	req->request_fill_callback = ks_chan_update_payload_fill;
+
+	req->skb = alloc_skb(4096, GFP_KERNEL);
+	if (!req->skb)
+		return ks_req_get(&ks_nomem_request);
+
+	int err;
+
+	err = ks_netlink_put_attr(req->skb, KS_CHANATTR_ID,
+			&chan->id,
+			sizeof(chan->id));
+	if (err < 0)
+		goto err_put_attr_id;
+
+	struct ks_dynattr_instance *dynattr;
+	list_for_each_entry(dynattr, &chan->dynattrs, node) {
+
+		err = ks_netlink_put_attr(req->skb, dynattr->dynattr->id,
+				dynattr->payload, dynattr->len);
+		if (err < 0)
+			goto err_put_attr;
+	}
 
 	ks_xact_queue_request(xact, req);
 
 	return req;
+
+err_put_attr:
+err_put_attr_id:
+
+	return ks_req_get(&ks_nomem_request);
 }
 
 int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn)

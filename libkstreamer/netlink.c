@@ -281,18 +281,17 @@ static void ks_netlink_receive_unicast(
 		pthread_mutex_unlock(&conn->cur_xact->requests_lock);
 
 		if (conn->cur_req->response_callback) {
-			conn->cur_req->response_callback(conn->cur_req, nlh,
-							conn->cur_req->data);
+			conn->cur_req->response_callback(conn->cur_req, nlh);
 		} else {
-			conn->cur_req->response_data =
+			conn->cur_req->response_payload =
 				malloc(KS_PAYLOAD(nlh));
 
-			if (!conn->cur_req->response_data) {
+			if (!conn->cur_req->response_payload) {
 				//FIXME
 				abort();
 			}
 
-			memcpy(conn->cur_req->response_data,
+			memcpy(conn->cur_req->response_payload,
 					NLMSG_DATA(nlh),
 					NLMSG_PAYLOAD(nlh, 0));
 		}
@@ -328,8 +327,7 @@ static void ks_netlink_receive_unicast(
 		assert(conn->cur_req);
 
 		if (conn->cur_req->response_callback)
-			conn->cur_req->response_callback(conn->cur_req, nlh,
-							conn->cur_req->data);
+			conn->cur_req->response_callback(conn->cur_req, nlh);
 
 		if (nlh->nlmsg_type == NLMSG_DONE ||
 		    nlh->nlmsg_type == NLMSG_ERROR) {
