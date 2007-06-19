@@ -57,11 +57,11 @@
 
 struct ks_conn *ks_conn;
 
-#ifdef DEBUG_DEFAULTS
-BOOL debug = FALSE;
-#else
-BOOL debug = FALSE;
-#endif
+//#ifdef DEBUG_DEFAULTS
+//BOOL debug = FALSE;
+//#else
+//BOOL debug = FALSE;
+//#endif
 
 static void ks_logger(int level, const char *format, ...)
 {
@@ -74,8 +74,7 @@ static void ks_logger(int level, const char *format, ...)
 
 	switch(level) {
 	case KS_LOG_DEBUG:
-		if (debug)
-			ast_verbose("ks %s", msg);
+		ast_verbose("libks: %s", msg);
 	break;
 
 	case KS_LOG_INFO:
@@ -327,6 +326,99 @@ static struct ast_cli_entry ks_show_kstreamer_pipelines =
 
 /*---------------------------------------------------------------------------*/
 
+static int ks_kstreamer_debug_messages_func(int fd, int argc, char *argv[])
+{
+	ks_conn->debug_netlink = TRUE;
+
+	return RESULT_SUCCESS;
+}
+
+static char  ks_kstreamer_debug_messages_help[] =
+"Usage: kstreamer debug messages\n"
+"\n"
+"	\n";
+
+static struct ast_cli_entry ks_kstreamer_debug_messages =
+{
+	{ "kstreamer", "debug", "messages", NULL },
+	ks_kstreamer_debug_messages_func,
+	"",
+	ks_kstreamer_debug_messages_help,
+	NULL,
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int ks_no_kstreamer_debug_messages_func(int fd, int argc, char *argv[])
+{
+	ks_conn->debug_netlink = FALSE;
+
+	return RESULT_SUCCESS;
+}
+
+static char ks_no_kstreamer_debug_messages_help[] =
+"Usage: no kstreamer debug messages\n"
+"\n"
+"	\n";
+
+static struct ast_cli_entry ks_no_kstreamer_debug_messages =
+{
+	{ "no", "kstreamer", "debug", "messages", NULL },
+	ks_no_kstreamer_debug_messages_func,
+	"",
+	ks_no_kstreamer_debug_messages_help,
+	NULL,
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int ks_kstreamer_debug_router_func(int fd, int argc, char *argv[])
+{
+	ks_conn->debug_router = TRUE;
+
+	return RESULT_SUCCESS;
+}
+
+static char  ks_kstreamer_debug_router_help[] =
+"Usage: kstreamer debug router\n"
+"\n"
+"	\n";
+
+static struct ast_cli_entry ks_kstreamer_debug_router =
+{
+	{ "kstreamer", "debug", "router", NULL },
+	ks_kstreamer_debug_router_func,
+	"",
+	ks_kstreamer_debug_router_help,
+	NULL,
+};
+
+
+/*---------------------------------------------------------------------------*/
+
+static int ks_no_kstreamer_debug_router_func(int fd, int argc, char *argv[])
+{
+	ks_conn->debug_router = FALSE;
+
+	return RESULT_SUCCESS;
+}
+
+static char ks_no_kstreamer_debug_router_help[] =
+"Usage: no kstreamer debug router\n"
+"\n"
+"	\n";
+
+static struct ast_cli_entry ks_no_kstreamer_debug_router =
+{
+	{ "no", "kstreamer", "debug", "router", NULL },
+	ks_no_kstreamer_debug_router_func,
+	"",
+	ks_no_kstreamer_debug_router_help,
+	NULL,
+};
+
+/*---------------------------------------------------------------------------*/
+
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 int load_module(void)
 #else
@@ -356,9 +448,17 @@ static int ks_load_module(void)
 	ast_cli_register(&ks_show_kstreamer_nodes);
 	ast_cli_register(&ks_show_kstreamer_chans);
 	ast_cli_register(&ks_show_kstreamer_pipelines);
+	ast_cli_register(&ks_kstreamer_debug_messages);
+	ast_cli_register(&ks_no_kstreamer_debug_messages);
+	ast_cli_register(&ks_kstreamer_debug_router);
+	ast_cli_register(&ks_no_kstreamer_debug_router);
 
 	return 0;
 
+	ast_cli_unregister(&ks_no_kstreamer_debug_router);
+	ast_cli_unregister(&ks_kstreamer_debug_router);
+	ast_cli_unregister(&ks_no_kstreamer_debug_messages);
+	ast_cli_unregister(&ks_kstreamer_debug_messages);
 	ast_cli_unregister(&ks_show_kstreamer_pipelines);
 	ast_cli_unregister(&ks_show_kstreamer_chans);
 	ast_cli_unregister(&ks_show_kstreamer_nodes);
@@ -378,6 +478,10 @@ int unload_module(void)
 static int ks_unload_module(void)
 #endif
 {
+	ast_cli_unregister(&ks_no_kstreamer_debug_router);
+	ast_cli_unregister(&ks_kstreamer_debug_router);
+	ast_cli_unregister(&ks_no_kstreamer_debug_messages);
+	ast_cli_unregister(&ks_kstreamer_debug_messages);
 	ast_cli_unregister(&ks_show_kstreamer_pipelines);
 	ast_cli_unregister(&ks_show_kstreamer_chans);
 	ast_cli_unregister(&ks_show_kstreamer_nodes);
