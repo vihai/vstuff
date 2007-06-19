@@ -404,48 +404,51 @@ static int ks_netlink_rcv_msg(
 	if (!cmd)
 		return -EINVAL;
 
-	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid) {
+	if (!cur_xact) {
+		cur_xact = ks_xact_alloc(nlh->nlmsg_pid,
+					nlh->nlmsg_seq);
+		if (!cur_xact)
+			return -ENOMEM;
+	}
 
-		skb_queue_tail(&ks_backlog, skb);
+	err = cmd->handler(cmd, cur_xact, nlh);
+	if (err < 0)
+		ks_xact_send_error(cur_xact, err);
 
-	} else {
-		if (!cur_xact) {
-			cur_xact = ks_xact_alloc(nlh->nlmsg_pid,
-						nlh->nlmsg_seq);
-			if (!cur_xact)
-				return -ENOMEM;
-		}
+	ks_xact_flush(cur_xact);
 
-		err = cmd->handler(cmd, cur_xact, nlh);
-		if (err < 0)
-			ks_xact_send_error(cur_xact, err);
-
-		ks_xact_flush(cur_xact);
-
-		if (!(cur_xact->flags & KS_XACT_FLAGS_PERSISTENT) ||
-		     cur_xact->flags & KS_XACT_FLAGS_COMPLETED) {
-			spin_lock(&ks_cur_xact_lock);
-			ks_xact_put(cur_xact);
-			cur_xact = NULL;
-			spin_unlock(&ks_cur_xact_lock);
-		}
+	if (!(cur_xact->flags & KS_XACT_FLAGS_PERSISTENT) ||
+	     cur_xact->flags & KS_XACT_FLAGS_COMPLETED) {
+		spin_lock(&ks_cur_xact_lock);
+		ks_xact_put(cur_xact);
+		cur_xact = NULL;
+		spin_unlock(&ks_cur_xact_lock);
 	}
 
 	return 0;
 }
 
-static int ks_netlink_rcv_skb(struct sk_buff *skb)
+static int ks_netlink_rcv_skb(struct sk_buff *skb, int *queued)
 {
 	struct nlmsghdr *nlh;
 	int err;
+
+	nlh = (struct nlmsghdr *)skb->data;
+	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid) {
+		skb_queue_tail(&ks_backlog, skb);
+		*queued = TRUE;
+		return 0;
+	}
 
 	while (skb->len >= NLMSG_SPACE(0)) {
 		u32 rlen;
 
 		nlh = (struct nlmsghdr *)skb->data;
 		if (nlh->nlmsg_len < sizeof(*nlh) ||
-		    skb->len < nlh->nlmsg_len)
+		    skb->len < nlh->nlmsg_len) {
+			*queued = FALSE;
 			return 0;
+		}
 
 		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
 		if (rlen > skb->len)
@@ -465,8 +468,15 @@ static void ks_run_backlog(void)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&ks_backlog)))
-		ks_netlink_rcv_skb(skb);
+	while ((skb = skb_dequeue(&ks_backlog))) {
+
+		int queued = FALSE;
+
+		ks_netlink_rcv_skb(skb, &queued);
+
+		if (!queued)
+			kfree_skb(skb);
+	}
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
@@ -478,14 +488,17 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&ksnl->sk_receive_queue))) {
-		ks_netlink_rcv_skb(skb);
-		kfree_skb(skb);
+
+		int queued = FALSE;
+
+		ks_netlink_rcv_skb(skb, &queued);
+
+		if (!queued)
+			kfree_skb(skb);
 	}
 
 	if (!cur_xact)
 		ks_run_backlog();
-
-
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
