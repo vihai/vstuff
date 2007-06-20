@@ -279,6 +279,9 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 			err = used_septets;
 			goto err_to_7bit;
 		}
+
+		*tp_udl_ptr = udh_len_septets + used_septets;
+		pos += vgsm_septets_to_octets(used_septets);
 	}
 
 	sms->pdu_tp_len = pos - pre_tp_len;
