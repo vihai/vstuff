@@ -2084,9 +2084,8 @@ static int vgsm_write(
 			" read/write = %s(%d)/%s(%d)\n",
 			frame->subclass, 
 			ast_getformatname_multiple(s1, sizeof(s1) - 1,
-				ast_chan->nativeformats &
-					AST_FORMAT_AUDIO_MASK),
-			ast_chan->nativeformats & AST_FORMAT_AUDIO_MASK,
+				ast_chan->nativeformats),
+			ast_chan->nativeformats,
 			ast_getformatname_multiple(s2, sizeof(s2) - 1,
 				ast_chan->readformat),
 			ast_chan->readformat,
