@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "util.h"
 
@@ -35,9 +36,6 @@ static const int base64_value[256] = {
 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 };
-
-static const char base64_code[] =
-	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 void base64_decode(const __u8 *src, char *dest, int dest_size)
 {
@@ -74,93 +72,64 @@ void base64_decode(const __u8 *src, char *dest, int dest_size)
 	dest[outpos] = 0;
 }
 
-void base64_encode(const __u8 *src, char *dest, int dest_size)
+/* LibTomCrypt, modular cryptographic library -- Tom St Denis
+ *
+ * LibTomCrypt is a library that provides various cryptographic
+ * algorithms in a highly modular and flexible manner.
+ *
+ * The library is free for all purposes without any express
+ * guarantee it works.
+ *
+ * Tom St Denis, tomstdenis@gmail.com, http://libtomcrypt.com
+ */
+
+static const char codes[] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+int base64_encode(const __u8 *in,  int inlen,
+                        char *out, int *outlen)
 {
-	__u32 bits = 0;
-	int char_count = 0;
-	int out_cnt = 0;
-	__u8 c;
-
-	assert(src);
-	assert(dest);
-	assert(dest_size > 0);
-
-	while ((c = *src++) && out_cnt < dest_size - 5) {
-
-		bits += c;
-
-		char_count++;
-
-		if (char_count == 3) {
-			dest[out_cnt++] = base64_code[bits >> 18];
-			dest[out_cnt++] = base64_code[(bits >> 12) & 0x3f];
-			dest[out_cnt++] = base64_code[(bits >> 6) & 0x3f];
-			dest[out_cnt++] = base64_code[bits & 0x3f];
-
-			bits = 0;
-			char_count = 0;
-		} else {
-			bits <<= 8;
-		}
+	unsigned long i, len2, leven;
+	__u8 *p;
+	
+	assert(in);
+	assert(out);
+	assert(outlen);
+	
+	/* valid output size ? */
+	len2 = 4 * ((inlen + 2) / 3);
+	
+	if (*outlen < len2 + 1) {
+	     	*outlen = len2 + 1;
+	     	return -ENOSPC;
 	}
 
-	if (char_count != 0) {
-		bits <<= 16 - (8 * char_count);
+	p = out;
+	leven = 3 * (inlen / 3);
 
-		dest[out_cnt++] = base64_code[bits >> 18];
-		dest[out_cnt++] = base64_code[(bits >> 12) & 0x3f];
-
-		if (char_count == 1) {
-			dest[out_cnt++] = '=';
-			dest[out_cnt++] = '=';
-		} else {
-			dest[out_cnt++] = base64_code[(bits >> 6) & 0x3f];
-			dest[out_cnt++] = '=';
-		}
+	for (i = 0; i < leven; i += 3) {
+		*p++ = codes[(in[0] >> 2) & 0x3F];
+		*p++ = codes[(((in[0] & 3) << 4) + (in[1] >> 4)) & 0x3F];
+		*p++ = codes[(((in[1] & 0xf) << 2) + (in[2] >> 6)) & 0x3F];
+		*p++ = codes[in[2] & 0x3F];
+		in += 3;
 	}
+	/* Pad it if necessary...  */
+	if (i < inlen) {
+		__u8 a = in[0];
+		__u8 b = (i+1 < inlen) ? in[1] : 0;
+		
+		*p++ = codes[(a >> 2) & 0x3F];
+		*p++ = codes[(((a & 3) << 4) + (b >> 4)) & 0x3F];
+		*p++ = (i+1 < inlen) ? codes[(((b & 0xf) << 2)) & 0x3F] : '=';
+		*p++ = '=';
+	}
+	
+	/* append a NULL byte */
+	*p = '\0';
+	
+	/* return ok */
+	*outlen = (void *)p - (void *)out;
 
-	dest[out_cnt] = '\0';
+	return 0;
 }
-
-#if 0
-const char *base64_encode_bin(const char *data, int len)
-{
-	static char result[BASE64_RESULT_SZ];
-	int bits = 0;
-	int char_count = 0;
-	int out_cnt = 0;
-
-	if (!data)
-	return data;
-
-	while (len-- && out_cnt < sizeof(result) - 5) {
-	int c = (unsigned char) *data++;
-	bits += c;
-	char_count++;
-	if (char_count == 3) {
-		result[out_cnt++] = base64_code[bits >> 18];
-		result[out_cnt++] = base64_code[(bits >> 12) & 0x3f];
-		result[out_cnt++] = base64_code[(bits >> 6) & 0x3f];
-		result[out_cnt++] = base64_code[bits & 0x3f];
-		bits = 0;
-		char_count = 0;
-	} else {
-		bits <<= 8;
-	}
-	}
-	if (char_count != 0) {
-	bits <<= 16 - (8 * char_count);
-	result[out_cnt++] = base64_code[bits >> 18];
-	result[out_cnt++] = base64_code[(bits >> 12) & 0x3f];
-	if (char_count == 1) {
-		result[out_cnt++] = '=';
-		result[out_cnt++] = '=';
-	} else {
-		result[out_cnt++] = base64_code[(bits >> 6) & 0x3f];
-		result[out_cnt++] = '=';
-	}
-	}
-	result[out_cnt] = '\0';	/* terminate */
-	return result;
-}
-#endif

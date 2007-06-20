@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -14,6 +14,7 @@
 #define _VGSM_BASE64_H
 
 void base64_decode(const char *src, __u8 *dest, int dest_size);
-void base64_encode(const __u8 *src, char *dest, int dest_size);
+int base64_encode(const __u8 *in,  int inlen,
+                        char *out, int *outlen);
 
 #endif
