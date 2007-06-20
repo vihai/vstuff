@@ -279,14 +279,6 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 			err = used_septets;
 			goto err_to_7bit;
 		}
-
-ast_log(LOG_NOTICE,
-	"UDL len7 = %d, wclen = %d, used7 = %d, max_len = %d, pos=%d, max7=%d\n",
-	udh_len_septets, wcslen(sms->text), used_septets, max_len, pos,
-	vgsm_octets_to_septets(max_len - pos) - udh_len_septets);
-
-		*tp_udl_ptr = udh_len_septets + used_septets;
-		pos += vgsm_septets_to_octets(used_septets);
 	}
 
 	sms->pdu_tp_len = pos - pre_tp_len;
