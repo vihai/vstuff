@@ -23,6 +23,7 @@
 #include <asterisk/lock.h>
 #include <asterisk/logger.h>
 #include <asterisk/cli.h>
+#include <asterisk/manager.h>
 
 #include "chan_vgsm.h"
 #include "util.h"
@@ -31,6 +32,7 @@
 #include "operators.h"
 #include "bcd.h"
 #include "7bit.h"
+#include "base64.h"
 #include "gsm_charset.h"
 
 struct vgsm_sms_deliver *vgsm_sms_deliver_alloc(void)
@@ -615,3 +617,159 @@ void vgsm_sms_deliver_dump(struct vgsm_sms_deliver *sms)
 	ast_verbose("-------------------------------\n");
 }
 
+int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
+{
+	struct vgsm_module *module = sms->module;
+
+	char text[2000];
+
+	char *loc = setlocale(LC_CTYPE, "C");
+	if (!loc) {
+		ast_log(LOG_ERROR, "Cannot set locale: %s\r\n",
+			strerror(errno));
+		return -1;
+	}
+
+	ast_mutex_lock(&module->lock);
+	struct vgsm_module_config *mc = module->current_config;
+
+	sanprintf(text, sizeof(text), 
+		"Received: from GSM module %s", module->name);
+
+	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		struct vgsm_operator_info *op_info;
+		op_info = vgsm_operators_search(module->net.mcc,
+						module->net.mnc);
+
+		sanprintf(text, sizeof(text),
+			", registered on %03hu%02hu",
+			module->net.mcc,
+			module->net.mnc);
+
+		if (op_info) {
+			sanprintf(text, sizeof(text)," (%s, %s)",
+				op_info->name,
+				op_info->country ? op_info->country->name :
+								"Unknown");
+		}
+	}
+	ast_mutex_unlock(&module->lock);
+
+	struct tm tm;
+	time_t tim = time(NULL);
+        localtime_r(&tim, &tm);
+	char tmpstr[40];
+	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
+	sanprintf(text, sizeof(text),"; %s\r\n", tmpstr);
+
+	sanprintf(text, sizeof(text), 
+		"From: <%s%s@%s>\r\n",
+		vgsm_number_prefix(&sms->originating_address),
+		sms->originating_address.digits,
+		mc->sms_sender_domain);
+	sanprintf(text, sizeof(text), 
+		"Subject: SMS message\r\n");
+	sanprintf(text, sizeof(text), 
+		"MIME-Version: 1.0\r\n");
+	sanprintf(text, sizeof(text), 
+		"Content-Type: text/plain; charset=\"UTF-8\"\r\n");
+	sanprintf(text, sizeof(text), 
+		"Content-Transfer-Encoding: base64\r\n");
+
+        localtime_r(&sms->timestamp, &tm);
+	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
+	sanprintf(text, sizeof(text), 
+		"Date: %s\r\n", tmpstr);
+
+	sanprintf(text, sizeof(text), 
+		"X-SMS-Message-Type: SMS-DELIVER\r\n");
+	sanprintf(text, sizeof(text), 
+		"X-SMS-Sender-NP: %s\r\n",
+		vgsm_numbering_plan_to_text(sms->originating_address.np));
+	sanprintf(text, sizeof(text), 
+		"X-SMS-Sender-TON: %s\r\n",
+		vgsm_type_of_number_to_text(sms->originating_address.ton));
+	sanprintf(text, sizeof(text), 
+		"X-SMS-Sender-Number: %s%s\r\n",
+		vgsm_number_prefix(&sms->originating_address),
+		sms->originating_address.digits);
+	sanprintf(text, sizeof(text), 
+		"X-SMS-SMCC-NP: %s\r\n",
+		vgsm_numbering_plan_to_text(sms->smcc_address.np));
+	sanprintf(text, sizeof(text), 
+		"X-SMS-SMCC-TON: %s\r\n",
+		vgsm_type_of_number_to_text(sms->smcc_address.ton));
+	sanprintf(text, sizeof(text), 
+		"X-SMS-SMCC-Number: %s%s\r\n",
+		vgsm_number_prefix(&sms->smcc_address),
+		sms->smcc_address.digits);
+
+	if (sms->message_class != -1)
+		sanprintf(text, sizeof(text), 
+		"X-SMS-Class: %d\r\n", sms->message_class);
+
+	sanprintf(text, sizeof(text), 
+		"X-SMS-More-Messages-To-Send: %s\r\n",
+		sms->more_messages_to_send ? "yes" : "no");
+	sanprintf(text, sizeof(text), 
+		"X-SMS-Reply-Path: %s\r\n", sms->reply_path ? "yes" : "no");
+	sanprintf(text, sizeof(text), 
+		"X-SMS-User-Data-Header-Indicator: %s\r\n",
+		sms->user_data_header_indicator ? "yes" : "no");
+	sanprintf(text, sizeof(text), 
+		"X-SMS-Status-Report-Indication: %s\r\n",
+		sms->status_report_indication ? "yes" : "no");
+
+	if (sms->user_data_header_indicator &&
+	    sms->udh_concatenate_maxmsg > 1) {
+		sanprintf(text, sizeof(text), 
+		"X-SMS-Concatenate-RefID: %d\r\n",
+			sms->udh_concatenate_refnum);
+		sanprintf(text, sizeof(text), 
+		"X-SMS-Concatenate-Total-Messages: %d\r\n",
+			sms->udh_concatenate_maxmsg);
+		sanprintf(text, sizeof(text), 
+		"X-SMS-Concatenate-Sequence-Number: %d\r\n",
+			sms->udh_concatenate_seqnum);
+	}
+
+	if (sms->text) {
+		char content[320];
+		char *inbuf = (char *)sms->text;
+		char *outbuf = content;
+		size_t inbytes = (wcslen(sms->text) + 1) * sizeof(wchar_t);
+		size_t outbytes_avail = sizeof(content);
+		size_t outbytes_left = outbytes_avail;
+
+		iconv_t cd = iconv_open("UTF-8", "WCHAR_T");
+		if (cd < 0) {
+			ast_log(LOG_ERROR, "Cannot open iconv context; %s\n",
+				strerror(errno));
+			return -1;
+		}
+
+		if (iconv(cd, &inbuf, &inbytes, &outbuf, &outbytes_left) < 0) {
+			ast_log(LOG_ERROR, "Cannot iconv; %s\n",
+				strerror(errno));
+			return -1;
+		}
+
+		iconv_close(cd);
+
+		char content_base64[512];
+		int outlen = sizeof(content_base64);
+		base64_encode(content,
+			strlen(content),
+			content_base64, &outlen);
+
+		sanprintf(text, sizeof(text),
+			"Content: %s\r\n", content_base64);
+	}
+
+	manager_event(EVENT_FLAG_CALL, "SMSrx", "%s", text);
+
+	setlocale(LC_CTYPE, loc);
+
+	return 0;
+}

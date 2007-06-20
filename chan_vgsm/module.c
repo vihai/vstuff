@@ -3574,6 +3574,8 @@ static void vgsm_module_handle_sms_deliver(struct vgsm_sms_deliver *sms)
 	if (sms->module->debug_sms)
 		vgsm_sms_deliver_dump(sms);
 
+	vgsm_sms_deliver_manager(sms);
+
 	if (vgsm_sms_deliver_spool(sms) >= 0) {
 
 		/* Send Acknowledgment */

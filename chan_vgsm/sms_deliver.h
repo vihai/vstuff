@@ -78,6 +78,7 @@ void _vgsm_sms_deliver_put(struct vgsm_sms_deliver *sms);
 
 struct vgsm_sms_deliver *vgsm_sms_deliver_init_from_pdu(const char *text_pdu);
 int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms);
+int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms);
 void vgsm_sms_deliver_dump(struct vgsm_sms_deliver *sms);
 
 #endif
