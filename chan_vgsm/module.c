@@ -1082,6 +1082,30 @@ void vgsm_module_set_status(
 			vgsm_module_status_to_text(status));
 	}
 
+	if (module->status != status) {
+		if (timeout >= 0) {
+			vgsm_debug_state(module,
+				"changed state from %s to %s"
+				" (timeout %.2fs)\n",
+				vgsm_module_status_to_text(module->status),
+				vgsm_module_status_to_text(status),
+				timeout / 1000000.0);
+		} else {
+			vgsm_debug_state(module,
+				"changed state from %s to %s\n",
+				vgsm_module_status_to_text(module->status),
+				vgsm_module_status_to_text(status));
+		}
+
+		manager_event(EVENT_FLAG_CALL, "vgsm_me_state",
+			"X-vGSM-ME-Old-State: %s\r\n"
+			"X-vGSM-ME-State: %s\r\n"
+			"X-vGSM-ME-State-Change-Reason: %s\r\n",
+			vgsm_module_status_to_text(module->status),
+			vgsm_module_status_to_text(status),
+			module->status_reason);
+	}
+
 	module->status = status;
 
 	if (status == VGSM_MODULE_STATUS_FAILED) {
@@ -3308,6 +3332,8 @@ static void vgsm_update_module_by_creg(
 	if (!get_token(&pars_ptr, field, sizeof(field)))
 		goto err_no_status;
 
+	int old_status = module->net.status;
+
 	switch(atoi(field)) {
 	case 0: module->net.status = VGSM_NET_STATUS_NOT_SEARCHING; break;
 	case 1: module->net.status = VGSM_NET_STATUS_REGISTERED_HOME; break;
@@ -3315,6 +3341,16 @@ static void vgsm_update_module_by_creg(
 	case 3: module->net.status = VGSM_NET_STATUS_REGISTRATION_DENIED; break;
 	case 4: module->net.status = VGSM_NET_STATUS_UNKNOWN; break;
 	case 5: module->net.status = VGSM_NET_STATUS_REGISTERED_ROAMING; break;
+	}
+
+	if (module->net.status != old_status) {
+		manager_event(EVENT_FLAG_CALL, "vgsm_net_state",
+			"X-vGSM-GSM-Registration: %s\r\n",
+			vgsm_net_status_to_text(module->net.status));
+
+		vgsm_debug_state(module,
+			"registration %s\n",
+			vgsm_net_status_to_text(module->net.status));
 	}
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
@@ -3388,10 +3424,6 @@ static void handle_unsolicited_creg(
 	ast_mutex_lock(&module->lock);
 
 	vgsm_update_module_by_creg(module, pars, FALSE);
-
-	vgsm_debug_state(module,
-		"registration %s\n",
-		vgsm_net_status_to_text(module->net.status));
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
 	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING)
