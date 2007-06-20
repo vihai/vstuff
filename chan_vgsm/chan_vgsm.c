@@ -2937,9 +2937,14 @@ static int vgsm_load_module(void)
 	vgsm_hg_cli_register();
 
 	/* Register manager commands */
-	ast_manager_register2("VGSMsmstx", EVENT_FLAG_SYSTEM,
+	ast_manager_register2("VGSMsmstx", EVENT_FLAG_CALL,
 			manager_vgsm_sms_tx,
-			"Send sms with VGSM (text format)",
+			"Send sms with vGSM (obsolete)",
+			mandescr_vgsm_sms_tx);
+
+	ast_manager_register2("vgsm_sms_tx", EVENT_FLAG_CALL,
+			manager_vgsm_sms_tx,
+			"Send sms with vGSM",
 			mandescr_vgsm_sms_tx);
 
 	ast_register_atexit(vgsm_shutdown);

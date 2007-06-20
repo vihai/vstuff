@@ -767,7 +767,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 			"Content: %s\r\n", content_base64);
 	}
 
-	manager_event(EVENT_FLAG_CALL, "SMSrx", "%s", text);
+	manager_event(EVENT_FLAG_CALL, "vgsm_sms_rx", "%s", text);
 
 	setlocale(LC_CTYPE, loc);
 
