@@ -46,7 +46,7 @@ clean: makefiles Kbuild
 distclean: clean
 	rm Makefile
 	rm Kbuild
-	rm Modules.symvers
+	-rm Modules.symvers
 
 Kbuild: Makefile
 	echo "" > Kbuild

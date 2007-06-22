@@ -42,7 +42,8 @@ endif
 SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
-SUBDIRS += scripts samples kstool vgsmctl
+SUBDIRS += scripts samples kstool
+SUBDIRS += vgsmctl vgsm2test
 SUBDIRS += visdn_netdev_ctl
 
 if asterisk_modules

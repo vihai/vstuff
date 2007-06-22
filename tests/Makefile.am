@@ -1,7 +1,7 @@
 #
 # vstuff
 #
-# Copyright (C) 2004-2006 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -9,12 +9,12 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-bin_PROGRAMS = vgsm2test vgsm_stress sniffer traffic dsptest # jitter  listener
+noinst_PROGRAMS = vgsm_stress sniffer traffic dsptest # jitter  listener
 
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
 
-nobase_include_HEADERS = longtime.h
+noinst_HEADERS = longtime.h
 
 sniffer_SOURCES = sniffer.c
 sniffer_LDADD = \
@@ -48,10 +48,6 @@ vgsm_stress_CPPFLAGS=\
 
 dsptest_SOURCES = dsptest.c
 dsptest_CPPFLAGS=
-
-vgsm2test_SOURCES = vgsm2test.c
-vgsm2test_CPPFLAGS =
-vgsm2test_LDADD = -lncurses -lform -lmenu
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 

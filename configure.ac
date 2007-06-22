@@ -377,7 +377,9 @@ AC_ARG_ENABLE(
 	[tests],
 	AC_HELP_STRING(
 		[--enable-tests],
-		[Enable testing tools]))
+		[Enable testing tools]),
+	[enable_tests="$enableval"],
+	[enable_tests="no"])
 
 AM_CONDITIONAL(tests, test "$enable_tests" != "no")
 
@@ -468,6 +470,7 @@ AC_CONFIG_FILES([Makefile
 		kstool/Makefile
 		visdn_netdev_ctl/Makefile
 		vgsmctl/Makefile
+		vgsm2test/Makefile
 		pppd_plugin/Makefile
 		samples/Makefile
 		tests/Makefile
