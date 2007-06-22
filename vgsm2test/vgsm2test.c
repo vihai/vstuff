@@ -2046,7 +2046,7 @@ static struct vgsm_card *select_card(
 	wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
 	mvwaddstr(win, 1, 1, "Select one card:");
 
-	update_funcbar("F2 - Halt | F3 - Reboot | F10 - Exit");
+	update_funcbar("ENTER - Select | F2 - Halt | F3 - Reboot | F10 - Exit");
 
 	keypad(win, TRUE);
 //	nodelay(win, FALSE);
@@ -2215,8 +2215,48 @@ askagain:;
 	}
 }
 
+void print_usage(int argc, char *argv[])
+{
+	fprintf(stderr,
+		"%s: [options]\n"
+		"\n"
+		"Options:"
+		"    -l --logdir: Create test reports in specified directory\n"
+		"\n", argv[0]);
+
+	exit(1);
+}
+
 int main(int argc, char *argv[])
 {
+	const char *logdir = NULL;
+	int c;
+	int optidx;
+
+	struct option options[] = {
+		{ "logdir", required_argument, 0, 0 },
+		{ }
+	};
+
+	for(;;) {
+		struct option no_opt ={ "", no_argument, 0, 0 };
+		struct option *opt;
+
+		c = getopt_long(argc, argv, "v", options, &optidx);
+
+		if (c == -1)
+			break;
+
+		opt = c ? &no_opt : &options[optidx];
+
+		if (c == 'l' || !strcmp(opt->name, "logdir"))
+			logdir = optarg;
+		else {
+			print_usage(argc, argv);
+			return 1;
+		}
+	}
+
 	signal(SIGALRM, sigalarm_handler);
 	signal(SIGINT, sigint_handler);
 
@@ -2304,31 +2344,35 @@ int main(int argc, char *argv[])
 			"%Y%m%d-%H%M%S",
 			gmtime(&now));
 
-		char *filename;
-		asprintf(&filename, "/var/vgsm2tester/XXXXXXXXXXXXXX-%s",
-			date_str);
+		char *filename = NULL;
 
-		report_f = fopen(filename, "w");
-		if (!report_f) {
-			perror("fopen()");
-			abort();
+		if (logdir) {
+			asprintf(&filename, "%s/XXXXXXXXXXXXXX-%s", logdir,
+				date_str);
+
+			report_f = fopen(filename, "w");
+			if (!report_f) {
+				perror("fopen()");
+				abort();
+			}
 		}
 
 		card_test(card);
 
-		char *filename2;
-		asprintf(&filename2, "/var/vgsm2tester/%012u-%s",
-			card->serial,
-			date_str);
+		if (logdir) {
+			char *filename2;
+			asprintf(&filename2, "%s/%012u-%s", logdir,
+				card->serial, date_str);
 
-		if (rename(filename, filename2) < 0) {
-			perror("rename()");
-			abort();
+			if (rename(filename, filename2) < 0) {
+				perror("rename()");
+				abort();
+			}
+			free(filename2);
+			free(filename);
+
+			fclose(report_f);
 		}
-		free(filename2);
-		free(filename);
-
-		fclose(report_f);
 
 		has_to_exit = 0;
 	}
