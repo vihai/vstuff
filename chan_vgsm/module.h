@@ -22,6 +22,26 @@
 #include "comm.h"
 #include "number.h"
 
+#ifdef DEBUG_CODE
+#define vgsm_debug_state(module, format, arg...)	\
+	if ((module)->debug_state)			\
+		ast_verbose("vgsm: %s: "		\
+			format,				\
+			(module)->name,			\
+			## arg)
+#define vgsm_debug_call(module, format, arg...)		\
+	if ((module)->debug_call)			\
+		ast_verbose("vgsm: %s: "		\
+			format,				\
+			(module)->name,			\
+			## arg)
+#else
+#define vgsm_debug_state(module, format, arg...)	\
+	do {} while(0);
+#define vgsm_debug_call(module, format, arg...)		\
+	do {} while(0);
+#endif
+
 enum vgsm_codec
 {
 	VGSM_CODEC_GSM_EFR,

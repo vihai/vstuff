@@ -73,6 +73,9 @@
 
 #include <res_kstreamer.h>
 
+/* Workaround for conflicting config.h */
+#define DEBUG_CODE 1
+
 #include "util.h"
 #include "chan_vgsm.h"
 #include "module.h"
@@ -737,12 +740,10 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	err = vgsm_sms_submit_prepare(sms);
 	if (err == -ENOSPC) {
 		ast_cli(fd, "Message too big\n");
-		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_submit_prepare;
 	} else if (err < 0) {
 		ast_cli(fd, "Invalid message content\n");
-		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_submit_prepare;
 	}
@@ -1418,6 +1419,7 @@ err_pipeline_rx_alloc:
 err_up_node_not_found:
 err_get_up_node_id:
 	close(vgsm_chan->up_fd);
+	vgsm_chan->up_fd = -1;
 err_open_userport:
 err_module_node_not_found:
 err_get_module_node_id:
@@ -1491,8 +1493,7 @@ static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 		if (vgsm_chan)
 			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
 
-		ast_log(LOG_DEBUG, "%s: Unable to dial: ATD failed\n",
-			module->name);
+		vgsm_debug_call(module, "Unable to dial: ATD failed\n");
 	} else {
 		if (vgsm_chan) {
 			ast_mutex_lock(&vgsm_chan->ast_chan->lock);
@@ -1527,14 +1528,16 @@ static int vgsm_call(
 	int err;
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-	struct vgsm_module *module = vgsm_chan->module;
+	struct vgsm_module *module = vgsm_module_get(vgsm_chan->module);
 
 	assert(ast_chan->_state == AST_STATE_DOWN);
+
+	ast_mutex_lock(&module->lock);
 
 	if (module->status != VGSM_MODULE_STATUS_READY) {
 		ast_mutex_unlock(&module->lock);
 
-		ast_log(LOG_DEBUG, "Module %s is not ready\n", module->name);
+		vgsm_debug_call(module, "Module not ready\n");
 		err = -1;
 		goto err_module_not_ready;
 	}
@@ -1543,8 +1546,7 @@ static int vgsm_call(
 	    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		ast_mutex_unlock(&module->lock);
 
-		ast_log(LOG_DEBUG, "Module %s not registered\n",
-			module->name);
+		vgsm_debug_call(module, "Module is not registered\n");
 		err = -1;
 		goto err_module_not_registered;
 	}
@@ -1552,8 +1554,7 @@ static int vgsm_call(
 	if (module->vgsm_chan) {
 		ast_mutex_unlock(&module->lock);
 
-		ast_log(LOG_DEBUG, "Module %s is busy (call present)\n",
-			module->name);
+		vgsm_debug_call(module, "Module is busy (call present)\n");
 		err = -1;
 		goto err_module_busy;
 	}
@@ -1570,8 +1571,9 @@ static int vgsm_call(
 		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
 		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
-	if (option_debug)
-		ast_log(LOG_DEBUG, "Calling %s on %s\n", vgsm_chan->called_number, ast_chan->name);
+	vgsm_debug_call(module, "Calling %s on %s\n",
+			vgsm_chan->called_number,
+			ast_chan->name);
 
 	char newname[40];
 	snprintf(newname, sizeof(newname), "VGSM/%s/%d", module->name, 1);
@@ -1879,7 +1881,8 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
-	if (vgsm_chan->module) {
+	/* We assigned to a module AND we are the module's current call */
+	if (vgsm_chan->module && vgsm_chan->module->vgsm_chan == vgsm_chan) {
 
 		ast_mutex_lock(&vgsm_chan->module->lock);
 
@@ -1904,7 +1907,9 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 		vgsm_chan->module->vgsm_chan = NULL;
 
 		ast_mutex_unlock(&vgsm_chan->module->lock);
+	}
 
+	if (vgsm_chan->module) {
 		vgsm_module_put(vgsm_chan->module);
 		vgsm_chan->module = NULL;
 	}
@@ -2209,7 +2214,8 @@ static int vgsm_write(
 			diff);
 	}
 
-	if (vgsm_chan->pressure_average > mc->jitbuf_high) {
+	if (vgsm_chan->pressure_average > mc->jitbuf_high &&
+	    pressure > mc->jitbuf_high) {
 
 		int drop = min(len / sample_size, (vgsm_chan->pressure_average -
 							mc->jitbuf_high));
@@ -2311,8 +2317,6 @@ static struct ast_channel *vgsm_request(
 		}
 	}
 
-	ast_mutex_lock(&module->lock);
-
 	struct vgsm_chan *vgsm_chan;
 	vgsm_chan = vgsm_chan_alloc();
 	if (!vgsm_chan) {
@@ -2329,14 +2333,14 @@ static struct ast_channel *vgsm_request(
 
 	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 
-
-
 	snprintf(vgsm_chan->called_number, sizeof(vgsm_chan->called_number),
 		"%s", number);
 
-	vgsm_chan->module = module;
+	vgsm_chan->module = vgsm_module_get(module);
 	vgsm_chan->hg_first_module = hg_first_module;
 	vgsm_chan->huntgroup = huntgroup;
+
+	vgsm_module_put(module);
 
 	vgsm_chan_put(vgsm_chan);
 

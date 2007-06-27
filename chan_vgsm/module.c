@@ -75,27 +75,6 @@
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 #define WAITING_INITIALIZATION_SIM_INSERTED_DELAY (5 * SEC)
 
-#ifdef DEBUG_CODE
-#define vgsm_debug_state(module, format, arg...)	\
-	if ((module)->debug_state)			\
-		ast_verbose("vgsm: %s: "		\
-			format,				\
-			(module)->name,			\
-			## arg)
-#define vgsm_debug_call(module, format, arg...)		\
-	if ((module)->debug_call)			\
-		ast_verbose("vgsm: %s: "		\
-			format,				\
-			(module)->name,			\
-			## arg)
-#else
-#define vgsm_debug_state(module, format, arg...)	\
-	do {} while(0);
-#define vgsm_debug_call(module, format, arg...)		\
-	do {} while(0);
-#endif
-
-
 void vgsm_module_config_default(struct vgsm_module_config *mc)
 {
 	strcpy(mc->context, "vgsm");
@@ -2690,7 +2669,7 @@ static char vgsm_sim_help[] =
 "Usage: vgsm sim <sim> <command>\n"
 "\n"
 "	Commands:\n"
-"
+""
 "	identify <on|off>\n";
 
 static struct ast_cli_entry vgsm_sim =
