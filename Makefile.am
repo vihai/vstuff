@@ -10,7 +10,8 @@
 #
 
 noinst_DATA =					\
-	include/list.h
+	include/list.h				\
+	include/longtime.h
 
 EXTRA_DIST =					\
 	$(sysconf_DATA)				\

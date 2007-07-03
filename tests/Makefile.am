@@ -14,8 +14,6 @@ noinst_PROGRAMS = vgsm_stress sniffer traffic dsptest # jitter  listener
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
 
-noinst_HEADERS = longtime.h
-
 sniffer_SOURCES = sniffer.c
 sniffer_LDADD = \
 	-lpthread	\

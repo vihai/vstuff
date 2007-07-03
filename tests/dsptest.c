@@ -22,7 +22,7 @@
 #include <sys/mman.h>
 #include <linux/types.h>
 
-#include "longtime.h"
+#include <longtime.h>
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 

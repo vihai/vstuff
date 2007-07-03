@@ -34,9 +34,9 @@
 #include <form.h>
 #include <menu.h>
 
-#include "../modules/vgsm2/regs.h"
+#include <longtime.h>
 
-#include "longtime.h"
+#include "../modules/vgsm2/regs.h"
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 

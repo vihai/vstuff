@@ -12,7 +12,8 @@
 bin_PROGRAMS = vgsm2test
 
 vgsm2test_SOURCES = vgsm2test.c
-vgsm2test_CPPFLAGS =
+vgsm2test_CPPFLAGS=\
+	-I$(top_srcdir)/include/
 vgsm2test_LDADD = -lncurses -lform -lmenu
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
