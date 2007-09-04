@@ -436,6 +436,7 @@ static int ks_netlink_rcv_skb(struct sk_buff *skb, int *queued)
 	nlh = (struct nlmsghdr *)skb->data;
 	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid) {
 		skb_queue_tail(&ks_backlog, skb);
+
 		*queued = TRUE;
 		return 0;
 	}
@@ -520,7 +521,7 @@ int ks_netlink_modinit(void)
 
 	skb_queue_head_init(&ks_backlog);
 
-	ks_netlink_rcv_wq = create_workqueue("ksnl");
+	ks_netlink_rcv_wq = create_singlethread_workqueue("ksnl");
 	if (!ks_netlink_rcv_wq) {
 		err = -ENOMEM;
 		goto err_create_workqueue;
