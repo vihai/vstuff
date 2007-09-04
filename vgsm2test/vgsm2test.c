@@ -2169,9 +2169,12 @@ retry:;
 
 askagain:;
 			int c = requester(FAIL_DIALOG_BG,
-				"Test failed: (r)etry? (q)uit?...");
+				"Test failed: (r)etry? (i)gnore? (q)uit?...");
 			if (c == 'r' || c == 'R') {
 				goto retry;
+			} if (c == 'i' || c == 'I') {
+				log_info("#### TEST IGNORED\n\n");
+				continue;
 			} else if (c == 'q' || c == 'Q') {
 				break;
 			} else
