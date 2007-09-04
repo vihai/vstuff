@@ -69,13 +69,16 @@ struct vgsm_chan {
 
 struct vgsm_state
 {
-	ast_mutex_t lock;
-
+	ast_mutex_t state_lock;
 	struct vgsm_module_config *default_mc;
-	struct list_head ifs;
 
+	ast_mutex_t ifs_list_lock;
+	struct list_head ifs_list;
+
+	ast_mutex_t huntgroups_list_lock;
 	struct list_head huntgroups_list;
 
+	ast_mutex_t operators_lock;
 	struct list_head op_countries_list;
 	struct list_head op_list;
 

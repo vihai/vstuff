@@ -829,7 +829,7 @@ static void vgsm_module_reconfigure(
 		var = var->next;
 	}
 
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.ifs_list_lock);
 
 	struct vgsm_module *module = vgsm_module_get_by_name(name);
 	if (!module) {
@@ -838,17 +838,19 @@ static void vgsm_module_reconfigure(
 			ast_log(LOG_ERROR, "Cannot allocate new module %s\n",
 				name);
 
-			ast_mutex_unlock(&vgsm.lock);
+			ast_mutex_unlock(&vgsm.ifs_list_lock);
 			goto err_module_alloc;
 		}
 
 		strncpy(module->name, name, sizeof(module->name));
 
 		err = vgsm_comm_init(&module->comm, vgsm_module_urcs);
-		if (err < 0)
+		if (err < 0) {
+			ast_mutex_unlock(&vgsm.ifs_list_lock);
 			goto err_comm_init;
+		}
 
-		list_add_tail(&module->ifs_node, &vgsm.ifs);
+		list_add_tail(&module->ifs_node, &vgsm.ifs_list);
 
 		vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_CLOSED,
@@ -866,7 +868,7 @@ static void vgsm_module_reconfigure(
 	module->current_config = vgsm_module_config_get(mc);
 	ast_mutex_unlock(&module->lock);
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	vgsm_module_config_put(mc);
 
@@ -1008,16 +1010,16 @@ void _vgsm_module_put(struct vgsm_module *module)
 
 struct vgsm_module *vgsm_module_get_by_name(const char *name)
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
-	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 		if (!strcasecmp(module->name, name)) {
-			ast_mutex_unlock(&vgsm.lock);
+			ast_mutex_unlock(&vgsm.ifs_list_lock);
 			return vgsm_module_get(module);
 		}
 	}
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	return NULL;
 }
@@ -1139,16 +1141,16 @@ char *vgsm_module_completion(const char *line, const char *word, int state)
 {
 	int which = 0;
 
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
-	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 		if (!strncasecmp(word, module->name, strlen(word)) &&
 		    ++which > state) {
-			ast_mutex_unlock(&vgsm.lock);
+			ast_mutex_unlock(&vgsm.ifs_list_lock);
 			return strdup(module->name);
 		}
 	}
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	return NULL;
 }
@@ -2067,10 +2069,10 @@ static int show_vgsm_modules_cli(int fd, int argc, char *argv[])
 		vgsm_module_put(module);
 
 	} else {
-		ast_mutex_lock(&vgsm.lock);
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		ast_mutex_lock(&vgsm.ifs_list_lock);
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			vgsm_show_module_summary(fd, module);
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2690,11 +2692,11 @@ static int debug_vgsm_module_state(
 	if (module) {
 		module->debug_state = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_state = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2706,11 +2708,11 @@ static int debug_vgsm_module_call(
 	if (module) {
 		module->debug_call = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_call = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2722,11 +2724,11 @@ static int debug_vgsm_module_atcommands(
 	if (module) {
 		module->comm.debug_messages = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->comm.debug_messages = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2738,11 +2740,11 @@ static int debug_vgsm_module_serial(
 	if (module) {
 		module->comm.debug_characters = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->comm.debug_characters = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2754,11 +2756,11 @@ static int debug_vgsm_module_sms(
 	if (module) {
 		module->debug_sms = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_sms = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2770,11 +2772,11 @@ static int debug_vgsm_module_cbm(
 	if (module) {
 		module->debug_cbm = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_cbm = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2786,11 +2788,11 @@ static int debug_vgsm_module_jitbuf(
 	if (module) {
 		module->debug_jitbuf = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_jitbuf = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2802,11 +2804,11 @@ static int debug_vgsm_module_frames(
 	if (module) {
 		module->debug_frames = enable;
 	} else {
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
-		list_for_each_entry(module, &vgsm.ifs, ifs_node)
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_frames = enable;
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2814,15 +2816,15 @@ static int debug_vgsm_module_frames(
 
 static int debug_vgsm_module_all(int fd, BOOL enable)
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
-	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 		module->comm.debug_messages = enable;
 		module->debug_sms = enable;
 		module->debug_cbm = enable;
 		module->debug_jitbuf = enable;
 	}
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	return RESULT_SUCCESS;
 }
@@ -5814,8 +5816,8 @@ void vgsm_module_shutdown_all(void)
 
 	ast_verbose("vgsm: powering off all modules\n");
 
-	ast_mutex_lock(&vgsm.lock);
-	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+	ast_mutex_lock(&vgsm.ifs_list_lock);
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 		ast_mutex_lock(&module->lock);
 
@@ -5835,15 +5837,15 @@ void vgsm_module_shutdown_all(void)
 
 		ast_mutex_unlock(&module->lock);
 	}
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	time_t begin = time(NULL);
 
 	while(time(NULL) - begin < 10) {
 		int not_off = FALSE;
 
-		ast_mutex_lock(&vgsm.lock);
-		list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+		ast_mutex_lock(&vgsm.ifs_list_lock);
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 			ast_mutex_lock(&module->lock);
 			if (module->current_config->poweroff_on_exit &&
@@ -5852,7 +5854,7 @@ void vgsm_module_shutdown_all(void)
 
 			ast_mutex_unlock(&module->lock);
 		}
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 		if (!not_off)
 			return;
@@ -5878,7 +5880,7 @@ int vgsm_module_module_load(void)
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	struct vgsm_module *module;
-	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 		ast_pthread_create(&module->monitor_thread, &attr,
 			vgsm_module_monitor_thread_main, module);
 	}

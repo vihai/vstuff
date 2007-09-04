@@ -535,9 +535,9 @@ static void vgsm_reload_config(void)
 
 static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_generic = TRUE;
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.state_lock);
 
 	ast_cli(fd, "vGSM debugging enabled\n");
 
@@ -562,9 +562,9 @@ static struct ast_cli_entry debug_vgsm_generic =
 
 static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_generic = FALSE;
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.state_lock);
 
 	ast_cli(fd, "vGSM debugging disabled\n");
 
@@ -584,9 +584,9 @@ static struct ast_cli_entry no_debug_vgsm_generic =
 
 static int do_debug_vgsm_timer(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_timer = TRUE;
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.state_lock);
 
 	ast_cli(fd, "vGSM debugging enabled\n");
 
@@ -611,9 +611,9 @@ static struct ast_cli_entry debug_vgsm_timer =
 
 static int do_no_debug_vgsm_timer(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_timer = FALSE;
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.state_lock);
 
 	ast_cli(fd, "vGSM debugging disabled\n");
 
@@ -2539,7 +2539,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (!strncasecmp(module_str, VGSM_HUNTGROUP_PREFIX,
 			strlen(VGSM_HUNTGROUP_PREFIX))) {
 
-		ast_mutex_lock(&vgsm.lock);
+		ast_mutex_lock(&vgsm.huntgroups_list_lock);
 
 		const char *hg_name = module_str +
 					strlen(VGSM_HUNTGROUP_PREFIX);
@@ -2549,7 +2549,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			astman_append(s, "Status: 508\n");
 			astman_send_error(s, m, "Cannot find huntgroup");
 
-			ast_mutex_unlock(&vgsm.lock);
+			ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 			goto err_huntgroup_not_found;
 		}
 
@@ -2571,7 +2571,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		vgsm_hg_put(hg);
 
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 		if (!module) {
 			astman_append(s, "Status: 404\n");
@@ -2623,8 +2623,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		struct vgsm_module *tm;
 
-		ast_mutex_lock(&vgsm.lock);
-		list_for_each_entry(tm, &vgsm.ifs, ifs_node) {
+		ast_mutex_lock(&vgsm.ifs_list_lock);
+		list_for_each_entry(tm, &vgsm.ifs_list, ifs_node) {
 		        ast_mutex_lock(&tm->lock);
 		        if (tm->status == VGSM_MODULE_STATUS_READY &&
 			    !tm->sending_sms &&
@@ -2638,7 +2638,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			}
 			ast_mutex_unlock(&tm->lock);
 		}
-		ast_mutex_unlock(&vgsm.lock);
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 		if (!module) {
 			astman_append(s, "Status: 404\n");
@@ -2903,13 +2903,18 @@ static int vgsm_load_module(void)
 
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
-	ast_mutex_init(&vgsm.lock);
+	ast_mutex_init(&vgsm.state_lock);
 
 	ast_mutex_init(&vgsm.usecnt_lock);
 
-	INIT_LIST_HEAD(&vgsm.ifs);
+	INIT_LIST_HEAD(&vgsm.ifs_list);
+	ast_mutex_init(&vgsm.ifs_list_lock);
+
+	ast_mutex_init(&vgsm.operators_lock);
 	INIT_LIST_HEAD(&vgsm.op_list);
 	INIT_LIST_HEAD(&vgsm.op_countries_list);
+
+	ast_mutex_init(&vgsm.huntgroups_list_lock);
 	INIT_LIST_HEAD(&vgsm.huntgroups_list);
 
 	vgsm.default_mc = vgsm_module_config_alloc();

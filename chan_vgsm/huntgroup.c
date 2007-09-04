@@ -82,16 +82,16 @@ struct vgsm_huntgroup *vgsm_hg_get_by_name(const char *name)
 {
 	struct vgsm_huntgroup *hg;
 
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 	
 	list_for_each_entry(hg, &vgsm.huntgroups_list, node) {
 		if (!strcasecmp(hg->name, name)) {
-			ast_mutex_unlock(&vgsm.lock);
+			ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 			return vgsm_hg_get(hg);
 		}
 	}
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 	return NULL;
 }
@@ -221,7 +221,7 @@ static void vgsm_hg_reconfigure(
 		var = var->next;
 	}
 
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 
 	struct vgsm_huntgroup *old_hg, *tpos;
 	list_for_each_entry_safe(old_hg, tpos, &vgsm.huntgroups_list, node) {
@@ -236,12 +236,12 @@ static void vgsm_hg_reconfigure(
 
 	list_add_tail(&vgsm_hg_get(hg)->node, &vgsm.huntgroups_list);
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 }
 
 void vgsm_hg_reload(struct ast_config *cfg)
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 
 	/*
 	struct vgsm_huntgroup *hg;
@@ -270,7 +270,7 @@ void vgsm_hg_reload(struct ast_config *cfg)
 			cat + strlen(VGSM_HUNTGROUP_PREFIX));
 	}
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -288,17 +288,17 @@ static char *complete_show_vgsm_huntgroups(
 
 	int which = 0;
 
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 	struct vgsm_huntgroup *huntgroup;
 	list_for_each_entry(huntgroup, &vgsm.huntgroups_list, node) {
 		if (!strncasecmp(word, huntgroup->name, strlen(word))) {
 			if (++which > state) {
-				ast_mutex_unlock(&vgsm.lock);
+				ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 				return strdup(huntgroup->name);
 			}
 		}
 	}
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 	return NULL;
 }
@@ -321,7 +321,7 @@ static void do_show_vgsm_huntgroups_details(
 
 static int do_show_vgsm_huntgroups(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 
 	struct vgsm_huntgroup *hg;
 	list_for_each_entry(hg, &vgsm.huntgroups_list, node) {
@@ -329,7 +329,7 @@ static int do_show_vgsm_huntgroups(int fd, int argc, char *argv[])
 			do_show_vgsm_huntgroups_details(fd, hg);
 	}
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 	return RESULT_SUCCESS;
 }
@@ -370,7 +370,7 @@ static struct vgsm_huntgroup_member *vgsm_hg_next_member(
 {
 	struct vgsm_huntgroup_member *memb;
 
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 
 	if (cur_memb->node.next == &hg->members)
 		memb = list_entry(hg->members.next,
@@ -379,7 +379,7 @@ static struct vgsm_huntgroup_member *vgsm_hg_next_member(
 		memb = list_entry(cur_memb->node.next,
 			struct vgsm_huntgroup_member, node);
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 	return memb;
 }
@@ -389,7 +389,7 @@ struct vgsm_module *vgsm_hg_hunt(
 	struct vgsm_module *cur_module,
 	struct vgsm_module *first_module)
 {
-	ast_mutex_lock(&vgsm.lock);
+	ast_mutex_lock(&vgsm.huntgroups_list_lock);
 
 	if (list_empty(&hg->members)) {
 		vgsm_debug_generic("No interfaces in huntgroup '%s'\n",
@@ -457,7 +457,7 @@ struct vgsm_module *vgsm_hg_hunt(
 				" '%s'\n", hgm->module->name);
 
 			ast_mutex_unlock(&hgm->module->lock);
-			ast_mutex_unlock(&vgsm.lock);
+			ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 			return vgsm_module_get(hgm->module);
 		}
@@ -473,7 +473,7 @@ struct vgsm_module *vgsm_hg_hunt(
 	} while(hgm != starting_hgm);
 
 err_no_interfaces:
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 	return NULL;
 }

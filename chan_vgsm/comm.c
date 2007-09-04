@@ -1131,8 +1131,8 @@ refresh:
 
 	nmodules = 0;
 	struct vgsm_module *module;
-	ast_mutex_lock(&vgsm.lock);
-	list_for_each_entry(module, &vgsm.ifs, ifs_node)
+	ast_mutex_lock(&vgsm.ifs_list_lock);
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 		nmodules++;
 
 	polls = malloc(sizeof(*polls) * (nmodules + 1));
@@ -1149,7 +1149,7 @@ refresh:
 
 	npolls = 0;
 	nmodules = 0;
-	list_for_each_entry(module, &vgsm.ifs, ifs_node) {
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 		struct vgsm_comm *comm = &module->comm;
 
@@ -1190,7 +1190,7 @@ refresh:
 		npolls++;
 	}
 
-	ast_mutex_unlock(&vgsm.lock);
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	polls[npolls].fd = vgsm_comm_thread_alert_read;
 	polls[npolls].events = POLLHUP | POLLERR | POLLIN;
