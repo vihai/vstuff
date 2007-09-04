@@ -89,8 +89,8 @@ struct vgsm_state
 	BOOL debug_jitbuf;
 	BOOL debug_timer;
 
-	char sms_spooler[32];
-	char sms_spooler_pars[32];
+	char sms_spooler[PATH_MAX];
+	char sms_spooler_pars[512];
 };
 
 struct vgsm_chan *vgsm_chan_get(struct vgsm_chan *vgsm_chan);
