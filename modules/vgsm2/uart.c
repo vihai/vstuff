@@ -145,7 +145,7 @@ uart_insert_char(struct uart_port *port, unsigned int status,
 }
 #endif
 
-static void receive_chars(struct vgsm_uart *up, u8 *status)
+static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *status)
 {
 	struct tty_struct *tty = up->port.info->tty;
 	u8 ch, lsr = *status;
@@ -192,9 +192,7 @@ static void receive_chars(struct vgsm_uart *up, u8 *status)
 		lsr = uart_in(up, UART_LSR);
 	} while ((lsr & UART_LSR_DR) && (max_count-- > 0));
 
-	spin_unlock(&up->port.lock);
 	tty_flip_buffer_push(tty);
-	spin_lock(&up->port.lock);
 
 	*status = lsr;
 }
@@ -263,50 +261,24 @@ static u8 check_modem_status(struct vgsm_uart *up)
 	return status;
 }
 
-/*
- * This handles the interrupt from one port.
- */
-static inline void
-vgsm_uart_handle_port(struct vgsm_uart *up)
-{
-}
-
-/*
- * This is the serial driver's interrupt routine.
- *
- * Arjan thinks the old way was overly complex, so it got simplified.
- * Alan disagrees, saying that need the complexity to handle the weird
- * nature of ISA shared interrupts.  (This is a special exception.)
- *
- * In order to handle ISA shared interrupts properly, we need to check
- * that all ports have been serviced, and therefore the ISA interrupt
- * line has been de-asserted.
- *
- * This means we need to loop through all ports. checking that they
- * don't have an interrupt pending.
- */
 void vgsm_uart_interrupt(struct vgsm_uart *up)
 {
 	u8 status;
-	 u8 iir;
+	u8 iir;
 
 	iir = uart_in(up, UART_IIR);
 	if (iir & UART_IIR_NO_INT)
 		return;
 
-	spin_lock(&up->port.lock);
-
 	status = uart_in(up, UART_LSR);
 
 	if (status & UART_LSR_DR)
-		receive_chars(up, &status);
+		vgsm_uart_receive_chars(up, &status);
 
 	check_modem_status(up);
 
 	if (status & UART_LSR_THRE)
 		transmit_chars(up);
-
-	spin_unlock(&up->port.lock);
 }
 
 static unsigned int vgsm_uart_tx_empty(struct uart_port *port)
@@ -397,6 +369,11 @@ static int vgsm_uart_startup(struct uart_port *port)
 	uart_out(up, UART_LCR, up->lcr);
 
 	/*
+	 * Now, initialize the UART
+	 */
+	uart_out(up, UART_LCR, UART_LCR_WLEN8);
+
+	/*
 	 * Clear the FIFO buffers and disable them.
 	 * (they will be reenabled in set_termios())
 	 */
@@ -416,33 +393,17 @@ static int vgsm_uart_startup(struct uart_port *port)
 	 * here.
 	 */
 	if (uart_in(up, UART_LSR) == 0xff) {
-		printk(KERN_ERR "ttyS%d: LSR safety check engaged!\n", up->port.line);
+		printk(KERN_ERR
+			"ttyS%d: LSR safety check engaged!\n",
+			up->port.line);
 		return -ENODEV;
 	}
 
 	/*
-	 * Now, initialize the UART
-	 */
-	uart_out(up, UART_LCR, UART_LCR_WLEN8);
-
-	spin_lock_irqsave(&up->port.lock, flags);
-	/*
 	 * Most PC uarts need OUT2 raised to enable interrupts.
 	 */
 	up->port.mctrl |= TIOCM_OUT2;
-
 	vgsm_uart_set_mctrl(&up->port, up->port.mctrl);
-
-	/*
-	 * Do a quick test to see if we receive an
-	 * interrupt when we enable the TX irq.
-	 */
-	uart_out(up, UART_IER, UART_IER_THRI);
-	lsr = uart_in(up, UART_LSR);
-	iir = uart_in(up, UART_IIR);
-	uart_out(up, UART_IER, 0);
-
-	spin_unlock_irqrestore(&up->port.lock, flags);
 
 	/*
 	 * Finally, enable interrupts.  Note: Modem status interrupts
@@ -451,14 +412,6 @@ static int vgsm_uart_startup(struct uart_port *port)
 	 */
 	up->ier = UART_IER_RLSI | UART_IER_RDI;
 	uart_out(up, UART_IER, up->ier);
-
-	/*
-	 * And clear the interrupt registers again for luck.
-	 */
-	uart_in(up, UART_LSR);
-	uart_in(up, UART_RX);
-	uart_in(up, UART_IIR);
-	uart_in(up, UART_MSR);
 
 	return 0;
 }
@@ -477,7 +430,6 @@ static void vgsm_uart_shutdown(struct uart_port *port)
 
 	spin_lock_irqsave(&up->port.lock, flags);
 	up->port.mctrl &= ~TIOCM_OUT2;
-
 	vgsm_uart_set_mctrl(&up->port, up->port.mctrl);
 	spin_unlock_irqrestore(&up->port.lock, flags);
 
@@ -539,7 +491,6 @@ static void vgsm_uart_set_termios(
 	baud = uart_get_baud_rate(port, termios, old,
 			(VGSM_UART_CLOCK / 0xffff) / 16, VGSM_UART_CLOCK/16); 
 	quot = uart_get_divisor(port, baud);
-
 
 	fcr = UART_FCR_ENABLE_FIFO | 0x80;
 
@@ -635,14 +586,16 @@ static void vgsm_uart_config_port(struct uart_port *port, int flags)
 {
 }
 
-static int vgsm_uart_verify_port(struct uart_port *port, struct serial_struct *ser)
+static int vgsm_uart_verify_port(
+	struct uart_port *port,
+	struct serial_struct *ser)
 {
 	return 0;
 }
 
 static const char *vgsm_uart_type(struct uart_port *port)
 {
-	return "16550D";
+	return "VGSM16550";
 }
 
 static int vgsm_uart_ioctl(
