@@ -266,9 +266,13 @@ void vgsm_uart_interrupt(struct vgsm_uart *up)
 	u8 status;
 	u8 iir;
 
+	spin_lock(&up->port.lock);
+
 	iir = uart_in(up, UART_IIR);
-	if (iir & UART_IIR_NO_INT)
+	if (iir & UART_IIR_NO_INT) {
+		spin_unlock(&up->port.lock);
 		return;
+	}
 
 	status = uart_in(up, UART_LSR);
 
@@ -279,6 +283,8 @@ void vgsm_uart_interrupt(struct vgsm_uart *up)
 
 	if (status & UART_LSR_THRE)
 		transmit_chars(up);
+
+	spin_unlock(&up->port.lock);
 }
 
 static unsigned int vgsm_uart_tx_empty(struct uart_port *port)
@@ -356,8 +362,6 @@ static int vgsm_uart_startup(struct uart_port *port)
 {
 	struct vgsm_uart *up =
 		container_of(port, struct vgsm_uart, port);
-	unsigned long flags;
-	unsigned char lsr, iir;
 
 	up->mcr = 0;
 
