@@ -5442,7 +5442,18 @@ static int vgsm_module_open(
 		module->interface_version = 1;
 	}
 
-	tcflush(module->fd, TCIOFLUSH);
+	if (tcflush(module->fd, TCIOFLUSH) < 0) {
+		char tmpstr[64];
+		snprintf(tmpstr, sizeof(tmpstr),
+			"Error flushing device: %s",
+				strerror(errno));
+
+		vgsm_module_set_status(module,
+			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
+			tmpstr);
+
+		goto err_module_flush;
+	}
 
 /*	int flags = fcntl(module->fd, F_GETFL, O_NONBLOCK);
 	if (flags < 0) {
@@ -5554,7 +5565,7 @@ static int vgsm_module_open(
 err_ioctl_power_get:
 err_tcsetattr:
 	vgsm_comm_close(&module->comm);
-
+err_module_flush:
 	close(module->fd);
 	module->fd = -1;
 err_module_open:
@@ -5731,6 +5742,12 @@ static void vgsm_module_timer(void *data)
 	case VGSM_MODULE_STATUS_FAILED:
 
 		if (module->failure_attempts < 3) {
+			if (tcflush(module->fd, TCIOFLUSH) < 0) {
+				ast_log(LOG_WARNING,
+					"Error flushing device: %s",
+					strerror(errno));
+			}
+
 			close(module->fd);
 			module->fd = -1;
 
