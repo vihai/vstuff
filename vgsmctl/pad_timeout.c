@@ -35,7 +35,7 @@ static int do_pad_timeout(
 	const char *device,
 	const char *value)
 {
-	int fd = open(device, O_RDWR);
+	int fd = open(device, O_RDWR | O_NOCTTY | O_NONBLOCK);
 	if (fd < 0) {
 		fprintf(stderr, "open failed: %s\n",
 			strerror(errno));

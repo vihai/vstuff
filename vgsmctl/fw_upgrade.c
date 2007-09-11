@@ -52,7 +52,7 @@ static int do_fw_upgrade(
 	const char *device,
 	const char *filename)
 {
-	int fd = open(device, O_RDWR);
+	int fd = open(device, O_RDWR | O_NOCTTY | O_NONBLOCK);
 	if (fd < 0) {
 		fprintf(stderr, "open(%s) failed: %s\n",
 			device,
