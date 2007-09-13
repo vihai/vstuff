@@ -39,7 +39,7 @@
 #include "util.h"
 #include "comm.h"
 
-#define ECHO_TIMEOUT (400 * MILLISEC)
+#define ECHO_TIMEOUT (800 * MILLISEC)
 #define URC_TIMEOUT (500 * MILLISEC)
 #define SMS_ECHO_TIMEOUT (1 * SEC)
 #define READING_URC_TIMEOUT (3 * SEC)
@@ -1064,8 +1064,10 @@ static void vgsm_comm_timer(void *data)
 	case VGSM_PS_AWAITING_ECHO:
 	case VGSM_PS_AWAITING_ECHO_READING_URC:
 	case VGSM_PS_READING_RESPONSE:
-		ast_log(LOG_NOTICE, "%s: Serial lost synchronization\n",
-			comm->name);
+		ast_log(LOG_NOTICE,
+			"%s: Serial lost synchronization in state %s\n",
+			comm->name,
+			vgsm_comm_state_to_text(comm->state));
 
 		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING, 1 * SEC);
 		comm->buf[0] = '\0';
