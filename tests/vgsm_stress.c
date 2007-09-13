@@ -91,39 +91,39 @@ char *unprintable_escape(const char *str, char *buf, int bufsize)
 }
 
 
-void merror(int dev, const char *text)
+void merror(char *device, const char *text)
 {
-	fprintf(stderr, "\nDevice: %d %s (%s)\n", dev, text, strerror(errno));
+	fprintf(stderr, "\nDevice: %s %s (%s)\n",
+		device, text, strerror(errno));
 	exit(1);
 };
 
-int do_stuff(int dev)
+int do_stuff(char *device)
 {
 	struct pollfd polls;
-	char devname[64];
 	char buf[1024] = "";
 	int buflen = 0;
 
-	snprintf(devname, sizeof(devname), "/dev/vgsm%d", dev);
+	printf("opening %s\n", device);
 
-	polls.fd = open(devname, O_RDWR);
+	polls.fd = open(device, O_RDWR | O_NONBLOCK);
 	if (polls.fd < 0)
-		merror(dev, "Error opening device\n");
+		merror(device, "Error opening device\n");
 
 	polls.events = POLLERR | POLLIN | POLLHUP; //POLLOUT | ;
 
 	/* Disable all URCs */
 	if (write(polls.fd, "AT&F\r", 5) < 0)
-		merror(dev, "write(AT&F)");
+		merror(device, "write(AT&F)");
 
 	sleep(1);
 
 	/* Flush buffer */
 	if (read(polls.fd, buf, sizeof(buf)) < 0)
-		merror(dev, "read");
+		merror(device, "read");
 
 	if (write(polls.fd, "AT&V\r", 5) < 0)
-		merror(dev, "write");
+		merror(device, "write");
 
 	int ncycles = 0;
 
@@ -133,15 +133,15 @@ int do_stuff(int dev)
 		ret = poll(&polls, 1, 5000);
 
 		if (ret < 0) {
-			merror(dev, "poll");
+			merror(device, "poll");
 			return 1;
 		} else if (ret == 0) {
-			char tmpstr[512];
+			char tmpstr[4096];
 			fprintf(stderr, "Buf=%d '%s'\n",
 				buflen,
 				unprintable_escape(buf, tmpstr,
 						sizeof(tmpstr)));
-			merror(dev, "Timeout");
+			merror(device, "Timeout");
 		}
 
 		if (polls.revents & POLLHUP)
@@ -151,33 +151,40 @@ int do_stuff(int dev)
 			int nread = read(polls.fd, buf + buflen,
 					sizeof(buf) - buflen);
 			if (nread < 0)
-				merror(dev, "read");
+				merror(device, "read");
 
 			buflen += nread;
 			buf[buflen] = '\0';
 
-			if (buflen >= sizeof(buf) - 1)
-				merror(dev, "overflow");
+			if (buflen >= sizeof(buf) - 1) {
+				char tmpstr[4096];
+				fprintf(stderr, "Buf=%d '%s'\n",
+					buflen,
+					unprintable_escape(buf, tmpstr,
+							sizeof(tmpstr)));
+				merror(device, "overflow");
+			}
 
 			if (strstr(buf, "OK\r\n")) {
 				buf[0] = '\0';
 				buflen = 0;
 
-				if (write(polls.fd, "AT&V\r", 5) < 0)
-					merror(dev, "write");
+				//if (write(polls.fd, "AT&V\r", 5) < 0)
+				if (write(polls.fd, "AT\r", 3) < 0)
+					merror(device, "write");
 
-				ncycles++;
+/*				ncycles++;
 				if (ncycles == (getpid() % 50) + 25) {
 					ncycles = 0;
 
 					close(polls.fd);
-					polls.fd = open(devname, O_RDWR);
+					polls.fd = open(device, O_RDWR);
 					if (polls.fd < 0)
-						merror(dev, "Error opening"
-							"device\n");
+						merror(device, "Error opening"
+							" device\n");
 
 					printf(".");
-				}
+				}*/
 			}
 		}
 	}
@@ -222,19 +229,15 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (devices < 0 || devices > 64) {
-		fprintf(stderr,"Invalid number of devices\n");
-		print_usage(argv[0]);
-	}
+	char *device;
 
-	int i;
-	for(i=0; i<devices; i++) {
+	while((device = argv[optind++])) {
 		int ret;
 
 		ret = fork();
 
 		if (ret == 0)
-			return do_stuff(i);
+			return do_stuff(device);
 		else if (ret < 0)
 			perror("fork");
 	}
