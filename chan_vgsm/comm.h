@@ -146,6 +146,7 @@ struct vgsm_comm
 	int fd;
 
 	BOOL enabled;
+	BOOL quiet;
 
 	enum vgsm_comm_state state;
 	ast_mutex_t state_lock;
@@ -233,7 +234,7 @@ void _vgsm_req_put(struct vgsm_req *req);
 int vgsm_req_status(struct vgsm_req *req);
 
 void vgsm_comm_wakeup(struct vgsm_comm *comm);
-void vgsm_comm_open(struct vgsm_comm *comm, int fd);
+void vgsm_comm_open(struct vgsm_comm *comm, int fd, BOOL quiet);
 void vgsm_comm_close(struct vgsm_comm *comm);
 int vgsm_comm_thread_create();
 void vgsm_comm_thread_destroy();

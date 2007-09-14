@@ -237,12 +237,13 @@ void vgsm_comm_close(struct vgsm_comm *comm)
 	ast_mutex_unlock(&comm->state_lock);
 }
 
-void vgsm_comm_open(struct vgsm_comm *comm, int fd)
+void vgsm_comm_open(struct vgsm_comm *comm, int fd, BOOL quiet)
 {
 	assert(comm->state == VGSM_PS_CLOSED);
 
 	comm->fd = fd;
 	comm->enabled = TRUE;
+	comm->quiet = quiet;
 	vgsm_comm_refresh(comm);
 }
 
@@ -1171,8 +1172,11 @@ refresh:
 			if (comm->enabled) {
 				vgsm_parser_change_state(comm,
 						VGSM_PS_RECOVERING, 1 * SEC);
+
 				comm->buf[0] = '\0';
-				vgsm_comm_send_recovery_sequence(comm);
+
+				if (!comm->quiet)
+					vgsm_comm_send_recovery_sequence(comm);
 			} else
 				continue;
 

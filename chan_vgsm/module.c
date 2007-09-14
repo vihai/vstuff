@@ -4982,6 +4982,11 @@ static int vgsm_module_configure(
 	struct vgsm_comm *comm = &module->comm;
 	int err;
 
+	/* Disable cell broadcast to work around Siemens bugs */
+	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT+CSCB=0");
+	if (err != VGSM_RESP_OK)
+		goto err_no_req;
+
 	/* Configure operator selection */
 	switch(mc->operator_selection) {
 	case VGSM_OPSEL_AUTOMATIC:
@@ -5104,6 +5109,27 @@ static int vgsm_module_configure(
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
+	/* Save the current configuration */
+	err = vgsm_req_make_wait_result(comm, 5 * SEC, "AT&W");
+	if (err != VGSM_RESP_OK)
+		goto err_no_req;
+
+	return 0;
+
+err_no_req:
+
+	vgsm_module_failed(module, err);
+
+	return -1;
+}
+
+static int vgsm_module_postponed_configuration(
+	struct vgsm_module *module,
+	struct vgsm_module_config *mc)
+{
+	struct vgsm_comm *comm = &module->comm;
+	int err;
+
 	/* Enable unsolicited new message indications */
 	err = vgsm_req_make_wait_result(comm, 5 * SEC, "AT+CNMI=2,2,2,1,1");
 	if (err != VGSM_RESP_OK)
@@ -5111,13 +5137,6 @@ static int vgsm_module_configure(
 
 	/* Subscribe to all cell broadcast channels */
 	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT+CSCB=1");
-	if (err != VGSM_RESP_OK)
-		goto err_no_req;
-
-	sleep(1); // Let the module flush CBM
-
-	/* Save the current configuration */
-	err = vgsm_req_make_wait_result(comm, 5 * SEC, "AT&W");
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
@@ -5524,8 +5543,6 @@ static int vgsm_module_open(
 
 	/***************/
 
-	vgsm_comm_open(&module->comm, module->fd);
-
 	int val;
 	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
 		vgsm_module_failed_text(module,
@@ -5537,6 +5554,8 @@ static int vgsm_module_open(
 	}
 
 	if (val) {
+		vgsm_comm_open(&module->comm, module->fd, FALSE);
+
 		vgsm_debug_state(module,
 			"Module is already powered on, I'm not waiting"
 			" for SYSSTART\n");
@@ -5545,6 +5564,8 @@ static int vgsm_module_open(
 				VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
 				0, NULL);
 	} else {
+		vgsm_comm_open(&module->comm, module->fd, TRUE);
+
 		vgsm_module_ignite(module);
 
 		/* The very first module power-up will not send ^SYSSTART URC
@@ -5650,6 +5671,9 @@ static void vgsm_module_initialize(
 		goto initialization_failed;
 
 	if (vgsm_module_update_net_info(module) < 0)
+		goto initialization_failed;
+
+	if (vgsm_module_postponed_configuration(module, mc) < 0)
 		goto initialization_failed;
 
 	module->failure_attempts = 0;
@@ -5763,7 +5787,7 @@ static void vgsm_module_timer(void *data)
 
 			vgsm_module_emerg_off(module);
 
-			vgsm_comm_open(&module->comm, module->fd);
+			vgsm_comm_open(&module->comm, module->fd, TRUE);
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_POWERING_ON,
 				POWERING_ON_TIMEOUT,
