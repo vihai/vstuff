@@ -23,6 +23,7 @@
 #include <linux/serial_core.h>
 #include <linux/serial.h>
 #include <linux/version.h>
+#include <linux/ctype.h>
 
 #include <asm/io.h>
 
@@ -40,20 +41,20 @@
 #define DEBUG_INTR(fmt...)	do { } while (0)
 #endif
 
-static u8 uart_in(struct vgsm_uart *up, int offset)
+static u32 uart_in(struct vgsm_uart *up, int offset)
 {
-	u8 r = readl(up->port.membase + (offset << 2));
-//printk(KERN_DEBUG "IN 0x%08x = %02x\n", up->port.membase + (offset << 2), r);
+	u32 r = readl(up->port.membase + (offset << 2));
+//printk(KERN_DEBUG "IN 0x%08x = %08x\n", up->port.membase + (offset << 2), r);
 
 	return r;
 }
 
 static void
-uart_out(struct vgsm_uart *up, int offset, u8 value)
+uart_out(struct vgsm_uart *up, int offset, u32 value)
 {
 	writel(value, up->port.membase + (offset << 2));
 
-//printk(KERN_DEBUG "OUT 0x%08x = %02x\n", up->port.membase + (offset << 2), value);
+//printk(KERN_DEBUG "OUT 0x%08x = %08x\n", up->port.membase + (offset << 2), value);
 }
 
 /* Uart divisor latch write */
@@ -145,10 +146,10 @@ uart_insert_char(struct uart_port *port, unsigned int status,
 }
 #endif
 
-static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *status)
+static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *ext_lsr)
 {
 	struct tty_struct *tty = up->port.info->tty;
-	u8 ch, lsr = *status;
+	u8 ch, lsr = *ext_lsr;
 	int max_count = 256;
 	char flag;
 
@@ -156,6 +157,19 @@ static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *status)
 		ch = uart_in(up, UART_RX);
 		flag = TTY_NORMAL;
 		up->port.icount.rx++;
+
+#if 0
+		{
+		u32 spec = uart_in(up, 8);
+		struct tty_buffer *tb = tty->buf.tail;
+		if (isprint(ch))
+			printk(KERN_DEBUG "A %d %02x %04x '%c'\n",
+				max_count, lsr, spec, ch);
+		else
+			printk(KERN_DEBUG "A %d %02x %04x '<%02x>'\n",
+				max_count, lsr, spec, ch);
+		}
+#endif
 
 		if (unlikely(lsr & (UART_LSR_BI | UART_LSR_PE |
 				    UART_LSR_FE | UART_LSR_OE))) {
@@ -190,11 +204,12 @@ static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *status)
 		uart_insert_char(&up->port, lsr, UART_LSR_OE, ch, flag);
 
 		lsr = uart_in(up, UART_LSR);
+
 	} while ((lsr & UART_LSR_DR) && (max_count-- > 0));
 
 	tty_flip_buffer_push(tty);
 
-	*status = lsr;
+	*ext_lsr = lsr;
 }
 
 static void transmit_chars(struct vgsm_uart *up)
@@ -243,28 +258,29 @@ static void transmit_chars(struct vgsm_uart *up)
 
 static u8 check_modem_status(struct vgsm_uart *up)
 {
-	u8 status = uart_in(up, UART_MSR);
+	u8 msr = uart_in(up, UART_MSR);
 
-	if (status & UART_MSR_ANY_DELTA && up->ier & UART_IER_MSI) {
-		if (status & UART_MSR_TERI)
+	if (msr & UART_MSR_ANY_DELTA && up->ier & UART_IER_MSI) {
+		if (msr & UART_MSR_TERI)
 			up->port.icount.rng++;
-		if (status & UART_MSR_DDSR)
+		if (msr & UART_MSR_DDSR)
 			up->port.icount.dsr++;
-		if (status & UART_MSR_DDCD)
-			uart_handle_dcd_change(&up->port, status & UART_MSR_DCD);
-		if (status & UART_MSR_DCTS)
-			uart_handle_cts_change(&up->port, status & UART_MSR_CTS);
+		if (msr & UART_MSR_DDCD)
+			uart_handle_dcd_change(&up->port,
+					msr & UART_MSR_DCD);
+		if (msr & UART_MSR_DCTS)
+			uart_handle_cts_change(&up->port,
+					msr & UART_MSR_CTS);
 
 		wake_up_interruptible(&up->port.info->delta_msr_wait);
 	}
 
-	return status;
+	return msr;
 }
 
 void vgsm_uart_interrupt(struct vgsm_uart *up)
 {
-	u8 status;
-	u8 iir;
+	u8 iir, lsr;
 
 	spin_lock(&up->port.lock);
 
@@ -274,14 +290,14 @@ void vgsm_uart_interrupt(struct vgsm_uart *up)
 		return;
 	}
 
-	status = uart_in(up, UART_LSR);
+	lsr = uart_in(up, UART_LSR);
 
-	if (status & UART_LSR_DR)
-		vgsm_uart_receive_chars(up, &status);
+	if (lsr & UART_LSR_DR)
+		vgsm_uart_receive_chars(up, &lsr);
 
 	check_modem_status(up);
 
-	if (status & UART_LSR_THRE)
+	if (lsr & UART_LSR_THRE)
 		transmit_chars(up);
 
 	spin_unlock(&up->port.lock);
