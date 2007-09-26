@@ -69,7 +69,7 @@
 #define FAILED_RETRY_TIME (5 * SEC)
 #define READY_UPDATE_TIME (30 * SEC)
 #define CLOSED_POSTPONE (3 * SEC)
-#define POWERING_ON_TIMEOUT (8 * SEC)
+#define POWERING_ON_TIMEOUT (10 * SEC)
 #define RESET_TIMEOUT (8 * SEC)
 #define POWERING_OFF_TIMEOUT (7 * SEC)
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
@@ -2049,6 +2049,48 @@ static int vgsm_show_module_smong(int fd, struct vgsm_module *module)
 	return RESULT_SUCCESS;
 }
 
+static int vgsm_show_module_serial(int fd, struct vgsm_module *module)
+{
+	struct serial_icounter_struct icount;
+	if (ioctl(module->me_fd, TIOCGICOUNT, &icount) < 0) {
+		ast_cli(fd, "ioctl(TIOCGICOUNT)\n");
+		return RESULT_FAILURE;
+	}
+
+	int status;
+	if (ioctl(module->me_fd, TIOCMGET, &status) < 0) {
+		ast_cli(fd, "ioctl(TIOCMGET)\n");
+		return RESULT_FAILURE;
+	}
+
+	ast_cli(fd,
+		"  RTS:         %s\n"
+		"  CTS:         %s (%d)\n"
+		"  DTR:         %s\n"
+		"  DSR:         %s (%d)\n"
+		"  RI:          %s (%d)\n"
+		"  CD:          %s (%d)\n"
+		"  RX:          %d\n"
+		"  TX:          %d\n"
+		"  Frame:       %d\n"
+		"  Overrun:     %d\n"
+		"  Parity:      %d\n"
+		"  Break:       %d\n"
+		"  Buf overrun: %d\n",
+		(status & TIOCM_RTS) ? "ON" : "OFF",
+		(status & TIOCM_CTS) ? "ON" : "OFF", icount.cts,
+		(status & TIOCM_DTR) ? "ON" : "OFF",
+		(status & TIOCM_DSR) ? "ON" : "OFF", icount.dsr, 
+		(status & TIOCM_RI)  ? "ON" : "OFF", icount.rng, 
+		(status & TIOCM_CD)  ? "ON" : "OFF", icount.dcd,
+		icount.rx,
+		icount.tx,
+		icount.frame, icount.overrun, icount.parity, icount.brk,
+		icount.buf_overrun);
+
+	return RESULT_SUCCESS;
+}
+
 static int vgsm_show_module_summary(int fd, struct vgsm_module *module)
 {
 	ast_mutex_lock(&module->lock);
@@ -2124,6 +2166,8 @@ static int show_vgsm_modules_cli(int fd, int argc, char *argv[])
 				err = vgsm_show_module_moni(fd, module);
 			else if (!strcasecmp(argv[4], "smong"))
 				err = vgsm_show_module_smong(fd, module);
+			else if (!strcasecmp(argv[4], "serial"))
+				err = vgsm_show_module_serial(fd, module);
 			else {
 				ast_cli(fd, "Command '%s' unrecognized\n",
 					argv[4]);
@@ -2161,7 +2205,8 @@ static char *show_vgsm_modules_complete(
 	int pos, int state)
 {
 	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
-				"statistics", "calls", "moni", "smong" };
+				"statistics", "calls", "moni", "smong",
+				"serial" };
 	int i;
 
 	switch(pos) {
@@ -5784,7 +5829,7 @@ static void vgsm_module_timer(void *data)
 		}
 
 		if (val) {
-			vgsm_debug_state(module, "SYSTART missed\n");
+			vgsm_debug_state(module, "SYSSTART missed\n");
 
 			vgsm_mesim_send_message(&module->mesim,
 					VGSM_MESIM_MSG_ME_POWERED_ON,
