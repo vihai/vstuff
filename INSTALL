@@ -14,6 +14,10 @@ file in the root directory.
 
 cd into the untarred package tree and run ./configure
 
+Be sure that the kernel currently running is the same currently installed. If,
+for example, you just upgraded the kernel you will need to reboot you machine
+in order to run the newer kernel.
+
 If your paths differ from the standard ones you may have to specify appropriate
 parameters to "configure". Run "./configure --help" to see a list of those
 parameters.
@@ -269,7 +273,7 @@ You should now reboot or:
 If everyting is correct, you will see properly named device being
 created in /dev/vgsm/
 
-Asterisk confiuguration:
+Asterisk configuration:
 
 In /etc/asterisk (or wherever you have your Asterisk configuration files) you
 have to create these files:
