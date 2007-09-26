@@ -103,6 +103,14 @@ static void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 	vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id), reg);
 }
 
+static int vgsm_sim_ioctl_sim_get_id(
+	struct vgsm_sim *sim,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	return put_user(sim->id, (int __user *)arg);
+}
+
 static int vgsm_sim_ioctl_sim_get_clock(
 	struct vgsm_sim *sim,
 	unsigned int cmd,
@@ -148,6 +156,8 @@ static int vgsm_sim_ioctl(
 	struct vgsm_sim *sim = container_of(uart, struct vgsm_sim, uart);
 
 	switch(cmd) {
+	case VGSM_IOC_SIM_GET_ID:
+		return vgsm_sim_ioctl_sim_get_id(sim, cmd, arg);
 	case VGSM_IOC_SIM_GET_CLOCK:
 		return vgsm_sim_ioctl_sim_get_clock(sim, cmd, arg);
 	case VGSM_IOC_SIM_SET_CLOCK:

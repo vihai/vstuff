@@ -893,6 +893,27 @@ static int vgsm_module_ioctl(
 	return -ENOIOCTLCMD;
 }
 
+static int vgsm_mesim_ioctl(
+	struct vgsm_uart *uart,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_module *module =
+		container_of(uart, struct vgsm_module, mesim);
+
+	switch(cmd) {
+	case VGSM_IOC_GET_INTERFACE_VERSION:
+		return put_user(2, (int __user *)arg);
+	break;
+
+	case VGSM_IOC_SIM_ROUTE:
+		return vgsm_module_ioctl_sim_route(module, cmd, arg);
+	break;
+	}
+
+	return -ENOIOCTLCMD;
+}
+
 static struct uart_driver vgsm_uart_driver_asc0 =
 {
 	.owner			= THIS_MODULE,
@@ -984,7 +1005,7 @@ struct vgsm_module *vgsm_module_create(
 		&card->pci_dev->dev,
 		card->id * 8 + module->id,
 		TRUE,
-		NULL);
+		vgsm_mesim_ioctl);
 
 	vgsm_module_get(module);
 	vgsm_module_rx_create(&module->rx, module, rx_fifo_base, rx_fifo_size);

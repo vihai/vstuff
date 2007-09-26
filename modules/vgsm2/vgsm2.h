@@ -21,6 +21,7 @@
 #define VGSM_IOC_FW_VERSION		_IOR(0xd1, 7, unsigned int)
 #define VGSM_IOC_FW_UPGRADE		_IOR(0xd1, 8, unsigned int)
 #define VGSM_IOC_SIM_ROUTE		_IOR(0xd1, 10, unsigned int)
+#define VGSM_IOC_SIM_GET_ID		_IOR(0xd1, 16, unsigned int)
 #define VGSM_IOC_SIM_GET_CLOCK		_IOR(0xd1, 11, unsigned int)
 #define VGSM_IOC_SIM_SET_CLOCK		_IOR(0xd1, 12, unsigned int)
 #define VGSM_IOC_FW_READ		_IOR(0xd1, 13, unsigned int)
