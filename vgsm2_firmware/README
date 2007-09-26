@@ -17,12 +17,22 @@ below.
 
 Changelog:
 
-------- 2.6.2 ------
+------ 2.7.0 ------
+
+- Increased UART FIFO size to 256 bytes inbound/512 bytes outbound
+- Fixed UART overrun reporting
+- Fixed LED output security to be more responsive and immune to aliasing
+
+------ 2.6.3 ------
+
+- Fixed unreliable SIM initialization on power-on
+
+------ 2.6.2 ------
 - Status LEDs (red/green) were switched
 
-------- 2.6.1 ------
+------ 2.6.1 ------
 - If the SIM UARTs were misconfigured while the ME was directly connected to
   a SIM, the SIM-ME communication could have been disrupted.
 
-------- 2.6.0 ------
+------ 2.6.0 ------
 - First firmware release
