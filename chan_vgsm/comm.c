@@ -1187,6 +1187,11 @@ static void vgsm_comm_timer(void *data)
 			comm->name,
 			vgsm_comm_state_to_text(comm->state));
 
+		if (comm->current_urc) {
+			vgsm_req_put(comm->current_urc);
+			comm->current_urc = NULL;
+		}
+
 		vgsm_comm_change_state(comm, VGSM_COMM_RECOVERING, 1 * SEC);
 
 		if (tcflush(comm->fd, TCIOFLUSH) < 0) {
