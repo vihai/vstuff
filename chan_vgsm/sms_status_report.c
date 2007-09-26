@@ -165,7 +165,7 @@ struct vgsm_sms_status_report *vgsm_sms_status_report_init_from_pdu(
 	int i;
 	for(i=0; i<sms->pdu_len; i++) {
 		pdu[i] = char_to_hexdigit(text_pdu[i * 2]) << 4 |
-		         char_to_hexdigit(text_pdu[i * 2 + 1]);
+			 char_to_hexdigit(text_pdu[i * 2 + 1]);
 	}
 
 	int pos = 0;
@@ -247,7 +247,7 @@ struct vgsm_sms_status_report *vgsm_sms_status_report_init_from_pdu(
 		goto err_smcc_timestamp_invalid;
 	}
 
-	if (*(pdu + pos)  & 0x80)
+	if (*(pdu + pos) & 0x80)
 		sms->smcc_timestamp_tz =
 			vgsm_nibbles_to_decimal(*(pdu + pos) & 0x7f);
 	else
@@ -272,7 +272,7 @@ struct vgsm_sms_status_report *vgsm_sms_status_report_init_from_pdu(
 		goto err_discharge_time_invalid;
 	}
 
-	if (*(pdu + pos)  & 0x80)
+	if (*(pdu + pos) & 0x80)
 		sms->discharge_time_tz =
 			vgsm_nibbles_to_decimal(*(pdu + pos) & 0x7f);
 	else
@@ -365,7 +365,7 @@ struct vgsm_sms_status_report *vgsm_sms_status_report_init_from_pdu(
 				VGSM_SMS_DCS_ALPHABET_UCS2) {
 
 			// What if tp_udl + header != msg_len ?
-			// What if tp_udl % 2  ?
+			// What if tp_udl % 2 ?
 			
 			sms->text = malloc(sizeof(wchar_t) * (tp_udl / 2 + 1));
 			if (!sms->text)
@@ -488,7 +488,7 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 	fprintf(f, "Received: from GSM module %s", module->name);
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		struct vgsm_operator_info *op_info;
 		op_info = vgsm_operators_search(module->net.mcc,
 						module->net.mnc);
@@ -509,7 +509,7 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 
 	struct tm tm;
 	time_t tim = time(NULL);
-        localtime_r(&tim, &tm);
+	localtime_r(&tim, &tm);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f,"; %s \n", tmpstr);
@@ -528,14 +528,14 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 	else
 		fprintf(f, "To: <%s>\n", mc->sms_recipient_address);
 
-        localtime_r(&sms->smcc_timestamp, &tm);
+	localtime_r(&sms->smcc_timestamp, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "Date: %s\n", tmpstr);
 
 	fprintf(f, "X-SMS-Message-Type: SMS-STATUS-REPORT\n");
 	fprintf(f, "X-SMS-Message-Reference: %d\n", sms->message_reference);
 
-        localtime_r(&sms->discharge_time, &tm);
+	localtime_r(&sms->discharge_time, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "X-SMS-Discharge-Time: %s\n", tmpstr);
 

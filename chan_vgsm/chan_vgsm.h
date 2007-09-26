@@ -77,6 +77,7 @@ struct vgsm_state
 
 	ast_mutex_t huntgroups_list_lock;
 	struct list_head huntgroups_list;
+//	struct list_head sim_holders_list;
 
 	ast_mutex_t operators_lock;
 	struct list_head op_countries_list;

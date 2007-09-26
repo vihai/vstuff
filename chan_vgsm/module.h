@@ -20,7 +20,11 @@
 #include "longtime.h"
 #include "timer.h"
 #include "comm.h"
+#include "mesim.h"
 #include "number.h"
+#include "sim.h"
+
+#define VGSM_ME_PREFIX "me:"
 
 #ifdef DEBUG_CODE
 #define vgsm_debug_state(module, format, arg...)	\
@@ -176,6 +180,7 @@ struct vgsm_module_config
 	struct vgsm_module *module;
 
 	char device_filename[PATH_MAX];
+	char mesim_device_filename[PATH_MAX];
 
 	char context[AST_MAX_EXTENSION];
 
@@ -183,10 +188,12 @@ struct vgsm_module_config
 	__u8 rx_gain;
 	__u8 tx_gain;
 
+	enum vgsm_mesim_proto sim_proto;
+	char sim_local_device_filename[PATH_MAX];
+	struct sockaddr_in sim_impl_simclient_addr;
+
 	BOOL set_clock;
 	BOOL poweroff_on_exit;
-
-	int route_to_sim;
 
 	enum vgsm_operator_selection operator_selection;
 	__s16 operator_mcc;
@@ -243,12 +250,16 @@ struct vgsm_module
 
 	BOOL sending_sms;
 
-	int fd;
+	int me_fd;
 	struct vgsm_comm comm;
+
+	int mesim_fd;
+	struct vgsm_mesim mesim;
 
 	int interface_version;
 
 	pthread_t monitor_thread;
+//	pthread_t mesim_monitor_thread;
 
 	struct {
 		char vendor[32];
@@ -263,8 +274,6 @@ struct vgsm_module
 		char card_id[32];
 		int remaining_attempts;
 		struct vgsm_number smcc_address;
-
-		struct vgsm_sim *sim;
 	} sim;
 
 	struct {

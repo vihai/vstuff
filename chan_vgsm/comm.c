@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -44,25 +44,7 @@
 #define SMS_ECHO_TIMEOUT (1 * SEC)
 #define READING_URC_TIMEOUT (3 * SEC)
 
-static pthread_t vgsm_comm_thread = AST_PTHREADT_NULL;
-static pthread_t vgsm_comm_urc_thread = AST_PTHREADT_NULL;
-static pthread_t vgsm_comm_completion_thread = AST_PTHREADT_NULL;
-
-static int vgsm_comm_thread_alert_read;
-static int vgsm_comm_thread_alert_write;
-
-static struct vgsm_timerset vgsm_timerset;
-
-static struct list_head vgsm_comm_urc_queue =
-			LIST_HEAD_INIT(vgsm_comm_urc_queue);
-AST_MUTEX_DEFINE_STATIC(vgsm_comm_urc_queue_lock);
-ast_cond_t vgsm_comm_urc_queue_cond;
-
-static struct list_head vgsm_comm_completion_queue =
-			LIST_HEAD_INIT(vgsm_comm_completion_queue);
-AST_MUTEX_DEFINE_STATIC(vgsm_comm_completion_queue_lock);
-ast_cond_t vgsm_comm_completion_queue_cond;
-
+static void vgsm_comm_timers_updated(struct vgsm_timerset *set);
 static void vgsm_comm_timer(void *data);
 
 int vgsm_comm_init(
@@ -73,15 +55,27 @@ int vgsm_comm_init(
 
 	comm->fd = -1;
 	comm->urc_classes = urc_classes;
-	comm->state = VGSM_PS_CLOSED;
+	comm->state = VGSM_COMM_CLOSED;
 
 	ast_mutex_init(&comm->state_lock);
 
-	ast_cond_init(&comm->close_cond, NULL);
+	ast_cond_init(&comm->state_cond, NULL);
 
+	comm->comm_thread = AST_PTHREADT_NULL;
 	INIT_LIST_HEAD(&comm->requests_queue);
 
-	vgsm_timer_init(&comm->timer, &vgsm_timerset, "comm",
+	comm->urc_thread = AST_PTHREADT_NULL;
+	INIT_LIST_HEAD(&comm->urc_queue);
+	ast_mutex_init(&comm->urc_queue_lock);
+	ast_cond_init(&comm->urc_queue_cond, NULL);
+
+	comm->completion_thread = AST_PTHREADT_NULL;
+	INIT_LIST_HEAD(&comm->completion_queue);
+	ast_mutex_init(&comm->completion_queue_lock);
+	ast_cond_init(&comm->completion_queue_cond, NULL);
+
+	vgsm_timerset_init(&comm->timerset, vgsm_comm_timers_updated);
+	vgsm_timer_init(&comm->timer, &comm->timerset, "comm",
 			vgsm_comm_timer, comm);
 
 	return 0;
@@ -151,46 +145,79 @@ static const char *vgsm_comm_state_to_text(
 	enum vgsm_comm_state state)
 {
 	switch(state) {
-	case VGSM_PS_CLOSED:
+	case VGSM_COMM_CLOSED:
 		return "CLOSED";
-	case VGSM_PS_FAILED:
+	case VGSM_COMM_CLOSING:
+		return "CLOSING";
+	case VGSM_COMM_FAILED:
 		return "FAILED";
-	case VGSM_PS_RECOVERING:
+	case VGSM_COMM_RECOVERING:
 		return "RECOVERING";
-	case VGSM_PS_IDLE:
+	case VGSM_COMM_IDLE:
 		return "IDLE";
-	case VGSM_PS_READING_URC:
+	case VGSM_COMM_READING_URC:
 		return "READING_URC";
-	case VGSM_PS_AWAITING_SMS_ECHO:
+	case VGSM_COMM_AWAITING_SMS_ECHO:
 		return "AWAITING_SMS_ECHO";
-	case VGSM_PS_AWAITING_SMS_ECHO_1A:
+	case VGSM_COMM_AWAITING_SMS_ECHO_1A:
 		return "AWAITING_SMS_ECHO_1A";
-	case VGSM_PS_AWAITING_ECHO:
+	case VGSM_COMM_AWAITING_ECHO:
 		return "AWAITING_ECHO";
-	case VGSM_PS_AWAITING_ECHO_READING_URC:
+	case VGSM_COMM_AWAITING_ECHO_READING_URC:
 		return "AWAITING_ECHO_READING_URC";
-	case VGSM_PS_READING_RESPONSE:
+	case VGSM_COMM_READING_RESPONSE:
 		return "READING_RESPONSE";
 	}
 
 	return "*UNKNOWN*";
 }
 
-enum vgsm_thread_signal
+const char *vgsm_comm_message_type_to_text(
+	enum vgsm_comm_message_type mt)
 {
-	VGSM_THREAD_SIGNAL_REQUEST,
-	VGSM_THREAD_SIGNAL_TIMER,
-	VGSM_THREAD_SIGNAL_REFRESH,
-};
+	switch(mt) {
+	case VGSM_COMM_MSG_CLOSE:
+		return "CLOSE";
+	case VGSM_COMM_MSG_REFRESH:
+		return "REFRESH";
+	case VGSM_COMM_MSG_INITIALIZE:
+		return "INITIALIZE";
+	}
 
-void vgsm_comm_signal_thread(enum vgsm_thread_signal signal)
-{
-	__u8 sig = signal;
-
-	write(vgsm_comm_thread_alert_write, &sig, sizeof(sig));
+	return "*UNKNOWN*";
 }
 
-static void vgsm_parser_change_state(
+void vgsm_comm_send_message(
+	struct vgsm_comm *comm,
+	enum vgsm_comm_message_type mt,
+	void *data,
+	int len)
+{
+	struct vgsm_comm_message *msg;
+
+	msg = alloca(sizeof(*msg) + len);
+	msg->type = mt;
+	msg->len = len;
+
+	if (data && len)
+		memcpy(&msg->data, data, len);
+
+	if (write(comm->cmd_pipe_write, msg, sizeof(*msg) + len) < 0) {
+		ast_log(LOG_WARNING,
+			"%s: Error writing to command pipe: %s\n",
+			comm->name,
+			strerror(errno));
+	}
+}
+
+static void vgsm_comm_timers_updated(struct vgsm_timerset *set)
+{
+	struct vgsm_comm *comm = container_of(set, struct vgsm_comm, timerset);
+
+	vgsm_comm_send_message(comm, VGSM_COMM_MSG_REFRESH, NULL, 0);
+}
+
+static void vgsm_comm_change_state(
 	struct vgsm_comm *comm,
 	enum vgsm_comm_state newstate,
 	longtime_t timeout)
@@ -218,33 +245,98 @@ static void vgsm_parser_change_state(
 	ast_mutex_lock(&comm->state_lock);
 	comm->state = newstate;
 	ast_mutex_unlock(&comm->state_lock);
-}
-
-void vgsm_comm_refresh(struct vgsm_comm *comm)
-{
-	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_REFRESH);
+	ast_cond_broadcast(&comm->state_cond);
 }
 
 void vgsm_comm_close(struct vgsm_comm *comm)
 {
-	comm->enabled = FALSE;
-	vgsm_comm_refresh(comm);
+	vgsm_comm_send_message(comm, VGSM_COMM_MSG_CLOSE, NULL, 0);
 
 	ast_mutex_lock(&comm->state_lock);
-	while(comm->state != VGSM_PS_CLOSED) {
-		ast_cond_wait(&comm->close_cond, &comm->state_lock);
+	while(comm->state != VGSM_COMM_CLOSED) {
+		ast_cond_wait(&comm->state_cond, &comm->state_lock);
 	}
 	ast_mutex_unlock(&comm->state_lock);
 }
 
-void vgsm_comm_open(struct vgsm_comm *comm, int fd, BOOL quiet)
+static void *vgsm_comm_thread_main(void *data);
+static void *vgsm_comm_urc_thread_main(void *data);
+static void *vgsm_comm_completion_thread_main(void *data);
+
+int vgsm_comm_open(struct vgsm_comm *comm, int fd)
 {
-	assert(comm->state == VGSM_PS_CLOSED);
+	int err;
+
+	assert(comm->state == VGSM_COMM_CLOSED);
 
 	comm->fd = fd;
-	comm->enabled = TRUE;
-	comm->quiet = quiet;
-	vgsm_comm_refresh(comm);
+
+	int filedes[2];
+	if (pipe(filedes) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot create cmd_pipe pipe: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_pipe;
+	}
+
+	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_0;
+	}
+
+	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_1;
+	}
+
+	comm->cmd_pipe_read = filedes[0];
+	comm->cmd_pipe_write = filedes[1];
+
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	err = ast_pthread_create(&comm->comm_thread, &attr,
+					vgsm_comm_thread_main, comm);
+	if (err < 0)
+		goto err_pthread_create_comm;
+
+	comm->urc_thread_has_to_exit = FALSE;
+	err = ast_pthread_create(&comm->urc_thread, &attr,
+					vgsm_comm_urc_thread_main, comm);
+	if (err < 0)
+		goto err_pthread_create_urc;
+
+	comm->completion_thread_has_to_exit = FALSE;
+	err = ast_pthread_create(&comm->completion_thread, &attr,
+					vgsm_comm_completion_thread_main, comm);
+	if (err < 0)
+		goto err_pthread_create_completion;
+
+	pthread_attr_destroy(&attr);
+
+	return 0;
+
+	pthread_kill(comm->completion_thread, SIGTERM);
+err_pthread_create_completion:
+	pthread_kill(comm->urc_thread, SIGTERM);
+err_pthread_create_urc:
+	pthread_kill(comm->comm_thread, SIGTERM);
+err_pthread_create_comm:
+err_fcntl_1:
+err_fcntl_0:
+	close(comm->cmd_pipe_read);
+	close(comm->cmd_pipe_write);
+err_pipe:
+
+	return err;
 }
 
 int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
@@ -288,7 +380,7 @@ int vgsm_comm_send_recovery_sequence(struct vgsm_comm *comm)
 	const char *cmd = "AT E1 V1 Q0\r";
 	if (write(comm->fd, cmd, strlen(cmd)) < 0) {
 		ast_log(LOG_WARNING,
-			"%s: write to module failed: %s\n",
+			"%s: error writing to serial: %s\n",
 			comm->name,
 			strerror(errno));
 
@@ -394,7 +486,7 @@ struct vgsm_req *vgsm_req_make_va(
 	list_add_tail(&vgsm_req_get(req)->node, &comm->requests_queue);
 	ast_mutex_unlock(&comm->requests_queue_lock);
 
-	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_REQUEST);
+	vgsm_comm_send_message(comm, VGSM_COMM_MSG_REFRESH, NULL, 0);
 
 	return req;
 
@@ -553,20 +645,31 @@ static int vgsm_match_response(
 			ast_log(LOG_WARNING,
 				"%s responded with '>' prompt but no "
 				"outstanding PDU is present\n", comm->name);
-			write(comm->fd, "\x1b", 1);
+			if (write(comm->fd, "\x1b", 1) < 0) {
+				ast_log(LOG_WARNING,
+					"%s: Error writing to serial: %s\n",
+					comm->name,
+					strerror(errno));
+			}
 
 			return 4;
 		}
 
-		write(comm->fd, req->sms_text_pdu, strlen(req->sms_text_pdu));
+		if (write(comm->fd, req->sms_text_pdu,
+					strlen(req->sms_text_pdu)) < 0) {
+			ast_log(LOG_WARNING,
+				"%s: Error writing to serial: %s\n",
+				comm->name,
+				strerror(errno));
+		}
 
 		char tmpstr[360];
 		vgsm_comm_debug_messages(comm,
-			"TX: '%s'\n",
+			"TX: '%s' (sms)\n",
 			unprintable_escape(req->sms_text_pdu,
 						tmpstr, sizeof(tmpstr)));
 
-		vgsm_parser_change_state(comm, VGSM_PS_AWAITING_SMS_ECHO,
+		vgsm_comm_change_state(comm, VGSM_COMM_AWAITING_SMS_ECHO,
 					SMS_ECHO_TIMEOUT);
 
 		return 4;
@@ -593,28 +696,29 @@ static int vgsm_match_response(
 
 	int err = vgsm_req_final_response_code(begin);
 	if (err != VGSM_RESP_UNKNOWN) {
-		vgsm_parser_change_state(comm, VGSM_PS_IDLE, -1);
+		vgsm_comm_change_state(comm, VGSM_COMM_IDLE, -1);
 
 		comm->current_req->err = err;
-
 		ast_mutex_lock(&comm->current_req->ready_lock);
 		comm->current_req->ready = TRUE;
 		ast_mutex_unlock(&comm->current_req->ready_lock);
 
-		ast_mutex_lock(&vgsm_comm_completion_queue_lock);
+		ast_mutex_lock(&comm->completion_queue_lock);
 		list_add_tail(&vgsm_req_get(comm->current_req)->node,
-				&vgsm_comm_completion_queue);
-		ast_mutex_unlock(&vgsm_comm_completion_queue_lock);
-		ast_cond_broadcast(&vgsm_comm_completion_queue_cond);
+				&comm->completion_queue);
+		ast_mutex_unlock(&comm->completion_queue_lock);
+		ast_cond_broadcast(&comm->completion_queue_cond);
 
 		ast_cond_broadcast(&comm->current_req->ready_cond);
+
 		vgsm_req_put(comm->current_req);
+		comm->current_req = NULL;
 	}
 
 	return end - comm->buf + 2;
 }
 
-static int match_echo(struct vgsm_comm *comm, const char *sent)
+static int vgsm_comm_match_echo(struct vgsm_comm *comm, const char *sent)
 {
 	int n = 0;
 	const char *buf = comm->buf;
@@ -637,7 +741,7 @@ static int match_echo(struct vgsm_comm *comm, const char *sent)
 		return -1;	// Cannot match
 }
 
-static int vgsm_match_urc(struct vgsm_comm *comm)
+static int vgsm_comm_match_urc(struct vgsm_comm *comm)
 {
 	char *begin = comm->buf;
 
@@ -654,8 +758,8 @@ static int vgsm_match_urc(struct vgsm_comm *comm)
 		if (*begin == '^')
 			goto sysstart_workaround;
 
-		ast_log(LOG_WARNING, "%s: Unexpected char 0x%02x\n",
-			comm->name,
+		vgsm_comm_debug_messages(comm,
+			"Unexpected char 0x%02x\n",
 			*begin);
 		return 1;
 	}
@@ -666,8 +770,8 @@ static int vgsm_match_urc(struct vgsm_comm *comm)
 		return 0;
 
 	if (*begin != '\n') {
-		ast_log(LOG_WARNING, "%s: Unexpected char 0x%02x after <cr>\n",
-			comm->name,
+		vgsm_comm_debug_messages(comm,
+			"Unexpected char 0x%02x after <cr>\n",
 			*begin);
 		return 1;
 	}
@@ -684,9 +788,8 @@ static int vgsm_match_urc(struct vgsm_comm *comm)
 			return 0;
 
 		if (*begin != '\n') {
-			ast_log(LOG_WARNING,
-				"%s: Unexpected char 0x%02x after <cr>\n",
-				comm->name,
+			vgsm_comm_debug_messages(comm,
+				"Unexpected char 0x%02x after <cr>\n",
 				*begin);
 			return 1;
 		}
@@ -739,34 +842,34 @@ cusd_workaround:;
 
 	list_add_tail(&req_line->node, &urc->lines);
 
-	if (comm->state == VGSM_PS_AWAITING_ECHO)
-		vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO,
+	if (comm->state == VGSM_COMM_AWAITING_ECHO)
+		vgsm_comm_change_state(comm, VGSM_COMM_AWAITING_ECHO,
 					ECHO_TIMEOUT);
 
 	if (urc->urc_class->detect_end) {
 		comm->current_urc = urc;
 
-		if (comm->state == VGSM_PS_AWAITING_ECHO)
-			vgsm_parser_change_state(comm,
-				VGSM_PS_AWAITING_ECHO_READING_URC,
+		if (comm->state == VGSM_COMM_AWAITING_ECHO)
+			vgsm_comm_change_state(comm,
+				VGSM_COMM_AWAITING_ECHO_READING_URC,
 				ECHO_TIMEOUT);
 		else
-			vgsm_parser_change_state(comm,
-				VGSM_PS_READING_URC,
+			vgsm_comm_change_state(comm,
+				VGSM_COMM_READING_URC,
 				READING_URC_TIMEOUT);
 
 		vgsm_timer_start_delta(&comm->timer, URC_TIMEOUT);
 	} else {
-		ast_mutex_lock(&vgsm_comm_urc_queue_lock);
-		list_add_tail(&urc->node, &vgsm_comm_urc_queue);
-		ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
-		ast_cond_broadcast(&vgsm_comm_urc_queue_cond);
+		ast_mutex_lock(&comm->urc_queue_lock);
+		list_add_tail(&urc->node, &comm->urc_queue);
+		ast_mutex_unlock(&comm->urc_queue_lock);
+		ast_cond_broadcast(&comm->urc_queue_cond);
 	}
 
 	return end - comm->buf + 2;
 }
 
-static int vgsm_match_urc_cont(struct vgsm_comm *comm)
+static int vgsm_comm_match_urc_cont(struct vgsm_comm *comm)
 {
 	char *begin = comm->buf;
 	char *end = strstr(begin, "\r\n");
@@ -791,31 +894,31 @@ static int vgsm_match_urc_cont(struct vgsm_comm *comm)
 
 	list_add_tail(&req_line->node, &comm->current_urc->lines);
 
-	if (comm->state == VGSM_PS_AWAITING_ECHO_READING_URC)
+	if (comm->state == VGSM_COMM_AWAITING_ECHO_READING_URC)
 		vgsm_timer_start_delta(&comm->timer, ECHO_TIMEOUT);
 
 	assert(comm->current_urc->urc_class->detect_end);
 
 	if (comm->current_urc->urc_class->detect_end(comm->current_urc)) {
-		ast_mutex_lock(&vgsm_comm_urc_queue_lock);
-		list_add_tail(&comm->current_urc->node, &vgsm_comm_urc_queue);
-		ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
-		ast_cond_broadcast(&vgsm_comm_urc_queue_cond);
+		ast_mutex_lock(&comm->urc_queue_lock);
+		list_add_tail(&comm->current_urc->node, &comm->urc_queue);
+		ast_mutex_unlock(&comm->urc_queue_lock);
+		ast_cond_broadcast(&comm->urc_queue_cond);
 
 		comm->current_urc = NULL;
 
-		if (comm->state == VGSM_PS_AWAITING_ECHO_READING_URC) {
-			vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO,
+		if (comm->state == VGSM_COMM_AWAITING_ECHO_READING_URC) {
+			vgsm_comm_change_state(comm, VGSM_COMM_AWAITING_ECHO,
 						ECHO_TIMEOUT);
 		} else {
-			vgsm_parser_change_state(comm, VGSM_PS_IDLE, -1);
+			vgsm_comm_change_state(comm, VGSM_COMM_IDLE, -1);
 		}
 	}
 
 	return end - comm->buf + 2;
 }
 
-static int vgsm_receive(struct vgsm_comm *comm)
+static int vgsm_comm_receive(struct vgsm_comm *comm)
 {
 	int buflen = strlen(comm->buf);
 	int nread;
@@ -858,49 +961,57 @@ static int vgsm_receive(struct vgsm_comm *comm)
 		}
 
 		switch(comm->state) {
-		case VGSM_PS_CLOSED:
+		case VGSM_COMM_CLOSED:
+		case VGSM_COMM_CLOSING:
 			ast_log(LOG_ERROR, "%s: Unexpected vgsm_receive()"
-				" in CLOSED state\n", comm->name);
+				" in state %s\n", comm->name,
+				vgsm_comm_state_to_text(comm->state));
 		break;
 
-		case VGSM_PS_FAILED:
-		case VGSM_PS_RECOVERING:
+		case VGSM_COMM_FAILED:
+		case VGSM_COMM_RECOVERING:
 			/* Throw away everything */
 			npull = nread;
 		break;
 
-		case VGSM_PS_IDLE:
-			npull = vgsm_match_urc(comm);
+		case VGSM_COMM_IDLE:
+			npull = vgsm_comm_match_urc(comm);
 		break;
 
-		case VGSM_PS_AWAITING_ECHO: {
-			int nmatch = match_echo(comm,
+		case VGSM_COMM_AWAITING_ECHO: {
+			int nmatch = vgsm_comm_match_echo(comm,
 					comm->current_req->request);
 			if (nmatch > 0) {
-				vgsm_parser_change_state(comm,
-					VGSM_PS_READING_RESPONSE,
+				vgsm_comm_change_state(comm,
+					VGSM_COMM_READING_RESPONSE,
 					comm->current_req->timeout);
 
 				npull = nmatch;
 			} else if (nmatch != 0) {
-				npull = vgsm_match_urc(comm);
+				npull = vgsm_comm_match_urc(comm);
 			}
 		}
 		break;
 
-		case VGSM_PS_READING_URC:
-		case VGSM_PS_AWAITING_ECHO_READING_URC:
-			npull = vgsm_match_urc_cont(comm);
+		case VGSM_COMM_READING_URC:
+		case VGSM_COMM_AWAITING_ECHO_READING_URC:
+			npull = vgsm_comm_match_urc_cont(comm);
 		break;
 
-		case VGSM_PS_AWAITING_SMS_ECHO: {
-			int nmatch = match_echo(comm,
+		case VGSM_COMM_AWAITING_SMS_ECHO: {
+			int nmatch = vgsm_comm_match_echo(comm,
 					comm->current_req->sms_text_pdu);
 			if (nmatch > 0) {
-				write(comm->fd, "\x1a", 1);
+				if (write(comm->fd, "\x1a", 1) < 0) {
+					ast_log(LOG_WARNING,
+						"%s: Error writing to serial:"
+						" %s\n",
+						comm->name,
+						strerror(errno));
+				}
 
-				vgsm_parser_change_state(comm,
-					VGSM_PS_AWAITING_SMS_ECHO_1A,
+				vgsm_comm_change_state(comm,
+					VGSM_COMM_AWAITING_SMS_ECHO_1A,
 					-2);
 
 				npull = nmatch;
@@ -908,11 +1019,11 @@ static int vgsm_receive(struct vgsm_comm *comm)
 		}
 		break;
 
-		case VGSM_PS_AWAITING_SMS_ECHO_1A: {
-			int nmatch = match_echo(comm, "\x1a");
+		case VGSM_COMM_AWAITING_SMS_ECHO_1A: {
+			int nmatch = vgsm_comm_match_echo(comm, "\x1a");
 			if (nmatch > 0) {
-				vgsm_parser_change_state(comm,
-					VGSM_PS_READING_RESPONSE,
+				vgsm_comm_change_state(comm,
+					VGSM_COMM_READING_RESPONSE,
 					comm->current_req->timeout);
 
 				npull = nmatch;
@@ -920,7 +1031,7 @@ static int vgsm_receive(struct vgsm_comm *comm)
 		}
 		break;
 
-		case VGSM_PS_READING_RESPONSE:
+		case VGSM_COMM_READING_RESPONSE:
 			npull = vgsm_match_response(comm);
 		break;
 		}
@@ -970,10 +1081,15 @@ static void vgsm_process_next_request(struct vgsm_comm *comm)
 		unprintable_escape(comm->current_req->request,
 					tmpstr, sizeof(tmpstr)));
 
-	write(comm->fd, comm->current_req->request,
-		strlen(comm->current_req->request));
+	if (write(comm->fd, comm->current_req->request,
+			strlen(comm->current_req->request)) < 0) {
+		ast_log(LOG_WARNING,
+			"%s: Error writing to serial: %s\n",
+			comm->name,
+			strerror(errno));
+	}
 
-	vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO, ECHO_TIMEOUT);
+	vgsm_comm_change_state(comm, VGSM_COMM_AWAITING_ECHO, ECHO_TIMEOUT);
 }
 
 static void vgsm_flush_requests(struct vgsm_comm *comm)
@@ -988,11 +1104,11 @@ static void vgsm_flush_requests(struct vgsm_comm *comm)
 		req->ready = TRUE;
 		ast_mutex_unlock(&req->ready_lock);
 
-		ast_mutex_lock(&vgsm_comm_completion_queue_lock);
+		ast_mutex_lock(&comm->completion_queue_lock);
 		list_add_tail(&vgsm_req_get(req)->node,
-				&vgsm_comm_completion_queue);
-		ast_mutex_unlock(&vgsm_comm_completion_queue_lock);
-		ast_cond_broadcast(&vgsm_comm_completion_queue_cond);
+				&comm->completion_queue);
+		ast_mutex_unlock(&comm->completion_queue_lock);
+		ast_cond_broadcast(&comm->completion_queue_cond);
 
 		ast_cond_broadcast(&req->ready_cond);
 		vgsm_req_put(req);
@@ -1004,13 +1120,13 @@ static void vgsm_comm_timer(void *data)
 	struct vgsm_comm *comm = data;
 
 	switch(comm->state) {
-	case VGSM_PS_RECOVERING:
+	case VGSM_COMM_RECOVERING:
 		if (comm->current_req) {
 			comm->current_req->retransmit_cnt--;
 
 			if (comm->current_req->retransmit_cnt == 0) {
-				vgsm_parser_change_state(comm,
-					VGSM_PS_FAILED, -1);
+				vgsm_comm_change_state(comm,
+					VGSM_COMM_FAILED, -1);
 
 				comm->current_req->err = VGSM_RESP_FAILED;
 
@@ -1019,15 +1135,14 @@ static void vgsm_comm_timer(void *data)
 				ast_mutex_unlock(&comm->current_req->
 								ready_lock);
 
-				ast_mutex_lock(
-					&vgsm_comm_completion_queue_lock);
+				ast_mutex_lock(&comm->completion_queue_lock);
 				list_add_tail(
 					&vgsm_req_get(comm->current_req)->node,
-					&vgsm_comm_completion_queue);
+					&comm->completion_queue);
 				ast_mutex_unlock(
-					&vgsm_comm_completion_queue_lock);
+					&comm->completion_queue_lock);
 				ast_cond_broadcast(
-					&vgsm_comm_completion_queue_cond);
+					&comm->completion_queue_cond);
 
 				ast_cond_broadcast(
 					&comm->current_req->ready_cond);
@@ -1043,41 +1158,52 @@ static void vgsm_comm_timer(void *data)
 
 			char tmpstr[200];
 			vgsm_comm_debug_messages(comm,
-				"TX: '%s'\n",
+				"TX: '%s' (retrans)\n",
 				unprintable_escape(buf, tmpstr,
 					sizeof(tmpstr)));
 
-//			write(comm->fd, buf, strlen(buf));
-			int i;
-			for(i=0; i<strlen(buf); i++)
-				write(comm->fd, &buf[i], 1);
+			if (write(comm->fd, buf, strlen(buf)) < 0) {
+				ast_log(LOG_WARNING,
+					"%s: Error writing to serial: %s\n",
+					comm->name,
+					strerror(errno));
+			}
 
-			vgsm_parser_change_state(comm, VGSM_PS_AWAITING_ECHO,
+			vgsm_comm_change_state(comm, VGSM_COMM_AWAITING_ECHO,
 						ECHO_TIMEOUT);
 		} else {
-			vgsm_parser_change_state(comm, VGSM_PS_IDLE, -1);
+			vgsm_comm_change_state(comm, VGSM_COMM_IDLE, -1);
 		}
 	break;
 
-	case VGSM_PS_READING_URC:
-	case VGSM_PS_AWAITING_SMS_ECHO:
-	case VGSM_PS_AWAITING_SMS_ECHO_1A:
-	case VGSM_PS_AWAITING_ECHO:
-	case VGSM_PS_AWAITING_ECHO_READING_URC:
-	case VGSM_PS_READING_RESPONSE:
+	case VGSM_COMM_READING_URC:
+	case VGSM_COMM_AWAITING_SMS_ECHO:
+	case VGSM_COMM_AWAITING_SMS_ECHO_1A:
+	case VGSM_COMM_AWAITING_ECHO:
+	case VGSM_COMM_AWAITING_ECHO_READING_URC:
+	case VGSM_COMM_READING_RESPONSE:
 		ast_log(LOG_NOTICE,
 			"%s: Serial lost synchronization in state %s\n",
 			comm->name,
 			vgsm_comm_state_to_text(comm->state));
 
-		vgsm_parser_change_state(comm, VGSM_PS_RECOVERING, 1 * SEC);
+		vgsm_comm_change_state(comm, VGSM_COMM_RECOVERING, 1 * SEC);
+
+		if (tcflush(comm->fd, TCIOFLUSH) < 0) {
+			ast_log(LOG_NOTICE,
+				"%s: tcflush(TCIOFLUSH):  %s\n",
+				comm->name,
+				strerror(errno));
+		}
+
 		comm->buf[0] = '\0';
 		vgsm_comm_send_recovery_sequence(comm);
 	break;
 
-	case VGSM_PS_CLOSED:
-	case VGSM_PS_FAILED:
-	case VGSM_PS_IDLE:
+	case VGSM_COMM_CLOSED:
+	case VGSM_COMM_CLOSING:
+	case VGSM_COMM_FAILED:
+	case VGSM_COMM_IDLE:
 		ast_log(LOG_WARNING,
 			"%s: Unexpected timeout in state %s\n",
 			comm->name,
@@ -1086,143 +1212,182 @@ static void vgsm_comm_timer(void *data)
 	}
 }
 
-enum vgsm_poll_type
+static int vgsm_comm_receive_message(
+	struct vgsm_comm *comm,
+	struct pollfd polls[])
 {
-	VGSM_POLL_TYPE_ASC0,
-	VGSM_POLL_TYPE_ASC1,
-	VGSM_POLL_TYPE_ALERT,
-};
+	struct vgsm_comm_message msgh;
 
-struct vgsm_poll_info
-{
-	struct vgsm_module *module;
-	enum vgsm_poll_type type;
-};
+	if (read(comm->cmd_pipe_read, &msgh, sizeof(msgh)) < 0) {
+		ast_log(LOG_WARNING,
+			"%s: Error reading from command pipe: %s\n",
+			comm->name,
+			strerror(errno));
+		return FALSE;
+	}
+
+	struct vgsm_comm_message *msg;
+
+	if (msgh.len) {
+		msg = alloca(sizeof(*msg) + msgh.len);
+		if (!msg) {
+			assert(0);
+			// FIXME
+		}
+
+		memcpy(msg, &msgh, sizeof(*msg));
+
+		read(comm->cmd_pipe_read, &msg->data, msg->len);
+	} else
+		msg = &msgh;
+
+	vgsm_comm_debug_messages(comm, "Received message %s (len=%d)\n",
+		vgsm_comm_message_type_to_text(msg->type), msg->len);
+
+	if (msg->type == VGSM_COMM_MSG_CLOSE) {
+		vgsm_comm_change_state(comm, VGSM_COMM_CLOSING, -1);
+		return TRUE;
+	} else if (msg->type == VGSM_COMM_MSG_REFRESH)
+		return FALSE;
+
+	switch(comm->state) {
+	case VGSM_COMM_CLOSED:
+	case VGSM_COMM_CLOSING:
+		assert(0);
+	break;
+
+	case VGSM_COMM_FAILED:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_RECOVERING:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_IDLE:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+			vgsm_comm_change_state(comm,
+					VGSM_COMM_RECOVERING, 1 * SEC);
+
+			comm->buf[0] = '\0';
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_READING_URC:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_AWAITING_SMS_ECHO:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_AWAITING_SMS_ECHO_1A:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_AWAITING_ECHO:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_AWAITING_ECHO_READING_URC:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+
+	case VGSM_COMM_READING_RESPONSE:
+		switch(msg->type) {
+		case VGSM_COMM_MSG_CLOSE:
+		case VGSM_COMM_MSG_REFRESH:
+		break;
+
+		case VGSM_COMM_MSG_INITIALIZE:
+		break;
+		}
+	break;
+	}
+
+	return 0;
+}
 
 static void *vgsm_comm_thread_main(void *data)
 {
-	struct pollfd *polls = NULL;
-	struct vgsm_poll_info *poll_infos = NULL;
-	int npolls = 0;
-	struct vgsm_module **modules = NULL;
-	int nmodules = 0;
-	int i;
+	struct vgsm_comm *comm = data;
 
-refresh:
+	struct pollfd polls[2];
 
-	if (polls) {
-		free(polls);
-		polls = NULL;
-	}
+	polls[0].fd = comm->cmd_pipe_read;
+	polls[0].events = POLLHUP | POLLERR | POLLIN;
 
-	if (poll_infos) {
-		for(i=0; i<npolls; i++)
-			if (poll_infos[i].module)
-				vgsm_module_put(poll_infos[i].module);
+	polls[1].fd = comm->fd;
+	polls[1].events = POLLHUP | POLLERR | POLLIN;
 
-		free(poll_infos);
-		poll_infos = NULL;
-	}
-
-	if (modules) {
-		for(i=0; i<nmodules; i++)
-			vgsm_module_put(modules[i]);
-
-		free(modules);
-		modules = NULL;
-	}
-
-	nmodules = 0;
-	struct vgsm_module *module;
-	ast_mutex_lock(&vgsm.ifs_list_lock);
-	list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
-		nmodules++;
-
-	polls = malloc(sizeof(*polls) * (nmodules + 1));
-	if (!polls)
-		abort();
-
-	poll_infos = malloc(sizeof(*poll_infos) * (nmodules + 1));
-	if (!poll_infos)
-		abort();
-
-	modules = malloc(sizeof(*modules) * nmodules);
-	if (!modules)
-		abort();
-
-	npolls = 0;
-	nmodules = 0;
-	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
-
-		struct vgsm_comm *comm = &module->comm;
-
-		modules[nmodules] = vgsm_module_get(module);
-		nmodules++;
-
-		if (!comm->enabled && comm->state != VGSM_PS_CLOSED) {
-			vgsm_parser_change_state(comm, VGSM_PS_CLOSED, -1);
-
-			ast_cond_broadcast(&comm->close_cond);
-		}
-
-		if (comm->state == VGSM_PS_CLOSED) {
-
-			vgsm_flush_requests(comm);
-
-			if (comm->enabled) {
-				vgsm_parser_change_state(comm,
-						VGSM_PS_RECOVERING, 1 * SEC);
-
-				comm->buf[0] = '\0';
-
-				if (!comm->quiet)
-					vgsm_comm_send_recovery_sequence(comm);
-			} else
-				continue;
-
-		} else if (comm->state == VGSM_PS_FAILED) {
-			vgsm_flush_requests(comm);
-
-			vgsm_parser_change_state(comm,
-					VGSM_PS_RECOVERING, 1 * SEC);
-			comm->buf[0] = '\0';
-			vgsm_comm_send_recovery_sequence(comm);
-		}
-
-		polls[npolls].fd = comm->fd;
-		polls[npolls].events = POLLHUP | POLLERR | POLLIN;
-		poll_infos[npolls].type = VGSM_POLL_TYPE_ASC0;
-		poll_infos[npolls].module = vgsm_module_get(module);
-		npolls++;
-	}
-
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
-
-	polls[npolls].fd = vgsm_comm_thread_alert_read;
-	polls[npolls].events = POLLHUP | POLLERR | POLLIN;
-	poll_infos[npolls].type = VGSM_POLL_TYPE_ALERT;
-	poll_infos[npolls].module = NULL;
-	npolls++;
+	vgsm_comm_change_state(comm, VGSM_COMM_IDLE, -1);
 
 	for(;;) {
-		int i;
+		vgsm_timerset_run(&comm->timerset);
 
-		vgsm_timerset_run(&vgsm_timerset);
+		if (comm->state == VGSM_COMM_IDLE)
+			vgsm_process_next_request(comm);
+		else if (comm->state == VGSM_COMM_FAILED ||
+		         comm->state == VGSM_COMM_CLOSING ||
+		         comm->state == VGSM_COMM_CLOSED)
+			vgsm_flush_requests(comm);
 
-		/* Submit a pending request if the comm is idle or drop it
-		 * if not ready
-		 */
-		for (i=0; i<nmodules; i++) {
-			struct vgsm_comm *comm = &modules[i]->comm;
-
-			if (comm->state == VGSM_PS_IDLE)
-				vgsm_process_next_request(comm);
-			else if (comm->state == VGSM_PS_FAILED ||
-			         comm->state == VGSM_PS_CLOSED)
-				vgsm_flush_requests(comm);
-		}
-
-		longtime_t timeout = vgsm_timerset_next(&vgsm_timerset);
+		longtime_t timeout = vgsm_timerset_next(&comm->timerset);
 
 		int timeout_ms;
 		if (timeout == -1)
@@ -1230,72 +1395,92 @@ refresh:
 		else
 			timeout_ms = max(timeout / 1000, 1LL);
 
-		if (vgsm.debug_timer)
-			ast_verbose("vgsm: set poll timeout = %d ms\n",
+		vgsm_comm_debug_characters(comm,
+				"poll (timeout = %d ms)\n",
 				timeout_ms);
 
-		int res = poll(polls, npolls, timeout_ms);
+		int res = poll(polls, ARRAY_SIZE(polls), timeout_ms);
 		if (res < 0) {
 			ast_log(LOG_WARNING, "vgsm: Error polling: %s\n",
 				strerror(errno));
-
-			goto refresh;
 		}
 
-		for (i=0; i<npolls; i++) {
-			struct vgsm_comm *comm = &poll_infos[i].module->comm;
+		if (res == 0)
+			continue;
 
-			if (poll_infos[i].type == VGSM_POLL_TYPE_ASC0) {
-
-				if (polls[i].revents & POLLIN)
-					vgsm_receive(comm);
-
-			} else if (poll_infos[i].type == VGSM_POLL_TYPE_ALERT) {
-				if (polls[i].revents & POLLIN) {
-					__u8 signal;
-
-					read(vgsm_comm_thread_alert_read,
-						&signal, sizeof(signal));
-
-					switch(signal) {
-					case VGSM_THREAD_SIGNAL_REQUEST:
-					case VGSM_THREAD_SIGNAL_TIMER:
-					break;
-					case VGSM_THREAD_SIGNAL_REFRESH:
-						goto refresh;
-					}
-				}
-			}
+		if (polls[0].revents & (POLLIN | POLLERR | POLLHUP)) {
+			if (vgsm_comm_receive_message(comm, polls))
+				break;
 		}
+
+		if (polls[1].revents & (POLLIN | POLLERR | POLLHUP))
+			vgsm_comm_receive(comm);
 	}
+
+	ast_mutex_lock(&comm->completion_queue_lock);
+	comm->completion_thread_has_to_exit = TRUE;
+	ast_mutex_unlock(&comm->completion_queue_lock);
+	ast_cond_broadcast(&comm->completion_queue_cond);
+
+	ast_mutex_lock(&comm->urc_queue_lock);
+	comm->urc_thread_has_to_exit = TRUE;
+	ast_mutex_unlock(&comm->urc_queue_lock);
+	ast_cond_broadcast(&comm->urc_queue_cond);
+
+	int err;
+	err = -pthread_join(comm->completion_thread, NULL);
+	if (err) {
+		ast_log(LOG_WARNING, "Cannot join completion thread: %s\n",
+			strerror(-err));
+	}
+
+	err = -pthread_join(comm->urc_thread, NULL);
+	if (err) {
+		ast_log(LOG_WARNING, "Cannot join URC thread: %s\n",
+			strerror(-err));
+	}
+
+	close(comm->cmd_pipe_read);
+	close(comm->cmd_pipe_write);
+
+	vgsm_comm_change_state(comm, VGSM_COMM_CLOSED, -1);
+
+	return NULL;
 }
 
-static struct vgsm_req *vgsm_comm_dequeue_urc(void)
+static struct vgsm_req *vgsm_comm_dequeue_urc(struct vgsm_comm *comm)
 {
-	ast_mutex_lock(&vgsm_comm_urc_queue_lock);
+	ast_mutex_lock(&comm->urc_queue_lock);
+	while(list_empty(&comm->urc_queue)) {
+		if (comm->urc_thread_has_to_exit) {
+			ast_mutex_unlock(&comm->urc_queue_lock);
+			return NULL;
+		}
 
-	while(list_empty(&vgsm_comm_urc_queue)) {
 		ast_cond_wait(
-			&vgsm_comm_urc_queue_cond,
-			&vgsm_comm_urc_queue_lock);
+			&comm->urc_queue_cond,
+			&comm->urc_queue_lock);
 	}
 
 	struct vgsm_req *req;
-	req = list_entry(vgsm_comm_urc_queue.next, struct vgsm_req, node);
+	req = list_entry(comm->urc_queue.next, struct vgsm_req, node);
 
 	list_del(&req->node);
-
-	ast_mutex_unlock(&vgsm_comm_urc_queue_lock);
+	ast_mutex_unlock(&comm->urc_queue_lock);
 
 	return req;
 }
 
 static void *vgsm_comm_urc_thread_main(void *data)
 {
+	struct vgsm_comm *comm = data;
+
 	for(;;) {
 		struct vgsm_req *req;
 
-		req = vgsm_comm_dequeue_urc();
+		req = vgsm_comm_dequeue_urc(comm);
+		if (!req)
+			break;
 
 		assert(req->urc_class);
 
@@ -1304,126 +1489,55 @@ static void *vgsm_comm_urc_thread_main(void *data)
 
 		vgsm_req_put(req);
 	}
+
+	vgsm_comm_debug_messages(comm, "URC thread exiting\n");
+
+	return NULL;
 }
 
-static struct vgsm_req *vgsm_comm_dequeue_completion(void)
+static struct vgsm_req *vgsm_comm_dequeue_completion(struct vgsm_comm *comm)
 {
-	ast_mutex_lock(&vgsm_comm_completion_queue_lock);
+	ast_mutex_lock(&comm->completion_queue_lock);
+	while(list_empty(&comm->completion_queue)) {
 
-	while(list_empty(&vgsm_comm_completion_queue)) {
+		if (comm->completion_thread_has_to_exit) {
+			ast_mutex_unlock(&comm->completion_queue_lock);
+			return NULL;
+		}
+
 		ast_cond_wait(
-			&vgsm_comm_completion_queue_cond,
-			&vgsm_comm_completion_queue_lock);
+			&comm->completion_queue_cond,
+			&comm->completion_queue_lock);
 	}
 
 	struct vgsm_req *req;
-	req = list_entry(vgsm_comm_completion_queue.next,
+	req = list_entry(comm->completion_queue.next,
 					struct vgsm_req, node);
 
 	list_del(&req->node);
-
-	ast_mutex_unlock(&vgsm_comm_completion_queue_lock);
+	ast_mutex_unlock(&comm->completion_queue_lock);
 
 	return req;
 }
 
 static void *vgsm_comm_completion_thread_main(void *data)
 {
+	struct vgsm_comm *comm = data;
+
 	for(;;) {
 		struct vgsm_req *req;
 
-		req = vgsm_comm_dequeue_completion();
+		req = vgsm_comm_dequeue_completion(comm);
+		if (!req)
+			break;
 
 		if (req->completion_func)
-			req->completion_func(req,
-					req->completion_data);
+			req->completion_func(req, req->completion_data);
 
 		vgsm_req_put(req);
 	}
-}
 
-static void vgsm_timers_updated(struct vgsm_timerset *set)
-{
-	vgsm_comm_signal_thread(VGSM_THREAD_SIGNAL_TIMER);
-}
+	vgsm_comm_debug_messages(comm, "Completion thread exiting\n");
 
-int vgsm_comm_thread_create()
-{
-	int err;
-
-	vgsm_timerset_init(&vgsm_timerset, vgsm_timers_updated);
-
-	ast_cond_init(&vgsm_comm_urc_queue_cond, NULL);
-	ast_cond_init(&vgsm_comm_completion_queue_cond, NULL);
-
-	int filedes[2];
-	if (pipe(filedes) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot create alert pipe: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_pipe;
-	}
-
-	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set pipe to non-blocking: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_fcntl_0;
-	}
-
-	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set pipe to non-blocking: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_fcntl_1;
-	}
-
-	vgsm_comm_thread_alert_read = filedes[0];
-	vgsm_comm_thread_alert_write = filedes[1];
-
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-	err = ast_pthread_create(&vgsm_comm_thread, &attr,
-						vgsm_comm_thread_main, NULL);
-	if (err < 0)
-		goto err_pthread_create_comm;
-
-	err = ast_pthread_create(&vgsm_comm_urc_thread, &attr,
-					vgsm_comm_urc_thread_main, NULL);
-	if (err < 0)
-		goto err_pthread_create_urc;
-
-	err = ast_pthread_create(&vgsm_comm_completion_thread, &attr,
-					vgsm_comm_completion_thread_main, NULL);
-	if (err < 0)
-		goto err_pthread_create_completion;
-
-	pthread_attr_destroy(&attr);
-
-	return 0;
-
-	pthread_kill(vgsm_comm_completion_thread, SIGTERM);
-err_pthread_create_completion:
-	pthread_kill(vgsm_comm_urc_thread, SIGTERM);
-err_pthread_create_urc:
-	pthread_kill(vgsm_comm_thread, SIGTERM);
-err_pthread_create_comm:
-err_fcntl_1:
-err_fcntl_0:
-	close(vgsm_comm_thread_alert_read);
-	close(vgsm_comm_thread_alert_write);
-err_pipe:
-
-	return err;
-}
-
-void vgsm_comm_thread_destroy(void)
-{
-	close(vgsm_comm_thread_alert_read);
-	close(vgsm_comm_thread_alert_write);
+	return NULL;
 }

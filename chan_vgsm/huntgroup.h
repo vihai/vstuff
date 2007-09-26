@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _HUNTGROUP_H
-#define _HUNTGROUP_H
+#ifndef _VGSM_HUNTGROUP_H
+#define _VGSM_HUNTGROUP_H
 
 #include <list.h>
 
@@ -58,7 +58,7 @@ struct vgsm_module *vgsm_hg_hunt(
 	struct vgsm_module *cur_module,
 	struct vgsm_module *first_module);
 
-void vgsm_hg_cli_register(void);
-void vgsm_hg_cli_unregister(void);
+int vgsm_hg_module_load(void);
+int vgsm_hg_module_unload(void);
 
 #endif

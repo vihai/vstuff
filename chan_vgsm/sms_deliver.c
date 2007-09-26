@@ -109,7 +109,7 @@ struct vgsm_sms_deliver *vgsm_sms_deliver_init_from_pdu(
 	int i;
 	for(i=0; i<sms->pdu_len; i++) {
 		pdu[i] = char_to_hexdigit(text_pdu[i * 2]) << 4 |
-		         char_to_hexdigit(text_pdu[i * 2 + 1]);
+			 char_to_hexdigit(text_pdu[i * 2 + 1]);
 	}
 
 	int pos = 0;
@@ -199,7 +199,7 @@ struct vgsm_sms_deliver *vgsm_sms_deliver_init_from_pdu(
 		goto err_timestamp_invalid;
 	}
 
-	if (*(pdu + pos)  & 0x80)
+	if (*(pdu + pos) & 0x80)
 		sms->timezone = vgsm_nibbles_to_decimal(*(pdu + pos) & 0x7f);
 	else
 		sms->timezone = -vgsm_nibbles_to_decimal(*(pdu + pos) & 0x7f);
@@ -308,7 +308,7 @@ struct vgsm_sms_deliver *vgsm_sms_deliver_init_from_pdu(
 				VGSM_SMS_DCS_ALPHABET_UCS2) {
 
 			// What if tp_udl + header != msg_len ?
-			// What if tp_udl % 2  ?
+			// What if tp_udl % 2 ?
 
 			int text_len = (tp_udl - udhl) / 2;
 			
@@ -432,7 +432,7 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 	fprintf(f, "Received: from GSM module %s", module->name);
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		struct vgsm_operator_info *op_info;
 		op_info = vgsm_operators_search(module->net.mcc,
 						module->net.mnc);
@@ -453,7 +453,7 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 
 	struct tm tm;
 	time_t tim = time(NULL);
-        localtime_r(&tim, &tm);
+	localtime_r(&tim, &tm);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f,"; %s\n", tmpstr);
@@ -472,7 +472,7 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 	else
 		fprintf(f, "To: <%s>\n", mc->sms_recipient_address);
 
-        localtime_r(&sms->timestamp, &tm);
+	localtime_r(&sms->timestamp, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "Date: %s\n", tmpstr);
 
@@ -637,7 +637,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 		"Received: from GSM module %s", module->name);
 
 	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		struct vgsm_operator_info *op_info;
 		op_info = vgsm_operators_search(module->net.mcc,
 						module->net.mnc);
@@ -658,7 +658,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 
 	struct tm tm;
 	time_t tim = time(NULL);
-        localtime_r(&tim, &tm);
+	localtime_r(&tim, &tm);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	sanprintf(text, sizeof(text),"; %s\r\n", tmpstr);
@@ -677,7 +677,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 	sanprintf(text, sizeof(text), 
 		"Content-Transfer-Encoding: base64\r\n");
 
-        localtime_r(&sms->timestamp, &tm);
+	localtime_r(&sms->timestamp, &tm);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	sanprintf(text, sizeof(text), 
 		"Date: %s\r\n", tmpstr);

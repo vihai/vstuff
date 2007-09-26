@@ -253,9 +253,7 @@ void vgsm_hg_reload(struct ast_config *cfg)
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
 
-		if (!strcasecmp(cat, "general") ||
-		    !strcasecmp(cat, "global") ||
-		    strncasecmp(cat, VGSM_HUNTGROUP_PREFIX,
+		if (strncasecmp(cat, VGSM_HUNTGROUP_PREFIX,
 				strlen(VGSM_HUNTGROUP_PREFIX)))
 			continue;
 
@@ -478,12 +476,16 @@ err_no_interfaces:
 	return NULL;
 }
 
-void vgsm_hg_cli_register(void)
+int vgsm_hg_module_load(void)
 {
 	ast_cli_register(&show_vgsm_huntgroups);
+
+	return 0;
 }
 
-void vgsm_hg_cli_unregister(void)
+int vgsm_hg_module_unload(void)
 {
 	ast_cli_unregister(&show_vgsm_huntgroups);
+
+	return 0;
 }

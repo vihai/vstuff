@@ -82,16 +82,32 @@ enum vgsm_req_codes
 
 enum vgsm_comm_state
 {
-	VGSM_PS_CLOSED,
-	VGSM_PS_FAILED,
-	VGSM_PS_RECOVERING,
-	VGSM_PS_IDLE,
-	VGSM_PS_READING_URC,
-	VGSM_PS_AWAITING_SMS_ECHO,
-	VGSM_PS_AWAITING_SMS_ECHO_1A,
-	VGSM_PS_AWAITING_ECHO,
-	VGSM_PS_AWAITING_ECHO_READING_URC,
-	VGSM_PS_READING_RESPONSE,
+	VGSM_COMM_CLOSED,
+	VGSM_COMM_CLOSING,
+	VGSM_COMM_FAILED,
+	VGSM_COMM_RECOVERING,
+	VGSM_COMM_IDLE,
+	VGSM_COMM_READING_URC,
+	VGSM_COMM_AWAITING_SMS_ECHO,
+	VGSM_COMM_AWAITING_SMS_ECHO_1A,
+	VGSM_COMM_AWAITING_ECHO,
+	VGSM_COMM_AWAITING_ECHO_READING_URC,
+	VGSM_COMM_READING_RESPONSE,
+};
+
+enum vgsm_comm_message_type
+{
+	VGSM_COMM_MSG_CLOSE,
+	VGSM_COMM_MSG_REFRESH,
+	VGSM_COMM_MSG_INITIALIZE,
+};
+
+struct vgsm_comm_message
+{
+	enum vgsm_comm_message_type type;
+
+	int len;
+	__u8 data[];
 };
 
 struct vgsm_req;
@@ -145,23 +161,36 @@ struct vgsm_comm
 
 	int fd;
 
-	BOOL enabled;
-	BOOL quiet;
-
 	enum vgsm_comm_state state;
 	ast_mutex_t state_lock;
+	ast_cond_t state_cond;
 
-	ast_cond_t close_cond;
-
+	struct vgsm_timerset timerset;
 	struct vgsm_timer timer;
 
 	char buf[2048];
 
+	pthread_t comm_thread;
 	ast_mutex_t requests_queue_lock;
 	struct list_head requests_queue;
 
+	int cmd_pipe_read;
+	int cmd_pipe_write;
+
 	struct vgsm_req *current_req;
 	struct vgsm_req *current_urc;
+
+	pthread_t urc_thread;
+	struct list_head urc_queue;
+	ast_mutex_t urc_queue_lock;
+	ast_cond_t urc_queue_cond;
+	BOOL urc_thread_has_to_exit;
+
+	pthread_t completion_thread;
+	struct list_head completion_queue;
+	ast_mutex_t completion_queue_lock;
+	ast_cond_t completion_queue_cond;
+	BOOL completion_thread_has_to_exit;
 
 	struct vgsm_urc_class *urc_classes;
 
@@ -233,10 +262,12 @@ void _vgsm_req_put(struct vgsm_req *req);
 
 int vgsm_req_status(struct vgsm_req *req);
 
-void vgsm_comm_wakeup(struct vgsm_comm *comm);
-void vgsm_comm_open(struct vgsm_comm *comm, int fd, BOOL quiet);
+int vgsm_comm_open(struct vgsm_comm *comm, int fd);
 void vgsm_comm_close(struct vgsm_comm *comm);
-int vgsm_comm_thread_create();
-void vgsm_comm_thread_destroy();
+
+void vgsm_comm_send_message(
+	struct vgsm_comm *comm,
+	enum vgsm_comm_message_type mt,
+	void *data, int len);
 
 #endif

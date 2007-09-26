@@ -87,7 +87,6 @@
 #include "operators.h"
 #include "pin.h"
 #include "number.h"
-#include "sim.h"
 #include "base64.h"
 #include "quotprint.h"
 
@@ -523,8 +522,8 @@ static void vgsm_reload_config(void)
 		var = var->next;
 	}
 
-	vgsm_module_reload(cfg);
 	vgsm_hg_reload(cfg);
+	vgsm_module_reload(cfg);
 
 	ast_config_destroy(cfg);
 
@@ -692,7 +691,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	struct vgsm_sms_submit *sms;
 	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
-		ast_cli(fd,  "Cannot allocate SMS\n");
+		ast_cli(fd, "Cannot allocate SMS\n");
 		err = RESULT_FAILURE;
 		goto err_sms_alloc;
 	}
@@ -866,7 +865,7 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 
 	if (argc < 5) {
 		ast_cli(fd, "Missing PIN\n");
-		err =  RESULT_SHOWUSAGE;
+		err = RESULT_SHOWUSAGE;
 		goto err_no_pin;
 	}
 
@@ -1249,7 +1248,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	__u32 node_id;
 	int err;
 
-	err = ioctl(vgsm_chan->module->fd, VGSM_IOC_GET_NODEID,
+	err = ioctl(vgsm_chan->module->me_fd, VGSM_IOC_GET_NODEID,
 						(caddr_t)&node_id);
 	if (err < 0) {
 
@@ -1999,8 +1998,8 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		if (err < 0)
 			ast_log(LOG_ERROR, "Cannot restart the pipeline\n");
 
-	        if (vgsm_chan->module->debug_frames)
-                	ast_verbose("Read format changed to %02x\n",
+		if (vgsm_chan->module->debug_frames)
+			ast_verbose("Read format changed to %02x\n",
 					ast_chan->rawreadformat);
 	}
 
@@ -2120,8 +2119,8 @@ static int vgsm_write(
 		if (err < 0)
 			ast_log(LOG_ERROR, "Cannot restart the pipeline\n");
 
-	        if (vgsm_chan->module->debug_frames)
-                	ast_verbose("Write format changed to %02x\n",
+		if (vgsm_chan->module->debug_frames)
+			ast_verbose("Write format changed to %02x\n",
 					ast_chan->rawwriteformat);
 	}
 
@@ -2192,7 +2191,7 @@ static int vgsm_write(
 
 	struct vgsm_module_config *mc = vgsm_chan->mc;
 
-        int len = frame->datalen;
+	int len = frame->datalen;
 	__u8 *buf = frame->data;
 
 	if (pressure < mc->jitbuf_low) {
@@ -2469,7 +2468,7 @@ static void astman_append(struct mansession *s, const char *fmt, ...)
 
 /***********************************************/
 
-/*! \brief  manager_vgsm_sms_tx: Send a text sms with VGSM card ---*/
+/*! \brief manager_vgsm_sms_tx: Send a text sms with VGSM card ---*/
 
 #if ASTERISK_VERSION_NUM >= 10402
 static int manager_vgsm_sms_tx(struct mansession *s, const struct message *m)
@@ -2555,12 +2554,12 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		struct vgsm_huntgroup_member *hgm;
 		list_for_each_entry(hgm, &hg->members, node) {
-		        ast_mutex_lock(&hgm->module->lock);
-		        if (hgm->module->status == VGSM_MODULE_STATUS_READY &&
-			    !hgm->module->sending_sms &&
-			    (hgm->module->net.status ==
+			ast_mutex_lock(&hgm->module->lock);
+			if (hgm->module->status == VGSM_MODULE_STATUS_READY &&
+				!hgm->module->sending_sms &&
+				(hgm->module->net.status ==
 					VGSM_NET_STATUS_REGISTERED_HOME ||
-			    hgm->module->net.status ==
+				hgm->module->net.status ==
 					VGSM_NET_STATUS_REGISTERED_ROAMING)) {
 
 				module = vgsm_module_get(hgm->module);
@@ -2625,12 +2624,12 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		ast_mutex_lock(&vgsm.ifs_list_lock);
 		list_for_each_entry(tm, &vgsm.ifs_list, ifs_node) {
-		        ast_mutex_lock(&tm->lock);
-		        if (tm->status == VGSM_MODULE_STATUS_READY &&
-			    !tm->sending_sms &&
-			    (tm->net.status ==
+			ast_mutex_lock(&tm->lock);
+			if (tm->status == VGSM_MODULE_STATUS_READY &&
+				!tm->sending_sms &&
+				(tm->net.status ==
 					VGSM_NET_STATUS_REGISTERED_HOME ||
-			    tm->net.status ==
+				tm->net.status ==
 					VGSM_NET_STATUS_REGISTERED_ROAMING)) {
 
 				module = vgsm_module_get(tm);
@@ -2933,6 +2932,10 @@ static int vgsm_load_module(void)
 	if (err < 0)
 		goto err_module_module_load;
 
+	err = vgsm_hg_module_load();
+	if (err < 0)
+		goto err_hg_module_load;
+
 	ast_cli_register(&debug_vgsm_generic);
 	ast_cli_register(&no_debug_vgsm_generic);
 	ast_cli_register(&debug_vgsm_timer);
@@ -2942,8 +2945,6 @@ static int vgsm_load_module(void)
 	ast_cli_register(&vgsm_pin_input);
 	ast_cli_register(&vgsm_puk_input);
 	ast_cli_register(&vgsm_pin_set);
-
-	vgsm_hg_cli_register();
 
 	/* Register manager commands */
 	ast_manager_register2("VGSMsmstx", EVENT_FLAG_CALL,
@@ -2960,11 +2961,12 @@ static int vgsm_load_module(void)
 
 	return 0;
 
+	vgsm_hg_module_unload();
+err_hg_module_load:
 	vgsm_module_module_unload();
 err_module_module_load:
 	ast_channel_unregister(&vgsm_tech);
 err_channel_register:
-	vgsm_hg_cli_unregister();
 
 	ast_cli_unregister(&vgsm_pin_set);
 	ast_cli_unregister(&vgsm_puk_input);
@@ -2987,9 +2989,8 @@ int unload_module(void)
 static int vgsm_unload_module(void)
 #endif
 {
+	vgsm_hg_module_unload();
 	vgsm_module_module_unload();
-
-	vgsm_hg_cli_unregister();
 
 	ast_cli_unregister(&vgsm_pin_set);
 	ast_cli_unregister(&vgsm_puk_input);

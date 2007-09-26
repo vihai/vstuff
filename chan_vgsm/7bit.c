@@ -39,7 +39,7 @@ void vgsm_7bit_to_wc(
 		int shift = 8 - ((i + offset) % 8);
 		__u16 mask = 0x7f << shift;
 		__u16 val = (j ? (*(buf + j-1)) : 0) |
-		       	*(buf + j) << 8;
+			*(buf + j) << 8;
 
 		out[i] = vgsm_gsm_to_wc((val & mask) >> shift);
 		outlen++;

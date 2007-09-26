@@ -54,7 +54,6 @@
 #include "util.h"
 #include "chan_vgsm.h"
 #include "module.h"
-#include "huntgroup.h"
 #include "comm.h"
 #include "causes.h"
 #include "sms.h"
@@ -64,6 +63,7 @@
 #include "operators.h"
 #include "pin.h"
 #include "sim.h"
+#include "sim_file.h"
 #include "timer.h"
 
 #define FAILED_RETRY_TIME (5 * SEC)
@@ -84,7 +84,6 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->tx_gain = 255;
 	mc->set_clock = 0;
 	mc->poweroff_on_exit = TRUE;
-	mc->route_to_sim = -2;
 	mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
 
 	strcpy(mc->smcc_address.digits, "");
@@ -495,7 +494,7 @@ const char *vgsm_module_error_to_text(int code)
 	    code < CME_ERROR_BASE + CME_ERROR_SIZE)
 		return vgsm_cme_error_to_text(code - CME_ERROR_BASE);
 	else if (code >= CMS_ERROR_BASE &&
-	         code < CMS_ERROR_BASE + CMS_ERROR_SIZE)
+		 code < CMS_ERROR_BASE + CMS_ERROR_SIZE)
 		return vgsm_cms_error_to_text(code - CMS_ERROR_BASE);
 	else if (code == VGSM_RESP_OK)
 		return "OK";
@@ -666,6 +665,9 @@ static int vgsm_module_config_from_var(
 	if (!strcasecmp(var->name, "device")) {
 		strncpy(mc->device_filename, var->value,
 			sizeof(mc->device_filename));
+	} else if (!strcasecmp(var->name, "mesim_device")) {
+		strncpy(mc->mesim_device_filename, var->value,
+			sizeof(mc->mesim_device_filename));
 	} else if (!strcasecmp(var->name, "context")) {
 		strncpy(mc->context, var->value, sizeof(mc->context));
 	} else if (!strcasecmp(var->name, "pin")) {
@@ -678,13 +680,38 @@ static int vgsm_module_config_from_var(
 		mc->set_clock = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "poweroff_on_exit")) {
 		mc->poweroff_on_exit = ast_true(var->value);
-	} else if (!strcasecmp(var->name, "sim")) {
-		if (!strcasecmp(var->value, "external"))
-			mc->route_to_sim = VGSM_SIM_ROUTE_EXTERNAL;
-		else if (!strcasecmp(var->value, "default"))
-			mc->route_to_sim = VGSM_SIM_ROUTE_DEFAULT;
+	} else if (!strcasecmp(var->name, "sim_proto")) {
+		if (!strcasecmp(var->value, "local"))
+			mc->sim_proto = VGSM_MESIM_PROTO_LOCAL;
+		else if (!strcasecmp(var->value, "implementa"))
+			mc->sim_proto = VGSM_MESIM_PROTO_IMPLEMENTA;
 		else
-			mc->route_to_sim = atoi(var->value);
+			ast_log(LOG_WARNING,
+				"Unknown SIM holder protocol '%s'\n",
+				var->value);
+	} else if (!strcasecmp(var->name, "sim_local_device_filename")) {
+		strncpy(mc->sim_local_device_filename, var->value,
+			sizeof(mc->sim_local_device_filename));
+	} else if (!strcasecmp(var->name, "sim_client_addr")) {
+		struct ast_hostent ahp;
+		struct hostent *hp;
+
+		if (!(hp = ast_gethostbyname(var->value, &ahp)))
+			ast_log(LOG_WARNING, "Invalid address: %s\n",
+				var->value);
+		else
+			memcpy(&mc->sim_impl_simclient_addr.sin_addr,
+				hp->h_addr,
+				sizeof(mc->sim_impl_simclient_addr.sin_addr));
+
+	} else if (!strcasecmp(var->name, "sim_client_port")) {
+		int port;
+		if (sscanf(var->value, "%d", &port) == 1)
+			mc->sim_impl_simclient_addr.sin_port = htons(port);
+		else
+			ast_log(LOG_WARNING,
+				"Invalid port number '%s' at line %d\n",
+				var->value, var->lineno);
 	} else if (!strcasecmp(var->name, "operator_selection")) {
 		if (!strcasecmp(var->value, "auto"))
 			mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
@@ -763,6 +790,8 @@ static void vgsm_module_config_copy(
 {
 	strncpy(dst->device_filename, src->device_filename,
 		sizeof(dst->device_filename));
+	strncpy(dst->mesim_device_filename, src->mesim_device_filename,
+		sizeof(dst->mesim_device_filename));
 	strncpy(dst->context, src->context,
 		sizeof(dst->context));
 	strncpy(dst->pin, src->pin,
@@ -772,7 +801,10 @@ static void vgsm_module_config_copy(
 	dst->tx_gain = src->tx_gain;
 	dst->set_clock = src->set_clock;
 	dst->poweroff_on_exit = src->poweroff_on_exit;
-	dst->route_to_sim = src->route_to_sim;
+	dst->sim_proto = src->sim_proto;
+	strncpy(dst->sim_local_device_filename,
+		src->sim_local_device_filename,
+		sizeof(dst->sim_local_device_filename));
 	dst->operator_selection = src->operator_selection;
 
 	dst->operator_mcc = src->operator_mcc;
@@ -800,8 +832,11 @@ static void vgsm_module_config_copy(
 	dst->jitbuf_high = src->jitbuf_high;
 }
 
+static void *vgsm_module_monitor_thread_main(void *data);
+
 static void vgsm_module_reconfigure(
 	struct ast_config *cfg,
+	const char *cat,
 	const char *name)
 {
 	int err;
@@ -818,7 +853,7 @@ static void vgsm_module_reconfigure(
 	vgsm_module_config_copy(mc, vgsm.default_mc);
 
 	struct ast_variable *var;
-	var = ast_variable_browse(cfg, (char *)name);
+	var = ast_variable_browse(cfg, (char *)cat);
 	while (var) {
 		if (vgsm_module_config_from_var(mc, var) < 0) {
 			ast_log(LOG_WARNING,
@@ -856,6 +891,14 @@ static void vgsm_module_reconfigure(
 				VGSM_MODULE_STATUS_CLOSED,
 				CLOSED_POSTPONE,
 				" ");
+
+		pthread_attr_t attr;
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+		ast_pthread_create(&module->monitor_thread, &attr,
+				vgsm_module_monitor_thread_main, module);
+		pthread_attr_destroy(&attr);
 	}
 
 	ast_mutex_lock(&module->lock);
@@ -866,6 +909,7 @@ static void vgsm_module_reconfigure(
 
 	mc->module = module;
 	module->current_config = vgsm_module_config_get(mc);
+
 	ast_mutex_unlock(&module->lock);
 
 	ast_mutex_unlock(&vgsm.ifs_list_lock);
@@ -904,13 +948,17 @@ void vgsm_module_reload(struct ast_config *cfg)
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
 
-		if (!strcasecmp(cat, "general") ||
-		    !strcasecmp(cat, "global") ||
-		    !strncasecmp(cat, VGSM_HUNTGROUP_PREFIX,
-				strlen(VGSM_HUNTGROUP_PREFIX)))
+		if (strncasecmp(cat, VGSM_ME_PREFIX, strlen(VGSM_ME_PREFIX)))
 			continue;
 
-		vgsm_module_reconfigure(cfg, cat);
+		if (strlen(cat) <= strlen(VGSM_ME_PREFIX)) {
+			ast_log(LOG_WARNING,
+				"Empty module name in configuration\n");
+
+			continue;
+		}
+
+		vgsm_module_reconfigure(cfg, cat, cat + strlen(VGSM_ME_PREFIX));
 	}
 }
 
@@ -941,20 +989,15 @@ struct vgsm_module *vgsm_module_alloc(void)
 
 	module->monitor_thread = AST_PTHREADT_NULL;
 
-	module->fd = -1;
+	module->me_fd = -1;
 
 	vgsm_timerset_init(&module->timerset, vgsm_module_timers_updated);
 
 	vgsm_timer_init(&module->timer, &module->timerset, "module",
 			vgsm_module_timer, module);
 
-	module->sim.sim = vgsm_sim_alloc(&module->comm);
-	if (!module->sim.sim)
-		goto err_sim_alloc;
-
 	return module;
 
-err_sim_alloc:
 	free(module);
 err_malloc:
 
@@ -989,11 +1032,6 @@ void _vgsm_module_put(struct vgsm_module *module)
 
 		if (module->status_reason)
 			free(module->status_reason);
-
-		if (module->sim.sim) {
-			vgsm_sim_put(module->sim.sim);
-			module->sim.sim = NULL;
-		}
 
 		struct vgsm_counter *counter, *t;
 		list_for_each_entry_safe(counter, t,
@@ -1045,23 +1083,10 @@ void vgsm_module_set_status(
 		va_end(ap);
 	}
 
-	if (timeout >= 0) {
+	if (timeout >= 0)
 		vgsm_timer_start_delta(&module->timer, timeout);
-
-		vgsm_debug_state(module,
-			"changed state from %s to %s"
-			" (timeout %.2fs)\n",
-			vgsm_module_status_to_text(module->status),
-			vgsm_module_status_to_text(status),
-			timeout / 1000000.0);
-	} else {
+	else
 		vgsm_timer_stop(&module->timer);
-
-		vgsm_debug_state(module,
-			"changed state from %s to %s\n",
-			vgsm_module_status_to_text(module->status),
-			vgsm_module_status_to_text(status));
-	}
 
 	if (module->status != status) {
 		if (timeout >= 0) {
@@ -1107,11 +1132,11 @@ void vgsm_module_failed_text(struct vgsm_module *module,
 	va_list ap;
 	char tmpstr[512];
 
-	vgsm_comm_close(&module->comm);
-
 	va_start(ap, fmt);
 	vsnprintf(tmpstr, sizeof(tmpstr), fmt, ap);
 	va_end(ap);
+
+	vgsm_comm_close(&module->comm);
 
 	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
@@ -1120,9 +1145,9 @@ void vgsm_module_failed_text(struct vgsm_module *module,
 
 void vgsm_module_failed(struct vgsm_module *module, int err)
 {
-	vgsm_comm_close(&module->comm);
-
 	ast_mutex_lock(&module->lock);
+
+	vgsm_comm_close(&module->comm);
 
 	if (err == VGSM_RESP_FAILED)
 		vgsm_module_set_status(module,
@@ -1158,7 +1183,9 @@ char *vgsm_module_completion(const char *line, const char *word, int state)
 static void vgsm_module_ignite(
 	struct vgsm_module *module)
 {
-	if (ioctl(module->fd, VGSM_IOC_POWER_IGN, 0) < 0)
+	vgsm_mesim_get_ready_for_poweron(&module->mesim);
+
+	if (ioctl(module->me_fd, VGSM_IOC_POWER_IGN, 0) < 0)
 		vgsm_module_failed_text(module,
 			"Error turning on module: ioctl(POWER_IGN): %s",
 			strerror(errno));
@@ -1167,7 +1194,7 @@ static void vgsm_module_ignite(
 static void vgsm_module_emerg_off(
 	struct vgsm_module *module)
 {
-	if (ioctl(module->fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0)
+	if (ioctl(module->me_fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0)
 		vgsm_module_failed_text(module,
 			"Error turning off module: ioctl(POWER_EMERG_OFF): %s",
 			strerror(errno));
@@ -1182,7 +1209,8 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 	ast_cli(fd,
 		"\n"
 		"---- Module '%s' ----\n"
-		"  Device : %s\n"
+		"  Device: %s\n"
+		"  ME SIM Device: %s\n"
 		"  Context: %s\n"
 		"  RX-gain: %d\n"
 		"  TX-gain: %d\n"
@@ -1192,6 +1220,7 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 		"  Status: %s\n",
 		module->name,
 		mc->device_filename,
+		mc->mesim_device_filename,
 		mc->context,
 		mc->rx_gain,
 		mc->tx_gain,
@@ -1199,13 +1228,13 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 		mc->poweroff_on_exit ? "YES" : "NO",
 		vgsm_module_status_to_text(module->status));
 
-	if (mc->route_to_sim == VGSM_SIM_ROUTE_EXTERNAL)
+/*	if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_EXTERNAL)
 		ast_cli(fd, "  Route to sim: external\n");
-	else if (mc->route_to_sim == VGSM_SIM_ROUTE_DEFAULT)
+	else if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_DEFAULT)
 		ast_cli(fd, "  Route to sim: default\n");
 	else
-		ast_cli(fd, "  Route to sim: %d\n", mc->route_to_sim);
-
+		ast_cli(fd, "  Route to sim: %s\n", mc->mesim.sim_holder->name);
+*/
 
 	if (module->status_reason)
 		ast_cli(fd, "  Reason: %s\n", module->status_reason);
@@ -1494,10 +1523,47 @@ static int vgsm_show_module_sim(int fd, struct vgsm_module *module)
 {
 	ast_mutex_lock(&module->lock);
 
-	if (module->status != VGSM_MODULE_STATUS_READY) {
+	if (module->status != VGSM_MODULE_STATUS_READY &&
+	    module->status != VGSM_MODULE_STATUS_WAITING_SIM &&
+	    module->status != VGSM_MODULE_STATUS_WAITING_PIN) {
 		ast_cli(fd, "Module is not ready\n");
 		goto out;
 	}
+
+	ast_cli(fd, "ME SIM:\n"
+		"  VCC=%d, RST=%d\n"
+		"  State: %s\n",
+		module->mesim.vcc,
+		module->mesim.rst,
+		vgsm_mesim_state_to_text(module->mesim.state));
+
+	if (module->mesim.proto == VGSM_MESIM_PROTO_LOCAL) {
+		ast_cli(fd, "  Routed to local SIM holder: %d\n",
+			module->mesim.local_sim_id);
+	} else if (module->mesim.proto == VGSM_MESIM_PROTO_CLIENT) {
+	} else if (module->mesim.proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
+		ast_cli(fd, "  Implementa interface status: %s\n",
+			vgsm_mesim_impl_state_to_text(
+					module->mesim.impl_state));
+		ast_cli(fd, "  Implementa SIM client addr:"
+				" %s:%d\n",
+			ast_inet_ntoa(module->mesim.
+					impl_simclient_addr.sin_addr),
+			ntohs(module->mesim.impl_simclient_addr.sin_port));
+	}
+
+
+/*
+	if (!module->mesim.sim_holder) {
+		ast_cli(fd,
+			"\nSIM Holder:\n"
+			"  Not connected\n");
+		goto out;
+	}
+
+	ast_cli(fd,
+		"\nSIM Holder: %s\n",
+		module->mesim.sim_holder->name);*/
 
 	if (!module->sim.inserted) {
 		ast_cli(fd,
@@ -1522,6 +1588,7 @@ static int vgsm_show_module_sim(int fd, struct vgsm_module *module)
 
 	ast_cli(fd, "\n");
 
+#if 0
 	struct vgsm_sim *sim = module->sim.sim;
 	if (!sim)
 		goto out;
@@ -1682,6 +1749,7 @@ static int vgsm_show_module_sim(int fd, struct vgsm_module *module)
 	vgsm_sim_file_put(file);
 
 	ast_cli(fd, "\n");
+#endif
 
 out:
 
@@ -1994,7 +2062,7 @@ static int vgsm_show_module_summary(int fd, struct vgsm_module *module)
 			vgsm_net_status_to_text(module->net.status));
 
 		if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-	            module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 
 			struct vgsm_operator_info *op_info;
 			op_info = vgsm_operators_search(module->net.mcc,
@@ -2361,7 +2429,7 @@ static int vgsm_module_identify(
 		return RESULT_SHOWUSAGE;
 	}
 
-	if (ioctl(module->fd, VGSM_IOC_IDENTIFY, value) < 0) {
+	if (ioctl(module->me_fd, VGSM_IOC_IDENTIFY, value) < 0) {
 		ast_cli(fd, "ioctl(VGSM_IOC_IDENTIFY): %s\n", strerror(errno));
 		return RESULT_FAILURE;
 	}
@@ -2554,138 +2622,6 @@ static struct ast_cli_entry vgsm_module =
 	vgsm_module_complete
 };
 
-#if 0
-/*---------------------------------------------------------------------------*/
-
-static int vgsm_sim_identify(
-	int fd, int argc, char *argv[],
-	struct vgsm_sim *sim)
-{
-	int value;
-
-
-	if (!strcasecmp(argv[4], "on"))
-		value = 1;
-	else if (!strcasecmp(argv[4], "off"))
-		value = 0;
-	else {
-		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
-		return RESULT_SHOWUSAGE;
-	}
-
-	if (ioctl(module->fd, VGSM_IOC_IDENTIFY, value) < 0) {
-		ast_cli(fd, "ioctl(VGSM_IOC_IDENTIFY): %s\n", strerror(errno));
-		return RESULT_FAILURE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_sim_func(int fd, int argc, char *argv[])
-{
-	int err;
-
-	if (argc < 3) {
-		ast_cli(fd, "Missing sim name\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_sim_name;
-	}
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing command\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_command;
-	}
-
-	struct vgsm_sim *sim;
-	sim = vgsm_sim_get_by_name(argv[2]);
-	if (!sim) {
-		ast_cli(fd, "Cannot find sim '%s'\n", argv[2]);
-		err = RESULT_FAILURE;
-		goto err_sim_not_found;
-	}
-
-	ast_mutex_lock(&sim->lock);
-	if (!strcasecmp(argv[3], "identify"))
-		err = vgsm_sim_identify(fd, argc, argv, sim);
-	else {
-		ast_mutex_unlock(&sim->lock);
-		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
-		err = RESULT_SHOWUSAGE;
-		goto err_unknown_command;
-	}
-	ast_mutex_unlock(&sim->lock);
-
-	if (err != RESULT_SUCCESS)
-		goto err_command;
-
-	vgsm_sim_put(sim);
-
-	return RESULT_SUCCESS;
-
-err_command:
-err_unknown_command:
-	vgsm_sim_put(sim);
-err_sim_not_found:
-err_no_command:
-err_no_sim_name:
-
-	return err;
-}
-
-static char *vgsm_sim_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	char *commands[] = { "identify" };
-	char *power_commands[] = { "on", "off" };
-	char *identify_commands[] = { "on", "off" };
-	int i;
-
-	switch(pos) {
-	case 2:
-		return vgsm_sim_completion(line, word, state);
-	case 3:
-		for(i=state; i<ARRAY_SIZE(commands); i++) {
-			if (!strncasecmp(word, commands[i], strlen(word)))
-				return strdup(commands[i]);
-		}
-	break;
-
-	case 4:
-		for(i=state; i<ARRAY_SIZE(power_commands); i++) {
-			if (!strncasecmp(word, power_commands[i], strlen(word)))
-				return strdup(power_commands[i]);
-		}
-	break;
-	}
-
-	return NULL;
-}
-
-static char vgsm_sim_help[] =
-"Usage: vgsm sim <sim> <command>\n"
-"\n"
-"	Commands:\n"
-""
-"	identify <on|off>\n";
-
-static struct ast_cli_entry vgsm_sim =
-{
-	{ "vgsm", "sim", NULL },
-	vgsm_sim_func,
-	"Power on or reset the specified sim",
-	vgsm_sim_help,
-	vgsm_sim_complete
-};
-#endif
-
-/*---------------------------------------------------------------------------*/
-
 static int debug_vgsm_module_state(
 	int fd, struct vgsm_module *module, BOOL enable)
 {
@@ -2814,12 +2750,29 @@ static int debug_vgsm_module_frames(
 	return RESULT_SUCCESS;
 }
 
+static int debug_vgsm_module_sim(
+	int fd, struct vgsm_module *module, BOOL enable)
+{
+	if (module) {
+		module->mesim.debug = enable;
+	} else {
+		ast_mutex_lock(&vgsm.ifs_list_lock);
+		struct vgsm_module *module;
+		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
+			module->mesim.debug = enable;
+		ast_mutex_unlock(&vgsm.ifs_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
 static int debug_vgsm_module_all(int fd, BOOL enable)
 {
 	ast_mutex_lock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
 	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 		module->comm.debug_messages = enable;
+		module->mesim.debug = enable;
 		module->debug_sms = enable;
 		module->debug_cbm = enable;
 		module->debug_jitbuf = enable;
@@ -2867,6 +2820,8 @@ static int debug_vgsm_module_cli(int fd, int argc, char *argv[],
 			err = debug_vgsm_module_jitbuf(fd, module, enable);
 		else if (!strcasecmp(argv[args], "frames"))
 			err = debug_vgsm_module_frames(fd, module, enable);
+		else if (!strcasecmp(argv[args], "sim"))
+			err = debug_vgsm_module_sim(fd, module, enable);
 		else {
 			ast_cli(fd, "Unrecognized category '%s'\n",
 					argv[args]);
@@ -2902,7 +2857,7 @@ static char *debug_module_category_complete(
 	int state)
 {
 	char *commands[] = { "state", "call", "atcommands", "serial", "sms",
-				"cbm", "jitbuf", "frames" };
+				"cbm", "jitbuf", "frames", "sim" };
 	int i;
 
 	for(i=state; i<ARRAY_SIZE(commands); i++) {
@@ -3627,7 +3582,7 @@ static void handle_unsolicited_cmt(
 	}
 
 	struct vgsm_req_line *line2 =
-	       list_entry(line->node.next, struct vgsm_req_line, node);
+		list_entry(line->node.next, struct vgsm_req_line, node);
 
 	struct vgsm_sms_deliver *sms;
 	sms = vgsm_sms_deliver_init_from_pdu(line2->text);
@@ -3686,7 +3641,7 @@ static void handle_unsolicited_cbm(
 	}
 
 	struct vgsm_req_line *line2 =
-	       list_entry(line->node.next, struct vgsm_req_line, node);
+		list_entry(line->node.next, struct vgsm_req_line, node);
 
 	struct vgsm_cbm *cbm = vgsm_decode_cbm_pdu(line2->text);
 	if (!cbm)
@@ -3758,7 +3713,7 @@ static void handle_unsolicited_cds(
 	}
 
 	struct vgsm_req_line *line2 =
-	       list_entry(line->node.next, struct vgsm_req_line, node);
+		list_entry(line->node.next, struct vgsm_req_line, node);
 
 	struct vgsm_sms_status_report *sms;
 	sms = vgsm_sms_status_report_init_from_pdu(line2->text);
@@ -4246,7 +4201,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	char field[32];
 
 	if (vgsm_module_update_common_cell_info(module, &module->net.sci,
-			       				&pars_ptr) < 0)
+							&pars_ptr) < 0)
 		goto err_moni;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
@@ -4468,6 +4423,10 @@ static void handle_unsolicited_sysstart(
 
 	vgsm_debug_state(module, "Module started (^SYSSTART received)\n");
 
+	vgsm_mesim_send_message(&module->mesim,
+			VGSM_MESIM_MSG_ME_POWERED_ON,
+				NULL, 0);
+
 	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
 		WAITING_INITIALIZATION_DELAY, NULL);
@@ -4538,9 +4497,11 @@ static void handle_unsolicited_scks(
 	} else {
 		module->sim.inserted = FALSE;
 
-		vgsm_module_set_status(module,
-			VGSM_MODULE_STATUS_WAITING_SIM, -1,
-			"SIM removed");
+		if (module->status == VGSM_MODULE_STATUS_READY ||
+		    module->status == VGSM_MODULE_STATUS_WAITING_PIN)
+			vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_WAITING_SIM, -1,
+				"SIM removed");
 	}
 	ast_mutex_unlock(&module->lock);
 }
@@ -4664,7 +4625,7 @@ struct vgsm_urc_class vgsm_module_urcs[] =
 	{ "+CMTI: ", handle_unsolicited_cmti, NULL },
 	{ "+CMT: ", handle_unsolicited_cmt, handle_cmt_end },
 	{ "+CBM: ", handle_unsolicited_cbm, handle_cbm_end },
-	{ "+CDS: ", handle_unsolicited_cds, handle_cds_end  },
+	{ "+CDS: ", handle_unsolicited_cds, handle_cds_end },
 	{ "+CDSI: ", handle_unsolicited_cdsi, NULL },
 	{ "+CIEV: ", handle_unsolicited_ciev, NULL },
 	{ "+CGEV: ", handle_unsolicited_cgev, NULL },
@@ -4798,7 +4759,7 @@ static int vgsm_module_codec_init(
 	cctl.parameter = VGSM_CODEC_RXGAIN;
 	cctl.value = mc->rx_gain;
 
-	if (ioctl(module->fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
+	if (ioctl(module->me_fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(IOC_CODEC_SET, RXGAIN) failed: %s\n",
 			strerror(errno));
@@ -4809,7 +4770,7 @@ static int vgsm_module_codec_init(
 	cctl.parameter = VGSM_CODEC_TXGAIN;
 	cctl.value = mc->tx_gain;
 
-	if (ioctl(module->fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
+	if (ioctl(module->me_fd, VGSM_IOC_CODEC_SET, &cctl) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(IOC_CODEC_SET, TXGAIN) failed: %s\n",
 			strerror(errno));
@@ -4912,11 +4873,12 @@ static int vgsm_module_prepin_configure(
 
 	if (module->interface_version == 1) {
 		/* Select audio path 1 */
-		err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SAIC=2,1,1");
+		err = vgsm_req_make_wait_result(comm, 10 * SEC,
+							"AT^SAIC=2,1,1");
 		if (err != VGSM_RESP_OK)
 			goto err_no_req;
 	} else {
-		/* Select DAI audio  */
+		/* Select DAI audio */
 		err = vgsm_req_make_wait_result(comm, 10 * SEC, "AT^SAIC=1");
 		if (err != VGSM_RESP_OK)
 			goto err_no_req;
@@ -5041,7 +5003,7 @@ static int vgsm_module_configure(
 	if (err != VGSM_RESP_OK)
 		vgsm_module_failed(module, err);
 
-	/* Select message service  */
+	/* Select message service */
 	err = vgsm_req_make_wait_result(comm, 100 * MILLISEC, "AT+CSMS=1");
 	if (err != VGSM_RESP_OK)
 		vgsm_module_failed(module, err);
@@ -5432,15 +5394,17 @@ err_no_req:
 static int vgsm_module_open(
 	struct vgsm_module *module)
 {
-	assert(module->fd == -1);
+	int err;
+
+	assert(module->me_fd == -1);
 
 	ast_mutex_lock(&module->lock);
 	struct vgsm_module_config *mc;
 	mc = vgsm_module_config_get(module->current_config);
 	ast_mutex_unlock(&module->lock);
 
-	module->fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
-	if (module->fd < 0) {
+	module->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
+	if (module->me_fd < 0) {
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
 			"Error opening device: open(%s): %s",
@@ -5451,17 +5415,18 @@ static int vgsm_module_open(
 			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
 			tmpstr);
 
+		err = -errno;
 		goto err_module_open;
 	}
 
 	module->comm.name = module->name;
 
-	if (ioctl(module->fd, VGSM_IOC_GET_INTERFACE_VERSION,
+	if (ioctl(module->me_fd, VGSM_IOC_GET_INTERFACE_VERSION,
 			&module->interface_version) < 0) {
 		module->interface_version = 1;
 	}
 
-	if (tcflush(module->fd, TCIOFLUSH) < 0) {
+	if (tcflush(module->me_fd, TCIOFLUSH) < 0) {
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
 			"Error flushing device: %s",
@@ -5471,10 +5436,11 @@ static int vgsm_module_open(
 			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
 			tmpstr);
 
+		err = -errno;
 		goto err_module_flush;
 	}
 
-/*	int flags = fcntl(module->fd, F_GETFL, O_NONBLOCK);
+/*	int flags = fcntl(module->me_fd, F_GETFL, O_NONBLOCK);
 	if (flags < 0) {
 		vgsm_module_failed_text(module,
 			"Error getting file flags:"
@@ -5484,7 +5450,7 @@ static int vgsm_module_open(
 		goto err_fcntl_getfl;
 	}
 
-	if (fcntl(module->fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
+	if (fcntl(module->me_fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
 		vgsm_module_failed_text(module,
 			"Error setting file flags:"
 			" fcntl(F_SETFL): %s",
@@ -5502,7 +5468,7 @@ static int vgsm_module_open(
 		newtio.c_cflag |= B38400 | CLOCAL;
 		newtio.c_iflag = IXON | IXOFF;
 	} else {
-		newtio.c_cflag |= B230400 | CRTSCTS;
+		newtio.c_cflag |= B230400 | CLOCAL;//CRTSCTS; FIXME
 		newtio.c_iflag = 0;
 	}
 
@@ -5527,7 +5493,7 @@ static int vgsm_module_open(
 	newtio.c_cc[VLNEXT]	= 0;
 	newtio.c_cc[VEOL2]	= 0;
 	
-	if (tcsetattr(module->fd, TCSANOW, &newtio) < 0) {
+	if (tcsetattr(module->me_fd, TCSANOW, &newtio) < 0) {
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
 			"Error setting tty's attributes: tcsetattr(%s): %s",
@@ -5538,23 +5504,125 @@ static int vgsm_module_open(
 			VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
 			tmpstr);
 
+		err = -errno;
 		goto err_tcsetattr;
 	}
 
 	/***************/
 
+	if (module->interface_version == 2) {
+
+		vgsm_mesim_create(&module->mesim, module);
+
+		module->mesim_fd = open(mc->mesim_device_filename,
+					O_RDWR | O_NOCTTY | O_NDELAY);
+		if (module->mesim_fd < 0) {
+			char tmpstr[64];
+			snprintf(tmpstr, sizeof(tmpstr),
+				"Error opening device: open(%s): %s",
+					mc->mesim_device_filename,
+					strerror(errno));
+
+			vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
+				tmpstr);
+
+			err = -errno;
+			goto err_mesim_open;
+		}
+
+		module->mesim.name = module->name;
+
+		struct termios newtio;
+		bzero(&newtio, sizeof(newtio));
+
+		newtio.c_cflag = B9600 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
+		newtio.c_iflag = IGNBRK | IGNPAR;
+		newtio.c_oflag = 0;
+		newtio.c_lflag = 0;
+		
+		newtio.c_cc[VINTR]	= 0;
+		newtio.c_cc[VQUIT]	= 0;
+		newtio.c_cc[VERASE]	= 0;
+		newtio.c_cc[VKILL]	= 0;
+		newtio.c_cc[VEOF]	= 4;
+		newtio.c_cc[VTIME]	= 0;
+		newtio.c_cc[VMIN]	= 1;
+		newtio.c_cc[VSWTC]	= 0;
+		newtio.c_cc[VSTART]	= 0;
+		newtio.c_cc[VSTOP]	= 0;
+		newtio.c_cc[VSUSP]	= 0;
+		newtio.c_cc[VEOL]	= 0;
+		newtio.c_cc[VREPRINT]	= 0;
+		newtio.c_cc[VDISCARD]	= 0;
+		newtio.c_cc[VWERASE]	= 0;
+		newtio.c_cc[VLNEXT]	= 0;
+		newtio.c_cc[VEOL2]	= 0;
+		
+		tcflush(module->mesim_fd, TCIOFLUSH);
+
+		if (tcsetattr(module->mesim_fd, TCSANOW, &newtio) < 0) {
+			char tmpstr[64];
+			snprintf(tmpstr, sizeof(tmpstr),
+				"Error setting tty's attributes: "
+				"tcsetattr(%s): %s",
+					mc->mesim_device_filename,
+					strerror(errno));
+
+			vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_CLOSED, FAILED_RETRY_TIME,
+				tmpstr);
+
+			err = -errno;
+			goto err_mesim_tcsetattr;
+		}
+
+		vgsm_mesim_open(&module->mesim, module->mesim_fd);
+
+		struct vgsm_mesim_set_mode sm = {
+			.proto = mc->sim_proto,
+		};
+
+		if (mc->sim_proto == VGSM_MESIM_PROTO_LOCAL) {
+			strncpy(sm.local.device_filename, 
+				mc->sim_local_device_filename,
+				sizeof(sm.local.device_filename));
+		} else if (mc->sim_proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
+			memcpy(&sm.impl.simclient_addr,
+				&mc->sim_impl_simclient_addr,
+				sizeof(sm.impl.simclient_addr));
+		}
+
+		vgsm_mesim_send_message(&module->mesim,
+				VGSM_MESIM_MSG_SET_MODE,
+				&sm, sizeof(sm));
+	}
+
+	/***************/
+
 	int val;
-	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
+	if (ioctl(module->me_fd, VGSM_IOC_POWER_GET, &val) < 0) {
 		vgsm_module_failed_text(module,
 			"Error getting power status:"
 			" ioctl(POWER_GET): %s",
 			strerror(errno));
 
+		err = -errno;
 		goto err_ioctl_power_get;
 	}
 
+	err = vgsm_comm_open(&module->comm, module->me_fd);
+	if (err < 0) {
+		vgsm_module_failed_text(module,
+			"Error opening communication port: %s",
+			strerror(err));
+
+		goto err_comm_open;
+	}
+
 	if (val) {
-		vgsm_comm_open(&module->comm, module->fd, FALSE);
+		vgsm_comm_send_message(&module->comm,
+				VGSM_COMM_MSG_INITIALIZE, NULL, 0);
 
 		vgsm_debug_state(module,
 			"Module is already powered on, I'm not waiting"
@@ -5564,8 +5632,6 @@ static int vgsm_module_open(
 				VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
 				0, NULL);
 	} else {
-		vgsm_comm_open(&module->comm, module->fd, TRUE);
-
 		vgsm_module_ignite(module);
 
 		/* The very first module power-up will not send ^SYSSTART URC
@@ -5583,16 +5649,22 @@ static int vgsm_module_open(
 
 	return 0;
 
-err_ioctl_power_get:
-err_tcsetattr:
 	vgsm_comm_close(&module->comm);
+err_comm_open:
+err_ioctl_power_get:
+err_mesim_tcsetattr:
+	vgsm_mesim_close(&module->mesim);
+	close(module->mesim_fd);
+	module->mesim_fd = -1;
+err_mesim_open:
+err_tcsetattr:
 err_module_flush:
-	close(module->fd);
-	module->fd = -1;
+	close(module->me_fd);
+	module->me_fd = -1;
 err_module_open:
 	vgsm_module_config_put(mc);
 
-	return -1;
+	return err; 
 }
 
 static void vgsm_module_initialize(
@@ -5616,21 +5688,10 @@ static void vgsm_module_initialize(
 
 			goto initialization_failed;
 		}
-	} else {
-		if (ioctl(module->fd, VGSM_IOC_SIM_ROUTE,
-						mc->route_to_sim) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_ROUTE, %d) failed: %s\n",
-				module->name,
-				mc->route_to_sim,
-				strerror(errno));
-
-			goto initialization_failed;
-		}
 	}
 
 	int val;
-	if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
+	if (ioctl(module->me_fd, VGSM_IOC_POWER_GET, &val) < 0) {
 		vgsm_module_failed_text(module,
 			"%s: Error getting power status: ioctl(POWER_GET): %s",
 			module->name,
@@ -5713,7 +5774,7 @@ static void vgsm_module_timer(void *data)
 	case VGSM_MODULE_STATUS_RESETTING:
 	case VGSM_MODULE_STATUS_POWERING_ON: {
 		int val;
-		if (ioctl(module->fd, VGSM_IOC_POWER_GET, &val) < 0) {
+		if (ioctl(module->me_fd, VGSM_IOC_POWER_GET, &val) < 0) {
 			vgsm_module_failed_text(module,
 				"Error getting power status:"
 				" ioctl(POWER_GET): %s",
@@ -5724,6 +5785,10 @@ static void vgsm_module_timer(void *data)
 
 		if (val) {
 			vgsm_debug_state(module, "SYSTART missed\n");
+
+			vgsm_mesim_send_message(&module->mesim,
+					VGSM_MESIM_MSG_ME_POWERED_ON,
+					NULL, 0);
 
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
@@ -5766,14 +5831,14 @@ static void vgsm_module_timer(void *data)
 	case VGSM_MODULE_STATUS_FAILED:
 
 		if (module->failure_attempts < 3) {
-			if (tcflush(module->fd, TCIOFLUSH) < 0) {
+			if (tcflush(module->me_fd, TCIOFLUSH) < 0) {
 				ast_log(LOG_WARNING,
 					"Error flushing device: %s",
 					strerror(errno));
 			}
 
-			close(module->fd);
-			module->fd = -1;
+			close(module->me_fd);
+			module->me_fd = -1;
 
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_CLOSED,
@@ -5787,7 +5852,8 @@ static void vgsm_module_timer(void *data)
 
 			vgsm_module_emerg_off(module);
 
-			vgsm_comm_open(&module->comm, module->fd, TRUE);
+			vgsm_comm_open(&module->comm, module->me_fd);
+
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_POWERING_ON,
 				POWERING_ON_TIMEOUT,
@@ -5882,51 +5948,55 @@ void vgsm_module_shutdown_all(void)
 
 	time_t begin = time(NULL);
 
+	int all_off = TRUE;
 	while(time(NULL) - begin < 10) {
-		int not_off = FALSE;
 
+		all_off = TRUE;
 		ast_mutex_lock(&vgsm.ifs_list_lock);
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 			ast_mutex_lock(&module->lock);
 			if (module->current_config->poweroff_on_exit &&
 			    module->status != VGSM_MODULE_STATUS_OFF)
-				not_off = TRUE;
+				all_off = FALSE;
 
 			ast_mutex_unlock(&module->lock);
 		}
 		ast_mutex_unlock(&vgsm.ifs_list_lock);
 
-		if (!not_off)
-			return;
+		if (all_off)
+			break;
 
 		sleep(1);
 	}
 
-	ast_verbose("vgsm: Failure to power off all modules\n");
+	if (!all_off)
+		ast_verbose("vgsm: Failure to power off all modules\n");
+
+	ast_mutex_lock(&vgsm.ifs_list_lock);
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
+
+		ast_mutex_lock(&module->lock);
+		vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_CLOSED,
+				-1, "Shutdown");
+		vgsm_comm_close(&module->comm);
+		close(module->me_fd);
+		module->me_fd = -1;
+
+		if (module->interface_version == 2) {
+			vgsm_mesim_close(&module->mesim);
+			close(module->mesim_fd);
+			module->mesim_fd = -1;
+		}
+
+		ast_mutex_unlock(&module->lock);
+	}
+	ast_mutex_unlock(&vgsm.ifs_list_lock);
 }
 
 int vgsm_module_module_load(void)
 {
-	int err;
-
-	if (vgsm_comm_thread_create() < 0) {
-		ast_log(LOG_ERROR, "Unable to start communication thread.\n");
-		err = -1;
-		goto err_comm_thread_create;
-	}
-
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-	struct vgsm_module *module;
-	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
-		ast_pthread_create(&module->monitor_thread, &attr,
-			vgsm_module_monitor_thread_main, module);
-	}
-	pthread_attr_destroy(&attr);
-
 	ast_cli_register(&show_vgsm_modules);
 	ast_cli_register(&vgsm_forwarding);
 	ast_cli_register(&vgsm_module);
@@ -5934,15 +6004,6 @@ int vgsm_module_module_load(void)
 	ast_cli_register(&no_debug_vgsm_module);
 
 	return 0;
-
-err_comm_thread_create:
-	ast_cli_unregister(&no_debug_vgsm_module);
-	ast_cli_unregister(&debug_vgsm_module);
-	ast_cli_unregister(&vgsm_module);
-	ast_cli_unregister(&vgsm_forwarding);
-	ast_cli_unregister(&show_vgsm_modules);
-
-	return err;
 }
 
 int vgsm_module_module_unload(void)

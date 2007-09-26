@@ -1,7 +1,7 @@
 #
 # vstuff
 #
-# Copyright (C) 2004-2006 Daniele Orlandi
+# Copyright (C) 2004-2007 Daniele Orlandi
 #
 # Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
 #
@@ -14,6 +14,8 @@ chan_vgsm_la_SOURCES =\
 	chan_vgsm.c		\
 	module.c		\
 	sim.c			\
+	sim_file.c		\
+	mesim.c			\
 	huntgroup.c		\
 	comm.c			\
 	causes.c		\
@@ -38,6 +40,8 @@ noinst_HEADERS =\
 	chan_vgsm.h		\
 	module.h		\
 	sim.h			\
+	sim_file.h		\
+	mesim.h			\
 	huntgroup.h		\
 	comm.h			\
 	causes.h		\
