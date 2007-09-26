@@ -603,6 +603,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 {
 	int err;
 	int i;
+	u32 r_info;
 
 	union {
 		__u32 serial;
@@ -679,10 +680,14 @@ int vgsm_card_probe(struct vgsm_card *card)
 		goto err_request_irq;
 	}
 
-	{
-	__u32 r_info = vgsm_inl(card, VGSM_R_INFO);
+	r_info = vgsm_inl(card, VGSM_R_INFO);
 	card->sims_number = (r_info & 0x000000f0) >> 4;
 	card->mes_number = (r_info & 0x0000000f) >> 0;
+
+	if (r_info == 0xffffffff) {
+		vgsm_msg_card(card, KERN_CRIT, "Card not responding\n");
+		err = -EINVAL;
+		goto err_card_not_responding;
 	}
 
 	card->hw_version = vgsm_inl(card, VGSM_R_VERSION);
@@ -793,6 +798,7 @@ err_module_create:
 	}
 err_mes_number_invalid:
 err_sims_number_invalid:
+err_card_not_responding:
 	free_irq(card->pci_dev->irq, card);
 err_request_irq:
 	iounmap(card->fifo_mem);
