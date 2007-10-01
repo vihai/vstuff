@@ -464,6 +464,8 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 			return;
 		}
 
+		vgsm_mesim_set_removed(mesim);
+
 		vgsm_mesim_change_state(mesim, VGSM_MESIM_DIRECTLY_ROUTED);
 
 	} else if (mesim->proto == VGSM_MESIM_PROTO_CLIENT) {
