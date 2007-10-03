@@ -522,8 +522,8 @@ static void vgsm_reload_config(void)
 		var = var->next;
 	}
 
-	vgsm_hg_reload(cfg);
 	vgsm_module_reload(cfg);
+	vgsm_hg_reload(cfg);
 
 	ast_config_destroy(cfg);
 
