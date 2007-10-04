@@ -247,6 +247,29 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 		}	
 	}
 
+	pbx_builtin_setvar_helper(ast_chan,
+		"VGSM_ME_IMEI", module->module.imei);
+	ast_cdr_setvar(ast_chan->cdr,
+		"VGSM_ME_IMEI", module->module.imei, 0);
+
+	pbx_builtin_setvar_helper(ast_chan,
+		"VGSM_SIM_IMSI", module->sim.imsi);
+	ast_cdr_setvar(ast_chan->cdr,
+		"VGSM_SIM_IMSI", module->sim.imsi, 0);
+
+	pbx_builtin_setvar_helper(ast_chan,
+		"VGSM_SIM_ID", module->sim.card_id);
+	ast_cdr_setvar(ast_chan->cdr,
+		"VGSM_SIM_ID", module->sim.card_id, 0);
+
+	char tmpstr[32];
+	snprintf(tmpstr, sizeof(tmpstr), "%03u%02u",
+		module->net.mcc, module->net.mnc);
+	pbx_builtin_setvar_helper(ast_chan,
+		"VGSM_NET_ID", tmpstr);
+	ast_cdr_setvar(ast_chan->cdr,
+		"VGSM_NET_ID", tmpstr, 0);
+
 	return ast_chan;
 
 	vgsm_chan_put(ast_chan->tech_pvt);
