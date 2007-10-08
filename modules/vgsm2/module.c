@@ -94,7 +94,7 @@ static ssize_t vgsm_module_identify_store(
 	else
 		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status);
 
-	schedule_delayed_work(&vgsm_identify_work, 0);
+	vgsm_led_update();
 
 	return count;
 }
@@ -821,7 +821,7 @@ static int vgsm_module_ioctl_identify(
 	else
 		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &module->status);
 
-	schedule_delayed_work(&vgsm_identify_work, 0);
+	vgsm_led_update();
 
 	return 0;
 }

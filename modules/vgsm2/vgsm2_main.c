@@ -57,17 +57,25 @@ static struct pci_device_id vgsm_ids[] = {
 MODULE_DEVICE_TABLE(pci, vgsm_ids);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-struct work_struct vgsm_identify_work;
+struct work_struct vgsm_led_update_work;
 #else
-struct delayed_work vgsm_identify_work;
+struct delayed_work vgsm_led_update_work;
 #endif
 
-static int vgsm_identify_work_card(struct vgsm_card *card, int color)
+static BOOL vgsm_card_led_update(struct vgsm_card *card)
 {
 	BOOL reschedule = FALSE;
 	u32 led_src = 0;
 	u32 led_user = 0;
 	int i;
+
+	u32 color;
+	switch((jiffies / (HZ / 5)) & 0x3) {
+	case 0: color = 0xffffffff; break;
+	case 1: color = 0x55555555; break;
+	case 2: color = 0xaaaaaaaa; break;
+	case 3: color = 0x00000000; break;
+	}
 
 	for(i=0; i<card->mes_number; i++) {
 		if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
@@ -100,6 +108,13 @@ static int vgsm_identify_work_card(struct vgsm_card *card, int color)
 		}
 	}
 
+	if (test_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags) &&
+	    (jiffies / 10) & 0x1) {
+		led_src |= VGSM_R_LED_SRC_V_STATUS_R;
+		led_user |= VGSM_R_LED_USER_V_STATUS_R;
+		reschedule = TRUE;
+	}
+
 	vgsm_outl(card, VGSM_R_LED_SRC, led_src);
 	vgsm_outl(card, VGSM_R_LED_USER, led_user);
 
@@ -107,33 +122,30 @@ static int vgsm_identify_work_card(struct vgsm_card *card, int color)
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-void vgsm_identify_work_func(void *data)
+static void vgsm_led_update_work_func(void *data)
 #else
-void vgsm_identify_work_func(struct work_struct *work)
+static void vgsm_led_update_work_func(struct work_struct *work)
 #endif
 {
 	struct vgsm_card *card;
 	BOOL reschedule = FALSE;
-	static u32 color;
 
 	spin_lock(&vgsm_cards_list_lock);
 	list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
 
 		if (test_bit(VGSM_CARD_FLAGS_READY, &card->flags)) 
 			reschedule = reschedule ||
-					vgsm_identify_work_card(card, color);
+					vgsm_card_led_update(card);
 	}
 	spin_unlock(&vgsm_cards_list_lock);
 
-	if (color == 0x0)
-		color = 0x55555555;
-	else if (color == 0x55555555)
-		color = 0xaaaaaaaa;
-	else
-		color = 0x0;
-
 	if (reschedule)
-		schedule_delayed_work(&vgsm_identify_work, HZ / 10);
+		schedule_delayed_work(&vgsm_led_update_work, HZ / 5);
+}
+
+void vgsm_led_update(void)
+{
+	schedule_delayed_work(&vgsm_led_update_work, HZ / 5);
 }
 
 static int vgsm_probe(
@@ -232,12 +244,12 @@ static int __init vgsm_init(void)
 	int err;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-	INIT_WORK(&vgsm_identify_work,
-		vgsm_identify_work_func,
+	INIT_WORK(&vgsm_led_update_work,
+		vgsm_led_update_work_func,
 		NULL);
 #else
-	INIT_DELAYED_WORK(&vgsm_identify_work,
-		vgsm_identify_work_func);
+	INIT_DELAYED_WORK(&vgsm_led_update_work,
+		vgsm_led_update_work_func);
 #endif
 
 	vgsm_amu_compander_class = ks_dynattr_register("amu_compander");

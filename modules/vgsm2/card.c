@@ -356,7 +356,7 @@ static ssize_t vgsm_card_identify_attr_store(
 	else
 		clear_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags);
 
-	schedule_delayed_work(&vgsm_identify_work, 0);
+	vgsm_led_update();
 
 	return count;
 }
@@ -502,6 +502,8 @@ int vgsm_card_ioctl_fw_upgrade(
 	struct vgsm2_fw_header fwh;
 	int err;
 	int i;
+	u32 led_src_orig;
+	u32 led = 0, prev_led = 0;
 
 	if (copy_from_user(&fwh, (void *)arg, sizeof(fwh))) {
 		err = -EFAULT;
@@ -512,9 +514,18 @@ int vgsm_card_ioctl_fw_upgrade(
 		"Firmware programming started (%d bytes)...\n",
 		fwh.size);
 
+	led_src_orig = vgsm_inl(card, VGSM_R_LED_SRC);
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+
 	for(i=0; i<0x60000; i+=0x10000) {
 		vgsm_msg_card(card, KERN_INFO,
 			"Erasing sector 0x%05x\n", i);
+
+		led = ((i / 0x10000) % 2) ? 0x5555 : 0xaaaa;
+		if (led != prev_led) {
+			prev_led = led;
+			vgsm_outl(card, VGSM_R_LED_USER, led);
+		}
 
 		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
 		vgsm_outl(card, VGSM_R_ASMI_CTL,
@@ -544,6 +555,12 @@ int vgsm_card_ioctl_fw_upgrade(
 				VGSM_R_ASMI_CTL_V_START |
 				VGSM_R_ASMI_CTL_V_DATAIN(b));
 
+		led = 0x5555 >> ((7 - ((i * 8) / fwh.size)) * 2);
+		if (led != prev_led) {
+			prev_led = led;
+			vgsm_outl(card, VGSM_R_LED_USER, led);
+		}
+
 		err = vgsm_card_asmi_waitbusy(card);
 		if (err < 0)
 			goto err_timeout;
@@ -553,6 +570,7 @@ int vgsm_card_ioctl_fw_upgrade(
 		"Firmware programming completed\n");
 
 	set_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags);
+	vgsm_led_update();
 
 	return 0; 
 
@@ -818,7 +836,7 @@ err_pci_enable_device:
 void vgsm_card_remove(struct vgsm_card *card)
 {
 	int i;
-	int shutting_down = FALSE;
+	//int shutting_down = FALSE;
 
 	/* Clean up any allocated resources and stuff here */
 

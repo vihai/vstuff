@@ -72,14 +72,10 @@ extern int debug_level;
 #define BOOL char
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-extern struct work_struct vgsm_identify_work;
-#else
-extern struct delayed_work vgsm_identify_work;
-#endif
-
 extern struct ks_dynattr *vgsm_amu_compander_class;
 extern struct ks_dynattr *vgsm_amu_decompander_class;
+
+void vgsm_led_update(void);
 
 #endif
 

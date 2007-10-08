@@ -213,7 +213,7 @@ static ssize_t vgsm_sim_identify_store(
 	else
 		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status);
 
-	schedule_delayed_work(&vgsm_identify_work, 0);
+	vgsm_led_update();
 
 	return count;
 }
