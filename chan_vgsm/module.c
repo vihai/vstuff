@@ -4157,58 +4157,81 @@ static void handle_unsolicited_ciev_smsfull(
 static int vgsm_module_update_common_cell_info(
 	struct vgsm_module *module,
 	struct vgsm_net_cell *cell,
-	const char **pars_ptr)
+	const char **pars_ptr,
+	const char *line)
 {
 	char field[32];
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse MCC '%s'\n", *pars_ptr);
+		ast_log(LOG_ERROR, "Cannot parse MCC '%s'\n", line);
 		goto err_moni;
 	}
 	
-	sscanf(field, "%hu", &cell->mcc);
+	if (sscanf(field, "%hu", &cell->mcc) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse MCC '%s'\n", line);
+		goto err_moni;
+	}
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse MNC '%s'\n", *pars_ptr);
+		ast_log(LOG_ERROR, "Cannot parse MNC '%s'\n", line);
 		goto err_moni;
 	}
 	
-	sscanf(field, "%hu", &cell->mnc);
+	if (sscanf(field, "%hu", &cell->mnc) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse MNC '%s'\n", line);
+		goto err_moni;
+	}
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse LAC '%s'\n", *pars_ptr);
+		ast_log(LOG_ERROR, "Cannot parse LAC '%s'\n", line);
 		goto err_moni;
 	}
 	
-	sscanf(field, "%hx", &cell->lac);
+	if (sscanf(field, "%hx", &cell->lac) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse LAC '%s'\n", line);
+		goto err_moni;
+	}
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse CID '%s'\n", *pars_ptr);
+		ast_log(LOG_ERROR, "Cannot parse CID '%s'\n", line);
 		goto err_moni;
 	}
 	
-	sscanf(field, "%hx", &cell->id);
-
-	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse BSIC '%s'\n", *pars_ptr);
+	if (sscanf(field, "%hx", &cell->id) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse CID '%s'\n", line);
 		goto err_moni;
 	}
 
-	sscanf(field, "%hu", &cell->bsic);
-
 	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse ARFCN '%s'\n", *pars_ptr);
+		ast_log(LOG_ERROR, "Cannot parse BSIC '%s'\n", line);
 		goto err_moni;
 	}
 
-	sscanf(field, "%hu", &cell->arfcn);
-
-	if (!get_token(pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse RxLev '%s'\n", *pars_ptr);
+	if (sscanf(field, "%hu", &cell->bsic) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse BSIC '%s'\n", line);
 		goto err_moni;
 	}
-	
-	sscanf(field, "%hu", &cell->rx_lev);
+
+	if (!get_token(pars_ptr, field, sizeof(field))) {
+		ast_log(LOG_ERROR, "Cannot parse ARFCN '%s'\n", line);
+		goto err_moni;
+	}
+
+	if (sscanf(field, "%hu", &cell->arfcn) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse ARFCN '%s'\n", line);
+		goto err_moni;
+	}
+
+	if (!get_token(pars_ptr, field, sizeof(field))) {
+		ast_log(LOG_ERROR, "Cannot parse RxLev '%s'\n", line);
+		goto err_moni;
+	}
+
+	if (sscanf(field, "%hu", &cell->rx_lev) != 1) {
+		ast_log(LOG_ERROR, "Cannot parse RxLev '%s'\n", line);
+		goto err_moni;
+	}
+
 
 	return 0;
 
@@ -4231,13 +4254,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_module_failed(module, err);
-		vgsm_req_put(req);
-		goto err_moni;
-	}
-
-	if (strlen(vgsm_req_first_line(req)->text) < strlen("^SMOND:")) {
-		vgsm_req_put(req);
-		goto err_moni;
+		goto err_smond;
 	}
 
 	const char *line;
@@ -4245,8 +4262,11 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	const char *pars_ptr = line + strlen("^SMOND:");
 	char field[32];
 
+	if (!strlen(*pars_ptr))
+		goto err_moni;
+
 	if (vgsm_module_update_common_cell_info(module, &module->net.sci,
-							&pars_ptr) < 0)
+							&pars_ptr, line) < 0)
 		goto err_moni;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
@@ -4293,7 +4313,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	for (i=0; i<6; i++) {
 		if (vgsm_module_update_common_cell_info(module,
 				&module->net.nci[module->net.ncells],
-				&pars_ptr) < 0)
+				&pars_ptr, line) < 0)
 			goto err_moni;
 
 		if (module->net.nci[module->net.ncells].mnc != 0)
@@ -4331,6 +4351,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	
 err_moni:
 
+	vgsm_req_put(req);
 	ast_mutex_unlock(&module->lock);
 
 	return -1;
