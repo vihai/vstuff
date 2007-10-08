@@ -469,9 +469,9 @@ static int vgsm_card_asmi_waitbusy(struct vgsm_card *card)
 
 	if (vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING) {
 
-		for(i=0; i<100 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
+		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
 				VGSM_R_ASMI_STA_V_RUNNING); i++)
-			udelay(5);
+			udelay(1);
 
 		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
 				VGSM_R_ASMI_STA_V_RUNNING); i++)

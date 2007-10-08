@@ -71,6 +71,7 @@ static BOOL vgsm_card_led_update(struct vgsm_card *card)
 
 	u32 color;
 	switch((jiffies / (HZ / 5)) & 0x3) {
+	default:
 	case 0: color = 0xffffffff; break;
 	case 1: color = 0x55555555; break;
 	case 2: color = 0xaaaaaaaa; break;
