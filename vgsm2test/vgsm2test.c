@@ -2222,8 +2222,10 @@ static void prepare_card_test(struct vgsm_card *card)
 		vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
 		vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
 
-		char serial_str[32];
-		snprintf(serial_str, sizeof(serial_str), "%d", card->serial);
+		char serial_str[32] = "";
+		if (card->serial != 0xffffffff)
+			snprintf(serial_str, sizeof(serial_str),
+					"%u", card->serial);
 
 		char *str = NULL;
 		str = requester_str(REQ_DIALOG_BG, serial_str,
@@ -2277,7 +2279,9 @@ static void program_serial_number(struct vgsm_card *card)
 	log_info("%012u\n", card->serial);
 
 	char serial_str[32];
-	snprintf(serial_str, sizeof(serial_str), "%d", card->serial);
+	if (card->serial != 0xffffffff)
+		snprintf(serial_str, sizeof(serial_str),
+				"%u", card->serial);
 
 	char *str = NULL;
 	str = requester_str(REQ_DIALOG_BG, serial_str,
