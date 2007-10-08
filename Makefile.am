@@ -44,7 +44,7 @@ SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
 SUBDIRS += scripts samples kstool
-SUBDIRS += vgsmctl vgsm2test
+SUBDIRS += vgsmctl
 SUBDIRS += visdn_netdev_ctl
 
 if asterisk_modules
@@ -59,7 +59,7 @@ SUBDIRS += pppd_plugin
 endif
 
 if tests
-SUBDIRS += tests
+SUBDIRS += vgsm2test tests
 endif
 
 dist-rpm: dist-bzip2
