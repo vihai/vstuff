@@ -62,6 +62,12 @@ typedef unsigned char BOOL;
 #define LSR		(5 << 2)
 #define MSR		(6 << 2)
 
+struct opts
+{
+	const char *logdir;
+	BOOL factory_mode;
+} opts = {};
+
 enum test_errors
 {
 	ERR_NOERR = 0,
@@ -112,6 +118,7 @@ struct vgsm_card
 	enum status status;
 
 	__u32 serial;
+	BOOL serial_pending;
 };
 
 int timed_out = 0;
@@ -296,7 +303,7 @@ static WINDOW *popup(int color, char *fmt, ...)
 	return dgwin;
 }
 
-static char *requester_str(int color, char *fmt, ...)
+static char *requester_str(int color, const char *def, char *fmt, ...)
 {
 	char *text;
 	va_list ap;
@@ -321,7 +328,7 @@ static char *requester_str(int color, char *fmt, ...)
 
 	FIELD *str = new_field(1, width - 4, 0, 1, 0, 0);
 	set_field_type(str, TYPE_INTEGER, 0, 0, INT_MAX);
-	set_field_buffer(str, 0, "");
+	set_field_buffer(str, 0, def);
 
 	set_field_back(str, A_UNDERLINE | COLOR_PAIR(COLOR_BLACK));
 	field_opts_off(str, O_AUTOSKIP); 
@@ -1028,58 +1035,6 @@ static int t_reg_values(struct vgsm_card *card, int par)
 	if (status != 0x00000002)
 		TEST_FAILED("R_STATUS 0x%08x != 0x00000002", status);
 	log_info("OK\n");
-
-	return 0;
-}
-
-static int t_serial_number(struct vgsm_card *card, int par)
-{
-	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
-	vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
-
-	char *str = NULL;
-
-	log_info("Reading serial number...");
-	card->serial = serial_read(card);
-	log_info("%012u\n", card->serial);
-
-	update_info(card);
-
-	if (card->serial == 0xffffffff) {
-		str = requester_str(REQ_DIALOG_BG,
-				"Please enter serial #:");
-	} else {
-		int c = requester(REQ_DIALOG_BG,
-			"Serial number already set to %012u."
-			" SKIP programming? (y/n)", card->serial);
-
-		if (has_to_exit)
-			return ERR_INTERRUPTED;
-		else if (c == 'n' || c == 'N')
-			str = requester_str(REQ_DIALOG_BG,
-				"Please enter serial #:");
-	}
-
-	if (has_to_exit)
-		return ERR_INTERRUPTED;
-
-	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
-	vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
-
-	if (str) {
-		if (strlen(str)) {
-
-			program_serial(card, atoi(str));
-
-			log_info("Reading again serial number...");
-			card->serial = serial_read(card);
-			log_info("%012u\n", card->serial);
-
-			update_info(card);
-		}
-
-		free(str);
-	}
 
 	return 0;
 }
@@ -1855,7 +1810,6 @@ struct test tests[] =
 	{ 0x00000010, "Card version", t_version },
 	{ 0x00000020, "Register values", t_reg_values },
 	{ 0x00005000, "ASMI basic", t_asmi },
-	{ 0x00000030, "Serial number", t_serial_number },
 	{ 0x00000040, "Register access (pattern 1)", t_reg_access_1 },
 	{ 0x00000050, "Register access (pattern 2)", t_reg_access_2 },
 	{ 0x00000060, "Register access (pattern 3)", t_reg_access_3 },
@@ -2035,7 +1989,7 @@ const char *status_to_text(enum status status)
 }
 
 static struct vgsm_card *select_card(
-	struct vgsm_card *cards, int n_cards, int cur_card)
+	struct vgsm_card *cards, int n_cards, int cur_card, int *action)
 {
 	beep();
 
@@ -2044,7 +1998,14 @@ static struct vgsm_card *select_card(
 	wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
 	mvwaddstr(win, 1, 1, "Select one card:");
 
-	update_funcbar("ENTER - Select | F2 - Halt | F3 - Reboot | F10 - Exit");
+	if (opts.factory_mode) {
+		update_funcbar(
+			"ENTER - Select | F2 - Halt | F3 - Reboot |"
+			" F4 - Program S/N | F10 - Exit");
+	} else {
+		update_funcbar(
+			"ENTER - Select | F10 - Exit");
+	}
 
 	keypad(win, TRUE);
 //	nodelay(win, FALSE);
@@ -2115,6 +2076,13 @@ static struct vgsm_card *select_card(
 			goto out;
 		break;
 
+		case KEY_F(4):
+			if (opts.factory_mode) {
+				card = &cards[item_index(current_item(menu))];
+				goto out;
+			}
+		break;
+
 		case KEY_F(10):
 			goto out;
 		break;
@@ -2122,6 +2090,8 @@ static struct vgsm_card *select_card(
 	}	
 
 out:;
+
+	*action = c;
 
 	unpost_menu(menu);
 
@@ -2197,6 +2167,9 @@ askagain:;
 
 	if (card->status == STATUS_TESTING) {
 
+		if (card->serial_pending)
+                        program_serial(card, card->serial);
+
 		card->status = STATUS_OK;
 
 		log_info("\n=========== Test session successfully "
@@ -2228,13 +2201,105 @@ void print_usage(int argc, char *argv[])
 	exit(1);
 }
 
+static void prepare_card_test(struct vgsm_card *card)
+{
+	char date_str[64];
+	time_t now = time(NULL);
+	strftime(date_str, sizeof(date_str),
+		"%Y%m%d-%H%M%S",
+		gmtime(&now));
+
+	char *filename = NULL;
+
+	log_info("Reading serial number...");
+	card->serial = serial_read(card);
+	log_info("%012u\n", card->serial);
+
+	update_info(card);
+
+	if (opts.factory_mode) {
+
+		vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+		vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
+
+		char serial_str[32];
+		snprintf(serial_str, sizeof(serial_str), "%d", card->serial);
+
+		char *str = NULL;
+		str = requester_str(REQ_DIALOG_BG, serial_str,
+				"Please enter serial #:");
+
+		vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+		vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
+
+		if (str) {
+			if (strlen(str)) {
+				card->serial = atoi(str);
+				card->serial_pending = TRUE;
+			}
+
+			free(str);
+		}
+	}
+
+	if (opts.logdir) {
+		asprintf(&filename, "%s/%012u-%s", opts.logdir, card->serial,
+			date_str);
+
+		report_f = fopen(filename, "a");
+		if (!report_f) {
+			perror("fopen()");
+			abort();
+		}
+	}
+
+	card_test(card);
+
+	if (opts.logdir) {
+		free(filename);
+		fclose(report_f);
+	}
+}
+
+static void program_serial_number(struct vgsm_card *card)
+{
+	char date_str[64];
+	time_t now = time(NULL);
+	strftime(date_str, sizeof(date_str),
+		"%Y%m%d-%H%M%S",
+		gmtime(&now));
+
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+	vgsm_outl(card, VGSM_R_LED_USER, 0xffffffff);
+
+	log_info("Reading serial number...");
+	card->serial = serial_read(card);
+	log_info("%012u\n", card->serial);
+
+	char serial_str[32];
+	snprintf(serial_str, sizeof(serial_str), "%d", card->serial);
+
+	char *str = NULL;
+	str = requester_str(REQ_DIALOG_BG, serial_str,
+			"Please enter serial #:", serial_str);
+
+	if (has_to_exit)
+		return;
+
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+	vgsm_outl(card, VGSM_R_LED_USER, 0x00000000);
+
+	if (str && strlen(str))
+		program_serial(card, atoi(str));
+}
+
 int main(int argc, char *argv[])
 {
-	const char *logdir = NULL;
 	int c;
 	int optidx;
 
 	struct option options[] = {
+		{ "factory", no_argument, 0, 0 },
 		{ "logdir", required_argument, 0, 0 },
 		{ }
 	};
@@ -2251,7 +2316,9 @@ int main(int argc, char *argv[])
 		opt = c ? &no_opt : &options[optidx];
 
 		if (c == 'l' || !strcmp(opt->name, "logdir"))
-			logdir = optarg;
+			opts.logdir = optarg;
+		else if (!strcmp(opt->name, "factory"))
+			opts.factory_mode = TRUE;
 		else {
 			print_usage(argc, argv);
 			return 1;
@@ -2335,45 +2402,15 @@ int main(int argc, char *argv[])
 
 		update_info(NULL);
 
-		card = select_card(cards, n_cards, cur_card);
+		int action;
+		card = select_card(cards, n_cards, cur_card, &action);
 		if (!card)
 			break;
 
-		char date_str[64];
-		time_t now = time(NULL);
-		strftime(date_str, sizeof(date_str),
-			"%Y%m%d-%H%M%S",
-			gmtime(&now));
-
-		char *filename = NULL;
-
-		if (logdir) {
-			asprintf(&filename, "%s/XXXXXXXXXXXXXX-%s", logdir,
-				date_str);
-
-			report_f = fopen(filename, "w");
-			if (!report_f) {
-				perror("fopen()");
-				abort();
-			}
-		}
-
-		card_test(card);
-
-		if (logdir) {
-			char *filename2;
-			asprintf(&filename2, "%s/%012u-%s", logdir,
-				card->serial, date_str);
-
-			if (rename(filename, filename2) < 0) {
-				perror("rename()");
-				abort();
-			}
-			free(filename2);
-			free(filename);
-
-			fclose(report_f);
-		}
+		if (action == '\r')
+			prepare_card_test(card);
+		else if (action == KEY_F(4))
+			program_serial_number(card);
 
 		has_to_exit = 0;
 	}
