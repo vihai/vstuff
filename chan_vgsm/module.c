@@ -4254,7 +4254,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_module_failed(module, err);
-		goto err_smond;
+		goto err_moni;
 	}
 
 	const char *line;
@@ -4262,7 +4262,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	const char *pars_ptr = line + strlen("^SMOND:");
 	char field[32];
 
-	if (!strlen(*pars_ptr))
+	if (!strlen(pars_ptr))
 		goto err_moni;
 
 	if (vgsm_module_update_common_cell_info(module, &module->net.sci,
