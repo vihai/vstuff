@@ -1202,8 +1202,48 @@ static void vgsm_module_emerg_off(
 
 static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 {
-	ast_mutex_lock(&module->lock);
+	struct vgsm_req *req;
 
+	/* Voltage */
+	int voltage = -1;
+	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SBV");
+	if (vgsm_req_status(req) == VGSM_RESP_OK) {
+		const char *line = vgsm_req_first_line(req)->text;
+
+		if (strlen(line) > strlen("^SBV: "))
+			voltage = atoi(line + strlen("^SBV: "));
+	}
+	vgsm_req_put(req);
+
+	/* Current */
+	int current = -1;
+	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SBC?");
+	if (vgsm_req_status(req) == VGSM_RESP_OK) {
+		line = vgsm_req_first_line(req)->text;
+		const char *pars_ptr = line + strlen("^SBC: ");
+		char field[32];
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+			goto err_sbc;
+		}
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+			goto err_sbc;
+		}
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+			goto err_sbc;
+		}
+
+		current = atoi(field);
+err_sbc:;
+	}
+	vgsm_req_put(req);
+
+	ast_mutex_lock(&module->lock);
 	struct vgsm_module_config *mc = module->current_config;
 
 	ast_cli(fd,
@@ -1251,55 +1291,11 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 		module->module.version,
 		module->module.imei);
 
-	/* Voltage */
-	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SBV");
-	if (vgsm_req_status(req) != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-		goto out;
-	}
+	if (voltage != -1)
+		ast_cli(fd, "  Supply voltage: %d mV\n", voltage);
 
-	const char *line = vgsm_req_first_line(req)->text;
-
-	if (strlen(line) > strlen("^SBV: ")) {
-		ast_cli(fd, "  Supply voltage: %d mV\n",
-			atoi(line + strlen("^SBV: ")));
-	}
-
-	vgsm_req_put(req);
-
-	/* Current */
-	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SBC?");
-	if (vgsm_req_status(req) != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-		goto out;
-	}
-
-	line = vgsm_req_first_line(req)->text;
-	const char *pars_ptr = line + strlen("^SBC: ");
-	char field[32];
-
-	if (!get_token(&pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
-		vgsm_req_put(req);
-		goto out;
-	}
-
-	if (!get_token(&pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
-		vgsm_req_put(req);
-		goto out;
-	}
-
-	if (!get_token(&pars_ptr, field, sizeof(field))) {
-		ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
-		vgsm_req_put(req);
-		goto out;
-	}
-
-	ast_cli(fd, "  Power consumption: %d mA\n", atoi(field));
-
-	vgsm_req_put(req);
+	if (current != -1)
+		ast_cli(fd, "  Supply current: %d mA\n", current);
 
 	if (module->failure_count)
 		ast_cli(fd, "\n  Failure count: %d\n", module->failure_count);
@@ -1308,6 +1304,10 @@ out:
 	ast_cli(fd, "\n");
 
 	ast_mutex_unlock(&module->lock);
+
+out_nolock:
+
+	return;
 }
 
 static void vgsm_print_call_class(int fd, int cls)
@@ -3014,8 +3014,10 @@ void vgsm_module_counter_inc(
 	}
 
 	counter = malloc(sizeof(*counter));
-	if (!counter)
+	if (!counter) {
+		ast_mutex_unlock(&module->lock);
 		goto err_malloc;
+	}
 
 	counter->location = location;
 	counter->reason = reason;
@@ -4245,8 +4247,6 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	struct vgsm_comm *comm = &module->comm;
 	int err;
 
-	ast_mutex_lock(&module->lock);
-
 	module->net.ncells = 0;
 
 	struct vgsm_req *req;
@@ -4265,48 +4265,50 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	if (!strlen(pars_ptr))
 		goto err_moni;
 
+	ast_mutex_lock(&module->lock);
+
 	if (vgsm_module_update_common_cell_info(module, &module->net.sci,
 							&pars_ptr, line) < 0)
-		goto err_moni;
+		goto err_moni2;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxLevFull '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	sscanf(field, "%d", &module->net.sci2.rx_lev_full);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxLevSub '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	sscanf(field, "%d", &module->net.sci2.rx_lev_sub);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxQual '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	sscanf(field, "%d", &module->net.sci2.rx_qual_full);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxQualFull '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	sscanf(field, "%d", &module->net.sci2.rx_qual_sub);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxQualSub '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	sscanf(field, "%d", &module->net.sci2.timeslot);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse Timeslot '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	int i;
@@ -4314,7 +4316,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 		if (vgsm_module_update_common_cell_info(module,
 				&module->net.nci[module->net.ncells],
 				&pars_ptr, line) < 0)
-			goto err_moni;
+			goto err_moni2;
 
 		if (module->net.nci[module->net.ncells].mnc != 0)
 			module->net.ncells++;
@@ -4322,14 +4324,14 @@ static int vgsm_update_smond(struct vgsm_module *module)
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse TA '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	sscanf(field, "%d", &module->net.sci2.ta);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RSSI '%s'\n", line);
-		goto err_moni;
+		goto err_moni2;
 	}
 
 	if (strlen(field)) {
@@ -4337,7 +4339,7 @@ static int vgsm_update_smond(struct vgsm_module *module)
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse BER '%s'\n", line);
-			goto err_moni;
+			goto err_moni2;
 		}
 
 		sscanf(field, "%d", &module->net.sci2.ber);
@@ -4349,10 +4351,10 @@ static int vgsm_update_smond(struct vgsm_module *module)
 
 	return 0;
 	
-err_moni:
-
-	vgsm_req_put(req);
+err_moni2:
 	ast_mutex_unlock(&module->lock);
+err_moni:
+	vgsm_req_put(req);
 
 	return -1;
 }

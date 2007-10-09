@@ -715,11 +715,12 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
 		ast_cli(fd, "Cannot allocate SMS\n");
+		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_sms_alloc;
 	}
 
-	sms->module = module;
+	sms->module = vgsm_module_get(module);
 
 	if (strlen(module->current_config->smcc_address.digits)) {
 		vgsm_number_copy(&sms->smcc_address,
@@ -733,14 +734,13 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 		goto err_no_smcc;
 	}
 
+	ast_mutex_unlock(&module->lock);
+
 	if (vgsm_number_parse(&sms->dest, argv[4]) < 0) {
 		ast_cli(fd, "Number %s is invalid\n", argv[4]);
-		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_invalid_number;
 	}
-
-	ast_mutex_unlock(&module->lock);
 
 	if (argc >= 7)
 		sms->message_class = atoi(argv[6]);
@@ -786,7 +786,9 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	}
 	vgsm_req_put(req);
 
+	ast_mutex_lock(&module->lock);
 	module->sending_sms = FALSE;
+	ast_mutex_unlock(&module->lock);
 
 	return RESULT_SUCCESS;
 
@@ -798,10 +800,13 @@ err_invalid_number:
 err_no_smcc:
 	vgsm_sms_submit_put(sms);
 err_sms_alloc:
+	ast_mutex_lock(&module->lock);
 	module->sending_sms = FALSE;
+	ast_mutex_unlock(&module->lock);
 err_already_sending_sms:
 err_module_not_registered:
 err_module_not_ready:
+	vgsm_module_put(module);
 err_module_not_found:
 err_missing_text:
 err_missing_number:
@@ -1505,9 +1510,7 @@ static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 	struct vgsm_module *module = data;
 
 	ast_mutex_lock(&module->lock);
-
 	module->call_present = TRUE;
-
 	struct vgsm_chan *vgsm_chan = vgsm_chan_get(module->vgsm_chan);
 	ast_mutex_unlock(&module->lock);
 
@@ -1593,20 +1596,19 @@ static int vgsm_call(
 		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
 		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
-	vgsm_debug_call(module, "Calling %s on %s\n",
-			vgsm_chan->called_number,
-			ast_chan->name);
+	module->call_present = FALSE;
 
 	char newname[40];
 	snprintf(newname, sizeof(newname), "VGSM/%s/%d", module->name, 1);
 
-	ast_change_name(ast_chan, newname);
+	ast_mutex_unlock(&module->lock);
 
+	ast_change_name(ast_chan, newname);
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-	module->call_present = FALSE;
-
-	ast_mutex_unlock(&module->lock);
+	vgsm_debug_call(module, "Calling %s on %s\n",
+			vgsm_chan->called_number,
+			ast_chan->name);
 
 	struct vgsm_req *req;
 	// 'timeout' instead of 20s ?
@@ -2612,34 +2614,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			goto err_module_not_found;
 		}
 
-		ast_mutex_lock(&module->lock);
-
-		if (module->status != VGSM_MODULE_STATUS_READY) {
-			ast_mutex_unlock(&module->lock);
-
-			astman_append(s, "Status: 401\n");
-			astman_send_error(s, m, "Module is not ready");
-			goto err_module_not_ready;
-		}
-
-		if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-		    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-			ast_mutex_unlock(&module->lock);
-
-			astman_append(s, "Status: 402\n");
-			astman_send_error(s, m, "Module is not registered");
-			goto err_module_not_registered;
-		}
-
-		if (module->sending_sms) {
-			ast_mutex_unlock(&module->lock);
-
-			astman_append(s, "Status: 403\n");
-			astman_send_error(s, m,
-				"403 Module is already sending a message");
-			goto err_module_sending_sms;
-		}
-
 	} else {
 		/* Find a ready module */
 
@@ -2670,7 +2644,36 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		}
 	}
 
+	ast_mutex_lock(&module->lock);
+
+	if (module->status != VGSM_MODULE_STATUS_READY) {
+		ast_mutex_unlock(&module->lock);
+
+		astman_append(s, "Status: 401\n");
+		astman_send_error(s, m, "Module is not ready");
+		goto err_module_not_ready;
+	}
+
+	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_mutex_unlock(&module->lock);
+
+		astman_append(s, "Status: 402\n");
+		astman_send_error(s, m, "Module is not registered");
+		goto err_module_not_registered;
+	}
+
+	if (module->sending_sms) {
+		ast_mutex_unlock(&module->lock);
+
+		astman_append(s, "Status: 403\n");
+		astman_send_error(s, m,
+			"403 Module is already sending a message");
+		goto err_module_sending_sms;
+	}
+
 	module->sending_sms = TRUE;
+	sms->module = vgsm_module_get(module);
 
 	struct vgsm_sms_submit *sms;
 	sms = vgsm_sms_submit_alloc();
@@ -2681,8 +2684,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		astman_send_error(s, m, "Cannot allocate message");
 		goto err_sms_alloc;
 	}
-
-	sms->module = module;
 
 	const char *smcc_str = astman_get_header(m, "X-SMS-SMCC-Number");
 	if (strlen(smcc_str)) {
@@ -2699,6 +2700,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		astman_send_error(s, m, "Services Center number not set");
 		goto err_no_smcc;
 	}
+
+	ast_mutex_unlock(&module->lock);
 
 	const char *reject_duplicates_str =
 		astman_get_header(m, "X-SMS-Reject-Duplicates");
@@ -2748,8 +2751,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		sms->udh_concatenate_seqnum = atoi(concatenate_seqnum_str);
 
 	vgsm_number_parse(&sms->dest, number);
-
-	ast_mutex_unlock(&module->lock);
 
 	const char *content_te =
 		astman_get_header(m, "Content-Transfer-Encoding");
