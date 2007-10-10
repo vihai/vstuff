@@ -2672,9 +2672,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_module_sending_sms;
 	}
 
-	module->sending_sms = TRUE;
-	sms->module = vgsm_module_get(module);
-
 	struct vgsm_sms_submit *sms;
 	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
@@ -2684,6 +2681,9 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		astman_send_error(s, m, "Cannot allocate message");
 		goto err_sms_alloc;
 	}
+
+	module->sending_sms = TRUE;
+	sms->module = vgsm_module_get(module);
 
 	const char *smcc_str = astman_get_header(m, "X-SMS-SMCC-Number");
 	if (strlen(smcc_str)) {
@@ -2879,7 +2879,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 err_make_req:
 err_submit_prepare:
-	module->sending_sms = FALSE;
 err_iconv:
 	free(sms->text);
 	sms->text = NULL;
@@ -2888,6 +2887,10 @@ err_unsupported_cte:
 err_unsupported_content_type:
 err_invalid_content_type:
 err_no_smcc:
+	ast_mutex_lock(&module->lock);
+	module->sending_sms = FALSE;
+	ast_mutex_unlock(&module->lock);
+
 	vgsm_sms_submit_put(sms);
 err_sms_alloc:
 err_module_sending_sms:

@@ -1219,7 +1219,7 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 	int current = -1;
 	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SBC?");
 	if (vgsm_req_status(req) == VGSM_RESP_OK) {
-		line = vgsm_req_first_line(req)->text;
+		const char *line = vgsm_req_first_line(req)->text;
 		const char *pars_ptr = line + strlen("^SBC: ");
 		char field[32];
 
@@ -1304,10 +1304,6 @@ out:
 	ast_cli(fd, "\n");
 
 	ast_mutex_unlock(&module->lock);
-
-out_nolock:
-
-	return;
 }
 
 static void vgsm_print_call_class(int fd, int cls)
@@ -4169,71 +4165,56 @@ static int vgsm_module_update_common_cell_info(
 		goto err_moni;
 	}
 	
-	if (sscanf(field, "%hu", &cell->mcc) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse MCC '%s'\n", line);
-		goto err_moni;
-	}
+	if (sscanf(field, "%hu", &cell->mcc) != 1)
+		cell->mcc = 0;
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse MNC '%s'\n", line);
 		goto err_moni;
 	}
 	
-	if (sscanf(field, "%hu", &cell->mnc) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse MNC '%s'\n", line);
-		goto err_moni;
-	}
+	if (sscanf(field, "%hu", &cell->mnc) != 1)
+		cell->mnc = 0;
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse LAC '%s'\n", line);
 		goto err_moni;
 	}
 	
-	if (sscanf(field, "%hx", &cell->lac) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse LAC '%s'\n", line);
-		goto err_moni;
-	}
+	if (sscanf(field, "%hx", &cell->lac) != 1)
+		cell->lac = 0;
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse CID '%s'\n", line);
 		goto err_moni;
 	}
 	
-	if (sscanf(field, "%hx", &cell->id) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse CID '%s'\n", line);
-		goto err_moni;
-	}
+	if (sscanf(field, "%hx", &cell->id) != 1)
+		cell->id = 0;
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse BSIC '%s'\n", line);
 		goto err_moni;
 	}
 
-	if (sscanf(field, "%hu", &cell->bsic) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse BSIC '%s'\n", line);
-		goto err_moni;
-	}
+	if (sscanf(field, "%hu", &cell->bsic) != 1)
+		cell->bsic = 0;
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse ARFCN '%s'\n", line);
 		goto err_moni;
 	}
 
-	if (sscanf(field, "%hu", &cell->arfcn) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse ARFCN '%s'\n", line);
-		goto err_moni;
-	}
+	if (sscanf(field, "%hu", &cell->arfcn) != 1)
+		cell->arfcn = 0;
 
 	if (!get_token(pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxLev '%s'\n", line);
 		goto err_moni;
 	}
 
-	if (sscanf(field, "%hu", &cell->rx_lev) != 1) {
-		ast_log(LOG_ERROR, "Cannot parse RxLev '%s'\n", line);
-		goto err_moni;
-	}
-
+	if (sscanf(field, "%hu", &cell->rx_lev) != 1)
+		cell->rx_lev = 0;
 
 	return 0;
 
@@ -4276,35 +4257,40 @@ static int vgsm_update_smond(struct vgsm_module *module)
 		goto err_moni2;
 	}
 
-	sscanf(field, "%d", &module->net.sci2.rx_lev_full);
+	if (sscanf(field, "%d", &module->net.sci2.rx_lev_full) != 1)
+		module->net.sci2.rx_lev_full = 0;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxLevSub '%s'\n", line);
 		goto err_moni2;
 	}
 
-	sscanf(field, "%d", &module->net.sci2.rx_lev_sub);
+	if (sscanf(field, "%d", &module->net.sci2.rx_lev_sub) != 1)
+		module->net.sci2.rx_lev_sub = 0;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxQual '%s'\n", line);
 		goto err_moni2;
 	}
 
-	sscanf(field, "%d", &module->net.sci2.rx_qual_full);
+	if (sscanf(field, "%d", &module->net.sci2.rx_qual_full) != 1)
+		module->net.sci2.rx_qual_full = 0;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxQualFull '%s'\n", line);
 		goto err_moni2;
 	}
 
-	sscanf(field, "%d", &module->net.sci2.rx_qual_sub);
+	if (sscanf(field, "%d", &module->net.sci2.rx_qual_sub) != 1)
+		module->net.sci2.rx_qual_sub = 0;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RxQualSub '%s'\n", line);
 		goto err_moni2;
 	}
 
-	sscanf(field, "%d", &module->net.sci2.timeslot);
+	if (sscanf(field, "%d", &module->net.sci2.timeslot) != 1)
+		module->net.sci2.timeslot = 0;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse Timeslot '%s'\n", line);
@@ -4327,7 +4313,8 @@ static int vgsm_update_smond(struct vgsm_module *module)
 		goto err_moni2;
 	}
 
-	sscanf(field, "%d", &module->net.sci2.ta);
+	if (sscanf(field, "%d", &module->net.sci2.ta) != 1)
+		module->net.sci2.ta = 0;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse RSSI '%s'\n", line);
@@ -4335,14 +4322,16 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	}
 
 	if (strlen(field)) {
-		sscanf(field, "%d", &module->net.sci2.rssi);
+		if (sscanf(field, "%d", &module->net.sci2.rssi) != 1)
+			module->net.sci2.rssi = 0;
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse BER '%s'\n", line);
 			goto err_moni2;
 		}
 
-		sscanf(field, "%d", &module->net.sci2.ber);
+		if (sscanf(field, "%d", &module->net.sci2.ber) != 1)
+			module->net.sci2.ber = 0;
 	}
 
 	vgsm_req_put(req);
