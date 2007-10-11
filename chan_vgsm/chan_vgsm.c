@@ -1563,6 +1563,7 @@ static int vgsm_call(
 		ast_mutex_unlock(&module->lock);
 
 		vgsm_debug_call(module, "Module not ready\n");
+		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		err = -1;
 		goto err_module_not_ready;
 	}
@@ -1572,6 +1573,7 @@ static int vgsm_call(
 		ast_mutex_unlock(&module->lock);
 
 		vgsm_debug_call(module, "Module is not registered\n");
+		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		err = -1;
 		goto err_module_not_registered;
 	}
@@ -1580,6 +1582,7 @@ static int vgsm_call(
 		ast_mutex_unlock(&module->lock);
 
 		vgsm_debug_call(module, "Module is busy (call present)\n");
+		ast_chan->hangupcause = AST_CAUSE_NORMAL_CIRCUIT_CONGESTION;
 		err = -1;
 		goto err_module_busy;
 	}
@@ -1624,6 +1627,7 @@ static int vgsm_call(
 			module->name);
 
 		err = -1;
+		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		goto err_atd_failed;
 	}
 
