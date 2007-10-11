@@ -17,6 +17,15 @@ below.
 
 Changelog:
 
+------ 2.8.0 ------
+
+- INTA# and SERR# were incorrectly output on the bus as two-state outputs,
+  leading to unreliable interrupt reporting when shared with other boards.
+- Upgraded PCI compiler to 7.1
+- Used derived clock for DAI clock, removing the need to synchronize between
+  clock domains.
+- Removed debugging features
+
 ------ 2.7.0 ------
 
 - Increased UART FIFO size to 256 bytes inbound/512 bytes outbound
