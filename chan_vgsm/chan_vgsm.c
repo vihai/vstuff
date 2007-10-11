@@ -1905,8 +1905,6 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 	assert(vgsm_chan);
 
-	ast_mutex_lock(&ast_chan->lock);
-
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
 	/* We assigned to a module AND we are the module's current call */
@@ -1950,7 +1948,6 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	 * control back to Assterisk (which will free the ast_chan structure
 	 * we have to wait until all threads have released their reference.
 	 */
-	ast_mutex_unlock(&ast_chan->lock);
 	int res = 0;
 	struct timespec timeout;
 	struct timeval now;
@@ -1965,7 +1962,6 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 				&vgsm.usecnt_lock, &timeout);
 	}
 	ast_mutex_unlock(&vgsm.usecnt_lock);
-	ast_mutex_lock(&ast_chan->lock);
 
 	assert(vgsm_chan->refcnt > 0);
 
@@ -1976,6 +1972,8 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 			" leak, %d references left\n",
 			ast_chan->name,
 			vgsm_chan->refcnt);
+
+	ast_mutex_lock(&ast_chan->lock);
 
 	vgsm_chan->ast_chan = NULL;
 
