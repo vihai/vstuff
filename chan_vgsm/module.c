@@ -102,8 +102,8 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->gsm_hr_enabled = TRUE;
 	mc->gsm_preferred = VGSM_CODEC_GSM_FR;
 
-	mc->rx_calibrate = 32767;
-	mc->tx_calibrate = 16383;
+	mc->rx_calibrate = 16384;
+	mc->tx_calibrate = 21402;
 
 	mc->jitbuf_low = 10;
 	mc->jitbuf_high = 80;
