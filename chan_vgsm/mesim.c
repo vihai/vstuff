@@ -398,7 +398,8 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 
 		assert(mesim->local_fd == -1);
 
-		mesim->local_fd = open(mesim->local_device_filename, O_RDONLY);
+		mesim->local_fd = open(mesim->local_device_filename,
+					O_RDWR | O_NOCTTY | O_NDELAY);
 		if (mesim->local_fd < 0) {
 			ast_log(LOG_ERROR,
 				"%s: open(%s) failed: %s\n",
