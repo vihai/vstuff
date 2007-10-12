@@ -18,6 +18,7 @@
 #include "../config.h"
 
 #include <asterisk/config.h>
+#include <asterisk/lock.h>
 
 #include "util.h"
 #include "chan_vgsm.h"
