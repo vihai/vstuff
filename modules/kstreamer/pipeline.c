@@ -1189,7 +1189,7 @@ static void ks_pipeline_release(struct kobject *kobj)
 {
 	struct ks_pipeline *pipeline = to_ks_pipeline(kobj);
 
-printk(KERN_CRIT "pipeline release\n");
+	ks_debug(3, "ks_pipeline_release()\n");
 
 	kfree(pipeline);
 }
