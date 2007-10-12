@@ -3943,6 +3943,7 @@ static void handle_unsolicited_ciev_call(
 	struct vgsm_module *module = to_module(comm);
 	int err;
 
+retry_workaround:;
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SLCC");
 	err = vgsm_req_status(req);
@@ -3967,10 +3968,11 @@ static void handle_unsolicited_ciev_call(
 			break;
 
 		if (strncmp(line->text, "^SLCC: ", 7)) {
+			ast_mutex_unlock(&module->lock);
 			ast_log(LOG_ERROR,
 				"Unexpected response %s to AT^SLCC\n",
 				line->text);
-			continue;
+			goto retry_workaround;
 		}
 
 		const char *pars_ptr = pars;
