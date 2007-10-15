@@ -1914,8 +1914,6 @@ static int vgsm_show_module_statistics(int fd, struct vgsm_module *module)
 		return RESULT_FAILURE;
 	}
 
-	ast_mutex_unlock(&module->lock);
-
 	ast_cli(fd, "\nStatistics:\n");
 
 	ast_cli(fd, "  Inbound: %d\n", module->stats.inbound);
@@ -1937,6 +1935,8 @@ static int vgsm_show_module_statistics(int fd, struct vgsm_module *module)
 	}
 
 	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&module->lock);
 
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(&module->comm, 180 * SEC, "AT^STCD");
@@ -3015,11 +3015,12 @@ void vgsm_module_counter_inc(
 		goto err_malloc;
 	}
 
+	memset(counter, 0, sizeof(*counter));
 	counter->location = location;
 	counter->reason = reason;
 	counter->count = 0;
 
-	list_add(&counter->node, list);
+	list_add_tail(&counter->node, list);
 	
 found:
 	counter->count++;
@@ -4230,8 +4231,6 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	struct vgsm_comm *comm = &module->comm;
 	int err;
 
-	module->net.ncells = 0;
-
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SMOND");
 	err = vgsm_req_status(req);
@@ -4299,6 +4298,8 @@ static int vgsm_update_smond(struct vgsm_module *module)
 		goto err_moni2;
 	}
 
+	module->net.ncells = 0;
+
 	int i;
 	for (i=0; i<6; i++) {
 		if (vgsm_module_update_common_cell_info(module,
@@ -4309,6 +4310,8 @@ static int vgsm_update_smond(struct vgsm_module *module)
 		if (module->net.nci[module->net.ncells].mnc != 0)
 			module->net.ncells++;
 	}
+
+	assert(module->net.ncells <= 6);
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
 		ast_log(LOG_ERROR, "Cannot parse TA '%s'\n", line);
