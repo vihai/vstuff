@@ -1665,10 +1665,9 @@ static int vgsm_answer(struct ast_channel *ast_chan)
 		ast_log(LOG_NOTICE, "Module is not ready anymore\n");
 		return -1;
 	}
-
-	vgsm_connect_channel(vgsm_chan);
-
 	ast_mutex_unlock(&module->lock);
+	
+	vgsm_connect_channel(vgsm_chan);
 
 	ast_indicate(ast_chan, -1);
 
@@ -1908,29 +1907,30 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
 	/* We assigned to a module AND we are the module's current call */
-	if (vgsm_chan->module && vgsm_chan->module->vgsm_chan == vgsm_chan) {
-
+	if (vgsm_chan->module) {
 		ast_mutex_lock(&vgsm_chan->module->lock);
 
-		vgsm_module_counter_inc(vgsm_chan->module,
-			vgsm_chan->outbound,
-			VGSM_CAUSE_LOCATION_LOCAL,
-			ast_chan->hangupcause != 0 ?
-				ast_chan->hangupcause : 16);
+		if (vgsm_chan->module->vgsm_chan == vgsm_chan) {
+			vgsm_module_counter_inc(vgsm_chan->module,
+				vgsm_chan->outbound,
+				VGSM_CAUSE_LOCATION_LOCAL,
+				ast_chan->hangupcause != 0 ?
+					ast_chan->hangupcause : 16);
 
-		/* Send deferred hangup */
+			/* Send deferred hangup */
 
-		if (vgsm_chan->module->call_present) {
-			_vgsm_req_put(vgsm_req_make_callback(
-				&vgsm_chan->module->comm,
-				vgsm_module_chup_complete,
-				vgsm_module_get(vgsm_chan->module),
-				5 * SEC, "AT+CHUP"));
+			if (vgsm_chan->module->call_present) {
+				_vgsm_req_put(vgsm_req_make_callback(
+					&vgsm_chan->module->comm,
+					vgsm_module_chup_complete,
+					vgsm_module_get(vgsm_chan->module),
+					5 * SEC, "AT+CHUP"));
+			}
+
+			/* Detach module and channel */
+			vgsm_chan_put(vgsm_chan->module->vgsm_chan);
+			vgsm_chan->module->vgsm_chan = NULL;
 		}
-
-		/* Detach module and channel */
-		vgsm_chan_put(vgsm_chan->module->vgsm_chan);
-		vgsm_chan->module->vgsm_chan = NULL;
 
 		ast_mutex_unlock(&vgsm_chan->module->lock);
 	}
@@ -1973,14 +1973,10 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 			ast_chan->name,
 			vgsm_chan->refcnt);
 
-	ast_mutex_lock(&ast_chan->lock);
-
 	vgsm_chan->ast_chan = NULL;
 
 	vgsm_chan_put(ast_chan->tech_pvt);
 	ast_chan->tech_pvt = NULL;
-
-	ast_mutex_unlock(&ast_chan->lock);
 
 	vgsm_debug_generic("%s: hangup complete\n", ast_chan->name);
 

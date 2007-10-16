@@ -3131,7 +3131,11 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 		 * hang it up.
 		 */
 
-		if (vgsm_chan->ast_chan->_state == AST_STATE_RESERVED) {
+		struct ast_channel *ast_chan = vgsm_chan->ast_chan;
+
+		ast_mutex_lock(&ast_chan->lock);
+		if (ast_chan->_state == AST_STATE_RESERVED) {
+			ast_mutex_unlock(&ast_chan->lock);
 			/* If only a +CRING has been received, no pbx has yet
 			 * been started on the ast_chan, so, do a manual
 			 * cleanup
@@ -3140,15 +3144,16 @@ static void vgsm_module_received_hangup(struct vgsm_module *module)
 			vgsm_module_put(vgsm_chan->module);
 			vgsm_chan->module = NULL;
 
-			vgsm_chan_put(vgsm_chan->ast_chan->tech_pvt);
-			vgsm_chan->ast_chan->tech_pvt = NULL;
-			ast_channel_free(vgsm_chan->ast_chan);
-			vgsm_chan->ast_chan = NULL;
+			vgsm_chan_put(ast_chan->tech_pvt);
+			ast_chan->tech_pvt = NULL;
+			ast_channel_free(ast_chan);
+			ast_chan = NULL;
 		} else {
-			vgsm_chan->ast_chan->hangupcause =
+			ast_chan->hangupcause =
 				vgsm_cause_to_ast_cause(location, reason);
 
-			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
+			ast_softhangup(ast_chan, AST_SOFTHANGUP_DEV);
+			ast_mutex_unlock(&ast_chan->lock);
 		}
 
 		vgsm_chan_put(vgsm_chan);
@@ -3435,10 +3440,9 @@ static void handle_unsolicited_clip(
 	ast_mutex_lock(&module->lock);
 
 	if (!module->vgsm_chan) {
-		ast_mutex_unlock(&module->lock);
-
 		ast_log(LOG_WARNING, "Received +CLIP without an active call\n");
 
+		ast_mutex_unlock(&module->lock);
 		goto err_call_not_present;
 	}
 
@@ -3449,11 +3453,11 @@ static void handle_unsolicited_clip(
 
 	ast_mutex_lock(&ast_chan->lock);
 	if (ast_chan->_state == AST_STATE_RING) {
-		ast_mutex_unlock(&ast_chan->lock);
 
 		vgsm_debug_call(module,
 			"Call is already ringing, ignoring further +CRINGs\n");
 
+		ast_mutex_unlock(&ast_chan->lock);
 		goto already_ringing;
 	}
 
@@ -3465,7 +3469,6 @@ static void handle_unsolicited_clip(
 			ast_chan->_state);
 
 		ast_mutex_unlock(&ast_chan->lock);
-
 		goto err_call_not_ring;
 	}
 
@@ -3827,11 +3830,13 @@ static void vgsm_handle_slcc_update(
 			break;
 		}
 
-		if (vgsm_chan->ast_chan->_state != AST_STATE_UP) {
-			ast_setstate(vgsm_chan->ast_chan, AST_STATE_UP);
-			ast_queue_control(vgsm_chan->ast_chan,
-						AST_CONTROL_ANSWER);
+		struct ast_channel *ast_chan = vgsm_chan->ast_chan;
+		ast_mutex_lock(&ast_chan->lock);
+		if (ast_chan->_state != AST_STATE_UP) {
+			ast_setstate(ast_chan, AST_STATE_UP);
+			ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 		}
+		ast_mutex_unlock(&ast_chan->lock);
 	}
 	break;
 
@@ -3862,11 +3867,13 @@ static void vgsm_handle_slcc_update(
 			break;
 		}
 
-		if (vgsm_chan->ast_chan->_state != AST_STATE_RINGING) {
-			ast_setstate(vgsm_chan->ast_chan, AST_STATE_RINGING);
-			ast_queue_control(vgsm_chan->ast_chan,
-							AST_CONTROL_RINGING);
+		struct ast_channel *ast_chan = vgsm_chan->ast_chan;
+		ast_mutex_lock(&ast_chan->lock);
+		if (ast_chan->_state != AST_STATE_RINGING) {
+			ast_setstate(ast_chan, AST_STATE_RINGING);
+			ast_queue_control(ast_chan, AST_CONTROL_RINGING);
 		}
+		ast_mutex_unlock(&ast_chan->lock);
 	}
 	break;
 
@@ -3882,9 +3889,10 @@ static void vgsm_handle_slcc_update(
 	break;
 
 	case VGSM_CALL_STATE_DROPPED:
-		if (vgsm_chan)
-			ast_queue_control(vgsm_chan->ast_chan,
-					AST_CONTROL_DISCONNECT);
+		if (vgsm_chan) {
+			struct ast_channel *ast_chan = vgsm_chan->ast_chan;
+			ast_queue_control(ast_chan, AST_CONTROL_DISCONNECT);
+		}
 	break;
 	}
 
@@ -4234,10 +4242,8 @@ static int vgsm_update_smond(struct vgsm_module *module)
 	struct vgsm_req *req;
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SMOND");
 	err = vgsm_req_status(req);
-	if (err != VGSM_RESP_OK) {
-		vgsm_module_failed(module, err);
+	if (err != VGSM_RESP_OK)
 		goto err_moni;
-	}
 
 	const char *line;
 	line = vgsm_req_first_line(req)->text;
