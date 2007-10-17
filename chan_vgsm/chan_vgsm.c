@@ -2555,8 +2555,9 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_iconv_open;
 	}
 
+#warning Ignore uninitalized warnings, it's a GCC bug
 	const char *module_str = astman_get_header(m, "X-SMS-Module");
-	struct vgsm_module *module = NULL;
+	struct vgsm_module *module;
 
 	if (!strncasecmp(module_str, VGSM_HUNTGROUP_PREFIX,
 			strlen(VGSM_HUNTGROUP_PREFIX))) {

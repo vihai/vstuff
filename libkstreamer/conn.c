@@ -183,9 +183,6 @@ static void ks_xact_flush(struct ks_xact *xact)
 
 static int ks_conn_send_next_packet(struct ks_conn *conn)
 {
-	//int size = 0;
-	int err;
-
 	pthread_mutex_lock(&conn->xacts_lock);
 	if (!conn->cur_xact) {
 		if (list_empty(&conn->xacts)) {

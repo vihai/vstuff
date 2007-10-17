@@ -125,7 +125,7 @@ struct ks_req *ks_xact_queue_new_request_callback(
 	struct ks_xact *xact,
 	__u16 type,
 	__u16 flags,
-	int (*callback)(struct ks_req *req, struct nlmsghdr *nlh, void *data))
+	int (*callback)(struct ks_req *req, struct nlmsghdr *nlh))
 {
 	struct ks_req *req;
 	req = ks_req_alloc(xact);

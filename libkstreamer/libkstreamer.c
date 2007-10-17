@@ -268,8 +268,7 @@ void ks_topology_update(
 
 static int ks_topology_callback(
 	struct ks_req *req,
-	struct nlmsghdr *nlh,
-	void *data)
+	struct nlmsghdr *nlh)
 {
 	struct ks_xact *xact = req->xact;
 	struct ks_conn *conn = xact->conn;
