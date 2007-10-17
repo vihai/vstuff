@@ -33,6 +33,7 @@
 #include <asterisk/lock.h>
 #include <asterisk/logger.h>
 #include <asterisk/options.h>
+#include <asterisk/version.h>
 
 #include <linux/vgsm2.h>
 
@@ -304,6 +305,7 @@ static void vgsm_mesim_impl_change_state(
 	ast_cond_broadcast(&mesim->state_cond);
 }
 
+#if 0
 static void vgsm_mesim_dump(struct vgsm_mesim *mesim)
 {
 	__u8 dump[32];
@@ -316,6 +318,7 @@ static void vgsm_mesim_dump(struct vgsm_mesim *mesim)
 				"Dumped %d bytes\n", dumped);
 	} while(dumped == sizeof(dump));
 }
+#endif
 
 static int vgsm_mesim_receive(struct vgsm_mesim *mesim)
 {
@@ -505,6 +508,20 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 		if (bind(mesim->clnt_listen_fd,
 			(struct sockaddr *)&mesim->clnt_bind_addr,
 			sizeof(mesim->clnt_bind_addr)) < 0) {
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+			{
+			char tmpstr[32];
+			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
+				mesim->clnt_bind_addr.sin_addr);
+
+				ast_log(LOG_WARNING,
+					"Unable to bind MESIM socket to"
+					" %s:%d: %s\n",
+					tmpstr,
+					ntohs(mesim->clnt_bind_addr.sin_port),
+					strerror(errno));
+			}
+#else
 				ast_log(LOG_WARNING,
 					"Unable to bind MESIM socket to"
 					" %s:%d: %s\n",
@@ -512,10 +529,26 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 							sin_addr),
 					ntohs(mesim->clnt_bind_addr.sin_port),
 					strerror(errno));
+#endif
+
 				return;
 			}
 
 		if (listen(mesim->clnt_listen_fd, 10)) {
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+			{
+			char tmpstr[32];
+			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
+				mesim->clnt_bind_addr.sin_addr);
+
+			ast_log(LOG_WARNING,
+				"Unable to start listening on"
+				" %s:%d: %s\n",
+					tmpstr,
+					ntohs(mesim->clnt_bind_addr.sin_port),
+					strerror(errno));
+			}
+#else
 			ast_log(LOG_WARNING,
 				"Unable to start listening on"
 				" %s:%d: %s\n",
@@ -523,6 +556,7 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 							sin_addr),
 					ntohs(mesim->clnt_bind_addr.sin_port),
 					strerror(errno));
+#endif
 			return;
 		}
 
@@ -598,21 +632,6 @@ static void vgsm_mesim_set_mode(
 			sizeof(mesim->impl_simclient_addr));
 	} else
 		assert(0);
-}
-
-static void vgsm_mesim_direct_routing(struct vgsm_mesim *mesim, int sim_id)
-{
-	vgsm_mesim_debug(mesim, "Direcly routing to SIM holder %d\n",
-			sim_id);
-
-	if (ioctl(mesim->fd, VGSM_IOC_SIM_ROUTE,
-		sim_id) < 0) {
-		ast_log(LOG_ERROR,
-			"%s: ioctl(IOC_SIM_ROUTE, %d) failed: %s\n",
-			mesim->name,
-			sim_id,
-			strerror(errno));
-	}
 }
 
 static BOOL vgsm_mesim_receive_message(
@@ -953,15 +972,27 @@ static void vgsm_mesim_impl_timer(void *data)
 				(struct sockaddr *)&mesim->impl_simclient_addr,
 				sizeof(mesim->impl_simclient_addr)) < 0) {
 
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+			{
+			char tmpstr[32];
+			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
+				mesim->impl_simclient_addr.sin_addr);
+			vgsm_mesim_debug(mesim,
+				"Unable to connect MESIM socket to"
+				" %s:%d: %s\n",
+				tmpstr,
+				ntohs(mesim->impl_simclient_addr.sin_port),
+				strerror(errno));
+			}
+#else
 			vgsm_mesim_debug(mesim,
 				"Unable to connect MESIM socket to"
 				" %s:%d: %s\n",
 				ast_inet_ntoa(
-					mesim->impl_simclient_addr.
-					sin_addr),
-				ntohs(mesim->impl_simclient_addr.
-					sin_port),
+					mesim->impl_simclient_addr.sin_addr),
+				ntohs(mesim->impl_simclient_addr.sin_port),
 				strerror(errno));
+#endif
 
 			vgsm_mesim_impl_change_state(mesim,
 					VGSM_MESIM_IMPL_STATE_TRYING);

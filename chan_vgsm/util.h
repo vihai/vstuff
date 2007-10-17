@@ -18,6 +18,7 @@
 #include <linux/types.h>
 
 #include <asterisk/logger.h>
+#include <asterisk/version.h>
 
 extern struct vgsm_state vgsm;
 
@@ -102,6 +103,10 @@ typedef unsigned char BOOL;
 		ast_verbose("UNLOCK " # a "  %s:%d\n", __FILE__, __LINE__); \
 		ast_mutex_unlock(a);	\
 	} while(0)
+#endif
+
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#define ast_localtime(time, tm, tz) localtime_r(time, tm)
 #endif
 
 int sanprintf(char *buf, int bufsize, const char *fmt, ...);

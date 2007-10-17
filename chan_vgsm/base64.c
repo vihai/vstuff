@@ -90,7 +90,7 @@ int base64_encode(const __u8 *in,  int inlen,
                         char *out, int *outlen)
 {
 	unsigned long i, len2, leven;
-	__u8 *p;
+	char *p;
 	
 	assert(in);
 	assert(out);

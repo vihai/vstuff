@@ -759,7 +759,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 
 		char content_base64[512];
 		int outlen = sizeof(content_base64);
-		base64_encode(content,
+		base64_encode((const __u8 *)content,
 			strlen(content),
 			content_base64, &outlen);
 

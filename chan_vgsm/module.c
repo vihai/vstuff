@@ -1541,11 +1541,24 @@ static int vgsm_show_module_sim(int fd, struct vgsm_module *module)
 		ast_cli(fd, "  Implementa interface status: %s\n",
 			vgsm_mesim_impl_state_to_text(
 					module->mesim.impl_state));
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+		{
+		char tmpstr[32];
+		ast_inet_ntoa(tmpstr, sizeof(tmpstr),
+			module->mesim.impl_simclient_addr.sin_addr);
+
+		ast_cli(fd, "  Implementa SIM client addr:"
+				" %s:%d\n",
+			tmpstr,
+			ntohs(module->mesim.impl_simclient_addr.sin_port));
+		}
+#else
 		ast_cli(fd, "  Implementa SIM client addr:"
 				" %s:%d\n",
 			ast_inet_ntoa(module->mesim.
 					impl_simclient_addr.sin_addr),
 			ntohs(module->mesim.impl_simclient_addr.sin_port));
+#endif
 	}
 
 
