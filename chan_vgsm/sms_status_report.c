@@ -509,7 +509,7 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 
 	struct tm tm;
 	time_t tim = time(NULL);
-	localtime_r(&tim, &tm);
+	ast_localtime(&tim, &tm, NULL);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f,"; %s \n", tmpstr);
@@ -528,14 +528,14 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 	else
 		fprintf(f, "To: <%s>\n", mc->sms_recipient_address);
 
-	localtime_r(&sms->smcc_timestamp, &tm);
+	ast_localtime(&sms->smcc_timestamp, &tm, NULL);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "Date: %s\n", tmpstr);
 
 	fprintf(f, "X-SMS-Message-Type: SMS-STATUS-REPORT\n");
 	fprintf(f, "X-SMS-Message-Reference: %d\n", sms->message_reference);
 
-	localtime_r(&sms->discharge_time, &tm);
+	ast_localtime(&sms->discharge_time, &tm, NULL);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "X-SMS-Discharge-Time: %s\n", tmpstr);
 

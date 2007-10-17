@@ -453,7 +453,7 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 
 	struct tm tm;
 	time_t tim = time(NULL);
-	localtime_r(&tim, &tm);
+	ast_localtime(&tim, &tm, NULL);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f,"; %s\n", tmpstr);
@@ -472,7 +472,7 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 	else
 		fprintf(f, "To: <%s>\n", mc->sms_recipient_address);
 
-	localtime_r(&sms->timestamp, &tm);
+	ast_localtime(&sms->timestamp, &tm, NULL);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	fprintf(f, "Date: %s\n", tmpstr);
 
@@ -658,7 +658,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 
 	struct tm tm;
 	time_t tim = time(NULL);
-	localtime_r(&tim, &tm);
+	ast_localtime(&tim, &tm, NULL);
 	char tmpstr[40];
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	sanprintf(text, sizeof(text),"; %s\r\n", tmpstr);
@@ -677,7 +677,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 	sanprintf(text, sizeof(text), 
 		"Content-Transfer-Encoding: base64\r\n");
 
-	localtime_r(&sms->timestamp, &tm);
+	ast_localtime(&sms->timestamp, &tm, NULL);
 	strftime(tmpstr, sizeof(tmpstr), "%a, %d %b %Y %H:%M:%S %z", &tm);
 	sanprintf(text, sizeof(text), 
 		"Date: %s\r\n", tmpstr);

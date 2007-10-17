@@ -4914,20 +4914,20 @@ static int vgsm_module_prepin_configure(
 
 	/* Sets current time on module */
 	if (mc->set_clock) {
-		struct tm *tm;
+		struct tm tm;
 		time_t ct = time(NULL);
 
-		tm = localtime(&ct);
+		ast_localtime(&ct, &tm, NULL);
 
 		err = vgsm_req_make_wait_result(comm, 200 * MILLISEC,
 			"AT+CCLK=\"%02d/%02d/%02d,%02d:%02d:%02d%+03ld\"",
-			tm->tm_year % 100,
-			tm->tm_mon + 1,
-			tm->tm_mday,
-			tm->tm_hour,
-			tm->tm_min,
-			tm->tm_sec,
-			-(timezone / 3600) + tm->tm_isdst);
+			tm.tm_year % 100,
+			tm.tm_mon + 1,
+			tm.tm_mday,
+			tm.tm_hour,
+			tm.tm_min,
+			tm.tm_sec,
+			-(timezone / 3600) + tm.tm_isdst);
 		if (err != VGSM_RESP_OK) {
 			vgsm_module_failed(module, err);
 			goto err_no_req;
