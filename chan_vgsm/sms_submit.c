@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -344,10 +344,9 @@ void vgsm_sms_submit_dump(struct vgsm_sms_submit *sms)
 			sms->udh_concatenate_seqnum);
 	}
 
-
 	if (sms->text) {
 		wchar_t tmpstr[170];
-		w_unprintable_remove(tmpstr, sms->text, ARRAY_SIZE(tmpstr));
+		w_unprintable_remove(tmpstr, sms->text, sizeof(tmpstr));
 
 		const wchar_t *tmpstr_p = tmpstr;
 		mbstate_t ps = {};

@@ -2508,11 +2508,33 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_missing_destination;
 	}
 
-	const char *content = astman_get_header(m, "Content");
+	char *content = strdup(astman_get_header(m, "Content"));
 	if (!strlen(content)) {
 		astman_append(s, "Status: 509\n");
 		astman_send_error(s, m, "Content: header missing");
 		goto err_missing_content;
+	}
+
+	int i = 2;
+	while(TRUE) {
+		char tmpstr[10];
+		snprintf(tmpstr, sizeof(tmpstr), "Content%d", i);
+		const char *content_n = astman_get_header(m, tmpstr);
+
+		if (!strlen(content_n))
+			break;
+
+		content = realloc(content, strlen(content) +
+					strlen(content_n) + 1);
+		if (!content) {
+			astman_append(s, "Status: 503\n");
+			astman_send_error(s, m, "Cannot realloc");
+			goto err_missing_content;
+		}
+
+		strcat(content, content_n);
+
+		i++;
 	}
 
 	const char *content_type = astman_get_header(m, "Content-type");
@@ -2874,6 +2896,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	iconv_close(cd);
 
+	free(content);
+
 	return 0;
 
 err_make_req:
@@ -2899,6 +2923,7 @@ err_module_not_found:
 err_huntgroup_not_found:
 	iconv_close(cd);
 err_iconv_open:
+	free(content);
 err_missing_content:
 err_missing_destination:
 

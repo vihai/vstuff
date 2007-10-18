@@ -363,7 +363,7 @@ void vgsm_cbm_dump(struct vgsm_cbm *cbm)
 
 	if (cbm->text) {
 		wchar_t tmpstr[170];
-		w_unprintable_remove(tmpstr, cbm->text, ARRAY_SIZE(tmpstr));
+		w_unprintable_remove(tmpstr, cbm->text, sizeof(tmpstr));
 
 		const wchar_t *tmpstr_p = tmpstr;
 		mbstate_t ps = {};

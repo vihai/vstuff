@@ -592,7 +592,7 @@ void vgsm_sms_deliver_dump(struct vgsm_sms_deliver *sms)
 
 	if (sms->text) {
 		wchar_t tmpstr[170];
-		w_unprintable_remove(tmpstr, sms->text, ARRAY_SIZE(tmpstr));
+		w_unprintable_remove(tmpstr, sms->text, sizeof(tmpstr));
 
 		const wchar_t *tmpstr_p = tmpstr;
 		mbstate_t ps = {};
