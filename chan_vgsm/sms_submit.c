@@ -225,11 +225,11 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 
 	int udh_len = 0;
 	int udh_len_septets = 0;
-	int udh_pos = pos;
-
-	__u8 *udhl_ptr = pdu + udh_pos++;
 
 	if (sms->user_data_header_indicator) {
+		int udh_pos = pos;
+
+		__u8 *udhl_ptr = pdu + udh_pos++;
 
 		*(pdu + udh_pos++) = VGSM_SMS_UDH_IEI_CONCATENATED_SMS;
 		*(pdu + udh_pos++) = 3;
@@ -281,7 +281,7 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 		}
 
 		*tp_udl_ptr = udh_len_septets + used_septets;
-		pos += vgsm_septets_to_octets(used_septets);
+		pos += vgsm_septets_to_octets(udh_len_septets + used_septets);
 	}
 
 	sms->pdu_tp_len = pos - pre_tp_len;
