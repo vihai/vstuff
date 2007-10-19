@@ -2653,6 +2653,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 					VGSM_NET_STATUS_REGISTERED_ROAMING)) {
 
 				module = vgsm_module_get(tm);
+
+				ast_mutex_unlock(&tm->lock);
 				break;
 			}
 			ast_mutex_unlock(&tm->lock);
