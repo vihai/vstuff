@@ -72,14 +72,14 @@ struct vgsm_state
 	ast_mutex_t state_lock;
 	struct vgsm_module_config *default_mc;
 
-	ast_mutex_t ifs_list_lock;
+	ast_rwlock_t ifs_list_lock;
 	struct list_head ifs_list;
 
-	ast_mutex_t huntgroups_list_lock;
+	ast_rwlock_t huntgroups_list_lock;
 	struct list_head huntgroups_list;
 //	struct list_head sim_holders_list;
 
-	ast_mutex_t operators_lock;
+	ast_rwlock_t operators_lock;
 	struct list_head op_countries_list;
 	struct list_head op_list;
 

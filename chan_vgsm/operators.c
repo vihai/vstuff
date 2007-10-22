@@ -28,17 +28,17 @@ struct vgsm_operator_info *vgsm_operators_search(__u16 mcc, __u16 mnc)
 {
 	struct vgsm_operator_info *op_info;
 
-	ast_mutex_lock(&vgsm.operators_lock);
+	ast_rwlock_rdlock(&vgsm.operators_lock);
 	list_for_each_entry(op_info, &vgsm.op_list, node) {
 		if (op_info->mcc == mcc &&
 		    op_info->mnc == mnc) {
 
-			ast_mutex_unlock(&vgsm.operators_lock);
+			ast_rwlock_unlock(&vgsm.operators_lock);
 
 			return op_info;
 		}
 	}
-	ast_mutex_unlock(&vgsm.operators_lock);
+	ast_rwlock_unlock(&vgsm.operators_lock);
 
 	return NULL;
 }
@@ -47,15 +47,15 @@ struct vgsm_operator_country *vgsm_operators_country_search(__u16 mcc)
 {
 	struct vgsm_operator_country *op_country;
 
-	ast_mutex_lock(&vgsm.operators_lock);
+	ast_rwlock_rdlock(&vgsm.operators_lock);
 	list_for_each_entry(op_country, &vgsm.op_countries_list, node) {
 		if (op_country->mcc == mcc) {
-			ast_mutex_unlock(&vgsm.operators_lock);
+			ast_rwlock_unlock(&vgsm.operators_lock);
 
 			return op_country;
 		}
 	}
-	ast_mutex_unlock(&vgsm.operators_lock);
+	ast_rwlock_unlock(&vgsm.operators_lock);
 
 	return NULL;
 }
@@ -198,8 +198,8 @@ static void vgsm_operators_info_init(void)
 
 void vgsm_operators_init(void)
 {
-	ast_mutex_lock(&vgsm.operators_lock);
+	ast_rwlock_wrlock(&vgsm.operators_lock);
 	vgsm_operators_countries_init();
 	vgsm_operators_info_init();
-	ast_mutex_unlock(&vgsm.operators_lock);
+	ast_rwlock_unlock(&vgsm.operators_lock);
 }

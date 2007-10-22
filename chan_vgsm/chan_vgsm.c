@@ -10,6 +10,60 @@
  *
  */
 
+/*
+ * Locking guidelines:
+ *
+ * Locking in vGSM is bit complex, adding the fact that Asterisk's locking
+ * is brain-dead, the risk of making a big mess is very high.
+ *
+ * The most used and dangerous locks are the Asterisk's channel lock and
+ * the module's lock. The former is the lock we all know and we also know
+ * that Asterisk acquires it on callback invocation.
+ * The latter is a lock protecting access to the "vgsm_module" structure.
+ * A vgsm_module describes everything belonging to a GSM module.
+ *
+ * There no one-to-one relationship between them as the module exists even
+ * if no call is present, a ast_chan is actually a call... or a channel?
+ * or half a call? who knows....
+ *
+ * Anyway, since our callbacks do get invoked with the ast_chan->lock acquired,
+ * Asterisk is forcing us to follow its locking model.
+ *
+ * GUIDELINES:
+ *
+ * Locking order for nested locks:
+ *
+ * ast_chan => module->lock
+ * ast_chan => vgsm.huntgroups_list_lock => module->lock
+ * ast_chan => vgsm.ifs_list_lock => module->lock
+ *
+ * Leaf locks:
+ *
+ * vgsm.usecnt_lock
+ * vgsm.operators_list_lock
+ * timers_lock
+ *
+ * vgsm_module callbacks are invoked without locks, it is their
+ * responsibility to acquire the needed locks.
+ *
+ * Some field in module may be accessed without locking, either because it is
+ * read-only after module initialization or being meaningful only after
+ * the module changes into a particular state.
+ *
+ * Furthermore, the module contains module->comm which is another object
+ * protected by its own lock, so, it has its own access policy.
+ *
+ * vgsm_module_config structures are instantiated on configuration and a
+ * pointer to the current configuration is set into vgsm_module.
+ * The values contained in a vgsm_module_config instance are read-only,
+ * procedures which want a stable configuration may simply take a reference
+ * to the vgsm_module_config object and keep it for as long as it is needed.
+ * For example, a snapshot of the configuration is taken into the channel
+ * structure and kept for as long as the call lasts.
+ *
+ */
+
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -83,7 +137,6 @@
 #include "comm.h"
 #include "causes.h"
 #include "sms_submit.h"
-#include "cbm.h"
 #include "operators.h"
 #include "pin.h"
 #include "number.h"
@@ -97,51 +150,17 @@
 #define POWERING_OFF_TIMEOUT (7 * SEC)
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
-/*
- * Locking guidelines:
- *
- * Locking in vGSM is bit complex, adding the fact that Asterisk's locking
- * is brain-dead, the risk of making a big mess is very high.
- *
- * The most used and dangerous locks are the Asterisk's channel lock and
- * the module's lock. The former is the lock we all know and we also know
- * that Asterisk acquires it on callback invocation.
- * The latter is a lock protecting access to the "vgsm_module" structure.
- * A vgsm_module describes everything belonging to a GSM module.
- *
- * There no one-to-one relationship between them as the module exists even
- * if no call is present, a ast_chan is actually a call... or a channel?
- * or half a call? who knows....
- *
- * Anyway, since our callbacks do get invoked with the ast_chan->lock acquired,
- * Asterisk is forcing us to follow its locking model.
- *
- * GUIDELINES:
- *
- * Locking order is ast_chan->lock, then module->lock.
- * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
- * NEVER ever attempt to acquire locks in reverse order, otherwise deadlocks
- * _will_ occour.
- *
- * vgsm_module callbacks are invoked without locks, it is their
- * responsibility to acquire the needed locks.
- *
- * Some field in module may be accessed without locking, either because it is
- * read-only after module initialization or being meaningful only after
- * the module changes into a particular state.
- *
- * Furthermore, the module contains module->comm which is another object
- * protected by its own lock, so, it has its own access policy.
- *
- * vgsm_module_config structures are instantiated on configuration and a
- * pointer to the current configuration is set into vgsm_module.
- * The values contained in a vgsm_module_config instance are read-only,
- * procedures which want a stable configuration may simply take a reference
- * to the vgsm_module_config object and keep it for as long as it is needed.
- * For example, a snapshot of the configuration is taken into the channel
- * structure and kept for as long as the call lasts.
- *
- */
+#ifdef DEBUG_CODE
+#define vgsm_debug_jitbuf(module, format, arg...)	\
+	if ((module)->debug_jitbuf)			\
+		ast_verbose("vgsm: %s: "		\
+			format,				\
+			(module)->name,			\
+			## arg)
+#else
+#define vgsm_debug_jitbuf(module, format, arg...)	\
+	do {} while(0);
+#endif
 
 struct vgsm_state vgsm = {
 	.usecnt = 0,
@@ -686,8 +705,9 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	ast_mutex_lock(&module->lock);
 
 	if (module->status != VGSM_MODULE_STATUS_READY) {
-		ast_cli(fd, "Module '%s' is not ready\n", module->name);
 		ast_mutex_unlock(&module->lock);
+
+		ast_cli(fd, "Module '%s' is not ready\n", module->name);
 		err = RESULT_FAILURE;
 		goto err_module_not_ready;
 	}
@@ -702,9 +722,10 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	}
 
 	if (module->sending_sms) {
+		ast_mutex_unlock(&module->lock);
+
 		ast_cli(fd, "Module '%s' is already sending a SMS\n",
 				module->name);
-		ast_mutex_unlock(&module->lock);
 		err = RESULT_FAILURE;
 		goto err_already_sending_sms;
 	}
@@ -714,8 +735,9 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	struct vgsm_sms_submit *sms;
 	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
-		ast_cli(fd, "Cannot allocate SMS\n");
 		ast_mutex_unlock(&module->lock);
+
+		ast_cli(fd, "Cannot allocate SMS\n");
 		err = RESULT_FAILURE;
 		goto err_sms_alloc;
 	}
@@ -728,8 +750,9 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	} else if (strlen(module->sim.smcc_address.digits)) {
 		vgsm_number_copy(&sms->smcc_address, &module->sim.smcc_address);
 	} else {
-		ast_cli(fd, "Services Center number not set\n");
 		ast_mutex_unlock(&module->lock);
+
+		ast_cli(fd, "Services Center number not set\n");
 		err = RESULT_FAILURE;
 		goto err_no_smcc;
 	}
@@ -2084,12 +2107,6 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	return f2;
 }
 
-#define vgsm_debug_jitbuf(module, format, arg...)			\
-	if ((module)->debug_jitbuf)					\
-		ast_verbose("vgsm: "				\
-			format,					\
-			## arg)
-
 static int vgsm_write(
 	struct ast_channel *ast_chan,
 	struct ast_frame *frame)
@@ -2584,8 +2601,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (!strncasecmp(module_str, VGSM_HUNTGROUP_PREFIX,
 			strlen(VGSM_HUNTGROUP_PREFIX))) {
 
-		ast_mutex_lock(&vgsm.huntgroups_list_lock);
-
 		const char *hg_name = module_str +
 					strlen(VGSM_HUNTGROUP_PREFIX);
 		struct vgsm_huntgroup *hg;
@@ -2594,10 +2609,10 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			astman_append(s, "Status: 508\n");
 			astman_send_error(s, m, "Cannot find huntgroup");
 
-			ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 			goto err_huntgroup_not_found;
 		}
 
+		ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
 		struct vgsm_huntgroup_member *hgm;
 		list_for_each_entry(hgm, &hg->members, node) {
 			ast_mutex_lock(&hgm->module->lock);
@@ -2615,10 +2630,9 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			}
 			ast_mutex_unlock(&hgm->module->lock);
 		}
+		ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
 
 		vgsm_hg_put(hg);
-
-		ast_mutex_unlock(&vgsm.huntgroups_list_lock);
 
 		if (!module) {
 			astman_append(s, "Status: 404\n");
@@ -2642,7 +2656,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		struct vgsm_module *tm;
 
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		list_for_each_entry(tm, &vgsm.ifs_list, ifs_node) {
 			ast_mutex_lock(&tm->lock);
 			if (tm->status == VGSM_MODULE_STATUS_READY &&
@@ -2659,7 +2673,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			}
 			ast_mutex_unlock(&tm->lock);
 		}
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
 		if (!module) {
 			astman_append(s, "Status: 404\n");
@@ -2896,7 +2910,9 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	astman_append(s, "Status: 201\n");
 	astman_send_ack(s, m, "Message sent");
 
+	ast_mutex_lock(&module->lock);
 	module->sending_sms = FALSE;
+	ast_mutex_unlock(&module->lock);
 
 	iconv_close(cd);
 
@@ -2962,13 +2978,13 @@ static int vgsm_load_module(void)
 	ast_mutex_init(&vgsm.usecnt_lock);
 
 	INIT_LIST_HEAD(&vgsm.ifs_list);
-	ast_mutex_init(&vgsm.ifs_list_lock);
+	ast_rwlock_init(&vgsm.ifs_list_lock);
 
-	ast_mutex_init(&vgsm.operators_lock);
+	ast_rwlock_init(&vgsm.operators_lock);
 	INIT_LIST_HEAD(&vgsm.op_list);
 	INIT_LIST_HEAD(&vgsm.op_countries_list);
 
-	ast_mutex_init(&vgsm.huntgroups_list_lock);
+	ast_rwlock_init(&vgsm.huntgroups_list_lock);
 	INIT_LIST_HEAD(&vgsm.huntgroups_list);
 
 	vgsm.default_mc = vgsm_module_config_alloc();

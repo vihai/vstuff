@@ -864,16 +864,17 @@ static void vgsm_module_reconfigure(
 		var = var->next;
 	}
 
-	ast_mutex_lock(&vgsm.ifs_list_lock);
+	ast_rwlock_wrlock(&vgsm.ifs_list_lock);
 
-	struct vgsm_module *module = vgsm_module_get_by_name(name);
+	struct vgsm_module *module = _vgsm_module_get_by_name(name);
 	if (!module) {
 		module = vgsm_module_alloc();
 		if (!module) {
+			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+
 			ast_log(LOG_ERROR, "Cannot allocate new module %s\n",
 				name);
 
-			ast_mutex_unlock(&vgsm.ifs_list_lock);
 			goto err_module_alloc;
 		}
 
@@ -881,7 +882,7 @@ static void vgsm_module_reconfigure(
 
 		err = vgsm_comm_init(&module->comm, vgsm_module_urcs);
 		if (err < 0) {
-			ast_mutex_unlock(&vgsm.ifs_list_lock);
+			ast_rwlock_unlock(&vgsm.ifs_list_lock);
 			goto err_comm_init;
 		}
 
@@ -912,7 +913,7 @@ static void vgsm_module_reconfigure(
 
 	ast_mutex_unlock(&module->lock);
 
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
 	vgsm_module_config_put(mc);
 
@@ -1046,20 +1047,27 @@ void _vgsm_module_put(struct vgsm_module *module)
 	}
 }
 
-struct vgsm_module *vgsm_module_get_by_name(const char *name)
+struct vgsm_module *_vgsm_module_get_by_name(const char *name)
 {
-	ast_mutex_lock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
 	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
-		if (!strcasecmp(module->name, name)) {
-			ast_mutex_unlock(&vgsm.ifs_list_lock);
+		if (!strcasecmp(module->name, name))
 			return vgsm_module_get(module);
-		}
 	}
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
 
 	return NULL;
+}
+
+struct vgsm_module *vgsm_module_get_by_name(const char *name)
+{
+	struct vgsm_module *module;
+
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	module = _vgsm_module_get_by_name(name);
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+
+	return module;
 }
 
 void vgsm_module_set_status(
@@ -1145,9 +1153,9 @@ void vgsm_module_failed_text(struct vgsm_module *module,
 
 void vgsm_module_failed(struct vgsm_module *module, int err)
 {
-	ast_mutex_lock(&module->lock);
-
 	vgsm_comm_close(&module->comm);
+
+	ast_mutex_lock(&module->lock);
 
 	if (err == VGSM_RESP_FAILED)
 		vgsm_module_set_status(module,
@@ -1166,16 +1174,16 @@ char *vgsm_module_completion(const char *line, const char *word, int state)
 {
 	int which = 0;
 
-	ast_mutex_lock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
 	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 		if (!strncasecmp(word, module->name, strlen(word)) &&
 		    ++which > state) {
-			ast_mutex_unlock(&vgsm.ifs_list_lock);
+			ast_rwlock_unlock(&vgsm.ifs_list_lock);
 			return strdup(module->name);
 		}
 	}
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
 	return NULL;
 }
@@ -2190,10 +2198,10 @@ static int show_vgsm_modules_cli(int fd, int argc, char *argv[])
 		vgsm_module_put(module);
 
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			vgsm_show_module_summary(fd, module);
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2682,11 +2690,11 @@ static int debug_vgsm_module_state(
 	if (module) {
 		module->debug_state = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_state = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2698,11 +2706,11 @@ static int debug_vgsm_module_call(
 	if (module) {
 		module->debug_call = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_call = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2714,11 +2722,11 @@ static int debug_vgsm_module_atcommands(
 	if (module) {
 		module->comm.debug_messages = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->comm.debug_messages = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2730,11 +2738,11 @@ static int debug_vgsm_module_serial(
 	if (module) {
 		module->comm.debug_characters = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->comm.debug_characters = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2746,11 +2754,11 @@ static int debug_vgsm_module_sms(
 	if (module) {
 		module->debug_sms = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_sms = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2762,11 +2770,11 @@ static int debug_vgsm_module_cbm(
 	if (module) {
 		module->debug_cbm = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_cbm = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2778,11 +2786,11 @@ static int debug_vgsm_module_jitbuf(
 	if (module) {
 		module->debug_jitbuf = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_jitbuf = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2794,11 +2802,11 @@ static int debug_vgsm_module_frames(
 	if (module) {
 		module->debug_frames = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->debug_frames = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2810,11 +2818,11 @@ static int debug_vgsm_module_sim(
 	if (module) {
 		module->mesim.debug = enable;
 	} else {
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		struct vgsm_module *module;
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
 			module->mesim.debug = enable;
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 	}
 
 	return RESULT_SUCCESS;
@@ -2822,7 +2830,7 @@ static int debug_vgsm_module_sim(
 
 static int debug_vgsm_module_all(int fd, BOOL enable)
 {
-	ast_mutex_lock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 	struct vgsm_module *module;
 	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 		module->comm.debug_messages = enable;
@@ -2831,7 +2839,7 @@ static int debug_vgsm_module_all(int fd, BOOL enable)
 		module->debug_cbm = enable;
 		module->debug_jitbuf = enable;
 	}
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
 	return RESULT_SUCCESS;
 }
@@ -6004,7 +6012,7 @@ void vgsm_module_shutdown_all(void)
 
 	ast_verbose("vgsm: powering off all modules\n");
 
-	ast_mutex_lock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 		ast_mutex_lock(&module->lock);
@@ -6025,7 +6033,7 @@ void vgsm_module_shutdown_all(void)
 
 		ast_mutex_unlock(&module->lock);
 	}
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
 	time_t begin = time(NULL);
 
@@ -6033,7 +6041,7 @@ void vgsm_module_shutdown_all(void)
 	while(time(NULL) - begin < 10) {
 
 		all_off = TRUE;
-		ast_mutex_lock(&vgsm.ifs_list_lock);
+		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 			ast_mutex_lock(&module->lock);
@@ -6043,7 +6051,7 @@ void vgsm_module_shutdown_all(void)
 
 			ast_mutex_unlock(&module->lock);
 		}
-		ast_mutex_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
 		if (all_off)
 			break;
@@ -6054,7 +6062,7 @@ void vgsm_module_shutdown_all(void)
 	if (!all_off)
 		ast_verbose("vgsm: Failure to power off all modules\n");
 
-	ast_mutex_lock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
 
 		ast_mutex_lock(&module->lock);
@@ -6073,7 +6081,7 @@ void vgsm_module_shutdown_all(void)
 
 		ast_mutex_unlock(&module->lock);
 	}
-	ast_mutex_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
 }
 
 int vgsm_module_module_load(void)

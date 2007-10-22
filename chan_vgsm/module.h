@@ -336,6 +336,7 @@ void _vgsm_module_put(struct vgsm_module *module);
 #define vgsm_module_put(module) \
 	do { _vgsm_module_put(module); (module) = NULL; } while(0)
 
+struct vgsm_module *_vgsm_module_get_by_name(const char *name);
 struct vgsm_module *vgsm_module_get_by_name(const char *name);
 
 void vgsm_module_set_status(
