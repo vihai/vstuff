@@ -2831,7 +2831,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	char *inbuf = (char *)content_raw;
 	size_t inbytes = content_size;
-	size_t outbytes_avail = content_size * sizeof(wchar_t);
+	size_t outbytes_avail = (content_size + 1) * sizeof(wchar_t);
 	size_t outbytes_left = outbytes_avail;
 
 	sms->text = malloc(outbytes_avail);
