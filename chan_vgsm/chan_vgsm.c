@@ -2802,7 +2802,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 	} else if(!strcasecmp(content_te, "hex")) {
 		content_size = strlen(content) / 2;
-		content_raw = alloca(content_size + 1);
+		content_raw = alloca(content_size);
 
 		int i;
 		for(i=0; i<content_size; i++) {
@@ -2810,18 +2810,17 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 				char_to_hexdigit(content[i * 2]) << 4 |
 				char_to_hexdigit(content[i * 2 + 1]);
 		}
-
 	} else if (!strcasecmp(content_te, "base64")) {
 		content_size = strlen(content);
-		content_raw = alloca(content_size + 1);
+		content_raw = alloca(content_size);
 
-		base64_decode(content, content_raw, content_size + 1);
+		base64_decode(content, content_raw, content_size);
 
 	} else if (!strcasecmp(content_te, "quoted-printable")) {
 		content_size = strlen(content);
-		content_raw = alloca(content_size + 1);
+		content_raw = alloca(content_size);
 
-		quoted_printable_decode(content, content_raw, content_size + 1);
+		quoted_printable_decode(content, content_raw, content_size);
 
 	} else {
 		astman_append(s, "Status: 506\n");
@@ -2831,8 +2830,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	}
 
 	char *inbuf = (char *)content_raw;
-	size_t inbytes = content_size + 1;
-	size_t outbytes_avail = (content_size + 1) * sizeof(wchar_t);
+	size_t inbytes = content_size;
+	size_t outbytes_avail = content_size * sizeof(wchar_t);
 	size_t outbytes_left = outbytes_avail;
 
 	sms->text = malloc(outbytes_avail);
@@ -2856,6 +2855,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		iconv_close(cd);
 		goto err_iconv;
 	}
+
+	*((wchar_t *)outbuf) = L'\0';
 
 	err = vgsm_sms_submit_prepare(sms);
 	if (err == -ENOSPC) {

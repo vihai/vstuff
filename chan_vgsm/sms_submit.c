@@ -103,7 +103,7 @@ int vgsm_sms_submit_prepare(struct vgsm_sms_submit *sms)
 
 	while(*c != L'\0') {
 		if (vgsm_wc_to_gsm(*c, &c1, &c2) == 0) {
-			ast_log(LOG_DEBUG,
+			ast_log(LOG_NOTICE,
 				"Cannot translate character 0x%08x to GSM "
 				"alphabet, switching to UCS2\n", *(__u32 *)c);
 
