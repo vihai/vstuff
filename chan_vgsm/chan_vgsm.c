@@ -2991,6 +2991,9 @@ static int vgsm_load_module(void)
 	vgsm.default_mc = vgsm_module_config_alloc();
 	vgsm_module_config_default(vgsm.default_mc);
 
+	strcpy(vgsm.sms_spooler, "/usr/sbin/sendmail");
+	strcpy(vgsm.sms_spooler_pars, "-it");
+
 	vgsm_reload_config();
 
 	if (ast_channel_register(&vgsm_tech)) {

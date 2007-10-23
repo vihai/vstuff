@@ -82,7 +82,7 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 
 	mc->rx_gain = 255;
 	mc->tx_gain = 255;
-	mc->set_clock = 0;
+	mc->set_clock = TRUE;
 	mc->poweroff_on_exit = TRUE;
 	mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
 
@@ -106,7 +106,7 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 	mc->tx_calibrate = 21402;
 
 	mc->jitbuf_low = 10;
-	mc->jitbuf_high = 80;
+	mc->jitbuf_high = 300;
 }
 
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
@@ -934,7 +934,7 @@ void vgsm_module_reload(struct ast_config *cfg)
 	/* Read default interface configuration */
 
 	struct ast_variable *var;
-	var = ast_variable_browse(cfg, "global");
+	var = ast_variable_browse(cfg, VGSM_ME_GLOBAL);
 	while (var) {
 		if (vgsm_module_config_from_var(vgsm.default_mc, var) < 0) {
 			ast_log(LOG_WARNING,
@@ -949,7 +949,10 @@ void vgsm_module_reload(struct ast_config *cfg)
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
 
-		if (strncasecmp(cat, VGSM_ME_PREFIX, strlen(VGSM_ME_PREFIX)))
+		if (strncmp(cat, VGSM_ME_PREFIX, strlen(VGSM_ME_PREFIX)))
+			continue;
+
+		if (!strncmp(cat, VGSM_ME_GLOBAL, strlen(VGSM_ME_GLOBAL)))
 			continue;
 
 		if (strlen(cat) <= strlen(VGSM_ME_PREFIX)) {

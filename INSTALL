@@ -207,10 +207,34 @@ it before proceeding.
 
 vGSM cards register several character devices, vGSM-I cards register one device
 for each ME while vGSM-II cards register three devices for each
-ME (ASC0, ASC1, MESIM) and one device for each SIM holder, thus, device naming
-becomes tricky.
+ME (ASC0, ASC1, MESIM) and one device for each SIM holder.
 
-That is why a helper script for udev lets you associate permanent names to
+The default device names are thus:
+
+- vGSM-I
+ /dev/vgsm_meX
+
+- vGSM-II
+ /dev/vgsm2_meX
+ /dev/vgsm2_meaX
+ /dev/vgsm2_mesimX
+ /dev/vgsm2_simX
+
+'X' is a number assigned to each GSM module/SIM holder and is calculated with
+the formula X=cardnum*8 + menum
+
+Unfortunately cardnum depends on the order with which the Linux kernel
+enumerates PCI devices which means that removing a card may renumber some or
+all the other cards.
+
+3.3.1 Persistent devices naming (EXPERIMENTAL)
+----------------------------------------------
+
+NOTE: If you only have one card or you are not concerned of eventual renubering
+it is recommendable to skip this procedure as it is sensitive to the specific
+Linux distribution, udev version and configuration.
+
+A helper script for udev lets you associate permanent names to
 devices. The script is located in samples/lib_udev/vgsm_helper and is referenced
 in 30-vgsm.rules.
 
@@ -273,7 +297,8 @@ You should now reboot or:
 If everyting is correct, you will see properly named device being
 created in /dev/vgsm/
 
-Asterisk configuration:
+3.3.2 Asterisk configuration
+-----------------------------
 
 In /etc/asterisk (or wherever you have your Asterisk configuration files) you
 have to create these files:
@@ -283,8 +308,17 @@ vgsm_operators.conf
 vgsm_countries.conf
 
 In 'samples/etc_asterisk' you will find sample configuration files. Put them in
-Asterisk's configuration directoryu and edit them according to your
+Asterisk's configuration directory and edit them according to your
 configuration.
+
+In particular you will have to put the correct device names in the module's
+sections.
 
 Finally start Asterisk and check that the modules get configured and initialized
 with "show vgsm modules"
+
+Please also refer, for further questions or trouble, to:
+
+http://open.voismart.it/index.php/VGSM_FAQ
+
+Thank you!

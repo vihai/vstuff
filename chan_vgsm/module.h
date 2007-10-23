@@ -25,6 +25,7 @@
 #include "sim.h"
 
 #define VGSM_ME_PREFIX "me:"
+#define VGSM_ME_GLOBAL "me:*"
 
 #ifdef DEBUG_CODE
 #define vgsm_debug_state(module, format, arg...)	\
