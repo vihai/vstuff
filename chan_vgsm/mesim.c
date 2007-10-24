@@ -1134,8 +1134,12 @@ static void *vgsm_mesim_thread_main(void *data)
 
 		int res = poll(polls, npolls, timeout_ms);
 		if (res < 0) {
-			ast_log(LOG_WARNING, "vgsm: Error polling: %s\n",
-				strerror(errno));
+			if (errno != EINTR) {
+				ast_log(LOG_WARNING,
+					"vgsm: Error polling: %s\n",
+					strerror(errno));
+			}
+
 			continue;
 		}
 

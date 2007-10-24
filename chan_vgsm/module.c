@@ -3478,21 +3478,23 @@ static void handle_unsolicited_clip(
 	ast_mutex_lock(&ast_chan->lock);
 	if (ast_chan->_state == AST_STATE_RING) {
 
+		ast_mutex_unlock(&ast_chan->lock);
+
 		vgsm_debug_call(module,
 			"Call is already ringing, ignoring further +CRINGs\n");
 
-		ast_mutex_unlock(&ast_chan->lock);
 		goto already_ringing;
 	}
 
 	if (ast_chan->_state != AST_STATE_RESERVED) {
+
+		ast_mutex_unlock(&ast_chan->lock);
 
 		vgsm_debug_call(module,
 			"Received +CLIP but active call"
 			" is not in RESERVED state (state=%d)\n",
 			ast_chan->_state);
 
-		ast_mutex_unlock(&ast_chan->lock);
 		goto err_call_not_ring;
 	}
 
@@ -3504,6 +3506,7 @@ static void handle_unsolicited_clip(
 		AST_PRES_UNAVAILABLE;
 
 	if (!get_token(&pars_ptr, field, sizeof(field))) {
+
 		ast_mutex_unlock(&ast_chan->lock);
 
 		ast_log(LOG_WARNING, "Cannot parse CID '%s'\n", pars);

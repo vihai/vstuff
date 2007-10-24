@@ -1406,8 +1406,11 @@ static void *vgsm_comm_thread_main(void *data)
 
 		int res = poll(polls, ARRAY_SIZE(polls), timeout_ms);
 		if (res < 0) {
-			ast_log(LOG_WARNING, "vgsm: Error polling: %s\n",
-				strerror(errno));
+			if (errno != EINTR) {
+				ast_log(LOG_WARNING,
+					"vgsm: Error polling: %s\n",
+					strerror(errno));
+			}
 		}
 
 		if (res == 0)

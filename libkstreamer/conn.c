@@ -275,9 +275,11 @@ void *ks_protocol_thread_main(void *data)
 		int res;
 		res = poll(pollfds, ARRAY_SIZE(pollfds), -1);
 		if (res < 0) {
-			report_conn(conn, LOG_WARNING,
-				"kstreamer: Error polling: %s\n",
-				strerror(errno));
+			if (errno != EINTR) {
+				report_conn(conn, LOG_WARNING,
+					"kstreamer: Error polling: %s\n",
+					strerror(errno));
+			}
 
 			continue;
 		}
