@@ -908,8 +908,13 @@ int vgsm_card_probe(
 	memset(card->writedma_mem, 0, card->writedma_size);
 
 	/* Requesting IRQ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
 	err = request_irq(card->pci_dev->irq, &vgsm_interrupt,
 			  SA_SHIRQ, vgsm_DRIVER_NAME, card);
+#else
+	err = request_irq(card->pci_dev->irq, &vgsm_interrupt, IRQF_SHARED,
+			  vgsm_DRIVER_NAME, card);
+#endif
 	if (err < 0) {
 		vgsm_msg_card(card, KERN_CRIT,
 			     "unable to register irq\n");

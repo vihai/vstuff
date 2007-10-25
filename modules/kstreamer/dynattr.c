@@ -34,9 +34,9 @@ EXPORT_SYMBOL(ks_dynattr_get);
 void ks_dynattr_put(struct ks_dynattr *dynattr)
 {
 	if (!atomic_dec_and_test(&dynattr->refcnt)) {
-		down_write(&kstreamer_subsys.rwsem);
+		down_write(&kstreamer_subsys_rwsem);
 		hlist_del(&dynattr->node);
-		up_write(&kstreamer_subsys.rwsem);
+		up_write(&kstreamer_subsys_rwsem);
 
 		kfree(dynattr);
 	}
@@ -68,9 +68,9 @@ struct ks_dynattr *ks_dynattr_get_by_id(int id)
 {
 	struct ks_dynattr *dynattr;
 
-	down_read(&kstreamer_subsys.rwsem);
+	down_read(&kstreamer_subsys_rwsem);
 	dynattr = ks_dynattr_get(_ks_dynattr_search_by_id(id));
-	up_read(&kstreamer_subsys.rwsem);
+	up_read(&kstreamer_subsys_rwsem);
 
 	return dynattr;
 }
@@ -210,18 +210,18 @@ struct ks_dynattr *ks_dynattr_register(const char *name)
 	struct ks_dynattr *dynattr;
 	int i;
 
-	down_read(&kstreamer_subsys.rwsem);
+	down_read(&kstreamer_subsys_rwsem);
 	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
 		struct hlist_node *t;
 
 		hlist_for_each_entry(dynattr, t, &ks_dynattrs_hash[i], node) {
 			if (!strcmp(dynattr->name, name)) {
-				up_read(&kstreamer_subsys.rwsem);
+				up_read(&kstreamer_subsys_rwsem);
 				return ks_dynattr_get(dynattr);
 			}
 		}
 	}
-	up_read(&kstreamer_subsys.rwsem);
+	up_read(&kstreamer_subsys_rwsem);
 
 	dynattr = kmalloc(sizeof(*dynattr), GFP_KERNEL);
 	if (!dynattr)
@@ -233,10 +233,10 @@ struct ks_dynattr *ks_dynattr_register(const char *name)
 
 	strncpy(dynattr->name, name, sizeof(dynattr->name));
 
-	down_write(&kstreamer_subsys.rwsem);
+	down_write(&kstreamer_subsys_rwsem);
 	dynattr->id = _ks_dynattr_new_id();
 	hlist_add_head(&dynattr->node, ks_dynattrs_get_hash(dynattr->id));
-	up_write(&kstreamer_subsys.rwsem);
+	up_write(&kstreamer_subsys_rwsem);
 
 	ks_dynattr_netlink_notification(dynattr, KS_NETLINK_DYNATTR_NEW, 0);
 

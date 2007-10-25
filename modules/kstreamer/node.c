@@ -66,6 +66,7 @@ static int _ks_node_new_id(void)
 	}
 }
 
+#if 0
 struct ks_node *ks_node_get_by_path(
 	const char *path)
 {
@@ -77,21 +78,22 @@ struct ks_node *ks_node_get_by_path(
 	if (err < 0)
 		return NULL;
 
-	down_read(&kstreamer_subsys.rwsem);
+	down_read(&kstreamer_subsys_rwsem);
 
 	list_for_each_entry(node, &ks_nodes_kset.list, kobj.entry) {
 		if (node->kobj.dentry == nd.dentry) {
 			path_release(&nd);
-			up_read(&kstreamer_subsys.rwsem);
+			up_read(&kstreamer_subsys_rwsem);
 			return ks_node_get(node);
 		}
 	}
-	up_read(&kstreamer_subsys.rwsem);
+	up_read(&kstreamer_subsys_rwsem);
 
 	path_release(&nd);
 
 	return NULL;
 }
+#endif
 
 #define to_ks_node_attr(_attr) \
 	container_of(_attr, struct ks_node_attribute, attr)
@@ -380,7 +382,11 @@ int ks_node_modinit(void)
 {
 	int err;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_nodes_kset.subsys = &kstreamer_subsys;
+#else
+	ks_nodes_kset.kobj.parent = &kstreamer_subsys.kobj;
+#endif
 	ks_nodes_kset.ktype = &ks_node_ktype;
 	kobject_set_name(&ks_nodes_kset.kobj, "nodes");
 

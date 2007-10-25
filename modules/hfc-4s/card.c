@@ -1083,8 +1083,13 @@ int hfc_card_probe(struct hfc_card *card)
 		goto err_ioremap;
 	}
 
-	err = request_irq(card->pci_dev->irq, &hfc_interrupt,
-		SA_SHIRQ, hfc_DRIVER_NAME, card);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
+	err = request_irq(card->pci_dev->irq, &hfc_interrupt, SA_SHIRQ,
+						hfc_DRIVER_NAME, card);
+#else
+	err = request_irq(card->pci_dev->irq, &hfc_interrupt, IRQF_SHARED,
+						hfc_DRIVER_NAME, card);
+#endif
 	if (err < 0) {
 		hfc_msg_card(card, KERN_CRIT, "unable to register irq\n");
 		goto err_request_irq;

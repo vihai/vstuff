@@ -73,7 +73,6 @@ void lapd_send_ph_primitive(
 	prim_hdr->primitive_type = primitive_type;
 	ctrl_hdr->param = param;
 
-	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 	dev_queue_xmit(skb);
 
 	return;

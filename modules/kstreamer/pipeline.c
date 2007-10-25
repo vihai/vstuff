@@ -1204,7 +1204,11 @@ int ks_pipeline_modinit()
 {
 	int err;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_pipelines_kset.subsys = &kstreamer_subsys;
+#else
+	ks_pipelines_kset.kobj.parent = &kstreamer_subsys.kobj;
+#endif
 	ks_pipelines_kset.ktype = &ks_pipeline_ktype;
 	kobject_set_name(&ks_pipelines_kset.kobj, "pipelines");
 

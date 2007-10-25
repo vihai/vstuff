@@ -120,7 +120,7 @@ extern void ks_node_destroy(struct ks_node *node);
 extern int ks_node_register(struct ks_node *node);
 extern void ks_node_unregister(struct ks_node *node);
 
-struct ks_node *ks_node_get_by_path(const char *path);
+//struct ks_node *ks_node_get_by_path(const char *path);
 
 extern int ks_node_create_file(
 	struct ks_node *node,

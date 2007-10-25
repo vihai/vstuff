@@ -39,6 +39,7 @@ int debug_level = 0;
 #endif
 #endif
 
+DECLARE_RWSEM(kstreamer_subsys_rwsem);
 decl_subsys(kstreamer, NULL, NULL);
 
 static void ks_system_device_release(struct device *cd)

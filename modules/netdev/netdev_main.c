@@ -1071,7 +1071,6 @@ static void vnd_send_primitive(
 		skb->dev = netdevice->netdev;
 		skb->pkt_type = PACKET_HOST;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
-		skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
 
 		prim_hdr = (struct lapd_prim_hdr *)
 			skb_put(skb, sizeof(struct lapd_prim_hdr));

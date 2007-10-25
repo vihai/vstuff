@@ -586,7 +586,11 @@ int ks_chan_modinit(void)
 {
 	int err;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_chans_kset.subsys = &kstreamer_subsys;
+#else
+	ks_chans_kset.kobj.parent = &kstreamer_subsys.kobj;
+#endif
 	ks_chans_kset.ktype = &ks_chan_ktype;
 	kobject_set_name(&ks_chans_kset.kobj, "chans");
 

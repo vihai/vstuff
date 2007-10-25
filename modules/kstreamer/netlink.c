@@ -530,9 +530,12 @@ int ks_netlink_modinit(void)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, ks_netlink_rcv);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, 0,
 					ks_netlink_rcv, THIS_MODULE);
+#else
+	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, 0, ks_netlink_rcv,
+							NULL, THIS_MODULE);
 #endif
 	if (!ksnl) {
 		err = -ENOMEM;

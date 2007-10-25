@@ -167,8 +167,13 @@ int vdsp_card_probe(
 		card->regs_bus_ptr);
 
 	/* Requesting IRQ */
-	err = request_irq(card->pci_dev->irq, &vdsp_interrupt,
-			  SA_SHIRQ, vdsp_DRIVER_NAME, card);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
+	err = request_irq(card->pci_dev->irq, &vdsp_interrupt, SA_SHIRQ,
+						vdsp_DRIVER_NAME, card);
+#else
+	err = request_irq(card->pci_dev->irq, &vdsp_interrupt, IRQF_SHARED,
+						vdsp_DRIVER_NAME, card);
+#endif
 	if (err < 0) {
 		vdsp_msg_card(card, KERN_CRIT,
 			     "unable to register irq\n");

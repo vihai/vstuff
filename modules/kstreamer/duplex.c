@@ -155,6 +155,7 @@ static struct kobj_type ks_duplex_ktype = {
 	.default_attrs	= ks_duplex_default_attrs,
 };
 
+DECLARE_RWSEM(ks_duplexes_subsys_rwsem);
 decl_subsys_name(ks_duplexes, duplexes, &ks_duplex_ktype, NULL);
 
 int ks_duplex_create_file(
@@ -187,7 +188,11 @@ int ks_duplex_modinit(void)
 {
 	int err;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_duplexes_subsys.kset.kobj.parent = &kstreamer_subsys.kset.kobj;
+#else
+	ks_duplexes_subsys.kobj.parent = &kstreamer_subsys.kobj;
+#endif
 
 	err = subsystem_register(&ks_duplexes_subsys);
 	if (err < 0)
