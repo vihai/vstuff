@@ -1147,8 +1147,6 @@ void vgsm_module_failed_text(struct vgsm_module *module,
 	vsnprintf(tmpstr, sizeof(tmpstr), fmt, ap);
 	va_end(ap);
 
-	vgsm_comm_close(&module->comm);
-
 	vgsm_module_set_status(module,
 		VGSM_MODULE_STATUS_FAILED, FAILED_RETRY_TIME,
 		tmpstr);
@@ -5926,6 +5924,8 @@ static void vgsm_module_timer(void *data)
 	case VGSM_MODULE_STATUS_FAILED:
 
 		if (module->failure_attempts < 3) {
+			vgsm_comm_close(&module->comm);
+
 			if (tcflush(module->me_fd, TCIOFLUSH) < 0) {
 				ast_log(LOG_WARNING,
 					"Error flushing device: %s",
@@ -5946,8 +5946,6 @@ static void vgsm_module_timer(void *data)
 				module->name);
 
 			vgsm_module_emerg_off(module);
-
-			vgsm_comm_open(&module->comm, module->me_fd);
 
 			vgsm_module_set_status(module,
 				VGSM_MODULE_STATUS_POWERING_ON,
