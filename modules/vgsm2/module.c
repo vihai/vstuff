@@ -716,7 +716,7 @@ static void vgsm_module_node_release(struct ks_node *node)
 	struct vgsm_module *module =
 		container_of(node, struct vgsm_module, ks_node);
 
-	printk(KERN_DEBUG "vgsm_module_node_release()\n");
+	vgsm_debug_module(module, 1, "vgsm_module_node_release()\n");
 
 	kfree(module);
 }
@@ -826,16 +826,6 @@ static int vgsm_module_ioctl_identify(
 	return 0;
 }
 
-static int vgsm_module_ioctl_read_serial(
-	struct vgsm_module *module,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct vgsm_card *card = module->card;
-
-	return put_user(card->serial_number, (int __user *)arg);
-}
-
 static int vgsm_module_ioctl(
 	struct vgsm_uart *uart,
 	unsigned int cmd,
@@ -869,24 +859,12 @@ static int vgsm_module_ioctl(
 		return vgsm_module_ioctl_sim_route(module, cmd, arg);
 	break;
 
-	case VGSM_IOC_FW_VERSION:
-		return vgsm_card_ioctl_fw_version(module->card, cmd, arg);
-	break;
-
-	case VGSM_IOC_FW_UPGRADE:
-		return vgsm_card_ioctl_fw_upgrade(module->card, cmd, arg);
-	break;
-
-	case VGSM_IOC_FW_READ:
-		return vgsm_card_ioctl_fw_read(module->card, cmd, arg);
-	break;
-
 	case VGSM_IOC_IDENTIFY:
 		return vgsm_module_ioctl_identify(module, cmd, arg);
 	break;
 
-	case VGSM_IOC_READ_SERIAL:
-		return vgsm_module_ioctl_read_serial(module, cmd, arg);
+	case VGSM_IOC_FW_VERSION: /* Shortcut */
+		return vgsm_card_ioctl_fw_version(module->card, cmd, arg);
 	break;
 	}
 
@@ -921,7 +899,7 @@ static struct uart_driver vgsm_uart_driver_asc0 =
 	.dev_name		= "vgsm2_me",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 128,
+	.nr			= VGSM_MAX_CARDS * VGSM_MAX_MODULES,
 	.cons			= NULL,
 };
 
@@ -932,7 +910,7 @@ static struct uart_driver vgsm_uart_driver_asc1 =
 	.dev_name		= "vgsm2_mea",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 128,
+	.nr			= VGSM_MAX_CARDS * VGSM_MAX_MODULES,
 	.cons			= NULL,
 };
 
@@ -943,7 +921,7 @@ static struct uart_driver vgsm_uart_driver_mesim =
 	.dev_name		= "vgsm2_mesim",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 128,
+	.nr			= VGSM_MAX_CARDS * VGSM_MAX_MODULES,
 	.cons			= NULL,
 };
 
@@ -983,7 +961,7 @@ struct vgsm_module *vgsm_module_create(
 		module->card->regs_mem + asc0_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 8 + module->id,
+		card->id * VGSM_MAX_MODULES + module->id,
 		FALSE,
 		vgsm_module_ioctl);
 
@@ -993,7 +971,7 @@ struct vgsm_module *vgsm_module_create(
 		module->card->regs_mem + asc1_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 8 + module->id,
+		card->id * VGSM_MAX_MODULES + module->id,
 		FALSE,
 		NULL);
 
@@ -1003,7 +981,7 @@ struct vgsm_module *vgsm_module_create(
 		module->card->regs_mem + mesim_base,
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
-		card->id * 8 + module->id,
+		card->id * VGSM_MAX_MODULES + module->id,
 		TRUE,
 		vgsm_mesim_ioctl);
 

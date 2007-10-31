@@ -263,9 +263,9 @@ struct vgsm_module
 //	pthread_t mesim_monitor_thread;
 
 	struct {
-		__u8 ver_major;
-		__u8 ver_minor;
-		__u8 ver_service;
+		__u8 ver_maj;
+		__u8 ver_min;
+		__u8 ver_ser;
 	} card;
 
 	struct {

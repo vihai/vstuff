@@ -30,6 +30,8 @@
 //#define VGSM_IOC_IDENTIFY		_IOR(0xd1, 14, unsigned int)
 //#define VGSM_IOC_READ_SERIAL		_IOR(0xd1, 15, unsigned int)
 //#define VGSM_IOC_SIM_GET_ID		_IOR(0xd1, 16, unsigned int)
+//#define VGSM_IOC_FW_FLASH_VERSION	_IOR(0xd1, 17, unsigned int)
+//#define VGSM_IOC_FW_UPGRADE_STAT	_IOR(0xd1, 18, unsigned int)
 
 struct vgsm_fw_header
 {

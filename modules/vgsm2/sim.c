@@ -69,7 +69,7 @@ static struct uart_driver vgsm_uart_driver_sim =
 	.dev_name		= "vgsm2_sim",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= 128,
+	.nr			= VGSM_MAX_CARDS * VGSM_MAX_MODULES,
 	.cons			= NULL,
 };
 

@@ -53,6 +53,7 @@ enum vgsm_card_flags
 	VGSM_CARD_FLAGS_SHUTTING_DOWN,
 	VGSM_CARD_FLAGS_RECONFIG_PENDING,
 	VGSM_CARD_FLAGS_IDENTIFY,
+	VGSM_CARD_FLAGS_FLASH_ACCESS,
 };
 
 struct vgsm_card
@@ -63,6 +64,9 @@ struct vgsm_card
 	spinlock_t lock;
 
 	struct pci_dev *pci_dev;
+
+	struct cdev cdev;
+	struct class_device class_device;
 
 	int id;
 
@@ -80,8 +84,16 @@ struct vgsm_card
 	struct vgsm_module *modules[4];
 	struct vgsm_sim sims[4];
 
+	struct vgsm_fw_version fw_version;
+
+	union {
 	u32 serial_number;
-	u32 hw_version;
+	u8 serial_octs[4];
+	};
+
+	struct task_struct *fw_upgrade_thread;
+	u8 *fw_upgrade_mem;
+	struct vgsm_fw_upgrade_stat fw_upgrade_stat;
 };
 
 void vgsm_card_update_router(struct vgsm_card *card);
@@ -89,24 +101,16 @@ void vgsm_card_update_router(struct vgsm_card *card);
 struct vgsm_card *vgsm_card_get(struct vgsm_card *card);
 void vgsm_card_put(struct vgsm_card *card);
 
+int vgsm_card_ioctl_fw_version(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg);
+
 struct vgsm_card *vgsm_card_create(
 	struct vgsm_card *card,
 	struct pci_dev *pci_dev,
 	int id);
 void vgsm_card_destroy(struct vgsm_card *card);
-
-int vgsm_card_ioctl_fw_version(
-	struct vgsm_card *card,
-	unsigned int cmd,
-	unsigned long arg);
-int vgsm_card_ioctl_fw_upgrade(
-	struct vgsm_card *card,
-	unsigned int cmd,
-	unsigned long arg);
-int vgsm_card_ioctl_fw_read(
-	struct vgsm_card *card,
-	unsigned int cmd,
-	unsigned long arg);
 
 int vgsm_card_register(struct vgsm_card *card);
 void vgsm_card_unregister(struct vgsm_card *card);

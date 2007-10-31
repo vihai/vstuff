@@ -27,6 +27,8 @@
 #include <linux/serial.h>
 #include <linux/termios.h>
 #include <linux/serial_core.h>
+#include <linux/cdev.h>
+#include <linux/kdev_t.h>
 
 #include "vgsm2.h"
 #include "card.h"
@@ -36,6 +38,373 @@
 
 struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
 spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
+
+static dev_t vgsm_card_first_dev;
+
+static void vgsm_card_class_release(struct class_device *cd)
+{
+}
+
+static struct class vgsm_card_class = {
+	.name = "vgsm_card",
+	.release = vgsm_card_class_release,
+};
+
+static int vgsm_card_cdev_open(
+	struct inode *inode,
+	struct file *file)
+{
+	struct vgsm_card *card;
+
+	file->private_data = NULL;
+
+	spin_lock(&vgsm_cards_list_lock);
+	list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
+		if (card->id == inode->i_rdev - vgsm_card_first_dev)
+			file->private_data = card;
+	}
+	spin_unlock(&vgsm_cards_list_lock);
+
+	if (!file->private_data)
+		return -ENOENT;
+
+	return 0;
+}
+
+static int vgsm_card_cdev_release(
+	struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static ssize_t vgsm_card_cdev_read(
+	struct file *file,
+	char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
+	return -ENOTSUPP;
+}
+
+static ssize_t vgsm_card_cdev_write(
+	struct file *file,
+	const char __user *buf,
+	size_t count,
+	loff_t *offp)
+{
+	return -ENOTSUPP;
+}
+
+static int vgsm_card_asmi_waitbusy(struct vgsm_card *card)
+{
+	int i;
+
+	if (vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING) {
+
+		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
+				VGSM_R_ASMI_STA_V_RUNNING); i++)
+			udelay(1);
+
+		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
+				VGSM_R_ASMI_STA_V_RUNNING); i++)
+			msleep(10);
+
+		if (i == 500)
+			return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static u8 vgsm_card_asmi_readb(struct vgsm_card *card, int pos)
+{
+	vgsm_outl(card, VGSM_R_ASMI_ADDR, pos);
+	vgsm_outl(card, VGSM_R_ASMI_CTL,
+		VGSM_R_ASMI_CTL_V_RDEN |
+		VGSM_R_ASMI_CTL_V_READ |
+		VGSM_R_ASMI_CTL_V_START);
+
+	vgsm_card_asmi_waitbusy(card);
+
+	return VGSM_R_ASMI_STA_V_DATAOUT(vgsm_inl(card, VGSM_R_ASMI_STA));
+}
+
+int vgsm_card_ioctl_fw_version(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	if (copy_to_user((void __user *)arg, &card->fw_version,
+						sizeof(card->fw_version)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int vgsm_card_ioctl_fw_flash_version(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_fw_version fw_version;
+
+	memset(&fw_version, 0, sizeof(fw_version));
+
+	fw_version.maj = vgsm_card_asmi_readb(card, 0x5ffffd);
+	fw_version.min = vgsm_card_asmi_readb(card, 0x5ffffe);
+	fw_version.ser = vgsm_card_asmi_readb(card, 0x5fffff);
+
+	if (copy_to_user((void __user *)arg, &fw_version, sizeof(fw_version)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int vgsm_card_ioctl_fw_upgrade(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm2_fw_header fwh;
+	int err;
+	int i;
+	u32 led_src_orig;
+	u32 led = 0, prev_led = 0;
+
+	if (!capable(CAP_SYS_ADMIN)) {
+		err = -EPERM;
+		goto err_no_capa;
+	}
+
+	if (copy_from_user(&fwh, (void *)arg, sizeof(fwh))) {
+		err = -EFAULT;
+		goto err_copy_from_user;
+        }
+
+	if (fwh.size > 0x60000) {
+		err = -ENOMEM;
+		goto err_too_big;
+	}
+
+	if (test_and_set_bit(VGSM_CARD_FLAGS_FLASH_ACCESS, &card->flags)) {
+		err = -EBUSY;
+		goto err_busy;
+	}
+
+	vgsm_msg_card(card, KERN_INFO,
+		"Firmware programming started (%d bytes)...\n",
+		fwh.size);
+
+	led_src_orig = vgsm_inl(card, VGSM_R_LED_SRC);
+	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
+
+	card->fw_upgrade_stat.state = VGSM_FW_UPGRADE_ERASE;
+	card->fw_upgrade_stat.tot = 0x60000;
+
+	for(i=0; i<0x60000; i+=0x10000) {
+		vgsm_msg_card(card, KERN_INFO,
+			"Erasing sector 0x%05x\n", i);
+
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+				VGSM_R_ASMI_CTL_V_WREN |
+				VGSM_R_ASMI_CTL_V_SECTOR_ERASE |
+				VGSM_R_ASMI_CTL_V_START);
+
+		card->fw_upgrade_stat.pos = i;
+
+		led = ((i / 0x10000) % 2) ? 0x5555 : 0xaaaa;
+		if (led != prev_led) {
+			prev_led = led;
+			vgsm_outl(card, VGSM_R_LED_USER, led);
+		}
+
+		err = vgsm_card_asmi_waitbusy(card);
+		if (err < 0)
+			goto err_timeout;
+	}
+
+	card->fw_upgrade_stat.state = VGSM_FW_UPGRADE_WRITE;
+	card->fw_upgrade_stat.tot = fwh.size;
+
+	for(i=0; i<fwh.size; i++) {
+		u8 b;
+
+		if (copy_from_user(&b, (void *)(arg + sizeof(fwh) + i),
+				sizeof(b))) {
+			err = -EFAULT;
+			goto err_copy_from_user_payload;
+		}
+
+		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
+		vgsm_outl(card, VGSM_R_ASMI_CTL,
+				VGSM_R_ASMI_CTL_V_WREN |
+				VGSM_R_ASMI_CTL_V_WRITE |
+				VGSM_R_ASMI_CTL_V_START |
+				VGSM_R_ASMI_CTL_V_DATAIN(b));
+
+		card->fw_upgrade_stat.pos = i;
+
+		led = 0x5555 >> ((7 - ((i * 8) / fwh.size)) * 2);
+		if (led != prev_led) {
+			prev_led = led;
+			vgsm_outl(card, VGSM_R_LED_USER, led);
+		}
+
+		err = vgsm_card_asmi_waitbusy(card);
+		if (err < 0)
+			goto err_timeout;
+	}
+
+	vgsm_msg_card(card, KERN_INFO,
+		"Firmware programming completed\n");
+
+	set_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags);
+
+	card->fw_upgrade_stat.state = VGSM_FW_UPGRADE_OK;
+	card->fw_upgrade_stat.pos = 0;
+
+	clear_bit(VGSM_CARD_FLAGS_FLASH_ACCESS, &card->flags);
+	vgsm_led_update();
+
+	return 0; 
+
+err_timeout:
+err_copy_from_user_payload:
+	card->fw_upgrade_stat.state = VGSM_FW_UPGRADE_KO;
+	card->fw_upgrade_stat.pos = 0;
+	clear_bit(VGSM_CARD_FLAGS_FLASH_ACCESS, &card->flags);
+	vgsm_led_update();
+err_busy:
+err_too_big:
+err_copy_from_user:
+err_no_capa:
+
+	return err;
+}
+
+static int vgsm_card_ioctl_fw_read(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	int err;
+	int i;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (test_and_set_bit(VGSM_CARD_FLAGS_FLASH_ACCESS, &card->flags)) {
+		err = -EBUSY;
+		goto err_busy;
+	}
+
+	card->fw_upgrade_stat.state = VGSM_FW_UPGRADE_READ;
+	card->fw_upgrade_stat.pos = 0;
+	card->fw_upgrade_stat.tot = 0x60000;
+
+	for(i=0; i<0x60000; i++) {
+		u8 b;
+
+		card->fw_upgrade_stat.pos = i;
+
+		b = vgsm_card_asmi_readb(card, i);
+
+		if (copy_to_user((void __user *)(arg + i),
+				&b, sizeof(b))) {
+			err = -EFAULT;
+			goto err_copy_to_user_payload;
+		}
+	}
+
+	clear_bit(VGSM_CARD_FLAGS_FLASH_ACCESS, &card->flags);
+
+	return i; 
+
+err_copy_to_user_payload:
+	clear_bit(VGSM_CARD_FLAGS_FLASH_ACCESS, &card->flags);
+err_busy:
+
+	return err;
+}
+
+static int vgsm_card_ioctl_fw_upgrade_stat(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	if (copy_to_user((void __user *)arg, &card->fw_upgrade_stat,
+						sizeof(card->fw_upgrade_stat)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int vgsm_card_ioctl_read_serial(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	return put_user(card->serial_number, (int __user *)arg);
+}
+
+int vgsm_card_cdev_ioctl(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = file->private_data;
+
+	switch(cmd) {
+	case VGSM_IOC_FW_VERSION:
+		return vgsm_card_ioctl_fw_version(card, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_FLASH_VERSION:
+		return vgsm_card_ioctl_fw_flash_version(card, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_UPGRADE:
+		return vgsm_card_ioctl_fw_upgrade(card, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_READ:
+		return vgsm_card_ioctl_fw_read(card, cmd, arg);
+	break;
+
+	case VGSM_IOC_FW_UPGRADE_STAT:
+		return vgsm_card_ioctl_fw_upgrade_stat(card, cmd, arg);
+	break;
+
+	case VGSM_IOC_READ_SERIAL:
+		return vgsm_card_ioctl_read_serial(card, cmd, arg);
+	break;
+	}
+
+	return -ENOIOCTLCMD;
+}
+
+struct file_operations vgsm_card_fops =
+{
+	.owner		= THIS_MODULE,
+	.read		= vgsm_card_cdev_read,
+	.write		= vgsm_card_cdev_write,
+	.ioctl		= vgsm_card_cdev_ioctl,
+	.open		= vgsm_card_cdev_open,
+	.release	= vgsm_card_cdev_release,
+	.llseek		= no_llseek,
+};
+
+#ifndef HAVE_CLASS_DEV_DEVT
+static ssize_t show_dev(struct class_device *class_dev, char *buf)
+{
+	struct 
+	return print_dev_t(buf, vppp_first_dev);
+}
+static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
+#endif
+
 
 /* HW initialization */
 
@@ -304,7 +673,7 @@ static DEVICE_ATTR(sims_number, S_IRUGO,
 
 /*----------------------------------------------------------------------------*/
 
-static ssize_t vgsm_show_hw_version(
+static ssize_t vgsm_show_fw_version(
 	struct device *device,
 	DEVICE_ATTR_COMPAT
 	char *buf)
@@ -314,13 +683,13 @@ static ssize_t vgsm_show_hw_version(
 
 	return snprintf(buf, PAGE_SIZE,
 		"%d.%d.%d\n",
-		(card->hw_version & 0x00ff0000) >> 16,
-		(card->hw_version & 0x0000ff00) >>  8,
-		(card->hw_version & 0x000000ff) >>  0);
+		card->fw_version.maj,
+		card->fw_version.min,
+		card->fw_version.ser);
 }
 
-static DEVICE_ATTR(hw_version, S_IRUGO,
-		vgsm_show_hw_version,
+static DEVICE_ATTR(fw_version, S_IRUGO,
+		vgsm_show_fw_version,
 		NULL);
 
 /*----------------------------------------------------------------------------*/
@@ -372,7 +741,7 @@ static struct device_attribute *vgsm_card_attributes[] =
         &dev_attr_serial_number,
         &dev_attr_mes_number,
         &dev_attr_sims_number,
-        &dev_attr_hw_version,
+        &dev_attr_fw_version,
         &dev_attr_identify,
 	NULL,
 };
@@ -463,170 +832,12 @@ void vgsm_card_destroy(struct vgsm_card *card)
 	vgsm_card_put(card);
 }
 
-static int vgsm_card_asmi_waitbusy(struct vgsm_card *card)
-{
-	int i;
-
-	if (vgsm_inl(card, VGSM_R_ASMI_STA) & VGSM_R_ASMI_STA_V_RUNNING) {
-
-		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
-				VGSM_R_ASMI_STA_V_RUNNING); i++)
-			udelay(1);
-
-		for(i=0; i<500 && (vgsm_inl(card, VGSM_R_ASMI_STA) &
-				VGSM_R_ASMI_STA_V_RUNNING); i++)
-			msleep(10);
-
-		if (i == 500)
-			return -ETIMEDOUT;
-	}
-
-	return 0;
-}
-
-int vgsm_card_ioctl_fw_version(
-	struct vgsm_card *card,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	u32 version = vgsm_inl(card, VGSM_R_VERSION);
-
-	return put_user(version, (int __user *)arg);
-}
-
-int vgsm_card_ioctl_fw_upgrade(
-	struct vgsm_card *card,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	struct vgsm2_fw_header fwh;
-	int err;
-	int i;
-	u32 led_src_orig;
-	u32 led = 0, prev_led = 0;
-
-	if (copy_from_user(&fwh, (void *)arg, sizeof(fwh))) {
-		err = -EFAULT;
-		goto err_copy_from_user;
-	}
-
-	vgsm_msg_card(card, KERN_INFO,
-		"Firmware programming started (%d bytes)...\n",
-		fwh.size);
-
-	led_src_orig = vgsm_inl(card, VGSM_R_LED_SRC);
-	vgsm_outl(card, VGSM_R_LED_SRC, 0xffffffff);
-
-	for(i=0; i<0x60000; i+=0x10000) {
-		vgsm_msg_card(card, KERN_INFO,
-			"Erasing sector 0x%05x\n", i);
-
-		led = ((i / 0x10000) % 2) ? 0x5555 : 0xaaaa;
-		if (led != prev_led) {
-			prev_led = led;
-			vgsm_outl(card, VGSM_R_LED_USER, led);
-		}
-
-		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
-		vgsm_outl(card, VGSM_R_ASMI_CTL,
-				VGSM_R_ASMI_CTL_V_WREN |
-				VGSM_R_ASMI_CTL_V_SECTOR_ERASE |
-				VGSM_R_ASMI_CTL_V_START);
-
-		err = vgsm_card_asmi_waitbusy(card);
-		if (err < 0)
-			goto err_timeout;
-	}
-
-	for(i=0; i<fwh.size; i++) {
-		u8 b;
-
-		if (copy_from_user(&b,
-				(void *)(arg + sizeof(fwh) + i),
-				sizeof(b))) {
-			err = -EFAULT;
-			goto err_copy_from_user_payload;
-		}
-
-		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
-		vgsm_outl(card, VGSM_R_ASMI_CTL,
-				VGSM_R_ASMI_CTL_V_WREN |
-				VGSM_R_ASMI_CTL_V_WRITE |
-				VGSM_R_ASMI_CTL_V_START |
-				VGSM_R_ASMI_CTL_V_DATAIN(b));
-
-		led = 0x5555 >> ((7 - ((i * 8) / fwh.size)) * 2);
-		if (led != prev_led) {
-			prev_led = led;
-			vgsm_outl(card, VGSM_R_LED_USER, led);
-		}
-
-		err = vgsm_card_asmi_waitbusy(card);
-		if (err < 0)
-			goto err_timeout;
-	}
-
-	vgsm_msg_card(card, KERN_INFO,
-		"Firmware programming completed\n");
-
-	set_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags);
-	vgsm_led_update();
-
-	return 0; 
-
-err_timeout:
-err_copy_from_user_payload:
-err_copy_from_user:
-
-	return err;
-}
-
-int vgsm_card_ioctl_fw_read(
-	struct vgsm_card *card,
-	unsigned int cmd,
-	unsigned long arg)
-{
-	int err;
-	int i;
-
-	for(i=0; i<0x60000; i++) {
-		u8 b;
-
-		vgsm_outl(card, VGSM_R_ASMI_ADDR, i);
-		vgsm_outl(card, VGSM_R_ASMI_CTL,
-			VGSM_R_ASMI_CTL_V_RDEN |
-			VGSM_R_ASMI_CTL_V_READ |
-			VGSM_R_ASMI_CTL_V_START);
-
-		vgsm_card_asmi_waitbusy(card);
-
-		b = VGSM_R_ASMI_STA_V_DATAOUT(
-				vgsm_inl(card, VGSM_R_ASMI_STA));
-
-		if (copy_to_user((void __user *)(arg + i),
-				&b, sizeof(b))) {
-			err = -EFAULT;
-			goto err_copy_to_user_payload;
-		}
-	}
-
-	return i; 
-
-err_copy_to_user_payload:
-
-	return err;
-}
 
 int vgsm_card_probe(struct vgsm_card *card)
 {
 	int err;
 	int i;
 	u32 r_info;
-
-	union {
-		__u32 serial;
-		__u8 octets[4];
-	} s;
 
 	/* From here on vgsm_msg_card may be used */
 
@@ -713,7 +924,12 @@ int vgsm_card_probe(struct vgsm_card *card)
 		goto err_card_not_responding;
 	}
 
-	card->hw_version = vgsm_inl(card, VGSM_R_VERSION);
+	{
+	__u32 fw_version_raw = vgsm_inl(card, VGSM_R_VERSION);
+	card->fw_version.maj = (fw_version_raw & 0x00ff0000) >> 16;
+	card->fw_version.min = (fw_version_raw & 0x0000ff00) >> 8;
+	card->fw_version.ser = (fw_version_raw & 0x000000ff) >> 0;
+	}
 
 	if (card->sims_number > 8) {
 		WARN_ON(1);
@@ -732,26 +948,13 @@ int vgsm_card_probe(struct vgsm_card *card)
 		card->regs_bus_mem);
 
 	vgsm_msg_card(card, KERN_INFO,
-		"HW version: %d.%d.%d\n",
-		(card->hw_version & 0x00ff0000) >> 16,
-		(card->hw_version & 0x0000ff00) >>  8,
-		(card->hw_version & 0x000000ff) >>  0);
+		"FW version: %d.%d.%d\n",
+		card->fw_version.maj,
+		card->fw_version.min,
+		card->fw_version.ser);
 
-	for(i=0; i<sizeof(s);i++) {
-		vgsm_outl(card, VGSM_R_ASMI_ADDR, 0x70000 + i);
-		vgsm_outl(card, VGSM_R_ASMI_CTL,
-			VGSM_R_ASMI_CTL_V_RDEN |
-			VGSM_R_ASMI_CTL_V_READ |
-			VGSM_R_ASMI_CTL_V_START);
-
-		vgsm_card_asmi_waitbusy(card);
-
-		s.octets[i] = VGSM_R_ASMI_STA_V_DATAOUT(
-				vgsm_inl(card, VGSM_R_ASMI_STA));
-
-	}
-
-	card->serial_number = s.serial;
+	for(i=0; i<ARRAY_SIZE(card->serial_octs);i++)
+		card->serial_octs[i] = vgsm_card_asmi_readb(card, 0x70000 + i);
 
 	if (card->serial_number)
 		vgsm_msg_card(card, KERN_INFO,
@@ -812,8 +1015,46 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	set_bit(VGSM_CARD_FLAGS_READY, &card->flags);
 
+	cdev_init(&card->cdev, &vgsm_card_fops);
+	card->cdev.owner = THIS_MODULE;
+
+	err = cdev_add(&card->cdev, vgsm_card_first_dev + card->id, 1);
+	if (err < 0)
+		goto err_cdev_add;
+
+	snprintf(card->class_device.class_id,
+		sizeof(card->class_device.class_id),
+		"vgsm2_card%d", card->id);
+	card->class_device.class = &vgsm_card_class;
+	card->class_device.dev = NULL;
+#ifdef HAVE_CLASS_DEV_DEVT
+	card->class_device.devt = vgsm_card_first_dev + card->id;
+#endif
+
+	err = class_device_register(&card->class_device);
+	if (err < 0)
+		goto err_class_device_register;
+
+#ifndef HAVE_CLASS_DEV_DEVT
+	err = class_device_create_file(
+		&card->class_device,
+		&class_device_attr_dev);
+	if (err < 0)
+		goto err_class_device_create_file;
+#endif
+
 	return 0;
 
+	class_device_unregister(&card->class_device);
+err_class_device_register:
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+		&card->class_device,
+		&class_device_attr_dev);
+err_class_device_create_file:
+#endif
+	cdev_del(&card->cdev);
+err_cdev_add:
 err_module_create:
 	for(i=card->mes_number-1; i>=0; i--) {
 		if (card->modules[i])
@@ -841,9 +1082,16 @@ err_pci_enable_device:
 void vgsm_card_remove(struct vgsm_card *card)
 {
 	int i;
-	//int shutting_down = FALSE;
 
 	/* Clean up any allocated resources and stuff here */
+
+	class_device_unregister(&card->class_device);
+#ifndef HAVE_CLASS_DEV_DEVT
+	class_device_remove_file(
+		&card->class_device,
+		&class_device_attr_dev);
+#endif
+	cdev_del(&card->cdev);
 
 	vgsm_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n", card->regs_mem);
@@ -972,10 +1220,29 @@ void vgsm_card_unregister(struct vgsm_card *card)
 
 int __init vgsm_card_modinit(void)
 {
-	return 1;
+	int err;
+
+	err = class_register(&vgsm_card_class);
+	if (err < 0)
+		goto err_class_register;
+
+	err = alloc_chrdev_region(&vgsm_card_first_dev, 0, VGSM_MAX_CARDS,
+							vgsm_DRIVER_NAME);
+	if (err < 0)
+		goto err_register_chrdev;
+
+	return 0;
+
+	unregister_chrdev_region(vgsm_card_first_dev, VGSM_MAX_CARDS);
+err_register_chrdev:
+	class_unregister(&vgsm_card_class);
+err_class_register:
+
+	return err;
 }
 
 void __exit vgsm_card_modexit(void)
 {
+	unregister_chrdev_region(vgsm_card_first_dev, VGSM_MAX_CARDS);
+	class_unregister(&vgsm_card_class);
 }
-

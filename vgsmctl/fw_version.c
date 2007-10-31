@@ -27,6 +27,7 @@
 #include <list.h>
 
 #include <linux/vgsm.h>
+#include <linux/vgsm2.h>
 
 #include "vgsmctl.h"
 #include "fw_version.h"
@@ -43,18 +44,19 @@ static int do_fw_version(
 		return 1;
 	}
 
-	int val = 0;
+	struct vgsm_fw_version fw_version;
 
-	if (ioctl(fd, VGSM_IOC_FW_VERSION, &val) < 0) {
+	if (ioctl(fd, VGSM_IOC_FW_VERSION, &fw_version) < 0) {
 		fprintf(stderr, "ioctl(IOC_FW_VERSION) failed: %s\n",
 			strerror(errno));
 
 		return 1;
 	}
 
-	printf("%d.%d.%d\n", (val & 0xff0000) >> 16, 
-				(val & 0x00ff00) >> 8,
-				(val & 0x0000ff));
+	printf("%d.%d.%d\n",
+		fw_version.maj,
+		fw_version.min,
+		fw_version.ser);
 
 	return 0;
 }

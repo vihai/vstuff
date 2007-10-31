@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include <netinet/in.h>
 
@@ -48,10 +49,74 @@ struct fw_file_header
 	__u8 reserved[14];
 };
 
+static const char *vgsm_upg_state_to_text(enum vgsm_fw_upgrade_state state)
+{
+	switch(state) {
+	case VGSM_FW_UPGRADE_ERASE:
+		return "ERASE";
+	case VGSM_FW_UPGRADE_WRITE:
+		return "WRITE";
+	case VGSM_FW_UPGRADE_READ:
+		return "READ";
+	case VGSM_FW_UPGRADE_OK:
+		return "OK";
+	case VGSM_FW_UPGRADE_KO:
+		return "KO";
+	}
+
+	return "*INVALID*";
+}
+
+static int spawn_monitor(int fd)
+{
+	int pid = fork();
+	if (pid != 0)
+		return pid;
+	else if (pid < 0) {
+		fprintf(stderr, "Cannot fork: %s\n", strerror(errno));
+		return -1;
+	}
+
+	struct vgsm_fw_upgrade_stat upgstat;
+
+	do {
+		if (ioctl(fd, VGSM_IOC_FW_UPGRADE_STAT, &upgstat) < 0)
+			_exit(1);
+
+		printf("%s: 0x%05x/0x%05x          ",
+			vgsm_upg_state_to_text(upgstat.state),
+			upgstat.pos,
+			upgstat.tot);
+
+		usleep(50000);
+
+		int i;
+		for(i=0; i<40; i++)
+			printf("\b");
+	} while(upgstat.state != VGSM_FW_UPGRADE_OK ||
+		upgstat.state != VGSM_FW_UPGRADE_KO);
+
+	_exit(0);
+
+	return 0;
+}
+
 static int do_fw_upgrade(
 	const char *device,
 	const char *filename)
 {
+	printf(
+	"############################ WARNING ###############################\n"
+	"  If firmware programming is interrupted by any means the flash\n"
+	"  memory WILL be corrupted. If possible retry another programming\n"
+	"  session, otherwise the hardware will need to be factory\n"
+	"  reprogrammed with the related costs.\n"
+	"\n"
+	"  Please don't attempt firmware programming unless specifically\n"
+	"  instructed.\n"
+	"####################################################################\n"
+	"\n");
+
 	int fd = open(device, O_RDWR | O_NOCTTY | O_NONBLOCK);
 	if (fd < 0) {
 		fprintf(stderr, "open(%s) failed: %s\n",
@@ -175,34 +240,105 @@ static int do_fw_upgrade(
 		printf("Checksum: 0x%04x\n", fwb->checksum);
 	}
 
-	__u32 cur_version;
-	if (ioctl(fd, VGSM_IOC_FW_VERSION, &cur_version) < 0) {
+	struct vgsm_fw_version fw_version;
+	if (ioctl(fd, VGSM_IOC_FW_VERSION, &fw_version) < 0) {
 		fprintf(stderr, "ioctl(IOC_FW_VERSION) failed: %s\n",
 			strerror(errno));
 
 		return 1;
 	}
 
-	printf("Current version: %d.%d.%d\n",
-		(cur_version & 0x00ff0000) >> 16,
-		(cur_version & 0x0000ff00) >> 8,
-		(cur_version & 0x000000ff) >> 0);
+	struct vgsm_fw_version fw_flash_version;
+	if (ioctl(fd, VGSM_IOC_FW_FLASH_VERSION, &fw_flash_version) < 0) {
+		fprintf(stderr, "ioctl(IOC_FW_FLASH_VERSION) failed: %s\n",
+			strerror(errno));
+
+		return 1;
+	}
+
+	printf("Current version running: %d.%d.%d\n",
+		fw_version.maj,
+		fw_version.min,
+		fw_version.ser);
+
+	if (fw_flash_version.maj != 0xff) {
+		// Not yet programmed
+
+		printf("Current version on flash: %d.%d.%d\n",
+			fw_flash_version.maj,
+			fw_flash_version.min,
+			fw_flash_version.ser);
+	}
 
 	printf("Version to program: %d.%d.%d\n",
 		ffh.version[0],
 		ffh.version[1],
 		ffh.version[2]);
 
-	printf("Updating firmware (this may take a while)...");
-
-	if (ioctl(fd, VGSM_IOC_FW_UPGRADE, fwb) < 0) {
-		fprintf(stderr, "ioctl(IOC_FW_UPGRADE) failed: %s\n",
-			strerror(errno));
-
-		return 1;
+	if (ffh.version[0] < fw_version.maj ||
+	    ffh.version[1] < fw_version.min ||
+	    ffh.version[2] < fw_version.ser) {
+		printf("WARNING: Firmware to program is older than running"
+			" firmware!\n");
 	}
 
-	printf("OK\n");
+	if (ffh.version[0] == fw_version.maj &&
+	    ffh.version[1] == fw_version.min &&
+	    ffh.version[2] == fw_version.ser) {
+		printf("NOTICE: Firmware to program is the same version of"
+			" running firmware.\n");
+	}
+
+	if (isatty(1)) {
+		while(TRUE) {
+			printf("Are you sure? (Y/n): ");
+			char answer[8];
+			fgets(answer, sizeof(answer), stdin);
+
+			if (answer[0] != 'Y' && answer[0] != 'y')
+				return 1;
+
+			if (answer[0] == 'Y' || answer[0] == 'y')
+				break;
+		}
+	}
+
+	printf("Updating firmware (this may take a while)...\n");
+
+	sighandler_t orig_hup_handler = signal(SIGHUP, SIG_IGN);
+	sighandler_t orig_int_handler = signal(SIGINT, SIG_IGN);
+	sighandler_t orig_quit_handler = signal(SIGQUIT, SIG_IGN);
+	sighandler_t orig_term_handler = signal(SIGTERM, SIG_IGN);
+
+	int pid = 0;
+
+	if (isatty(1))
+		pid = spawn_monitor(fd);
+
+	int err;
+	err = ioctl(fd, VGSM_IOC_FW_UPGRADE, fwb);
+
+	if (pid) {
+		int status;
+		int i;
+		for(i=0; i<5; i++) {
+			if (waitpid(pid, &status, WNOHANG) > 0)
+				break;
+
+			sleep(1);
+		}
+
+		if (i==5)
+			kill(pid, SIGKILL);
+	}
+
+	printf("\n");
+
+	if (err < 0) {
+		fprintf(stderr, "ioctl(IOC_FW_UPGRADE) failed: %s\n",
+			strerror(errno));
+		goto err_fw_upgrade;
+	}
 
 	if (interface_version == 2) {
 		__u8 cmp[0x100000];
@@ -212,8 +348,7 @@ static int do_fw_upgrade(
 		if (ioctl(fd, VGSM_IOC_FW_READ, cmp) < 0) {
 			fprintf(stderr, "ioctl(IOC_FW_READ) failed: %s\n",
 				strerror(errno));
-
-			return 1;
+			goto err_fw_read;
 		}
 
 		int i;
@@ -223,12 +358,31 @@ static int do_fw_upgrade(
 					"Compare 0x%08x: 0x%08x != 0x%08x\n",
 					i, cmp[i], fwb->data[i]);
 
-				return 1;
+				goto err_compare;
 			}
 		}
 
 		printf("OK\n");
 	}
+
+	signal(SIGHUP, orig_hup_handler);
+	signal(SIGINT, orig_int_handler);
+	signal(SIGQUIT, orig_quit_handler);
+	signal(SIGTERM, orig_term_handler);
+
+	printf("\n\nFirmware has been SUCCESSFULLY programmed\n");
+	printf("When possible 'rmmod vgsm2' to activate reconfiguration"
+		" and reboot\n");
+
+	return 0;
+
+err_fw_upgrade:
+err_fw_read:
+err_compare:
+	signal(SIGHUP, orig_hup_handler);
+	signal(SIGINT, orig_int_handler);
+	signal(SIGQUIT, orig_quit_handler);
+	signal(SIGTERM, orig_term_handler);
 
 	return 0;
 }
