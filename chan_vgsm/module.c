@@ -1309,6 +1309,13 @@ err_sbc:;
 	if (module->failure_count)
 		ast_cli(fd, "\n  Failure count: %d\n", module->failure_count);
 
+	if (module->card.ver_major) {
+		ast_cli(fd, "  Card firmware: %d.%d.%d\n",
+			module->card.ver_major,
+			module->card.ver_minor,
+			module->card.ver_service);
+	}
+
 out:
 	ast_cli(fd, "\n");
 
@@ -5604,6 +5611,23 @@ static int vgsm_module_open(
 	/***************/
 
 	if (module->interface_version == 2) {
+
+		struct { __u8 pad; __u8 maj; __u8 min; __u8 ser; } ver;
+		if (ioctl(module->me_fd, VGSM_IOC_FW_VERSION, &ver) < 0) {
+			ast_log(LOG_NOTICE,
+				"%s: cannot get firmware version\n",
+				module->name);
+
+			module->card.ver_major = 0;
+			module->card.ver_minor = 0;
+			module->card.ver_service = 0;
+		} else {
+			
+
+			module->card.ver_major = ver.maj;
+			module->card.ver_minor = ver.min;
+			module->card.ver_service = ver.ser;
+		}
 
 		vgsm_mesim_create(&module->mesim, module);
 

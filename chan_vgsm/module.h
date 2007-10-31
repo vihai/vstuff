@@ -263,6 +263,12 @@ struct vgsm_module
 //	pthread_t mesim_monitor_thread;
 
 	struct {
+		__u8 ver_major;
+		__u8 ver_minor;
+		__u8 ver_service;
+	} card;
+
+	struct {
 		char vendor[32];
 		char model[32];
 		char version[32];
