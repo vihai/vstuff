@@ -1,7 +1,7 @@
 /*
  * vISDN - Controlling program
  *
- * Copyright (C) 2005 Daniele Orlandi
+ * Copyright (C) 2005-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -52,15 +52,17 @@ static int do_fw_version(
 		return 1;
 	}
 
+	printf("%d.%d.%d\n", (val & 0xff0000) >> 16, 
+				(val & 0x00ff00) >> 8,
+				(val & 0x0000ff));
+
 	return 0;
 }
 
-static int handle_fw_version(const char *module, int argc, char *argv[], int optind)
+static int handle_fw_version(
+	const char *module,
+	int argc, char *argv[], int optind)
 {
-	if (argc <= optind + 1) {
-		print_usage("Missing <value>\n");
-	}
-
 	return do_fw_version(module, argv[optind + 1]);
 }
 
