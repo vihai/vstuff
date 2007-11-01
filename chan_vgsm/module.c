@@ -1154,8 +1154,6 @@ void vgsm_module_failed_text(struct vgsm_module *module,
 
 void vgsm_module_failed(struct vgsm_module *module, int err)
 {
-	vgsm_comm_close(&module->comm);
-
 	ast_mutex_lock(&module->lock);
 
 	if (err == VGSM_RESP_FAILED)
