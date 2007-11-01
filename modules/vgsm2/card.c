@@ -399,8 +399,10 @@ struct file_operations vgsm_card_fops =
 #ifndef HAVE_CLASS_DEV_DEVT
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
-	struct 
-	return print_dev_t(buf, vppp_first_dev);
+	struct vgsm_card *card =
+		container_of(class_dev, struct vgsm_card, class_device);
+
+	return print_dev_t(buf, vgsm_card_first_dev + card->id);
 }
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
