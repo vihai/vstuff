@@ -101,7 +101,7 @@ void vgsm_card_update_router(struct vgsm_card *card);
 struct vgsm_card *vgsm_card_get(struct vgsm_card *card);
 void vgsm_card_put(struct vgsm_card *card);
 
-int vgsm_card_ioctl_fw_version(
+int vgsm_card_ioctl(
 	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg);

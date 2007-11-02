@@ -864,9 +864,11 @@ static int vgsm_module_ioctl(
 	break;
 
 	case VGSM_IOC_FW_VERSION: /* Shortcut */
-		return vgsm_card_ioctl_fw_version(module->card, cmd, arg);
+	case VGSM_IOC_READ_SERIAL:
+		return vgsm_card_ioctl(module->card, cmd, arg);
 	break;
 	}
+
 
 	return -ENOIOCTLCMD;
 }

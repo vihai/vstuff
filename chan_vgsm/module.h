@@ -266,6 +266,8 @@ struct vgsm_module
 		__u8 ver_maj;
 		__u8 ver_min;
 		__u8 ver_ser;
+
+		__u32 serial;
 	} card;
 
 	struct {

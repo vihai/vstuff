@@ -129,7 +129,7 @@ static u8 vgsm_card_asmi_readb(struct vgsm_card *card, int pos)
 	return VGSM_R_ASMI_STA_V_DATAOUT(vgsm_inl(card, VGSM_R_ASMI_STA));
 }
 
-int vgsm_card_ioctl_fw_version(
+static int vgsm_card_ioctl_fw_version(
 	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg)
@@ -348,14 +348,11 @@ static int vgsm_card_ioctl_read_serial(
 	return put_user(card->serial_number, (int __user *)arg);
 }
 
-int vgsm_card_cdev_ioctl(
-	struct inode *inode,
-	struct file *file,
+int vgsm_card_ioctl(
+	struct vgsm_card *card,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_card *card = file->private_data;
-
 	switch(cmd) {
 	case VGSM_IOC_FW_VERSION:
 		return vgsm_card_ioctl_fw_version(card, cmd, arg);
@@ -383,6 +380,18 @@ int vgsm_card_cdev_ioctl(
 	}
 
 	return -ENOIOCTLCMD;
+}
+
+
+static int vgsm_card_cdev_ioctl(
+	struct inode *inode,
+	struct file *file,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	struct vgsm_card *card = file->private_data;
+
+	return vgsm_card_ioctl(card, cmd, arg);
 }
 
 struct file_operations vgsm_card_fops =

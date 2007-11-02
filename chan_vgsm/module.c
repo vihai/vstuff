@@ -1211,6 +1211,59 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 {
 	struct vgsm_req *req;
 
+	ast_mutex_lock(&module->lock);
+	struct vgsm_module_config *mc = module->current_config;
+
+	ast_cli(fd,
+		"\n"
+		"  Module: %s\n"
+		"  Status: %s\n",
+		module->name,
+		vgsm_module_status_to_text(module->status));
+
+	if (module->status_reason && strlen(module->status_reason))
+		ast_cli(fd, "  Reason: %s\n", module->status_reason);
+
+	if (module->failure_count)
+		ast_cli(fd, "\n  Failure count: %d\n", module->failure_count);
+
+	ast_cli(fd,
+		"\n"
+		"  Device: %s\n"
+		"  ME SIM Device: %s\n"
+		"  Context: %s\n"
+		"  Set clock: %s\n"
+		"  Power off on exit: %s\n",
+		mc->device_filename,
+		mc->mesim_device_filename,
+		mc->context,
+		mc->set_clock ? "YES" : "NO",
+		mc->poweroff_on_exit ? "YES" : "NO");
+
+	if (module->interface_version == 1) {
+		ast_cli(fd,
+			"  RX-gain: %d\n"
+			"  TX-gain: %d\n",
+			mc->rx_gain,
+			mc->tx_gain);
+	}
+
+
+/*	if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_EXTERNAL)
+		ast_cli(fd, "  Route to sim: external\n");
+	else if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_DEFAULT)
+		ast_cli(fd, "  Route to sim: default\n");
+	else
+		ast_cli(fd, "  Route to sim: %s\n", mc->mesim.sim_holder->name);
+*/
+
+
+	if (module->status != VGSM_MODULE_STATUS_READY)
+		goto out;
+
+	/* Avoid holding a lock during long term operations */
+	ast_mutex_unlock(&module->lock);
+
 	/* Voltage */
 	int voltage = -1;
 	req = vgsm_req_make_wait(&module->comm, 5 * SEC, "AT^SBV");
@@ -1251,45 +1304,9 @@ err_sbc:;
 	vgsm_req_put(req);
 
 	ast_mutex_lock(&module->lock);
-	struct vgsm_module_config *mc = module->current_config;
 
 	ast_cli(fd,
 		"\n"
-		"---- Module '%s' ----\n"
-		"  Device: %s\n"
-		"  ME SIM Device: %s\n"
-		"  Context: %s\n"
-		"  RX-gain: %d\n"
-		"  TX-gain: %d\n"
-		"  Set clock: %s\n"
-		"  Power off on exit: %s\n"
-		"\n"
-		"  Status: %s\n",
-		module->name,
-		mc->device_filename,
-		mc->mesim_device_filename,
-		mc->context,
-		mc->rx_gain,
-		mc->tx_gain,
-		mc->set_clock ? "YES" : "NO",
-		mc->poweroff_on_exit ? "YES" : "NO",
-		vgsm_module_status_to_text(module->status));
-
-/*	if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_EXTERNAL)
-		ast_cli(fd, "  Route to sim: external\n");
-	else if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_DEFAULT)
-		ast_cli(fd, "  Route to sim: default\n");
-	else
-		ast_cli(fd, "  Route to sim: %s\n", mc->mesim.sim_holder->name);
-*/
-
-	if (module->status_reason)
-		ast_cli(fd, "  Reason: %s\n", module->status_reason);
-
-	if (module->status != VGSM_MODULE_STATUS_READY)
-		goto out;
-
-	ast_cli(fd,
 		"  Model: %s %s\n"
 		"  Version: %s\n"
 		"  IMEI: %s\n",
@@ -1304,14 +1321,20 @@ err_sbc:;
 	if (current != -1)
 		ast_cli(fd, "  Supply current: %d mA\n", current);
 
-	if (module->failure_count)
-		ast_cli(fd, "\n  Failure count: %d\n", module->failure_count);
-
 	if (module->card.ver_maj) {
-		ast_cli(fd, "  Card firmware: %d.%d.%d\n",
+		ast_cli(fd,
+			"\n"
+			"  Card's firmware: %d.%d.%d\n",
 			module->card.ver_maj,
 			module->card.ver_min,
 			module->card.ver_ser);
+	}
+
+	if (module->card.serial != 0xffffffff &&
+	    module->card.serial != 0x00000000) {
+		ast_cli(fd,
+			"  Card's S/N: %012d\n",
+			module->card.serial);
 	}
 
 out:
@@ -2159,6 +2182,22 @@ static int vgsm_show_module_summary(int fd, struct vgsm_module *module)
 	return RESULT_SUCCESS;
 }
 
+static int vgsm_show_module_details(int fd, struct vgsm_module *module)
+{
+	vgsm_show_module_module(fd, module);
+	vgsm_show_module_serial(fd, module);
+	vgsm_show_module_forwarding(fd, module);
+	vgsm_show_module_callwaiting(fd, module);
+	vgsm_show_module_sim(fd, module);
+	vgsm_show_module_network(fd, module);
+	vgsm_show_module_statistics(fd, module);
+	vgsm_show_module_calls(fd, module);
+	vgsm_show_module_moni(fd, module);
+	vgsm_show_module_smong(fd, module);
+
+	return RESULT_SUCCESS;
+}
+
 static int show_vgsm_modules_cli(int fd, int argc, char *argv[])
 {
 	int err;
@@ -2191,6 +2230,8 @@ static int show_vgsm_modules_cli(int fd, int argc, char *argv[])
 				err = vgsm_show_module_smong(fd, module);
 			else if (!strcasecmp(argv[4], "serial"))
 				err = vgsm_show_module_serial(fd, module);
+			else if (!strcasecmp(argv[4], "details"))
+				err = vgsm_show_module_details(fd, module);
 			else {
 				ast_cli(fd, "Command '%s' unrecognized\n",
 					argv[4]);
@@ -2229,7 +2270,7 @@ static char *show_vgsm_modules_complete(
 {
 	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
 				"statistics", "calls", "moni", "smong",
-				"serial" };
+				"serial", "details" };
 	int i;
 
 	switch(pos) {
@@ -2267,7 +2308,9 @@ static char show_vgsm_modules_help[] =
 "		statistics	show call statistics: inbound/outbound\n"
 "				counters, release codes and duration\n"
 "\n"
-"		calls		show active calls on selected module\n";
+"		calls		show active calls on selected module\n"
+"\n"
+"		details		show detailed informations about module\n";
 
 static struct ast_cli_entry show_vgsm_modules =
 {
@@ -5616,14 +5659,17 @@ static int vgsm_module_open(
 			ast_log(LOG_NOTICE,
 				"%s: cannot get firmware version\n",
 				module->name);
-
-			module->card.ver_maj = 0;
-			module->card.ver_min = 0;
-			module->card.ver_ser = 0;
 		} else {
 			module->card.ver_maj = fw_version.maj;
 			module->card.ver_min = fw_version.min;
 			module->card.ver_ser = fw_version.ser;
+		}
+
+		if (ioctl(module->me_fd, VGSM_IOC_READ_SERIAL,
+					&module->card.serial) < 0) {
+			ast_log(LOG_NOTICE,
+				"%s: cannot read card's serial number\n",
+				module->name);
 		}
 
 		vgsm_mesim_create(&module->mesim, module);
