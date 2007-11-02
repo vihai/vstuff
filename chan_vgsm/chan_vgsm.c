@@ -2285,6 +2285,7 @@ static struct ast_channel *vgsm_request(
 		ast_log(LOG_NOTICE,
 			"Asked to get a channel of unsupported format '%d'\n",
 			format);
+		*cause = AST_CAUSE_FAILURE;
 		err = -1;
 		goto err_unsupported_format;
 	}
@@ -2300,6 +2301,7 @@ static struct ast_channel *vgsm_request(
 			"Invalid destination '%s' format (module/number)\n",
 			(char *)data);
 
+		*cause = AST_CAUSE_FAILURE;
 		err = -1;
 		goto err_invalid_destination;
 	}
@@ -2310,6 +2312,7 @@ static struct ast_channel *vgsm_request(
 			"Invalid destination '%s' format (module/number)\n",
 			(char *)data);
 
+		*cause = AST_CAUSE_FAILURE;
 		err = -1;
 		goto err_invalid_format;
 	}
@@ -2329,6 +2332,7 @@ static struct ast_channel *vgsm_request(
 			ast_log(LOG_ERROR, "Cannot find huntgroup '%s'\n",
 				hg_name);
 
+			*cause = AST_CAUSE_FAILURE;
 			err = -1;
 			goto err_huntgroup_not_found;
 		}
@@ -2338,6 +2342,7 @@ static struct ast_channel *vgsm_request(
 			vgsm_debug_generic("Cannot hunt in huntgroup %s\n",
 					hg_name);
 
+			*cause = AST_CAUSE_CONGESTION;
 			err = -1;
 			goto err_no_module_available;
 		}
@@ -2351,6 +2356,7 @@ static struct ast_channel *vgsm_request(
 		if (!module) {
 			ast_log(LOG_WARNING, "Module %s not found\n",
 				module_name);
+			*cause = AST_CAUSE_FAILURE;
 			err = -1;
 			goto err_module_not_found;
 		}
@@ -2360,13 +2366,18 @@ static struct ast_channel *vgsm_request(
 	vgsm_chan = vgsm_chan_alloc();
 	if (!vgsm_chan) {
 		ast_log(LOG_ERROR, "Cannot allocate vgsm_chan\n");
+		*cause = AST_CAUSE_FAILURE;
+		err = -1;
 		goto err_vgsm_chan_alloc;
 	}
 
 	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN,
 							module, 1, format);
-	if (!vgsm_chan->ast_chan)
+	if (!vgsm_chan->ast_chan) {
+		*cause = AST_CAUSE_FAILURE;
+		err = -1;
 		goto err_vgsm_ast_chan_alloc;
+	}
 
 	vgsm_chan->outbound = TRUE;
 
