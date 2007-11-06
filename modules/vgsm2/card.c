@@ -1056,16 +1056,16 @@ int vgsm_card_probe(struct vgsm_card *card)
 
 	return 0;
 
-	class_device_unregister(&card->class_device);
-err_class_device_register:
+	cdev_del(&card->cdev);
+err_cdev_add:
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
 		&card->class_device,
 		&class_device_attr_dev);
 err_class_device_create_file:
 #endif
-	cdev_del(&card->cdev);
-err_cdev_add:
+	class_device_unregister(&card->class_device);
+err_class_device_register:
 err_module_create:
 	for(i=card->mes_number-1; i>=0; i--) {
 		if (card->modules[i])
@@ -1096,13 +1096,15 @@ void vgsm_card_remove(struct vgsm_card *card)
 
 	/* Clean up any allocated resources and stuff here */
 
-	class_device_unregister(&card->class_device);
+	cdev_del(&card->cdev);
+
 #ifndef HAVE_CLASS_DEV_DEVT
 	class_device_remove_file(
 		&card->class_device,
 		&class_device_attr_dev);
 #endif
-	cdev_del(&card->cdev);
+
+	class_device_unregister(&card->class_device);
 
 	vgsm_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n", card->regs_mem);
