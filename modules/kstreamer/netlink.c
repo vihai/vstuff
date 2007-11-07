@@ -30,7 +30,6 @@ struct sock *ksnl;
 
 static struct workqueue_struct *ks_netlink_rcv_wq;
 
-static spinlock_t ks_cur_xact_lock = SPIN_LOCK_UNLOCKED;
 static struct ks_xact *cur_xact = NULL;
 static struct sk_buff_head ks_backlog;
 
@@ -419,37 +418,29 @@ static int ks_netlink_rcv_msg(
 
 	if (!(cur_xact->flags & KS_XACT_FLAGS_PERSISTENT) ||
 	     cur_xact->flags & KS_XACT_FLAGS_COMPLETED) {
-		spin_lock(&ks_cur_xact_lock);
 		ks_xact_put(cur_xact);
 		cur_xact = NULL;
-		spin_unlock(&ks_cur_xact_lock);
 	}
 
 	return 0;
 }
 
-static int ks_netlink_rcv_skb(struct sk_buff *skb, int *queued)
+static int ks_netlink_rcv_skb(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlh;
 	int err;
 
 	nlh = (struct nlmsghdr *)skb->data;
-	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid) {
-		skb_queue_tail(&ks_backlog, skb);
-
-		*queued = TRUE;
-		return 0;
-	}
+	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid)
+		return -EBUSY;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
 		u32 rlen;
 
 		nlh = (struct nlmsghdr *)skb->data;
 		if (nlh->nlmsg_len < sizeof(*nlh) ||
-		    skb->len < nlh->nlmsg_len) {
-			*queued = FALSE;
+		    skb->len < nlh->nlmsg_len)
 			return 0;
-		}
 
 		rlen = NLMSG_ALIGN(nlh->nlmsg_len);
 		if (rlen > skb->len)
@@ -465,21 +456,6 @@ static int ks_netlink_rcv_skb(struct sk_buff *skb, int *queued)
 	return 0;
 }
 
-static void ks_run_backlog(void)
-{
-	struct sk_buff *skb;
-
-	while ((skb = skb_dequeue(&ks_backlog))) {
-
-		int queued = FALSE;
-
-		ks_netlink_rcv_skb(skb, &queued);
-
-		if (!queued)
-			kfree_skb(skb);
-	}
-}
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void ks_netlink_rcv_work_func(void *data)
 #else
@@ -487,19 +463,34 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 #endif
 {
 	struct sk_buff *skb;
+	int err;
+	int processed;
 
 	while ((skb = skb_dequeue(&ksnl->sk_receive_queue))) {
 
-		int queued = FALSE;
-
-		ks_netlink_rcv_skb(skb, &queued);
-
-		if (!queued)
+		err = ks_netlink_rcv_skb(skb);
+		if (err < 0)
+			skb_queue_tail(&ks_backlog, skb);
+		else
 			kfree_skb(skb);
 	}
 
-	if (!cur_xact)
-		ks_run_backlog();
+redo_backlog:
+	processed = FALSE;
+	while ((skb = skb_dequeue(&ks_backlog))) {
+
+		err = ks_netlink_rcv_skb(skb);
+		if (err < 0)
+			skb_queue_tail(&ks_backlog, skb);
+		else {
+			kfree_skb(skb);
+			processed = TRUE;
+		}
+	}
+
+	if (processed)
+		goto redo_backlog;
+
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
