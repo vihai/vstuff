@@ -391,7 +391,7 @@ static void ks_netlink_receive_msg(
 
 }
 
-void ks_netlink_receive(struct ks_conn *conn)
+int ks_netlink_receive(struct ks_conn *conn)
 {
 	int buf_size = NLMSG_SPACE(8192);
 	void *buf = malloc(buf_size);
@@ -413,7 +413,7 @@ void ks_netlink_receive(struct ks_conn *conn)
 	int len = recvmsg(conn->sock, &msg, 0);
 	if(len < 0) {
 		perror("recvmsg()");
-		return;
+		return -errno;
 	}
 
 	if (conn->debug_netlink)
@@ -433,4 +433,6 @@ void ks_netlink_receive(struct ks_conn *conn)
 	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
 			"<<<-------------------------------------------<<<\n");
+
+	return 0;
 }

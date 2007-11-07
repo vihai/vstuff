@@ -25,6 +25,20 @@
 #include "channel.h"
 #include "pipeline.h"
 
+enum ks_conn_message_type
+{
+	KS_CONN_MSG_CLOSE,
+	KS_CONN_MSG_REFRESH,
+};
+
+struct ks_conn_message
+{
+	enum ks_conn_message_type type;
+	
+	int len;
+	__u8 data[];
+};
+
 enum ks_topology_state
 {
 	KS_TOPOLOGY_STATE_NULL,
@@ -77,8 +91,8 @@ struct ks_conn
 	int debug_state;
 
 	pthread_t protocol_thread;
-	int alert_read;
-	int alert_write;
+	int cmd_read;
+	int cmd_write;
 
 	pthread_mutex_t xacts_lock;
 	struct list_head xacts;
@@ -102,6 +116,12 @@ int ks_conn_establish(struct ks_conn *conn);
 void ks_conn_destroy(struct ks_conn *conn);
 
 int ks_conn_sync(struct ks_conn *conn);
+
+void ks_conn_send_message(
+	struct ks_conn *conn,
+	enum ks_conn_message_type mt,
+	void *data,
+	int len);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 

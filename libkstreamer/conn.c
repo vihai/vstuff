@@ -257,13 +257,87 @@ retry:
 	return 0;
 }
 
+void ks_conn_send_message(
+	struct ks_conn *conn,
+	enum ks_conn_message_type mt,
+	void *data,
+	int len)
+{
+	struct ks_conn_message *msg;
+
+	msg = alloca(sizeof(*msg) + len);
+	msg->type = mt;
+	msg->len = len;
+
+	if (data && len)
+		memcpy(&msg->data, data, len);
+
+	if (write(conn->cmd_write, msg, sizeof(*msg) + len) < 0) {
+		report_conn(conn, LOG_WARNING,
+			"Error writing to command pipe: %s\n",
+				strerror(errno));
+	}
+}
+
+const char *ks_conn_message_type_to_text(
+        enum ks_conn_message_type mt)
+{
+	switch(mt) {
+	case KS_CONN_MSG_CLOSE:
+		return "CLOSE";
+	case KS_CONN_MSG_REFRESH:
+		return "REFRESH";
+	}
+	
+	return "*UNKNOWN*";
+}
+
+static int ks_conn_receive_message(
+	struct ks_conn *conn,
+	struct pollfd polls[])
+{
+	struct ks_conn_message msgh;
+
+	if (read(conn->cmd_read, &msgh, sizeof(msgh)) < 0) {
+		report_conn(conn, LOG_WARNING,
+			"Error reading from command pipe: %s\n",
+			strerror(errno));
+		return FALSE;
+	}
+
+	struct ks_conn_message *msg;
+
+	if (msgh.len) {
+		msg = alloca(sizeof(*msg) + msgh.len);
+		if (!msg) {
+			assert(0);
+			// FIXME
+		}
+
+		memcpy(msg, &msgh, sizeof(*msg));
+
+		read(conn->cmd_read, &msg->data, msg->len);
+	} else
+		msg = &msgh;
+
+//	ks_conn_debug_messages(conn, "Received message %s (len=%d)\n",
+//		ks_conn_message_type_to_text(msg->type), msg->len);
+
+	if (msg->type == KS_CONN_MSG_CLOSE) {
+		return TRUE;
+	} else if (msg->type == KS_CONN_MSG_REFRESH)
+		return FALSE;
+
+	return FALSE;
+}
+
 void *ks_protocol_thread_main(void *data)
 {
 	struct ks_conn *conn = data;
 
 	struct pollfd pollfds[2];
 
-	pollfds[0].fd = conn->alert_read;
+	pollfds[0].fd = conn->cmd_read;
 	pollfds[0].events = POLLHUP | POLLERR | POLLIN;
 
 	pollfds[1].fd = conn->sock;
@@ -286,16 +360,11 @@ void *ks_protocol_thread_main(void *data)
 
 		if (pollfds[0].revents & POLLHUP ||
 		    pollfds[0].revents & POLLERR ||
-		    pollfds[0].revents & POLLNVAL) {
-			report_conn(conn, LOG_ERR,
-				 "kstreamer: poll alert fd error\n");
+		    pollfds[0].revents & POLLNVAL ||
+		    pollfds[0].revents & POLLIN) {
 
-			 return NULL;
-		}
-
-		if (pollfds[0].revents & POLLIN) {
-			char junk;
-			read(conn->alert_read, &junk, sizeof(junk));
+			if (ks_conn_receive_message(conn, pollfds))
+				break;
 
 			if (conn->state == KS_CONN_STATE_IDLE)
 				ks_conn_send_next_packet(conn);
@@ -303,15 +372,11 @@ void *ks_protocol_thread_main(void *data)
 
 		if (pollfds[1].revents & POLLHUP ||
 		    pollfds[1].revents & POLLERR ||
-		    pollfds[1].revents & POLLNVAL) {
-			report_conn(conn, LOG_ERR,
-				 "kstreamer: poll error\n");
-
-			 return NULL;
+		    pollfds[1].revents & POLLNVAL ||
+		    pollfds[1].revents & POLLIN) {
+			if (ks_netlink_receive(conn) < 0)
+				break;
 		}
-
-		if (pollfds[1].revents & POLLIN)
-			ks_netlink_receive(conn);
 	}
 
 	return NULL;
@@ -324,12 +389,13 @@ int ks_conn_establish(struct ks_conn *conn)
 	int filedes[2];
 	if (pipe(filedes) < 0) {
 		report_conn(conn, LOG_ERR,
-			"Cannot create alert pipe: %s\n",
+			"Cannot create cmd pipe: %s\n",
 			strerror(errno));
 		err = -errno;
 		goto err_pipe;
 	}
 
+#if 0
 	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
 		report_conn(conn, LOG_ERR,
 			"Cannot set pipe to non-blocking: %s\n",
@@ -345,29 +411,10 @@ int ks_conn_establish(struct ks_conn *conn)
 		err = -errno;
 		goto err_fcntl_1;
 	}
+#endif
 
-	conn->alert_read = filedes[0];
-	conn->alert_write = filedes[1];
-
-	pthread_attr_t attr;
-	err = pthread_attr_init(&attr);
-	if (err < 0) {
-		report_conn(conn, LOG_ERR,
-			"Cannot create thread attributes: %s\n",
-			strerror(errno));
-		goto err_pthread_attr_init;
-	}
-
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-	err = pthread_create(&conn->protocol_thread, &attr,
-				ks_protocol_thread_main, conn);
-	if (err < 0) {
-		report_conn(conn, LOG_ERR,
-			"Cannot create thread: %s\n",
-			strerror(errno));
-		goto err_pthread_create;
-	}
+	conn->cmd_read = filedes[0];
+	conn->cmd_write = filedes[1];
 
 	conn->sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_KSTREAMER);
 	if (conn->sock < 0) {
@@ -387,6 +434,26 @@ int ks_conn_establish(struct ks_conn *conn)
 		perror("Unable to bind netlink socket");
 		err = -errno;
 		goto err_bind;
+	}
+
+	pthread_attr_t attr;
+	err = pthread_attr_init(&attr);
+	if (err < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot create thread attributes: %s\n",
+			strerror(errno));
+		goto err_pthread_attr_init;
+	}
+
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	err = pthread_create(&conn->protocol_thread, &attr,
+				ks_protocol_thread_main, conn);
+	if (err < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot create thread: %s\n",
+			strerror(errno));
+		goto err_pthread_create;
 	}
 
 	err = ks_conn_get_version(conn);
@@ -411,17 +478,17 @@ int ks_conn_establish(struct ks_conn *conn)
 
 err_invalid_version:
 err_get_version:
-err_bind:
-	close(conn->sock);
-err_socket:
-        pthread_kill(conn->protocol_thread, SIGTERM);
+	pthread_join(conn->protocol_thread, NULL);
 err_pthread_create:
 	pthread_attr_destroy(&attr);
 err_pthread_attr_init:
-err_fcntl_1:
-err_fcntl_0:
-	close(conn->alert_read);
-	close(conn->alert_write);
+err_bind:
+	close(conn->sock);
+err_socket:
+//err_fcntl_1:
+//err_fcntl_0:
+	close(conn->cmd_read);
+	close(conn->cmd_write);
 err_pipe:
 
 	return err;
@@ -429,10 +496,18 @@ err_pipe:
 
 void ks_conn_destroy(struct ks_conn *conn)
 {
-        pthread_kill(conn->protocol_thread, SIGTERM);
+	ks_conn_send_message(conn, KS_CONN_MSG_CLOSE, NULL, 0);
 
-	close(conn->alert_read);
-	close(conn->alert_write);
+	int err;
+	err = -pthread_join(conn->protocol_thread, NULL);
+	if (err) {
+		report_conn(conn, LOG_ERR,
+			"Cannot join protocol thread: %s\n",
+			strerror(-err));
+	}
+
+	close(conn->cmd_read);
+	close(conn->cmd_write);
 
 	pthread_mutex_destroy(&conn->xacts_lock);
 	pthread_mutex_destroy(&conn->topology_lock);

@@ -97,8 +97,7 @@ void ks_xact_queue_request(
 	list_add_tail(&ks_req_get(req)->node, &xact->requests);
 	pthread_mutex_unlock(&xact->requests_lock);
 
-	char junk = 0;
-	write(xact->conn->alert_write, &junk, sizeof(junk));
+	ks_conn_send_message(xact->conn, KS_CONN_MSG_REFRESH, NULL, 0);
 }
 
 struct ks_req *ks_xact_queue_new_request(
@@ -209,8 +208,7 @@ int ks_xact_submit(struct ks_xact *xact)
 	ks_conn_add_xact(xact->conn, xact);
 	xact->state = KS_XACT_STATE_ACTIVE;
 
-	char junk = 0;
-	write(xact->conn->alert_write, &junk, sizeof(junk));
+	ks_conn_send_message(xact->conn, KS_CONN_MSG_REFRESH, NULL, 0);
 
 	return 0;
 }

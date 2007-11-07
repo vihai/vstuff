@@ -31,7 +31,7 @@ int ks_netlink_put_attr(
 	void *data,
 	int data_len);
 
-void ks_netlink_receive(struct ks_conn *conn);
+int ks_netlink_receive(struct ks_conn *conn);
 
 int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
 
