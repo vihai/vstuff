@@ -591,6 +591,7 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 
 	printk(KERN_DEBUG " ");
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		printk("%s/%s/%s =====(%s/%s/%s)=====> ",
@@ -603,6 +604,7 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan)
 		printk("%s/%s\n",
@@ -615,11 +617,13 @@ static int ks_pipeline_negotiate_mtu(struct ks_pipeline *pipeline)
 	struct ks_chan *chan;
 	int min_mtu = 65536;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 		if (chan->mtu != -1 &&
 		    chan->mtu < min_mtu)
 			min_mtu = chan->mtu;
 	}
+	rcu_read_unlock();
 
 	return min_mtu;
 }
@@ -633,10 +637,13 @@ static void ks_pipeline_connected_to_null(
 	struct ks_chan *chan;
 	struct ks_chan *prev_chan = NULL;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (chan == stop_at)
+		if (chan == stop_at) {
+			rcu_read_unlock();
 			goto done;
+		}
 
 		if (chan->ops->disconnect)
 			chan->ops->disconnect(chan);
@@ -647,13 +654,13 @@ static void ks_pipeline_connected_to_null(
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan && prev_chan->to->ops->disconnect)
 		prev_chan->to->ops->disconnect(
 			prev_chan->to, NULL, chan);
 
 done:
-
 	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
@@ -678,13 +685,16 @@ static int ks_pipeline_null_to_connected(struct ks_pipeline *pipeline)
 	struct ks_chan *prev_chan = NULL;
 	int err;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		if (chan->from->ops->connect) {
 			err = chan->from->ops->connect(
 				chan->from, chan, prev_chan);
-			if (err < 0)
+			if (err < 0) {
+				rcu_read_unlock();
 				goto failed;
+			}
 		}
 
 		if (chan->ops->connect) {
@@ -694,12 +704,14 @@ static int ks_pipeline_null_to_connected(struct ks_pipeline *pipeline)
 					chan->from->ops->disconnect(chan->from,
 							chan, prev_chan);
 
+				rcu_read_unlock();
 				goto failed;
 			}
 		}
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan &&
 	    prev_chan->to->ops->connect)
@@ -726,10 +738,13 @@ static void ks_pipeline_open_to_connected(
 	struct ks_chan *chan;
 	struct ks_chan *prev_chan = NULL;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (chan == stop_at)
+		if (chan == stop_at) {
+			rcu_read_unlock();
 			goto done;
+		}
 
 		if (chan->ops->close)
 			chan->ops->close(chan);
@@ -740,6 +755,7 @@ static void ks_pipeline_open_to_connected(
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan && prev_chan->to->ops->close)
 		prev_chan->to->ops->close(
@@ -758,13 +774,16 @@ static int ks_pipeline_connected_to_open(struct ks_pipeline *pipeline)
 
 	pipeline->mtu = ks_pipeline_negotiate_mtu(pipeline);
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		if (chan->from->ops->open) {
 			err = chan->from->ops->open(
 				chan->from, chan, prev_chan);
-			if (err < 0)
+			if (err < 0) {
+				rcu_read_unlock();
 				goto failed;
+			}
 		}
 
 		if (chan->ops->open) {
@@ -774,12 +793,14 @@ static int ks_pipeline_connected_to_open(struct ks_pipeline *pipeline)
 					chan->from->ops->close(chan->from,
 							chan, prev_chan);
 
+				rcu_read_unlock();
 				goto failed;
 			}
 		}
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan && prev_chan->to->ops->open)
 		prev_chan->to->ops->open(
@@ -805,10 +826,13 @@ static void ks_pipeline_flowing_to_open(
 	struct ks_chan *chan;
 	struct ks_chan *prev_chan = NULL;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
-		if (chan == stop_at)
+		if (chan == stop_at) {
+			rcu_read_unlock();
 			goto done;
+		}
 
 		if (chan->ops->stop)
 			chan->ops->stop(chan);
@@ -819,6 +843,7 @@ static void ks_pipeline_flowing_to_open(
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan && prev_chan->to->ops->stop)
 		prev_chan->to->ops->stop(
@@ -835,13 +860,16 @@ static int ks_pipeline_open_to_flowing(struct ks_pipeline *pipeline)
 	struct ks_chan *prev_chan = NULL;
 	int err;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		if (chan->from->ops->start) {
 			err = chan->from->ops->start(
 				chan->from, chan, prev_chan);
-			if (err < 0)
+			if (err < 0) {
+				rcu_read_unlock();
 				goto failed;
+			}
 		}
 
 		if (chan->ops->start) {
@@ -851,12 +879,14 @@ static int ks_pipeline_open_to_flowing(struct ks_pipeline *pipeline)
 					chan->from->ops->stop(chan->from,
 							chan, prev_chan);
 
+				rcu_read_unlock();
 				goto failed;
 			}
 		}
 
 		prev_chan = chan;
 	}
+	rcu_read_unlock();
 
 	if (prev_chan && prev_chan->to->ops->start)
 		prev_chan->to->ops->start(
@@ -1012,12 +1042,11 @@ void ks_pipeline_stimulate(struct ks_pipeline *pipeline)
 			chan->from->ops->stimulus(
 				chan->from, chan, prev_chan);
 	}
+	rcu_read_unlock();
 
 	if (prev_chan && prev_chan->to->ops->stimulus)
 		prev_chan->to->ops->stimulus(
 			prev_chan->to, NULL, chan);
-
-	rcu_read_unlock();
 }
 EXPORT_SYMBOL(ks_pipeline_stimulate);
 
