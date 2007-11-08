@@ -391,7 +391,8 @@ int ks_pipeline_cmd_new(
 		return err;
 	}
 
-	ks_pipeline_dump(pipeline);
+	if (debug_level > 1)
+		ks_pipeline_dump(pipeline);
 
 	err = ks_pipeline_register(pipeline);
 	if (err < 0)
