@@ -335,7 +335,11 @@ err_invalid_status:
 	}
 
 	/* Avoid to use the channels again while they are in RCU list */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
+	synchronize_rcu();
+#else
 	rcu_barrier();
+#endif
 
 	ks_pipeline_put(pipeline);
 	pipeline = NULL;
@@ -693,7 +697,11 @@ done:
 	}
 
 	/* Avoid to use the channels again while they are in RCU list */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
+	synchronize_rcu();
+#else
 	rcu_barrier();
+#endif
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_NULL);
 }
