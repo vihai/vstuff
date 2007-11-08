@@ -479,8 +479,7 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 redo_backlog:
 	tail = skb_peek_tail(&ks_backlog);
 	processed = FALSE;
-	while ((skb = skb_dequeue(&ks_backlog)) != tail) {
-
+	while ((skb = skb_dequeue(&ks_backlog))) {
 		err = ks_netlink_rcv_skb(skb);
 		if (err < 0)
 			skb_queue_tail(&ks_backlog, skb);
@@ -488,6 +487,9 @@ redo_backlog:
 			kfree_skb(skb);
 			processed = TRUE;
 		}
+
+		if (skb == tail)
+			break;
 	}
 
 	if (processed)
