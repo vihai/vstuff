@@ -146,6 +146,9 @@ void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
 void ks_conn_set_state(
 	struct ks_conn *conn,
 	enum ks_conn_state state);
+void ks_conn_set_topology_state(
+	struct ks_conn *conn,
+	enum ks_topology_state state);
 
 void ks_conn_topology_updated(
 	struct ks_conn *conn,

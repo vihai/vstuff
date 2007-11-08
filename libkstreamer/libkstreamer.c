@@ -368,11 +368,13 @@ void ks_update_topology(struct ks_conn *conn)
 {
 	int err;
 
-	conn->topology_state = KS_TOPOLOGY_STATE_SYNCING;
+	ks_conn_set_topology_state(conn, KS_TOPOLOGY_STATE_SYNCING);
 
 	struct ks_xact *xact;
 	xact = ks_send_topology_update_req(conn, &err);
 
 	ks_xact_wait(xact);
 	ks_xact_put(xact);
+
+	ks_conn_set_topology_state(conn, KS_TOPOLOGY_STATE_SYNCHED);
 }

@@ -135,29 +135,34 @@ int ks_netlink_put_attr(
 
 static void ks_dump_nlh(
 	struct ks_conn *conn,
-	struct nlmsghdr *nlh)
+	struct nlmsghdr *nlh,
+	const char *prefix)
 {
 	char flags[256];
 
 	snprintf(flags, sizeof(flags),
 		"%s%s%s%s%s%s%s",
-		nlh->nlmsg_flags & NLM_F_REQUEST ? "NLM_F_REQUEST" : "",
-		nlh->nlmsg_flags & NLM_F_MULTI ? "NLM_F_MULTI" : "",
-		nlh->nlmsg_flags & NLM_F_ACK ? "NLM_F_ACK" : "",
-		nlh->nlmsg_flags & NLM_F_ECHO ? "NLM_F_ECHO" : "",
-		nlh->nlmsg_flags & NLM_F_ROOT ? "NLM_F_ROOT" : "",
-		nlh->nlmsg_flags & NLM_F_MATCH ? "NLM_F_MATCH" : "",
-		nlh->nlmsg_flags & NLM_F_ATOMIC ? "NLM_F_ATOMIC" : "");
+		nlh->nlmsg_flags & NLM_F_REQUEST ? "NLM_F_REQUEST " : "",
+		nlh->nlmsg_flags & NLM_F_MULTI ? "NLM_F_MULTI " : "",
+		nlh->nlmsg_flags & NLM_F_ACK ? "NLM_F_ACK " : "",
+		nlh->nlmsg_flags & NLM_F_ECHO ? "NLM_F_ECHO " : "",
+		nlh->nlmsg_flags & NLM_F_ROOT ? "NLM_F_ROOT " : "",
+		nlh->nlmsg_flags & NLM_F_MATCH ? "NLM_F_MATCH " : "",
+		nlh->nlmsg_flags & NLM_F_ATOMIC ? "NLM_F_ATOMIC " : "");
 
 	report_conn(conn, LOG_DEBUG,
-		"  Message type: %s (%d)\n"
-		"  PID: %d\n"
-		"  Sequence number: %d\n"
-		"  Flags: %s\n",
+		"%s  Message type: %s (%d)\n"
+		"%s  PID: %d\n"
+		"%s  Sequence number: %d\n"
+		"%s  Flags: %s\n",
+		prefix,
 		ks_netlink_message_type_to_string(nlh->nlmsg_type),
 		nlh->nlmsg_type,
+		prefix,
 		nlh->nlmsg_pid,
+		prefix,
 		nlh->nlmsg_seq,
+		prefix,
 		flags);
 #if 0
 	__u8 *payload = KS_DATA(nlh);
@@ -197,8 +202,7 @@ int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 
 	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
-			"\n"
-			">>>--------- Sending packet len = %d -------->>>\n",
+			"TX --------- Sending packet len = %d --------\n",
 			skb->len);
 
 	struct nlmsghdr *nlh;
@@ -208,12 +212,12 @@ int ks_netlink_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 		for (nlh = skb->data;
 		     NLMSG_OK(nlh, len_left);
 		     nlh = NLMSG_NEXT(nlh, len_left))
-			ks_dump_nlh(conn, nlh);
+			ks_dump_nlh(conn, nlh, "TX");
 	}
 
 	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
-			">>>------------------------------------------<<<\n");
+			"TX ------------------------------------------\n");
 
 	int len = sendmsg(conn->sock, &msg, 0);
 	if(len < 0) {
@@ -363,7 +367,8 @@ static void ks_netlink_receive_multicast(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
-	ks_topology_update(conn, nlh);
+	if (conn->topology_state == KS_TOPOLOGY_STATE_SYNCHED)
+		ks_topology_update(conn, nlh);
 }
 
 static void ks_netlink_receive_msg(
@@ -382,7 +387,7 @@ static void ks_netlink_receive_msg(
 #endif
 
 	if (conn->debug_netlink)
-		ks_dump_nlh(conn, nlh);
+		ks_dump_nlh(conn, nlh, "RX");
 
 	if (src_sa->nl_groups)
 		ks_netlink_receive_multicast(conn, nlh);
@@ -417,9 +422,9 @@ int ks_netlink_receive(struct ks_conn *conn)
 	}
 
 	if (conn->debug_netlink)
-		report_conn(conn, LOG_DEBUG, "\n"
-			"<<<--------- Received packet len = %d groups = %d"
-			"--------<<<\n"
+		report_conn(conn, LOG_DEBUG,
+			"RX --------- Received packet len = %d groups = %d"
+			"--------\n"
 			,len, src_sa.nl_groups);
 
 	struct nlmsghdr *nlh;
@@ -432,7 +437,7 @@ int ks_netlink_receive(struct ks_conn *conn)
 
 	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,
-			"<<<-------------------------------------------<<<\n");
+			"RX -------------------------------------------\n");
 
 	return 0;
 }

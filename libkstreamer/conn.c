@@ -288,7 +288,7 @@ const char *ks_conn_message_type_to_text(
 	case KS_CONN_MSG_REFRESH:
 		return "REFRESH";
 	}
-	
+
 	return "*UNKNOWN*";
 }
 
@@ -517,6 +517,20 @@ void ks_conn_destroy(struct ks_conn *conn)
 	free(conn);
 }
 
+static const char *ks_topology_state_to_text(enum ks_topology_state state)
+{
+	switch(state) {
+	case KS_TOPOLOGY_STATE_NULL:
+		return "NULL";
+	case KS_TOPOLOGY_STATE_SYNCING:
+		return "SYNCING";
+	case KS_TOPOLOGY_STATE_SYNCHED:
+		return "SYNCHED";
+	}
+
+	return "*INVALID*";
+}
+
 static const char *ks_conn_state_to_text(enum ks_conn_state state)
 {
 	switch(state) {
@@ -543,4 +557,16 @@ void ks_conn_set_state(
 			ks_conn_state_to_text(state));
 
 	conn->state = state;
+}
+
+void ks_conn_set_topology_state(
+	struct ks_conn *conn,
+	enum ks_topology_state state)
+{
+	debug_conn(conn, debug_state,
+			"Topology state changed from %s to %s\n",
+			ks_topology_state_to_text(conn->topology_state),
+			ks_topology_state_to_text(state));
+
+	conn->topology_state = state;
 }
