@@ -282,13 +282,13 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 				goto err_chan_is_busy;
 			}
 
+			chan->pipeline = ks_pipeline_get(pipeline);
+
 			spin_lock(&pipeline->entries_lock);
-			list_add_tail(
+			list_add_tail_rcu(
 				&ks_chan_get(chan)->pipeline_entry,
 				&pipeline->entries);
 			spin_unlock(&pipeline->entries_lock);
-
-			chan->pipeline = ks_pipeline_get(pipeline);
 
 			ks_chan_put(chan);
 		}
@@ -318,13 +318,24 @@ err_chan_is_busy:
 err_chan_not_found:
 err_invalid_status:
 	{
-	struct ks_chan *chan, *t;
-	list_for_each_entry_safe(chan, t, &pipeline->entries,
-						pipeline_entry) {
+	struct ks_chan *chan;
+	spin_lock(&pipeline->entries_lock);
+	list_for_each_entry(chan, &pipeline->entries, pipeline_entry) {
+
+		struct ks_pipeline *pipeline = chan->pipeline;
+
 		chan->pipeline = NULL;
-		ks_chan_put(chan);
+
+		list_del_rcu(&chan->pipeline_entry);
+		call_rcu(&chan->pipeline_entry_rcu, ks_chan_del_rcu);
+
+		ks_pipeline_put(pipeline);
 	}
+	spin_unlock(&pipeline->entries_lock);
 	}
+
+	/* Avoid to use the channels again while they are in RCU list */
+	rcu_barrier();
 
 	ks_pipeline_put(pipeline);
 	pipeline = NULL;
@@ -663,10 +674,13 @@ static void ks_pipeline_connected_to_null(
 			prev_chan->to, NULL, chan);
 
 done:
+	{
 	spin_lock(&pipeline->entries_lock);
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		struct ks_pipeline *pipeline = chan->pipeline;
+
+		WARN_ON(!chan->pipeline);
 
 		chan->pipeline = NULL;
 
@@ -676,6 +690,10 @@ done:
 		ks_pipeline_put(pipeline);
 	}
 	spin_unlock(&pipeline->entries_lock);
+	}
+
+	/* Avoid to use the channels again while they are in RCU list */
+	rcu_barrier();
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_NULL);
 }

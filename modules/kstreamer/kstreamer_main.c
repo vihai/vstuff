@@ -56,7 +56,8 @@ void ks_kobj_waitref(struct kobject *kobj)
 
 		while(atomic_read(&kobj->kref.refcount) > 1) {
 			ks_msg(KERN_WARNING,
-				"Waiting for '%s' refcnt to become 1 (now %d)",
+				"Waiting for '%s' refcnt to become 1"
+				" (now %d)\n",
 				kobject_name(kobj),
 				atomic_read(&kobj->kref.refcount));
 

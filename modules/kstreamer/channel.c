@@ -533,7 +533,9 @@ void ks_chan_unregister(struct ks_chan *chan)
 	ks_chan_netlink_broadcast_notification(chan, KS_NETLINK_CHAN_DEL);
 
 	if (chan->pipeline) {
-		struct ks_pipeline *pipeline;
+BUG();
+
+/*		struct ks_pipeline *pipeline;
 
 		pipeline = ks_pipeline_get(chan->pipeline);
 
@@ -541,7 +543,7 @@ void ks_chan_unregister(struct ks_chan *chan)
 		ks_pipeline_unregister(pipeline);
 
 		ks_pipeline_put(pipeline);
-		pipeline = NULL;
+		pipeline = NULL;*/
 	}
 
 	sysfs_remove_link(&chan->kobj, "to");
