@@ -335,7 +335,9 @@ err_invalid_status:
 	}
 
 	/* Avoid to use the channels again while they are in RCU list */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+	synchronize_kernel();
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
 	synchronize_rcu();
 #else
 	rcu_barrier();
@@ -697,7 +699,9 @@ done:
 	}
 
 	/* Avoid to use the channels again while they are in RCU list */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+	synchronize_kernel();
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
 	synchronize_rcu();
 #else
 	rcu_barrier();
