@@ -463,6 +463,7 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 #endif
 {
 	struct sk_buff *skb;
+	struct sk_buff *tail;
 	int err;
 	int processed;
 
@@ -476,8 +477,9 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 	}
 
 redo_backlog:
+	tail = skb_peek_tail(&ks_backlog);
 	processed = FALSE;
-	while ((skb = skb_dequeue(&ks_backlog))) {
+	while ((skb = skb_dequeue(&ks_backlog)) != tail) {
 
 		err = ks_netlink_rcv_skb(skb);
 		if (err < 0)
@@ -490,7 +492,6 @@ redo_backlog:
 
 	if (processed)
 		goto redo_backlog;
-
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)

@@ -43,13 +43,12 @@ struct ks_pipeline
 	struct kobject kobj;
 	struct list_head node;
 
-	struct rw_semaphore lock;
-
 	int id;
 
 	enum ks_pipeline_status status;
 
 	struct list_head entries;
+	spinlock_t entries_lock;
 
 	struct file *file;
 

@@ -282,9 +282,11 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 				goto err_chan_is_busy;
 			}
 
+			spin_lock(&pipeline->entries_lock);
 			list_add_tail(
 				&ks_chan_get(chan)->pipeline_entry,
 				&pipeline->entries);
+			spin_unlock(&pipeline->entries_lock);
 
 			chan->pipeline = ks_pipeline_get(pipeline);
 
@@ -519,8 +521,7 @@ struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 	pipeline->kobj.kset = kset_get(&ks_pipelines_kset);
 
 	INIT_LIST_HEAD(&pipeline->entries);
-
-	init_rwsem(&pipeline->lock);
+	spin_lock_init(&pipeline->entries_lock);
 
 	pipeline->status = KS_PIPELINE_STATUS_NULL;
 
@@ -661,20 +662,19 @@ static void ks_pipeline_connected_to_null(
 			prev_chan->to, NULL, chan);
 
 done:
-	rcu_read_lock();
+	spin_lock(&pipeline->entries_lock);
 	list_for_each_entry_rcu(chan, &pipeline->entries, pipeline_entry) {
 
 		struct ks_pipeline *pipeline = chan->pipeline;
 
 		chan->pipeline = NULL;
-		wmb();
 
 		list_del_rcu(&chan->pipeline_entry);
 		call_rcu(&chan->pipeline_entry_rcu, ks_chan_del_rcu);
 
 		ks_pipeline_put(pipeline);
 	}
-	rcu_read_unlock();
+	spin_unlock(&pipeline->entries_lock);
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_NULL);
 }
