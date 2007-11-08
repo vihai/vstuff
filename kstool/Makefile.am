@@ -19,7 +19,9 @@ kstool_SOURCES = \
 	pipeline_close.c	\
 	pipeline_start.c	\
 	pipeline_stop.c		\
-	monitor.c
+	xml.c			\
+	monitor.c		\
+	dump.c
 
 noinst_HEADERS = \
 	kstool.h		\
@@ -29,7 +31,9 @@ noinst_HEADERS = \
 	pipeline_close.h	\
 	pipeline_start.h	\
 	pipeline_stop.h		\
-	monitor.h
+	xml.h			\
+	monitor.h		\
+	dump.h
 
 kstool_LDADD = \
         -lpthread					\

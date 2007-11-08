@@ -39,6 +39,7 @@
 #include "pipeline_open.h"
 #include "pipeline_close.h"
 #include "monitor.h"
+#include "dump.h"
 
 struct global_state glob;
 
@@ -102,6 +103,7 @@ int main(int argc, char *argv[])
 	INIT_LIST_HEAD(&glob.modules);
 
 	setvbuf(stdout, (char *)NULL, _IONBF, 0);
+	setvbuf(stderr, (char *)NULL, _IONBF, 0);
 
 	list_add_tail(&module_connect.node, &glob.modules);
 	list_add_tail(&module_disconnect.node, &glob.modules);
@@ -110,6 +112,7 @@ int main(int argc, char *argv[])
 	list_add_tail(&module_pipeline_start.node, &glob.modules);
 	list_add_tail(&module_pipeline_stop.node, &glob.modules);
 	list_add_tail(&module_monitor.node, &glob.modules);
+	list_add_tail(&module_dump.node, &glob.modules);
 
 	glob.conn = ks_conn_create();
 	if (!glob.conn) {
@@ -119,6 +122,7 @@ int main(int argc, char *argv[])
 
 	struct option options[] = {
 		{ "verbose", no_argument, 0, 0 },
+		{ "debug-state", no_argument, 0, 0 },
 		{ "debug-netlink", no_argument, 0, 0 },
 		{ "debug-router", no_argument, 0, 0 },
 		{ }
@@ -137,6 +141,8 @@ int main(int argc, char *argv[])
 
 		if (c == 'v' || !strcmp(opt->name, "verbose"))
 			glob.verbosity++;
+		else if (!strcmp(opt->name, "debug-state"))
+			glob.conn->debug_state = TRUE;
 		else if (!strcmp(opt->name, "debug-netlink"))
 			glob.conn->debug_netlink = TRUE;
 		else if (!strcmp(opt->name, "debug-router"))
