@@ -675,6 +675,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+#if 0
 	debug("Entering main cycle...\n");
 
 	char buf[4096];
@@ -723,6 +724,7 @@ int main(int argc, char *argv[])
 				write(up_fd, buf, nread);
 		}
 	}
+#endif
 
 #if 0
 	int i;
@@ -734,9 +736,10 @@ int main(int argc, char *argv[])
 	}
 #endif
 
-	
+#if 0
 	srand(time(NULL)*getpid());
 	usleep(rand() % 250000);
+#endif
 
 	if (rx_pipeline) {
 		debug("Stopping rx_pipeline...\n");
