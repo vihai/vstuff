@@ -115,10 +115,11 @@ struct ks_attr
 #include <linux/version.h>
 #include <net/sock.h>
 
+extern struct semaphore ksnl_sem;
+
 struct ks_sock
 {
 	struct sock sk;
-
 };
 
 enum ks_xact_flags

@@ -167,16 +167,6 @@ static void ks_chan_release(struct kobject *kobj)
 		kfree(chan);
 }
 
-void ks_chan_del_rcu(struct rcu_head *head)
-{
-	struct ks_chan *chan =
-		container_of(head, struct ks_chan, pipeline_entry_rcu);
-
-	ks_debug(3, "ks_chan_del_rcu()\n");
-
-	ks_chan_put(chan);
-}
-
 static struct kobj_type ks_chan_ktype = {
 	.release	= ks_chan_release,
 	.sysfs_ops	= &ks_chan_sysfs_ops,
@@ -220,7 +210,6 @@ struct ks_chan *ks_chan_create(
 	chan->mtu = -1;
 
 	INIT_LIST_HEAD(&chan->pipeline_entry);
-	INIT_RCU_HEAD(&chan->pipeline_entry_rcu);
 
 	return chan;
 }
@@ -532,19 +521,18 @@ void ks_chan_unregister(struct ks_chan *chan)
 {
 	ks_chan_netlink_broadcast_notification(chan, KS_NETLINK_CHAN_DEL);
 
+	write_lock(&ks_connection_lock);
 	if (chan->pipeline) {
-BUG();
+		struct ks_pipeline *pipeline = ks_pipeline_get(chan->pipeline);
+		write_unlock(&ks_connection_lock);
 
-/*		struct ks_pipeline *pipeline;
-
-		pipeline = ks_pipeline_get(chan->pipeline);
-
-		ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
+		down(&ksnl_sem);
 		ks_pipeline_unregister(pipeline);
+		up(&ksnl_sem);
 
 		ks_pipeline_put(pipeline);
-		pipeline = NULL;*/
-	}
+	} else
+		write_unlock(&ks_connection_lock);
 
 	sysfs_remove_link(&chan->kobj, "to");
 	sysfs_remove_link(&chan->kobj, "from");

@@ -26,7 +26,6 @@ enum ks_chan_attribute_type
 #include <linux/list.h>
 #include <linux/sysfs.h>
 #include <linux/kobject.h>
-#include <linux/rcupdate.h>
 
 #include <kernel_config.h>
 
@@ -80,8 +79,9 @@ struct ks_chan
 	int mtu;
 
 	struct ks_pipeline *pipeline;
+	spinlock_t pipeline_lock;
+
 	struct list_head pipeline_entry;
-	struct rcu_head pipeline_entry_rcu;
 
 	void *driver_data;
 };
@@ -155,8 +155,6 @@ static inline void ks_chan_put(struct ks_chan *chan)
 	if (chan)
 		kobject_put(&chan->kobj);
 }
-
-void ks_chan_del_rcu(struct rcu_head *head);
 
 int ks_chan_modinit(void);
 void ks_chan_modexit(void);

@@ -154,7 +154,6 @@ static void ksup_timer_func(unsigned long data)
 
 	chan->stimulus_timer.expires += HZ / chan->stimulus_frequency;
 
-	/* Some locking to access .pipeline??? XXX FIXME TODO */
 	ks_pipeline_stimulate(chan->ks_chan_rx->pipeline);
 
 	add_timer(&chan->stimulus_timer);

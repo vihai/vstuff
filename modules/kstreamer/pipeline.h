@@ -38,6 +38,8 @@ enum ks_pipeline_status
 #include <linux/rcupdate.h>
 #include <linux/rwsem.h>
 
+extern rwlock_t ks_connection_lock;
+
 struct ks_pipeline
 {
 	struct kobject kobj;
@@ -48,7 +50,6 @@ struct ks_pipeline
 	enum ks_pipeline_status status;
 
 	struct list_head entries;
-	spinlock_t entries_lock;
 
 	struct file *file;
 

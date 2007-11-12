@@ -26,6 +26,8 @@
 #include "channel.h"
 #include "pipeline.h"
 
+DECLARE_MUTEX(ksnl_sem);
+
 struct sock *ksnl;
 
 static struct workqueue_struct *ks_netlink_rcv_wq;
@@ -410,7 +412,9 @@ static int ks_netlink_rcv_msg(
 			return -ENOMEM;
 	}
 
+	down(&ksnl_sem);
 	err = cmd->handler(cmd, cur_xact, nlh);
+	up(&ksnl_sem);
 	if (err < 0)
 		ks_xact_send_error(cur_xact, err);
 
