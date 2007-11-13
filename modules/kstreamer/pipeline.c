@@ -284,13 +284,13 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 				goto err_chan_is_busy;
 			}
 
-			write_lock(&ks_connection_lock);
+			write_lock_bh(&ks_connection_lock);
 			chan->pipeline = ks_pipeline_get(pipeline);
 
 			list_add_tail(
 				&ks_chan_get(chan)->pipeline_entry,
 				&pipeline->entries);
-			write_unlock(&ks_connection_lock);
+			write_unlock_bh(&ks_connection_lock);
 
 			ks_chan_put(chan);
 		}
@@ -322,7 +322,7 @@ err_invalid_status:
 	{
 	struct ks_chan *chan;
 	struct ks_chan *chan2;
-	write_lock(&ks_connection_lock);
+	write_lock_bh(&ks_connection_lock);
 	list_for_each_entry_safe(chan, chan2, &pipeline->entries,
 							pipeline_entry) {
 
@@ -333,7 +333,7 @@ err_invalid_status:
 
 		ks_pipeline_put(pipeline);
 	}
-	write_unlock(&ks_connection_lock);
+	write_unlock_bh(&ks_connection_lock);
 	}
 
 	ks_pipeline_put(pipeline);
@@ -674,7 +674,7 @@ static void ks_pipeline_connected_to_null(
 done:
 	{
 	struct ks_chan *chan2;
-	write_lock(&ks_connection_lock);
+	write_lock_bh(&ks_connection_lock);
 	list_for_each_entry_safe(chan, chan2, &pipeline->entries,
 							pipeline_entry) {
 
@@ -688,7 +688,7 @@ done:
 
 		ks_pipeline_put(pipeline);
 	}
-	write_unlock(&ks_connection_lock);
+	write_unlock_bh(&ks_connection_lock);
 	}
 
 	ks_pipeline_set_status(pipeline, KS_PIPELINE_STATUS_NULL);
