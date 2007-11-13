@@ -521,10 +521,10 @@ void ks_chan_unregister(struct ks_chan *chan)
 {
 	ks_chan_netlink_broadcast_notification(chan, KS_NETLINK_CHAN_DEL);
 
-	write_lock(&ks_connection_lock);
+	write_lock_bh(&ks_connection_lock);
 	if (chan->pipeline) {
 		struct ks_pipeline *pipeline = ks_pipeline_get(chan->pipeline);
-		write_unlock(&ks_connection_lock);
+		write_unlock_bh(&ks_connection_lock);
 
 		down(&ksnl_sem);
 		ks_pipeline_unregister(pipeline);
@@ -532,7 +532,7 @@ void ks_chan_unregister(struct ks_chan *chan)
 
 		ks_pipeline_put(pipeline);
 	} else
-		write_unlock(&ks_connection_lock);
+		write_unlock_bh(&ks_connection_lock);
 
 	sysfs_remove_link(&chan->kobj, "to");
 	sysfs_remove_link(&chan->kobj, "from");
