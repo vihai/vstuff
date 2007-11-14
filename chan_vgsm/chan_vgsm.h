@@ -19,6 +19,8 @@
 #define VGSM_OP_CONFIG_FILE "vgsm_operators.conf"
 #define VGSM_OP_COUNTRY_CONFIG_FILE "vgsm_countries.conf"
 
+#define VGSM_MINIMUM_FIRMWARE (0x020800)
+
 #include <asterisk/channel.h>
 
 #include <list.h>

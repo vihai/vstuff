@@ -1328,6 +1328,17 @@ err_sbc:;
 			module->card.ver_maj,
 			module->card.ver_min,
 			module->card.ver_ser);
+
+		if ((module->card.ver_maj << 16 |
+		     module->card.ver_min << 8 |
+		     module->card.ver_ser) < VGSM_MINIMUM_FIRMWARE) {
+			ast_cli(fd,
+				"  !!! WARNING, firmware upgrade to "
+				"%d.%d.%d is required !!!\n",
+				(VGSM_MINIMUM_FIRMWARE & 0xff0000) >> 16,
+				(VGSM_MINIMUM_FIRMWARE & 0x00ff00) >> 8,
+				(VGSM_MINIMUM_FIRMWARE & 0x0000ff) >> 0);
+		}
 	}
 
 	if (module->card.serial != 0xffffffff &&
