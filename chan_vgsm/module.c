@@ -130,6 +130,8 @@ static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
 		return "INITIALIZING";
 	case VGSM_MODULE_STATUS_READY:
 		return "READY";
+	case VGSM_MODULE_STATUS_OFFLINE:
+		return "OFFLINE";
 	case VGSM_MODULE_STATUS_WAITING_SIM:
 		return "WAITING_SIM";
 	case VGSM_MODULE_STATUS_WAITING_PIN:
@@ -1049,6 +1051,7 @@ struct vgsm_module *vgsm_module_alloc(void)
 	INIT_LIST_HEAD(&module->stats.outbound_counters);
 
 	module->status = VGSM_MODULE_STATUS_CLOSED;
+	module->in_service = TRUE;
 
 	module->monitor_thread = AST_PTHREADT_NULL;
 
@@ -1277,8 +1280,10 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 		"\n"
 		"  Module: %s\n"
 		"  Status: %s\n",
+		"  In service: %s\n",
 		module->name,
-		vgsm_module_status_to_text(module->status));
+		vgsm_module_status_to_text(module->status),
+		module->in_service ? "YES" : "NO");
 
 	if (module->status_reason && strlen(module->status_reason))
 		ast_cli(fd, "  Reason: %s\n", module->status_reason);
@@ -2580,6 +2585,7 @@ static int vgsm_module_reset(
 		ast_cli(fd, "Module is not available\n");
 		return RESULT_FAILURE;
 	}
+
 	vgsm_module_set_status(module,
 			VGSM_MODULE_STATUS_RESETTING,
 			RESET_TIMEOUT,
@@ -2591,6 +2597,58 @@ static int vgsm_module_reset(
 			vgsm_module_error_to_text(res),
 			res);
 		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_module_service_on(
+	int fd, int argc, char *argv[],
+	struct vgsm_module *module)
+{
+	module->in_service = TRUE;
+
+	if (module->status == VGSM_MODULE_STATUS_OFFLINE) {
+		vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_READY,
+				READY_UPDATE_TIME,
+				" ");
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_module_service_off(
+	int fd, int argc, char *argv[],
+	struct vgsm_module *module)
+{
+	if (module->status == VGSM_MODULE_STATUS_OFFLINE) {
+	} else if (module->status == VGSM_MODULE_STATUS_READY) {
+		vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_OFFLINE,
+				-1,
+				"CLI request");
+	} else {
+		module->in_service = FALSE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_module_service(
+	int fd, int argc, char *argv[],
+	struct vgsm_module *module)
+{
+	if (argc < 5)
+		return RESULT_SHOWUSAGE;
+
+	if (!strcasecmp(argv[4], "on"))
+		return vgsm_module_service_on(fd, argc, argv, module);
+	else if (!strcasecmp(argv[4], "off"))
+		return vgsm_module_service_off(fd, argc, argv, module);
+	else {
+		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
+		return RESULT_SHOWUSAGE;
 	}
 
 	return RESULT_SUCCESS;
@@ -2719,6 +2777,8 @@ static int vgsm_module_func(int fd, int argc, char *argv[])
 		err = vgsm_module_operator(fd, argc, argv, module);
 	else if (!strcasecmp(argv[3], "rawcommand"))
 		err = vgsm_module_rawcommand(fd, argc, argv, module);
+	else if (!strcasecmp(argv[3], "service"))
+		err = vgsm_module_service(fd, argc, argv, module);
 	else {
 		ast_mutex_unlock(&module->lock);
 		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
@@ -2752,7 +2812,8 @@ static char *vgsm_module_complete(
 #endif
 	int pos, int state)
 {
-	char *commands[] = { "power", "reset", "identify", "operator" };
+	char *commands[] = { "power", "reset", "identify", "operator",
+				"service" };
 	char *power_commands[] = { "on", "off" };
 	int i;
 
@@ -2770,6 +2831,8 @@ static char *vgsm_module_complete(
 		for(i=state; i<ARRAY_SIZE(power_commands); i++) {
 			if (!strncasecmp(word, power_commands[i], strlen(word)))
 				return strdup(power_commands[i]);
+
+			// FIXME add service subcommands
 		}
 	break;
 	}
@@ -2787,6 +2850,9 @@ static char vgsm_module_help[] =
 "		Power-off will be graceful (requesting de-registration from\n"
 "		the network. If, however, the module is not responding,\n"
 "		the module will be forcibly shut down.\n"
+"\n"
+"	service <on|off>\n"
+"		Put the specified module in-service or off-line.\n"
 "\n"
 "	reset\n"
 "		Initiate ME software reset"
@@ -6002,10 +6068,17 @@ static void vgsm_module_initialize(
 
 	module->failure_attempts = 0;
 
-	vgsm_module_set_status(module,
-		VGSM_MODULE_STATUS_READY,
-		READY_UPDATE_TIME,
-		" ");
+	if (module->in_service) {
+		vgsm_module_set_status(module,
+			VGSM_MODULE_STATUS_READY,
+			READY_UPDATE_TIME,
+			" ");
+	} else {
+		vgsm_module_set_status(module,
+			VGSM_MODULE_STATUS_OFFLINE,
+			READY_UPDATE_TIME,
+			" ");
+	}
 
 	vgsm_debug_state(module, "module successfully initialized\n");
 
@@ -6150,6 +6223,7 @@ static void vgsm_module_timer(void *data)
 
 	case VGSM_MODULE_STATUS_WAITING_SIM:
 	case VGSM_MODULE_STATUS_WAITING_PIN:
+	case VGSM_MODULE_STATUS_OFFLINE:
 		// Do nothing
 	break;
 	}

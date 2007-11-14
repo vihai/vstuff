@@ -66,6 +66,7 @@ enum vgsm_module_status
 	VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
 	VGSM_MODULE_STATUS_INITIALIZING,
 	VGSM_MODULE_STATUS_READY,
+	VGSM_MODULE_STATUS_OFFLINE,
 	VGSM_MODULE_STATUS_WAITING_SIM,
 	VGSM_MODULE_STATUS_WAITING_PIN,
 	VGSM_MODULE_STATUS_FAILED,
@@ -244,6 +245,7 @@ struct vgsm_module
 	char name[64];
 
 	enum vgsm_module_status status;
+	BOOL in_service;
 
 	struct vgsm_timerset timerset;
 	struct vgsm_timer timer;
