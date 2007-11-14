@@ -332,7 +332,9 @@ static int ks_chan_netlink_broadcast_notification(
 
 	skb = alloc_skb(NLMSG_SPACE(280), GFP_KERNEL);
 	if (!skb) {
-	        netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
+	        //netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
+	        // FIXME, set_err is really needed, but kernel people removed
+	        // the EXPORT_SYMBOL
 		err = -ENOMEM;
 		goto err_alloc_skb;
 	}
