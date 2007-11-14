@@ -332,6 +332,7 @@ err_invalid_status:
 
 		chan->pipeline = NULL;
 		list_del(&chan->pipeline_entry);
+		ks_chan_put(chan);
 
 		ks_pipeline_put(pipeline);
 	}
@@ -687,6 +688,7 @@ done:
 		chan->pipeline = NULL;
 
 		list_del(&chan->pipeline_entry);
+		ks_chan_put(chan);
 
 		ks_pipeline_put(pipeline);
 	}
