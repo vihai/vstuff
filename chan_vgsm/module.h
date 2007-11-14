@@ -170,6 +170,14 @@ struct vgsm_cbm_recorded
 	wchar_t *text;
 };
 
+enum vgsm_flow_control
+{
+	VGSM_FLOW_AUTO,
+	VGSM_FLOW_NONE,
+	VGSM_FLOW_SW,
+	VGSM_FLOW_HW
+};
+
 #define VGSM_SIM_ROUTE_EXTERNAL -1
 #define VGSM_SIM_ROUTE_DEFAULT -2
 
@@ -182,6 +190,8 @@ struct vgsm_module_config
 
 	char device_filename[PATH_MAX];
 	char mesim_device_filename[PATH_MAX];
+
+	enum vgsm_flow_control flow_control;
 
 	char context[AST_MAX_EXTENSION];
 
@@ -253,6 +263,7 @@ struct vgsm_module
 
 	int me_fd;
 	struct vgsm_comm comm;
+	enum vgsm_flow_control flow_control;
 
 	int mesim_fd;
 	struct vgsm_mesim mesim;

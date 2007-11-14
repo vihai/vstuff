@@ -77,6 +77,8 @@
 
 void vgsm_module_config_default(struct vgsm_module_config *mc)
 {
+	mc->flow_control = VGSM_FLOW_AUTO;
+
 	strcpy(mc->context, "vgsm");
 	strcpy(mc->pin, "");
 
@@ -546,6 +548,23 @@ static const char *vgsm_call_state_to_text(enum vgsm_call_state state)
 	return "*INVALID*";
 }
 
+static const char *vgsm_flow_control_to_text(enum vgsm_flow_control flow)
+{
+	switch(flow) {
+	case VGSM_FLOW_AUTO:
+		return "AUTO";
+	case VGSM_FLOW_NONE:
+		return "NONE";
+	case VGSM_FLOW_SW:
+		return "SW";
+	case VGSM_FLOW_HW:
+		return "HW";
+	}
+
+	return "*UNKNOWN*";
+}
+
+
 #if 0
 static const char *vgsm_call_direction_to_text(
 	enum vgsm_call_direction direction)
@@ -668,6 +687,22 @@ static int vgsm_module_config_from_var(
 	} else if (!strcasecmp(var->name, "mesim_device")) {
 		strncpy(mc->mesim_device_filename, var->value,
 			sizeof(mc->mesim_device_filename));
+	} else if (!strcasecmp(var->name, "flow_control")) {
+		if (!strcasecmp(var->value, "auto"))
+			mc->operator_selection = VGSM_FLOW_AUTO;
+		else if (!strcasecmp(var->value, "none"))
+			mc->operator_selection = VGSM_FLOW_NONE;
+		else if (!strcasecmp(var->value, "software"))
+			mc->operator_selection = VGSM_FLOW_SW;
+		else if (!strcasecmp(var->value, "hardware"))
+			mc->operator_selection = VGSM_FLOW_HW;
+		else {
+			ast_log(LOG_ERROR,
+				"Flow control selection '%s' unknown\n",
+				var->value);
+
+			return -1;
+		}
 	} else if (!strcasecmp(var->name, "context")) {
 		strncpy(mc->context, var->value, sizeof(mc->context));
 	} else if (!strcasecmp(var->name, "pin")) {
@@ -685,10 +720,14 @@ static int vgsm_module_config_from_var(
 			mc->sim_proto = VGSM_MESIM_PROTO_LOCAL;
 		else if (!strcasecmp(var->value, "implementa"))
 			mc->sim_proto = VGSM_MESIM_PROTO_IMPLEMENTA;
-		else
-			ast_log(LOG_WARNING,
+		else {
+			ast_log(LOG_ERROR,
 				"Unknown SIM holder protocol '%s'\n",
 				var->value);
+
+			return -1;
+		}
+
 	} else if (!strcasecmp(var->name, "sim_local_device_filename")) {
 		strncpy(mc->sim_local_device_filename, var->value,
 			sizeof(mc->sim_local_device_filename));
@@ -696,22 +735,28 @@ static int vgsm_module_config_from_var(
 		struct ast_hostent ahp;
 		struct hostent *hp;
 
-		if (!(hp = ast_gethostbyname(var->value, &ahp)))
-			ast_log(LOG_WARNING, "Invalid address: %s\n",
+		if (!(hp = ast_gethostbyname(var->value, &ahp))) {
+			ast_log(LOG_ERROR, "Invalid address: %s\n",
 				var->value);
-		else
-			memcpy(&mc->sim_impl_simclient_addr.sin_addr,
-				hp->h_addr,
-				sizeof(mc->sim_impl_simclient_addr.sin_addr));
+
+			return -1;
+		}
+
+		memcpy(&mc->sim_impl_simclient_addr.sin_addr,
+			hp->h_addr,
+			sizeof(mc->sim_impl_simclient_addr.sin_addr));
 
 	} else if (!strcasecmp(var->name, "sim_client_port")) {
 		int port;
 		if (sscanf(var->value, "%d", &port) == 1)
 			mc->sim_impl_simclient_addr.sin_port = htons(port);
-		else
+		else {
 			ast_log(LOG_WARNING,
 				"Invalid port number '%s' at line %d\n",
 				var->value, var->lineno);
+
+			return -1;
+		}
 	} else if (!strcasecmp(var->name, "operator_selection")) {
 		if (!strcasecmp(var->value, "auto"))
 			mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
@@ -721,10 +766,14 @@ static int vgsm_module_config_from_var(
 			mc->operator_selection = VGSM_OPSEL_MANUAL_FALLBACK;
 		else if (!strcasecmp(var->value, "deregistered"))
 			mc->operator_selection = VGSM_OPSEL_DEREGISTERED;
-		else
-			ast_log(LOG_WARNING,
+		else {
+			ast_log(LOG_ERROR,
 				"Operator selection '%s' unknown\n",
 				var->value);
+
+			return -1;
+		}
+
 	} else if (!strcasecmp(var->name, "operator_id")) {
 
 		mc->operator_mcc = -1;
@@ -737,9 +786,11 @@ static int vgsm_module_config_from_var(
 			mc->operator_mcc = -1;
 			mc->operator_mnc = -1;
 
-			ast_log(LOG_WARNING,
+			ast_log(LOG_ERROR,
 				"Cannot parse operator ID '%s'\n",
 				var->value);
+
+			return -1;
 		}
 
 	} else if (!strcasecmp(var->name, "sms_service_center")) {
@@ -765,10 +816,12 @@ static int vgsm_module_config_from_var(
 			mc->gsm_preferred = VGSM_CODEC_GSM_HR;
 		else if (strcasecmp(var->value, "fr"))
 			mc->gsm_preferred = VGSM_CODEC_GSM_FR;
-		else
+		else {
 			ast_log(LOG_ERROR,
 				"Unknown preferred coded '%s'\n",
 				var->value);
+			return -1;
+		}
 	} else if (!strcasecmp(var->name, "rx_calibrate")) {
 		mc->rx_calibrate = atoi(var->value);
 	} else if (!strcasecmp(var->name, "tx_calibrate")) {
@@ -834,7 +887,7 @@ static void vgsm_module_config_copy(
 
 static void *vgsm_module_monitor_thread_main(void *data);
 
-static void vgsm_module_reconfigure(
+static int vgsm_module_reconfigure(
 	struct ast_config *cfg,
 	const char *cat,
 	const char *name)
@@ -847,6 +900,7 @@ static void vgsm_module_reconfigure(
 	if (!mc) {
 		ast_log(LOG_ERROR, "Cannot allocate new module config %s\n",
 			name);
+		err = -ENOMEM;
 		goto err_module_config_alloc;
 	}
 
@@ -856,9 +910,12 @@ static void vgsm_module_reconfigure(
 	var = ast_variable_browse(cfg, (char *)cat);
 	while (var) {
 		if (vgsm_module_config_from_var(mc, var) < 0) {
-			ast_log(LOG_WARNING,
-				"Unknown configuration variable %s\n",
+			ast_log(LOG_ERROR,
+				"Module '%s' configuration invalid\n",
 				var->name);
+
+			err = -EINVAL;
+			goto err_module_config_invalid;
 		}
 
 		var = var->next;
@@ -875,6 +932,7 @@ static void vgsm_module_reconfigure(
 			ast_log(LOG_ERROR, "Cannot allocate new module %s\n",
 				name);
 
+			err = -ENOMEM;
 			goto err_module_alloc;
 		}
 
@@ -883,6 +941,7 @@ static void vgsm_module_reconfigure(
 		err = vgsm_comm_init(&module->comm, vgsm_module_urcs);
 		if (err < 0) {
 			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+			err = -EIO;
 			goto err_comm_init;
 		}
 
@@ -917,16 +976,17 @@ static void vgsm_module_reconfigure(
 
 	vgsm_module_config_put(mc);
 
-	return;
+	return 0;
 
 	vgsm_comm_destroy(&module->comm);
 err_comm_init:
 	vgsm_module_put(module);
 err_module_alloc:
+err_module_config_invalid:
 	vgsm_module_config_put(mc);
 err_module_config_alloc:
 
-	return;
+	return err;
 }
 
 void vgsm_module_reload(struct ast_config *cfg)
@@ -938,8 +998,7 @@ void vgsm_module_reload(struct ast_config *cfg)
 	while (var) {
 		if (vgsm_module_config_from_var(vgsm.default_mc, var) < 0) {
 			ast_log(LOG_WARNING,
-				"Unknown configuration variable %s\n",
-				var->name);
+				"Global module configuration invalid\n");
 		}
 
 		var = var->next;
@@ -2108,6 +2167,11 @@ static int vgsm_show_module_smong(int fd, struct vgsm_module *module)
 
 static int vgsm_show_module_serial(int fd, struct vgsm_module *module)
 {
+	ast_mutex_lock(&module->lock);
+	struct vgsm_module_config *mc;
+	mc = vgsm_module_config_get(module->current_config);
+	ast_mutex_unlock(&module->lock);
+
 	struct serial_icounter_struct icount;
 	if (ioctl(module->me_fd, TIOCGICOUNT, &icount) < 0) {
 		ast_cli(fd, "ioctl(TIOCGICOUNT)\n");
@@ -2121,6 +2185,8 @@ static int vgsm_show_module_serial(int fd, struct vgsm_module *module)
 	}
 
 	ast_cli(fd,
+		"  Flow conf.:  %s\n"
+		"  Flow acutal: %s\n"
 		"  RTS:         %s\n"
 		"  CTS:         %s (%d)\n"
 		"  DTR:         %s\n"
@@ -2134,6 +2200,8 @@ static int vgsm_show_module_serial(int fd, struct vgsm_module *module)
 		"  Parity:      %d\n"
 		"  Break:       %d\n"
 		"  Buf overrun: %d\n",
+		vgsm_flow_control_to_text(mc->flow_control),
+		vgsm_flow_control_to_text(module->flow_control),
 		(status & TIOCM_RTS) ? "ON" : "OFF",
 		(status & TIOCM_CTS) ? "ON" : "OFF", icount.cts,
 		(status & TIOCM_DTR) ? "ON" : "OFF",
@@ -5517,9 +5585,17 @@ static int vgsm_module_init_at_interface(
 	struct vgsm_comm *comm = &module->comm;
 	int err;
 
+	int flow_control;
+	switch(module->flow_control) {
+	case VGSM_FLOW_NONE: flow_control = 0; break;
+	case VGSM_FLOW_SW: flow_control = 1; break;
+	case VGSM_FLOW_HW: flow_control = 3; break;
+	default: assert(0); break;
+	}
+
 	err = vgsm_req_make_wait_result(comm, 200 * MILLISEC,
 		"AT Z0 E1 V1 Q0 \\Q%d",
-		module->interface_version == 1 ? 1 : 3);
+		flow_control);
 	if (err != VGSM_RESP_OK)
 		goto err_no_req;
 
@@ -5616,11 +5692,27 @@ static int vgsm_module_open(
 
 	newtio.c_cflag = CS8 | CREAD | HUPCL;
 
-	if (module->interface_version == 1) {
-		newtio.c_cflag |= B38400 | CLOCAL;
+        if (module->interface_version == 1)
+		newtio.c_cflag |= B38400;
+	else
+		newtio.c_cflag |= B230400;
+
+	if (mc->flow_control == VGSM_FLOW_AUTO) {
+		if (module->interface_version == 1)
+			module->flow_control = VGSM_FLOW_SW;
+		else
+			module->flow_control = VGSM_FLOW_HW;
+	} else
+		module->flow_control = mc->flow_control;
+
+	if (module->flow_control == VGSM_FLOW_NONE) {
+		newtio.c_cflag |= CLOCAL;
+		newtio.c_iflag = 0;
+	} else if (module->flow_control == VGSM_FLOW_SW) {
+		newtio.c_cflag |= CLOCAL;
 		newtio.c_iflag = IXON | IXOFF;
-	} else {
-		newtio.c_cflag |= B230400 | CLOCAL;//CRTSCTS; FIXME
+	} else if (module->flow_control == VGSM_FLOW_HW) {
+		newtio.c_cflag |= CRTSCTS;
 		newtio.c_iflag = 0;
 	}
 
