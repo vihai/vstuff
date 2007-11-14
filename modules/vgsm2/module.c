@@ -1072,8 +1072,6 @@ err_node_register:
 void vgsm_module_unregister(struct vgsm_module *module)
 {
 	ks_node_remove_file(&module->ks_node, &ks_node_attr_identify);
-	sysfs_remove_link(&module->card->pci_dev->dev.kobj,
-			kobject_name(&module->ks_node.kobj));
 
 	vgsm_uart_unregister(&module->mesim);
 	vgsm_uart_unregister(&module->asc1);
