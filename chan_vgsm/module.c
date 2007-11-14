@@ -114,6 +114,8 @@ void vgsm_module_config_default(struct vgsm_module_config *mc)
 static const char *vgsm_module_status_to_text(enum vgsm_module_status status)
 {
 	switch(status) {
+	case VGSM_MODULE_STATUS_UNCONFIGURED:
+		return "UNCONFIGURED";
 	case VGSM_MODULE_STATUS_CLOSED:
 		return "CLOSED";
 	case VGSM_MODULE_STATUS_OFF:
@@ -889,7 +891,61 @@ static void vgsm_module_config_copy(
 
 static void *vgsm_module_monitor_thread_main(void *data);
 
+static struct vgsm_module *vgsm_module_get_or_create(const char *name)
+{
+	/* If the named module does not exist, allocate and start monitor
+	 * thread. Monitor thread will remain in CLOSED state until it
+	 * is explicitly started.
+	 */
+
+	ast_rwlock_wrlock(&vgsm.ifs_list_lock);
+
+	struct vgsm_module *module = _vgsm_module_get_by_name(name);
+	if (!module) {
+		module = vgsm_module_alloc();
+		if (!module) {
+			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+
+			ast_log(LOG_ERROR, "Cannot allocate new module %s\n",
+				name);
+
+			goto err_module_alloc;
+		}
+
+		strncpy(module->name, name, sizeof(module->name));
+
+		int err = vgsm_comm_init(&module->comm, vgsm_module_urcs);
+		if (err < 0) {
+			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+			goto err_comm_init;
+		}
+
+		list_add_tail(&vgsm_module_get(module)->ifs_node,
+							&vgsm.ifs_list);
+
+		pthread_attr_t attr;
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+		ast_pthread_create(&module->monitor_thread, &attr,
+				vgsm_module_monitor_thread_main, module);
+		pthread_attr_destroy(&attr);
+	}
+
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+
+	return module;
+
+	vgsm_comm_destroy(&module->comm);
+err_comm_init:
+	vgsm_module_put(module);
+err_module_alloc:
+
+	return NULL;
+}
+
 static int vgsm_module_reconfigure(
+	struct vgsm_module *module,
 	struct ast_config *cfg,
 	const char *cat,
 	const char *name)
@@ -923,67 +979,15 @@ static int vgsm_module_reconfigure(
 		var = var->next;
 	}
 
-	ast_rwlock_wrlock(&vgsm.ifs_list_lock);
+	mc->module = vgsm_module_get(module);
 
-	struct vgsm_module *module = _vgsm_module_get_by_name(name);
-	if (!module) {
-		module = vgsm_module_alloc();
-		if (!module) {
-			ast_rwlock_unlock(&vgsm.ifs_list_lock);
-
-			ast_log(LOG_ERROR, "Cannot allocate new module %s\n",
-				name);
-
-			err = -ENOMEM;
-			goto err_module_alloc;
-		}
-
-		strncpy(module->name, name, sizeof(module->name));
-
-		err = vgsm_comm_init(&module->comm, vgsm_module_urcs);
-		if (err < 0) {
-			ast_rwlock_unlock(&vgsm.ifs_list_lock);
-			err = -EIO;
-			goto err_comm_init;
-		}
-
-		list_add_tail(&module->ifs_node, &vgsm.ifs_list);
-
-		vgsm_module_set_status(module,
-				VGSM_MODULE_STATUS_CLOSED,
-				CLOSED_POSTPONE,
-				" ");
-
-		pthread_attr_t attr;
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-		ast_pthread_create(&module->monitor_thread, &attr,
-				vgsm_module_monitor_thread_main, module);
-		pthread_attr_destroy(&attr);
-	}
-
-	ast_mutex_lock(&module->lock);
-	if (module->current_config) {
-		vgsm_module_config_put(module->current_config);
-		module->current_config = NULL;
-	}
-
-	mc->module = module;
-	module->current_config = vgsm_module_config_get(mc);
-
-	ast_mutex_unlock(&module->lock);
-
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	module->config_present = TRUE;
+	module->new_config = vgsm_module_config_get(mc);
 
 	vgsm_module_config_put(mc);
 
 	return 0;
 
-	vgsm_comm_destroy(&module->comm);
-err_comm_init:
-	vgsm_module_put(module);
-err_module_alloc:
 err_module_config_invalid:
 	vgsm_module_config_put(mc);
 err_module_config_alloc:
@@ -991,7 +995,7 @@ err_module_config_alloc:
 	return err;
 }
 
-void vgsm_module_reload(struct ast_config *cfg)
+int vgsm_module_reload(struct ast_config *cfg)
 {
 	/* Read default interface configuration */
 
@@ -1001,11 +1005,25 @@ void vgsm_module_reload(struct ast_config *cfg)
 		if (vgsm_module_config_from_var(vgsm.default_mc, var) < 0) {
 			ast_log(LOG_WARNING,
 				"Global module configuration invalid\n");
+
+			return -1;
 		}
 
 		var = var->next;
 	}
 
+	/* Mark all modules are not present in config file */
+	{
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	struct vgsm_module *module;
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node)
+		module->config_present = FALSE;
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	}
+
+	/* Browse config file, create missing modules and mark present modules
+	 * as configured
+	 */
 	const char *cat;
 	for (cat = ast_category_browse(cfg, NULL); cat;
 	     cat = ast_category_browse(cfg, (char *)cat)) {
@@ -1023,8 +1041,49 @@ void vgsm_module_reload(struct ast_config *cfg)
 			continue;
 		}
 
-		vgsm_module_reconfigure(cfg, cat, cat + strlen(VGSM_ME_PREFIX));
+		struct vgsm_module *module = vgsm_module_get_or_create(
+						cat + strlen(VGSM_ME_PREFIX));
+		if (!module)
+			continue;
+
+		vgsm_module_reconfigure(module, cfg, cat,
+						cat + strlen(VGSM_ME_PREFIX));
 	}
+
+	/* TODO: Removed modules not present anymore in config file */
+
+	/* Activate new configuration */
+	{
+	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	struct vgsm_module *module;
+	list_for_each_entry(module, &vgsm.ifs_list, ifs_node) {
+
+		ast_mutex_lock(&module->lock);
+		if (module->new_config) {
+			if (module->current_config) {
+				vgsm_module_config_put(module->current_config);
+				module->current_config = NULL;
+			}
+
+			module->current_config = module->new_config;
+			module->new_config = NULL;
+		}
+
+		/* Start newly created modules */
+		if (module->current_config &&
+		    module->status == VGSM_MODULE_STATUS_UNCONFIGURED) {
+			vgsm_module_set_status(module,
+				VGSM_MODULE_STATUS_CLOSED,
+				CLOSED_POSTPONE,
+				" ");
+		}
+
+		ast_mutex_unlock(&module->lock);
+	}
+	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	}
+
+	return 0;
 }
 
 static void vgsm_module_timers_updated(struct vgsm_timerset *set)
@@ -1050,7 +1109,7 @@ struct vgsm_module *vgsm_module_alloc(void)
 	INIT_LIST_HEAD(&module->stats.inbound_counters);
 	INIT_LIST_HEAD(&module->stats.outbound_counters);
 
-	module->status = VGSM_MODULE_STATUS_CLOSED;
+	module->status = VGSM_MODULE_STATUS_UNCONFIGURED;
 	module->in_service = TRUE;
 
 	module->monitor_thread = AST_PTHREADT_NULL;
@@ -1279,7 +1338,7 @@ static void vgsm_show_module_module(int fd, struct vgsm_module *module)
 	ast_cli(fd,
 		"\n"
 		"  Module: %s\n"
-		"  Status: %s\n",
+		"  Status: %s\n"
 		"  In service: %s\n",
 		module->name,
 		vgsm_module_status_to_text(module->status),
@@ -2500,7 +2559,8 @@ static struct ast_cli_entry vgsm_forwarding =
 
 static int vgsm_module_power_on(int fd, struct vgsm_module *module)
 {
-	if (module->status == VGSM_MODULE_STATUS_CLOSED ||
+	if (module->status == VGSM_MODULE_STATUS_UNCONFIGURED ||
+	    module->status == VGSM_MODULE_STATUS_CLOSED ||
 	    module->status == VGSM_MODULE_STATUS_FAILED) {
 		ast_cli(fd, "Module is not available\n");
 		return RESULT_FAILURE;
@@ -2526,7 +2586,8 @@ static int vgsm_module_power_off(int fd, struct vgsm_module *module)
 {
 	struct vgsm_comm *comm = &module->comm;
 
-	if (module->status == VGSM_MODULE_STATUS_CLOSED ||
+	if (module->status == VGSM_MODULE_STATUS_UNCONFIGURED ||
+	    module->status == VGSM_MODULE_STATUS_CLOSED ||
 	    module->status == VGSM_MODULE_STATUS_FAILED) {
 		ast_cli(fd, "Module is not available\n");
 		return RESULT_FAILURE;
@@ -2663,7 +2724,9 @@ static int vgsm_module_identify(
 	if (argc < 5)
 		return RESULT_SHOWUSAGE;
 
-	if (module->status == VGSM_MODULE_STATUS_CLOSED) {
+	if (module->status == VGSM_MODULE_STATUS_UNCONFIGURED ||
+	    module->status == VGSM_MODULE_STATUS_CLOSED ||
+	    module->status == VGSM_MODULE_STATUS_FAILED) {
 		ast_cli(fd, "Module is not available\n");
 		return RESULT_FAILURE;
 	}
@@ -6221,10 +6284,11 @@ static void vgsm_module_timer(void *data)
 			vgsm_module_status_to_text(module->status));
 	break;
 
+	case VGSM_MODULE_STATUS_UNCONFIGURED:
 	case VGSM_MODULE_STATUS_WAITING_SIM:
 	case VGSM_MODULE_STATUS_WAITING_PIN:
 	case VGSM_MODULE_STATUS_OFFLINE:
-		// Do nothing
+		assert(0);
 	break;
 	}
 }
@@ -6266,6 +6330,7 @@ void vgsm_module_shutdown_all(void)
 		ast_mutex_lock(&module->lock);
 
 		if (module->current_config->poweroff_on_exit &&
+		    module->status != VGSM_MODULE_STATUS_UNCONFIGURED &&
 		    module->status != VGSM_MODULE_STATUS_CLOSED &&
 		    module->status != VGSM_MODULE_STATUS_POWERING_OFF &&
 		    module->status != VGSM_MODULE_STATUS_OFF &&

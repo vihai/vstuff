@@ -24,21 +24,38 @@
 #include "chan_vgsm.h"
 #include "operators.h"
 
+static struct vgsm_operator_info *_vgsm_operators_search(__u16 mcc, __u16 mnc)
+{
+	struct vgsm_operator_info *op_info;
+
+	list_for_each_entry(op_info, &vgsm.op_list, node) {
+		if (op_info->mcc == mcc &&
+		    op_info->mnc == mnc)
+			return op_info;
+	}
+
+	return NULL;
+}
+
 struct vgsm_operator_info *vgsm_operators_search(__u16 mcc, __u16 mnc)
 {
 	struct vgsm_operator_info *op_info;
 
 	ast_rwlock_rdlock(&vgsm.operators_lock);
-	list_for_each_entry(op_info, &vgsm.op_list, node) {
-		if (op_info->mcc == mcc &&
-		    op_info->mnc == mnc) {
-
-			ast_rwlock_unlock(&vgsm.operators_lock);
-
-			return op_info;
-		}
-	}
+	op_info = _vgsm_operators_search(mcc, mnc);
 	ast_rwlock_unlock(&vgsm.operators_lock);
+
+	return op_info;
+}
+
+static struct vgsm_operator_country *_vgsm_operators_country_search(__u16 mcc)
+{
+	struct vgsm_operator_country *op_country;
+
+	list_for_each_entry(op_country, &vgsm.op_countries_list, node) {
+		if (op_country->mcc == mcc)
+			return op_country;
+	}
 
 	return NULL;
 }
@@ -48,16 +65,10 @@ struct vgsm_operator_country *vgsm_operators_country_search(__u16 mcc)
 	struct vgsm_operator_country *op_country;
 
 	ast_rwlock_rdlock(&vgsm.operators_lock);
-	list_for_each_entry(op_country, &vgsm.op_countries_list, node) {
-		if (op_country->mcc == mcc) {
-			ast_rwlock_unlock(&vgsm.operators_lock);
-
-			return op_country;
-		}
-	}
+	op_country = _vgsm_operators_country_search(mcc);
 	ast_rwlock_unlock(&vgsm.operators_lock);
 
-	return NULL;
+	return op_country;
 }
 
 static void vgsm_operators_countries_init(void)
@@ -167,7 +178,7 @@ static void vgsm_operators_info_init(void)
 				cat);
 		}
 
-		op_info->country = vgsm_operators_country_search(op_info->mcc);
+		op_info->country = _vgsm_operators_country_search(op_info->mcc);
 
 		struct ast_variable *var;
 		var = ast_variable_browse(cfg, (char *)cat);

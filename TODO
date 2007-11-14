@@ -1,37 +1,4 @@
 
-- hfc-4s leaks references to card
-
-- Access pipeline from link should avoid races with pipeline destruction
-
-- All netlink transactions are atomic, if the reader does not empty his
-  receive buffer the tables remain locked forever! Implement some timeout
-  policy
-
-- Re-implement non-persistent pipelines, bound to pid or open file, so that the
-  holding process will drop the pipeline on exit without closing (crash/kill/
-  etc).
-
-- Find a better way to allocate ids instead of using a list (?)
-
-- libkstreamer: Initialize hashes
-
-- Creating an unconnected pipeline, and then removing hfc-4s causes:
-[17872085.280000] BUG: unable to handle kernel paging request at virtual address 00100104
-[17872085.280000] EIP is at ks_pipeline_unregister+0x49/0x80 [kstreamer]
-[17872085.280000]  <c010409f> error_code+0x4f/0x60  <cfc7c0ef> ks_link_unregister+0xaf/0xd0 [kstreamer]
-[17872085.280000]  <cfbc8ea3> hfc_st_chan_rx_unregister+0xb/0x10 [visdn_hfc_4s]  <cfbc9129> hfc_st_chan_unregister+0x77/0x9a [visdn_hfc_4s]
-[17872085.280000]  <cfbc8056> hfc_st_port_unregister+0xd6/0xfc [visdn_hfc_4s]  <cfbc5204> hfc_card_unregister+0x67/0xa4 [visdn_hfc_4s]
-
-
-
-
-
-
-
-
-
-
-
 General:
 --------
 
@@ -52,6 +19,19 @@ Build system:
 - Avoid libtool to install chan_visdn.a, chan_visdn.la, run ldconfig and
   complain about non-standard directory location
 - Conditionally build kfifo!
+
+kstreamer:
+----------
+
+- All netlink transactions are atomic, if the reader does not empty his
+  receive buffer the tables remain locked forever! Implement some timeout
+  policy
+
+- Re-implement non-persistent pipelines, bound to pid or open file, so that the
+  holding process will drop the pipeline on exit without closing (crash/kill/
+  etc).
+
+- Find a better way to allocate ids instead of using a list (?)
 
 chan_visdn:
 -----------
@@ -202,7 +182,12 @@ vgsm:
 - Handle hung micros by timing out writes/reads and resetting the board
 - Implement CODEC write queueing and CODEC read waiting
 
+vgsm2:
+------
+
 chan_vgsm:
 ----------
+- Implement removal of modules during reload if they are removed in vgsm.conf
+- Implement removal of huntgroups during reload if they are removed in vgsm.conf
 - Implement network listing command
 - Implement reconfiguration of operator selection on reload

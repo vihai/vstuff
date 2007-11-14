@@ -58,6 +58,7 @@ enum vgsm_codec
 
 enum vgsm_module_status
 {
+	VGSM_MODULE_STATUS_UNCONFIGURED,
 	VGSM_MODULE_STATUS_CLOSED,
 	VGSM_MODULE_STATUS_OFF,
 	VGSM_MODULE_STATUS_POWERING_ON,
@@ -241,6 +242,8 @@ struct vgsm_module
 	ast_mutex_t lock;
 
 	struct vgsm_module_config *current_config;
+	struct vgsm_module_config *new_config;
+	BOOL config_present;
 
 	char name[64];
 
@@ -368,7 +371,7 @@ void vgsm_module_set_status(
 	const char *fmt, ...)
 	__attribute__ ((format (printf, 4, 5)));
 
-void vgsm_module_reload(struct ast_config *cfg);
+int vgsm_module_reload(struct ast_config *cfg);
 
 void vgsm_module_chup_complete(struct vgsm_req *req, void *data);
 

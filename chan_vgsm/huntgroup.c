@@ -241,9 +241,9 @@ static void vgsm_hg_reconfigure(
 
 void vgsm_hg_reload(struct ast_config *cfg)
 {
-	ast_rwlock_wrlock(&vgsm.huntgroups_list_lock);
-
 	/*
+	 * TODO: Implement huntgroup removal
+	 *
 	struct vgsm_huntgroup *hg;
 	list_for_each_entry(hg, &vgsm.huntgroups_list, node) {
 		hg->configured = FALSE;
@@ -267,8 +267,6 @@ void vgsm_hg_reload(struct ast_config *cfg)
 		vgsm_hg_reconfigure(cfg, cat,
 			cat + strlen(VGSM_HUNTGROUP_PREFIX));
 	}
-
-	ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
 }
 
 /*---------------------------------------------------------------------------*/

@@ -540,16 +540,16 @@ static int vgsm_state_from_var(
 
 static struct vgsm_urc_class urc_classes[];
 
-static void vgsm_reload_config(void)
+static int vgsm_reload_config(void)
 {
 	struct ast_config *cfg;
 	cfg = ast_config_load(VGSM_CONFIG_FILE);
 	if (!cfg) {
 		ast_log(LOG_WARNING,
-			"Unable to load config %s, VGSM disabled\n",
+			"Unable to load vgsm config file '%s'\n",
 			VGSM_CONFIG_FILE);
 
-		return;
+		return -1;
 	}
 
 	struct ast_variable *var;
@@ -570,6 +570,8 @@ static void vgsm_reload_config(void)
 	ast_config_destroy(cfg);
 
 	vgsm_operators_init();
+
+	return 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -879,7 +881,10 @@ static struct ast_cli_entry vgsm_send_sms =
 
 static int do_vgsm_reload(int fd, int argc, char *argv[])
 {
-	vgsm_reload_config();
+	if (vgsm_reload_config() < 0) {
+		ast_cli(fd, "Error reloading configuration\n");
+		return RESULT_FAILURE;
+	}
 
 	return RESULT_SUCCESS;
 }
@@ -3101,9 +3106,7 @@ int reload(void)
 static int vgsm_reload_module(void)
 #endif
 {
-	vgsm_reload_config();
-
-	return 0;
+	return vgsm_reload_config();
 }
 
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)

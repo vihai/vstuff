@@ -51,8 +51,6 @@ int vgsm_comm_init(
 	struct vgsm_comm *comm,
 	struct vgsm_urc_class *urc_classes)
 {
-	int err;
-
 	comm->fd = -1;
 	comm->urc_classes = urc_classes;
 	comm->state = VGSM_COMM_CLOSED;
@@ -79,8 +77,6 @@ int vgsm_comm_init(
 			vgsm_comm_timer, comm);
 
 	return 0;
-
-	return err;
 }
 
 void vgsm_comm_destroy(struct vgsm_comm *comm)
