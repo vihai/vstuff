@@ -237,6 +237,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 		ast_chan->rawreadformat = AST_FORMAT_ALAW;
 		ast_chan->writeformat = AST_FORMAT_ALAW;
 		ast_chan->rawwriteformat = AST_FORMAT_ALAW;
+		vgsm_chan->prev_rawreadformat = AST_FORMAT_ALAW;
 		vgsm_chan->prev_rawwriteformat = AST_FORMAT_ALAW;
 	} else {
 		ast_chan->nativeformats =

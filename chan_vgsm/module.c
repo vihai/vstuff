@@ -1311,7 +1311,8 @@ char *vgsm_module_completion(const char *line, const char *word, int state)
 static void vgsm_module_ignite(
 	struct vgsm_module *module)
 {
-	vgsm_mesim_get_ready_for_poweron(&module->mesim);
+	if (module->interface_version == 2)
+		vgsm_mesim_get_ready_for_poweron(&module->mesim);
 
 	if (ioctl(module->me_fd, VGSM_IOC_POWER_IGN, 0) < 0)
 		vgsm_module_failed_text(module,
@@ -6278,17 +6279,15 @@ static void vgsm_module_timer(void *data)
 
 	case VGSM_MODULE_STATUS_INITIALIZING:
 	case VGSM_MODULE_STATUS_OFF:
-		ast_log(LOG_ERROR,
-			"vgsm: Module '%s': Unexpected timer in status %s\n",
-			module->name,
-			vgsm_module_status_to_text(module->status));
-	break;
-
 	case VGSM_MODULE_STATUS_UNCONFIGURED:
 	case VGSM_MODULE_STATUS_WAITING_SIM:
 	case VGSM_MODULE_STATUS_WAITING_PIN:
 	case VGSM_MODULE_STATUS_OFFLINE:
-		assert(0);
+		ast_log(LOG_ERROR,
+			"vgsm: Module '%s': Unexpected timer in status %s\n",
+			module->name,
+			vgsm_module_status_to_text(module->status));
+
 	break;
 	}
 }
