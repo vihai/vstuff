@@ -12,7 +12,7 @@
 astmod_LTLIBRARIES = chan_vgsm.la
 chan_vgsm_la_SOURCES =\
 	chan_vgsm.c		\
-	module.c		\
+	me.c			\
 	sim.c			\
 	sim_file.c		\
 	mesim.c			\

@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -40,7 +40,7 @@ struct vgsm_sms_deliver
 {
 	int refcnt;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	struct vgsm_number smcc_address;
 

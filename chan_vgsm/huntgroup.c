@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -131,8 +131,8 @@ static void vgsm_hg_clear_members(
 {
 	struct vgsm_huntgroup_member *hgm, *tpos;
 	list_for_each_entry_safe(hgm, tpos, &hg->members, node) {
-		vgsm_module_put(hgm->module);
-		hgm->module = NULL;
+		vgsm_me_put(hgm->me);
+		hgm->me = NULL;
 		
 		list_del(&hgm->node);
 		free(hgm);
@@ -157,9 +157,9 @@ static void vgsm_hg_parse_members(
 			*(tok + strlen(tok) - 1) == '\t')
 			*(tok + strlen(tok) - 1) = '\0';
 
-		struct vgsm_module *module;
-		module = vgsm_module_get_by_name(tok);
-		if (!module) {
+		struct vgsm_me *me;
+		me = vgsm_me_get_by_name(tok);
+		if (!me) {
 			ast_log(LOG_WARNING,
 				"Huntgroup member %s not found\n",
 				tok);
@@ -171,12 +171,12 @@ static void vgsm_hg_parse_members(
 		hgm = malloc(sizeof(*hgm));
 		memset(hgm, 0, sizeof(hgm));
 
-		hgm->module = vgsm_module_get(module);
+		hgm->me = vgsm_me_get(me);
 
 		list_add_tail(&hgm->node, &hg->members);
 
-		vgsm_module_put(module);
-		module = NULL;
+		vgsm_me_put(me);
+		me = NULL;
 	}
 
 	free(str);
@@ -311,7 +311,7 @@ static void do_show_vgsm_huntgroups_details(
 	ast_cli(fd, "Members: ");
 	struct vgsm_huntgroup_member *hgm;
 	list_for_each_entry(hgm, &hg->members, node) {
-		ast_cli(fd, "%s, ", hgm->module->name);
+		ast_cli(fd, "%s, ", hgm->me->name);
 	}
 	ast_cli(fd, "\n\n");
 }
@@ -354,7 +354,7 @@ static struct vgsm_huntgroup_member *vgsm_hg_find_member(
 {
 	struct vgsm_huntgroup_member *hgm;
 	list_for_each_entry(hgm, &hg->members, node) {
-		if (!strcasecmp(hgm->module->name, name))
+		if (!strcasecmp(hgm->me->name, name))
 			return hgm;
 	}
 
@@ -381,10 +381,10 @@ static struct vgsm_huntgroup_member *vgsm_hg_next_member(
 	return memb;
 }
 
-struct vgsm_module *vgsm_hg_hunt(
+struct vgsm_me *vgsm_hg_hunt(
 	struct vgsm_huntgroup *hg,
-	struct vgsm_module *cur_module,
-	struct vgsm_module *first_module)
+	struct vgsm_me *cur_me,
+	struct vgsm_me *first_me)
 {
 	ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
 
@@ -396,19 +396,19 @@ struct vgsm_module *vgsm_hg_hunt(
 	}
 
 	vgsm_debug_generic("Hunting started on group '%s'"
-			" (mode='%s', cur_module='%s', first_module='%s',"
+			" (mode='%s', cur_me='%s', first_me='%s',"
 			" int_member='%s')\n",
 			hg->name,
 			vgsm_huntgroup_mode_to_text(hg->mode),
-			cur_module ? cur_module->name : "",
-			first_module ? first_module->name : "",
+			cur_me ? cur_me->name : "",
+			first_me ? first_me->name : "",
 			hg->current_member ?
-				hg->current_member->module->name : "");
+				hg->current_member->me->name : "");
 
 	struct vgsm_huntgroup_member *starting_hgm;
-	if (cur_module) {
+	if (cur_me) {
 		starting_hgm = vgsm_hg_next_member(hg,
-				vgsm_hg_find_member(hg, cur_module->name));
+				vgsm_hg_find_member(hg, cur_me->name));
 	} else {
 		starting_hgm = list_entry(hg->members.next,
 				struct vgsm_huntgroup_member, node);
@@ -430,42 +430,42 @@ struct vgsm_module *vgsm_hg_hunt(
 	do {
 		vgsm_debug_generic(
 			"Huntgroup: trying interface '%s'\n",
-			hgm->module->name);
+			hgm->me->name);
 
-		if (hgm->module == first_module) {
+		if (hgm->me == first_me) {
 			vgsm_debug_generic(
 				"Huntgroup: cycle completed without success\n");
 			break;
 		}
 
-		ast_mutex_lock(&hgm->module->lock);
+		ast_mutex_lock(&hgm->me->lock);
 
-		if (hgm->module->status == VGSM_MODULE_STATUS_READY &&
-		   !hgm->module->vgsm_chan &&
-		   (hgm->module->net.status ==
+		if (hgm->me->status == VGSM_ME_STATUS_READY &&
+		   !hgm->me->vgsm_chan &&
+		   (hgm->me->net.status ==
 					VGSM_NET_STATUS_REGISTERED_HOME ||
-		    hgm->module->net.status ==
+		    hgm->me->net.status ==
 					VGSM_NET_STATUS_REGISTERED_ROAMING)) {
 
 			hg->current_member = hgm;
 
 			vgsm_debug_generic(
-				"Huntgroup: found module"
-				" '%s'\n", hgm->module->name);
+				"Huntgroup: found me"
+				" '%s'\n", hgm->me->name);
 
-			ast_mutex_unlock(&hgm->module->lock);
+			ast_mutex_unlock(&hgm->me->lock);
 			ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
 
-			return vgsm_module_get(hgm->module);
+			return vgsm_me_get(hgm->me);
 		}
 
-		ast_mutex_unlock(&hgm->module->lock);
+		ast_mutex_unlock(&hgm->me->lock);
 
 		hgm = vgsm_hg_next_member(hg, hgm);
 
 		vgsm_debug_generic(
 			"Huntgroup: next interface '%s'\n",
-			hgm->module->name);
+			hgm->me->name);
 
 	} while(hgm != starting_hgm);
 
@@ -475,14 +475,14 @@ err_no_interfaces:
 	return NULL;
 }
 
-int vgsm_hg_module_load(void)
+int vgsm_hg_me_load(void)
 {
 	ast_cli_register(&show_vgsm_huntgroups);
 
 	return 0;
 }
 
-int vgsm_hg_module_unload(void)
+int vgsm_hg_me_unload(void)
 {
 	ast_cli_unregister(&show_vgsm_huntgroups);
 

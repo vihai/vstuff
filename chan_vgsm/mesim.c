@@ -46,13 +46,13 @@ static void vgsm_mesim_timers_updated(struct vgsm_timerset *set);
 static void vgsm_mesim_timer(void *data);
 static void vgsm_mesim_impl_timer(void *data);
 
-int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_module *module)
+int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_me *me)
 {
 //	int err;
 
 	mesim->fd = -1;
 	mesim->state = VGSM_MESIM_CLOSED;
-	mesim->module = module;
+	mesim->me = me;
 
 	ast_mutex_init(&mesim->state_lock);
 	ast_cond_init(&mesim->state_cond, NULL);
@@ -81,14 +81,14 @@ void vgsm_mesim_destroy(struct vgsm_mesim *mesim)
 struct vgsm_mesim *vgsm_mesim_get(
 	struct vgsm_mesim *mesim)
 {
-	vgsm_module_get(mesim->module);
+	vgsm_me_get(mesim->me);
 
 	return mesim;
 }
 
 void _vgsm_mesim_put(struct vgsm_mesim *mesim)
 {
-	vgsm_module_put(mesim->module);
+	vgsm_me_put(mesim->me);
 }
 
 const char *vgsm_mesim_message_type_to_text(

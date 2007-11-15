@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -129,8 +129,8 @@ void _vgsm_sms_status_report_put(struct vgsm_sms_status_report *sms)
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
 	if (!refcnt) {
-		if (sms->module)
-			vgsm_module_put(sms->module);
+		if (sms->me)
+			vgsm_me_put(sms->me);
 
 		if (sms->text)
 			free(sms->text);
@@ -460,7 +460,7 @@ err_sms_alloc:
 
 int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 {
-	struct vgsm_module *module = sms->module;
+	struct vgsm_me *me = sms->me;
 	char spooler[PATH_MAX];
 
 	snprintf(spooler, sizeof(spooler), "%s %s",
@@ -482,21 +482,21 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 		return -1;
 	}
 
-	ast_mutex_lock(&module->lock);
-	struct vgsm_module_config *mc = module->current_config;
+	ast_mutex_lock(&me->lock);
+	struct vgsm_me_config *mc = me->current_config;
 
-	fprintf(f, "Received: from GSM module %s", module->name);
+	fprintf(f, "Received: from GSM me %s", me->name);
 
-	if (module->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-	    module->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+	if (me->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+	    me->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		struct vgsm_operator_info *op_info;
-		op_info = vgsm_operators_search(module->net.mcc,
-						module->net.mnc);
+		op_info = vgsm_operators_search(me->net.mcc,
+						me->net.mnc);
 
 		fprintf(f,
 			", registered on %03hu%02hu",
-			module->net.mcc,
-			module->net.mnc);
+			me->net.mcc,
+			me->net.mnc);
 
 		if (op_info) {
 			fprintf(f," (%s, %s)\n",
@@ -505,7 +505,7 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 								"Unknown");
 		}
 	}
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_unlock(&me->lock);
 
 	struct tm tm;
 	time_t tim = time(NULL);

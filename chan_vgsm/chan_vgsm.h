@@ -25,7 +25,7 @@
 
 #include <list.h>
 
-#include "module.h"
+#include "me.h"
 #include "comm.h"
 
 #ifndef AST_CONTROL_DISCONNECT
@@ -40,16 +40,16 @@ struct vgsm_chan {
 
 	BOOL outbound;
 
-	struct vgsm_module *module;
-	struct vgsm_module_config *mc;
+	struct vgsm_me *me;
+	struct vgsm_me_config *mc;
 
 	struct vgsm_huntgroup *huntgroup;
-	struct vgsm_module *hg_first_module;
+	struct vgsm_me *hg_first_me;
 
 	int up_fd;
 
 	struct ks_node *node_userport;
-	struct ks_node *node_module;
+	struct ks_node *node_me;
 
 	struct ks_pipeline *pipeline_rx;
 	struct ks_pipeline *pipeline_tx;
@@ -72,7 +72,7 @@ struct vgsm_chan {
 struct vgsm_state
 {
 	ast_mutex_t state_lock;
-	struct vgsm_module_config *default_mc;
+	struct vgsm_me_config *default_mc;
 
 	ast_rwlock_t ifs_list_lock;
 	struct list_head ifs_list;
@@ -101,7 +101,7 @@ void _vgsm_chan_put(struct vgsm_chan *vgsm_chan);
 #define vgsm_chan_put(vgsm_chan) \
 	do { _vgsm_chan_put(vgsm_chan); (vgsm_chan) = NULL; } while(0)
 
-struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module);
+struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me);
 
 static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)
 {

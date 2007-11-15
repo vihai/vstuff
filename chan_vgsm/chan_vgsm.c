@@ -17,12 +17,12 @@
  * is brain-dead, the risk of making a big mess is very high.
  *
  * The most used and dangerous locks are the Asterisk's channel lock and
- * the module's lock. The former is the lock we all know and we also know
+ * the me's lock. The former is the lock we all know and we also know
  * that Asterisk acquires it on callback invocation.
- * The latter is a lock protecting access to the "vgsm_module" structure.
- * A vgsm_module describes everything belonging to a GSM module.
+ * The latter is a lock protecting access to the "vgsm_me" structure.
+ * A vgsm_me describes everything belonging to a GSM me.
  *
- * There no one-to-one relationship between them as the module exists even
+ * There no one-to-one relationship between them as the me exists even
  * if no call is present, a ast_chan is actually a call... or a channel?
  * or half a call? who knows....
  *
@@ -33,9 +33,9 @@
  *
  * Locking order for nested locks:
  *
- * ast_chan => module->lock
- * ast_chan => vgsm.huntgroups_list_lock => module->lock
- * ast_chan => vgsm.ifs_list_lock => module->lock
+ * ast_chan => me->lock
+ * ast_chan => vgsm.huntgroups_list_lock => me->lock
+ * ast_chan => vgsm.ifs_list_lock => me->lock
  *
  * Leaf locks:
  *
@@ -43,21 +43,21 @@
  * vgsm.operators_list_lock
  * timers_lock
  *
- * vgsm_module callbacks are invoked without locks, it is their
+ * vgsm_me callbacks are invoked without locks, it is their
  * responsibility to acquire the needed locks.
  *
- * Some field in module may be accessed without locking, either because it is
- * read-only after module initialization or being meaningful only after
- * the module changes into a particular state.
+ * Some field in me may be accessed without locking, either because it is
+ * read-only after me initialization or being meaningful only after
+ * the me changes into a particular state.
  *
- * Furthermore, the module contains module->comm which is another object
+ * Furthermore, the me contains me->comm which is another object
  * protected by its own lock, so, it has its own access policy.
  *
- * vgsm_module_config structures are instantiated on configuration and a
- * pointer to the current configuration is set into vgsm_module.
- * The values contained in a vgsm_module_config instance are read-only,
+ * vgsm_me_config structures are instantiated on configuration and a
+ * pointer to the current configuration is set into vgsm_me.
+ * The values contained in a vgsm_me_config instance are read-only,
  * procedures which want a stable configuration may simply take a reference
- * to the vgsm_module_config object and keep it for as long as it is needed.
+ * to the vgsm_me_config object and keep it for as long as it is needed.
  * For example, a snapshot of the configuration is taken into the channel
  * structure and kept for as long as the call lasts.
  *
@@ -132,7 +132,7 @@
 
 #include "util.h"
 #include "chan_vgsm.h"
-#include "module.h"
+#include "me.h"
 #include "huntgroup.h"
 #include "comm.h"
 #include "causes.h"
@@ -151,14 +151,14 @@
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 
 #ifdef DEBUG_CODE
-#define vgsm_debug_jitbuf(module, format, arg...)	\
-	if ((module)->debug_jitbuf)			\
+#define vgsm_debug_jitbuf(me, format, arg...)	\
+	if ((me)->debug_jitbuf)			\
 		ast_verbose("vgsm: %s: "		\
 			format,				\
-			(module)->name,			\
+			(me)->name,			\
 			## arg)
 #else
-#define vgsm_debug_jitbuf(module, format, arg...)	\
+#define vgsm_debug_jitbuf(me, format, arg...)	\
 	do {} while(0);
 #endif
 
@@ -179,7 +179,7 @@ static const struct ast_channel_tech vgsm_tech;
 static struct ast_channel *vgsm_ast_chan_alloc(
 	struct vgsm_chan *vgsm_chan,
 	int state,
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	int line,
 	int format)
 {
@@ -196,12 +196,12 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 
 	snprintf(ast_chan->name, sizeof(ast_chan->name),
 		"VGSM/%s/%d",
-		module ? module->name : "null",
+		me ? me->name : "null",
 		line);
 #elif ASTERISK_VERSION_NUM < 10403
 	ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
 				"VGSM/%s/%d",
-				module ? module->name : "null",
+				me ? me->name : "null",
 				line);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
@@ -211,7 +211,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 	ast_chan = ast_channel_alloc(TRUE, state, NULL, NULL,
 				NULL, NULL, NULL, 0,
 				"VGSM/%s/%d",
-				module ? module->name : "null",
+				me ? me->name : "null",
 				line);
 	if (!ast_chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel\n");
@@ -231,7 +231,7 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 
 	ast_chan->adsicpe = AST_ADSI_UNAVAILABLE;
 
-	if (module->interface_version == 1) {
+	if (me->interface_version == 1) {
 		ast_chan->nativeformats = AST_FORMAT_ALAW;
 		ast_chan->readformat = AST_FORMAT_ALAW;
 		ast_chan->rawreadformat = AST_FORMAT_ALAW;
@@ -268,23 +268,23 @@ static struct ast_channel *vgsm_ast_chan_alloc(
 	}
 
 	pbx_builtin_setvar_helper(ast_chan,
-		"VGSM_ME_IMEI", module->module.imei);
+		"VGSM_ME_IMEI", me->me.imei);
 	ast_cdr_setvar(ast_chan->cdr,
-		"VGSM_ME_IMEI", module->module.imei, 0);
+		"VGSM_ME_IMEI", me->me.imei, 0);
 
 	pbx_builtin_setvar_helper(ast_chan,
-		"VGSM_SIM_IMSI", module->sim.imsi);
+		"VGSM_SIM_IMSI", me->sim.imsi);
 	ast_cdr_setvar(ast_chan->cdr,
-		"VGSM_SIM_IMSI", module->sim.imsi, 0);
+		"VGSM_SIM_IMSI", me->sim.imsi, 0);
 
 	pbx_builtin_setvar_helper(ast_chan,
-		"VGSM_SIM_ID", module->sim.card_id);
+		"VGSM_SIM_ID", me->sim.card_id);
 	ast_cdr_setvar(ast_chan->cdr,
-		"VGSM_SIM_ID", module->sim.card_id, 0);
+		"VGSM_SIM_ID", me->sim.card_id, 0);
 
 	char tmpstr[32];
 	snprintf(tmpstr, sizeof(tmpstr), "%03u%02u",
-		module->net.mcc, module->net.mnc);
+		me->net.mcc, me->net.mnc);
 	pbx_builtin_setvar_helper(ast_chan,
 		"VGSM_NET_ID", tmpstr);
 	ast_cdr_setvar(ast_chan->cdr,
@@ -368,7 +368,7 @@ void _vgsm_chan_put(struct vgsm_chan *vgsm_chan)
 
 	if (!refcnt) {
 		assert(!vgsm_chan->ast_chan);
-		assert(!vgsm_chan->module);
+		assert(!vgsm_chan->me);
 
 		if (vgsm_chan->dsp) {
 			ast_dsp_free(vgsm_chan->dsp);
@@ -380,13 +380,13 @@ void _vgsm_chan_put(struct vgsm_chan *vgsm_chan)
 			vgsm_chan->huntgroup = NULL;
 		}
 
-		if (vgsm_chan->hg_first_module) {
-			vgsm_module_put(vgsm_chan->hg_first_module);
-			vgsm_chan->hg_first_module = NULL;
+		if (vgsm_chan->hg_first_me) {
+			vgsm_me_put(vgsm_chan->hg_first_me);
+			vgsm_chan->hg_first_me = NULL;
 		}
 
 		if (vgsm_chan->mc) {
-			vgsm_module_config_put(vgsm_chan->mc);
+			vgsm_me_config_put(vgsm_chan->mc);
 			vgsm_chan->mc = NULL;
 		}
 
@@ -406,9 +406,9 @@ static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 	int err;
 
 	if (argc < 4) {
-		ast_cli(fd, "Missing module name\n");
+		ast_cli(fd, "Missing me name\n");
 		err = RESULT_SHOWUSAGE;
-		goto err_missing_module;
+		goto err_missing_me;
 	}
 
 	if (argc < 5) {
@@ -429,20 +429,20 @@ static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 		goto err_missing_newpin;
 	}
 
-	struct vgsm_module *module;
-	module = vgsm_module_get_by_name(argv[3]);
-	if (!module) {
-		ast_cli(fd, "Cannot find module '%s'\n", argv[3]);
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(argv[3]);
+	if (!me) {
+		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
 		err = RESULT_SHOWUSAGE;
-		goto err_module_not_found;
+		goto err_me_not_found;
 	}
 
 	int res;
 	if (!strcasecmp(argv[5], "enabled")) {
-		res = vgsm_req_make_wait_result(&module->comm, 180 * SEC,
+		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
 			"AT+CLCK=SC,1,\"%s\"", argv[4]);
 	} else if (!strcasecmp(argv[5], "disabled")) {
-		res = vgsm_req_make_wait_result(&module->comm, 180 * SEC,
+		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
 			"AT+CLCK=SC,0,\"%s\"", argv[4]);
 	} else {
 		if (!vgsm_pin_valid(argv[5])) {
@@ -451,31 +451,31 @@ static int do_vgsm_pin_set(int fd, int argc, char *argv[])
 			goto err_newpin_invalid;
 		}
 
-		res = vgsm_req_make_wait_result(&module->comm, 180 * SEC,
+		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
 			"AT+CPWD=SC,\"%s\",\"%s\"",
 			argv[4], argv[5]);
 	}
 
 	if (res != VGSM_RESP_OK) {
 		ast_cli(fd, "Unable to complete command: %s (%d)\n",
-			vgsm_module_error_to_text(res),
+			vgsm_me_error_to_text(res),
 			res);
 		err = RESULT_FAILURE;
 		goto err_response;
 	}
 
-	vgsm_module_put(module);
+	vgsm_me_put(me);
 
 	return RESULT_SUCCESS;
 
 err_response:
 err_newpin_invalid:
-	vgsm_module_put(module);
-err_module_not_found:
+	vgsm_me_put(me);
+err_me_not_found:
 err_missing_newpin:
 err_oldpin_invalid:
 err_missing_oldpin:
-err_missing_module:
+err_missing_me:
 
 	return err;
 }
@@ -493,7 +493,7 @@ static char *vgsm_pin_set_complete(
 
 	switch(pos) {
 	case 3:
-		return vgsm_module_completion(line, word, state);
+		return vgsm_me_completion(line, word, state);
 	case 5:
 		for(i=state; i<ARRAY_SIZE(commands); i++) {
 			if (!strncasecmp(word, commands[i], strlen(word)))
@@ -506,16 +506,16 @@ static char *vgsm_pin_set_complete(
 }
 
 static char vgsm_pin_set_help[] =
-"Usage: vgsm pin set <module> <OLDPIN> <NEWPIN|enabled|disabled>\n"
+"Usage: vgsm pin set <me> <OLDPIN> <NEWPIN|enabled|disabled>\n"
 "\n"
-"	Set, enable or disable the PIN on the SIM installed in module\n"
-"	<module>.\n";
+"	Set, enable or disable the PIN on the SIM installed in me\n"
+"	<me>.\n";
 
 static struct ast_cli_entry vgsm_pin_set =
 {
 	{ "vgsm", "pin", "set", NULL },
 	do_vgsm_pin_set,
-	"Set, enable or disable PIN on the selected module",
+	"Set, enable or disable PIN on the selected me",
 	vgsm_pin_set_help,
 	vgsm_pin_set_complete,
 };
@@ -565,7 +565,7 @@ static int vgsm_reload_config(void)
 		var = var->next;
 	}
 
-	vgsm_module_reload(cfg);
+	vgsm_me_reload(cfg);
 	vgsm_hg_reload(cfg);
 
 	ast_config_destroy(cfg);
@@ -591,7 +591,7 @@ static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
 static char debug_vgsm_generic_help[] =
 "Usage: debug vgsm generic\n"
 "\n"
-"	Debug generic vGSM events, including modules state change\n";
+"	Debug generic vGSM events, including mes state change\n";
 
 static struct ast_cli_entry debug_vgsm_generic =
 {
@@ -680,9 +680,9 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	int err = RESULT_SUCCESS;
 
 	if (argc < 4) {
-		ast_cli(fd, "Missing module\n");
+		ast_cli(fd, "Missing me\n");
 		err = RESULT_SHOWUSAGE;
-		goto err_missing_module;
+		goto err_missing_me;
 	}
 
 	if (argc < 5) {
@@ -697,70 +697,70 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 		goto err_missing_text;
 	}
 
-	struct vgsm_module *module;
-	module = vgsm_module_get_by_name(argv[3]);
-	if (!module) {
-		ast_cli(fd, "Cannot find module '%s'\n", argv[3]);
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(argv[3]);
+	if (!me) {
+		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
 		err = RESULT_FAILURE;
-		goto err_module_not_found;
+		goto err_me_not_found;
 	}
 
-	ast_mutex_lock(&module->lock);
+	ast_mutex_lock(&me->lock);
 
-	if (module->status != VGSM_MODULE_STATUS_READY) {
-		ast_mutex_unlock(&module->lock);
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
 
-		ast_cli(fd, "Module '%s' is not ready\n", module->name);
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
 		err = RESULT_FAILURE;
-		goto err_module_not_ready;
+		goto err_me_not_ready;
 	}
 
-	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-	    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		ast_mutex_unlock(&module->lock);
+	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_mutex_unlock(&me->lock);
 
-		ast_cli(fd, "Module %s not registered\n", module->name);
+		ast_cli(fd, "ME %s not registered\n", me->name);
 		err = RESULT_FAILURE;
-		goto err_module_not_registered;
+		goto err_me_not_registered;
 	}
 
-	if (module->sending_sms) {
-		ast_mutex_unlock(&module->lock);
+	if (me->sending_sms) {
+		ast_mutex_unlock(&me->lock);
 
-		ast_cli(fd, "Module '%s' is already sending a SMS\n",
-				module->name);
+		ast_cli(fd, "ME '%s' is already sending a SMS\n",
+				me->name);
 		err = RESULT_FAILURE;
 		goto err_already_sending_sms;
 	}
 
-	module->sending_sms = TRUE;
+	me->sending_sms = TRUE;
 
 	struct vgsm_sms_submit *sms;
 	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
-		ast_mutex_unlock(&module->lock);
+		ast_mutex_unlock(&me->lock);
 
 		ast_cli(fd, "Cannot allocate SMS\n");
 		err = RESULT_FAILURE;
 		goto err_sms_alloc;
 	}
 
-	sms->module = vgsm_module_get(module);
+	sms->me = vgsm_me_get(me);
 
-	if (strlen(module->current_config->smcc_address.digits)) {
+	if (strlen(me->current_config->smcc_address.digits)) {
 		vgsm_number_copy(&sms->smcc_address,
-				&module->current_config->smcc_address);
-	} else if (strlen(module->sim.smcc_address.digits)) {
-		vgsm_number_copy(&sms->smcc_address, &module->sim.smcc_address);
+				&me->current_config->smcc_address);
+	} else if (strlen(me->sim.smcc_address.digits)) {
+		vgsm_number_copy(&sms->smcc_address, &me->sim.smcc_address);
 	} else {
-		ast_mutex_unlock(&module->lock);
+		ast_mutex_unlock(&me->lock);
 
 		ast_cli(fd, "Services Center number not set\n");
 		err = RESULT_FAILURE;
 		goto err_no_smcc;
 	}
 
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_unlock(&me->lock);
 
 	if (vgsm_number_parse(&sms->dest, argv[4]) < 0) {
 		ast_cli(fd, "Number %s is invalid\n", argv[4]);
@@ -797,7 +797,7 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 	}
 
 	struct vgsm_req *req = vgsm_req_make_sms(
-		&module->comm, 30 * SEC, sms->pdu, sms->pdu_len,
+		&me->comm, 30 * SEC, sms->pdu, sms->pdu_len,
 		"AT+CMGS=%d", sms->pdu_tp_len);
 	vgsm_req_wait(req);
 	int res = vgsm_req_status(req);
@@ -805,16 +805,16 @@ static int do_vgsm_send_sms(int fd, int argc, char *argv[])
 		vgsm_req_put(req);
 		ast_cli(fd,
 			"Error sending SMS: %s (%d)\n",
-			vgsm_module_error_to_text(res),
+			vgsm_me_error_to_text(res),
 			res);
 		err = RESULT_FAILURE;
 		goto err_make_req;
 	}
 	vgsm_req_put(req);
 
-	ast_mutex_lock(&module->lock);
-	module->sending_sms = FALSE;
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_lock(&me->lock);
+	me->sending_sms = FALSE;
+	ast_mutex_unlock(&me->lock);
 
 	return RESULT_SUCCESS;
 
@@ -826,17 +826,17 @@ err_invalid_number:
 err_no_smcc:
 	vgsm_sms_submit_put(sms);
 err_sms_alloc:
-	ast_mutex_lock(&module->lock);
-	module->sending_sms = FALSE;
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_lock(&me->lock);
+	me->sending_sms = FALSE;
+	ast_mutex_unlock(&me->lock);
 err_already_sending_sms:
-err_module_not_registered:
-err_module_not_ready:
-	vgsm_module_put(module);
-err_module_not_found:
+err_me_not_registered:
+err_me_not_ready:
+	vgsm_me_put(me);
+err_me_not_found:
 err_missing_text:
 err_missing_number:
-err_missing_module:
+err_missing_me:
 
 	return err;
 }
@@ -851,16 +851,16 @@ static char *vgsm_send_sms_complete(
 {
 	switch(pos) {
 	case 3:
-		return vgsm_module_completion(line, word,state);
+		return vgsm_me_completion(line, word,state);
 	}
 
 	return NULL;
 }
 
 static char vgsm_send_sms_help[] =
-"Usage: vgsm send sms <module> <number> <text> [class]\n"
+"Usage: vgsm send sms <me> <number> <text> [class]\n"
 "\n"
-"	Send short message to <number> using module <module>.\n"
+"	Send short message to <number> using me <me>.\n"
 "\n"
 "	<text> is the text to send, in 7-bit ASCII format.\n"
 "	This is meant to be just a testing command, other charsets beside\n"
@@ -895,7 +895,7 @@ static char vgsm_vgsm_reload_help[] =
 "\n"
 "	Reloads the vGSM configuration.\n"
 "\n"
-"	The module's configuration is loaded using a multiversion approach;\n"
+"	The me's configuration is loaded using a multiversion approach;\n"
 "	Calls using the old configuration will still use it, while new calls\n"
 "	will use the newly loaded configuration\n";
 
@@ -915,9 +915,9 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 	int err;
 
 	if (argc < 4) {
-		ast_cli(fd, "Missing module name\n");
+		ast_cli(fd, "Missing me name\n");
 		err = RESULT_SHOWUSAGE;
-		goto err_no_module_name;
+		goto err_no_me_name;
 	}
 
 	if (argc < 5) {
@@ -932,20 +932,20 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 		goto err_pin_invalid;
 	}
 
-	struct vgsm_module *module;
-	module = vgsm_module_get_by_name(argv[3]);
-	if (!module) {
-		ast_cli(fd, "Cannot find module '%s'\n", argv[3]);
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(argv[3]);
+	if (!me) {
+		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
 		err = RESULT_FAILURE;
-		goto err_module_not_found;
+		goto err_me_not_found;
 	}
 
-	struct vgsm_comm *comm = &module->comm;
+	struct vgsm_comm *comm = &me->comm;
 	struct vgsm_req *req;
 
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	if (req->err != VGSM_RESP_OK) {
-		vgsm_module_failed(module, req->err);
+		vgsm_me_failed(me, req->err);
 		err = RESULT_FAILURE;
 		goto err_req_make;
 	}
@@ -963,14 +963,14 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 				"AT+CPIN=\"%s\"", argv[4]);
 		if (res != VGSM_RESP_OK) {
 			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_module_error_to_text(res),
+				vgsm_me_error_to_text(res),
 				res);
 			err = RESULT_FAILURE;
 			goto err_send_pin;
 		}
 
-		vgsm_module_set_status(module,
-			VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_WAITING_INITIALIZATION,
 			-1, "PIN entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
@@ -992,7 +992,7 @@ static int do_vgsm_pin_input(int fd, int argc, char *argv[])
 	}
 
 	vgsm_req_put(req);
-	vgsm_module_put(module);
+	vgsm_me_put(me);
 
 	return RESULT_SUCCESS;
 
@@ -1001,11 +1001,11 @@ err_send_pin:
 err_not_waiting_pin:
 	vgsm_req_put(req);
 err_req_make:
-	vgsm_module_put(module);
-err_module_not_found:
+	vgsm_me_put(me);
+err_me_not_found:
 err_pin_invalid:
 err_no_pin:
-err_no_module_name:
+err_no_me_name:
 
 	return err;
 }
@@ -1020,22 +1020,22 @@ static char *vgsm_pin_input_complete(
 {
 	switch(pos) {
 	case 3:
-		return vgsm_module_completion(line, word, state);
+		return vgsm_me_completion(line, word, state);
 	}
 
 	return NULL;
 }
 
 static char vgsm_pin_input_help[] =
-"Usage: vgsm pin input <module> <PIN>\n"
+"Usage: vgsm pin input <me> <PIN>\n"
 "\n"
-"	Manually input PIN to selected module\n";
+"	Manually input PIN to selected me\n";
 
 static struct ast_cli_entry vgsm_pin_input =
 {
 	{ "vgsm", "pin", "input", NULL },
 	do_vgsm_pin_input,
-	"Manually input PIN to selected module",
+	"Manually input PIN to selected me",
 	vgsm_pin_input_help,
 	vgsm_pin_input_complete,
 };
@@ -1047,9 +1047,9 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 	int err;
 
 	if (argc < 4) {
-		ast_cli(fd, "Missing module name\n");
+		ast_cli(fd, "Missing me name\n");
 		err = RESULT_SHOWUSAGE;
-		goto err_no_module_name;
+		goto err_no_me_name;
 	}
 
 	if (argc < 5) {
@@ -1076,21 +1076,21 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 		goto err_newpin_invalid;
 	}
 
-	struct vgsm_module *module;
-	module = vgsm_module_get_by_name(argv[3]);
-	if (!module) {
-		ast_cli(fd, "Cannot find module '%s'\n", argv[3]);
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(argv[3]);
+	if (!me) {
+		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
 		err = RESULT_FAILURE;
-		goto err_module_not_found;
+		goto err_me_not_found;
 	}
 
-	struct vgsm_comm *comm = &module->comm;
+	struct vgsm_comm *comm = &me->comm;
 	struct vgsm_req *req;
 
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
-		vgsm_module_failed(module, err);
+		vgsm_me_failed(me, err);
 		err = RESULT_FAILURE;
 		goto err_req_make;
 	}
@@ -1116,14 +1116,14 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 				"AT+CPIN=\"%s\",\"%s\"", argv[4], argv[5]);
 		if (err != VGSM_RESP_OK) {
 			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_module_error_to_text(err),
+				vgsm_me_error_to_text(err),
 				err);
 			err = RESULT_FAILURE;
 		goto err_invalid_state;
 		}
 
-		vgsm_module_set_status(module,
-			VGSM_MODULE_STATUS_WAITING_INITIALIZATION, -1,
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_WAITING_INITIALIZATION, -1,
 			"PUK entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
@@ -1138,7 +1138,7 @@ static int do_vgsm_puk_input(int fd, int argc, char *argv[])
 	}
 
 	vgsm_req_put(req);
-	vgsm_module_put(module);
+	vgsm_me_put(me);
 
 	return RESULT_SUCCESS;
 
@@ -1146,13 +1146,13 @@ err_unknown_response:
 err_invalid_state:
 	vgsm_req_put(req);
 err_req_make:
-	vgsm_module_put(module);
-err_module_not_found:
+	vgsm_me_put(me);
+err_me_not_found:
 err_newpin_invalid:
 err_no_newpin:
 err_puk_invalid:
 err_no_puk:
-err_no_module_name:
+err_no_me_name:
 
 	return err;
 }
@@ -1167,16 +1167,16 @@ static char *vgsm_puk_input_complete(
 {
 	switch(pos) {
 	case 3:
-		return vgsm_module_completion(line, word, state);
+		return vgsm_me_completion(line, word, state);
 	}
 
 	return NULL;
 }
 
 static char vgsm_puk_input_help[] =
-"Usage: vgsm puk input <module> <PUK>\n"
+"Usage: vgsm puk input <me> <PUK>\n"
 "\n"
-"	Manually input PUK to selected module\n"
+"	Manually input PUK to selected me\n"
 "\n"
 "	WARNING: Inputing the wrong PUK for 10 times will render the SIM card\n"
 "	         useless, you will need to have it replaced from your\n"
@@ -1186,7 +1186,7 @@ static struct ast_cli_entry vgsm_puk_input =
 {
 	{ "vgsm", "puk", "input", NULL },
 	do_vgsm_puk_input,
-	"Manually input PUK to selected module",
+	"Manually input PUK to selected me",
 	vgsm_puk_input_help,
 	vgsm_puk_input_complete,
 };
@@ -1305,20 +1305,20 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	__u32 node_id;
 	int err;
 
-	err = ioctl(vgsm_chan->module->me_fd, VGSM_IOC_GET_NODEID,
+	err = ioctl(vgsm_chan->me->me_fd, VGSM_IOC_GET_NODEID,
 						(caddr_t)&node_id);
 	if (err < 0) {
 
 		ast_log(LOG_ERROR,
 			"ioctl(VGSM_IOC_GET_NODEID): %s\n",
 			strerror(errno));
-		goto err_get_module_node_id;
+		goto err_get_me_node_id;
 	}
 
-	vgsm_chan->node_module = ks_node_get_by_id(ks_conn, node_id);
-	if (!vgsm_chan->node_module) {
-		ast_log(LOG_ERROR, "Module's node not found\n");
-		goto err_module_node_not_found;
+	vgsm_chan->node_me = ks_node_get_by_id(ks_conn, node_id);
+	if (!vgsm_chan->node_me) {
+		ast_log(LOG_ERROR, "ME's node not found\n");
+		goto err_me_node_not_found;
 	}
 
 	vgsm_chan->up_fd = open("/dev/ks/userport_stream", O_RDWR);
@@ -1349,7 +1349,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 	vgsm_debug_generic("Connecting userport %06d to chan %06d\n",
 			vgsm_chan->node_userport->id,
-			vgsm_chan->node_module->id);
+			vgsm_chan->node_me->id);
 
 	/* Create RX pipeline */
 	vgsm_chan->pipeline_rx = ks_pipeline_alloc();
@@ -1361,7 +1361,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	}
 
 	err = ks_pipeline_autoroute(vgsm_chan->pipeline_rx, ks_conn,
-				vgsm_chan->node_module,
+				vgsm_chan->node_me,
 				vgsm_chan->node_userport);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
@@ -1378,7 +1378,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_rx_create;
 	}
 
-	if (vgsm_chan->module->interface_version == 2) {
+	if (vgsm_chan->me->interface_version == 2) {
 
 		err = vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
 				vgsm_chan->ast_chan->rawreadformat !=
@@ -1405,7 +1405,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 	err = ks_pipeline_autoroute(vgsm_chan->pipeline_tx, ks_conn,
 				vgsm_chan->node_userport,
-				vgsm_chan->node_module);
+				vgsm_chan->node_me);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot connect nodes: %s\n", strerror(-err));
@@ -1421,7 +1421,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_tx_create;
 	}
 
-	if (vgsm_chan->module->interface_version == 2) {
+	if (vgsm_chan->me->interface_version == 2) {
 		err = vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
 				vgsm_chan->ast_chan->rawwriteformat !=
 							AST_FORMAT_SLINEAR,
@@ -1477,13 +1477,13 @@ err_get_up_node_id:
 	close(vgsm_chan->up_fd);
 	vgsm_chan->up_fd = -1;
 err_open_userport:
-err_module_node_not_found:
-err_get_module_node_id:
+err_me_node_not_found:
+err_get_me_node_id:
 
 	return -1;
 }
 
-struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
+struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
 {
 	struct vgsm_chan *vgsm_chan;
 	vgsm_chan = vgsm_chan_alloc();
@@ -1494,15 +1494,15 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 
 	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan,
 						AST_STATE_RESERVED,
-						module, 1, AST_FORMAT_SLINEAR);
+						me, 1, AST_FORMAT_SLINEAR);
 
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 
 	vgsm_chan->outbound = FALSE;
 
-	vgsm_chan->module = vgsm_module_get(module);
-	vgsm_chan->mc = vgsm_module_config_get(module->current_config);
+	vgsm_chan->me = vgsm_me_get(me);
+	vgsm_chan->mc = vgsm_me_config_get(me->current_config);
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
@@ -1524,9 +1524,9 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_module *module)
 	ast_channel_free(vgsm_chan->ast_chan);
 	vgsm_chan->ast_chan = NULL;
 err_vgsm_ast_chan_alloc:
-	vgsm_module_put(vgsm_chan->module);
-	vgsm_chan->module = NULL;
-	vgsm_module_config_put(vgsm_chan->mc);
+	vgsm_me_put(vgsm_chan->me);
+	vgsm_chan->me = NULL;
+	vgsm_me_config_put(vgsm_chan->mc);
 	vgsm_chan->mc = NULL;
 	vgsm_chan_put(vgsm_chan);
 err_vgsm_chan_alloc:
@@ -1536,18 +1536,18 @@ err_vgsm_chan_alloc:
 
 static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 {
-	struct vgsm_module *module = data;
+	struct vgsm_me *me = data;
 
-	ast_mutex_lock(&module->lock);
-	module->call_present = TRUE;
-	struct vgsm_chan *vgsm_chan = vgsm_chan_get(module->vgsm_chan);
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_lock(&me->lock);
+	me->call_present = TRUE;
+	struct vgsm_chan *vgsm_chan = vgsm_chan_get(me->vgsm_chan);
+	ast_mutex_unlock(&me->lock);
 
 	if (req->err != VGSM_RESP_OK) {
 		if (vgsm_chan)
 			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
 
-		vgsm_debug_call(module, "Unable to dial: ATD failed\n");
+		vgsm_debug_call(me, "Unable to dial: ATD failed\n");
 	} else {
 		if (vgsm_chan) {
 			ast_mutex_lock(&vgsm_chan->ast_chan->lock);
@@ -1562,16 +1562,16 @@ static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 
 			ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
 		} else {
-			_vgsm_req_put(vgsm_req_make_callback(&module->comm,
-					vgsm_module_chup_complete,
-					vgsm_module_get(module),
+			_vgsm_req_put(vgsm_req_make_callback(&me->comm,
+					vgsm_me_chup_complete,
+					vgsm_me_get(me),
 					5 * SEC, "AT+CHUP"));
 		}
 	}
 
 	vgsm_chan_put(vgsm_chan);
 
-	vgsm_module_put(module);
+	vgsm_me_put(me);
 }
 
 static int vgsm_call(
@@ -1582,45 +1582,45 @@ static int vgsm_call(
 	int err;
 
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-	struct vgsm_module *module = vgsm_module_get(vgsm_chan->module);
+	struct vgsm_me *me = vgsm_me_get(vgsm_chan->me);
 
 	assert(ast_chan->_state == AST_STATE_DOWN);
 
-	ast_mutex_lock(&module->lock);
+	ast_mutex_lock(&me->lock);
 
-	if (module->status != VGSM_MODULE_STATUS_READY) {
-		ast_mutex_unlock(&module->lock);
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
 
-		vgsm_debug_call(module, "Module not ready\n");
+		vgsm_debug_call(me, "ME not ready\n");
 		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		err = -1;
-		goto err_module_not_ready;
+		goto err_me_not_ready;
 	}
 
-	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-	    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		ast_mutex_unlock(&module->lock);
+	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_mutex_unlock(&me->lock);
 
-		vgsm_debug_call(module, "Module is not registered\n");
+		vgsm_debug_call(me, "ME is not registered\n");
 		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		err = -1;
-		goto err_module_not_registered;
+		goto err_me_not_registered;
 	}
 
-	if (module->vgsm_chan) {
-		ast_mutex_unlock(&module->lock);
+	if (me->vgsm_chan) {
+		ast_mutex_unlock(&me->lock);
 
-		vgsm_debug_call(module, "Module is busy (call present)\n");
+		vgsm_debug_call(me, "ME is busy (call present)\n");
 		ast_chan->hangupcause = AST_CAUSE_NORMAL_CIRCUIT_CONGESTION;
 		err = -1;
-		goto err_module_busy;
+		goto err_me_busy;
 	}
 
-	module->stats.outbound++;
+	me->stats.outbound++;
 
-	module->vgsm_chan = vgsm_chan_get(vgsm_chan);
-	vgsm_chan->module = vgsm_module_get(module);
-	vgsm_chan->mc = vgsm_module_config_get(module->current_config);
+	me->vgsm_chan = vgsm_chan_get(vgsm_chan);
+	vgsm_chan->me = vgsm_me_get(me);
+	vgsm_chan->mc = vgsm_me_config_get(me->current_config);
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
@@ -1628,32 +1628,32 @@ static int vgsm_call(
 		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
 		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
 
-	module->call_present = FALSE;
+	me->call_present = FALSE;
 
 	char newname[40];
-	snprintf(newname, sizeof(newname), "VGSM/%s/%d", module->name, 1);
+	snprintf(newname, sizeof(newname), "VGSM/%s/%d", me->name, 1);
 
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_unlock(&me->lock);
 
 	ast_change_name(ast_chan, newname);
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-	vgsm_debug_call(module, "Calling %s on %s\n",
+	vgsm_debug_call(me, "Calling %s on %s\n",
 			vgsm_chan->called_number,
 			ast_chan->name);
 
 	struct vgsm_req *req;
 	// 'timeout' instead of 20s ?
-	req = vgsm_req_make_callback(&module->comm,
+	req = vgsm_req_make_callback(&me->comm,
 			vgsm_atd_complete,
-			vgsm_module_get(module),
+			vgsm_me_get(me),
 			180 * SEC, "ATD%c%s;",
 			((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
 				AST_PRES_ALLOWED) ? 'i' : 'I',
 			vgsm_chan->called_number);
 	if (!req) {
 		ast_log(LOG_ERROR, "%s: Unable to dial: ATD failed\n",
-			module->name);
+			me->name);
 
 		err = -1;
 		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
@@ -1662,17 +1662,17 @@ static int vgsm_call(
 
 	vgsm_req_put(req);
 
-	vgsm_module_put(module);
+	vgsm_me_put(me);
 
 	return 0;
 
 err_atd_failed:
-	vgsm_module_config_put(vgsm_chan->mc);
-	vgsm_module_put(vgsm_chan->module);
-	vgsm_chan_put(module->vgsm_chan);
-err_module_busy:
-err_module_not_registered:
-err_module_not_ready:
+	vgsm_me_config_put(vgsm_chan->mc);
+	vgsm_me_put(vgsm_chan->me);
+	vgsm_chan_put(me->vgsm_chan);
+err_me_busy:
+err_me_not_registered:
+err_me_not_ready:
 
 	return err;
 }
@@ -1680,32 +1680,32 @@ err_module_not_ready:
 static int vgsm_answer(struct ast_channel *ast_chan)
 {
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-	struct vgsm_module *module = vgsm_chan->module;
+	struct vgsm_me *me = vgsm_chan->me;
 	int err;
 
 	vgsm_debug_generic("vgsm_answer\n");
 
 	assert(vgsm_chan);
 
-	ast_mutex_lock(&module->lock);
-	if (module->status != VGSM_MODULE_STATUS_READY) {
-		ast_mutex_unlock(&module->lock);
+	ast_mutex_lock(&me->lock);
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
 
-		ast_log(LOG_NOTICE, "Module is not ready anymore\n");
+		ast_log(LOG_NOTICE, "ME is not ready anymore\n");
 		return -1;
 	}
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_unlock(&me->lock);
 	
 	vgsm_connect_channel(vgsm_chan);
 
 	ast_indicate(ast_chan, -1);
 
-	err = vgsm_req_make_wait_result(&module->comm, 1 * SEC, "ATA");
+	err = vgsm_req_make_wait_result(&me->comm, 1 * SEC, "ATA");
 	if (err != VGSM_RESP_OK) {
 
 		if (err != VGSM_RESP_NO_CARRIER)
 			ast_log(LOG_WARNING, "Couldn't answer: %s\n",
-				vgsm_module_error_to_text(err));
+				vgsm_me_error_to_text(err));
 
 		return -1;
 	}
@@ -1742,7 +1742,7 @@ static int vgsm_indicate(
 #endif
 {
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-	//struct vgsm_module *module = vgsm_chan->module;
+	//struct vgsm_me *me = vgsm_chan->me;
 
 	if (!vgsm_chan) {
 		ast_log(LOG_ERROR, "NO VGSM_CHAN!!\n");
@@ -1784,21 +1784,21 @@ static int vgsm_indicate(
 	break;
 
 	case AST_CONTROL_CONGESTION:
-/*		vgsm_module_counter_inc(module,
+/*		vgsm_me_counter_inc(me,
 			vgsm_chan->outbound,
 			VGSM_CAUSE_LOCATION_LOCAL,
 			42);
 
-		vgsm_module_hangup(module);*/
+		vgsm_me_hangup(me);*/
 	break;
 
 	case AST_CONTROL_BUSY:
-/*		vgsm_module_counter_inc(module,
+/*		vgsm_me_counter_inc(me,
 			vgsm_chan->outbound,
 			VGSM_CAUSE_LOCATION_LOCAL,
 			17);
 
-		vgsm_module_hangup(module);*/
+		vgsm_me_hangup(me);*/
 	break;
 	}
 
@@ -1854,14 +1854,14 @@ static int vgsm_send_digit(
 {
 #endif
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
-	struct vgsm_module *module = vgsm_chan->module;
+	struct vgsm_me *me = vgsm_chan->me;
 
 	if (duration < 300)
 		duration = 300;
 
 	/* VTS takes duration in 1/100 sec */
 	_vgsm_req_put(vgsm_req_make(
-		&module->comm, 2 * SEC, "AT+VTS=%c,%d", digit, duration / 100));
+		&me->comm, 2 * SEC, "AT+VTS=%c,%d", digit, duration / 100));
 
 	return 0;
 }
@@ -1935,12 +1935,12 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
-	/* We assigned to a module AND we are the module's current call */
-	if (vgsm_chan->module) {
-		ast_mutex_lock(&vgsm_chan->module->lock);
+	/* We assigned to a me AND we are the me's current call */
+	if (vgsm_chan->me) {
+		ast_mutex_lock(&vgsm_chan->me->lock);
 
-		if (vgsm_chan->module->vgsm_chan == vgsm_chan) {
-			vgsm_module_counter_inc(vgsm_chan->module,
+		if (vgsm_chan->me->vgsm_chan == vgsm_chan) {
+			vgsm_me_counter_inc(vgsm_chan->me,
 				vgsm_chan->outbound,
 				VGSM_CAUSE_LOCATION_LOCAL,
 				ast_chan->hangupcause != 0 ?
@@ -1948,25 +1948,25 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 
 			/* Send deferred hangup */
 
-			if (vgsm_chan->module->call_present) {
+			if (vgsm_chan->me->call_present) {
 				_vgsm_req_put(vgsm_req_make_callback(
-					&vgsm_chan->module->comm,
-					vgsm_module_chup_complete,
-					vgsm_module_get(vgsm_chan->module),
+					&vgsm_chan->me->comm,
+					vgsm_me_chup_complete,
+					vgsm_me_get(vgsm_chan->me),
 					5 * SEC, "AT+CHUP"));
 			}
 
-			/* Detach module and channel */
-			vgsm_chan_put(vgsm_chan->module->vgsm_chan);
-			vgsm_chan->module->vgsm_chan = NULL;
+			/* Detach me and channel */
+			vgsm_chan_put(vgsm_chan->me->vgsm_chan);
+			vgsm_chan->me->vgsm_chan = NULL;
 		}
 
-		ast_mutex_unlock(&vgsm_chan->module->lock);
+		ast_mutex_unlock(&vgsm_chan->me->lock);
 	}
 
-	if (vgsm_chan->module) {
-		vgsm_module_put(vgsm_chan->module);
-		vgsm_chan->module = NULL;
+	if (vgsm_chan->me) {
+		vgsm_me_put(vgsm_chan->me);
+		vgsm_chan->me = NULL;
 	}
 
 	if (vgsm_chan->up_fd >= 0)
@@ -2050,7 +2050,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		if (err < 0)
 			ast_log(LOG_ERROR, "Cannot restart the pipeline\n");
 
-		if (vgsm_chan->module->debug_frames)
+		if (vgsm_chan->me->debug_frames)
 			ast_verbose("Read format changed to %02x\n",
 					ast_chan->rawreadformat);
 	}
@@ -2075,7 +2075,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		return NULL;
 	}
 
-	if (vgsm_chan->module->debug_frames) {
+	if (vgsm_chan->me->debug_frames) {
 		__u8 *buf = vgsm_chan->frame_out_buf;
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
@@ -2165,7 +2165,7 @@ static int vgsm_write(
 		if (err < 0)
 			ast_log(LOG_ERROR, "Cannot restart the pipeline\n");
 
-		if (vgsm_chan->module->debug_frames)
+		if (vgsm_chan->me->debug_frames)
 			ast_verbose("Write format changed to %02x\n",
 					ast_chan->rawwriteformat);
 	}
@@ -2187,7 +2187,7 @@ static int vgsm_write(
 		return 0;
 
 	if (vgsm_chan->up_fd < 0) {
-		if (vgsm_chan->module->debug_frames)
+		if (vgsm_chan->me->debug_frames)
 			ast_verbose(
 				"Dropped frame write on unconnected channel\n");
 
@@ -2208,7 +2208,7 @@ static int vgsm_write(
 	vgsm_chan->pressure_average =
 		((5 * vgsm_chan->pressure_average) + pressure) / 6;
 
-	if (vgsm_chan->module->debug_frames) {
+	if (vgsm_chan->me->debug_frames) {
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
@@ -2235,7 +2235,7 @@ static int vgsm_write(
 			vgsm_chan->pressure_average);
 	}
 
-	struct vgsm_module_config *mc = vgsm_chan->mc;
+	struct vgsm_me_config *mc = vgsm_chan->mc;
 
 	int len = frame->datalen;
 	__u8 *buf = frame->data;
@@ -2254,7 +2254,7 @@ static int vgsm_write(
 		memcpy(buf + diff_octs, frame->data, len);
 		len += diff_octs;
 
-		vgsm_debug_jitbuf(vgsm_chan->module,
+		vgsm_debug_jitbuf(vgsm_chan->me,
 			"TX under low-mark: added %d samples\n",
 			diff);
 	}
@@ -2265,7 +2265,7 @@ static int vgsm_write(
 		int drop = min(len / sample_size, (vgsm_chan->pressure_average -
 							mc->jitbuf_high));
 
-		vgsm_debug_jitbuf(vgsm_chan->module,
+		vgsm_debug_jitbuf(vgsm_chan->me,
 			"TX %d over high-mark: dropped %d samples\n",
 			pressure - mc->jitbuf_high,
 			drop);
@@ -2296,15 +2296,15 @@ static struct ast_channel *vgsm_request(
 		goto err_unsupported_format;
 	}
 
-	// Parse destination and obtain module name + number
-	const char *module_name;
+	// Parse destination and obtain me name + number
+	const char *me_name;
 	const char *number;
 	char *stringp = data;
 
-	module_name = strsep(&stringp, "/");
-	if (!module_name) {
+	me_name = strsep(&stringp, "/");
+	if (!me_name) {
 		ast_log(LOG_WARNING,
-			"Invalid destination '%s' format (module/number)\n",
+			"Invalid destination '%s' format (me/number)\n",
 			(char *)data);
 
 		*cause = AST_CAUSE_FAILURE;
@@ -2315,7 +2315,7 @@ static struct ast_channel *vgsm_request(
 	number = strsep(&stringp, "/");
 	if (!number) {
 		ast_log(LOG_WARNING,
-			"Invalid destination '%s' format (module/number)\n",
+			"Invalid destination '%s' format (me/number)\n",
 			(char *)data);
 
 		*cause = AST_CAUSE_FAILURE;
@@ -2323,14 +2323,14 @@ static struct ast_channel *vgsm_request(
 		goto err_invalid_format;
 	}
 
-	struct vgsm_module *module;
-	struct vgsm_module *hg_first_module = NULL;
+	struct vgsm_me *me;
+	struct vgsm_me *hg_first_me = NULL;
 	struct vgsm_huntgroup *huntgroup = NULL;
 
-	if (!strncasecmp(module_name, VGSM_HUNTGROUP_PREFIX,
+	if (!strncasecmp(me_name, VGSM_HUNTGROUP_PREFIX,
 			strlen(VGSM_HUNTGROUP_PREFIX))) {
 
-		const char *hg_name = module_name +
+		const char *hg_name = me_name +
 					strlen(VGSM_HUNTGROUP_PREFIX);
 		struct vgsm_huntgroup *hg;
 		hg = vgsm_hg_get_by_name(hg_name);
@@ -2343,28 +2343,28 @@ static struct ast_channel *vgsm_request(
 			goto err_huntgroup_not_found;
 		}
 
-		module = vgsm_hg_hunt(hg, NULL, NULL);
-		if (!module) {
+		me = vgsm_hg_hunt(hg, NULL, NULL);
+		if (!me) {
 			vgsm_debug_generic("Cannot hunt in huntgroup %s\n",
 					hg_name);
 
 			*cause = AST_CAUSE_CONGESTION;
 			err = -1;
-			goto err_no_module_available;
+			goto err_no_me_available;
 		}
 
-		hg_first_module = vgsm_module_get(module);
+		hg_first_me = vgsm_me_get(me);
 		huntgroup = vgsm_hg_get(hg);
 
 		vgsm_hg_put(hg);
 	} else {
-		module = vgsm_module_get_by_name(module_name);
-		if (!module) {
-			ast_log(LOG_WARNING, "Module %s not found\n",
-				module_name);
+		me = vgsm_me_get_by_name(me_name);
+		if (!me) {
+			ast_log(LOG_WARNING, "ME %s not found\n",
+				me_name);
 			*cause = AST_CAUSE_FAILURE;
 			err = -1;
-			goto err_module_not_found;
+			goto err_me_not_found;
 		}
 	}
 
@@ -2378,7 +2378,7 @@ static struct ast_channel *vgsm_request(
 	}
 
 	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan, AST_STATE_DOWN,
-							module, 1, format);
+							me, 1, format);
 	if (!vgsm_chan->ast_chan) {
 		*cause = AST_CAUSE_FAILURE;
 		err = -1;
@@ -2392,11 +2392,11 @@ static struct ast_channel *vgsm_request(
 	snprintf(vgsm_chan->called_number, sizeof(vgsm_chan->called_number),
 		"%s", number);
 
-	vgsm_chan->module = vgsm_module_get(module);
-	vgsm_chan->hg_first_module = hg_first_module;
+	vgsm_chan->me = vgsm_me_get(me);
+	vgsm_chan->hg_first_me = hg_first_me;
 	vgsm_chan->huntgroup = huntgroup;
 
-	vgsm_module_put(module);
+	vgsm_me_put(me);
 
 	vgsm_chan_put(vgsm_chan);
 
@@ -2409,9 +2409,9 @@ static struct ast_channel *vgsm_request(
 err_vgsm_ast_chan_alloc:
 	vgsm_chan_put(vgsm_chan);
 err_vgsm_chan_alloc:
-	vgsm_module_put(module);
-err_module_not_found:
-err_no_module_available:
+	vgsm_me_put(me);
+err_me_not_found:
+err_no_me_available:
 err_huntgroup_not_found:
 err_invalid_format:
 err_invalid_destination:
@@ -2612,13 +2612,13 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	}
 
 #warning Ignore uninitalized warnings, it's a GCC bug
-	const char *module_str = astman_get_header(m, "X-SMS-Module");
-	struct vgsm_module *module;
+	const char *me_str = astman_get_header(m, "X-SMS-ME");
+	struct vgsm_me *me;
 
-	if (!strncasecmp(module_str, VGSM_HUNTGROUP_PREFIX,
+	if (!strncasecmp(me_str, VGSM_HUNTGROUP_PREFIX,
 			strlen(VGSM_HUNTGROUP_PREFIX))) {
 
-		const char *hg_name = module_str +
+		const char *hg_name = me_str +
 					strlen(VGSM_HUNTGROUP_PREFIX);
 		struct vgsm_huntgroup *hg;
 		hg = vgsm_hg_get_by_name(hg_name);
@@ -2632,58 +2632,58 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
 		struct vgsm_huntgroup_member *hgm;
 		list_for_each_entry(hgm, &hg->members, node) {
-			ast_mutex_lock(&hgm->module->lock);
-			if (hgm->module->status == VGSM_MODULE_STATUS_READY &&
-				!hgm->module->sending_sms &&
-				(hgm->module->net.status ==
+			ast_mutex_lock(&hgm->me->lock);
+			if (hgm->me->status == VGSM_ME_STATUS_READY &&
+				!hgm->me->sending_sms &&
+				(hgm->me->net.status ==
 					VGSM_NET_STATUS_REGISTERED_HOME ||
-				hgm->module->net.status ==
+				hgm->me->net.status ==
 					VGSM_NET_STATUS_REGISTERED_ROAMING)) {
 
-				module = vgsm_module_get(hgm->module);
+				me = vgsm_me_get(hgm->me);
 
-				ast_mutex_unlock(&hgm->module->lock);
+				ast_mutex_unlock(&hgm->me->lock);
 				break;
 			}
-			ast_mutex_unlock(&hgm->module->lock);
+			ast_mutex_unlock(&hgm->me->lock);
 		}
 		ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
 
 		vgsm_hg_put(hg);
 
-		if (!module) {
+		if (!me) {
 			astman_append(s, "Status: 404\n");
 			astman_send_error(s, m,
-				"Cannot find an available module");
-			goto err_module_not_found;
+				"Cannot find an available me");
+			goto err_me_not_found;
 		}
 
-	} else if(strlen(module_str)) {
-		/* A specific module has been requested */
+	} else if(strlen(me_str)) {
+		/* A specific me has been requested */
 
-		module = vgsm_module_get_by_name(module_str);
-		if (!module) {
+		me = vgsm_me_get_by_name(me_str);
+		if (!me) {
 			astman_append(s, "Status: 501\n");
-			astman_send_error(s, m, "501 Cannot find module");
-			goto err_module_not_found;
+			astman_send_error(s, m, "501 Cannot find me");
+			goto err_me_not_found;
 		}
 
 	} else {
-		/* Find a ready module */
+		/* Find a ready me */
 
-		struct vgsm_module *tm;
+		struct vgsm_me *tm;
 
 		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
 		list_for_each_entry(tm, &vgsm.ifs_list, ifs_node) {
 			ast_mutex_lock(&tm->lock);
-			if (tm->status == VGSM_MODULE_STATUS_READY &&
+			if (tm->status == VGSM_ME_STATUS_READY &&
 				!tm->sending_sms &&
 				(tm->net.status ==
 					VGSM_NET_STATUS_REGISTERED_HOME ||
 				tm->net.status ==
 					VGSM_NET_STATUS_REGISTERED_ROAMING)) {
 
-				module = vgsm_module_get(tm);
+				me = vgsm_me_get(tm);
 
 				ast_mutex_unlock(&tm->lock);
 				break;
@@ -2692,72 +2692,72 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		}
 		ast_rwlock_unlock(&vgsm.ifs_list_lock);
 
-		if (!module) {
+		if (!me) {
 			astman_append(s, "Status: 404\n");
 			astman_send_error(s, m,
-				"Cannot find an available module");
-			goto err_module_not_found;
+				"Cannot find an available me");
+			goto err_me_not_found;
 		}
 	}
 
-	ast_mutex_lock(&module->lock);
+	ast_mutex_lock(&me->lock);
 
-	if (module->status != VGSM_MODULE_STATUS_READY) {
-		ast_mutex_unlock(&module->lock);
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
 
 		astman_append(s, "Status: 401\n");
-		astman_send_error(s, m, "Module is not ready");
-		goto err_module_not_ready;
+		astman_send_error(s, m, "ME is not ready");
+		goto err_me_not_ready;
 	}
 
-	if (module->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-	    module->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		ast_mutex_unlock(&module->lock);
+	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_mutex_unlock(&me->lock);
 
 		astman_append(s, "Status: 402\n");
-		astman_send_error(s, m, "Module is not registered");
-		goto err_module_not_registered;
+		astman_send_error(s, m, "ME is not registered");
+		goto err_me_not_registered;
 	}
 
-	if (module->sending_sms) {
-		ast_mutex_unlock(&module->lock);
+	if (me->sending_sms) {
+		ast_mutex_unlock(&me->lock);
 
 		astman_append(s, "Status: 403\n");
 		astman_send_error(s, m,
-			"403 Module is already sending a message");
-		goto err_module_sending_sms;
+			"403 ME is already sending a message");
+		goto err_me_sending_sms;
 	}
 
 	struct vgsm_sms_submit *sms;
 	sms = vgsm_sms_submit_alloc();
 	if (!sms) {
-		ast_mutex_unlock(&module->lock);
+		ast_mutex_unlock(&me->lock);
 
 		astman_append(s, "Status: 405\n");
 		astman_send_error(s, m, "Cannot allocate message");
 		goto err_sms_alloc;
 	}
 
-	module->sending_sms = TRUE;
-	sms->module = vgsm_module_get(module);
+	me->sending_sms = TRUE;
+	sms->me = vgsm_me_get(me);
 
 	const char *smcc_str = astman_get_header(m, "X-SMS-SMCC-Number");
 	if (strlen(smcc_str)) {
 		vgsm_number_parse(&sms->smcc_address, smcc_str);
-	} else if (strlen(module->current_config->smcc_address.digits)) {
+	} else if (strlen(me->current_config->smcc_address.digits)) {
 		vgsm_number_copy(&sms->smcc_address,
-				&module->current_config->smcc_address);
-	} else if (strlen(module->sim.smcc_address.digits)) {
-		vgsm_number_copy(&sms->smcc_address, &module->sim.smcc_address);
+				&me->current_config->smcc_address);
+	} else if (strlen(me->sim.smcc_address.digits)) {
+		vgsm_number_copy(&sms->smcc_address, &me->sim.smcc_address);
 	} else {
-		ast_mutex_unlock(&module->lock);
+		ast_mutex_unlock(&me->lock);
 
 		astman_append(s, "Status: 502\n");
 		astman_send_error(s, m, "Services Center number not set");
 		goto err_no_smcc;
 	}
 
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_unlock(&me->lock);
 
 	const char *reject_duplicates_str =
 		astman_get_header(m, "X-SMS-Reject-Duplicates");
@@ -2889,11 +2889,11 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_submit_prepare;
 	}
 
-	if (module->debug_sms)
+	if (me->debug_sms)
 		vgsm_sms_submit_dump(sms);
 
 	struct vgsm_req *req = vgsm_req_make_sms(
-		&module->comm, 30 * SEC, sms->pdu, sms->pdu_len,
+		&me->comm, 30 * SEC, sms->pdu, sms->pdu_len,
 		"AT+CMGS=%d", sms->pdu_tp_len);
 	vgsm_req_wait(req);
 	int res = vgsm_req_status(req);
@@ -2906,7 +2906,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		char tmpstr[256];
 		snprintf(tmpstr, sizeof(tmpstr),
 			"%s\n",
-			vgsm_module_error_to_text(res));
+			vgsm_me_error_to_text(res));
 
 		astman_send_error(s, m, tmpstr);
 
@@ -2928,9 +2928,9 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	astman_append(s, "Status: 201\n");
 	astman_send_ack(s, m, "Message sent");
 
-	ast_mutex_lock(&module->lock);
-	module->sending_sms = FALSE;
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_lock(&me->lock);
+	me->sending_sms = FALSE;
+	ast_mutex_unlock(&me->lock);
 
 	iconv_close(cd);
 
@@ -2948,16 +2948,16 @@ err_unsupported_cte:
 err_unsupported_content_type:
 err_invalid_content_type:
 err_no_smcc:
-	ast_mutex_lock(&module->lock);
-	module->sending_sms = FALSE;
-	ast_mutex_unlock(&module->lock);
+	ast_mutex_lock(&me->lock);
+	me->sending_sms = FALSE;
+	ast_mutex_unlock(&me->lock);
 
 	vgsm_sms_submit_put(sms);
 err_sms_alloc:
-err_module_sending_sms:
-err_module_not_registered:
-err_module_not_ready:
-err_module_not_found:
+err_me_sending_sms:
+err_me_not_registered:
+err_me_not_ready:
+err_me_not_found:
 err_huntgroup_not_found:
 	iconv_close(cd);
 err_iconv_open:
@@ -2978,7 +2978,7 @@ static char mandescr_vgsm_sms_tx[] =
 
 static void vgsm_shutdown(void)
 {
-	vgsm_module_shutdown_all();
+	vgsm_me_shutdown_all();
 }
 
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
@@ -3005,8 +3005,8 @@ static int vgsm_load_module(void)
 	ast_rwlock_init(&vgsm.huntgroups_list_lock);
 	INIT_LIST_HEAD(&vgsm.huntgroups_list);
 
-	vgsm.default_mc = vgsm_module_config_alloc();
-	vgsm_module_config_default(vgsm.default_mc);
+	vgsm.default_mc = vgsm_me_config_alloc();
+	vgsm_me_config_default(vgsm.default_mc);
 
 	strcpy(vgsm.sms_spooler, "/usr/sbin/sendmail");
 	strcpy(vgsm.sms_spooler_pars, "-it");
@@ -3020,13 +3020,13 @@ static int vgsm_load_module(void)
 		goto err_channel_register;
 	}
 
-	err = vgsm_module_module_load();
+	err = vgsm_me_load();
 	if (err < 0)
-		goto err_module_module_load;
+		goto err_me_load;
 
-	err = vgsm_hg_module_load();
+	err = vgsm_hg_load();
 	if (err < 0)
-		goto err_hg_module_load;
+		goto err_hg_load;
 
 	ast_cli_register(&debug_vgsm_generic);
 	ast_cli_register(&no_debug_vgsm_generic);
@@ -3053,10 +3053,10 @@ static int vgsm_load_module(void)
 
 	return 0;
 
-	vgsm_hg_module_unload();
-err_hg_module_load:
-	vgsm_module_module_unload();
-err_module_module_load:
+	vgsm_hg_unload();
+err_hg_load:
+	vgsm_me_unload();
+err_me_load:
 	ast_channel_unregister(&vgsm_tech);
 err_channel_register:
 
@@ -3070,7 +3070,7 @@ err_channel_register:
 	ast_cli_unregister(&no_debug_vgsm_generic);
 	ast_cli_unregister(&debug_vgsm_generic);
 
-	vgsm_module_config_put(vgsm.default_mc);
+	vgsm_me_config_put(vgsm.default_mc);
 
 	return err;
 }
@@ -3081,8 +3081,8 @@ int unload_module(void)
 static int vgsm_unload_module(void)
 #endif
 {
-	vgsm_hg_module_unload();
-	vgsm_module_module_unload();
+	vgsm_hg_unload();
+	vgsm_me_unload();
 
 	ast_cli_unregister(&vgsm_pin_set);
 	ast_cli_unregister(&vgsm_puk_input);
@@ -3096,7 +3096,7 @@ static int vgsm_unload_module(void)
 
 	ast_channel_unregister(&vgsm_tech);
 
-	vgsm_module_config_put(vgsm.default_mc);
+	vgsm_me_config_put(vgsm.default_mc);
 
 	return 0;
 }
@@ -3135,7 +3135,7 @@ char *key(void)
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY,
 		AST_MODFLAG_GLOBAL_SYMBOLS,
-		"Kstreamer handler",
+		"vGSM-II driver",
 		.load = vgsm_load_module,
 		.unload = vgsm_unload_module,
 		.reload = vgsm_reload_module,

@@ -77,8 +77,8 @@ void _vgsm_sms_submit_put(struct vgsm_sms_submit *sms)
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
 	if (!refcnt) {
-		if (sms->module)
-			vgsm_module_put(sms->module);
+		if (sms->me)
+			vgsm_me_put(sms->me);
 
 		if (sms->text)
 			free(sms->text);

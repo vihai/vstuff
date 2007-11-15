@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _MODULE_H
-#define _MODULE_H
+#ifndef _ME_H
+#define _ME_H
 
 #include <asterisk/channel.h>
 
@@ -28,22 +28,22 @@
 #define VGSM_ME_GLOBAL "me:*"
 
 #ifdef DEBUG_CODE
-#define vgsm_debug_state(module, format, arg...)	\
-	if ((module)->debug_state)			\
+#define vgsm_debug_state(me, format, arg...)	\
+	if ((me)->debug_state)			\
 		ast_verbose("vgsm: %s: "		\
 			format,				\
-			(module)->name,			\
+			(me)->name,			\
 			## arg)
-#define vgsm_debug_call(module, format, arg...)		\
-	if ((module)->debug_call)			\
+#define vgsm_debug_call(me, format, arg...)		\
+	if ((me)->debug_call)			\
 		ast_verbose("vgsm: %s: "		\
 			format,				\
-			(module)->name,			\
+			(me)->name,			\
 			## arg)
 #else
-#define vgsm_debug_state(module, format, arg...)	\
+#define vgsm_debug_state(me, format, arg...)	\
 	do {} while(0);
-#define vgsm_debug_call(module, format, arg...)		\
+#define vgsm_debug_call(me, format, arg...)		\
 	do {} while(0);
 #endif
 
@@ -56,21 +56,21 @@ enum vgsm_codec
 	VGSM_CODEC_AMR_FR,
 };
 
-enum vgsm_module_status
+enum vgsm_me_status
 {
-	VGSM_MODULE_STATUS_UNCONFIGURED,
-	VGSM_MODULE_STATUS_CLOSED,
-	VGSM_MODULE_STATUS_OFF,
-	VGSM_MODULE_STATUS_POWERING_ON,
-	VGSM_MODULE_STATUS_POWERING_OFF,
-	VGSM_MODULE_STATUS_RESETTING,
-	VGSM_MODULE_STATUS_WAITING_INITIALIZATION,
-	VGSM_MODULE_STATUS_INITIALIZING,
-	VGSM_MODULE_STATUS_READY,
-	VGSM_MODULE_STATUS_OFFLINE,
-	VGSM_MODULE_STATUS_WAITING_SIM,
-	VGSM_MODULE_STATUS_WAITING_PIN,
-	VGSM_MODULE_STATUS_FAILED,
+	VGSM_ME_STATUS_UNCONFIGURED,
+	VGSM_ME_STATUS_CLOSED,
+	VGSM_ME_STATUS_OFF,
+	VGSM_ME_STATUS_POWERING_ON,
+	VGSM_ME_STATUS_POWERING_OFF,
+	VGSM_ME_STATUS_RESETTING,
+	VGSM_ME_STATUS_WAITING_INITIALIZATION,
+	VGSM_ME_STATUS_INITIALIZING,
+	VGSM_ME_STATUS_READY,
+	VGSM_ME_STATUS_OFFLINE,
+	VGSM_ME_STATUS_WAITING_SIM,
+	VGSM_ME_STATUS_WAITING_PIN,
+	VGSM_ME_STATUS_FAILED,
 };
 
 enum vgsm_net_status
@@ -183,12 +183,12 @@ enum vgsm_flow_control
 #define VGSM_SIM_ROUTE_EXTERNAL -1
 #define VGSM_SIM_ROUTE_DEFAULT -2
 
-struct vgsm_module;
-struct vgsm_module_config
+struct vgsm_me;
+struct vgsm_me_config
 {
 	int refcnt;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	char device_filename[PATH_MAX];
 	char mesim_device_filename[PATH_MAX];
@@ -233,7 +233,7 @@ struct vgsm_module_config
 	int jitbuf_high;
 };
 
-struct vgsm_module
+struct vgsm_me
 {
 	struct list_head ifs_node;
 
@@ -241,13 +241,13 @@ struct vgsm_module
 
 	ast_mutex_t lock;
 
-	struct vgsm_module_config *current_config;
-	struct vgsm_module_config *new_config;
+	struct vgsm_me_config *current_config;
+	struct vgsm_me_config *new_config;
 	BOOL config_present;
 
 	char name[64];
 
-	enum vgsm_module_status status;
+	enum vgsm_me_status status;
 	BOOL in_service;
 
 	struct vgsm_timerset timerset;
@@ -291,7 +291,7 @@ struct vgsm_module
 		char model[32];
 		char version[32];
 		char imei[32];
-	} module;
+	} me;
 
 	struct {
 		BOOL inserted;
@@ -341,54 +341,54 @@ struct vgsm_module
 	BOOL debug_frames;
 };
 
-extern struct vgsm_urc_class vgsm_module_urcs[];
+extern struct vgsm_urc_class vgsm_me_urcs[];
 
-struct vgsm_module_config *vgsm_module_config_alloc(void);
-struct vgsm_module_config *vgsm_module_config_get(
-	struct vgsm_module_config *module_config);
-void _vgsm_module_config_put(struct vgsm_module_config *module_config);
-#define vgsm_module_config_put(module_config) \
+struct vgsm_me_config *vgsm_me_config_alloc(void);
+struct vgsm_me_config *vgsm_me_config_get(
+	struct vgsm_me_config *me_config);
+void _vgsm_me_config_put(struct vgsm_me_config *me_config);
+#define vgsm_me_config_put(me_config) \
 	do {						\
-		_vgsm_module_config_put(module_config);	\
-		(module_config) = NULL;			\
+		_vgsm_me_config_put(me_config);	\
+		(me_config) = NULL;			\
 	} while(0)
 
-void vgsm_module_config_default(struct vgsm_module_config *mc);
+void vgsm_me_config_default(struct vgsm_me_config *mc);
 
-struct vgsm_module *vgsm_module_alloc(void);
-struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
-void _vgsm_module_put(struct vgsm_module *module);
-#define vgsm_module_put(module) \
-	do { _vgsm_module_put(module); (module) = NULL; } while(0)
+struct vgsm_me *vgsm_me_alloc(void);
+struct vgsm_me *vgsm_me_get(struct vgsm_me *me);
+void _vgsm_me_put(struct vgsm_me *me);
+#define vgsm_me_put(me) \
+	do { _vgsm_me_put(me); (me) = NULL; } while(0)
 
-struct vgsm_module *_vgsm_module_get_by_name(const char *name);
-struct vgsm_module *vgsm_module_get_by_name(const char *name);
+struct vgsm_me *_vgsm_me_get_by_name(const char *name);
+struct vgsm_me *vgsm_me_get_by_name(const char *name);
 
-void vgsm_module_set_status(
-	struct vgsm_module *module,
-	enum vgsm_module_status status,
+void vgsm_me_set_status(
+	struct vgsm_me *me,
+	enum vgsm_me_status status,
 	longtime_t timeout,
 	const char *fmt, ...)
 	__attribute__ ((format (printf, 4, 5)));
 
-int vgsm_module_reload(struct ast_config *cfg);
+int vgsm_me_reload(struct ast_config *cfg);
 
-void vgsm_module_chup_complete(struct vgsm_req *req, void *data);
+void vgsm_me_chup_complete(struct vgsm_req *req, void *data);
 
-void vgsm_module_counter_inc(
-	struct vgsm_module *module,
+void vgsm_me_counter_inc(
+	struct vgsm_me *me,
 	BOOL outbound,
 	int location,
 	int reason);
-void vgsm_module_failed(struct vgsm_module *module, int err);
+void vgsm_me_failed(struct vgsm_me *me, int err);
 
-const char *vgsm_module_error_to_text(int code);
+const char *vgsm_me_error_to_text(int code);
 
-void vgsm_module_shutdown_all(void);
+void vgsm_me_shutdown_all(void);
 
-char *vgsm_module_completion(const char *line, const char *word, int state);
+char *vgsm_me_completion(const char *line, const char *word, int state);
 
-int vgsm_module_module_load(void);
-int vgsm_module_module_unload(void);
+int vgsm_me_load(void);
+int vgsm_me_unload(void);
 
 #endif

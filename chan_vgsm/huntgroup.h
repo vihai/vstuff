@@ -23,13 +23,13 @@ enum vgsm_huntgroup_mode
 	VGSM_HUNTGROUP_MODE_CYCLIC,
 };
 
-struct vgsm_module;
+struct vgsm_me;
 
 struct vgsm_huntgroup_member
 {
 	struct list_head node;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 };
 
 struct vgsm_huntgroup
@@ -53,12 +53,12 @@ struct vgsm_huntgroup *vgsm_hg_get(struct vgsm_huntgroup *hg);
 void vgsm_hg_put(struct vgsm_huntgroup *hg);
 struct vgsm_huntgroup *vgsm_hg_get_by_name(const char *name);
 
-struct vgsm_module *vgsm_hg_hunt(
+struct vgsm_me *vgsm_hg_hunt(
 	struct vgsm_huntgroup *hg,
-	struct vgsm_module *cur_module,
-	struct vgsm_module *first_module);
+	struct vgsm_me *cur_me,
+	struct vgsm_me *first_me);
 
-int vgsm_hg_module_load(void);
-int vgsm_hg_module_unload(void);
+int vgsm_hg_load(void);
+int vgsm_hg_unload(void);
 
 #endif

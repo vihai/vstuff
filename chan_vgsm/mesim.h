@@ -104,7 +104,7 @@ enum vgsm_mesim_impl_state
 	VGSM_MESIM_IMPL_STATE_CONNECTED,
 };
 
-struct vgsm_module;
+struct vgsm_me;
 
 struct vgsm_mesim
 {
@@ -117,7 +117,7 @@ struct vgsm_mesim
 	ast_mutex_t state_lock;
 	ast_cond_t state_cond;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	struct vgsm_timerset timerset;
 	struct vgsm_timer timer;
@@ -161,7 +161,7 @@ struct vgsm_mesim
 const char *vgsm_mesim_state_to_text(
 	enum vgsm_mesim_state state);
 
-int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_module *module);
+int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_me *me);
 void vgsm_mesim_destroy(struct vgsm_mesim *mesim);
 
 struct vgsm_mesim *vgsm_mesim_get(
