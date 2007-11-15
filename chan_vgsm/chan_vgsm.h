@@ -74,8 +74,8 @@ struct vgsm_state
 	ast_mutex_t state_lock;
 	struct vgsm_me_config *default_mc;
 
-	ast_rwlock_t ifs_list_lock;
-	struct list_head ifs_list;
+	ast_rwlock_t mes_list_lock;
+	struct list_head mes_list;
 
 	ast_rwlock_t huntgroups_list_lock;
 	struct list_head huntgroups_list;

@@ -57,6 +57,7 @@
 #include "comm.h"
 #include "causes.h"
 #include "sms.h"
+#include "sms_submit.h"
 #include "sms_deliver.h"
 #include "sms_status_report.h"
 #include "cbm.h"
@@ -898,13 +899,13 @@ static struct vgsm_me *vgsm_me_get_or_create(const char *name)
 	 * is explicitly started.
 	 */
 
-	ast_rwlock_wrlock(&vgsm.ifs_list_lock);
+	ast_rwlock_wrlock(&vgsm.mes_list_lock);
 
 	struct vgsm_me *me = _vgsm_me_get_by_name(name);
 	if (!me) {
 		me = vgsm_me_alloc();
 		if (!me) {
-			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+			ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 			ast_log(LOG_ERROR, "Cannot allocate new me %s\n",
 				name);
@@ -916,12 +917,12 @@ static struct vgsm_me *vgsm_me_get_or_create(const char *name)
 
 		int err = vgsm_comm_init(&me->comm, vgsm_me_urcs);
 		if (err < 0) {
-			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+			ast_rwlock_unlock(&vgsm.mes_list_lock);
 			goto err_comm_init;
 		}
 
 		list_add_tail(&vgsm_me_get(me)->ifs_node,
-							&vgsm.ifs_list);
+							&vgsm.mes_list);
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -932,7 +933,7 @@ static struct vgsm_me *vgsm_me_get_or_create(const char *name)
 		pthread_attr_destroy(&attr);
 	}
 
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 	return me;
 
@@ -1012,13 +1013,13 @@ int vgsm_me_reload(struct ast_config *cfg)
 		var = var->next;
 	}
 
-	/* Mark all mes are not present in config file */
+	/* Mark all MEs are not present in config file */
 	{
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node)
 		me->config_present = FALSE;
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
 
 	/* Browse config file, create missing mes and mark present mes
@@ -1054,9 +1055,9 @@ int vgsm_me_reload(struct ast_config *cfg)
 
 	/* Activate new configuration */
 	{
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
 
 		ast_mutex_lock(&me->lock);
 		if (me->new_config) {
@@ -1080,7 +1081,7 @@ int vgsm_me_reload(struct ast_config *cfg)
 
 		ast_mutex_unlock(&me->lock);
 	}
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
 
 	return 0;
@@ -1174,7 +1175,7 @@ void _vgsm_me_put(struct vgsm_me *me)
 struct vgsm_me *_vgsm_me_get_by_name(const char *name)
 {
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
 
 		if (!strcasecmp(me->name, name))
 			return vgsm_me_get(me);
@@ -1187,9 +1188,9 @@ struct vgsm_me *vgsm_me_get_by_name(const char *name)
 {
 	struct vgsm_me *me;
 
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	me = _vgsm_me_get_by_name(name);
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 	return me;
 }
@@ -1294,16 +1295,16 @@ char *vgsm_me_completion(const char *line, const char *word, int state)
 {
 	int which = 0;
 
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
 		if (!strncasecmp(word, me->name, strlen(word)) &&
 		    ++which > state) {
-			ast_rwlock_unlock(&vgsm.ifs_list_lock);
+			ast_rwlock_unlock(&vgsm.mes_list_lock);
 			return strdup(me->name);
 		}
 	}
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 	return NULL;
 }
@@ -1328,1941 +1329,6 @@ static void vgsm_me_emerg_off(
 			"Error turning off me: ioctl(POWER_EMERG_OFF): %s",
 			strerror(errno));
 }
-
-static void vgsm_show_me_me(int fd, struct vgsm_me *me)
-{
-	struct vgsm_req *req;
-
-	ast_mutex_lock(&me->lock);
-	struct vgsm_me_config *mc = me->current_config;
-
-	ast_cli(fd,
-		"\n"
-		"  ME: %s\n"
-		"  Status: %s\n"
-		"  In service: %s\n",
-		me->name,
-		vgsm_me_status_to_text(me->status),
-		me->in_service ? "YES" : "NO");
-
-	if (me->status_reason && strlen(me->status_reason))
-		ast_cli(fd, "  Reason: %s\n", me->status_reason);
-
-	if (me->failure_count)
-		ast_cli(fd, "\n  Failure count: %d\n", me->failure_count);
-
-	ast_cli(fd,
-		"\n"
-		"  Device: %s\n"
-		"  ME SIM Device: %s\n"
-		"  Context: %s\n"
-		"  Set clock: %s\n"
-		"  Power off on exit: %s\n",
-		mc->device_filename,
-		mc->mesim_device_filename,
-		mc->context,
-		mc->set_clock ? "YES" : "NO",
-		mc->poweroff_on_exit ? "YES" : "NO");
-
-	if (me->interface_version == 1) {
-		ast_cli(fd,
-			"  RX-gain: %d\n"
-			"  TX-gain: %d\n",
-			mc->rx_gain,
-			mc->tx_gain);
-	}
-
-
-/*	if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_EXTERNAL)
-		ast_cli(fd, "  Route to sim: external\n");
-	else if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_DEFAULT)
-		ast_cli(fd, "  Route to sim: default\n");
-	else
-		ast_cli(fd, "  Route to sim: %s\n", mc->mesim.sim_holder->name);
-*/
-
-
-	if (me->status != VGSM_ME_STATUS_READY)
-		goto out;
-
-	/* Avoid holding a lock during long term operations */
-	ast_mutex_unlock(&me->lock);
-
-	/* Voltage */
-	int voltage = -1;
-	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^SBV");
-	if (vgsm_req_status(req) == VGSM_RESP_OK) {
-		const char *line = vgsm_req_first_line(req)->text;
-
-		if (strlen(line) > strlen("^SBV: "))
-			voltage = atoi(line + strlen("^SBV: "));
-	}
-	vgsm_req_put(req);
-
-	/* Current */
-	int current = -1;
-	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^SBC?");
-	if (vgsm_req_status(req) == VGSM_RESP_OK) {
-		const char *line = vgsm_req_first_line(req)->text;
-		const char *pars_ptr = line + strlen("^SBC: ");
-		char field[32];
-
-		if (!get_token(&pars_ptr, field, sizeof(field))) {
-			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
-			goto err_sbc;
-		}
-
-		if (!get_token(&pars_ptr, field, sizeof(field))) {
-			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
-			goto err_sbc;
-		}
-
-		if (!get_token(&pars_ptr, field, sizeof(field))) {
-			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
-			goto err_sbc;
-		}
-
-		current = atoi(field);
-err_sbc:;
-	}
-	vgsm_req_put(req);
-
-	ast_mutex_lock(&me->lock);
-
-	ast_cli(fd,
-		"\n"
-		"  Model: %s %s\n"
-		"  Version: %s\n"
-		"  IMEI: %s\n",
-		me->me.vendor,
-		me->me.model,
-		me->me.version,
-		me->me.imei);
-
-	if (voltage != -1)
-		ast_cli(fd, "  Supply voltage: %d mV\n", voltage);
-
-	if (current != -1)
-		ast_cli(fd, "  Supply current: %d mA\n", current);
-
-	if (me->card.ver_maj) {
-		ast_cli(fd,
-			"\n"
-			"  Card's firmware: %d.%d.%d\n",
-			me->card.ver_maj,
-			me->card.ver_min,
-			me->card.ver_ser);
-
-		if ((me->card.ver_maj << 16 |
-		     me->card.ver_min << 8 |
-		     me->card.ver_ser) < VGSM_MINIMUM_FIRMWARE) {
-			ast_cli(fd,
-				"  !!! WARNING, firmware upgrade to "
-				"%d.%d.%d is required !!!\n",
-				(VGSM_MINIMUM_FIRMWARE & 0xff0000) >> 16,
-				(VGSM_MINIMUM_FIRMWARE & 0x00ff00) >> 8,
-				(VGSM_MINIMUM_FIRMWARE & 0x0000ff) >> 0);
-		}
-	}
-
-	if (me->card.serial != 0xffffffff &&
-	    me->card.serial != 0x00000000) {
-		ast_cli(fd,
-			"  Card's S/N: %012d\n",
-			me->card.serial);
-	}
-
-out:
-	ast_cli(fd, "\n");
-
-	ast_mutex_unlock(&me->lock);
-}
-
-static void vgsm_print_call_class(int fd, int cls)
-{
-	if (cls & 1)
-		ast_cli(fd, "voice, ");
-
-	if (cls & 2)
-		ast_cli(fd, "data, ");
-
-	if (cls & 4)
-		ast_cli(fd, "fax, ");
-
-	if (cls & 8)
-		ast_cli(fd, "SMS, ");
-
-	if (cls & 16)
-		ast_cli(fd, "data circuit sync, ");
-
-	if (cls & 32)
-		ast_cli(fd, "data circuit async, ");
-
-	if (cls & 64)
-		ast_cli(fd, "dedicated packet access, ");
-
-	if (cls & 128)
-		ast_cli(fd, "dedicated PAD access, ");
-}
-
-static int vgsm_show_me_forwarding_entry(
-	int fd, const char *name, const char *line)
-{
-	const char *pars_ptr = line;
-	char field[32];
-
-	if (!get_token(&pars_ptr, field, sizeof(field))) {
-		ast_cli(fd, "Error parsing CCEF reply '%s'\n", line);
-		return RESULT_FAILURE;
-	}
-
-	int status = atoi(field);
-
-	if (status == 1) {
-		if (!get_token(&pars_ptr, field, sizeof(field))) {
-			ast_cli(fd, "Error parsing CCEF reply '%s'\n", line);
-			return RESULT_FAILURE;
-		}
-
-		int cls = atoi(field);
-
-		ast_cli(fd, "Forward: %s, ", name);
-
-		vgsm_print_call_class(fd, cls);
-
-		if (get_token(&pars_ptr, field, sizeof(field))) {
-
-			ast_cli(fd, "traffic to %s", field);
-
-			if (get_token(&pars_ptr, field, sizeof(field))) {
-				if (get_token(&pars_ptr, field,
-							sizeof(field))) {
-					ast_cli(fd, " (delay %ds)",
-						atoi(field));
-				}
-			}
-		}
-
-		ast_cli(fd, "\n");
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static const char *vgsm_forwarding_reason_to_text(int value)
-{
-	switch(value) {
-	case 0:
-		return "unconditional";
-	case 1:
-		return "when busy";
-	case 2:
-		return "when not replying";
-	case 3:
-		return "when not reachable";
-	}
-
-	return "*INVALID*";
-}
-
-static int vgsm_show_me_forwarding(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-
-	if (me->status != VGSM_ME_STATUS_READY) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "ME is not ready\n");
-		goto out;
-	}
-
-	ast_mutex_unlock(&me->lock);
-
-	int i;
-	for(i=0; i<=3; i++) {
-		struct vgsm_req *req;
-		req = vgsm_req_make_wait(&me->comm, 180 * SEC,
-						"AT+CCFC=%d,2", i);
-
-		if (!req)
-			return RESULT_FAILURE;
-
-		int res = vgsm_req_status(req);
-		if (res != VGSM_RESP_OK) {
-			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_me_error_to_text(res),
-				res);
-
-			vgsm_req_put(req);
-
-			return RESULT_FAILURE;
-		}
-
-		struct vgsm_req_line *line;
-		list_for_each_entry(line, &req->lines, node) {
-			if (!strncmp(line->text, "+CCFC: ",
-						strlen("+CCFC: ")))
-				vgsm_show_me_forwarding_entry(fd,
-					vgsm_forwarding_reason_to_text(i),
-					line->text + strlen("+CCFC: "));
-		}
-
-		vgsm_req_put(req);
-	}
-
-	ast_cli(fd, "\n");
-
-out:
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_callwaiting_entry(
-	int fd, const char *line)
-{
-	const char *pars_ptr = line;
-	char field[32];
-
-	if (!get_token(&pars_ptr, field, sizeof(field))) {
-		ast_cli(fd, "Error parsing CCWA reply '%s'\n", line);
-		return RESULT_FAILURE;
-	}
-
-	int status = atoi(field);
-
-	if (!get_token(&pars_ptr, field, sizeof(field))) {
-		ast_cli(fd, "Error parsing CCWA reply '%s'\n", line);
-		return RESULT_FAILURE;
-	}
-
-	int cls = atoi(field);
-
-	ast_cli(fd, "Call waiting: ");
-	vgsm_print_call_class(fd, cls);
-	ast_cli(fd, " %s\n", status == 1 ? "Enabled" : "Disabled");
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_callwaiting(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-
-	if (me->status != VGSM_ME_STATUS_READY) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "ME is not ready\n");
-		return RESULT_FAILURE;
-	}
-
-	ast_mutex_unlock(&me->lock);
-
-	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&me->comm, 180 * SEC, "AT+CCWA=1,2");
-	int res = vgsm_req_status(req);
-
-	if (res != VGSM_RESP_OK) {
-		ast_cli(fd, "Error: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-
-		vgsm_req_put(req);
-
-		return RESULT_FAILURE;
-	}
-
-	ast_cli(fd, "Call waiting:\n\n");
-
-	struct vgsm_req_line *line;
-	list_for_each_entry(line, &req->lines, node) {
-		if (!strncmp(line->text, "+CCWA: ", strlen("+CCWA: ")))
-			vgsm_show_me_callwaiting_entry(fd,
-				line->text + strlen("+CCWA: "));
-	}
-
-	vgsm_req_put(req);
-
-	ast_cli(fd, "\n");
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_sim(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-
-	if (me->status != VGSM_ME_STATUS_READY &&
-	    me->status != VGSM_ME_STATUS_WAITING_SIM &&
-	    me->status != VGSM_ME_STATUS_WAITING_PIN) {
-		ast_cli(fd, "ME is not ready\n");
-		goto out;
-	}
-
-	ast_cli(fd, "ME SIM:\n"
-		"  VCC=%d, RST=%d\n"
-		"  State: %s\n",
-		me->mesim.vcc,
-		me->mesim.rst,
-		vgsm_mesim_state_to_text(me->mesim.state));
-
-	if (me->mesim.proto == VGSM_MESIM_PROTO_LOCAL) {
-		ast_cli(fd, "  Routed to local SIM holder: %d\n",
-			me->mesim.local_sim_id);
-	} else if (me->mesim.proto == VGSM_MESIM_PROTO_CLIENT) {
-	} else if (me->mesim.proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-		ast_cli(fd, "  Implementa interface status: %s\n",
-			vgsm_mesim_impl_state_to_text(
-					me->mesim.impl_state));
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-		{
-		char tmpstr[32];
-		ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-			me->mesim.impl_simclient_addr.sin_addr);
-
-		ast_cli(fd, "  Implementa SIM client addr:"
-				" %s:%d\n",
-			tmpstr,
-			ntohs(me->mesim.impl_simclient_addr.sin_port));
-		}
-#else
-		ast_cli(fd, "  Implementa SIM client addr:"
-				" %s:%d\n",
-			ast_inet_ntoa(me->mesim.
-					impl_simclient_addr.sin_addr),
-			ntohs(me->mesim.impl_simclient_addr.sin_port));
-#endif
-	}
-
-
-/*
-	if (!me->mesim.sim_holder) {
-		ast_cli(fd,
-			"\nSIM Holder:\n"
-			"  Not connected\n");
-		goto out;
-	}
-
-	ast_cli(fd,
-		"\nSIM Holder: %s\n",
-		me->mesim.sim_holder->name);*/
-
-	if (!me->sim.inserted) {
-		ast_cli(fd,
-			"\nSIM:\n"
-			"  Not inserted\n");
-		goto out;
-	}
-
-	ast_cli(fd,
-		"\nSIM:\n"
-		"  Card ID: %s\n"
-		"  IMSI: %s\n"
-		"  PIN remaining attempts: %d\n"
-		"  Services center: %s/%s/%s%s\n",
-		me->sim.card_id,
-		me->sim.imsi,
-		me->sim.remaining_attempts,
-		vgsm_numbering_plan_to_text(me->sim.smcc_address.np),
-		vgsm_type_of_number_to_text(me->sim.smcc_address.ton),
-		vgsm_number_prefix(&me->sim.smcc_address),
-		me->sim.smcc_address.digits);
-
-	ast_cli(fd, "\n");
-
-#if 0
-	struct vgsm_sim *sim = me->sim.sim;
-	if (!sim)
-		goto out;
-
-	struct vgsm_sim_file *file;
-	__u8 *buf;
-	int i;
-	int err;
-
-	/***************/
-
-	file = vgsm_sim_file_alloc(sim);
-	if (!file)
-		goto out;
-	vgsm_sim_file_open(file, 0x6F46);
-
-	buf = alloca(file->length + 1);
-	vgsm_sim_file_read(file, buf, 0, file->length);
-	buf[file->length] = '\0';
-	ast_cli(fd, "  Operator name: %s\n", buf);
-	vgsm_sim_file_put(file);
-
-	/***************/
-
-	file = vgsm_sim_file_alloc(sim);
-	if (!file)
-		goto out;
-
-	__u8 phase;
-	vgsm_sim_file_open(file, 0x6FAE);
-	err = vgsm_sim_file_read(file, &phase, 0, 1);
-	if (err < 0) {
-		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
-		goto out;
-	}
-
-	if (phase == 3)
-		ast_cli(fd, "  Phase: 2 with profile download\n");
-	else
-		ast_cli(fd, "  Phase: %d\n", phase);
-
-	vgsm_sim_file_put(file);
-
-	/***************/
-
-	file = vgsm_sim_file_alloc(sim);
-	if (!file)
-		goto out;
-	vgsm_sim_file_open(file, 0x6F30);
-
-	buf = alloca(file->length);
-
-	err = vgsm_sim_file_read(file, buf, 0, file->length);
-	if (err < 0) {
-		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
-		goto out;
-	}
-
-	ast_cli(fd, "\nPLMN Selector:\n");
-	for(i=0; i<file->length; i+=3) {
-
-		if (buf[i] == 0xff &&
-		    buf[i + 1] == 0xff &&
-		    buf[i + 2] == 0xff)
-			continue;
-
-		__u16 mcc = (buf[i] & 0x0f) * 100 +
-			    ((buf[i] & 0xf0) >> 4) * 10 +
-			    (buf[i + 1] & 0x0f);
-
-		__u16 mnc = (buf[i + 2] & 0x0f) * 10+
-			    ((buf[i + 2] & 0xf0) >> 4);
-
-		if ((buf[i + 1] & 0xf0) != 0xf0)
-			    mnc += ((buf[i + 1] & 0xf0) >> 4) * 100;
-
-		ast_cli(fd, "  %03d%02d", mcc, mnc);
-
-		struct vgsm_operator_info *op_info;
-		op_info = vgsm_operators_search(mcc, mnc);
-		if (op_info)
-			ast_cli(fd, " %s - %s",
-				op_info->name,
-				op_info->country ? op_info->country->name : "");
-
-		ast_cli(fd, "\n");
-	}
-
-	vgsm_sim_file_put(file);
-
-	/***************/
-
-	file = vgsm_sim_file_alloc(sim);
-	if (!file)
-		goto out;
-	vgsm_sim_file_open(file, 0x6F7B);
-
-	buf = alloca(file->length);
-
-	err = vgsm_sim_file_read(file, buf, 0, file->length);
-	if (err < 0) {
-		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
-		goto out;
-	}
-
-	ast_cli(fd, "\nForbidden PLMNs:\n");
-	for(i=0; i<file->length; i+=3) {
-
-		if (buf[i] == 0xff &&
-		    buf[i + 1] == 0xff &&
-		    buf[i + 2] == 0xff)
-			continue;
-
-		__u16 mcc = (buf[i] & 0x0f) * 100 +
-			    ((buf[i] & 0xf0) >> 4) * 10 +
-			    (buf[i + 1] & 0x0f);
-
-		__u16 mnc = (buf[i + 2] & 0x0f) * 10+
-			    ((buf[i + 2] & 0xf0) >> 4);
-
-		if ((buf[i + 1] & 0xf0) != 0xf0)
-			    mnc += ((buf[i + 1] & 0xf0) >> 4) * 100;
-
-		ast_cli(fd, "  %03d%02d", mcc, mnc);
-
-		struct vgsm_operator_info *op_info;
-		op_info = vgsm_operators_search(mcc, mnc);
-		if (op_info)
-			ast_cli(fd, " %s - %s",
-				op_info->name,
-				op_info->country ? op_info->country->name : "");
-
-		ast_cli(fd, "\n");
-	}
-
-	vgsm_sim_file_put(file);
-
-	/***************/
-
-	file = vgsm_sim_file_alloc(sim);
-	if (!file)
-		goto out;
-
-	vgsm_sim_file_open(file, 0x6F05);
-
-	buf = alloca(file->length);
-	err = vgsm_sim_file_read(file, buf, 0, file->length);
-	if (err < 0) {
-		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
-		goto out;
-	}
-
-	ast_cli(fd, "\nPreferred languages:\n");
-	for(i=0; i<file->length; i++) {
-		ast_cli(fd, "  %s\n", vgsm_sim_language_to_text(buf[i]));
-	}
-
-	vgsm_sim_file_put(file);
-
-	ast_cli(fd, "\n");
-#endif
-
-out:
-
-	ast_mutex_unlock(&me->lock);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_network(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-
-	struct vgsm_me_config *mc = me->current_config;
-
-	if (me->status != VGSM_ME_STATUS_READY) {
-		ast_cli(fd, "ME is not ready\n");
-		goto out;
-	}
-
-	ast_cli(fd,
-		"\nNetwork: \n"
-		"  Operator Selection: %s\n",
-		vgsm_me_operator_selection_to_text(
-			mc->operator_selection));
-
-	if (mc->operator_selection != VGSM_OPSEL_AUTOMATIC) {
-		struct vgsm_operator_info *op_info;
-		op_info = vgsm_operators_search(
-				mc->operator_mcc, mc->operator_mnc);
-
-		if (op_info) {
-			ast_cli(fd,
-				"  Desidered network:"
-				" %03d%02d (%s - %s - %s)\n",
-				op_info->mcc,
-				op_info->mnc,
-				op_info->name,
-				op_info->country ? op_info->country->name :
-					"Unknown",
-				op_info->bands);
-		} else {
-			ast_cli(fd,
-				"  Desidered network: %03d%02d)\n",
-				mc->operator_mcc,
-				mc->operator_mnc);
-		}
-	}
-
-	ast_cli(fd,
-		"  Status: %s\n",
-		vgsm_net_status_to_text(me->net.status));
-
-	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING)
-		goto out;
-
-	struct vgsm_operator_info *op_info;
-	op_info = vgsm_operators_search(me->net.mcc, me->net.mnc);
-
-	if (op_info) {
-		ast_cli(fd,
-			"  Current network:"
-			" %03u%02u (%s - %s - %s)\n",
-			op_info->mcc,
-			op_info->mnc,
-			op_info->name,
-			op_info->country ? op_info->country->name : "Unknown",
-			op_info->bands);
-	} else {
-		ast_cli(fd,
-			"  Current network: %03u%02u\n",
-			me->net.mcc,
-			me->net.mnc);
-	}
-
-	ast_cli(fd, "\nServing cell\n");
-	ast_cli(fd,
-		"  MCC MNC  LAC   ID"
-		" BSIC ARFCN     RxLev\n");
-
-	ast_cli(fd,
-		"  %03d  %02d %04x %04x %4d %5d"
-		" %5d dBm\n",
-		me->net.sci.mcc,
-		me->net.sci.mnc,
-		me->net.sci.lac,
-		me->net.sci.id,
-		me->net.sci.bsic,
-		me->net.sci.arfcn,
-		-me->net.sci.rx_lev);
-
-	ast_cli(fd,
-		"  RxLev Sub: %d dBm\n"
-		"  RxLev Full: %d dBm\n"
-		"  RxQual: %d (BER %s)\n"
-		"  RxQual Sub: %d (BER %s)\n"
-		"  RxQual Full: %d (BER %s)\n"
-		"  Timeslot: %d\n"
-		"  TA: %d\n",
-		-me->net.sci2.rx_lev_sub,
-		-me->net.sci2.rx_lev_full,
-		me->net.sci2.rx_qual,
-		vgsm_qual_to_text(me->net.sci2.rx_qual),
-		me->net.sci2.rx_qual_sub,
-		vgsm_qual_to_text(me->net.sci2.rx_qual_sub),
-		me->net.sci2.rx_qual_full,
-		vgsm_qual_to_text(me->net.sci2.rx_qual_full),
-		me->net.sci2.timeslot,
-		me->net.sci2.ta);
-
-	if (me->net.sci2.rssi == 0)
-		ast_cli(fd, "  RSSI: <= -113 dBm\n");
-	else if (me->net.sci2.rssi == 31)
-		ast_cli(fd, "  RSSI: >= -51 dB,\n");
-	else if (me->net.sci2.rssi == 99)
-		ast_cli(fd, "  RSSI: N/A\n");
-	else
-		ast_cli(fd, "  RSSI: %d dBm\n",
-			-113 + (me->net.sci2.rssi * 2));
-
-	ast_cli(fd, "  BER: %d (%s)\n",
-		me->net.sci2.ber,
-		vgsm_qual_to_text(me->net.sci2.ber));
-
-	if (me->net.ncells) {
-		ast_cli(fd, "\nAdjacent cells (%d)\n",
-			me->net.ncells);
-
-		ast_cli(fd,
-			"  #  MCC MNC  LAC   ID"
-			" BSIC ARFCN     RxLev\n");
-
-		int i;
-		for (i=0; i<me->net.ncells; i++) {
-			ast_cli(fd,
-				" %2d: %03d  %02d %04x %04x %4d %5d"
-				" %5d dBm\n",
-				i + 1,
-				me->net.nci[i].mcc,
-				me->net.nci[i].mnc,
-				me->net.nci[i].lac,
-				me->net.nci[i].id,
-				me->net.nci[i].bsic,
-				me->net.nci[i].arfcn,
-				-me->net.nci[i].rx_lev);
-		}
-	}
-
-out:
-	ast_cli(fd, "\n");
-
-	ast_mutex_unlock(&me->lock);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_statistics(int fd, struct vgsm_me *me)
-{
-	struct vgsm_counter *counter;
-
-	ast_mutex_lock(&me->lock);
-	if (me->status != VGSM_ME_STATUS_READY) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "ME is not ready\n");
-		return RESULT_FAILURE;
-	}
-
-	ast_cli(fd, "\nStatistics:\n");
-
-	ast_cli(fd, "  Inbound: %d\n", me->stats.inbound);
-	list_for_each_entry(counter, &me->stats.inbound_counters, node) {
-		ast_cli(fd, "    %s/%s: %d\n",
-			vgsm_cause_location_to_text(counter->location),
-			vgsm_cause_reason_to_text(counter->location,
-				counter->reason),
-			counter->count);
-	}
-
-	ast_cli(fd, "  Outbound: %d\n", me->stats.outbound);
-	list_for_each_entry(counter, &me->stats.outbound_counters, node) {
-		ast_cli(fd, "    %s/%s: %d\n",
-			vgsm_cause_location_to_text(counter->location),
-			vgsm_cause_reason_to_text(counter->location,
-				counter->reason),
-			counter->count);
-	}
-
-	ast_cli(fd, "\n");
-
-	ast_mutex_unlock(&me->lock);
-
-	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&me->comm, 180 * SEC, "AT^STCD");
-	int res = vgsm_req_status(req);
-	if (res != VGSM_RESP_OK) {
-		ast_cli(fd, "Error: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-
-		vgsm_req_put(req);
-
-		return RESULT_FAILURE;
-	}
-
-	ast_cli(fd, "Total call duration: %s\n",
-		vgsm_req_first_line(req)->text + strlen("^STCD: "));
-
-	vgsm_req_put(req);
-
-	req = vgsm_req_make_wait(&me->comm, 180 * SEC, "AT^SLCD");
-	res = vgsm_req_status(req);
-	if (res != VGSM_RESP_OK) {
-		ast_cli(fd, "Error: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-
-		vgsm_req_put(req);
-
-		return RESULT_FAILURE;
-	}
-
-	ast_cli(fd, "Last call duration: %s\n",
-		vgsm_req_first_line(req)->text + strlen("^SLCD: "));
-
-	vgsm_req_put(req);
-
-	ast_cli(fd, "\n");
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_calls(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-
-	ast_cli(fd, "\nCalls:\n");
-	ast_cli(fd, "  #  State      Dir T Bearer          Channel\n");
-
-	int i;
-	for(i=0; i<ARRAY_SIZE(me->calls); i++) {
-		if (me->calls[i].state == VGSM_CALL_STATE_UNUSED)
-			continue;
-
-		ast_cli(fd, "  %1d: %-10s %-3s %c %-15s %s\n",
-			i + 1,
-			vgsm_call_state_to_text(me->calls[i].state),
-			(me->calls[i].direction ==
-				VGSM_CALL_DIRECTION_MOBILE_TERMINATED ?
-					"IN" : "OUT"),
-			me->calls[i].channel_assigned ? '*' : ' ',
-			vgsm_call_bearer_to_text(me->calls[i].bearer),
-			(i == 0 && me->vgsm_chan) ?
-				me->vgsm_chan->ast_chan->name : "");
-	}
-
-	ast_cli(fd, "\n");
-
-	ast_mutex_unlock(&me->lock);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_moni(int fd, struct vgsm_me *me)
-{
-	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^MONI");
-	if (vgsm_req_status(req) != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-		return RESULT_FAILURE;
-	}
-
-	struct vgsm_req_line *line;
-	list_for_each_entry(line, &req->lines, node)
-		ast_cli(fd, "%s\n", line->text);
-
-	vgsm_req_put(req);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_smong(int fd, struct vgsm_me *me)
-{
-	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^SMONG");
-	if (vgsm_req_status(req) != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-		return RESULT_FAILURE;
-	}
-
-	struct vgsm_req_line *line;
-	list_for_each_entry(line, &req->lines, node)
-		ast_cli(fd, "%s\n", line->text);
-
-	vgsm_req_put(req);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_serial(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-	struct vgsm_me_config *mc;
-	mc = vgsm_me_config_get(me->current_config);
-	ast_mutex_unlock(&me->lock);
-
-	struct serial_icounter_struct icount;
-	if (ioctl(me->me_fd, TIOCGICOUNT, &icount) < 0) {
-		ast_cli(fd, "ioctl(TIOCGICOUNT)\n");
-		return RESULT_FAILURE;
-	}
-
-	int status;
-	if (ioctl(me->me_fd, TIOCMGET, &status) < 0) {
-		ast_cli(fd, "ioctl(TIOCMGET)\n");
-		return RESULT_FAILURE;
-	}
-
-	ast_cli(fd,
-		"  Flow conf.:  %s\n"
-		"  Flow acutal: %s\n"
-		"  RTS:         %s\n"
-		"  CTS:         %s (%d)\n"
-		"  DTR:         %s\n"
-		"  DSR:         %s (%d)\n"
-		"  RI:          %s (%d)\n"
-		"  CD:          %s (%d)\n"
-		"  RX:          %d\n"
-		"  TX:          %d\n"
-		"  Frame:       %d\n"
-		"  Overrun:     %d\n"
-		"  Parity:      %d\n"
-		"  Break:       %d\n"
-		"  Buf overrun: %d\n",
-		vgsm_flow_control_to_text(mc->flow_control),
-		vgsm_flow_control_to_text(me->flow_control),
-		(status & TIOCM_RTS) ? "ON" : "OFF",
-		(status & TIOCM_CTS) ? "ON" : "OFF", icount.cts,
-		(status & TIOCM_DTR) ? "ON" : "OFF",
-		(status & TIOCM_DSR) ? "ON" : "OFF", icount.dsr, 
-		(status & TIOCM_RI)  ? "ON" : "OFF", icount.rng, 
-		(status & TIOCM_CD)  ? "ON" : "OFF", icount.dcd,
-		icount.rx,
-		icount.tx,
-		icount.frame, icount.overrun, icount.parity, icount.brk,
-		icount.buf_overrun);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_summary(int fd, struct vgsm_me *me)
-{
-	ast_mutex_lock(&me->lock);
-
-	ast_cli(fd, "%-10s: %s",
-		me->name,
-		vgsm_me_status_to_text(me->status));
-
-	if (me->status == VGSM_ME_STATUS_READY) {
-		ast_cli(fd, " %-17s",
-			vgsm_net_status_to_text(me->net.status));
-
-		if (me->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
-		    me->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
-
-			struct vgsm_operator_info *op_info;
-			op_info = vgsm_operators_search(me->net.mcc,
-							me->net.mnc);
-
-			if (op_info)
-				ast_cli(fd, " \"%s\"", op_info->name_short);
-			else
-				ast_cli(fd, " %03u%02u", me->net.mcc,
-							me->net.mnc);
-		}
-
-		if (me->vgsm_chan)
-			ast_cli(fd, " - CALL[%s]",
-				me->vgsm_chan->ast_chan->name);
-
-		if (me->sending_sms)
-			ast_cli(fd, " - SENDING_SMS");
-
-	} else {
-		if (me->status_reason)
-			ast_cli(fd, "  %s", me->status_reason);
-	}
-
-	ast_cli(fd, "\n");
-
-	ast_mutex_unlock(&me->lock);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_show_me_details(int fd, struct vgsm_me *me)
-{
-	vgsm_show_me_me(fd, me);
-	vgsm_show_me_serial(fd, me);
-	vgsm_show_me_forwarding(fd, me);
-	vgsm_show_me_callwaiting(fd, me);
-	vgsm_show_me_sim(fd, me);
-	vgsm_show_me_network(fd, me);
-	vgsm_show_me_statistics(fd, me);
-	vgsm_show_me_calls(fd, me);
-	vgsm_show_me_moni(fd, me);
-	vgsm_show_me_smong(fd, me);
-
-	return RESULT_SUCCESS;
-}
-
-static int show_vgsm_mes_cli(int fd, int argc, char *argv[])
-{
-	int err;
-	struct vgsm_me *me;
-
-	if (argc >= 4) {
-		me = vgsm_me_get_by_name(argv[3]);
-		if (!me) {
-			ast_cli(fd, "ME %s not found\n", argv[3]);
-			err = RESULT_FAILURE;
-			goto err_me_not_found;
-		}
-
-		if (argc >= 5) {
-			if (!strcasecmp(argv[4], "forwarding"))
-				err = vgsm_show_me_forwarding(fd, me);
-			else if (!strcasecmp(argv[4], "callwaiting"))
-				err = vgsm_show_me_callwaiting(fd, me);
-			else if (!strcasecmp(argv[4], "sim"))
-				err = vgsm_show_me_sim(fd, me);
-			else if (!strcasecmp(argv[4], "network"))
-				err = vgsm_show_me_network(fd, me);
-			else if (!strcasecmp(argv[4], "statistics"))
-				err = vgsm_show_me_statistics(fd, me);
-			else if (!strcasecmp(argv[4], "calls"))
-				err = vgsm_show_me_calls(fd, me);
-			else if (!strcasecmp(argv[4], "moni"))
-				err = vgsm_show_me_moni(fd, me);
-			else if (!strcasecmp(argv[4], "smong"))
-				err = vgsm_show_me_smong(fd, me);
-			else if (!strcasecmp(argv[4], "serial"))
-				err = vgsm_show_me_serial(fd, me);
-			else if (!strcasecmp(argv[4], "details"))
-				err = vgsm_show_me_details(fd, me);
-			else {
-				ast_cli(fd, "Command '%s' unrecognized\n",
-					argv[4]);
-
-				err = RESULT_SHOWUSAGE;
-				goto err_command_unrecognized;
-			}
-		} else
-			vgsm_show_me_me(fd, me);
-
-		vgsm_me_put(me);
-
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			vgsm_show_me_summary(fd, me);
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-
-err_command_unrecognized:
-	vgsm_me_put(me);
-err_me_not_found:
-
-	return err;
-}
-
-static char *show_vgsm_mes_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
-				"statistics", "calls", "moni", "smong",
-				"serial", "details" };
-	int i;
-
-	switch(pos) {
-	case 3:
-		return vgsm_me_completion(line, word, state);
-	case 4:
-		for(i=state; i<ARRAY_SIZE(commands); i++) {
-			if (!strncasecmp(word, commands[i], strlen(word)))
-				return strdup(commands[i]);
-		}
-	}
-
-	return NULL;
-}
-
-static char show_vgsm_mes_help[] =
-"Usage: show vgsm mes [<me> [<category>]]\n"
-"\n"
-"	Display informations on vGSM mes\n"
-"\n"
-"	<category> may be one of the following:\n"
-"\n"
-"		forwarding	show current status of call forwarding\n"
-"				supplementary service\n"
-"\n"
-"		callwaiting	show current status of call waiting\n"
-"				supplementary service\n"
-"\n"
-"		sim		show informations related to the SIM card\n"
-"				inserted in <me>\n"
-"\n"
-"		network		show informations regarding the GSM network\n"
-"				received by the me\n"
-"\n"
-"		statistics	show call statistics: inbound/outbound\n"
-"				counters, release codes and duration\n"
-"\n"
-"		calls		show active calls on selected me\n"
-"\n"
-"		details		show detailed informations about me\n";
-
-static struct ast_cli_entry show_vgsm_mes =
-{
-	{ "show", "vgsm", "mes", NULL },
-	show_vgsm_mes_cli,
-	"Displays vGSM me informations",
-	show_vgsm_mes_help,
-	show_vgsm_mes_complete,
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int vgsm_forwarding_func(int fd, int argc, char *argv[])
-{
-	int err;
-
-	if (argc < 3) {
-		ast_cli(fd, "Missing me name\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_me_name;
-	}
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing command\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_command;
-	}
-
-	struct vgsm_me *me;
-	me = vgsm_me_get_by_name(argv[2]);
-	if (!me) {
-		ast_cli(fd, "Cannot find me '%s'\n", argv[2]);
-		err = RESULT_FAILURE;
-		goto err_me_not_found;
-	}
-
-	if (!strcasecmp(argv[3], "query")) {
-//		err = do_vgsm_forwarding_query(fd, me);
-//		if (err != RESULT_SUCCESS)
-//			goto err_forwarding_query;
-	} else if (!strcasecmp(argv[3], "off")) {
-//		err = do_vgsm_forwarding_off(fd, me);
-//		if (err != RESULT_SUCCESS)
-//			goto err_forwarding_off;
-	} else {
-		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
-		err = RESULT_SHOWUSAGE;
-		goto err_unknown_command;
-	}
-
-	vgsm_me_put(me);
-
-	return RESULT_SUCCESS;
-
-err_unknown_command:
-	vgsm_me_put(me);
-err_me_not_found:
-err_no_command:
-err_no_me_name:
-
-	return err;
-}
-
-static char *vgsm_forwarding_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	char *commands[] = { "query", "off" };
-	int i;
-
-	switch(pos) {
-	case 2:
-		return vgsm_me_completion(line, word, state);
-	case 3:
-		for(i=state; i<ARRAY_SIZE(commands); i++) {
-			if (!strncasecmp(word, commands[i], strlen(word)))
-				return strdup(commands[i]);
-		}
-	}
-
-	return NULL;
-}
-
-static char vgsm_forwarding_help[] =
-"Usage: vgsm forwarding <me> <set|>\n"
-"\n"
-"	Set call forwarding for the specified me (not yet implemented)\n";
-
-static struct ast_cli_entry vgsm_forwarding =
-{
-	{ "vgsm", "forwarding", NULL },
-	vgsm_forwarding_func,
-	"Set call forwarding for specified me",
-	vgsm_forwarding_help,
-	vgsm_forwarding_complete
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int vgsm_me_power_on(int fd, struct vgsm_me *me)
-{
-	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
-	    me->status == VGSM_ME_STATUS_CLOSED ||
-	    me->status == VGSM_ME_STATUS_FAILED) {
-		ast_cli(fd, "ME is not available\n");
-		return RESULT_FAILURE;
-	} else if (me->status == VGSM_ME_STATUS_POWERING_ON) {
-		ast_cli(fd, "ME is already powering off\n");
-		return RESULT_FAILURE;
-	} else if (me->status != VGSM_ME_STATUS_OFF) {
-		ast_cli(fd, "ME is already powered on\n");
-		return RESULT_FAILURE;
-	}
-
-	vgsm_me_ignite(me);
-
-	vgsm_me_set_status(me,
-		VGSM_ME_STATUS_POWERING_ON,
-		POWERING_ON_TIMEOUT,
-		"CLI request");
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_power_off(int fd, struct vgsm_me *me)
-{
-	struct vgsm_comm *comm = &me->comm;
-
-	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
-	    me->status == VGSM_ME_STATUS_CLOSED ||
-	    me->status == VGSM_ME_STATUS_FAILED) {
-		ast_cli(fd, "ME is not available\n");
-		return RESULT_FAILURE;
-	} else if (me->status == VGSM_ME_STATUS_OFF) {
-		ast_cli(fd, "ME is already powered off\n");
-		return RESULT_FAILURE;
-	} else if (me->status == VGSM_ME_STATUS_POWERING_OFF) {
-		ast_cli(fd, "ME is already powering off\n");
-		return RESULT_FAILURE;
-	}
-
-	vgsm_me_set_status(me,
-			VGSM_ME_STATUS_POWERING_OFF,
-			POWERING_OFF_TIMEOUT,
-			"CLI request");
-
-	int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT^SMSO");
-	if (res != VGSM_RESP_OK) {
-		ast_cli(fd, "Error: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-		return RESULT_FAILURE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_power(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	if (argc < 5)
-		return RESULT_SHOWUSAGE;
-
-	if (!strcasecmp(argv[4], "on"))
-		return vgsm_me_power_on(fd, me);
-	else if (!strcasecmp(argv[4], "off"))
-		return vgsm_me_power_off(fd, me);
-	else {
-		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
-		return RESULT_SHOWUSAGE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_reset(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	struct vgsm_comm *comm = &me->comm;
-
-	if (me->status != VGSM_ME_STATUS_READY &&
-	    me->status != VGSM_ME_STATUS_WAITING_SIM &&
-	    me->status != VGSM_ME_STATUS_WAITING_PIN) {
-		ast_cli(fd, "ME is not available\n");
-		return RESULT_FAILURE;
-	}
-
-	vgsm_me_set_status(me,
-			VGSM_ME_STATUS_RESETTING,
-			RESET_TIMEOUT,
-			"CLI request");
-
-	int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT+CFUN=1,1");
-	if (res != VGSM_RESP_OK) {
-		ast_cli(fd, "Error: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-		return RESULT_FAILURE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_service_on(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	me->in_service = TRUE;
-
-	if (me->status == VGSM_ME_STATUS_OFFLINE) {
-		vgsm_me_set_status(me,
-				VGSM_ME_STATUS_READY,
-				READY_UPDATE_TIME,
-				" ");
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_service_off(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	if (me->status == VGSM_ME_STATUS_OFFLINE) {
-	} else if (me->status == VGSM_ME_STATUS_READY) {
-		vgsm_me_set_status(me,
-				VGSM_ME_STATUS_OFFLINE,
-				-1,
-				"CLI request");
-	} else {
-		me->in_service = FALSE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_service(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	if (argc < 5)
-		return RESULT_SHOWUSAGE;
-
-	if (!strcasecmp(argv[4], "on"))
-		return vgsm_me_service_on(fd, argc, argv, me);
-	else if (!strcasecmp(argv[4], "off"))
-		return vgsm_me_service_off(fd, argc, argv, me);
-	else {
-		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
-		return RESULT_SHOWUSAGE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_identify(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	int value;
-
-	if (argc < 5)
-		return RESULT_SHOWUSAGE;
-
-	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
-	    me->status == VGSM_ME_STATUS_CLOSED ||
-	    me->status == VGSM_ME_STATUS_FAILED) {
-		ast_cli(fd, "ME is not available\n");
-		return RESULT_FAILURE;
-	}
-
-	if (!strcasecmp(argv[4], "on"))
-		value = 1;
-	else if (!strcasecmp(argv[4], "off"))
-		value = 0;
-	else {
-		ast_cli(fd, "Unknown command '%s'\n", argv[4]);
-		return RESULT_SHOWUSAGE;
-	}
-
-	if (ioctl(me->me_fd, VGSM_IOC_IDENTIFY, value) < 0) {
-		ast_cli(fd, "ioctl(VGSM_IOC_IDENTIFY): %s\n", strerror(errno));
-		return RESULT_FAILURE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_operator(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	struct vgsm_comm *comm = &me->comm;
-	int err;
-
-	if (!strcasecmp(argv[4], "auto")) {
-		err = vgsm_req_make_wait_result(
-			comm, 180 * SEC, "AT+COPS=0,2");
-	} else if (!strcasecmp(argv[4], "none")) {
-		err = vgsm_req_make_wait_result(
-			comm, 180 * SEC, "AT+COPS=2,2");
-	} else {
-		int lai = atoi(argv[4]);
-		int mode;
-
-		if (argc > 5 && !strcasecmp(argv[5], "fallback"))
-			mode = 4;
-		else
-			mode = 1;
-
-		err = vgsm_req_make_wait_result(
-			comm, 180 * SEC, "AT+COPS=%d,2,%05u",
-			mode, lai);
-	}
-
-	if (err != VGSM_RESP_OK) {
-		ast_cli(fd, "Error: %s (%d)\n",
-			vgsm_me_error_to_text(err),
-			err);
-		return RESULT_FAILURE;
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_rawcommand(
-	int fd, int argc, char *argv[],
-	struct vgsm_me *me)
-{
-	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&me->comm, 5 * SEC, argv[4]);
-	if (vgsm_req_status(req) != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-		return RESULT_FAILURE;
-	}
-
-	struct vgsm_req_line *line;
-	list_for_each_entry(line, &req->lines, node)
-		ast_cli(fd, "%s\n", line->text);
-
-	vgsm_req_put(req);
-
-	return RESULT_SUCCESS;
-}
-
-static int vgsm_me_func(int fd, int argc, char *argv[])
-{
-	int err;
-
-	if (argc < 3) {
-		ast_cli(fd, "Missing me name\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_me_name;
-	}
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing command\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_command;
-	}
-
-	struct vgsm_me *me;
-	me = vgsm_me_get_by_name(argv[2]);
-	if (!me) {
-		ast_cli(fd, "Cannot find me '%s'\n", argv[2]);
-		err = RESULT_FAILURE;
-		goto err_me_not_found;
-	}
-
-	ast_mutex_lock(&me->lock);
-	if (!strcasecmp(argv[3], "power"))
-		err = vgsm_me_power(fd, argc, argv, me);
-	else if (!strcasecmp(argv[3], "reset"))
-		err = vgsm_me_reset(fd, argc, argv, me);
-	else if (!strcasecmp(argv[3], "identify"))
-		err = vgsm_me_identify(fd, argc, argv, me);
-	else if (!strcasecmp(argv[3], "operator"))
-		err = vgsm_me_operator(fd, argc, argv, me);
-	else if (!strcasecmp(argv[3], "rawcommand"))
-		err = vgsm_me_rawcommand(fd, argc, argv, me);
-	else if (!strcasecmp(argv[3], "service"))
-		err = vgsm_me_service(fd, argc, argv, me);
-	else {
-		ast_mutex_unlock(&me->lock);
-		ast_cli(fd, "Unknown command '%s'\n", argv[3]);
-		err = RESULT_SHOWUSAGE;
-		goto err_unknown_command;
-	}
-	ast_mutex_unlock(&me->lock);
-
-	if (err != RESULT_SUCCESS)
-		goto err_command;
-
-	vgsm_me_put(me);
-
-	return RESULT_SUCCESS;
-
-err_command:
-err_unknown_command:
-	vgsm_me_put(me);
-err_me_not_found:
-err_no_command:
-err_no_me_name:
-
-	return err;
-}
-
-static char *vgsm_me_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	char *commands[] = { "power", "reset", "identify", "operator",
-				"service" };
-	char *power_commands[] = { "on", "off" };
-	int i;
-
-	switch(pos) {
-	case 2:
-		return vgsm_me_completion(line, word, state);
-	case 3:
-		for(i=state; i<ARRAY_SIZE(commands); i++) {
-			if (!strncasecmp(word, commands[i], strlen(word)))
-				return strdup(commands[i]);
-		}
-	break;
-
-	case 4:
-		for(i=state; i<ARRAY_SIZE(power_commands); i++) {
-			if (!strncasecmp(word, power_commands[i], strlen(word)))
-				return strdup(power_commands[i]);
-
-			// FIXME add service subcommands
-		}
-	break;
-	}
-
-	return NULL;
-}
-
-static char vgsm_me_help[] =
-"Usage: vgsm me <me> <command>\n"
-"\n"
-"	Commands:\n"
-"	power <on|off>\n"
-"		Power on or off the specified me.\n"
-"\n"
-"		Power-off will be graceful (requesting de-registration from\n"
-"		the network. If, however, the me is not responding,\n"
-"		the me will be forcibly shut down.\n"
-"\n"
-"	service <on|off>\n"
-"		Put the specified me in-service or off-line.\n"
-"\n"
-"	reset\n"
-"		Initiate ME software reset"
-"\n"
-"	identify <on|off>\n"
-"		Enables or disables frontal LED flashing to identify the\n"
-"		antenna connector associated with the specified me.\n"
-"\n"
-"	operator <auto | none | LAI> [fallback]\n"
-"		Changes the operator selection mode.\n"
-"		auto: Automatically select the best operator\n"
-"		none: Deregister and disable further registration attempts\n"
-"		LAI: Manually select the operator specified by LAI (MCC+MNC).\n"
-"			If 'fallback' is specified, fall back to automatic if\n"
-"			the manually selected operator is not available.\n";
-
-static struct ast_cli_entry vgsm_me =
-{
-	{ "vgsm", "me", NULL },
-	vgsm_me_func,
-	"Power on or reset the specified me",
-	vgsm_me_help,
-	vgsm_me_complete
-};
-
-static int debug_vgsm_me_state(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->debug_state = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->debug_state = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_call(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->debug_call = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->debug_call = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_atcommands(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->comm.debug_messages = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->comm.debug_messages = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_serial(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->comm.debug_characters = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->comm.debug_characters = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_sms(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->debug_sms = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->debug_sms = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_cbm(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->debug_cbm = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->debug_cbm = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_jitbuf(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->debug_jitbuf = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->debug_jitbuf = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_frames(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->debug_frames = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->debug_frames = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_sim(
-	int fd, struct vgsm_me *me, BOOL enable)
-{
-	if (me) {
-		me->mesim.debug = enable;
-	} else {
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node)
-			me->mesim.debug = enable;
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
-	}
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_all(int fd, BOOL enable)
-{
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
-		me->comm.debug_messages = enable;
-		me->mesim.debug = enable;
-		me->debug_sms = enable;
-		me->debug_cbm = enable;
-		me->debug_jitbuf = enable;
-	}
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_cli(int fd, int argc, char *argv[],
-				int args, BOOL enable)
-{
-	int err = 0;
-
-	if (argc < args)
-		return RESULT_SHOWUSAGE;
-
-	struct vgsm_me *me = NULL;
-
-	if (argc < args + 1) {
-		err = debug_vgsm_me_all(fd, enable);
-	} else {
-		if (argc > args + 1) {
-			me = vgsm_me_get_by_name(argv[args + 1]);
-			if (!me) {
-				ast_cli(fd, "Cannot find me '%s'\n",
-					argv[args]);
-				return RESULT_FAILURE;
-			}
-		}
-
-		if (!strcasecmp(argv[args], "state"))
-			err = debug_vgsm_me_state(fd, me, enable);
-		else if (!strcasecmp(argv[args], "call"))
-			err = debug_vgsm_me_call(fd, me, enable);
-		else if (!strcasecmp(argv[args], "atcommands"))
-			err = debug_vgsm_me_atcommands(fd, me, enable);
-		else if (!strcasecmp(argv[args], "serial"))
-			err = debug_vgsm_me_serial(fd, me, enable);
-		else if (!strcasecmp(argv[args], "sms"))
-			err = debug_vgsm_me_sms(fd, me, enable);
-		else if (!strcasecmp(argv[args], "cbm"))
-			err = debug_vgsm_me_cbm(fd, me, enable);
-		else if (!strcasecmp(argv[args], "jitbuf"))
-			err = debug_vgsm_me_jitbuf(fd, me, enable);
-		else if (!strcasecmp(argv[args], "frames"))
-			err = debug_vgsm_me_frames(fd, me, enable);
-		else if (!strcasecmp(argv[args], "sim"))
-			err = debug_vgsm_me_sim(fd, me, enable);
-		else {
-			ast_cli(fd, "Unrecognized category '%s'\n",
-					argv[args]);
-			err = RESULT_SHOWUSAGE;
-		}
-
-		if (me)
-			vgsm_me_put(me);
-	}
-
-	if (err)
-		return err;
-
-	return RESULT_SUCCESS;
-}
-
-static int debug_vgsm_me_func(int fd, int argc, char *argv[])
-{
-	return debug_vgsm_me_cli(fd, argc, argv, 3, TRUE);
-}
-
-static int no_debug_vgsm_me_func(int fd, int argc, char *argv[])
-{
-	return debug_vgsm_me_cli(fd, argc, argv, 4, FALSE);
-}
-
-static char *debug_me_category_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int state)
-{
-	char *commands[] = { "state", "call", "atcommands", "serial", "sms",
-				"cbm", "jitbuf", "frames", "sim" };
-	int i;
-
-	for(i=state; i<ARRAY_SIZE(commands); i++) {
-		if (!strncasecmp(word, commands[i], strlen(word)))
-			return strdup(commands[i]);
-	}
-
-	return NULL;
-}
-
-static char *debug_me_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-
-	switch(pos) {
-	case 3:
-		return debug_me_category_complete(line, word, state);
-	case 4:
-		return vgsm_me_completion(line, word, state);
-	}
-
-	return NULL;
-}
-
-static char *no_debug_me_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-
-	switch(pos) {
-	case 4:
-		return debug_me_category_complete(line, word, state);
-	case 5:
-		return vgsm_me_completion(line, word, state);
-	}
-
-	return NULL;
-}
-
-static char debug_vgsm_me_help[] =
-"Usage: debug vgsm me [<state | call | atcommands | serial | sms | cbm |\n"
-"			 jitbuf | frames> [me]]\n"
-"\n"
-"	Debug vGSM's me-related events\n"
-"\n"
-"	state		ME state transitions\n"
-"	call		Call-related messages\n"
-"	atcommands	AT-commands sent or received on the serial port\n"
-"	serial		low-level serial communication, including line buffer\n"
-"			and read()/write() calls. Caution: It can be very\n"
-"			verbose.\n"
-"	sms		SMS-DELIVER and SMS-STATUS-REPORT messages\n"
-"	cbm		Cell-broadcast messages\n"
-"	jitbuf		Audio jitter buffer\n"
-"	frames		Audio frames\n";
-
-static struct ast_cli_entry debug_vgsm_me =
-{
-	{ "debug", "vgsm", "me", NULL },
-	debug_vgsm_me_func,
-	"Enables me vGSM debugging",
-	debug_vgsm_me_help,
-	debug_me_complete
-};
-
-static struct ast_cli_entry no_debug_vgsm_me =
-{
-	{ "no", "debug", "vgsm", "me", NULL },
-	no_debug_vgsm_me_func,
-	"Disables me vGSM debugging",
-	NULL,
-	no_debug_me_complete
-};
-
-/*---------------------------------------------------------------------------*/
-
 
 #define to_me(cm) container_of((cm), struct vgsm_me, comm)
 
@@ -6321,10 +4387,10 @@ void vgsm_me_shutdown_all(void)
 {
 	struct vgsm_me *me;
 
-	ast_verbose("vgsm: powering off all mes\n");
+	ast_verbose("vgsm: powering off all MEs\n");
 
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
 
 		ast_mutex_lock(&me->lock);
 
@@ -6345,7 +4411,7 @@ void vgsm_me_shutdown_all(void)
 
 		ast_mutex_unlock(&me->lock);
 	}
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 	time_t begin = time(NULL);
 
@@ -6353,8 +4419,8 @@ void vgsm_me_shutdown_all(void)
 	while(time(NULL) - begin < 10) {
 
 		all_off = TRUE;
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
 
 			ast_mutex_lock(&me->lock);
 			if (me->current_config->poweroff_on_exit &&
@@ -6363,7 +4429,7 @@ void vgsm_me_shutdown_all(void)
 
 			ast_mutex_unlock(&me->lock);
 		}
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 		if (all_off)
 			break;
@@ -6372,10 +4438,10 @@ void vgsm_me_shutdown_all(void)
 	}
 
 	if (!all_off)
-		ast_verbose("vgsm: Failure to power off all mes\n");
+		ast_verbose("vgsm: Failure to power off all MEs\n");
 
-	ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-	list_for_each_entry(me, &vgsm.ifs_list, ifs_node) {
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
 
 		ast_mutex_lock(&me->lock);
 		vgsm_me_set_status(me,
@@ -6393,27 +4459,2986 @@ void vgsm_me_shutdown_all(void)
 
 		ast_mutex_unlock(&me->lock);
 	}
-	ast_rwlock_unlock(&vgsm.ifs_list_lock);
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
 }
 
-int vgsm_me_me_load(void)
+/*---------------------------------------------------------------------------*/
+
+static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 {
-	ast_cli_register(&show_vgsm_mes);
-	ast_cli_register(&vgsm_forwarding);
-	ast_cli_register(&vgsm_me);
-	ast_cli_register(&debug_vgsm_me);
-	ast_cli_register(&no_debug_vgsm_me);
+	struct vgsm_req *req;
+
+	ast_mutex_lock(&me->lock);
+	struct vgsm_me_config *mc = me->current_config;
+
+	ast_cli(fd,
+		"\n"
+		"  ME: %s\n"
+		"  Status: %s\n"
+		"  In service: %s\n",
+		me->name,
+		vgsm_me_status_to_text(me->status),
+		me->in_service ? "YES" : "NO");
+
+	if (me->status_reason && strlen(me->status_reason))
+		ast_cli(fd, "  Reason: %s\n", me->status_reason);
+
+	if (me->failure_count)
+		ast_cli(fd, "\n  Failure count: %d\n", me->failure_count);
+
+	ast_cli(fd,
+		"\n"
+		"  Device: %s\n"
+		"  ME SIM Device: %s\n"
+		"  Context: %s\n"
+		"  Set clock: %s\n"
+		"  Power off on exit: %s\n",
+		mc->device_filename,
+		mc->mesim_device_filename,
+		mc->context,
+		mc->set_clock ? "YES" : "NO",
+		mc->poweroff_on_exit ? "YES" : "NO");
+
+	if (me->interface_version == 1) {
+		ast_cli(fd,
+			"  RX-gain: %d\n"
+			"  TX-gain: %d\n",
+			mc->rx_gain,
+			mc->tx_gain);
+	}
+
+
+/*	if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_EXTERNAL)
+		ast_cli(fd, "  Route to sim: external\n");
+	else if (mc->mesim.sim_holder == VGSM_SIM_ROUTE_DEFAULT)
+		ast_cli(fd, "  Route to sim: default\n");
+	else
+		ast_cli(fd, "  Route to sim: %s\n", mc->mesim.sim_holder->name);
+*/
+
+
+	if (me->status != VGSM_ME_STATUS_READY)
+		goto out;
+
+	/* Avoid holding a lock during long term operations */
+	ast_mutex_unlock(&me->lock);
+
+	/* Voltage */
+	int voltage = -1;
+	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^SBV");
+	if (vgsm_req_status(req) == VGSM_RESP_OK) {
+		const char *line = vgsm_req_first_line(req)->text;
+
+		if (strlen(line) > strlen("^SBV: "))
+			voltage = atoi(line + strlen("^SBV: "));
+	}
+	vgsm_req_put(req);
+
+	/* Current */
+	int current = -1;
+	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^SBC?");
+	if (vgsm_req_status(req) == VGSM_RESP_OK) {
+		const char *line = vgsm_req_first_line(req)->text;
+		const char *pars_ptr = line + strlen("^SBC: ");
+		char field[32];
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+			goto err_sbc;
+		}
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+			goto err_sbc;
+		}
+
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_log(LOG_ERROR, "Cannot parse SBC '%s'\n", line);
+			goto err_sbc;
+		}
+
+		current = atoi(field);
+err_sbc:;
+	}
+	vgsm_req_put(req);
+
+	ast_mutex_lock(&me->lock);
+
+	ast_cli(fd,
+		"\n"
+		"  Model: %s %s\n"
+		"  Version: %s\n"
+		"  IMEI: %s\n",
+		me->me.vendor,
+		me->me.model,
+		me->me.version,
+		me->me.imei);
+
+	if (voltage != -1)
+		ast_cli(fd, "  Supply voltage: %d mV\n", voltage);
+
+	if (current != -1)
+		ast_cli(fd, "  Supply current: %d mA\n", current);
+
+	if (me->card.ver_maj) {
+		ast_cli(fd,
+			"\n"
+			"  Card's firmware: %d.%d.%d\n",
+			me->card.ver_maj,
+			me->card.ver_min,
+			me->card.ver_ser);
+
+		if ((me->card.ver_maj << 16 |
+		     me->card.ver_min << 8 |
+		     me->card.ver_ser) < VGSM_MINIMUM_FIRMWARE) {
+			ast_cli(fd,
+				"  !!! WARNING, firmware upgrade to "
+				"%d.%d.%d is required !!!\n",
+				(VGSM_MINIMUM_FIRMWARE & 0xff0000) >> 16,
+				(VGSM_MINIMUM_FIRMWARE & 0x00ff00) >> 8,
+				(VGSM_MINIMUM_FIRMWARE & 0x0000ff) >> 0);
+		}
+	}
+
+	if (me->card.serial != 0xffffffff &&
+	    me->card.serial != 0x00000000) {
+		ast_cli(fd,
+			"  Card's S/N: %012d\n",
+			me->card.serial);
+	}
+
+out:
+	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&me->lock);
+}
+
+static void vgsm_print_call_class(int fd, int cls)
+{
+	if (cls & 1)
+		ast_cli(fd, "voice, ");
+
+	if (cls & 2)
+		ast_cli(fd, "data, ");
+
+	if (cls & 4)
+		ast_cli(fd, "fax, ");
+
+	if (cls & 8)
+		ast_cli(fd, "SMS, ");
+
+	if (cls & 16)
+		ast_cli(fd, "data circuit sync, ");
+
+	if (cls & 32)
+		ast_cli(fd, "data circuit async, ");
+
+	if (cls & 64)
+		ast_cli(fd, "dedicated packet access, ");
+
+	if (cls & 128)
+		ast_cli(fd, "dedicated PAD access, ");
+}
+
+static int vgsm_me_show_forwarding_entry(
+	int fd, const char *name, const char *line)
+{
+	const char *pars_ptr = line;
+	char field[32];
+
+	if (!get_token(&pars_ptr, field, sizeof(field))) {
+		ast_cli(fd, "Error parsing CCEF reply '%s'\n", line);
+		return RESULT_FAILURE;
+	}
+
+	int status = atoi(field);
+
+	if (status == 1) {
+		if (!get_token(&pars_ptr, field, sizeof(field))) {
+			ast_cli(fd, "Error parsing CCEF reply '%s'\n", line);
+			return RESULT_FAILURE;
+		}
+
+		int cls = atoi(field);
+
+		ast_cli(fd, "Forward: %s, ", name);
+
+		vgsm_print_call_class(fd, cls);
+
+		if (get_token(&pars_ptr, field, sizeof(field))) {
+
+			ast_cli(fd, "traffic to %s", field);
+
+			if (get_token(&pars_ptr, field, sizeof(field))) {
+				if (get_token(&pars_ptr, field,
+							sizeof(field))) {
+					ast_cli(fd, " (delay %ds)",
+						atoi(field));
+				}
+			}
+		}
+
+		ast_cli(fd, "\n");
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static const char *vgsm_me_forwarding_reason_to_text(int value)
+{
+	switch(value) {
+	case 0:
+		return "unconditional";
+	case 1:
+		return "when busy";
+	case 2:
+		return "when not replying";
+	case 3:
+		return "when not reachable";
+	}
+
+	return "*INVALID*";
+}
+
+static int vgsm_me_show_forwarding(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		goto out;
+	}
+
+	ast_mutex_unlock(&me->lock);
+
+	int i;
+	for(i=0; i<=3; i++) {
+		struct vgsm_req *req;
+		req = vgsm_req_make_wait(&me->comm, 180 * SEC,
+						"AT+CCFC=%d,2", i);
+
+		if (!req)
+			return RESULT_FAILURE;
+
+		int res = vgsm_req_status(req);
+		if (res != VGSM_RESP_OK) {
+			ast_cli(fd, "Error: %s (%d)\n",
+				vgsm_me_error_to_text(res),
+				res);
+
+			vgsm_req_put(req);
+
+			return RESULT_FAILURE;
+		}
+
+		struct vgsm_req_line *line;
+		list_for_each_entry(line, &req->lines, node) {
+			if (!strncmp(line->text, "+CCFC: ",
+						strlen("+CCFC: ")))
+				vgsm_me_show_forwarding_entry(fd,
+					vgsm_me_forwarding_reason_to_text(i),
+					line->text + strlen("+CCFC: "));
+		}
+
+		vgsm_req_put(req);
+	}
+
+	ast_cli(fd, "\n");
+
+out:
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_callwaiting_entry(
+	int fd, const char *line)
+{
+	const char *pars_ptr = line;
+	char field[32];
+
+	if (!get_token(&pars_ptr, field, sizeof(field))) {
+		ast_cli(fd, "Error parsing CCWA reply '%s'\n", line);
+		return RESULT_FAILURE;
+	}
+
+	int status = atoi(field);
+
+	if (!get_token(&pars_ptr, field, sizeof(field))) {
+		ast_cli(fd, "Error parsing CCWA reply '%s'\n", line);
+		return RESULT_FAILURE;
+	}
+
+	int cls = atoi(field);
+
+	ast_cli(fd, "Call waiting: ");
+	vgsm_print_call_class(fd, cls);
+	ast_cli(fd, " %s\n", status == 1 ? "Enabled" : "Disabled");
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_callwaiting(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		return RESULT_FAILURE;
+	}
+
+	ast_mutex_unlock(&me->lock);
+
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&me->comm, 180 * SEC, "AT+CCWA=1,2");
+	int res = vgsm_req_status(req);
+
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(res),
+			res);
+
+		vgsm_req_put(req);
+
+		return RESULT_FAILURE;
+	}
+
+	ast_cli(fd, "Call waiting:\n\n");
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node) {
+		if (!strncmp(line->text, "+CCWA: ", strlen("+CCWA: ")))
+			vgsm_me_show_callwaiting_entry(fd,
+				line->text + strlen("+CCWA: "));
+	}
+
+	vgsm_req_put(req);
+
+	ast_cli(fd, "\n");
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_sim(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_WAITING_SIM &&
+	    me->status != VGSM_ME_STATUS_WAITING_PIN) {
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		goto out;
+	}
+
+	ast_cli(fd, "ME SIM:\n"
+		"  VCC=%d, RST=%d\n"
+		"  State: %s\n",
+		me->mesim.vcc,
+		me->mesim.rst,
+		vgsm_mesim_state_to_text(me->mesim.state));
+
+	if (me->mesim.proto == VGSM_MESIM_PROTO_LOCAL) {
+		ast_cli(fd, "  Routed to local SIM holder: %d\n",
+			me->mesim.local_sim_id);
+	} else if (me->mesim.proto == VGSM_MESIM_PROTO_CLIENT) {
+	} else if (me->mesim.proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
+		ast_cli(fd, "  Implementa interface status: %s\n",
+			vgsm_mesim_impl_state_to_text(
+					me->mesim.impl_state));
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+		{
+		char tmpstr[32];
+		ast_inet_ntoa(tmpstr, sizeof(tmpstr),
+			me->mesim.impl_simclient_addr.sin_addr);
+
+		ast_cli(fd, "  Implementa SIM client addr:"
+				" %s:%d\n",
+			tmpstr,
+			ntohs(me->mesim.impl_simclient_addr.sin_port));
+		}
+#else
+		ast_cli(fd, "  Implementa SIM client addr:"
+				" %s:%d\n",
+			ast_inet_ntoa(me->mesim.
+					impl_simclient_addr.sin_addr),
+			ntohs(me->mesim.impl_simclient_addr.sin_port));
+#endif
+	}
+
+
+/*
+	if (!me->mesim.sim_holder) {
+		ast_cli(fd,
+			"\nSIM Holder:\n"
+			"  Not connected\n");
+		goto out;
+	}
+
+	ast_cli(fd,
+		"\nSIM Holder: %s\n",
+		me->mesim.sim_holder->name);*/
+
+	if (!me->sim.inserted) {
+		ast_cli(fd,
+			"\nSIM:\n"
+			"  Not inserted\n");
+		goto out;
+	}
+
+	ast_cli(fd,
+		"\nSIM:\n"
+		"  Card ID: %s\n"
+		"  IMSI: %s\n"
+		"  PIN remaining attempts: %d\n"
+		"  Services center: %s/%s/%s%s\n",
+		me->sim.card_id,
+		me->sim.imsi,
+		me->sim.remaining_attempts,
+		vgsm_numbering_plan_to_text(me->sim.smcc_address.np),
+		vgsm_type_of_number_to_text(me->sim.smcc_address.ton),
+		vgsm_number_prefix(&me->sim.smcc_address),
+		me->sim.smcc_address.digits);
+
+	ast_cli(fd, "\n");
+
+#if 0
+	struct vgsm_sim *sim = me->sim.sim;
+	if (!sim)
+		goto out;
+
+	struct vgsm_sim_file *file;
+	__u8 *buf;
+	int i;
+	int err;
+
+	/***************/
+
+	file = vgsm_sim_file_alloc(sim);
+	if (!file)
+		goto out;
+	vgsm_sim_file_open(file, 0x6F46);
+
+	buf = alloca(file->length + 1);
+	vgsm_sim_file_read(file, buf, 0, file->length);
+	buf[file->length] = '\0';
+	ast_cli(fd, "  Operator name: %s\n", buf);
+	vgsm_sim_file_put(file);
+
+	/***************/
+
+	file = vgsm_sim_file_alloc(sim);
+	if (!file)
+		goto out;
+
+	__u8 phase;
+	vgsm_sim_file_open(file, 0x6FAE);
+	err = vgsm_sim_file_read(file, &phase, 0, 1);
+	if (err < 0) {
+		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
+		goto out;
+	}
+
+	if (phase == 3)
+		ast_cli(fd, "  Phase: 2 with profile download\n");
+	else
+		ast_cli(fd, "  Phase: %d\n", phase);
+
+	vgsm_sim_file_put(file);
+
+	/***************/
+
+	file = vgsm_sim_file_alloc(sim);
+	if (!file)
+		goto out;
+	vgsm_sim_file_open(file, 0x6F30);
+
+	buf = alloca(file->length);
+
+	err = vgsm_sim_file_read(file, buf, 0, file->length);
+	if (err < 0) {
+		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
+		goto out;
+	}
+
+	ast_cli(fd, "\nPLMN Selector:\n");
+	for(i=0; i<file->length; i+=3) {
+
+		if (buf[i] == 0xff &&
+		    buf[i + 1] == 0xff &&
+		    buf[i + 2] == 0xff)
+			continue;
+
+		__u16 mcc = (buf[i] & 0x0f) * 100 +
+			    ((buf[i] & 0xf0) >> 4) * 10 +
+			    (buf[i + 1] & 0x0f);
+
+		__u16 mnc = (buf[i + 2] & 0x0f) * 10+
+			    ((buf[i + 2] & 0xf0) >> 4);
+
+		if ((buf[i + 1] & 0xf0) != 0xf0)
+			    mnc += ((buf[i + 1] & 0xf0) >> 4) * 100;
+
+		ast_cli(fd, "  %03d%02d", mcc, mnc);
+
+		struct vgsm_operator_info *op_info;
+		op_info = vgsm_operators_search(mcc, mnc);
+		if (op_info)
+			ast_cli(fd, " %s - %s",
+				op_info->name,
+				op_info->country ? op_info->country->name : "");
+
+		ast_cli(fd, "\n");
+	}
+
+	vgsm_sim_file_put(file);
+
+	/***************/
+
+	file = vgsm_sim_file_alloc(sim);
+	if (!file)
+		goto out;
+	vgsm_sim_file_open(file, 0x6F7B);
+
+	buf = alloca(file->length);
+
+	err = vgsm_sim_file_read(file, buf, 0, file->length);
+	if (err < 0) {
+		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
+		goto out;
+	}
+
+	ast_cli(fd, "\nForbidden PLMNs:\n");
+	for(i=0; i<file->length; i+=3) {
+
+		if (buf[i] == 0xff &&
+		    buf[i + 1] == 0xff &&
+		    buf[i + 2] == 0xff)
+			continue;
+
+		__u16 mcc = (buf[i] & 0x0f) * 100 +
+			    ((buf[i] & 0xf0) >> 4) * 10 +
+			    (buf[i + 1] & 0x0f);
+
+		__u16 mnc = (buf[i + 2] & 0x0f) * 10+
+			    ((buf[i + 2] & 0xf0) >> 4);
+
+		if ((buf[i + 1] & 0xf0) != 0xf0)
+			    mnc += ((buf[i + 1] & 0xf0) >> 4) * 100;
+
+		ast_cli(fd, "  %03d%02d", mcc, mnc);
+
+		struct vgsm_operator_info *op_info;
+		op_info = vgsm_operators_search(mcc, mnc);
+		if (op_info)
+			ast_cli(fd, " %s - %s",
+				op_info->name,
+				op_info->country ? op_info->country->name : "");
+
+		ast_cli(fd, "\n");
+	}
+
+	vgsm_sim_file_put(file);
+
+	/***************/
+
+	file = vgsm_sim_file_alloc(sim);
+	if (!file)
+		goto out;
+
+	vgsm_sim_file_open(file, 0x6F05);
+
+	buf = alloca(file->length);
+	err = vgsm_sim_file_read(file, buf, 0, file->length);
+	if (err < 0) {
+		ast_cli(fd, "Cannot read SIM file: %s\n", strerror(-err));
+		goto out;
+	}
+
+	ast_cli(fd, "\nPreferred languages:\n");
+	for(i=0; i<file->length; i++) {
+		ast_cli(fd, "  %s\n", vgsm_sim_language_to_text(buf[i]));
+	}
+
+	vgsm_sim_file_put(file);
+
+	ast_cli(fd, "\n");
+#endif
+
+out:
+
+	ast_mutex_unlock(&me->lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_network(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+
+	struct vgsm_me_config *mc = me->current_config;
+
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		goto out;
+	}
+
+	ast_cli(fd,
+		"\nNetwork: \n"
+		"  Operator Selection: %s\n",
+		vgsm_me_operator_selection_to_text(
+			mc->operator_selection));
+
+	if (mc->operator_selection != VGSM_OPSEL_AUTOMATIC) {
+		struct vgsm_operator_info *op_info;
+		op_info = vgsm_operators_search(
+				mc->operator_mcc, mc->operator_mnc);
+
+		if (op_info) {
+			ast_cli(fd,
+				"  Desidered network:"
+				" %03d%02d (%s - %s - %s)\n",
+				op_info->mcc,
+				op_info->mnc,
+				op_info->name,
+				op_info->country ? op_info->country->name :
+					"Unknown",
+				op_info->bands);
+		} else {
+			ast_cli(fd,
+				"  Desidered network: %03d%02d)\n",
+				mc->operator_mcc,
+				mc->operator_mnc);
+		}
+	}
+
+	ast_cli(fd,
+		"  Status: %s\n",
+		vgsm_net_status_to_text(me->net.status));
+
+	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING)
+		goto out;
+
+	struct vgsm_operator_info *op_info;
+	op_info = vgsm_operators_search(me->net.mcc, me->net.mnc);
+
+	if (op_info) {
+		ast_cli(fd,
+			"  Current network:"
+			" %03u%02u (%s - %s - %s)\n",
+			op_info->mcc,
+			op_info->mnc,
+			op_info->name,
+			op_info->country ? op_info->country->name : "Unknown",
+			op_info->bands);
+	} else {
+		ast_cli(fd,
+			"  Current network: %03u%02u\n",
+			me->net.mcc,
+			me->net.mnc);
+	}
+
+	ast_cli(fd, "\nServing cell\n");
+	ast_cli(fd,
+		"  MCC MNC  LAC   ID"
+		" BSIC ARFCN     RxLev\n");
+
+	ast_cli(fd,
+		"  %03d  %02d %04x %04x %4d %5d"
+		" %5d dBm\n",
+		me->net.sci.mcc,
+		me->net.sci.mnc,
+		me->net.sci.lac,
+		me->net.sci.id,
+		me->net.sci.bsic,
+		me->net.sci.arfcn,
+		-me->net.sci.rx_lev);
+
+	ast_cli(fd,
+		"  RxLev Sub: %d dBm\n"
+		"  RxLev Full: %d dBm\n"
+		"  RxQual: %d (BER %s)\n"
+		"  RxQual Sub: %d (BER %s)\n"
+		"  RxQual Full: %d (BER %s)\n"
+		"  Timeslot: %d\n"
+		"  TA: %d\n",
+		-me->net.sci2.rx_lev_sub,
+		-me->net.sci2.rx_lev_full,
+		me->net.sci2.rx_qual,
+		vgsm_qual_to_text(me->net.sci2.rx_qual),
+		me->net.sci2.rx_qual_sub,
+		vgsm_qual_to_text(me->net.sci2.rx_qual_sub),
+		me->net.sci2.rx_qual_full,
+		vgsm_qual_to_text(me->net.sci2.rx_qual_full),
+		me->net.sci2.timeslot,
+		me->net.sci2.ta);
+
+	if (me->net.sci2.rssi == 0)
+		ast_cli(fd, "  RSSI: <= -113 dBm\n");
+	else if (me->net.sci2.rssi == 31)
+		ast_cli(fd, "  RSSI: >= -51 dB,\n");
+	else if (me->net.sci2.rssi == 99)
+		ast_cli(fd, "  RSSI: N/A\n");
+	else
+		ast_cli(fd, "  RSSI: %d dBm\n",
+			-113 + (me->net.sci2.rssi * 2));
+
+	ast_cli(fd, "  BER: %d (%s)\n",
+		me->net.sci2.ber,
+		vgsm_qual_to_text(me->net.sci2.ber));
+
+	if (me->net.ncells) {
+		ast_cli(fd, "\nAdjacent cells (%d)\n",
+			me->net.ncells);
+
+		ast_cli(fd,
+			"  #  MCC MNC  LAC   ID"
+			" BSIC ARFCN     RxLev\n");
+
+		int i;
+		for (i=0; i<me->net.ncells; i++) {
+			ast_cli(fd,
+				" %2d: %03d  %02d %04x %04x %4d %5d"
+				" %5d dBm\n",
+				i + 1,
+				me->net.nci[i].mcc,
+				me->net.nci[i].mnc,
+				me->net.nci[i].lac,
+				me->net.nci[i].id,
+				me->net.nci[i].bsic,
+				me->net.nci[i].arfcn,
+				-me->net.nci[i].rx_lev);
+		}
+	}
+
+out:
+	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&me->lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_statistics(int fd, struct vgsm_me *me)
+{
+	struct vgsm_counter *counter;
+
+	ast_mutex_lock(&me->lock);
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		return RESULT_FAILURE;
+	}
+
+	ast_cli(fd, "\nStatistics:\n");
+
+	ast_cli(fd, "  Inbound: %d\n", me->stats.inbound);
+	list_for_each_entry(counter, &me->stats.inbound_counters, node) {
+		ast_cli(fd, "    %s/%s: %d\n",
+			vgsm_cause_location_to_text(counter->location),
+			vgsm_cause_reason_to_text(counter->location,
+				counter->reason),
+			counter->count);
+	}
+
+	ast_cli(fd, "  Outbound: %d\n", me->stats.outbound);
+	list_for_each_entry(counter, &me->stats.outbound_counters, node) {
+		ast_cli(fd, "    %s/%s: %d\n",
+			vgsm_cause_location_to_text(counter->location),
+			vgsm_cause_reason_to_text(counter->location,
+				counter->reason),
+			counter->count);
+	}
+
+	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&me->lock);
+
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&me->comm, 180 * SEC, "AT^STCD");
+	int res = vgsm_req_status(req);
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(res),
+			res);
+
+		vgsm_req_put(req);
+
+		return RESULT_FAILURE;
+	}
+
+	ast_cli(fd, "Total call duration: %s\n",
+		vgsm_req_first_line(req)->text + strlen("^STCD: "));
+
+	vgsm_req_put(req);
+
+	req = vgsm_req_make_wait(&me->comm, 180 * SEC, "AT^SLCD");
+	res = vgsm_req_status(req);
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(res),
+			res);
+
+		vgsm_req_put(req);
+
+		return RESULT_FAILURE;
+	}
+
+	ast_cli(fd, "Last call duration: %s\n",
+		vgsm_req_first_line(req)->text + strlen("^SLCD: "));
+
+	vgsm_req_put(req);
+
+	ast_cli(fd, "\n");
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_calls(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+
+	ast_cli(fd, "\nCalls:\n");
+	ast_cli(fd, "  #  State      Dir T Bearer          Channel\n");
+
+	int i;
+	for(i=0; i<ARRAY_SIZE(me->calls); i++) {
+		if (me->calls[i].state == VGSM_CALL_STATE_UNUSED)
+			continue;
+
+		ast_cli(fd, "  %1d: %-10s %-3s %c %-15s %s\n",
+			i + 1,
+			vgsm_call_state_to_text(me->calls[i].state),
+			(me->calls[i].direction ==
+				VGSM_CALL_DIRECTION_MOBILE_TERMINATED ?
+					"IN" : "OUT"),
+			me->calls[i].channel_assigned ? '*' : ' ',
+			vgsm_call_bearer_to_text(me->calls[i].bearer),
+			(i == 0 && me->vgsm_chan) ?
+				me->vgsm_chan->ast_chan->name : "");
+	}
+
+	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&me->lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_moni(int fd, struct vgsm_me *me)
+{
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^MONI");
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put(req);
+		return RESULT_FAILURE;
+	}
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node)
+		ast_cli(fd, "%s\n", line->text);
+
+	vgsm_req_put(req);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_smong(int fd, struct vgsm_me *me)
+{
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "AT^SMONG");
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		vgsm_req_put(req);
+		return RESULT_FAILURE;
+	}
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node)
+		ast_cli(fd, "%s\n", line->text);
+
+	vgsm_req_put(req);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_serial(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+	struct vgsm_me_config *mc;
+	mc = vgsm_me_config_get(me->current_config);
+	ast_mutex_unlock(&me->lock);
+
+	struct serial_icounter_struct icount;
+	if (ioctl(me->me_fd, TIOCGICOUNT, &icount) < 0) {
+		ast_cli(fd, "ioctl(TIOCGICOUNT)\n");
+		return RESULT_FAILURE;
+	}
+
+	int status;
+	if (ioctl(me->me_fd, TIOCMGET, &status) < 0) {
+		ast_cli(fd, "ioctl(TIOCMGET)\n");
+		return RESULT_FAILURE;
+	}
+
+	ast_cli(fd,
+		"  Flow conf.:  %s\n"
+		"  Flow acutal: %s\n"
+		"  RTS:         %s\n"
+		"  CTS:         %s (%d)\n"
+		"  DTR:         %s\n"
+		"  DSR:         %s (%d)\n"
+		"  RI:          %s (%d)\n"
+		"  CD:          %s (%d)\n"
+		"  RX:          %d\n"
+		"  TX:          %d\n"
+		"  Frame:       %d\n"
+		"  Overrun:     %d\n"
+		"  Parity:      %d\n"
+		"  Break:       %d\n"
+		"  Buf overrun: %d\n",
+		vgsm_flow_control_to_text(mc->flow_control),
+		vgsm_flow_control_to_text(me->flow_control),
+		(status & TIOCM_RTS) ? "ON" : "OFF",
+		(status & TIOCM_CTS) ? "ON" : "OFF", icount.cts,
+		(status & TIOCM_DTR) ? "ON" : "OFF",
+		(status & TIOCM_DSR) ? "ON" : "OFF", icount.dsr, 
+		(status & TIOCM_RI)  ? "ON" : "OFF", icount.rng, 
+		(status & TIOCM_CD)  ? "ON" : "OFF", icount.dcd,
+		icount.rx,
+		icount.tx,
+		icount.frame, icount.overrun, icount.parity, icount.brk,
+		icount.buf_overrun);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_summary(int fd, struct vgsm_me *me)
+{
+	ast_mutex_lock(&me->lock);
+
+	ast_cli(fd, "%-10s: %s",
+		me->name,
+		vgsm_me_status_to_text(me->status));
+
+	if (me->status == VGSM_ME_STATUS_READY) {
+		ast_cli(fd, " %-17s",
+			vgsm_net_status_to_text(me->net.status));
+
+		if (me->net.status == VGSM_NET_STATUS_REGISTERED_HOME ||
+		    me->net.status == VGSM_NET_STATUS_REGISTERED_ROAMING) {
+
+			struct vgsm_operator_info *op_info;
+			op_info = vgsm_operators_search(me->net.mcc,
+							me->net.mnc);
+
+			if (op_info)
+				ast_cli(fd, " \"%s\"", op_info->name_short);
+			else
+				ast_cli(fd, " %03u%02u", me->net.mcc,
+							me->net.mnc);
+		}
+
+		if (me->vgsm_chan)
+			ast_cli(fd, " - CALL[%s]",
+				me->vgsm_chan->ast_chan->name);
+
+		if (me->sending_sms)
+			ast_cli(fd, " - SENDING_SMS");
+
+	} else {
+		if (me->status_reason)
+			ast_cli(fd, "  %s", me->status_reason);
+	}
+
+	ast_cli(fd, "\n");
+
+	ast_mutex_unlock(&me->lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_details(int fd, struct vgsm_me *me)
+{
+	vgsm_me_show_me(fd, me);
+	vgsm_me_show_serial(fd, me);
+	vgsm_me_show_forwarding(fd, me);
+	vgsm_me_show_callwaiting(fd, me);
+	vgsm_me_show_sim(fd, me);
+	vgsm_me_show_network(fd, me);
+	vgsm_me_show_statistics(fd, me);
+	vgsm_me_show_calls(fd, me);
+	vgsm_me_show_moni(fd, me);
+	vgsm_me_show_smong(fd, me);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_show_cli(int fd, int argc, char *argv[])
+{
+	int err;
+	struct vgsm_me *me;
+
+	if (argc >= 4) {
+		me = vgsm_me_get_by_name(argv[3]);
+		if (!me) {
+			ast_cli(fd, "ME %s not found\n", argv[3]);
+			err = RESULT_FAILURE;
+			goto err_me_not_found;
+		}
+
+		if (argc >= 5) {
+			if (!strcasecmp(argv[4], "forwarding"))
+				err = vgsm_me_show_forwarding(fd, me);
+			else if (!strcasecmp(argv[4], "callwaiting"))
+				err = vgsm_me_show_callwaiting(fd, me);
+			else if (!strcasecmp(argv[4], "sim"))
+				err = vgsm_me_show_sim(fd, me);
+			else if (!strcasecmp(argv[4], "network"))
+				err = vgsm_me_show_network(fd, me);
+			else if (!strcasecmp(argv[4], "statistics"))
+				err = vgsm_me_show_statistics(fd, me);
+			else if (!strcasecmp(argv[4], "calls"))
+				err = vgsm_me_show_calls(fd, me);
+			else if (!strcasecmp(argv[4], "moni"))
+				err = vgsm_me_show_moni(fd, me);
+			else if (!strcasecmp(argv[4], "smong"))
+				err = vgsm_me_show_smong(fd, me);
+			else if (!strcasecmp(argv[4], "serial"))
+				err = vgsm_me_show_serial(fd, me);
+			else if (!strcasecmp(argv[4], "details"))
+				err = vgsm_me_show_details(fd, me);
+			else {
+				ast_cli(fd, "Command '%s' unrecognized\n",
+					argv[4]);
+
+				err = RESULT_SHOWUSAGE;
+				goto err_command_unrecognized;
+			}
+		} else
+			vgsm_me_show_me(fd, me);
+
+		vgsm_me_put(me);
+
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			vgsm_me_show_summary(fd, me);
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+
+err_command_unrecognized:
+	vgsm_me_put(me);
+err_me_not_found:
+
+	return err;
+}
+
+static char *vgsm_me_show_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "forwarding", "callwaiting", "sim", "network",
+				"statistics", "calls", "moni", "smong",
+				"serial", "details" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+	case 4:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_show_help[] =
+"Usage: show vgsm mes [<me> [<category>]]\n"
+"\n"
+"	Display informations on vGSM MEs\n"
+"\n"
+"	<category> may be one of the following:\n"
+"\n"
+"		forwarding	show current status of call forwarding\n"
+"				supplementary service\n"
+"\n"
+"		callwaiting	show current status of call waiting\n"
+"				supplementary service\n"
+"\n"
+"		sim		show informations related to the SIM card\n"
+"				inserted in <me>\n"
+"\n"
+"		network		show informations regarding the GSM network\n"
+"				received by the me\n"
+"\n"
+"		statistics	show call statistics: inbound/outbound\n"
+"				counters, release codes and duration\n"
+"\n"
+"		calls		show active calls on selected me\n"
+"\n"
+"		details		show detailed informations about me\n";
+
+static struct ast_cli_entry vgsm_me_show =
+{
+	{ "vgsm", "me", "show", NULL },
+	vgsm_me_show_cli,
+	"Displays vGSM ME informations",
+	vgsm_me_show_help,
+	vgsm_me_show_complete,
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_power_on(int fd, struct vgsm_me *me)
+{
+	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
+	    me->status == VGSM_ME_STATUS_CLOSED ||
+	    me->status == VGSM_ME_STATUS_FAILED) {
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		return RESULT_FAILURE;
+	} else if (me->status == VGSM_ME_STATUS_POWERING_ON) {
+		ast_cli(fd, "ME '%s' is already powering off\n", me->name);
+		return RESULT_FAILURE;
+	} else if (me->status != VGSM_ME_STATUS_OFF) {
+		ast_cli(fd, "ME '%s' is already powered on\n", me->name);
+		return RESULT_FAILURE;
+	}
+
+	vgsm_me_ignite(me);
+
+	vgsm_me_set_status(me,
+		VGSM_ME_STATUS_POWERING_ON,
+		POWERING_ON_TIMEOUT,
+		"CLI request");
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_power_off(int fd, struct vgsm_me *me)
+{
+	struct vgsm_comm *comm = &me->comm;
+
+	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
+	    me->status == VGSM_ME_STATUS_CLOSED ||
+	    me->status == VGSM_ME_STATUS_FAILED) {
+		ast_cli(fd, "ME '%s' is not available\n", me->name);
+		return RESULT_FAILURE;
+	} else if (me->status == VGSM_ME_STATUS_OFF) {
+		ast_cli(fd, "ME is already powered off\n");
+		return RESULT_FAILURE;
+	} else if (me->status == VGSM_ME_STATUS_POWERING_OFF) {
+		ast_cli(fd, "ME is already powering off\n");
+		return RESULT_FAILURE;
+	}
+
+	vgsm_me_set_status(me,
+			VGSM_ME_STATUS_POWERING_OFF,
+			POWERING_OFF_TIMEOUT,
+			"CLI request");
+
+	int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT^SMSO");
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(res),
+			res);
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_power_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing command\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_command;
+	}
+	const char *command = argv[4];
+
+	int (*func)(int fd, struct vgsm_me *me);
+
+	if (!strcasecmp(command, "on"))
+		func = vgsm_me_power_on;
+	else if (!strcasecmp(command, "off"))
+		func = vgsm_me_power_off;
+	else {
+		ast_cli(fd, "Unknown command '%s'\n", command);
+		err = RESULT_SHOWUSAGE;
+		goto err_unknown_command;
+	}
+
+	if (strcmp(me_name, "*")) {
+		struct vgsm_me *me;
+		me = vgsm_me_get_by_name(me_name);
+		if (!me) {
+			ast_cli(fd, "Cannot find me '%s'\n", me_name);
+			err = RESULT_FAILURE;
+			goto err_me_not_found;
+		}
+
+		err = func(fd, me);
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+			ast_mutex_lock(&me->lock);
+			func(fd, me);
+			ast_mutex_unlock(&me->lock);
+		}
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+
+	return RESULT_SUCCESS;
+
+err_me_not_found:
+err_unknown_command:
+err_missing_command:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_power_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "on", "off" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+
+	case 4:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_power_help[] =
+"Usage: vgsm me power <me> <on|off>\n"
+"\n"
+"	<me>	ME name or '*' for every ME.\n"
+"\n"
+"	on\n"
+"		Power on or off the specified me.\n"
+"\n"
+"	off\n"
+"		Power-off will be graceful (requesting de-registration from\n"
+"		the network. If, however, the me is not responding,\n"
+"		the me will be forcibly shut down.\n";
+
+static struct ast_cli_entry vgsm_me_power =
+{
+	{ "vgsm", "me", "power", NULL },
+	vgsm_me_power_func,
+	"Power control",
+	vgsm_me_power_help,
+	vgsm_me_power_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_reset_do(int fd, struct vgsm_me *me)
+{
+	struct vgsm_comm *comm = &me->comm;
+
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_WAITING_SIM &&
+	    me->status != VGSM_ME_STATUS_WAITING_PIN) {
+		ast_cli(fd, "ME '%s' is not available\n", me->name);
+		return RESULT_FAILURE;
+	}
+
+	vgsm_me_set_status(me,
+			VGSM_ME_STATUS_RESETTING,
+			RESET_TIMEOUT,
+			"CLI request");
+
+	int res = vgsm_req_make_wait_result(comm, 3 * SEC, "AT+CFUN=1,1");
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(res),
+			res);
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_reset_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	if (strcmp(me_name, "*")) {
+		struct vgsm_me *me;
+		me = vgsm_me_get_by_name(me_name);
+		if (!me) {
+			ast_cli(fd, "Cannot find me '%s'\n", me_name);
+			err = RESULT_FAILURE;
+			goto err_me_not_found;
+		}
+
+		ast_mutex_lock(&me->lock);
+		err = vgsm_me_reset_do(fd, me);
+		ast_mutex_unlock(&me->lock);
+	} else {
+		err = RESULT_SUCCESS;
+
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+			ast_mutex_lock(&me->lock);
+			err = vgsm_me_reset_do(fd, me);
+			ast_mutex_unlock(&me->lock);
+		}
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	if (err != RESULT_SUCCESS)
+		goto err_reset_do;
+
+	return RESULT_SUCCESS;
+
+err_reset_do:
+err_me_not_found:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_reset_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_reset_help[] =
+"Usage: vgsm me reset <me>\n"
+"\n"
+"	Initiate ME software reset\n";
+
+static struct ast_cli_entry vgsm_me_reset =
+{
+	{ "vgsm", "me", "reset", NULL },
+	vgsm_me_reset_func,
+	"Put the ME online or offline",
+	vgsm_me_reset_help,
+	vgsm_me_reset_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_service_on(int fd, struct vgsm_me *me)
+{
+	me->in_service = TRUE;
+
+	if (me->status == VGSM_ME_STATUS_OFFLINE) {
+		vgsm_me_set_status(me,
+				VGSM_ME_STATUS_READY,
+				READY_UPDATE_TIME,
+				" ");
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_service_off(int fd, struct vgsm_me *me)
+{
+	if (me->status == VGSM_ME_STATUS_OFFLINE) {
+	} else if (me->status == VGSM_ME_STATUS_READY) {
+		vgsm_me_set_status(me,
+				VGSM_ME_STATUS_OFFLINE,
+				-1,
+				"CLI request");
+	} else {
+		me->in_service = FALSE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_service_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing command\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_command;
+	}
+	const char *command = argv[4];
+
+	int (*func)(int fd, struct vgsm_me *me);
+
+	if (!strcasecmp(command, "on"))
+		func = vgsm_me_service_on;
+	else if (!strcasecmp(command, "off"))
+		func = vgsm_me_service_off;
+	else {
+		ast_cli(fd, "Unknown command '%s'\n", command);
+		err = RESULT_SHOWUSAGE;
+		goto err_unknown_command;
+	}
+
+	if (strcmp(me_name, "*")) {
+		struct vgsm_me *me;
+		me = vgsm_me_get_by_name(me_name);
+		if (!me) {
+			ast_cli(fd, "Cannot find me '%s'\n", me_name);
+			err = RESULT_FAILURE;
+			goto err_me_not_found;
+		}
+
+		ast_mutex_lock(&me->lock);
+		err = func(fd, me);
+		ast_mutex_unlock(&me->lock);
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+			ast_mutex_lock(&me->lock);
+			func(fd, me);
+			ast_mutex_unlock(&me->lock);
+		}
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+
+	return RESULT_SUCCESS;
+
+err_me_not_found:
+err_unknown_command:
+err_missing_command:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_service_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "on", "off" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+
+	case 4:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_service_help[] =
+"Usage: vgsm me service <on|off> <me>\n"
+"\n"
+"	<me>\n"
+"		ME name or '*' for every ME.\n"
+"\n"
+"	on\n"
+"		Put the specified me in-service.\n"
+"\n"
+"	off\n"
+"		Put the specified ME offline.\n";
+
+static struct ast_cli_entry vgsm_me_service =
+{
+	{ "vgsm", "me", "service", NULL },
+	vgsm_me_service_func,
+	"Put the ME online or offline",
+	vgsm_me_service_help,
+	vgsm_me_service_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_identify_do(int fd, struct vgsm_me *me, int value)
+{
+	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
+	    me->status == VGSM_ME_STATUS_CLOSED ||
+	    me->status == VGSM_ME_STATUS_FAILED) {
+		ast_cli(fd, "ME '%s' is not available\n", me->name);
+		return RESULT_FAILURE;
+	}
+
+	if (ioctl(me->me_fd, VGSM_IOC_IDENTIFY, value) < 0) {
+		ast_cli(fd, "ioctl(VGSM_IOC_IDENTIFY): %s\n", strerror(errno));
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_identify_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	int value = 1;
+	if (argc > 4) {
+		const char *command = argv[4];
+
+		if (!strcasecmp(command, "off"))
+			value = 0;
+		else {
+			ast_cli(fd, "Unknown command '%s'\n", command);
+			err = RESULT_SHOWUSAGE;
+			goto err_unknown_command;
+		}
+	}
+
+	if (strcmp(me_name, "*")) {
+		struct vgsm_me *me;
+		me = vgsm_me_get_by_name(me_name);
+		if (!me) {
+			ast_cli(fd, "Cannot find me '%s'\n", me_name);
+			err = RESULT_FAILURE;
+			goto err_me_not_found;
+		}
+
+		ast_mutex_lock(&me->lock);
+		err = vgsm_me_identify_do(fd, me, value);
+		ast_mutex_unlock(&me->lock);
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+			ast_mutex_lock(&me->lock);
+			err = vgsm_me_identify_do(fd, me, value);
+			ast_mutex_unlock(&me->lock);
+		}
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+
+err_me_not_found:
+err_unknown_command:
+err_missing_me:
+
+	return err;
+}
+static char *vgsm_me_identify_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "off" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+
+	case 4:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_identify_help[] =
+"Usage: vgsm me identify <me> [off]\n"
+"\n"
+"	<me>\n"
+"		ME name or * for every ME.\n"
+"\n"
+"	off\n"
+"		Disables frontal LED flashing to identify the\n"
+"		antenna connector associated with the specified me.\n";
+
+static struct ast_cli_entry vgsm_me_identify =
+{
+	{ "vgsm", "me", "identify", NULL },
+	vgsm_me_identify_func,
+	"Set operation selection method",
+	vgsm_me_identify_help,
+	vgsm_me_identify_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_operator_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing mode parameter\n\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_mode;
+	}
+	const char *mode = argv[4];
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find me '%s'\n", me_name);
+		err = RESULT_FAILURE;
+		goto err_me_not_found;
+	}
+
+	struct vgsm_comm *comm = &me->comm;
+
+	if (!strcasecmp(mode, "auto")) {
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=0,2");
+	} else if (!strcasecmp(mode, "none")) {
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=2,2");
+	} else {
+		int lai = atoi(mode);
+		int mode;
+
+		if (argc > 5 && !strcasecmp(argv[5], "fallback"))
+			mode = 4;
+		else
+			mode = 1;
+
+		err = vgsm_req_make_wait_result(
+			comm, 180 * SEC, "AT+COPS=%d,2,%05u",
+			mode, lai);
+	}
+
+	if (err != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(err),
+			err);
+		return RESULT_FAILURE;
+	}
+
+	return RESULT_SUCCESS;
+
+err_me_not_found:
+err_missing_mode:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_operator_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *modes[] = { "auto", "none", "<LAI>" };
+	char *options[] = { "fallback" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+
+	case 4:
+		for(i=state; i<ARRAY_SIZE(modes); i++) {
+			if (!strncasecmp(word, modes[i], strlen(word)))
+				return strdup(modes[i]);
+		}
+	break;
+
+	case 5:
+		for(i=state; i<ARRAY_SIZE(options); i++) {
+			if (!strncasecmp(word, options[i], strlen(word)))
+				return strdup(options[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_operator_help[] =
+"Usage: vgsm me operator <me> <auto | none | LAI> [fallback]\n"
+"\n"
+"	Changes the operator selection mode.\n"
+"\n"
+"	<me>	ME name or * for every ME.\n"
+"\n"
+"	auto: Automatically select the best operator\n"
+"	none: Deregister and disable further registration attempts\n"
+"	LAI: Manually select the operator specified by LAI (MCC+MNC).\n"
+"\n"
+"	If 'fallback' is specified, fall back to automatic if\n"
+"	the manually selected operator is not available.\n";
+
+static struct ast_cli_entry vgsm_me_operator =
+{
+	{ "vgsm", "me", "operator", NULL },
+	vgsm_me_operator_func,
+	"Set operation selection method",
+	vgsm_me_operator_help,
+	vgsm_me_operator_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_pin_set_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing OLDPIN\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_oldpin;
+	}
+	const char *oldpin = argv[4];
+
+	if (!vgsm_pin_valid(oldpin)) {
+		ast_cli(fd, "OLDPIN contains invalid characters\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_oldpin_invalid;
+	}
+
+	if (argc < 6) {
+		ast_cli(fd, "Missing NEWPIN\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_newpin;
+	}
+	const char *newpin = argv[5];
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find ME '%s'\n", me_name);
+		err = RESULT_SHOWUSAGE;
+		goto err_me_not_found;
+	}
+
+	int res;
+	if (!strcasecmp(newpin, "enabled")) {
+		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
+			"AT+CLCK=SC,1,\"%s\"", oldpin);
+	} else if (!strcasecmp(newpin, "disabled")) {
+		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
+			"AT+CLCK=SC,0,\"%s\"", oldpin);
+	} else {
+		if (!vgsm_pin_valid(newpin)) {
+			ast_cli(fd, "NEWPIN contains invalid characters\n");
+			err = RESULT_FAILURE;
+			goto err_newpin_invalid;
+		}
+
+		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
+			"AT+CPWD=SC,\"%s\",\"%s\"",
+			oldpin, newpin);
+	}
+
+	if (res != VGSM_RESP_OK) {
+		ast_cli(fd, "Unable to complete command: %s (%d)\n",
+			vgsm_me_error_to_text(res), res);
+		err = RESULT_FAILURE;
+		goto err_response;
+	}
+
+	vgsm_me_put(me);
+
+	return RESULT_SUCCESS;
+
+err_response:
+err_newpin_invalid:
+	vgsm_me_put(me);
+err_me_not_found:
+err_missing_newpin:
+err_oldpin_invalid:
+err_missing_oldpin:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_pin_set_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "enabled", "disabled" };
+	int i;
+
+	switch(pos) {
+	case 4:
+		return vgsm_me_completion(line, word, state);
+
+	case 6:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	break;
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_pin_set_help[] =
+"Usage: vgsm pin set <me> <OLDPIN> <NEWPIN|enabled|disabled>\n"
+"\n"
+"	Set, enable or disable the PIN on the SIM installed in me\n"
+"	<me>.\n"
+"\n"
+"	<me>		ME name\n"
+"	<OLDPIN>	Current PIN\n"
+"	<NEWPIN>	New PIN\n"
+"	enabled		Enable PIN check on the SIM card\n"
+"	disabled	Disable PIN check on the SIM card\n";
+
+static struct ast_cli_entry vgsm_me_pin_set =
+{
+	{ "vgsm", "me", "pin", "set", NULL },
+	vgsm_me_pin_set_func,
+	"Set, enable or disable PIN on the selected ME",
+	vgsm_me_pin_set_help,
+	vgsm_me_pin_set_complete,
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_pin_input_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_me_name;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing PIN\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_pin;
+	}
+	const char *pin = argv[4];
+
+	if (!vgsm_pin_valid(pin)) {
+		ast_cli(fd, "PIN contains invalid characters\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_pin_invalid;
+	}
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find ME '%s'\n", me_name);
+		err = RESULT_FAILURE;
+		goto err_me_not_found;
+	}
+
+	struct vgsm_comm *comm = &me->comm;
+	struct vgsm_req *req;
+
+	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
+	if (req->err != VGSM_RESP_OK) {
+		vgsm_me_failed(me, req->err);
+		err = RESULT_FAILURE;
+		goto err_req_make;
+	}
+
+	const struct vgsm_req_line *first_line;
+	first_line = vgsm_req_first_line(req);
+
+	if (!strcmp(first_line->text, "+CPIN: READY")) {
+		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
+
+		int res = vgsm_req_make_wait_result(comm, 20 * SEC,
+				"AT+CPIN=\"%s\"", pin);
+		if (res != VGSM_RESP_OK) {
+			ast_cli(fd, "Error: %s (%d)\n",
+				vgsm_me_error_to_text(res), res);
+			err = RESULT_FAILURE;
+			goto err_send_pin;
+		}
+
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_WAITING_INITIALIZATION,
+			-1, "PIN entered");
+
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
+		ast_cli(fd, "SIM requires PIN2\n");
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
+		ast_cli(fd, "SIM requires PUK\n");
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
+		ast_cli(fd, "SIM requires PUK2\n");
+		err = RESULT_FAILURE;
+		goto err_not_waiting_pin;
+	} else {
+		ast_cli(fd, "Unknown response '%s'\n", first_line->text);
+		err = RESULT_FAILURE;
+		goto err_unknown_response;
+	}
+
+	vgsm_req_put(req);
+	vgsm_me_put(me);
+
+	return RESULT_SUCCESS;
+
+err_unknown_response:
+err_send_pin:
+err_not_waiting_pin:
+	vgsm_req_put(req);
+err_req_make:
+	vgsm_me_put(me);
+err_me_not_found:
+err_pin_invalid:
+err_no_pin:
+err_no_me_name:
+
+	return err;
+}
+
+static char *vgsm_me_pin_input_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_pin_input_help[] =
+"Usage: vgsm me pin input <me> <PIN>\n"
+"\n"
+"	Manually input PIN to selected ME\n";
+
+static struct ast_cli_entry vgsm_me_pin_input =
+{
+	{ "vgsm", "me", "pin", "input", NULL },
+	vgsm_me_pin_input_func,
+	"Manually input PIN to selected ME",
+	vgsm_me_pin_input_help,
+	vgsm_me_pin_input_complete,
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_puk_input_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_me_name;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing PUK\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_puk;
+	}
+	const char *puk = argv[4];
+
+	if (!vgsm_pin_valid(puk)) {
+		ast_cli(fd, "PUK contains invalid characters\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_puk_invalid;
+	}
+
+	if (argc < 6) {
+		ast_cli(fd, "Missing NEWPIN\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_newpin;
+	}
+	const char *newpin = argv[5];
+
+	if (!vgsm_pin_valid(newpin)) {
+		ast_cli(fd, "NEWPIN contains invalid characters\n");
+		err = RESULT_FAILURE;
+		goto err_newpin_invalid;
+	}
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find ME '%s'\n", me_name);
+		err = RESULT_FAILURE;
+		goto err_me_not_found;
+	}
+
+	struct vgsm_comm *comm = &me->comm;
+	struct vgsm_req *req;
+
+	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
+	err = vgsm_req_status(req);
+	if (err != VGSM_RESP_OK) {
+		vgsm_me_failed(me, err);
+		err = RESULT_FAILURE;
+		goto err_req_make;
+	}
+
+	const struct vgsm_req_line *first_line;
+	first_line = vgsm_req_first_line(req);
+
+	if (!strcmp(first_line->text, "+CPIN: READY")) {
+		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
+		ast_cli(fd, "SIM requires PIN\n");
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
+		ast_cli(fd, "SIM requires PIN2\n");
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
+
+		int err = vgsm_req_make_wait_result(comm, 20 * SEC,
+				"AT+CPIN=\"%s\",\"%s\"", puk, newpin);
+		if (err != VGSM_RESP_OK) {
+			ast_cli(fd, "Error: %s (%d)\n",
+				vgsm_me_error_to_text(err), err);
+			err = RESULT_FAILURE;
+		goto err_invalid_state;
+		}
+
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_WAITING_INITIALIZATION, -1,
+			"PUK entered");
+
+	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
+		ast_cli(fd, "SIM requires PUK2\n");
+		err = RESULT_FAILURE;
+		goto err_invalid_state;
+	} else {
+		ast_cli(fd, "Unknown response '%s'\n", first_line->text);
+
+		err = RESULT_FAILURE;
+		goto err_unknown_response;
+	}
+
+	vgsm_req_put(req);
+	vgsm_me_put(me);
+
+	return RESULT_SUCCESS;
+
+err_unknown_response:
+err_invalid_state:
+	vgsm_req_put(req);
+err_req_make:
+	vgsm_me_put(me);
+err_me_not_found:
+err_newpin_invalid:
+err_no_newpin:
+err_puk_invalid:
+err_no_puk:
+err_no_me_name:
+
+	return err;
+}
+
+static char *vgsm_me_puk_input_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_puk_input_help[] =
+"Usage: vgsm me puk input <me> <PUK>\n"
+"\n"
+"	Manually input PUK to selected me\n"
+"\n"
+"	WARNING: Inputing the wrong PUK for 10 times will render the SIM card\n"
+"	         useless, you will need to have it replaced from your\n"
+"	         operator.\n";
+
+static struct ast_cli_entry vgsm_me_puk_input =
+{
+	{ "vgsm", "me", "puk", "input", NULL },
+	vgsm_me_puk_input_func,
+	"Manually input PUK to selected ME",
+	vgsm_me_puk_input_help,
+	vgsm_me_puk_input_complete,
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_sms_send_func(int fd, int argc, char *argv[])
+{
+	int err = RESULT_SUCCESS;
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing me\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[4];
+
+	if (argc < 6) {
+		ast_cli(fd, "Missing phone number\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_number;
+	}
+	const char *phone_number = argv[5];
+
+	if (argc < 7) {
+		ast_cli(fd, "Missing text\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_text;
+	}
+	const char *text = argv[6];
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find ME '%s'\n", me_name);
+		err = RESULT_FAILURE;
+		goto err_me_not_found;
+	}
+
+	ast_mutex_lock(&me->lock);
+
+	if (me->status != VGSM_ME_STATUS_READY) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "ME '%s' is not ready\n", me->name);
+		err = RESULT_FAILURE;
+		goto err_me_not_ready;
+	}
+
+	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
+	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "ME %s not registered\n", me->name);
+		err = RESULT_FAILURE;
+		goto err_me_not_registered;
+	}
+
+	if (me->sending_sms) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "ME '%s' is already sending a SMS\n", me->name);
+		err = RESULT_FAILURE;
+		goto err_already_sending_sms;
+	}
+
+	me->sending_sms = TRUE;
+
+	struct vgsm_sms_submit *sms;
+	sms = vgsm_sms_submit_alloc();
+	if (!sms) {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "Cannot allocate SMS\n");
+		err = RESULT_FAILURE;
+		goto err_sms_alloc;
+	}
+
+	sms->me = vgsm_me_get(me);
+
+	if (strlen(me->current_config->smcc_address.digits)) {
+		vgsm_number_copy(&sms->smcc_address,
+				&me->current_config->smcc_address);
+	} else if (strlen(me->sim.smcc_address.digits)) {
+		vgsm_number_copy(&sms->smcc_address, &me->sim.smcc_address);
+	} else {
+		ast_mutex_unlock(&me->lock);
+
+		ast_cli(fd, "Services Center number not set\n");
+		err = RESULT_FAILURE;
+		goto err_no_smcc;
+	}
+
+	ast_mutex_unlock(&me->lock);
+
+	if (vgsm_number_parse(&sms->dest, phone_number) < 0) {
+		ast_cli(fd, "Number '%s' is invalid\n", phone_number);
+		err = RESULT_FAILURE;
+		goto err_invalid_number;
+	}
+
+	if (argc >= 8)
+		sms->message_class = atoi(argv[7]);
+	else
+		sms->message_class = 1;
+
+	size_t slen;
+	slen = mbstowcs(NULL, text, 0);
+	if(slen == -1)
+		goto err_invalid_mbstring;
+
+	sms->text = malloc((slen + 1) * sizeof(wchar_t));
+	if(!sms->text)
+		goto err_malloc_sms_text;
+
+	mbstowcs(sms->text, text, slen);
+	sms->text[slen] = L'\0';
+
+	err = vgsm_sms_submit_prepare(sms);
+	if (err == -ENOSPC) {
+		ast_cli(fd, "Message too big\n");
+		err = RESULT_FAILURE;
+		goto err_submit_prepare;
+	} else if (err < 0) {
+		ast_cli(fd, "Invalid message content\n");
+		err = RESULT_FAILURE;
+		goto err_submit_prepare;
+	}
+
+	struct vgsm_req *req = vgsm_req_make_sms(
+		&me->comm, 30 * SEC, sms->pdu, sms->pdu_len,
+		"AT+CMGS=%d", sms->pdu_tp_len);
+	vgsm_req_wait(req);
+	int res = vgsm_req_status(req);
+	if (res != VGSM_RESP_OK) {
+		vgsm_req_put(req);
+		ast_cli(fd,
+			"Error sending SMS: %s (%d)\n",
+			vgsm_me_error_to_text(res),
+			res);
+		err = RESULT_FAILURE;
+		goto err_req_make;
+	}
+	vgsm_req_put(req);
+
+	ast_mutex_lock(&me->lock);
+	me->sending_sms = FALSE;
+	ast_mutex_unlock(&me->lock);
+
+	return RESULT_SUCCESS;
+
+err_req_make:
+err_submit_prepare:
+err_invalid_mbstring:
+err_malloc_sms_text:
+err_invalid_number:
+err_no_smcc:
+	vgsm_sms_submit_put(sms);
+err_sms_alloc:
+	ast_mutex_lock(&me->lock);
+	me->sending_sms = FALSE;
+	ast_mutex_unlock(&me->lock);
+err_already_sending_sms:
+err_me_not_registered:
+err_me_not_ready:
+	vgsm_me_put(me);
+err_me_not_found:
+err_missing_text:
+err_missing_number:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_sms_send_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	switch(pos) {
+	case 4:
+		return vgsm_me_completion(line, word,state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_sms_send_help[] =
+"Usage: vgsm me sms send <me> <number> <text> [class]\n"
+"\n"
+"	Send short message to <number> using me <me>.\n"
+"\n"
+"	<text> is the text to send, in 7-bit ASCII format.\n"
+"	This is meant to be just a testing command, other charsets beside\n"
+"	ASCII are not supported, neither are various other SMS parameters;\n"
+"\n"
+"	The full SMS interface is implemented throught the manager\n"
+"	interface.\n";
+
+static struct ast_cli_entry vgsm_me_sms_send =
+{
+	{ "vgsm", "me", "sms", "send", NULL },
+	vgsm_me_sms_send_func,
+	"Send a SMS message",
+	vgsm_me_sms_send_help,
+	vgsm_me_sms_send_complete,
+};
+
+/*---------------------------------------------------------------------------*/
+static int vgsm_me_forwarding_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_me_name;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing command\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_no_command;
+	}
+	const char *command = argv[4];
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find ME '%s'\n", me_name);
+		err = RESULT_FAILURE;
+		goto err_me_not_found;
+	}
+
+	if (!strcasecmp(command, "off")) {
+//		err = do_vgsm_me_forwarding_off(fd, me);
+//		if (err != RESULT_SUCCESS)
+//			goto err_forwarding_off;
+	} else {
+		ast_cli(fd, "Unknown command '%s'\n", command);
+		err = RESULT_SHOWUSAGE;
+		goto err_unknown_command;
+	}
+
+	vgsm_me_put(me);
+
+	return RESULT_SUCCESS;
+
+err_unknown_command:
+	vgsm_me_put(me);
+err_me_not_found:
+err_no_command:
+err_no_me_name:
+
+	return err;
+}
+
+static char *vgsm_me_forwarding_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	char *commands[] = { "off" };
+	int i;
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+	case 4:
+		for(i=state; i<ARRAY_SIZE(commands); i++) {
+			if (!strncasecmp(word, commands[i], strlen(word)))
+				return strdup(commands[i]);
+		}
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_forwarding_help[] =
+"Usage: vgsm me forwarding <me> <set|>\n"
+"\n"
+"	Set call forwarding for the specified me (not yet implemented)\n";
+
+static struct ast_cli_entry vgsm_me_forwarding =
+{
+	{ "vgsm", "me", "forwarding", NULL },
+	vgsm_me_forwarding_func,
+	"Set call forwarding for specified me",
+	vgsm_me_forwarding_help,
+	vgsm_me_forwarding_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_rawcommand_func(int fd, int argc, char *argv[])
+{
+	int err;
+
+	if (argc < 4) {
+		ast_cli(fd, "Missing ME name\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_me;
+	}
+	const char *me_name = argv[3];
+
+	if (argc < 5) {
+		ast_cli(fd, "Missing command\n");
+		err = RESULT_SHOWUSAGE;
+		goto err_missing_command;
+	}
+	const char *command = argv[4];
+
+	struct vgsm_me *me;
+	me = vgsm_me_get_by_name(me_name);
+	if (!me) {
+		ast_cli(fd, "Cannot find me '%s'\n", me_name);
+		err = RESULT_FAILURE;
+		goto err_me_not_found;
+	}
+
+	struct vgsm_req *req;
+	req = vgsm_req_make_wait(&me->comm, 5 * SEC, command);
+	if (vgsm_req_status(req) != VGSM_RESP_OK) {
+		ast_cli(fd, "Error: %s (%d)\n",
+			vgsm_me_error_to_text(vgsm_req_status(req)),
+			vgsm_req_status(req));
+		vgsm_req_put(req);
+		err = RESULT_FAILURE;
+		goto err_req_make;
+	}
+
+	struct vgsm_req_line *line;
+	list_for_each_entry(line, &req->lines, node)
+		ast_cli(fd, "%s\n", line->text);
+
+	vgsm_req_put(req);
+
+	return RESULT_SUCCESS;
+
+err_req_make:
+err_me_not_found:
+err_missing_command:
+err_missing_me:
+
+	return err;
+}
+
+static char *vgsm_me_rawcommand_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+	switch(pos) {
+	case 3:
+		return vgsm_me_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_rawcommand_help[] =
+"Usage: vgsm me rawcommand <me> <command>\n"
+"\n"
+"	Send a raw AT command. Only for debugging purposes!\n";
+
+static struct ast_cli_entry vgsm_me_rawcommand =
+{
+	{ "vgsm", "me", "rawcommand", NULL },
+	vgsm_me_rawcommand_func,
+	"Send AT raw command",
+	vgsm_me_rawcommand_help,
+	vgsm_me_rawcommand_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+static int vgsm_me_debug_state(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->debug_state = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->debug_state = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_call(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->debug_call = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->debug_call = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_atcommands(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->comm.debug_messages = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->comm.debug_messages = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_serial(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->comm.debug_characters = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->comm.debug_characters = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_sms(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->debug_sms = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->debug_sms = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_cbm(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->debug_cbm = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->debug_cbm = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_jitbuf(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->debug_jitbuf = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->debug_jitbuf = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_frames(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->debug_frames = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->debug_frames = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_sim(
+	int fd, struct vgsm_me *me, BOOL enable)
+{
+	if (me) {
+		me->mesim.debug = enable;
+	} else {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		struct vgsm_me *me;
+		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+			me->mesim.debug = enable;
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_all(int fd, BOOL enable)
+{
+	ast_rwlock_rdlock(&vgsm.mes_list_lock);
+	struct vgsm_me *me;
+	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+		me->comm.debug_messages = enable;
+		me->mesim.debug = enable;
+		me->debug_sms = enable;
+		me->debug_cbm = enable;
+		me->debug_jitbuf = enable;
+	}
+	ast_rwlock_unlock(&vgsm.mes_list_lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_cli(int fd, int argc, char *argv[],
+				int args, BOOL enable)
+{
+	int err = 0;
+
+	if (argc < args)
+		return RESULT_SHOWUSAGE;
+
+	struct vgsm_me *me = NULL;
+
+	if (argc < args + 1) {
+		err = vgsm_me_debug_all(fd, enable);
+	} else {
+		if (argc > args + 1) {
+			me = vgsm_me_get_by_name(argv[args + 1]);
+			if (!me) {
+				ast_cli(fd, "Cannot find me '%s'\n",
+					argv[args]);
+				return RESULT_FAILURE;
+			}
+		}
+
+		if (!strcasecmp(argv[args], "state"))
+			err = vgsm_me_debug_state(fd, me, enable);
+		else if (!strcasecmp(argv[args], "call"))
+			err = vgsm_me_debug_call(fd, me, enable);
+		else if (!strcasecmp(argv[args], "atcommands"))
+			err = vgsm_me_debug_atcommands(fd, me, enable);
+		else if (!strcasecmp(argv[args], "serial"))
+			err = vgsm_me_debug_serial(fd, me, enable);
+		else if (!strcasecmp(argv[args], "sms"))
+			err = vgsm_me_debug_sms(fd, me, enable);
+		else if (!strcasecmp(argv[args], "cbm"))
+			err = vgsm_me_debug_cbm(fd, me, enable);
+		else if (!strcasecmp(argv[args], "jitbuf"))
+			err = vgsm_me_debug_jitbuf(fd, me, enable);
+		else if (!strcasecmp(argv[args], "frames"))
+			err = vgsm_me_debug_frames(fd, me, enable);
+		else if (!strcasecmp(argv[args], "sim"))
+			err = vgsm_me_debug_sim(fd, me, enable);
+		else {
+			ast_cli(fd, "Unrecognized category '%s'\n",
+					argv[args]);
+			err = RESULT_SHOWUSAGE;
+		}
+
+		if (me)
+			vgsm_me_put(me);
+	}
+
+	if (err)
+		return err;
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_me_debug_func(int fd, int argc, char *argv[])
+{
+	return vgsm_me_debug_cli(fd, argc, argv, 3, TRUE);
+}
+
+static int vgsm_me_no_debug_func(int fd, int argc, char *argv[])
+{
+	return vgsm_me_debug_cli(fd, argc, argv, 4, FALSE);
+}
+
+static char *vgsm_me_debug_category_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int state)
+{
+	char *commands[] = { "state", "call", "atcommands", "serial", "sms",
+				"cbm", "jitbuf", "frames", "sim" };
+	int i;
+
+	for(i=state; i<ARRAY_SIZE(commands); i++) {
+		if (!strncasecmp(word, commands[i], strlen(word)))
+			return strdup(commands[i]);
+	}
+
+	return NULL;
+}
+
+static char *vgsm_me_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 3:
+		return vgsm_me_debug_category_complete(line, word, state);
+	case 4:
+		return vgsm_me_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char *vgsm_me_no_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 4:
+		return vgsm_me_debug_category_complete(line, word, state);
+	case 5:
+		return vgsm_me_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_me_debug_help[] =
+"Usage: debug vgsm me [<state | call | atcommands | serial | sms | cbm |\n"
+"			 jitbuf | frames> [me]]\n"
+"\n"
+"	Debug vGSM's me-related events\n"
+"\n"
+"	state		ME state transitions\n"
+"	call		Call-related messages\n"
+"	atcommands	AT-commands sent or received on the serial port\n"
+"	serial		low-level serial communication, including line buffer\n"
+"			and read()/write() calls. Caution: It can be very\n"
+"			verbose.\n"
+"	sms		SMS-DELIVER and SMS-STATUS-REPORT messages\n"
+"	cbm		Cell-broadcast messages\n"
+"	jitbuf		Audio jitter buffer\n"
+"	frames		Audio frames\n";
+
+static struct ast_cli_entry vgsm_me_debug =
+{
+	{ "vgsm", "me", "debug", NULL },
+	vgsm_me_debug_func,
+	"Enable ME debugging",
+	vgsm_me_debug_help,
+	vgsm_me_debug_complete
+};
+
+static struct ast_cli_entry vgsm_me_no_debug =
+{
+	{ "vgsm", "me", "no", "debug", NULL },
+	vgsm_me_no_debug_func,
+	"Disable ME debugging",
+	NULL,
+	vgsm_me_no_debug_complete
+};
+
+/*---------------------------------------------------------------------------*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int vgsm_me_load(void)
+{
+	ast_cli_register(&vgsm_me_show);
+
+	ast_cli_register(&vgsm_me_power);
+	ast_cli_register(&vgsm_me_reset);
+	ast_cli_register(&vgsm_me_service);
+	ast_cli_register(&vgsm_me_identify);
+	ast_cli_register(&vgsm_me_operator);
+	ast_cli_register(&vgsm_me_pin_set);
+	ast_cli_register(&vgsm_me_pin_input);
+	ast_cli_register(&vgsm_me_puk_input);
+	ast_cli_register(&vgsm_me_sms_send);
+	ast_cli_register(&vgsm_me_forwarding);
+	ast_cli_register(&vgsm_me_rawcommand);
+
+	ast_cli_register(&vgsm_me_debug);
+	ast_cli_register(&vgsm_me_no_debug);
 
 	return 0;
 }
 
-int vgsm_me_me_unload(void)
+int vgsm_me_unload(void)
 {
-	ast_cli_unregister(&no_debug_vgsm_me);
-	ast_cli_unregister(&debug_vgsm_me);
-	ast_cli_unregister(&vgsm_me);
-	ast_cli_unregister(&vgsm_forwarding);
-	ast_cli_unregister(&show_vgsm_mes);
+	ast_cli_unregister(&vgsm_me_no_debug);
+	ast_cli_unregister(&vgsm_me_debug);
+
+	ast_cli_unregister(&vgsm_me_rawcommand);
+	ast_cli_unregister(&vgsm_me_forwarding);
+	ast_cli_unregister(&vgsm_me_sms_send);
+	ast_cli_unregister(&vgsm_me_puk_input);
+	ast_cli_unregister(&vgsm_me_pin_input);
+	ast_cli_unregister(&vgsm_me_pin_set);
+	ast_cli_unregister(&vgsm_me_operator);
+	ast_cli_unregister(&vgsm_me_identify);
+	ast_cli_unregister(&vgsm_me_service);
+	ast_cli_unregister(&vgsm_me_reset);
+	ast_cli_unregister(&vgsm_me_power);
+
+	ast_cli_unregister(&vgsm_me_show);
 
 	return 0;
 }

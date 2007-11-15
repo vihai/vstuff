@@ -38,7 +38,7 @@ chan_vgsm_la_SOURCES =\
 
 noinst_HEADERS =\
 	chan_vgsm.h		\
-	module.h		\
+	me.h			\
 	sim.h			\
 	sim_file.h		\
 	mesim.h			\

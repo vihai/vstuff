@@ -1,7 +1,7 @@
 /*
  * Kstreamer helper functions for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -100,7 +100,7 @@ static void ks_logger(int level, const char *format, ...)
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_show_kstreamer_dynattrs_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_show_dynattrs_func(int fd, int argc, char *argv[])
 {
 	int i;
 
@@ -121,7 +121,7 @@ static int ks_show_kstreamer_dynattrs_func(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char *ks_show_kstreamer_dynattrs_complete(
+static char *ks_kstreamer_show_dynattrs_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -141,23 +141,23 @@ static char *ks_show_kstreamer_dynattrs_complete(
 	return NULL;
 }
 
-static char ks_show_kstreamer_dynattrs_help[] =
-"Usage: show kstreamer dynattrs\n"
+static char ks_kstreamer_show_dynattrs_help[] =
+"Usage: kstreamer show dynattrs\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_show_kstreamer_dynattrs =
+static struct ast_cli_entry ks_kstreamer_show_dynattrs =
 {
-	{ "show", "kstreamer", "dynattrs", NULL },
-	ks_show_kstreamer_dynattrs_func,
+	{ "kstreamer", "show", "dynattrs", NULL },
+	ks_kstreamer_show_dynattrs_func,
 	"",
-	ks_show_kstreamer_dynattrs_help,
-	ks_show_kstreamer_dynattrs_complete
+	ks_kstreamer_show_dynattrs_help,
+	ks_kstreamer_show_dynattrs_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_show_kstreamer_nodes_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_show_nodes_func(int fd, int argc, char *argv[])
 {
 	int i;
 
@@ -177,7 +177,7 @@ static int ks_show_kstreamer_nodes_func(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char *ks_show_kstreamer_nodes_complete(
+static char *ks_kstreamer_show_nodes_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -197,23 +197,23 @@ static char *ks_show_kstreamer_nodes_complete(
 	return NULL;
 }
 
-static char ks_show_kstreamer_nodes_help[] =
-"Usage: show kstreamer nodes\n"
+static char ks_kstreamer_show_nodes_help[] =
+"Usage: kstreamer show nodes\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_show_kstreamer_nodes =
+static struct ast_cli_entry ks_kstreamer_show_nodes =
 {
-	{ "show", "kstreamer", "nodes", NULL },
-	ks_show_kstreamer_nodes_func,
+	{ "kstreamer", "show", "nodes", NULL },
+	ks_kstreamer_show_nodes_func,
 	"",
-	ks_show_kstreamer_nodes_help,
-	ks_show_kstreamer_nodes_complete
+	ks_kstreamer_show_nodes_help,
+	ks_kstreamer_show_nodes_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_show_kstreamer_chans_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_show_chans_func(int fd, int argc, char *argv[])
 {
 	int i;
 
@@ -233,7 +233,7 @@ static int ks_show_kstreamer_chans_func(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char *ks_show_kstreamer_chans_complete(
+static char *ks_kstreamer_show_chans_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -253,23 +253,23 @@ static char *ks_show_kstreamer_chans_complete(
 	return NULL;
 }
 
-static char ks_show_kstreamer_chans_help[] =
-"Usage: show kstreamer chans\n"
+static char ks_kstreamer_show_chans_help[] =
+"Usage: kstreamer show chans\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_show_kstreamer_chans =
+static struct ast_cli_entry ks_kstreamer_show_chans =
 {
-	{ "show", "kstreamer", "chans", NULL },
-	ks_show_kstreamer_chans_func,
+	{ "kstreamer", "show", "chans", NULL },
+	ks_kstreamer_show_chans_func,
 	"",
-	ks_show_kstreamer_chans_help,
-	ks_show_kstreamer_chans_complete
+	ks_kstreamer_show_chans_help,
+	ks_kstreamer_show_chans_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_show_kstreamer_pipelines_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_show_pipelines_func(int fd, int argc, char *argv[])
 {
 	int i;
 
@@ -290,7 +290,7 @@ static int ks_show_kstreamer_pipelines_func(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char *ks_show_kstreamer_pipelines_complete(
+static char *ks_kstreamer_show_pipelines_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -310,18 +310,18 @@ static char *ks_show_kstreamer_pipelines_complete(
 	return NULL;
 }
 
-static char ks_show_kstreamer_pipelines_help[] =
-"Usage: show kstreamer pipelines\n"
+static char ks_kstreamer_show_pipelines_help[] =
+"Usage: kstreamer show pipelines\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_show_kstreamer_pipelines =
+static struct ast_cli_entry ks_kstreamer_show_pipelines =
 {
-	{ "show", "kstreamer", "pipelines", NULL },
-	ks_show_kstreamer_pipelines_func,
+	{ "kstreamer", "show", "pipelines", NULL },
+	ks_kstreamer_show_pipelines_func,
 	"",
-	ks_show_kstreamer_pipelines_help,
-	ks_show_kstreamer_pipelines_complete
+	ks_kstreamer_show_pipelines_help,
+	ks_kstreamer_show_pipelines_complete
 };
 
 /*---------------------------------------------------------------------------*/
@@ -349,24 +349,24 @@ static struct ast_cli_entry ks_kstreamer_debug_messages =
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_no_kstreamer_debug_messages_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_no_debug_messages_func(int fd, int argc, char *argv[])
 {
 	ks_conn->debug_netlink = FALSE;
 
 	return RESULT_SUCCESS;
 }
 
-static char ks_no_kstreamer_debug_messages_help[] =
+static char ks_kstreamer_no_debug_messages_help[] =
 "Usage: no kstreamer debug messages\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_no_kstreamer_debug_messages =
+static struct ast_cli_entry ks_kstreamer_no_debug_messages =
 {
 	{ "no", "kstreamer", "debug", "messages", NULL },
-	ks_no_kstreamer_debug_messages_func,
+	ks_kstreamer_no_debug_messages_func,
 	"",
-	ks_no_kstreamer_debug_messages_help,
+	ks_kstreamer_no_debug_messages_help,
 	NULL,
 };
 
@@ -396,24 +396,24 @@ static struct ast_cli_entry ks_kstreamer_debug_router =
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_no_kstreamer_debug_router_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_no_debug_router_func(int fd, int argc, char *argv[])
 {
 	ks_conn->debug_router = FALSE;
 
 	return RESULT_SUCCESS;
 }
 
-static char ks_no_kstreamer_debug_router_help[] =
+static char ks_kstreamer_no_debug_router_help[] =
 "Usage: no kstreamer debug router\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_no_kstreamer_debug_router =
+static struct ast_cli_entry ks_kstreamer_no_debug_router =
 {
 	{ "no", "kstreamer", "debug", "router", NULL },
-	ks_no_kstreamer_debug_router_func,
+	ks_kstreamer_no_debug_router_func,
 	"",
-	ks_no_kstreamer_debug_router_help,
+	ks_kstreamer_no_debug_router_help,
 	NULL,
 };
 
@@ -444,25 +444,25 @@ static int ks_load_module(void)
 
 	ks_update_topology(ks_conn);
 
-	ast_cli_register(&ks_show_kstreamer_dynattrs);
-	ast_cli_register(&ks_show_kstreamer_nodes);
-	ast_cli_register(&ks_show_kstreamer_chans);
-	ast_cli_register(&ks_show_kstreamer_pipelines);
+	ast_cli_register(&ks_kstreamer_show_dynattrs);
+	ast_cli_register(&ks_kstreamer_show_nodes);
+	ast_cli_register(&ks_kstreamer_show_chans);
+	ast_cli_register(&ks_kstreamer_show_pipelines);
 	ast_cli_register(&ks_kstreamer_debug_messages);
-	ast_cli_register(&ks_no_kstreamer_debug_messages);
+	ast_cli_register(&ks_kstreamer_no_debug_messages);
 	ast_cli_register(&ks_kstreamer_debug_router);
-	ast_cli_register(&ks_no_kstreamer_debug_router);
+	ast_cli_register(&ks_kstreamer_no_debug_router);
 
 	return 0;
 
-	ast_cli_unregister(&ks_no_kstreamer_debug_router);
+	ast_cli_unregister(&ks_kstreamer_no_debug_router);
 	ast_cli_unregister(&ks_kstreamer_debug_router);
-	ast_cli_unregister(&ks_no_kstreamer_debug_messages);
+	ast_cli_unregister(&ks_kstreamer_no_debug_messages);
 	ast_cli_unregister(&ks_kstreamer_debug_messages);
-	ast_cli_unregister(&ks_show_kstreamer_pipelines);
-	ast_cli_unregister(&ks_show_kstreamer_chans);
-	ast_cli_unregister(&ks_show_kstreamer_nodes);
-	ast_cli_unregister(&ks_show_kstreamer_dynattrs);
+	ast_cli_unregister(&ks_kstreamer_show_pipelines);
+	ast_cli_unregister(&ks_kstreamer_show_chans);
+	ast_cli_unregister(&ks_kstreamer_show_nodes);
+	ast_cli_unregister(&ks_kstreamer_show_dynattrs);
 
 	// Disconnect?
 err_ks_conn_establish:
@@ -478,14 +478,14 @@ int unload_module(void)
 static int ks_unload_module(void)
 #endif
 {
-	ast_cli_unregister(&ks_no_kstreamer_debug_router);
+	ast_cli_unregister(&ks_kstreamer_no_debug_router);
 	ast_cli_unregister(&ks_kstreamer_debug_router);
-	ast_cli_unregister(&ks_no_kstreamer_debug_messages);
+	ast_cli_unregister(&ks_kstreamer_no_debug_messages);
 	ast_cli_unregister(&ks_kstreamer_debug_messages);
-	ast_cli_unregister(&ks_show_kstreamer_pipelines);
-	ast_cli_unregister(&ks_show_kstreamer_chans);
-	ast_cli_unregister(&ks_show_kstreamer_nodes);
-	ast_cli_unregister(&ks_show_kstreamer_dynattrs);
+	ast_cli_unregister(&ks_kstreamer_show_pipelines);
+	ast_cli_unregister(&ks_kstreamer_show_chans);
+	ast_cli_unregister(&ks_kstreamer_show_nodes);
+	ast_cli_unregister(&ks_kstreamer_show_dynattrs);
 
 	ks_conn_destroy(ks_conn);
 

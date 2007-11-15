@@ -4774,7 +4774,7 @@ static void visdn_q931_ccb_receive(void)
 
 /*---------------------------------------------------------------------------*/
 
-static int do_debug_visdn_generic(int fd, int argc, char *argv[])
+static int do_visdn_debug_generic(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 	visdn.debug = TRUE;
@@ -4785,22 +4785,23 @@ static int do_debug_visdn_generic(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char debug_visdn_generic_help[] =
-"Usage: debug visdn generic\n"
+static char visdn_debug_generic_help[] =
+"Usage: visdn debug generic\n"
+"\n"
 "	Debug generic vISDN events\n";
 
-static struct ast_cli_entry debug_visdn_generic =
+static struct ast_cli_entry visdn_debug_generic =
 {
-	{ "debug", "visdn", "generic", NULL },
-	do_debug_visdn_generic,
+	{ "visdn", "debug", "generic", NULL },
+	do_visdn_debug_generic,
 	"Enables generic vISDN debugging",
-	debug_visdn_generic_help,
+	visdn_debug_generic_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_no_debug_visdn_generic(int fd, int argc, char *argv[])
+static int do_visdn_no_debug_generic(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 	visdn.debug = FALSE;
@@ -4811,10 +4812,10 @@ static int do_no_debug_visdn_generic(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry no_debug_visdn_generic =
+static struct ast_cli_entry visdn_no_debug_generic =
 {
-	{ "no", "debug", "visdn", "generic", NULL },
-	do_no_debug_visdn_generic,
+	{ "visdn", "no", "debug", "generic", NULL },
+	do_visdn_no_debug_generic,
 	"Disables generic vISDN debugging",
 	NULL,
 	NULL
@@ -4822,7 +4823,7 @@ static struct ast_cli_entry no_debug_visdn_generic =
 
 /*---------------------------------------------------------------------------*/
 
-static int do_debug_visdn_q921(int fd, int argc, char *argv[])
+static int do_visdn_debug_q921(int fd, int argc, char *argv[])
 {
 	// Enable debugging on new DLCs FIXME TODO
 
@@ -4836,23 +4837,24 @@ static int do_debug_visdn_q921(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char debug_visdn_q921_help[] =
-"Usage: debug visdn q921\n"
+static char visdn_debug_q921_help[] =
+"Usage: visdn debug q921\n"
+"\n"
 "	Enabled q.921 debugging messages. Since q.921 runs in kernel mode,\n"
 "	those messages will appear in the kernel log (dmesg) or syslog.\n";
 
-static struct ast_cli_entry debug_visdn_q921 =
+static struct ast_cli_entry visdn_debug_q921 =
 {
-	{ "debug", "visdn", "q921", NULL },
-	do_debug_visdn_q921,
+	{ "visdn", "debug", "q921", NULL },
+	do_visdn_debug_q921,
 	"Enables q.921 debugging",
-	debug_visdn_q921_help,
+	visdn_debug_q921_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_no_debug_visdn_q921(int fd, int argc, char *argv[])
+static int do_visdn_no_debug_q921(int fd, int argc, char *argv[])
 {
 	// Disable debugging on new DLCs FIXME TODO
 
@@ -4866,10 +4868,10 @@ static int do_no_debug_visdn_q921(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry no_debug_visdn_q921 =
+static struct ast_cli_entry visdn_no_debug_q921 =
 {
-	{ "no", "debug", "visdn", "q921", NULL },
-	do_no_debug_visdn_q921,
+	{ "visdn", "no", "debug", "q921", NULL },
+	do_visdn_no_debug_q921,
 	"Disables q.921 debugging",
 	NULL,
 	NULL
@@ -4877,7 +4879,7 @@ static struct ast_cli_entry no_debug_visdn_q921 =
 
 /*---------------------------------------------------------------------------*/
 
-static int do_debug_visdn_q931(int fd, int argc, char *argv[])
+static int do_visdn_debug_q931(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 	visdn.debug_q931 = TRUE;
@@ -4888,23 +4890,24 @@ static int do_debug_visdn_q931(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char debug_visdn_q931_help[] =
-"Usage: debug visdn q931 [interface]\n"
+static char visdn_debug_q931_help[] =
+"Usage: visdn debug q931 [interface]\n"
+"\n"
 "	Enable q.931 process debugging. Messages and state machine events\n"
 "	will be directed to the console\n";
 
-static struct ast_cli_entry debug_visdn_q931 =
+static struct ast_cli_entry visdn_debug_q931 =
 {
-	{ "debug", "visdn", "q931", NULL },
-	do_debug_visdn_q931,
+	{ "visdn", "debug", "q931", NULL },
+	do_visdn_debug_q931,
 	"Enables q.931 debugging",
-	debug_visdn_q931_help,
+	visdn_debug_q931_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_no_debug_visdn_q931(int fd, int argc, char *argv[])
+static int do_visdn_no_debug_q931(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 	visdn.debug_q931 = FALSE;
@@ -4915,10 +4918,10 @@ static int do_no_debug_visdn_q931(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry no_debug_visdn_q931 =
+static struct ast_cli_entry visdn_no_debug_q931 =
 {
-	{ "no", "debug", "visdn", "q931", NULL },
-	do_no_debug_visdn_q931,
+	{ "visdn", "no", "debug", "q931", NULL },
+	do_visdn_no_debug_q931,
 	"Disables q.931 debugging",
 	NULL,
 	NULL
@@ -4935,6 +4938,7 @@ static int do_visdn_reload(int fd, int argc, char *argv[])
 
 static char visdn_visdn_reload_help[] =
 "Usage: visdn reload\n"
+"\n"
 "	Reloads vISDN's configuration.\n"
 "	The reload process is fully non-blocking and can be done while calls\n"
 "	are active. Old calls will retain the previous configuration while\n"
@@ -5121,7 +5125,7 @@ static void visdn_cli_print_call(int fd, struct q931_call *call)
 
 }
 
-static char *complete_show_visdn_calls(
+static char *visdn_show_calls_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -5175,7 +5179,7 @@ static char *complete_show_visdn_calls(
 	return NULL;
 }
 
-static int do_show_visdn_calls(int fd, int argc, char *argv[])
+static int visdn_show_calls_func(int fd, int argc, char *argv[])
 {
 	if (argc < 4) {
 		visdn_cli_print_call_list(fd, NULL);
@@ -5257,18 +5261,19 @@ static int do_show_visdn_calls(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char show_visdn_calls_help[] =
-"Usage: show visdn calls [<interface>|<callid>]\n"
+static char visdn_show_calls_help[] =
+"Usage: visdn show calls [<interface>|<callid>]\n"
+"\n"
 "	Show detailed call informations if <callid> is specified, otherwise\n"
 "	lists all the available calls, limited to <interface> if provided.\n";
 
-static struct ast_cli_entry show_visdn_calls =
+static struct ast_cli_entry visdn_show_calls =
 {
-	{ "show", "visdn", "calls", NULL },
-	do_show_visdn_calls,
+	{ "visdn", "show", "calls", NULL },
+	visdn_show_calls_func,
 	"Show vISDN's calls informations",
-	show_visdn_calls_help,
-	complete_show_visdn_calls
+	visdn_show_calls_help,
+	visdn_show_calls_complete
 };
 
 /*---------------------------------------------------------------------------*/
@@ -5405,14 +5410,14 @@ static int visdn_load_module(void)
 		goto err_channel_register;
 	}
 
-	ast_cli_register(&debug_visdn_generic);
-	ast_cli_register(&no_debug_visdn_generic);
-	ast_cli_register(&debug_visdn_q921);
-	ast_cli_register(&no_debug_visdn_q921);
-	ast_cli_register(&debug_visdn_q931);
-	ast_cli_register(&no_debug_visdn_q931);
+	ast_cli_register(&visdn_debug_generic);
+	ast_cli_register(&visdn_no_debug_generic);
+	ast_cli_register(&visdn_debug_q921);
+	ast_cli_register(&visdn_no_debug_q921);
+	ast_cli_register(&visdn_debug_q931);
+	ast_cli_register(&visdn_no_debug_q931);
 	ast_cli_register(&visdn_reload);
-	ast_cli_register(&show_visdn_calls);
+	ast_cli_register(&visdn_show_calls);
 
 	visdn_intf_cli_register();
 	visdn_hg_cli_register();
@@ -5453,14 +5458,14 @@ static int visdn_unload_module(void)
 	visdn_intf_cli_unregister();
 	visdn_hg_cli_unregister();
 
-	ast_cli_unregister(&show_visdn_calls);
+	ast_cli_unregister(&visdn_show_calls);
 	ast_cli_unregister(&visdn_reload);
-	ast_cli_unregister(&no_debug_visdn_q931);
-	ast_cli_unregister(&debug_visdn_q931);
-	ast_cli_unregister(&no_debug_visdn_q921);
-	ast_cli_unregister(&debug_visdn_q921);
-	ast_cli_unregister(&no_debug_visdn_generic);
-	ast_cli_unregister(&debug_visdn_generic);
+	ast_cli_unregister(&visdn_no_debug_q931);
+	ast_cli_unregister(&visdn_debug_q931);
+	ast_cli_unregister(&visdn_no_debug_q921);
+	ast_cli_unregister(&visdn_debug_q921);
+	ast_cli_unregister(&visdn_no_debug_generic);
+	ast_cli_unregister(&visdn_debug_generic);
 
 	ast_channel_unregister(&visdn_tech);
 

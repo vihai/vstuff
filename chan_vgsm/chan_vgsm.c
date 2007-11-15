@@ -35,7 +35,7 @@
  *
  * ast_chan => me->lock
  * ast_chan => vgsm.huntgroups_list_lock => me->lock
- * ast_chan => vgsm.ifs_list_lock => me->lock
+ * ast_chan => vgsm.mes_list_lock => me->lock
  *
  * Leaf locks:
  *
@@ -401,127 +401,6 @@ void _vgsm_chan_put(struct vgsm_chan *vgsm_chan)
 
 //-----------------------------------------------------------------------------
 
-static int do_vgsm_pin_set(int fd, int argc, char *argv[])
-{
-	int err;
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing me name\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_missing_me;
-	}
-
-	if (argc < 5) {
-		ast_cli(fd, "Missing OLDPIN\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_missing_oldpin;
-	}
-
-	if (!vgsm_pin_valid(argv[4])) {
-		ast_cli(fd, "OLDPIN contains invalid characters\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_oldpin_invalid;
-	}
-
-	if (argc < 6) {
-		ast_cli(fd, "Missing NEWPIN\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_missing_newpin;
-	}
-
-	struct vgsm_me *me;
-	me = vgsm_me_get_by_name(argv[3]);
-	if (!me) {
-		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
-		err = RESULT_SHOWUSAGE;
-		goto err_me_not_found;
-	}
-
-	int res;
-	if (!strcasecmp(argv[5], "enabled")) {
-		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
-			"AT+CLCK=SC,1,\"%s\"", argv[4]);
-	} else if (!strcasecmp(argv[5], "disabled")) {
-		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
-			"AT+CLCK=SC,0,\"%s\"", argv[4]);
-	} else {
-		if (!vgsm_pin_valid(argv[5])) {
-			ast_cli(fd, "NEWPIN contains invalid characters\n");
-			err = RESULT_FAILURE;
-			goto err_newpin_invalid;
-		}
-
-		res = vgsm_req_make_wait_result(&me->comm, 180 * SEC,
-			"AT+CPWD=SC,\"%s\",\"%s\"",
-			argv[4], argv[5]);
-	}
-
-	if (res != VGSM_RESP_OK) {
-		ast_cli(fd, "Unable to complete command: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-		err = RESULT_FAILURE;
-		goto err_response;
-	}
-
-	vgsm_me_put(me);
-
-	return RESULT_SUCCESS;
-
-err_response:
-err_newpin_invalid:
-	vgsm_me_put(me);
-err_me_not_found:
-err_missing_newpin:
-err_oldpin_invalid:
-err_missing_oldpin:
-err_missing_me:
-
-	return err;
-}
-
-static char *vgsm_pin_set_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	char *commands[] = { "enabled", "disabled" };
-	int i;
-
-	switch(pos) {
-	case 3:
-		return vgsm_me_completion(line, word, state);
-	case 5:
-		for(i=state; i<ARRAY_SIZE(commands); i++) {
-			if (!strncasecmp(word, commands[i], strlen(word)))
-				return strdup(commands[i]);
-		}
-	break;
-	}
-
-	return NULL;
-}
-
-static char vgsm_pin_set_help[] =
-"Usage: vgsm pin set <me> <OLDPIN> <NEWPIN|enabled|disabled>\n"
-"\n"
-"	Set, enable or disable the PIN on the SIM installed in me\n"
-"	<me>.\n";
-
-static struct ast_cli_entry vgsm_pin_set =
-{
-	{ "vgsm", "pin", "set", NULL },
-	do_vgsm_pin_set,
-	"Set, enable or disable PIN on the selected me",
-	vgsm_pin_set_help,
-	vgsm_pin_set_complete,
-};
-
-//-----------------------------------------------------------------------------
-
 static int vgsm_state_from_var(
 	struct vgsm_state *state,
 	struct ast_variable *var)
@@ -577,7 +456,7 @@ static int vgsm_reload_config(void)
 
 /*---------------------------------------------------------------------------*/
 
-static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
+static int vgsm_debug_generic_func(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_generic = TRUE;
@@ -588,23 +467,23 @@ static int do_debug_vgsm_generic(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char debug_vgsm_generic_help[] =
-"Usage: debug vgsm generic\n"
+static char vgsm_debug_generic_help[] =
+"Usage: vgsm debug generic\n"
 "\n"
 "	Debug generic vGSM events, including mes state change\n";
 
-static struct ast_cli_entry debug_vgsm_generic =
+static struct ast_cli_entry vgsm_debug_generic =
 {
-	{ "debug", "vgsm", "generic", NULL },
-	do_debug_vgsm_generic,
+	{ "vgsm", "debug", "generic", NULL },
+	vgsm_debug_generic_func,
 	"Enables generic vGSM debugging",
-	debug_vgsm_generic_help,
+	vgsm_debug_generic_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
+static int vgsm_no_debug_generic_func(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_generic = FALSE;
@@ -615,10 +494,10 @@ static int do_no_debug_vgsm_generic(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry no_debug_vgsm_generic =
+static struct ast_cli_entry vgsm_no_debug_generic =
 {
-	{ "no", "debug", "vgsm", "generic", NULL },
-	do_no_debug_vgsm_generic,
+	{ "vgsm", "no", "debug", "generic", NULL },
+	vgsm_no_debug_generic_func,
 	"Disables generic vGSM debugging",
 	NULL,
 	NULL
@@ -626,7 +505,7 @@ static struct ast_cli_entry no_debug_vgsm_generic =
 
 /*---------------------------------------------------------------------------*/
 
-static int do_debug_vgsm_timer(int fd, int argc, char *argv[])
+static int vgsm_debug_timer_func(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_timer = TRUE;
@@ -637,23 +516,23 @@ static int do_debug_vgsm_timer(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char debug_vgsm_timer_help[] =
-"Usage: debug vgsm timer\n"
+static char vgsm_debug_timer_help[] =
+"Usage: vgsm debug timer\n"
 "\n"
 "	Enable debugging of vGSM timer events\n";
 
-static struct ast_cli_entry debug_vgsm_timer =
+static struct ast_cli_entry vgsm_debug_timer =
 {
-	{ "debug", "vgsm", "timer", NULL },
-	do_debug_vgsm_timer,
+	{ "vgsm", "debug", "timer", NULL },
+	vgsm_debug_timer_func,
 	"Enables vGSM timer debugging",
-	debug_vgsm_timer_help,
+	vgsm_debug_timer_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_no_debug_vgsm_timer(int fd, int argc, char *argv[])
+static int vgsm_no_debug_timer_func(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.state_lock);
 	vgsm.debug_timer = FALSE;
@@ -664,10 +543,10 @@ static int do_no_debug_vgsm_timer(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry no_debug_vgsm_timer =
+static struct ast_cli_entry vgsm_no_debug_timer =
 {
-	{ "no", "debug", "vgsm", "timer", NULL },
-	do_no_debug_vgsm_timer,
+	{ "vgsm", "no", "debug", "timer", NULL },
+	vgsm_no_debug_timer_func,
 	"Disables debuggin of vGSM timer events",
 	NULL,
 	NULL
@@ -675,212 +554,7 @@ static struct ast_cli_entry no_debug_vgsm_timer =
 
 /*---------------------------------------------------------------------------*/
 
-static int do_vgsm_send_sms(int fd, int argc, char *argv[])
-{
-	int err = RESULT_SUCCESS;
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing me\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_missing_me;
-	}
-
-	if (argc < 5) {
-		ast_cli(fd, "Missing phone number\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_missing_number;
-	}
-
-	if (argc < 6) {
-		ast_cli(fd, "Missing text\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_missing_text;
-	}
-
-	struct vgsm_me *me;
-	me = vgsm_me_get_by_name(argv[3]);
-	if (!me) {
-		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
-		err = RESULT_FAILURE;
-		goto err_me_not_found;
-	}
-
-	ast_mutex_lock(&me->lock);
-
-	if (me->status != VGSM_ME_STATUS_READY) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "ME '%s' is not ready\n", me->name);
-		err = RESULT_FAILURE;
-		goto err_me_not_ready;
-	}
-
-	if (me->net.status != VGSM_NET_STATUS_REGISTERED_HOME &&
-	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "ME %s not registered\n", me->name);
-		err = RESULT_FAILURE;
-		goto err_me_not_registered;
-	}
-
-	if (me->sending_sms) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "ME '%s' is already sending a SMS\n",
-				me->name);
-		err = RESULT_FAILURE;
-		goto err_already_sending_sms;
-	}
-
-	me->sending_sms = TRUE;
-
-	struct vgsm_sms_submit *sms;
-	sms = vgsm_sms_submit_alloc();
-	if (!sms) {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "Cannot allocate SMS\n");
-		err = RESULT_FAILURE;
-		goto err_sms_alloc;
-	}
-
-	sms->me = vgsm_me_get(me);
-
-	if (strlen(me->current_config->smcc_address.digits)) {
-		vgsm_number_copy(&sms->smcc_address,
-				&me->current_config->smcc_address);
-	} else if (strlen(me->sim.smcc_address.digits)) {
-		vgsm_number_copy(&sms->smcc_address, &me->sim.smcc_address);
-	} else {
-		ast_mutex_unlock(&me->lock);
-
-		ast_cli(fd, "Services Center number not set\n");
-		err = RESULT_FAILURE;
-		goto err_no_smcc;
-	}
-
-	ast_mutex_unlock(&me->lock);
-
-	if (vgsm_number_parse(&sms->dest, argv[4]) < 0) {
-		ast_cli(fd, "Number %s is invalid\n", argv[4]);
-		err = RESULT_FAILURE;
-		goto err_invalid_number;
-	}
-
-	if (argc >= 7)
-		sms->message_class = atoi(argv[6]);
-	else
-		sms->message_class = 1;
-
-	size_t slen;
-	slen = mbstowcs(NULL, argv[5], 0);
-	if(slen == -1)
-		goto err_invalid_mbstring;
-
-	sms->text = malloc((slen + 1) * sizeof(wchar_t));
-	if(!sms->text)
-		goto err_malloc_sms_text;
-
-	mbstowcs(sms->text, argv[5], slen);
-	sms->text[slen] = L'\0';
-
-	err = vgsm_sms_submit_prepare(sms);
-	if (err == -ENOSPC) {
-		ast_cli(fd, "Message too big\n");
-		err = RESULT_FAILURE;
-		goto err_submit_prepare;
-	} else if (err < 0) {
-		ast_cli(fd, "Invalid message content\n");
-		err = RESULT_FAILURE;
-		goto err_submit_prepare;
-	}
-
-	struct vgsm_req *req = vgsm_req_make_sms(
-		&me->comm, 30 * SEC, sms->pdu, sms->pdu_len,
-		"AT+CMGS=%d", sms->pdu_tp_len);
-	vgsm_req_wait(req);
-	int res = vgsm_req_status(req);
-	if (res != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-		ast_cli(fd,
-			"Error sending SMS: %s (%d)\n",
-			vgsm_me_error_to_text(res),
-			res);
-		err = RESULT_FAILURE;
-		goto err_make_req;
-	}
-	vgsm_req_put(req);
-
-	ast_mutex_lock(&me->lock);
-	me->sending_sms = FALSE;
-	ast_mutex_unlock(&me->lock);
-
-	return RESULT_SUCCESS;
-
-err_make_req:
-err_submit_prepare:
-err_invalid_mbstring:
-err_malloc_sms_text:
-err_invalid_number:
-err_no_smcc:
-	vgsm_sms_submit_put(sms);
-err_sms_alloc:
-	ast_mutex_lock(&me->lock);
-	me->sending_sms = FALSE;
-	ast_mutex_unlock(&me->lock);
-err_already_sending_sms:
-err_me_not_registered:
-err_me_not_ready:
-	vgsm_me_put(me);
-err_me_not_found:
-err_missing_text:
-err_missing_number:
-err_missing_me:
-
-	return err;
-}
-
-static char *vgsm_send_sms_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	switch(pos) {
-	case 3:
-		return vgsm_me_completion(line, word,state);
-	}
-
-	return NULL;
-}
-
-static char vgsm_send_sms_help[] =
-"Usage: vgsm send sms <me> <number> <text> [class]\n"
-"\n"
-"	Send short message to <number> using me <me>.\n"
-"\n"
-"	<text> is the text to send, in 7-bit ASCII format.\n"
-"	This is meant to be just a testing command, other charsets beside\n"
-"	ASCII are not supported, neither are various other SMS parameters;\n"
-"\n"
-"	The full SMS interface is implemented throught the manager\n"
-"	interface.\n";
-
-static struct ast_cli_entry vgsm_send_sms =
-{
-	{ "vgsm", "send", "sms", NULL },
-	do_vgsm_send_sms,
-	"Send a SMS message",
-	vgsm_send_sms_help,
-	vgsm_send_sms_complete,
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int do_vgsm_reload(int fd, int argc, char *argv[])
+static int vgsm_reload_func(int fd, int argc, char *argv[])
 {
 	if (vgsm_reload_config() < 0) {
 		ast_cli(fd, "Error reloading configuration\n");
@@ -902,293 +576,10 @@ static char vgsm_vgsm_reload_help[] =
 static struct ast_cli_entry vgsm_reload =
 {
 	{ "vgsm", "reload", NULL },
-	do_vgsm_reload,
+	vgsm_reload_func,
 	"Reloads vGSM configuration",
 	vgsm_vgsm_reload_help,
 	NULL
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int do_vgsm_pin_input(int fd, int argc, char *argv[])
-{
-	int err;
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing me name\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_me_name;
-	}
-
-	if (argc < 5) {
-		ast_cli(fd, "Missing PIN\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_pin;
-	}
-
-	if (!vgsm_pin_valid(argv[4])) {
-		ast_cli(fd, "PIN contains invalid characters\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_pin_invalid;
-	}
-
-	struct vgsm_me *me;
-	me = vgsm_me_get_by_name(argv[3]);
-	if (!me) {
-		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
-		err = RESULT_FAILURE;
-		goto err_me_not_found;
-	}
-
-	struct vgsm_comm *comm = &me->comm;
-	struct vgsm_req *req;
-
-	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
-	if (req->err != VGSM_RESP_OK) {
-		vgsm_me_failed(me, req->err);
-		err = RESULT_FAILURE;
-		goto err_req_make;
-	}
-
-	const struct vgsm_req_line *first_line;
-	first_line = vgsm_req_first_line(req);
-
-	if (!strcmp(first_line->text, "+CPIN: READY")) {
-		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
-		err = RESULT_FAILURE;
-		goto err_not_waiting_pin;
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
-
-		int res = vgsm_req_make_wait_result(comm, 20 * SEC,
-				"AT+CPIN=\"%s\"", argv[4]);
-		if (res != VGSM_RESP_OK) {
-			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_me_error_to_text(res),
-				res);
-			err = RESULT_FAILURE;
-			goto err_send_pin;
-		}
-
-		vgsm_me_set_status(me,
-			VGSM_ME_STATUS_WAITING_INITIALIZATION,
-			-1, "PIN entered");
-
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
-		ast_cli(fd, "SIM requires PIN2\n");
-		err = RESULT_FAILURE;
-		goto err_not_waiting_pin;
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
-		ast_cli(fd, "SIM requires PUK\n");
-		err = RESULT_FAILURE;
-		goto err_not_waiting_pin;
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
-		ast_cli(fd, "SIM requires PUK2\n");
-		err = RESULT_FAILURE;
-		goto err_not_waiting_pin;
-	} else {
-		ast_cli(fd, "Unknown response '%s'\n", first_line->text);
-		err = RESULT_FAILURE;
-		goto err_unknown_response;
-	}
-
-	vgsm_req_put(req);
-	vgsm_me_put(me);
-
-	return RESULT_SUCCESS;
-
-err_unknown_response:
-err_send_pin:
-err_not_waiting_pin:
-	vgsm_req_put(req);
-err_req_make:
-	vgsm_me_put(me);
-err_me_not_found:
-err_pin_invalid:
-err_no_pin:
-err_no_me_name:
-
-	return err;
-}
-
-static char *vgsm_pin_input_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	switch(pos) {
-	case 3:
-		return vgsm_me_completion(line, word, state);
-	}
-
-	return NULL;
-}
-
-static char vgsm_pin_input_help[] =
-"Usage: vgsm pin input <me> <PIN>\n"
-"\n"
-"	Manually input PIN to selected me\n";
-
-static struct ast_cli_entry vgsm_pin_input =
-{
-	{ "vgsm", "pin", "input", NULL },
-	do_vgsm_pin_input,
-	"Manually input PIN to selected me",
-	vgsm_pin_input_help,
-	vgsm_pin_input_complete,
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int do_vgsm_puk_input(int fd, int argc, char *argv[])
-{
-	int err;
-
-	if (argc < 4) {
-		ast_cli(fd, "Missing me name\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_me_name;
-	}
-
-	if (argc < 5) {
-		ast_cli(fd, "Missing PUK\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_puk;
-	}
-
-	if (!vgsm_pin_valid(argv[4])) {
-		ast_cli(fd, "PUK contains invalid characters\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_puk_invalid;
-	}
-
-	if (argc < 6) {
-		ast_cli(fd, "Missing NEWPIN\n");
-		err = RESULT_SHOWUSAGE;
-		goto err_no_newpin;
-	}
-
-	if (!vgsm_pin_valid(argv[4])) {
-		ast_cli(fd, "NEWPIN contains invalid characters\n");
-		err = RESULT_FAILURE;
-		goto err_newpin_invalid;
-	}
-
-	struct vgsm_me *me;
-	me = vgsm_me_get_by_name(argv[3]);
-	if (!me) {
-		ast_cli(fd, "Cannot find me '%s'\n", argv[3]);
-		err = RESULT_FAILURE;
-		goto err_me_not_found;
-	}
-
-	struct vgsm_comm *comm = &me->comm;
-	struct vgsm_req *req;
-
-	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
-	err = vgsm_req_status(req);
-	if (err != VGSM_RESP_OK) {
-		vgsm_me_failed(me, err);
-		err = RESULT_FAILURE;
-		goto err_req_make;
-	}
-
-	const struct vgsm_req_line *first_line;
-	first_line = vgsm_req_first_line(req);
-
-	if (!strcmp(first_line->text, "+CPIN: READY")) {
-		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
-		err = RESULT_FAILURE;
-		goto err_invalid_state;
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
-		ast_cli(fd, "SIM requires PIN\n");
-		err = RESULT_FAILURE;
-		goto err_invalid_state;
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
-		ast_cli(fd, "SIM requires PIN2\n");
-		err = RESULT_FAILURE;
-		goto err_invalid_state;
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
-
-		int err = vgsm_req_make_wait_result(comm, 20 * SEC,
-				"AT+CPIN=\"%s\",\"%s\"", argv[4], argv[5]);
-		if (err != VGSM_RESP_OK) {
-			ast_cli(fd, "Error: %s (%d)\n",
-				vgsm_me_error_to_text(err),
-				err);
-			err = RESULT_FAILURE;
-		goto err_invalid_state;
-		}
-
-		vgsm_me_set_status(me,
-			VGSM_ME_STATUS_WAITING_INITIALIZATION, -1,
-			"PUK entered");
-
-	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
-		ast_cli(fd, "SIM requires PUK2\n");
-		err = RESULT_FAILURE;
-		goto err_invalid_state;
-	} else {
-		ast_cli(fd, "Unknown response '%s'\n", first_line->text);
-
-		err = RESULT_FAILURE;
-		goto err_unknown_response;
-	}
-
-	vgsm_req_put(req);
-	vgsm_me_put(me);
-
-	return RESULT_SUCCESS;
-
-err_unknown_response:
-err_invalid_state:
-	vgsm_req_put(req);
-err_req_make:
-	vgsm_me_put(me);
-err_me_not_found:
-err_newpin_invalid:
-err_no_newpin:
-err_puk_invalid:
-err_no_puk:
-err_no_me_name:
-
-	return err;
-}
-
-static char *vgsm_puk_input_complete(
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-	char *line, char *word,
-#else
-	const char *line, const char *word,
-#endif
-	int pos, int state)
-{
-	switch(pos) {
-	case 3:
-		return vgsm_me_completion(line, word, state);
-	}
-
-	return NULL;
-}
-
-static char vgsm_puk_input_help[] =
-"Usage: vgsm puk input <me> <PUK>\n"
-"\n"
-"	Manually input PUK to selected me\n"
-"\n"
-"	WARNING: Inputing the wrong PUK for 10 times will render the SIM card\n"
-"	         useless, you will need to have it replaced from your\n"
-"	         operator.\n";
-
-static struct ast_cli_entry vgsm_puk_input =
-{
-	{ "vgsm", "puk", "input", NULL },
-	do_vgsm_puk_input,
-	"Manually input PUK to selected me",
-	vgsm_puk_input_help,
-	vgsm_puk_input_complete,
 };
 
 /*---------------------------------------------------------------------------*/
@@ -2673,8 +2064,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		struct vgsm_me *tm;
 
-		ast_rwlock_rdlock(&vgsm.ifs_list_lock);
-		list_for_each_entry(tm, &vgsm.ifs_list, ifs_node) {
+		ast_rwlock_rdlock(&vgsm.mes_list_lock);
+		list_for_each_entry(tm, &vgsm.mes_list, ifs_node) {
 			ast_mutex_lock(&tm->lock);
 			if (tm->status == VGSM_ME_STATUS_READY &&
 				!tm->sending_sms &&
@@ -2690,7 +2081,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			}
 			ast_mutex_unlock(&tm->lock);
 		}
-		ast_rwlock_unlock(&vgsm.ifs_list_lock);
+		ast_rwlock_unlock(&vgsm.mes_list_lock);
 
 		if (!me) {
 			astman_append(s, "Status: 404\n");
@@ -2995,8 +2386,8 @@ static int vgsm_load_module(void)
 
 	ast_mutex_init(&vgsm.usecnt_lock);
 
-	INIT_LIST_HEAD(&vgsm.ifs_list);
-	ast_rwlock_init(&vgsm.ifs_list_lock);
+	INIT_LIST_HEAD(&vgsm.mes_list);
+	ast_rwlock_init(&vgsm.mes_list_lock);
 
 	ast_rwlock_init(&vgsm.operators_lock);
 	INIT_LIST_HEAD(&vgsm.op_list);
@@ -3028,15 +2419,11 @@ static int vgsm_load_module(void)
 	if (err < 0)
 		goto err_hg_load;
 
-	ast_cli_register(&debug_vgsm_generic);
-	ast_cli_register(&no_debug_vgsm_generic);
-	ast_cli_register(&debug_vgsm_timer);
-	ast_cli_register(&no_debug_vgsm_timer);
+	ast_cli_register(&vgsm_debug_generic);
+	ast_cli_register(&vgsm_no_debug_generic);
+	ast_cli_register(&vgsm_debug_timer);
+	ast_cli_register(&vgsm_no_debug_timer);
 	ast_cli_register(&vgsm_reload);
-	ast_cli_register(&vgsm_send_sms);
-	ast_cli_register(&vgsm_pin_input);
-	ast_cli_register(&vgsm_puk_input);
-	ast_cli_register(&vgsm_pin_set);
 
 	/* Register manager commands */
 	ast_manager_register2("VGSMsmstx", EVENT_FLAG_CALL,
@@ -3060,15 +2447,11 @@ err_me_load:
 	ast_channel_unregister(&vgsm_tech);
 err_channel_register:
 
-	ast_cli_unregister(&vgsm_pin_set);
-	ast_cli_unregister(&vgsm_puk_input);
-	ast_cli_unregister(&vgsm_pin_input);
-	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&vgsm_reload);
-	ast_cli_unregister(&no_debug_vgsm_timer);
-	ast_cli_unregister(&debug_vgsm_timer);
-	ast_cli_unregister(&no_debug_vgsm_generic);
-	ast_cli_unregister(&debug_vgsm_generic);
+	ast_cli_unregister(&vgsm_no_debug_timer);
+	ast_cli_unregister(&vgsm_debug_timer);
+	ast_cli_unregister(&vgsm_no_debug_generic);
+	ast_cli_unregister(&vgsm_debug_generic);
 
 	vgsm_me_config_put(vgsm.default_mc);
 
@@ -3084,15 +2467,11 @@ static int vgsm_unload_module(void)
 	vgsm_hg_unload();
 	vgsm_me_unload();
 
-	ast_cli_unregister(&vgsm_pin_set);
-	ast_cli_unregister(&vgsm_puk_input);
-	ast_cli_unregister(&vgsm_pin_input);
-	ast_cli_unregister(&vgsm_send_sms);
 	ast_cli_unregister(&vgsm_reload);
-	ast_cli_unregister(&no_debug_vgsm_timer);
-	ast_cli_unregister(&debug_vgsm_timer);
-	ast_cli_unregister(&no_debug_vgsm_generic);
-	ast_cli_unregister(&debug_vgsm_generic);
+	ast_cli_unregister(&vgsm_no_debug_timer);
+	ast_cli_unregister(&vgsm_debug_timer);
+	ast_cli_unregister(&vgsm_no_debug_generic);
+	ast_cli_unregister(&vgsm_debug_generic);
 
 	ast_channel_unregister(&vgsm_tech);
 

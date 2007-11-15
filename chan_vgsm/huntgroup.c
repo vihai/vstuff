@@ -271,7 +271,7 @@ void vgsm_hg_reload(struct ast_config *cfg)
 
 /*---------------------------------------------------------------------------*/
 
-static char *complete_show_vgsm_huntgroups(
+static char *vgsm_hg_show_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -300,7 +300,7 @@ static char *complete_show_vgsm_huntgroups(
 	return NULL;
 }
 
-static void do_show_vgsm_huntgroups_details(
+static void vgsm_hg_show_details(
 	int fd, struct vgsm_huntgroup *hg)
 {
 	ast_cli(fd, "\n-- Huntgroup '%s'--\n", hg->name);
@@ -316,14 +316,14 @@ static void do_show_vgsm_huntgroups_details(
 	ast_cli(fd, "\n\n");
 }
 
-static int do_show_vgsm_huntgroups(int fd, int argc, char *argv[])
+static int vgsm_hg_show_func(int fd, int argc, char *argv[])
 {
 	ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
 
 	struct vgsm_huntgroup *hg;
 	list_for_each_entry(hg, &vgsm.huntgroups_list, node) {
 		if (argc != 4 || !strcasecmp(argv[3], hg->name))
-			do_show_vgsm_huntgroups_details(fd, hg);
+			vgsm_hg_show_details(fd, hg);
 	}
 
 	ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
@@ -331,19 +331,19 @@ static int do_show_vgsm_huntgroups(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char show_vgsm_huntgroups_help[] =
-"Usage: show vgsm huntgroups [<huntgroup>]\n"
+static char vgsm_hg_show_help[] =
+"Usage: vgsm huntgroups show [<huntgroup>]\n"
 "\n"
 "	Displays detailed informations on vGSM's huntgroup or lists all the\n"
 "	available huntgroups if <huntgroup> has not been specified.\n";
 
-static struct ast_cli_entry show_vgsm_huntgroups =
+static struct ast_cli_entry vgsm_hg_show =
 {
-	{ "show", "vgsm", "huntgroups", NULL },
-	do_show_vgsm_huntgroups,
-	"Displays vGSM's huntgroups informations",
-	show_vgsm_huntgroups_help,
-	complete_show_vgsm_huntgroups
+	{ "vgsm", "huntgroups", "show", NULL },
+	vgsm_hg_show_func,
+	"Displays huntgroups informations",
+	vgsm_hg_show_help,
+	vgsm_hg_show_complete
 };
 
 /*---------------------------------------------------------------------------*/
@@ -475,16 +475,16 @@ err_no_interfaces:
 	return NULL;
 }
 
-int vgsm_hg_me_load(void)
+int vgsm_hg_load(void)
 {
-	ast_cli_register(&show_vgsm_huntgroups);
+	ast_cli_register(&vgsm_hg_show);
 
 	return 0;
 }
 
-int vgsm_hg_me_unload(void)
+int vgsm_hg_unload(void)
 {
-	ast_cli_unregister(&show_vgsm_huntgroups);
+	ast_cli_unregister(&vgsm_hg_show);
 
 	return 0;
 }

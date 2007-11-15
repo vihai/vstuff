@@ -1,7 +1,7 @@
 /*
  * vISDN channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -270,7 +270,7 @@ void visdn_hg_reload(struct ast_config *cfg)
 
 /*---------------------------------------------------------------------------*/
 
-static char *complete_show_visdn_huntgroups(
+static char *complete_visdn_huntgroups_show(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -298,7 +298,7 @@ static char *complete_show_visdn_huntgroups(
 	return NULL;
 }
 
-static void do_show_visdn_huntgroups_details(
+static void do_visdn_huntgroups_show_details(
 	int fd, struct visdn_huntgroup *hg)
 {
 	ast_cli(fd, "\n-- '%s'--\n", hg->name);
@@ -314,14 +314,14 @@ static void do_show_visdn_huntgroups_details(
 	ast_cli(fd, "\n");
 }
 
-static int do_show_visdn_huntgroups(int fd, int argc, char *argv[])
+static int do_visdn_huntgroups_show(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
 	struct visdn_huntgroup *hg;
 	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
 		if (argc != 4 || !strcasecmp(argv[3], hg->name))
-			do_show_visdn_huntgroups_details(fd, hg);
+			do_visdn_huntgroups_show_details(fd, hg);
 	}
 
 	ast_mutex_unlock(&visdn.lock);
@@ -329,18 +329,18 @@ static int do_show_visdn_huntgroups(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char show_visdn_huntgroups_help[] =
+static char visdn_huntgroups_show_help[] =
 "Usage: visdn show huntgroups [<huntgroup>]\n"
 "	Displays detailed informations on vISDN's huntgroup or lists all the\n"
 "	available huntgroups if <huntgroup> has not been specified.\n";
 
-static struct ast_cli_entry show_visdn_huntgroups =
+static struct ast_cli_entry visdn_huntgroups_show =
 {
-	{ "show", "visdn", "huntgroups", NULL },
-	do_show_visdn_huntgroups,
+	{ "visdn", "huntgroups", "show", NULL },
+	do_visdn_huntgroups_show,
 	"Displays vISDN's huntgroups informations",
-	show_visdn_huntgroups_help,
-	complete_show_visdn_huntgroups
+	visdn_huntgroups_show_help,
+	complete_visdn_huntgroups_show
 };
 
 /*---------------------------------------------------------------------------*/
@@ -471,10 +471,10 @@ err_no_interfaces:
 
 void visdn_hg_cli_register(void)
 {
-	ast_cli_register(&show_visdn_huntgroups);
+	ast_cli_register(&visdn_huntgroups_show);
 }
 
 void visdn_hg_cli_unregister(void)
 {
-	ast_cli_unregister(&show_visdn_huntgroups);
+	ast_cli_unregister(&visdn_huntgroups_show);
 }

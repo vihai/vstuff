@@ -1111,7 +1111,7 @@ char *visdn_intf_complete(
 	return NULL;
 }
 
-static char *complete_show_visdn_interfaces(
+static char *complete_visdn_interface_show(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -1159,7 +1159,7 @@ static void visdn_show_interface(int fd, struct visdn_intf *intf)
 	ast_mutex_unlock(&intf->lock);
 }
 
-static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
+static int do_visdn_interface_show(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&visdn.lock);
 
@@ -1186,28 +1186,29 @@ static int do_show_visdn_interfaces(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char show_visdn_interfaces_help[] =
-"Usage: visdn show interfaces [<interface>]\n"
+static char visdn_interface_show_help[] =
+"Usage: visdn interface show [<interface>]\n"
+"\n"
 "	Displays informations on vISDN's interfaces. If no interface name is\n"
 "	specified, shows a summary of all the interfaces.\n";
 
-static struct ast_cli_entry show_visdn_interfaces =
+static struct ast_cli_entry visdn_interface_show =
 {
 	{ "show", "visdn", "interfaces", NULL },
-	do_show_visdn_interfaces,
+	do_visdn_interface_show,
 	"Displays vISDN's interface information",
-	show_visdn_interfaces_help,
-	complete_show_visdn_interfaces,
+	visdn_interface_show_help,
+	complete_visdn_interface_show,
 };
 
 /*---------------------------------------------------------------------------*/
 
 void visdn_intf_cli_register(void)
 {
-	ast_cli_register(&show_visdn_interfaces);
+	ast_cli_register(&visdn_interface_show);
 }
 
 void visdn_intf_cli_unregister(void)
 {
-	ast_cli_unregister(&show_visdn_interfaces);
+	ast_cli_unregister(&visdn_interface_show);
 }
