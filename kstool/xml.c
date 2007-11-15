@@ -1,5 +1,5 @@
 /*
- * kstreamer controlling program
+ * kstreamer's controlling program
  *
  * Copyright (C) 2007 Daniele Orlandi
  *

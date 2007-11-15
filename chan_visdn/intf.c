@@ -1194,7 +1194,7 @@ static char visdn_interface_show_help[] =
 
 static struct ast_cli_entry visdn_interface_show =
 {
-	{ "show", "visdn", "interfaces", NULL },
+	{ "visdn", "interfaces", "show", NULL },
 	do_visdn_interface_show,
 	"Displays vISDN's interface information",
 	visdn_interface_show_help,

@@ -1,5 +1,5 @@
 /*
- * vISDN - Controlling program
+ * vISDN's NetDev Controlling program
  *
  * Copyright (C) 2005-2006 Daniele Orlandi
  *

@@ -1,5 +1,5 @@
 /*
- * vGSM - Controlling program
+ * vGSM's controlling program
  *
  * Copyright (C) 2007 Daniele Orlandi
  *

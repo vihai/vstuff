@@ -1,5 +1,5 @@
 /*
- * vISDN - Controlling program
+ * vGSM's controlling program
  *
  * Copyright (C) 2005-2007 Daniele Orlandi
  *

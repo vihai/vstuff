@@ -1,7 +1,7 @@
 /*
- * vGSM channel driver for Asterisk
+ * Kstreamer helper functions for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _VGSM_UTIL_H
-#define _VGSM_UTIL_H
+#ifndef _RES_KSTREAMER_UTIL_H
+#define _RES_KSTREAMER_UTIL_H
 
 #include <wchar.h>
 
