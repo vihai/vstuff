@@ -126,7 +126,11 @@ int ks_pipeline_write_to_nlmsg(
 	unsigned char *oldtail;
 	int err = -ENOBUFS;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	oldtail = skb->tail;
+#else
+	oldtail = skb_tail_pointer(skb);
+#endif
 
 	nlh = NLMSG_PUT(skb, pid, seq, message_type, 0);
 	nlh->nlmsg_flags = flags;
@@ -162,7 +166,11 @@ int ks_pipeline_write_to_nlmsg(
 		}
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	nlh->nlmsg_len = skb->tail - oldtail;
+#else
+	nlh->nlmsg_len = skb_tail_pointer(skb) - oldtail;
+#endif
 
 	return 0;
 
