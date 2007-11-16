@@ -78,41 +78,50 @@ static BOOL vgsm_card_led_update(struct vgsm_card *card)
 	case 3: color = 0x00000000; break;
 	}
 
-	for(i=0; i<card->mes_number; i++) {
-		if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
-		    (card->modules[i] &&
-		     test_bit(VGSM_MODULE_STATUS_IDENTIFY,
-					&card->modules[i]->status))) {
+	if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags)) {
+		led_src = 0xffffff;
+		led_user = color & 0xffffff;
+		reschedule = TRUE;
+	} else {
+		for(i=0; i<card->mes_number; i++) {
+			if (card->modules[i] &&
+			     test_bit(VGSM_MODULE_STATUS_IDENTIFY,
+						&card->modules[i]->status)) {
 
-			led_src |= 0xf << (i * 4);
-			led_user |= color << (i * 4);
+				led_src |= 0xf << (i * 4);
+				led_user |= color << (i * 4);
 
-			if (card->modules[i]->route_to_sim >= 0) {
-				int sim = card->modules[i]->route_to_sim;
+				if (card->modules[i]->route_to_sim >= 0) {
+					int sim = card->modules[i]->
+								route_to_sim;
 
-				led_src |= 0x3 << ((sim * 2) + 16);
-				led_user |= (color & 0x3) << ((sim * 2) + 16);
+					led_src |= 0x3 << ((sim * 2) + 16);
+					led_user |= (color & 0x3) <<
+							((sim * 2) + 16);
+				}
+
+				reschedule = TRUE;
 			}
+		}
 
-			reschedule = TRUE;
+		for(i=0; i<card->sims_number; i++) {
+			if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
+			    test_bit(VGSM_MODULE_STATUS_IDENTIFY,
+						&card->sims[i].status)) {
+
+				led_src |= 0x3 << ((i * 2) + 16);
+				led_user |= (color & 0x3) << ((i * 2) + 16);
+				reschedule = TRUE;
+			}
 		}
 	}
 
-	for(i=0; i<card->sims_number; i++) {
-		if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
-		    test_bit(VGSM_MODULE_STATUS_IDENTIFY,
-					&card->sims[i].status)) {
-
-			led_src |= 0x3 << ((i * 2) + 16);
-			led_user |= (color & 0x3) << ((i * 2) + 16);
-			reschedule = TRUE;
+	if (test_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags)) {
+		if ((jiffies / (HZ / 5)) & 0x1) {
+			led_src |= VGSM_R_LED_SRC_V_STATUS_R;
+			led_user |= VGSM_R_LED_USER_V_STATUS_R;
 		}
-	}
 
-	if (test_bit(VGSM_CARD_FLAGS_RECONFIG_PENDING, &card->flags) &&
-	    (jiffies / 10) & 0x1) {
-		led_src |= VGSM_R_LED_SRC_V_STATUS_R;
-		led_user |= VGSM_R_LED_USER_V_STATUS_R;
 		reschedule = TRUE;
 	}
 
