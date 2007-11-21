@@ -37,8 +37,8 @@ struct ks_node
 
 	char *path;
 
-	struct ks_dynattr *dynattrs[16]; // FIXME
-	int dynattrs_cnt;
+	struct ks_feature *features[16]; // FIXME
+	int features_cnt;
 
 	int router_cost;
 	int router_visited;

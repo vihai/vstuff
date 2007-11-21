@@ -13,9 +13,9 @@ subdir = modules/kstreamer
 MODULE = kstreamer
 
 SOURCES = kstreamer_main.c node.c channel.c duplex.c pipeline.c \
-		streamframe.c netlink.c dynattr.c
+		streamframe.c netlink.c feature.c
 DIST_HEADERS = kstreamer.h kstreamer_priv.h node.h channel.h duplex.h \
-		pipeline.h streamframe.h netlink.h dynattr.h
+		pipeline.h streamframe.h netlink.h feature.h
 DIST_SOURCES = $(SOURCES)
 DIST_COMMON = Makefile.in
 

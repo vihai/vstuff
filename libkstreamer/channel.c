@@ -23,7 +23,7 @@
 
 #include "channel.h"
 #include "node.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "netlink.h"
 #include "req.h"
 #include "xact.h"
@@ -32,7 +32,7 @@
 static inline struct hlist_head *ks_chan_get_hash(
 	struct ks_conn *conn, int id)
 {
-	return &conn->chans_hash[id & (DYNATTR_HASHSIZE - 1)];
+	return &conn->chans_hash[id & (FEATURE_HASHSIZE - 1)];
 }
 
 void ks_chan_add(struct ks_chan *chan, struct ks_conn *conn)
@@ -201,7 +201,7 @@ struct ks_chan *ks_chan_alloc(void)
 	chan->refcnt = 1;
 	chan->cost = 1000;
 
-	INIT_LIST_HEAD(&chan->dynattrs);
+	INIT_LIST_HEAD(&chan->features);
 
 	return chan;
 }
@@ -223,12 +223,12 @@ void ks_chan_put(struct ks_chan *chan)
 	chan->refcnt--;
 
 	if (!chan->refcnt) {
-		struct ks_dynattr_instance *dynattr, *t;
+		struct ks_feature_value *featval, *t;
 
-		list_for_each_entry_safe(dynattr, t, &chan->dynattrs, node) {
-			ks_dynattr_put(dynattr->dynattr);
-			list_del(&dynattr->node);
-			free(dynattr);
+		list_for_each_entry_safe(featval, t, &chan->features, node) {
+			ks_feature_put(featval->feature);
+			list_del(&featval->node);
+			free(featval);
 		}
 
 		if (chan->path)
@@ -290,31 +290,31 @@ struct ks_chan *ks_chan_create_from_nlmsg(
 		break;
 
 		default: {
-			struct ks_dynattr *dynattr_class;
-			dynattr_class = ks_dynattr_get_by_id(conn, attr->type);
-			if (!dynattr_class) {
+			struct ks_feature *feature;
+			feature = ks_feature_get_by_id(conn, attr->type);
+			if (!feature) {
 				report_conn(conn, LOG_WARNING,
 					"Attribute %d unknown\n", attr->type);
 				break;
 			}
 
-			struct ks_dynattr_instance *dynattr;
-			dynattr = malloc(sizeof(*dynattr) + attr->len);
-			if (!dynattr) {
+			struct ks_feature_value *featval;
+			featval = malloc(sizeof(*featval) + attr->len);
+			if (!featval) {
 				// FIXME
-				ks_dynattr_put(dynattr_class);
+				ks_feature_put(feature);
 				break;
 			}
 
-			dynattr->dynattr = ks_dynattr_get(dynattr_class);
-			dynattr->len = KS_ATTR_PAYLOAD(attr);
-			memcpy(dynattr->payload,
+			featval->feature = ks_feature_get(feature);
+			featval->len = KS_ATTR_PAYLOAD(attr);
+			memcpy(featval->payload,
 				KS_ATTR_DATA(attr),
 				KS_ATTR_PAYLOAD(attr));
 
-			list_add(&dynattr->node, &chan->dynattrs);
+			list_add(&featval->node, &chan->features);
 
-			ks_dynattr_put(dynattr_class);
+			ks_feature_put(feature);
 		}
 		}
 	}
@@ -343,13 +343,13 @@ void ks_chan_update_from_nlmsg(
 		break;
 
 		default: {
-			struct ks_dynattr_instance *dynattr;
-			list_for_each_entry(dynattr, &chan->dynattrs, node) {
-				if (dynattr->dynattr->id == attr->type)
-					assert(dynattr->len ==
+			struct ks_feature_value *featval;
+			list_for_each_entry(featval, &chan->features, node) {
+				if (featval->feature->id == attr->type)
+					assert(featval->len ==
 						KS_ATTR_PAYLOAD(attr));
 
-					memcpy(dynattr->payload,
+					memcpy(featval->payload,
 						KS_ATTR_DATA(attr),
 						KS_ATTR_PAYLOAD(attr));
 
@@ -376,19 +376,19 @@ void ks_chan_dump(
 		report_conn(conn, level, "  To    : 0x%08x (%s)\n",
 			chan->to->id, chan->to->path);
 
-	struct ks_dynattr_instance *dynattr;
-	list_for_each_entry(dynattr, &chan->dynattrs, node) {
+	struct ks_feature_value *featval;
+	list_for_each_entry(featval, &chan->features, node) {
 
-		__u8 *text = alloca(dynattr->len * 2 + 1);
+		__u8 *text = alloca(featval->len * 2 + 1);
 
 		int i;
-		for(i=0; i<dynattr->len; i++)
+		for(i=0; i<featval->len; i++)
 			sprintf((char *)text + i * 2,
-				"%02x", *(dynattr->payload + i));
+				"%02x", *(featval->payload + i));
 
 		report_conn(conn, level,
-			"  Dynattr: %s (%s)\n",
-			dynattr->dynattr->name,
+			"  Feature: %s (%s)\n",
+			featval->feature->name,
 			text);
 	}
 }
@@ -433,13 +433,13 @@ struct ks_req *ks_chan_queue_update(
 	if (err < 0)
 		goto err_put_attr_id;
 
-	struct ks_dynattr_instance *dynattr;
-	list_for_each_entry(dynattr, &chan->dynattrs, node) {
+	struct ks_feature_value *featval;
+	list_for_each_entry(featval, &chan->features, node) {
 
 		err = ks_netlink_put_attr(req->skb,
-				dynattr->dynattr->id,
-				dynattr->payload,
-				dynattr->len);
+				featval->feature->id,
+				featval->payload,
+				featval->len);
 		if (err < 0)
 			goto err_put_attr;
 	}

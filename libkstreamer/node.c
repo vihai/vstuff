@@ -21,7 +21,7 @@
 
 #include "node.h"
 #include "conn.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "util.h"
 #include "logging.h"
 
@@ -216,8 +216,8 @@ void ks_node_put(struct ks_node *node)
 
 	if (!node->refcnt) {
 		int i;
-		for (i=0; i<node->dynattrs_cnt; i++)
-			ks_dynattr_put(node->dynattrs[i]);
+		for (i=0; i<node->features_cnt; i++)
+			ks_feature_put(node->features[i]);
 
 		if (node->path)
 			free(node->path);
@@ -258,17 +258,17 @@ struct ks_node *ks_node_create_from_nlmsg(
 		break;
 
 		default: {
-			struct ks_dynattr *dynattr;
-			dynattr = ks_dynattr_get_by_id(conn, attr->type);
-			if (!dynattr) {
+			struct ks_feature *feature;
+			feature = ks_feature_get_by_id(conn, attr->type);
+			if (!feature) {
 				report_conn(conn, LOG_ERR,
 					"Attribute %d unknown\n", attr->type);
 				break;
 			}
 
-			node->dynattrs[node->dynattrs_cnt++] =
-						ks_dynattr_get(dynattr);
-			ks_dynattr_put(dynattr);
+			node->features[node->features_cnt++] =
+						ks_feature_get(feature);
+			ks_feature_put(feature);
 		}
 		}
 	}
@@ -310,9 +310,9 @@ void ks_node_dump(
 	report_conn(conn, level, "  Path  : '%s'\n", node->path);
 
 	int i;
-	for (i=0; i<node->dynattrs_cnt; i++) {
+	for (i=0; i<node->features_cnt; i++) {
 		report_conn(conn, level,
-			"  Dynattr: %s\n", node->dynattrs[i]->name);
+			"  Feature: %s\n", node->features[i]->name);
 	}
 }
 

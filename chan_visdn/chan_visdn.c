@@ -4236,9 +4236,9 @@ static int visdn_pipeline_set_octet_reverser(
 	BOOL enabled)
 {
 	/* TODO: Do this only once */
-	struct ks_dynattr *octet_reverser_attr;
+	struct ks_feature *octet_reverser_attr;
 
-	octet_reverser_attr = ks_dynattr_get_by_name(ks_conn, "octet_reverser");
+	octet_reverser_attr = ks_feature_get_by_name(ks_conn, "octet_reverser");
 	if (!octet_reverser_attr) {
 		ast_log(LOG_ERROR,
 			"Cannot find octet reverser attr\n");
@@ -4250,15 +4250,15 @@ static int visdn_pipeline_set_octet_reverser(
 	int i;
 	for(i=0; i<pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = pipeline->chans[i];
-		struct ks_dynattr_instance *dynattr;
+		struct ks_feature_value *featval;
 
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == octet_reverser_attr) {
+			if (featval->feature == octet_reverser_attr) {
 
 				struct ks_octet_reverser_descr *descr =
 					(struct ks_octet_reverser_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!octet_reverser || descr->hardware)
 					octet_reverser = descr;

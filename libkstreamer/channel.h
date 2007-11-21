@@ -45,7 +45,7 @@ struct ks_chan
 
 	struct ks_pipeline *pipeline;
 
-	struct list_head dynattrs;
+	struct list_head features;
 
 	int router_cost;
 	int router_done;

@@ -21,7 +21,7 @@
 #include "kstreamer.h"
 #include "kstreamer_priv.h"
 #include "netlink.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
@@ -314,15 +314,15 @@ int ks_cmd_abort(
 	return 0;
 }
 
-int ks_dynattr_cmd_get(
+int ks_feature_cmd_get(
 	struct ks_command *cmd,
 	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	ks_xact_send_control(xact, KS_NETLINK_DYNATTR_GET,
+	ks_xact_send_control(xact, KS_NETLINK_FEATURE_GET,
 			NLM_F_ACK | NLM_F_MULTI);
 
-	ks_dynattr_netlink_dump(xact);
+	ks_feature_netlink_dump(xact);
 
 	return 0;
 }
@@ -361,10 +361,10 @@ struct ks_command ks_commands[] =
 	{ KS_NETLINK_COMMIT, ks_cmd_commit, 0 },
 	{ KS_NETLINK_ABORT, ks_cmd_abort, 0 },
 
-	{ KS_NETLINK_DYNATTR_NEW, ks_cmd_not_implemented, KS_CMD_WR },
-	{ KS_NETLINK_DYNATTR_DEL, ks_cmd_not_implemented, KS_CMD_WR },
-	{ KS_NETLINK_DYNATTR_GET, ks_dynattr_cmd_get, 0 },
-	{ KS_NETLINK_DYNATTR_SET, ks_cmd_not_implemented, KS_CMD_WR },
+	{ KS_NETLINK_FEATURE_NEW, ks_cmd_not_implemented, KS_CMD_WR },
+	{ KS_NETLINK_FEATURE_DEL, ks_cmd_not_implemented, KS_CMD_WR },
+	{ KS_NETLINK_FEATURE_GET, ks_feature_cmd_get, 0 },
+	{ KS_NETLINK_FEATURE_SET, ks_cmd_not_implemented, KS_CMD_WR },
 
 	{ KS_NETLINK_NODE_NEW, ks_cmd_not_implemented, KS_CMD_WR },
 	{ KS_NETLINK_NODE_DEL, ks_cmd_not_implemented, KS_CMD_WR },

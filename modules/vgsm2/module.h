@@ -15,7 +15,7 @@
 
 #include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 
 #include <linux/kstreamer/amu_compander.h>
 
@@ -32,7 +32,7 @@ struct vgsm_card;
 
 struct vgsm_amu_compander
 {
-	struct ks_dynattr_instance dynattr;
+	struct ks_feature_value feature;
 	struct ks_amu_compander_descr descr;
 };
 
@@ -54,7 +54,7 @@ struct vgsm_module_rx
 
 struct vgsm_amu_decompander
 {
-	struct ks_dynattr_instance dynattr;
+	struct ks_feature_value feature;
 	struct ks_amu_compander_descr descr;
 };
 

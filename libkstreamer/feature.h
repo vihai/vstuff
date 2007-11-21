@@ -10,21 +10,21 @@
  *
  */
 
-#ifndef _LIBKSTREAMER_DYNATTR_H
-#define _LIBKSTREAMER_DYNATTR_H
+#ifndef _LIBKSTREAMER_FEATURE_H
+#define _LIBKSTREAMER_FEATURE_H
 
 #include <sys/socket.h>
 
 #include <linux/types.h>
 #include <linux/netlink.h>
 
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 
 #include <list.h>
 
 struct ks_conn;
 
-struct ks_dynattr
+struct ks_feature
 {
 	struct hlist_node node;
 
@@ -36,49 +36,49 @@ struct ks_dynattr
 	char *name;
 };
 
-struct ks_dynattr_instance
+struct ks_feature_value
 {
 	struct list_head node;
 
-	struct ks_dynattr *dynattr;
+	struct ks_feature *feature;
 
 	int len;
 
 	__u8 payload[0];
 };
 
-struct ks_dynattr *ks_dynattr_alloc(void);
-struct ks_dynattr *ks_dynattr_get(struct ks_dynattr *dynattr);
-void ks_dynattr_put(struct ks_dynattr *dynattr);
+struct ks_feature *ks_feature_alloc(void);
+struct ks_feature *ks_feature_get(struct ks_feature *feature);
+void ks_feature_put(struct ks_feature *feature);
 
-struct ks_dynattr *ks_dynattr_get_by_id(
+struct ks_feature *ks_feature_get_by_id(
 	struct ks_conn *conn,
 	int id);
-struct ks_dynattr *ks_dynattr_get_by_name(
+struct ks_feature *ks_feature_get_by_name(
 	struct ks_conn *conn,
 	const char *name);
 
-void ks_dynattr_dump(
-	struct ks_dynattr *dynattr,
+void ks_feature_dump(
+	struct ks_feature *feature,
 	struct ks_conn *conn,
 	int level);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 
-void ks_dynattr_add(struct ks_dynattr *dynattr, struct ks_conn *conn);
-void ks_dynattr_del(struct ks_dynattr *dynattr);
-void ks_dynattr_flush(struct ks_conn *conn);
+void ks_feature_add(struct ks_feature *feature, struct ks_conn *conn);
+void ks_feature_del(struct ks_feature *feature);
+void ks_feature_flush(struct ks_conn *conn);
 
-struct ks_dynattr *ks_dynattr_get_by_nlid(
+struct ks_feature *ks_feature_get_by_nlid(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 
-struct ks_dynattr *ks_dynattr_create_from_nlmsg(
+struct ks_feature *ks_feature_create_from_nlmsg(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 
-void ks_dynattr_update_from_nlmsg(
-	struct ks_dynattr *dynattr,
+void ks_feature_update_from_nlmsg(
+	struct ks_feature *feature,
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 

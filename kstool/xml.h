@@ -13,7 +13,7 @@
 #ifndef _XML_H
 #define _XML_H
 
-void dynattr_dump_xml(struct ks_dynattr *dynattr);
+void feature_dump_xml(struct ks_feature *feature);
 void node_dump_xml(struct ks_node *node);
 void chan_dump_xml(struct ks_chan *chan);
 void pipeline_dump_xml(struct ks_pipeline *pipeline);

@@ -26,7 +26,7 @@
 #include "netlink.h"
 #include "channel.h"
 #include "node.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "req.h"
 #include "xact.h"
 #include "router.h"
@@ -250,10 +250,10 @@ void ks_pipeline_dump(
 			chan->path,
 			chan->to->path);
 
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		struct ks_feature_value *featval;
+		list_for_each_entry(featval, &chan->features, node) {
 			report_conn(conn, level,
-				"  DynAttr: %s\n", dynattr->dynattr->name);
+				"  Feature: %s\n", featval->feature->name);
 		}
 	}
 }

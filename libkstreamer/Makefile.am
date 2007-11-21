@@ -13,7 +13,7 @@ lib_LTLIBRARIES = libkstreamer.la
 
 libkstreamer_la_SOURCES = \
 	libkstreamer.c	\
-	dynattr.c	\
+	feature.c	\
 	channel.c	\
 	netlink.c	\
 	xact.c		\
@@ -28,7 +28,7 @@ libkstreamer_la_SOURCES = \
 libkstreamer_ladir = libkstreamer
 
 nobase_include_HEADERS = \
-	dynattr.h	\
+	feature.h	\
 	libkstreamer.h	\
 	channel.h	\
 	node.h		\

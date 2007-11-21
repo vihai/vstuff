@@ -16,7 +16,7 @@
 #include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/pipeline.h>
 #include <linux/kstreamer/streamframe.h>
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 #include <linux/kstreamer/softswitch.h>
 
 #include <linux/visdn/visdn.h>

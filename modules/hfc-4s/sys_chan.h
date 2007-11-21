@@ -17,7 +17,7 @@
 
 #include <linux/kstreamer/kstreamer.h>
 #include <linux/kstreamer/channel.h>
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 #include <linux/kstreamer/duplex.h>
 
 #include <linux/kstreamer/hdlc_framer.h>
@@ -47,14 +47,14 @@ struct hfc_sys_chan;
 
 struct hfc_hdlc_framer
 {
-	struct ks_dynattr_instance dynattr;
+	struct ks_feature_value feature;
 
 	struct ks_hdlc_framer_descr descr;
 };
 
 struct hfc_octet_reverser
 {
-	struct ks_dynattr_instance dynattr;
+	struct ks_feature_value feature;
 
 	struct ks_octet_reverser_descr descr;
 };

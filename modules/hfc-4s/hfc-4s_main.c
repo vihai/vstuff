@@ -22,7 +22,7 @@
 #include <linux/workqueue.h>
 #include <linux/kref.h>
 
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 
 #include "card.h"
 
@@ -289,9 +289,9 @@ DRIVER_ATTR(debug_level, S_IRUGO | S_IWUSR,
  * Module stuff
  ******************************************/
 
-struct ks_dynattr *hfc_hdlc_framer_class;
-struct ks_dynattr *hfc_hdlc_deframer_class;
-struct ks_dynattr *hfc_octet_reverser_class;
+struct ks_feature *hfc_hdlc_framer_class;
+struct ks_feature *hfc_hdlc_deframer_class;
+struct ks_feature *hfc_octet_reverser_class;
 
 static int __init hfc_init_module(void)
 {
@@ -301,19 +301,19 @@ static int __init hfc_init_module(void)
 
 	atomic_set(&module_refcnt, 0);
 
-	hfc_hdlc_framer_class = ks_dynattr_register("hdlc_framer");
+	hfc_hdlc_framer_class = ks_feature_register("hdlc_framer");
 	if (!hfc_hdlc_framer_class) {
 		err = -ENOMEM;
 		goto err_register_hdlc_framer;
 	}
 
-	hfc_hdlc_deframer_class = ks_dynattr_register("hdlc_deframer");
+	hfc_hdlc_deframer_class = ks_feature_register("hdlc_deframer");
 	if (!hfc_hdlc_deframer_class) {
 		err = -ENOMEM;
 		goto err_register_hdlc_deframer;
 	}
 
-	hfc_octet_reverser_class = ks_dynattr_register("octet_reverser");
+	hfc_octet_reverser_class = ks_feature_register("octet_reverser");
 	if (!hfc_octet_reverser_class) {
 		err = -ENOMEM;
 		goto err_register_octet_reverser;
@@ -340,11 +340,11 @@ static int __init hfc_init_module(void)
 err_create_file_debug_level:
 #endif
 err_pci_register_driver:
-	ks_dynattr_unregister(hfc_octet_reverser_class);
+	ks_feature_unregister(hfc_octet_reverser_class);
 err_register_octet_reverser:
-	ks_dynattr_unregister(hfc_hdlc_deframer_class);
+	ks_feature_unregister(hfc_hdlc_deframer_class);
 err_register_hdlc_deframer:
-	ks_dynattr_unregister(hfc_hdlc_framer_class);
+	ks_feature_unregister(hfc_hdlc_framer_class);
 err_register_hdlc_framer:
 
 	return err;
@@ -364,9 +364,9 @@ printk(KERN_DEBUG "module_exit()\n");
 
 	pci_unregister_driver(&hfc_driver);
 
-	ks_dynattr_unregister(hfc_octet_reverser_class);
-	ks_dynattr_unregister(hfc_hdlc_deframer_class);
-	ks_dynattr_unregister(hfc_hdlc_framer_class);
+	ks_feature_unregister(hfc_octet_reverser_class);
+	ks_feature_unregister(hfc_hdlc_deframer_class);
+	ks_feature_unregister(hfc_hdlc_framer_class);
 
 	hfc_msg(KERN_INFO, hfc_DRIVER_DESCR " unloaded\n");
 }

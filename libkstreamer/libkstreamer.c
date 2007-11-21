@@ -44,57 +44,57 @@ void ks_topology_update(
 		report_conn(conn, LOG_ERR, "Unexpected COMMIT/ABORT message\n");
 	break;
 
-	case KS_NETLINK_DYNATTR_NEW: {
-		struct ks_dynattr *dynattr;
-		dynattr = ks_dynattr_create_from_nlmsg(conn, nlh);
-		if (!dynattr) {
+	case KS_NETLINK_FEATURE_NEW: {
+		struct ks_feature *feature;
+		feature = ks_feature_create_from_nlmsg(conn, nlh);
+		if (!feature) {
 			// FIXME
 		}
 
 		if (conn->debug_netlink)
-			ks_dynattr_dump(dynattr, conn, LOG_DEBUG);
+			ks_feature_dump(feature, conn, LOG_DEBUG);
 
-		ks_dynattr_add(dynattr, conn);
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
-		ks_dynattr_put(dynattr);
+		ks_feature_add(feature, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
+		ks_feature_put(feature);
 	}
 	break;
 
-	case KS_NETLINK_DYNATTR_DEL: {
-		struct ks_dynattr *dynattr;
+	case KS_NETLINK_FEATURE_DEL: {
+		struct ks_feature *feature;
 
-		dynattr = ks_dynattr_get_by_nlid(conn, nlh);
-		if (!dynattr) {
+		feature = ks_feature_get_by_nlid(conn, nlh);
+		if (!feature) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
 		if (conn->debug_netlink)
-			ks_dynattr_dump(dynattr, conn, LOG_DEBUG);
+			ks_feature_dump(feature, conn, LOG_DEBUG);
 
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
-		ks_dynattr_del(dynattr);
-		ks_dynattr_put(dynattr);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
+		ks_feature_del(feature);
+		ks_feature_put(feature);
 	}
 	break;
 
-	case KS_NETLINK_DYNATTR_SET: {
-		struct ks_dynattr *dynattr;
+	case KS_NETLINK_FEATURE_SET: {
+		struct ks_feature *feature;
 
-		dynattr = ks_dynattr_get_by_nlid(conn, nlh);
-		if (!dynattr) {
+		feature = ks_feature_get_by_nlid(conn, nlh);
+		if (!feature) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
 		}
 
-		ks_dynattr_update_from_nlmsg(dynattr, conn, nlh);
+		ks_feature_update_from_nlmsg(feature, conn, nlh);
 
 		if (conn->debug_netlink)
-			ks_dynattr_dump(dynattr, conn, LOG_DEBUG);
+			ks_feature_dump(feature, conn, LOG_DEBUG);
 
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, dynattr);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
 
-		ks_dynattr_put(dynattr);
+		ks_feature_put(feature);
 	}
 	break;
 
@@ -307,7 +307,7 @@ struct ks_xact *ks_send_topology_update_req(
 	ks_req_put(req);
 
 	req = ks_xact_queue_new_request_callback(xact,
-			KS_NETLINK_DYNATTR_GET,
+			KS_NETLINK_FEATURE_GET,
 			NLM_F_REQUEST | NLM_F_ROOT,
 			ks_topology_callback);
 	if (req->err < 0) {
@@ -382,7 +382,7 @@ void ks_update_topology(struct ks_conn *conn)
 	ks_pipeline_flush(conn);
 	ks_chan_flush(conn);
 	ks_node_flush(conn);
-	ks_dynattr_flush(conn);
+	ks_feature_flush(conn);
 
 	struct ks_xact *xact;
 	xact = ks_send_topology_update_req(conn, &err);

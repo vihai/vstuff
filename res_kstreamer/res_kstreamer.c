@@ -100,20 +100,20 @@ static void ks_logger(int level, const char *format, ...)
 
 /*---------------------------------------------------------------------------*/
 
-static int ks_kstreamer_show_dynattrs_func(int fd, int argc, char *argv[])
+static int ks_kstreamer_show_features_func(int fd, int argc, char *argv[])
 {
 	int i;
 
-	for (i=0; i<ARRAY_SIZE(ks_conn->dynattrs_hash); i++) {
-		struct ks_dynattr *dynattr;
+	for (i=0; i<ARRAY_SIZE(ks_conn->features_hash); i++) {
+		struct ks_feature *feature;
 		struct hlist_node *t;
 
 		pthread_mutex_lock(&ks_conn->topology_lock);
-		hlist_for_each_entry(dynattr, t, &ks_conn->dynattrs_hash[i],
+		hlist_for_each_entry(feature, t, &ks_conn->features_hash[i],
 								node) {
 			ast_cli(fd, "0x%08x: %s\n",
-				dynattr->id,
-				dynattr->name);
+				feature->id,
+				feature->name);
 		}
 		pthread_mutex_unlock(&ks_conn->topology_lock);
 	}
@@ -121,7 +121,7 @@ static int ks_kstreamer_show_dynattrs_func(int fd, int argc, char *argv[])
 	return RESULT_SUCCESS;
 }
 
-static char *ks_kstreamer_show_dynattrs_complete(
+static char *ks_kstreamer_show_features_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -134,25 +134,25 @@ static char *ks_kstreamer_show_dynattrs_complete(
 
 	switch(pos) {
 	case 2:
-		return ks_dynattr_completion(line, word, state);
+		return ks_feature_completion(line, word, state);
 	}
 	*/
 
 	return NULL;
 }
 
-static char ks_kstreamer_show_dynattrs_help[] =
-"Usage: kstreamer show dynattrs\n"
+static char ks_kstreamer_show_features_help[] =
+"Usage: kstreamer show features\n"
 "\n"
 "	\n";
 
-static struct ast_cli_entry ks_kstreamer_show_dynattrs =
+static struct ast_cli_entry ks_kstreamer_show_features =
 {
-	{ "kstreamer", "show", "dynattrs", NULL },
-	ks_kstreamer_show_dynattrs_func,
+	{ "kstreamer", "show", "features", NULL },
+	ks_kstreamer_show_features_func,
 	"",
-	ks_kstreamer_show_dynattrs_help,
-	ks_kstreamer_show_dynattrs_complete
+	ks_kstreamer_show_features_help,
+	ks_kstreamer_show_features_complete
 };
 
 /*---------------------------------------------------------------------------*/
@@ -444,7 +444,7 @@ static int ks_load_module(void)
 
 	ks_update_topology(ks_conn);
 
-	ast_cli_register(&ks_kstreamer_show_dynattrs);
+	ast_cli_register(&ks_kstreamer_show_features);
 	ast_cli_register(&ks_kstreamer_show_nodes);
 	ast_cli_register(&ks_kstreamer_show_chans);
 	ast_cli_register(&ks_kstreamer_show_pipelines);
@@ -462,7 +462,7 @@ static int ks_load_module(void)
 	ast_cli_unregister(&ks_kstreamer_show_pipelines);
 	ast_cli_unregister(&ks_kstreamer_show_chans);
 	ast_cli_unregister(&ks_kstreamer_show_nodes);
-	ast_cli_unregister(&ks_kstreamer_show_dynattrs);
+	ast_cli_unregister(&ks_kstreamer_show_features);
 
 	// Disconnect?
 err_ks_conn_establish:
@@ -485,7 +485,7 @@ static int ks_unload_module(void)
 	ast_cli_unregister(&ks_kstreamer_show_pipelines);
 	ast_cli_unregister(&ks_kstreamer_show_chans);
 	ast_cli_unregister(&ks_kstreamer_show_nodes);
-	ast_cli_unregister(&ks_kstreamer_show_dynattrs);
+	ast_cli_unregister(&ks_kstreamer_show_features);
 
 	ks_conn_destroy(ks_conn);
 

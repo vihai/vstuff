@@ -20,7 +20,7 @@
 
 #include <pthread.h>
 
-#include "dynattr.h"
+#include "feature.h"
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
@@ -54,8 +54,8 @@ enum ks_conn_state
 	KS_CONN_STATE_WAITING_DONE,
 };
 
-#define DYNATTR_HASHBITS 8
-#define DYNATTR_HASHSIZE ((1 << DYNATTR_HASHBITS) - 1)
+#define FEATURE_HASHBITS 8
+#define FEATURE_HASHSIZE ((1 << FEATURE_HASHBITS) - 1)
 
 #define PIPELINE_HASHBITS 8
 #define PIPELINE_HASHSIZE ((1 << PIPELINE_HASHBITS) - 1)
@@ -74,7 +74,7 @@ struct ks_conn
 
 	enum ks_conn_state state;
 
-	struct hlist_head dynattrs_hash[DYNATTR_HASHSIZE];
+	struct hlist_head features_hash[FEATURE_HASHSIZE];
 	struct hlist_head chans_hash[CHAN_HASHSIZE];
 	struct hlist_head nodes_hash[NODE_HASHSIZE];
 	struct hlist_head pipelines_hash[PIPELINE_HASHSIZE];

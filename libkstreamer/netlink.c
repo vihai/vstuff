@@ -28,7 +28,7 @@
 
 #include "libkstreamer.h"
 #include "netlink.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
@@ -55,14 +55,14 @@ static const char *ks_netlink_message_type_to_string(
 		return "ABORT";
 	case KS_NETLINK_VERSION:
 		return "VERSION";
-	case KS_NETLINK_DYNATTR_GET:
-		return "DYNATTR_GET";
-	case KS_NETLINK_DYNATTR_NEW:
-		return "DYNATTR_NEW";
-	case KS_NETLINK_DYNATTR_DEL:
-		return "DYNATTR_DEL";
-	case KS_NETLINK_DYNATTR_SET:
-		return "DYNATTR_SET";
+	case KS_NETLINK_FEATURE_GET:
+		return "FEATURE_GET";
+	case KS_NETLINK_FEATURE_NEW:
+		return "FEATURE_NEW";
+	case KS_NETLINK_FEATURE_DEL:
+		return "FEATURE_DEL";
+	case KS_NETLINK_FEATURE_SET:
+		return "FEATURE_SET";
 	case KS_NETLINK_NODE_GET:
 		return "NODE_GET";
 	case KS_NETLINK_NODE_NEW:

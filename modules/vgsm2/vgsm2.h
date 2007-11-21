@@ -104,8 +104,8 @@ extern int debug_level;
 #define BOOL char
 #endif
 
-extern struct ks_dynattr *vgsm_amu_compander_class;
-extern struct ks_dynattr *vgsm_amu_decompander_class;
+extern struct ks_feature *vgsm_amu_compander_class;
+extern struct ks_feature *vgsm_amu_decompander_class;
 
 void vgsm_led_update(void);
 

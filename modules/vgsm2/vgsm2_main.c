@@ -27,7 +27,7 @@
 #include <linux/termios.h>
 #include <linux/serial_core.h>
 
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 
 #include "vgsm2.h"
 #include "card.h"
@@ -246,8 +246,8 @@ DRIVER_ATTR(debug_level, S_IRUGO | S_IWUSR,
 	vgsm_store_debug_level);
 #endif
 
-struct ks_dynattr *vgsm_amu_compander_class;
-struct ks_dynattr *vgsm_amu_decompander_class;
+struct ks_feature *vgsm_amu_compander_class;
+struct ks_feature *vgsm_amu_decompander_class;
 
 static int __init vgsm_init(void)
 {
@@ -262,13 +262,13 @@ static int __init vgsm_init(void)
 		vgsm_led_update_work_func);
 #endif
 
-	vgsm_amu_compander_class = ks_dynattr_register("amu_compander");
+	vgsm_amu_compander_class = ks_feature_register("amu_compander");
 	if (!vgsm_amu_compander_class) {
 		err = -ENOMEM;
 		goto err_register_amu_compander;
 	}
 
-	vgsm_amu_decompander_class = ks_dynattr_register("amu_decompander");
+	vgsm_amu_decompander_class = ks_feature_register("amu_decompander");
 	if (!vgsm_amu_decompander_class) {
 		err = -ENOMEM;
 		goto err_register_amu_decompander;
@@ -317,9 +317,9 @@ err_sim_modinit:
 err_module_modinit:
 	vgsm_card_modexit();
 err_card_modinit:
-	ks_dynattr_unregister(vgsm_amu_decompander_class);
+	ks_feature_unregister(vgsm_amu_decompander_class);
 err_register_amu_decompander:
-	ks_dynattr_unregister(vgsm_amu_compander_class);
+	ks_feature_unregister(vgsm_amu_compander_class);
 err_register_amu_compander:
 
 	return err;
@@ -340,8 +340,8 @@ static void __exit vgsm_exit(void)
 	vgsm_module_modexit();
 	vgsm_card_modexit();
 
-	ks_dynattr_unregister(vgsm_amu_decompander_class);
-	ks_dynattr_unregister(vgsm_amu_compander_class);
+	ks_feature_unregister(vgsm_amu_decompander_class);
+	ks_feature_unregister(vgsm_amu_compander_class);
 
 	vgsm_msg(KERN_INFO, vgsm_DRIVER_DESCR " unloaded\n");
 }

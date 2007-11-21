@@ -55,36 +55,36 @@ static int apply_parameters_to_autorouted(
 	for(i=start_nchans; i<=end_nchans; i++) {
 		struct ks_chan *chan = pipeline->chans[i];
 
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		struct ks_feature_value *featval;
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == glob.octet_reverser) {
+			if (featval->feature == glob.octet_reverser) {
 
 				struct ks_octet_reverser_descr *descr =
 					(struct ks_octet_reverser_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!octet_reverser_chan || descr->hardware) {
 					octet_reverser_chan = chan;
 					octet_reverser_descr = descr;
 				}
 
-			} else if (dynattr->dynattr == glob.hdlc_framer) {
+			} else if (featval->feature == glob.hdlc_framer) {
 
 				struct ks_hdlc_framer_descr *descr =
 					(struct ks_hdlc_framer_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!hdlc_framer_chan || descr->hardware) {
 					hdlc_framer_chan = chan;
 					hdlc_framer_descr = descr;
 				}
 
-			} else if (dynattr->dynattr == glob.hdlc_deframer) {
+			} else if (featval->feature == glob.hdlc_deframer) {
 
 				struct ks_hdlc_deframer_descr *descr =
 					(struct ks_hdlc_deframer_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!hdlc_deframer_chan || descr->hardware) {
 					hdlc_deframer_chan = chan;

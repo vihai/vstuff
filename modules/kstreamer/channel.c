@@ -27,7 +27,7 @@
 #include "duplex.h"
 #include "pipeline.h"
 #include "netlink.h"
-#include "dynattr.h"
+#include "feature.h"
 
 struct kset ks_chans_kset;
 

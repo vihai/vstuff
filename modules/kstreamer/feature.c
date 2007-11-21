@@ -15,67 +15,67 @@
 
 #include "kstreamer.h"
 #include "kstreamer_priv.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "netlink.h"
 
 #define KS_CAPA_HASHBITS	8
 #define KS_CAPA_HASHSIZE	((1 << KS_CAPA_HASHBITS) - 1)
 
-static struct hlist_head ks_dynattrs_hash[KS_CAPA_HASHSIZE];
+static struct hlist_head ks_features_hash[KS_CAPA_HASHSIZE];
 
-struct ks_dynattr *ks_dynattr_get(struct ks_dynattr *dynattr)
+struct ks_feature *ks_feature_get(struct ks_feature *feature)
 {
-	atomic_inc(&dynattr->refcnt);
+	atomic_inc(&feature->refcnt);
 
-	return dynattr;
+	return feature;
 }
-EXPORT_SYMBOL(ks_dynattr_get);
+EXPORT_SYMBOL(ks_feature_get);
 
-void ks_dynattr_put(struct ks_dynattr *dynattr)
+void ks_feature_put(struct ks_feature *feature)
 {
-	if (!atomic_dec_and_test(&dynattr->refcnt)) {
+	if (!atomic_dec_and_test(&feature->refcnt)) {
 		down_write(&kstreamer_subsys_rwsem);
-		hlist_del(&dynattr->node);
+		hlist_del(&feature->node);
 		up_write(&kstreamer_subsys_rwsem);
 
-		kfree(dynattr);
+		kfree(feature);
 	}
 }
-EXPORT_SYMBOL(ks_dynattr_put);
+EXPORT_SYMBOL(ks_feature_put);
 
-static inline struct hlist_head *ks_dynattrs_get_hash(u32 pid)
+static inline struct hlist_head *ks_features_get_hash(u32 pid)
 {
-	return &ks_dynattrs_hash[pid & (KS_CAPA_HASHSIZE - 1)];
+	return &ks_features_hash[pid & (KS_CAPA_HASHSIZE - 1)];
 }
 
-struct ks_dynattr *_ks_dynattr_search_by_id(int id)
+struct ks_feature *_ks_feature_search_by_id(int id)
 {
-	struct ks_dynattr *dynattr;
+	struct ks_feature *feature;
 	int i;
 
 	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
 		struct hlist_node *t;
 
-		hlist_for_each_entry(dynattr, t, &ks_dynattrs_hash[i], node)
-			if (dynattr->id == id)
-				return dynattr;
+		hlist_for_each_entry(feature, t, &ks_features_hash[i], node)
+			if (feature->id == id)
+				return feature;
 	}
 
 	return NULL;
 }
 
-struct ks_dynattr *ks_dynattr_get_by_id(int id)
+struct ks_feature *ks_feature_get_by_id(int id)
 {
-	struct ks_dynattr *dynattr;
+	struct ks_feature *feature;
 
 	down_read(&kstreamer_subsys_rwsem);
-	dynattr = ks_dynattr_get(_ks_dynattr_search_by_id(id));
+	feature = ks_feature_get(_ks_feature_search_by_id(id));
 	up_read(&kstreamer_subsys_rwsem);
 
-	return dynattr;
+	return feature;
 }
 
-static int _ks_dynattr_new_id(void)
+static int _ks_feature_new_id(void)
 {
 	static int cur_id;
 
@@ -85,13 +85,13 @@ static int _ks_dynattr_new_id(void)
 		if (cur_id < 0x00ff || cur_id > 0xffff)
 			cur_id = 0x00ff;
 
-		if (!_ks_dynattr_search_by_id(cur_id))
+		if (!_ks_feature_search_by_id(cur_id))
 			return cur_id;
 	}
 }
 
-static int ks_dynattr_netlink_fill_msg(
-	struct ks_dynattr *dynattr,
+static int ks_feature_netlink_fill_msg(
+	struct ks_feature *feature,
 	struct sk_buff *skb,
 	enum ks_netlink_message_type message_type,
 	u32 pid, u32 seq, u16 flags)
@@ -109,14 +109,14 @@ static int ks_dynattr_netlink_fill_msg(
 	nlh = NLMSG_PUT(skb, pid, seq, message_type, 0);
 	nlh->nlmsg_flags = flags;
 
-	err = ks_netlink_put_attr(skb, KS_DYNATTR_ID, &dynattr->id,
-						sizeof(dynattr->id));
+	err = ks_netlink_put_attr(skb, KS_FEATURE_ID, &feature->id,
+						sizeof(feature->id));
 	if (err < 0)
 		goto err_put_attr;
 
-	if (message_type != KS_NETLINK_DYNATTR_DEL) {
-		err = ks_netlink_put_attr(skb, KS_DYNATTR_NAME,
-					dynattr->name, strlen(dynattr->name));
+	if (message_type != KS_NETLINK_FEATURE_DEL) {
+		err = ks_netlink_put_attr(skb, KS_FEATURE_NAME,
+					feature->name, strlen(feature->name));
 		if (err < 0)
 			goto err_put_attr;
 	}
@@ -136,8 +136,8 @@ nlmsg_failure:
 	return err;
 }
 
-static int ks_dynattr_netlink_notification(
-	struct ks_dynattr *dynattr,
+static int ks_feature_netlink_notification(
+	struct ks_feature *feature,
 	enum ks_netlink_message_type message_type,
 	u32 pid)
 {
@@ -165,8 +165,8 @@ static int ks_dynattr_netlink_notification(
 	NETLINK_CB(skb).dst_group = pid ? 0 : KS_NETLINK_GROUP_TOPOLOGY;
 #endif
 
-	err = ks_dynattr_netlink_fill_msg(
-			dynattr, skb, message_type, pid, 0, 0);
+	err = ks_feature_netlink_fill_msg(
+			feature, skb, message_type, pid, 0, 0);
 	if (err < 0)
 		goto err_fill_msg;
 
@@ -183,25 +183,25 @@ err_alloc_skb:
 	return err;
 }
 
-void ks_dynattr_netlink_dump(struct ks_xact *xact)
+void ks_feature_netlink_dump(struct ks_xact *xact)
 {
-	struct ks_dynattr *dynattr;
+	struct ks_feature *feature;
 	int err;
 	int i;
 
 	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
 		struct hlist_node *t;
 
-		hlist_for_each_entry(dynattr, t, &ks_dynattrs_hash[i], node) {
+		hlist_for_each_entry(feature, t, &ks_features_hash[i], node) {
 
 retry:
 			ks_xact_need_skb(xact);
 			if (!xact->out_skb)
 				return;
 
-			err = ks_dynattr_netlink_fill_msg(dynattr,
+			err = ks_feature_netlink_fill_msg(feature,
 						xact->out_skb,
-						KS_NETLINK_DYNATTR_NEW,
+						KS_NETLINK_FEATURE_NEW,
 						xact->pid,
 						0,
 						NLM_F_MULTI);
@@ -215,49 +215,49 @@ retry:
 	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
 }
 
-struct ks_dynattr *ks_dynattr_register(const char *name)
+struct ks_feature *ks_feature_register(const char *name)
 {
-	struct ks_dynattr *dynattr;
+	struct ks_feature *feature;
 	int i;
 
 	down_read(&kstreamer_subsys_rwsem);
 	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
 		struct hlist_node *t;
 
-		hlist_for_each_entry(dynattr, t, &ks_dynattrs_hash[i], node) {
-			if (!strcmp(dynattr->name, name)) {
+		hlist_for_each_entry(feature, t, &ks_features_hash[i], node) {
+			if (!strcmp(feature->name, name)) {
 				up_read(&kstreamer_subsys_rwsem);
-				return ks_dynattr_get(dynattr);
+				return ks_feature_get(feature);
 			}
 		}
 	}
 	up_read(&kstreamer_subsys_rwsem);
 
-	dynattr = kmalloc(sizeof(*dynattr), GFP_KERNEL);
-	if (!dynattr)
+	feature = kmalloc(sizeof(*feature), GFP_KERNEL);
+	if (!feature)
 		return NULL;
 
-	memset(dynattr, 0, sizeof(*dynattr));
+	memset(feature, 0, sizeof(*feature));
 
-	atomic_set(&dynattr->refcnt, 1);
+	atomic_set(&feature->refcnt, 1);
 
-	strncpy(dynattr->name, name, sizeof(dynattr->name));
+	strncpy(feature->name, name, sizeof(feature->name));
 
 	down_write(&kstreamer_subsys_rwsem);
-	dynattr->id = _ks_dynattr_new_id();
-	hlist_add_head(&dynattr->node, ks_dynattrs_get_hash(dynattr->id));
+	feature->id = _ks_feature_new_id();
+	hlist_add_head(&feature->node, ks_features_get_hash(feature->id));
 	up_write(&kstreamer_subsys_rwsem);
 
-	ks_dynattr_netlink_notification(dynattr, KS_NETLINK_DYNATTR_NEW, 0);
+	ks_feature_netlink_notification(feature, KS_NETLINK_FEATURE_NEW, 0);
 
-	return dynattr;
+	return feature;
 }
-EXPORT_SYMBOL(ks_dynattr_register);
+EXPORT_SYMBOL(ks_feature_register);
 
-void ks_dynattr_unregister(struct ks_dynattr *dynattr)
+void ks_feature_unregister(struct ks_feature *feature)
 {
-	ks_dynattr_netlink_notification(dynattr, KS_NETLINK_DYNATTR_DEL, 0);
+	ks_feature_netlink_notification(feature, KS_NETLINK_FEATURE_DEL, 0);
 
-	ks_dynattr_put(dynattr);
+	ks_feature_put(feature);
 }
-EXPORT_SYMBOL(ks_dynattr_unregister);
+EXPORT_SYMBOL(ks_feature_unregister);

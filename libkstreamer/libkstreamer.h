@@ -17,7 +17,7 @@
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
-#include "dynattr.h"
+#include "feature.h"
 #include "router.h"
 #include "netlink.h"
 #include "req.h"

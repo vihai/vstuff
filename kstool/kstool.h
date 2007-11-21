@@ -35,9 +35,9 @@ struct global_state
 
 	int verbosity;
 
-	struct ks_dynattr *hdlc_framer;
-	struct ks_dynattr *hdlc_deframer;
-	struct ks_dynattr *octet_reverser;
+	struct ks_feature *hdlc_framer;
+	struct ks_feature *hdlc_deframer;
+	struct ks_feature *octet_reverser;
 
 	struct list_head modules;
 

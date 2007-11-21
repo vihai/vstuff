@@ -10,15 +10,15 @@
  *
  */
 
-#ifndef __KS_DYNATTR_H
-#define __KS_DYNATTR_H
+#ifndef __KS_FEATURE_H
+#define __KS_FEATURE_H
 
 #include <linux/types.h>
 
-enum ks_dynattr_attribute_type
+enum ks_feature_attribute_type
 {
-	KS_DYNATTR_ID = 1,
-	KS_DYNATTR_NAME,
+	KS_FEATURE_ID = 1,
+	KS_FEATURE_NAME,
 };
 
 #ifdef __KERNEL__
@@ -27,7 +27,7 @@ enum ks_dynattr_attribute_type
 
 struct ks_xact;
 
-struct ks_dynattr
+struct ks_feature
 {
 	struct hlist_node node;
 
@@ -37,22 +37,22 @@ struct ks_dynattr
 	char name[32];
 };
 
-struct ks_dynattr_instance
+struct ks_feature_value
 {
 	struct list_head node;
 
-	struct ks_dynattr *dynattr;
+	struct ks_feature *feature;
 
 	int len;
 };
 
-void ks_dynattr_netlink_dump(struct ks_xact *xact);
+void ks_feature_netlink_dump(struct ks_xact *xact);
 
-extern struct ks_dynattr *ks_dynattr_register(const char *name);
-extern void ks_dynattr_unregister(struct ks_dynattr *dynattr);
+extern struct ks_feature *ks_feature_register(const char *name);
+extern void ks_feature_unregister(struct ks_feature *feature);
 
-extern struct ks_dynattr *ks_dynattr_get(struct ks_dynattr *dynattr);
-extern void ks_dynattr_put(struct ks_dynattr *dynattr);
+extern struct ks_feature *ks_feature_get(struct ks_feature *feature);
+extern void ks_feature_put(struct ks_feature *feature);
 
 #endif
 

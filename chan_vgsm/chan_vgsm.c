@@ -590,9 +590,9 @@ static int vgsm_pipeline_set_amu_compander(
 	BOOL mu_mode)
 {
 	/* TODO: Do this only once */
-	struct ks_dynattr *amu_compander_attr;
+	struct ks_feature *amu_compander_attr;
 
-	amu_compander_attr = ks_dynattr_get_by_name(ks_conn, "amu_compander");
+	amu_compander_attr = ks_feature_get_by_name(ks_conn, "amu_compander");
 	if (!amu_compander_attr) {
 		ast_log(LOG_ERROR,
 			"Cannot find amu_compander attr\n");
@@ -604,15 +604,15 @@ static int vgsm_pipeline_set_amu_compander(
 	int i;
 	for(i=0; i<pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = pipeline->chans[i];
-		struct ks_dynattr_instance *dynattr;
+		struct ks_feature_value *featval;
 
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == amu_compander_attr) {
+			if (featval->feature == amu_compander_attr) {
 
 				struct ks_amu_compander_descr *descr =
 					(struct ks_amu_compander_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!amu_compander || descr->hardware)
 					amu_compander = descr;
@@ -643,9 +643,9 @@ static int vgsm_pipeline_set_amu_decompander(
 	BOOL mu_mode)
 {
 	/* TODO: Do this only once */
-	struct ks_dynattr *amu_decompander_attr;
+	struct ks_feature *amu_decompander_attr;
 
-	amu_decompander_attr = ks_dynattr_get_by_name(ks_conn,
+	amu_decompander_attr = ks_feature_get_by_name(ks_conn,
 						"amu_decompander");
 	if (!amu_decompander_attr) {
 		ast_log(LOG_ERROR,
@@ -658,15 +658,15 @@ static int vgsm_pipeline_set_amu_decompander(
 	int i;
 	for(i=0; i<pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = pipeline->chans[i];
-		struct ks_dynattr_instance *dynattr;
+		struct ks_feature_value *featval;
 
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == amu_decompander_attr) {
+			if (featval->feature == amu_decompander_attr) {
 
 				struct ks_amu_decompander_descr *descr =
 					(struct ks_amu_decompander_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!amu_decompander || descr->hardware)
 					amu_decompander = descr;

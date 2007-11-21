@@ -175,11 +175,11 @@ int main(int argc, char *argv[])
 	ks_update_topology(glob.conn);
 
 	glob.hdlc_framer =
-		ks_dynattr_get_by_name(glob.conn, "hdlc_framer");
+		ks_feature_get_by_name(glob.conn, "hdlc_framer");
 	glob.hdlc_deframer =
-		ks_dynattr_get_by_name(glob.conn, "hdlc_deframer");
+		ks_feature_get_by_name(glob.conn, "hdlc_deframer");
 	glob.octet_reverser =
-		ks_dynattr_get_by_name(glob.conn, "octet_reverser");
+		ks_feature_get_by_name(glob.conn, "octet_reverser");
 
 	int ret;
 	struct module *module;
@@ -197,13 +197,13 @@ int main(int argc, char *argv[])
 found:
 
 	if (glob.hdlc_framer)
-		ks_dynattr_put(glob.hdlc_framer);
+		ks_feature_put(glob.hdlc_framer);
 
 	if (glob.hdlc_deframer)
-		ks_dynattr_put(glob.hdlc_deframer);
+		ks_feature_put(glob.hdlc_deframer);
 
 	if (glob.octet_reverser)
-		ks_dynattr_put(glob.octet_reverser);
+		ks_feature_put(glob.octet_reverser);
 
 	ks_conn_destroy(glob.conn);
 

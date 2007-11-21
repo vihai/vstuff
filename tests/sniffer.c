@@ -26,7 +26,7 @@
 #include <linux/netlink.h>
 #include <getopt.h>
 
-#include <linux/kstreamer/dynattr.h>
+#include <linux/kstreamer/feature.h>
 #include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/netlink.h>
@@ -83,10 +83,10 @@ struct opts
 	enum write_from write_from;
 	const char *write_from_file;
 
-	struct ks_dynattr *hdlc_framer;
-	struct ks_dynattr *hdlc_deframer;
-	struct ks_dynattr *octet_reverser;
-	struct ks_dynattr *amu_compander;
+	struct ks_feature *hdlc_framer;
+	struct ks_feature *hdlc_deframer;
+	struct ks_feature *octet_reverser;
+	struct ks_feature *amu_compander;
 
 	BOOL enable_rx_octet_reverser;
 	struct ks_octet_reverser_descr *rx_octet_reverser;
@@ -142,34 +142,34 @@ int configure_rx_pipeline(struct ks_pipeline *pipeline)
 	for(i=0; i<pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = pipeline->chans[i];
 
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		struct ks_feature_value *featval;
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == opts.octet_reverser) {
+			if (featval->feature == opts.octet_reverser) {
 
 				struct ks_octet_reverser_descr *descr =
 					(struct ks_octet_reverser_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!opts.rx_octet_reverser ||
 				    descr->hardware)
 					opts.rx_octet_reverser = descr;
 
-			} else if (dynattr->dynattr == opts.hdlc_deframer) {
+			} else if (featval->feature == opts.hdlc_deframer) {
 
 				struct ks_hdlc_deframer_descr *descr =
 					(struct ks_hdlc_deframer_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!opts.rx_hdlc_deframer ||
 				    descr->hardware)
 					opts.rx_hdlc_deframer = descr;
 
-			} else if (dynattr->dynattr == opts.amu_compander) {
+			} else if (featval->feature == opts.amu_compander) {
 
 				struct ks_amu_decompander_descr *descr =
 					(struct ks_amu_decompander_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!opts.rx_amu_compander)
 					opts.rx_amu_compander = descr;
@@ -236,33 +236,33 @@ int configure_tx_pipeline(struct ks_pipeline *pipeline)
 	for(i=0; i<pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = pipeline->chans[i];
 
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		struct ks_feature_value *featval;
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == opts.octet_reverser) {
+			if (featval->feature == opts.octet_reverser) {
 
 				struct ks_octet_reverser_descr *descr =
 					(struct ks_octet_reverser_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!opts.tx_octet_reverser ||
 				    descr->hardware)
 					opts.tx_octet_reverser = descr;
 
-			} else if (dynattr->dynattr == opts.hdlc_framer) {
+			} else if (featval->feature == opts.hdlc_framer) {
 
 				struct ks_hdlc_framer_descr *descr =
 					(struct ks_hdlc_framer_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!opts.tx_hdlc_framer ||
 				    descr->hardware)
 					opts.tx_hdlc_framer = descr;
-			} else if (dynattr->dynattr == opts.amu_compander) {
+			} else if (featval->feature == opts.amu_compander) {
 
 				struct ks_amu_decompander_descr *descr =
 					(struct ks_amu_decompander_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!opts.tx_amu_decompander)
 					opts.tx_amu_decompander = descr;
@@ -546,10 +546,10 @@ int main(int argc, char *argv[])
 
 	ks_update_topology(conn);
 
-	opts.hdlc_framer = ks_dynattr_get_by_name(conn, "hdlc_framer");
-	opts.hdlc_deframer = ks_dynattr_get_by_name(conn, "hdlc_deframer");
-	opts.octet_reverser = ks_dynattr_get_by_name(conn, "octet_reverser");
-	opts.amu_compander = ks_dynattr_get_by_name(conn, "amu_compander");
+	opts.hdlc_framer = ks_feature_get_by_name(conn, "hdlc_framer");
+	opts.hdlc_deframer = ks_feature_get_by_name(conn, "hdlc_deframer");
+	opts.octet_reverser = ks_feature_get_by_name(conn, "octet_reverser");
+	opts.amu_compander = ks_feature_get_by_name(conn, "amu_compander");
 
 	struct ks_node *node_up;
 	node_up = ks_node_get_by_id(conn, node_up_id);
@@ -786,16 +786,16 @@ int main(int argc, char *argv[])
 	ks_node_put(node_up);
 
 	if (opts.hdlc_framer)
-		ks_dynattr_put(opts.hdlc_framer);
+		ks_feature_put(opts.hdlc_framer);
 
 	if (opts.hdlc_deframer)
-		ks_dynattr_put(opts.hdlc_deframer);
+		ks_feature_put(opts.hdlc_deframer);
 
 	if (opts.octet_reverser)
-		ks_dynattr_put(opts.octet_reverser);
+		ks_feature_put(opts.octet_reverser);
 
 	if (opts.amu_compander)
-		ks_dynattr_put(opts.amu_compander);
+		ks_feature_put(opts.amu_compander);
 
 	debug("Closing connection to kstreamer...\n");
 

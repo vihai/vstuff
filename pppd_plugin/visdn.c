@@ -113,13 +113,13 @@ static int visdn_connect(void)
 	ks_update_topology(conn);
 	dbglog("PPPovISDN - 2");
 
-	struct ks_dynattr *hdlc_framer;
-	hdlc_framer = ks_dynattr_get_by_name(conn, "hdlc_framer");
+	struct ks_feature *hdlc_framer;
+	hdlc_framer = ks_feature_get_by_name(conn, "hdlc_framer");
 	if (!hdlc_framer)
 		fatal("No HDLC framer attribute found");
 
-	struct ks_dynattr *hdlc_deframer;
-	hdlc_deframer = ks_dynattr_get_by_name(conn, "hdlc_deframer");
+	struct ks_feature *hdlc_deframer;
+	hdlc_deframer = ks_feature_get_by_name(conn, "hdlc_deframer");
 	if (!hdlc_deframer)
 		fatal("No HDLC deframer attribute found");
 
@@ -168,14 +168,14 @@ static int visdn_connect(void)
 	for(i=0; i<in_pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = in_pipeline->chans[i];
 
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		struct ks_feature_value *featval;
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == hdlc_deframer) {
+			if (featval->feature == hdlc_deframer) {
 
 				struct ks_hdlc_deframer_descr *descr =
 					(struct ks_hdlc_deframer_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!in_hdlc_deframer ||
 				    descr->hardware)
@@ -225,14 +225,14 @@ static int visdn_connect(void)
 	for(i=0; i<out_pipeline->chans_cnt; i++) {
 		struct ks_chan *chan = out_pipeline->chans[i];
 
-		struct ks_dynattr_instance *dynattr;
-		list_for_each_entry(dynattr, &chan->dynattrs, node) {
+		struct ks_feature_value *featval;
+		list_for_each_entry(featval, &chan->features, node) {
 
-			if (dynattr->dynattr == hdlc_framer) {
+			if (featval->feature == hdlc_framer) {
 
 				struct ks_hdlc_framer_descr *descr =
 					(struct ks_hdlc_framer_descr *)
-					dynattr->payload;
+					featval->payload;
 
 				if (!out_hdlc_framer ||
 				    descr->hardware)

@@ -20,11 +20,11 @@
 
 #include "xml.h"
 
-void dynattr_dump_xml(struct ks_dynattr *dynattr)
+void feature_dump_xml(struct ks_feature *feature)
 {
-	printf("    <dynattr id=\"%d\">\n", dynattr->id);
-	printf("      <name>%s</name>\n", dynattr->name);
-	printf("    </dynattr>\n");
+	printf("    <feature id=\"%d\">\n", feature->id);
+	printf("      <name>%s</name>\n", feature->name);
+	printf("    </feature>\n");
 }
 
 void node_dump_xml(struct ks_node *node)
@@ -45,22 +45,22 @@ void chan_dump_xml(struct ks_chan *chan)
 		printf("      <pipeline>%d</pipeline>\n",
 			chan->pipeline->id);
 
-	struct ks_dynattr_instance *dynattr;
-	list_for_each_entry(dynattr, &chan->dynattrs, node) {
-		printf("      <dynattr id=\"%d\">\n",
-			dynattr->dynattr->id);
+	struct ks_feature_value *featval;
+	list_for_each_entry(featval, &chan->features, node) {
+		printf("      <feature id=\"%d\">\n",
+			featval->feature->id);
 		printf("        <name>%s</name>\n",
-			dynattr->dynattr->name);
+			featval->feature->name);
 
-		char *raw = alloca(dynattr->len * 2 + 1);
+		char *raw = alloca(featval->len * 2 + 1);
 		int i;
-		for(i=0; i<dynattr->len; i++) {
+		for(i=0; i<featval->len; i++) {
 			sprintf(raw + i * 2, "%02x",
-				*(__u8 *)(dynattr->payload + i));
+				*(__u8 *)(featval->payload + i));
 		}
 
 		printf("        <raw>%s</raw>\n", raw);
-		printf("      </dynattr>\n");
+		printf("      </feature>\n");
 	}
 
 	printf("    </chan>\n");
@@ -91,34 +91,34 @@ void topology_event_handler_xml(
 
 	switch(message_type) {
 
-	case KS_NETLINK_DYNATTR_NEW: {
-		struct ks_dynattr *dynattr = object;
+	case KS_NETLINK_FEATURE_NEW: {
+		struct ks_feature *feature = object;
 
 		printf("<message type=\"new_object\">\n");
 		printf("  <object>\n");
-		dynattr_dump_xml(dynattr);
+		feature_dump_xml(feature);
 		printf("  </object>\n");
 		printf("</message>\n");
 	}
 	break;
 
-	case KS_NETLINK_DYNATTR_DEL: {
-		struct ks_dynattr *dynattr = object;
+	case KS_NETLINK_FEATURE_DEL: {
+		struct ks_feature *feature = object;
 
 		printf("<message type=\"del_object\">\n");
 		printf("  <object>\n");
-		dynattr_dump_xml(dynattr);
+		feature_dump_xml(feature);
 		printf("  </object>\n");
 		printf("</message>\n");
 	}
 	break;
 
-	case KS_NETLINK_DYNATTR_SET: {
-		struct ks_dynattr *dynattr = object;
+	case KS_NETLINK_FEATURE_SET: {
+		struct ks_feature *feature = object;
 
 		printf("<message type=\"set_object\">\n");
 		printf("  <object>\n");
-		dynattr_dump_xml(dynattr);
+		feature_dump_xml(feature);
 		printf("  </object>\n");
 		printf("</message>\n");
 	}
