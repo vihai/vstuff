@@ -1540,6 +1540,9 @@ static int vgsm_write(
 		return 0;
 	}
 
+	if (!vgsm_chan->pipeline_tx)
+		return 0;
+
 	if (ast_chan->rawwriteformat != vgsm_chan->prev_rawwriteformat) {
 		int err;
 		err = vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
