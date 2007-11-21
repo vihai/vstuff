@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-sbin_PROGRAMS = lemon
+noinst_PROGRAMS = lemon
 
 lemon_SOURCES = lemon.c
 lemon_CPPFLAGS=
