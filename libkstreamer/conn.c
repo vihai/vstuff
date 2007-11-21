@@ -514,6 +514,11 @@ void ks_conn_destroy(struct ks_conn *conn)
 
 	close(conn->sock);
 
+	ks_pipeline_flush(conn);
+	ks_chan_flush(conn);
+	ks_node_flush(conn);
+	ks_dynattr_flush(conn);
+
 	free(conn);
 }
 

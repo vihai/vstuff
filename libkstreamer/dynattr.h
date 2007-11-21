@@ -67,6 +67,7 @@ void ks_dynattr_dump(
 
 void ks_dynattr_add(struct ks_dynattr *dynattr, struct ks_conn *conn);
 void ks_dynattr_del(struct ks_dynattr *dynattr);
+void ks_dynattr_flush(struct ks_conn *conn);
 
 struct ks_dynattr *ks_dynattr_get_by_nlid(
 	struct ks_conn *conn,

@@ -55,9 +55,23 @@ void ks_pipeline_del(struct ks_pipeline *pipeline)
 	for (i=0; i<pipeline->chans_cnt; i++)
 		pipeline->chans[i]->pipeline = NULL;
 
-	pipeline->chans_cnt = 0;
-
 	ks_pipeline_put(pipeline);
+}
+
+void ks_pipeline_flush(struct ks_conn *conn)
+{
+	struct hlist_node *pos, *n;
+	struct ks_pipeline *pipeline;
+	int i;
+
+	for(i=0; i<ARRAY_SIZE(conn->pipelines_hash); i++) {
+		hlist_for_each_entry_safe(pipeline, pos, n,
+					&conn->pipelines_hash[i], node) {
+
+			hlist_del(&pipeline->node);
+			ks_pipeline_put(pipeline);
+		}
+	}
 }
 
 struct ks_pipeline *ks_pipeline_get_by_id(
@@ -191,6 +205,10 @@ void ks_pipeline_put(struct ks_pipeline *pipeline)
 		if (pipeline->path)
 			free(pipeline->path);
 
+		int i;
+		for(i=0; i<pipeline->chans_cnt; i++)
+			ks_chan_put(pipeline->chans[i]);
+
 		free(pipeline);
 	}
 }
@@ -268,9 +286,6 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 		break;
 
 		case KS_PIPELINEATTR_PATH:
-			if (pipeline->path)
-				free(pipeline->path);
-
 			pipeline->path = strndup(KS_ATTR_DATA(attr),
 					KS_ATTR_PAYLOAD(attr));
 		break;
@@ -286,7 +301,8 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 				break;
 			}
 
-			pipeline->chans[pipeline->chans_cnt] = chan;
+			pipeline->chans[pipeline->chans_cnt] =
+							ks_chan_get(chan);
 			pipeline->chans_cnt++;
 
 			chan->pipeline = pipeline;
@@ -353,6 +369,7 @@ static int ks_pipeline_create_handle_response(
 
 	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
 
+	ks_pipeline_add(pipeline, req->xact->conn);
 	ks_pipeline_put(pipeline);
 
 	return 0;
@@ -431,12 +448,14 @@ int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	}
 
 	ks_req_put(req);
+	ks_xact_put(xact);
 
 	return 0;
 
 err_create_failed:
 	ks_xact_put(xact);
 err_xact_alloc:
+	ks_pipeline_del(pipeline);
 
 	return err;
 }
@@ -523,6 +542,7 @@ int ks_pipeline_update(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	}
 
 	ks_req_put(req);
+	ks_xact_put(xact);
 
 	return 0;
 
@@ -576,6 +596,8 @@ int ks_pipeline_restart(struct ks_pipeline *pipeline, struct ks_conn *conn)
 		goto err_update_failed_2;
 	}
 	ks_req_put(req2);
+
+	ks_xact_put(xact);
 
 	return 0;
 
@@ -667,6 +689,7 @@ int ks_pipeline_destroy(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	}
 
 	ks_req_put(req);
+	ks_xact_put(xact);
 
 	return 0;
 
@@ -720,6 +743,8 @@ int ks_pipeline_update_chans(
 	if (err < 0)
 		goto err_xact_commit;
 
+	ks_xact_put(xact);
+
 	return 0;
 
 err_xact_commit:
@@ -758,7 +783,7 @@ int ks_pipeline_autoroute(
 	for(node = dst_node, i=0; node->router_prev;
 	    node = node->router_prev, i++) {
 		pipeline->chans[pipeline->chans_cnt + nchans - i - 1] =
-			node->router_prev_thru;
+			ks_chan_get(node->router_prev_thru);
 	}
 
 	pipeline->chans_cnt += nchans;

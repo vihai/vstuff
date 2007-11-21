@@ -45,7 +45,6 @@ struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
 	pthread_mutex_init(&xact->requests_lock, NULL);
 	INIT_LIST_HEAD(&xact->requests);
 	INIT_LIST_HEAD(&xact->requests_sent);
-	INIT_LIST_HEAD(&xact->requests_done);
 
 	xact->refcnt = 1;
 	xact->conn = conn;
@@ -152,6 +151,7 @@ int ks_xact_begin(struct ks_xact *xact)
 
 	ks_xact_submit(xact);
 	ks_req_wait(req);
+	ks_req_put(req);
 
 	return 0;
 }
@@ -165,6 +165,7 @@ int ks_xact_commit(struct ks_xact *xact)
 		return req->err;
 
 	ks_req_wait(req);
+	ks_req_put(req);
 
 	return 0;
 }
@@ -179,6 +180,7 @@ int ks_xact_abort(struct ks_xact *xact)
 		return req->err;
 
 	ks_req_wait(req);
+	ks_req_put(req);
 
 	return 0;
 }

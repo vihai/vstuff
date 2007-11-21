@@ -75,6 +75,9 @@ void ks_req_put(struct ks_req *req)
 			req->response_payload = NULL;
 		}
 
+		if (req->skb)
+			kfree_skb(req->skb);
+
 		free(req);
 	}
 }

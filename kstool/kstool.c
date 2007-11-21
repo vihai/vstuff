@@ -181,15 +181,31 @@ int main(int argc, char *argv[])
 	glob.octet_reverser =
 		ks_dynattr_get_by_name(glob.conn, "octet_reverser");
 
+	int ret;
 	struct module *module;
 	list_for_each_entry(module, &glob.modules, node) {
 		if (!strcasecmp(command, module->cmd) &&
 		    module->do_it) {
-			return module->do_it(optind);
+			ret = module->do_it(optind);
+			goto found;
 		}
 	}
 
 	print_usage("Unknown command '%s'\n", command);
-
 	return 1;
+
+found:
+
+	if (glob.hdlc_framer)
+		ks_dynattr_put(glob.hdlc_framer);
+
+	if (glob.hdlc_deframer)
+		ks_dynattr_put(glob.hdlc_deframer);
+
+	if (glob.octet_reverser)
+		ks_dynattr_put(glob.octet_reverser);
+
+	ks_conn_destroy(glob.conn);
+
+	return ret;
 }

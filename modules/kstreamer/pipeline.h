@@ -81,6 +81,7 @@ struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline);
 extern void ks_pipeline_destroy(struct ks_pipeline *pipeline);
 
 int ks_pipeline_register(struct ks_pipeline *pipeline);
+void ks_pipeline_register_bcast(struct ks_pipeline *pipeline);
 void ks_pipeline_unregister(struct ks_pipeline *pipeline);
 
 struct ks_pipeline *ks_pipeline_get_by_id(int id);

@@ -579,9 +579,8 @@ int main(int argc, char *argv[])
 	debug("node: 0x%08x\n", node->id);
 
 	struct ks_pipeline *rx_pipeline = NULL;
-	if (node &&
-	    (opts.read_to_stdout ||
-	     opts.read_to_file)) {
+	if (opts.read_to_stdout ||
+	     opts.read_to_file) {
 
 		debug("Creating rx_pipeline...\n");
 
@@ -631,7 +630,7 @@ int main(int argc, char *argv[])
 	}
 
 	struct ks_pipeline *tx_pipeline = NULL;
-	if (node && opts.write_from != WRITE_FROM_NONE) {
+	if (opts.write_from != WRITE_FROM_NONE) {
 
 		debug("Creating tx_pipeline...\n");
 
@@ -675,7 +674,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-#if 0
+#if 1
 	debug("Entering main cycle...\n");
 
 	char buf[4096];
@@ -758,6 +757,8 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Cannot destroy the pipeline\n");
 			return 1;
 		}
+
+		ks_pipeline_put(rx_pipeline);
 	}
 
 	if (tx_pipeline) {
@@ -777,7 +778,24 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Cannot destroy the pipeline\n");
 			return 1;
 		}
+
+		ks_pipeline_put(tx_pipeline);
 	}
+
+	ks_node_put(node);
+	ks_node_put(node_up);
+
+	if (opts.hdlc_framer)
+		ks_dynattr_put(opts.hdlc_framer);
+
+	if (opts.hdlc_deframer)
+		ks_dynattr_put(opts.hdlc_deframer);
+
+	if (opts.octet_reverser)
+		ks_dynattr_put(opts.octet_reverser);
+
+	if (opts.amu_compander)
+		ks_dynattr_put(opts.amu_compander);
 
 	debug("Closing connection to kstreamer...\n");
 

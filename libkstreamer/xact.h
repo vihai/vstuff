@@ -50,7 +50,6 @@ struct ks_xact
 	pthread_mutex_t requests_lock;
 	struct list_head requests;
 	struct list_head requests_sent;
-	struct list_head requests_done;
 };
 
 struct ks_xact *ks_xact_alloc(struct ks_conn *conn);

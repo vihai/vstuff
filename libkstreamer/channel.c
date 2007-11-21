@@ -51,6 +51,22 @@ void ks_chan_del(struct ks_chan *chan)
 	ks_chan_put(chan);
 }
 
+void ks_chan_flush(struct ks_conn *conn)
+{
+	struct hlist_node *pos, *n;
+	struct ks_chan *chan;
+	int i;
+
+	for(i=0; i<ARRAY_SIZE(conn->chans_hash); i++) {
+		hlist_for_each_entry_safe(chan, pos, n,
+					&conn->chans_hash[i], node) {
+
+			hlist_del(&chan->node);
+			ks_chan_put(chan);
+		}
+	}
+}
+
 struct ks_chan *ks_chan_get_by_id(struct ks_conn *conn, int id)
 {
 	struct ks_chan *chan;
@@ -210,9 +226,19 @@ void ks_chan_put(struct ks_chan *chan)
 		struct ks_dynattr_instance *dynattr, *t;
 
 		list_for_each_entry_safe(dynattr, t, &chan->dynattrs, node) {
+			ks_dynattr_put(dynattr->dynattr);
 			list_del(&dynattr->node);
 			free(dynattr);
 		}
+
+		if (chan->path)
+			free(chan->path);
+
+		if (chan->from)
+			ks_node_put(chan->from);
+
+		if (chan->to)
+			ks_node_put(chan->to);
 
 		free(chan);
 	}
@@ -243,19 +269,22 @@ struct ks_chan *ks_chan_create_from_nlmsg(
 		break;
 
 		case KS_CHANATTR_PATH:
-			if (chan->path)
-				free(chan->path);
+			assert(!chan->path);
 
 			chan->path = strndup(KS_ATTR_DATA(attr),
 					KS_ATTR_PAYLOAD(attr));
 		break;
 
 		case KS_CHANATTR_FROM:
+			assert(!chan->from);
+
 			chan->from = ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		break;
 
 		case KS_CHANATTR_TO:
+			assert(!chan->to);
+
 			chan->to = ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		break;
@@ -273,16 +302,19 @@ struct ks_chan *ks_chan_create_from_nlmsg(
 			dynattr = malloc(sizeof(*dynattr) + attr->len);
 			if (!dynattr) {
 				// FIXME
+				ks_dynattr_put(dynattr_class);
 				break;
 			}
 
-			dynattr->dynattr = dynattr_class;
+			dynattr->dynattr = ks_dynattr_get(dynattr_class);
 			dynattr->len = KS_ATTR_PAYLOAD(attr);
 			memcpy(dynattr->payload,
 				KS_ATTR_DATA(attr),
 				KS_ATTR_PAYLOAD(attr));
 
 			list_add(&dynattr->node, &chan->dynattrs);
+
+			ks_dynattr_put(dynattr_class);
 		}
 		}
 	}
@@ -404,8 +436,10 @@ struct ks_req *ks_chan_queue_update(
 	struct ks_dynattr_instance *dynattr;
 	list_for_each_entry(dynattr, &chan->dynattrs, node) {
 
-		err = ks_netlink_put_attr(req->skb, dynattr->dynattr->id,
-				dynattr->payload, dynattr->len);
+		err = ks_netlink_put_attr(req->skb,
+				dynattr->dynattr->id,
+				dynattr->payload,
+				dynattr->len);
 		if (err < 0)
 			goto err_put_attr;
 	}

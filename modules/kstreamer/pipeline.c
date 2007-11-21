@@ -421,6 +421,8 @@ int ks_pipeline_cmd_new(
 
 	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_NEW);
 
+	ks_pipeline_register_bcast(pipeline);
+
 	ks_pipeline_put(pipeline);
 
 	return 0;
@@ -567,8 +569,8 @@ int ks_pipeline_register(struct ks_pipeline *pipeline)
 	if (err < 0)
 		goto err_kobject_add;
 
-	ks_pipeline_broadcast_netlink_notification(
-			pipeline, KS_NETLINK_PIPELINE_NEW);
+	/* NOTICE! netlink broadcast has to be explicitly sent with
+	 * ks_pipeline_register_bcast fucntion */
 
 	return 0;
 
@@ -581,7 +583,13 @@ err_kobject_add:
 
 	return err;
 }
-EXPORT_SYMBOL(ks_pipeline_register);
+
+void ks_pipeline_register_bcast(struct ks_pipeline *pipeline)
+{
+	ks_pipeline_broadcast_netlink_notification(
+			pipeline, KS_NETLINK_PIPELINE_NEW);
+
+}
 
 void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 {

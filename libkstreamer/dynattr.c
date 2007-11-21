@@ -45,6 +45,22 @@ void ks_dynattr_del(struct ks_dynattr *dynattr)
 	ks_dynattr_put(dynattr);
 }
 
+void ks_dynattr_flush(struct ks_conn *conn)
+{
+	struct hlist_node *pos, *n;
+	struct ks_dynattr *dynattr;
+	int i;
+
+	for(i=0; i<ARRAY_SIZE(conn->dynattrs_hash); i++) {
+		hlist_for_each_entry_safe(dynattr, pos, n,
+					&conn->dynattrs_hash[i], node) {
+
+			hlist_del(&dynattr->node);
+			ks_dynattr_put(dynattr);
+		}
+	}
+}
+
 struct ks_dynattr *ks_dynattr_get_by_id(struct ks_conn *conn, int id)
 {
 	struct ks_dynattr *dynattr;
@@ -127,6 +143,7 @@ struct ks_dynattr *ks_dynattr_alloc()
 struct ks_dynattr *ks_dynattr_get(struct ks_dynattr *dynattr)
 {
 	assert(dynattr->refcnt > 0);
+	assert(dynattr->refcnt < 100000);
 
 	if (dynattr)
 		dynattr->refcnt++;
@@ -137,11 +154,16 @@ struct ks_dynattr *ks_dynattr_get(struct ks_dynattr *dynattr)
 void ks_dynattr_put(struct ks_dynattr *dynattr)
 {
 	assert(dynattr->refcnt > 0);
+	assert(dynattr->refcnt < 100000);
 
 	dynattr->refcnt--;
 
-	if (!dynattr->refcnt)
+	if (!dynattr->refcnt) {
+		if (dynattr->name)
+			free(dynattr->name);
+
 		free(dynattr);
+	}
 }
 
 void ks_dynattr_update_from_nlmsg(
@@ -197,8 +219,7 @@ struct ks_dynattr *ks_dynattr_create_from_nlmsg(
 		break;
 
 		case KS_DYNATTR_NAME:
-			if (dynattr->name)
-				free(dynattr->name);
+			assert(!dynattr->name);
 
 			dynattr->name = strndup(KS_ATTR_DATA(attr),
 						KS_ATTR_PAYLOAD(attr));

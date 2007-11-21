@@ -50,6 +50,22 @@ void ks_node_del(struct ks_node *node)
 	ks_node_put(node);
 }
 
+void ks_node_flush(struct ks_conn *conn)
+{
+	struct hlist_node *pos, *n;
+	struct ks_node *node;
+	int i;
+
+	for(i=0; i<ARRAY_SIZE(conn->nodes_hash); i++) {
+		hlist_for_each_entry_safe(node, pos, n,
+					&conn->nodes_hash[i], node) {
+
+			hlist_del(&node->node);
+			ks_node_put(node);
+		}
+	}
+}
+
 struct ks_node *ks_node_get_by_id(
 	struct ks_conn *conn,
 	int id)
@@ -183,6 +199,7 @@ struct ks_node *ks_node_alloc(void)
 struct ks_node *ks_node_get(struct ks_node *node)
 {
 	assert(node->refcnt > 0);
+	assert(node->refcnt < 100000);
 
 	if (node)
 		node->refcnt++;
@@ -193,10 +210,15 @@ struct ks_node *ks_node_get(struct ks_node *node)
 void ks_node_put(struct ks_node *node)
 {
 	assert(node->refcnt > 0);
+	assert(node->refcnt < 100000);
 
 	node->refcnt--;
 
 	if (!node->refcnt) {
+		int i;
+		for (i=0; i<node->dynattrs_cnt; i++)
+			ks_dynattr_put(node->dynattrs[i]);
+
 		if (node->path)
 			free(node->path);
 
@@ -229,8 +251,7 @@ struct ks_node *ks_node_create_from_nlmsg(
 		break;
 
 		case KS_NODEATTR_PATH:
-			if (node->path)
-				free(node->path);
+			assert(!node->path);
 
 			node->path = strndup(KS_ATTR_DATA(attr),
 					KS_ATTR_PAYLOAD(attr));
@@ -245,7 +266,9 @@ struct ks_node *ks_node_create_from_nlmsg(
 				break;
 			}
 
-			node->dynattrs[node->dynattrs_cnt++] = dynattr;
+			node->dynattrs[node->dynattrs_cnt++] =
+						ks_dynattr_get(dynattr);
+			ks_dynattr_put(dynattr);
 		}
 		}
 	}

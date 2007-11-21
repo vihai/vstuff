@@ -277,10 +277,9 @@ static void ks_netlink_receive_unicast(
 
 		assert(!list_empty(&conn->cur_xact->requests_sent));
 
+		pthread_mutex_lock(&conn->cur_xact->requests_lock);
 		conn->cur_req = list_entry(conn->cur_xact->requests_sent.next,
 						struct ks_req, node);
-
-		pthread_mutex_lock(&conn->cur_xact->requests_lock);
 		list_del(&conn->cur_req->node);
 		pthread_mutex_unlock(&conn->cur_xact->requests_lock);
 
@@ -335,9 +334,6 @@ static void ks_netlink_receive_unicast(
 
 		if (nlh->nlmsg_type == NLMSG_DONE ||
 		    nlh->nlmsg_type == NLMSG_ERROR) {
-
-			list_add_tail(&ks_req_get(conn->cur_req)->node,
-					&conn->cur_xact->requests_done);
 
 			int err;
 			if (nlh->nlmsg_type == NLMSG_ERROR)
@@ -408,7 +404,7 @@ int ks_netlink_receive(struct ks_conn *conn)
 	iov.iov_base = buf;
 	iov.iov_len = buf_size;
 
-	struct msghdr msg;
+	struct msghdr msg = {};
 	msg.msg_name = &src_sa;
 	msg.msg_namelen = sizeof(src_sa);
 	msg.msg_iov = &iov;
@@ -418,6 +414,7 @@ int ks_netlink_receive(struct ks_conn *conn)
 	int len = recvmsg(conn->sock, &msg, 0);
 	if(len < 0) {
 		perror("recvmsg()");
+		free(buf);
 		return -errno;
 	}
 
@@ -434,6 +431,8 @@ int ks_netlink_receive(struct ks_conn *conn)
 	     NLMSG_OK(nlh, len_left);
 	     nlh = NLMSG_NEXT(nlh, len_left))
 		ks_netlink_receive_msg(conn, nlh, &src_sa);
+
+	free(buf);
 
 	if (conn->debug_netlink)
 		report_conn(conn, LOG_DEBUG,

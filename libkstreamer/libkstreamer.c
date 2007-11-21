@@ -164,7 +164,7 @@ void ks_topology_update(
 		if (conn->debug_netlink)
 			ks_chan_dump(chan, conn, LOG_DEBUG);
 
-		ks_chan_add(chan, conn); // CHECK FOR DUPEs
+		ks_chan_add(chan, conn); // CHECK FOR DUPEs FIXME TODO
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 		ks_chan_put(chan);
 	}
@@ -210,6 +210,13 @@ void ks_topology_update(
 
 	case KS_NETLINK_PIPELINE_NEW: {
 		struct ks_pipeline *pipeline;
+
+		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		if (pipeline) {
+			ks_pipeline_put(pipeline);
+			break;
+		}
+
 		pipeline = ks_pipeline_create_from_nlmsg(conn, nlh);
 		if (!pipeline) {
 			// FIXME
@@ -220,6 +227,7 @@ void ks_topology_update(
 
 		ks_pipeline_add(pipeline, conn);
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
+
 		ks_pipeline_put(pipeline);
 	}
 	break;
@@ -356,6 +364,7 @@ struct ks_xact *ks_send_topology_update_req(
 
 err_xact_begin:
 err_xact_queue_new_request:
+	ks_xact_queue_abort(xact);
 err_xact_commit:
 	ks_xact_put(xact);
 err_xact_alloc:
@@ -369,6 +378,11 @@ void ks_update_topology(struct ks_conn *conn)
 	int err;
 
 	ks_conn_set_topology_state(conn, KS_TOPOLOGY_STATE_SYNCING);
+
+	ks_pipeline_flush(conn);
+	ks_chan_flush(conn);
+	ks_node_flush(conn);
+	ks_dynattr_flush(conn);
 
 	struct ks_xact *xact;
 	xact = ks_send_topology_update_req(conn, &err);
