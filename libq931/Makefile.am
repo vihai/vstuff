@@ -89,7 +89,7 @@ nobase_include_HEADERS =			\
 	libq931/timer.h				\
 	libq931/util.h
 
-libq931_la_LDFLAGS = -version-info 0:0:0
+libq931_la_LDFLAGS = -module -version-info 1:0:0 -no-undefined
 
 libq931_ladir = libq931
 

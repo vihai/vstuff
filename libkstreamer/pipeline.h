@@ -92,16 +92,7 @@ void ks_pipeline_add(struct ks_pipeline *pipeline, struct ks_conn *conn);
 void ks_pipeline_del(struct ks_pipeline *pipeline);
 void ks_pipeline_flush(struct ks_conn *conn);
 
-struct ks_pipeline *ks_pipeline_get_by_nlid(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
-struct ks_pipeline *ks_pipeline_create_from_nlmsg(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
-void ks_pipeline_update_from_nlmsg(
-	struct ks_pipeline *pipeline,
+void ks_pipeline_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 

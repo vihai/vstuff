@@ -62,7 +62,7 @@ libkstreamer_la-pd_grammar.lo: pd_grammar.c
 	then mv -f "$(DEPDIR)/libkstreamer_la-pd_grammar.Tpo" "$(DEPDIR)/libkstreamer_la-pd_grammar.Plo"; else rm -f "$(DEPDIR)/libkstreamer_la-pd_grammar.Tpo"; exit 1; fi
 
 libkstreamer_la_LIBADD = libkstreamer_la-pd_grammar.lo
-libkstreamer_la_LDFLAGS = -module -avoid-version -no-undefined
+libkstreamer_la_LDFLAGS = -module -version-info 1:0:0 -no-undefined
 
 AM_CFLAGS = -Wall -D_REENTRANT -D_GNU_SOURCE -D_LIBKSTREAMER_PRIVATE_
 

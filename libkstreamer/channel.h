@@ -85,18 +85,9 @@ void ks_chan_add(struct ks_chan *chan, struct ks_conn *conn);
 void ks_chan_del(struct ks_chan *chan);
 void ks_chan_flush(struct ks_conn *conn);
 
-struct ks_chan *ks_chan_get_by_nlid(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
 int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn);
 
-struct ks_chan *ks_chan_create_from_nlmsg(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
-void ks_chan_update_from_nlmsg(
-	struct ks_chan *chan,
+void ks_chan_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 

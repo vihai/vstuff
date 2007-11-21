@@ -20,6 +20,7 @@
 #include "libkstreamer.h"
 #include "netlink.h"
 #include "req.h"
+#include "feature.h"
 #include "channel.h"
 #include "pipeline.h"
 #include "util.h"
@@ -44,230 +45,28 @@ void ks_topology_update(
 		report_conn(conn, LOG_ERR, "Unexpected COMMIT/ABORT message\n");
 	break;
 
-	case KS_NETLINK_FEATURE_NEW: {
-		struct ks_feature *feature;
-		feature = ks_feature_create_from_nlmsg(conn, nlh);
-		if (!feature) {
-			// FIXME
-		}
-
-		if (conn->debug_netlink)
-			ks_feature_dump(feature, conn, LOG_DEBUG);
-
-		ks_feature_add(feature, conn);
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
-		ks_feature_put(feature);
-	}
+	case KS_NETLINK_FEATURE_NEW:
+	case KS_NETLINK_FEATURE_DEL:
+	case KS_NETLINK_FEATURE_SET:
+		ks_feature_handle_topology_update(conn, nlh);
 	break;
 
-	case KS_NETLINK_FEATURE_DEL: {
-		struct ks_feature *feature;
-
-		feature = ks_feature_get_by_nlid(conn, nlh);
-		if (!feature) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		if (conn->debug_netlink)
-			ks_feature_dump(feature, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
-		ks_feature_del(feature);
-		ks_feature_put(feature);
-	}
+	case KS_NETLINK_NODE_NEW:
+	case KS_NETLINK_NODE_DEL:
+	case KS_NETLINK_NODE_SET:
+		ks_node_handle_topology_update(conn, nlh);
 	break;
 
-	case KS_NETLINK_FEATURE_SET: {
-		struct ks_feature *feature;
-
-		feature = ks_feature_get_by_nlid(conn, nlh);
-		if (!feature) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		ks_feature_update_from_nlmsg(feature, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_feature_dump(feature, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
-
-		ks_feature_put(feature);
-	}
+	case KS_NETLINK_CHAN_NEW:
+	case KS_NETLINK_CHAN_DEL:
+	case KS_NETLINK_CHAN_SET:
+		ks_chan_handle_topology_update(conn, nlh);
 	break;
 
-	case KS_NETLINK_NODE_NEW: {
-		struct ks_node *node;
-
-		node = ks_node_create_from_nlmsg(conn, nlh);
-		if (!node) {
-			// FIXME
-		}
-
-		if (conn->debug_netlink)
-			ks_node_dump(node, conn, LOG_DEBUG);
-
-		ks_node_add(node, conn);
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
-		ks_node_put(node);
-	}
-	break;
-
-	case KS_NETLINK_NODE_DEL: {
-		struct ks_node *node;
-
-		node = ks_node_get_by_nlid(conn, nlh);
-		if (!node) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		if (conn->debug_netlink)
-			ks_node_dump(node, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
-		ks_node_del(node);
-		ks_node_put(node);
-	}
-	break;
-
-	case KS_NETLINK_NODE_SET: {
-		struct ks_node *node;
-
-		node = ks_node_get_by_nlid(conn, nlh);
-		if (!node) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		ks_node_update_from_nlmsg(node, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_node_dump(node, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
-
-		ks_node_put(node);
-	}
-	break;
-
-	case KS_NETLINK_CHAN_NEW: {
-		struct ks_chan *chan;
-
-		chan = ks_chan_create_from_nlmsg(conn, nlh);
-		if (!chan) {
-			// FIXME
-		}
-
-		if (conn->debug_netlink)
-			ks_chan_dump(chan, conn, LOG_DEBUG);
-
-		ks_chan_add(chan, conn); // CHECK FOR DUPEs FIXME TODO
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
-		ks_chan_put(chan);
-	}
-	break;
-
-	case KS_NETLINK_CHAN_DEL: {
-		struct ks_chan *chan;
-
-		chan = ks_chan_get_by_nlid(conn, nlh);
-		if (!chan) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		if (conn->debug_netlink)
-			ks_chan_dump(chan, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
-		ks_chan_del(chan);
-		ks_chan_put(chan);
-	}
-	break;
-
-	case KS_NETLINK_CHAN_SET: {
-		struct ks_chan *chan;
-
-		chan = ks_chan_get_by_nlid(conn, nlh);
-		if (!chan) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		ks_chan_update_from_nlmsg(chan, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_chan_dump(chan, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
-
-		ks_chan_put(chan);
-	}
-	break;
-
-	case KS_NETLINK_PIPELINE_NEW: {
-		struct ks_pipeline *pipeline;
-
-		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
-		if (pipeline) {
-			ks_pipeline_put(pipeline);
-			break;
-		}
-
-		pipeline = ks_pipeline_create_from_nlmsg(conn, nlh);
-		if (!pipeline) {
-			// FIXME
-		}
-
-		if (conn->debug_netlink)
-			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
-
-		ks_pipeline_add(pipeline, conn);
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
-
-		ks_pipeline_put(pipeline);
-	}
-	break;
-
-	case KS_NETLINK_PIPELINE_DEL: {
-		struct ks_pipeline *pipeline;
-
-		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
-		if (!pipeline) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		if (conn->debug_netlink)
-			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
-		ks_pipeline_del(pipeline);
-		ks_pipeline_put(pipeline);
-	}
-	break;
-
-	case KS_NETLINK_PIPELINE_SET: {
-		struct ks_pipeline *pipeline;
-
-		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
-		if (!pipeline) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
-			break;
-		}
-
-		ks_pipeline_update_from_nlmsg(pipeline, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
-
-		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
-
-		ks_pipeline_put(pipeline);
-	}
+	case KS_NETLINK_PIPELINE_NEW:
+	case KS_NETLINK_PIPELINE_DEL:
+	case KS_NETLINK_PIPELINE_SET:
+		ks_pipeline_handle_topology_update(conn, nlh);
 	break;
 	}
 

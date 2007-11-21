@@ -14,6 +14,7 @@ lib_LTLIBRARIES = libskb.la
 libskb_la_SOURCES = libskb.c
 
 libskb_ladir = libskb
+libskb_la_LDFLAGS = -module -version-info 1:0:0 -no-undefined
 
 nobase_include_HEADERS = libskb.h
 

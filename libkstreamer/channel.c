@@ -152,7 +152,8 @@ struct ks_chan *ks_chan_get_by_token(
 	return chan;
 }
 
-struct ks_chan *ks_chan_get_by_nlid(struct ks_conn *conn, struct nlmsghdr *nlh)
+static struct ks_chan *ks_chan_get_by_nlid(
+	struct ks_conn *conn, struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
@@ -244,7 +245,45 @@ void ks_chan_put(struct ks_chan *chan)
 	}
 }
 
-struct ks_chan *ks_chan_create_from_nlmsg(
+static void ks_chan_update_from_nlmsg(
+	struct ks_chan *chan,
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		switch(attr->type) {
+		case KS_CHANATTR_ID:
+		case KS_CHANATTR_PATH:
+		case KS_CHANATTR_FROM:
+		case KS_CHANATTR_TO:
+			/* Are updates to these allowed? */
+		break;
+
+		default: {
+			struct ks_feature_value *featval;
+			list_for_each_entry(featval, &chan->features, node) {
+				if (featval->feature->id == attr->type)
+					assert(featval->len ==
+						KS_ATTR_PAYLOAD(attr));
+
+					memcpy(featval->payload,
+						KS_ATTR_DATA(attr),
+						KS_ATTR_PAYLOAD(attr));
+
+					break;
+				}
+		}
+		}
+	}
+}
+
+static struct ks_chan *ks_chan_create_from_nlmsg(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -322,41 +361,65 @@ struct ks_chan *ks_chan_create_from_nlmsg(
 	return chan;
 }
 
-void ks_chan_update_from_nlmsg(
-	struct ks_chan *chan,
+void ks_chan_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
-	struct ks_attr *attr;
-	int attrs_len = KS_PAYLOAD(nlh);
+	switch(nlh->nlmsg_type) {
+	case KS_NETLINK_CHAN_NEW: {
+		struct ks_chan *chan;
 
-	for (attr = KS_ATTRS(nlh);
-	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
-
-		switch(attr->type) {
-		case KS_CHANATTR_ID:
-		case KS_CHANATTR_PATH:
-		case KS_CHANATTR_FROM:
-		case KS_CHANATTR_TO:
-			/* Are updates to these allowed? */
-		break;
-
-		default: {
-			struct ks_feature_value *featval;
-			list_for_each_entry(featval, &chan->features, node) {
-				if (featval->feature->id == attr->type)
-					assert(featval->len ==
-						KS_ATTR_PAYLOAD(attr));
-
-					memcpy(featval->payload,
-						KS_ATTR_DATA(attr),
-						KS_ATTR_PAYLOAD(attr));
-
-					break;
-				}
+		chan = ks_chan_create_from_nlmsg(conn, nlh);
+		if (!chan) {
+			// FIXME
 		}
+
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
+
+		ks_chan_add(chan, conn); // CHECK FOR DUPEs FIXME TODO
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
+		ks_chan_put(chan);
+	}
+	break;
+
+	case KS_NETLINK_CHAN_DEL: {
+		struct ks_chan *chan;
+
+		chan = ks_chan_get_by_nlid(conn, nlh);
+		if (!chan) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
 		}
+
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
+		ks_chan_del(chan);
+		ks_chan_put(chan);
+	}
+	break;
+
+	case KS_NETLINK_CHAN_SET: {
+		struct ks_chan *chan;
+
+		chan = ks_chan_get_by_nlid(conn, nlh);
+		if (!chan) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		ks_chan_update_from_nlmsg(chan, conn, nlh);
+
+		if (conn->debug_netlink)
+			ks_chan_dump(chan, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
+
+		ks_chan_put(chan);
+	}
+	break;
 	}
 }
 

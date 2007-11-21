@@ -69,16 +69,7 @@ void ks_feature_add(struct ks_feature *feature, struct ks_conn *conn);
 void ks_feature_del(struct ks_feature *feature);
 void ks_feature_flush(struct ks_conn *conn);
 
-struct ks_feature *ks_feature_get_by_nlid(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
-struct ks_feature *ks_feature_create_from_nlmsg(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
-void ks_feature_update_from_nlmsg(
-	struct ks_feature *feature,
+void ks_feature_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 

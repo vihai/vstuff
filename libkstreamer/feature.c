@@ -74,7 +74,7 @@ struct ks_feature *ks_feature_get_by_id(struct ks_conn *conn, int id)
 	return NULL;
 }
 
-struct ks_feature *ks_feature_get_by_nlid(
+static struct ks_feature *ks_feature_get_by_nlid(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -166,7 +166,7 @@ void ks_feature_put(struct ks_feature *feature)
 	}
 }
 
-void ks_feature_update_from_nlmsg(
+static void ks_feature_update_from_nlmsg(
 	struct ks_feature *feature,
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
@@ -194,7 +194,7 @@ void ks_feature_update_from_nlmsg(
 	}
 }
 
-struct ks_feature *ks_feature_create_from_nlmsg(
+static struct ks_feature *ks_feature_create_from_nlmsg(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -234,6 +234,67 @@ struct ks_feature *ks_feature_create_from_nlmsg(
 	}
 
 	return feature;
+}
+
+void ks_feature_handle_topology_update(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	switch(nlh->nlmsg_type) {
+	case KS_NETLINK_FEATURE_NEW: {
+		struct ks_feature *feature;
+		feature = ks_feature_create_from_nlmsg(conn, nlh);
+		if (!feature) {
+			// FIXME
+		}
+
+		if (conn->debug_netlink)
+			ks_feature_dump(feature, conn, LOG_DEBUG);
+
+		ks_feature_add(feature, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
+		ks_feature_put(feature);
+	}
+	break;
+
+	case KS_NETLINK_FEATURE_DEL: {
+		struct ks_feature *feature;
+
+		feature = ks_feature_get_by_nlid(conn, nlh);
+		if (!feature) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		if (conn->debug_netlink)
+			ks_feature_dump(feature, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
+		ks_feature_del(feature);
+		ks_feature_put(feature);
+	}
+	break;
+
+	case KS_NETLINK_FEATURE_SET: {
+		struct ks_feature *feature;
+
+		feature = ks_feature_get_by_nlid(conn, nlh);
+		if (!feature) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		ks_feature_update_from_nlmsg(feature, conn, nlh);
+
+		if (conn->debug_netlink)
+			ks_feature_dump(feature, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
+
+		ks_feature_put(feature);
+	}
+	break;
+	}
 }
 
 void ks_feature_dump(

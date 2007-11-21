@@ -72,15 +72,7 @@ void ks_node_add(struct ks_node *node, struct ks_conn *conn);
 void ks_node_del(struct ks_node *node);
 void ks_node_flush(struct ks_conn *conn);
 
-struct ks_node *ks_node_get_by_nlid(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-
-struct ks_node *ks_node_create_from_nlmsg(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh);
-void ks_node_update_from_nlmsg(
-	struct ks_node *node,
+void ks_node_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 

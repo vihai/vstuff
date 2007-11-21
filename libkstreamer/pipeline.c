@@ -134,7 +134,7 @@ struct ks_pipeline *ks_pipeline_get_by_string(
 	return pipeline;
 }
 
-struct ks_pipeline *ks_pipeline_get_by_nlid(
+static struct ks_pipeline *ks_pipeline_get_by_nlid(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -258,7 +258,7 @@ void ks_pipeline_dump(
 	}
 }
 
-struct ks_pipeline *ks_pipeline_create_from_nlmsg(
+static struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -319,7 +319,7 @@ struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 	return pipeline;
 }
 
-void ks_pipeline_update_from_nlmsg(
+static void ks_pipeline_update_from_nlmsg(
 	struct ks_pipeline *pipeline,
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
@@ -358,6 +358,75 @@ void ks_pipeline_update_from_nlmsg(
 				ks_netlink_pipeline_attr_to_string(
 					attr->type));
 		}
+	}
+}
+
+void ks_pipeline_handle_topology_update(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	switch(nlh->nlmsg_type) {
+	case KS_NETLINK_PIPELINE_NEW: {
+		struct ks_pipeline *pipeline;
+
+		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		if (pipeline) {
+			ks_pipeline_put(pipeline);
+			break;
+		}
+
+		pipeline = ks_pipeline_create_from_nlmsg(conn, nlh);
+		if (!pipeline) {
+			// FIXME
+		}
+
+		if (conn->debug_netlink)
+			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
+
+		ks_pipeline_add(pipeline, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
+
+		ks_pipeline_put(pipeline);
+	}
+	break;
+
+	case KS_NETLINK_PIPELINE_DEL: {
+		struct ks_pipeline *pipeline;
+
+		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		if (!pipeline) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		if (conn->debug_netlink)
+			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
+		ks_pipeline_del(pipeline);
+		ks_pipeline_put(pipeline);
+	}
+	break;
+
+	case KS_NETLINK_PIPELINE_SET: {
+		struct ks_pipeline *pipeline;
+
+		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		if (!pipeline) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		ks_pipeline_update_from_nlmsg(pipeline, conn, nlh);
+
+		if (conn->debug_netlink)
+			ks_pipeline_dump(pipeline, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, pipeline);
+
+		ks_pipeline_put(pipeline);
+	}
+	break;
 	}
 }
 

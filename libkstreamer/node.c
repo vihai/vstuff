@@ -147,7 +147,7 @@ struct ks_node *ks_node_get_by_token(
 	return node;
 }
 
-struct ks_node *ks_node_get_by_nlid(
+static struct ks_node *ks_node_get_by_nlid(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -226,7 +226,7 @@ void ks_node_put(struct ks_node *node)
 	}
 }
 
-struct ks_node *ks_node_create_from_nlmsg(
+static struct ks_node *ks_node_create_from_nlmsg(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -276,7 +276,7 @@ struct ks_node *ks_node_create_from_nlmsg(
 	return node;
 }
 
-void ks_node_update_from_nlmsg(
+static void ks_node_update_from_nlmsg(
 	struct ks_node *node,
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
@@ -298,6 +298,68 @@ void ks_node_update_from_nlmsg(
 			// UNIMPLEMENTED FIXME
 			assert(0);
 		}
+	}
+}
+
+void ks_node_handle_topology_update(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	switch(nlh->nlmsg_type) {
+	case KS_NETLINK_NODE_NEW: {
+		struct ks_node *node;
+
+		node = ks_node_create_from_nlmsg(conn, nlh);
+		if (!node) {
+			// FIXME
+		}
+
+		if (conn->debug_netlink)
+			ks_node_dump(node, conn, LOG_DEBUG);
+
+		ks_node_add(node, conn);
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
+		ks_node_put(node);
+	}
+	break;
+
+	case KS_NETLINK_NODE_DEL: {
+		struct ks_node *node;
+
+		node = ks_node_get_by_nlid(conn, nlh);
+		if (!node) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		if (conn->debug_netlink)
+			ks_node_dump(node, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
+		ks_node_del(node);
+		ks_node_put(node);
+	}
+	break;
+
+	case KS_NETLINK_NODE_SET: {
+		struct ks_node *node;
+
+		node = ks_node_get_by_nlid(conn, nlh);
+		if (!node) {
+			report_conn(conn, LOG_ERR, "Sync lost\n");
+			break;
+		}
+
+		ks_node_update_from_nlmsg(node, conn, nlh);
+
+		if (conn->debug_netlink)
+			ks_node_dump(node, conn, LOG_DEBUG);
+
+		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
+
+		ks_node_put(node);
+	}
+	break;
 	}
 }
 
