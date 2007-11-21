@@ -1060,7 +1060,11 @@ static int vgsm_call(
 err_atd_failed:
 	vgsm_me_config_put(vgsm_chan->mc);
 	vgsm_me_put(vgsm_chan->me);
+
+	ast_mutex_lock(&me->lock);
 	vgsm_chan_put(me->vgsm_chan);
+	me->vgsm_chan = NULL;
+	ast_mutex_unlock(&me->lock);
 err_me_busy:
 err_me_not_registered:
 err_me_not_ready:
@@ -1326,7 +1330,7 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 
 	ast_setstate(ast_chan, AST_STATE_DOWN);
 
-	/* We assigned to a me AND we are the me's current call */
+	/* We are assigned to a ME AND we are the ME's current call */
 	if (vgsm_chan->me) {
 		ast_mutex_lock(&vgsm_chan->me->lock);
 
@@ -1347,15 +1351,13 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 					5 * SEC, "AT+CHUP"));
 			}
 
-			/* Detach me and channel */
+			/* Detach ME and channel */
 			vgsm_chan_put(vgsm_chan->me->vgsm_chan);
 			vgsm_chan->me->vgsm_chan = NULL;
 		}
 
 		ast_mutex_unlock(&vgsm_chan->me->lock);
-	}
 
-	if (vgsm_chan->me) {
 		vgsm_me_put(vgsm_chan->me);
 		vgsm_chan->me = NULL;
 	}
@@ -1385,13 +1387,14 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 
 	assert(vgsm_chan->refcnt > 0);
 
-	if (res == ETIMEDOUT)
+	if (res == ETIMEDOUT) {
 		ast_log(LOG_WARNING,
 			"%s: Timeout waiting for references to"
 			" vgsm_chan to be released, possible reference"
 			" leak, %d references left\n",
 			ast_chan->name,
 			vgsm_chan->refcnt);
+	}
 
 	vgsm_chan->ast_chan = NULL;
 
