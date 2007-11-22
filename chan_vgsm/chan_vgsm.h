@@ -22,6 +22,7 @@
 #define VGSM_MINIMUM_FIRMWARE (0x020800)
 
 #include <asterisk/channel.h>
+#include <asterisk/version.h>
 
 #include <list.h>
 
