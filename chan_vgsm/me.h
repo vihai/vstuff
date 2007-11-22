@@ -180,9 +180,6 @@ enum vgsm_flow_control
 	VGSM_FLOW_HW
 };
 
-#define VGSM_SIM_ROUTE_EXTERNAL -1
-#define VGSM_SIM_ROUTE_DEFAULT -2
-
 struct vgsm_me;
 struct vgsm_me_config
 {

@@ -415,11 +415,14 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 		struct termios newtio;
 		bzero(&newtio, sizeof(newtio));
 
-		newtio.c_cflag = B9600 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
+		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
 		newtio.c_iflag = IGNBRK | IGNPAR;
 		newtio.c_oflag = 0;
 		newtio.c_lflag = 0;
 		
+		newtio.c_ospeed = 8636;
+		newtio.c_ispeed = 8636;
+
 		newtio.c_cc[VINTR]	= 0;
 		newtio.c_cc[VQUIT]	= 0;
 		newtio.c_cc[VERASE]	= 0;
@@ -438,8 +441,6 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 		newtio.c_cc[VLNEXT]	= 0;
 		newtio.c_cc[VEOL2]	= 0;
 		
-		tcflush(mesim->local_fd, TCIOFLUSH);
-
 		if (tcsetattr(mesim->local_fd, TCSANOW, &newtio) < 0) {
 			ast_log(LOG_ERROR,
 				"Error setting tty's attributes: "
@@ -449,19 +450,19 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 			return;
 		}
 
-		if (ioctl(mesim->local_fd, VGSM_IOC_SIM_GET_ID,
-						&mesim->local_sim_id) < 0) {
+		if (tcflush(mesim->local_fd, TCIOFLUSH) < 0) {
 			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_GET_ID) failed: %s\n",
+				"%s: tcflush(TCIOFLUSH):  %s\n",
 				mesim->name,
 				strerror(errno));
+
 			return;
 		}
 
-		if (ioctl(mesim->fd, VGSM_IOC_SIM_ROUTE,
+		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
 						mesim->local_sim_id) < 0) {
 			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_ROUTE, %d) failed: %s\n",
+				"%s: ioctl(IOC_SET_SIM_ROUTE, %d) failed: %s\n",
 				mesim->name,
 				mesim->local_sim_id,
 				strerror(errno));
@@ -477,10 +478,11 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 		assert(mesim->clnt_listen_fd == -1);
 		assert(mesim->clnt_sock_fd == -1);
 
-		if (ioctl(mesim->fd, VGSM_IOC_SIM_ROUTE,
+		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
 					VGSM_SIM_ROUTE_EXTERNAL) < 0) {
 			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_ROUTE, EXTERN) failed: %s\n",
+				"%s: ioctl(IOC_SET_SIM_ROUTE, EXTERN)"
+				" failed: %s\n",
 				mesim->name,
 				strerror(errno));
 			return;
@@ -566,10 +568,11 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 
 		assert(mesim->impl_sock_fd == -1);
 
-		if (ioctl(mesim->fd, VGSM_IOC_SIM_ROUTE,
+		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
 					VGSM_SIM_ROUTE_EXTERNAL) < 0) {
 			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_ROUTE, EXTERN) failed: %s\n",
+				"%s: ioctl(IOC_SET_SIM_ROUTE, EXTERN)"
+				" failed: %s\n",
 				mesim->name,
 				strerror(errno));
 			return;
@@ -1000,6 +1003,7 @@ static void vgsm_mesim_impl_timer(void *data)
 		} else {
 			vgsm_mesim_impl_change_state(mesim,
 					VGSM_MESIM_IMPL_STATE_CONNECTED);
+			vgsm_mesim_set_inserted(mesim);
 		}
 
 	break;
