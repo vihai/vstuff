@@ -30,6 +30,7 @@
 #include "fw_version.h"
 #include "fw_upgrade.h"
 #include "get_serial.h"
+#include "sim_route.h"
 
 int global_argc;
 char **global_argv;
@@ -86,6 +87,7 @@ int main(int argc, char *argv[])
 	list_add_tail(&module_fw_version.node, &modules);
 	list_add_tail(&module_fw_upgrade.node, &modules);
 	list_add_tail(&module_get_serial.node, &modules);
+	list_add_tail(&module_sim_route.node, &modules);
 
 	struct option options[] = {
 		{ "verbose", no_argument, 0, 0 },

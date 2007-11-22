@@ -18,7 +18,8 @@ vgsmctl_SOURCES = \
 	pad_timeout.c	\
 	fw_version.c	\
 	fw_upgrade.c	\
-	get_serial.c
+	get_serial.c	\
+	sim_route.c
 
 vgsmctl_LDADD = -lz
 
@@ -29,7 +30,8 @@ noinst_HEADERS = \
 	pad_timeout.h	\
 	fw_version.h	\
 	fw_upgrade.h	\
-	get_serial.h
+	get_serial.h	\
+	sim_route.h
 
 vgsmctl_CPPFLAGS = \
 	-I$(top_srcdir)/include/		\
