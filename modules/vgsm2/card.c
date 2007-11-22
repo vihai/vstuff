@@ -436,18 +436,6 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 #error Unsupported endianness
 #endif
 
-	vgsm_outl(card, VGSM_R_SIM_ROUTER,
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(0, 0) |
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(1, 1) |
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(2, 2) |
-			VGSM_R_SIM_ROUTER_V_ME_SOURCE(3, 3));
-
-	for(i=0; i<card->sims_number; i++)
-  	      vgsm_outl(card, VGSM_R_SIM_SETUP(i),
-				VGSM_R_SIM_SETUP_V_VCC |
-				VGSM_R_SIM_SETUP_V_3V |
-				VGSM_R_SIM_SETUP_V_CLOCK_ME);
-
 	/* Set LEDs */
 	vgsm_outl(card, VGSM_R_LED_SRC,
 		VGSM_R_LED_SRC_V_STATUS_G |
@@ -492,6 +480,9 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		VGSM_R_INT_ENABLE_V_SIM(1) |
 		VGSM_R_INT_ENABLE_V_SIM(2) |
 		VGSM_R_INT_ENABLE_V_SIM(3));
+
+	/* This takes care of setting SIM_ROUTE and SIM_SETUP(n) */
+	vgsm_card_update_router(card);
 
 	vgsm_msg(KERN_DEBUG, "vGSM-II card successfully initialized\n");
 
@@ -609,6 +600,10 @@ void vgsm_card_update_router(struct vgsm_card *card)
 	}
 
 	vgsm_outl(card, VGSM_R_SIM_ROUTER, sim_router);
+
+	int j;
+	for(j=0; j<card->sims_number; j++)
+		vgsm_sim_update_sim_setup(&card->sims[j]);
 }
 
 static void vgsm_card_release(struct kref *kref)

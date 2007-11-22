@@ -21,8 +21,6 @@ struct vgsm_uart
 	int (*ioctl)(struct vgsm_uart *uart,
 		unsigned int cmd, unsigned long arg);
 
-	int sim_mode;
-
 	u8 acr;
 	u8 ier;
 	u8 lcr;
@@ -42,7 +40,6 @@ struct vgsm_uart *vgsm_uart_create(
 	int irq,
 	struct device *dev,
 	int line,
-	int sim_mode,
 	int (*ioctl)(struct vgsm_uart *uart,
 		unsigned int cmd, unsigned long arg));
 

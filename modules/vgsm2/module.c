@@ -790,16 +790,29 @@ static int vgsm_module_ioctl_emerg_off(
 	return 0;
 }
 
-static int vgsm_module_ioctl_sim_route(
+static int vgsm_module_ioctl_get_sim_route(
+	struct vgsm_module *module,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	if (module->route_to_sim == 0xf)
+		put_user(VGSM_SIM_ROUTE_EXTERNAL, (int __user *)arg);
+	else
+		put_user(module->route_to_sim, (int __user *)arg);
+
+	return 0;
+}
+
+static int vgsm_module_ioctl_set_sim_route(
 	struct vgsm_module *module,
 	unsigned int cmd,
 	unsigned long arg)
 {
 	struct vgsm_card *card = module->card;
 
-	if (arg == -1)
+	if (arg == VGSM_SIM_ROUTE_EXTERNAL)
 		module->route_to_sim = 0xf;
-	else if (arg == -2)
+	else if (arg == VGSM_SIM_ROUTE_DEFAULT)
 		module->route_to_sim = module->id;
 	else if (arg < card->sims_number)
 		module->route_to_sim = arg;
@@ -837,36 +850,31 @@ static int vgsm_module_ioctl(
 	switch(cmd) {
 	case VGSM_IOC_GET_INTERFACE_VERSION:
 		return put_user(2, (int __user *)arg);
-	break;
 
 	case VGSM_IOC_GET_NODEID:
 		return put_user(module->ks_node.id, (int __user *)arg);
-	break;
 
 	case VGSM_IOC_POWER_GET:
 		return vgsm_module_ioctl_power_get(module, cmd, arg);
-	break;
 
 	case VGSM_IOC_POWER_IGN:
 		return vgsm_module_ioctl_power_ign(module, cmd, arg);
-	break;
 
 	case VGSM_IOC_POWER_EMERG_OFF:
 		return vgsm_module_ioctl_emerg_off(module, cmd, arg);
-	break;
 
-	case VGSM_IOC_SIM_ROUTE:
-		return vgsm_module_ioctl_sim_route(module, cmd, arg);
-	break;
+	case VGSM_IOC_GET_SIM_ROUTE:
+		return vgsm_module_ioctl_get_sim_route(module, cmd, arg);
+
+	case VGSM_IOC_SET_SIM_ROUTE:
+		return vgsm_module_ioctl_set_sim_route(module, cmd, arg);
 
 	case VGSM_IOC_IDENTIFY:
 		return vgsm_module_ioctl_identify(module, cmd, arg);
-	break;
 
 	case VGSM_IOC_FW_VERSION: /* Shortcut */
 	case VGSM_IOC_READ_SERIAL:
 		return vgsm_card_ioctl(module->card, cmd, arg);
-	break;
 	}
 
 
@@ -884,11 +892,12 @@ static int vgsm_mesim_ioctl(
 	switch(cmd) {
 	case VGSM_IOC_GET_INTERFACE_VERSION:
 		return put_user(2, (int __user *)arg);
-	break;
 
-	case VGSM_IOC_SIM_ROUTE:
-		return vgsm_module_ioctl_sim_route(module, cmd, arg);
-	break;
+	case VGSM_IOC_GET_SIM_ROUTE:
+		return vgsm_module_ioctl_get_sim_route(module, cmd, arg);
+
+	case VGSM_IOC_SET_SIM_ROUTE:
+		return vgsm_module_ioctl_set_sim_route(module, cmd, arg);
 	}
 
 	return -ENOIOCTLCMD;
@@ -950,6 +959,7 @@ struct vgsm_module *vgsm_module_create(
 
 	module->card = card;
 	module->id = id;
+	module->route_to_sim = id;
 
 //	init_completion(&module->read_status_completion);
 
@@ -964,7 +974,6 @@ struct vgsm_module *vgsm_module_create(
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
 		card->id * VGSM_MAX_MODULES + module->id,
-		FALSE,
 		vgsm_module_ioctl);
 
 	vgsm_uart_create(&module->asc1,
@@ -974,7 +983,6 @@ struct vgsm_module *vgsm_module_create(
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
 		card->id * VGSM_MAX_MODULES + module->id,
-		FALSE,
 		NULL);
 
 	vgsm_uart_create(&module->mesim,
@@ -984,7 +992,6 @@ struct vgsm_module *vgsm_module_create(
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
 		card->id * VGSM_MAX_MODULES + module->id,
-		TRUE,
 		vgsm_mesim_ioctl);
 
 	vgsm_module_get(module);

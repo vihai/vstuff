@@ -47,6 +47,8 @@ void vgsm_sim_destroy(struct vgsm_sim *module);
 int vgsm_sim_register(struct vgsm_sim *module);
 void vgsm_sim_unregister(struct vgsm_sim *module);
 
+void vgsm_sim_update_sim_setup(struct vgsm_sim *sim);
+
 int __init vgsm_sim_modinit(void);
 void __exit vgsm_sim_modexit(void);
 

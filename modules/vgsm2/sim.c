@@ -73,14 +73,15 @@ static struct uart_driver vgsm_uart_driver_sim =
 	.cons			= NULL,
 };
 
-static void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
+void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 {
 	struct vgsm_card *card = sim->card;
 	u32 reg;
 	int i;
 
 	for(i=0; i<card->mes_number; i++) {
-		if (card->modules[i]->route_to_sim == sim->id) {
+		if (card->modules[i] &&
+		    card->modules[i]->route_to_sim == sim->id) {
 			vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id),
 				VGSM_R_SIM_SETUP_V_CLOCK_ME);
 			return;
@@ -99,6 +100,9 @@ static void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 	case 20000000: reg = VGSM_R_SIM_SETUP_V_CLOCK_20; break;
 	default: reg = VGSM_R_SIM_SETUP_V_CLOCK_3_5; break;
 	}
+
+	reg |=	VGSM_R_SIM_SETUP_V_VCC |
+                VGSM_R_SIM_SETUP_V_3V;
 
 	vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id), reg);
 }
@@ -162,7 +166,6 @@ static int vgsm_sim_ioctl(
 		return vgsm_sim_ioctl_sim_get_clock(sim, cmd, arg);
 	case VGSM_IOC_SIM_SET_CLOCK:
 		return vgsm_sim_ioctl_sim_set_clock(sim, cmd, arg);
-	break;
 	}
 
 	return -ENOIOCTLCMD;
@@ -310,7 +313,6 @@ struct vgsm_sim *vgsm_sim_create(
 		card->pci_dev->irq,
 		&card->pci_dev->dev,
 		card->id * 8 + sim->id,
-		FALSE,
 		vgsm_sim_ioctl);
 
 	return sim;

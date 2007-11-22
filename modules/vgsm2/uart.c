@@ -60,6 +60,9 @@ uart_out(struct vgsm_uart *up, int offset, u32 value)
 /* Uart divisor latch write */
 static inline void vgsm_uart_dl_write(struct vgsm_uart *up, u16 value)
 {
+
+printk(KERN_DEBUG "WRITE DL %d\n", value);
+
 	uart_out(up, UART_DLM, value >> 8 & 0xff);
 	uart_out(up, UART_DLL, value & 0xff);
 }
@@ -388,10 +391,7 @@ static int vgsm_uart_startup(struct uart_port *port)
 	up->mcr = 0;
 
 	uart_out(up, UART_LCR, up->lcr | UART_LCR_DLAB);
-	if (up->sim_mode)
-		vgsm_uart_dl_write(up, VGSM_UART_CLOCK / (8636 * 16));
-	else
-		vgsm_uart_dl_write(up, VGSM_UART_CLOCK / (9600 * 16));
+	vgsm_uart_dl_write(up, VGSM_UART_CLOCK / (9600 * 16));
 	uart_out(up, UART_LCR, up->lcr);
 
 	/*
@@ -576,11 +576,9 @@ static void vgsm_uart_set_termios(
 
 	uart_out(up, UART_IER, up->ier);
 
-	if (!up->sim_mode) {
-		uart_out(up, UART_LCR, cval | UART_LCR_DLAB);
-		vgsm_uart_dl_write(up, quot);
-		uart_out(up, UART_LCR, cval);
-	}
+	uart_out(up, UART_LCR, cval | UART_LCR_DLAB);
+	vgsm_uart_dl_write(up, quot);
+	uart_out(up, UART_LCR, cval);
 
 	/* Save LCR */
 	up->lcr = cval;
@@ -670,7 +668,6 @@ struct vgsm_uart *vgsm_uart_create(
 	int irq,
 	struct device *dev,
 	int line,
-	int sim_mode,
 	int (*ioctl_f)(struct vgsm_uart *uart,
 		unsigned int cmd, unsigned long arg))
 	
@@ -691,8 +688,6 @@ struct vgsm_uart *vgsm_uart_create(
 	uart->port.line = line;
 	uart->port.type = PORT_16550A;
 	uart->port.uartclk = VGSM_UART_CLOCK;
-
-	uart->sim_mode = sim_mode;
 
 	uart->ioctl = ioctl_f;
 
