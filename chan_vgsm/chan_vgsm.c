@@ -121,6 +121,7 @@
 #undef pthread_cond_timedwait
 
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#include "rwlock_compat.h"
 #else
 #include <asterisk.h>
 #endif

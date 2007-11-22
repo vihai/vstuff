@@ -25,6 +25,10 @@
 
 #include <list.h>
 
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#include "rwlock_compat.h"
+#endif
+
 #include "me.h"
 #include "comm.h"
 
