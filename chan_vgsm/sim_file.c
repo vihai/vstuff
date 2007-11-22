@@ -215,6 +215,8 @@ int vgsm_sim_file_open(
 	sim_file->length = ntohs(stats->length);
 	sim_file->type = stats->type_of_file;
 
+	vgsm_req_put(req);
+
 	return 0;
 
 err_response_invalid:

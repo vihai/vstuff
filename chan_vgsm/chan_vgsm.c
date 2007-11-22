@@ -2292,11 +2292,11 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	struct vgsm_req *req = vgsm_req_make_sms(
 		&me->comm, 30 * SEC, sms->pdu, sms->pdu_len,
 		"AT+CMGS=%d", sms->pdu_tp_len);
+
 	vgsm_req_wait(req);
+
 	int res = vgsm_req_status(req);
 	if (res != VGSM_RESP_OK) {
-		vgsm_req_put(req);
-
 		astman_append(s, "Status: %c00\n",
 			vgsm_cms_error_fatal(res) ? '5' : '4');
 
@@ -2309,6 +2309,8 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 		goto err_make_req;
 	}
+
+	vgsm_req_put(req);
 
 	const char *pars = vgsm_req_first_line(req)->text + strlen("+CMGS: ");
 	const char *pars_ptr = pars;

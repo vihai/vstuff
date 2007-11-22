@@ -3619,12 +3619,16 @@ static int vgsm_me_update_static_info(
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse SCKS '%s'\n",
 				vgsm_req_first_line(req)->text);
+
+			vgsm_req_put(req);
 			goto no_sim;
 		}
 
 		if (!get_token(&pars_ptr, field, sizeof(field))) {
 			ast_log(LOG_ERROR, "Cannot parse SCKS '%s'\n",
 				vgsm_req_first_line(req)->text);
+
+			vgsm_req_put(req);
 			goto no_sim;
 		}
 
@@ -3667,8 +3671,10 @@ static int vgsm_me_update_static_info(
 		goto err_failed;
 	}
 
-	if (strlen(vgsm_req_first_line(req)->text) < strlen("+CXXCID: "))
+	if (strlen(vgsm_req_first_line(req)->text) < strlen("+CXXCID: ")) {
+		vgsm_req_put(req);
 		goto err_failed;
+	}
 
 	ast_mutex_lock(&me->lock);
 	strncpy(me->sim.card_id,
@@ -3684,6 +3690,7 @@ retry_csca:
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		if (err == CME_ERROR(14)) { // SIM busy
+			vgsm_req_put(req);
 			sleep(1);
 			goto retry_csca;
 		}
@@ -6578,6 +6585,7 @@ static int vgsm_me_puk_input_func(int fd, int argc, char *argv[])
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
+		vgsm_req_put(req);
 		err = RESULT_FAILURE;
 		goto err_req_make;
 	}
@@ -6805,7 +6813,9 @@ static int vgsm_me_sms_send_func(int fd, int argc, char *argv[])
 	struct vgsm_req *req = vgsm_req_make_sms(
 		&me->comm, 30 * SEC, sms->pdu, sms->pdu_len,
 		"AT+CMGS=%d", sms->pdu_tp_len);
+
 	vgsm_req_wait(req);
+
 	int res = vgsm_req_status(req);
 	if (res != VGSM_RESP_OK) {
 		vgsm_req_put(req);
@@ -6816,6 +6826,7 @@ static int vgsm_me_sms_send_func(int fd, int argc, char *argv[])
 		err = RESULT_FAILURE;
 		goto err_req_make;
 	}
+
 	vgsm_req_put(req);
 
 	ast_mutex_lock(&me->lock);
