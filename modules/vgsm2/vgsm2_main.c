@@ -345,7 +345,7 @@ static void __exit vgsm_exit(void)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	set_bit(VGSM_STATUS_FLAG_SHUTTING_DOWN, &vgsm_status);
 	cancel_delayed_work(&vgsm_led_update_work);
-	flush_scheduled_work(&vgsm_led_update_work);
+	flush_scheduled_work();
 #else
 	cancel_rearming_delayed_work(&vgsm_led_update_work);
 #endif
