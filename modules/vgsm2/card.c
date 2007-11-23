@@ -593,6 +593,7 @@ void vgsm_card_update_router(struct vgsm_card *card)
 {
 	u32 sim_router = 0;
 	int i;
+	int j;
 
 	for(i=0; i<card->mes_number; i++) {
 		if (card->modules[i])
@@ -601,7 +602,6 @@ void vgsm_card_update_router(struct vgsm_card *card)
 
 	vgsm_outl(card, VGSM_R_SIM_ROUTER, sim_router);
 
-	int j;
 	for(j=0; j<card->sims_number; j++)
 		vgsm_sim_update_sim_setup(&card->sims[j]);
 }

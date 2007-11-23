@@ -113,6 +113,11 @@ extern struct ks_feature *vgsm_amu_decompander_class;
 
 void vgsm_led_update(void);
 
+enum vgsm_status_flag
+{
+	VGSM_STATUS_FLAG_SHUTTING_DOWN,
+};
+
 #endif
 
 #endif

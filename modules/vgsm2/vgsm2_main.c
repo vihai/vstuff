@@ -48,6 +48,8 @@ int debug_level = 0;
 #define PCI_DEVICE_ID_ESPIA_VGSM2	0x0001
 #endif
 
+unsigned long vgsm_status = 0;
+
 static struct pci_device_id vgsm_ids[] = {
 	{ PCI_VENDOR_ID_ESPIA, PCI_DEVICE_ID_ESPIA_VGSM2,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
@@ -149,8 +151,14 @@ static void vgsm_led_update_work_func(struct work_struct *work)
 	}
 	spin_unlock(&vgsm_cards_list_lock);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+	if (reschedule &&
+	    !test_big(VGSM_STATUS_FLAG_SHUTTING_DOWN, &vgsm_status))
+		schedule_delayed_work(&vgsm_led_update_work, HZ / 5);
+#else
 	if (reschedule)
 		schedule_delayed_work(&vgsm_led_update_work, HZ / 5);
+#endif
 }
 
 void vgsm_led_update(void)
@@ -332,6 +340,14 @@ static void __exit vgsm_exit(void)
 	driver_remove_file(
 		&vgsm_driver.driver,
 		&driver_attr_debug_level);
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+	set_bit(VGSM_STATUS_FLAG_SHUTTING_DOWN, &vgsm_status);
+	cancel_delayed_work(&vgsm_led_update_work);
+	flush_scheduled_work(&vgsm_led_update_work);
+#else
+	cancel_rearming_delayed_work(&vgsm_led_update_work);
 #endif
 
 	pci_unregister_driver(&vgsm_driver);
