@@ -275,19 +275,20 @@ static int do_fw_upgrade(
 		ffh.version[1],
 		ffh.version[2]);
 
-	if (ffh.version[0] < fw_version.maj ||
-	    ffh.version[1] < fw_version.min ||
-	    ffh.version[2] < fw_version.ser) {
+	__u32 newver_code = (ffh.version[0] << 16) |
+				(ffh.version[1] << 8) |
+				(ffh.version[2] << 0);
+	__u32 curver_code = (fw_version.maj << 16) |
+				(fw_version.min << 8) |
+				(fw_version.ser << 0);
+
+	if (newver_code < curver_code)
 		printf("WARNING: Firmware to program is older than running"
 			" firmware!\n");
-	}
 
-	if (ffh.version[0] == fw_version.maj &&
-	    ffh.version[1] == fw_version.min &&
-	    ffh.version[2] == fw_version.ser) {
+	if (newver_code == curver_code)
 		printf("NOTICE: Firmware to program is the same version of"
 			" running firmware.\n");
-	}
 
 	if (isatty(1)) {
 		while(TRUE) {
