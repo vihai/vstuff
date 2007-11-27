@@ -2013,7 +2013,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_iconv_open;
 	}
 
-#warning Ignore uninitalized warnings, it's a GCC bug
 	const char *me_str = astman_get_header(m, "X-SMS-ME");
 	struct vgsm_me *me = NULL;
 
@@ -2076,7 +2075,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		struct vgsm_me *tm;
 
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
-		list_for_each_entry(tm, &vgsm.mes_list, ifs_node) {
+		list_for_each_entry(tm, &vgsm.mes_list, node) {
 			ast_mutex_lock(&tm->lock);
 			if (tm->status == VGSM_ME_STATUS_READY &&
 				!tm->sending_sms &&

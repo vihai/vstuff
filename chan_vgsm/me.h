@@ -232,7 +232,7 @@ struct vgsm_me_config
 
 struct vgsm_me
 {
-	struct list_head ifs_node;
+	struct list_head node;
 
 	int refcnt;
 

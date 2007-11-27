@@ -921,8 +921,7 @@ static struct vgsm_me *vgsm_me_get_or_create(const char *name)
 			goto err_comm_init;
 		}
 
-		list_add_tail(&vgsm_me_get(me)->ifs_node,
-							&vgsm.mes_list);
+		list_add_tail(&vgsm_me_get(me)->node, &vgsm.mes_list);
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -1017,7 +1016,7 @@ int vgsm_me_reload(struct ast_config *cfg)
 	{
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+	list_for_each_entry(me, &vgsm.mes_list, node)
 		me->config_present = FALSE;
 	ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -1057,7 +1056,7 @@ int vgsm_me_reload(struct ast_config *cfg)
 	{
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, node) {
 
 		ast_mutex_lock(&me->lock);
 		if (me->new_config) {
@@ -1175,7 +1174,7 @@ void _vgsm_me_put(struct vgsm_me *me)
 struct vgsm_me *_vgsm_me_get_by_name(const char *name)
 {
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, node) {
 
 		if (!strcasecmp(me->name, name))
 			return vgsm_me_get(me);
@@ -1297,7 +1296,7 @@ char *vgsm_me_completion(const char *line, const char *word, int state)
 
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, node) {
 		if (!strncasecmp(word, me->name, strlen(word)) &&
 		    ++which > state) {
 			ast_rwlock_unlock(&vgsm.mes_list_lock);
@@ -4397,7 +4396,7 @@ void vgsm_me_shutdown_all(void)
 	ast_verbose("vgsm: powering off all MEs\n");
 
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, node) {
 
 		ast_mutex_lock(&me->lock);
 
@@ -4427,7 +4426,7 @@ void vgsm_me_shutdown_all(void)
 
 		all_off = TRUE;
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+		list_for_each_entry(me, &vgsm.mes_list, node) {
 
 			ast_mutex_lock(&me->lock);
 			if (me->current_config->poweroff_on_exit &&
@@ -4448,7 +4447,7 @@ void vgsm_me_shutdown_all(void)
 		ast_verbose("vgsm: Failure to power off all MEs\n");
 
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, node) {
 
 		ast_mutex_lock(&me->lock);
 		vgsm_me_set_status(me,
@@ -5532,7 +5531,7 @@ static int vgsm_me_show_cli(int fd, int argc, char *argv[])
 
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			vgsm_me_show_summary(fd, me);
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -5710,7 +5709,7 @@ static int vgsm_me_power_func(int fd, int argc, char *argv[])
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+		list_for_each_entry(me, &vgsm.mes_list, node) {
 			ast_mutex_lock(&me->lock);
 			func(fd, me);
 			ast_mutex_unlock(&me->lock);
@@ -5834,7 +5833,7 @@ static int vgsm_me_reset_func(int fd, int argc, char *argv[])
 
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+		list_for_each_entry(me, &vgsm.mes_list, node) {
 			ast_mutex_lock(&me->lock);
 			err = vgsm_me_reset_do(fd, me);
 			ast_mutex_unlock(&me->lock);
@@ -5960,7 +5959,7 @@ static int vgsm_me_service_func(int fd, int argc, char *argv[])
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+		list_for_each_entry(me, &vgsm.mes_list, node) {
 			ast_mutex_lock(&me->lock);
 			func(fd, me);
 			ast_mutex_unlock(&me->lock);
@@ -6084,7 +6083,7 @@ static int vgsm_me_identify_func(int fd, int argc, char *argv[])
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+		list_for_each_entry(me, &vgsm.mes_list, node) {
 			ast_mutex_lock(&me->lock);
 			err = vgsm_me_identify_do(fd, me, value);
 			ast_mutex_unlock(&me->lock);
@@ -7078,7 +7077,7 @@ static int vgsm_me_debug_state(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->debug_state = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7094,7 +7093,7 @@ static int vgsm_me_debug_call(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->debug_call = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7110,7 +7109,7 @@ static int vgsm_me_debug_atcommands(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->comm.debug_messages = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7126,7 +7125,7 @@ static int vgsm_me_debug_serial(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->comm.debug_characters = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7142,7 +7141,7 @@ static int vgsm_me_debug_sms(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->debug_sms = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7158,7 +7157,7 @@ static int vgsm_me_debug_cbm(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->debug_cbm = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7174,7 +7173,7 @@ static int vgsm_me_debug_jitbuf(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->debug_jitbuf = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7190,7 +7189,7 @@ static int vgsm_me_debug_frames(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->debug_frames = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7206,7 +7205,7 @@ static int vgsm_me_debug_sim(
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
-		list_for_each_entry(me, &vgsm.mes_list, ifs_node)
+		list_for_each_entry(me, &vgsm.mes_list, node)
 			me->mesim.debug = enable;
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
 	}
@@ -7218,7 +7217,7 @@ static int vgsm_me_debug_all(int fd, BOOL enable)
 {
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
-	list_for_each_entry(me, &vgsm.mes_list, ifs_node) {
+	list_for_each_entry(me, &vgsm.mes_list, node) {
 		me->comm.debug_messages = enable;
 		me->mesim.debug = enable;
 		me->debug_sms = enable;
