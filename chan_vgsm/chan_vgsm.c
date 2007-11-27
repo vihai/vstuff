@@ -2312,8 +2312,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		goto err_make_req;
 	}
 
-	vgsm_req_put(req);
-
 	const char *pars = vgsm_req_first_line(req)->text + strlen("+CMGS: ");
 	const char *pars_ptr = pars;
 	char field[32];
