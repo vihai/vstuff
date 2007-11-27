@@ -235,12 +235,12 @@ it is recommendable to skip this procedure as it is sensitive to the specific
 Linux distribution, udev version and configuration.
 
 A helper script for udev lets you associate permanent names to
-devices. The script is located in samples/lib_udev/vgsm_helper and is referenced
-in 30-vgsm.rules.
+devices. The script is located in unsupported/lib_udev/vgsm_helper and is
+referenced in 30-vgsm.rules.
 
 Please note that these rules have only be tested with recent versions of udev.
 
-Install udev rule in samples/etc_udev_rules.d/30-vgsm to /etc/udev/rules.d/
+Install udev rule in unsupported/etc_udev_rules.d/30-vgsm to /etc/udev/rules.d/
 Install udev helper script in /lib/udev or where it is appropriate in your
 distribution.
 
@@ -285,9 +285,9 @@ create two files:
     |-- pci-0000:00:0d.0
     `-- pci-0000:00:0e.0
 
-In samples/vgsm_device there are two sample device configuration files, one
-identifying the card by the PCI location ID and the other identifying the card
-by its serial number.
+In unsupported/etc_vgsm_devices there are two sample device configuration
+files, one identifying the card by the PCI location ID and the other identifying
+the card by its serial number.
 
 You should now reboot or:
 
