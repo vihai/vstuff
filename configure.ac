@@ -473,6 +473,7 @@ AC_CONFIG_FILES([Makefile
 		vgsm2test/Makefile
 		pppd_plugin/Makefile
 		samples/Makefile
+		unsupported/Makefile
 		tests/Makefile
 		modules/include/kernel_config.h
 		modules/Makefile
