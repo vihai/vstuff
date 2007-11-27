@@ -2011,7 +2011,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 
 #warning Ignore uninitalized warnings, it's a GCC bug
 	const char *me_str = astman_get_header(m, "X-SMS-ME");
-	struct vgsm_me *me;
+	struct vgsm_me *me = NULL;
 
 	if (!strncasecmp(me_str, VGSM_HUNTGROUP_PREFIX,
 			strlen(VGSM_HUNTGROUP_PREFIX))) {
@@ -2093,7 +2093,7 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 		if (!me) {
 			astman_append(s, "Status: 404\n");
 			astman_send_error(s, m,
-				"Cannot find an available me");
+				"Cannot find an available ME");
 			goto err_me_not_found;
 		}
 	}
