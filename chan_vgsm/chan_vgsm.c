@@ -1970,27 +1970,31 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	}
 
 	const char *content_type = astman_get_header(m, "Content-type");
-	char *content_type_a = strdupa(content_type);
-	char *lasts;
-	char *type = strtok_r(content_type_a, " \t;", &lasts);
-	if (!type) {
-		astman_append(s, "Status: 504\n");
-		astman_send_error(s, m, "Invalid content-type");
-		goto err_invalid_content_type;
-	}
-
-	if (strcasecmp(type, "text/plain")) {
-		astman_append(s, "Status: 505\n");
-		astman_send_error(s, m, "Unsupported content-type");
-		goto err_unsupported_content_type;
-	}
-
 	char *charset = "utf-8";
-	char *par;
-	while((par = strtok_r(NULL, " ;", &lasts))) {
-		if (!strncasecmp(par, "charset=", strlen("charset="))) {
-			charset = par + strlen("charset=");
-			break;
+
+	if (strlen(content_type)) {
+		char *content_type_a = strdupa(content_type);
+		char *lasts;
+		char *type = strtok_r(content_type_a, " \t;", &lasts);
+		if (!type) {
+			astman_append(s, "Status: 504\n");
+			astman_send_error(s, m, "Invalid content-type");
+			goto err_invalid_content_type;
+		}
+
+		if (strcasecmp(type, "text/plain")) {
+			astman_append(s, "Status: 505\n");
+			astman_send_error(s, m, "Unsupported content-type");
+			goto err_unsupported_content_type;
+		
+		}
+
+		char *par;
+		while((par = strtok_r(NULL, " ;", &lasts))) {
+			if (!strncasecmp(par, "charset=", strlen("charset="))) {
+				charset = par + strlen("charset=");
+				break;
+			}
 		}
 	}
 
@@ -2345,15 +2349,12 @@ err_iconv:
 	sms->text = NULL;
 err_text_malloc:
 err_unsupported_cte:
-err_unsupported_content_type:
-err_invalid_content_type:
 err_no_smcc:
+	vgsm_sms_submit_put(sms);
+err_sms_alloc:
 	ast_mutex_lock(&me->lock);
 	me->sending_sms = FALSE;
 	ast_mutex_unlock(&me->lock);
-
-	vgsm_sms_submit_put(sms);
-err_sms_alloc:
 err_me_sending_sms:
 err_me_not_registered:
 err_me_not_ready:
@@ -2361,6 +2362,8 @@ err_me_not_found:
 err_huntgroup_not_found:
 	iconv_close(cd);
 err_iconv_open:
+err_unsupported_content_type:
+err_invalid_content_type:
 	free(content);
 err_missing_content:
 err_missing_destination:
