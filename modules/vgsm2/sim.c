@@ -69,7 +69,7 @@ static struct uart_driver vgsm_uart_driver_sim =
 	.dev_name		= "vgsm2_sim",
 	.major			= 0,
 	.minor			= 0,
-	.nr			= VGSM_MAX_CARDS * VGSM_MAX_MODULES,
+	.nr			= VGSM_MAX_CARDS * VGSM_MAX_MES,
 	.cons			= NULL,
 };
 
@@ -80,8 +80,8 @@ void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 	int i;
 
 	for(i=0; i<card->mes_number; i++) {
-		if (card->modules[i] &&
-		    card->modules[i]->route_to_sim == sim->id) {
+		if (card->mes[i] &&
+		    card->mes[i]->route_to_sim == sim->id) {
 			vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id),
 				VGSM_R_SIM_SETUP_V_CLOCK_ME);
 			return;
@@ -198,7 +198,7 @@ static ssize_t vgsm_sim_identify_show(
 	char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n",
-		test_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status) ? 1 : 0);
+		test_bit(VGSM_ME_STATUS_IDENTIFY, &sim->status) ? 1 : 0);
 }
 
 static ssize_t vgsm_sim_identify_store(
@@ -212,9 +212,9 @@ static ssize_t vgsm_sim_identify_store(
 		return -EINVAL;
 
 	if (value)
-		set_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status);
+		set_bit(VGSM_ME_STATUS_IDENTIFY, &sim->status);
 	else
-		clear_bit(VGSM_MODULE_STATUS_IDENTIFY, &sim->status);
+		clear_bit(VGSM_ME_STATUS_IDENTIFY, &sim->status);
 
 	vgsm_led_update();
 

@@ -36,8 +36,8 @@
 #define VGSM_SIM_ROUTE_EXTERNAL -1
 #define VGSM_SIM_ROUTE_DEFAULT -2
 
-#define VGSM_MAX_CARDS			16
-#define VGSM_MAX_MODULES		8
+#define VGSM_MAX_CARDS	16
+#define VGSM_MAX_MES	8
 
 struct vgsm2_fw_header
 {

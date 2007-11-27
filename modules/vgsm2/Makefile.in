@@ -5,7 +5,7 @@ MODULE = vgsm2
 SOURCES = \
 	vgsm2_main.c	\
 	card.c		\
-	module.c	\
+	me.c		\
 	sim.c		\
 	uart.c
 
@@ -14,7 +14,7 @@ DIST_HEADERS = \
 	card.h		\
 	card_inline.h	\
 	regs.h		\
-	module.h	\
+	me.h		\
 	sim.h		\
 	uart.h
 

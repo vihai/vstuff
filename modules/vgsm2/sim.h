@@ -38,14 +38,14 @@ struct vgsm_sim
 };
 
 struct vgsm_sim *vgsm_sim_create(
-	struct vgsm_sim *module,
+	struct vgsm_sim *sim,
 	struct vgsm_card *card,
 	int id,
 	u32 uart_base);
-void vgsm_sim_destroy(struct vgsm_sim *module);
+void vgsm_sim_destroy(struct vgsm_sim *sim);
 
-int vgsm_sim_register(struct vgsm_sim *module);
-void vgsm_sim_unregister(struct vgsm_sim *module);
+int vgsm_sim_register(struct vgsm_sim *sim);
+void vgsm_sim_unregister(struct vgsm_sim *sim);
 
 void vgsm_sim_update_sim_setup(struct vgsm_sim *sim);
 

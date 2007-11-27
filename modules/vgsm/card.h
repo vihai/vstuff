@@ -26,7 +26,7 @@
 #include <linux/kfifo.h>
 #endif
 
-#include "module.h"
+#include "me.h"
 #include "micro.h"
 
 #define vgsm_msg_card(card, level, format, arg...)	\
@@ -85,8 +85,8 @@ struct vgsm_card
 	int num_micros;
 	struct vgsm_micro micros[2];
 
-	int num_modules;
-	struct vgsm_module *modules[4];
+	int num_mes;
+	struct vgsm_me *mes[4];
 
 	struct {
 		u8 mask0;
@@ -95,7 +95,7 @@ struct vgsm_card
 
 	struct tasklet_struct rx_tasklet;
 	struct tasklet_struct tx_tasklet;
-	int rr_last_module;
+	int rr_last_me;
 
 	struct timer_list maint_timer;
 };
@@ -112,7 +112,7 @@ void vgsm_card_remove(struct vgsm_card *card);
 void vgsm_update_mask0(struct vgsm_card *card);
 
 void vgsm_codec_reset(struct vgsm_card *card);
-void vgsm_update_codec(struct vgsm_module *module);
+void vgsm_update_codec(struct vgsm_me *me);
 
 void vgsm_write_msg(
 	struct vgsm_card *card, struct vgsm_micro_message *msg);

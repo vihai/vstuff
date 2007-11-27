@@ -33,7 +33,7 @@
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"
-#include "module.h"
+#include "me.h"
 #include "sim.h"
 
 #ifdef DEBUG_CODE
@@ -86,15 +86,15 @@ static BOOL vgsm_card_led_update(struct vgsm_card *card)
 		reschedule = TRUE;
 	} else {
 		for(i=0; i<card->mes_number; i++) {
-			if (card->modules[i] &&
-			     test_bit(VGSM_MODULE_STATUS_IDENTIFY,
-						&card->modules[i]->status)) {
+			if (card->mes[i] &&
+			     test_bit(VGSM_ME_STATUS_IDENTIFY,
+						&card->mes[i]->status)) {
 
 				led_src |= 0xf << (i * 4);
 				led_user |= color << (i * 4);
 
-				if (card->modules[i]->route_to_sim >= 0) {
-					int sim = card->modules[i]->
+				if (card->mes[i]->route_to_sim >= 0) {
+					int sim = card->mes[i]->
 								route_to_sim;
 
 					led_src |= 0x3 << ((sim * 2) + 16);
@@ -108,7 +108,7 @@ static BOOL vgsm_card_led_update(struct vgsm_card *card)
 
 		for(i=0; i<card->sims_number; i++) {
 			if (test_bit(VGSM_CARD_FLAGS_IDENTIFY, &card->flags) ||
-			    test_bit(VGSM_MODULE_STATUS_IDENTIFY,
+			    test_bit(VGSM_ME_STATUS_IDENTIFY,
 						&card->sims[i].status)) {
 
 				led_src |= 0x3 << ((i * 2) + 16);
@@ -286,9 +286,9 @@ static int __init vgsm_init(void)
 	if (err < 0)
 		goto err_card_modinit;
 
-	err = vgsm_module_modinit();
+	err = vgsm_me_modinit();
 	if (err < 0)
-		goto err_module_modinit;
+		goto err_me_modinit;
 
 	err = vgsm_sim_modinit();
 	if (err < 0)
@@ -321,8 +321,8 @@ err_create_file_debug_level:
 err_pci_register_driver:
 	vgsm_sim_modexit();
 err_sim_modinit:
-	vgsm_module_modexit();
-err_module_modinit:
+	vgsm_me_modexit();
+err_me_modinit:
 	vgsm_card_modexit();
 err_card_modinit:
 	ks_feature_unregister(vgsm_amu_decompander_class);
@@ -353,7 +353,7 @@ static void __exit vgsm_exit(void)
 	pci_unregister_driver(&vgsm_driver);
 
 	vgsm_sim_modexit();
-	vgsm_module_modexit();
+	vgsm_me_modexit();
 	vgsm_card_modexit();
 
 	ks_feature_unregister(vgsm_amu_decompander_class);

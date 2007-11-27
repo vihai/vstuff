@@ -34,7 +34,7 @@
 #include "card.h"
 #include "card_inline.h"
 #include "regs.h"
-#include "module.h"
+#include "me.h"
 
 struct list_head vgsm_cards_list = LIST_HEAD_INIT(vgsm_cards_list);
 spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
@@ -446,7 +446,7 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 
 	/* Enable interrupts */
 	for(i=0; i<card->mes_number; i++) {
-		if (card->modules[i]) {
+		if (card->mes[i]) {
 			vgsm_outl(card, VGSM_R_ME_INT_ENABLE(i),
 				VGSM_R_ME_INT_ENABLE_V_VDD |
 				VGSM_R_ME_INT_ENABLE_V_VDDLP |
@@ -472,10 +472,10 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	}
 
 	vgsm_outl(card, VGSM_R_INT_ENABLE,
-		(card->modules[0] ? VGSM_R_INT_ENABLE_V_ME(0) : 0) |
-		(card->modules[1] ? VGSM_R_INT_ENABLE_V_ME(1) : 0) |
-		(card->modules[2] ? VGSM_R_INT_ENABLE_V_ME(2) : 0) |
-		(card->modules[3] ? VGSM_R_INT_ENABLE_V_ME(3) : 0) |
+		(card->mes[0] ? VGSM_R_INT_ENABLE_V_ME(0) : 0) |
+		(card->mes[1] ? VGSM_R_INT_ENABLE_V_ME(1) : 0) |
+		(card->mes[2] ? VGSM_R_INT_ENABLE_V_ME(2) : 0) |
+		(card->mes[3] ? VGSM_R_INT_ENABLE_V_ME(3) : 0) |
 		VGSM_R_INT_ENABLE_V_SIM(0) |
 		VGSM_R_INT_ENABLE_V_SIM(1) |
 		VGSM_R_INT_ENABLE_V_SIM(2) |
@@ -491,21 +491,21 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 
 static void vgsm_me_interrupt(struct vgsm_card *card, int id)
 {
-	struct vgsm_module *module = card->modules[id];
+	struct vgsm_me *me = card->mes[id];
 	u32 me_int_status = vgsm_inl(card, VGSM_R_ME_INT_STATUS(id));
 	u32 me_status = vgsm_inl(card, VGSM_R_ME_STATUS(id));
 
-	if (!module)
+	if (!me)
 		return;
 
 	if (me_int_status & VGSM_R_ME_INT_STATUS_V_UART_ASC0)
-		vgsm_uart_interrupt(&module->asc0);
+		vgsm_uart_interrupt(&me->asc0);
 
 	if (me_int_status & VGSM_R_ME_INT_STATUS_V_UART_ASC1)
-		vgsm_uart_interrupt(&module->asc1);
+		vgsm_uart_interrupt(&me->asc1);
 
 	if (me_int_status & VGSM_R_ME_INT_STATUS_V_UART_MESIM)
-		vgsm_uart_interrupt(&module->mesim);
+		vgsm_uart_interrupt(&me->mesim);
 
 	if (me_int_status & VGSM_R_ME_INT_STATUS_V_VDD)
 		vgsm_debug_card(card, 1,
@@ -596,8 +596,8 @@ void vgsm_card_update_router(struct vgsm_card *card)
 	int j;
 
 	for(i=0; i<card->mes_number; i++) {
-		if (card->modules[i])
-			sim_router |= card->modules[i]->route_to_sim << (i*4);
+		if (card->mes[i])
+			sim_router |= card->mes[i]->route_to_sim << (i*4);
 	}
 
 	vgsm_outl(card, VGSM_R_SIM_ROUTER, sim_router);
@@ -828,8 +828,8 @@ void vgsm_card_destroy(struct vgsm_card *card)
 	int i;
 
 	for(i=card->mes_number-1; i>=0; i--) {
-		if (card->modules[i])
-			vgsm_module_destroy(card->modules[i]);
+		if (card->mes[i])
+			vgsm_me_destroy(card->mes[i]);
 	}
 
 	for(i=card->sims_number-1; i>=0; i--)
@@ -970,7 +970,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 			"Serial number: N/A\n");
 
 	vgsm_msg_card(card, KERN_INFO,
-		"GSM module sockets: %d\n",
+		"GSM me sockets: %d\n",
 		card->mes_number);
 
 	vgsm_msg_card(card, KERN_INFO,
@@ -988,7 +988,7 @@ int vgsm_card_probe(struct vgsm_card *card)
 			char tmpstr[8];
 			snprintf(tmpstr, sizeof(tmpstr), "gsm%d", i);
 
-			card->modules[i] = vgsm_module_create(
+			card->mes[i] = vgsm_me_create(
 						NULL, card, i, tmpstr,
 						VGSM_FIFO_RX_BASE(i),
 						VGSM_R_ME_FIFO_SIZE_V_RX_SIZE
@@ -999,18 +999,18 @@ int vgsm_card_probe(struct vgsm_card *card)
 						VGSM_ME_ASC0_BASE(i),
 						VGSM_ME_ASC1_BASE(i),
 						VGSM_ME_SIM_BASE(i));
-			if (!card->modules[i]) {
+			if (!card->mes[i]) {
 				err = -ENOMEM;
-				goto err_module_create;
+				goto err_me_create;
 			}
 
 			vgsm_msg_card(card, KERN_INFO,
-				"Module %d is installed and powered %s\n", i,
-				vgsm_module_power_get(card->modules[i]) ?
-								"ON" : "OFF");
+				"ME %d is installed and powered %s\n", i,
+				vgsm_me_power_get(card->mes[i]) ?
+							"ON" : "OFF");
 		} else {
 			vgsm_msg_card(card, KERN_INFO,
-				"Module %d is not installed\n", i);
+				"ME %d is not installed\n", i);
 		}
 	}
 
@@ -1061,10 +1061,10 @@ err_class_device_create_file:
 #endif
 	class_device_unregister(&card->class_device);
 err_class_device_register:
-err_module_create:
+err_me_create:
 	for(i=card->mes_number-1; i>=0; i--) {
-		if (card->modules[i])
-			vgsm_module_destroy(card->modules[i]);
+		if (card->mes[i])
+			vgsm_me_destroy(card->mes[i]);
 	}
 err_mes_number_invalid:
 err_sims_number_invalid:
@@ -1107,19 +1107,19 @@ void vgsm_card_remove(struct vgsm_card *card)
 	set_bit(VGSM_CARD_FLAGS_SHUTTING_DOWN, &card->flags);
 
 	for(i=0; i<card->mes_number; i++) {
-		if (card->modules[i]) {
-			struct vgsm_module *module = card->modules[i];
+		if (card->mes[i]) {
+			struct vgsm_me *me = card->mes[i];
 
 			u32 me_status =
-				vgsm_inl(card, VGSM_R_ME_STATUS(module->id));
+				vgsm_inl(card, VGSM_R_ME_STATUS(me->id));
 
 			if (me_status & VGSM_R_ME_STATUS_V_VDD) {
 				vgsm_msg_card(card, KERN_NOTICE,
-					"Module %d has not been shut down,"
+					"ME %d has not been shut down,"
 					" forcing emergency shutdown\n",
-					module->id);
+					me->id);
 
-				vgsm_outl(card, VGSM_R_ME_SETUP(module->id),
+				vgsm_outl(card, VGSM_R_ME_SETUP(me->id),
 						VGSM_R_ME_SETUP_V_EMERG_OFF);
 			}
 		}
@@ -1173,12 +1173,12 @@ int vgsm_card_register(struct vgsm_card *card)
 	}
 
 	for (i=0; i<card->mes_number; i++) {
-		if (card->modules[i]) {
-			err = vgsm_module_register(card->modules[i]);
+		if (card->mes[i]) {
+			err = vgsm_me_register(card->mes[i]);
 			if (err < 0) {
 				vgsm_msg_card(card, KERN_ERR,
 					"ME registration failed: %d\n", err);
-				goto err_module_register;
+				goto err_me_register;
 			}
 		}
 	}
@@ -1197,10 +1197,10 @@ err_card_sysfs_create_files:
 err_register_sim:
 	for(--i; i>=0; i--)
 		vgsm_sim_unregister(&card->sims[i]);
-err_module_register:
+err_me_register:
 	for(--i; i>=0; i--) {
-		if (card->modules[i])
-			vgsm_module_unregister(card->modules[i]);
+		if (card->mes[i])
+			vgsm_me_unregister(card->mes[i]);
 	}
 
 	return err;
@@ -1220,8 +1220,8 @@ void vgsm_card_unregister(struct vgsm_card *card)
 		vgsm_sim_unregister(&card->sims[i]);
 
 	for(i=card->mes_number-1; i>=0; i--) {
-		if (card->modules[i])
-			vgsm_module_unregister(card->modules[i]);
+		if (card->mes[i])
+			vgsm_me_unregister(card->mes[i]);
 	}
 
 }

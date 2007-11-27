@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _VGSM_MODULE_H
-#define _VGSM_MODULE_H
+#ifndef _VGSM_ME_H
+#define _VGSM_ME_H
 
 #include <linux/cdev.h>
 #include <linux/kdev_t.h>
@@ -20,22 +20,22 @@
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/channel.h>
 
-enum vgsm_module_status
+enum vgsm_me_status
 {
-	VGSM_MODULE_STATUS_RUNNING,
-	VGSM_MODULE_STATUS_RX_THROTTLE,
-	VGSM_MODULE_STATUS_RX_ACK_PENDING,
-	VGSM_MODULE_STATUS_TX_ACK_PENDING,
-	VGSM_MODULE_STATUS_ON,
+	VGSM_ME_STATUS_RUNNING,
+	VGSM_ME_STATUS_RX_THROTTLE,
+	VGSM_ME_STATUS_RX_ACK_PENDING,
+	VGSM_ME_STATUS_TX_ACK_PENDING,
+	VGSM_ME_STATUS_ON,
 };
 
 struct vgsm_card;
 
-struct vgsm_module_rx
+struct vgsm_me_rx
 {
 	struct ks_chan ks_chan;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	int fifo_pos;
 	int fifo_size;
@@ -43,11 +43,11 @@ struct vgsm_module_rx
 	u8 codec_gain;
 };
 
-struct vgsm_module_tx
+struct vgsm_me_tx
 {
 	struct ks_chan ks_chan;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	int fifo_pos;
 	int fifo_size;
@@ -61,12 +61,12 @@ struct vgsm_module_tx
 	u8 codec_gain;
 };
 
-struct vgsm_module
+struct vgsm_me
 {
 	struct ks_node ks_node;
 
-	struct vgsm_module_rx rx;
-	struct vgsm_module_tx tx;
+	struct vgsm_me_rx rx;
+	struct vgsm_me_tx tx;
 
 	struct vgsm_card *card;
 	struct vgsm_micro *micro;
@@ -87,32 +87,32 @@ struct vgsm_module
 	BOOL dig_loop;
 };
 
-void vgsm_module_send_string(
-	struct vgsm_module *module,
+void vgsm_me_send_string(
+	struct vgsm_me *me,
 	u8 *buf,
 	int len);
-void vgsm_module_send_ack(
-	struct vgsm_module *module);
-void vgsm_module_send_onoff(
-	struct vgsm_module *module,
+void vgsm_me_send_ack(
+	struct vgsm_me *me);
+void vgsm_me_send_onoff(
+	struct vgsm_me *me,
 	int onoff_cmd);
-void vgsm_module_send_set_padding_timeout(
-	struct vgsm_module *module,
+void vgsm_me_send_set_padding_timeout(
+	struct vgsm_me *me,
 	u8 timeout);
-void vgsm_module_send_power_get(
-	struct vgsm_module *module);
+void vgsm_me_send_power_get(
+	struct vgsm_me *me);
 
-struct vgsm_module *vgsm_module_create(
-	struct vgsm_module *module,
+struct vgsm_me *vgsm_me_create(
+	struct vgsm_me *me,
 	struct vgsm_card *card,
 	struct vgsm_micro *micro,
 	int id,
 	const char *name);
 
-struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
-void vgsm_module_put(struct vgsm_module *module);
+struct vgsm_me *vgsm_me_get(struct vgsm_me *me);
+void vgsm_me_put(struct vgsm_me *me);
 
-int vgsm_module_register(struct vgsm_module *module);
-void vgsm_module_unregister(struct vgsm_module *module);
+int vgsm_me_register(struct vgsm_me *me);
+void vgsm_me_unregister(struct vgsm_me *me);
 
 #endif

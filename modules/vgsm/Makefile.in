@@ -5,7 +5,7 @@ MODULE = vgsm
 SOURCES = \
 	vgsm_main.c	\
 	card.c		\
-	module.c	\
+	me.c		\
 	micro.c
 
 DIST_HEADERS = \
@@ -13,7 +13,7 @@ DIST_HEADERS = \
 	card.h		\
 	card_inline.h	\
 	regs.h		\
-	module.h	\
+	me.h		\
 	micro.h		\
 	codec.h
 

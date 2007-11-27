@@ -18,7 +18,7 @@
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 
-#include "module.h"
+#include "me.h"
 #include "sim.h"
 
 #ifdef DEBUG_CODE
@@ -81,7 +81,7 @@ struct vgsm_card
 	u8 mes_number;
 	u8 sims_number;
 
-	struct vgsm_module *modules[4];
+	struct vgsm_me *mes[4];
 	struct vgsm_sim sims[4];
 
 	struct vgsm_fw_version fw_version;

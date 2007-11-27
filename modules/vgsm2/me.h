@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _VGSM_MODULE_H
-#define _VGSM_MODULE_H
+#ifndef _VGSM_ME_H
+#define _VGSM_ME_H
 
 #include <linux/kstreamer/channel.h>
 #include <linux/kstreamer/node.h>
@@ -21,11 +21,11 @@
 
 #include "uart.h"
 
-enum vgsm_module_status
+enum vgsm_me_status
 {
-	VGSM_MODULE_STATUS_RUNNING,
-	VGSM_MODULE_STATUS_ON,
-	VGSM_MODULE_STATUS_IDENTIFY,
+	VGSM_ME_STATUS_RUNNING,
+	VGSM_ME_STATUS_ON,
+	VGSM_ME_STATUS_IDENTIFY,
 };
 
 struct vgsm_card;
@@ -36,13 +36,13 @@ struct vgsm_amu_compander
 	struct ks_amu_compander_descr descr;
 };
 
-struct vgsm_module_rx
+struct vgsm_me_rx
 {
 	struct ks_chan ks_chan;
 
 	struct vgsm_amu_compander amu_compander;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	BOOL compander_enabled;
 	BOOL compander_mu_mode;
@@ -58,13 +58,13 @@ struct vgsm_amu_decompander
 	struct ks_amu_compander_descr descr;
 };
 
-struct vgsm_module_tx
+struct vgsm_me_tx
 {
 	struct ks_chan ks_chan;
 
 	struct vgsm_amu_decompander amu_decompander;
 
-	struct vgsm_module *module;
+	struct vgsm_me *me;
 
 	BOOL compander_enabled;
 	BOOL compander_mu_mode;
@@ -74,12 +74,12 @@ struct vgsm_module_tx
 	u32 fifo_in;
 };
 
-struct vgsm_module
+struct vgsm_me
 {
 	struct ks_node ks_node;
 
-	struct vgsm_module_rx rx;
-	struct vgsm_module_tx tx;
+	struct vgsm_me_rx rx;
+	struct vgsm_me_tx tx;
 
 	struct vgsm_card *card;
 
@@ -94,8 +94,8 @@ struct vgsm_module
 	unsigned long status;
 };
 
-struct vgsm_module *vgsm_module_create(
-	struct vgsm_module *module,
+struct vgsm_me *vgsm_me_create(
+	struct vgsm_me *me,
 	struct vgsm_card *card,
 	int id,
 	const char *name,
@@ -106,17 +106,17 @@ struct vgsm_module *vgsm_module_create(
 	u32 asc0_base,
 	u32 asc1_base,
 	u32 mesim_base);
-void vgsm_module_destroy(struct vgsm_module *module);
+void vgsm_me_destroy(struct vgsm_me *me);
 
-struct vgsm_module *vgsm_module_get(struct vgsm_module *module);
-void vgsm_module_put(struct vgsm_module *module);
+struct vgsm_me *vgsm_me_get(struct vgsm_me *me);
+void vgsm_me_put(struct vgsm_me *me);
 
-int vgsm_module_register(struct vgsm_module *module);
-void vgsm_module_unregister(struct vgsm_module *module);
+int vgsm_me_register(struct vgsm_me *me);
+void vgsm_me_unregister(struct vgsm_me *me);
 
-BOOL vgsm_module_power_get(struct vgsm_module *module);
+BOOL vgsm_me_power_get(struct vgsm_me *me);
 
-int __init vgsm_module_modinit(void);
-void __exit vgsm_module_modexit(void);
+int __init vgsm_me_modinit(void);
+void __exit vgsm_me_modexit(void);
 
 #endif

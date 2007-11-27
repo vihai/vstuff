@@ -59,34 +59,34 @@ static int vgsm_tty_open(
 	if (!tty->driver_data) {
 		// int err;
 		struct vgsm_card *card;
-		struct vgsm_module *module = NULL;
+		struct vgsm_me *me = NULL;
 
 		spin_lock(&vgsm_cards_list_lock);
 		list_for_each_entry(card, &vgsm_cards_list, cards_list_node) {
 			if (card->id == tty->index / 8) {
 
-				if (tty->index % 8 < card->num_modules)
-					module = card->modules[tty->index % 8];
+				if (tty->index % 8 < card->num_mes)
+					me = card->mes[tty->index % 8];
 
 				break;
 			}
 		}
 		spin_unlock(&vgsm_cards_list_lock);
 
-		if (!module)
+		if (!me)
 			return -ENODEV;
 
-		tty->driver_data = module;
-		module->tty = tty;
+		tty->driver_data = me;
+		me->tty = tty;
 
-		atomic_set(&module->tty_open_count, 1);
+		atomic_set(&me->tty_open_count, 1);
 
-		clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
-		set_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+		clear_bit(VGSM_ME_STATUS_RX_THROTTLE, &me->status);
+		set_bit(VGSM_ME_STATUS_RUNNING, &me->status);
 	} else {
-		struct vgsm_module *module = tty->driver_data;
+		struct vgsm_me *me = tty->driver_data;
 
-		atomic_inc(&module->tty_open_count);
+		atomic_inc(&me->tty_open_count);
 	}
 
 	return 0;
@@ -96,17 +96,17 @@ static void vgsm_tty_close(
 	struct tty_struct *tty,
 	struct file *file)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
 	/* TTY has never ever been initialized */
-	if (!module)
+	if (!me)
 		return;
 
-	if (atomic_dec_and_test(&module->tty_open_count)) {
-		clear_bit(VGSM_MODULE_STATUS_RUNNING, &module->status);
+	if (atomic_dec_and_test(&me->tty_open_count)) {
+		clear_bit(VGSM_ME_STATUS_RUNNING, &me->status);
 
 		/* Flush the RX queue and ACK */
-		tasklet_schedule(&module->card->rx_tasklet);
+		tasklet_schedule(&me->card->rx_tasklet);
 	}
 }
 
@@ -143,21 +143,21 @@ static int vgsm_tty_write(
 	const unsigned char *buf,
 	int count)
 {
-	struct vgsm_module *module = tty->driver_data;
-	struct vgsm_card *card = module->card;
+	struct vgsm_me *me = tty->driver_data;
+	struct vgsm_card *card = me->card;
 	int copied_bytes = 0;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
 	if (from_user) {
-		copied_bytes = __kfifo_put_user(module->tx.fifo,
+		copied_bytes = __kfifo_put_user(me->tx.fifo,
 					(unsigned char *)buf, count);
 	} else {
-		copied_bytes = __kfifo_put(module->tx.fifo,
+		copied_bytes = __kfifo_put(me->tx.fifo,
 					(unsigned char *)buf, count);
 	}
 #else
 
-	copied_bytes = __kfifo_put(module->tx.fifo,
+	copied_bytes = __kfifo_put(me->tx.fifo,
 				(unsigned char *)buf, count);
 #endif
 
@@ -168,58 +168,58 @@ static int vgsm_tty_write(
 
 static int vgsm_tty_write_room(struct tty_struct *tty)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-	return module->tx.fifo->size - kfifo_len(module->tx.fifo);
+	return me->tx.fifo->size - kfifo_len(me->tx.fifo);
 }
 
 static void vgsm_tty_throttle(struct tty_struct *tty)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-	set_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
+	set_bit(VGSM_ME_STATUS_RX_THROTTLE, &me->status);
 }
 
 static void vgsm_tty_unthrottle(struct tty_struct *tty)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-	clear_bit(VGSM_MODULE_STATUS_RX_THROTTLE, &module->status);
+	clear_bit(VGSM_ME_STATUS_RX_THROTTLE, &me->status);
 
-	tasklet_schedule(&module->card->rx_tasklet);
+	tasklet_schedule(&me->card->rx_tasklet);
 }
 
 static int vgsm_tty_chars_in_buffer(struct tty_struct *tty)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-	return kfifo_len(module->tx.fifo);
+	return kfifo_len(me->tx.fifo);
 }
 
 static void vgsm_tty_flush_buffer(
 	struct tty_struct *tty)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-	kfifo_reset(module->tx.fifo);
+	kfifo_reset(me->tx.fifo);
 }
 
 static void vgsm_tty_wait_until_sent(
 	struct tty_struct *tty,
 	int timeout)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-	while(kfifo_len(module->tx.fifo)) {
+	while(kfifo_len(me->tx.fifo)) {
 		DEFINE_WAIT(wait);
 
-		prepare_to_wait(&module->tx.wait_queue, &wait,
+		prepare_to_wait(&me->tx.wait_queue, &wait,
 			TASK_UNINTERRUPTIBLE);
 
-		if (kfifo_len(module->tx.fifo))
+		if (kfifo_len(me->tx.fifo))
 			schedule_timeout(timeout);
 
-		finish_wait(&module->tx.wait_queue, &wait);
+		finish_wait(&me->tx.wait_queue, &wait);
 
 		if (signal_pending(current))
 			return;
@@ -227,7 +227,7 @@ static void vgsm_tty_wait_until_sent(
 }
 
 static int vgsm_tty_do_codec_set(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
@@ -241,7 +241,7 @@ static int vgsm_tty_do_codec_set(
 
 	switch(cctl.parameter) {
 	case VGSM_CODEC_RESET:
-		vgsm_codec_reset(module->card);
+		vgsm_codec_reset(me->card);
 	break;
 
 	case VGSM_CODEC_RXGAIN:
@@ -251,7 +251,7 @@ static int vgsm_tty_do_codec_set(
 		}
 
 		/* codec's tx gain is analog rx gain */
-		module->tx.codec_gain = cctl.value;
+		me->tx.codec_gain = cctl.value;
 	break;
 
 	case VGSM_CODEC_TXGAIN:
@@ -261,25 +261,25 @@ static int vgsm_tty_do_codec_set(
 		}
 
 		/* codec's rx gain is analog tx gain */
-		module->rx.codec_gain = cctl.value;
+		me->rx.codec_gain = cctl.value;
 	break;
 
 	case VGSM_CODEC_DIG_LOOP:
-		module->dig_loop = !!cctl.value;
+		me->dig_loop = !!cctl.value;
 	break;
 
 	case VGSM_CODEC_ANAL_LOOP:
-		module->anal_loop = !!cctl.value;
+		me->anal_loop = !!cctl.value;
 	break;
 	}
 
-	vgsm_update_codec(module);
+	vgsm_update_codec(me);
 
 	return 0;
 
 err_invalid_value:
-	vgsm_update_codec(module);
-	vgsm_card_unlock(module->card);
+	vgsm_update_codec(me);
+	vgsm_card_unlock(me->card);
 err_copy_from_user:
 
 	return err;
@@ -317,19 +317,19 @@ out:
 #endif
 
 static int vgsm_tty_do_power_get(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	INIT_COMPLETION(module->read_status_completion);
+	INIT_COMPLETION(me->read_status_completion);
 
-	vgsm_card_lock(module->card);
-	vgsm_module_send_power_get(module);
-	vgsm_card_unlock(module->card);
+	vgsm_card_lock(me->card);
+	vgsm_me_send_power_get(me);
+	vgsm_card_unlock(me->card);
 
-	wait_for_completion_timeout(&module->read_status_completion, 1 * HZ);
+	wait_for_completion_timeout(&me->read_status_completion, 1 * HZ);
 
-	if (test_bit(VGSM_MODULE_STATUS_ON, &module->status))
+	if (test_bit(VGSM_ME_STATUS_ON, &me->status))
 		put_user(1, (unsigned int *)arg);
 	else
 		put_user(0, (unsigned int *)arg);
@@ -338,77 +338,77 @@ static int vgsm_tty_do_power_get(
 }
 
 static int vgsm_tty_do_power_ign(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	vgsm_card_lock(module->card);
-	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_IGN);
-	vgsm_card_unlock(module->card);
+	vgsm_card_lock(me->card);
+	vgsm_me_send_onoff(me, VGSM_CMD_MAINT_ONOFF_IGN);
+	vgsm_card_unlock(me->card);
 
 	msleep(180);
 
-	vgsm_card_lock(module->card);
-	vgsm_module_send_onoff(module, 0);
-	vgsm_card_unlock(module->card);
+	vgsm_card_lock(me->card);
+	vgsm_me_send_onoff(me, 0);
+	vgsm_card_unlock(me->card);
 
 	return 0;
 }
 
 static int vgsm_tty_do_emerg_off(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	vgsm_card_lock(module->card);
-	vgsm_module_send_onoff(module, VGSM_CMD_MAINT_ONOFF_EMERG_OFF);
-	vgsm_card_unlock(module->card);
+	vgsm_card_lock(me->card);
+	vgsm_me_send_onoff(me, VGSM_CMD_MAINT_ONOFF_EMERG_OFF);
+	vgsm_card_unlock(me->card);
 
 	msleep(3200);
 
-	vgsm_card_lock(module->card);
-	vgsm_module_send_onoff(module, 0);
-	vgsm_card_unlock(module->card);
+	vgsm_card_lock(me->card);
+	vgsm_me_send_onoff(me, 0);
+	vgsm_card_unlock(me->card);
 
 	return 0;
 }
 
 static int vgsm_tty_do_pad_timeout(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
 	if (arg < 0 || arg > 0xFF)
 		return -EINVAL;
 
-	vgsm_card_lock(module->card);
-	vgsm_module_send_set_padding_timeout(module, arg);
-	vgsm_card_unlock(module->card);
+	vgsm_card_lock(me->card);
+	vgsm_me_send_set_padding_timeout(me, arg);
+	vgsm_card_unlock(me->card);
 
 	return 0;
 }
 
 static int vgsm_tty_do_fw_version(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	vgsm_card_lock(module->card);
-	if (module->id == 0 || module->id == 1)
-		vgsm_send_get_fw_ver(&module->micro[0]);
+	vgsm_card_lock(me->card);
+	if (me->id == 0 || me->id == 1)
+		vgsm_send_get_fw_ver(&me->micro[0]);
 	else
-		vgsm_send_get_fw_ver(&module->micro[1]);
-	vgsm_card_unlock(module->card);
+		vgsm_send_get_fw_ver(&me->micro[1]);
+	vgsm_card_unlock(me->card);
 
 	return -EOPNOTSUPP;
 }
 
 static int vgsm_tty_do_fw_upgrade(
-	struct vgsm_module *module,
+	struct vgsm_me *me,
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_card *card = module->card;
+	struct vgsm_card *card = me->card;
 	struct vgsm_micro *micro;
 	struct vgsm_fw_header fwh;
 	struct vgsm_micro_message msg = { };
@@ -416,7 +416,7 @@ static int vgsm_tty_do_fw_upgrade(
 	int err;
 	int i;
 
-	if (module->id == 0 || module->id == 1)
+	if (me->id == 0 || me->id == 1)
 		micro = &card->micros[0];
 	else
 		micro = &card->micros[1];
@@ -426,13 +426,13 @@ static int vgsm_tty_do_fw_upgrade(
 		goto err_copy_from_user;
 	}
 
-	set_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags);
+	set_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &me->card->flags);
 
 	INIT_COMPLETION(micro->fw_upgrade_ready);
 
-	vgsm_card_lock(module->card);
+	vgsm_card_lock(me->card);
 	vgsm_send_fw_upgrade(micro);
-	vgsm_card_unlock(module->card);
+	vgsm_card_unlock(me->card);
 
 	if (!wait_for_completion_timeout(&micro->fw_upgrade_ready, 5 * HZ)) {
 		err = -ETIMEDOUT;
@@ -477,7 +477,7 @@ static int vgsm_tty_do_fw_upgrade(
 
 err_copy_from_user_payload:
 err_completion_timeout:
-	clear_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags);
+	clear_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &me->card->flags);
 err_copy_from_user:
 
 	return err;
@@ -489,9 +489,9 @@ static int vgsm_tty_ioctl(
 	unsigned int cmd,
 	unsigned long arg)
 {
-	struct vgsm_module *module = tty->driver_data;
+	struct vgsm_me *me = tty->driver_data;
 
-//	if (test_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &module->card->flags))
+//	if (test_bit(VGSM_CARD_FLAGS_FW_UPGRADE, &me->card->flags))
 //		return -ENOIOCTLCMD;
 
 	switch(cmd) {
@@ -500,40 +500,40 @@ static int vgsm_tty_ioctl(
 	break;
 
 	case VGSM_IOC_GET_TX_FIFOLEN:
-		return put_user(kfifo_len(module->tx.fifo),
+		return put_user(kfifo_len(me->tx.fifo),
 				(unsigned int *)arg);
 	break;
 
 	case VGSM_IOC_GET_NODEID:
-		return put_user(module->ks_node.id, (int __user *)arg);
+		return put_user(me->ks_node.id, (int __user *)arg);
 	break;
 
 	case VGSM_IOC_CODEC_SET:
-		return vgsm_tty_do_codec_set(module, cmd, arg);
+		return vgsm_tty_do_codec_set(me, cmd, arg);
 	break;
 
 	case VGSM_IOC_POWER_GET:
-		return vgsm_tty_do_power_get(module, cmd, arg);
+		return vgsm_tty_do_power_get(me, cmd, arg);
 	break;
 
 	case VGSM_IOC_POWER_IGN:
-		return vgsm_tty_do_power_ign(module, cmd, arg);
+		return vgsm_tty_do_power_ign(me, cmd, arg);
 	break;
 
 	case VGSM_IOC_POWER_EMERG_OFF:
-		return vgsm_tty_do_emerg_off(module, cmd, arg);
+		return vgsm_tty_do_emerg_off(me, cmd, arg);
 	break;
 
 	case VGSM_IOC_PAD_TIMEOUT:
-		return vgsm_tty_do_pad_timeout(module, cmd, arg);
+		return vgsm_tty_do_pad_timeout(me, cmd, arg);
 	break;
 
 	case VGSM_IOC_FW_VERSION:
-		return vgsm_tty_do_fw_version(module, cmd, arg);
+		return vgsm_tty_do_fw_version(me, cmd, arg);
 	break;
 
 	case VGSM_IOC_FW_UPGRADE:
-		return vgsm_tty_do_fw_upgrade(module, cmd, arg);
+		return vgsm_tty_do_fw_upgrade(me, cmd, arg);
 	break;
 	}
 
@@ -715,7 +715,7 @@ static void __exit vgsm_exit(void)
 }
 module_exit(vgsm_exit);
 
-MODULE_DESCRIPTION("VoiSmart GSM Wildcard");
+MODULE_DESCRIPTION("VoiSmart vGSM-I driver");
 MODULE_AUTHOR("Daniele Orlandi <orlandi@voismart.it>");
 MODULE_LICENSE("GPL");
 
