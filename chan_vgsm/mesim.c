@@ -459,6 +459,15 @@ static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 			return;
 		}
 
+		if (ioctl(mesim->local_fd, VGSM_IOC_SIM_GET_ID,
+						&mesim->local_sim_id) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: ioctl(IOC_SIM_GET_ID) failed: %s\n",
+				mesim->name,
+				strerror(errno));
+			return;
+		}
+
 		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
 						mesim->local_sim_id) < 0) {
 			ast_log(LOG_ERROR,
