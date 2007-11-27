@@ -60,9 +60,6 @@ uart_out(struct vgsm_uart *up, int offset, u32 value)
 /* Uart divisor latch write */
 static inline void vgsm_uart_dl_write(struct vgsm_uart *up, u16 value)
 {
-
-printk(KERN_DEBUG "WRITE DL %d\n", value);
-
 	uart_out(up, UART_DLM, value >> 8 & 0xff);
 	uart_out(up, UART_DLL, value & 0xff);
 }
