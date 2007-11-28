@@ -77,6 +77,8 @@
 ./res_kstreamer/Makefile.in
 ./samples/Makefile
 ./samples/Makefile.in
+./unsupported/Makefile
+./unsupported/Makefile.in
 ./scripts/Makefile
 ./scripts/Makefile.in
 ./scripts/visdn_configurator
