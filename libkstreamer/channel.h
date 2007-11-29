@@ -91,6 +91,10 @@ void ks_chan_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 
+struct ks_chan *_ks_chan_get_by_id(
+	struct ks_conn *conn,
+	int id);
+
 #endif
 
 #endif

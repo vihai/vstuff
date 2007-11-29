@@ -141,7 +141,6 @@ struct ks_node *ks_node_get_by_path(
 	return node;
 }
 
-
 struct ks_node *ks_node_get_by_token(
 	struct ks_conn *conn,
 	struct ks_pd_token *token)
@@ -175,7 +174,7 @@ struct ks_node *ks_node_get_by_token(
 	return node;
 }
 
-static struct ks_node *ks_node_get_by_nlid(
+static struct ks_node *_ks_node_get_by_nlid(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -187,11 +186,24 @@ static struct ks_node *ks_node_get_by_nlid(
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		if(attr->type == KS_NODEATTR_ID)
-			return ks_node_get_by_id(conn,
+			return _ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 	}
 
 	return NULL;
+}
+
+struct ks_node *ks_node_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	struct ks_node *node;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	node = _ks_node_get_by_nlid(conn, nlh);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return node;
 }
 
 #if 0
@@ -361,7 +373,7 @@ void ks_node_handle_topology_update(
 	case KS_NETLINK_NODE_DEL: {
 		struct ks_node *node;
 
-		node = ks_node_get_by_nlid(conn, nlh);
+		node = _ks_node_get_by_nlid(conn, nlh);
 		if (!node) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
@@ -379,7 +391,7 @@ void ks_node_handle_topology_update(
 	case KS_NETLINK_NODE_SET: {
 		struct ks_node *node;
 
-		node = ks_node_get_by_nlid(conn, nlh);
+		node = _ks_node_get_by_nlid(conn, nlh);
 		if (!node) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;

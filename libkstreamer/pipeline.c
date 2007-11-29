@@ -153,10 +153,10 @@ static struct ks_pipeline *_ks_pipeline_get_by_string(
 			return NULL;
 		}
 
-		pipeline = ks_pipeline_get_by_path(conn, real_path + 4);
+		pipeline = _ks_pipeline_get_by_path(conn, real_path + 4);
 		free(real_path);
 	} else
-		pipeline = ks_pipeline_get_by_id(conn, atoi(pipeline_str));
+		pipeline = _ks_pipeline_get_by_id(conn, atoi(pipeline_str));
 
 	return pipeline;
 }
@@ -174,7 +174,7 @@ struct ks_pipeline *ks_pipeline_get_by_string(
 	return pipeline;
 }
 
-static struct ks_pipeline *ks_pipeline_get_by_nlid(
+static struct ks_pipeline *_ks_pipeline_get_by_nlid(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -414,7 +414,7 @@ void ks_pipeline_handle_topology_update(
 	case KS_NETLINK_PIPELINE_NEW: {
 		struct ks_pipeline *pipeline;
 
-		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		pipeline = _ks_pipeline_get_by_nlid(conn, nlh);
 		if (pipeline) {
 			ks_pipeline_put(pipeline);
 			break;
@@ -438,7 +438,7 @@ void ks_pipeline_handle_topology_update(
 	case KS_NETLINK_PIPELINE_DEL: {
 		struct ks_pipeline *pipeline;
 
-		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		pipeline = _ks_pipeline_get_by_nlid(conn, nlh);
 		if (!pipeline) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
@@ -456,7 +456,7 @@ void ks_pipeline_handle_topology_update(
 	case KS_NETLINK_PIPELINE_SET: {
 		struct ks_pipeline *pipeline;
 
-		pipeline = ks_pipeline_get_by_nlid(conn, nlh);
+		pipeline = _ks_pipeline_get_by_nlid(conn, nlh);
 		if (!pipeline) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;

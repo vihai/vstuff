@@ -155,13 +155,13 @@ static struct ks_chan *_ks_chan_get_by_token(
 			return NULL;
 		}
 
-		chan = ks_chan_get_by_path(conn, real_path + strlen("/sys"));
+		chan = _ks_chan_get_by_path(conn, real_path + strlen("/sys"));
 		free(real_path);
 	}
 	break;
 
 	case TK_INTEGER:
-		chan = ks_chan_get_by_id(conn, atoi(token->text));
+		chan = _ks_chan_get_by_id(conn, atoi(token->text));
 	break;
 
 	case TK_HEXINT:
@@ -190,7 +190,7 @@ struct ks_chan *ks_chan_get_by_token(
 	return chan;
 }
 
-static struct ks_chan *ks_chan_get_by_nlid(
+static struct ks_chan *_ks_chan_get_by_nlid(
 	struct ks_conn *conn, struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
@@ -201,7 +201,7 @@ static struct ks_chan *ks_chan_get_by_nlid(
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		if(attr->type == KS_CHANATTR_ID) {
-			return ks_chan_get_by_id(conn,
+			return _ks_chan_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		}
 	}
@@ -430,7 +430,7 @@ void ks_chan_handle_topology_update(
 	case KS_NETLINK_CHAN_DEL: {
 		struct ks_chan *chan;
 
-		chan = ks_chan_get_by_nlid(conn, nlh);
+		chan = _ks_chan_get_by_nlid(conn, nlh);
 		if (!chan) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
@@ -448,7 +448,7 @@ void ks_chan_handle_topology_update(
 	case KS_NETLINK_CHAN_SET: {
 		struct ks_chan *chan;
 
-		chan = ks_chan_get_by_nlid(conn, nlh);
+		chan = _ks_chan_get_by_nlid(conn, nlh);
 		if (!chan) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
