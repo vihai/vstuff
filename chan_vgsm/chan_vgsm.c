@@ -697,19 +697,19 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	__u32 node_id;
 	int err;
 
-	err = ioctl(vgsm_chan->me->me_fd, VGSM_IOC_GET_NODEID,
-						(caddr_t)&node_id);
-	if (err < 0) {
-
+	if (ioctl(vgsm_chan->me->me_fd, VGSM_IOC_GET_NODEID,
+					(caddr_t)&node_id) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VGSM_IOC_GET_NODEID): %s\n",
 			strerror(errno));
+		err = -errno;
 		goto err_get_me_node_id;
 	}
 
 	vgsm_chan->node_me = ks_node_get_by_id(ks_conn, node_id);
 	if (!vgsm_chan->node_me) {
 		ast_log(LOG_ERROR, "ME's node not found\n");
+		err = -ENOENT;
 		goto err_me_node_not_found;
 	}
 
@@ -718,16 +718,17 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		ast_log(LOG_ERROR,
 			"Cannot open userport: %s\n",
 			strerror(errno));
+		err = -errno;
 		goto err_open_userport;
 	}
 
 	vgsm_chan->ast_chan->fds[0] = vgsm_chan->up_fd;
 
-	err = ioctl(vgsm_chan->up_fd, KS_UP_GET_NODEID, (caddr_t)&node_id);
-	if (err < 0) {
+	if (ioctl(vgsm_chan->up_fd, KS_UP_GET_NODEID, (caddr_t)&node_id) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(KS_UP_GET_NODEID): %s\n",
 			strerror(errno));
+		err = -errno;
 		goto err_get_up_node_id;
 	}
 
@@ -736,6 +737,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	vgsm_chan->node_userport = ks_node_get_by_id(ks_conn, node_id);
 	if (!vgsm_chan->node_userport) {
 		ast_log(LOG_ERROR, "Userport's node not found\n");
+		err = -ENOENT;
 		goto err_up_node_not_found;
 	}
 
@@ -748,7 +750,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	if (!vgsm_chan->pipeline_rx) {
 		ast_log(LOG_ERROR,
 			"Cannot allocate pipeline\n");
-
+		err = -ENOMEM;
 		goto err_pipeline_rx_alloc;
 	}
 
@@ -758,7 +760,6 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot connect nodes: %s\n", strerror(-err));
-
 		goto err_pipeline_rx_connect;
 	}
 
@@ -791,7 +792,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	if (!vgsm_chan->pipeline_tx) {
 		ast_log(LOG_ERROR,
 			"Cannot allocate TX pipeline\n");
-
+		err = -ENOMEM;
 		goto err_pipeline_tx_alloc;
 	}
 
@@ -844,7 +845,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	err = ks_pipeline_update(vgsm_chan->pipeline_tx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-				"Cannot start the pipeline\n");
+				"Cannot start the TX pipeline\n");
 		goto err_pipeline_tx_update;
 	}
 
@@ -864,15 +865,20 @@ err_pipeline_rx_connect:
 	ks_pipeline_put(vgsm_chan->pipeline_rx);
 	vgsm_chan->pipeline_rx = NULL;
 err_pipeline_rx_alloc:
+	ks_node_put(vgsm_chan->node_userport);
+	vgsm_chan->node_userport = NULL;
 err_up_node_not_found:
 err_get_up_node_id:
+	vgsm_chan->ast_chan->fds[0] = -1;
 	close(vgsm_chan->up_fd);
 	vgsm_chan->up_fd = -1;
 err_open_userport:
+	ks_node_put(vgsm_chan->node_me);
+	vgsm_chan->node_me = NULL;
 err_me_node_not_found:
 err_get_me_node_id:
 
-	return -1;
+	return err;
 }
 
 struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
@@ -945,12 +951,13 @@ static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 			ast_mutex_lock(&vgsm_chan->ast_chan->lock);
 			/* If there hasn't been an hangup in between */
 
-			if (vgsm_connect_channel(vgsm_chan) < 0)
+			if (vgsm_connect_channel(vgsm_chan) < 0) {
 				ast_softhangup(vgsm_chan->ast_chan,
 						AST_SOFTHANGUP_DEV);
-			else
+			} else {
 				ast_queue_control(vgsm_chan->ast_chan,
 					AST_CONTROL_PROCEEDING);
+			}
 
 			ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
 		} else {
@@ -1091,8 +1098,13 @@ static int vgsm_answer(struct ast_channel *ast_chan)
 		return -1;
 	}
 	ast_mutex_unlock(&me->lock);
-	
-	vgsm_connect_channel(vgsm_chan);
+
+	ast_mutex_lock(&ast_chan->lock);
+	if (vgsm_connect_channel(vgsm_chan) < 0) {
+		ast_mutex_unlock(&ast_chan->lock);
+		return -1;
+	}
+	ast_mutex_unlock(&ast_chan->lock);
 
 	ast_indicate(ast_chan, -1);
 
@@ -1375,7 +1387,7 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	struct timespec timeout;
 	struct timeval now;
 	gettimeofday( &now, NULL );
-	timeout.tv_sec = now.tv_sec + 5;
+	timeout.tv_sec = now.tv_sec + 30;
 	timeout.tv_nsec = now.tv_usec * 1000;
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
@@ -1389,10 +1401,10 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	assert(vgsm_chan->refcnt > 0);
 
 	if (res == ETIMEDOUT) {
-		ast_log(LOG_WARNING,
+		ast_log(LOG_ERROR,
 			"%s: Timeout waiting for references to"
 			" vgsm_chan to be released, possible reference"
-			" leak, %d references left\n",
+			" leak, %d references left. Expect a crash.\n",
 			ast_chan->name,
 			vgsm_chan->refcnt);
 	}
