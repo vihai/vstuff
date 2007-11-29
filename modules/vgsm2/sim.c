@@ -82,9 +82,10 @@ void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 	for(i=0; i<card->mes_number; i++) {
 		if (card->mes[i] &&
 		    card->mes[i]->route_to_sim == sim->id) {
-			vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id),
-				VGSM_R_SIM_SETUP_V_CLOCK_ME);
-			return;
+			reg = VGSM_R_SIM_SETUP_V_CLOCK_ME;
+
+			vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id), reg);
+			goto speed_me;
 		}
 	}
 
@@ -101,8 +102,10 @@ void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 	default: reg = VGSM_R_SIM_SETUP_V_CLOCK_3_5; break;
 	}
 
-	reg |=	VGSM_R_SIM_SETUP_V_VCC |
-                VGSM_R_SIM_SETUP_V_3V;
+speed_me:
+
+ 	reg |= VGSM_R_SIM_SETUP_V_VCC |
+		VGSM_R_SIM_SETUP_V_3V;
 
 	vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id), reg);
 }

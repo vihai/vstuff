@@ -598,6 +598,8 @@ void vgsm_card_update_router(struct vgsm_card *card)
 	for(i=0; i<card->mes_number; i++) {
 		if (card->mes[i])
 			sim_router |= card->mes[i]->route_to_sim << (i*4);
+		else
+			sim_router |= i << (i*4);
 	}
 
 	vgsm_outl(card, VGSM_R_SIM_ROUTER, sim_router);
