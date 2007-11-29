@@ -186,7 +186,7 @@ static struct ks_pipeline *ks_pipeline_get_by_nlid(
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		if(attr->type == KS_PIPELINEATTR_ID)
-			return ks_pipeline_get_by_id(conn,
+			return _ks_pipeline_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 	}
 
