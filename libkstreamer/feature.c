@@ -18,6 +18,7 @@
 #include <linux/kstreamer/feature.h>
 #include <linux/kstreamer/netlink.h>
 
+#include "libkstreamer.h"
 #include "conn.h"
 #include "feature.h"
 #include "util.h"
@@ -61,7 +62,7 @@ void ks_feature_flush(struct ks_conn *conn)
 	}
 }
 
-struct ks_feature *ks_feature_get_by_id(struct ks_conn *conn, int id)
+struct ks_feature *_ks_feature_get_by_id(struct ks_conn *conn, int id)
 {
 	struct ks_feature *feature;
 	struct hlist_node *t;
@@ -74,26 +75,18 @@ struct ks_feature *ks_feature_get_by_id(struct ks_conn *conn, int id)
 	return NULL;
 }
 
-static struct ks_feature *ks_feature_get_by_nlid(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh)
+struct ks_feature *ks_feature_get_by_id(struct ks_conn *conn, int id)
 {
-	struct ks_attr *attr;
-	int attrs_len = KS_PAYLOAD(nlh);
+	struct ks_feature *feature;
 
-	for (attr = KS_ATTRS(nlh);
-	     KS_ATTR_OK(attr, attrs_len);
-	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	feature = _ks_feature_get_by_id(conn, id);
+	pthread_rwlock_unlock(&conn->topology_lock);
 
-		if(attr->type == KS_FEATURE_ID)
-			return ks_feature_get_by_id(conn,
-					*(__u32 *)KS_ATTR_DATA(attr));
-	}
-
-	return NULL;
+	return feature;
 }
 
-struct ks_feature *ks_feature_get_by_name(
+static struct ks_feature *_ks_feature_get_by_name(
 	struct ks_conn *conn,
 	const char *name)
 {
@@ -106,6 +99,39 @@ struct ks_feature *ks_feature_get_by_name(
 								node) {
 			if (!strcmp(feature->name, name))
 				return ks_feature_get(feature);
+		}
+	}
+
+	return NULL;
+}
+
+struct ks_feature *ks_feature_get_by_name(
+	struct ks_conn *conn,
+	const char *name)
+{
+	struct ks_feature *feature;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	feature = _ks_feature_get_by_name(conn, name);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return feature;
+}
+
+struct ks_feature *_ks_feature_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		if(attr->type == KS_FEATURE_ID) {
+			return _ks_feature_get_by_id(conn,
+					*(__u32 *)KS_ATTR_DATA(attr));
 		}
 	}
 
@@ -145,8 +171,11 @@ struct ks_feature *ks_feature_get(struct ks_feature *feature)
 	assert(feature->refcnt > 0);
 	assert(feature->refcnt < 100000);
 
-	if (feature)
+	if (feature) {
+		pthread_mutex_lock(&refcnt_lock);
 		feature->refcnt++;
+		pthread_mutex_unlock(&refcnt_lock);
+	}
 
 	return feature;
 }
@@ -156,9 +185,11 @@ void ks_feature_put(struct ks_feature *feature)
 	assert(feature->refcnt > 0);
 	assert(feature->refcnt < 100000);
 
-	feature->refcnt--;
+	pthread_mutex_lock(&refcnt_lock);
+	int refcnt = --feature->refcnt;
+	pthread_mutex_unlock(&refcnt_lock);
 
-	if (!feature->refcnt) {
+	if (!refcnt) {
 		if (feature->name)
 			free(feature->name);
 
@@ -260,7 +291,7 @@ void ks_feature_handle_topology_update(
 	case KS_NETLINK_FEATURE_DEL: {
 		struct ks_feature *feature;
 
-		feature = ks_feature_get_by_nlid(conn, nlh);
+		feature = _ks_feature_get_by_nlid(conn, nlh);
 		if (!feature) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;
@@ -278,7 +309,7 @@ void ks_feature_handle_topology_update(
 	case KS_NETLINK_FEATURE_SET: {
 		struct ks_feature *feature;
 
-		feature = ks_feature_get_by_nlid(conn, nlh);
+		feature = _ks_feature_get_by_nlid(conn, nlh);
 		if (!feature) {
 			report_conn(conn, LOG_ERR, "Sync lost\n");
 			break;

@@ -163,7 +163,8 @@ struct ks_conn *ks_conn_create(void)
 	INIT_LIST_HEAD(&conn->xacts);
 	conn->pid = getpid();
 
-	pthread_mutex_init(&conn->topology_lock, NULL);
+	pthread_mutex_init(&conn->refcnt_lock, NULL);
+	pthread_rwlock_init(&conn->topology_lock, NULL);
 	pthread_mutex_init(&conn->xacts_lock, NULL);
 
 	conn->report_func = ks_report_default;
@@ -510,7 +511,8 @@ void ks_conn_destroy(struct ks_conn *conn)
 	close(conn->cmd_write);
 
 	pthread_mutex_destroy(&conn->xacts_lock);
-	pthread_mutex_destroy(&conn->topology_lock);
+	pthread_rwlock_destroy(&conn->topology_lock);
+	pthread_mutex_destroy(&conn->refcnt_lock);
 
 	close(conn->sock);
 
@@ -575,3 +577,19 @@ void ks_conn_set_topology_state(
 
 	conn->topology_state = state;
 }
+
+void ks_conn_topology_rdlock(struct ks_conn *conn)
+{
+	pthread_rwlock_rdlock(&conn->topology_lock);
+}
+
+void ks_conn_topology_wrlock(struct ks_conn *conn)
+{
+	pthread_rwlock_wrlock(&conn->topology_lock);
+}
+
+void ks_conn_topology_unlock(struct ks_conn *conn)
+{
+	pthread_rwlock_unlock(&conn->topology_lock);
+}
+

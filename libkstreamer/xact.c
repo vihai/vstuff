@@ -79,7 +79,6 @@ void ks_xact_put(struct ks_xact *xact)
 	if (!xact->refcnt) {
 		pthread_cond_destroy(&xact->state_cond);
 		pthread_mutex_destroy(&xact->state_lock);
-
 		pthread_mutex_destroy(&xact->requests_lock);
 
 		free(xact);

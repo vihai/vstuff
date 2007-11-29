@@ -34,6 +34,8 @@ void ks_update_topology(struct ks_conn *conn);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 
+extern pthread_mutex_t refcnt_lock;
+
 int ks_send_noop(struct ks_conn *conn);
 
 void ks_topology_update(

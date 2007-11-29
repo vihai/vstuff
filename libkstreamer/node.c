@@ -19,6 +19,7 @@
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/netlink.h>
 
+#include "libkstreamer.h"
 #include "node.h"
 #include "conn.h"
 #include "feature.h"
@@ -66,7 +67,7 @@ void ks_node_flush(struct ks_conn *conn)
 	}
 }
 
-struct ks_node *ks_node_get_by_id(
+struct ks_node *_ks_node_get_by_id(
 	struct ks_conn *conn,
 	int id)
 {
@@ -81,7 +82,20 @@ struct ks_node *ks_node_get_by_id(
 	return NULL;
 }
 
-struct ks_node *ks_node_get_by_path(
+struct ks_node *ks_node_get_by_id(
+	struct ks_conn *conn,
+	int id)
+{
+	struct ks_node *node;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	node = _ks_node_get_by_id(conn, id);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return node;
+}
+
+static struct ks_node *_ks_node_get_by_path(
 	struct ks_conn *conn,
 	const char *path)
 {
@@ -113,6 +127,20 @@ struct ks_node *ks_node_get_by_path(
 
 	return NULL;
 }
+
+struct ks_node *ks_node_get_by_path(
+	struct ks_conn *conn,
+	const char *path)
+{
+	struct ks_node *node;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	node = _ks_node_get_by_path(conn, path);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return node;
+}
+
 
 struct ks_node *ks_node_get_by_token(
 	struct ks_conn *conn,
@@ -201,8 +229,11 @@ struct ks_node *ks_node_get(struct ks_node *node)
 	assert(node->refcnt > 0);
 	assert(node->refcnt < 100000);
 
-	if (node)
+	if (node) {
+		pthread_mutex_lock(&refcnt_lock);
 		node->refcnt++;
+		pthread_mutex_unlock(&refcnt_lock);
+	}
 
 	return node;
 }
@@ -212,9 +243,11 @@ void ks_node_put(struct ks_node *node)
 	assert(node->refcnt > 0);
 	assert(node->refcnt < 100000);
 
-	node->refcnt--;
+	pthread_mutex_lock(&refcnt_lock);
+	int refcnt = --node->refcnt;
+	pthread_mutex_unlock(&refcnt_lock);
 
-	if (!node->refcnt) {
+	if (!refcnt) {
 		int i;
 		for (i=0; i<node->features_cnt; i++)
 			ks_feature_put(node->features[i]);
@@ -259,7 +292,7 @@ static struct ks_node *ks_node_create_from_nlmsg(
 
 		default: {
 			struct ks_feature *feature;
-			feature = ks_feature_get_by_id(conn, attr->type);
+			feature = _ks_feature_get_by_id(conn, attr->type);
 			if (!feature) {
 				report_conn(conn, LOG_ERR,
 					"Attribute %d unknown\n", attr->type);
@@ -300,6 +333,8 @@ static void ks_node_update_from_nlmsg(
 		}
 	}
 }
+
+/* Must be called holding topology_lock */
 
 void ks_node_handle_topology_update(
 	struct ks_conn *conn,

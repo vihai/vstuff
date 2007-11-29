@@ -22,6 +22,7 @@
 
 #include <libskb.h>
 
+#include "libkstreamer.h"
 #include "pipeline.h"
 #include "netlink.h"
 #include "channel.h"
@@ -74,7 +75,7 @@ void ks_pipeline_flush(struct ks_conn *conn)
 	}
 }
 
-struct ks_pipeline *ks_pipeline_get_by_id(
+static struct ks_pipeline *_ks_pipeline_get_by_id(
 	struct ks_conn *conn,
 	int id)
 {
@@ -90,7 +91,20 @@ struct ks_pipeline *ks_pipeline_get_by_id(
 	return NULL;
 }
 
-struct ks_pipeline *ks_pipeline_get_by_path(
+struct ks_pipeline *ks_pipeline_get_by_id(
+	struct ks_conn *conn,
+	int id)
+{
+	struct ks_pipeline *pipeline;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	pipeline = _ks_pipeline_get_by_id(conn, id);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return pipeline;
+}
+
+static struct ks_pipeline *_ks_pipeline_get_by_path(
 	struct ks_conn *conn,
 	const char *path)
 {
@@ -109,7 +123,20 @@ struct ks_pipeline *ks_pipeline_get_by_path(
 	return NULL;
 }
 
-struct ks_pipeline *ks_pipeline_get_by_string(
+struct ks_pipeline *ks_pipeline_get_by_path(
+	struct ks_conn *conn,
+	const char *path)
+{
+	struct ks_pipeline *pipeline;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	pipeline = _ks_pipeline_get_by_path(conn, path);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return pipeline;
+}
+
+static struct ks_pipeline *_ks_pipeline_get_by_string(
 	struct ks_conn *conn,
 	const char *pipeline_str)
 {
@@ -130,6 +157,19 @@ struct ks_pipeline *ks_pipeline_get_by_string(
 		free(real_path);
 	} else
 		pipeline = ks_pipeline_get_by_id(conn, atoi(pipeline_str));
+
+	return pipeline;
+}
+
+struct ks_pipeline *ks_pipeline_get_by_string(
+	struct ks_conn *conn,
+	const char *pipeline_str)
+{
+	struct ks_pipeline *pipeline;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	pipeline = _ks_pipeline_get_by_string(conn, pipeline_str);
+	pthread_rwlock_unlock(&conn->topology_lock);
 
 	return pipeline;
 }
@@ -189,8 +229,11 @@ struct ks_pipeline *ks_pipeline_get(struct ks_pipeline *pipeline)
 {
 	assert(pipeline->refcnt > 0);
 
-	if (pipeline)
+	if (pipeline) {
+		pthread_mutex_lock(&refcnt_lock);
 		pipeline->refcnt++;
+		pthread_mutex_unlock(&refcnt_lock);
+	}
 
 	return pipeline;
 }
@@ -199,9 +242,11 @@ void ks_pipeline_put(struct ks_pipeline *pipeline)
 {
 	assert(pipeline->refcnt > 0);
 
-	pipeline->refcnt--;
+	pthread_mutex_lock(&refcnt_lock);
+	int refcnt = --pipeline->refcnt;
+	pthread_mutex_unlock(&refcnt_lock);
 
-	if (!pipeline->refcnt) {
+	if (!refcnt) {
 		if (pipeline->path)
 			free(pipeline->path);
 
@@ -435,10 +480,14 @@ static int ks_pipeline_create_handle_response(
 	struct nlmsghdr *nlh)
 {
 	struct ks_pipeline *pipeline = req->response_data;
+	struct ks_conn *conn = req->xact->conn;
 
-	ks_pipeline_update_from_nlmsg(pipeline, req->xact->conn, nlh);
+	ks_pipeline_update_from_nlmsg(pipeline, conn, nlh);
 
-	ks_pipeline_add(pipeline, req->xact->conn);
+	pthread_rwlock_wrlock(&conn->topology_lock);
+	ks_pipeline_add(pipeline, conn);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
 	ks_pipeline_put(pipeline);
 
 	return 0;
@@ -834,7 +883,7 @@ int ks_pipeline_autoroute(
 {
 	int err;
 
-	pthread_mutex_lock(&conn->topology_lock);
+	pthread_rwlock_wrlock(&conn->topology_lock);
 
 	ks_router_run(src_node, dst_node);
 
@@ -857,12 +906,12 @@ int ks_pipeline_autoroute(
 
 	pipeline->chans_cnt += nchans;
 
-	pthread_mutex_unlock(&conn->topology_lock);
+	pthread_rwlock_unlock(&conn->topology_lock);
 
 	return 0;
 
 err_no_path:
-	pthread_mutex_unlock(&conn->topology_lock);
+	pthread_rwlock_unlock(&conn->topology_lock);
 
 	return err;
 }

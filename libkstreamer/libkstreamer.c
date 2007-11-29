@@ -27,11 +27,13 @@
 #include "xact.h"
 #include "logging.h"
 
+pthread_mutex_t refcnt_lock = PTHREAD_MUTEX_INITIALIZER;
+
 void ks_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
-	pthread_mutex_lock(&conn->topology_lock);
+	pthread_rwlock_wrlock(&conn->topology_lock);
 
 	switch(nlh->nlmsg_type) {
 	case NLMSG_NOOP:
@@ -70,7 +72,7 @@ void ks_topology_update(
 	break;
 	}
 
-	pthread_mutex_unlock(&conn->topology_lock);
+	pthread_rwlock_unlock(&conn->topology_lock);
 }
 
 static int ks_topology_callback(
@@ -176,12 +178,14 @@ void ks_update_topology(struct ks_conn *conn)
 {
 	int err;
 
+	pthread_rwlock_wrlock(&conn->topology_lock);
 	ks_conn_set_topology_state(conn, KS_TOPOLOGY_STATE_SYNCING);
 
 	ks_pipeline_flush(conn);
 	ks_chan_flush(conn);
 	ks_node_flush(conn);
 	ks_feature_flush(conn);
+	pthread_rwlock_unlock(&conn->topology_lock);
 
 	struct ks_xact *xact;
 	xact = ks_send_topology_update_req(conn, &err);
@@ -189,5 +193,7 @@ void ks_update_topology(struct ks_conn *conn)
 	ks_xact_wait(xact);
 	ks_xact_put(xact);
 
+	pthread_rwlock_wrlock(&conn->topology_lock);
 	ks_conn_set_topology_state(conn, KS_TOPOLOGY_STATE_SYNCHED);
+	pthread_rwlock_unlock(&conn->topology_lock);
 }

@@ -65,6 +65,11 @@ void ks_feature_dump(
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 
+struct ks_feature *_ks_feature_get_by_id(struct ks_conn *conn, int id);
+struct ks_feature *_ks_feature_get_by_nlid(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh);
+
 void ks_feature_add(struct ks_feature *feature, struct ks_conn *conn);
 void ks_feature_del(struct ks_feature *feature);
 void ks_feature_flush(struct ks_conn *conn);

@@ -21,6 +21,7 @@
 
 #include <libskb.h>
 
+#include "libkstreamer.h"
 #include "channel.h"
 #include "node.h"
 #include "feature.h"
@@ -67,7 +68,7 @@ void ks_chan_flush(struct ks_conn *conn)
 	}
 }
 
-struct ks_chan *ks_chan_get_by_id(struct ks_conn *conn, int id)
+struct ks_chan *_ks_chan_get_by_id(struct ks_conn *conn, int id)
 {
 	struct ks_chan *chan;
 	struct hlist_node *t;
@@ -80,7 +81,18 @@ struct ks_chan *ks_chan_get_by_id(struct ks_conn *conn, int id)
 	return NULL;
 }
 
-struct ks_chan *ks_chan_get_by_path(
+struct ks_chan *ks_chan_get_by_id(struct ks_conn *conn, int id)
+{
+	struct ks_chan *chan;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	chan = _ks_chan_get_by_id(conn, id);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return chan;
+}
+
+static struct ks_chan *_ks_chan_get_by_path(
 	struct ks_conn *conn,
 	const char *path)
 {
@@ -113,7 +125,20 @@ struct ks_chan *ks_chan_get_by_path(
 	return NULL;
 }
 
-struct ks_chan *ks_chan_get_by_token(
+struct ks_chan *ks_chan_get_by_path(
+	struct ks_conn *conn,
+	const char *path)
+{
+	struct ks_chan *chan;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	chan = _ks_chan_get_by_path(conn, path);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return chan;
+}
+
+static struct ks_chan *_ks_chan_get_by_token(
 	struct ks_conn *conn,
 	struct ks_pd_token *token)
 {
@@ -152,6 +177,19 @@ struct ks_chan *ks_chan_get_by_token(
 	return chan;
 }
 
+struct ks_chan *ks_chan_get_by_token(
+	struct ks_conn *conn,
+	struct ks_pd_token *token)
+{
+	struct ks_chan *chan;
+
+	pthread_rwlock_rdlock(&conn->topology_lock);
+	chan = _ks_chan_get_by_token(conn, token);
+	pthread_rwlock_unlock(&conn->topology_lock);
+
+	return chan;
+}
+
 static struct ks_chan *ks_chan_get_by_nlid(
 	struct ks_conn *conn, struct nlmsghdr *nlh)
 {
@@ -162,9 +200,10 @@ static struct ks_chan *ks_chan_get_by_nlid(
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
-		if(attr->type == KS_CHANATTR_ID)
+		if(attr->type == KS_CHANATTR_ID) {
 			return ks_chan_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
+		}
 	}
 
 	return NULL;
@@ -211,8 +250,11 @@ struct ks_chan *ks_chan_get(struct ks_chan *chan)
 {
 	assert(chan->refcnt > 0);
 
-	if (chan)
+	if (chan) {
+		pthread_mutex_lock(&refcnt_lock);
 		chan->refcnt++;
+		pthread_mutex_unlock(&refcnt_lock);
+	}
 
 	return chan;
 }
@@ -221,9 +263,11 @@ void ks_chan_put(struct ks_chan *chan)
 {
 	assert(chan->refcnt > 0);
 
-	chan->refcnt--;
+	pthread_mutex_lock(&refcnt_lock);
+	int refcnt = --chan->refcnt;
+	pthread_mutex_unlock(&refcnt_lock);
 
-	if (!chan->refcnt) {
+	if (!refcnt) {
 		struct ks_feature_value *featval, *t;
 
 		list_for_each_entry_safe(featval, t, &chan->features, node) {
@@ -317,20 +361,20 @@ static struct ks_chan *ks_chan_create_from_nlmsg(
 		case KS_CHANATTR_FROM:
 			assert(!chan->from);
 
-			chan->from = ks_node_get_by_id(conn,
+			chan->from = _ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		break;
 
 		case KS_CHANATTR_TO:
 			assert(!chan->to);
 
-			chan->to = ks_node_get_by_id(conn,
+			chan->to = _ks_node_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 		break;
 
 		default: {
 			struct ks_feature *feature;
-			feature = ks_feature_get_by_id(conn, attr->type);
+			feature = _ks_feature_get_by_id(conn, attr->type);
 			if (!feature) {
 				report_conn(conn, LOG_WARNING,
 					"Attribute %d unknown\n", attr->type);

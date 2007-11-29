@@ -68,7 +68,9 @@ enum ks_conn_state
 
 struct ks_conn
 {
-	pthread_mutex_t topology_lock;
+	pthread_mutex_t refcnt_lock;
+
+	pthread_rwlock_t topology_lock;
 
 	enum ks_topology_state topology_state;
 
@@ -122,6 +124,10 @@ void ks_conn_send_message(
 	enum ks_conn_message_type mt,
 	void *data,
 	int len);
+
+void ks_conn_topology_rdlock(struct ks_conn *conn);
+void ks_conn_topology_wrlock(struct ks_conn *conn);
+void ks_conn_topology_unlock(struct ks_conn *conn);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 

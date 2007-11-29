@@ -104,19 +104,19 @@ static int ks_kstreamer_show_features_func(int fd, int argc, char *argv[])
 {
 	int i;
 
+	ks_conn_topology_rdlock(ks_conn);
 	for (i=0; i<ARRAY_SIZE(ks_conn->features_hash); i++) {
 		struct ks_feature *feature;
 		struct hlist_node *t;
 
-		pthread_mutex_lock(&ks_conn->topology_lock);
 		hlist_for_each_entry(feature, t, &ks_conn->features_hash[i],
 								node) {
 			ast_cli(fd, "0x%08x: %s\n",
 				feature->id,
 				feature->name);
 		}
-		pthread_mutex_unlock(&ks_conn->topology_lock);
 	}
+	ks_conn_topology_unlock(ks_conn);
 
 	return RESULT_SUCCESS;
 }
@@ -161,18 +161,18 @@ static int ks_kstreamer_show_nodes_func(int fd, int argc, char *argv[])
 {
 	int i;
 
+	ks_conn_topology_rdlock(ks_conn);
 	for (i=0; i<ARRAY_SIZE(ks_conn->nodes_hash); i++) {
 		struct ks_node *node;
 		struct hlist_node *t;
 
-		pthread_mutex_lock(&ks_conn->topology_lock);
 		hlist_for_each_entry(node, t, &ks_conn->nodes_hash[i], node) {
 			ast_cli(fd, "0x%08x: %s\n",
 				node->id,
 				node->path);
 		}
-		pthread_mutex_unlock(&ks_conn->topology_lock);
 	}
+	ks_conn_topology_unlock(ks_conn);
 
 	return RESULT_SUCCESS;
 }
@@ -217,18 +217,18 @@ static int ks_kstreamer_show_chans_func(int fd, int argc, char *argv[])
 {
 	int i;
 
+	ks_conn_topology_rdlock(ks_conn);
 	for (i=0; i<ARRAY_SIZE(ks_conn->chans_hash); i++) {
 		struct ks_chan *chan;
 		struct hlist_node *t;
 
-		pthread_mutex_lock(&ks_conn->topology_lock);
 		hlist_for_each_entry(chan, t, &ks_conn->chans_hash[i], node) {
 			ast_cli(fd, "0x%08x: %s\n",
 				chan->id,
 				chan->path);
 		}
-		pthread_mutex_unlock(&ks_conn->topology_lock);
 	}
+	ks_conn_topology_unlock(ks_conn);
 
 	return RESULT_SUCCESS;
 }
@@ -273,19 +273,19 @@ static int ks_kstreamer_show_pipelines_func(int fd, int argc, char *argv[])
 {
 	int i;
 
+	ks_conn_topology_rdlock(ks_conn);
 	for (i=0; i<ARRAY_SIZE(ks_conn->pipelines_hash); i++) {
 		struct ks_pipeline *pipeline;
 		struct hlist_node *t;
 
-		pthread_mutex_lock(&ks_conn->topology_lock);
 		hlist_for_each_entry(pipeline, t, &ks_conn->pipelines_hash[i],
 									node) {
 			ast_cli(fd, "0x%08x: %s\n",
 				pipeline->id,
 				pipeline->path);
 		}
-		pthread_mutex_unlock(&ks_conn->topology_lock);
 	}
+	ks_conn_topology_unlock(ks_conn);
 
 	return RESULT_SUCCESS;
 }
