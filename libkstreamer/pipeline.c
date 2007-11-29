@@ -337,7 +337,7 @@ static struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 
 		case KS_PIPELINEATTR_CHAN_ID: {
 			struct ks_chan *chan;
-			chan = ks_chan_get_by_id(conn,
+			chan = _ks_chan_get_by_id(conn,
 					*(__u32 *)KS_ATTR_DATA(attr));
 			if (!chan) {
 				report_conn(conn, LOG_ERR,
