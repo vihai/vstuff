@@ -83,8 +83,6 @@ void vgsm_sim_update_sim_setup(struct vgsm_sim *sim)
 		if (card->mes[i] &&
 		    card->mes[i]->route_to_sim == sim->id) {
 			reg = VGSM_R_SIM_SETUP_V_CLOCK_ME;
-
-			vgsm_outl(card, VGSM_R_SIM_SETUP(sim->id), reg);
 			goto speed_me;
 		}
 	}
