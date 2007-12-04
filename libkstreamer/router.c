@@ -79,7 +79,7 @@ void ks_router_run(
 		if (min_cost_node == to)
 			break;
 
-		debug_conn(conn, debug_router,
+		ks_conn_debug_router(conn,
 			"Min cost (%d) node = %s\n",
 			min_cost_node->router_cost,
 			min_cost_node->path);
@@ -101,7 +101,7 @@ void ks_router_run(
 				if (arch->pipeline)
 					continue;
 
-				debug_conn(conn, debug_router,
+				ks_conn_debug_router(conn,
 					"    Arch (%s) from"
 					" node (%s) to node (%s),"
 					" cost = %d\n",
@@ -123,7 +123,7 @@ void ks_router_run(
 					arch->to->router_prev = min_cost_node;
 					arch->to->router_prev_thru = arch;
 
-					debug_conn(conn, debug_router,
+					ks_conn_debug_router(conn,
 						"        => Relaxing node (%s)"
 						" new cost = %d\n",
 						arch->to->path,

@@ -217,8 +217,9 @@ int ks_xact_submit(struct ks_xact *xact)
 void ks_xact_wait(struct ks_xact *xact)
 {
 	pthread_mutex_lock(&xact->state_lock);
-	while(xact->state != KS_XACT_STATE_COMPLETED)
+	while(xact->state != KS_XACT_STATE_COMPLETED) {
 		pthread_cond_wait(&xact->state_cond, &xact->state_lock);
+	}
 	pthread_mutex_unlock(&xact->state_lock);
 }
 

@@ -15,7 +15,6 @@ libkstreamer_la_SOURCES = \
 	libkstreamer.c	\
 	feature.c	\
 	channel.c	\
-	netlink.c	\
 	xact.c		\
 	req.c		\
 	node.c		\
@@ -23,7 +22,8 @@ libkstreamer_la_SOURCES = \
 	conn.c		\
 	router.c	\
 	pd_parser.c	\
-	pd_grammar.lem
+	pd_grammar.lem	\
+	timer.c
 
 libkstreamer_ladir = libkstreamer
 
@@ -37,11 +37,11 @@ nobase_include_HEADERS = \
 	libkstreamer/xact.h		\
 	libkstreamer/req.h		\
 	libkstreamer/router.h		\
-	libkstreamer/netlink.h		\
 	libkstreamer/util.h		\
 	libkstreamer/logging.h		\
 	libkstreamer/pd_grammar.h	\
-	libkstreamer/pd_parser.h
+	libkstreamer/pd_parser.h	\
+	libkstreamer/timer.h
 
 libkstreamer_la_CPPFLAGS= \
 	-I$(top_builddir)			\

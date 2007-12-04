@@ -19,7 +19,6 @@
 #include "pipeline.h"
 #include "feature.h"
 #include "router.h"
-#include "netlink.h"
 #include "req.h"
 #include "xact.h"
 #include "logging.h"

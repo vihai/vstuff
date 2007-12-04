@@ -24,6 +24,7 @@
 #include "node.h"
 #include "channel.h"
 #include "pipeline.h"
+#include "timer.h"
 
 enum ks_conn_message_type
 {
@@ -102,6 +103,9 @@ struct ks_conn
 	struct ks_xact *cur_xact;
 	struct ks_req *cur_req;
 
+	struct ks_timerset timerset;
+	struct ks_timer timer;
+
 	void (*report_func)(int level, const char *format, ...)
 		__attribute__ ((format (printf, 2, 3)));
 
@@ -131,21 +135,31 @@ void ks_conn_topology_unlock(struct ks_conn *conn);
 
 #ifdef _LIBKSTREAMER_PRIVATE_
 
+#include <linux/types.h>
+
 #define report_conn(conn, lvl, format, arg...)				\
 	(conn)->report_func((lvl),					\
 		"ks: "							\
 		format,							\
 		## arg)
 
-#define debug_conn(conn, flag, format, arg...)				\
-	do {								\
-		if ((conn)->flag) {					\
-			(conn)->report_func(LOG_DEBUG,			\
-				"ks: "					\
-				format,					\
-				## arg);				\
-		}							\
-	} while(0)
+#define ks_conn_debug_state(conn, format, arg...)	\
+	if (conn->debug_state)			\
+		report_conn(conn, LOG_DEBUG,		\
+			format,				\
+			## arg)
+
+#define ks_conn_debug_netlink(conn, format, arg...)	\
+	if (conn->debug_netlink)			\
+		report_conn(conn, LOG_DEBUG,		\
+			format,				\
+			## arg)
+
+#define ks_conn_debug_router(conn, format, arg...)	\
+	if (conn->debug_router)				\
+		report_conn(conn, LOG_DEBUG,		\
+			format,				\
+			## arg)
 
 void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
 
@@ -160,6 +174,22 @@ void ks_conn_topology_updated(
 	struct ks_conn *conn,
 	int message_type,
 	void *object);
+
+struct sk_buff;
+
+struct nlmsghdr *ks_nlmsg_put(
+	struct sk_buff *skb, __u32 pid, __u32 seq,
+	__u16 message_type, __u16 flags, int payload_size);
+
+int ks_conn_put_attr(
+	struct sk_buff *skb,
+	int type,
+	void *data,
+	int data_len);
+
+int ks_conn_receive(struct ks_conn *conn);
+
+int ks_conn_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
 
 #endif
 
