@@ -26,11 +26,11 @@
 
 #include <libskb.h>
 
-#include "conn.h"
-#include "netlink.h"
-#include "util.h"
-#include "xact.h"
-#include "req.h"
+#include <libkstreamer/conn.h>
+#include <libkstreamer/netlink.h>
+#include <libkstreamer/util.h>
+#include <libkstreamer/xact.h>
+#include <libkstreamer/req.h>
 
 struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
 {

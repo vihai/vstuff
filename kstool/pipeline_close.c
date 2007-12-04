@@ -23,7 +23,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include "kstool.h"
 #include "pipeline_close.h"

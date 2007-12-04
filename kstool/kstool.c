@@ -29,7 +29,7 @@
 #include <list.h>
 
 #include <libskb.h>
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include "kstool.h"
 #include "connect.h"

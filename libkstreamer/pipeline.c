@@ -22,16 +22,16 @@
 
 #include <libskb.h>
 
-#include "libkstreamer.h"
-#include "pipeline.h"
-#include "netlink.h"
-#include "channel.h"
-#include "node.h"
-#include "feature.h"
-#include "req.h"
-#include "xact.h"
-#include "router.h"
-#include "logging.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/pipeline.h>
+#include <libkstreamer/netlink.h>
+#include <libkstreamer/channel.h>
+#include <libkstreamer/node.h>
+#include <libkstreamer/feature.h>
+#include <libkstreamer/req.h>
+#include <libkstreamer/xact.h>
+#include <libkstreamer/router.h>
+#include <libkstreamer/logging.h>
 
 static inline struct hlist_head *ks_pipeline_get_hash(
 	struct ks_conn *conn, int id)

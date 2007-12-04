@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "pd_parser.h"
+#include <libkstreamer/pd_parser.h>
 }
 
 %left COMMA.

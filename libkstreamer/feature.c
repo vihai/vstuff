@@ -18,11 +18,11 @@
 #include <linux/kstreamer/feature.h>
 #include <linux/kstreamer/netlink.h>
 
-#include "libkstreamer.h"
-#include "conn.h"
-#include "feature.h"
-#include "util.h"
-#include "logging.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/conn.h>
+#include <libkstreamer/feature.h>
+#include <libkstreamer/util.h>
+#include <libkstreamer/logging.h>
 
 static inline struct hlist_head *ks_feature_get_hash(
 	struct ks_conn *conn, int id)

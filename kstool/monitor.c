@@ -26,7 +26,7 @@
 
 #include <list.h>
 
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include "kstool.h"
 #include "monitor.h"

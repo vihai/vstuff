@@ -26,12 +26,12 @@
 #include <linux/netlink.h>
 #include <linux/kstreamer/netlink.h>
 
-#include "libkstreamer.h"
-#include "conn.h"
-#include "xact.h"
-#include "req.h"
-#include "util.h"
-#include "logging.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/conn.h>
+#include <libkstreamer/xact.h>
+#include <libkstreamer/req.h>
+#include <libkstreamer/util.h>
+#include <libkstreamer/logging.h>
 
 void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact)
 {

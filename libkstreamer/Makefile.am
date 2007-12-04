@@ -28,20 +28,20 @@ libkstreamer_la_SOURCES = \
 libkstreamer_ladir = libkstreamer
 
 nobase_include_HEADERS = \
-	feature.h	\
-	libkstreamer.h	\
-	channel.h	\
-	node.h		\
-	pipeline.h	\
-	conn.h		\
-	xact.h		\
-	req.h		\
-	router.h	\
-	netlink.h	\
-	util.h		\
-	logging.h	\
-	pd_grammar.h	\
-	pd_parser.h
+	libkstreamer/libkstreamer.h	\
+	libkstreamer/feature.h		\
+	libkstreamer/channel.h		\
+	libkstreamer/node.h		\
+	libkstreamer/pipeline.h		\
+	libkstreamer/conn.h		\
+	libkstreamer/xact.h		\
+	libkstreamer/req.h		\
+	libkstreamer/router.h		\
+	libkstreamer/netlink.h		\
+	libkstreamer/util.h		\
+	libkstreamer/logging.h		\
+	libkstreamer/pd_grammar.h	\
+	libkstreamer/pd_parser.h
 
 libkstreamer_la_CPPFLAGS= \
 	-I$(top_builddir)			\
@@ -49,13 +49,14 @@ libkstreamer_la_CPPFLAGS= \
 	-I$(top_builddir)/libskb/		\
 	-I$(top_builddir)/modules/include/
 
-CLEANFILES = pd_grammar.c pd_grammar.h pd_grammar.out libkstreamer_la-pd_grammar.lo
+CLEANFILES = pd_grammar.c libkstreamer/pd_grammar.h pd_grammar.out libkstreamer_la-pd_grammar.lo
 EXTRA_DIST = pd_grammar.lem
 
 BUILT_SOURCES = pd_grammar.c
 
-pd_grammar.c pd_grammar.h: pd_grammar.lem
+pd_grammar.c libkstreamer/pd_grammar.h: pd_grammar.lem
 	../tools/lemon pd_grammar.lem
+	mv pd_grammar.h libkstreamer/
 
 libkstreamer_la-pd_grammar.lo: pd_grammar.c
 	if $(LIBTOOL) --mode=compile --tag=CC $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libkstreamer_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libkstreamer_la-pd_grammar.lo -MD -MP -MF "$(DEPDIR)/libkstreamer_la-pd_grammar.Tpo" -c -o libkstreamer_la-pd_grammar.lo `test -f 'pd_grammar.c' || echo '$(srcdir)/'`pd_grammar.c; \

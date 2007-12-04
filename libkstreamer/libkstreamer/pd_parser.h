@@ -13,7 +13,7 @@
 #ifndef _LIBKSTREAMER_PD_TOKENIZER_H
 #define _LIBKSTREAMER_PD_TOKENIZER_H
 
-#include "util.h"
+#include <libkstreamer/util.h>
 
 #include <list.h>
 

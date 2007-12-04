@@ -21,14 +21,14 @@
 
 #include <libskb.h>
 
-#include "libkstreamer.h"
-#include "channel.h"
-#include "node.h"
-#include "feature.h"
-#include "netlink.h"
-#include "req.h"
-#include "xact.h"
-#include "logging.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/channel.h>
+#include <libkstreamer/node.h>
+#include <libkstreamer/feature.h>
+#include <libkstreamer/netlink.h>
+#include <libkstreamer/req.h>
+#include <libkstreamer/xact.h>
+#include <libkstreamer/logging.h>
 
 static inline struct hlist_head *ks_chan_get_hash(
 	struct ks_conn *conn, int id)

@@ -26,14 +26,14 @@
 
 #include <libskb.h>
 
-#include "libkstreamer.h"
-#include "netlink.h"
-#include "feature.h"
-#include "node.h"
-#include "channel.h"
-#include "pipeline.h"
-#include "xact.h"
-#include "req.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/netlink.h>
+#include <libkstreamer/feature.h>
+#include <libkstreamer/node.h>
+#include <libkstreamer/channel.h>
+#include <libkstreamer/pipeline.h>
+#include <libkstreamer/xact.h>
+#include <libkstreamer/req.h>
 
 static const char *ks_netlink_message_type_to_string(
 		enum ks_netlink_message_type message_type)

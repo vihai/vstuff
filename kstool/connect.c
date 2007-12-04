@@ -24,7 +24,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include <linux/kstreamer/hdlc_framer.h>
 #include <linux/kstreamer/octet_reverser.h>

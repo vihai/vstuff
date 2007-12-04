@@ -19,15 +19,15 @@
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/netlink.h>
 
-#include "libkstreamer.h"
-#include "node.h"
-#include "conn.h"
-#include "feature.h"
-#include "util.h"
-#include "logging.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/node.h>
+#include <libkstreamer/conn.h>
+#include <libkstreamer/feature.h>
+#include <libkstreamer/util.h>
+#include <libkstreamer/logging.h>
 
-#include "pd_grammar.h"
-#include "pd_parser.h"
+#include <libkstreamer/pd_grammar.h>
+#include <libkstreamer/pd_parser.h>
 
 static inline struct hlist_head *ks_node_get_hash(
 	struct ks_conn *conn, int id)

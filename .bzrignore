@@ -42,8 +42,8 @@
 ./libkstreamer/Makefile
 ./libkstreamer/Makefile.in
 ./libkstreamer/pd_grammar.c
-./libkstreamer/pd_grammar.h
 ./libkstreamer/pd_grammar.out
+./libkstreamer/libkstreamer/pd_grammar.h
 ./libq931/Makefile
 ./libq931/Makefile.in
 ./libskb/Makefile

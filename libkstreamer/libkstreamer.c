@@ -17,15 +17,15 @@
 
 #include <libskb.h>
 
-#include "libkstreamer.h"
-#include "netlink.h"
-#include "req.h"
-#include "feature.h"
-#include "channel.h"
-#include "pipeline.h"
-#include "util.h"
-#include "xact.h"
-#include "logging.h"
+#include <libkstreamer/libkstreamer.h>
+#include <libkstreamer/netlink.h>
+#include <libkstreamer/req.h>
+#include <libkstreamer/feature.h>
+#include <libkstreamer/channel.h>
+#include <libkstreamer/pipeline.h>
+#include <libkstreamer/util.h>
+#include <libkstreamer/xact.h>
+#include <libkstreamer/logging.h>
 
 pthread_mutex_t refcnt_lock = PTHREAD_MUTEX_INITIALIZER;
 

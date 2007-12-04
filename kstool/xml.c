@@ -16,7 +16,7 @@
 #include <errno.h>
 #include <string.h>
 
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include "xml.h"
 

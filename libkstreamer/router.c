@@ -18,13 +18,13 @@
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/netlink.h>
 
-#include "util.h"
-#include "router.h"
-#include "node.h"
-#include "channel.h"
-#include "pipeline.h"
-#include "conn.h"
-#include "logging.h"
+#include <libkstreamer/util.h>
+#include <libkstreamer/router.h>
+#include <libkstreamer/node.h>
+#include <libkstreamer/channel.h>
+#include <libkstreamer/pipeline.h>
+#include <libkstreamer/conn.h>
+#include <libkstreamer/logging.h>
 
 #define DIJ_DEBUG
 

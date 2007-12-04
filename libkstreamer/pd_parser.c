@@ -20,12 +20,12 @@
 #include <linux/kstreamer/node.h>
 #include <linux/kstreamer/netlink.h>
 
-#include "util.h"
-#include "logging.h"
-#include "conn.h"
+#include <libkstreamer/util.h>
+#include <libkstreamer/logging.h>
+#include <libkstreamer/conn.h>
 
-#include "pd_grammar.h"
-#include "pd_parser.h"
+#include <libkstreamer/pd_grammar.h>
+#include <libkstreamer/pd_parser.h>
 
 static inline KSBOOL isidentstart(char c)
 {

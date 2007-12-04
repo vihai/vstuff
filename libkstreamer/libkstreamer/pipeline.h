@@ -23,7 +23,7 @@
 
 #include <libskb.h>
 
-#include "util.h"
+#include <libkstreamer/util.h>
 
 struct ks_conn;
 

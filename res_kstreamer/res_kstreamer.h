@@ -13,7 +13,7 @@
 #ifndef _RES_KSTREAMER_H
 #define _RES_KSTREAMER_H
 
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 #include <libskb.h>
 
 extern struct ks_conn *ks_conn;

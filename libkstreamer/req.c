@@ -16,11 +16,11 @@
 #include <errno.h>
 #include <assert.h>
 
-#include "conn.h"
-#include "netlink.h"
-#include "util.h"
-#include "req.h"
-#include "xact.h"
+#include <libkstreamer/conn.h>
+#include <libkstreamer/netlink.h>
+#include <libkstreamer/util.h>
+#include <libkstreamer/req.h>
+#include <libkstreamer/xact.h>
 
 struct ks_req ks_nomem_request =
 {

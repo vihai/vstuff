@@ -15,7 +15,7 @@
 
 #include <list.h>
 
-#include "util.h"
+#include <libkstreamer/util.h>
 
 #define KS_XACT_HASHBITS 4
 #define KS_XACT_HASHSIZE ((1 << KS_XACT_HASHBITS) - 1)

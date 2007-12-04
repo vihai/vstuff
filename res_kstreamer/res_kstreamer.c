@@ -49,7 +49,7 @@
 #undef pthread_cond_wait
 #undef pthread_cond_timedwait
 
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include "res_kstreamer.h"
 
