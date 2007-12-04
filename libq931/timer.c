@@ -49,19 +49,11 @@ void q931_start_timer(
 		q931_timer_update();
 }
 
-longtime_t q931_longtime_now()
-{
-	struct timeval now_tv;
-	gettimeofday(&now_tv, NULL);
-
-	return now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
-}
-
 void q931_start_timer_delta(
 	struct q931_timer *timer,
 	longtime_t delta)
 {
-	q931_start_timer(timer, q931_longtime_now() + delta);
+	q931_start_timer(timer, longtime_now() + delta);
 }
 
 void q931_stop_timer(struct q931_timer *timer)
@@ -75,7 +67,7 @@ void q931_stop_timer(struct q931_timer *timer)
 
 longtime_t q931_run_timers(void)
 {
-	longtime_t now = q931_longtime_now();
+	longtime_t now = longtime_now();
 	longtime_t next_timer = -1;
 	BOOL next_timer_set = FALSE;
 

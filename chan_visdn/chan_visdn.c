@@ -5025,7 +5025,7 @@ static void visdn_cli_print_call_timer_info(
 	const char *name)
 {
 	if (timer->pending) {
-		longtime_t delay = timer->expires - q931_longtime_now();
+		longtime_t delay = timer->expires - longtime_now();
 		ast_cli(fd, "%s (in %.1f s) ", name, delay / 1000000.0);
 	}
 }

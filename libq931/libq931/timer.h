@@ -15,7 +15,7 @@
 
 #include <libq931/list.h>
 
-typedef long long longtime_t;
+#include <longtime.h>
 
 struct q931_timer
 {
@@ -32,8 +32,6 @@ struct q931_timer
 };
 
 extern longtime_t q931_run_timers();
-
-extern longtime_t q931_longtime_now(void);
 
 #ifdef Q931_PRIVATE
 

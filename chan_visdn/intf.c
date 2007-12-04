@@ -441,7 +441,7 @@ static void visdn_intf_set_status(
 		timeout / 1000000.0);
 
 	intf->status = status;
-	intf->timer_expiration = q931_longtime_now() + timeout;
+	intf->timer_expiration = longtime_now() + timeout;
 
 	if (fmt) {
 		va_list ap;
@@ -664,12 +664,12 @@ longtime_t visdn_intf_run_timers(longtime_t timeout)
 	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
 
 		if (intf->timer_expiration != -1) {
-			if (intf->timer_expiration < q931_longtime_now()) {
+			if (intf->timer_expiration < longtime_now()) {
 				intf->timer_expiration = -1;
 				visdn_intf_timer(intf);
 			} else {
 				timeout = intf->timer_expiration -
-							q931_longtime_now();
+							longtime_now();
 			}
 		}
 	}

@@ -94,6 +94,7 @@ libq931_la_LDFLAGS = -module -version-info 1:0:0 -no-undefined
 libq931_ladir = libq931
 
 libq931_la_CPPFLAGS=\
+	-I$(top_srcdir)/include/		\
 	-I$(top_srcdir)/modules/include/
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall

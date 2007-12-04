@@ -32,7 +32,6 @@ chan_vgsm_la_SOURCES =\
 	7bit.c			\
 	base64.c		\
 	quotprint.c		\
-	longtime.c		\
 	timer.c			\
 	util.c
 
@@ -58,7 +57,6 @@ noinst_HEADERS =\
 	7bit.h			\
 	base64.h		\
 	quotprint.h		\
-	longtime.h		\
 	timer.h			\
 	util.h			\
 	rwlock_compat.h
