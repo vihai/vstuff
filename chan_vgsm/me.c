@@ -3092,6 +3092,7 @@ static int vgsm_me_pin_check_and_input(
 
 	vgsm_req_put(req);
 
+cpin_retry:
 	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CPIN?");
 	err = vgsm_req_status(req);
 	if (err == CME_ERROR(10)) {
@@ -3100,6 +3101,10 @@ static int vgsm_me_pin_check_and_input(
 				"SIM not present");
 		vgsm_req_put(req);
 		goto err_spic;
+	} else if (err == CME_ERROR(256)) {
+		vgsm_req_put(req);
+		sleep(1);
+		goto cpin_retry;
 	} else if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
 		vgsm_req_put(req);
@@ -4001,7 +4006,7 @@ static int vgsm_me_open(
 		struct termios newtio;
 		bzero(&newtio, sizeof(newtio));
 
-		newtio.c_cflag = B9600 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
+		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
 		newtio.c_iflag = IGNBRK | IGNPAR;
 		newtio.c_oflag = 0;
 		newtio.c_lflag = 0;
@@ -4024,7 +4029,15 @@ static int vgsm_me_open(
 		newtio.c_cc[VLNEXT]	= 0;
 		newtio.c_cc[VEOL2]	= 0;
 		
-		tcflush(me->mesim_fd, TCIOFLUSH);
+		if (tcflush(me->mesim_fd, TCIOFLUSH) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: tcflush(TCIOFLUSH):  %s\n",
+				me->name,
+				strerror(errno));
+
+			err = -errno;
+			goto err_mesim_tcsetattr;
+		}
 
 		if (tcsetattr(me->mesim_fd, TCSANOW, &newtio) < 0) {
 			char tmpstr[64];
@@ -4037,6 +4050,41 @@ static int vgsm_me_open(
 			vgsm_me_set_status(me,
 				VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
 				tmpstr);
+
+			err = -errno;
+			goto err_mesim_tcsetattr;
+		}
+
+		if (tcflush(me->mesim_fd, TCIOFLUSH) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: tcflush(TCIOFLUSH):  %s\n",
+				me->name,
+				strerror(errno));
+
+			err = -errno;
+			goto err_mesim_tcsetattr;
+		}
+
+		struct serial_struct ss;
+		if (ioctl(me->mesim_fd, TIOCGSERIAL, &ss) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: ioctl(TIOCGSERIAL):  %s\n",
+				me->name,
+				strerror(errno));
+
+			err = -errno;
+			goto err_mesim_tcsetattr;
+		}
+
+		ss.custom_divisor = ss.baud_base / 8736;
+		ss.flags &= ~ASYNC_SPD_MASK;
+		ss.flags |= ASYNC_SPD_CUST;
+
+		if (ioctl(me->mesim_fd, TIOCSSERIAL, &ss) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: ioctl(TIOCSSERIAL):  %s\n",
+				me->name,
+				strerror(errno));
 
 			err = -errno;
 			goto err_mesim_tcsetattr;
@@ -4848,29 +4896,29 @@ static int vgsm_me_show_sim(int fd, struct vgsm_me *me)
 
 	if (me->mesim.proto == VGSM_MESIM_PROTO_LOCAL) {
 		ast_cli(fd, "  Routed to local SIM holder: %d\n",
-			me->mesim.local_sim_id);
+			me->mesim.local.sim_id);
 	} else if (me->mesim.proto == VGSM_MESIM_PROTO_CLIENT) {
 	} else if (me->mesim.proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
 		ast_cli(fd, "  Implementa interface status: %s\n",
 			vgsm_mesim_impl_state_to_text(
-					me->mesim.impl_state));
+					me->mesim.impl.state));
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 		{
 		char tmpstr[32];
 		ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-			me->mesim.impl_simclient_addr.sin_addr);
+			me->mesim.impl.simclient_addr.sin_addr);
 
 		ast_cli(fd, "  Implementa SIM client addr:"
 				" %s:%d\n",
 			tmpstr,
-			ntohs(me->mesim.impl_simclient_addr.sin_port));
+			ntohs(me->mesim.impl.simclient_addr.sin_port));
 		}
 #else
 		ast_cli(fd, "  Implementa SIM client addr:"
 				" %s:%d\n",
 			ast_inet_ntoa(me->mesim.
-					impl_simclient_addr.sin_addr),
-			ntohs(me->mesim.impl_simclient_addr.sin_port));
+					impl.simclient_addr.sin_addr),
+			ntohs(me->mesim.impl.simclient_addr.sin_port));
 #endif
 	}
 

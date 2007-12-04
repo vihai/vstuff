@@ -38,11 +38,11 @@ enum vgsm_mesim_state
 {
 	VGSM_MESIM_CLOSED,
 	VGSM_MESIM_CLOSING,
-	VGSM_MESIM_ME_POWERING_ON,
 	VGSM_MESIM_UNCONFIGURED,
 	VGSM_MESIM_SETTING_MODE,
 	VGSM_MESIM_DIRECTLY_ROUTED,
 	VGSM_MESIM_HOLDER_REMOVED,
+	VGSM_MESIM_HOLDER_CHANGING,
 	VGSM_MESIM_SIM_MISSING,
 	VGSM_MESIM_READY,
 	VGSM_MESIM_RESET,
@@ -102,6 +102,7 @@ enum vgsm_mesim_impl_state
 	VGSM_MESIM_IMPL_STATE_NULL,
 	VGSM_MESIM_IMPL_STATE_TRYING,
 	VGSM_MESIM_IMPL_STATE_CONNECTED,
+	VGSM_MESIM_IMPL_STATE_ACTIVE,
 };
 
 struct vgsm_me;
@@ -113,16 +114,15 @@ struct vgsm_mesim
 	const char *name;
 
 	enum vgsm_mesim_state state;
-	enum vgsm_mesim_state prev_state;
 	ast_mutex_t state_lock;
 	ast_cond_t state_cond;
+
+	BOOL insert_override;
 
 	struct vgsm_me *me;
 
 	struct vgsm_timerset timerset;
 	struct vgsm_timer timer;
-
-	BOOL enabled;
 
 	int cmd_pipe_read;
 	int cmd_pipe_write;
@@ -130,6 +130,8 @@ struct vgsm_mesim
 	pthread_t comm_thread;
 	pthread_t modem_thread;
 	BOOL modem_thread_has_to_exit;
+
+	BOOL is_reset;
 
 	BOOL vcc;
 	BOOL rst;
@@ -142,20 +144,26 @@ struct vgsm_mesim
         enum vgsm_mesim_proto proto;
 
 	/* protocol=local */
-	char local_device_filename[PATH_MAX];
-	int local_fd;
-	int local_sim_id;
+	struct {
+		char device_filename[PATH_MAX];
+		int fd;
+		int sim_id;
+	} local;
 
 	/* protocol=client */
-	int clnt_listen_fd;
-	int clnt_sock_fd;
-	struct sockaddr_in clnt_bind_addr;
+	struct {
+		int listen_fd;
+		int sock_fd;
+		struct sockaddr_in bind_addr;
+	} clnt;
 
 	/* protocol=implementa */
-	int impl_sock_fd;
-	struct sockaddr_in impl_simclient_addr;
-	enum vgsm_mesim_impl_state impl_state;
-	struct vgsm_timer impl_timer;
+	struct {
+		int sock_fd;
+		struct sockaddr_in simclient_addr;
+		enum vgsm_mesim_impl_state state;
+		struct vgsm_timer timer;
+	} impl;
 };
 
 const char *vgsm_mesim_state_to_text(
