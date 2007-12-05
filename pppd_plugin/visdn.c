@@ -25,7 +25,7 @@
 #include <linux/kstreamer/hdlc_framer.h>
 
 #include <libskb.h>
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #include "pppd.h"
 #include "fsm.h"
