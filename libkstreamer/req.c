@@ -17,7 +17,6 @@
 #include <assert.h>
 
 #include <libkstreamer/conn.h>
-#include <libkstreamer/netlink.h>
 #include <libkstreamer/util.h>
 #include <libkstreamer/req.h>
 #include <libkstreamer/xact.h>

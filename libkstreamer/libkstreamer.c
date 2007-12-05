@@ -18,7 +18,6 @@
 #include <libskb.h>
 
 #include <libkstreamer/libkstreamer.h>
-#include <libkstreamer/netlink.h>
 #include <libkstreamer/req.h>
 #include <libkstreamer/feature.h>
 #include <libkstreamer/channel.h>

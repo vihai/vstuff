@@ -27,7 +27,6 @@
 #include <libskb.h>
 
 #include <libkstreamer/conn.h>
-#include <libkstreamer/netlink.h>
 #include <libkstreamer/util.h>
 #include <libkstreamer/xact.h>
 #include <libkstreamer/req.h>

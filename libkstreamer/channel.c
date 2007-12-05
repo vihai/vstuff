@@ -25,7 +25,6 @@
 #include <libkstreamer/channel.h>
 #include <libkstreamer/node.h>
 #include <libkstreamer/feature.h>
-#include <libkstreamer/netlink.h>
 #include <libkstreamer/req.h>
 #include <libkstreamer/xact.h>
 #include <libkstreamer/logging.h>

@@ -181,15 +181,11 @@ struct nlmsghdr *ks_nlmsg_put(
 	struct sk_buff *skb, __u32 pid, __u32 seq,
 	__u16 message_type, __u16 flags, int payload_size);
 
-int ks_conn_put_attr(
+int ks_netlink_put_attr(
 	struct sk_buff *skb,
 	int type,
 	void *data,
 	int data_len);
-
-int ks_conn_receive(struct ks_conn *conn);
-
-int ks_conn_sendmsg(struct ks_conn *conn, struct sk_buff *skb);
 
 #endif
 

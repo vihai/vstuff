@@ -24,7 +24,6 @@
 
 #include <libkstreamer/libkstreamer.h>
 #include <libkstreamer/pipeline.h>
-#include <libkstreamer/netlink.h>
 #include <libkstreamer/channel.h>
 #include <libkstreamer/node.h>
 #include <libkstreamer/feature.h>

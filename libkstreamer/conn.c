@@ -158,7 +158,7 @@ struct nlmsghdr *ks_nlmsg_put(
 	return nlh;
 }
 
-int ks_conn_put_attr(
+int ks_netlink_put_attr(
 	struct sk_buff *skb,
 	int type,
 	void *data,
@@ -439,7 +439,7 @@ static void ks_conn_receive_msg(
 
 }
 
-int ks_conn_receive(struct ks_conn *conn)
+static int ks_conn_receive(struct ks_conn *conn)
 {
 	int buf_size = NLMSG_SPACE(8192);
 	void *buf = malloc(buf_size);
