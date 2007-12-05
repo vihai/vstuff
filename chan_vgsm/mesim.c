@@ -1016,7 +1016,7 @@ static void vgsm_mesim_impl_timer(void *data)
 			{
 			char tmpstr[32];
 			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-				mesim->impl_simclient_addr.sin_addr);
+				mesim->impl.simclient_addr.sin_addr);
 			vgsm_mesim_debug(mesim,
 				"Unable to connect MESIM socket to"
 				" %s:%d: %s\n",

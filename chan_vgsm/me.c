@@ -2347,7 +2347,7 @@ retry_workaround:;
 			continue;
 		} else if (idx >= ARRAY_SIZE(me->calls)) {
 			ast_log(LOG_ERROR, "SLCC describes call index %d but"
-				" a maximum of %u calls is handled\n",
+				" a maximum of %lu calls is handled\n",
 				idx, ARRAY_SIZE(me->calls));
 			continue;
 		}
