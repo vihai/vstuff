@@ -40,7 +40,7 @@
 #include <list.h>
 
 #include <libskb.h>
-#include <libkstreamer.h>
+#include <libkstreamer/libkstreamer.h>
 
 #define DEBUG_CODE 1
 

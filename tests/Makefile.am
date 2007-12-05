@@ -45,7 +45,8 @@ vgsm_stress_CPPFLAGS=\
 	-I$(top_srcdir)/modules/include/
 
 dsptest_SOURCES = dsptest.c
-dsptest_CPPFLAGS=
+dsptest_CPPFLAGS=\
+	-I$(top_srcdir)/include/
 
 AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
 
