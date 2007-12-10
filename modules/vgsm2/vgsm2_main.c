@@ -153,7 +153,7 @@ static void vgsm_led_update_work_func(struct work_struct *work)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	if (reschedule &&
-	    !test_big(VGSM_STATUS_FLAG_SHUTTING_DOWN, &vgsm_status))
+	    !test_bit(VGSM_STATUS_FLAG_SHUTTING_DOWN, &vgsm_status))
 		schedule_delayed_work(&vgsm_led_update_work, HZ / 5);
 #else
 	if (reschedule)
