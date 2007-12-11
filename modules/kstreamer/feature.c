@@ -78,8 +78,8 @@ static int _ks_feature_new_id(void)
 	for (;;) {
 		cur_id++;
 
-		if (cur_id < 0x00ff || cur_id > 0xffff)
-			cur_id = 0x00ff;
+		if (cur_id < 0x0100 || cur_id > 0xffff)
+			cur_id = 0x0100;
 
 		if (!_ks_feature_search_by_id(cur_id))
 			return cur_id;

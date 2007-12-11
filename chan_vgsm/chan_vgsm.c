@@ -610,7 +610,6 @@ static int vgsm_pipeline_set_amu_compander(
 		list_for_each_entry(featval, &chan->features, node) {
 
 			if (featval->feature == amu_compander_attr) {
-
 				struct ks_amu_compander_descr *descr =
 					(struct ks_amu_compander_descr *)
 					featval->payload;
@@ -694,23 +693,16 @@ err_missing_amu_decompander:
 
 static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 {
-	__u32 node_id;
 	int err;
 
+	__u32 me_node_id;
 	if (ioctl(vgsm_chan->me->me_fd, VGSM_IOC_GET_NODEID,
-					(caddr_t)&node_id) < 0) {
+					(caddr_t)&me_node_id) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(VGSM_IOC_GET_NODEID): %s\n",
 			strerror(errno));
 		err = -errno;
 		goto err_get_me_node_id;
-	}
-
-	vgsm_chan->node_me = ks_node_get_by_id(ks_conn, node_id);
-	if (!vgsm_chan->node_me) {
-		ast_log(LOG_ERROR, "ME's node not found\n");
-		err = -ENOENT;
-		goto err_me_node_not_found;
 	}
 
 	vgsm_chan->up_fd = open("/dev/ks/userport_stream", O_RDWR);
@@ -724,7 +716,9 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 	vgsm_chan->ast_chan->fds[0] = vgsm_chan->up_fd;
 
-	if (ioctl(vgsm_chan->up_fd, KS_UP_GET_NODEID, (caddr_t)&node_id) < 0) {
+	__u32 up_node_id;
+	if (ioctl(vgsm_chan->up_fd, KS_UP_GET_NODEID,
+					(caddr_t)&up_node_id) < 0) {
 		ast_log(LOG_ERROR,
 			"ioctl(KS_UP_GET_NODEID): %s\n",
 			strerror(errno));
@@ -732,25 +726,30 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_get_up_node_id;
 	}
 
-	ks_conn_sync(ks_conn);
-
-	vgsm_chan->node_userport = ks_node_get_by_id(ks_conn, node_id);
-	if (!vgsm_chan->node_userport) {
-		ast_log(LOG_ERROR, "Userport's node not found\n");
-		err = -ENOENT;
-		goto err_up_node_not_found;
-	}
-
-	vgsm_debug_generic("Connecting userport %06d to chan %06d\n",
-			vgsm_chan->node_userport->id,
-			vgsm_chan->node_me->id);
-
 	err = ks_conn_remote_topology_lock(ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot lock kstreamer topology: %s\n", strerror(-err));
 		goto err_kstreamer_lock;
 	}
+
+	vgsm_chan->node_userport = ks_node_get_by_id(ks_conn, up_node_id);
+	if (!vgsm_chan->node_userport) {
+		ast_log(LOG_ERROR, "Userport's node not found\n");
+		err = -ENOENT;
+		goto err_up_node_not_found;
+	}
+
+	vgsm_chan->node_me = ks_node_get_by_id(ks_conn, me_node_id);
+	if (!vgsm_chan->node_me) {
+		ast_log(LOG_ERROR, "ME's node not found\n");
+		err = -ENOENT;
+		goto err_me_node_not_found;
+	}
+
+	vgsm_debug_generic("Connecting userport %06d to chan %06d\n",
+			vgsm_chan->node_userport->id,
+			vgsm_chan->node_me->id);
 
 	/* Create RX pipeline */
 	vgsm_chan->pipeline_rx = ks_pipeline_alloc();
@@ -888,18 +887,18 @@ err_pipeline_rx_connect:
 err_pipeline_rx_alloc:
 	ks_conn_remote_topology_unlock(ks_conn);
 err_kstreamer_lock:
-	ks_node_put(vgsm_chan->node_userport);
-	vgsm_chan->node_userport = NULL;
-err_up_node_not_found:
-err_get_up_node_id:
+err_get_me_node_id:
 	vgsm_chan->ast_chan->fds[0] = -1;
 	close(vgsm_chan->up_fd);
 	vgsm_chan->up_fd = -1;
 err_open_userport:
+err_get_up_node_id:
+	ks_node_put(vgsm_chan->node_userport);
+	vgsm_chan->node_userport = NULL;
+err_up_node_not_found:
 	ks_node_put(vgsm_chan->node_me);
 	vgsm_chan->node_me = NULL;
 err_me_node_not_found:
-err_get_me_node_id:
 
 	return err;
 }
