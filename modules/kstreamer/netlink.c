@@ -520,10 +520,10 @@ static int ks_netlink_rcv_skb(
 			rlen = skb->len;
 
 		err = ks_netlink_rcv_msg(state, skb, nlh);
-		if (err == -EAGAIN) {
+		if (err == -EAGAIN)
 			return err;
-		} else
-			netlink_ack(skb, nlh, err);
+		else if (err < 0)
+			ks_netlink_send_error(state, nlh, err);
 
 		skb_pull(skb, rlen);
 	}
