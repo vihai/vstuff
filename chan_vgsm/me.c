@@ -6321,19 +6321,19 @@ static int vgsm_me_pin_set_func(int fd, int argc, char *argv[])
 {
 	int err;
 
-	if (argc < 4) {
+	if (argc < 5) {
 		ast_cli(fd, "Missing ME name\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_missing_me;
 	}
-	const char *me_name = argv[3];
+	const char *me_name = argv[4];
 
-	if (argc < 5) {
+	if (argc < 6) {
 		ast_cli(fd, "Missing OLDPIN\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_missing_oldpin;
 	}
-	const char *oldpin = argv[4];
+	const char *oldpin = argv[5];
 
 	if (!vgsm_pin_valid(oldpin)) {
 		ast_cli(fd, "OLDPIN contains invalid characters\n");
@@ -6341,12 +6341,12 @@ static int vgsm_me_pin_set_func(int fd, int argc, char *argv[])
 		goto err_oldpin_invalid;
 	}
 
-	if (argc < 6) {
+	if (argc < 7) {
 		ast_cli(fd, "Missing NEWPIN\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_missing_newpin;
 	}
-	const char *newpin = argv[5];
+	const char *newpin = argv[6];
 
 	struct vgsm_me *me;
 	me = vgsm_me_get_by_name(me_name);
@@ -6451,19 +6451,19 @@ static int vgsm_me_pin_input_func(int fd, int argc, char *argv[])
 {
 	int err;
 
-	if (argc < 4) {
+	if (argc < 5) {
 		ast_cli(fd, "Missing ME name\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_no_me_name;
 	}
-	const char *me_name = argv[3];
+	const char *me_name = argv[4];
 
-	if (argc < 5) {
+	if (argc < 6) {
 		ast_cli(fd, "Missing PIN\n");
 		err = RESULT_SHOWUSAGE;
 		goto err_no_pin;
 	}
-	const char *pin = argv[4];
+	const char *pin = argv[5];
 
 	if (!vgsm_pin_valid(pin)) {
 		ast_cli(fd, "PIN contains invalid characters\n");
@@ -6509,7 +6509,7 @@ static int vgsm_me_pin_input_func(int fd, int argc, char *argv[])
 
 		vgsm_me_set_status(me,
 			VGSM_ME_STATUS_WAITING_INITIALIZATION,
-			-1, "PIN entered");
+			0, "PIN entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN2")) {
 		ast_cli(fd, "SIM requires PIN2\n");
@@ -6557,7 +6557,7 @@ static char *vgsm_me_pin_input_complete(
 	int pos, int state)
 {
 	switch(pos) {
-	case 3:
+	case 4:
 		return vgsm_me_completion(line, word, state);
 	}
 
@@ -6664,7 +6664,7 @@ static int vgsm_me_puk_input_func(int fd, int argc, char *argv[])
 		}
 
 		vgsm_me_set_status(me,
-			VGSM_ME_STATUS_WAITING_INITIALIZATION, -1,
+			VGSM_ME_STATUS_WAITING_INITIALIZATION, 0,
 			"PUK entered");
 
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK2")) {
