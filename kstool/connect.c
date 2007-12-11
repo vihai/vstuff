@@ -160,16 +160,23 @@ static int do_connect(const char *pipeline_descr)
 	pd = ks_pd_parse(pipeline_descr);
 	if (!pd || pd->failed) {
 		fprintf(stderr, "Cannot parse pipeline description\n");
-		return 1;
+		goto err_pd_parse;
 	}
 
 	ks_pd_dump(pd, glob.conn, KS_LOG_DEBUG);
+
+	err = ks_conn_remote_topology_lock(glob.conn);
+	if (err < 0) {
+		fprintf(stderr,
+			"Cannot lock kstreamer topology: %s\n", strerror(-err));
+		goto err_kstreamer_lock;
+	}
 
 	struct ks_pipeline *pipeline;
 	pipeline = ks_pipeline_alloc();
 	if (!pipeline) {
 		fprintf(stderr, "Cannot allocate pipeline\n");
-		return 1;
+		goto err_pipeline_alloc;
 	}
 
 	struct ks_node *ep1;
@@ -178,7 +185,7 @@ static int do_connect(const char *pipeline_descr)
 		fprintf(stderr,
 			"Cannot find endpoint 1 '%s'\n",
 			pd->pipeline->ep1->text);
-		return 1; // Cleanup - FIXME
+		goto err_node_get_ep1;
 	}
 
 	struct ks_node *ep2;
@@ -187,7 +194,7 @@ static int do_connect(const char *pipeline_descr)
 		fprintf(stderr,
 			"Cannot find endpoint 2 '%s'\n",
 			pd->pipeline->ep2->text);
-		return 1; // Cleanup - FIXME
+		goto err_node_get_ep2;
 	}
 
 	struct ks_pd_channel *pd_chan;
@@ -221,7 +228,7 @@ static int do_connect(const char *pipeline_descr)
 					fprintf(stderr,
 						"Cannot find channel '%s'\n",
 						pd_chan->name->text);
-					return 1; // Cleanup - FIXME
+					goto err_chan_get;
 				}
 
 				dst_node = dst_chan->from;
@@ -236,7 +243,7 @@ static int do_connect(const char *pipeline_descr)
 				fprintf(stderr,
 					"Cannot autoroute channels: %s\n",
 					strerror(-err));
-				return 1;
+				goto err_pipeline_autoroute;
 			}
 
 			if (pd_chan->parameters) {
@@ -245,7 +252,7 @@ static int do_connect(const char *pipeline_descr)
 						pipeline->chans_cnt - 1,
 						pd_chan->parameters);
 				if (err < 0)
-					return 1;
+					goto err_apply_parameters;
 			}
 		} else {
 			struct ks_chan *chan;
@@ -254,7 +261,7 @@ static int do_connect(const char *pipeline_descr)
 				fprintf(stderr,
 					"Cannot find channel '%s'\n",
 					pd_chan->name->text);
-				return 1; // Cleanup - FIXME
+				goto err_chan_get_by_token;
 			}
 
 			pipeline->chans[pipeline->chans_cnt] = chan;
@@ -271,18 +278,45 @@ static int do_connect(const char *pipeline_descr)
 		fprintf(stderr,
 			"Cannot create pipeline: %s\n",
 				strerror(-err));
-		return 1;
+		goto err_pipeline_create;
 	}
 
-	ks_pipeline_update_chans(pipeline, glob.conn);
+	err = ks_pipeline_update_chans(pipeline, glob.conn);
+	if (err < 0) {
+		fprintf(stderr,
+			"Cannot update pipeline's channels: %s\n",
+				strerror(-err));
+		goto err_pipeline_update_chans;
+	}
 
 	printf("pipeline: %06x\n", pipeline->id);
+
+	ks_conn_remote_topology_unlock(glob.conn);
 
 	ks_pipeline_put(pipeline);
 
 	verbose("Done!\n");
 
 	return 0;
+
+err_pipeline_update_chans:
+	ks_pipeline_destroy(pipeline, glob.conn);
+err_pipeline_create:
+err_chan_get_by_token:
+err_apply_parameters:
+err_pipeline_autoroute:
+err_chan_get:
+	ks_node_put(ep2);
+err_node_get_ep2:
+	ks_node_put(ep1);
+err_node_get_ep1:
+	ks_pipeline_put(pipeline);
+err_pipeline_alloc:
+	ks_conn_remote_topology_unlock(glob.conn);
+err_kstreamer_lock:
+err_pd_parse:
+
+	return 1;
 }
 
 static int handle_connect(int optind)

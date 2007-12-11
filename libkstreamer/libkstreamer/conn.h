@@ -45,14 +45,7 @@ enum ks_topology_state
 	KS_TOPOLOGY_STATE_NULL,
 	KS_TOPOLOGY_STATE_SYNCING,
 	KS_TOPOLOGY_STATE_SYNCHED,
-};
-
-enum ks_conn_state
-{
-	KS_CONN_STATE_NULL,
-	KS_CONN_STATE_IDLE,
-	KS_CONN_STATE_WAITING_ACK,
-	KS_CONN_STATE_WAITING_DONE,
+	KS_TOPOLOGY_STATE_INVALID,
 };
 
 #define FEATURE_HASHBITS 8
@@ -71,12 +64,9 @@ struct ks_conn
 {
 	pthread_mutex_t refcnt_lock;
 
-	pthread_rwlock_t topology_lock;
-
 	enum ks_topology_state topology_state;
 
-	enum ks_conn_state state;
-
+	pthread_rwlock_t topology_lock;
 	struct hlist_head features_hash[FEATURE_HASHSIZE];
 	struct hlist_head chans_hash[CHAN_HASHSIZE];
 	struct hlist_head nodes_hash[NODE_HASHSIZE];
@@ -86,8 +76,10 @@ struct ks_conn
 
 	struct ks_netlink_version_response version;
 
-	int seqnum;
+	int seqnum; /* Access protected by requests_lock */
 	__u32 pid;
+
+	int multicast_seqnum;
 
 	int debug_netlink;
 	int debug_router;
@@ -97,11 +89,11 @@ struct ks_conn
 	int cmd_read;
 	int cmd_write;
 
-	pthread_mutex_t xacts_lock;
-	struct list_head xacts;
-
-	struct ks_xact *cur_xact;
-	struct ks_req *cur_req;
+	pthread_mutex_t requests_lock;
+	struct list_head requests_pending;
+	struct list_head requests_waiting_ack;
+	struct list_head requests_multi;
+	struct sk_buff *out_skb;
 
 	struct ks_timerset timerset;
 	struct ks_timer timer;
@@ -133,6 +125,10 @@ void ks_conn_topology_rdlock(struct ks_conn *conn);
 void ks_conn_topology_wrlock(struct ks_conn *conn);
 void ks_conn_topology_unlock(struct ks_conn *conn);
 
+int ks_conn_remote_topology_lock(struct ks_conn *conn);
+int ks_conn_remote_topology_trylock(struct ks_conn *conn);
+int ks_conn_remote_topology_unlock(struct ks_conn *conn);
+
 #ifdef _LIBKSTREAMER_PRIVATE_
 
 #include <linux/types.h>
@@ -161,11 +157,6 @@ void ks_conn_topology_unlock(struct ks_conn *conn);
 			format,				\
 			## arg)
 
-void ks_conn_add_xact(struct ks_conn *conn, struct ks_xact *xact);
-
-void ks_conn_set_state(
-	struct ks_conn *conn,
-	enum ks_conn_state state);
 void ks_conn_set_topology_state(
 	struct ks_conn *conn,
 	enum ks_topology_state state);
@@ -186,6 +177,12 @@ int ks_netlink_put_attr(
 	int type,
 	void *data,
 	int data_len);
+
+void ks_conn_queue_request(
+	struct ks_conn *conn,
+	struct ks_req *req);
+
+void ks_conn_flush_requests(struct ks_conn *conn);
 
 #endif
 

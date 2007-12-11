@@ -181,71 +181,52 @@ nlmsg_failure:
 	return err;
 }
 
-static int ks_pipeline_broadcast_netlink_notification(
+static int ks_pipeline_mcast_send(
 	struct ks_pipeline *pipeline,
+	struct ks_netlink_state *state,
 	enum ks_netlink_message_type message_type)
 {
-	struct sk_buff *skb;
-	int err = -EINVAL;
-
-	skb = alloc_skb(NLMSG_SPACE(257), GFP_KERNEL);
-	if (!skb) {
-	        //netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
-	        // FIXME, set_err is really needed, but kernel people removed
-	        // the EXPORT_SYMBOL
-		err = -ENOMEM;
-		goto err_alloc_skb;
-	}
-
-	NETLINK_CB(skb).pid = 0;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-	NETLINK_CB(skb).dst_pid = 0;
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-	NETLINK_CB(skb).dst_groups = (1 << KS_NETLINK_GROUP_TOPOLOGY);
-#else
-	NETLINK_CB(skb).dst_group = KS_NETLINK_GROUP_TOPOLOGY;
-#endif
-
-	err = ks_pipeline_write_to_nlmsg(pipeline, skb, message_type, 0, 0, 0);
-	if (err < 0)
-		goto err_fill_msg;
-
-	netlink_broadcast(ksnl, skb, 0,
-			KS_NETLINK_GROUP_TOPOLOGY,
-			GFP_KERNEL);
-
-	return 0;
-
-err_fill_msg:
-	kfree_skb(skb);
-err_alloc_skb:
-
-	return err;
-}
-
-static int ks_pipeline_xact_write(
-	struct ks_pipeline *pipeline,
-	struct ks_xact *xact,
-	enum ks_netlink_message_type message_type)
-{
-	int err = -EINVAL;
+	int err;
 
 retry:
-	ks_xact_need_skb(xact);
-	if (!xact->out_skb)
-		return -ENOMEM;
+	err = ks_netlink_mcast_need_skb(state);
+	if (err < 0)
+		return err;
 
-	err = ks_pipeline_write_to_nlmsg(pipeline, xact->out_skb, message_type,
-						xact->pid, xact->id, 0);
+	err = ks_pipeline_write_to_nlmsg(pipeline, state->mcast_skb,
+			message_type, 0, state->mcast_seqnum++, 0);
 	if (err < 0) {
-		ks_xact_flush(xact);
+		ks_netlink_mcast_flush(state);
 		goto retry;
 	}
 
-	ks_xact_flush(xact);
+	ks_netlink_mcast_flush(state);
+
+	return 0;
+}
+
+static int ks_pipeline_netlink_respond(
+	struct ks_pipeline *pipeline,
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	enum ks_netlink_message_type message_type)
+{
+	int err;
+
+retry:
+	ks_netlink_need_skb(state);
+	if (!state->out_skb)
+		return -ENOMEM;
+
+	err = ks_pipeline_write_to_nlmsg(pipeline, state->out_skb,
+				message_type,
+				req_nlh->nlmsg_pid,
+				req_nlh->nlmsg_seq,
+				NLM_F_ACK);
+	if (err < 0) {
+		ks_netlink_flush(state);
+		goto retry;
+	}
 
 	return 0;
 }
@@ -398,9 +379,11 @@ err_invalid_status:
 	return err;
 }
 
+static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline);
+
 int ks_pipeline_cmd_new(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	struct ks_pipeline *pipeline;
@@ -415,27 +398,26 @@ int ks_pipeline_cmd_new(
 	if (debug_level > 1)
 		ks_pipeline_dump(pipeline);
 
-	err = ks_pipeline_register(pipeline);
+	err = ks_pipeline_register_no_topology_lock(pipeline);
 	if (err < 0)
 		goto err_pipeline_register;
 
-	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_NEW);
-
-	ks_pipeline_register_bcast(pipeline);
+	ks_pipeline_netlink_respond(pipeline, state, nlh,
+					KS_NETLINK_PIPELINE_NEW);
 
 	ks_pipeline_put(pipeline);
 
 	return 0;
 
-	ks_pipeline_unregister(pipeline);
+	ks_pipeline_unregister_no_topology_lock(pipeline);
 err_pipeline_register:
 
 	return err;
 }
 
 int ks_pipeline_cmd_del(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	struct ks_pipeline *pipeline;
@@ -450,9 +432,10 @@ int ks_pipeline_cmd_del(
 	if (pipeline->status != KS_PIPELINE_STATUS_NULL)
 		ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
 
-	ks_pipeline_unregister(pipeline);
+	ks_pipeline_unregister_no_topology_lock(pipeline);
 
-	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_DEL);
+	ks_pipeline_netlink_respond(pipeline, state, nlh,
+					KS_NETLINK_PIPELINE_DEL);
 
 	ks_pipeline_put(pipeline);
 
@@ -465,8 +448,8 @@ err_pipeline_get:
 }
 
 int ks_pipeline_cmd_set(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	struct ks_pipeline *pipeline;
@@ -482,7 +465,8 @@ int ks_pipeline_cmd_set(
 	if (err < 0)
 		goto err_pipeline_update;
 
-	ks_pipeline_xact_write(pipeline, xact, KS_NETLINK_PIPELINE_SET);
+	ks_pipeline_netlink_respond(pipeline, state, nlh,
+					KS_NETLINK_PIPELINE_SET);
 
 	ks_pipeline_put(pipeline);
 
@@ -496,35 +480,37 @@ err_pipeline_get:
 }
 
 int ks_pipeline_cmd_get(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	struct ks_pipeline *pipeline;
 	int err;
-
-	ks_xact_send_control(xact, KS_NETLINK_PIPELINE_GET,
-			NLM_F_ACK | NLM_F_MULTI);
+	struct ks_pipeline *pipeline;
+	int cnt = 1;
+  
+	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
 
 	list_for_each_entry(pipeline, &ks_pipelines_kset.list, kobj.entry) {
 
 retry:
-		ks_xact_need_skb(xact);
-		if (!xact->out_skb)
+		ks_netlink_need_skb(state);
+		if (!state->out_skb)
 			return -ENOMEM;
 
-		err = ks_pipeline_write_to_nlmsg(pipeline, xact->out_skb,
+		err = ks_pipeline_write_to_nlmsg(pipeline, state->out_skb,
 					KS_NETLINK_PIPELINE_NEW,
-					xact->pid,
-					0,
+					nlh->nlmsg_pid,
+					nlh->nlmsg_seq + cnt,
 					NLM_F_MULTI);
 		if (err < 0) {
-			ks_xact_flush(xact);
+			ks_netlink_flush(state);
 			goto retry;
 		}
+
+		cnt++;
 	}
 
-	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_netlink_send_done(state, nlh, cnt);
 
 	return 0;
 }
@@ -551,7 +537,7 @@ struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 	return pipeline;
 }
 
-int ks_pipeline_register(struct ks_pipeline *pipeline)
+static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 {
 	int err;
 
@@ -569,8 +555,8 @@ int ks_pipeline_register(struct ks_pipeline *pipeline)
 	if (err < 0)
 		goto err_kobject_add;
 
-	/* NOTICE! netlink broadcast has to be explicitly sent with
-	 * ks_pipeline_register_bcast fucntion */
+	ks_pipeline_mcast_send(pipeline, &ks_netlink_state,
+					KS_NETLINK_PIPELINE_NEW);
 
 	return 0;
 
@@ -584,18 +570,21 @@ err_kobject_add:
 	return err;
 }
 
-void ks_pipeline_register_bcast(struct ks_pipeline *pipeline)
+#if 0
+int ks_pipeline_register(struct ks_pipeline *pipeline)
 {
-	ks_pipeline_broadcast_netlink_notification(
-			pipeline, KS_NETLINK_PIPELINE_NEW);
+	int err;
 
+	down_write(&ks_topology_lock);
+	err = ks_pipeline_register_no_topology_lock(pipeline);
+	up_write(&ks_topology_lock);
+
+	return err;
 }
+#endif
 
-void ks_pipeline_unregister(struct ks_pipeline *pipeline)
+void ks_pipeline_unregister_no_topology_lock(struct ks_pipeline *pipeline)
 {
-	ks_pipeline_broadcast_netlink_notification(
-			pipeline, KS_NETLINK_PIPELINE_DEL);
-
 	ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
 
 	kobject_del(&pipeline->kobj);
@@ -604,8 +593,18 @@ void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 	list_del(&pipeline->node);
 	ks_pipeline_put(pipeline);
 	up_write(&ks_pipelines_list_sem);
+
+	ks_pipeline_mcast_send(pipeline, &ks_netlink_state,
+					KS_NETLINK_PIPELINE_DEL);
 }
-EXPORT_SYMBOL(ks_pipeline_unregister);
+
+void ks_pipeline_unregister(struct ks_pipeline *pipeline)
+{
+	down_write(&ks_topology_lock);
+	ks_pipeline_unregister_no_topology_lock(pipeline);
+	up_write(&ks_topology_lock);
+}
+//EXPORT_SYMBOL(ks_pipeline_unregister);
 
 void ks_pipeline_destroy(struct ks_pipeline *pipeline)
 {

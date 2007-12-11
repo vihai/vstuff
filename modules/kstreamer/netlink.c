@@ -26,14 +26,12 @@
 #include "channel.h"
 #include "pipeline.h"
 
-DECLARE_MUTEX(ksnl_sem);
-
 struct sock *ksnl;
 
 static struct workqueue_struct *ks_netlink_rcv_wq;
-
-static struct ks_xact *cur_xact = NULL;
 static struct sk_buff_head ks_backlog;
+
+struct ks_netlink_state ks_netlink_state = { };
 
 int ks_kobj_make_path(struct kobject *kobj, void *buf)
 {
@@ -105,162 +103,195 @@ int ks_netlink_put_attr(
 	return 0;
 }
 
-static struct ks_xact *ks_xact_alloc(u32 pid, u32 id)
+int ks_netlink_need_skb(struct ks_netlink_state *state)
 {
-	struct ks_xact *xact;
-
-	xact = kmalloc(sizeof(*xact), GFP_ATOMIC);
-	if (!xact)
-		return NULL;
-
-	memset(xact, 0, sizeof(*xact));
-
-	atomic_set(&xact->refcnt, 1);
-
-	xact->pid = pid;
-	xact->id = id;
-
-	return xact;
-}
-
-#if 0
-static struct ks_xact *ks_xact_get(struct ks_xact *xact)
-{
-	BUG_ON(!xact);
-	BUG_ON(atomic_read(&xact->refcnt) <= 0);
-	BUG_ON(atomic_read(&xact->refcnt) > 10000);
-
-	atomic_inc(&xact->refcnt);
-
-	return xact;
-}
-#endif
-
-static void ks_xact_put(struct ks_xact *xact)
-{
-	BUG_ON(!xact);
-	BUG_ON(atomic_read(&xact->refcnt) <= 0);
-	BUG_ON(atomic_read(&xact->refcnt) > 10000);
-
-	if (atomic_dec_and_test(&xact->refcnt)) {
-		if (xact->out_skb)
-			kfree_skb(xact->out_skb);
-
-		kfree(xact);
+	if (!state->out_skb) {
+		state->out_skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	}
-}
 
-
-void ks_xact_need_skb(struct ks_xact *xact)
-{
-	if (!xact->out_skb)
-		xact->out_skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
-
-	if (!xact->out_skb) {
+	if (!state->out_skb) {
 		ksnl->sk_err = ENOBUFS;
 		ksnl->sk_error_report(ksnl);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+int ks_netlink_mcast_need_skb(struct ks_netlink_state *state)
+{
+	if (!state->mcast_skb) {
+		state->mcast_skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
+		NETLINK_CB(state->mcast_skb).dst_pid = 0;
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
+		NETLINK_CB(state->mcast_skb).dst_groups =
+					(1 << KS_NETLINK_GROUP_TOPOLOGY);
+#else
+		NETLINK_CB(state->mcast_skb).dst_group =
+					KS_NETLINK_GROUP_TOPOLOGY;
+#endif
+	}
+
+	if (!state->mcast_skb) {
+		ksnl->sk_err = ENOBUFS;
+		ksnl->sk_error_report(ksnl);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+void ks_netlink_flush(struct ks_netlink_state *state)
+{
+	if (state->out_skb) {
+		if (state->out_skb->len) {
+			int err;
+
+			err = netlink_unicast(ksnl, state->out_skb,
+							state->cur_pid, 0);
+			if (err < 0) {
+				ksnl->sk_err = ENOBUFS;
+				ksnl->sk_error_report(ksnl);
+			}
+		} else
+			kfree_skb(state->out_skb);
+
+		state->out_skb = NULL;
 	}
 }
 
-void ks_xact_flush(struct ks_xact *xact)
+static void ks_netlink_mcast_flush_nolock(struct ks_netlink_state *state)
 {
-	if (xact->out_skb) {
-		if (xact->out_skb->len) {
-			int err;
+	struct sk_buff *skb;
+	int err;
 
-			err = netlink_unicast(ksnl, xact->out_skb,
-							xact->pid, 0);
+	while ((skb = skb_dequeue(&state->mcast_queue))) {
+		err = netlink_broadcast(ksnl, skb,
+				0, KS_NETLINK_GROUP_TOPOLOGY,
+				GFP_KERNEL);
+		if (err < 0) {
+			ksnl->sk_err = ENOBUFS;
+			ksnl->sk_error_report(ksnl);
+		}
+	}
+
+	if (state->mcast_skb) {
+		if (state->mcast_skb->len) {
+
+			err = netlink_broadcast(ksnl, state->mcast_skb,
+					0, KS_NETLINK_GROUP_TOPOLOGY,
+					GFP_KERNEL);
 			if (err < 0) {
 				ksnl->sk_err = ENOBUFS;
 				ksnl->sk_error_report(ksnl);
 			}
 
-			xact->out_skb = NULL;
-		} else {
-			kfree_skb(xact->out_skb);
-			xact->out_skb = NULL;
-		}
+		} else
+			kfree_skb(state->mcast_skb);
+
+		state->mcast_skb = NULL;
 	}
 }
 
-void ks_xact_send_control(
-	struct ks_xact *xact,
-	enum ks_netlink_message_type message_type, u16 flags)
+void ks_netlink_mcast_flush(struct ks_netlink_state *state)
 {
-	struct nlmsghdr *nlh;
+	if (!down_write_trylock(&ks_topology_lock)) {
+		if (state->mcast_skb) {
+			skb_queue_tail(&state->mcast_queue,
+					state->mcast_skb);
+			state->mcast_skb = NULL;
+		}
 
-retry:
-
-	ks_xact_need_skb(xact);
-	if (!xact->out_skb)
 		return;
+	}
 
-	nlh = NLMSG_PUT(xact->out_skb, xact->pid, xact->id, message_type, 0);
-	nlh->nlmsg_flags = flags;
+	ks_netlink_mcast_flush_nolock(state);
 
-	return;
-
-nlmsg_failure:
-	ks_xact_flush(xact);
-	goto retry;
-}
-
-void ks_xact_send_error(struct ks_xact *xact, int error)
-{
-	struct nlmsghdr *nlh;
-
-retry:
-
-	ks_xact_need_skb(xact);
-	if (!xact->out_skb)
-		return;
-
-	nlh = NLMSG_PUT(xact->out_skb, xact->pid, xact->id,
-			NLMSG_ERROR, sizeof(int));
-	nlh->nlmsg_flags = 0;
-
-	*((int *)NLMSG_DATA(nlh)) = -error;
-
-	return;
-
-nlmsg_failure:
-	ks_xact_flush(xact);
-	goto retry;
+	up_write(&ks_topology_lock);
 }
 
 int ks_cmd_done(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	return 0;
 }
 
-int ks_cmd_begin(
+int ks_cmd_topology_lock(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	xact->flags |= KS_XACT_FLAGS_PERSISTENT;
+	state->lock_owner = nlh->nlmsg_pid;
 
-	ks_xact_send_control(xact, KS_NETLINK_BEGIN, NLM_F_ACK);
+	ks_netlink_mcast_flush_nolock(state);
+
+	state->lock_timer.expires = jiffies + 5 * HZ;
+	add_timer(&state->lock_timer);
+
+	ks_netlink_send_ack(state, nlh, 0);
+
+	return 0;
+}
+
+int ks_cmd_topology_trylock(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh)
+{
+	if (!down_write_trylock(&ks_topology_lock))
+		return -EBUSY;
+
+	ks_netlink_mcast_flush_nolock(state);
+
+	state->lock_timer.expires = jiffies + 5 * HZ;
+	add_timer(&state->lock_timer);
+
+	ks_netlink_send_ack(state, nlh, 0);
+
+	return 0;
+}
+
+int ks_cmd_topology_unlock(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh)
+{
+	if (!state->lock_owner)
+		return -ENOENT;
+
+	if (state->lock_owner != nlh->nlmsg_pid)
+		return -EINVAL;
+
+	state->lock_owner = 0;
+
+	del_timer(&state->lock_timer);
+
+	ks_netlink_send_ack(state, nlh, 0);
+
+	ks_netlink_mcast_flush_nolock(state);
 
 	return 0;
 }
 
 int ks_cmd_noop(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	ks_xact_send_control(xact, NLMSG_NOOP, NLM_F_ACK);
+	ks_netlink_send_ack(state, nlh, 0);
 
 	return 0;
 }
 
 int ks_cmd_version_request(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *req_nlh)
 {
 	struct ks_netlink_version_response *vr;
@@ -268,81 +299,31 @@ int ks_cmd_version_request(
 
 retry:
 
-	ks_xact_need_skb(xact);
-	if (!xact->out_skb)
+	ks_netlink_need_skb(state);
+	if (!state->out_skb)
 		return -ENOMEM;
 
-	nlh = NLMSG_PUT(xact->out_skb, xact->pid, xact->id,
+	nlh = NLMSG_PUT(state->out_skb, state->cur_pid, state->cur_seq,
 			KS_NETLINK_VERSION,
 			sizeof(*vr));
-	nlh->nlmsg_flags = 0;
+	nlh->nlmsg_flags = NLM_F_ACK;
 
 	vr = (struct ks_netlink_version_response *)NLMSG_DATA(nlh);
 	vr->reserved = 0;
-	vr->major = 0;
+	vr->major = 1;
 	vr->minor = 0;
-	vr->service = 1;
+	vr->service = 0;
 
 	return 0;
 
 nlmsg_failure:
-	ks_xact_flush(xact);
+	ks_netlink_flush(state);
 	goto retry;
 }
 
-int ks_cmd_commit(
-	struct ks_command *cmd,
-	struct ks_xact *xact,
-	struct nlmsghdr *nlh)
-{
-	ks_xact_send_control(xact, KS_NETLINK_COMMIT, NLM_F_ACK);
-
-	xact->flags |= KS_XACT_FLAGS_COMPLETED;
-
-	return 0;
-}
-
-int ks_cmd_abort(
-	struct ks_command *cmd,
-	struct ks_xact *xact,
-	struct nlmsghdr *nlh)
-{
-	ks_xact_send_control(xact, KS_NETLINK_ABORT, NLM_F_ACK);
-
-	xact->flags |= KS_XACT_FLAGS_COMPLETED;
-
-	return 0;
-}
-
-int ks_feature_cmd_get(
-	struct ks_command *cmd,
-	struct ks_xact *xact,
-	struct nlmsghdr *nlh)
-{
-	ks_xact_send_control(xact, KS_NETLINK_FEATURE_GET,
-			NLM_F_ACK | NLM_F_MULTI);
-
-	ks_feature_netlink_dump(xact);
-
-	return 0;
-}
-
-int ks_node_cmd_get(
-	struct ks_command *cmd,
-	struct ks_xact *xact,
-	struct nlmsghdr *nlh)
-{
-	ks_xact_send_control(xact, KS_NETLINK_NODE_GET,
-			NLM_F_ACK | NLM_F_MULTI);
-
-	ks_node_netlink_dump(xact);
-
-	return 0;
-}
-
 int ks_cmd_not_implemented(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	ks_msg(KERN_INFO, "command %d not implemented\n",
@@ -357,32 +338,109 @@ struct ks_command ks_commands[] =
 	{ NLMSG_NOOP, ks_cmd_noop, 0 },
 
 	{ KS_NETLINK_VERSION, ks_cmd_version_request, 0 },
-	{ KS_NETLINK_BEGIN, ks_cmd_begin, 0 },
-	{ KS_NETLINK_COMMIT, ks_cmd_commit, 0 },
-	{ KS_NETLINK_ABORT, ks_cmd_abort, 0 },
+
+	{ KS_NETLINK_TOPOLOGY_LOCK, ks_cmd_topology_lock, KS_CMD_WR },
+	{ KS_NETLINK_TOPOLOGY_TRYLOCK, ks_cmd_topology_trylock, 0 },
+	{ KS_NETLINK_TOPOLOGY_UNLOCK, ks_cmd_topology_unlock, 0 },
 
 	{ KS_NETLINK_FEATURE_NEW, ks_cmd_not_implemented, KS_CMD_WR },
 	{ KS_NETLINK_FEATURE_DEL, ks_cmd_not_implemented, KS_CMD_WR },
-	{ KS_NETLINK_FEATURE_GET, ks_feature_cmd_get, 0 },
+	{ KS_NETLINK_FEATURE_GET, ks_feature_cmd_get, KS_CMD_RD },
 	{ KS_NETLINK_FEATURE_SET, ks_cmd_not_implemented, KS_CMD_WR },
 
 	{ KS_NETLINK_NODE_NEW, ks_cmd_not_implemented, KS_CMD_WR },
 	{ KS_NETLINK_NODE_DEL, ks_cmd_not_implemented, KS_CMD_WR },
-	{ KS_NETLINK_NODE_GET, ks_node_cmd_get, 0 },
+	{ KS_NETLINK_NODE_GET, ks_node_cmd_get, KS_CMD_RD },
 	{ KS_NETLINK_NODE_SET, ks_cmd_not_implemented, KS_CMD_WR },
 
 	{ KS_NETLINK_CHAN_NEW, ks_cmd_not_implemented, KS_CMD_WR },
 	{ KS_NETLINK_CHAN_DEL, ks_cmd_not_implemented, KS_CMD_WR },
-	{ KS_NETLINK_CHAN_GET, ks_chan_cmd_get, 0 },
+	{ KS_NETLINK_CHAN_GET, ks_chan_cmd_get, KS_CMD_RD },
 	{ KS_NETLINK_CHAN_SET, ks_chan_cmd_set, KS_CMD_WR },
 
 	{ KS_NETLINK_PIPELINE_NEW, ks_pipeline_cmd_new, KS_CMD_WR },
 	{ KS_NETLINK_PIPELINE_DEL, ks_pipeline_cmd_del, KS_CMD_WR },
-	{ KS_NETLINK_PIPELINE_GET, ks_pipeline_cmd_get, 0 },
+	{ KS_NETLINK_PIPELINE_GET, ks_pipeline_cmd_get, KS_CMD_RD },
 	{ KS_NETLINK_PIPELINE_SET, ks_pipeline_cmd_set, KS_CMD_WR },
 };
 
+int ks_netlink_send_done(
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	u16 seq)
+{
+	struct nlmsghdr *nlh;
+
+retry:
+	ks_netlink_need_skb(state);
+	if (!state->out_skb)
+		return -ENOMEM;
+
+	nlh = NLMSG_PUT(state->out_skb,
+			req_nlh->nlmsg_pid,
+			req_nlh->nlmsg_seq + seq,
+			NLMSG_DONE, 0);
+	nlh->nlmsg_flags = NLM_F_MULTI;
+
+	return 0;
+
+nlmsg_failure:
+	ks_netlink_flush(state);
+	goto retry;
+}
+
+int ks_netlink_send_ack(
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	int flags)
+{
+	struct nlmsghdr *nlh;
+
+retry:
+	ks_netlink_need_skb(state);
+	if (!state->out_skb)
+		return -ENOMEM;
+
+	nlh = NLMSG_PUT(state->out_skb,
+			req_nlh->nlmsg_pid,
+			req_nlh->nlmsg_seq,
+			req_nlh->nlmsg_type, 0);
+	nlh->nlmsg_flags = flags | NLM_F_ACK;
+
+	return 0;
+
+nlmsg_failure:
+	ks_netlink_flush(state);
+	goto retry;
+}
+
+int ks_netlink_send_error(
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	int error)
+{
+	struct nlmsghdr *nlh;
+
+retry:
+	ks_netlink_need_skb(state);
+	if (!state->out_skb)
+		return -ENOMEM;
+
+	nlh = NLMSG_PUT(state->out_skb, req_nlh->nlmsg_pid, req_nlh->nlmsg_seq,
+						NLMSG_ERROR, sizeof(int));
+	nlh->nlmsg_flags = NLM_F_ACK;
+
+	*((int *)NLMSG_DATA(nlh)) = -error;
+
+	return 0;
+
+nlmsg_failure:
+	ks_netlink_flush(state);
+	goto retry;
+}
+
 static int ks_netlink_rcv_msg(
+	struct ks_netlink_state *state,
 	struct sk_buff *skb,
 	struct nlmsghdr *nlh)
 {
@@ -391,8 +449,10 @@ static int ks_netlink_rcv_msg(
 	int err;
 
 	/* Only requests are handled */
-	if (!(nlh->nlmsg_flags & NLM_F_REQUEST))
-		return -EINVAL;
+	if (!(nlh->nlmsg_flags & NLM_F_REQUEST)) {
+		err = -EINVAL;
+		goto err_not_request;
+	}
 
 	/* Do this with a hash TODO */
 	for(i=0; i<ARRAY_SIZE(ks_commands); i++) {
@@ -402,41 +462,50 @@ static int ks_netlink_rcv_msg(
 		}
 	}
 
-	if (!cmd)
-		return -EINVAL;
-
-	if (!cur_xact) {
-		cur_xact = ks_xact_alloc(nlh->nlmsg_pid,
-					nlh->nlmsg_seq);
-		if (!cur_xact)
-			return -ENOMEM;
+	if (!cmd) {
+		err = -EINVAL;
+		goto err_invalid_command;
 	}
 
-	down(&ksnl_sem);
-	err = cmd->handler(cmd, cur_xact, nlh);
-	up(&ksnl_sem);
+	if (!down_write_trylock(&ks_topology_lock)) {
+		if (state->lock_owner != nlh->nlmsg_pid) {
+			err = -EAGAIN;
+			goto err_lock_failed;
+		}
+	}
+
+	state->cur_pid = nlh->nlmsg_pid;
+	state->cur_seq = nlh->nlmsg_seq;
+
+	err = cmd->handler(state, cmd, nlh);
 	if (err < 0)
-		ks_xact_send_error(cur_xact, err);
+		ks_netlink_send_error(state, nlh, err);
 
-	ks_xact_flush(cur_xact);
+	ks_netlink_flush(state);
 
-	if (!(cur_xact->flags & KS_XACT_FLAGS_PERSISTENT) ||
-	     cur_xact->flags & KS_XACT_FLAGS_COMPLETED) {
-		ks_xact_put(cur_xact);
-		cur_xact = NULL;
-	}
+	/* We have the lock but there is no real owner, release it */
+	if (!state->lock_owner)
+		up_write(&ks_topology_lock);
 
 	return 0;
+
+	if (!state->lock_owner)
+		up_write(&ks_topology_lock);
+err_lock_failed:
+err_not_request:
+err_invalid_command:
+
+	return err;
 }
 
-static int ks_netlink_rcv_skb(struct sk_buff *skb)
+static int ks_netlink_rcv_skb(
+	struct ks_netlink_state *state,
+	struct sk_buff *skb)
 {
 	struct nlmsghdr *nlh;
 	int err;
 
 	nlh = (struct nlmsghdr *)skb->data;
-	if (cur_xact && cur_xact->pid != nlh->nlmsg_pid)
-		return -EBUSY;
 
 	while (skb->len >= NLMSG_SPACE(0)) {
 		u32 rlen;
@@ -450,8 +519,10 @@ static int ks_netlink_rcv_skb(struct sk_buff *skb)
 		if (rlen > skb->len)
 			rlen = skb->len;
 
-		err = ks_netlink_rcv_msg(skb, nlh);
-		if (err < 0)
+		err = ks_netlink_rcv_msg(state, skb, nlh);
+		if (err == -EAGAIN) {
+			return err;
+		} else
 			netlink_ack(skb, nlh, err);
 
 		skb_pull(skb, rlen);
@@ -473,8 +544,8 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 
 	while ((skb = skb_dequeue(&ksnl->sk_receive_queue))) {
 
-		err = ks_netlink_rcv_skb(skb);
-		if (err < 0)
+		err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
+		if (err == -EAGAIN)
 			skb_queue_tail(&ks_backlog, skb);
 		else
 			kfree_skb(skb);
@@ -484,8 +555,8 @@ redo_backlog:
 	tail = skb_peek_tail(&ks_backlog);
 	processed = FALSE;
 	while ((skb = skb_dequeue(&ks_backlog))) {
-		err = ks_netlink_rcv_skb(skb);
-		if (err < 0)
+		err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
+		if (err == -EAGAIN)
 			skb_queue_tail(&ks_backlog, skb);
 		else {
 			kfree_skb(skb);
@@ -498,6 +569,8 @@ redo_backlog:
 
 	if (processed)
 		goto redo_backlog;
+
+	ks_netlink_mcast_flush(&ks_netlink_state);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
@@ -505,6 +578,17 @@ static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func, NULL);
 #else
 static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func);
 #endif
+
+void ks_lock_timeout(unsigned long data)
+{
+//	struct ks_netlink_state *state = (void *)data;
+
+	ks_msg(KERN_INFO, "topology lock timer expired!\n");
+
+	up_write(&ks_topology_lock);
+
+	queue_work(ks_netlink_rcv_wq, &ks_netlink_rcv_work);
+}
 
 static void ks_netlink_rcv(struct sock *sk, int len)
 {
@@ -541,6 +625,14 @@ int ks_netlink_modinit(void)
 	}
 
 	netlink_set_nonroot(NETLINK_KSTREAMER, NL_NONROOT_RECV);
+
+	ks_netlink_state.mcast_seqnum = 0xBEEF;
+
+	init_timer(&ks_netlink_state.lock_timer);
+	ks_netlink_state.lock_timer.function = ks_lock_timeout;
+	ks_netlink_state.lock_timer.data = (unsigned long)&ks_netlink_state;
+
+	skb_queue_head_init(&ks_netlink_state.mcast_queue);
 
 	return 0;
 

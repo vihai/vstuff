@@ -80,8 +80,7 @@ struct ks_pipeline_attribute {
 struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline);
 extern void ks_pipeline_destroy(struct ks_pipeline *pipeline);
 
-int ks_pipeline_register(struct ks_pipeline *pipeline);
-void ks_pipeline_register_bcast(struct ks_pipeline *pipeline);
+void ks_pipeline_unregister_no_topology_lock(struct ks_pipeline *pipeline);
 void ks_pipeline_unregister(struct ks_pipeline *pipeline);
 
 struct ks_pipeline *ks_pipeline_get_by_id(int id);
@@ -103,20 +102,20 @@ static inline void ks_pipeline_put(struct ks_pipeline *pipeline)
 void ks_pipeline_dump(struct ks_pipeline *pipeline);
 
 int ks_pipeline_cmd_new(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 int ks_pipeline_cmd_del(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 int ks_pipeline_cmd_set(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 int ks_pipeline_cmd_get(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 
 extern int ks_pipeline_change_status(

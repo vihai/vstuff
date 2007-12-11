@@ -443,7 +443,8 @@ int main(int argc, char *argv[])
 			else if (!strcasecmp(optarg, "mulaw"))
 				opts.rx_amu_compander_mu_mode = TRUE;
 			else {
-				fprintf(stderr, "Unrecognized mode %s\n", optarg);
+				fprintf(stderr,
+					"Unrecognized mode %s\n", optarg);
 				print_usage(argv[0]);
 				return 1;
 			}
@@ -455,7 +456,8 @@ int main(int argc, char *argv[])
 			else if (!strcasecmp(optarg, "mulaw"))
 				opts.tx_amu_decompander_mu_mode = TRUE;
 			else {
-				fprintf(stderr, "Unrecognized mode %s\n", optarg);
+				fprintf(stderr,
+					"Unrecognized mode %s\n", optarg);
 				print_usage(argv[0]);
 				return 1;
 			}
@@ -487,7 +489,7 @@ int main(int argc, char *argv[])
 		mode = O_WRONLY;
 	else {
 		print_usage(argv[0]);
-		return 1;
+		goto err_usage;
 	}
 
 	debug("Opening userport...\n");
@@ -502,23 +504,23 @@ int main(int argc, char *argv[])
 
 	if (up_fd < 0) {
 		perror("cannot open /dev/ks/userport_stream");
-		return 1;
+		goto err_open_userport;
 	}
 
 	if (fcntl(0, F_SETFL, O_NONBLOCK) < 0) {
 		perror("fcntl(0, O_NONBLOCK)");
-		return 1;
+		goto err_set_stdin_nonblock;
 	}
 
 	if (fcntl(1, F_SETFL, O_NONBLOCK) < 0) {
 		perror("fcntl(1, O_NONBLOCK)");
-		return 1;
+		goto err_set_stdout_nonblock;
 	}
 
 	__u32 node_up_id;
 	if (ioctl(up_fd, KS_UP_GET_NODEID, (caddr_t)&node_up_id) < 0) {
 		perror("ioctl(KS_UP_GET_NODEID)");
-		return 1;
+		goto err_get_node_id;
 	}
 
 	debug("Connecting to kstreamer...\n");
@@ -527,7 +529,7 @@ int main(int argc, char *argv[])
 	conn = ks_conn_create();
 	if (!conn) {
 		fprintf(stderr, "Cannot initialize kstreamer library\n");
-		return 1;
+		goto err_ks_conn_create;
 	}
 
 	conn->report_func = ks_report_func;
@@ -539,7 +541,7 @@ int main(int argc, char *argv[])
 	err = ks_conn_establish(conn);
 	if (err < 0) {
 		fprintf(stderr, "Cannot connect kstreamer library\n");
-		return 1;
+		goto err_ks_conn_establish;
 	}
 
 	debug("Updating topology...\n");
@@ -555,7 +557,7 @@ int main(int argc, char *argv[])
 	node_up = ks_node_get_by_id(conn, node_up_id);
 	if (!node_up) {
 		fprintf(stderr, "Cannot find UP node\n");
-		return 1;
+		goto err_up_node_get;
 	}
 
 	debug("node_up: 0x%08x\n", node_up->id);
@@ -572,11 +574,18 @@ int main(int argc, char *argv[])
 		if (!node) {
 			fprintf(stderr,
 				"Cannot find node '%s'\n", opts.node_name);
-			return 1;
+			goto err_node_get;
 		}
 	}
 
 	debug("node: 0x%08x\n", node->id);
+
+	err = ks_conn_remote_topology_lock(conn);
+	if (err < 0) {
+		fprintf(stderr,
+			"Cannot lock kstreamer topology: %s\n", strerror(-err));
+		goto err_kstreamer_lock;
+	}
 
 	struct ks_pipeline *rx_pipeline = NULL;
 	if (opts.read_to_stdout ||
@@ -589,14 +598,14 @@ int main(int argc, char *argv[])
 		if (!rx_pipeline) {
 			fprintf(stderr,
 				"Cannot alloc in pipeline\n");
-			return 1;
+			goto err_rx_pipeline_alloc;
 		}
 
 		err = ks_pipeline_autoroute(rx_pipeline, conn, node, node_up);
 		if (err < 0) {
 			fprintf(stderr,
 				"Cannot connect nodes: %s\n", strerror(-err));
-			return 1;
+			goto err_rx_pipeline_autoroute;
 		}
 
 		rx_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
@@ -606,14 +615,14 @@ int main(int argc, char *argv[])
 			fprintf(stderr,
 				"Cannot create pipeline: %s\n",
 					strerror(-err));
-			return 1;
+			goto err_rx_pipeline_create;
 		}
 
 		debug("Configuring rx_pipeline...\n");
 
 		err = configure_rx_pipeline(rx_pipeline);
 		if (err < 0)
-			return 1;
+			goto err_rx_pipeline_configure;
 
 		debug("Configuring rx_pipeline channels...\n");
 
@@ -625,10 +634,23 @@ int main(int argc, char *argv[])
 		err = ks_pipeline_update(rx_pipeline, conn);
 		if (err < 0) {
 			fprintf(stderr, "Cannot start the pipeline\n");
-			return 1;
+			goto err_rx_pipeline_start;
 		}
+
+		goto rx_pipeline_done;
+
+err_rx_pipeline_start:
+err_rx_pipeline_configure:
+		ks_pipeline_destroy(rx_pipeline, conn);
+err_rx_pipeline_create:
+err_rx_pipeline_autoroute:
+		ks_pipeline_put(rx_pipeline);
+err_rx_pipeline_alloc:
+
+		goto err_rx_pipeline;
 	}
 
+rx_pipeline_done:;
 	struct ks_pipeline *tx_pipeline = NULL;
 	if (opts.write_from != WRITE_FROM_NONE) {
 
@@ -638,14 +660,14 @@ int main(int argc, char *argv[])
 		if (!tx_pipeline) {
 			fprintf(stderr,
 				"Cannot alloc in pipeline\n");
-			return 1;
+			goto err_tx_pipeline_alloc;
 		}
 
 		err = ks_pipeline_autoroute(tx_pipeline, conn, node_up, node);
 		if (err < 0) {
 			fprintf(stderr,
 				"Cannot connect nodes: %s\n", strerror(-err));
-			return 1;
+			goto err_tx_pipeline_autoroute;
 		}
 
 		tx_pipeline->status = KS_PIPELINE_STATUS_CONNECTED;
@@ -654,12 +676,14 @@ int main(int argc, char *argv[])
 			fprintf(stderr,
 				"Cannot create pipeline: %s\n",
 					strerror(-err));
-			return -err;
+			goto err_tx_pipeline_create;
 		}
 
 		debug("Configuring tx_pipeline channels...\n");
 
-		configure_tx_pipeline(tx_pipeline);
+		err = configure_tx_pipeline(tx_pipeline);
+		if (err < 0)
+			goto err_tx_pipeline_configure;
 
 		debug("Configuring tx_pipeline...\n");
 		ks_pipeline_update_chans(tx_pipeline, conn);
@@ -670,11 +694,26 @@ int main(int argc, char *argv[])
 		err = ks_pipeline_update(tx_pipeline, conn);
 		if (err < 0) {
 			fprintf(stderr, "Cannot start the pipeline\n");
-			return 1;
+			goto err_tx_pipeline_start;
 		}
+
+		goto tx_pipeline_done;
+
+err_tx_pipeline_start:
+err_tx_pipeline_configure:
+		ks_pipeline_destroy(tx_pipeline, conn);
+err_tx_pipeline_create:
+err_tx_pipeline_autoroute:
+		ks_pipeline_put(tx_pipeline);
+err_tx_pipeline_alloc:
+
+		goto err_tx_pipeline;
 	}
 
-#if 1
+tx_pipeline_done:;
+	ks_conn_remote_topology_unlock(conn);
+
+#if 0
 	debug("Entering main cycle...\n");
 
 	char buf[4096];
@@ -735,7 +774,7 @@ int main(int argc, char *argv[])
 	}
 #endif
 
-#if 0
+#if 1
 	srand(time(NULL)*getpid());
 	usleep(rand() % 250000);
 #endif
@@ -782,9 +821,6 @@ int main(int argc, char *argv[])
 		ks_pipeline_put(tx_pipeline);
 	}
 
-	ks_node_put(node);
-	ks_node_put(node_up);
-
 	if (opts.hdlc_framer)
 		ks_feature_put(opts.hdlc_framer);
 
@@ -799,7 +835,32 @@ int main(int argc, char *argv[])
 
 	debug("Closing connection to kstreamer...\n");
 
+	ks_node_put(node);
+	ks_node_put(node_up);
+
 	ks_conn_destroy(conn);
 
+	close(up_fd);
+
 	return 0;
+
+err_tx_pipeline:
+err_rx_pipeline:
+	ks_conn_remote_topology_unlock(conn);
+err_kstreamer_lock:
+	ks_node_put(node);
+err_node_get:
+	ks_node_put(node_up);
+err_up_node_get:
+err_ks_conn_establish:
+	ks_conn_destroy(conn);
+err_ks_conn_create:
+err_get_node_id:
+err_set_stdout_nonblock:
+err_set_stdin_nonblock:
+	close(up_fd);
+err_open_userport:
+err_usage:
+
+	return 1;
 }

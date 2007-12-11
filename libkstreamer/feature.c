@@ -118,7 +118,7 @@ struct ks_feature *ks_feature_get_by_name(
 	return feature;
 }
 
-struct ks_feature *_ks_feature_get_by_nlid(
+static __u32 ks_feature_nlh_to_id(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -129,13 +129,11 @@ struct ks_feature *_ks_feature_get_by_nlid(
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
-		if(attr->type == KS_FEATURE_ID) {
-			return _ks_feature_get_by_id(conn,
-					*(__u32 *)KS_ATTR_DATA(attr));
-		}
+		if(attr->type == KS_FEATURE_ID)
+			return *(__u32 *)KS_ATTR_DATA(attr);
 	}
 
-	return NULL;
+	return 0;
 }
 
 static const char *ks_netlink_feature_attr_to_string(
@@ -205,8 +203,6 @@ static void ks_feature_update_from_nlmsg(
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
 
-	attr = KS_ATTRS(nlh);
-
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
@@ -237,8 +233,6 @@ static struct ks_feature *ks_feature_create_from_nlmsg(
 
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
-
-	attr = KS_ATTRS(nlh);
 
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
@@ -279,9 +273,6 @@ void ks_feature_handle_topology_update(
 			// FIXME
 		}
 
-		if (conn->debug_netlink)
-			ks_feature_dump(feature, conn, LOG_DEBUG);
-
 		ks_feature_add(feature, conn);
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
 		ks_feature_put(feature);
@@ -289,16 +280,13 @@ void ks_feature_handle_topology_update(
 	break;
 
 	case KS_NETLINK_FEATURE_DEL: {
-		struct ks_feature *feature;
-
-		feature = _ks_feature_get_by_nlid(conn, nlh);
+		__u32 id = ks_feature_nlh_to_id(conn, nlh);
+		struct ks_feature *feature = _ks_feature_get_by_id(conn, id);
 		if (!feature) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
+			report_conn(conn, LOG_ERR,
+				"Feature ID %08x not found!\n", id);
 			break;
 		}
-
-		if (conn->debug_netlink)
-			ks_feature_dump(feature, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
 		ks_feature_del(feature);
@@ -307,24 +295,56 @@ void ks_feature_handle_topology_update(
 	break;
 
 	case KS_NETLINK_FEATURE_SET: {
-		struct ks_feature *feature;
-
-		feature = _ks_feature_get_by_nlid(conn, nlh);
+		__u32 id = ks_feature_nlh_to_id(conn, nlh);
+		struct ks_feature *feature = _ks_feature_get_by_id(conn, id);
 		if (!feature) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
+			report_conn(conn, LOG_ERR,
+				"Feature ID %08x not found!\n", id);
 			break;
 		}
 
 		ks_feature_update_from_nlmsg(feature, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_feature_dump(feature, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, feature);
 
 		ks_feature_put(feature);
 	}
 	break;
+	}
+}
+
+void ks_feature_nlmsg_dump(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh,
+	const char *prefix)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		switch(attr->type) {
+		case KS_FEATURE_ID:
+			report_conn(conn, LOG_DEBUG,
+				"%s  ID: 0x%08x\n", prefix,
+				*(__u32 *)KS_ATTR_DATA(attr));
+		break;
+
+		case KS_FEATURE_NAME:
+			report_conn(conn, LOG_DEBUG,
+				"%s  Name: '%s'\n", prefix,
+				strndupa(KS_ATTR_DATA(attr),
+					KS_ATTR_PAYLOAD(attr)));
+		break;
+
+		default:
+			report_conn(conn, LOG_WARNING,
+				"%s  Attribute '%s' unexpected\n", prefix,
+				ks_netlink_feature_attr_to_string(
+					attr->type));
+		}
 	}
 }
 

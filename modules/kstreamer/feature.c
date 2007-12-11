@@ -18,10 +18,11 @@
 #include "feature.h"
 #include "netlink.h"
 
-#define KS_CAPA_HASHBITS	8
-#define KS_CAPA_HASHSIZE	((1 << KS_CAPA_HASHBITS) - 1)
+#define KS_FEATURE_HASHBITS	8
+#define KS_FEATURE_HASHSIZE	((1 << KS_FEATURE_HASHBITS) - 1)
 
-static struct hlist_head ks_features_hash[KS_CAPA_HASHSIZE];
+static struct hlist_head ks_features_hash[KS_FEATURE_HASHSIZE];
+static rwlock_t ks_features_list_lock = RW_LOCK_UNLOCKED;
 
 struct ks_feature *ks_feature_get(struct ks_feature *feature)
 {
@@ -33,19 +34,14 @@ EXPORT_SYMBOL(ks_feature_get);
 
 void ks_feature_put(struct ks_feature *feature)
 {
-	if (!atomic_dec_and_test(&feature->refcnt)) {
-		down_write(&kstreamer_subsys_rwsem);
-		hlist_del(&feature->node);
-		up_write(&kstreamer_subsys_rwsem);
-
+	if (!atomic_dec_and_test(&feature->refcnt))
 		kfree(feature);
-	}
 }
 EXPORT_SYMBOL(ks_feature_put);
 
 static inline struct hlist_head *ks_features_get_hash(u32 pid)
 {
-	return &ks_features_hash[pid & (KS_CAPA_HASHSIZE - 1)];
+	return &ks_features_hash[pid & (KS_FEATURE_HASHSIZE - 1)];
 }
 
 struct ks_feature *_ks_feature_search_by_id(int id)
@@ -53,7 +49,7 @@ struct ks_feature *_ks_feature_search_by_id(int id)
 	struct ks_feature *feature;
 	int i;
 
-	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
+	for(i=0; i<KS_FEATURE_HASHSIZE; i++) {
 		struct hlist_node *t;
 
 		hlist_for_each_entry(feature, t, &ks_features_hash[i], node)
@@ -68,9 +64,9 @@ struct ks_feature *ks_feature_get_by_id(int id)
 {
 	struct ks_feature *feature;
 
-	down_read(&kstreamer_subsys_rwsem);
+	read_lock(&ks_features_list_lock);
 	feature = ks_feature_get(_ks_feature_search_by_id(id));
-	up_read(&kstreamer_subsys_rwsem);
+	read_unlock(&ks_features_list_lock);
 
 	return feature;
 }
@@ -90,7 +86,7 @@ static int _ks_feature_new_id(void)
 	}
 }
 
-static int ks_feature_netlink_fill_msg(
+static int ks_feature_write_to_nlmsg(
 	struct ks_feature *feature,
 	struct sk_buff *skb,
 	enum ks_netlink_message_type message_type,
@@ -136,106 +132,98 @@ nlmsg_failure:
 	return err;
 }
 
-static int ks_feature_netlink_notification(
+static int ks_feature_mcast_send(
 	struct ks_feature *feature,
-	enum ks_netlink_message_type message_type,
-	u32 pid)
+	struct ks_netlink_state *state,
+	enum ks_netlink_message_type message_type)
 {
-	struct sk_buff *skb;
-	int err = -EINVAL;
+	int err;
 
-	skb = alloc_skb(NLMSG_SPACE(128), GFP_KERNEL);
-	if (!skb) {
-	        //netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
-	        // FIXME, set_err is really needed, but kernel people removed
-	        // the EXPORT_SYMBOL
-		err = -ENOMEM;
-		goto err_alloc_skb;
+retry:
+	err = ks_netlink_mcast_need_skb(state);
+	if (err < 0)
+		return err;
+
+	err = ks_feature_write_to_nlmsg(feature, state->mcast_skb, message_type,
+						0, state->mcast_seqnum++, 0);
+	if (err < 0) {
+		ks_netlink_mcast_flush(state);
+		goto retry;
 	}
 
-	NETLINK_CB(skb).pid = 0;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-	NETLINK_CB(skb).dst_pid = pid;
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-	NETLINK_CB(skb).dst_groups = pid ? 0 : (1 << KS_NETLINK_GROUP_TOPOLOGY);
-#else
-	NETLINK_CB(skb).dst_group = pid ? 0 : KS_NETLINK_GROUP_TOPOLOGY;
-#endif
-
-	err = ks_feature_netlink_fill_msg(
-			feature, skb, message_type, pid, 0, 0);
-	if (err < 0)
-		goto err_fill_msg;
-
-	netlink_broadcast(ksnl, skb, 0,
-		KS_NETLINK_GROUP_TOPOLOGY,
-		GFP_KERNEL);
+	ks_netlink_mcast_flush(state);
 
 	return 0;
-
-err_fill_msg:
-	kfree_skb(skb);
-err_alloc_skb:
-
-	return err;
 }
 
-void ks_feature_netlink_dump(struct ks_xact *xact)
+int ks_feature_cmd_get(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh)
 {
-	struct ks_feature *feature;
 	int err;
 	int i;
+	int cnt = 1;
+  
+	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
 
-	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
+	read_lock(&ks_features_list_lock);
+	for(i=0; i<KS_FEATURE_HASHSIZE; i++) {
 		struct hlist_node *t;
 
+		struct ks_feature *feature;
 		hlist_for_each_entry(feature, t, &ks_features_hash[i], node) {
 
 retry:
-			ks_xact_need_skb(xact);
-			if (!xact->out_skb)
-				return;
+			ks_netlink_need_skb(state);
+			if (!state->out_skb) {
+				read_unlock(&ks_features_list_lock);
+				return -ENOMEM;
+			}
 
-			err = ks_feature_netlink_fill_msg(feature,
-						xact->out_skb,
+			err = ks_feature_write_to_nlmsg(feature,
+						state->out_skb,
 						KS_NETLINK_FEATURE_NEW,
-						xact->pid,
-						0,
+						nlh->nlmsg_pid,
+						nlh->nlmsg_seq + cnt,
 						NLM_F_MULTI);
 			if (err < 0) {
-				ks_xact_flush(xact);
+				ks_netlink_flush(state);
 				goto retry;
 			}
+
+			cnt++;
 		}
 	}
+	read_unlock(&ks_features_list_lock);
 
-	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_netlink_send_done(state, nlh, cnt);
+
+	return 0;
 }
 
-struct ks_feature *ks_feature_register(const char *name)
+static struct ks_feature *ks_feature_register_no_topology_lock(const char *name)
 {
 	struct ks_feature *feature;
 	int i;
 
-	down_read(&kstreamer_subsys_rwsem);
-	for(i=0; i<KS_CAPA_HASHSIZE; i++) {
+	write_lock(&ks_features_list_lock);
+	for(i=0; i<KS_FEATURE_HASHSIZE; i++) {
 		struct hlist_node *t;
 
 		hlist_for_each_entry(feature, t, &ks_features_hash[i], node) {
 			if (!strcmp(feature->name, name)) {
-				up_read(&kstreamer_subsys_rwsem);
+				write_unlock(&ks_features_list_lock);
 				return ks_feature_get(feature);
 			}
 		}
 	}
-	up_read(&kstreamer_subsys_rwsem);
 
-	feature = kmalloc(sizeof(*feature), GFP_KERNEL);
-	if (!feature)
+	feature = kmalloc(sizeof(*feature), GFP_ATOMIC);
+	if (!feature) {
+		write_unlock(&ks_features_list_lock);
 		return NULL;
+	}
 
 	memset(feature, 0, sizeof(*feature));
 
@@ -243,12 +231,24 @@ struct ks_feature *ks_feature_register(const char *name)
 
 	strncpy(feature->name, name, sizeof(feature->name));
 
-	down_write(&kstreamer_subsys_rwsem);
 	feature->id = _ks_feature_new_id();
 	hlist_add_head(&feature->node, ks_features_get_hash(feature->id));
-	up_write(&kstreamer_subsys_rwsem);
 
-	ks_feature_netlink_notification(feature, KS_NETLINK_FEATURE_NEW, 0);
+	ks_feature_mcast_send(feature, &ks_netlink_state,
+				KS_NETLINK_FEATURE_NEW);
+
+	write_unlock(&ks_features_list_lock);
+
+	return feature;
+}
+
+struct ks_feature *ks_feature_register(const char *name)
+{
+	struct ks_feature *feature;
+
+	down_write(&ks_topology_lock);
+	feature = ks_feature_register_no_topology_lock(name);
+	up_write(&ks_topology_lock);
 
 	return feature;
 }
@@ -256,7 +256,14 @@ EXPORT_SYMBOL(ks_feature_register);
 
 void ks_feature_unregister(struct ks_feature *feature)
 {
-	ks_feature_netlink_notification(feature, KS_NETLINK_FEATURE_DEL, 0);
+	if (atomic_read(&feature->refcnt) == 1) {
+		down_write(&ks_topology_lock);
+		hlist_del(&feature->node);
+
+		ks_feature_mcast_send(feature, &ks_netlink_state,
+				KS_NETLINK_FEATURE_DEL);
+		up_write(&ks_topology_lock);
+	}
 
 	ks_feature_put(feature);
 }

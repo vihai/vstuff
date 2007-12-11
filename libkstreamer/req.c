@@ -19,7 +19,7 @@
 #include <libkstreamer/conn.h>
 #include <libkstreamer/util.h>
 #include <libkstreamer/req.h>
-#include <libkstreamer/xact.h>
+#include <libkstreamer/logging.h>
 
 struct ks_req ks_nomem_request =
 {
@@ -28,7 +28,17 @@ struct ks_req ks_nomem_request =
 	.err = -ENOMEM,
 };
 
-struct ks_req *ks_req_alloc(struct ks_xact *xact)
+void ks_req_timer(void *data)
+{
+	struct ks_req *req = data;
+
+	report_conn(req->conn, LOG_ERR,
+		"Timeout waiting for request processin!!\n");
+
+	ks_req_complete(req, ETIMEDOUT);
+}
+
+struct ks_req *ks_req_alloc(struct ks_conn *conn)
 {
 	struct ks_req *req;
 
@@ -39,8 +49,12 @@ struct ks_req *ks_req_alloc(struct ks_xact *xact)
 	memset(req, 0, sizeof(*req));
 
 	req->refcnt = 1;
-	req->xact = xact;
-	req->id = xact->conn->seqnum++;
+	req->conn = conn;
+	req->id = 0;
+	req->multi_seq = 1;
+
+	ks_timer_init(&req->timer, &conn->timerset, "ks_req",
+		ks_req_timer, req);
 
 	pthread_mutex_init(&req->completed_lock, NULL);
 	pthread_cond_init(&req->completed_cond, NULL);
@@ -81,6 +95,21 @@ void ks_req_put(struct ks_req *req)
 	}
 }
 
+void ks_req_complete(struct ks_req *req, int err)
+{
+	req->err = err;
+
+	ks_timer_stop(&req->timer);
+
+	pthread_mutex_lock(&req->completed_lock);
+	req->completed = TRUE;
+	pthread_mutex_unlock(&req->completed_lock);
+	pthread_cond_broadcast(&req->completed_cond);
+
+	if (req->response_callback)
+		req->response_callback(req);
+}
+
 void ks_req_wait(struct ks_req *req)
 {
 	pthread_mutex_lock(&req->completed_lock);
@@ -89,3 +118,24 @@ void ks_req_wait(struct ks_req *req)
 	}
 	pthread_mutex_unlock(&req->completed_lock);
 }
+
+int ks_req_resp_append_payload(
+	struct ks_req *req,
+	struct nlmsghdr *nlh)
+{
+	req->response_payload = realloc(req->response_payload,
+					req->response_payload_size +
+					NLMSG_ALIGN(nlh->nlmsg_len));
+
+	if (!req->response_payload)
+		return -ENOMEM;
+
+	memcpy(req->response_payload + req->response_payload_size,
+				nlh, NLMSG_ALIGN(nlh->nlmsg_len));
+
+	req->response_payload_size += NLMSG_ALIGN(nlh->nlmsg_len);
+
+	return 0;
+}
+
+

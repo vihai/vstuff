@@ -26,8 +26,8 @@
 
 struct kset ks_nodes_kset;
 
-struct list_head ks_nodes_list = LIST_HEAD_INIT(ks_nodes_list);
-rwlock_t ks_nodes_list_lock = RW_LOCK_UNLOCKED;
+static struct list_head ks_nodes_list = LIST_HEAD_INIT(ks_nodes_list);
+static rwlock_t ks_nodes_list_lock = RW_LOCK_UNLOCKED;
 
 struct ks_node *_ks_node_search_by_id(int id)
 {
@@ -65,35 +65,6 @@ static int _ks_node_new_id(void)
 			return cur_id;
 	}
 }
-
-#if 0
-struct ks_node *ks_node_get_by_path(
-	const char *path)
-{
-	struct ks_node *node;
-	struct nameidata nd;
-	int err;
-
-	err = path_lookup(path, LOOKUP_FOLLOW | LOOKUP_DIRECTORY, &nd);
-	if (err < 0)
-		return NULL;
-
-	down_read(&kstreamer_subsys_rwsem);
-
-	list_for_each_entry(node, &ks_nodes_kset.list, kobj.entry) {
-		if (node->kobj.dentry == nd.dentry) {
-			path_release(&nd);
-			up_read(&kstreamer_subsys_rwsem);
-			return ks_node_get(node);
-		}
-	}
-	up_read(&kstreamer_subsys_rwsem);
-
-	path_release(&nd);
-
-	return NULL;
-}
-#endif
 
 #define to_ks_node_attr(_attr) \
 	container_of(_attr, struct ks_node_attribute, attr)
@@ -240,79 +211,68 @@ nlmsg_failure:
 	return err;
 }
 
-static int ks_node_netlink_notification(
+static int ks_node_mcast_send(
 	struct ks_node *node,
-	enum ks_netlink_message_type message_type,
-	u32 pid)
+	struct ks_netlink_state *state,
+	enum ks_netlink_message_type message_type)
 {
-	struct sk_buff *skb;
-	int err = -EINVAL;
-
-	skb = alloc_skb(NLMSG_SPACE(257), GFP_KERNEL);
-	if (!skb) {
-	        //netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
-	        // FIXME, set_err is really needed, but kernel people removed
-	        // the EXPORT_SYMBOL
-		err = -ENOMEM;
-		goto err_alloc_skb;
-	}
-
-	NETLINK_CB(skb).pid = 0;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-	NETLINK_CB(skb).dst_pid = pid;
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-	NETLINK_CB(skb).dst_groups = pid ? 0 : (1 << KS_NETLINK_GROUP_TOPOLOGY);
-#else
-	NETLINK_CB(skb).dst_group = pid ? 0 : KS_NETLINK_GROUP_TOPOLOGY;
-#endif
-
-	err = ks_node_write_to_nlmsg(node, skb, message_type, pid, 0, 0);
-	if (err < 0)
-		goto err_fill_msg;
-
-	netlink_broadcast(ksnl, skb, 0,
-		KS_NETLINK_GROUP_TOPOLOGY,
-		GFP_KERNEL);
-
-	return 0;
-
-err_fill_msg:
-	kfree_skb(skb);
-err_alloc_skb:
-
-	return err;
-}
-
-void ks_node_netlink_dump(struct ks_xact *xact)
-{
-	struct ks_node *node;
 	int err;
 
+retry:
+	err = ks_netlink_mcast_need_skb(state);
+	if (err < 0)
+		return err;
+
+	err = ks_node_write_to_nlmsg(node, state->mcast_skb, message_type,
+					0,  state->mcast_seqnum++, 0);
+	if (err < 0) {
+		ks_netlink_mcast_flush(state);
+		goto retry;
+	}
+
+	ks_netlink_mcast_flush(state);
+
+	return 0;
+}
+
+int ks_node_cmd_get(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh)
+{
+	int err;
+	struct ks_node *node;
+	int cnt = 1;
+
+	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
+  
 	list_for_each_entry(node, &ks_nodes_kset.list, kobj.entry) {
 
 retry:
-		ks_xact_need_skb(xact);
-		if (!xact->out_skb)
-			return;
+		ks_netlink_need_skb(state);
+		if (!state->out_skb)
+			return -ENOMEM;
 
-		err = ks_node_write_to_nlmsg(node, xact->out_skb,
+		err = ks_node_write_to_nlmsg(node,
+					state->out_skb,
 					KS_NETLINK_NODE_NEW,
-					xact->pid,
-					0,
+					nlh->nlmsg_pid,
+					nlh->nlmsg_seq + cnt,
 					NLM_F_MULTI);
 		if (err < 0) {
-			ks_xact_flush(xact);
+			ks_netlink_flush(state);
 			goto retry;
 		}
+
+		cnt++;
 	}
 
-	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_netlink_send_done(state, nlh, cnt);
+
+	return 0;
 }
 
-int ks_node_register(struct ks_node *node)
+int ks_node_register_no_topology_lock(struct ks_node *node)
 {
 	int err;
 
@@ -327,7 +287,7 @@ int ks_node_register(struct ks_node *node)
 	if (err < 0)
 		goto err_kobject_add;
 
-	ks_node_netlink_notification(node, KS_NETLINK_NODE_NEW, 0);
+	ks_node_mcast_send(node, &ks_netlink_state, KS_NETLINK_NODE_NEW);
 
 	return 0;
 
@@ -340,18 +300,36 @@ err_kobject_add:
 
 	return err;
 }
+
+int ks_node_register(struct ks_node *node)
+{
+	int err;
+
+	down_write(&ks_topology_lock);
+	err = ks_node_register_no_topology_lock(node);
+	up_write(&ks_topology_lock);
+
+	return err;
+}
 EXPORT_SYMBOL(ks_node_register);
 
-void ks_node_unregister(struct ks_node *node)
+void ks_node_unregister_no_topology_lock(struct ks_node *node)
 {
-	ks_node_netlink_notification(node, KS_NETLINK_NODE_DEL, 0);
-
 	kobject_del(&node->kobj);
 
 	write_lock(&ks_nodes_list_lock);
 	list_del(&node->node);
 	ks_node_put(node);
 	write_unlock(&ks_nodes_list_lock);
+
+	ks_node_mcast_send(node, &ks_netlink_state, KS_NETLINK_NODE_DEL);
+}
+
+void ks_node_unregister(struct ks_node *node)
+{
+	down_write(&ks_topology_lock);
+	ks_node_unregister_no_topology_lock(node);
+	up_write(&ks_topology_lock);
 }
 EXPORT_SYMBOL(ks_node_unregister);
 

@@ -25,17 +25,16 @@
 #define NETLINK_KSTREAMER 31
 #endif
 
-extern struct sock *ksnl;
-
 #define KS_NETLINK_BASE 16
 #define KS_NETLINK_OBJS 32
 
 enum ks_netlink_message_type
 {
 	KS_NETLINK_VERSION = KS_NETLINK_BASE,
-	KS_NETLINK_BEGIN,
-	KS_NETLINK_COMMIT,
-	KS_NETLINK_ABORT,
+
+	KS_NETLINK_TOPOLOGY_LOCK,
+	KS_NETLINK_TOPOLOGY_TRYLOCK,
+	KS_NETLINK_TOPOLOGY_UNLOCK,
 
 	KS_NETLINK_FEATURE_NEW = KS_NETLINK_OBJS,
 	KS_NETLINK_FEATURE_DEL,
@@ -115,42 +114,44 @@ struct ks_attr
 #include <linux/version.h>
 #include <net/sock.h>
 
+extern struct sock *ksnl;
+
 extern struct semaphore ksnl_sem;
+
+extern struct ks_netlink_state ks_netlink_state;
+
 
 struct ks_sock
 {
 	struct sock sk;
 };
 
-enum ks_xact_flags
+struct ks_netlink_state
 {
-	KS_XACT_FLAGS_WRITE,
-	KS_XACT_FLAGS_PERSISTENT,
-	KS_XACT_FLAGS_COMPLETED,
-};
-
-struct ks_xact
-{
-	struct hlist_node node;
-
-	atomic_t refcnt;
-
+	/* These not need locking as they are accessed only by ksnl thread */
 	struct sk_buff *out_skb;
 
-	u32 pid;
-	u32 id;
-	u16 flags;
+	int cur_pid;
+	u32 cur_seq;
+
+	int lock_owner;
+	struct timer_list lock_timer;
+
+	int mcast_seqnum;
+	struct sk_buff *mcast_skb;
+	struct sk_buff_head mcast_queue;
 };
 
-#define KS_CMD_WR (1 << 0)
+#define KS_CMD_RD		(1 << 0)
+#define KS_CMD_WR		(1 << 1)
 
 struct ks_command
 {
 	enum ks_netlink_message_type message_type;
 
 	int (*handler)(
+		struct ks_netlink_state *state,
 		struct ks_command *cmd,
-		struct ks_xact *xact,
 		struct nlmsghdr *nlh);
 
 	int flags;
@@ -185,11 +186,23 @@ int ks_netlink_put_attr(
 	void *data,
 	int data_len);
 
-void ks_xact_send_control(struct ks_xact *xact,
-		enum ks_netlink_message_type message_type, u16 flags);
-void ks_xact_send_error(struct ks_xact *xact, int error);
-void ks_xact_need_skb(struct ks_xact *xact);
-void ks_xact_flush(struct ks_xact *xact);
+int ks_netlink_need_skb(struct ks_netlink_state *state);
+int ks_netlink_mcast_need_skb(struct ks_netlink_state *state);
+void ks_netlink_flush(struct ks_netlink_state *state);
+void ks_netlink_mcast_flush(struct ks_netlink_state *state);
+
+int ks_netlink_send_done(
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	u16 seq);
+int ks_netlink_send_ack(
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	int flags);
+int ks_netlink_send_error(
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	int error);
 
 int ks_netlink_modinit(void);
 void ks_netlink_modexit(void);

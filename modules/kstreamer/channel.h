@@ -132,12 +132,12 @@ struct ks_chan *ks_chan_get_by_id(int id);
 struct ks_chan *ks_chan_get_by_nlid(struct nlmsghdr *nlh);
 
 int ks_chan_cmd_get(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 int ks_chan_cmd_set(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh);
 
 static inline struct ks_chan *ks_chan_get(struct ks_chan *chan)

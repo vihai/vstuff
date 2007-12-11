@@ -745,6 +745,13 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 			vgsm_chan->node_userport->id,
 			vgsm_chan->node_me->id);
 
+	err = ks_conn_remote_topology_lock(ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot lock kstreamer topology: %s\n", strerror(-err));
+		goto err_kstreamer_lock;
+	}
+
 	/* Create RX pipeline */
 	vgsm_chan->pipeline_rx = ks_pipeline_alloc();
 	if (!vgsm_chan->pipeline_rx) {
@@ -785,7 +792,12 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		}
 	}
 
-	ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
+	err = ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot update pipeline's channels\n");
+		goto err_pipeline_rx_update_chans;
+	}
 
 	/* Create TX pipeline */
 	vgsm_chan->pipeline_tx = ks_pipeline_alloc();
@@ -814,6 +826,8 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_pipeline_tx_create;
 	}
 
+	ks_conn_remote_topology_unlock(ks_conn);
+
 	if (vgsm_chan->me->interface_version == 2) {
 		err = vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
 				vgsm_chan->ast_chan->rawwriteformat !=
@@ -827,7 +841,12 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		}
 	}
 
-	ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
+	err = ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot update pipeline's channels\n");
+		goto err_pipeline_tx_update_chans;
+	}
 
 	/* Start RX pipelines */
 	vgsm_chan->pipeline_rx->status = KS_PIPELINE_STATUS_FLOWING;
@@ -853,18 +872,22 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 
 err_pipeline_tx_update:
 err_pipeline_rx_update:
+err_pipeline_tx_update_chans:
 err_pipeline_tx_decompander_enable:
 err_pipeline_tx_create:
 err_pipeline_tx_connect:
 	ks_pipeline_put(vgsm_chan->pipeline_tx);
 	vgsm_chan->pipeline_tx = NULL;
 err_pipeline_tx_alloc:
+err_pipeline_rx_update_chans:
 err_pipeline_rx_amu_compander_enable:
 err_pipeline_rx_create:
 err_pipeline_rx_connect:
 	ks_pipeline_put(vgsm_chan->pipeline_rx);
 	vgsm_chan->pipeline_rx = NULL;
 err_pipeline_rx_alloc:
+	ks_conn_remote_topology_unlock(ks_conn);
+err_kstreamer_lock:
 	ks_node_put(vgsm_chan->node_userport);
 	vgsm_chan->node_userport = NULL;
 err_up_node_not_found:
@@ -1451,7 +1474,11 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 
 		vgsm_chan->prev_rawreadformat = ast_chan->rawreadformat;
 
-		ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
+		err = ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
+		if (err < 0) {
+			ast_log(LOG_ERROR,
+				"Cannot update pipeline's channels\n");
+		}
 
 		err = ks_pipeline_restart(vgsm_chan->pipeline_rx, ks_conn);
 		if (err < 0)
@@ -1569,7 +1596,11 @@ static int vgsm_write(
 
 		vgsm_chan->prev_rawwriteformat = ast_chan->rawwriteformat;
 
-		ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
+		err = ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
+		if (err < 0) {
+			ast_log(LOG_ERROR,
+				"Cannot update pipeline's channels\n");
+		}
 
 		err = ks_pipeline_restart(vgsm_chan->pipeline_rx, ks_conn);
 		if (err < 0)

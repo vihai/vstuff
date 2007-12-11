@@ -25,7 +25,7 @@ enum ks_feature_attribute_type
 
 #include <linux/skbuff.h>
 
-struct ks_xact;
+#include "netlink.h"
 
 struct ks_feature
 {
@@ -46,7 +46,10 @@ struct ks_feature_value
 	int len;
 };
 
-void ks_feature_netlink_dump(struct ks_xact *xact);
+int ks_feature_cmd_get(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh);
 
 extern struct ks_feature *ks_feature_register(const char *name);
 extern void ks_feature_unregister(struct ks_feature *feature);

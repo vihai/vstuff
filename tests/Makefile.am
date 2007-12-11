@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-noinst_PROGRAMS = vgsm_stress sniffer traffic dsptest # jitter  listener
+sbin_PROGRAMS = vgsm_stress sniffer traffic dsptest # jitter  listener
 
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm

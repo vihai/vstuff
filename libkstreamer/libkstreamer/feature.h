@@ -78,6 +78,11 @@ void ks_feature_handle_topology_update(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh);
 
+void ks_feature_nlmsg_dump(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh,
+	const char *prefix);
+
 #endif
 
 #endif

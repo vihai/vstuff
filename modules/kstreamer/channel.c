@@ -331,67 +331,50 @@ static int ks_chan_update_from_nlmsg(struct ks_chan *chan, struct nlmsghdr *nlh)
 	return 0;
 }
 
-static int ks_chan_netlink_broadcast_notification(
+static int ks_chan_mcast_send(
 	struct ks_chan *chan,
+	struct ks_netlink_state *state,
 	enum ks_netlink_message_type message_type)
 {
-	struct sk_buff *skb;
-	int err = -EINVAL;
-
-	skb = alloc_skb(NLMSG_SPACE(280), GFP_KERNEL);
-	if (!skb) {
-	        //netlink_set_err(ksnl, 0, KS_NETLINK_GROUP_TOPOLOGY, ENOBUFS);
-	        // FIXME, set_err is really needed, but kernel people removed
-	        // the EXPORT_SYMBOL
-		err = -ENOMEM;
-		goto err_alloc_skb;
-	}
-
-	NETLINK_CB(skb).pid = 0;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-	NETLINK_CB(skb).dst_pid = 0;
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
-	NETLINK_CB(skb).dst_groups = (1 << KS_NETLINK_GROUP_TOPOLOGY);
-#else
-	NETLINK_CB(skb).dst_group = KS_NETLINK_GROUP_TOPOLOGY;
-#endif
-
-	err = ks_chan_write_to_nlmsg(chan, skb, message_type, 0, 0, 0);
-	if (err < 0)
-		goto err_fill_msg;
-
-	netlink_broadcast(ksnl, skb, 0,
-		KS_NETLINK_GROUP_TOPOLOGY,
-		GFP_KERNEL);
-
-	return 0;
-
-err_fill_msg:
-	kfree_skb(skb);
-err_alloc_skb:
-
-	return err;
-}
-
-static int ks_chan_xact_write(
-	struct ks_chan *chan,
-	struct ks_xact *xact,
-	enum ks_netlink_message_type message_type)
-{
-	int err = -EINVAL;
+	int err;
 
 retry:
-	ks_xact_need_skb(xact);
-	if (!xact->out_skb)
+	err = ks_netlink_mcast_need_skb(state);
+	if (err < 0)
+		return err;
+
+	err = ks_chan_write_to_nlmsg(chan, state->mcast_skb, message_type,
+						0, state->mcast_seqnum++, 0);
+	if (err < 0) {
+		ks_netlink_mcast_flush(state);
+		goto retry;
+	}
+
+	ks_netlink_mcast_flush(state);
+
+	return 0;
+}
+
+static int ks_chan_netlink_respond(
+	struct ks_chan *chan,
+	struct ks_netlink_state *state,
+	struct nlmsghdr *req_nlh,
+	enum ks_netlink_message_type message_type)
+{
+	int err;
+
+retry:
+	ks_netlink_need_skb(state);
+	if (!state->out_skb)
 		return -ENOMEM;
 
-	err = ks_chan_write_to_nlmsg(chan, xact->out_skb, message_type,
-						xact->pid, xact->id, 0);
+	err = ks_chan_write_to_nlmsg(chan, state->out_skb,
+				message_type,
+				req_nlh->nlmsg_pid,
+				req_nlh->nlmsg_seq,
+				NLM_F_ACK);
 	if (err < 0) {
-		ks_xact_flush(xact);
+		ks_netlink_flush(state);
 		goto retry;
 	}
 
@@ -399,42 +382,45 @@ retry:
 }
 
 int ks_chan_cmd_get(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
-	struct ks_chan *chan;
 	int err;
-
-	ks_xact_send_control(xact, KS_NETLINK_CHAN_GET,
-			NLM_F_ACK | NLM_F_MULTI);
+	struct ks_chan *chan;
+	int cnt = 1;
+  
+	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
 
 	list_for_each_entry(chan, &ks_chans_kset.list, kobj.entry) {
 
 retry:
-		ks_xact_need_skb(xact);
-		if (!xact->out_skb)
+		ks_netlink_need_skb(state);
+		if (!state->out_skb)
 			return -ENOMEM;
 
-		err = ks_chan_write_to_nlmsg(chan, xact->out_skb,
+		err = ks_chan_write_to_nlmsg(chan,
+					state->out_skb,
 					KS_NETLINK_CHAN_NEW,
-					xact->pid,
-					0,
+					nlh->nlmsg_pid,
+					nlh->nlmsg_seq + cnt,
 					NLM_F_MULTI);
 		if (err < 0) {
-			ks_xact_flush(xact);
+			ks_netlink_flush(state);
 			goto retry;
 		}
+
+		cnt++;
 	}
 
-	ks_xact_send_control(xact, NLMSG_DONE, NLM_F_MULTI);
+	ks_netlink_send_done(state, nlh, cnt);
 
 	return 0;
 }
 
 int ks_chan_cmd_set(
+	struct ks_netlink_state *state,
 	struct ks_command *cmd,
-	struct ks_xact *xact,
 	struct nlmsghdr *nlh)
 {
 	struct ks_chan *chan;
@@ -451,7 +437,7 @@ int ks_chan_cmd_set(
 	if (err < 0)
 		goto err_chan_update;
 
-	ks_chan_xact_write(chan, xact, KS_NETLINK_CHAN_SET);
+	ks_chan_netlink_respond(chan, state, nlh, KS_NETLINK_CHAN_SET);
 
 	ks_chan_put(chan);
 
@@ -464,7 +450,7 @@ err_chan_get:
 	return err;
 }
 
-int ks_chan_register(struct ks_chan *chan)
+int ks_chan_register_no_topology_lock(struct ks_chan *chan)
 {
 	int err;
 
@@ -505,7 +491,7 @@ int ks_chan_register(struct ks_chan *chan)
 	if (err < 0)
 		goto err_create_chan_to;
 
-	ks_chan_netlink_broadcast_notification(chan, KS_NETLINK_CHAN_NEW);
+	ks_chan_mcast_send(chan, &ks_netlink_state, KS_NETLINK_CHAN_NEW);
 
 	return 0;
 
@@ -525,20 +511,27 @@ err_kobject_add:
 
 	return err;
 }
+
+int ks_chan_register(struct ks_chan *chan)
+{
+	int err;
+
+	down_write(&ks_topology_lock);
+	err = ks_chan_register_no_topology_lock(chan);
+	up_write(&ks_topology_lock);
+
+	return err;
+}
 EXPORT_SYMBOL(ks_chan_register);
 
-void ks_chan_unregister(struct ks_chan *chan)
+void ks_chan_unregister_no_topology_lock(struct ks_chan *chan)
 {
-	ks_chan_netlink_broadcast_notification(chan, KS_NETLINK_CHAN_DEL);
-
 	write_lock_bh(&ks_connection_lock);
 	if (chan->pipeline) {
 		struct ks_pipeline *pipeline = ks_pipeline_get(chan->pipeline);
 		write_unlock_bh(&ks_connection_lock);
 
-		down(&ksnl_sem);
-		ks_pipeline_unregister(pipeline);
-		up(&ksnl_sem);
+		ks_pipeline_unregister_no_topology_lock(pipeline);
 
 		ks_pipeline_put(pipeline);
 	} else
@@ -556,6 +549,15 @@ void ks_chan_unregister(struct ks_chan *chan)
 	list_del(&chan->node);
 	ks_chan_put(chan);
 	write_unlock(&ks_chans_list_lock);
+
+	ks_chan_mcast_send(chan, &ks_netlink_state, KS_NETLINK_CHAN_DEL);
+}
+
+void ks_chan_unregister(struct ks_chan *chan)
+{
+	down_write(&ks_topology_lock);
+	ks_chan_unregister_no_topology_lock(chan);
+	up_write(&ks_topology_lock);
 }
 EXPORT_SYMBOL(ks_chan_unregister);
 

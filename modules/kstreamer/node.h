@@ -26,8 +26,8 @@ enum ks_node_attribute_type
 #include "netlink.h"
 
 extern struct kset ks_nodes_kset;
-extern struct list_head ks_nodes_list;
-extern rwlock_t ks_nodes_list_lock;
+//extern struct list_head ks_nodes_list;
+//extern rwlock_t ks_nodes_list_lock;
 
 struct ks_chan;
 struct ks_pipeline;
@@ -117,6 +117,11 @@ extern struct ks_node *ks_node_create(
 	struct kobject *parent);
 extern void ks_node_destroy(struct ks_node *node);
 
+int ks_node_cmd_get(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh);
+
 extern int ks_node_register(struct ks_node *node);
 extern void ks_node_unregister(struct ks_node *node);
 
@@ -128,8 +133,6 @@ extern int ks_node_create_file(
 extern void ks_node_remove_file(
 	struct ks_node *node,
 	struct ks_node_attribute *attr);
-
-void ks_node_netlink_dump(struct ks_xact *xact);
 
 extern int ks_node_modinit(void);
 extern void ks_node_modexit(void);

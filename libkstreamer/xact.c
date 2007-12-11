@@ -28,7 +28,6 @@
 
 #include <libkstreamer/conn.h>
 #include <libkstreamer/util.h>
-#include <libkstreamer/xact.h>
 #include <libkstreamer/req.h>
 
 struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
@@ -41,9 +40,6 @@ struct ks_xact *ks_xact_alloc(struct ks_conn *conn)
 
 	memset(xact, 0, sizeof(*xact));
 
-	pthread_mutex_init(&xact->requests_lock, NULL);
-	INIT_LIST_HEAD(&xact->requests);
-	INIT_LIST_HEAD(&xact->requests_sent);
 
 	xact->refcnt = 1;
 	xact->conn = conn;
@@ -82,19 +78,6 @@ void ks_xact_put(struct ks_xact *xact)
 
 		free(xact);
 	}
-}
-
-void ks_xact_queue_request(
-	struct ks_xact *xact,
-	struct ks_req *req)
-{
-	assert(xact->state != KS_XACT_STATE_COMPLETED);
-
-	pthread_mutex_lock(&xact->requests_lock);
-	list_add_tail(&ks_req_get(req)->node, &xact->requests);
-	pthread_mutex_unlock(&xact->requests_lock);
-
-	ks_conn_send_message(xact->conn, KS_CONN_MSG_REFRESH, NULL, 0);
 }
 
 struct ks_req *ks_xact_queue_new_request(

@@ -26,7 +26,6 @@
 #include <libkstreamer/node.h>
 #include <libkstreamer/feature.h>
 #include <libkstreamer/req.h>
-#include <libkstreamer/xact.h>
 #include <libkstreamer/logging.h>
 
 static inline struct hlist_head *ks_chan_get_hash(
@@ -189,7 +188,7 @@ struct ks_chan *ks_chan_get_by_token(
 	return chan;
 }
 
-static struct ks_chan *_ks_chan_get_by_nlid(
+static __u32 ks_chan_nlh_to_id(
 	struct ks_conn *conn, struct nlmsghdr *nlh)
 {
 	struct ks_attr *attr;
@@ -199,13 +198,11 @@ static struct ks_chan *_ks_chan_get_by_nlid(
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
-		if(attr->type == KS_CHANATTR_ID) {
-			return _ks_chan_get_by_id(conn,
-					*(__u32 *)KS_ATTR_DATA(attr));
-		}
+		if(attr->type == KS_CHANATTR_ID)
+			return *(__u32 *)KS_ATTR_DATA(attr);
 	}
 
-	return NULL;
+	return 0;
 }
 
 #if 0
@@ -417,9 +414,6 @@ void ks_chan_handle_topology_update(
 			// FIXME
 		}
 
-		if (conn->debug_netlink)
-			ks_chan_dump(chan, conn, LOG_DEBUG);
-
 		ks_chan_add(chan, conn); // CHECK FOR DUPEs FIXME TODO
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 		ks_chan_put(chan);
@@ -427,16 +421,13 @@ void ks_chan_handle_topology_update(
 	break;
 
 	case KS_NETLINK_CHAN_DEL: {
-		struct ks_chan *chan;
-
-		chan = _ks_chan_get_by_nlid(conn, nlh);
+		__u32 id = ks_chan_nlh_to_id(conn, nlh);
+		struct ks_chan *chan = _ks_chan_get_by_id(conn, id);
 		if (!chan) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
+			report_conn(conn, LOG_ERR,
+				"Channel ID %08x not found!\n", id);
 			break;
 		}
-
-		if (conn->debug_netlink)
-			ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 		ks_chan_del(chan);
@@ -445,24 +436,67 @@ void ks_chan_handle_topology_update(
 	break;
 
 	case KS_NETLINK_CHAN_SET: {
-		struct ks_chan *chan;
-
-		chan = _ks_chan_get_by_nlid(conn, nlh);
+		__u32 id = ks_chan_nlh_to_id(conn, nlh);
+		struct ks_chan *chan = _ks_chan_get_by_id(conn, id);
 		if (!chan) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
+			report_conn(conn, LOG_ERR,
+				"Channel ID %08x not found!\n", id);
 			break;
 		}
 
 		ks_chan_update_from_nlmsg(chan, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_chan_dump(chan, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, chan);
 
 		ks_chan_put(chan);
 	}
 	break;
+	}
+}
+
+void ks_chan_nlmsg_dump(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh,
+	const char *prefix)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		switch(attr->type) {
+		case KS_CHANATTR_ID:
+			report_conn(conn, LOG_DEBUG,
+				"%s  ID    : 0x%08x\n",	prefix,
+				*(__u32 *)KS_ATTR_DATA(attr));
+		break;
+
+		case KS_CHANATTR_PATH:
+			report_conn(conn, LOG_DEBUG,
+				"%s  Path  : '%s'\n", prefix,
+				strndupa(KS_ATTR_DATA(attr),
+					KS_ATTR_PAYLOAD(attr)));
+		break;
+
+		case KS_CHANATTR_FROM:
+			report_conn(conn, LOG_DEBUG,
+				"%s  From  : 0x%08x\n", prefix,
+				*(__u32 *)KS_ATTR_DATA(attr));
+		break;
+
+		case KS_CHANATTR_TO:
+			report_conn(conn, LOG_DEBUG,
+				"%s  To    : 0x%08x\n", prefix,
+				*(__u32 *)KS_ATTR_DATA(attr));
+		break;
+
+		default:
+		report_conn(conn, LOG_DEBUG,
+			"%s  Feature: %d\n", prefix,
+			attr->type);
+		}
 	}
 }
 
@@ -499,39 +533,25 @@ void ks_chan_dump(
 	}
 }
 
-static int ks_chan_update_handle_response(
-	struct ks_req *req,
-	struct nlmsghdr *nlh)
+int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn)
 {
-	struct ks_chan *chan = req->response_data;
+	int err;
 
-	if (nlh->nlmsg_type != KS_NETLINK_PIPELINE_SET)
-		return 0;
-
-	ks_chan_update_from_nlmsg(chan, req->xact->conn, nlh);
-
-	return 0;
-}
-
-struct ks_req *ks_chan_queue_update(
-	struct ks_chan *chan,
-	struct ks_xact *xact)
-{
 	struct ks_req *req;
-
-	req = ks_req_alloc(xact);
-	if (!req)
-		return ks_req_get(&ks_nomem_request);
+	req = ks_req_alloc(conn);
+	if (!req) {
+		err = -ENOMEM;
+		goto err_req_alloc;
+	}
 
 	req->type = KS_NETLINK_CHAN_SET;
 	req->flags = NLM_F_REQUEST;
-	req->response_callback = ks_chan_update_handle_response;
 
 	req->skb = alloc_skb(4096, GFP_KERNEL);
-	if (!req->skb)
-		return ks_req_get(&ks_nomem_request);
-
-	int err;
+	if (!req->skb) {
+		err = -ENOMEM;
+		goto err_skb_alloc;
+	}
 
 	err = ks_netlink_put_attr(req->skb, KS_CHANATTR_ID,
 			&chan->id,
@@ -547,51 +567,31 @@ struct ks_req *ks_chan_queue_update(
 				featval->payload,
 				featval->len);
 		if (err < 0)
-			goto err_put_attr;
+			goto err_put_attr_features;
 	}
 
-	ks_xact_queue_request(xact, req);
+	ks_conn_queue_request(conn, req);
+	ks_conn_flush_requests(conn);
 
-	return req;
-
-err_put_attr:
-err_put_attr_id:
-
-	return ks_req_get(&ks_nomem_request);
-}
-
-int ks_chan_update(struct ks_chan *chan, struct ks_conn *conn)
-{
-	int err;
-
-	struct ks_xact *xact = ks_xact_alloc(conn);
-	if (!xact) {
-		err = -ENOMEM;
-		goto err_xact_alloc;
-	}
-
-	struct ks_req *req;
-	req = ks_chan_queue_update(chan, xact);
-
-	ks_xact_submit(xact);
 	ks_req_wait(req);
-
 	if (req->err < 0) {
 		err = req->err;
 		ks_req_put(req);
 
-		ks_xact_abort(xact);
-
-		goto err_update_failed;
+		goto err_request_failed;
 	}
 
 	ks_req_put(req);
 
 	return 0;
 
-err_update_failed:
-	ks_xact_put(xact);
-err_xact_alloc:
+err_request_failed:
+err_put_attr_features:
+err_put_attr_id:
+	/* skb is freed in req_put */
+err_skb_alloc:
+	ks_req_put(req);
+err_req_alloc:
 
 	return err;
 }

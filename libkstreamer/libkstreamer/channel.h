@@ -26,7 +26,6 @@
 #include "pd_grammar.h"
 #include "pd_parser.h"
 
-struct ks_xact;
 struct ks_conn;
 
 struct ks_chan
@@ -75,10 +74,6 @@ void ks_chan_dump(
 	struct ks_conn *conn,
 	int level);
 
-struct ks_req *ks_chan_queue_update(
-	struct ks_chan *chan,
-	struct ks_xact *xact);
-
 #ifdef _LIBKSTREAMER_PRIVATE_
 
 void ks_chan_add(struct ks_chan *chan, struct ks_conn *conn);
@@ -94,6 +89,11 @@ void ks_chan_handle_topology_update(
 struct ks_chan *_ks_chan_get_by_id(
 	struct ks_conn *conn,
 	int id);
+
+void ks_chan_nlmsg_dump(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh,
+	const char *prefix);
 
 #endif
 

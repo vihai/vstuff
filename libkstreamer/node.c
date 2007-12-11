@@ -174,7 +174,7 @@ struct ks_node *ks_node_get_by_token(
 	return node;
 }
 
-static struct ks_node *_ks_node_get_by_nlid(
+static __u32 ks_node_nlh_to_id(
 	struct ks_conn *conn,
 	struct nlmsghdr *nlh)
 {
@@ -186,24 +186,10 @@ static struct ks_node *_ks_node_get_by_nlid(
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
 
 		if(attr->type == KS_NODEATTR_ID)
-			return _ks_node_get_by_id(conn,
-					*(__u32 *)KS_ATTR_DATA(attr));
+			return *(__u32 *)KS_ATTR_DATA(attr);
 	}
 
-	return NULL;
-}
-
-struct ks_node *ks_node_get_by_nlid(
-	struct ks_conn *conn,
-	struct nlmsghdr *nlh)
-{
-	struct ks_node *node;
-
-	pthread_rwlock_rdlock(&conn->topology_lock);
-	node = _ks_node_get_by_nlid(conn, nlh);
-	pthread_rwlock_unlock(&conn->topology_lock);
-
-	return node;
+	return 0;
 }
 
 #if 0
@@ -284,8 +270,6 @@ static struct ks_node *ks_node_create_from_nlmsg(
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
 
-	attr = KS_ATTRS(nlh);
-
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
@@ -329,8 +313,6 @@ static void ks_node_update_from_nlmsg(
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
 
-	attr = KS_ATTRS(nlh);
-
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
@@ -361,9 +343,6 @@ void ks_node_handle_topology_update(
 			// FIXME
 		}
 
-		if (conn->debug_netlink)
-			ks_node_dump(node, conn, LOG_DEBUG);
-
 		ks_node_add(node, conn);
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 		ks_node_put(node);
@@ -371,16 +350,13 @@ void ks_node_handle_topology_update(
 	break;
 
 	case KS_NETLINK_NODE_DEL: {
-		struct ks_node *node;
-
-		node = _ks_node_get_by_nlid(conn, nlh);
+		__u32 id = ks_node_nlh_to_id(conn, nlh);
+		struct ks_node *node = _ks_node_get_by_id(conn, id);
 		if (!node) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
+			report_conn(conn, LOG_ERR,
+				"Node ID %08x not found!\n", id);
 			break;
 		}
-
-		if (conn->debug_netlink)
-			ks_node_dump(node, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 		ks_node_del(node);
@@ -389,24 +365,55 @@ void ks_node_handle_topology_update(
 	break;
 
 	case KS_NETLINK_NODE_SET: {
-		struct ks_node *node;
-
-		node = _ks_node_get_by_nlid(conn, nlh);
+		__u32 id = ks_node_nlh_to_id(conn, nlh);
+		struct ks_node *node = _ks_node_get_by_id(conn, id);
 		if (!node) {
-			report_conn(conn, LOG_ERR, "Sync lost\n");
+			report_conn(conn, LOG_ERR,
+				"Node ID %08x not found!\n", id);
 			break;
 		}
 
 		ks_node_update_from_nlmsg(node, conn, nlh);
-
-		if (conn->debug_netlink)
-			ks_node_dump(node, conn, LOG_DEBUG);
 
 		ks_conn_topology_updated(conn, nlh->nlmsg_type, node);
 
 		ks_node_put(node);
 	}
 	break;
+	}
+}
+
+void ks_node_nlmsg_dump(
+	struct ks_conn *conn,
+	struct nlmsghdr *nlh,
+	const char *prefix)
+{
+	struct ks_attr *attr;
+	int attrs_len = KS_PAYLOAD(nlh);
+
+	for (attr = KS_ATTRS(nlh);
+	     KS_ATTR_OK(attr, attrs_len);
+	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
+
+		switch(attr->type) {
+		case KS_NODEATTR_ID:
+			report_conn(conn, LOG_DEBUG,
+				"%s  ID    : 0x%08x\n",	prefix,
+				*(__u32 *)KS_ATTR_DATA(attr));
+		break;
+
+		case KS_NODEATTR_PATH:
+			report_conn(conn, LOG_DEBUG,
+				"%s  Path  : '%s'\n", prefix,
+				strndupa(KS_ATTR_DATA(attr),
+					KS_ATTR_PAYLOAD(attr)));
+		break;
+
+		default:
+		report_conn(conn, LOG_DEBUG,
+			"%s  Feature: %d\n", prefix,
+			attr->type);
+		}
 	}
 }
 
