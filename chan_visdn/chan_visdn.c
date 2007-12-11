@@ -4316,12 +4316,6 @@ static void visdn_q931_connect_channel(
 //	strncpy(visdn_chan->bearer_node_id, dest,
 //			sizeof(visdn_chan->bearer_node_id));
 
-	visdn_chan->node_bearer = ks_node_get_by_path(ks_conn, dest);
-	if (!visdn_chan->node_bearer) {
-		ast_log(LOG_ERROR, "Bearer's node not found\n");
-		goto err_bearer_node_not_found;
-	}
-
 	if (visdn_chan->is_framed)
 		visdn_chan->up_fd = open(
 			"/dev/ks/userport_framed", O_RDWR);
@@ -4338,9 +4332,9 @@ static void visdn_q931_connect_channel(
 
 	ast_chan->fds[0] = visdn_chan->up_fd;
 
-	__u32 node_id;
+	__u32 up_node_id;
 	if (ioctl(visdn_chan->up_fd, KS_UP_GET_NODEID,
-		(caddr_t)&node_id) < 0) {
+				(caddr_t)&up_node_id) < 0) {
 
 		ast_log(LOG_ERROR,
 			"ioctl(KS_UP_GET_NODEID): %s\n",
@@ -4348,17 +4342,28 @@ static void visdn_q931_connect_channel(
 		goto err_get_up_node_id;
 	}
 
-	ks_conn_sync(ks_conn);
+	err = ks_conn_remote_topology_lock(ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot lock kstreamer topology: %s\n", strerror(-err));
+		goto err_kstreamer_lock;
+	}
 
-	visdn_chan->node_userport = ks_node_get_by_id(ks_conn, node_id);
+	visdn_chan->node_bearer = ks_node_get_by_path(ks_conn, dest);
+	if (!visdn_chan->node_bearer) {
+		ast_log(LOG_ERROR, "Bearer's node not found\n");
+		goto err_bearer_node_not_found;
+	}
+
+	visdn_chan->node_userport = ks_node_get_by_id(ks_conn, up_node_id);
 	if (!visdn_chan->node_userport) {
 		ast_log(LOG_ERROR, "Userport's node not found\n");
 		goto err_up_node_not_found;
 	}
 
-/*	visdn_debug_generic("Connecting userport %06d to chan %06d\n",
+	visdn_debug("Connecting userport %06d to chan %06d\n",
 			visdn_chan->node_userport->id,
-			visdn_chan->node_bearer->id);*/
+			visdn_chan->node_bearer->id);
 
 	/* Create RX pipeline */
 	visdn_chan->pipeline_rx = ks_pipeline_alloc();
@@ -4387,14 +4392,19 @@ static void visdn_q931_connect_channel(
 		goto err_pipeline_rx_create;
 	}
 
-	if (visdn_pipeline_set_octet_reverser(
-			visdn_chan->pipeline_rx, TRUE) < 0) {
+	err = visdn_pipeline_set_octet_reverser(visdn_chan->pipeline_rx, TRUE);
+	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot enable RX octet reverser\n");
 		goto err_pipeline_rx_octet_reverser_enable;
 	}
 
-	ks_pipeline_update_chans(visdn_chan->pipeline_rx, ks_conn);
+	err = ks_pipeline_update_chans(visdn_chan->pipeline_rx, ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot update pipeline's channels\n");
+		goto err_pipeline_rx_update_chans;
+	}
 
 	/* Create TX pipeline */
 	visdn_chan->pipeline_tx = ks_pipeline_alloc();
@@ -4410,7 +4420,8 @@ static void visdn_q931_connect_channel(
 				visdn_chan->node_bearer);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot connect nodes: %s\n", strerror(-err));
+			"Cannot connect TX pipeline's nodes: %s\n",
+			strerror(-err));
 
 		goto err_pipeline_tx_connect;
 	}
@@ -4423,14 +4434,25 @@ static void visdn_q931_connect_channel(
 		goto err_pipeline_tx_create;
 	}
 
-	if (visdn_pipeline_set_octet_reverser(
-			visdn_chan->pipeline_tx, TRUE) < 0) {
+	err = ks_conn_remote_topology_unlock(ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Error unlocking kstreamer's topology\n");
+	}
+
+	err = visdn_pipeline_set_octet_reverser(visdn_chan->pipeline_tx, TRUE);
+	if (err < 0) {
 		ast_log(LOG_ERROR,
 			"Cannot enable TX octet reverser\n");
 		goto err_pipeline_tx_octet_reverser_enable;
 	}
 
-	ks_pipeline_update_chans(visdn_chan->pipeline_tx, ks_conn);
+	err = ks_pipeline_update_chans(visdn_chan->pipeline_tx, ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot update TX pipeline's channels\n");
+		goto err_pipeline_tx_update_chans;
+	}
 
 	/* Start RX pipelines */
 	visdn_chan->pipeline_rx->status = KS_PIPELINE_STATUS_FLOWING;
@@ -4438,7 +4460,7 @@ static void visdn_q931_connect_channel(
 	err = ks_pipeline_update(visdn_chan->pipeline_rx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-				"Cannot start the RX pipeline\n");
+			"Cannot start RX pipeline\n");
 		goto err_pipeline_rx_update;
 	}
 
@@ -4448,7 +4470,7 @@ static void visdn_q931_connect_channel(
 	err = ks_pipeline_update(visdn_chan->pipeline_tx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-				"Cannot start the pipeline\n");
+			"Cannot start TX pipeline\n");
 		goto err_pipeline_tx_update;
 	}
 
@@ -4464,14 +4486,14 @@ static void visdn_q931_connect_channel(
 
 err_pipeline_tx_update:
 err_pipeline_rx_update:
-
+err_pipeline_tx_update_chans:
 err_pipeline_tx_octet_reverser_enable:
 err_pipeline_tx_create:
 err_pipeline_tx_connect:
 	ks_pipeline_put(visdn_chan->pipeline_tx);
 	visdn_chan->pipeline_tx = NULL;
 err_pipeline_tx_alloc:
-
+err_pipeline_rx_update_chans:
 err_pipeline_rx_octet_reverser_enable:
 err_pipeline_rx_create:
 err_pipeline_rx_connect:
@@ -4480,11 +4502,13 @@ err_pipeline_rx_connect:
 err_pipeline_rx_alloc:
 
 err_up_node_not_found:
+err_bearer_node_not_found:
+	ks_conn_remote_topology_unlock(ks_conn);
+err_kstreamer_lock:
 err_get_up_node_id:
 	close(visdn_chan->up_fd);
 	visdn_chan->up_fd = -1;
 err_open_userport:
-err_bearer_node_not_found:
 
 	ast_mutex_unlock(&ast_chan->lock);
 
