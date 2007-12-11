@@ -755,7 +755,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	vgsm_chan->pipeline_rx = ks_pipeline_alloc();
 	if (!vgsm_chan->pipeline_rx) {
 		ast_log(LOG_ERROR,
-			"Cannot allocate pipeline\n");
+			"Cannot allocate RX pipeline\n");
 		err = -ENOMEM;
 		goto err_pipeline_rx_alloc;
 	}
@@ -765,7 +765,8 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 				vgsm_chan->node_userport);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot connect nodes: %s\n", strerror(-err));
+			"Cannot connect RX pipeline's nodes: %s\n",
+			strerror(-err));
 		goto err_pipeline_rx_connect;
 	}
 
@@ -794,7 +795,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	err = ks_pipeline_update_chans(vgsm_chan->pipeline_rx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot update pipeline's channels\n");
+			"Cannot update RX pipeline's channels\n");
 		goto err_pipeline_rx_update_chans;
 	}
 
@@ -812,7 +813,8 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 				vgsm_chan->node_me);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot connect nodes: %s\n", strerror(-err));
+			"Cannot connect TX pipeline's nodes: %s\n",
+			strerror(-err));
 
 		goto err_pipeline_tx_connect;
 	}
@@ -820,12 +822,16 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	err = ks_pipeline_create(vgsm_chan->pipeline_tx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot create pipeline: %s\n",
+			"Cannot create TX pipeline: %s\n",
 			strerror(-err));
 		goto err_pipeline_tx_create;
 	}
 
-	ks_conn_remote_topology_unlock(ks_conn);
+	err = ks_conn_remote_topology_unlock(ks_conn);
+	if (err < 0) {
+		ast_log(LOG_ERROR,
+			"Error unlocking kstreamer's topology\n");
+	}
 
 	if (vgsm_chan->me->interface_version == 2) {
 		err = vgsm_pipeline_set_amu_decompander(vgsm_chan->pipeline_tx,
@@ -843,7 +849,7 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 	err = ks_pipeline_update_chans(vgsm_chan->pipeline_tx, ks_conn);
 	if (err < 0) {
 		ast_log(LOG_ERROR,
-			"Cannot update pipeline's channels\n");
+			"Cannot update TX pipeline's channels\n");
 		goto err_pipeline_tx_update_chans;
 	}
 
