@@ -25,9 +25,8 @@ rwlock_t ks_connection_lock = RW_LOCK_UNLOCKED;
 
 struct kset ks_pipelines_kset;
 
-struct list_head ks_pipelines_list =
-	LIST_HEAD_INIT(ks_pipelines_list);
-DECLARE_RWSEM(ks_pipelines_list_sem);
+static struct list_head ks_pipelines_list = LIST_HEAD_INIT(ks_pipelines_list);
+static rwlock_t ks_pipelines_list_lock = RW_LOCK_UNLOCKED;
 
 struct ks_pipeline *_ks_pipeline_search_by_id(int id)
 {
@@ -44,9 +43,9 @@ struct ks_pipeline *ks_pipeline_get_by_id(int id)
 {
 	struct ks_pipeline *pipeline;
 
-	down_read(&ks_pipelines_list_sem);
+	read_lock(&ks_pipelines_list_lock);
 	pipeline = ks_pipeline_get(_ks_pipeline_search_by_id(id));
-	up_read(&ks_pipelines_list_sem);
+	read_unlock(&ks_pipelines_list_lock);
 
 	return pipeline;
 }
@@ -543,11 +542,11 @@ static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 
 	BUG_ON(!pipeline);
 
-	down_write(&ks_pipelines_list_sem);
+	write_lock(&ks_pipelines_list_lock);
 	pipeline->id = _ks_pipeline_new_id();
 	list_add_tail(&ks_pipeline_get(pipeline)->node,
 		&ks_pipelines_list);
-	up_write(&ks_pipelines_list_sem);
+	write_unlock(&ks_pipelines_list_lock);
 
 	kobject_set_name(&pipeline->kobj, "%06d", pipeline->id);
 
@@ -562,10 +561,10 @@ static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 
 	kobject_del(&pipeline->kobj);
 err_kobject_add:
-	down_write(&ks_pipelines_list_sem);
+	write_lock(&ks_pipelines_list_lock);
 	list_del(&pipeline->node);
+	write_unlock(&ks_pipelines_list_lock);
 	ks_pipeline_put(pipeline);
-	up_write(&ks_pipelines_list_sem);
 
 	return err;
 }
@@ -589,10 +588,11 @@ void ks_pipeline_unregister_no_topology_lock(struct ks_pipeline *pipeline)
 
 	kobject_del(&pipeline->kobj);
 
-	down_write(&ks_pipelines_list_sem);
+	write_lock(&ks_pipelines_list_lock);
 	list_del(&pipeline->node);
+	write_unlock(&ks_pipelines_list_lock);
+
 	ks_pipeline_put(pipeline);
-	up_write(&ks_pipelines_list_sem);
 
 	ks_pipeline_mcast_send(pipeline, &ks_netlink_state,
 					KS_NETLINK_PIPELINE_DEL);

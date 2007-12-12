@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
 	err = ks_conn_establish(glob.conn);
 	if (err < 0) {
 		fprintf(stderr, "Cannot connect kstreamer library\n");
-		return 1;
+		goto err_conn_establish;
 	}
 
 	ks_update_topology(glob.conn);
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
 	}
 
 	print_usage("Unknown command '%s'\n", command);
-	return 1;
+	goto err_command_not_found;
 
 found:
 
@@ -208,4 +208,10 @@ found:
 	ks_conn_destroy(glob.conn);
 
 	return ret;
+
+err_command_not_found:
+	ks_conn_destroy(glob.conn);
+err_conn_establish:
+
+	return err;
 }

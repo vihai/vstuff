@@ -31,8 +31,8 @@
 
 struct kset ks_chans_kset;
 
-struct list_head ks_chans_list = LIST_HEAD_INIT(ks_chans_list);
-rwlock_t ks_chans_list_lock = RW_LOCK_UNLOCKED;
+static struct list_head ks_chans_list = LIST_HEAD_INIT(ks_chans_list);
+static rwlock_t ks_chans_list_lock = RW_LOCK_UNLOCKED;
 
 struct ks_chan *_ks_chan_search_by_id(int id)
 {

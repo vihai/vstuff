@@ -852,8 +852,8 @@ err_kstreamer_lock:
 err_node_get:
 	ks_node_put(node_up);
 err_up_node_get:
-err_ks_conn_establish:
 	ks_conn_destroy(conn);
+err_ks_conn_establish:
 err_ks_conn_create:
 err_get_node_id:
 err_set_stdout_nonblock:
