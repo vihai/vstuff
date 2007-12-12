@@ -1077,6 +1077,7 @@ int ks_conn_establish(struct ks_conn *conn)
 
 err_invalid_version:
 err_get_version:
+	ks_conn_send_message(conn, KS_CONN_MSG_CLOSE, NULL, 0);
 	pthread_join(conn->protocol_thread, NULL);
 err_pthread_create:
 	pthread_attr_destroy(&attr);
