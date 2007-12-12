@@ -26,7 +26,7 @@ void vgsm_timerset_init(
 
 	INIT_LIST_HEAD(&set->timers);
 
-	ast_mutex_init(&set->timers_lock);
+	pthread_mutex_init(&set->timers_lock, NULL);
 
 	set->timers_updated = timers_updated;
 }
@@ -56,9 +56,8 @@ static void _vgsm_timer_add(
 
 	timer->expires = expires;
 
-	ast_mutex_lock(&set->timers_lock);
 	if (list_empty(&set->timers) ||
-	    list_entry(set->timers.prev, struct vgsm_timer, node)->expires <
+	    list_entry(set->timers.prev, struct vgsm_timer, node)->expires <=
 							timer->expires) {
 
 		list_add_tail(&timer->node, &set->timers);
@@ -73,7 +72,6 @@ static void _vgsm_timer_add(
 			}
 		}
 	}
-	ast_mutex_unlock(&set->timers_lock);
 
 	assert(timer->pending);
 }
@@ -82,9 +80,13 @@ void vgsm_timer_add(
 	struct vgsm_timer *timer,
 	longtime_t expires)
 {
+	pthread_mutex_lock(&timer->set->timers_lock);
+
 	assert(!timer->pending);
 
 	_vgsm_timer_add(timer, expires);
+
+	pthread_mutex_unlock(&timer->set->timers_lock);
 }
 
 void vgsm_timer_start(
@@ -93,17 +95,20 @@ void vgsm_timer_start(
 {
 	struct vgsm_timerset *set = timer->set;
 
+	pthread_mutex_lock(&set->timers_lock);
 	if (timer->pending) {
-		if (timer->expires == expires)
+		if (timer->expires == expires) {
+			pthread_mutex_unlock(&set->timers_lock);
 			return;
+		}
 
-		ast_mutex_lock(&set->timers_lock);
 		list_del(&timer->node);
-		ast_mutex_unlock(&set->timers_lock);
 		timer->pending = FALSE;
 	}
 
 	_vgsm_timer_add(timer, expires);
+
+	pthread_mutex_unlock(&set->timers_lock);
 
 	if (set->timers_updated)
 		set->timers_updated(set);
@@ -111,13 +116,12 @@ void vgsm_timer_start(
 
 void vgsm_timer_stop(struct vgsm_timer *timer)
 {
+	pthread_mutex_lock(&timer->set->timers_lock);
 	if (timer->pending) {
-		ast_mutex_lock(&timer->set->timers_lock);
 		list_del(&timer->node);
-		ast_mutex_unlock(&timer->set->timers_lock);
-
 		timer->pending = FALSE;
 	}
+	pthread_mutex_unlock(&timer->set->timers_lock);
 }
 
 void vgsm_timer_start_delta(
@@ -133,7 +137,7 @@ void vgsm_timerset_run(struct vgsm_timerset *set)
 
 restart:;
 	struct vgsm_timer *timer;
-	ast_mutex_lock(&set->timers_lock);
+	pthread_mutex_lock(&set->timers_lock);
 	list_for_each_entry(timer, &set->timers, node) {
 
 		if (timer->expires < now) {
@@ -144,27 +148,27 @@ restart:;
 			 * stopped or changed timers
 			 */
 
-			ast_mutex_unlock(&set->timers_lock);
+			pthread_mutex_unlock(&set->timers_lock);
 			timer->func(timer->data);
 
 			goto restart;
 		} else
 			break;
 	}
-	ast_mutex_unlock(&set->timers_lock);
+	pthread_mutex_unlock(&set->timers_lock);
 }
 
 longtime_t vgsm_timerset_next(struct vgsm_timerset *set)
 {
 	longtime_t ret;
 
-	ast_mutex_lock(&set->timers_lock);
+	pthread_mutex_lock(&set->timers_lock);
 	if (list_empty(&set->timers))
 		ret = -1;
 	else
 		ret = max(list_entry(set->timers.next, struct vgsm_timer, node)
 					->expires - longtime_now(), 0LL);
-	ast_mutex_unlock(&set->timers_lock);
+	pthread_mutex_unlock(&set->timers_lock);
 
 	return ret;
 }

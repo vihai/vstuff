@@ -58,9 +58,8 @@ static void _ks_timer_add(
 
 	timer->expires = expires;
 
-	pthread_mutex_lock(&set->timers_lock);
 	if (list_empty(&set->timers) ||
-	    list_entry(set->timers.prev, struct ks_timer, node)->expires <
+	    list_entry(set->timers.prev, struct ks_timer, node)->expires <=
 							timer->expires) {
 
 		list_add_tail(&timer->node, &set->timers);
@@ -75,7 +74,6 @@ static void _ks_timer_add(
 			}
 		}
 	}
-	pthread_mutex_unlock(&set->timers_lock);
 
 	assert(timer->pending);
 }
@@ -84,9 +82,13 @@ void ks_timer_add(
 	struct ks_timer *timer,
 	longtime_t expires)
 {
+	pthread_mutex_lock(&timer->set->timers_lock);
+
 	assert(!timer->pending);
 
 	_ks_timer_add(timer, expires);
+
+	pthread_mutex_unlock(&timer->set->timers_lock);
 }
 
 void ks_timer_start(
@@ -95,17 +97,20 @@ void ks_timer_start(
 {
 	struct ks_timerset *set = timer->set;
 
+	pthread_mutex_lock(&set->timers_lock);
 	if (timer->pending) {
-		if (timer->expires == expires)
+		if (timer->expires == expires) {
+			pthread_mutex_unlock(&set->timers_lock);
 			return;
+		}
 
-		pthread_mutex_lock(&set->timers_lock);
 		list_del(&timer->node);
-		pthread_mutex_unlock(&set->timers_lock);
 		timer->pending = FALSE;
 	}
 
 	_ks_timer_add(timer, expires);
+
+	pthread_mutex_unlock(&set->timers_lock);
 
 	if (set->timers_updated)
 		set->timers_updated(set);
@@ -113,13 +118,12 @@ void ks_timer_start(
 
 void ks_timer_stop(struct ks_timer *timer)
 {
+	pthread_mutex_lock(&timer->set->timers_lock);
 	if (timer->pending) {
-		pthread_mutex_lock(&timer->set->timers_lock);
 		list_del(&timer->node);
-		pthread_mutex_unlock(&timer->set->timers_lock);
-
 		timer->pending = FALSE;
 	}
+	pthread_mutex_unlock(&timer->set->timers_lock);
 }
 
 void ks_timer_start_delta(

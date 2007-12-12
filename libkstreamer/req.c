@@ -33,7 +33,7 @@ void ks_req_timer(void *data)
 	struct ks_req *req = data;
 
 	report_conn(req->conn, LOG_ERR,
-		"Timeout waiting for request processin!!\n");
+		"Timeout waiting for request processing!\n");
 
 	ks_req_complete(req, -ETIMEDOUT);
 }
