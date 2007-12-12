@@ -608,6 +608,23 @@ found:
 	assert(!req->response_payload);
 	assert(!req->response_payload_size);
 
+	if (nlh->nlmsg_type == NLMSG_ERROR) {
+		pthread_mutex_unlock(&conn->requests_lock);
+
+		if (NLMSG_PAYLOAD(nlh, 0) < sizeof(__u32)) {
+			report_conn(conn, LOG_ERR,
+				"Error in error message: missing error code.");
+		} else {
+			ks_req_complete(req,
+				-*((__u32 *)NLMSG_DATA(nlh)));
+		}
+
+		ks_req_put(req);
+		req = NULL;
+
+		return;
+	}
+
 	ks_req_resp_append_payload(req, nlh);
 
 	if (nlh->nlmsg_flags & NLM_F_MULTI) {
@@ -645,7 +662,25 @@ static void ks_conn_receive_multi(
 					nlh->nlmsg_seq & 0xffff,
 					req->multi_seq);
 
-				ks_req_complete(req, EIO);
+				ks_req_complete(req, -EIO);
+			}
+
+			if (nlh->nlmsg_type == NLMSG_ERROR) {
+				pthread_mutex_unlock(&conn->requests_lock);
+
+				if (NLMSG_PAYLOAD(nlh, 0) < sizeof(__u32)) {
+					report_conn(conn, LOG_ERR,
+						"Error in error message:"
+						" missing error code.");
+				} else {
+					ks_req_complete(req,
+						-*((__u32 *)NLMSG_DATA(nlh)));
+				}
+
+				ks_req_put(req);
+				req = NULL;
+
+				return;
 			}
 
 			ks_req_resp_append_payload(req, nlh);
