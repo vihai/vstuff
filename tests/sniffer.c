@@ -821,6 +821,11 @@ tx_pipeline_done:;
 		ks_pipeline_put(tx_pipeline);
 	}
 
+	debug("Closing connection to kstreamer...\n");
+
+	ks_node_put(node);
+	ks_node_put(node_up);
+
 	if (opts.hdlc_framer)
 		ks_feature_put(opts.hdlc_framer);
 
@@ -832,11 +837,6 @@ tx_pipeline_done:;
 
 	if (opts.amu_compander)
 		ks_feature_put(opts.amu_compander);
-
-	debug("Closing connection to kstreamer...\n");
-
-	ks_node_put(node);
-	ks_node_put(node_up);
 
 	ks_conn_destroy(conn);
 
@@ -852,6 +852,18 @@ err_kstreamer_lock:
 err_node_get:
 	ks_node_put(node_up);
 err_up_node_get:
+	if (opts.hdlc_framer)
+		ks_feature_put(opts.hdlc_framer);
+
+	if (opts.hdlc_deframer)
+		ks_feature_put(opts.hdlc_deframer);
+
+	if (opts.octet_reverser)
+		ks_feature_put(opts.octet_reverser);
+
+	if (opts.amu_compander)
+		ks_feature_put(opts.amu_compander);
+
 	ks_conn_destroy(conn);
 err_ks_conn_establish:
 err_ks_conn_create:
