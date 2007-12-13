@@ -513,6 +513,7 @@ static int ks_netlink_rcv_msg(
 		ks_netlink_send_error(state, nlh, err);
 
 	ks_netlink_flush(state);
+	ks_netlink_mcast_flush(&ks_netlink_state);
 
 	up_write(&ks_netlink_state.topology_lock);
 
@@ -597,8 +598,6 @@ redo_backlog:
 
 	if (processed)
 		goto redo_backlog;
-
-	ks_netlink_mcast_flush(&ks_netlink_state);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
