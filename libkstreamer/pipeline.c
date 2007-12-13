@@ -320,6 +320,8 @@ static struct ks_pipeline *ks_pipeline_create_from_nlmsg(
 			pipeline->chans_cnt++;
 
 			chan->pipeline = pipeline;
+
+			ks_chan_put(chan);
 		}
 		break;
 
