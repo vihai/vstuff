@@ -687,6 +687,8 @@ err_st_me_tx_register:
 err_st_me_rx_register:
 	ks_node_unregister(&me->ks_node);
 err_node_register:
+	tty_unregister_device(vgsm_tty_driver,
+			me->card->id * 8 + me->id);
 
 	return err;
 }

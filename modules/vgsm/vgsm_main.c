@@ -647,9 +647,11 @@ static int __init vgsm_init(void)
 	vgsm_tty_driver->name = "vgsm_me";
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
 	vgsm_tty_driver->devfs_name = "vgsm/";
-	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS ;
+	vgsm_tty_driver->flags = TTY_DRIVER_DYNAMIC_DEV |
+				TTY_DRIVER_REAL_RAW | TTY_DRIVER_NO_DEVFS ;
 #else
-	vgsm_tty_driver->flags = TTY_DRIVER_REAL_RAW;
+	vgsm_tty_driver->flags = TTY_DRIVER_DYNAMIC_DEV |
+				TTY_DRIVER_REAL_RAW;
 #endif
 	vgsm_tty_driver->major = 0;
 	vgsm_tty_driver->minor_start = 0;
