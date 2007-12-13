@@ -489,7 +489,11 @@ int ks_pipeline_cmd_get(
   
 	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
 
-	list_for_each_entry(pipeline, &ks_pipelines_kset.list, kobj.entry) {
+	/* No need to read_lock(&ks_pipelines_list_lock); because we are also
+	 * protected by ks_topology_lock semaphore.
+	 */
+
+	list_for_each_entry(pipeline, &ks_pipelines_list, node) {
 
 retry:
 		ks_netlink_need_skb(state);
@@ -544,8 +548,7 @@ static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 
 	write_lock(&ks_pipelines_list_lock);
 	pipeline->id = _ks_pipeline_new_id();
-	list_add_tail(&ks_pipeline_get(pipeline)->node,
-		&ks_pipelines_list);
+	list_add_tail(&ks_pipeline_get(pipeline)->node, &ks_pipelines_list);
 	write_unlock(&ks_pipelines_list_lock);
 
 	kobject_set_name(&pipeline->kobj, "%06d", pipeline->id);
@@ -574,9 +577,9 @@ int ks_pipeline_register(struct ks_pipeline *pipeline)
 {
 	int err;
 
-	down_write(&ks_topology_lock);
+	ks_topology_lock();
 	err = ks_pipeline_register_no_topology_lock(pipeline);
-	up_write(&ks_topology_lock);
+	ks_topology_unlock();
 
 	return err;
 }
@@ -591,7 +594,6 @@ void ks_pipeline_unregister_no_topology_lock(struct ks_pipeline *pipeline)
 	write_lock(&ks_pipelines_list_lock);
 	list_del(&pipeline->node);
 	write_unlock(&ks_pipelines_list_lock);
-
 	ks_pipeline_put(pipeline);
 
 	ks_pipeline_mcast_send(pipeline, &ks_netlink_state,
@@ -600,9 +602,9 @@ void ks_pipeline_unregister_no_topology_lock(struct ks_pipeline *pipeline)
 
 void ks_pipeline_unregister(struct ks_pipeline *pipeline)
 {
-	down_write(&ks_topology_lock);
+	ks_topology_lock();
 	ks_pipeline_unregister_no_topology_lock(pipeline);
-	up_write(&ks_topology_lock);
+	ks_topology_unlock();
 }
 //EXPORT_SYMBOL(ks_pipeline_unregister);
 

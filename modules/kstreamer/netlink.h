@@ -134,6 +134,8 @@ struct ks_netlink_state
 	int cur_pid;
 	u32 cur_seq;
 
+	struct rw_semaphore topology_lock;
+	wait_queue_head_t lock_sleep;
 	int lock_owner;
 	struct timer_list lock_timer;
 
@@ -190,6 +192,10 @@ int ks_netlink_need_skb(struct ks_netlink_state *state);
 int ks_netlink_mcast_need_skb(struct ks_netlink_state *state);
 void ks_netlink_flush(struct ks_netlink_state *state);
 void ks_netlink_mcast_flush(struct ks_netlink_state *state);
+void ks_netlink_mcast_flush_nolock(struct ks_netlink_state *state);
+
+void ks_topology_lock(void);
+void ks_topology_unlock(void);
 
 int ks_netlink_send_done(
 	struct ks_netlink_state *state,

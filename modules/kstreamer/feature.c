@@ -167,7 +167,10 @@ int ks_feature_cmd_get(
   
 	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
 
-	read_lock(&ks_features_list_lock);
+	/* No need to read_lock(&ks_features_list_lock); because we are also
+	 * protected by ks_topology_lock semaphore.
+	 */
+
 	for(i=0; i<KS_FEATURE_HASHSIZE; i++) {
 		struct hlist_node *t;
 
@@ -176,10 +179,8 @@ int ks_feature_cmd_get(
 
 retry:
 			ks_netlink_need_skb(state);
-			if (!state->out_skb) {
-				read_unlock(&ks_features_list_lock);
+			if (!state->out_skb)
 				return -ENOMEM;
-			}
 
 			err = ks_feature_write_to_nlmsg(feature,
 						state->out_skb,
@@ -195,7 +196,6 @@ retry:
 			cnt++;
 		}
 	}
-	read_unlock(&ks_features_list_lock);
 
 	ks_netlink_send_done(state, nlh, cnt);
 
@@ -233,11 +233,10 @@ static struct ks_feature *ks_feature_register_no_topology_lock(const char *name)
 
 	feature->id = _ks_feature_new_id();
 	hlist_add_head(&feature->node, ks_features_get_hash(feature->id));
+	write_unlock(&ks_features_list_lock);
 
 	ks_feature_mcast_send(feature, &ks_netlink_state,
 				KS_NETLINK_FEATURE_NEW);
-
-	write_unlock(&ks_features_list_lock);
 
 	return feature;
 }
@@ -246,9 +245,9 @@ struct ks_feature *ks_feature_register(const char *name)
 {
 	struct ks_feature *feature;
 
-	down_write(&ks_topology_lock);
+	ks_topology_lock();
 	feature = ks_feature_register_no_topology_lock(name);
-	up_write(&ks_topology_lock);
+	ks_topology_unlock();
 
 	return feature;
 }
@@ -257,12 +256,12 @@ EXPORT_SYMBOL(ks_feature_register);
 void ks_feature_unregister(struct ks_feature *feature)
 {
 	if (atomic_read(&feature->refcnt) == 1) {
-		down_write(&ks_topology_lock);
+		ks_topology_lock();
 		hlist_del(&feature->node);
 
 		ks_feature_mcast_send(feature, &ks_netlink_state,
 				KS_NETLINK_FEATURE_DEL);
-		up_write(&ks_topology_lock);
+		ks_topology_unlock();
 	}
 
 	ks_feature_put(feature);

@@ -20,8 +20,6 @@
 
 extern struct class ks_system_class;
 
-extern struct rw_semaphore ks_topology_lock;
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 extern struct subsystem kstreamer_subsys;
 #else

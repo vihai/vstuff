@@ -26,6 +26,8 @@
 #include "channel.h"
 #include "pipeline.h"
 
+#define KS_TOPOLOGY_LOCK_TIMER 5
+
 struct sock *ksnl;
 
 static struct workqueue_struct *ks_netlink_rcv_wq;
@@ -164,10 +166,18 @@ void ks_netlink_flush(struct ks_netlink_state *state)
 	}
 }
 
-static void ks_netlink_mcast_flush_nolock(struct ks_netlink_state *state)
+void ks_netlink_mcast_flush(struct ks_netlink_state *state)
 {
 	struct sk_buff *skb;
 	int err;
+
+	if (state->lock_owner) {
+		if (state->mcast_skb) {
+			skb_queue_tail(&state->mcast_queue,
+					state->mcast_skb);
+			state->mcast_skb = NULL;
+		}
+	}
 
 	while ((skb = skb_dequeue(&state->mcast_queue))) {
 		err = netlink_broadcast(ksnl, skb,
@@ -197,23 +207,6 @@ static void ks_netlink_mcast_flush_nolock(struct ks_netlink_state *state)
 	}
 }
 
-void ks_netlink_mcast_flush(struct ks_netlink_state *state)
-{
-	if (!down_write_trylock(&ks_topology_lock)) {
-		if (state->mcast_skb) {
-			skb_queue_tail(&state->mcast_queue,
-					state->mcast_skb);
-			state->mcast_skb = NULL;
-		}
-
-		return;
-	}
-
-	ks_netlink_mcast_flush_nolock(state);
-
-	up_write(&ks_topology_lock);
-}
-
 int ks_cmd_done(
 	struct ks_netlink_state *state,
 	struct ks_command *cmd,
@@ -227,11 +220,16 @@ int ks_cmd_topology_lock(
 	struct ks_command *cmd,
 	struct nlmsghdr *nlh)
 {
+	if (state->lock_owner) {
+		WARN_ON(state->lock_owner);
+		return -EBUSY;
+	}
+
 	state->lock_owner = nlh->nlmsg_pid;
 
-	ks_netlink_mcast_flush_nolock(state);
+	ks_netlink_mcast_flush(state);
 
-	state->lock_timer.expires = jiffies + 5 * HZ;
+	state->lock_timer.expires = jiffies + KS_TOPOLOGY_LOCK_TIMER * HZ;
 	add_timer(&state->lock_timer);
 
 	ks_netlink_send_ack(state, nlh, 0);
@@ -244,12 +242,12 @@ int ks_cmd_topology_trylock(
 	struct ks_command *cmd,
 	struct nlmsghdr *nlh)
 {
-	if (!down_write_trylock(&ks_topology_lock))
+	if (state->lock_owner)
 		return -EBUSY;
 
-	ks_netlink_mcast_flush_nolock(state);
+	ks_netlink_mcast_flush(state);
 
-	state->lock_timer.expires = jiffies + 5 * HZ;
+	state->lock_timer.expires = jiffies + KS_TOPOLOGY_LOCK_TIMER * HZ;
 	add_timer(&state->lock_timer);
 
 	ks_netlink_send_ack(state, nlh, 0);
@@ -274,7 +272,9 @@ int ks_cmd_topology_unlock(
 
 	ks_netlink_send_ack(state, nlh, 0);
 
-	ks_netlink_mcast_flush_nolock(state);
+	ks_netlink_mcast_flush(state);
+
+	wake_up(&state->lock_sleep);
 
 	return 0;
 }
@@ -439,6 +439,35 @@ nlmsg_failure:
 	goto retry;
 }
 
+void ks_topology_lock(void)
+{
+	DEFINE_WAIT(wait);
+
+	down_write(&ks_netlink_state.topology_lock);
+
+	if (!ks_netlink_state.lock_owner)
+		return;
+
+	for(;;) {
+		prepare_to_wait(&ks_netlink_state.lock_sleep, &wait,
+							TASK_UNINTERRUPTIBLE);
+
+		up_write(&ks_netlink_state.topology_lock);
+		schedule();
+		down_write(&ks_netlink_state.topology_lock);
+
+		if (!ks_netlink_state.lock_owner)
+			break;
+	}
+
+	finish_wait(&ks_netlink_state.lock_sleep, &wait);
+}
+
+void ks_topology_unlock(void)
+{
+	up_write(&ks_netlink_state.topology_lock);
+}
+
 static int ks_netlink_rcv_msg(
 	struct ks_netlink_state *state,
 	struct sk_buff *skb,
@@ -467,11 +496,13 @@ static int ks_netlink_rcv_msg(
 		goto err_invalid_command;
 	}
 
-	if (!down_write_trylock(&ks_topology_lock)) {
-		if (state->lock_owner != nlh->nlmsg_pid) {
-			err = -EAGAIN;
-			goto err_lock_failed;
-		}
+	down_write(&ks_netlink_state.topology_lock);
+
+	if (state->lock_owner &&
+	    state->lock_owner != nlh->nlmsg_pid) {
+		up_write(&ks_netlink_state.topology_lock);
+		err = -EAGAIN;
+		goto err_lock_failed;
 	}
 
 	state->cur_pid = nlh->nlmsg_pid;
@@ -483,14 +514,11 @@ static int ks_netlink_rcv_msg(
 
 	ks_netlink_flush(state);
 
-	/* We have the lock but there is no real owner, release it */
-	if (!state->lock_owner)
-		up_write(&ks_topology_lock);
+	up_write(&ks_netlink_state.topology_lock);
 
 	return 0;
 
-	if (!state->lock_owner)
-		up_write(&ks_topology_lock);
+	up_write(&ks_netlink_state.topology_lock);
 err_lock_failed:
 err_not_request:
 err_invalid_command:
@@ -583,11 +611,12 @@ void ks_lock_timeout(unsigned long data)
 {
 //	struct ks_netlink_state *state = (void *)data;
 
-	ks_msg(KERN_INFO, "topology lock timer expired!\n");
+	ks_msg(KERN_WARNING,
+		"Topology lock held for more that %d seconds,"
+		" forcibly breaking lock\n", KS_TOPOLOGY_LOCK_TIMER);
 
-	up_write(&ks_topology_lock);
-
-	queue_work(ks_netlink_rcv_wq, &ks_netlink_rcv_work);
+	ks_netlink_state.lock_owner = 0;
+	wake_up(&ks_netlink_state.lock_sleep);
 }
 
 static void ks_netlink_rcv(struct sock *sk, int len)
@@ -628,9 +657,12 @@ int ks_netlink_modinit(void)
 
 	ks_netlink_state.mcast_seqnum = 0xBEEF;
 
+	init_rwsem(&ks_netlink_state.topology_lock);
 	init_timer(&ks_netlink_state.lock_timer);
 	ks_netlink_state.lock_timer.function = ks_lock_timeout;
 	ks_netlink_state.lock_timer.data = (unsigned long)&ks_netlink_state;
+
+	init_waitqueue_head(&ks_netlink_state.lock_sleep);
 
 	skb_queue_head_init(&ks_netlink_state.mcast_queue);
 

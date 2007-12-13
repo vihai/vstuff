@@ -392,7 +392,11 @@ int ks_chan_cmd_get(
   
 	ks_netlink_send_ack(state, nlh, NLM_F_MULTI);
 
-	list_for_each_entry(chan, &ks_chans_kset.list, kobj.entry) {
+	/* No need to read_lock(&ks_chans_list_lock); because we are also
+	 * protected by ks_topology_lock semaphore.
+	 */
+
+	list_for_each_entry(chan, &ks_chans_list, node) {
 
 retry:
 		ks_netlink_need_skb(state);
@@ -458,8 +462,7 @@ int ks_chan_register_no_topology_lock(struct ks_chan *chan)
 
 	write_lock(&ks_chans_list_lock);
 	chan->id = _ks_chan_new_id();
-	list_add_tail(&ks_chan_get(chan)->node,
-		&ks_chans_list);
+	list_add_tail(&ks_chan_get(chan)->node, &ks_chans_list);
 	write_unlock(&ks_chans_list_lock);
 
 	err = kobject_add(&chan->kobj);
@@ -506,8 +509,8 @@ err_create_chan_duplex:
 err_kobject_add:
 	write_lock(&ks_chans_list_lock);
 	list_del(&chan->node);
-	ks_chan_put(chan);
 	write_unlock(&ks_chans_list_lock);
+	ks_chan_put(chan);
 
 	return err;
 }
@@ -516,9 +519,9 @@ int ks_chan_register(struct ks_chan *chan)
 {
 	int err;
 
-	down_write(&ks_topology_lock);
+	ks_topology_lock();
 	err = ks_chan_register_no_topology_lock(chan);
-	up_write(&ks_topology_lock);
+	ks_topology_unlock();
 
 	return err;
 }
@@ -547,17 +550,17 @@ void ks_chan_unregister_no_topology_lock(struct ks_chan *chan)
 
 	write_lock(&ks_chans_list_lock);
 	list_del(&chan->node);
-	ks_chan_put(chan);
 	write_unlock(&ks_chans_list_lock);
+	ks_chan_put(chan);
 
 	ks_chan_mcast_send(chan, &ks_netlink_state, KS_NETLINK_CHAN_DEL);
 }
 
 void ks_chan_unregister(struct ks_chan *chan)
 {
-	down_write(&ks_topology_lock);
+	ks_topology_lock();
 	ks_chan_unregister_no_topology_lock(chan);
-	up_write(&ks_topology_lock);
+	ks_topology_unlock();
 }
 EXPORT_SYMBOL(ks_chan_unregister);
 
