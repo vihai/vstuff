@@ -1418,6 +1418,14 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	timeout.tv_sec = now.tv_sec + 30;
 	timeout.tv_nsec = now.tv_usec * 1000;
 
+	/* We are called holding ast_chan->lock, only the FSM knows why.
+	 * Of course if another thread holding a reference to vgsm_chan needs
+	 * to lock the ast_chan we get stuck in a near-deadlock situation.
+	 *
+	 * Thus, we release the lock before waiting.
+	 */
+	ast_mutex_unlock(&ast_chan->lock);
+
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	while(vgsm_chan->refcnt > 1 && res == 0) {
 		res = ast_cond_timedwait(
@@ -1425,6 +1433,8 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 				&vgsm.usecnt_lock, &timeout);
 	}
 	ast_mutex_unlock(&vgsm.usecnt_lock);
+
+	ast_mutex_lock(&ast_chan->lock);
 
 	assert(vgsm_chan->refcnt > 0);
 
