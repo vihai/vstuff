@@ -112,12 +112,34 @@ int ks_netlink_need_skb(struct ks_netlink_state *state)
 	}
 
 	if (!state->out_skb) {
+		ks_msg(KERN_WARNING,
+			"Cannot allocate skb in need_skb\n");
 		ksnl->sk_err = ENOBUFS;
 		ksnl->sk_error_report(ksnl);
 		return -ENOMEM;
 	}
 
 	return 0;
+}
+
+void ks_netlink_flush(struct ks_netlink_state *state)
+{
+	if (state->out_skb) {
+		if (state->out_skb->len) {
+			int err;
+
+			err = netlink_unicast(ksnl, state->out_skb,
+							state->cur_pid, 0);
+			if (err < 0) {
+				ks_msg(KERN_WARNING,
+					"Netlink overflow detected at"
+					" netlink_flush\n");
+			}
+		} else
+			kfree_skb(state->out_skb);
+
+		state->out_skb = NULL;
+	}
 }
 
 int ks_netlink_mcast_need_skb(struct ks_netlink_state *state)
@@ -139,6 +161,8 @@ int ks_netlink_mcast_need_skb(struct ks_netlink_state *state)
 	}
 
 	if (!state->mcast_skb) {
+		ks_msg(KERN_WARNING,
+			"Cannot allocate skb in mcast_need_skb\n");
 		ksnl->sk_err = ENOBUFS;
 		ksnl->sk_error_report(ksnl);
 		return -ENOMEM;
@@ -147,45 +171,33 @@ int ks_netlink_mcast_need_skb(struct ks_netlink_state *state)
 	return 0;
 }
 
-void ks_netlink_flush(struct ks_netlink_state *state)
+void ks_netlink_mcast_need_another_skb(struct ks_netlink_state *state)
 {
-	if (state->out_skb) {
-		if (state->out_skb->len) {
-			int err;
+	if (state->mcast_skb) {
+		skb_queue_tail(&state->mcast_queue,
+				state->mcast_skb);
+		state->mcast_skb = NULL;
 
-			err = netlink_unicast(ksnl, state->out_skb,
-							state->cur_pid, 0);
-			if (err < 0) {
-				ksnl->sk_err = ENOBUFS;
-				ksnl->sk_error_report(ksnl);
-			}
-		} else
-			kfree_skb(state->out_skb);
-
-		state->out_skb = NULL;
 	}
+
+	ks_netlink_mcast_need_skb(state);
 }
 
-void ks_netlink_mcast_flush(struct ks_netlink_state *state)
+static void ks_netlink_mcast_flush(struct ks_netlink_state *state)
 {
 	struct sk_buff *skb;
 	int err;
 
-	if (state->lock_owner) {
-		if (state->mcast_skb) {
-			skb_queue_tail(&state->mcast_queue,
-					state->mcast_skb);
-			state->mcast_skb = NULL;
-		}
-	}
+	if (state->lock_owner)
+		return;
 
 	while ((skb = skb_dequeue(&state->mcast_queue))) {
 		err = netlink_broadcast(ksnl, skb,
 				0, KS_NETLINK_GROUP_TOPOLOGY,
-				GFP_KERNEL);
+				GFP_KERNEL | __GFP_WAIT);
 		if (err < 0) {
-			ksnl->sk_err = ENOBUFS;
-			ksnl->sk_error_report(ksnl);
+			ks_msg(KERN_WARNING,
+				"Netlink overflow detected at mcast_flush\n");
 		}
 	}
 
@@ -194,10 +206,11 @@ void ks_netlink_mcast_flush(struct ks_netlink_state *state)
 
 			err = netlink_broadcast(ksnl, state->mcast_skb,
 					0, KS_NETLINK_GROUP_TOPOLOGY,
-					GFP_KERNEL);
-			if (err < 0) {
-				ksnl->sk_err = ENOBUFS;
-				ksnl->sk_error_report(ksnl);
+					GFP_KERNEL | __GFP_WAIT);
+			if (err == -ENOBUFS) {
+				ks_msg(KERN_WARNING,
+					"Netlink overflow detected at"
+					" mcast_flush2: %d\n", err);
 			}
 
 		} else
@@ -465,6 +478,8 @@ void ks_topology_lock(void)
 
 void ks_topology_unlock(void)
 {
+	ks_netlink_mcast_flush(&ks_netlink_state);
+
 	up_write(&ks_netlink_state.topology_lock);
 }
 

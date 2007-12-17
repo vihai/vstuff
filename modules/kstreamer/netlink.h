@@ -191,8 +191,7 @@ int ks_netlink_put_attr(
 int ks_netlink_need_skb(struct ks_netlink_state *state);
 int ks_netlink_mcast_need_skb(struct ks_netlink_state *state);
 void ks_netlink_flush(struct ks_netlink_state *state);
-void ks_netlink_mcast_flush(struct ks_netlink_state *state);
-void ks_netlink_mcast_flush_nolock(struct ks_netlink_state *state);
+void ks_netlink_mcast_need_another_skb(struct ks_netlink_state *state);
 
 void ks_topology_lock(void);
 void ks_topology_unlock(void);

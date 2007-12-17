@@ -218,19 +218,17 @@ static int ks_node_mcast_send(
 {
 	int err;
 
-retry:
 	err = ks_netlink_mcast_need_skb(state);
 	if (err < 0)
 		return err;
 
+retry:
 	err = ks_node_write_to_nlmsg(node, state->mcast_skb, message_type,
 					0,  state->mcast_seqnum++, 0);
 	if (err < 0) {
-		ks_netlink_mcast_flush(state);
+		ks_netlink_mcast_need_another_skb(state);
 		goto retry;
 	}
-
-	ks_netlink_mcast_flush(state);
 
 	return 0;
 }
