@@ -989,8 +989,7 @@ void *ks_protocol_thread_main(void *data)
 		    pollfds[1].revents & POLLERR ||
 		    pollfds[1].revents & POLLNVAL ||
 		    pollfds[1].revents & POLLIN) {
-			if (ks_conn_receive(conn) < 0)
-				break;
+			ks_conn_receive(conn);
 		}
 
 		ks_conn_send_requests(conn);
@@ -1010,6 +1009,22 @@ int ks_conn_establish(struct ks_conn *conn)
 			strerror(errno));
 		err = -errno;
 		goto err_pipe;
+	}
+
+	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_0;
+	}
+
+	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
+		report_conn(conn, LOG_ERR,
+			"Cannot set pipe to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl_1;
 	}
 
 	conn->cmd_read = filedes[0];
@@ -1085,6 +1100,8 @@ err_pthread_attr_init:
 err_bind:
 	close(conn->sock);
 err_socket:
+err_fcntl_1:
+err_fcntl_0:
 	close(conn->cmd_read);
 	close(conn->cmd_write);
 err_pipe:
