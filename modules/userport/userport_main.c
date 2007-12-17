@@ -1,7 +1,7 @@
 /*
- * vISDN gateway between vISDN's switch and userland for stream access
+ * kstreamer gateway between softswitch and userland for stream access
  *
- * Copyright (C) 2005-2006 Daniele Orlandi
+ * Copyright (C) 2005-2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -46,7 +46,7 @@ static struct class_device ksup_stream_class_dev;
 static struct class_device ksup_frame_class_dev;
 
 struct list_head ksup_chans_list = LIST_HEAD_INIT(ksup_chans_list);
-DECLARE_RWSEM(ksup_chans_list_sem);
+static rwlock_t ksup_chans_list_lock = RW_LOCK_UNLOCKED;
 
 static struct ksup_chan *ksup_chan_get(struct ksup_chan *chan)
 {
@@ -76,9 +76,9 @@ struct ksup_chan *ksup_chan_get_by_id(int id)
 {
 	struct ksup_chan *chan;
 
-	down_read(&ksup_chans_list_sem);
+	read_lock(&ksup_chans_list_lock);
 	chan = ksup_chan_get(_ksup_chan_search_by_id(id));
-	up_read(&ksup_chans_list_sem);
+	read_unlock(&ksup_chans_list_lock);
 
 	return chan;
 }
@@ -105,6 +105,8 @@ static void ksup_node_release(struct ks_node *ks_node)
 					struct ksup_chan, ks_node);
 
 	ksup_debug(3, "ksup_node_release()\n");
+
+	kfifo_free(chan->read_fifo);
 
 	kfree(chan);
 }
@@ -254,79 +256,14 @@ struct ks_chan_ops ksup_chan_tx_chan_ops = {
 
 /*---------------------------------------------------------------------------*/
 
-/*
-static inline void ksup_chan_h223_put(struct ksup_chan *chan, u8 c)
-{
-	switch(chan->h223_rx_state) {
-	case VUP_H223_STATE_HUNTING1:
-		if (c == 0xe1)
-			chan->h223_rx_state = VUP_H223_STATE_HUNTING1;
-	break;
-
-	case VUP_H223_STATE_HUNTING2:
-		if (c == 0x4d)
-			chan->h223_rx_state = VUP_H223_STATE_READING_FRAME;
-	break;
-
-	case VUP_H223_STATE_READING_FRAME:
-		if (c == 0xe1)
-			chan->h223_rx_state = VUP_H223_STATE_CLOSING;
-		else {
-			if (chan->h223_rx_frame_pos ==
-					sizeof(chan->h223_rx_frame_buf) - 1)
-				chan->h223_rx_state = VUP_H223_STATE_DROPPING;
-			else {
-				chan->h223_frame_buf[chan->h223_frame_pos] = c;
-				chan->h223_frame_pos++;
-			}
-		}
-	break;
-
-	case VUP_H223_STATE_CLOSING:
-		if (c == 0x4d) {
-			chan->h223_rx_state = VUP_H223_STATE_READING_FRAME;
-
-			if (chan->h223_frame_pos) {
-				struct sk_buff *skb;
-				skb = alloc_skb(count, GFP_KERNEL);
-				if (skb) {
-					skb_queue_tail(&chan->read_queue, skb);
-					wake_up(&chan->read_wait_queue);
-				}
-			}
-		} else {
-	break;
-
-	case VUP_H223_STATE_DROPPING:
-		if (c == 0xe1)
-			chan->h223_rx_state = VUP_H223_STATE_CLOSING;
-	break;
-	}
-}
-*/
-
 static int ksup_chan_rx_chan_push_raw(
 	struct ks_chan *ks_chan,
 	struct ks_streamframe *sf)
 {
 	struct ksup_chan *chan = ks_chan->driver_data;
 
-#if 0
-	if (chan->type == VISDN_LINK_FRAMING_H223A &&
-	    ks_chan->pipeline->framing == VISDN_LINK_FRAMING_NONE) {
-
-		/* H.223A framer */
-
-		int i;
-		for(i=0; i<sf->len; i++) {
-			ksup_chan_h223_put(chan, ((u8 *)data)[i]);
-		}
-	} else {
-#endif
-		if (__kfifo_put(chan->read_fifo, sf->data, sf->len))
-			wake_up(&chan->read_wait_queue);
-//	}
-
+	if (__kfifo_put(chan->read_fifo, sf->data, sf->len))
+		wake_up(&chan->read_wait_queue);
 
 	return 0;
 }
@@ -349,195 +286,56 @@ struct kss_chan_from_ops ksup_chan_rx_chan_node_ops =
 	.push_raw	= ksup_chan_rx_chan_push_raw,
 };
 
-
-/*static ssize_t ksup_chan_read(
-	struct ks_leg *ks_leg,
-	void *buf, size_t count)
-{
-	struct ksup_chan *chan = to_ksup_chan(ks_leg->chan);
-
-	return __kfifo_get(chan->tx_fifo, buf, count);
-}
-
-static ssize_t ksup_chan_write(
-	struct ks_leg *ks_leg,
-	const void *buf, size_t count)
-
-{
-	struct ksup_chan *chan = to_ksup_chan(ks_leg->chan);
-
-	return __kfifo_put(chan->read_fifo, (void *)buf, count);
-}
-
-static void ksup_chan_rx_error(
-	struct ks_leg *ks_leg,
-	enum ks_leg_rx_error_code code)
-{
-}
-
-static void ksup_chan_tx_error(
-	struct ks_leg *ks_leg,
-	enum ks_leg_tx_error_code code)
-{
-}
-
-static int ksup_chan_connect(
-	struct ks_leg *ks_leg1,
-	struct ks_leg *ks_leg2)
-{
-	ksup_debug(2, "Streamport %06d connected to %06d\n",
-		ks_leg1->chan->id,
-		ks_leg2->chan->id);
-
-	return 0;
-}
-
-static void ksup_chan_disconnect(
-	struct ks_leg *ks_leg1,
-	struct ks_leg *ks_leg2)
-{
-	ksup_debug(2, "Streamport %06d disconnected from %06d\n",
-		ks_leg1->chan->id,
-		ks_leg2->chan->id);
-}
-
-static struct ks_chan_ops ksup_chan_ops = {
-	.owner		= THIS_MODULE,
-
-	.release	= ksup_chan_release,
-	.open		= ksup_chan_open,
-	.close		= ksup_chan_close,
-};
-
-static struct ks_leg_ops ksup_leg_ops = {
-	.owner		= THIS_MODULE,
-
-	.connect	= ksup_chan_connect,
-	.disconnect	= ksup_chan_disconnect,
-
-	.read		= ksup_chan_read,
-	.write		= ksup_chan_write,
-
-	.rx_error	= ksup_chan_rx_error,
-	.tx_error	= ksup_chan_tx_error,
-};
-*/
-/*---------------------------------------------------------------------------*/
-
-/*static ssize_t ksup_show_read_fifo_usage(
-	struct ks_chan *ks_chan,
-	struct ks_chan_attribute *attr,
-	char *buf)
-{
-	struct ksup_chan *chan = to_ksup_chan(ks_chan);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-		kfifo_len(chan->read_fifo));
-}
-
-static ssize_t ksup_store_read_fifo_usage(
-	struct ks_chan *ks_chan,
-	struct ks_chan_attribute *attr,
-	const char *buf,
-	size_t count)
-{
-	struct ksup_chan *chan = to_ksup_chan(ks_chan);
-
-	kfifo_reset(chan->read_fifo);
-
-	return count;
-}
-
-static VISDN_LINK_ATTR(read_fifo_usage, S_IRUGO | S_IWUSR,
-		ksup_show_read_fifo_usage,
-		ksup_store_read_fifo_usage);
-*/
-/*---------------------------------------------------------------------------*/
-/*
-static ssize_t ksup_show_tx_fifo_usage(
-	struct ks_chan *ks_chan,
-	struct ks_chan_attribute *attr,
-	char *buf)
-{
-	struct ksup_chan *chan = to_ksup_chan(ks_chan);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-		kfifo_len(chan->tx_fifo));
-}
-
-static ssize_t ksup_store_tx_fifo_usage(
-	struct ks_chan *ks_chan,
-	struct ks_chan_attribute *attr,
-	const char *buf,
-	size_t count)
-{
-	struct ksup_chan *chan = to_ksup_chan(ks_chan);
-
-	kfifo_reset(chan->tx_fifo);
-
-	return count;
-}
-
-static VISDN_LINK_ATTR(tx_fifo_usage, S_IRUGO | S_IWUSR,
-		ksup_show_tx_fifo_usage,
-		ksup_store_tx_fifo_usage);
-*/
-
-static void ksup_chan_create(
+static struct ksup_chan *ksup_chan_create(
 	struct ksup_chan *chan,
 	int framed)
 {
+	BUG_ON(chan);
+
+	if (!chan) {
+		chan = kmalloc(sizeof(*chan), GFP_KERNEL);
+		if (!chan)
+			goto err_kmalloc;
+	}
+
 	memset(chan, 0, sizeof(*chan));
 
 	init_timer(&chan->stimulus_timer);
 	chan->stimulus_frequency = 50;
 	chan->framed = framed;
 
+	spin_lock_init(&chan->read_fifo_lock);
+	chan->read_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->read_fifo_lock);
+	if (!chan->read_fifo)
+		goto err_fifo_rx_alloc;
+
         skb_queue_head_init(&chan->read_queue);
 	init_waitqueue_head(&chan->read_wait_queue);
 
-/*	spin_lock_init(&chan->tx_fifo_lock);
-	chan->tx_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->tx_fifo_lock);
-	if (!chan->tx_fifo) {
-		err = -EFAULT;
-		goto err_fifo_tx_alloc;
-	}*/
-
 	ks_node_create(&chan->ks_node, &ksup_chan_node_ops, "",
 			&ks_system_device.kobj);
-}
-
-static struct ksup_chan *ksup_chan_alloc(int framed)
-{
-	struct ksup_chan *chan;
-
-	chan = kmalloc(sizeof(*chan), GFP_KERNEL);
-	if (!chan)
-		return NULL;
-
-	ksup_chan_create(chan, framed);
 
 	return chan;
+
+	kfifo_free(chan->read_fifo);
+err_fifo_rx_alloc:
+	kfree(chan);
+err_kmalloc:
+
+	return NULL;
 }
 
 static int ksup_chan_register(struct ksup_chan *chan)
 {
 	int err;
 
-	down_write(&ksup_chans_list_sem);
+	write_lock(&ksup_chans_list_lock);
 	chan->id = _ksup_chan_new_id();
 	list_add_tail(&ksup_chan_get(chan)->node,
 		&ksup_chans_list);
-	up_write(&ksup_chans_list_sem);
+	write_unlock(&ksup_chans_list_lock);
 
 	kobject_set_name(&chan->ks_node.kobj, "%d", chan->id);
-
-	spin_lock_init(&chan->read_fifo_lock);
-	chan->read_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->read_fifo_lock);
-	if (!chan->read_fifo) {
-		err = -EFAULT;
-		goto err_fifo_rx_alloc;
-	}
 
 	err = ks_node_register(&chan->ks_node);
 	if (err < 0)
@@ -565,12 +363,10 @@ err_chan_tx_register:
 err_chan_rx_register:
 	ks_node_unregister(&chan->ks_node);
 err_node_register:
-	kfifo_free(chan->read_fifo);
-err_fifo_rx_alloc:
-	down_write(&ksup_chans_list_sem);
+	write_lock(&ksup_chans_list_lock);
 	list_del(&chan->node);
+	write_unlock(&ksup_chans_list_lock);
 	ksup_chan_put(chan);
-	up_write(&ksup_chans_list_sem);
 
 	return err;
 }
@@ -585,12 +381,10 @@ static void ksup_chan_unregister(struct ksup_chan *chan)
 
 	ks_node_unregister(&chan->ks_node);
 
-	kfifo_free(chan->read_fifo);
-
-	down_write(&ksup_chans_list_sem);
+	write_lock(&ksup_chans_list_lock);
 	list_del(&chan->node);
+	write_unlock(&ksup_chans_list_lock);
 	ksup_chan_put(chan);
-	up_write(&ksup_chans_list_sem);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -604,66 +398,46 @@ static int ksup_cdev_open(
 
 	nonseekable_open(inode, file);
 
-	chan = ksup_chan_alloc(inode->i_rdev - ksup_first_dev == 1);
+	chan = ksup_chan_create(NULL, inode->i_rdev - ksup_first_dev == 1);
 	if (!chan) {
 		err = -ENOMEM;
-		goto err_alloc_chan;
+		goto err_chan_create;
 	}
 
 	if ((file->f_flags & O_ACCMODE) == O_RDONLY ||
 	    (file->f_flags & O_ACCMODE) == O_RDWR) {
-		chan->ks_chan_rx = kmalloc(sizeof(*chan->ks_chan_rx),
-						GFP_KERNEL);
-		if (!chan->ks_chan_rx) {
-			err = -ENOMEM;
-			goto err_alloc_chan_rx;
-		}
-
-		ks_chan_create(chan->ks_chan_rx, &ksup_chan_rx_chan_ops,
+		chan->ks_chan_rx = ks_chan_create(NULL, &ksup_chan_rx_chan_ops,
 				"rx", NULL,
 				&chan->ks_node.kobj,
 				&kss_softswitch.ks_node,
 				&chan->ks_node);
+		if (!chan->ks_chan_rx) {
+			err = -ENOMEM;
+			goto err_rx_chan_create;
+		}
 
 		chan->ks_chan_rx->driver_data = chan;
 		chan->ks_chan_rx->from_ops = &ksup_chan_rx_chan_node_ops;
-/*		chan->ks_chan_rx->framed_mtu = -1;
-		chan->ks_chan_rx->framing_avail = framing;*/
 	}
 
 	if ((file->f_flags & O_ACCMODE) == O_WRONLY ||
 	    (file->f_flags & O_ACCMODE) == O_RDWR) {
-		chan->ks_chan_tx = kmalloc(sizeof(*chan->ks_chan_tx),
-						GFP_KERNEL);
-		if (!chan->ks_chan_tx) {
-			err = -ENOMEM;
-			goto err_alloc_chan_tx;
-		}
-
-		ks_chan_create(chan->ks_chan_tx, &ksup_chan_tx_chan_ops,
+		chan->ks_chan_tx = ks_chan_create(NULL, &ksup_chan_tx_chan_ops,
 				"tx", NULL,
 				&chan->ks_node.kobj,
 				&chan->ks_node,
 				&kss_softswitch.ks_node);
+		if (!chan->ks_chan_tx) {
+			err = -ENOMEM;
+			goto err_tx_chan_create;
+		}
 
 		chan->ks_chan_tx->driver_data = chan;
-/*		chan->ks_chan_tx.framed_mtu = -1;
-		chan->ks_chan_tx.framing_avail = framing;*/
 	}
 
 	err = ksup_chan_register(chan);
 	if (err < 0)
 		goto err_chan_register;
-
-/*	err = ks_chan_create_file(&chan->ks_chan,
-					&ks_chan_attr_read_fifo_usage);
-	if (err < 0)
-		goto err_create_file_read_fifo;
-
-	err = ks_chan_create_file(&chan->ks_chan,
-					&ks_chan_attr_tx_fifo_usage);
-	if (err < 0)
-		goto err_create_file_tx_fifo;*/
 
 	file->private_data = ksup_chan_get(chan);
 
@@ -673,27 +447,16 @@ static int ksup_cdev_open(
 
 	return 0;
 
-/*	ks_chan_remove_file(&chan->ks_chan,
-				&ks_chan_attr_tx_fifo_usage);
-err_create_file_tx_fifo:
-	ks_chan_remove_file(&chan->ks_chan,
-				&ks_chan_attr_read_fifo_usage);
-err_create_file_read_fifo:*/
-/*	kfifo_free(chan->tx_fifo);
-err_fifo_tx_alloc:
-	kfifo_free(chan->read_fifo);
-err_fifo_rx_alloc:*/
-
 	if (chan->ks_chan_tx)
 		ks_chan_put(chan->ks_chan_tx);
-err_alloc_chan_tx:
+err_tx_chan_create:
 	if (chan->ks_chan_rx)
 		ks_chan_put(chan->ks_chan_rx);
-err_alloc_chan_rx:
+err_rx_chan_create:
 	ksup_chan_unregister(chan);
 err_chan_register:
 	ksup_chan_put(chan);
-err_alloc_chan:
+err_chan_create:
 
 	return err;
 }
@@ -708,7 +471,7 @@ static int ksup_cdev_release(
 	ksup_chan_unregister(chan);
 
 	if (chan->ks_chan_tx) {
-		ks_chan_put(chan->ks_chan_tx);
+	ks_chan_put(chan->ks_chan_tx);
 		chan->ks_chan_tx = NULL;
 	}
 
@@ -716,9 +479,6 @@ static int ksup_cdev_release(
 		ks_chan_put(chan->ks_chan_rx);
 		chan->ks_chan_rx = NULL;
 	}
-
-//	kfifo_free(chan->tx_fifo);
-//	kfifo_free(chan->read_fifo);
 
 	ksup_chan_put(chan);
 	file->private_data = NULL;
@@ -927,35 +687,6 @@ static ssize_t ksup_cdev_write(
 	else
 		return ksup_cdev_write_stream(file, buf, count, offp);
 }
-
-/*static void ks_make_kobj_path(
-	struct kobject *kobj, char *path, int max_length)
-{
-	struct kobject *cur;
-	int length = 0;
-	int pos;
-
-	for (cur = kobj; cur; cur = cur->parent)
-		length += strlen(kobject_name(cur)) + 1;
-
-	if (length >= max_length) {
-		path[0] = '\0';
-		return;
-	}
-
-	pos = length;
-	path[length] = '\0';
-
-	for (cur = kobj; cur; cur = cur->parent) {
-
-		int len = strlen(kobject_name(cur));
-
-		pos -= len;
-
-		memcpy(path + pos, kobject_name(cur), len);
-		*(path + --pos) = '/';
-	}
-}*/
 
 static int ksup_cdev_ioctl(
 	struct inode *inode,
