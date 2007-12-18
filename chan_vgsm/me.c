@@ -4540,6 +4540,9 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 	if (me->failure_count)
 		ast_cli(fd, "\n  Failure count: %d\n", me->failure_count);
 
+	if (me->status == VGSM_ME_STATUS_UNCONFIGURED)
+		goto out;
+
 	ast_cli(fd,
 		"\n"
 		"  Device: %s\n"
