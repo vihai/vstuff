@@ -156,11 +156,7 @@ void vgsm_update_mask0(struct vgsm_card *card)
 				VGSM_INT1STAT_RD_REACH_END);
 
 	for(i=0; i<card->num_mes; i++) {
-
-		if (card->mes[i]->rx.ks_chan.pipeline &&
-		    card->mes[i]->rx.ks_chan.pipeline->status ==
-					KS_PIPELINE_STATUS_FLOWING) {
-
+		if (card->mes[i]->rx.running || card->mes[i]->tx.running) {
 			card->regs.mask0 |=
 				VGSM_INT1STAT_WR_REACH_INT |
 				VGSM_INT1STAT_WR_REACH_END |

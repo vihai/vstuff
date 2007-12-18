@@ -234,6 +234,8 @@ static int vgsm_me_rx_chan_start(struct ks_chan *ks_chan)
 	me_rx->fifo_pos = (le32_to_cpu(vgsm_inl(card, VGSM_DMA_RD_CUR)) -
 				card->readdma_bus_mem) / 4;
 
+	me_rx->running = TRUE;
+
 	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
 
@@ -250,6 +252,7 @@ static void vgsm_me_rx_chan_stop(struct ks_chan *ks_chan)
 	struct vgsm_card *card = me->card;
 
 	vgsm_card_lock(card);
+	me_rx->running = FALSE;
 	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
 
@@ -381,6 +384,8 @@ static int vgsm_me_tx_chan_start(struct ks_chan *ks_chan)
 
 	vgsm_card_lock(card);
 
+	me_tx->running = TRUE;
+
 	/* Fill FIFO with a-law silence */
 	for(i=me->timeslot_offset; i < card->writedma_size; i+=4)
 		*(u8 *)(card->writedma_mem + i) = 0x2a;
@@ -404,6 +409,7 @@ static void vgsm_me_tx_chan_stop(struct ks_chan *ks_chan)
 	struct vgsm_card *card = me->card;
 
 	vgsm_card_lock(card);
+	me_tx->running = FALSE;
 	vgsm_update_mask0(card);
 	vgsm_card_unlock(card);
 

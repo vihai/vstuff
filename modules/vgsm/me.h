@@ -37,6 +37,8 @@ struct vgsm_me_rx
 
 	struct vgsm_me *me;
 
+	BOOL running;
+
 	int fifo_pos;
 	int fifo_size;
 
@@ -48,6 +50,8 @@ struct vgsm_me_tx
 	struct ks_chan ks_chan;
 
 	struct vgsm_me *me;
+
+	BOOL running;
 
 	int fifo_pos;
 	int fifo_size;
