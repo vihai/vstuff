@@ -713,7 +713,7 @@ err_tx_pipeline_alloc:
 tx_pipeline_done:;
 	ks_conn_remote_topology_unlock(conn);
 
-#if 0
+#if 1
 	debug("Entering main cycle...\n");
 
 	char buf[4096];
@@ -774,7 +774,7 @@ tx_pipeline_done:;
 	}
 #endif
 
-#if 1
+#if 0
 	srand(time(NULL)*getpid());
 	usleep(rand() % 250000);
 #endif

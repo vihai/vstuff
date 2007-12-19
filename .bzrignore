@@ -89,6 +89,7 @@
 ./tests/sniffer
 ./tests/traffic
 ./tests/vgsm_stress
+./tests/vgsm2reg
 ./tools/Makefile
 ./tools/Makefile.in
 ./tools/lemon

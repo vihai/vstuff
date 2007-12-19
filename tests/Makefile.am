@@ -9,7 +9,7 @@
 # under the terms and conditions of the GNU General Public License.
 #
 
-sbin_PROGRAMS = vgsm_stress sniffer traffic dsptest # jitter  listener
+sbin_PROGRAMS = vgsm2reg vgsm_stress sniffer traffic dsptest
 
 #jitter_SOURCES = jitter.c
 #jitter_LDADD = -lm
@@ -43,6 +43,10 @@ vgsm_stress_SOURCES = vgsm_stress.c
 vgsm_stress_CPPFLAGS=\
 	-I$(top_srcdir)/include/		\
 	-I$(top_srcdir)/modules/include/
+
+vgsm2reg_SOURCES = vgsm2reg.c
+vgsm2reg_CPPFLAGS=\
+	-I$(top_srcdir)/include/
 
 dsptest_SOURCES = dsptest.c
 dsptest_CPPFLAGS=\
