@@ -422,6 +422,7 @@ static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 static int vgsm_initialize_hw(struct vgsm_card *card)
 {
 	int i;
+	u32 int_enable = 0;
 
 	/* Reset all subsystems */
 	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
@@ -445,12 +446,13 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		VGSM_R_LED_SRC_V_STATUS_G);
 
 	/* Enable interrupts */
+
 	for(i=0; i<card->mes_number; i++) {
 		if (card->mes[i]) {
 			vgsm_outl(card, VGSM_R_ME_INT_ENABLE(i),
-				VGSM_R_ME_INT_ENABLE_V_VDD |
+/*				VGSM_R_ME_INT_ENABLE_V_VDD |
 				VGSM_R_ME_INT_ENABLE_V_VDDLP |
-				VGSM_R_ME_INT_ENABLE_V_CCVCC |
+				VGSM_R_ME_INT_ENABLE_V_CCVCC |*/
 				VGSM_R_ME_INT_ENABLE_V_DAI_RX_INT |
 				VGSM_R_ME_INT_ENABLE_V_DAI_RX_END |
 				VGSM_R_ME_INT_ENABLE_V_DAI_TX_INT |
@@ -462,6 +464,8 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 			vgsm_outl(card, VGSM_R_ME_FIFO_SETUP(i),
 				VGSM_R_ME_FIFO_SETUP_V_RX_LINEAR |
 				VGSM_R_ME_FIFO_SETUP_V_TX_LINEAR);
+
+			int_enable |= VGSM_R_INT_ENABLE_V_ME(i);
 		}
 	}
 
@@ -469,17 +473,11 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		vgsm_outl(card, VGSM_R_SIM_INT_ENABLE(i),
 			VGSM_R_SIM_INT_ENABLE_V_CCIN |
 			VGSM_R_SIM_INT_ENABLE_V_UART);
+
+		int_enable |= VGSM_R_INT_ENABLE_V_SIM(i);
 	}
 
-	vgsm_outl(card, VGSM_R_INT_ENABLE,
-		(card->mes[0] ? VGSM_R_INT_ENABLE_V_ME(0) : 0) |
-		(card->mes[1] ? VGSM_R_INT_ENABLE_V_ME(1) : 0) |
-		(card->mes[2] ? VGSM_R_INT_ENABLE_V_ME(2) : 0) |
-		(card->mes[3] ? VGSM_R_INT_ENABLE_V_ME(3) : 0) |
-		VGSM_R_INT_ENABLE_V_SIM(0) |
-		VGSM_R_INT_ENABLE_V_SIM(1) |
-		VGSM_R_INT_ENABLE_V_SIM(2) |
-		VGSM_R_INT_ENABLE_V_SIM(3));
+	vgsm_outl(card, VGSM_R_INT_ENABLE, int_enable);
 
 	/* This takes care of setting SIM_ROUTE and SIM_SETUP(n) */
 	vgsm_card_update_router(card);
@@ -522,8 +520,8 @@ static void vgsm_me_interrupt(struct vgsm_card *card, int id)
 	if (me_int_status & VGSM_R_ME_INT_STATUS_V_CCVCC)
 		vgsm_debug_card(card, 1,
 			"ME CCVCC changed from: %d to %d\n",
-			!(me_status & VGSM_R_ME_STATUS_V_VDD),
-			!!(me_status & VGSM_R_ME_STATUS_V_VDD));
+			!(me_status & VGSM_R_ME_STATUS_V_CCVCC),
+			!!(me_status & VGSM_R_ME_STATUS_V_CCVCC));
 
 	if (me_int_status & VGSM_R_ME_INT_STATUS_V_DAI_RX_INT)
 		vgsm_debug_card(card, 3, "DAI RX INT\n");
