@@ -721,47 +721,59 @@ static int vgsm_me_config_from_var(
 	} else if (!strcasecmp(var->name, "poweroff_on_exit")) {
 		mc->poweroff_on_exit = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "sim_proto")) {
+		ast_log(LOG_NOTICE,
+			"sim_proto is obsolete, use sim_driver instead\n");
+		goto sim_driver;
+	} else if (!strcasecmp(var->name, "sim_driver")) {
+sim_driver:
 		if (!strcasecmp(var->value, "local"))
-			mc->sim_proto = VGSM_MESIM_PROTO_LOCAL;
+			mc->sim_driver_type = VGSM_MESIM_DRIVER_LOCAL;
 		else if (!strcasecmp(var->value, "implementa"))
-			mc->sim_proto = VGSM_MESIM_PROTO_IMPLEMENTA;
+			mc->sim_driver_type = VGSM_MESIM_DRIVER_IMPLEMENTA;
 		else {
 			ast_log(LOG_ERROR,
-				"Unknown SIM holder protocol '%s'\n",
+				"Unknown SIM driver '%s'\n",
 				var->value);
 
 			return -1;
 		}
 
 	} else if (!strcasecmp(var->name, "sim_local_device_filename")) {
-		strncpy(mc->sim_local_device_filename, var->value,
-			sizeof(mc->sim_local_device_filename));
+		ast_log(LOG_NOTICE,
+			"sim_local_device_filename is obsolete,"
+			" use sim_device_filename instead\n");
+		goto sim_device_filename;
+	} else if (!strcasecmp(var->name, "sim_device_filename")) {
+sim_device_filename:
+		strncpy(mc->sim_device_filename, var->value,
+			sizeof(mc->sim_device_filename));
 	} else if (!strcasecmp(var->name, "sim_client_addr")) {
 		struct ast_hostent ahp;
 		struct hostent *hp;
 
-		if (!(hp = ast_gethostbyname(var->value, &ahp))) {
+		char *addr = alloca(strlen(var->value) + 1);
+		char *port = alloca(strlen(var->value) + 1);
+
+		if (sscanf(var->value, "%s:%s", addr, port) != 2) {
+			ast_log(LOG_ERROR,
+				"Cannot parse sim_client_addr '%s'\n",
+				var->value);
+			return -1;
+		}
+
+		if (!(hp = ast_gethostbyname(addr, &ahp))) {
 			ast_log(LOG_ERROR, "Invalid address: %s\n",
 				var->value);
 
 			return -1;
 		}
 
-		memcpy(&mc->sim_impl_simclient_addr.sin_addr,
+		memcpy(&mc->sim_client_addr.sin_addr,
 			hp->h_addr,
-			sizeof(mc->sim_impl_simclient_addr.sin_addr));
+			sizeof(mc->sim_client_addr.sin_addr));
 
-	} else if (!strcasecmp(var->name, "sim_client_port")) {
-		int port;
-		if (sscanf(var->value, "%d", &port) == 1)
-			mc->sim_impl_simclient_addr.sin_port = htons(port);
-		else {
-			ast_log(LOG_WARNING,
-				"Invalid port number '%s' at line %d\n",
-				var->value, var->lineno);
+		mc->sim_client_addr.sin_port = htons(atoi(port));
 
-			return -1;
-		}
 	} else if (!strcasecmp(var->name, "operator_selection")) {
 		if (!strcasecmp(var->value, "auto"))
 			mc->operator_selection = VGSM_OPSEL_AUTOMATIC;
@@ -859,10 +871,10 @@ static void vgsm_me_config_copy(
 	dst->tx_gain = src->tx_gain;
 	dst->set_clock = src->set_clock;
 	dst->poweroff_on_exit = src->poweroff_on_exit;
-	dst->sim_proto = src->sim_proto;
-	strncpy(dst->sim_local_device_filename,
-		src->sim_local_device_filename,
-		sizeof(dst->sim_local_device_filename));
+	dst->sim_driver_type = src->sim_driver_type;
+	strncpy(dst->sim_device_filename,
+		src->sim_device_filename,
+		sizeof(dst->sim_device_filename));
 	dst->operator_selection = src->operator_selection;
 
 	dst->operator_mcc = src->operator_mcc;
@@ -3895,7 +3907,7 @@ static int vgsm_me_open(
 	}*/
 
 	struct termios newtio;
-	bzero(&newtio, sizeof(newtio));
+	memset(&newtio, 0, sizeof(newtio));
 
 	newtio.c_cflag = CS8 | CREAD | HUPCL;
 
@@ -4004,7 +4016,7 @@ static int vgsm_me_open(
 		me->mesim.name = me->name;
 
 		struct termios newtio;
-		bzero(&newtio, sizeof(newtio));
+		memset(&newtio, 0, sizeof(newtio));
 
 		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
 		newtio.c_iflag = IGNBRK | IGNPAR;
@@ -4093,18 +4105,13 @@ static int vgsm_me_open(
 		vgsm_mesim_open(&me->mesim, me->mesim_fd);
 
 		struct vgsm_mesim_set_mode sm = {
-			.proto = mc->sim_proto,
+			.driver_type = mc->sim_driver_type,
 		};
 
-		if (mc->sim_proto == VGSM_MESIM_PROTO_LOCAL) {
-			strncpy(sm.local.device_filename, 
-				mc->sim_local_device_filename,
-				sizeof(sm.local.device_filename));
-		} else if (mc->sim_proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-			memcpy(&sm.impl.simclient_addr,
-				&mc->sim_impl_simclient_addr,
-				sizeof(sm.impl.simclient_addr));
-		}
+		strncpy(sm.device_filename, mc->sim_device_filename,
+					sizeof(sm.device_filename));
+		memcpy(&sm.client_addr, &mc->sim_client_addr,
+					sizeof(sm.client_addr));
 
 		vgsm_mesim_send_message(&me->mesim,
 				VGSM_MESIM_MSG_SET_MODE,
@@ -4897,46 +4904,8 @@ static int vgsm_me_show_sim(int fd, struct vgsm_me *me)
 		me->mesim.rst,
 		vgsm_mesim_state_to_text(me->mesim.state));
 
-	if (me->mesim.proto == VGSM_MESIM_PROTO_LOCAL) {
-		ast_cli(fd, "  Routed to local SIM holder: %d\n",
-			me->mesim.local.sim_id);
-	} else if (me->mesim.proto == VGSM_MESIM_PROTO_CLIENT) {
-	} else if (me->mesim.proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-		ast_cli(fd, "  Implementa interface status: %s\n",
-			vgsm_mesim_impl_state_to_text(
-					me->mesim.impl.state));
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-		{
-		char tmpstr[32];
-		ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-			me->mesim.impl.simclient_addr.sin_addr);
-
-		ast_cli(fd, "  Implementa SIM client addr:"
-				" %s:%d\n",
-			tmpstr,
-			ntohs(me->mesim.impl.simclient_addr.sin_port));
-		}
-#else
-		ast_cli(fd, "  Implementa SIM client addr:"
-				" %s:%d\n",
-			ast_inet_ntoa(me->mesim.
-					impl.simclient_addr.sin_addr),
-			ntohs(me->mesim.impl.simclient_addr.sin_port));
-#endif
-	}
-
-
-/*
-	if (!me->mesim.sim_holder) {
-		ast_cli(fd,
-			"\nSIM Holder:\n"
-			"  Not connected\n");
-		goto out;
-	}
-
-	ast_cli(fd,
-		"\nSIM Holder: %s\n",
-		me->mesim.sim_holder->name);*/
+	if (me->mesim.driver->cli_show)
+		me->mesim.driver->cli_show(me->mesim.driver, fd);
 
 	if (!me->sim.inserted) {
 		ast_cli(fd,

@@ -198,9 +198,9 @@ struct vgsm_me_config
 	__u8 rx_gain;
 	__u8 tx_gain;
 
-	enum vgsm_mesim_proto sim_proto;
-	char sim_local_device_filename[PATH_MAX];
-	struct sockaddr_in sim_impl_simclient_addr;
+	enum vgsm_mesim_driver_type sim_driver_type;
+	char sim_device_filename[PATH_MAX];
+	struct sockaddr_in sim_client_addr;
 
 	BOOL set_clock;
 	BOOL poweroff_on_exit;

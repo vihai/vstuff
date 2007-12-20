@@ -16,6 +16,9 @@ chan_vgsm_la_SOURCES =\
 	sim.c			\
 	sim_file.c		\
 	mesim.c			\
+	mesim_local.c		\
+	mesim_clnt.c		\
+	mesim_impl.c		\
 	huntgroup.c		\
 	comm.c			\
 	causes.c		\
@@ -41,6 +44,9 @@ noinst_HEADERS =\
 	sim.h			\
 	sim_file.h		\
 	mesim.h			\
+	mesim_local.h		\
+	mesim_clnt.h		\
+	mesim_impl.h		\
 	huntgroup.h		\
 	comm.h			\
 	causes.h		\

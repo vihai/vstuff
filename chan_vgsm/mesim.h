@@ -67,11 +67,12 @@ struct vgsm_mesim_message
 	__u8 data[];
 };
 
-enum vgsm_mesim_proto
+enum vgsm_mesim_driver_type
 {
-        VGSM_MESIM_PROTO_LOCAL,
-        VGSM_MESIM_PROTO_CLIENT,
-        VGSM_MESIM_PROTO_IMPLEMENTA,
+        VGSM_MESIM_DRIVER_NONE,
+        VGSM_MESIM_DRIVER_LOCAL,
+        VGSM_MESIM_DRIVER_CLIENT,
+        VGSM_MESIM_DRIVER_IMPLEMENTA,
 };
 
 const char *vgsm_mesim_message_type_to_text(
@@ -79,30 +80,27 @@ const char *vgsm_mesim_message_type_to_text(
 
 struct vgsm_mesim_set_mode
 {
-	enum vgsm_mesim_proto proto;
+	enum vgsm_mesim_driver_type driver_type;
 
-	union
-	{
-		struct {
-		char device_filename[256];
-		} local;
-
-		struct {
-		struct sockaddr bind_addr;
-		} clnt;
-
-		struct {
-		struct sockaddr simclient_addr;
-		} impl;
-	};
+	char device_filename[PATH_MAX];
+	struct sockaddr bind_addr;
+	struct sockaddr client_addr;
 };
 
-enum vgsm_mesim_impl_state
+struct vgsm_mesim_driver
 {
-	VGSM_MESIM_IMPL_STATE_NULL,
-	VGSM_MESIM_IMPL_STATE_TRYING,
-	VGSM_MESIM_IMPL_STATE_CONNECTED,
-	VGSM_MESIM_IMPL_STATE_ACTIVE,
+	void (*release)(struct vgsm_mesim_driver *driver);
+	void (*deactivate)(struct vgsm_mesim_driver *driver);
+	void (*activate)(struct vgsm_mesim_driver *driver);
+	void (*set_mode)(struct vgsm_mesim_driver *driver,
+				struct vgsm_mesim_message *msg);
+	void (*reset_asserted)(struct vgsm_mesim_driver *driver);
+	void (*reset_removed)(struct vgsm_mesim_driver *driver);
+	int (*send)(struct vgsm_mesim_driver *driver, void *buf, int len);
+	int (*receive)(struct vgsm_mesim_driver *driver);
+	int (*get_polls)(struct vgsm_mesim_driver *driver,
+						struct pollfd *polls);
+	void (*cli_show)(struct vgsm_mesim_driver *driver, int fd);
 };
 
 struct vgsm_me;
@@ -140,30 +138,8 @@ struct vgsm_mesim
 
 	BOOL debug;
 
-	/* External interface */
-        enum vgsm_mesim_proto proto;
-
-	/* protocol=local */
-	struct {
-		char device_filename[PATH_MAX];
-		int fd;
-		int sim_id;
-	} local;
-
-	/* protocol=client */
-	struct {
-		int listen_fd;
-		int sock_fd;
-		struct sockaddr_in bind_addr;
-	} clnt;
-
-	/* protocol=implementa */
-	struct {
-		int sock_fd;
-		struct sockaddr_in simclient_addr;
-		enum vgsm_mesim_impl_state state;
-		struct vgsm_timer timer;
-	} impl;
+        enum vgsm_mesim_driver_type driver_type;
+	struct vgsm_mesim_driver *driver;
 };
 
 const char *vgsm_mesim_state_to_text(
@@ -188,8 +164,19 @@ void vgsm_mesim_send_message(
 	enum vgsm_mesim_message_type mt,
 	void *data, int len);
 
+#ifdef VGSM_MESIM_DRIVER_PRIVATE
 
-const char *vgsm_mesim_impl_state_to_text(
-	enum vgsm_mesim_impl_state state);
+void vgsm_mesim_change_state(
+	struct vgsm_mesim *mesim,
+	enum vgsm_mesim_state newstate);
+
+void vgsm_mesim_set_inserted(struct vgsm_mesim *mesim);
+void vgsm_mesim_set_removed(struct vgsm_mesim *mesim);
+
+int vgsm_mesim_write(
+	struct vgsm_mesim *mesim,
+	void *data, int size);
+
+#endif
 
 #endif

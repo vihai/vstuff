@@ -41,10 +41,12 @@
 #include "util.h"
 #include "timer.h"
 #include "mesim.h"
+#include "mesim_local.h"
+#include "mesim_clnt.h"
+#include "mesim_impl.h"
 
 static void vgsm_mesim_timers_updated(struct vgsm_timerset *set);
 static void vgsm_mesim_timer(void *data);
-static void vgsm_mesim_impl_timer(void *data);
 
 int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_me *me)
 {
@@ -62,16 +64,6 @@ int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_me *me)
 	vgsm_timerset_init(&mesim->timerset, vgsm_mesim_timers_updated);
 	vgsm_timer_init(&mesim->timer, &mesim->timerset, "mesim",
 			vgsm_mesim_timer, mesim);
-
-	mesim->local.fd = -1;
-
-	mesim->clnt.listen_fd = -1;
-	mesim->clnt.sock_fd = -1;
-
-	mesim->impl.sock_fd = -1;
-	mesim->impl.state = VGSM_MESIM_IMPL_STATE_NULL;
-	vgsm_timer_init(&mesim->impl.timer, &mesim->timerset, "mesim_impl",
-			vgsm_mesim_impl_timer, mesim);
 
 	return 0;
 }
@@ -140,23 +132,6 @@ const char *vgsm_mesim_state_to_text(
 		return "RESET";
 	case VGSM_MESIM_READY:
 		return "READY";
-	}
-
-	return "*UNKNOWN*";
-}
-
-const char *vgsm_mesim_impl_state_to_text(
-	enum vgsm_mesim_impl_state state)
-{
-	switch(state) {
-	case VGSM_MESIM_IMPL_STATE_NULL:
-		return "NULL";
-	case VGSM_MESIM_IMPL_STATE_TRYING:
-		return "TRYING";
-	case VGSM_MESIM_IMPL_STATE_CONNECTED:
-		return "CONNECTED";
-	case VGSM_MESIM_IMPL_STATE_ACTIVE:
-		return "ACTIVE";
 	}
 
 	return "*UNKNOWN*";
@@ -280,7 +255,7 @@ err_pipe:
 	return err;
 }
 
-static void vgsm_mesim_change_state(
+void vgsm_mesim_change_state(
 	struct vgsm_mesim *mesim,
 	enum vgsm_mesim_state newstate)
 {
@@ -291,22 +266,6 @@ static void vgsm_mesim_change_state(
 
 	ast_mutex_lock(&mesim->state_lock);
 	mesim->state = newstate;
-	ast_mutex_unlock(&mesim->state_lock);
-
-	ast_cond_broadcast(&mesim->state_cond);
-}
-
-static void vgsm_mesim_impl_change_state(
-	struct vgsm_mesim *mesim,
-	enum vgsm_mesim_impl_state newstate)
-{
-	vgsm_mesim_debug(mesim,
-		"Implementa state changed from %s to %s\n",
-		vgsm_mesim_impl_state_to_text(mesim->impl.state),
-		vgsm_mesim_impl_state_to_text(newstate));
-
-	ast_mutex_lock(&mesim->state_lock);
-	mesim->impl.state = newstate;
 	ast_mutex_unlock(&mesim->state_lock);
 
 	ast_cond_broadcast(&mesim->state_cond);
@@ -342,36 +301,7 @@ int vgsm_mesim_write(
 	return write(mesim->fd, data, size);
 }
 
-static int vgsm_mesim_impl_write_reset_asserted(struct vgsm_mesim *mesim)
-{
-	vgsm_mesim_debug(mesim, "Sending '-' on implementa socket\n");
-
-	return write(mesim->impl.sock_fd, "-", 1);
-}
-
-static int vgsm_mesim_impl_write_reset_removed(struct vgsm_mesim *mesim)
-{
-	vgsm_mesim_debug(mesim, "Sending '+' on implementa socket\n");
-
-	return write(mesim->impl.sock_fd, "+", 1);
-}
-
-static int vgsm_mesim_impl_write(
-	struct vgsm_mesim *mesim,
-	void *data, int size)
-{
-	char *hextext = alloca(size * 2 + 1);
-
-	int i;
-	for(i=0; i<size; i++)
-		sprintf(&hextext[i*2], "%02X", ((__u8 *)data)[i]);
-
-	vgsm_mesim_debug(mesim, "IMPL TX (%2d): %s\n", size, hextext);
-
-	return write(mesim->impl.sock_fd, hextext, size * 2);
-}
-
-static void vgsm_mesim_set_inserted(struct vgsm_mesim *mesim)
+void vgsm_mesim_set_inserted(struct vgsm_mesim *mesim)
 {
 	int status = TIOCM_RTS;
 
@@ -381,7 +311,7 @@ static void vgsm_mesim_set_inserted(struct vgsm_mesim *mesim)
 	}
 }
 
-static void vgsm_mesim_set_removed(struct vgsm_mesim *mesim)
+void vgsm_mesim_set_removed(struct vgsm_mesim *mesim)
 {
 	if (mesim->insert_override)
 		return;
@@ -396,232 +326,26 @@ static void vgsm_mesim_set_removed(struct vgsm_mesim *mesim)
 
 static void vgsm_mesim_deactivate(struct vgsm_mesim *mesim)
 {
+	if (mesim->driver->deactivate)
+		mesim->driver->deactivate(mesim->driver);
 
-	if (mesim->proto == VGSM_MESIM_PROTO_LOCAL) {
-		if (mesim->local.fd != -1) {
-			close(mesim->local.fd);
-			mesim->local.fd = -1;
-		}
-	} else if (mesim->proto == VGSM_MESIM_PROTO_CLIENT) {
-	} else if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-		
+	if (mesim->driver_type == VGSM_MESIM_DRIVER_LOCAL) {
+		vgsm_mesim_local_destroy(mesim->driver);
+	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_CLIENT) {
+		vgsm_mesim_clnt_destroy(mesim->driver);
+	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_IMPLEMENTA) {
+		vgsm_mesim_impl_destroy(mesim->driver);
 	}
+
+	mesim->driver = NULL;
 
 	vgsm_mesim_set_removed(mesim);
 }
 
 static void vgsm_mesim_activate(struct vgsm_mesim *mesim)
 {
-	if (mesim->proto == VGSM_MESIM_PROTO_LOCAL) {
-
-		assert(mesim->local.fd == -1);
-
-		mesim->local.fd = open(mesim->local.device_filename,
-					O_RDWR | O_NOCTTY | O_NDELAY);
-		if (mesim->local.fd < 0) {
-			ast_log(LOG_ERROR,
-				"%s: open(%s) failed: %s\n",
-				mesim->name,
-				mesim->local.device_filename,
-				strerror(errno));
-			return;
-		}
-
-		struct termios newtio;
-		bzero(&newtio, sizeof(newtio));
-
-		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
-		newtio.c_iflag = IGNBRK | IGNPAR;
-		newtio.c_oflag = 0;
-		newtio.c_lflag = 0;
-		
-		newtio.c_ospeed = 8736;
-		newtio.c_ispeed = 8736;
-
-		newtio.c_cc[VINTR]	= 0;
-		newtio.c_cc[VQUIT]	= 0;
-		newtio.c_cc[VERASE]	= 0;
-		newtio.c_cc[VKILL]	= 0;
-		newtio.c_cc[VEOF]	= 4;
-		newtio.c_cc[VTIME]	= 0;
-		newtio.c_cc[VMIN]	= 1;
-		newtio.c_cc[VSWTC]	= 0;
-		newtio.c_cc[VSTART]	= 0;
-		newtio.c_cc[VSTOP]	= 0;
-		newtio.c_cc[VSUSP]	= 0;
-		newtio.c_cc[VEOL]	= 0;
-		newtio.c_cc[VREPRINT]	= 0;
-		newtio.c_cc[VDISCARD]	= 0;
-		newtio.c_cc[VWERASE]	= 0;
-		newtio.c_cc[VLNEXT]	= 0;
-		newtio.c_cc[VEOL2]	= 0;
-		
-		if (tcflush(mesim->local.fd, TCIOFLUSH) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: tcflush(TCIOFLUSH):  %s\n",
-				mesim->name,
-				strerror(errno));
-
-			return;
-		}
-
-		if (tcsetattr(mesim->local.fd, TCSANOW, &newtio) < 0) {
-			ast_log(LOG_ERROR,
-				"Error setting tty's attributes: "
-				"tcsetattr(%s): %s",
-					mesim->local.device_filename,
-					strerror(errno));
-			return;
-		}
-
-		if (tcflush(mesim->local.fd, TCIOFLUSH) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: tcflush(TCIOFLUSH):  %s\n",
-				mesim->name,
-				strerror(errno));
-
-			return;
-		}
-
-		struct serial_struct ss;
-		if (ioctl(mesim->local.fd, TIOCGSERIAL, &ss) < 0) {
-			perror( "Error getting serial parameters");
-
-			return;
-		}
-
-		ss.custom_divisor = ss.baud_base / 8736;
-		ss.flags &= ~ASYNC_SPD_MASK;
-		ss.flags |= ASYNC_SPD_CUST;
-
-		if (ioctl(mesim->local.fd, TIOCSSERIAL, &ss) < 0) {
-			perror( "Error setting serial parameters");
-
-			return;
-		}
-
-		if (ioctl(mesim->local.fd, VGSM_IOC_SIM_GET_ID,
-						&mesim->local.sim_id) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_GET_ID) failed: %s\n",
-				mesim->name,
-				strerror(errno));
-			return;
-		}
-
-		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
-						mesim->local.sim_id) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SET_SIM_ROUTE, %d) failed: %s\n",
-				mesim->name,
-				mesim->local.sim_id,
-				strerror(errno));
-			return;
-		}
-
-		vgsm_mesim_set_removed(mesim);
-
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_DIRECTLY_ROUTED);
-
-	} else if (mesim->proto == VGSM_MESIM_PROTO_CLIENT) {
-
-		assert(mesim->clnt.listen_fd == -1);
-		assert(mesim->clnt.sock_fd == -1);
-
-		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
-					VGSM_SIM_ROUTE_EXTERNAL) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SET_SIM_ROUTE, EXTERN)"
-				" failed: %s\n",
-				mesim->name,
-				strerror(errno));
-			return;
-		}
-
-		mesim->clnt.bind_addr.sin_family = AF_INET;
-
-		mesim->clnt.listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (mesim->clnt.listen_fd < 0) {
-			ast_log(LOG_WARNING,
-				"Unable to create MESIM socket: %s\n",
-				strerror(errno));
-			return;
-		}
-
-		int on = 1;
-		if(setsockopt(mesim->clnt.listen_fd, SOL_SOCKET, SO_REUSEADDR,
-						&on, sizeof(on)) == -1) {
-			ast_log(LOG_ERROR,
-				"Set Socket Options failed: %s\n",
-				strerror(errno));
-			return;
-		}
-
-		if (bind(mesim->clnt.listen_fd,
-			(struct sockaddr *)&mesim->clnt.bind_addr,
-			sizeof(mesim->clnt.bind_addr)) < 0) {
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-			{
-			char tmpstr[32];
-			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-				mesim->clnt.bind_addr.sin_addr);
-
-				ast_log(LOG_WARNING,
-					"Unable to bind MESIM socket to"
-					" %s:%d: %s\n",
-					tmpstr,
-					ntohs(mesim->clnt.bind_addr.sin_port),
-					strerror(errno));
-			}
-#else
-				ast_log(LOG_WARNING,
-					"Unable to bind MESIM socket to"
-					" %s:%d: %s\n",
-					ast_inet_ntoa(mesim->clnt.bind_addr.
-							sin_addr),
-					ntohs(mesim->clnt.bind_addr.sin_port),
-					strerror(errno));
-#endif
-
-				return;
-			}
-
-		if (listen(mesim->clnt.listen_fd, 10)) {
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-			{
-			char tmpstr[32];
-			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-				mesim->clnt.bind_addr.sin_addr);
-
-			ast_log(LOG_WARNING,
-				"Unable to start listening on"
-				" %s:%d: %s\n",
-					tmpstr,
-					ntohs(mesim->clnt.bind_addr.sin_port),
-					strerror(errno));
-			}
-#else
-			ast_log(LOG_WARNING,
-				"Unable to start listening on"
-				" %s:%d: %s\n",
-					ast_inet_ntoa(mesim->clnt.bind_addr.
-							sin_addr),
-					ntohs(mesim->clnt.bind_addr.sin_port),
-					strerror(errno));
-#endif
-			return;
-		}
-
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_HOLDER_REMOVED);
-
-	} else if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_HOLDER_REMOVED);
-
-		vgsm_mesim_impl_change_state(mesim,
-				VGSM_MESIM_IMPL_STATE_TRYING);
-		vgsm_timer_start_delta(&mesim->impl.timer, 1 * SEC);
-	}
-
+	if (mesim->driver->activate)
+		mesim->driver->activate(mesim->driver);
 }
 
 static void vgsm_mesim_set_mode(
@@ -632,18 +356,30 @@ static void vgsm_mesim_set_mode(
 
 	assert(msg->len == sizeof(*sm));
 
-	mesim->proto = sm->proto;
+	if (mesim->driver_type == VGSM_MESIM_DRIVER_LOCAL) {
+		vgsm_mesim_local_destroy(mesim->driver);
+	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_CLIENT) {
+		vgsm_mesim_clnt_destroy(mesim->driver);
+	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_IMPLEMENTA) {
+		vgsm_mesim_impl_destroy(mesim->driver);
+	}
 
-	if (mesim->proto == VGSM_MESIM_PROTO_LOCAL) {
-		strncpy(mesim->local.device_filename,
-			sm->local.device_filename,
-			sizeof(mesim->local.device_filename));
-	} else if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-		memcpy(&mesim->impl.simclient_addr,
-			&sm->impl.simclient_addr,
-			sizeof(mesim->impl.simclient_addr));
+	mesim->driver_type = sm->driver_type;
+
+	if (mesim->driver_type == VGSM_MESIM_DRIVER_LOCAL) {
+		mesim->driver = vgsm_mesim_local_create(mesim,
+						&mesim->timerset);
+	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_CLIENT) {
+		mesim->driver = vgsm_mesim_clnt_create(mesim,
+						&mesim->timerset);
+	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_IMPLEMENTA) {
+		mesim->driver = vgsm_mesim_impl_create(mesim,
+						&mesim->timerset);
 	} else
 		assert(0);
+
+	if (mesim->driver->set_mode)
+		mesim->driver->set_mode(mesim->driver, msg);
 }
 
 static int vgsm_mesim_receive_data(struct vgsm_mesim *mesim)
@@ -672,9 +408,8 @@ static int vgsm_mesim_receive_data(struct vgsm_mesim *mesim)
 	break;
 
 	case VGSM_MESIM_READY:
-		if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-			vgsm_mesim_impl_write(mesim, buf, nread);
-		}
+		if (mesim->driver->send)
+			mesim->driver->send(mesim->driver, buf, nread);
 	break;
 	}
 
@@ -707,7 +442,7 @@ static void vgsm_mesim_receive_message_set_mode(
 	break;
 
 	case VGSM_MESIM_UNCONFIGURED:
-		vgsm_mesim_deactivate(mesim);
+		vgsm_mesim_set_removed(mesim);
 		vgsm_mesim_set_mode(mesim, msg);
 		vgsm_mesim_activate(mesim);
 	break;
@@ -781,17 +516,8 @@ static void vgsm_mesim_receive_message_reset_asserted(
 	case VGSM_MESIM_READY:
 		vgsm_mesim_change_state(mesim, VGSM_MESIM_RESET);
 
-		if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-			if (mesim->impl.state == VGSM_MESIM_IMPL_STATE_ACTIVE) {
-				if (vgsm_mesim_impl_write_reset_asserted(mesim)
-									 < 0) {
-					ast_log(LOG_WARNING,
-						"Error writing '-' to socket:"
-						" %s\n",
-						strerror(errno));
-				}
-			}
-		}
+		if (mesim->driver->reset_asserted)
+			mesim->driver->reset_asserted(mesim->driver);
 	break;
 	}
 }
@@ -829,25 +555,8 @@ static void vgsm_mesim_receive_message_reset_removed(
 
 		vgsm_mesim_change_state(mesim, VGSM_MESIM_READY);
 
-		if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-
-			vgsm_mesim_debug(mesim, "Sending ATR\n");
-
-			__u8 atr[] = { 0x3b, 0xb0, 0x11, 0x00, 0xC0,
-					0xFF, 0x1F, 0xC3, 0x42};
-
-			if (vgsm_mesim_write(mesim, atr, sizeof(atr)) < 0) {
-				ast_log(LOG_WARNING,
-					"Error writing ATR to MESIM: %s\n",
-					strerror(errno));
-			}
-
-			if (vgsm_mesim_impl_write_reset_removed(mesim) < 0) {
-				ast_log(LOG_WARNING,
-					"Error writing '+' to socket: %s\n",
-					strerror(errno));
-			}
-		}
+		if (mesim->driver->reset_removed)
+			mesim->driver->reset_removed(mesim->driver);
 	break;
 	}
 }
@@ -953,216 +662,6 @@ static void vgsm_mesim_timer(void *data)
 	}
 }
 
-static void vgsm_mesim_impl_timer(void *data)
-{
-	struct vgsm_mesim *mesim = data;
-
-	vgsm_mesim_debug(mesim, "Implementa timer fired in state %s\n",
-			vgsm_mesim_impl_state_to_text(mesim->impl.state));
-
-	switch(mesim->impl.state) {
-	case VGSM_MESIM_IMPL_STATE_NULL:
-		assert(0);
-	break;
-
-	case VGSM_MESIM_IMPL_STATE_TRYING:
-
-		assert(mesim->impl.sock_fd == -1);
-
-		if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE,
-					VGSM_SIM_ROUTE_EXTERNAL) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SET_SIM_ROUTE, EXTERN)"
-				" failed: %s\n",
-				mesim->name,
-				strerror(errno));
-			return;
-		}
-
-		mesim->impl.simclient_addr.sin_family = AF_INET;
-
-		mesim->impl.sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (mesim->impl.sock_fd < 0) {
-			ast_log(LOG_WARNING,
-				"Unable to create MESIM socket: %s\n",
-				strerror(errno));
-			return;
-		}
-
-		struct protoent *proto;
-		proto = getprotobyname("tcp");
-		if (!proto) {
-			ast_log(LOG_NOTICE,
-				"Cannot find protocol 'tcp': %s\n",
-				strerror(errno));
-			return;
-		}
-
-		int on = 1;
-		if (setsockopt(mesim->impl.sock_fd, proto->p_proto, TCP_NODELAY,
-				(char *)&on, sizeof(on) ) < 0 ) {
-			ast_log(LOG_WARNING,
-				"Failed to set TCP_NODELAY option on"
-				" connection: %s\n",
-				strerror(errno));
-		}
-
-
-		if (connect(mesim->impl.sock_fd,
-				(struct sockaddr *)&mesim->impl.simclient_addr,
-				sizeof(mesim->impl.simclient_addr)) < 0) {
-
-#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
-			{
-			char tmpstr[32];
-			ast_inet_ntoa(tmpstr, sizeof(tmpstr),
-				mesim->impl.simclient_addr.sin_addr);
-			vgsm_mesim_debug(mesim,
-				"Unable to connect MESIM socket to"
-				" %s:%d: %s\n",
-				tmpstr,
-				ntohs(mesim->impl.simclient_addr.sin_port),
-				strerror(errno));
-			}
-#else
-			vgsm_mesim_debug(mesim,
-				"Unable to connect MESIM socket to"
-				" %s:%d: %s\n",
-				ast_inet_ntoa(
-					mesim->impl.simclient_addr.sin_addr),
-				ntohs(mesim->impl.simclient_addr.sin_port),
-				strerror(errno));
-#endif
-			close(mesim->impl.sock_fd);
-			mesim->impl.sock_fd = -1;
-
-			vgsm_mesim_impl_change_state(mesim,
-					VGSM_MESIM_IMPL_STATE_TRYING);
-			vgsm_timer_start_delta(&mesim->impl.timer, 5 * SEC);
-		} else {
-			vgsm_mesim_impl_change_state(mesim,
-					VGSM_MESIM_IMPL_STATE_CONNECTED);
-		}
-
-	break;
-
-	case VGSM_MESIM_IMPL_STATE_CONNECTED:
-	case VGSM_MESIM_IMPL_STATE_ACTIVE:
-	break;
-	}
-}
-
-#if 0
-static void vgsm_mesim_clnt.accept(struct vgsm_mesim *mesim)
-{
-	struct sockaddr_in sin;
-	socklen_t sinlen;
-
-	sinlen = sizeof(sin);
-	mesim->impl.sock_fd = accept(mesim->impl.listen_fd,
-				(struct sockaddr *)&sin, &sinlen);
-	if (mesim->impl.sock_fd < 0) {
-		ast_log(LOG_NOTICE,
-			"Cannot accept incoming connection: %s\n",
-			strerror(errno));
-		return;
-	}
-
-	struct protoent *proto;
-	proto = getprotobyname("tcp");
-	if (!proto) {
-		ast_log(LOG_NOTICE,
-			"Cannot find protocol 'tcp': %s\n",
-			strerror(errno));
-		return;
-	}
-
-	int on = 1;
-	if (setsockopt(mesim->impl.sock_fd, proto->p_proto, TCP_NODELAY,
-			(char *)&on, sizeof(on) ) < 0 ) {
-		ast_log(LOG_WARNING,
-			"Failed to set TCP_NODELAY option on connection: %s\n",
-			strerror(errno));
-	}
-
-	vgsm_mesim_debug(mesim, "Implementa connection from %s\n",
-			ast_inet_ntoa(sin.sin_addr));
-}
-#endif
-
-static void vgsm_mesim_impl_receive(struct vgsm_mesim *mesim)
-{
-	__u8 buf[128];
-	int nread;
-	int max_read = sizeof(buf);
-
-	if(mesim->state == VGSM_MESIM_IMPL_STATE_CONNECTED)
-		max_read = 1;
-
-	nread = read(mesim->impl.sock_fd, buf, max_read);
-	if (nread <= 0) {
-		if (nread < 0) {
-			ast_log(LOG_WARNING, "Error reading from socket: %s\n",
-				strerror(errno));
-		}
-
-		close(mesim->impl.sock_fd);
-		mesim->impl.sock_fd = -1;
-
-		vgsm_mesim_set_removed(mesim);
-		vgsm_mesim_impl_change_state(mesim,
-				VGSM_MESIM_IMPL_STATE_TRYING);
-		vgsm_timer_start_delta(&mesim->impl.timer, 1 * SEC);
-
-		return;
-	}
-
-	switch(mesim->impl.state) {
-	case VGSM_MESIM_IMPL_STATE_NULL:
-	case VGSM_MESIM_IMPL_STATE_TRYING: {
-		vgsm_mesim_debug(mesim,
-				"SIM=>ME DUMPED (%2d): %.*s\n",
-				nread, nread, buf);
-	}
-	break;
-
-	case VGSM_MESIM_IMPL_STATE_CONNECTED: {
-		if (buf[0] == '.') {
-			vgsm_mesim_change_state(mesim,
-				VGSM_MESIM_HOLDER_CHANGING);
-			vgsm_mesim_set_removed(mesim);
-			vgsm_timer_start_delta(&mesim->timer, 6 * SEC);
-
-			vgsm_mesim_impl_change_state(mesim,
-				VGSM_MESIM_IMPL_STATE_ACTIVE);
-
-			if (vgsm_mesim_impl_write_reset_asserted(mesim) < 0) {
-				ast_log(LOG_WARNING,
-					"Error writing '-' to socket: %s\n",
-					strerror(errno));
-			}
-		}
-	}
-	break;
-
-	case VGSM_MESIM_IMPL_STATE_ACTIVE: {
-
-		vgsm_mesim_debug(mesim,
-				"IMPL RX (%2d): %.*s\n", nread, nread, buf);
-
-		__u8 *bufo = alloca(nread / 2);
-		int i;
-		for(i=0; i<nread/2; i++) {
-			bufo[i] = char_to_hexdigit(buf[i*2]) << 4 |
-				char_to_hexdigit(buf[i*2 + 1]);
-		}
-
-		vgsm_mesim_write(mesim, bufo, nread / 2);
-	}
-	break;
-	}
-}
-
 static void vgsm_mesim_timers_updated(struct vgsm_timerset *set)
 {
 	struct vgsm_mesim *mesim = container_of(set, struct vgsm_mesim,
@@ -1202,29 +701,10 @@ static void *vgsm_mesim_thread_main(void *data)
 			timeout_ms);
 
 		npolls = 2;
-
-		if (mesim->proto == VGSM_MESIM_PROTO_LOCAL) {
-		} else if (mesim->proto == VGSM_MESIM_PROTO_CLIENT) {
-/*			polls[2].fd = mesim->impl.listen_fd;
-			polls[2].events = POLLHUP | POLLERR | POLLIN;
-
-			if (mesim->impl.sock_fd != -1) {
-				polls[3].fd = mesim->impl.sock_fd;
-				polls[3].events = POLLHUP | POLLERR | POLLIN;
-				npolls = 4;
-			} else
-				npolls = 3;*/
-		} else if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA) {
-
-			if (mesim->impl.state ==
-					VGSM_MESIM_IMPL_STATE_CONNECTED ||
-			    mesim->impl.state ==
-					VGSM_MESIM_IMPL_STATE_ACTIVE) {
-				polls[2].fd = mesim->impl.sock_fd;
-				polls[2].events = POLLHUP | POLLERR | POLLIN;
-				npolls = 3;
-			}
-		}
+		if (mesim->driver &&
+		    mesim->driver->get_polls)
+			npolls += mesim->driver->get_polls(mesim->driver,
+							&polls[2]);
 
 		int res = poll(polls, npolls, timeout_ms);
 		if (res < 0) {
@@ -1247,12 +727,8 @@ static void *vgsm_mesim_thread_main(void *data)
 
 		if (npolls > 2 && (polls[2].revents & (POLLIN | POLLERR |
 								POLLHUP))) {
-			if (mesim->proto == VGSM_MESIM_PROTO_LOCAL)
-				assert(0);
-			else if (mesim->proto == VGSM_MESIM_PROTO_CLIENT)
-				;//vgsm_mesim_clnt.accept(mesim);
-			else if (mesim->proto == VGSM_MESIM_PROTO_IMPLEMENTA)
-				vgsm_mesim_impl_receive(mesim);
+			if (mesim->driver->receive)
+				mesim->driver->receive(mesim->driver);
 		}
 	}
 
