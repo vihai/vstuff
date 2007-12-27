@@ -891,20 +891,20 @@ err_pipeline_rx_connect:
 	ks_pipeline_put(vgsm_chan->pipeline_rx);
 	vgsm_chan->pipeline_rx = NULL;
 err_pipeline_rx_alloc:
+	ks_node_put(vgsm_chan->node_me);
+	vgsm_chan->node_me = NULL;
+err_me_node_not_found:
+	ks_node_put(vgsm_chan->node_userport);
+	vgsm_chan->node_userport = NULL;
+err_up_node_not_found:
 	ks_conn_remote_topology_unlock(ks_conn);
 err_kstreamer_lock:
-err_get_me_node_id:
+err_get_up_node_id:
 	vgsm_chan->ast_chan->fds[0] = -1;
 	close(vgsm_chan->up_fd);
 	vgsm_chan->up_fd = -1;
 err_open_userport:
-err_get_up_node_id:
-	ks_node_put(vgsm_chan->node_userport);
-	vgsm_chan->node_userport = NULL;
-err_up_node_not_found:
-	ks_node_put(vgsm_chan->node_me);
-	vgsm_chan->node_me = NULL;
-err_me_node_not_found:
+err_get_me_node_id:
 
 	return err;
 }
