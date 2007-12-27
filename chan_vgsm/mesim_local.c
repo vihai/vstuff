@@ -296,8 +296,23 @@ static int vgsm_mesim_local_send(
 
 static int vgsm_mesim_local_receive(struct vgsm_mesim_driver *driver)
 {
-//	struct vgsm_mesim_local *mesim_local =
-//			container_of(driver, struct vgsm_mesim_local, driver);
+	struct vgsm_mesim_local *mesim_local =
+			container_of(driver, struct vgsm_mesim_local, driver);
+	struct vgsm_mesim *mesim = mesim_local->mesim;
+
+	__u8 buf[128];
+	int nread;
+
+	nread = read(mesim_local->fd, buf, sizeof(buf));
+	if (nread < 0) {
+		ast_log(LOG_WARNING,
+			"Error reading from local SIM: %s\n",
+			strerror(errno));
+	}
+
+	vgsm_mesim_debug(mesim,
+			"SIM=>ME DUMPED (%2d): %.*s\n",
+			nread, nread, buf);
 
 	return 0;
 }

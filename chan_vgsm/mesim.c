@@ -727,8 +727,8 @@ static void *vgsm_mesim_thread_main(void *data)
 
 		if (npolls > 2 && (polls[2].revents & (POLLIN | POLLERR |
 								POLLHUP))) {
-			if (mesim->driver->receive)
-				mesim->driver->receive(mesim->driver);
+			assert(mesim->driver->receive);
+			mesim->driver->receive(mesim->driver);
 		}
 	}
 
