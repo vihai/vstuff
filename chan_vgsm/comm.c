@@ -191,6 +191,8 @@ void vgsm_comm_send_message(
 {
 	struct vgsm_comm_message *msg;
 
+	assert(pthread_self() != comm->comm_thread);
+
 	msg = alloca(sizeof(*msg) + len);
 	msg->type = mt;
 	msg->len = len;
@@ -210,7 +212,14 @@ static void vgsm_comm_timers_updated(struct vgsm_timerset *set)
 {
 	struct vgsm_comm *comm = container_of(set, struct vgsm_comm, timerset);
 
-	vgsm_comm_send_message(comm, VGSM_COMM_MSG_REFRESH, NULL, 0);
+	/* If the timers have been updated in the handling thread we are
+	 * already going to recalculate before select so threre is no need
+	 * to send a message to ourselves risking a deadlock if the pipe does
+	 * not have space
+	 */
+
+	if (pthread_self() != comm->comm_thread)
+		vgsm_comm_send_message(comm, VGSM_COMM_MSG_REFRESH, NULL, 0);
 }
 
 static void vgsm_comm_change_state(
@@ -276,22 +285,6 @@ int vgsm_comm_open(struct vgsm_comm *comm, int fd)
 		goto err_pipe;
 	}
 
-	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set pipe to non-blocking: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_fcntl_0;
-	}
-
-	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set pipe to non-blocking: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_fcntl_1;
-	}
-
 	comm->cmd_pipe_read = filedes[0];
 	comm->cmd_pipe_write = filedes[1];
 
@@ -326,8 +319,6 @@ err_pthread_create_completion:
 err_pthread_create_urc:
 	pthread_kill(comm->comm_thread, SIGTERM);
 err_pthread_create_comm:
-err_fcntl_1:
-err_fcntl_0:
 	close(comm->cmd_pipe_read);
 	close(comm->cmd_pipe_write);
 err_pipe:

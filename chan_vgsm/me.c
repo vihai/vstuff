@@ -3887,25 +3887,6 @@ static int vgsm_me_open(
 		goto err_me_flush;
 	}
 
-/*	int flags = fcntl(me->me_fd, F_GETFL, O_NONBLOCK);
-	if (flags < 0) {
-		vgsm_me_failed_text(me,
-			"Error getting file flags:"
-			" fcntl(F_GETFL): %s",
-			strerror(errno));
-
-		goto err_fcntl_getfl;
-	}
-
-	if (fcntl(me->me_fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
-		vgsm_me_failed_text(me,
-			"Error setting file flags:"
-			" fcntl(F_SETFL): %s",
-			strerror(errno));
-
-		goto err_fcntl_setfl;
-	}*/
-
 	struct termios newtio;
 	memset(&newtio, 0, sizeof(newtio));
 
@@ -4580,8 +4561,8 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 		ast_cli(fd, "  Route to sim: %s\n", mc->mesim.sim_holder->name);
 */
 
-
-	if (me->status != VGSM_ME_STATUS_READY)
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_OFFLINE)
 		goto out;
 
 	/* Avoid holding a lock during long term operations */
@@ -4768,7 +4749,8 @@ static int vgsm_me_show_forwarding(int fd, struct vgsm_me *me)
 {
 	ast_mutex_lock(&me->lock);
 
-	if (me->status != VGSM_ME_STATUS_READY) {
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_OFFLINE) {
 		ast_mutex_unlock(&me->lock);
 
 		ast_cli(fd, "ME '%s' is not ready\n", me->name);
@@ -4847,7 +4829,8 @@ static int vgsm_me_show_callwaiting(int fd, struct vgsm_me *me)
 {
 	ast_mutex_lock(&me->lock);
 
-	if (me->status != VGSM_ME_STATUS_READY) {
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_OFFLINE) {
 		ast_mutex_unlock(&me->lock);
 
 		ast_cli(fd, "ME '%s' is not ready\n", me->name);
@@ -4892,7 +4875,8 @@ static int vgsm_me_show_sim(int fd, struct vgsm_me *me)
 
 	if (me->status != VGSM_ME_STATUS_READY &&
 	    me->status != VGSM_ME_STATUS_WAITING_SIM &&
-	    me->status != VGSM_ME_STATUS_WAITING_PIN) {
+	    me->status != VGSM_ME_STATUS_WAITING_PIN &&
+	    me->status != VGSM_ME_STATUS_OFFLINE) {
 		ast_cli(fd, "ME '%s' is not ready\n", me->name);
 		goto out;
 	}
@@ -5106,7 +5090,8 @@ static int vgsm_me_show_network(int fd, struct vgsm_me *me)
 
 	struct vgsm_me_config *mc = me->current_config;
 
-	if (me->status != VGSM_ME_STATUS_READY) {
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_OFFLINE) {
 		ast_cli(fd, "ME '%s' is not ready\n", me->name);
 		goto out;
 	}
@@ -5253,7 +5238,8 @@ static int vgsm_me_show_statistics(int fd, struct vgsm_me *me)
 	struct vgsm_counter *counter;
 
 	ast_mutex_lock(&me->lock);
-	if (me->status != VGSM_ME_STATUS_READY) {
+	if (me->status != VGSM_ME_STATUS_READY &&
+	    me->status != VGSM_ME_STATUS_OFFLINE) {
 		ast_mutex_unlock(&me->lock);
 
 		ast_cli(fd, "ME '%s' is not ready\n", me->name);
@@ -5450,7 +5436,8 @@ static int vgsm_me_show_summary(int fd, struct vgsm_me *me)
 		me->name,
 		vgsm_me_status_to_text(me->status));
 
-	if (me->status == VGSM_ME_STATUS_READY) {
+	if (me->status == VGSM_ME_STATUS_READY ||
+	    me->status == VGSM_ME_STATUS_OFFLINE) {
 		ast_cli(fd, " %-17s",
 			vgsm_net_status_to_text(me->net.status));
 
@@ -7409,25 +7396,6 @@ static struct ast_cli_entry vgsm_me_no_debug =
 };
 
 /*---------------------------------------------------------------------------*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 int vgsm_me_load(void)
 {

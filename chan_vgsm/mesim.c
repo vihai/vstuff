@@ -145,6 +145,8 @@ void vgsm_mesim_send_message(
 {
 	struct vgsm_mesim_message *msg;
 
+	assert(pthread_self() != mesim->comm_thread);
+
 	msg = alloca(sizeof(*msg) + len);
 	msg->type = mt;
 	msg->len = len;
@@ -201,28 +203,11 @@ int vgsm_mesim_open(struct vgsm_mesim *mesim, int fd)
 		goto err_pipe;
 	}
 
-	if (fcntl(filedes[0], F_SETFL, O_NONBLOCK) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set pipe to non-blocking: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_fcntl_0;
-	}
-
-	if (fcntl(filedes[1], F_SETFL, O_NONBLOCK) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set pipe to non-blocking: %s\n",
-			strerror(errno));
-		err = -errno;
-		goto err_fcntl_1;
-	}
-
 	mesim->cmd_pipe_read = filedes[0];
 	mesim->cmd_pipe_write = filedes[1];
 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-//	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 	err = ast_pthread_create(&mesim->comm_thread, &attr,
@@ -246,8 +231,6 @@ int vgsm_mesim_open(struct vgsm_mesim *mesim, int fd)
 err_pthread_create_modem:
 	pthread_kill(mesim->comm_thread, SIGURG);
 err_pthread_create_comm:
-err_fcntl_1:
-err_fcntl_0:
 	close(mesim->cmd_pipe_read);
 	close(mesim->cmd_pipe_write);
 err_pipe:
@@ -667,7 +650,14 @@ static void vgsm_mesim_timers_updated(struct vgsm_timerset *set)
 	struct vgsm_mesim *mesim = container_of(set, struct vgsm_mesim,
 								timerset);
 
-	vgsm_mesim_send_message(mesim, VGSM_MESIM_MSG_REFRESH, NULL, 0);
+	/* If the timers have been updated in the handling thread we are
+	 * already going to recalculate before select so threre is no need
+	 * to send a message to ourselves risking a deadlock if the pipe does
+	 * not have space
+	 */
+
+	if (pthread_self() != mesim->comm_thread)
+		vgsm_mesim_send_message(mesim, VGSM_MESIM_MSG_REFRESH, NULL, 0);
 }
 
 static void *vgsm_mesim_thread_main(void *data)
