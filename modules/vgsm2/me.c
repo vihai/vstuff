@@ -806,9 +806,10 @@ static int vgsm_me_ioctl_get_sim_route(
 static int vgsm_me_ioctl_set_sim_route(
 	struct vgsm_me *me,
 	unsigned int cmd,
-	unsigned long arg)
+	unsigned long argul)
 {
 	struct vgsm_card *card = me->card;
+	int arg = (int)argul;
 
 	if (arg == VGSM_SIM_ROUTE_EXTERNAL)
 		me->route_to_sim = 0xf;
