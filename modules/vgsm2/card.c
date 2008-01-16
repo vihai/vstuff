@@ -348,6 +348,14 @@ static int vgsm_card_ioctl_read_serial(
 	return put_user(card->serial_number, (int __user *)arg);
 }
 
+static int vgsm_card_ioctl_get_id(
+	struct vgsm_card *card,
+	unsigned int cmd,
+	unsigned long arg)
+{
+	return put_user(card->id, (int __user *)arg);
+}
+
 int vgsm_card_ioctl(
 	struct vgsm_card *card,
 	unsigned int cmd,
@@ -376,6 +384,10 @@ int vgsm_card_ioctl(
 
 	case VGSM_IOC_READ_SERIAL:
 		return vgsm_card_ioctl_read_serial(card, cmd, arg);
+	break;
+
+	case VGSM_IOC_CARD_GET_ID:
+		return vgsm_card_ioctl_get_id(card, cmd, arg);
 	break;
 	}
 

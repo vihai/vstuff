@@ -18,6 +18,22 @@
 #include "timer.h"
 #include "util.h"
 
+enum vgsm_mesim_local_type
+{
+	VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT,
+	VGSM_MESIM_LOCAL_TYPE_VGSM,
+	VGSM_MESIM_LOCAL_TYPE_USB,
+};
+
+enum vgsm_mesim_local_state
+{
+	VGSM_MESIM_LOCAL_STATE_NULL,
+	VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED,
+	VGSM_MESIM_LOCAL_STATE_RESET,
+	VGSM_MESIM_LOCAL_STATE_READING_ATR,
+	VGSM_MESIM_LOCAL_STATE_READY,
+};
+
 struct vgsm_mesim;
 
 struct vgsm_mesim_local
@@ -29,6 +45,19 @@ struct vgsm_mesim_local
 	char device_filename[PATH_MAX];
 	int fd;
 	int sim_id;
+	int card_id;
+
+	enum vgsm_mesim_local_type type;
+
+	enum vgsm_mesim_local_state state;
+
+	__u8 out_buf[64];
+	int out_buf_len;
+	__u8 atr_buf[64];
+	int atr_buf_len;
+
+	pthread_t modem_thread;
+	BOOL modem_thread_has_to_exit;
 };
 
 struct vgsm_mesim_driver *vgsm_mesim_local_create(

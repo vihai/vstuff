@@ -54,6 +54,8 @@ enum vgsm_mesim_message_type
 	VGSM_MESIM_MSG_REFRESH,
 	VGSM_MESIM_MSG_RESET_ASSERTED,
 	VGSM_MESIM_MSG_RESET_REMOVED,
+	VGSM_MESIM_MSG_HOLDER_REMOVED,
+	VGSM_MESIM_MSG_HOLDER_INSERTED,
 	VGSM_MESIM_MSG_SET_MODE,
 	VGSM_MESIM_MSG_ME_POWERING_ON,
 	VGSM_MESIM_MSG_ME_POWERED_ON,
@@ -96,6 +98,8 @@ struct vgsm_mesim_driver
 				struct vgsm_mesim_message *msg);
 	void (*reset_asserted)(struct vgsm_mesim_driver *driver);
 	void (*reset_removed)(struct vgsm_mesim_driver *driver);
+	void (*holder_removed)(struct vgsm_mesim_driver *driver);
+	void (*holder_inserted)(struct vgsm_mesim_driver *driver);
 	int (*send)(struct vgsm_mesim_driver *driver, void *buf, int len);
 	int (*receive)(struct vgsm_mesim_driver *driver);
 	int (*get_polls)(struct vgsm_mesim_driver *driver,
@@ -168,7 +172,8 @@ void vgsm_mesim_send_message(
 
 void vgsm_mesim_change_state(
 	struct vgsm_mesim *mesim,
-	enum vgsm_mesim_state newstate);
+	enum vgsm_mesim_state newstate,
+	longtime_t timeout);
 
 void vgsm_mesim_set_inserted(struct vgsm_mesim *mesim);
 void vgsm_mesim_set_removed(struct vgsm_mesim *mesim);

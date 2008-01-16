@@ -181,7 +181,7 @@ static void vgsm_mesim_clnt_activate(struct vgsm_mesim_driver *driver)
 		return;
 	}
 
-	vgsm_mesim_change_state(mesim, VGSM_MESIM_HOLDER_REMOVED);
+	vgsm_mesim_change_state(mesim, VGSM_MESIM_HOLDER_REMOVED, -1);
 }
 
 static void vgsm_mesim_clnt_set_mode(

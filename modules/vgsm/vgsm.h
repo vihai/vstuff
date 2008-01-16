@@ -33,6 +33,8 @@
 //#define VGSM_IOC_FW_FLASH_VERSION	_IOR(0xd1, 17, unsigned int)
 //#define VGSM_IOC_FW_UPGRADE_STAT	_IOR(0xd1, 18, unsigned int)
 //#define VGSM_IOC_GET_SIM_ROUTE	_IOR(0xd1, 19, unsigned int)
+//#define VGSM_IOC_SIM_GET_CARD_ID	_IOR(0xd1, 20, unsigned int)
+//#define VGSM_IOC_CARD_GET_ID		_IOR(0xd1, 21, unsigned int)
 
 struct vgsm_fw_header
 {

@@ -281,6 +281,8 @@ struct vgsm_me
 		__u8 ver_ser;
 
 		__u32 serial;
+
+		int id;
 	} card;
 
 	struct {

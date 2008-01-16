@@ -65,7 +65,8 @@ noinst_HEADERS =\
 	quotprint.h		\
 	timer.h			\
 	util.h			\
-	rwlock_compat.h
+	rwlock_compat.h		\
+	atr.h
 
 chan_vgsm_la_CPPFLAGS=\
 	-DAST_MODULE=\"chan_vgsm\"		\

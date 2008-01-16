@@ -3085,6 +3085,7 @@ static int vgsm_me_pin_check_and_input(
 	int res = 0;
 
 	/* Be careful to not consume all the available attempts */
+retry_spic:
 	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SPIC");
 	err = vgsm_req_status(req);
 	if (err == CME_ERROR(10)) {
@@ -3093,6 +3094,10 @@ static int vgsm_me_pin_check_and_input(
 				"SIM not present");
 		vgsm_req_put(req);
 		goto err_spic;
+	} else if (err == CME_ERROR(262)) {
+		vgsm_req_put(req);
+		sleep(1);
+		goto retry_spic;
 	} else if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
 		vgsm_req_put(req);
@@ -3975,6 +3980,13 @@ static int vgsm_me_open(
 				me->name);
 		}
 
+		if (ioctl(me->me_fd, VGSM_IOC_CARD_GET_ID,
+					&me->card.id) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: cannot read card's ID\n",
+				me->name);
+		}
+
 		vgsm_mesim_create(&me->mesim, me);
 
 		me->mesim_fd = open(mc->mesim_device_filename,
@@ -3999,7 +4011,8 @@ static int vgsm_me_open(
 		struct termios newtio;
 		memset(&newtio, 0, sizeof(newtio));
 
-		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD | PARENB | HUPCL;
+		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD |
+				 PARENB | HUPCL | CSTOPB;
 		newtio.c_iflag = IGNBRK | IGNPAR;
 		newtio.c_oflag = 0;
 		newtio.c_lflag = 0;

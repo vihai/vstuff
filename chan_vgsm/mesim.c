@@ -97,6 +97,10 @@ const char *vgsm_mesim_message_type_to_text(
 		return "RESET ASSERTED";
 	case VGSM_MESIM_MSG_RESET_REMOVED:
 		return "RESET REMOVED";
+	case VGSM_MESIM_MSG_HOLDER_REMOVED:
+		return "HOLDER REMOVED";
+	case VGSM_MESIM_MSG_HOLDER_INSERTED:
+		return "HOLDER INSERTED";
 	case VGSM_MESIM_MSG_SET_MODE:
 		return "SET_MODE";
 	case VGSM_MESIM_MSG_ME_POWERING_ON:
@@ -227,9 +231,16 @@ int vgsm_mesim_open(struct vgsm_mesim *mesim, int fd)
 
 	return 0;
 
-	pthread_kill(mesim->modem_thread, SIGURG);
+	pthread_kill(mesim->modem_thread, SIGTERM);
+	pthread_join(mesim->modem_thread, NULL);
 err_pthread_create_modem:
-	pthread_kill(mesim->comm_thread, SIGURG);
+	vgsm_mesim_send_message(mesim, VGSM_MESIM_MSG_CLOSE, NULL, 0);
+
+	ast_mutex_lock(&mesim->state_lock);
+	while(mesim->state != VGSM_MESIM_CLOSED) {
+		ast_cond_wait(&mesim->state_cond, &mesim->state_lock);
+	}
+	ast_mutex_unlock(&mesim->state_lock);
 err_pthread_create_comm:
 	close(mesim->cmd_pipe_read);
 	close(mesim->cmd_pipe_write);
@@ -240,7 +251,8 @@ err_pipe:
 
 void vgsm_mesim_change_state(
 	struct vgsm_mesim *mesim,
-	enum vgsm_mesim_state newstate)
+	enum vgsm_mesim_state newstate,
+	longtime_t timeout)
 {
 	vgsm_mesim_debug(mesim,
 		"State change from %s to %s\n",
@@ -252,6 +264,12 @@ void vgsm_mesim_change_state(
 	ast_mutex_unlock(&mesim->state_lock);
 
 	ast_cond_broadcast(&mesim->state_cond);
+
+	if (timeout >= 0)
+		vgsm_timer_start_delta(&mesim->timer, timeout);
+	else
+		vgsm_timer_stop(&mesim->timer);
+
 }
 
 #if 0
@@ -410,7 +428,7 @@ static void vgsm_mesim_receive_message_close(
 	struct vgsm_mesim_message *msg)
 {
 	vgsm_mesim_set_removed(mesim);
-	vgsm_mesim_change_state(mesim, VGSM_MESIM_CLOSING);
+	vgsm_mesim_change_state(mesim, VGSM_MESIM_CLOSING, -1);
 }
 
 static void vgsm_mesim_receive_message_set_mode(
@@ -439,8 +457,8 @@ static void vgsm_mesim_receive_message_set_mode(
 	case VGSM_MESIM_READY:
 		vgsm_mesim_deactivate(mesim);
 		vgsm_mesim_set_mode(mesim, msg);
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_SETTING_MODE);
-		vgsm_timer_start_delta(&mesim->timer, 3 * SEC);
+		vgsm_mesim_change_state(mesim, VGSM_MESIM_SETTING_MODE,
+								3 * SEC);
 	break;
 	}
 }
@@ -497,7 +515,7 @@ static void vgsm_mesim_receive_message_reset_asserted(
 	break;
 
 	case VGSM_MESIM_READY:
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_RESET);
+		vgsm_mesim_change_state(mesim, VGSM_MESIM_RESET, -1);
 
 		if (mesim->driver->reset_asserted)
 			mesim->driver->reset_asserted(mesim->driver);
@@ -536,12 +554,75 @@ static void vgsm_mesim_receive_message_reset_removed(
 			return;
 		}*/
 
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_READY);
+		vgsm_mesim_change_state(mesim, VGSM_MESIM_READY, -1);
 
 		if (mesim->driver->reset_removed)
 			mesim->driver->reset_removed(mesim->driver);
 	break;
 	}
+}
+
+static void vgsm_mesim_receive_message_holder_removed(
+	struct vgsm_mesim *mesim,
+	struct vgsm_mesim_message *msg)
+{
+	switch(mesim->state) {
+	case VGSM_MESIM_CLOSED:
+	case VGSM_MESIM_CLOSING:
+	case VGSM_MESIM_DIRECTLY_ROUTED:
+	case VGSM_MESIM_UNCONFIGURED:
+	case VGSM_MESIM_SETTING_MODE:
+		assert(0);
+	break;
+
+	case VGSM_MESIM_HOLDER_REMOVED:
+	break;
+
+	case VGSM_MESIM_HOLDER_CHANGING:
+	case VGSM_MESIM_SIM_MISSING:
+	case VGSM_MESIM_READY:
+	case VGSM_MESIM_RESET:
+		vgsm_mesim_change_state(mesim, VGSM_MESIM_HOLDER_REMOVED, -1);
+		vgsm_mesim_set_removed(mesim);
+	break;
+	}
+
+	if (mesim->driver->holder_removed)
+		mesim->driver->holder_removed(mesim->driver);
+}
+
+static void vgsm_mesim_receive_message_holder_inserted(
+	struct vgsm_mesim *mesim,
+	struct vgsm_mesim_message *msg)
+{
+	switch(mesim->state) {
+	case VGSM_MESIM_CLOSED:
+	case VGSM_MESIM_CLOSING:
+	case VGSM_MESIM_UNCONFIGURED:
+	case VGSM_MESIM_SETTING_MODE:
+	case VGSM_MESIM_DIRECTLY_ROUTED:
+	case VGSM_MESIM_HOLDER_CHANGING:
+	case VGSM_MESIM_SIM_MISSING:
+	case VGSM_MESIM_READY:
+	case VGSM_MESIM_RESET:
+		assert(0);
+	break;
+
+	case VGSM_MESIM_HOLDER_REMOVED:
+		if (mesim->is_reset) {
+			vgsm_mesim_change_state(mesim, VGSM_MESIM_RESET, -1);
+		} else {
+			vgsm_mesim_change_state(mesim,
+				VGSM_MESIM_HOLDER_CHANGING, 3 * SEC);
+			vgsm_mesim_set_removed(mesim);
+		}
+
+		vgsm_mesim_set_inserted(mesim);
+	break;
+	}
+
+	if (mesim->driver->holder_inserted)
+		mesim->driver->holder_inserted(mesim->driver);
 }
 
 static BOOL vgsm_mesim_receive_message(struct vgsm_mesim *mesim)
@@ -606,6 +687,14 @@ static BOOL vgsm_mesim_receive_message(struct vgsm_mesim *mesim)
 	case VGSM_MESIM_MSG_RESET_REMOVED:
 		vgsm_mesim_receive_message_reset_removed(mesim, msg);
 	break;
+
+	case VGSM_MESIM_MSG_HOLDER_REMOVED:
+		vgsm_mesim_receive_message_holder_removed(mesim, msg);
+	break;
+
+	case VGSM_MESIM_MSG_HOLDER_INSERTED:
+		vgsm_mesim_receive_message_holder_inserted(mesim, msg);
+	break;
 	}
 
 	return FALSE;
@@ -632,9 +721,9 @@ static void vgsm_mesim_timer(void *data)
 
 	case VGSM_MESIM_HOLDER_CHANGING:
 		if (mesim->is_reset)
-			vgsm_mesim_change_state(mesim, VGSM_MESIM_RESET);
+			vgsm_mesim_change_state(mesim, VGSM_MESIM_RESET, -1);
 		else
-			vgsm_mesim_change_state(mesim, VGSM_MESIM_READY);
+			vgsm_mesim_change_state(mesim, VGSM_MESIM_READY, -1);
 
 		vgsm_mesim_set_inserted(mesim);
 	break;
@@ -673,7 +762,7 @@ static void *vgsm_mesim_thread_main(void *data)
 	polls[1].fd = mesim->fd;
 	polls[1].events = POLLHUP | POLLERR | POLLIN;
 
-	vgsm_mesim_change_state(mesim, VGSM_MESIM_UNCONFIGURED);
+	vgsm_mesim_change_state(mesim, VGSM_MESIM_UNCONFIGURED, -1);
 
 	for(;;) {
 
@@ -740,12 +829,12 @@ static void *vgsm_mesim_thread_main(void *data)
 	close(mesim->cmd_pipe_read);
 	close(mesim->cmd_pipe_write);
 
-	vgsm_mesim_change_state(mesim, VGSM_MESIM_CLOSED);
+	vgsm_mesim_change_state(mesim, VGSM_MESIM_CLOSED, -1);
 
 	return NULL;
 }
 
-void vgsm_mesim_sigterm_handler(int sig)
+static void vgsm_mesim_sigterm_handler(int sig)
 {
 }
 
@@ -759,7 +848,7 @@ static void *vgsm_mesim_modem_thread_main(void *data)
 	};
 
 	if (sigaction(SIGTERM, &sigterm, NULL) < 0) {
-		ast_log(LOG_ERROR, "sigaction()\n");
+		ast_log(LOG_ERROR, "sigaction(): %s\n", strerror(errno));
 		return NULL;
 	}
 
@@ -767,18 +856,21 @@ static void *vgsm_mesim_modem_thread_main(void *data)
 	sigemptyset(&sigs);
 	sigaddset(&sigs, SIGTERM);
 	if (pthread_sigmask(SIG_UNBLOCK, &sigs, NULL)) {
-		ast_log(LOG_ERROR, "pthread_sigmask()\n");
+		ast_log(LOG_ERROR, "pthread_sigmask(): %s\n",
+					strerror(errno));
 		return NULL;
 	}
 
 	if (ioctl(mesim->fd, TIOCGICOUNT, &mesim->icount) < 0) {
-		ast_log(LOG_ERROR, "ioctl(TIOCGICOUNT)\n");
+		ast_log(LOG_ERROR, "ioctl(TIOCGICOUNT): %s\n",
+					strerror(errno));
 		return NULL;
 	}
 
 	int status;
 	if (ioctl(mesim->fd, TIOCMGET, &status) < 0) {
-		ast_log(LOG_ERROR, "ioctl(TIOCMGET)\n");
+		ast_log(LOG_ERROR, "ioctl(TIOCMGET): %s\n",
+					strerror(errno));
 		return NULL;
 	}
 
@@ -787,7 +879,7 @@ static void *vgsm_mesim_modem_thread_main(void *data)
 
 	struct serial_icounter_struct icount;
 	if (ioctl(mesim->fd, TIOCGICOUNT, &icount) < 0) {
-		ast_log(LOG_ERROR, "ioctl(TIOCGICOUNT)\n");
+		ast_log(LOG_ERROR, "ioctl(TIOCGICOUNT): %s\n", strerror(errno));
 		return NULL;
 	}
 
@@ -797,7 +889,8 @@ static void *vgsm_mesim_modem_thread_main(void *data)
 	for(;;) {
 		if (ioctl(mesim->fd, TIOCMIWAIT, TIOCM_CTS | TIOCM_DSR) < 0) {
 			if (errno != EINTR) {
-				ast_log(LOG_ERROR, "ioctl(TIOCMIWAIT)\n");
+				ast_log(LOG_ERROR, "ioctl(TIOCMIWAIT): %s\n",
+							strerror(errno));
 				break;
 			}
 		}
@@ -806,12 +899,14 @@ static void *vgsm_mesim_modem_thread_main(void *data)
 			break;
 
 		if (ioctl(mesim->fd, TIOCGICOUNT, &icount) < 0) {
-			ast_log(LOG_ERROR, "ioctl(TIOCGICOUNT)\n");
+			ast_log(LOG_ERROR, "ioctl(TIOCGICOUNT): %s\n",
+						strerror(errno));
 			break;
 		}
 
 		if (ioctl(mesim->fd, TIOCMGET, &status) < 0) {
-			ast_log(LOG_ERROR, "ioctl(TIOCMGET)\n");
+			ast_log(LOG_ERROR, "ioctl(TIOCMGET): %s\n",
+						strerror(errno));
 			break;
 		}
 

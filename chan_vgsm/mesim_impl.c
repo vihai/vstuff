@@ -167,7 +167,7 @@ static void vgsm_mesim_impl_deactivate(struct vgsm_mesim_driver *driver)
 	}
 
 	vgsm_mesim_impl_change_state(mesim_impl, VGSM_MESIM_IMPL_STATE_NULL);
-	vgsm_timer_stop_delta(&mesim_impl->timer);
+	vgsm_timer_stop(&mesim_impl->timer);
 }
 
 static void vgsm_mesim_impl_activate(struct vgsm_mesim_driver *driver)
@@ -175,7 +175,8 @@ static void vgsm_mesim_impl_activate(struct vgsm_mesim_driver *driver)
 	struct vgsm_mesim_impl *mesim_impl =
 			container_of(driver, struct vgsm_mesim_impl, driver);
 
-	vgsm_mesim_change_state(mesim_impl->mesim, VGSM_MESIM_HOLDER_REMOVED);
+	vgsm_mesim_change_state(mesim_impl->mesim,
+				VGSM_MESIM_HOLDER_REMOVED, -1);
 
 	vgsm_mesim_impl_change_state(mesim_impl, VGSM_MESIM_IMPL_STATE_TRYING);
 	vgsm_timer_start_delta(&mesim_impl->timer, 1 * SEC);
@@ -388,9 +389,8 @@ static int vgsm_mesim_impl_receive(struct vgsm_mesim_driver *driver)
 	case VGSM_MESIM_IMPL_STATE_CONNECTED: {
 		if (buf[0] == '.') {
 			vgsm_mesim_change_state(mesim,
-				VGSM_MESIM_HOLDER_CHANGING);
+				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
 			vgsm_mesim_set_removed(mesim);
-			vgsm_timer_start_delta(&mesim->timer, 6 * SEC);
 
 			vgsm_mesim_impl_change_state(mesim_impl,
 				VGSM_MESIM_IMPL_STATE_ACTIVE);

@@ -875,6 +875,7 @@ static int vgsm_me_ioctl(
 
 	case VGSM_IOC_FW_VERSION: /* Shortcut */
 	case VGSM_IOC_READ_SERIAL:
+	case VGSM_IOC_CARD_GET_ID:
 		return vgsm_card_ioctl(me->card, cmd, arg);
 	}
 
