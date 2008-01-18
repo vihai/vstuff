@@ -13,6 +13,7 @@
 #ifndef _GSM_CHARSET_H
 #define _GSM_CHARSET_H
 
+#include <wchar.h>
 #include <linux/types.h>
 
 wchar_t vgsm_gsm_to_wc(char gsm);
