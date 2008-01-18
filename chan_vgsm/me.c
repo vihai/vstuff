@@ -3855,7 +3855,7 @@ static int vgsm_me_open(
 	mc = vgsm_me_config_get(me->current_config);
 	ast_mutex_unlock(&me->lock);
 
-	me->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
+	me->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY);
 	if (me->me_fd < 0) {
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
@@ -3990,7 +3990,7 @@ static int vgsm_me_open(
 		vgsm_mesim_create(&me->mesim, me);
 
 		me->mesim_fd = open(mc->mesim_device_filename,
-					O_RDWR | O_NOCTTY | O_NDELAY);
+						O_RDWR | O_NOCTTY);
 		if (me->mesim_fd < 0) {
 			char tmpstr[64];
 			snprintf(tmpstr, sizeof(tmpstr),
