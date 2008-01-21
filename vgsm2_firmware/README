@@ -17,6 +17,16 @@ below.
 
 Changelog:
 
+------ 2.8.2 ------
+
+- Allow controlling the SIM's VCC through the DTR line. Some SIM does not get
+  reset properly if the proper power-up sequence is not followed.
+
+------ 2.8.1 ------
+
+- Ignore pulled up lines when the ME is powered off, otherwise spurious IRQs
+  may be generated up to the point to severy slow down or hang the system.
+
 ------ 2.8.0 ------
 
 - INTA# and SERR# were incorrectly output on the bus as two-state outputs,
