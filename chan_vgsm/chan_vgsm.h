@@ -64,7 +64,7 @@ struct vgsm_chan {
 	char calling_number[21];
 
 	struct ast_frame frame_out;
-	__u8 frame_out_buf[512];
+	__u8 frame_out_buf[AST_FRIENDLY_OFFSET + 512];
 
 	struct ast_dsp *dsp;
 
