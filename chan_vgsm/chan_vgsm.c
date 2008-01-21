@@ -932,9 +932,9 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
-		vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
-		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
-		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
+		(vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH) |
+		(vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0) |
+		(vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0));
 
 	struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 
@@ -1051,9 +1051,9 @@ static int vgsm_call(
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
-		vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
-		vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
-		vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);
+		(vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH) |
+		(vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0) |
+		(vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0));
 
 	me->call_present = FALSE;
 
@@ -1297,7 +1297,7 @@ static int vgsm_send_digit(
 
 	/* VTS takes duration in 1/100 sec */
 	_vgsm_req_put(vgsm_req_make(
-		&me->comm, 2 * SEC, "AT+VTS=%c,%d", digit, duration / 100));
+		&me->comm, 2 * SEC, "AT+VTS=%c,%u", digit, duration / 100));
 
 	return 0;
 }
@@ -1557,13 +1557,9 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	frame->datalen = nread;
 	frame->data = vgsm_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
 
-	struct ast_frame *f2;
-	f2 = ast_dsp_process(ast_chan, vgsm_chan->dsp, frame);
+	frame = ast_dsp_process(ast_chan, vgsm_chan->dsp, frame);
 
-//	if (f2 && f2->frametype != AST_FRAME_DTMF)
-		return f2;
-//	else
-//		return frame;
+	return frame;
 }
 
 static int vgsm_write(
