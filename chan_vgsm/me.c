@@ -639,6 +639,24 @@ static const char *vgsm_qual_to_text(int ber)
 	}
 }
 
+static const char *vgsm_codec_to_text(enum vgsm_codec codec)
+{
+	switch(codec) {
+	case VGSM_CODEC_GSM_EFR:
+		return "GSM-EFR";
+	case VGSM_CODEC_GSM_FR:
+		return "GSM-FR";
+	case VGSM_CODEC_GSM_HR:
+		return "GSM-HR";
+	case VGSM_CODEC_AMR_HR:
+		return "AMR-HR";
+	case VGSM_CODEC_AMR_FR:
+		return "AMR-FR";
+	}
+
+	return "*INVALID*";
+}
+
 struct vgsm_me_config *vgsm_me_config_alloc(void)
 {
 	struct vgsm_me_config *me_config;
@@ -3855,7 +3873,9 @@ static int vgsm_me_open(
 	mc = vgsm_me_config_get(me->current_config);
 	ast_mutex_unlock(&me->lock);
 
-	me->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY);
+	me->comm.name = me->name;
+
+	me->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (me->me_fd < 0) {
 		char tmpstr[64];
 		snprintf(tmpstr, sizeof(tmpstr),
@@ -3871,7 +3891,18 @@ static int vgsm_me_open(
 		goto err_me_open;
 	}
 
-	me->comm.name = me->name;
+	int flags;
+	flags = fcntl(me->me_fd, F_GETFL, 0);
+
+	flags &= ~O_NONBLOCK;
+
+	if (fcntl(me->me_fd, F_SETFL, flags) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set ME fd to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_me_fcntl;
+	}
 
 	if (ioctl(me->me_fd, VGSM_IOC_GET_INTERFACE_VERSION,
 			&me->interface_version) < 0) {
@@ -3989,8 +4020,10 @@ static int vgsm_me_open(
 
 		vgsm_mesim_create(&me->mesim, me);
 
+		me->mesim.name = me->name;
+
 		me->mesim_fd = open(mc->mesim_device_filename,
-						O_RDWR | O_NOCTTY);
+						O_RDWR | O_NOCTTY | O_NDELAY);
 		if (me->mesim_fd < 0) {
 			char tmpstr[64];
 			snprintf(tmpstr, sizeof(tmpstr),
@@ -4006,7 +4039,18 @@ static int vgsm_me_open(
 			goto err_mesim_open;
 		}
 
-		me->mesim.name = me->name;
+		int flags;
+		flags = fcntl(me->mesim_fd, F_GETFL, 0);
+
+		flags &= ~O_NONBLOCK;
+
+		if (fcntl(me->mesim_fd, F_SETFL, flags) < 0) {
+			ast_log(LOG_ERROR,
+				"Cannot set MESIM fd to non-blocking: %s\n",
+				strerror(errno));
+			err = -errno;
+			goto err_mesim_fcntl;
+		}
 
 		struct termios newtio;
 		memset(&newtio, 0, sizeof(newtio));
@@ -4167,12 +4211,14 @@ static int vgsm_me_open(
 err_comm_open:
 err_ioctl_power_get:
 err_mesim_tcsetattr:
+err_mesim_fcntl:
 	vgsm_mesim_close(&me->mesim);
 	close(me->mesim_fd);
 	me->mesim_fd = -1;
 err_mesim_open:
 err_tcsetattr:
 err_me_flush:
+err_me_fcntl:
 	close(me->me_fd);
 	me->me_fd = -1;
 err_me_open:
@@ -4479,7 +4525,9 @@ void vgsm_me_shutdown_all(void)
 
 			ast_mutex_lock(&me->lock);
 			if (me->current_config->poweroff_on_exit &&
-			    me->status != VGSM_ME_STATUS_OFF)
+			    me->status != VGSM_ME_STATUS_OFF &&
+			    me->status != VGSM_ME_STATUS_CLOSED &&
+			    me->status != VGSM_ME_STATUS_UNCONFIGURED)
 				all_off = FALSE;
 
 			ast_mutex_unlock(&me->lock);
@@ -4556,6 +4604,31 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 		mc->context,
 		mc->set_clock ? "YES" : "NO",
 		mc->poweroff_on_exit ? "YES" : "NO");
+
+	ast_cli(fd,
+		"  SMS sender domain: %s\n"
+		"  SMS recipient address: %s\n"
+		"\n"
+		"  DTMF quelch: %s\n"
+		"  DTMF mutemax: %s\n"
+		"  DTMF relax: %s\n"
+		"\n"
+		"  AMR enabled: %s\n"
+		"  GSM-HR enabled: %s\n"
+		"  GSM preferred CODEC: %s\n"
+		"\n"
+		"  Jitter buffer low-mark: %d\n"
+		"  Jitter buffer high-mark: %d\n",
+		mc->sms_sender_domain,
+		mc->sms_recipient_address,
+		mc->dtmf_quelch ? "YES" : "NO",
+		mc->dtmf_mutemax ? "YES" : "NO",
+		mc->dtmf_relax ? "YES" : "NO",
+		mc->amr_enabled ? "YES" : "NO",
+		mc->gsm_hr_enabled ? "YES" : "NO",
+		vgsm_codec_to_text(mc->gsm_preferred),
+		mc->jitbuf_low,
+		mc->jitbuf_high);
 
 	if (me->interface_version == 1) {
 		ast_cli(fd,
