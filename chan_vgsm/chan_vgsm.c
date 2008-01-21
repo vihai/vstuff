@@ -1466,6 +1466,8 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	frame->mallocd = 0;
 	frame->delivery.tv_sec = 0;
 	frame->delivery.tv_usec = 0;
+	frame->offset = AST_FRIENDLY_OFFSET;
+	frame->src = "vgsm";
 
 	if (vgsm_chan->up_fd < 0) {
 		frame->frametype = AST_FRAME_NULL;
@@ -1473,7 +1475,6 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		frame->samples = 0;
 		frame->datalen = 0;
 		frame->data = NULL;
-		frame->offset = 0;
 
 		return frame;
 	}
@@ -1504,8 +1505,9 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 					ast_chan->rawreadformat);
 	}
 
-	int nread = read(vgsm_chan->up_fd, vgsm_chan->frame_out_buf,
-					sizeof(vgsm_chan->frame_out_buf));
+	int nread = read(vgsm_chan->up_fd,
+			vgsm_chan->frame_out_buf + AST_FRIENDLY_OFFSET,
+			sizeof(vgsm_chan->frame_out_buf) - AST_FRIENDLY_OFFSET);
 	if (nread < 0) {
 //		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
 		return frame;
@@ -1525,7 +1527,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	}
 
 	if (vgsm_chan->me->debug_frames) {
-		__u8 *buf = vgsm_chan->frame_out_buf;
+		__u8 *buf = vgsm_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
 		struct timeval tv;
 		gettimeofday(&tv, NULL);
 		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
@@ -1553,13 +1555,15 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	frame->subclass = ast_chan->rawreadformat;
 	frame->samples = nread / sample_size;
 	frame->datalen = nread;
-	frame->data = vgsm_chan->frame_out_buf;
-	frame->offset = 0;
+	frame->data = vgsm_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
 
 	struct ast_frame *f2;
 	f2 = ast_dsp_process(ast_chan, vgsm_chan->dsp, frame);
 
-	return f2;
+//	if (f2 && f2->frametype != AST_FRAME_DTMF)
+		return f2;
+//	else
+//		return frame;
 }
 
 static int vgsm_write(
