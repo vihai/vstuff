@@ -342,7 +342,8 @@ static void __exit vgsm_exit(void)
 		&driver_attr_debug_level);
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
+	/* cancel_readmin_delayed_work is missing or buggy till 2.6.22 */
 	set_bit(VGSM_STATUS_FLAG_SHUTTING_DOWN, &vgsm_status);
 	cancel_delayed_work(&vgsm_led_update_work);
 	flush_scheduled_work();
