@@ -75,6 +75,8 @@ static const char *vgsm_mesim_local_state_to_text(
 		return "READING_ATR";
 	case VGSM_MESIM_LOCAL_STATE_READY:
 		return "READY";
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
+		return "FAILED";
 	}
 
 	return "*UNKNOWN*";
@@ -82,7 +84,8 @@ static const char *vgsm_mesim_local_state_to_text(
 
 static void vgsm_mesim_local_change_state(
 	struct vgsm_mesim_local *mesim_local,
-	enum vgsm_mesim_local_state newstate)
+	enum vgsm_mesim_local_state newstate,
+	longtime_t timeout)
 {
 	vgsm_mesim_debug(mesim_local->mesim,
 		"Local SIM state changed from %s to %s\n",
@@ -92,6 +95,11 @@ static void vgsm_mesim_local_change_state(
 //	ast_mutex_lock(&mesim_local->state_lock);
 	mesim_local->state = newstate;
 //	ast_mutex_unlock(&mesim_local->state_lock);
+//
+	if (timeout >= 0)
+		vgsm_timer_start_delta(&mesim_local->timer, timeout);
+	else
+		vgsm_timer_stop(&mesim_local->timer);
 }
 
 static BOOL vgsm_mesim_local_is_inserted(
@@ -203,6 +211,33 @@ static void *vgsm_mesim_local_modem_thread_main(void *data)
 
 	return NULL;
 }
+
+static void vgsm_mesim_local_timer(void *data)
+{
+	struct vgsm_mesim_local *mesim_local = data;
+	struct vgsm_mesim *mesim = mesim_local->mesim;
+
+	vgsm_mesim_debug(mesim, "Local SIM timer fired in state %s\n",
+			vgsm_mesim_local_state_to_text(mesim_local->state));
+
+	switch(mesim_local->state) {
+	case VGSM_MESIM_LOCAL_STATE_NULL:
+	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
+	case VGSM_MESIM_LOCAL_STATE_RESET:
+	case VGSM_MESIM_LOCAL_STATE_READY:
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
+		assert(0);
+	break;
+
+	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
+		vgsm_mesim_local_set_lines(mesim_local, TRUE, TRUE);
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED, -1);
+	break;
+	}
+}
+
 static struct vgsm_mesim_driver vgsm_mesim_driver_local;
 
 struct vgsm_mesim_driver *vgsm_mesim_local_create(
@@ -223,6 +258,9 @@ struct vgsm_mesim_driver *vgsm_mesim_local_create(
 	mesim_local->fd = -1;
 
 	mesim_local->state = VGSM_MESIM_LOCAL_STATE_NULL;
+
+	vgsm_timer_init(&mesim_local->timer, timerset, "mesim_local",
+			vgsm_mesim_local_timer, mesim_local);
 
 	return &mesim_local->driver;
 }
@@ -275,12 +313,25 @@ static void vgsm_mesim_local_activate(struct vgsm_mesim_driver *driver)
 
 	assert(mesim_local->fd == -1);
 
-	mesim_local->fd = open(mesim_local->device_filename, O_RDWR | O_NOCTTY);
+	mesim_local->fd = open(mesim_local->device_filename,
+						O_RDWR | O_NOCTTY | O_NDELAY);
 	if (mesim_local->fd < 0) {
 		ast_log(LOG_ERROR,
 			"%s: open(%s) failed: %s\n",
 			mesim->name,
 			mesim_local->device_filename,
+			strerror(errno));
+		return;
+	}
+
+	int flags;
+	flags = fcntl(mesim_local->fd, F_GETFL, 0);
+
+	flags &= ~O_NONBLOCK;
+
+	if (fcntl(mesim_local->fd, F_SETFL, flags) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set Local SIM fd to non-blocking: %s\n",
 			strerror(errno));
 		return;
 	}
@@ -426,7 +477,7 @@ static void vgsm_mesim_local_activate(struct vgsm_mesim_driver *driver)
 		vgsm_mesim_change_state(mesim, VGSM_MESIM_DIRECTLY_ROUTED, -1);
 
 		vgsm_mesim_local_change_state(mesim_local,
-						VGSM_MESIM_LOCAL_STATE_READY);
+					VGSM_MESIM_LOCAL_STATE_READY, -1);
 	} else {
 		vgsm_mesim_local_set_lines(mesim_local, FALSE, TRUE);
 		usleep(10000);
@@ -441,14 +492,14 @@ static void vgsm_mesim_local_activate(struct vgsm_mesim_driver *driver)
 
 		if (vgsm_mesim_local_is_inserted(mesim_local, status)) {
 			vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_RESET);
+					VGSM_MESIM_LOCAL_STATE_RESET, -1);
 
 			vgsm_mesim_change_state(mesim,
 				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
 			vgsm_mesim_set_removed(mesim);
 		} else {
 			vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED);
+				VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED, -1);
 			vgsm_mesim_set_removed(mesim);
 			vgsm_mesim_change_state(mesim,
 					VGSM_MESIM_HOLDER_REMOVED, -1);
@@ -503,6 +554,7 @@ static void vgsm_mesim_local_reset_asserted(struct vgsm_mesim_driver *driver)
 
 	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
 	case VGSM_MESIM_LOCAL_STATE_RESET:
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
 	break;
 
 	case VGSM_MESIM_LOCAL_STATE_READY:
@@ -510,7 +562,7 @@ static void vgsm_mesim_local_reset_asserted(struct vgsm_mesim_driver *driver)
 		vgsm_mesim_local_set_lines(mesim_local, TRUE, TRUE);
 
 		vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_RESET);
+					VGSM_MESIM_LOCAL_STATE_RESET, -1);
 	break;
 	}
 }
@@ -529,6 +581,7 @@ static void vgsm_mesim_local_reset_removed(struct vgsm_mesim_driver *driver)
 
 	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
 	case VGSM_MESIM_LOCAL_STATE_RESET:
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
 	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
 		/* Remove reset on the Local SIM side */
 		vgsm_mesim_local_set_lines(mesim_local, TRUE, FALSE);
@@ -538,7 +591,7 @@ static void vgsm_mesim_local_reset_removed(struct vgsm_mesim_driver *driver)
 		mesim_local->out_buf_len = 0;
 		memset(mesim_local->out_buf, 0, sizeof(mesim_local->out_buf));
 		vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_READING_ATR);
+				VGSM_MESIM_LOCAL_STATE_READING_ATR, 1 * SEC);
 
 		/* Send a fake ATR to the ME */
 		vgsm_mesim_debug(mesim, "Sending ATR to MESIM\n");
@@ -564,6 +617,7 @@ static void vgsm_mesim_local_holder_inserted(struct vgsm_mesim_driver *driver)
 	case VGSM_MESIM_LOCAL_STATE_READY:
 	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
 	case VGSM_MESIM_LOCAL_STATE_RESET:
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
 		assert(0);
 	break;
 
@@ -573,7 +627,7 @@ static void vgsm_mesim_local_holder_inserted(struct vgsm_mesim_driver *driver)
 		vgsm_mesim_local_set_lines(mesim_local, TRUE, TRUE);
 
 		vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_RESET);
+					VGSM_MESIM_LOCAL_STATE_RESET, -1);
 	break;
 	}
 }
@@ -592,6 +646,7 @@ static void vgsm_mesim_local_holder_removed(struct vgsm_mesim_driver *driver)
 	case VGSM_MESIM_LOCAL_STATE_READY:
 	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
 	case VGSM_MESIM_LOCAL_STATE_RESET:
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
 		/* The holder in VoiSmart SIM server must receive VCC,
 		 * otherwise we wouldn't be able to detect holder insertion
 		 */
@@ -599,7 +654,7 @@ static void vgsm_mesim_local_holder_removed(struct vgsm_mesim_driver *driver)
 		vgsm_mesim_local_set_lines(mesim_local, FALSE, TRUE);
 
 		vgsm_mesim_local_change_state(mesim_local,
-				VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED);
+				VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED, -1);
 	break;
 	}
 }
@@ -974,7 +1029,7 @@ static int vgsm_mesim_local_receive_atr(
 #endif
 
 	vgsm_mesim_local_change_state(mesim_local,
-				VGSM_MESIM_LOCAL_STATE_READY);
+				VGSM_MESIM_LOCAL_STATE_READY, -1);
 	if (mesim_local->out_buf_len) {
 		int err = vgsm_mesim_local_write(mesim_local,
 					mesim_local->out_buf,

@@ -219,7 +219,6 @@ struct vgsm_me_config
 	BOOL dtmf_relax;
 
 	BOOL amr_enabled;
-	BOOL gsm_fr_enabled;
 	BOOL gsm_hr_enabled;
 	enum vgsm_codec gsm_preferred;
 

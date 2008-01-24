@@ -269,7 +269,6 @@ void vgsm_mesim_change_state(
 		vgsm_timer_start_delta(&mesim->timer, timeout);
 	else
 		vgsm_timer_stop(&mesim->timer);
-
 }
 
 #if 0

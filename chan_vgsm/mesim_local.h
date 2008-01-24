@@ -32,6 +32,7 @@ enum vgsm_mesim_local_state
 	VGSM_MESIM_LOCAL_STATE_RESET,
 	VGSM_MESIM_LOCAL_STATE_READING_ATR,
 	VGSM_MESIM_LOCAL_STATE_READY,
+	VGSM_MESIM_LOCAL_STATE_FAILED,
 };
 
 struct vgsm_mesim;
@@ -58,6 +59,8 @@ struct vgsm_mesim_local
 
 	pthread_t modem_thread;
 	BOOL modem_thread_has_to_exit;
+
+	struct vgsm_timer timer;
 };
 
 struct vgsm_mesim_driver *vgsm_mesim_local_create(
