@@ -772,7 +772,7 @@ sim_device_filename:
 		char *addr = alloca(strlen(var->value) + 1);
 		char *port = alloca(strlen(var->value) + 1);
 
-		if (sscanf(var->value, "%s:%s", addr, port) != 2) {
+		if (sscanf(var->value, "%[^:]:%s", addr, port) != 2) {
 			ast_log(LOG_ERROR,
 				"Cannot parse sim_client_addr '%s'\n",
 				var->value);
