@@ -2314,7 +2314,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (!sms->text) {
 		astman_append(s, "Status: 406\n");
 		astman_send_error(s, m, "Out of memory");
-		iconv_close(cd);
 		goto err_text_malloc;
 	}
 
@@ -2328,7 +2327,6 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 			strerror(errno));
 
 		astman_send_error(s, m, tmpstr);
-		iconv_close(cd);
 		goto err_iconv;
 	}
 
@@ -2338,13 +2336,11 @@ static int manager_vgsm_sms_tx(struct mansession *s, struct message *m)
 	if (err == -ENOSPC) {
 		astman_append(s, "Status: 511\n");
 		astman_send_error(s, m, "Message too big");
-		iconv_close(cd);
 		goto err_submit_prepare;
 	} else if (err < 0) {
 		astman_append(s, "Status: 512\n");
 		astman_send_error(s, m,
 			"Unspecified message preparation error");
-		iconv_close(cd);
 		goto err_submit_prepare;
 	}
 
