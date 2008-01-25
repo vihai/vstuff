@@ -4495,11 +4495,15 @@ void vgsm_me_shutdown_all(void)
 
 		ast_mutex_lock(&me->lock);
 
-		if (me->current_config->poweroff_on_exit &&
-		    me->status != VGSM_ME_STATUS_UNCONFIGURED &&
+		/* Check me->status != UNCONFIGURED before accessing
+		 * me->current_config
+		 */
+
+		if (me->status != VGSM_ME_STATUS_UNCONFIGURED &&
 		    me->status != VGSM_ME_STATUS_CLOSED &&
 		    me->status != VGSM_ME_STATUS_POWERING_OFF &&
 		    me->status != VGSM_ME_STATUS_OFF &&
+		    me->current_config->poweroff_on_exit &&
 		    me->comm.fd >= 0) {
 			vgsm_me_set_status(me,
 					VGSM_ME_STATUS_POWERING_OFF,
@@ -4524,10 +4528,10 @@ void vgsm_me_shutdown_all(void)
 		list_for_each_entry(me, &vgsm.mes_list, node) {
 
 			ast_mutex_lock(&me->lock);
-			if (me->current_config->poweroff_on_exit &&
-			    me->status != VGSM_ME_STATUS_OFF &&
+			if (me->status != VGSM_ME_STATUS_OFF &&
 			    me->status != VGSM_ME_STATUS_CLOSED &&
-			    me->status != VGSM_ME_STATUS_UNCONFIGURED)
+			    me->status != VGSM_ME_STATUS_UNCONFIGURED &&
+			    me->current_config->poweroff_on_exit)
 				all_off = FALSE;
 
 			ast_mutex_unlock(&me->lock);
