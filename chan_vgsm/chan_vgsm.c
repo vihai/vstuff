@@ -1653,6 +1653,8 @@ static int vgsm_write(
 	if (!frame->datalen)
 		return 0;
 
+	struct vgsm_me_config *mc = vgsm_chan->mc;
+
 	int pressure;
 	if (ioctl(vgsm_chan->up_fd, KS_UP_GET_PRESSURE, &pressure)) {
 		ast_log(LOG_ERROR, "ioctl(KS_UP_GET_PRESSURE): %s\n",
@@ -1662,7 +1664,8 @@ static int vgsm_write(
 	pressure = pressure / sample_size;
 
 	vgsm_chan->pressure_average =
-		((5 * vgsm_chan->pressure_average) + pressure) / 6;
+		((mc->jitbuf_average * vgsm_chan->pressure_average) +
+		pressure) / (mc->jitbuf_average + 1);
 
 	if (vgsm_chan->me->debug_frames) {
 		struct timeval tv;
@@ -1690,8 +1693,6 @@ static int vgsm_write(
 			pressure,
 			vgsm_chan->pressure_average);
 	}
-
-	struct vgsm_me_config *mc = vgsm_chan->mc;
 
 	int len = frame->datalen;
 	__u8 *buf = frame->data;
@@ -1742,7 +1743,7 @@ static int vgsm_write(
 
 		vgsm_debug_jitbuf(vgsm_chan->me,
 			"TX %d over high-mark: dropped %d samples\n",
-			pressure - mc->jitbuf_high,
+			vgsm_chan->pressure_average > mc->jitbuf_high,
 			drop);
 
 		len = max(0, len - drop * sample_size);

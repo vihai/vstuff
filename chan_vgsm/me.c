@@ -108,9 +108,10 @@ void vgsm_me_config_default(struct vgsm_me_config *mc)
 	mc->rx_calibrate = 16384;
 	mc->tx_calibrate = 21402;
 
+	mc->jitbuf_average = 5;
 	mc->jitbuf_low = 10;
 	mc->jitbuf_hardlow = 0;
-	mc->jitbuf_high = 300;
+	mc->jitbuf_high = 30;
 	mc->jitbuf_hardhigh = 1024;
 }
 
@@ -863,6 +864,8 @@ sim_device_filename:
 		mc->rx_calibrate = atoi(var->value);
 	} else if (!strcasecmp(var->name, "tx_calibrate")) {
 		mc->tx_calibrate = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_average")) {
+		mc->jitbuf_average = atoi(var->value);
 	} else if (!strcasecmp(var->name, "jitbuf_low")) {
 		mc->jitbuf_low = atoi(var->value);
 	} else if (!strcasecmp(var->name, "jitbuf_hardlow")) {
@@ -922,6 +925,7 @@ static void vgsm_me_config_copy(
 	dst->rx_calibrate = src->rx_calibrate;
 	dst->tx_calibrate = src->tx_calibrate;
 
+	dst->jitbuf_average = src->jitbuf_average;
 	dst->jitbuf_low = src->jitbuf_low;
 	dst->jitbuf_hardlow = src->jitbuf_hardlow;
 	dst->jitbuf_high = src->jitbuf_high;
@@ -4629,6 +4633,7 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 		"  GSM-HR enabled: %s\n"
 		"  GSM preferred CODEC: %s\n"
 		"\n"
+		"  Jitter buffer average: %d\n"
 		"  Jitter buffer low-mark: %d\n"
 		"  Jitter buffer hard low-mark: %d\n"
 		"  Jitter buffer high-mark: %d\n"
@@ -4641,6 +4646,7 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 		mc->amr_enabled ? "YES" : "NO",
 		mc->gsm_hr_enabled ? "YES" : "NO",
 		vgsm_codec_to_text(mc->gsm_preferred),
+		mc->jitbuf_average,
 		mc->jitbuf_low,
 		mc->jitbuf_hardlow,
 		mc->jitbuf_high,
