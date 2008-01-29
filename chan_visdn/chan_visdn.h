@@ -110,9 +110,9 @@ struct visdn_chan {
 	struct visdn_huntgroup *huntgroup;
 	struct visdn_intf *hg_first_intf;
 
-	__u8 frame_out_buf[512];
-
 	struct ast_frame frame_out;
+	__u8 frame_out_buf[AST_FRIENDLY_OFFSET + 512];
+
 	struct ast_dsp *dsp;
 };
 

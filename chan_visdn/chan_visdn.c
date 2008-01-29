@@ -2179,21 +2179,31 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 {
 	struct visdn_chan *visdn_chan = to_visdn_chan(ast_chan);
-	static struct ast_frame f;
+	struct ast_frame *frame = &visdn_chan->frame_out;
 
-	f.src = VISDN_CHAN_TYPE;
-	memset(&f, 0, sizeof(f));
-	f.mallocd = 0;
-	f.frametype = AST_FRAME_NULL;
+	frame->src = VISDN_CHAN_TYPE;
+	frame->mallocd = 0;
+	frame->delivery.tv_sec = 0;
+	frame->delivery.tv_usec = 0;
 
-	if (visdn_chan->up_fd < 0)
-		return &f;
+	if (visdn_chan->up_fd < 0) {
+		frame->frametype = AST_FRAME_NULL;
+		frame->subclass = 0;
+		frame->samples = 0;
+		frame->datalen = 0;
+		frame->data = NULL;
+		frame->offset = 0;
 
-	int nread = read(visdn_chan->up_fd, visdn_chan->frame_out_buf,
-					sizeof(visdn_chan->frame_out_buf));
+		return frame;
+	}
+
+	int nread = read(visdn_chan->up_fd,
+			visdn_chan->frame_out_buf + AST_FRIENDLY_OFFSET,
+			sizeof(visdn_chan->frame_out_buf) -
+						AST_FRIENDLY_OFFSET);
 	if (nread < 0) {
 		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
-		return &f;
+		return frame;
 	}
 
 #if 0
@@ -2220,18 +2230,18 @@ for(i=0; i<nread; i++)
 ast_verbose("\n");
 #endif
 
-	f.frametype = visdn_chan->ast_frame_type;
-	f.subclass = visdn_chan->ast_frame_subclass;
-	f.samples = nread;
-	f.datalen = nread;
-	f.data = visdn_chan->frame_out_buf;
-	f.offset = 0;
+	frame->frametype = visdn_chan->ast_frame_type;
+	frame->subclass = visdn_chan->ast_frame_subclass;
+	frame->samples = nread;
+	frame->datalen = nread;
+	frame->data = visdn_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
+	frame->offset = AST_FRIENDLY_OFFSET;
 
 /*		struct ast_frame *f2 =
 			ast_dsp_process(ast_chan, visdn_chan->dsp, &f);
 		return f2;*/
 
-	return &f;
+	return frame;
 }
 
 #define FIFO_JITTBUFF_LOW 10
