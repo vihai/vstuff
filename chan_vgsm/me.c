@@ -109,7 +109,9 @@ void vgsm_me_config_default(struct vgsm_me_config *mc)
 	mc->tx_calibrate = 21402;
 
 	mc->jitbuf_low = 10;
+	mc->jitbuf_hardlow = 0;
 	mc->jitbuf_high = 300;
+	mc->jitbuf_hardhigh = 1024;
 }
 
 static const char *vgsm_me_status_to_text(enum vgsm_me_status status)
@@ -863,8 +865,12 @@ sim_device_filename:
 		mc->tx_calibrate = atoi(var->value);
 	} else if (!strcasecmp(var->name, "jitbuf_low")) {
 		mc->jitbuf_low = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_hardlow")) {
+		mc->jitbuf_hardlow = atoi(var->value);
 	} else if (!strcasecmp(var->name, "jitbuf_high")) {
 		mc->jitbuf_high = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_hardhigh")) {
+		mc->jitbuf_hardhigh = atoi(var->value);
 	} else {
 		return -1;
 	}
@@ -917,7 +923,9 @@ static void vgsm_me_config_copy(
 	dst->tx_calibrate = src->tx_calibrate;
 
 	dst->jitbuf_low = src->jitbuf_low;
+	dst->jitbuf_hardlow = src->jitbuf_hardlow;
 	dst->jitbuf_high = src->jitbuf_high;
+	dst->jitbuf_hardhigh = src->jitbuf_hardhigh;
 }
 
 static void *vgsm_me_monitor_thread_main(void *data);
@@ -2377,8 +2385,8 @@ retry_workaround:;
 			continue;
 		} else if (idx >= ARRAY_SIZE(me->calls)) {
 			ast_log(LOG_ERROR, "SLCC describes call index %d but"
-				" a maximum of %lu calls is handled\n",
-				idx, ARRAY_SIZE(me->calls));
+				" a maximum of %u calls is handled\n",
+				idx, (unsigned int)ARRAY_SIZE(me->calls));
 			continue;
 		}
 
@@ -4622,7 +4630,9 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 		"  GSM preferred CODEC: %s\n"
 		"\n"
 		"  Jitter buffer low-mark: %d\n"
-		"  Jitter buffer high-mark: %d\n",
+		"  Jitter buffer hard low-mark: %d\n"
+		"  Jitter buffer high-mark: %d\n"
+		"  Jitter buffer hard high-mark: %d\n",
 		mc->sms_sender_domain,
 		mc->sms_recipient_address,
 		mc->dtmf_quelch ? "YES" : "NO",
@@ -4632,7 +4642,9 @@ static void vgsm_me_show_me(int fd, struct vgsm_me *me)
 		mc->gsm_hr_enabled ? "YES" : "NO",
 		vgsm_codec_to_text(mc->gsm_preferred),
 		mc->jitbuf_low,
-		mc->jitbuf_high);
+		mc->jitbuf_hardlow,
+		mc->jitbuf_high,
+		mc->jitbuf_hardhigh);
 
 	if (me->interface_version == 1) {
 		ast_cli(fd,

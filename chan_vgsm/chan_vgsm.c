@@ -1696,11 +1696,11 @@ static int vgsm_write(
 	int len = frame->datalen;
 	__u8 *buf = frame->data;
 
-	if (pressure < mc->jitbuf_low) {
-		int diff = (mc->jitbuf_low - pressure);
+	if (pressure < mc->jitbuf_hardlow) {
+		int diff = (mc->jitbuf_hardlow - pressure);
 		int diff_octs = diff * sample_size;
 
-		buf = alloca(len + diff_octs);
+		__u8 buf[len + diff_octs];
 
 		if (frame->subclass == AST_FORMAT_SLINEAR)
 			memset(buf, 0x00, diff_octs);
@@ -1711,7 +1711,26 @@ static int vgsm_write(
 		len += diff_octs;
 
 		vgsm_debug_jitbuf(vgsm_chan->me,
-			"TX under low-mark: added %d samples\n",
+			"TX under hard low-mark: added %d samples\n",
+			diff);
+	}
+
+	if (vgsm_chan->pressure_average < mc->jitbuf_low) {
+		int diff = (mc->jitbuf_low - vgsm_chan->pressure_average);
+		int diff_octs = diff * sample_size;
+
+		__u8 buf[len + diff_octs];
+
+		if (frame->subclass == AST_FORMAT_SLINEAR)
+			memset(buf, 0x00, diff_octs);
+		else
+			memset(buf, 0x2a, diff_octs);
+
+		memcpy(buf + diff_octs, frame->data, len);
+		len += diff_octs;
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX under hard low-mark: added %d samples\n",
 			diff);
 	}
 
@@ -1724,6 +1743,19 @@ static int vgsm_write(
 		vgsm_debug_jitbuf(vgsm_chan->me,
 			"TX %d over high-mark: dropped %d samples\n",
 			pressure - mc->jitbuf_high,
+			drop);
+
+		len = max(0, len - drop * sample_size);
+	}
+
+	if (pressure + len > mc->jitbuf_hardhigh) {
+
+		int drop = min(len / sample_size, (pressure + len -
+							mc->jitbuf_hardhigh));
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX %d over hard high-mark: dropped %d samples\n",
+			pressure + len - mc->jitbuf_hardhigh,
 			drop);
 
 		len = max(0, len - drop * sample_size);

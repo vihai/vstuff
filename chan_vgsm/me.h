@@ -226,7 +226,9 @@ struct vgsm_me_config
 	int tx_calibrate;
 
 	int jitbuf_low;
+	int jitbuf_hardlow;
 	int jitbuf_high;
+	int jitbuf_hardhigh;
 };
 
 struct vgsm_me
