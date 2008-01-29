@@ -2239,8 +2239,17 @@ ast_verbose("\n");
 #define FIFO_JITTBUFF_AVG \
 		((FIFO_JITTBUFF_LOW + FIFO_JITTBUFF_HIGH) / 2)
 
-#define min(a,b) ((a) < (b) ? (a) : (b))
-#define max(a,b) ((a) > (b) ? (a) : (b))
+#define min(x,y) ({		\
+	typeof(x) _x = (x);	\
+	typeof(y) _y = (y);	\
+	(void) (&_x == &_y);	\
+	_x < _y ? _x : _y; })
+
+#define max(x,y) ({		\
+	typeof(x) _x = (x);	\
+	typeof(y) _y = (y);	\
+	(void) (&_x == &_y);	\
+	_x > _y ? _x : _y; })
 
 static int visdn_write(
 	struct ast_channel *ast_chan,
