@@ -2244,22 +2244,7 @@ ast_verbose("\n");
 	return frame;
 }
 
-#define FIFO_JITTBUFF_LOW 10
-#define FIFO_JITTBUFF_HIGH 100
-#define FIFO_JITTBUFF_AVG \
-		((FIFO_JITTBUFF_LOW + FIFO_JITTBUFF_HIGH) / 2)
-
-#define min(x,y) ({		\
-	typeof(x) _x = (x);	\
-	typeof(y) _y = (y);	\
-	(void) (&_x == &_y);	\
-	_x < _y ? _x : _y; })
-
-#define max(x,y) ({		\
-	typeof(x) _x = (x);	\
-	typeof(y) _y = (y);	\
-	(void) (&_x == &_y);	\
-	_x > _y ? _x : _y; })
+#define visdn_debug_jitbuf(...)	/* Placeholder */
 
 static int visdn_write(
 	struct ast_channel *ast_chan,
@@ -2282,46 +2267,81 @@ static int visdn_write(
 		return 0;
 	}
 
-	if (visdn_chan->up_fd < 0) {
-//		ast_log(LOG_WARNING,
-//			"Attempting to write on unconnected channel\n");
+	if (visdn_chan->up_fd < 0)
 		return 0;
-	}
+
+	if (!visdn_chan->pipeline_tx)
+		return 0;
 
 	if (!frame->datalen)
 		return 0;
 
-//	if (!visdn_chan->up_bearer_pipeline_started) {
-		// PLACEHOLDER FIXME
-//	}
-
 	int len = frame->datalen;
 	__u8 *buf = frame->data;
+
+	struct visdn_ic *ic = visdn_chan->ic;
 
 	int pressure;
 	if (ioctl(visdn_chan->up_fd, KS_UP_GET_PRESSURE, &pressure)) {
 		ast_log(LOG_ERROR, "ioctl(): %s\n", strerror(errno));
 	}
 
-	if (pressure < FIFO_JITTBUFF_LOW) {
-		int diff = (FIFO_JITTBUFF_LOW - pressure);
+	visdn_chan->pressure_average =
+		((ic->jitbuf_average * visdn_chan->pressure_average) +
+		pressure) / (ic->jitbuf_average + 1);
 
-		buf = malloc(len + diff);
+	if (pressure < ic->jitbuf_hardlow) {
+		int diff = (ic->jitbuf_hardlow - pressure);
+
+		buf = alloca(len + diff);
+
 		memset(buf, 0x2a, diff);
 		memcpy(buf + diff, frame->data, len);
 		len += diff;
 
-#if 1
-		ast_verbose("TX under low-mark: added %d samples\n", diff);
-#endif
+		visdn_debug_jitbuf(visdn_chan,
+			"TX under hard low-mark: added %d samples\n",
+			diff);
 	}
 
-	if (pressure > FIFO_JITTBUFF_HIGH && len > 0) {
-		ast_verbose("TX %d over high-mark: dropped %d samples\n",
-			pressure - FIFO_JITTBUFF_HIGH,
-			min(len, pressure - FIFO_JITTBUFF_HIGH));
+	if (visdn_chan->pressure_average < ic->jitbuf_low) {
+		int diff = (ic->jitbuf_low - visdn_chan->pressure_average);
 
-		len = max(0, len - (pressure - FIFO_JITTBUFF_HIGH));
+		buf = alloca(len + diff);
+
+		memset(buf, 0x2a, diff);
+		memcpy(buf + diff, frame->data, len);
+		len += diff;
+
+		visdn_debug_jitbuf(visdn_chan->me,
+			"TX under hard low-mark: added %d samples\n",
+			diff);
+	}
+
+	if (visdn_chan->pressure_average > ic->jitbuf_high &&
+	    pressure > ic->jitbuf_high) {
+
+		int drop = min(len, (visdn_chan->pressure_average -
+						ic->jitbuf_high));
+
+		visdn_debug_jitbuf(visdn_chan,
+			"TX %d over high-mark: dropped %d samples\n",
+			visdn_chan->pressure_average > ic->jitbuf_high,
+			drop);
+
+		len = max(0, len - drop);
+	}
+
+	if (pressure + len > ic->jitbuf_hardhigh) {
+
+		int drop = min(len, (pressure + len - ic->jitbuf_hardhigh));
+
+		visdn_debug_jitbuf(visdn_chan,
+			"TX %d over hard high-mark: dropped %d samples\n",
+			pressure + len - ic->jitbuf_hardhigh,
+			drop);
+
+		len = max(0, len - drop);
 	}
 
 #if 0

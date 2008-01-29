@@ -113,6 +113,8 @@ struct visdn_chan {
 	struct ast_frame frame_out;
 	__u8 frame_out_buf[AST_FRIENDLY_OFFSET + 512];
 
+	__u16 pressure_average;
+
 	struct ast_dsp *dsp;
 };
 

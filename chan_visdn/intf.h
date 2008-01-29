@@ -1,7 +1,7 @@
 /*
  * vISDN channel driver for Asterisk
  *
- * Copyright (C) 2006 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -81,6 +81,12 @@ struct visdn_ic
 
 	int echocancel;
 	int echocancel_taps;
+
+	int jitbuf_average;
+	int jitbuf_low;
+	int jitbuf_hardlow;
+	int jitbuf_high;
+	int jitbuf_hardhigh;
 
 	int T301;
 	int T302;

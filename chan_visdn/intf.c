@@ -294,6 +294,16 @@ static int visdn_ic_from_var(
 		ic->echocancel = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "echocancel_taps")) {
 		ic->echocancel_taps = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_average")) {
+		ic->jitbuf_average = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_low")) {
+		ic->jitbuf_low = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_hardlow")) {
+		ic->jitbuf_hardlow = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_high")) {
+		ic->jitbuf_high = atoi(var->value);
+	} else if (!strcasecmp(var->name, "jitbuf_hardhigh")) {
+		ic->jitbuf_hardhigh = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t301")) {
 		ic->T301 = atoi(var->value);
 	} else if (!strcasecmp(var->name, "t302")) {
@@ -378,6 +388,12 @@ static void visdn_ic_copy(
 	dst->dlc_autorelease_time = src->dlc_autorelease_time;
 	dst->echocancel = src->echocancel;
 	dst->echocancel_taps = src->echocancel_taps;
+
+	dst->jitbuf_average = src->jitbuf_average;
+	dst->jitbuf_low = src->jitbuf_low;
+	dst->jitbuf_hardlow = src->jitbuf_hardlow;
+	dst->jitbuf_high = src->jitbuf_high;
+	dst->jitbuf_hardhigh = src->jitbuf_hardhigh;
 
 	dst->T301 = src->T301;
 	dst->T302 = src->T302;
@@ -683,29 +699,45 @@ void visdn_ic_setdefault(struct visdn_ic *ic)
 	ic->tei = LAPD_DYNAMIC_TEI;
 	ic->network_role = Q931_INTF_NET_PRIVATE;
 	ic->outbound_called_ton = VISDN_TYPE_OF_NUMBER_UNKNOWN;
+
 	strcpy(ic->force_outbound_cli, "");
+
 	ic->force_outbound_cli_ton = VISDN_TYPE_OF_NUMBER_UNSET;
 	ic->tones_option = TRUE;
+
 	strcpy(ic->context, "visdn");
 	strcpy(ic->language, "");
+
 	ic->clip_enabled = TRUE;
 	ic->clip_override = FALSE;
+
 	strcpy(ic->clip_default_name, "");
 	strcpy(ic->clip_default_number, "");
+
 	ic->clip_special_arrangement = FALSE;
 	ic->clir_mode = VISDN_CLIR_MODE_UNRESTRICTED_DEFAULT;
 	ic->overlap_sending = TRUE;
 	ic->overlap_receiving = FALSE;
 	ic->call_bumping = FALSE;
 	ic->cli_rewriting = FALSE;
+
 	strcpy(ic->national_prefix, "");
 	strcpy(ic->international_prefix, "");
 	strcpy(ic->network_specific_prefix, "");
 	strcpy(ic->subscriber_prefix, "");
 	strcpy(ic->abbreviated_prefix, "");
+
 	ic->dlc_autorelease_time = 10;
+
 	ic->echocancel = FALSE;
 	ic->echocancel_taps = 256;
+
+	ic->jitbuf_average = 5;
+	ic->jitbuf_low = 10;
+	ic->jitbuf_hardlow = 0;
+	ic->jitbuf_high = 30;
+	ic->jitbuf_hardhigh = 1024;
+
 	ic->T307 = 180;
 }
 
@@ -910,12 +942,22 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 	ast_cli(fd,
 		"Echo canceller            : %s\n"
 		"Echo canceller taps       : %d (%d ms)\n"
+		"Jitter buffer average     : %d\n"
+		"Jitter buffer low-mark    : %d\n"
+		"Jitter buffer hard low-mark: %d\n"
+		"Jitter buffer high-mark   : %d\n"
+		"Jitter buffer hard high-mark: %d\n"
 		"Tones option              : %s\n"
 		"Overlap Sending           : %s\n"
 		"Overlap Receiving         : %s\n"
 		"Call bumping              : %s\n",
 		ic->echocancel ? "Yes" : "No",
 		ic->echocancel_taps, ic->echocancel_taps / 8,
+		ic->jitbuf_average,
+		ic->jitbuf_low,
+		ic->jitbuf_hardlow,
+		ic->jitbuf_high,
+		ic->jitbuf_hardhigh,
 		ic->tones_option ? "Yes" : "No",
 		ic->overlap_sending ? "Yes" : "No",
 		ic->overlap_receiving ? "Yes" : "No",
