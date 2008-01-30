@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -28,8 +28,6 @@
 #include <sys/signal.h>
 
 #include <asm/types.h>
-
-#include "../config.h"
 
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
@@ -1264,14 +1262,14 @@ void vgsm_me_set_status(
 
 	if (me->status != status) {
 		if (timeout >= 0) {
-			vgsm_debug_state(me,
+			vgsm_me_debug_state(me,
 				"changed state from %s to %s"
 				" (timeout %.2fs)\n",
 				vgsm_me_status_to_text(me->status),
 				vgsm_me_status_to_text(status),
 				timeout / 1000000.0);
 		} else {
-			vgsm_debug_state(me,
+			vgsm_me_debug_state(me,
 				"changed state from %s to %s\n",
 				vgsm_me_status_to_text(me->status),
 				vgsm_me_status_to_text(status));
@@ -1332,7 +1330,7 @@ void vgsm_me_failed(struct vgsm_me *me, int err)
 	ast_mutex_unlock(&me->lock);
 }
 
-char *vgsm_me_completion(const char *line, const char *word, int state)
+static char *vgsm_me_completion(const char *line, const char *word, int state)
 {
 	int which = 0;
 
@@ -1467,7 +1465,7 @@ err_cerr:
 
 static void vgsm_me_received_hangup(struct vgsm_me *me)
 {
-	vgsm_debug_call(me, "received hangup\n");
+	vgsm_me_debug_call(me, "received hangup\n");
 
 	/* First of all, retrieve the cause code. No-one will place
 	 * calls in between, because me->vgsm_chan is still set
@@ -1492,7 +1490,7 @@ static void vgsm_me_received_hangup(struct vgsm_me *me)
 			vgsm_chan ? vgsm_chan->outbound : TRUE,
 			location, reason);
 
-		vgsm_debug_call(me,
+		vgsm_me_debug_call(me,
 			"Call released, location '%s', cause '%s'\n",
 			vgsm_cause_location_to_text(location),
 			vgsm_cause_reason_to_text(location, reason));
@@ -1545,7 +1543,7 @@ static void vgsm_me_received_hangup(struct vgsm_me *me)
 		vgsm_chan_put(vgsm_chan);
 	}
 
-	vgsm_debug_call(me, "received hangup done\n");
+	vgsm_me_debug_call(me, "received hangup done\n");
 }
 
 static void handle_unsolicited_no_carrier(
@@ -1651,7 +1649,7 @@ static void handle_unsolicited_cring(
 	}
 
 	if (me->vgsm_chan) {
-		vgsm_debug_call(me,
+		vgsm_me_debug_call(me,
 			"Received +CRING with an already active call\n");
 		goto err_call_already_present;
 	}
@@ -1719,7 +1717,7 @@ static void vgsm_update_me_by_creg(
 			"X-vGSM-GSM-Registration: %s\r\n",
 			vgsm_net_status_to_text(me->net.status));
 
-		vgsm_debug_state(me,
+		vgsm_me_debug_state(me,
 			"registration %s\n",
 			vgsm_net_status_to_text(me->net.status));
 	}
@@ -1842,7 +1840,7 @@ static void handle_unsolicited_clip(
 
 		ast_mutex_unlock(&ast_chan->lock);
 
-		vgsm_debug_call(me,
+		vgsm_me_debug_call(me,
 			"Call is already ringing, ignoring further +CRINGs\n");
 
 		goto already_ringing;
@@ -1852,7 +1850,7 @@ static void handle_unsolicited_clip(
 
 		ast_mutex_unlock(&ast_chan->lock);
 
-		vgsm_debug_call(me,
+		vgsm_me_debug_call(me,
 			"Received +CLIP but active call"
 			" is not in RESERVED state (state=%d)\n",
 			ast_chan->_state);
@@ -2194,7 +2192,7 @@ static void vgsm_handle_slcc_update(
 	switch(call->state) {
 	case VGSM_CALL_STATE_UNUSED:
 		if (vgsm_chan) {
-			vgsm_debug_call(me,
+			vgsm_me_debug_call(me,
 				"Call disappeared from SLCC,"
 				" requesting HANGUP\n");
 
@@ -2294,7 +2292,7 @@ static void handle_unsolicited_ciev_battchg(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Battery level: %s\n", pars);
+	vgsm_me_debug_state(me, "Battery level: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_signal(
@@ -2303,7 +2301,7 @@ static void handle_unsolicited_ciev_signal(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Signal: %s\n", pars);
+	vgsm_me_debug_state(me, "Signal: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_service(
@@ -2312,7 +2310,7 @@ static void handle_unsolicited_ciev_service(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Service: %s\n", pars);
+	vgsm_me_debug_state(me, "Service: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_sounder(
@@ -2321,7 +2319,7 @@ static void handle_unsolicited_ciev_sounder(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Sounder: %s\n", pars);
+	vgsm_me_debug_state(me, "Sounder: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_message(
@@ -2330,7 +2328,7 @@ static void handle_unsolicited_ciev_message(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Message: %s\n", pars);
+	vgsm_me_debug_state(me, "Message: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_call(
@@ -2540,7 +2538,7 @@ static void handle_unsolicited_ciev_roam(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Roaming: %s\n", pars);
+	vgsm_me_debug_state(me, "Roaming: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_smsfull(
@@ -2549,7 +2547,7 @@ static void handle_unsolicited_ciev_smsfull(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "SMS memory full: %s\n", pars);
+	vgsm_me_debug_state(me, "SMS memory full: %s\n", pars);
 }
 
 static int vgsm_me_update_common_cell_info(
@@ -2767,7 +2765,7 @@ static void handle_unsolicited_ciev_audio(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Audio: %s\n", pars);
+	vgsm_me_debug_state(me, "Audio: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_vmwait1(
@@ -2776,7 +2774,7 @@ static void handle_unsolicited_ciev_vmwait1(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Voicemail 1 waiting: %s\n", pars);
+	vgsm_me_debug_state(me, "Voicemail 1 waiting: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_vmwait2(
@@ -2785,7 +2783,7 @@ static void handle_unsolicited_ciev_vmwait2(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Voicemail 2 waiting: %s\n", pars);
+	vgsm_me_debug_state(me, "Voicemail 2 waiting: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_ciphcall(
@@ -2794,7 +2792,7 @@ static void handle_unsolicited_ciev_ciphcall(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Ciphercall: %s\n", pars);
+	vgsm_me_debug_state(me, "Ciphercall: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_eons(
@@ -2803,7 +2801,7 @@ static void handle_unsolicited_ciev_eons(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Enhanced Operator Name String: %s\n", pars);
+	vgsm_me_debug_state(me, "Enhanced Operator Name String: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev_nitz(
@@ -2812,7 +2810,7 @@ static void handle_unsolicited_ciev_nitz(
 {
 	struct vgsm_me *me = to_me(urc->comm);
 
-	vgsm_debug_state(me, "Network Identity and Time Zone: %s\n", pars);
+	vgsm_me_debug_state(me, "Network Identity and Time Zone: %s\n", pars);
 }
 
 static void handle_unsolicited_ciev(
@@ -2878,7 +2876,7 @@ static void handle_unsolicited_sysstart(
 	struct vgsm_comm *comm = urc->comm;
 	struct vgsm_me *me = to_me(comm);
 
-	vgsm_debug_state(me, "ME started (^SYSSTART received)\n");
+	vgsm_me_debug_state(me, "ME started (^SYSSTART received)\n");
 
 	vgsm_mesim_send_message(&me->mesim,
 			VGSM_MESIM_MSG_ME_POWERED_ON,
@@ -2895,7 +2893,7 @@ static void handle_unsolicited_shutdown(
 	struct vgsm_comm *comm = urc->comm;
 	struct vgsm_me *me = to_me(comm);
 
-	vgsm_debug_state(me, "ME powered off (^SHUTDOWN received)\n");
+	vgsm_me_debug_state(me, "ME powered off (^SHUTDOWN received)\n");
 
 	vgsm_me_set_status(me, VGSM_ME_STATUS_OFF, -1, NULL);
 }
@@ -4194,7 +4192,7 @@ static int vgsm_me_open(
 		vgsm_comm_send_message(&me->comm,
 				VGSM_COMM_MSG_INITIALIZE, NULL, 0);
 
-		vgsm_debug_state(me,
+		vgsm_me_debug_state(me,
 			"ME is already powered on, I'm not waiting"
 			" for SYSSTART\n");
 
@@ -4242,7 +4240,7 @@ err_me_open:
 static void vgsm_me_initialize(
 	struct vgsm_me *me)
 {
-	vgsm_debug_state(me, "ME initializing...\n");
+	vgsm_me_debug_state(me, "ME initializing...\n");
 
 	ast_mutex_lock(&me->lock);
 	struct vgsm_me_config *mc;
@@ -4323,7 +4321,7 @@ static void vgsm_me_initialize(
 			" ");
 	}
 
-	vgsm_debug_state(me, "me successfully initialized\n");
+	vgsm_me_debug_state(me, "me successfully initialized\n");
 
 	vgsm_me_config_put(mc);
 
@@ -4363,7 +4361,7 @@ static void vgsm_me_timer(void *data)
 		}
 
 		if (val) {
-			vgsm_debug_state(me, "SYSSTART missed\n");
+			vgsm_me_debug_state(me, "SYSSTART missed\n");
 
 			vgsm_mesim_send_message(&me->mesim,
 					VGSM_MESIM_MSG_ME_POWERED_ON,
@@ -5781,7 +5779,7 @@ static int vgsm_me_power_off(int fd, struct vgsm_me *me)
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_power_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_power_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -5843,7 +5841,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_power_complete(
+static char *vgsm_me_cli_power_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -5869,7 +5867,7 @@ static char *vgsm_me_power_complete(
 	return NULL;
 }
 
-static char vgsm_me_power_help[] =
+static char vgsm_me_cli_power_help[] =
 "Usage: vgsm me power <me> <on|off>\n"
 "\n"
 "	<me>	ME name or '*' for every ME.\n"
@@ -5882,18 +5880,18 @@ static char vgsm_me_power_help[] =
 "		the network. If, however, the me is not responding,\n"
 "		the me will be forcibly shut down.\n";
 
-static struct ast_cli_entry vgsm_me_power =
+static struct ast_cli_entry vgsm_me_cli_power =
 {
 	{ "vgsm", "me", "power", NULL },
-	vgsm_me_power_func,
+	vgsm_me_cli_power_func,
 	"Power control",
-	vgsm_me_power_help,
-	vgsm_me_power_complete
+	vgsm_me_cli_power_help,
+	vgsm_me_cli_power_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_reset_do(int fd, struct vgsm_me *me)
+static int vgsm_me_cli_reset_do(int fd, struct vgsm_me *me)
 {
 	struct vgsm_comm *comm = &me->comm;
 
@@ -5920,7 +5918,7 @@ static int vgsm_me_reset_do(int fd, struct vgsm_me *me)
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_reset_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_reset_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -5941,7 +5939,7 @@ static int vgsm_me_reset_func(int fd, int argc, char *argv[])
 		}
 
 		ast_mutex_lock(&me->lock);
-		err = vgsm_me_reset_do(fd, me);
+		err = vgsm_me_cli_reset_do(fd, me);
 		ast_mutex_unlock(&me->lock);
 	} else {
 		err = RESULT_SUCCESS;
@@ -5950,7 +5948,7 @@ static int vgsm_me_reset_func(int fd, int argc, char *argv[])
 		struct vgsm_me *me;
 		list_for_each_entry(me, &vgsm.mes_list, node) {
 			ast_mutex_lock(&me->lock);
-			err = vgsm_me_reset_do(fd, me);
+			err = vgsm_me_cli_reset_do(fd, me);
 			ast_mutex_unlock(&me->lock);
 		}
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
@@ -5968,7 +5966,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_reset_complete(
+static char *vgsm_me_cli_reset_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -5984,23 +5982,23 @@ static char *vgsm_me_reset_complete(
 	return NULL;
 }
 
-static char vgsm_me_reset_help[] =
+static char vgsm_me_cli_reset_help[] =
 "Usage: vgsm me reset <me>\n"
 "\n"
 "	Initiate ME software reset\n";
 
-static struct ast_cli_entry vgsm_me_reset =
+static struct ast_cli_entry vgsm_me_cli_reset =
 {
 	{ "vgsm", "me", "reset", NULL },
-	vgsm_me_reset_func,
+	vgsm_me_cli_reset_func,
 	"Put the ME online or offline",
-	vgsm_me_reset_help,
-	vgsm_me_reset_complete
+	vgsm_me_cli_reset_help,
+	vgsm_me_cli_reset_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_service_on(int fd, struct vgsm_me *me)
+static int vgsm_me_cli_service_on(int fd, struct vgsm_me *me)
 {
 	me->in_service = TRUE;
 
@@ -6014,7 +6012,7 @@ static int vgsm_me_service_on(int fd, struct vgsm_me *me)
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_service_off(int fd, struct vgsm_me *me)
+static int vgsm_me_cli_service_off(int fd, struct vgsm_me *me)
 {
 	if (me->status == VGSM_ME_STATUS_OFFLINE) {
 	} else if (me->status == VGSM_ME_STATUS_READY) {
@@ -6029,7 +6027,7 @@ static int vgsm_me_service_off(int fd, struct vgsm_me *me)
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_service_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_service_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -6050,9 +6048,9 @@ static int vgsm_me_service_func(int fd, int argc, char *argv[])
 	int (*func)(int fd, struct vgsm_me *me);
 
 	if (!strcasecmp(command, "on"))
-		func = vgsm_me_service_on;
+		func = vgsm_me_cli_service_on;
 	else if (!strcasecmp(command, "off"))
-		func = vgsm_me_service_off;
+		func = vgsm_me_cli_service_off;
 	else {
 		ast_cli(fd, "Unknown command '%s'\n", command);
 		err = RESULT_SHOWUSAGE;
@@ -6093,7 +6091,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_service_complete(
+static char *vgsm_me_cli_service_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6119,7 +6117,7 @@ static char *vgsm_me_service_complete(
 	return NULL;
 }
 
-static char vgsm_me_service_help[] =
+static char vgsm_me_cli_service_help[] =
 "Usage: vgsm me service <on|off> <me>\n"
 "\n"
 "	<me>\n"
@@ -6131,18 +6129,18 @@ static char vgsm_me_service_help[] =
 "	off\n"
 "		Put the specified ME offline.\n";
 
-static struct ast_cli_entry vgsm_me_service =
+static struct ast_cli_entry vgsm_me_cli_service =
 {
 	{ "vgsm", "me", "service", NULL },
-	vgsm_me_service_func,
+	vgsm_me_cli_service_func,
 	"Put the ME online or offline",
-	vgsm_me_service_help,
-	vgsm_me_service_complete
+	vgsm_me_cli_service_help,
+	vgsm_me_cli_service_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_identify_do(int fd, struct vgsm_me *me, int value)
+static int vgsm_me_cli_identify_do(int fd, struct vgsm_me *me, int value)
 {
 	if (me->status == VGSM_ME_STATUS_UNCONFIGURED ||
 	    me->status == VGSM_ME_STATUS_CLOSED ||
@@ -6159,7 +6157,7 @@ static int vgsm_me_identify_do(int fd, struct vgsm_me *me, int value)
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_identify_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_identify_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -6193,14 +6191,14 @@ static int vgsm_me_identify_func(int fd, int argc, char *argv[])
 		}
 
 		ast_mutex_lock(&me->lock);
-		err = vgsm_me_identify_do(fd, me, value);
+		err = vgsm_me_cli_identify_do(fd, me, value);
 		ast_mutex_unlock(&me->lock);
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
 		list_for_each_entry(me, &vgsm.mes_list, node) {
 			ast_mutex_lock(&me->lock);
-			err = vgsm_me_identify_do(fd, me, value);
+			err = vgsm_me_cli_identify_do(fd, me, value);
 			ast_mutex_unlock(&me->lock);
 		}
 		ast_rwlock_unlock(&vgsm.mes_list_lock);
@@ -6214,7 +6212,7 @@ err_missing_me:
 
 	return err;
 }
-static char *vgsm_me_identify_complete(
+static char *vgsm_me_cli_identify_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6240,7 +6238,7 @@ static char *vgsm_me_identify_complete(
 	return NULL;
 }
 
-static char vgsm_me_identify_help[] =
+static char vgsm_me_cli_identify_help[] =
 "Usage: vgsm me identify <me> [off]\n"
 "\n"
 "	<me>\n"
@@ -6250,18 +6248,18 @@ static char vgsm_me_identify_help[] =
 "		Disables frontal LED flashing to identify the\n"
 "		antenna connector associated with the specified me.\n";
 
-static struct ast_cli_entry vgsm_me_identify =
+static struct ast_cli_entry vgsm_me_cli_identify =
 {
 	{ "vgsm", "me", "identify", NULL },
-	vgsm_me_identify_func,
+	vgsm_me_cli_identify_func,
 	"Set operation selection method",
-	vgsm_me_identify_help,
-	vgsm_me_identify_complete
+	vgsm_me_cli_identify_help,
+	vgsm_me_cli_identify_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_operator_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_operator_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -6325,7 +6323,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_operator_complete(
+static char *vgsm_me_cli_operator_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6359,7 +6357,7 @@ static char *vgsm_me_operator_complete(
 	return NULL;
 }
 
-static char vgsm_me_operator_help[] =
+static char vgsm_me_cli_operator_help[] =
 "Usage: vgsm me operator <me> <auto | none | LAI> [fallback]\n"
 "\n"
 "	Changes the operator selection mode.\n"
@@ -6373,18 +6371,18 @@ static char vgsm_me_operator_help[] =
 "	If 'fallback' is specified, fall back to automatic if\n"
 "	the manually selected operator is not available.\n";
 
-static struct ast_cli_entry vgsm_me_operator =
+static struct ast_cli_entry vgsm_me_cli_operator =
 {
 	{ "vgsm", "me", "operator", NULL },
-	vgsm_me_operator_func,
+	vgsm_me_cli_operator_func,
 	"Set operation selection method",
-	vgsm_me_operator_help,
-	vgsm_me_operator_complete
+	vgsm_me_cli_operator_help,
+	vgsm_me_cli_operator_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_pin_set_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_pin_set_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -6465,7 +6463,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_pin_set_complete(
+static char *vgsm_me_cli_pin_set_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6491,7 +6489,7 @@ static char *vgsm_me_pin_set_complete(
 	return NULL;
 }
 
-static char vgsm_me_pin_set_help[] =
+static char vgsm_me_cli_pin_set_help[] =
 "Usage: vgsm pin set <me> <OLDPIN> <NEWPIN|enabled|disabled>\n"
 "\n"
 "	Set, enable or disable the PIN on the SIM installed in me\n"
@@ -6503,18 +6501,18 @@ static char vgsm_me_pin_set_help[] =
 "	enabled		Enable PIN check on the SIM card\n"
 "	disabled	Disable PIN check on the SIM card\n";
 
-static struct ast_cli_entry vgsm_me_pin_set =
+static struct ast_cli_entry vgsm_me_cli_pin_set =
 {
 	{ "vgsm", "me", "pin", "set", NULL },
-	vgsm_me_pin_set_func,
+	vgsm_me_cli_pin_set_func,
 	"Set, enable or disable PIN on the selected ME",
-	vgsm_me_pin_set_help,
-	vgsm_me_pin_set_complete,
+	vgsm_me_cli_pin_set_help,
+	vgsm_me_cli_pin_set_complete,
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_pin_input_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_pin_input_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -6615,7 +6613,7 @@ err_no_me_name:
 	return err;
 }
 
-static char *vgsm_me_pin_input_complete(
+static char *vgsm_me_cli_pin_input_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6631,23 +6629,23 @@ static char *vgsm_me_pin_input_complete(
 	return NULL;
 }
 
-static char vgsm_me_pin_input_help[] =
+static char vgsm_me_cli_pin_input_help[] =
 "Usage: vgsm me pin input <me> <PIN>\n"
 "\n"
 "	Manually input PIN to selected ME\n";
 
-static struct ast_cli_entry vgsm_me_pin_input =
+static struct ast_cli_entry vgsm_me_cli_pin_input =
 {
 	{ "vgsm", "me", "pin", "input", NULL },
-	vgsm_me_pin_input_func,
+	vgsm_me_cli_pin_input_func,
 	"Manually input PIN to selected ME",
-	vgsm_me_pin_input_help,
-	vgsm_me_pin_input_complete,
+	vgsm_me_cli_pin_input_help,
+	vgsm_me_cli_pin_input_complete,
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_puk_input_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_puk_input_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -6765,7 +6763,7 @@ err_no_me_name:
 	return err;
 }
 
-static char *vgsm_me_puk_input_complete(
+static char *vgsm_me_cli_puk_input_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6781,7 +6779,7 @@ static char *vgsm_me_puk_input_complete(
 	return NULL;
 }
 
-static char vgsm_me_puk_input_help[] =
+static char vgsm_me_cli_puk_input_help[] =
 "Usage: vgsm me puk input <me> <PUK>\n"
 "\n"
 "	Manually input PUK to selected me\n"
@@ -6790,18 +6788,18 @@ static char vgsm_me_puk_input_help[] =
 "	         useless, you will need to have it replaced from your\n"
 "	         operator.\n";
 
-static struct ast_cli_entry vgsm_me_puk_input =
+static struct ast_cli_entry vgsm_me_cli_puk_input =
 {
 	{ "vgsm", "me", "puk", "input", NULL },
-	vgsm_me_puk_input_func,
+	vgsm_me_cli_puk_input_func,
 	"Manually input PUK to selected ME",
-	vgsm_me_puk_input_help,
-	vgsm_me_puk_input_complete,
+	vgsm_me_cli_puk_input_help,
+	vgsm_me_cli_puk_input_complete,
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_sms_send_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_sms_send_func(int fd, int argc, char *argv[])
 {
 	int err = RESULT_SUCCESS;
 
@@ -6972,7 +6970,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_sms_send_complete(
+static char *vgsm_me_cli_sms_send_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -6988,7 +6986,7 @@ static char *vgsm_me_sms_send_complete(
 	return NULL;
 }
 
-static char vgsm_me_sms_send_help[] =
+static char vgsm_me_cli_sms_send_help[] =
 "Usage: vgsm me sms send <me> <number> <text> [class]\n"
 "\n"
 "	Send short message to <number> using me <me>.\n"
@@ -7000,17 +6998,17 @@ static char vgsm_me_sms_send_help[] =
 "	The full SMS interface is implemented throught the manager\n"
 "	interface.\n";
 
-static struct ast_cli_entry vgsm_me_sms_send =
+static struct ast_cli_entry vgsm_me_cli_sms_send =
 {
 	{ "vgsm", "me", "sms", "send", NULL },
-	vgsm_me_sms_send_func,
+	vgsm_me_cli_sms_send_func,
 	"Send a SMS message",
-	vgsm_me_sms_send_help,
-	vgsm_me_sms_send_complete,
+	vgsm_me_cli_sms_send_help,
+	vgsm_me_cli_sms_send_complete,
 };
 
 /*---------------------------------------------------------------------------*/
-static int vgsm_me_forwarding_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_forwarding_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -7037,7 +7035,7 @@ static int vgsm_me_forwarding_func(int fd, int argc, char *argv[])
 	}
 
 	if (!strcasecmp(command, "off")) {
-//		err = do_vgsm_me_forwarding_off(fd, me);
+//		err = do_vgsm_me_cli_forwarding_off(fd, me);
 //		if (err != RESULT_SUCCESS)
 //			goto err_forwarding_off;
 	} else {
@@ -7059,7 +7057,7 @@ err_no_me_name:
 	return err;
 }
 
-static char *vgsm_me_forwarding_complete(
+static char *vgsm_me_cli_forwarding_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -7083,23 +7081,23 @@ static char *vgsm_me_forwarding_complete(
 	return NULL;
 }
 
-static char vgsm_me_forwarding_help[] =
+static char vgsm_me_cli_forwarding_help[] =
 "Usage: vgsm me forwarding <me> <set|>\n"
 "\n"
 "	Set call forwarding for the specified me (not yet implemented)\n";
 
-static struct ast_cli_entry vgsm_me_forwarding =
+static struct ast_cli_entry vgsm_me_cli_forwarding =
 {
 	{ "vgsm", "me", "forwarding", NULL },
-	vgsm_me_forwarding_func,
+	vgsm_me_cli_forwarding_func,
 	"Set call forwarding for specified me",
-	vgsm_me_forwarding_help,
-	vgsm_me_forwarding_complete
+	vgsm_me_cli_forwarding_help,
+	vgsm_me_cli_forwarding_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_rawcommand_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_rawcommand_func(int fd, int argc, char *argv[])
 {
 	int err;
 
@@ -7152,7 +7150,7 @@ err_missing_me:
 	return err;
 }
 
-static char *vgsm_me_rawcommand_complete(
+static char *vgsm_me_cli_rawcommand_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -7168,23 +7166,24 @@ static char *vgsm_me_rawcommand_complete(
 	return NULL;
 }
 
-static char vgsm_me_rawcommand_help[] =
+static char vgsm_me_cli_rawcommand_help[] =
 "Usage: vgsm me rawcommand <me> <command>\n"
 "\n"
 "	Send a raw AT command. Only for debugging purposes!\n";
 
-static struct ast_cli_entry vgsm_me_rawcommand =
+static struct ast_cli_entry vgsm_me_cli_rawcommand =
 {
 	{ "vgsm", "me", "rawcommand", NULL },
-	vgsm_me_rawcommand_func,
+	vgsm_me_cli_rawcommand_func,
 	"Send AT raw command",
-	vgsm_me_rawcommand_help,
-	vgsm_me_rawcommand_complete
+	vgsm_me_cli_rawcommand_help,
+	vgsm_me_cli_rawcommand_complete
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_me_debug_state(
+#ifdef DEBUG_CODE
+static int vgsm_me_cli_debug_state(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7200,7 +7199,7 @@ static int vgsm_me_debug_state(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_call(
+static int vgsm_me_cli_debug_call(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7216,7 +7215,7 @@ static int vgsm_me_debug_call(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_atcommands(
+static int vgsm_me_cli_debug_atcommands(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7232,7 +7231,7 @@ static int vgsm_me_debug_atcommands(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_serial(
+static int vgsm_me_cli_debug_serial(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7248,7 +7247,7 @@ static int vgsm_me_debug_serial(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_sms(
+static int vgsm_me_cli_debug_sms(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7264,7 +7263,7 @@ static int vgsm_me_debug_sms(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_cbm(
+static int vgsm_me_cli_debug_cbm(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7280,7 +7279,7 @@ static int vgsm_me_debug_cbm(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_jitbuf(
+static int vgsm_me_cli_debug_jitbuf(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7296,7 +7295,7 @@ static int vgsm_me_debug_jitbuf(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_frames(
+static int vgsm_me_cli_debug_frames(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7312,7 +7311,7 @@ static int vgsm_me_debug_frames(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_sim(
+static int vgsm_me_cli_debug_sim(
 	int fd, struct vgsm_me *me, BOOL enable)
 {
 	if (me) {
@@ -7328,7 +7327,7 @@ static int vgsm_me_debug_sim(
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_all(int fd, BOOL enable)
+static int vgsm_me_cli_debug_all(int fd, BOOL enable)
 {
 	ast_rwlock_rdlock(&vgsm.mes_list_lock);
 	struct vgsm_me *me;
@@ -7344,7 +7343,7 @@ static int vgsm_me_debug_all(int fd, BOOL enable)
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_cli(int fd, int argc, char *argv[],
+static int vgsm_me_cli_debug_do(int fd, int argc, char *argv[],
 				int args, BOOL enable)
 {
 	int err = 0;
@@ -7355,7 +7354,7 @@ static int vgsm_me_debug_cli(int fd, int argc, char *argv[],
 	struct vgsm_me *me = NULL;
 
 	if (argc < args + 1) {
-		err = vgsm_me_debug_all(fd, enable);
+		err = vgsm_me_cli_debug_all(fd, enable);
 	} else {
 		if (argc > args + 1) {
 			me = vgsm_me_get_by_name(argv[args + 1]);
@@ -7367,23 +7366,23 @@ static int vgsm_me_debug_cli(int fd, int argc, char *argv[],
 		}
 
 		if (!strcasecmp(argv[args], "state"))
-			err = vgsm_me_debug_state(fd, me, enable);
+			err = vgsm_me_cli_debug_state(fd, me, enable);
 		else if (!strcasecmp(argv[args], "call"))
-			err = vgsm_me_debug_call(fd, me, enable);
+			err = vgsm_me_cli_debug_call(fd, me, enable);
 		else if (!strcasecmp(argv[args], "atcommands"))
-			err = vgsm_me_debug_atcommands(fd, me, enable);
+			err = vgsm_me_cli_debug_atcommands(fd, me, enable);
 		else if (!strcasecmp(argv[args], "serial"))
-			err = vgsm_me_debug_serial(fd, me, enable);
+			err = vgsm_me_cli_debug_serial(fd, me, enable);
 		else if (!strcasecmp(argv[args], "sms"))
-			err = vgsm_me_debug_sms(fd, me, enable);
+			err = vgsm_me_cli_debug_sms(fd, me, enable);
 		else if (!strcasecmp(argv[args], "cbm"))
-			err = vgsm_me_debug_cbm(fd, me, enable);
+			err = vgsm_me_cli_debug_cbm(fd, me, enable);
 		else if (!strcasecmp(argv[args], "jitbuf"))
-			err = vgsm_me_debug_jitbuf(fd, me, enable);
+			err = vgsm_me_cli_debug_jitbuf(fd, me, enable);
 		else if (!strcasecmp(argv[args], "frames"))
-			err = vgsm_me_debug_frames(fd, me, enable);
+			err = vgsm_me_cli_debug_frames(fd, me, enable);
 		else if (!strcasecmp(argv[args], "sim"))
-			err = vgsm_me_debug_sim(fd, me, enable);
+			err = vgsm_me_cli_debug_sim(fd, me, enable);
 		else {
 			ast_cli(fd, "Unrecognized category '%s'\n",
 					argv[args]);
@@ -7400,17 +7399,17 @@ static int vgsm_me_debug_cli(int fd, int argc, char *argv[],
 	return RESULT_SUCCESS;
 }
 
-static int vgsm_me_debug_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_debug_func(int fd, int argc, char *argv[])
 {
-	return vgsm_me_debug_cli(fd, argc, argv, 3, TRUE);
+	return vgsm_me_cli_debug_do(fd, argc, argv, 3, TRUE);
 }
 
-static int vgsm_me_no_debug_func(int fd, int argc, char *argv[])
+static int vgsm_me_cli_no_debug_func(int fd, int argc, char *argv[])
 {
-	return vgsm_me_debug_cli(fd, argc, argv, 4, FALSE);
+	return vgsm_me_cli_debug_do(fd, argc, argv, 4, FALSE);
 }
 
-static char *vgsm_me_debug_category_complete(
+static char *vgsm_me_cli_debug_category_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -7430,7 +7429,7 @@ static char *vgsm_me_debug_category_complete(
 	return NULL;
 }
 
-static char *vgsm_me_debug_complete(
+static char *vgsm_me_cli_debug_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -7441,7 +7440,7 @@ static char *vgsm_me_debug_complete(
 
 	switch(pos) {
 	case 3:
-		return vgsm_me_debug_category_complete(line, word, state);
+		return vgsm_me_cli_debug_category_complete(line, word, state);
 	case 4:
 		return vgsm_me_completion(line, word, state);
 	}
@@ -7449,7 +7448,7 @@ static char *vgsm_me_debug_complete(
 	return NULL;
 }
 
-static char *vgsm_me_no_debug_complete(
+static char *vgsm_me_cli_no_debug_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -7460,7 +7459,7 @@ static char *vgsm_me_no_debug_complete(
 
 	switch(pos) {
 	case 4:
-		return vgsm_me_debug_category_complete(line, word, state);
+		return vgsm_me_cli_debug_category_complete(line, word, state);
 	case 5:
 		return vgsm_me_completion(line, word, state);
 	}
@@ -7468,8 +7467,8 @@ static char *vgsm_me_no_debug_complete(
 	return NULL;
 }
 
-static char vgsm_me_debug_help[] =
-"Usage: debug vgsm me [<state | call | atcommands | serial | sms | cbm |\n"
+static char vgsm_me_cli_debug_help[] =
+"Usage: vgsm me debug [<state | call | atcommands | serial | sms | cbm |\n"
 "			 jitbuf | frames> [me]]\n"
 "\n"
 "	Debug vGSM's me-related events\n"
@@ -7485,23 +7484,24 @@ static char vgsm_me_debug_help[] =
 "	jitbuf		Audio jitter buffer\n"
 "	frames		Audio frames\n";
 
-static struct ast_cli_entry vgsm_me_debug =
+static struct ast_cli_entry vgsm_me_cli_debug =
 {
 	{ "vgsm", "me", "debug", NULL },
-	vgsm_me_debug_func,
+	vgsm_me_cli_debug_func,
 	"Enable ME debugging",
-	vgsm_me_debug_help,
-	vgsm_me_debug_complete
+	vgsm_me_cli_debug_help,
+	vgsm_me_cli_debug_complete
 };
 
-static struct ast_cli_entry vgsm_me_no_debug =
+static struct ast_cli_entry vgsm_me_cli_no_debug =
 {
 	{ "vgsm", "me", "no", "debug", NULL },
-	vgsm_me_no_debug_func,
+	vgsm_me_cli_no_debug_func,
 	"Disable ME debugging",
 	NULL,
-	vgsm_me_no_debug_complete
+	vgsm_me_cli_no_debug_complete
 };
+#endif
 
 /*---------------------------------------------------------------------------*/
 
@@ -7509,40 +7509,44 @@ int vgsm_me_load(void)
 {
 	ast_cli_register(&vgsm_me_show);
 
-	ast_cli_register(&vgsm_me_power);
-	ast_cli_register(&vgsm_me_reset);
-	ast_cli_register(&vgsm_me_service);
-	ast_cli_register(&vgsm_me_identify);
-	ast_cli_register(&vgsm_me_operator);
-	ast_cli_register(&vgsm_me_pin_set);
-	ast_cli_register(&vgsm_me_pin_input);
-	ast_cli_register(&vgsm_me_puk_input);
-	ast_cli_register(&vgsm_me_sms_send);
-	ast_cli_register(&vgsm_me_forwarding);
-	ast_cli_register(&vgsm_me_rawcommand);
+	ast_cli_register(&vgsm_me_cli_power);
+	ast_cli_register(&vgsm_me_cli_reset);
+	ast_cli_register(&vgsm_me_cli_service);
+	ast_cli_register(&vgsm_me_cli_identify);
+	ast_cli_register(&vgsm_me_cli_operator);
+	ast_cli_register(&vgsm_me_cli_pin_set);
+	ast_cli_register(&vgsm_me_cli_pin_input);
+	ast_cli_register(&vgsm_me_cli_puk_input);
+	ast_cli_register(&vgsm_me_cli_sms_send);
+	ast_cli_register(&vgsm_me_cli_forwarding);
+	ast_cli_register(&vgsm_me_cli_rawcommand);
 
-	ast_cli_register(&vgsm_me_debug);
-	ast_cli_register(&vgsm_me_no_debug);
+#ifdef DEBUG_CODE
+	ast_cli_register(&vgsm_me_cli_debug);
+	ast_cli_register(&vgsm_me_cli_no_debug);
+#endif
 
 	return 0;
 }
 
 int vgsm_me_unload(void)
 {
-	ast_cli_unregister(&vgsm_me_no_debug);
-	ast_cli_unregister(&vgsm_me_debug);
+#ifdef DEBUG_CODE
+	ast_cli_unregister(&vgsm_me_cli_no_debug);
+	ast_cli_unregister(&vgsm_me_cli_debug);
+#endif
 
-	ast_cli_unregister(&vgsm_me_rawcommand);
-	ast_cli_unregister(&vgsm_me_forwarding);
-	ast_cli_unregister(&vgsm_me_sms_send);
-	ast_cli_unregister(&vgsm_me_puk_input);
-	ast_cli_unregister(&vgsm_me_pin_input);
-	ast_cli_unregister(&vgsm_me_pin_set);
-	ast_cli_unregister(&vgsm_me_operator);
-	ast_cli_unregister(&vgsm_me_identify);
-	ast_cli_unregister(&vgsm_me_service);
-	ast_cli_unregister(&vgsm_me_reset);
-	ast_cli_unregister(&vgsm_me_power);
+	ast_cli_unregister(&vgsm_me_cli_rawcommand);
+	ast_cli_unregister(&vgsm_me_cli_forwarding);
+	ast_cli_unregister(&vgsm_me_cli_sms_send);
+	ast_cli_unregister(&vgsm_me_cli_puk_input);
+	ast_cli_unregister(&vgsm_me_cli_pin_input);
+	ast_cli_unregister(&vgsm_me_cli_pin_set);
+	ast_cli_unregister(&vgsm_me_cli_operator);
+	ast_cli_unregister(&vgsm_me_cli_identify);
+	ast_cli_unregister(&vgsm_me_cli_service);
+	ast_cli_unregister(&vgsm_me_cli_reset);
+	ast_cli_unregister(&vgsm_me_cli_power);
 
 	ast_cli_unregister(&vgsm_me_show);
 

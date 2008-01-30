@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -128,9 +128,6 @@
 
 #include <res_kstreamer.h>
 
-/* Workaround for conflicting config.h */
-#define DEBUG_CODE 1
-
 #include "util.h"
 #include "chan_vgsm.h"
 #include "me.h"
@@ -143,6 +140,7 @@
 #include "number.h"
 #include "base64.h"
 #include "quotprint.h"
+#include "debug.h"
 
 #define FAILED_RETRY_TIME (5 * SEC)
 #define READY_UPDATE_TIME (30 * SEC)
@@ -154,9 +152,9 @@
 #ifdef DEBUG_CODE
 #define vgsm_debug_jitbuf(me, format, arg...)	\
 	if ((me)->debug_jitbuf)			\
-		ast_verbose("vgsm: %s: "		\
-			format,				\
-			(me)->name,			\
+		vgsm_debug("%s: "		\
+			format,			\
+			(me)->name,		\
 			## arg)
 #else
 #define vgsm_debug_jitbuf(me, format, arg...)	\
@@ -165,14 +163,13 @@
 
 struct vgsm_state vgsm = {
 	.usecnt = 0,
+#ifdef DEBUG_CODE
 #ifdef DEBUG_DEFAULTS
-	.debug_generic = TRUE,
 	.debug_timer = FALSE,
 #else
-	.debug_generic = FALSE,
 	.debug_timer = FALSE,
 #endif
-
+#endif
 };
 
 static const struct ast_channel_tech vgsm_tech;
@@ -457,55 +454,7 @@ static int vgsm_reload_config(void)
 
 /*---------------------------------------------------------------------------*/
 
-static int vgsm_debug_generic_func(int fd, int argc, char *argv[])
-{
-	ast_mutex_lock(&vgsm.state_lock);
-	vgsm.debug_generic = TRUE;
-	ast_mutex_unlock(&vgsm.state_lock);
-
-	ast_cli(fd, "vGSM debugging enabled\n");
-
-	return RESULT_SUCCESS;
-}
-
-static char vgsm_debug_generic_help[] =
-"Usage: vgsm debug generic\n"
-"\n"
-"	Debug generic vGSM events, including mes state change\n";
-
-static struct ast_cli_entry vgsm_debug_generic =
-{
-	{ "vgsm", "debug", "generic", NULL },
-	vgsm_debug_generic_func,
-	"Enables generic vGSM debugging",
-	vgsm_debug_generic_help,
-	NULL
-};
-
-/*---------------------------------------------------------------------------*/
-
-static int vgsm_no_debug_generic_func(int fd, int argc, char *argv[])
-{
-	ast_mutex_lock(&vgsm.state_lock);
-	vgsm.debug_generic = FALSE;
-	ast_mutex_unlock(&vgsm.state_lock);
-
-	ast_cli(fd, "vGSM debugging disabled\n");
-
-	return RESULT_SUCCESS;
-}
-
-static struct ast_cli_entry vgsm_no_debug_generic =
-{
-	{ "vgsm", "no", "debug", "generic", NULL },
-	vgsm_no_debug_generic_func,
-	"Disables generic vGSM debugging",
-	NULL,
-	NULL
-};
-
-/*---------------------------------------------------------------------------*/
-
+#ifdef DEBUG_CODE
 static int vgsm_debug_timer_func(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.state_lock);
@@ -530,9 +479,11 @@ static struct ast_cli_entry vgsm_debug_timer =
 	vgsm_debug_timer_help,
 	NULL
 };
+#endif
 
 /*---------------------------------------------------------------------------*/
 
+#ifdef DEBUG_CODE
 static int vgsm_no_debug_timer_func(int fd, int argc, char *argv[])
 {
 	ast_mutex_lock(&vgsm.state_lock);
@@ -552,6 +503,7 @@ static struct ast_cli_entry vgsm_no_debug_timer =
 	NULL,
 	NULL
 };
+#endif
 
 /*---------------------------------------------------------------------------*/
 
@@ -747,7 +699,8 @@ static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 		goto err_me_node_not_found;
 	}
 
-	vgsm_debug_generic("Connecting userport %06d to chan %06d\n",
+	vgsm_me_debug_state(vgsm_chan->me,
+			"Connecting userport %06d to chan %06d\n",
 			vgsm_chan->node_userport->id,
 			vgsm_chan->node_me->id);
 
@@ -973,7 +926,7 @@ static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 		if (vgsm_chan)
 			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
 
-		vgsm_debug_call(me, "Unable to dial: ATD failed\n");
+		vgsm_me_debug_call(me, "Unable to dial: ATD failed\n");
 	} else {
 		if (vgsm_chan) {
 			ast_mutex_lock(&vgsm_chan->ast_chan->lock);
@@ -1018,7 +971,7 @@ static int vgsm_call(
 	if (me->status != VGSM_ME_STATUS_READY) {
 		ast_mutex_unlock(&me->lock);
 
-		vgsm_debug_call(me, "ME not ready\n");
+		vgsm_me_debug_call(me, "ME not ready\n");
 		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		err = -1;
 		goto err_me_not_ready;
@@ -1028,7 +981,7 @@ static int vgsm_call(
 	    me->net.status != VGSM_NET_STATUS_REGISTERED_ROAMING) {
 		ast_mutex_unlock(&me->lock);
 
-		vgsm_debug_call(me, "ME is not registered\n");
+		vgsm_me_debug_call(me, "ME is not registered\n");
 		ast_chan->hangupcause = AST_CAUSE_NETWORK_OUT_OF_ORDER;
 		err = -1;
 		goto err_me_not_registered;
@@ -1037,7 +990,7 @@ static int vgsm_call(
 	if (me->vgsm_chan) {
 		ast_mutex_unlock(&me->lock);
 
-		vgsm_debug_call(me, "ME is busy (call present)\n");
+		vgsm_me_debug_call(me, "ME is busy (call present)\n");
 		ast_chan->hangupcause = AST_CAUSE_NORMAL_CIRCUIT_CONGESTION;
 		err = -1;
 		goto err_me_busy;
@@ -1065,7 +1018,7 @@ static int vgsm_call(
 	ast_change_name(ast_chan, newname);
 	ast_setstate(ast_chan, AST_STATE_DIALING);
 
-	vgsm_debug_call(me, "Calling %s on %s\n",
+	vgsm_me_debug_call(me, "Calling %s on %s\n",
 			vgsm_chan->called_number,
 			ast_chan->name);
 
@@ -1113,8 +1066,6 @@ static int vgsm_answer(struct ast_channel *ast_chan)
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 	struct vgsm_me *me = vgsm_chan->me;
 	int err;
-
-	vgsm_debug_generic("vgsm_answer\n");
 
 	assert(vgsm_chan);
 
@@ -1184,8 +1135,6 @@ static int vgsm_indicate(
 		ast_log(LOG_ERROR, "NO VGSM_CHAN!!\n");
 		return 1;
 	}
-
-	vgsm_debug_generic("vgsm_indicate %d\n", condition);
 
 	switch(condition) {
 	case AST_CONTROL_RING:
@@ -1364,8 +1313,6 @@ static void vgsm_disconnect_channel(
 
 static int vgsm_hangup(struct ast_channel *ast_chan)
 {
-	vgsm_debug_generic("%s: hangup\n", ast_chan->name);
-
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
 	assert(vgsm_chan);
 
@@ -1452,8 +1399,6 @@ static int vgsm_hangup(struct ast_channel *ast_chan)
 	vgsm_chan_put(ast_chan->tech_pvt);
 	ast_chan->tech_pvt = NULL;
 
-	vgsm_debug_generic("%s: hangup complete\n", ast_chan->name);
-
 	return 0;
 }
 
@@ -1466,8 +1411,6 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	frame->mallocd = 0;
 	frame->delivery.tv_sec = 0;
 	frame->delivery.tv_usec = 0;
-	frame->offset = AST_FRIENDLY_OFFSET;
-	frame->src = "vgsm";
 
 	if (vgsm_chan->up_fd < 0) {
 		frame->frametype = AST_FRAME_NULL;
@@ -1475,6 +1418,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		frame->samples = 0;
 		frame->datalen = 0;
 		frame->data = NULL;
+		frame->offset = 0;
 
 		return frame;
 	}
@@ -1510,7 +1454,7 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 			sizeof(vgsm_chan->frame_out_buf) - AST_FRIENDLY_OFFSET);
 	if (nread < 0) {
 //		ast_log(LOG_WARNING, "read error: %s\n", strerror(errno));
-		return frame;
+		return NULL;
 	}
 
 	int sample_size;
@@ -1554,8 +1498,9 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 	frame->frametype = AST_FRAME_VOICE;
 	frame->subclass = ast_chan->rawreadformat;
 	frame->samples = nread / sample_size;
-	frame->datalen = nread;
 	frame->data = vgsm_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
+	frame->datalen = nread;
+	frame->offset = AST_FRIENDLY_OFFSET;
 
 	frame = ast_dsp_process(ast_chan, vgsm_chan->dsp, frame);
 
@@ -1701,7 +1646,7 @@ static int vgsm_write(
 		int diff = (mc->jitbuf_hardlow - pressure);
 		int diff_octs = diff * sample_size;
 
-		__u8 buf[len + diff_octs];
+		buf = alloca(len + diff_octs);
 
 		if (frame->subclass == AST_FORMAT_SLINEAR)
 			memset(buf, 0x00, diff_octs);
@@ -1720,7 +1665,7 @@ static int vgsm_write(
 		int diff = (mc->jitbuf_low - vgsm_chan->pressure_average);
 		int diff_octs = diff * sample_size;
 
-		__u8 buf[len + diff_octs];
+		buf = alloca(len + diff_octs);
 
 		if (frame->subclass == AST_FORMAT_SLINEAR)
 			memset(buf, 0x00, diff_octs);
@@ -1834,9 +1779,6 @@ static struct ast_channel *vgsm_request(
 
 		me = vgsm_hg_hunt(hg, NULL, NULL);
 		if (!me) {
-			vgsm_debug_generic("Cannot hunt in huntgroup %s\n",
-					hg_name);
-
 			*cause = AST_CAUSE_CONGESTION;
 			err = -1;
 			goto err_no_me_available;
@@ -2515,10 +2457,11 @@ static int vgsm_load_module(void)
 	if (err < 0)
 		goto err_hg_load;
 
-	ast_cli_register(&vgsm_debug_generic);
-	ast_cli_register(&vgsm_no_debug_generic);
+#ifdef DEBUG_CODE
 	ast_cli_register(&vgsm_debug_timer);
 	ast_cli_register(&vgsm_no_debug_timer);
+#endif
+
 	ast_cli_register(&vgsm_reload);
 
 	/* Register manager commands */
@@ -2544,10 +2487,11 @@ err_me_load:
 err_channel_register:
 
 	ast_cli_unregister(&vgsm_reload);
+
+#ifdef DEBUG_CODE
 	ast_cli_unregister(&vgsm_no_debug_timer);
 	ast_cli_unregister(&vgsm_debug_timer);
-	ast_cli_unregister(&vgsm_no_debug_generic);
-	ast_cli_unregister(&vgsm_debug_generic);
+#endif
 
 	vgsm_me_config_put(vgsm.default_mc);
 
@@ -2564,10 +2508,11 @@ static int vgsm_unload_module(void)
 	vgsm_me_unload();
 
 	ast_cli_unregister(&vgsm_reload);
+
+#ifdef DEBUG_CODE
 	ast_cli_unregister(&vgsm_no_debug_timer);
 	ast_cli_unregister(&vgsm_debug_timer);
-	ast_cli_unregister(&vgsm_no_debug_generic);
-	ast_cli_unregister(&vgsm_debug_generic);
+#endif
 
 	ast_channel_unregister(&vgsm_tech);
 

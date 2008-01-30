@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -66,9 +66,9 @@ struct vgsm_chan {
 	struct ast_frame frame_out;
 	__u8 frame_out_buf[AST_FRIENDLY_OFFSET + 512];
 
-	struct ast_dsp *dsp;
-
 	__u16 pressure_average;
+
+	struct ast_dsp *dsp;
 
 	int prev_rawwriteformat;
 	int prev_rawreadformat;
@@ -93,8 +93,6 @@ struct vgsm_state
 	ast_mutex_t usecnt_lock;
 	int usecnt;
 
-	BOOL debug_generic;
-	BOOL debug_jitbuf;
 	BOOL debug_timer;
 
 	char sms_spooler[PATH_MAX];

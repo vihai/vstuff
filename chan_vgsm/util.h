@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -37,38 +37,6 @@ extern struct vgsm_state vgsm;
 	(type *)( (char *)__mptr - offsetof(type,member) );})
 
 typedef unsigned char BOOL;
-
-#ifdef DEBUG_CODE
-#define vgsm_debug_serial(format, arg...)		\
-	if (vgsm.debug_serial)				\
-		ast_verbose("vgsm: "			\
-			format,				\
-			## arg)
-#define vgsm_debug_generic(format, arg...)		\
-	if (vgsm.debug_generic)				\
-		ast_verbose("vgsm: "			\
-			format,				\
-			## arg)
-#define vgsm_debug_serial_verb(format, arg...)		\
-	if (vgsm.debug_serial)				\
-		ast_verbose(VERBOSE_PREFIX_1		\
-			format,				\
-			## arg)
-#define vgsm_debug_generic_verb(format, arg...)		\
-	if (vgsm.debug_generic)				\
-		ast_verbose(VERBOSE_PREFIX_1		\
-			format,				\
-			## arg)
-#else
-#define vgsm_debug_serial(format, arg...)		\
-	do {} while(0);
-#define vgsm_debug_generic(format, arg...)		\
-	do {} while(0);
-#define vgsm_debug_serial_verb(format, arg...)		\
-	do {} while(0);
-#define vgsm_debug_generic_verb(format, arg...)		\
-	do {} while(0);
-#endif
 
 #define assert(cond)							\
 	do {								\

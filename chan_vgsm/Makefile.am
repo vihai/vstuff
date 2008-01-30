@@ -66,7 +66,8 @@ noinst_HEADERS =\
 	timer.h			\
 	util.h			\
 	rwlock_compat.h		\
-	atr.h
+	atr.h			\
+	debug.h
 
 chan_vgsm_la_CPPFLAGS=\
 	-DAST_MODULE=\"chan_vgsm\"		\
@@ -81,7 +82,7 @@ chan_vgsm_la_CPPFLAGS=\
 chan_vgsm_la_LIBADD = ../libkstreamer/libkstreamer.la ../libskb/libskb.la
 chan_vgsm_la_LDFLAGS = -module -avoid-version -no-undefined
 
-AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall -DDEBUG_CODE
 
 if !inline
 AM_CFLAGS += -fno-inline

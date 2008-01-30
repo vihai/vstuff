@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -26,8 +26,6 @@
 #include <sys/termios.h>
 #include <sys/signal.h>
 #include <ctype.h>
-
-#include "../config.h"
 
 #include <asterisk/lock.h>
 #include <asterisk/logger.h>

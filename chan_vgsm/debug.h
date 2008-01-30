@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006-2008 Daniele Orlandi
+ * Copyright (C) 2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -10,9 +10,15 @@
  *
  */
 
-#ifndef _VGSM_QUOTPRINT_H
-#define _VGSM_QUOTPRINT_H
+#ifndef _DEBUG_H
+#define _DEBUG_H
 
-int quoted_printable_decode(const char *src, __u8 *dest, int dest_size);
+#ifdef DEBUG_CODE
+#define vgsm_debug(format, arg...)					\
+	ast_verbose("vgsm: "						\
+		format,							\
+		## arg)
+
+#endif
 
 #endif

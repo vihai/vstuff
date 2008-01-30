@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -18,8 +18,6 @@
 #include <stdarg.h>
 #include <ctype.h>
 
-#include "../config.h"
-
 #include <asterisk/lock.h>
 #include <asterisk/channel.h>
 #include <asterisk/config.h>
@@ -32,6 +30,19 @@
 #include "chan_vgsm.h"
 #include "util.h"
 #include "huntgroup.h"
+#include "debug.h"
+
+#ifdef DEBUG_CODE
+#define vgsm_hg_debug(hg, format, arg...)	\
+	if ((hg)->debug)			\
+		vgsm_debug("%s: "		\
+			format,			\
+			(hg)->name,		\
+			## arg)
+#else
+#define vgsm_hg_debug(hg, format, arg...)	\
+	do {} while(0);
+#endif
 
 static struct vgsm_huntgroup *vgsm_hg_alloc(void)
 {
@@ -83,14 +94,12 @@ struct vgsm_huntgroup *vgsm_hg_get_by_name(const char *name)
 	struct vgsm_huntgroup *hg;
 
 	ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
-	
 	list_for_each_entry(hg, &vgsm.huntgroups_list, node) {
 		if (!strcasecmp(hg->name, name)) {
 			ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
 			return vgsm_hg_get(hg);
 		}
 	}
-
 	ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
 
 	return NULL;
@@ -339,7 +348,7 @@ static char vgsm_hg_show_help[] =
 
 static struct ast_cli_entry vgsm_hg_show =
 {
-	{ "vgsm", "huntgroups", "show", NULL },
+	{ "vgsm", "huntgroup", "show", NULL },
 	vgsm_hg_show_func,
 	"Displays huntgroups informations",
 	vgsm_hg_show_help,
@@ -389,13 +398,13 @@ struct vgsm_me *vgsm_hg_hunt(
 	ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
 
 	if (list_empty(&hg->members)) {
-		vgsm_debug_generic("No interfaces in huntgroup '%s'\n",
+		vgsm_hg_debug(hg, "No interfaces in huntgroup '%s'\n",
 				hg->name);
 
 		goto err_no_interfaces;
 	}
 
-	vgsm_debug_generic("Hunting started on group '%s'"
+	vgsm_hg_debug(hg, "Hunting started on group '%s'"
 			" (mode='%s', cur_me='%s', first_me='%s',"
 			" int_member='%s')\n",
 			hg->name,
@@ -428,12 +437,12 @@ struct vgsm_me *vgsm_hg_hunt(
 
 	struct vgsm_huntgroup_member *hgm = starting_hgm;
 	do {
-		vgsm_debug_generic(
+		vgsm_hg_debug(hg,
 			"Huntgroup: trying interface '%s'\n",
 			hgm->me->name);
 
 		if (hgm->me == first_me) {
-			vgsm_debug_generic(
+			vgsm_hg_debug(hg,
 				"Huntgroup: cycle completed without success\n");
 			break;
 		}
@@ -449,7 +458,7 @@ struct vgsm_me *vgsm_hg_hunt(
 
 			hg->current_member = hgm;
 
-			vgsm_debug_generic(
+			vgsm_hg_debug(hg,
 				"Huntgroup: found me"
 				" '%s'\n", hgm->me->name);
 
@@ -463,7 +472,7 @@ struct vgsm_me *vgsm_hg_hunt(
 
 		hgm = vgsm_hg_next_member(hg, hgm);
 
-		vgsm_debug_generic(
+		vgsm_hg_debug(hg,
 			"Huntgroup: next interface '%s'\n",
 			hgm->me->name);
 
@@ -475,15 +484,154 @@ err_no_interfaces:
 	return NULL;
 }
 
+static char *vgsm_hg_completion(const char *line, const char *word, int state)
+{
+	int which = 0;
+
+	ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
+	struct vgsm_huntgroup *hg;
+	list_for_each_entry(hg, &vgsm.huntgroups_list, node) {
+		if (!strncasecmp(word, hg->name, strlen(word)) &&
+		    ++which > state) {
+			ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
+			return strdup(hg->name);
+		}
+	}
+	ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
+
+	return NULL;
+}
+
+#ifdef DEBUG_CODE
+static int vgsm_hg_cli_debug_all(int fd, BOOL enable)
+{
+	struct vgsm_huntgroup *hg;
+	ast_rwlock_rdlock(&vgsm.huntgroups_list_lock);
+	list_for_each_entry(hg, &vgsm.huntgroups_list, node)
+		hg->debug = enable;
+	ast_rwlock_unlock(&vgsm.huntgroups_list_lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_hg_cli_debug_do(int fd, int argc, char *argv[],
+				int args, BOOL enable)
+{
+	int err = 0;
+
+	if (argc < args)
+		return RESULT_SHOWUSAGE;
+
+	struct vgsm_huntgroup *hg = NULL;
+
+	if (argc <= args) {
+		err = vgsm_hg_cli_debug_all(fd, enable);
+	} else if (argc <= args + 1) {
+		hg = vgsm_hg_get_by_name(argv[args + 1]);
+		if (!hg) {
+			ast_cli(fd, "Cannot find huntgroup '%s'\n",
+				argv[args]);
+			return RESULT_FAILURE;
+		}
+
+		hg->debug = enable;
+
+		vgsm_hg_put(hg);
+	}
+
+	if (err)
+		return err;
+
+	return RESULT_SUCCESS;
+}
+
+static int vgsm_hg_cli_debug_func(int fd, int argc, char *argv[])
+{
+	return vgsm_hg_cli_debug_do(fd, argc, argv, 3, TRUE);
+}
+
+static int vgsm_hg_cli_no_debug_func(int fd, int argc, char *argv[])
+{
+	return vgsm_hg_cli_debug_do(fd, argc, argv, 4, FALSE);
+}
+
+static char *vgsm_hg_cli_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 3:
+		return vgsm_hg_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char *vgsm_hg_cli_no_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 4:
+		return vgsm_hg_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char vgsm_hg_cli_debug_help[] =
+"Usage: vgsm huntgroup debug [huntgroup]\n"
+"\n"
+"	Debug huntgroup events\n";
+
+static struct ast_cli_entry vgsm_hg_cli_debug =
+{
+	{ "vgsm", "huntgroup", "debug", NULL },
+	vgsm_hg_cli_debug_func,
+	"Enable huntgroup debugging",
+	vgsm_hg_cli_debug_help,
+	vgsm_hg_cli_debug_complete
+};
+
+static struct ast_cli_entry vgsm_hg_cli_no_debug =
+{
+	{ "vgsm", "huntgroup", "no", "debug", NULL },
+	vgsm_hg_cli_no_debug_func,
+	"Disable huntgroup debugging",
+	NULL,
+	vgsm_hg_cli_no_debug_complete
+};
+#endif
+
 int vgsm_hg_load(void)
 {
 	ast_cli_register(&vgsm_hg_show);
+
+#ifdef DEBUG_CODE
+	ast_cli_register(&vgsm_hg_cli_debug);
+	ast_cli_register(&vgsm_hg_cli_no_debug);
+#endif
 
 	return 0;
 }
 
 int vgsm_hg_unload(void)
 {
+#ifdef DEBUG_CODE
+	ast_cli_unregister(&vgsm_hg_cli_no_debug);
+	ast_cli_unregister(&vgsm_hg_cli_debug);
+#endif
+
 	ast_cli_unregister(&vgsm_hg_show);
 
 	return 0;

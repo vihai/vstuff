@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -28,22 +28,22 @@
 #define VGSM_ME_GLOBAL "me:*"
 
 #ifdef DEBUG_CODE
-#define vgsm_debug_state(me, format, arg...)	\
+#define vgsm_me_debug_state(me, format, arg...)	\
 	if ((me)->debug_state)			\
-		ast_verbose("vgsm: %s: "		\
-			format,				\
-			(me)->name,			\
+		vgsm_debug("%s: "		\
+			format,			\
+			(me)->name,		\
 			## arg)
-#define vgsm_debug_call(me, format, arg...)		\
+#define vgsm_me_debug_call(me, format, arg...)	\
 	if ((me)->debug_call)			\
-		ast_verbose("vgsm: %s: "		\
-			format,				\
-			(me)->name,			\
+		vgsm_debug("%s: "		\
+			format,			\
+			(me)->name,		\
 			## arg)
 #else
-#define vgsm_debug_state(me, format, arg...)	\
+#define vgsm_me_debug_state(me, format, arg...)	\
 	do {} while(0);
-#define vgsm_debug_call(me, format, arg...)		\
+#define vgsm_me_debug_call(me, format, arg...)	\
 	do {} while(0);
 #endif
 
@@ -386,8 +386,6 @@ void vgsm_me_failed(struct vgsm_me *me, int err);
 const char *vgsm_me_error_to_text(int code);
 
 void vgsm_me_shutdown_all(void);
-
-char *vgsm_me_completion(const char *line, const char *word, int state);
 
 int vgsm_me_load(void);
 int vgsm_me_unload(void);

@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2007 Daniele Orlandi
+ * Copyright (C) 2007-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -25,7 +25,7 @@
 #ifdef DEBUG_CODE
 #define vgsm_mesim_debug(mesim, format, arg...)	\
 	if ((mesim)->debug)				\
-		ast_verbose("vgsm: mesim %s: "		\
+		vgsm_debug("mesim %s: "			\
 			format,				\
 			(mesim)->name,			\
 			## arg)

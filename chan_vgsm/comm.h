@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -20,25 +20,26 @@
 #include "longtime.h"
 #include "timer.h"
 #include "util.h"
+#include "debug.h"
 
 #ifdef DEBUG_CODE
 #define vgsm_comm_debug_messages(comm, format, arg...)		\
 	if ((comm)->debug_messages)				\
-		ast_verbose("vgsm: %s: "			\
+		vgsm_debug("%s: "				\
 			format,					\
 			(comm)->name,				\
 			## arg)
 
 #define vgsm_comm_debug_characters(comm, format, arg...)	\
 	if ((comm)->debug_characters)				\
-		ast_verbose("vgsm: %s: "			\
+		vgsm_debug("%s: "				\
 			format,					\
 			(comm)->name,				\
 			## arg)
 
 #define vgsm_comm_debug_timer(comm, format, arg...)		\
 	if ((comm)->debug_timer)				\
-		ast_verbose("vgsm: %s: "			\
+		vgsm_debug("%s: "				\
 			format,					\
 			(comm)->name,				\
 			## arg)
