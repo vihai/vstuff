@@ -29,7 +29,9 @@ noinst_HEADERS = \
 	disconnect.h	\
 	numbers_list.h	\
 	app_visdn_ppp.h \
-	util.h
+	util.h		\
+	rwlock_compat.h	\
+	debug.h
 
 chan_visdn_la_CPPFLAGS=\
 	-DAST_MODULE=\"chan_visdn\"		\
@@ -45,7 +47,7 @@ chan_visdn_la_CPPFLAGS=\
 chan_visdn_la_LIBADD = ../libq931/libq931.la
 chan_visdn_la_LDFLAGS = -module -avoid-version -no-undefined
 
-AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall
+AM_CFLAGS = -D_REENTRANT -D_GNU_SOURCE -Wall -DDEBUG_CODE
 
 if !inline
 AM_CFLAGS += -fno-inline

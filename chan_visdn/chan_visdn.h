@@ -122,7 +122,7 @@ struct visdn_state
 {
 	pthread_t q931_thread;
 
-	ast_mutex_t lock;
+	ast_mutex_t state_lock;
 
 	int usecnt;
 	ast_mutex_t usecnt_lock;
@@ -139,7 +139,10 @@ struct visdn_state
 	int q931_ccb_queue_pipe_read;
 	int q931_ccb_queue_pipe_write;
 
-	struct list_head ifs;
+	ast_rwlock_t intfs_list_lock;
+	struct list_head intfs_list;
+
+	ast_rwlock_t huntgroups_list_lock;
 	struct list_head huntgroups_list;
 
 	struct pollfd polls[100];
@@ -150,7 +153,7 @@ struct visdn_state
 
 	int router_control_fd;
 
-	int debug;
+	int debug_netlink;
 	int debug_q931;
 	int debug_q921;
 

@@ -22,6 +22,8 @@
 		}							\
 	} while(0)
 
+typedef unsigned char BOOL;
+
 #ifndef TRUE
 #define TRUE 1
 #endif
@@ -33,25 +35,6 @@
 #define BOOL char
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-#ifdef DEBUG_CODE
-#define visdn_debug(format, arg...)			\
-	if (visdn.debug)				\
-		ast_verbose(VERBOSE_PREFIX_3		\
-			format,				\
-			## arg)
-
-#define FUNC_DEBUG(format, arg...)	\
-	visdn_debug("%s " format "\n", __FUNCTION__, ## arg);
-
-#else
-#define visdn_debug(format, arg...)		\
-	do {} while(0);
-#define FUNC_DEBUG() do {} while(0)
-#endif
-
-#define SEC 1000000LL
-#define MILLISEC 1000LL
 
 #define min(x,y) ({ \
 	typeof(x) _x = (x);		\

@@ -45,6 +45,8 @@ struct visdn_huntgroup
 	struct list_head members;
 
 	struct visdn_huntgroup_member *current_member;
+
+	BOOL debug;
 };
 
 void visdn_hg_reload(struct ast_config *cfg);

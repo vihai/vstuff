@@ -49,6 +49,7 @@
 #include "huntgroup.h"
 #include "ton.h"
 #include "numbers_list.h"
+#include "debug.h"
 
 #define FAILED_RETRY_TIME (30 * SEC)
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
@@ -101,22 +102,27 @@ void visdn_intf_put(struct visdn_intf *intf)
 	ast_mutex_unlock(&visdn.usecnt_lock);
 }
 
+static struct visdn_intf *_visdn_intf_get_by_name(const char *name)
+{
+	struct visdn_intf *intf;
+
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
+		if (!strcasecmp(intf->name, name))
+			return visdn_intf_get(intf);
+	}
+
+	return NULL;
+}
+
 struct visdn_intf *visdn_intf_get_by_name(const char *name)
 {
 	struct visdn_intf *intf;
 
-	ast_mutex_lock(&visdn.lock);
-	
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
-		if (!strcasecmp(intf->name, name)) {
-			ast_mutex_unlock(&visdn.lock);
-			return visdn_intf_get(intf);
-		}
-	}
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	intf = _visdn_intf_get_by_name(name);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 
-	ast_mutex_unlock(&visdn.lock);
-
-	return NULL;
+	return intf;
 }
 
 struct visdn_ic *visdn_ic_alloc(void)
@@ -449,9 +455,8 @@ static void visdn_intf_set_status(
 	longtime_t timeout,
 	const char *fmt, ...)
 {
-	visdn_debug("vISDN interface '%s' changed state from %s to %s"
-		" (timer %.2fs)\n",
-		intf->name,
+	visdn_intf_debug_state(intf,
+		"changed state from %s to %s (timer %.2fs)\n",
 		visdn_intf_status_to_text(intf->status),
 		visdn_intf_status_to_text(status),
 		timeout / 1000000.0);
@@ -653,7 +658,6 @@ void visdn_intf_close(struct visdn_intf *intf)
 	intf->q931_intf = NULL;
 }
 
-
 static void visdn_intf_timer(struct visdn_intf *intf)
 {
 	switch(intf->status) {
@@ -676,8 +680,8 @@ static void visdn_intf_timer(struct visdn_intf *intf)
 longtime_t visdn_intf_run_timers(longtime_t timeout)
 {
 	struct visdn_intf *intf;
-	ast_mutex_lock(&visdn.lock);
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
 
 		if (intf->timer_expiration != -1) {
 			if (intf->timer_expiration < longtime_now()) {
@@ -689,7 +693,7 @@ longtime_t visdn_intf_run_timers(longtime_t timeout)
 			}
 		}
 	}
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 
 	return timeout;
 }
@@ -768,19 +772,19 @@ static void visdn_intf_reconfigure(
 		var = var->next;
 	}
 
-	ast_mutex_lock(&visdn.lock);
+	ast_rwlock_wrlock(&visdn.intfs_list_lock);
 
-	struct visdn_intf *intf = visdn_intf_get_by_name(name);
+	struct visdn_intf *intf = _visdn_intf_get_by_name(name);
 	if (!intf) {
 		intf = visdn_intf_alloc();
 		if (!intf) {
-			ast_mutex_unlock(&visdn.lock);
+			ast_rwlock_unlock(&visdn.intfs_list_lock);
 			return;
 		}
 
 		strncpy(intf->name, name, sizeof(intf->name));
 
-		list_add_tail(&intf->ifs_node, &visdn.ifs);
+		list_add_tail(&intf->node, &visdn.intfs_list);
 	}
 
 	if (intf->current_ic)
@@ -795,13 +799,11 @@ static void visdn_intf_reconfigure(
 			VISDN_INTF_STATUS_CONFIGURED,
 			WAITING_INITIALIZATION_DELAY, NULL);
 
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 }
 
 void visdn_intf_reload(struct ast_config *cfg)
 {
-	ast_mutex_lock(&visdn.lock);
-
 	/* Read default interface configuration */
 	struct ast_variable *var;
 	var = ast_variable_browse(cfg, "global");
@@ -827,8 +829,6 @@ void visdn_intf_reload(struct ast_config *cfg)
 
 		visdn_intf_reconfigure(cfg, cat);
 	}
-
-	ast_mutex_unlock(&visdn.lock);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1128,27 +1128,27 @@ static void visdn_print_intf_details(int fd, struct visdn_intf *intf)
 
 }
 
-char *visdn_intf_complete(
+char *visdn_intf_completion(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
 	const char *line, const char *word,
 #endif
-	int pos, int state)
+	int state)
 {
 	int which = 0;
 
-	ast_mutex_lock(&visdn.lock);
 	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
 		if (!strncasecmp(word, intf->name, strlen(word))) {
 			if (++which > state) {
-				ast_mutex_unlock(&visdn.lock);
+				ast_rwlock_unlock(&visdn.intfs_list_lock);
 				return strdup(intf->name);
 			}
 		}
 	}
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 
 	return NULL;
 }
@@ -1164,7 +1164,7 @@ static char *complete_visdn_interface_show(
 	if (pos != 3)
 		return NULL;
 
-	return visdn_intf_complete(line, word, pos, state);
+	return visdn_intf_completion(line, word, state);
 }
 
 static void visdn_show_interface(int fd, struct visdn_intf *intf)
@@ -1203,27 +1203,27 @@ static void visdn_show_interface(int fd, struct visdn_intf *intf)
 
 static int do_visdn_interface_show(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&visdn.lock);
-
 	if (argc == 3) {
 		ast_cli(fd, "Interface  Status         Role Mode TEI Calls\n");
 		
 		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node)
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		list_for_each_entry(intf, &visdn.intfs_list, node)
 			visdn_show_interface(fd, intf);
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
 
 	} else if (argc == 4) {
 		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		list_for_each_entry(intf, &visdn.intfs_list, node) {
 			if (!strcasecmp(argv[3], intf->name)) {
 				visdn_print_intf_details(fd, intf);
 				break;
 			}
 		}
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
 	} else
 		return RESULT_SHOWUSAGE;
-
-	ast_mutex_unlock(&visdn.lock);
 
 	return RESULT_SUCCESS;
 }
@@ -1245,12 +1245,225 @@ static struct ast_cli_entry visdn_interface_show =
 
 /*---------------------------------------------------------------------------*/
 
+#ifdef DEBUG_CODE
+static int visdn_intf_cli_debug_state(
+	int fd, struct visdn_intf *intf, BOOL enable)
+{
+	if (intf) {
+		intf->debug_state = enable;
+	} else {
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		struct visdn_intf *intf;
+		list_for_each_entry(intf, &visdn.intfs_list, node)
+			intf->debug_state = enable;
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_intf_cli_debug_jitbuf(
+	int fd, struct visdn_intf *intf, BOOL enable)
+{
+	if (intf) {
+		intf->debug_jitbuf = enable;
+	} else {
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		struct visdn_intf *intf;
+		list_for_each_entry(intf, &visdn.intfs_list, node)
+			intf->debug_jitbuf = enable;
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_intf_cli_debug_frames(
+	int fd, struct visdn_intf *intf, BOOL enable)
+{
+	if (intf) {
+		intf->debug_frames = enable;
+	} else {
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		struct visdn_intf *intf;
+		list_for_each_entry(intf, &visdn.intfs_list, node)
+			intf->debug_frames = enable;
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
+	}
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_intf_cli_debug_all(int fd, BOOL enable)
+{
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	struct visdn_intf *intf;
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
+		intf->debug_state = enable;
+		intf->debug_jitbuf = enable;
+	}
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_intf_cli_debug(int fd, int argc, char *argv[],
+				int args, BOOL enable)
+{
+	int err = 0;
+
+	if (argc < args)
+		return RESULT_SHOWUSAGE;
+
+	struct visdn_intf *intf = NULL;
+
+	if (argc < args + 1) {
+		err = visdn_intf_cli_debug_all(fd, enable);
+	} else {
+		if (argc > args + 1) {
+			intf = visdn_intf_get_by_name(argv[args + 1]);
+			if (!intf) {
+				ast_cli(fd, "Cannot find interface '%s'\n",
+					argv[args]);
+				return RESULT_FAILURE;
+			}
+		}
+
+		if (!strcasecmp(argv[args], "state"))
+			err = visdn_intf_cli_debug_state(fd, intf, enable);
+		else if (!strcasecmp(argv[args], "jitbuf"))
+			err = visdn_intf_cli_debug_jitbuf(fd, intf, enable);
+		else if (!strcasecmp(argv[args], "frames"))
+			err = visdn_intf_cli_debug_frames(fd, intf, enable);
+		else {
+			ast_cli(fd, "Unrecognized category '%s'\n",
+					argv[args]);
+			err = RESULT_SHOWUSAGE;
+		}
+
+		if (intf)
+			visdn_intf_put(intf);
+	}
+
+	if (err)
+		return err;
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_intf_debug_func(int fd, int argc, char *argv[])
+{
+	return visdn_intf_cli_debug(fd, argc, argv, 3, TRUE);
+}
+
+static int visdn_intf_no_debug_func(int fd, int argc, char *argv[])
+{
+	return visdn_intf_cli_debug(fd, argc, argv, 4, FALSE);
+}
+
+static char *visdn_intf_debug_category_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int state)
+{
+	char *commands[] = { "state", "jitbuf", "frames" };
+	int i;
+
+	for(i=state; i<ARRAY_SIZE(commands); i++) {
+		if (!strncasecmp(word, commands[i], strlen(word)))
+			return strdup(commands[i]);
+	}
+
+	return NULL;
+}
+
+static char *visdn_intf_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 3:
+		return visdn_intf_debug_category_complete(line, word, state);
+	case 4:
+		return visdn_intf_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char *visdn_intf_no_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 4:
+		return visdn_intf_debug_category_complete(line, word, state);
+	case 5:
+		return visdn_intf_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char visdn_intf_debug_help[] =
+"Usage: visdn interface [<state | jitbuf | frames> [interface]]\n"
+"\n"
+"	Debug vISDN's interface related events\n"
+"\n"
+"	state		Interface state transitions\n"
+"	jitbuf		Audio jitter buffer\n"
+"	frames		Audio frames\n";
+
+static struct ast_cli_entry visdn_intf_debug =
+{
+	{ "visdn", "interface", "debug", NULL },
+	visdn_intf_debug_func,
+	"Enable interface debugging",
+	visdn_intf_debug_help,
+	visdn_intf_debug_complete
+};
+
+static struct ast_cli_entry visdn_intf_no_debug =
+{
+	{ "visdn", "interface", "no", "debug", NULL },
+	visdn_intf_no_debug_func,
+	"Disable interface debugging",
+	NULL,
+	visdn_intf_no_debug_complete
+};
+#endif
+
+/*---------------------------------------------------------------------------*/
+
 void visdn_intf_cli_register(void)
 {
 	ast_cli_register(&visdn_interface_show);
+
+#ifdef DEBUG_CODE
+	ast_cli_register(&visdn_intf_debug);
+	ast_cli_register(&visdn_intf_no_debug);
+#endif
 }
 
 void visdn_intf_cli_unregister(void)
 {
+#ifdef DEBUG_CODE
+	ast_cli_unregister(&visdn_intf_no_debug);
+	ast_cli_unregister(&visdn_intf_debug);
+#endif
+
 	ast_cli_unregister(&visdn_interface_show);
 }

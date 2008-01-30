@@ -1,7 +1,7 @@
 /*
  * vISDN channel driver for Asterisk
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -29,6 +29,19 @@
 #include "chan_visdn.h"
 #include "util.h"
 #include "huntgroup.h"
+#include "debug.h"
+
+#ifdef DEBUG_CODE
+#define visdn_hg_debug(hg, format, arg...)	\
+	if ((hg)->debug)			\
+		visdn_debug("%s: "		\
+			format,			\
+			(hg)->name,		\
+			## arg)
+#else
+#define visdn_hg_debug(hg, format, arg...)	\
+	do {} while(0);
+#endif
 
 static struct visdn_huntgroup *visdn_hg_alloc(void)
 {
@@ -77,16 +90,14 @@ struct visdn_huntgroup *visdn_hg_get_by_name(const char *name)
 {
 	struct visdn_huntgroup *hg;
 
-	ast_mutex_lock(&visdn.lock);
-	
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
 	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
 		if (!strcasecmp(hg->name, name)) {
-			ast_mutex_unlock(&visdn.lock);
+			ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 			return visdn_hg_get(hg);
 		}
 	}
-
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 
 	return NULL;
 }
@@ -216,9 +227,8 @@ static void visdn_hg_reconfigure(
 		var = var->next;
 	}
 
-	ast_mutex_lock(&visdn.lock);
-
 	struct visdn_huntgroup *old_hg, *tpos;
+	ast_rwlock_wrlock(&visdn.huntgroups_list_lock);
 	list_for_each_entry_safe(old_hg, tpos, &visdn.huntgroups_list, node) {
 		if (strcasecmp(old_hg->name, name))
 			continue;
@@ -231,13 +241,11 @@ static void visdn_hg_reconfigure(
 
 	list_add_tail(&visdn_hg_get(hg)->node, &visdn.huntgroups_list);
 
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 }
 
 void visdn_hg_reload(struct ast_config *cfg)
 {
-	ast_mutex_lock(&visdn.lock);
-
 	/*
 	struct visdn_huntgroup *hg;
 	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
@@ -264,13 +272,11 @@ void visdn_hg_reload(struct ast_config *cfg)
 		visdn_hg_reconfigure(cfg, cat,
 			cat + strlen(VISDN_HUNTGROUP_PREFIX));
 	}
-
-	ast_mutex_unlock(&visdn.lock);
 }
 
 /*---------------------------------------------------------------------------*/
 
-static char *complete_visdn_huntgroups_show(
+static char *visdn_hg_cli_show_complete(
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 	char *line, char *word,
 #else
@@ -283,22 +289,22 @@ static char *complete_visdn_huntgroups_show(
 
 	int which = 0;
 
-	ast_mutex_lock(&visdn.lock);
 	struct visdn_huntgroup *huntgroup;
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
 	list_for_each_entry(huntgroup, &visdn.huntgroups_list, node) {
 		if (!strncasecmp(word, huntgroup->name, strlen(word))) {
 			if (++which > state) {
-				ast_mutex_unlock(&visdn.lock);
+				ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 				return strdup(huntgroup->name);
 			}
 		}
 	}
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 
 	return NULL;
 }
 
-static void do_visdn_huntgroups_show_details(
+static void do_visdn_hg_cli_show_details(
 	int fd, struct visdn_huntgroup *hg)
 {
 	ast_cli(fd, "\n-- '%s'--\n", hg->name);
@@ -314,33 +320,31 @@ static void do_visdn_huntgroups_show_details(
 	ast_cli(fd, "\n");
 }
 
-static int do_visdn_huntgroups_show(int fd, int argc, char *argv[])
+static int do_visdn_hg_cli_show(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&visdn.lock);
-
 	struct visdn_huntgroup *hg;
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
 	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
 		if (argc != 4 || !strcasecmp(argv[3], hg->name))
-			do_visdn_huntgroups_show_details(fd, hg);
+			do_visdn_hg_cli_show_details(fd, hg);
 	}
-
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 
 	return RESULT_SUCCESS;
 }
 
-static char visdn_huntgroups_show_help[] =
+static char visdn_hg_cli_show_help[] =
 "Usage: visdn show huntgroups [<huntgroup>]\n"
 "	Displays detailed informations on vISDN's huntgroup or lists all the\n"
 "	available huntgroups if <huntgroup> has not been specified.\n";
 
-static struct ast_cli_entry visdn_huntgroups_show =
+static struct ast_cli_entry visdn_hg_cli_show =
 {
-	{ "visdn", "huntgroups", "show", NULL },
-	do_visdn_huntgroups_show,
+	{ "visdn", "huntgroup", "show", NULL },
+	do_visdn_hg_cli_show,
 	"Displays vISDN's huntgroups informations",
-	visdn_huntgroups_show_help,
-	complete_visdn_huntgroups_show
+	visdn_hg_cli_show_help,
+	visdn_hg_cli_show_complete
 };
 
 /*---------------------------------------------------------------------------*/
@@ -364,7 +368,7 @@ static struct visdn_huntgroup_member *visdn_hg_next_member(
 {
 	struct visdn_huntgroup_member *memb;
 
-	ast_mutex_lock(&visdn.lock);
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
 
 	if (cur_memb->node.next == &hg->members)
 		memb = list_entry(hg->members.next,
@@ -373,7 +377,7 @@ static struct visdn_huntgroup_member *visdn_hg_next_member(
 		memb = list_entry(cur_memb->node.next,
 			struct visdn_huntgroup_member, node);
 
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 
 	return memb;
 }
@@ -383,15 +387,16 @@ struct visdn_intf *visdn_hg_hunt(
 	struct visdn_intf *cur_intf,
 	struct visdn_intf *first_intf)
 {
-	ast_mutex_lock(&visdn.lock);
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
 
 	if (list_empty(&hg->members)) {
-		visdn_debug("No interfaces in huntgroup '%s'\n", hg->name);
+		visdn_hg_debug(hg, "No interfaces in huntgroup '%s'\n",
+								hg->name);
 
 		goto err_no_interfaces;
 	}
 
-	visdn_debug("Hunting started on group '%s'"
+	visdn_hg_debug(hg, "Hunting started on group '%s'"
 			" (mode='%s', cur_intf='%s', first_intf='%s',"
 			" int_member='%s')\n",
 			hg->name,
@@ -424,12 +429,12 @@ struct visdn_intf *visdn_hg_hunt(
 
 	struct visdn_huntgroup_member *hgm = starting_hgm;
 	do {
-		visdn_debug(
+		visdn_hg_debug(hg,
 			"Huntgroup: trying interface '%s'\n",
 			hgm->intf->name);
 
 		if (hgm->intf == first_intf) {
-			visdn_debug(
+			visdn_hg_debug(hg,
 				"Huntgroup: cycle completed without success\n");
 			break;
 		}
@@ -444,11 +449,12 @@ struct visdn_intf *visdn_hg_hunt(
 
 					hg->current_member = hgm;
 
-					visdn_debug(
+					visdn_hg_debug(hg,
 						"Huntgroup: found interface"
 					       	" '%s'\n", hgm->intf->name);
 
-					ast_mutex_unlock(&visdn.lock);
+					ast_rwlock_unlock(
+						&visdn.huntgroups_list_lock);
 
 					return visdn_intf_get(hgm->intf);
 				}
@@ -457,24 +463,163 @@ struct visdn_intf *visdn_hg_hunt(
 
 		hgm = visdn_hg_next_member(hg, hgm);
 
-		visdn_debug(
+		visdn_hg_debug(hg,
 			"Huntgroup: next interface '%s'\n",
 			hgm->intf->name);
 
 	} while(hgm != starting_hgm);
 
 err_no_interfaces:
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
 
 	return NULL;
 }
 
+static char *visdn_hg_completion(const char *line, const char *word, int state)
+{
+	int which = 0;
+
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
+	struct visdn_huntgroup *hg;
+	list_for_each_entry(hg, &visdn.huntgroups_list, node) {
+		if (!strncasecmp(word, hg->name, strlen(word)) &&
+		    ++which > state) {
+			ast_rwlock_unlock(&visdn.huntgroups_list_lock);
+			return strdup(hg->name);
+		}
+	}
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
+
+	return NULL;
+}
+
+#ifdef DEBUG_CODE
+static int visdn_hg_cli_debug_all(int fd, BOOL enable)
+{
+	struct visdn_huntgroup *hg;
+	ast_rwlock_rdlock(&visdn.huntgroups_list_lock);
+	list_for_each_entry(hg, &visdn.huntgroups_list, node)
+		hg->debug = enable;
+	ast_rwlock_unlock(&visdn.huntgroups_list_lock);
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_hg_cli_debug_do(int fd, int argc, char *argv[],
+				int args, BOOL enable)
+{
+	int err = 0;
+
+	if (argc < args)
+		return RESULT_SHOWUSAGE;
+
+	struct visdn_huntgroup *hg = NULL;
+
+	if (argc <= args) {
+		err = visdn_hg_cli_debug_all(fd, enable);
+	} else if (argc <= args + 1) {
+		hg = visdn_hg_get_by_name(argv[args + 1]);
+		if (!hg) {
+			ast_cli(fd, "Cannot find huntgroup '%s'\n",
+				argv[args]);
+			return RESULT_FAILURE;
+		}
+
+		hg->debug = enable;
+
+		visdn_hg_put(hg);
+	}
+
+	if (err)
+		return err;
+
+	return RESULT_SUCCESS;
+}
+
+static int visdn_hg_cli_debug_func(int fd, int argc, char *argv[])
+{
+	return visdn_hg_cli_debug_do(fd, argc, argv, 3, TRUE);
+}
+
+static int visdn_hg_cli_no_debug_func(int fd, int argc, char *argv[])
+{
+	return visdn_hg_cli_debug_do(fd, argc, argv, 4, FALSE);
+}
+
+static char *visdn_hg_cli_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 3:
+		return visdn_hg_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char *visdn_hg_cli_no_debug_complete(
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+	char *line, char *word,
+#else
+	const char *line, const char *word,
+#endif
+	int pos, int state)
+{
+
+	switch(pos) {
+	case 4:
+		return visdn_hg_completion(line, word, state);
+	}
+
+	return NULL;
+}
+
+static char visdn_hg_cli_debug_help[] =
+"Usage: visdn huntgroup debug [huntgroup]\n"
+"\n"
+"	Debug huntgroup events\n";
+
+static struct ast_cli_entry visdn_hg_cli_debug =
+{
+	{ "visdn", "huntgroup", "debug", NULL },
+	visdn_hg_cli_debug_func,
+	"Enable huntgroup debugging",
+	visdn_hg_cli_debug_help,
+	visdn_hg_cli_debug_complete
+};
+
+static struct ast_cli_entry visdn_hg_cli_no_debug =
+{
+	{ "visdn", "huntgroup", "no", "debug", NULL },
+	visdn_hg_cli_no_debug_func,
+	"Disable huntgroup debugging",
+	NULL,
+	visdn_hg_cli_no_debug_complete
+};
+#endif
+
 void visdn_hg_cli_register(void)
 {
-	ast_cli_register(&visdn_huntgroups_show);
+	ast_cli_register(&visdn_hg_cli_show);
+
+#ifdef DEBUG_CODE
+	ast_cli_register(&visdn_hg_cli_debug);
+	ast_cli_register(&visdn_hg_cli_no_debug);
+#endif
 }
 
 void visdn_hg_cli_unregister(void)
 {
-	ast_cli_unregister(&visdn_huntgroups_show);
+#ifdef DEBUG_CODE
+	ast_cli_unregister(&visdn_hg_cli_no_debug);
+	ast_cli_unregister(&visdn_hg_cli_debug);
+#endif
+
+	ast_cli_unregister(&visdn_hg_cli_show);
 }

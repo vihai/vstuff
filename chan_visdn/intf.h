@@ -20,6 +20,49 @@
 #include <libq931/intf.h>
 
 #include "ton.h"
+#include "util.h"
+
+#ifdef DEBUG_CODE
+#define visdn_intf_debug(intf, format, arg...)		\
+	if ((intf)->debug_state)			\
+		visdn_debug("%s: "			\
+			format,				\
+			(intf)->name,			\
+			## arg)
+
+#define visdn_intf_debug_state(intf, format, arg...)	\
+	if ((intf)->debug_state)			\
+		visdn_debug("%s: "			\
+			format,				\
+			(intf)->name,			\
+			## arg)
+
+#define visdn_intf_debug_frames(intf, format, arg...)	\
+	if ((intf)->debug_frames)			\
+		visdn_debug("%s: "			\
+			format,				\
+			(intf)->name,			\
+			## arg)
+
+#define visdn_intf_debug_jitbuf(intf, format, arg...)	\
+	if ((intf)->debug_jitbuf)			\
+		visdn_debug("%s: "			\
+			format,				\
+			(intf)->name,			\
+			## arg)
+#else
+#define visdn_intf_debug(intf, format, arg...)		\
+	do {} while(0)
+
+#define visdn_intf_debug_state(intf, format, arg...)	\
+	do {} while(0)
+
+#define visdn_intf_debug_frames(intf, format, arg...)	\
+	do {} while(0)
+
+#define visdn_intf_debug_jitbuf(intf, format, arg...)	\
+	do {} while(0)
+#endif
 
 enum visdn_intf_status
 {
@@ -112,7 +155,7 @@ struct visdn_ic
 
 struct visdn_intf
 {
-	struct list_head ifs_node;
+	struct list_head node;
 
 	int refcnt;
 	ast_mutex_t lock;
@@ -132,6 +175,10 @@ struct visdn_intf
 	struct q931_interface *q931_intf;
 
 	char remote_port[PATH_MAX];
+
+	BOOL debug_state;
+	BOOL debug_jitbuf;
+	BOOL debug_frames;
 };
 
 struct visdn_intf *visdn_intf_alloc(void);

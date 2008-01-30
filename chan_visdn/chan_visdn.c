@@ -106,20 +106,62 @@
 #include "overlap.h"
 #include "disconnect.h"
 #include "numbers_list.h"
+#include "debug.h"
+
+#ifdef DEBUG_CODE
+#define visdn_debug_netlink(format, arg...)				\
+	if (visdn.debug_netlink)					\
+		visdn_debug(						\
+			format,						\
+			## arg)
+
+#define visdn_debug_q931(format, arg...)				\
+	if (visdn.debug_q931)						\
+		visdn_debug(						\
+			format,						\
+			## arg)
+
+#define visdn_chan_debug(chan, format, arg...)				\
+	visdn_intf_debug(						\
+		((struct visdn_intf *)((chan)->q931_call->intf->pvt)),	\
+		format,							\
+		## arg)
+
+#define visdn_chan_debug_frames(chan, format, arg...)			\
+	visdn_intf_debug_frames(					\
+		((struct visdn_intf *)((chan)->q931_call->intf->pvt)),	\
+		format,							\
+		## arg)
+
+#define visdn_chan_debug_jitbuf(chan, format, arg...)			\
+	visdn_intf_debug_jitbuf(					\
+		((struct visdn_intf *)((chan)->q931_call->intf->pvt)),	\
+		format,							\
+		## arg)
+
+#else
+#define visdn_chan_debug_frames(chan, format, arg...)	\
+	do {} while(0)
+
+#define visdn_chan_debug_jitbuf(chan, format, arg...)	\
+	do {} while(0)
+#endif
 
 struct visdn_state visdn = {
 	.usecnt = 0,
 
 	.q931_thread = AST_PTHREADT_NULL,
 
+#ifdef DEBUG_CODE
 #ifdef DEBUG_DEFAULTS
-	.debug = TRUE,
+	.debug_netlink = TRUE,
 	.debug_q921 = FALSE,
 	.debug_q931 = TRUE,
 #else
-	.debug = FALSE,
+	.debug_netlink = FALSE,
 	.debug_q921 = FALSE,
 	.debug_q931 = FALSE,
+#endif
 #endif
 };
 
@@ -330,7 +372,7 @@ err_channel_alloc:
 static void visdn_set_socket_debug(int on)
 {
 	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
 		if (!intf->q931_intf)
 			continue;
 
@@ -365,8 +407,6 @@ static void visdn_set_socket_debug(int on)
 
 void refresh_polls_list(void)
 {
-	ast_mutex_lock(&visdn.lock);
-
 	visdn.npolls = 0;
 
 	visdn.polls[visdn.npolls].fd = visdn.q931_ccb_queue_pipe_read;
@@ -385,7 +425,8 @@ void refresh_polls_list(void)
 	visdn.npolls++;
 
 	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
 
 		if (intf->status == VISDN_INTF_STATUS_FAILED)
 			continue;
@@ -450,11 +491,9 @@ void refresh_polls_list(void)
 			visdn.npolls++;
 		}
 	}
-
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 }
 
-// Must be called with visdn.lock acquired
 static void visdn_accept(
 	struct q931_interface *intf,
 	int accept_socket)
@@ -465,7 +504,8 @@ static void visdn_accept(
 	if (!newdlc)
 		return;
 
-	visdn_debug("New DLC (TEI=%d) accepted on interface %s\n",
+	visdn_intf_debug_state((struct visdn_intf *)intf->pvt,
+			"New DLC (TEI=%d) accepted on interface %s\n",
 			newdlc->tei,
 			intf->name);
 
@@ -871,16 +911,18 @@ static int visdn_request_call(
 	struct visdn_ic *ic = intf->current_ic;
 	int err;
 
-	visdn_debug("Calling on interface '%s'\n", intf->name);
+	visdn_intf_debug(intf, "Calling on interface '%s'\n", intf->name);
 
 	visdn_chan->ic = visdn_ic_get(intf->current_ic);
 
 	Q931_DECLARE_IES(ies);
 
 	/* ------------- Bearer Capability ---------------- */
-	const char *raw_bc = pbx_builtin_getvar_helper(ast_chan, "BEARERCAP_RAW");
+	const char *raw_bc = pbx_builtin_getvar_helper(ast_chan,
+							"BEARERCAP_RAW");
 	if (raw_bc) {
-		visdn_debug("Taking bearer capability from bridged channel\n");
+		visdn_intf_debug(intf,
+			"Taking bearer capability from bridged channel\n");
 
 		struct q931_ie_bearer_capability *bc;
 		bc = q931_ie_bearer_capability_alloc();
@@ -971,7 +1013,7 @@ bc_failure:;
 	/* ------------- High Layer Compatibility ---------------- */
 	const char *raw_hlc = pbx_builtin_getvar_helper(ast_chan, "HLC_RAW");
 	if (raw_hlc) {
-		visdn_debug("Taking HLC from bridged channel\n");
+		visdn_intf_debug(intf, "Taking HLC from bridged channel\n");
 
 		struct q931_ie_high_layer_compatibility *hlc;
 		hlc = q931_ie_high_layer_compatibility_alloc();
@@ -1028,7 +1070,7 @@ hlc_failure:;
 	/* ------------- Low Layer Compatibility ---------------- */
 	const char *raw_llc = pbx_builtin_getvar_helper(ast_chan, "LLC_RAW");
 	if (raw_llc) {
-		visdn_debug("Taking LLC from bridged channel\n");
+		visdn_intf_debug(intf, "Taking LLC from bridged channel\n");
 
 		struct q931_ie_low_layer_compatibility *llc;
 		llc = q931_ie_low_layer_compatibility_alloc();
@@ -1243,7 +1285,7 @@ static int visdn_resume_call(
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 	int err;
 
-	visdn_debug("Resuming on interface '%s'\n", intf->name);
+	visdn_intf_debug(intf, "Resuming call\n");
 
 	visdn_chan->ic = visdn_ic_get(intf->current_ic);
 
@@ -1343,7 +1385,7 @@ static int visdn_call(
 		strncpy(visdn_chan->options, token,
 			sizeof(visdn_chan->options));
 
-	visdn_debug("Calling %s on %s\n",
+	visdn_chan_debug(visdn_chan, "Calling %s on %s\n",
 			dest, ast_chan->name);
 
 	struct visdn_intf *intf = NULL;
@@ -1357,8 +1399,6 @@ static int visdn_call(
 			goto err_resume_in_huntgroup;
 		}
 
-		ast_mutex_lock(&visdn.lock);
-
 		const char *hg_name = intf_name +
 					strlen(VISDN_HUNTGROUP_PREFIX);
 		struct visdn_huntgroup *hg;
@@ -1370,23 +1410,20 @@ static int visdn_call(
 			ast_chan->hangupcause = AST_CAUSE_BUSY;
 
 			err = -1;
-			ast_mutex_unlock(&visdn.lock);
 			goto err_huntgroup_not_found;
 		}
 
 		intf = visdn_hg_hunt(hg, NULL, NULL);
 		if (!intf) {
-			visdn_debug("Cannot hunt in huntgroup %s\n", hg_name);
+			visdn_chan_debug(visdn_chan,
+				"Cannot hunt in huntgroup %s\n", hg_name);
 
 			err = -1;
-			ast_mutex_unlock(&visdn.lock);
 			goto err_no_channel_available;
 		}
 
 		visdn_chan->hg_first_intf = visdn_intf_get(intf);
 		visdn_chan->huntgroup = visdn_hg_get(hg);
-
-		ast_mutex_unlock(&visdn.lock);
 	} else {
 		intf = visdn_intf_get_by_name(intf_name);
 
@@ -1717,7 +1754,8 @@ static int visdn_indicate(
 		   strcmp(ast_bridged_channel(ast_chan)->tech->type,
 						VISDN_CHAN_TYPE)) {
 
-			visdn_debug("Channel is not VISDN, sending"
+			visdn_chan_debug(visdn_chan,
+					"Channel is not VISDN, sending"
 					" progress indicator\n");
 
 			pi = q931_ie_progress_indicator_alloc();
@@ -2206,29 +2244,31 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 		return frame;
 	}
 
-#if 0
-struct timeval tv;
-gettimeofday(&tv, NULL);
-ast_verbose("R %.3f %4d     %02x%02x%02x%02x%02x%02x%02x%02x\n",
-	tv.tv_sec + tv.tv_usec/1000000.0,
-	nread,
-	*(__u8 *)(visdn_chan->frame_out_buf + 0),
-	*(__u8 *)(visdn_chan->frame_out_buf + 1),
-	*(__u8 *)(visdn_chan->frame_out_buf + 2),
-	*(__u8 *)(visdn_chan->frame_out_buf + 3),
-	*(__u8 *)(visdn_chan->frame_out_buf + 4),
-	*(__u8 *)(visdn_chan->frame_out_buf + 5),
-	*(__u8 *)(visdn_chan->frame_out_buf + 6),
-	*(__u8 *)(visdn_chan->frame_out_buf + 7));
-#elif 0
-struct timeval tv;
-gettimeofday(&tv, NULL);
-ast_verbose("R %.3f %4d    ", tv.tv_sec + tv.tv_usec/1000000.0, nread);
-int i;
-for(i=0; i<nread; i++)
-	ast_verbose("%02x", ((__u8 *)visdn_chan->frame_out_buf)[i]);
-ast_verbose("\n");
-#endif
+	struct visdn_intf *intf = visdn_chan->q931_call->intf->pvt;
+
+	if (intf->debug_frames) {
+		__u8 *buf = visdn_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+
+		ast_verbose(
+			"R %.3f     F%02x R%02x N%02x"
+			" %02x%02x%02x%02x%02x%02x%02x%02x"
+			" %d\n",
+			t/1000000.0,
+			ast_chan->readformat, ast_chan->rawreadformat,
+			ast_chan->nativeformats,
+			*(__u8 *)(buf + 0),
+			*(__u8 *)(buf + 1),
+			*(__u8 *)(buf + 2),
+			*(__u8 *)(buf + 3),
+			*(__u8 *)(buf + 4),
+			*(__u8 *)(buf + 5),
+			*(__u8 *)(buf + 6),
+			*(__u8 *)(buf + 7),
+			nread);
+	}
 
 	frame->frametype = visdn_chan->ast_frame_type;
 	frame->subclass = visdn_chan->ast_frame_subclass;
@@ -2243,8 +2283,6 @@ ast_verbose("\n");
 
 	return frame;
 }
-
-#define visdn_debug_jitbuf(...)	/* Placeholder */
 
 static int visdn_write(
 	struct ast_channel *ast_chan,
@@ -2290,6 +2328,35 @@ static int visdn_write(
 		((ic->jitbuf_average * visdn_chan->pressure_average) +
 		pressure) / (ic->jitbuf_average + 1);
 
+	struct visdn_intf *intf = visdn_chan->q931_call->intf->pvt;
+
+	if (intf->debug_frames) {
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
+		ast_verbose(
+			"W %.3f"
+			" S%02x F%02x R%02x N%02x"
+			" %02x%02x%02x%02x%02x%02x%02x%02x"
+			" %3d(%-3d) P%-3d PA%-3d\n",
+			t/1000000.0,
+			frame->subclass,
+			ast_chan->writeformat, ast_chan->rawwriteformat,
+			ast_chan->nativeformats,
+			*(__u8 *)(frame->data + 0),
+			*(__u8 *)(frame->data + 1),
+			*(__u8 *)(frame->data + 2),
+			*(__u8 *)(frame->data + 3),
+			*(__u8 *)(frame->data + 4),
+			*(__u8 *)(frame->data + 5),
+			*(__u8 *)(frame->data + 6),
+			*(__u8 *)(frame->data + 7),
+			frame->datalen,
+			frame->samples,
+			pressure,
+			visdn_chan->pressure_average);
+	}
+
 	if (pressure < ic->jitbuf_hardlow) {
 		int diff = (ic->jitbuf_hardlow - pressure);
 
@@ -2299,7 +2366,7 @@ static int visdn_write(
 		memcpy(buf + diff, frame->data, len);
 		len += diff;
 
-		visdn_debug_jitbuf(visdn_chan,
+		visdn_chan_debug_jitbuf(visdn_chan,
 			"TX under hard low-mark: added %d samples\n",
 			diff);
 	}
@@ -2313,7 +2380,7 @@ static int visdn_write(
 		memcpy(buf + diff, frame->data, len);
 		len += diff;
 
-		visdn_debug_jitbuf(visdn_chan->me,
+		visdn_chan_debug_jitbuf(visdn_chan,
 			"TX under hard low-mark: added %d samples\n",
 			diff);
 	}
@@ -2324,7 +2391,7 @@ static int visdn_write(
 		int drop = min(len, (visdn_chan->pressure_average -
 						ic->jitbuf_high));
 
-		visdn_debug_jitbuf(visdn_chan,
+		visdn_chan_debug_jitbuf(visdn_chan,
 			"TX %d over high-mark: dropped %d samples\n",
 			visdn_chan->pressure_average > ic->jitbuf_high,
 			drop);
@@ -2336,7 +2403,7 @@ static int visdn_write(
 
 		int drop = min(len, (pressure + len - ic->jitbuf_hardhigh));
 
-		visdn_debug_jitbuf(visdn_chan,
+		visdn_chan_debug_jitbuf(visdn_chan,
 			"TX %d over hard high-mark: dropped %d samples\n",
 			pressure + len - ic->jitbuf_hardhigh,
 			drop);
@@ -2375,9 +2442,6 @@ ast_verbose("W %.3f %4d %3d %02x%02x%02x%02x%02x%02x%02x%02x\n",
 	pressure,
 	buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
 #endif
-
-	if (buf != frame->data)
-		free(buf);
 
 	return 0;
 }
@@ -2449,7 +2513,6 @@ static const struct ast_channel_tech visdn_tech = {
 
 #define MAX_PAYLOAD 1024
 
-// Must be called with visdn.lock acquired
 static void visdn_netlink_receive(void)
 {
 	struct sockaddr_nl tonl;
@@ -2506,14 +2569,14 @@ static void visdn_netlink_receive(void)
 			}
 
 			if (ifi->ifi_flags & IFF_UP) {
-				visdn_debug("Netlink msg: %s UP %s\n",
+				visdn_debug_netlink("Netlink msg: %s UP %s\n",
 					ifname,
 					(ifi->ifi_flags & IFF_ALLMULTI) ?
 				 		"NT": "TE");
 
 				//visdn_intf_now_up(ifname);XXX
 			} else {
-				visdn_debug("Netlink msg: %s DOWN %s\n",
+				visdn_debug_netlink("Netlink msg: %s DOWN %s\n",
 					ifname,
 					(ifi->ifi_flags & IFF_ALLMULTI) ?
 						"NT": "TE");
@@ -2561,7 +2624,7 @@ struct mgmt_prim
 	struct lapd_ctrl_hdr ctrl;
 };
 
-static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
+static int visdn_mgmt_receive(struct visdn_intf *intf)
 {
 	struct msghdr skmsg;
 	struct cmsghdr cmsg;
@@ -2580,7 +2643,7 @@ static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
 	skmsg.msg_controllen = sizeof(cmsg);
 	skmsg.msg_flags = 0;
 
-	len = recvmsg(visdn_intf->mgmt_fd, &skmsg, 0);
+	len = recvmsg(intf->mgmt_fd, &skmsg, 0);
 	if(len < 0) {
 		ast_log(LOG_ERROR, "recvmsg error: %s\n",
 			strerror(errno));
@@ -2590,23 +2653,23 @@ static int visdn_mgmt_receive(struct visdn_intf *visdn_intf)
 
 	switch(prim.prim.primitive_type) {
 	case LAPD_MPH_ERROR_INDICATION:
-		visdn_debug("%s: MPH-ERROR-INDICATION: %d\n",
-			visdn_intf->name, prim.ctrl.param);
+		visdn_intf_debug(intf, "%s: MPH-ERROR-INDICATION: %d\n",
+			intf->name, prim.ctrl.param);
 	break;
 
 	case LAPD_MPH_ACTIVATE_INDICATION:
-		visdn_debug("%s: MPH-ACTIVATE-INDICATION\n",
-			visdn_intf->name);
+		visdn_intf_debug(intf, "%s: MPH-ACTIVATE-INDICATION\n",
+			intf->name);
 	break;
 
 	case LAPD_MPH_DEACTIVATE_INDICATION:
-		visdn_debug("%s: MPH-DEACTIVATE-INDICATION\n",
-			visdn_intf->name);
+		visdn_intf_debug(intf, "%s: MPH-DEACTIVATE-INDICATION\n",
+			intf->name);
 	break;
 
 	case LAPD_MPH_INFORMATION_INDICATION:
-		visdn_debug("%s: MPH-INFORMATION-INDICATION: %s\n",
-			visdn_intf->name,
+		visdn_intf_debug(intf, "%s: MPH-INFORMATION-INDICATION: %s\n",
+			intf->name,
 			prim.ctrl.param == LAPD_MPH_II_CONNECTED ?
 				"CONNECTED" :
 				"DISCONNECTED");
@@ -2633,7 +2696,7 @@ static int visdn_q931_thread_do_poll()
 	int msec_to_wait = (usec_to_wait < 0) ? -1 :
 				usec_to_wait / 1000 + 1;
 
-	visdn_debug("poll(%d ms)\n", msec_to_wait);
+	visdn_debug_q931("poll(%d ms)\n", msec_to_wait);
 
 	// Uhm... we should lock, copy polls and unlock before poll()
 	if (poll(visdn.polls, visdn.npolls, msec_to_wait) < 0) {
@@ -2694,7 +2757,6 @@ static int visdn_q931_thread_do_poll()
 						visdn.poll_infos[i].intf);
 
 					refresh_polls_list();
-					ast_mutex_unlock(&visdn.lock);
 
 					break;
 				}
@@ -2706,11 +2768,11 @@ static int visdn_q931_thread_do_poll()
 			if (visdn.polls[i].revents &
 					(POLLIN | POLLPRI | POLLERR |
 					 POLLHUP | POLLNVAL)) {
-				ast_mutex_lock(&visdn.lock);
+
 				visdn_accept(
 					visdn.poll_infos[i].intf->q931_intf,
 					visdn.polls[i].fd);
-				ast_mutex_unlock(&visdn.lock);
+
 				break; // polls list may have been changed
 			}
 		} else if (visdn.poll_infos[i].type == POLL_INFO_TYPE_DLC ||
@@ -2720,8 +2782,6 @@ static int visdn_q931_thread_do_poll()
 					 POLLHUP | POLLNVAL)) {
 
 				int err;
-				ast_mutex_lock(&visdn.lock);
-
 				err = q931_receive(visdn.poll_infos[i].dlc);
 				if (err < 0 && err != -EBADMSG) {
 
@@ -2737,23 +2797,20 @@ static int visdn_q931_thread_do_poll()
 						visdn.poll_infos[i].intf);
 
 					refresh_polls_list();
-					ast_mutex_unlock(&visdn.lock);
 
 					break;
 				}
-
-				ast_mutex_unlock(&visdn.lock);
 			}
 		}
 	}
 
-	ast_mutex_lock(&visdn.lock);
 	int active_calls_cnt = 0;
 	if (visdn.have_to_exit) {
 		active_calls_cnt = 0;
 
 		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		list_for_each_entry(intf, &visdn.intfs_list, node) {
 			if (intf->q931_intf) {
 				struct q931_call *call;
 				list_for_each_entry(call,
@@ -2762,12 +2819,12 @@ static int visdn_q931_thread_do_poll()
 					active_calls_cnt++;
 			}
 		}
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
 
 		ast_log(LOG_WARNING,
 			"There are still %d active calls, waiting...\n",
 			active_calls_cnt);
 	}
-	ast_mutex_unlock(&visdn.lock);
 
 	return (!visdn.have_to_exit || active_calls_cnt > 0);
 }
@@ -2775,14 +2832,9 @@ static int visdn_q931_thread_do_poll()
 
 static void *visdn_q931_thread_main(void *data)
 {
-	ast_mutex_lock(&visdn.lock);
-
 	visdn.npolls = 0;
 	refresh_polls_list();
-
 	visdn.have_to_exit = 0;
-
-	ast_mutex_unlock(&visdn.lock);
 
 	while(visdn_q931_thread_do_poll());
 
@@ -2803,7 +2855,8 @@ static void visdn_handle_eventual_progind(
 			if (pi->progress_description ==
 					Q931_IE_PI_PD_IN_BAND_INFORMATION) {
 
-				visdn_debug("In-band informations available\n");
+				visdn_chan_debug(visdn_chan,
+					"In-band informations available\n");
 
 				visdn_chan->inband_info = TRUE;
 				break;
@@ -3478,7 +3531,8 @@ static void visdn_handle_clip_nt(
 			ast_chan->cid.cid_pres |=
 				AST_PRES_USER_NUMBER_PASSED_SCREEN;
 		} else {
-			visdn_debug("Specified CLI did not pass screening\n");
+			visdn_chan_debug(visdn_chan,
+				"Specified CLI did not pass screening\n");
 
 			ast_chan->cid.cid_num =
 				strdup(ic->clip_default_number);
@@ -3661,7 +3715,8 @@ static void visdn_q931_setup_indication(
 
 	if (!visdn_chan_update_bc_cache(visdn_chan, bc)) {
 
-		visdn_debug("Unsupported bearer capability, rejecting call\n");
+		visdn_chan_debug(visdn_chan,
+			"Unsupported bearer capability, rejecting call\n");
 
 		Q931_DECLARE_IES(ies);
 
@@ -4400,7 +4455,8 @@ static void visdn_q931_connect_channel(
 		goto err_up_node_not_found;
 	}
 
-	visdn_debug("Connecting userport %06d to chan %06d\n",
+	visdn_chan_debug(visdn_chan,
+			"Connecting userport %06d to chan %06d\n",
 			visdn_chan->node_userport->id,
 			visdn_chan->node_bearer->id);
 
@@ -4645,8 +4701,7 @@ static void visdn_logger(int level, const char *format, ...)
 
 	switch(level) {
 	case Q931_LOG_DEBUG:
-		if (visdn.debug_q931)
-			ast_verbose("q931 %s", msg);
+		visdn_debug_q931("%s", msg);
 	break;
 
 	case Q931_LOG_INFO:
@@ -4837,49 +4892,45 @@ static void visdn_q931_ccb_receive(void)
 
 /*---------------------------------------------------------------------------*/
 
-static int do_visdn_debug_generic(int fd, int argc, char *argv[])
+static int do_visdn_debug_netlink(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&visdn.lock);
-	visdn.debug = TRUE;
-	ast_mutex_unlock(&visdn.lock);
+	visdn.debug_netlink = TRUE;
 
-	ast_cli(fd, "vISDN debugging enabled\n");
+	ast_cli(fd, "vISDN Netlink debugging enabled\n");
 
 	return RESULT_SUCCESS;
 }
 
-static char visdn_debug_generic_help[] =
-"Usage: visdn debug generic\n"
+static char visdn_debug_netlink_help[] =
+"Usage: visdn debug netlink\n"
 "\n"
-"	Debug generic vISDN events\n";
+"	Debug NetLink vISDN events\n";
 
-static struct ast_cli_entry visdn_debug_generic =
+static struct ast_cli_entry visdn_debug_netlink =
 {
-	{ "visdn", "debug", "generic", NULL },
-	do_visdn_debug_generic,
-	"Enables generic vISDN debugging",
-	visdn_debug_generic_help,
+	{ "visdn", "debug", "netlink", NULL },
+	do_visdn_debug_netlink,
+	"Enables netlink vISDN debugging",
+	visdn_debug_netlink_help,
 	NULL
 };
 
 /*---------------------------------------------------------------------------*/
 
-static int do_visdn_no_debug_generic(int fd, int argc, char *argv[])
+static int do_visdn_no_debug_netlink(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&visdn.lock);
-	visdn.debug = FALSE;
-	ast_mutex_unlock(&visdn.lock);
+	visdn.debug_netlink = FALSE;
 
-	ast_cli(fd, "vISDN debugging disabled\n");
+	ast_cli(fd, "vISDN NetLink debugging disabled\n");
 
 	return RESULT_SUCCESS;
 }
 
-static struct ast_cli_entry visdn_no_debug_generic =
+static struct ast_cli_entry visdn_no_debug_netlink =
 {
-	{ "visdn", "no", "debug", "generic", NULL },
-	do_visdn_no_debug_generic,
-	"Disables generic vISDN debugging",
+	{ "visdn", "no", "debug", "netlink", NULL },
+	do_visdn_no_debug_netlink,
+	"Disables NetLink vISDN debugging",
 	NULL,
 	NULL
 };
@@ -4890,10 +4941,8 @@ static int do_visdn_debug_q921(int fd, int argc, char *argv[])
 {
 	// Enable debugging on new DLCs FIXME TODO
 
-	ast_mutex_lock(&visdn.lock);
 	visdn.debug_q921 = TRUE;
 	visdn_set_socket_debug(1);
-	ast_mutex_unlock(&visdn.lock);
 
 	ast_cli(fd, "vISDN q.921 debugging enabled\n");
 
@@ -4921,10 +4970,8 @@ static int do_visdn_no_debug_q921(int fd, int argc, char *argv[])
 {
 	// Disable debugging on new DLCs FIXME TODO
 
-	ast_mutex_lock(&visdn.lock);
 	visdn.debug_q921 = FALSE;
 	visdn_set_socket_debug(0);
-	ast_mutex_unlock(&visdn.lock);
 
 	ast_cli(fd, "vISDN q.921 debugging disabled\n");
 
@@ -4944,9 +4991,7 @@ static struct ast_cli_entry visdn_no_debug_q921 =
 
 static int do_visdn_debug_q931(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&visdn.lock);
 	visdn.debug_q931 = TRUE;
-	ast_mutex_unlock(&visdn.lock);
 
 	ast_cli(fd, "vISDN q.931 debugging enabled\n");
 
@@ -4972,9 +5017,7 @@ static struct ast_cli_entry visdn_debug_q931 =
 
 static int do_visdn_no_debug_q931(int fd, int argc, char *argv[])
 {
-	ast_mutex_lock(&visdn.lock);
 	visdn.debug_q931 = FALSE;
-	ast_mutex_unlock(&visdn.lock);
 
 	ast_cli(fd, "vISDN q.931 debugging disabled\n");
 
@@ -5050,10 +5093,9 @@ static int visdn_cli_print_call_list(
 {
 	int first_call;
 
-	ast_mutex_lock(&visdn.lock);
-
 	struct visdn_intf *intf;
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
 
 		if (!intf->q931_intf)
 			continue;
@@ -5077,8 +5119,7 @@ static int visdn_cli_print_call_list(
 			}
 		}
 	}
-
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 
 	return RESULT_SUCCESS;
 }
@@ -5205,18 +5246,19 @@ static char *visdn_show_calls_complete(
 	char *slashpos = strchr(word_dup, '/');
 
 	if (!slashpos) {
-		ast_mutex_lock(&visdn.lock);
 		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+		ast_rwlock_rdlock(&visdn.intfs_list_lock);
+		list_for_each_entry(intf, &visdn.intfs_list, node) {
 
 			if (!strncasecmp(word, intf->name, strlen(word))) {
 				if (++which > state) {
-					ast_mutex_unlock(&visdn.lock);
+					ast_rwlock_unlock(
+						&visdn.intfs_list_lock);
 					return strdup(intf->name);
 				}
 			}
 		}
-		ast_mutex_unlock(&visdn.lock);
+		ast_rwlock_unlock(&visdn.intfs_list_lock);
 	} else {
 		*slashpos = '\0';
 		struct visdn_intf *intf = visdn_intf_get_by_name(word_dup);
@@ -5264,15 +5306,15 @@ static int visdn_show_calls_func(int fd, int argc, char *argv[])
 
 	{
 	struct visdn_intf *intf;
-	ast_mutex_lock(&visdn.lock);
-	list_for_each_entry(intf, &visdn.ifs, ifs_node) {
+	ast_rwlock_rdlock(&visdn.intfs_list_lock);
+	list_for_each_entry(intf, &visdn.intfs_list, node) {
 		if (intf->q931_intf &&
 		    !strcasecmp(intf->name, intf_name)) {
 			filter_intf = intf;
 			break;
 		}
 	}
-	ast_mutex_unlock(&visdn.lock);
+	ast_rwlock_unlock(&visdn.intfs_list_lock);
 	}
 
 	if (!filter_intf) {
@@ -5350,7 +5392,7 @@ static int visdn_load_module(void)
 	// Initialize q.931 library.
 	// No worries, internal structures are read-only and thread safe
 
-	ast_mutex_init(&visdn.lock);
+	ast_mutex_init(&visdn.state_lock);
 	ast_mutex_init(&visdn.usecnt_lock);
 
 	INIT_LIST_HEAD(&visdn.ccb_q931_queue);
@@ -5381,7 +5423,10 @@ static int visdn_load_module(void)
 	visdn.q931_ccb_queue_pipe_read = filedes[0];
 	visdn.q931_ccb_queue_pipe_write = filedes[1];
 
-	INIT_LIST_HEAD(&visdn.ifs);
+	ast_rwlock_init(&visdn.intfs_list_lock);
+	INIT_LIST_HEAD(&visdn.intfs_list);
+
+	ast_rwlock_init(&visdn.huntgroups_list_lock);
 	INIT_LIST_HEAD(&visdn.huntgroups_list);
 
 	q931_init();
@@ -5473,8 +5518,8 @@ static int visdn_load_module(void)
 		goto err_channel_register;
 	}
 
-	ast_cli_register(&visdn_debug_generic);
-	ast_cli_register(&visdn_no_debug_generic);
+	ast_cli_register(&visdn_debug_netlink);
+	ast_cli_register(&visdn_no_debug_netlink);
 	ast_cli_register(&visdn_debug_q921);
 	ast_cli_register(&visdn_no_debug_q921);
 	ast_cli_register(&visdn_debug_q931);
@@ -5527,8 +5572,8 @@ static int visdn_unload_module(void)
 	ast_cli_unregister(&visdn_debug_q931);
 	ast_cli_unregister(&visdn_no_debug_q921);
 	ast_cli_unregister(&visdn_debug_q921);
-	ast_cli_unregister(&visdn_no_debug_generic);
-	ast_cli_unregister(&visdn_debug_generic);
+	ast_cli_unregister(&visdn_no_debug_netlink);
+	ast_cli_unregister(&visdn_debug_netlink);
 
 	ast_channel_unregister(&visdn_tech);
 
