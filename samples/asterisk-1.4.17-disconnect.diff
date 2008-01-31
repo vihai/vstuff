@@ -1,0 +1,68 @@
+diff -ur asterisk-1.4.17-orig/apps/app_dial.c asterisk-1.4.17/apps/app_dial.c
+--- asterisk-1.4.17-orig/apps/app_dial.c	2007-12-07 17:38:48.000000000 +0100
++++ asterisk-1.4.17/apps/app_dial.c	2008-01-31 15:20:17.000000000 +0100
+@@ -652,6 +652,16 @@
+ 				case AST_CONTROL_FLASH:
+ 					/* Ignore going off hook and flash */
+ 					break;
++				case AST_CONTROL_INBAND_INFO:
++					if (option_verbose > 2)
++						ast_verbose(VERBOSE_PREFIX_3 "Inband information available\n", o->chan->name);
++					ast_indicate(in, AST_CONTROL_INBAND_INFO);
++					break;
++				case AST_CONTROL_DISCONNECT:
++					if (option_verbose > 2)
++						ast_verbose(VERBOSE_PREFIX_3 "Call disconnected\n", o->chan->name);
++					in->hangupcause = o->chan->hangupcause;
++					ast_indicate(in, AST_CONTROL_DISCONNECT);					break;
+ 				case -1:
+ 					if (!ast_test_flag(outgoing, OPT_RINGBACK | OPT_MUSICBACK)) {
+ 						if (option_verbose > 2)
+diff -ur asterisk-1.4.17-orig/channels/chan_sip.c asterisk-1.4.17/channels/chan_sip.c
+--- asterisk-1.4.17-orig/channels/chan_sip.c	2008-01-02 21:24:09.000000000 +0100
++++ asterisk-1.4.17/channels/chan_sip.c	2008-01-31 17:03:47.000000000 +0100
+@@ -3921,6 +3921,9 @@
+ 		} else
+ 			res = -1;
+ 		break;
++	case AST_CONTROL_INBAND_INFO:
++	case AST_CONTROL_DISCONNECT:
++		break;
+ 	case -1:
+ 		res = -1;
+ 		break;
+diff -ur asterisk-1.4.17-orig/include/asterisk/build.h asterisk-1.4.17/include/asterisk/build.h
+--- asterisk-1.4.17-orig/include/asterisk/build.h	2008-01-31 12:04:22.000000000 +0100
++++ asterisk-1.4.17/include/asterisk/build.h	2008-01-31 15:31:50.000000000 +0100
+@@ -6,6 +6,6 @@
+ #define BUILD_KERNEL "2.6.22.9-91.fc7"
+ #define BUILD_MACHINE "i686"
+ #define BUILD_OS "Linux"
+-#define BUILD_DATE "2008-01-31 11:04:22 UTC"
++#define BUILD_DATE "2008-01-31 14:31:50 UTC"
+ #define BUILD_USER "root"
+ 
+diff -ur asterisk-1.4.17-orig/include/asterisk/frame.h asterisk-1.4.17/include/asterisk/frame.h
+--- asterisk-1.4.17-orig/include/asterisk/frame.h	2007-10-10 08:24:41.000000000 +0200
++++ asterisk-1.4.17/include/asterisk/frame.h	2008-01-31 15:18:35.000000000 +0100
+@@ -281,6 +281,8 @@
+ 	AST_CONTROL_HOLD = 16,		/*!< Indicate call is placed on hold */
+ 	AST_CONTROL_UNHOLD = 17,	/*!< Indicate call is left from hold */
+ 	AST_CONTROL_VIDUPDATE = 18,	/*!< Indicate video frame update */
++	AST_CONTROL_INBAND_INFO = 42,	/*!< There is inband informatio */
++	AST_CONTROL_DISCONNECT = 43,	/*!< Disconnect indication */
+ };
+ 
+ #define AST_SMOOTHER_FLAG_G729		(1 << 0)
+diff -ur asterisk-1.4.17-orig/main/file.c asterisk-1.4.17/main/file.c
+--- asterisk-1.4.17-orig/main/file.c	2007-11-29 18:29:59.000000000 +0100
++++ asterisk-1.4.17/main/file.c	2008-01-31 15:31:43.000000000 +0100
+@@ -1156,6 +1156,8 @@
+ 				case AST_CONTROL_VIDUPDATE:
+ 				case AST_CONTROL_HOLD:
+ 				case AST_CONTROL_UNHOLD:
++				case AST_CONTROL_INBAND_INFO:
++				case AST_CONTROL_DISCONNECT:
+ 					/* Unimportant */
+ 					break;
+ 				default:
