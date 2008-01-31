@@ -20,12 +20,17 @@
 
 typedef long long longtime_t;
 
+static inline longtime_t longtime_from(struct timeval *tv)
+{
+	return tv->tv_sec * 1000000LL + tv->tv_usec;
+}
+
 static inline longtime_t longtime_now(void)
 {
-	struct timeval now_tv;
-	gettimeofday(&now_tv, NULL);
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
 
-	return now_tv.tv_sec * 1000000LL + now_tv.tv_usec;
+	return longtime_from(&tv);
 }
 
 #endif

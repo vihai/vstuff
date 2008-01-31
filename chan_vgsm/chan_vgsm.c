@@ -1470,17 +1470,16 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		return NULL;
 	}
 
+	longtime_t now = longtime_now();
+
 	if (vgsm_chan->me->debug_frames) {
 		__u8 *buf = vgsm_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 
 		ast_verbose(
-			"R %.3f     F%02x R%02x N%02x"
+			"R %7.3f     F%02x R%02x N%02x"
 			" %02x%02x%02x%02x%02x%02x%02x%02x"
 			" %d(%d)\n",
-			t/1000000.0,
+			(now - vgsm_chan->last_rx) / 1000.0,
 			ast_chan->readformat, ast_chan->rawreadformat,
 			ast_chan->nativeformats,
 			*(__u8 *)(buf + 0),
@@ -1494,6 +1493,8 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 			nread,
 			nread / sample_size);
 	}
+
+	vgsm_chan->last_rx = longtime_now();
 
 	frame->frametype = AST_FRAME_VOICE;
 	frame->subclass = ast_chan->rawreadformat;
@@ -1608,20 +1609,107 @@ static int vgsm_write(
 
 	pressure = pressure / sample_size;
 
+	int len = frame->datalen;
+	__u8 *buf = frame->data;
+
 	vgsm_chan->pressure_average =
 		((mc->jitbuf_average * vgsm_chan->pressure_average) +
 		pressure) / (mc->jitbuf_average + 1);
 
+	longtime_t now = longtime_now();
+	if (now - vgsm_chan->last_tx > frame->samples * 125 * 2) {
+
+		int diff = (mc->jitbuf_high + mc->jitbuf_low) / 2;
+		int diff_octs = diff * sample_size;
+
+		vgsm_chan->pressure_average = diff;
+
+		buf = alloca(len + diff_octs);
+
+		if (frame->subclass == AST_FORMAT_SLINEAR)
+			memset(buf, 0x00, diff_octs);
+		else
+			memset(buf, 0x2a, diff_octs);
+
+		memcpy(buf + diff_octs, frame->data, len);
+		len += diff_octs;
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX delivery late (%lld ms), adding %d samples and"
+			" resetting pressure average\n",
+			(now - vgsm_chan->last_tx) / 1000,
+			diff);
+
+	} else if (pressure < mc->jitbuf_hardlow) {
+		int diff = (mc->jitbuf_hardlow - pressure);
+		int diff_octs = diff * sample_size;
+
+		buf = alloca(len + diff_octs);
+
+		if (frame->subclass == AST_FORMAT_SLINEAR)
+			memset(buf, 0x00, diff_octs);
+		else
+			memset(buf, 0x2a, diff_octs);
+
+		memcpy(buf + diff_octs, frame->data, len);
+		len += diff_octs;
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX under hard low-mark: added %d samples\n",
+			diff);
+
+	} else if (vgsm_chan->pressure_average < mc->jitbuf_low &&
+					    pressure < mc->jitbuf_low) {
+		int diff = (mc->jitbuf_low - vgsm_chan->pressure_average);
+		int diff_octs = diff * sample_size;
+
+		buf = alloca(len + diff_octs);
+
+		if (frame->subclass == AST_FORMAT_SLINEAR)
+			memset(buf, 0x00, diff_octs);
+		else
+			memset(buf, 0x2a, diff_octs);
+
+		memcpy(buf + diff_octs, frame->data, len);
+		len += diff_octs;
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX under low-mark: added %d samples\n",
+			diff);
+
+	} else if (pressure + len > mc->jitbuf_hardhigh) {
+
+		int drop = min(len / sample_size, (pressure + len -
+							mc->jitbuf_hardhigh));
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX %d over hard high-mark: dropped %d samples\n",
+			pressure + len - mc->jitbuf_hardhigh,
+			drop);
+
+		len = max(0, len - drop * sample_size);
+
+	} else if (vgsm_chan->pressure_average > mc->jitbuf_high &&
+					    pressure > mc->jitbuf_high) {
+
+		int drop = min(len / sample_size, (vgsm_chan->pressure_average -
+							mc->jitbuf_high));
+
+		vgsm_debug_jitbuf(vgsm_chan->me,
+			"TX %d over high-mark: dropped %d samples\n",
+			vgsm_chan->pressure_average > mc->jitbuf_high,
+			drop);
+
+		len = max(0, len - drop * sample_size);
+	}
+
 	if (vgsm_chan->me->debug_frames) {
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 		ast_verbose(
-			"W %.3f"
+			"W %7.3f"
 			" S%02x F%02x R%02x N%02x"
 			" %02x%02x%02x%02x%02x%02x%02x%02x"
 			" %3d(%-3d) P%-3d PA%-3d\n",
-			t/1000000.0,
+			(now - vgsm_chan->last_tx) / 1000.0,
 			frame->subclass,
 			ast_chan->writeformat, ast_chan->rawwriteformat,
 			ast_chan->nativeformats,
@@ -1639,74 +1727,7 @@ static int vgsm_write(
 			vgsm_chan->pressure_average);
 	}
 
-	int len = frame->datalen;
-	__u8 *buf = frame->data;
-
-	if (pressure < mc->jitbuf_hardlow) {
-		int diff = (mc->jitbuf_hardlow - pressure);
-		int diff_octs = diff * sample_size;
-
-		buf = alloca(len + diff_octs);
-
-		if (frame->subclass == AST_FORMAT_SLINEAR)
-			memset(buf, 0x00, diff_octs);
-		else
-			memset(buf, 0x2a, diff_octs);
-
-		memcpy(buf + diff_octs, frame->data, len);
-		len += diff_octs;
-
-		vgsm_debug_jitbuf(vgsm_chan->me,
-			"TX under hard low-mark: added %d samples\n",
-			diff);
-	}
-
-	if (vgsm_chan->pressure_average < mc->jitbuf_low &&
-	    pressure < mc->jitbuf_low) {
-		int diff = (mc->jitbuf_low - vgsm_chan->pressure_average);
-		int diff_octs = diff * sample_size;
-
-		buf = alloca(len + diff_octs);
-
-		if (frame->subclass == AST_FORMAT_SLINEAR)
-			memset(buf, 0x00, diff_octs);
-		else
-			memset(buf, 0x2a, diff_octs);
-
-		memcpy(buf + diff_octs, frame->data, len);
-		len += diff_octs;
-
-		vgsm_debug_jitbuf(vgsm_chan->me,
-			"TX under low-mark: added %d samples\n",
-			diff);
-	}
-
-	if (vgsm_chan->pressure_average > mc->jitbuf_high &&
-	    pressure > mc->jitbuf_high) {
-
-		int drop = min(len / sample_size, (vgsm_chan->pressure_average -
-							mc->jitbuf_high));
-
-		vgsm_debug_jitbuf(vgsm_chan->me,
-			"TX %d over high-mark: dropped %d samples\n",
-			vgsm_chan->pressure_average > mc->jitbuf_high,
-			drop);
-
-		len = max(0, len - drop * sample_size);
-	}
-
-	if (pressure + len > mc->jitbuf_hardhigh) {
-
-		int drop = min(len / sample_size, (pressure + len -
-							mc->jitbuf_hardhigh));
-
-		vgsm_debug_jitbuf(vgsm_chan->me,
-			"TX %d over hard high-mark: dropped %d samples\n",
-			pressure + len - mc->jitbuf_hardhigh,
-			drop);
-
-		len = max(0, len - drop * sample_size);
-	}
+	vgsm_chan->last_tx = now;
 
 	if (write(vgsm_chan->up_fd, buf, len) < 0) {
 		ast_log(LOG_ERROR, "write(): %s\n", strerror(errno));

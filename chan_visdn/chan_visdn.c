@@ -2265,17 +2265,16 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 
 	struct visdn_intf *intf = visdn_chan->q931_call->intf->pvt;
 
+	longtime_t now = longtime_now();
+
 	if (intf->debug_frames) {
 		__u8 *buf = visdn_chan->frame_out_buf + AST_FRIENDLY_OFFSET;
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 
 		ast_verbose(
-			"R %.3f     F%02x R%02x N%02x"
+			"R %7.3f     F%02x R%02x N%02x"
 			" %02x%02x%02x%02x%02x%02x%02x%02x"
 			" %d\n",
-			t/1000000.0,
+			(now - visdn_chan->last_rx) / 1000.0,
 			ast_chan->readformat, ast_chan->rawreadformat,
 			ast_chan->nativeformats,
 			*(__u8 *)(buf + 0),
@@ -2288,6 +2287,8 @@ static struct ast_frame *visdn_read(struct ast_channel *ast_chan)
 			*(__u8 *)(buf + 7),
 			nread);
 	}
+
+	visdn_chan->last_rx = longtime_now();
 
 	frame->frametype = visdn_chan->ast_frame_type;
 	frame->subclass = visdn_chan->ast_frame_subclass;
@@ -2347,18 +2348,89 @@ static int visdn_write(
 		((ic->jitbuf_average * visdn_chan->pressure_average) +
 		pressure) / (ic->jitbuf_average + 1);
 
+	longtime_t now = longtime_now();
+	if (now - visdn_chan->last_tx > frame->samples * 125 * 2) {
+
+		int diff = (ic->jitbuf_high + ic->jitbuf_low) / 2;
+
+		visdn_chan->pressure_average = diff;
+
+		buf = alloca(len + diff);
+
+		if (frame->subclass == AST_FORMAT_SLINEAR)
+			memset(buf, 0x00, diff);
+		else
+			memset(buf, 0x2a, diff);
+
+		memcpy(buf + diff, frame->data, len);
+		len += diff;
+
+		visdn_chan_debug_jitbuf(visdn_chan,
+			"TX delivery late (%lld ms), adding %d samples and"
+			" resetting pressure average\n",
+			(now - visdn_chan->last_tx) / 1000,
+			diff);
+
+	} else if (pressure < ic->jitbuf_hardlow) {
+		int diff = (ic->jitbuf_hardlow - pressure);
+
+		buf = alloca(len + diff);
+
+		memset(buf, 0x2a, diff);
+		memcpy(buf + diff, frame->data, len);
+		len += diff;
+
+		visdn_chan_debug_jitbuf(visdn_chan,
+			"TX under hard low-mark: added %d samples\n",
+			diff);
+
+	} else if (visdn_chan->pressure_average < ic->jitbuf_low &&
+					    pressure < ic->jitbuf_low) {
+		int diff = (ic->jitbuf_low - visdn_chan->pressure_average);
+
+		buf = alloca(len + diff);
+
+		memset(buf, 0x2a, diff);
+		memcpy(buf + diff, frame->data, len);
+		len += diff;
+
+		visdn_chan_debug_jitbuf(visdn_chan,
+			"TX under low-mark: added %d samples\n",
+			diff);
+	} else if (pressure + len > ic->jitbuf_hardhigh) {
+
+		int drop = min(len, (pressure + len - ic->jitbuf_hardhigh));
+
+		visdn_chan_debug_jitbuf(visdn_chan,
+			"TX %d over hard high-mark: dropped %d samples\n",
+			pressure + len - ic->jitbuf_hardhigh,
+			drop);
+
+		len = max(0, len - drop);
+
+	} else if (visdn_chan->pressure_average > ic->jitbuf_high &&
+					    pressure > ic->jitbuf_high) {
+
+		int drop = min(len, (visdn_chan->pressure_average -
+						ic->jitbuf_high));
+
+		visdn_chan_debug_jitbuf(visdn_chan,
+			"TX %d over high-mark: dropped %d samples\n",
+			visdn_chan->pressure_average > ic->jitbuf_high,
+			drop);
+
+		len = max(0, len - drop);
+	}
+
 	struct visdn_intf *intf = visdn_chan->q931_call->intf->pvt;
 
 	if (intf->debug_frames) {
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		unsigned long long t = tv.tv_sec * 1000000ULL + tv.tv_usec;
 		ast_verbose(
-			"W %.3f"
+			"W %7.3f"
 			" S%02x F%02x R%02x N%02x"
 			" %02x%02x%02x%02x%02x%02x%02x%02x"
 			" %3d(%-3d) P%-3d PA%-3d\n",
-			t/1000000.0,
+			(now - visdn_chan->last_tx) / 1000.0,
 			frame->subclass,
 			ast_chan->writeformat, ast_chan->rawwriteformat,
 			ast_chan->nativeformats,
@@ -2376,60 +2448,7 @@ static int visdn_write(
 			visdn_chan->pressure_average);
 	}
 
-	if (pressure < ic->jitbuf_hardlow) {
-		int diff = (ic->jitbuf_hardlow - pressure);
-
-		buf = alloca(len + diff);
-
-		memset(buf, 0x2a, diff);
-		memcpy(buf + diff, frame->data, len);
-		len += diff;
-
-		visdn_chan_debug_jitbuf(visdn_chan,
-			"TX under hard low-mark: added %d samples\n",
-			diff);
-	}
-
-	if (visdn_chan->pressure_average < ic->jitbuf_low &&
-	    pressure < ic->jitbuf_low) {
-		int diff = (ic->jitbuf_low - visdn_chan->pressure_average);
-
-		buf = alloca(len + diff);
-
-		memset(buf, 0x2a, diff);
-		memcpy(buf + diff, frame->data, len);
-		len += diff;
-
-		visdn_chan_debug_jitbuf(visdn_chan,
-			"TX under low-mark: added %d samples\n",
-			diff);
-	}
-
-	if (visdn_chan->pressure_average > ic->jitbuf_high &&
-	    pressure > ic->jitbuf_high) {
-
-		int drop = min(len, (visdn_chan->pressure_average -
-						ic->jitbuf_high));
-
-		visdn_chan_debug_jitbuf(visdn_chan,
-			"TX %d over high-mark: dropped %d samples\n",
-			visdn_chan->pressure_average > ic->jitbuf_high,
-			drop);
-
-		len = max(0, len - drop);
-	}
-
-	if (pressure + len > ic->jitbuf_hardhigh) {
-
-		int drop = min(len, (pressure + len - ic->jitbuf_hardhigh));
-
-		visdn_chan_debug_jitbuf(visdn_chan,
-			"TX %d over hard high-mark: dropped %d samples\n",
-			pressure + len - ic->jitbuf_hardhigh,
-			drop);
-
-		len = max(0, len - drop);
-	}
+	visdn_chan->last_tx = now;
 
 #if 0
 	/* Octet reverser */
@@ -3585,13 +3604,11 @@ struct visdn_chan *visdn_alloc_inbound_call(struct q931_call *q931_call)
 	visdn_chan->q931_call = q931_call_get(q931_call);
 	visdn_chan->ic = visdn_ic_get(ic);
 
-
-
 /*	ast_dsp_digitmode(visdn_chan->dsp,
 		DSP_DIGITMODE_DTMF |
-		visdn_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
-		visdn_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
-		visdn_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);*/
+		visdn_chan->ic->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH |
+		visdn_chan->ic->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0 |
+		visdn_chan->ic->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0);*/
 
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 

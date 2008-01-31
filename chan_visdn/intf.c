@@ -739,7 +739,7 @@ void visdn_ic_setdefault(struct visdn_ic *ic)
 	ic->jitbuf_average = 5;
 	ic->jitbuf_low = 10;
 	ic->jitbuf_hardlow = 0;
-	ic->jitbuf_high = 30;
+	ic->jitbuf_high = 50;
 	ic->jitbuf_hardhigh = 1024;
 
 	ic->T307 = 180;

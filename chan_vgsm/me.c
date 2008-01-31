@@ -109,7 +109,7 @@ void vgsm_me_config_default(struct vgsm_me_config *mc)
 	mc->jitbuf_average = 5;
 	mc->jitbuf_low = 10;
 	mc->jitbuf_hardlow = 0;
-	mc->jitbuf_high = 30;
+	mc->jitbuf_high = 50;
 	mc->jitbuf_hardhigh = 1024;
 }
 

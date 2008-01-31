@@ -66,6 +66,9 @@ struct vgsm_chan {
 	struct ast_frame frame_out;
 	__u8 frame_out_buf[AST_FRIENDLY_OFFSET + 512];
 
+	longtime_t last_rx;
+	longtime_t last_tx;
+
 	__u16 pressure_average;
 
 	struct ast_dsp *dsp;
