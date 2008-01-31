@@ -1,7 +1,7 @@
 /*
  * vISDN channel driver for Asterisk
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -122,24 +122,36 @@
 			## arg)
 
 #define visdn_chan_debug(chan, format, arg...)				\
-	visdn_intf_debug(						\
-		((struct visdn_intf *)((chan)->q931_call->intf->pvt)),	\
-		format,							\
-		## arg)
+	if((chan)->debug_generic)					\
+		visdn_debug("%s: "					\
+			format,						\
+			(chan)->ast_chan->name,				\
+			## arg)
 
 #define visdn_chan_debug_frames(chan, format, arg...)			\
-	visdn_intf_debug_frames(					\
-		((struct visdn_intf *)((chan)->q931_call->intf->pvt)),	\
-		format,							\
-		## arg)
+	if((chan)->debug_frames)					\
+		visdn_debug("%s: "					\
+			format,						\
+			(chan)->ast_chan->name,				\
+			## arg)
 
 #define visdn_chan_debug_jitbuf(chan, format, arg...)			\
-	visdn_intf_debug_jitbuf(					\
-		((struct visdn_intf *)((chan)->q931_call->intf->pvt)),	\
-		format,							\
-		## arg)
+	if((chan)->debug_jitbuf)					\
+		visdn_debug("%s: "					\
+			format,						\
+			(chan)->ast_chan->name,				\
+			## arg)
 
 #else
+#define visdn_chan_debug_netlink(format, arg...)	\
+	do {} while(0)
+
+#define visdn_chan_debug_q931(format, arg...)		\
+	do {} while(0)
+
+#define visdn_chan_debug(chan, format, arg...)	\
+	do {} while(0)
+
 #define visdn_chan_debug_frames(chan, format, arg...)	\
 	do {} while(0)
 
@@ -1385,9 +1397,6 @@ static int visdn_call(
 		strncpy(visdn_chan->options, token,
 			sizeof(visdn_chan->options));
 
-	visdn_chan_debug(visdn_chan, "Calling %s on %s\n",
-			dest, ast_chan->name);
-
 	struct visdn_intf *intf = NULL;
 	if (!strncasecmp(intf_name, VISDN_HUNTGROUP_PREFIX,
 			strlen(VISDN_HUNTGROUP_PREFIX))) {
@@ -1446,6 +1455,14 @@ static int visdn_call(
 		visdn_chan->hg_first_intf = NULL;
 		visdn_chan->huntgroup = NULL;
 	}
+
+	visdn_chan->intf = visdn_intf_get(intf);
+	visdn_chan->debug_generic = intf->debug_generic;
+	visdn_chan->debug_jitbuf = intf->debug_jitbuf;
+	visdn_chan->debug_frames = intf->debug_frames;
+
+	visdn_chan_debug(visdn_chan, "Calling %s on %s\n",
+			dest, ast_chan->name);
 
 	if (strchr(visdn_chan->options, 'R')) {
 		visdn_resume_call(visdn_chan, intf,
@@ -2203,6 +2220,8 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			ast_chan->name,
 			visdn_chan->refcnt);
 
+	visdn_intf_put(visdn_chan->intf);
+	visdn_chan->intf = NULL;
 
 	visdn_chan->ast_chan = NULL;
 
@@ -2371,7 +2390,8 @@ static int visdn_write(
 			diff);
 	}
 
-	if (visdn_chan->pressure_average < ic->jitbuf_low) {
+	if (visdn_chan->pressure_average < ic->jitbuf_low &&
+	    pressure < ic->jitbuf_low) {
 		int diff = (ic->jitbuf_low - visdn_chan->pressure_average);
 
 		buf = alloca(len + diff);
@@ -2381,7 +2401,7 @@ static int visdn_write(
 		len += diff;
 
 		visdn_chan_debug_jitbuf(visdn_chan,
-			"TX under hard low-mark: added %d samples\n",
+			"TX under low-mark: added %d samples\n",
 			diff);
 	}
 
@@ -3169,6 +3189,10 @@ static void visdn_q931_release_confirm(
 	enum q931_release_confirm_status status)
 {
 	struct visdn_chan *visdn_chan = q931_call->pvt;
+
+	if (!visdn_chan)
+		return;
+
 	struct ast_channel *ast_chan = visdn_chan->ast_chan;
 
 	ast_mutex_lock(&ast_chan->lock);

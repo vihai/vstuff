@@ -1,7 +1,7 @@
 /*
  * vISDN channel driver for Asterisk
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -105,6 +105,7 @@ struct visdn_chan {
 	char dtmf_queue[20];
 	int dtmf_deferred;
 
+	struct visdn_intf *intf;
 	struct visdn_ic *ic;
 
 	struct visdn_huntgroup *huntgroup;
@@ -116,6 +117,10 @@ struct visdn_chan {
 	__u16 pressure_average;
 
 	struct ast_dsp *dsp;
+
+	BOOL debug_generic;
+	BOOL debug_jitbuf;
+	BOOL debug_frames;
 };
 
 struct visdn_state

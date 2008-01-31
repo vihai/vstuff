@@ -1236,7 +1236,7 @@ static char visdn_interface_show_help[] =
 
 static struct ast_cli_entry visdn_interface_show =
 {
-	{ "visdn", "interfaces", "show", NULL },
+	{ "visdn", "interface", "show", NULL },
 	do_visdn_interface_show,
 	"Displays vISDN's interface information",
 	visdn_interface_show_help,
@@ -1251,11 +1251,14 @@ static int visdn_intf_cli_debug_state(
 {
 	if (intf) {
 		intf->debug_state = enable;
+		intf->debug_generic = enable;
 	} else {
 		ast_rwlock_rdlock(&visdn.intfs_list_lock);
 		struct visdn_intf *intf;
-		list_for_each_entry(intf, &visdn.intfs_list, node)
+		list_for_each_entry(intf, &visdn.intfs_list, node) {
 			intf->debug_state = enable;
+			intf->debug_generic = enable;
+		}
 		ast_rwlock_unlock(&visdn.intfs_list_lock);
 	}
 
@@ -1299,6 +1302,7 @@ static int visdn_intf_cli_debug_all(int fd, BOOL enable)
 	ast_rwlock_rdlock(&visdn.intfs_list_lock);
 	struct visdn_intf *intf;
 	list_for_each_entry(intf, &visdn.intfs_list, node) {
+		intf->debug_generic = enable;
 		intf->debug_state = enable;
 		intf->debug_jitbuf = enable;
 	}

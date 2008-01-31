@@ -1661,7 +1661,8 @@ static int vgsm_write(
 			diff);
 	}
 
-	if (vgsm_chan->pressure_average < mc->jitbuf_low) {
+	if (vgsm_chan->pressure_average < mc->jitbuf_low &&
+	    pressure < mc->jitbuf_low) {
 		int diff = (mc->jitbuf_low - vgsm_chan->pressure_average);
 		int diff_octs = diff * sample_size;
 
@@ -1676,7 +1677,7 @@ static int vgsm_write(
 		len += diff_octs;
 
 		vgsm_debug_jitbuf(vgsm_chan->me,
-			"TX under hard low-mark: added %d samples\n",
+			"TX under low-mark: added %d samples\n",
 			diff);
 	}
 

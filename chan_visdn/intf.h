@@ -22,9 +22,9 @@
 #include "ton.h"
 #include "util.h"
 
-#ifdef DEBUG_CODE
+#ifdef ADEBUG_CODE
 #define visdn_intf_debug(intf, format, arg...)		\
-	if ((intf)->debug_state)			\
+	if ((intf)->debug_generic)			\
 		visdn_debug("%s: "			\
 			format,				\
 			(intf)->name,			\
@@ -176,6 +176,7 @@ struct visdn_intf
 
 	char remote_port[PATH_MAX];
 
+	BOOL debug_generic;
 	BOOL debug_state;
 	BOOL debug_jitbuf;
 	BOOL debug_frames;
