@@ -18,6 +18,10 @@
 
 #include <libq931/list.h>
 
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#include "rwlock_compat.h"
+#endif
+
 #include "intf.h"
 
 #ifndef AST_CONTROL_INBAND_INFO
