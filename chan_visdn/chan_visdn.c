@@ -2220,8 +2220,10 @@ static int visdn_hangup(struct ast_channel *ast_chan)
 			ast_chan->name,
 			visdn_chan->refcnt);
 
-	visdn_intf_put(visdn_chan->intf);
-	visdn_chan->intf = NULL;
+	if (visdn_chan->intf) {
+		visdn_intf_put(visdn_chan->intf);
+		visdn_chan->intf = NULL;
+	}
 
 	visdn_chan->ast_chan = NULL;
 
