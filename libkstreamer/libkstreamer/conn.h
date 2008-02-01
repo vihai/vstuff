@@ -1,7 +1,7 @@
 /*
  * Userland Kstreamer interface
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -40,6 +40,13 @@ struct ks_conn_message
 	__u8 data[];
 };
 
+enum ks_conn_state
+{
+	KS_CONN_STATE_NULL,
+	KS_CONN_STATE_DISCONNECTED,
+	KS_CONN_STATE_ESTABLISHED,
+};
+
 enum ks_topology_state
 {
 	KS_TOPOLOGY_STATE_NULL,
@@ -64,6 +71,7 @@ struct ks_conn
 {
 	pthread_mutex_t refcnt_lock;
 
+	enum ks_conn_state state;
 	enum ks_topology_state topology_state;
 
 	pthread_rwlock_t topology_lock;
@@ -110,8 +118,10 @@ struct ks_conn
 struct ks_req;
 
 struct ks_conn *ks_conn_create(void);
-int ks_conn_establish(struct ks_conn *conn);
 void ks_conn_destroy(struct ks_conn *conn);
+
+int ks_conn_establish(struct ks_conn *conn);
+void ks_conn_disconnect(struct ks_conn *conn);
 
 int ks_conn_sync(struct ks_conn *conn);
 

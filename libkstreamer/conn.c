@@ -306,6 +306,8 @@ struct ks_conn *ks_conn_create(void)
 
 	conn->report_func = ks_report_default;
 
+	conn->state = KS_CONN_STATE_DISCONNECTED;
+
 	return conn;
 }
 
@@ -571,7 +573,9 @@ int ks_conn_sendmsg(struct ks_conn *conn, struct sk_buff *skb)
 
 	int len = sendmsg(conn->sock, &msg, 0);
 	if(len < 0) {
-		perror("sendmsg()");
+		report_conn(conn, LOG_ERR,
+			"sendmsg() error: %s\n",
+			strerror(errno));
 		return -errno;
 	}
 
@@ -786,7 +790,8 @@ static int ks_conn_receive(struct ks_conn *conn)
 
 	int len = recvmsg(conn->sock, &msg, 0);
 	if(len < 0) {
-		perror("recvmsg()");
+		report_conn(conn, LOG_ERR,
+			"recvmsg() error: %s\n", strerror(errno));
 		free(buf);
 		return -errno;
 	}
@@ -1032,7 +1037,9 @@ int ks_conn_establish(struct ks_conn *conn)
 
 	conn->sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_KSTREAMER);
 	if (conn->sock < 0) {
-		perror("Unable to open kstreamer socket");
+		report_conn(conn, LOG_ERR,
+			"unable to open kstreamer's netlink socket: %s\n",
+			strerror(errno));
 		err = -errno;
 		goto err_socket;
 	}
@@ -1045,7 +1052,9 @@ int ks_conn_establish(struct ks_conn *conn)
 
 	if (bind(conn->sock, (struct sockaddr *)&bind_sa,
 						sizeof(bind_sa)) < 0) {
-		perror("Unable to bind netlink socket");
+		report_conn(conn, LOG_ERR,
+			"unable to bind kstreamer's netlink socket: %s\n",
+			strerror(errno));
 		err = -errno;
 		goto err_bind;
 	}
@@ -1088,6 +1097,8 @@ int ks_conn_establish(struct ks_conn *conn)
 		goto err_invalid_version;
 	}
 
+	conn->state = KS_CONN_STATE_ESTABLISHED;
+
 	return 0;
 
 err_invalid_version:
@@ -1109,8 +1120,10 @@ err_pipe:
 	return err;
 }
 
-void ks_conn_destroy(struct ks_conn *conn)
+void ks_conn_disconnect(struct ks_conn *conn)
 {
+	assert(conn->state == KS_CONN_STATE_ESTABLISHED);
+
 	ks_conn_send_message(conn, KS_CONN_MSG_CLOSE, NULL, 0);
 
 	int err;
@@ -1123,17 +1136,26 @@ void ks_conn_destroy(struct ks_conn *conn)
 
 	close(conn->cmd_read);
 	close(conn->cmd_write);
-
-	pthread_mutex_init(&conn->requests_lock, NULL);
-	pthread_rwlock_destroy(&conn->topology_lock);
-	pthread_mutex_destroy(&conn->refcnt_lock);
-
 	close(conn->sock);
 
 	ks_pipeline_flush(conn);
 	ks_chan_flush(conn);
 	ks_node_flush(conn);
 	ks_feature_flush(conn);
+
+	conn->state = KS_CONN_STATE_DISCONNECTED;
+}
+
+void ks_conn_destroy(struct ks_conn *conn)
+{
+	if (conn->state == KS_CONN_STATE_ESTABLISHED)
+		ks_conn_disconnect(conn);
+
+	assert(conn->state == KS_CONN_STATE_DISCONNECTED);
+
+	pthread_mutex_destroy(&conn->requests_lock);
+	pthread_rwlock_destroy(&conn->topology_lock);
+	pthread_mutex_destroy(&conn->refcnt_lock);
 
 	free(conn);
 }
