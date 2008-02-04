@@ -1697,7 +1697,7 @@ static int vgsm_write(
 
 		vgsm_debug_jitbuf(vgsm_chan->me,
 			"TX %d over high-mark: dropped %d samples\n",
-			vgsm_chan->pressure_average > mc->jitbuf_high,
+			mc->jitbuf_high - vgsm_chan->pressure_average,
 			drop);
 
 		len = max(0, len - drop * sample_size);
