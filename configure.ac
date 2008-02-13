@@ -142,13 +142,6 @@ fi
 AC_SUBST(kblddir)
 AC_MSG_RESULT([$kblddir])
 
-AC_ARG_WITH(
-	[kernel-have-sk-prot],
-	AC_HELP_STRING(
-		[--with-kernel-have-sk-prot],
-		[Fedora kernel have sk_prot before 2.6.12]),)
-AC_SUBST(with_kernel_have_sk_prot)
-
 fi
 
 AM_CONDITIONAL(kernel_modules, test "$enable_kernel_modules" != "no")

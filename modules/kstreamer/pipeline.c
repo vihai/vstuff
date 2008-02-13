@@ -624,12 +624,12 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 	list_for_each_entry(chan, &pipeline->entries, pipeline_entry) {
 
 		printk("%s/%s/%s =====(%s/%s/%s)=====> ",
-			chan->from->kobj.parent->parent->name,
-			chan->from->kobj.parent->name,
-			chan->from->kobj.name,
-			chan->kobj.parent->parent->name,
-			chan->kobj.parent->name,
-			chan->kobj.name);
+			kobject_name(chan->from->kobj.parent->parent),
+			kobject_name(chan->from->kobj.parent),
+			kobject_name(&chan->from->kobj),
+			kobject_name(chan->kobj.parent->parent),
+			kobject_name(chan->kobj.parent),
+			kobject_name(&chan->kobj));
 
 		prev_chan = chan;
 	}
@@ -637,8 +637,8 @@ void ks_pipeline_dump(struct ks_pipeline *pipeline)
 
 	if (prev_chan)
 		printk("%s/%s\n",
-			prev_chan->to->kobj.parent->name,
-			prev_chan->to->kobj.name);
+			kobject_name(prev_chan->to->kobj.parent),
+			kobject_name(&prev_chan->to->kobj));
 }
 
 static int ks_pipeline_negotiate_mtu(struct ks_pipeline *pipeline)

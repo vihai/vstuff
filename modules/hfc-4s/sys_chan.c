@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -39,7 +39,7 @@
 			format,						\
 			(chan)->port->card->pci_dev->dev.bus->name,	\
 			(chan)->port->card->pci_dev->dev.bus_id,	\
-			(chan)->ks_duplex.kobj.name,			\
+			kobject_name(&(chan)->ks_duplex.kobj),		\
 			## arg)
 
 #else
@@ -54,7 +54,7 @@
 		format,							\
 		(chan)->port->card->pci_dev->dev.bus->name,		\
 		(chan)->port->card->pci_dev->dev.bus_id,		\
-		(chan)->ks_duplex.kobj.name,				\
+		kobject_name(&(chan)->ks_duplex.kobj),			\
 		## arg)
 
 #if 0

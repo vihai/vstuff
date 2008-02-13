@@ -27,7 +27,11 @@ struct lapd_device *lapd_dev_get_by_name(const char *name)
 {
 	struct net_device *dev;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	dev = dev_get_by_name(name);
+#else
+	dev = dev_get_by_name(&init_net, name);
+#endif
 	if (!dev)
 		return NULL;
 

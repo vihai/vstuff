@@ -30,7 +30,10 @@
 
 struct sock *ksnl;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static struct workqueue_struct *ks_netlink_rcv_wq;
+#endif
+
 static struct sk_buff_head ks_backlog;
 
 struct ks_netlink_state ks_netlink_state = { };
@@ -575,6 +578,8 @@ static int ks_netlink_rcv_skb(
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static void ks_netlink_rcv_work_func(void *data)
 #else
@@ -614,11 +619,13 @@ redo_backlog:
 	if (processed)
 		goto redo_backlog;
 }
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
 static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func, NULL);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static DECLARE_WORK(ks_netlink_rcv_work, ks_netlink_rcv_work_func);
+#else
 #endif
 
 void ks_lock_timeout(unsigned long data)
@@ -633,12 +640,46 @@ void ks_lock_timeout(unsigned long data)
 	wake_up(&ks_netlink_state.lock_sleep);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static void ks_netlink_rcv(struct sock *sk, int len)
 {
 	/* Packets can only be coming in from ksnl */
 
 	queue_work(ks_netlink_rcv_wq, &ks_netlink_rcv_work);
 }
+#else
+static void ks_netlink_rcv(struct sk_buff *skb)
+{
+	struct sk_buff *tail;
+	int err;
+	int processed;
+
+	err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
+	if (err == -EAGAIN)
+		skb_queue_tail(&ks_backlog, skb);
+	else
+		kfree_skb(skb);
+
+redo_backlog:
+	tail = skb_peek_tail(&ks_backlog);
+	processed = FALSE;
+	while ((skb = skb_dequeue(&ks_backlog))) {
+		err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
+		if (err == -EAGAIN)
+			skb_queue_tail(&ks_backlog, skb);
+		else {
+			kfree_skb(skb);
+			processed = TRUE;
+		}
+
+		if (skb == tail)
+			break;
+	}
+
+	if (processed)
+		goto redo_backlog;
+}
+#endif
 
 int ks_netlink_modinit(void)
 {
@@ -646,21 +687,25 @@ int ks_netlink_modinit(void)
 
 	skb_queue_head_init(&ks_backlog);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	ks_netlink_rcv_wq = create_singlethread_workqueue("ksnl");
 	if (!ks_netlink_rcv_wq) {
 		err = -ENOMEM;
 		goto err_create_workqueue;
 	}
-
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, ks_netlink_rcv);
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, 0,
 					ks_netlink_rcv, THIS_MODULE);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	ksnl = netlink_kernel_create(NETLINK_KSTREAMER, 0, ks_netlink_rcv,
 							NULL, THIS_MODULE);
+#else
+	ksnl = netlink_kernel_create(&init_net, NETLINK_KSTREAMER, 0,
+					ks_netlink_rcv, NULL, THIS_MODULE);
 #endif
 	if (!ksnl) {
 		err = -ENOMEM;
@@ -682,8 +727,10 @@ int ks_netlink_modinit(void)
 
 	return 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	destroy_workqueue(ks_netlink_rcv_wq);
 err_create_workqueue:
+#endif
 	sock_release(ksnl->sk_socket);
 err_netlink_kernel_create:
 
@@ -692,7 +739,9 @@ err_netlink_kernel_create:
 
 void ks_netlink_modexit(void)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	destroy_workqueue(ks_netlink_rcv_wq);
+#endif
 
 	sock_release(ksnl->sk_socket);
 }

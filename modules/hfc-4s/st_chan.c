@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -29,7 +29,7 @@
 			(chan)->port->card->pci_dev->dev.bus->name,	\
 			(chan)->port->card->pci_dev->dev.bus_id,	\
 			(chan)->port->id,				\
-			(chan)->ks_node.kobj.name,			\
+			kobject_name(&(chan)->ks_node.kobj),		\
 			## arg)
 #else
 #define hfc_debug_st_chan(chan, dbglevel, format, arg...) do {} while (0)

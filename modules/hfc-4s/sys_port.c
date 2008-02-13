@@ -1,7 +1,7 @@
 /*
  * Cologne Chip's HFC-4S and HFC-8S vISDN driver
  *
- * Copyright (C) 2004-2006 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -202,7 +202,7 @@ static ssize_t hfc_show_fifo_state(
 			sanprintf(buf, PAGE_SIZE,
 				"st%d:%-2s",
 				chan_rx->chan->port->id,
-				chan_rx->chan->ks_node.kobj.name);
+				kobject_name(&chan_rx->chan->ks_node.kobj));
 /*		} else if (prev_chan->ops == &hfc_pcm_chan_rx_chan_ops) {
 			struct hfc_pcm_chan_rx *chan_rx =
 				container_of(prev_chan, struct hfc_pcm_chan_rx,
@@ -242,7 +242,7 @@ static ssize_t hfc_show_fifo_state(
 			sanprintf(buf, PAGE_SIZE,
 				"st%d:%-2s\n",
 				chan_tx->chan->port->id,
-				chan_tx->chan->ks_node.kobj.name);
+				kobject_name(&chan_tx->chan->ks_node.kobj));
 /*		} else if (next_chan->ops == &hfc_pcm_chan_tx_chan_ops) {
 			struct hfc_pcm_chan_tx *chan_tx =
 				container_of(next_chan, struct hfc_pcm_chan_tx,

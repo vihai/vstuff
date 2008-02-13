@@ -1013,7 +1013,13 @@ static int lapd_mac_addr(struct net_device *dev, void *addr)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
+#else
+static int lapd_hard_header_parse(
+	const struct sk_buff *skb,
+	unsigned char *haddr)
+#endif
 {
 	if(!skb->dev)
 		return 0;
@@ -1023,18 +1029,35 @@ static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
 	return 1;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
+#else
+const struct header_ops lapd_header_ops ____cacheline_aligned = {
+	.create		= NULL,
+	.parse		= lapd_hard_header_parse,
+	.rebuild	= NULL,
+	.cache		= NULL,
+	.cache_update	= NULL,
+};
+#endif
+
 static void setup_lapd(struct net_device *netdev)
 {
 	netdev->change_mtu = NULL;
-	netdev->hard_header = NULL;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	netdev->rebuild_header = NULL;
-	netdev->set_mac_address = lapd_mac_addr;
+	netdev->hard_header = NULL;
 	netdev->hard_header_cache = NULL;
-	netdev->header_cache_update= NULL;
+	netdev->hard_header_len = 0;
 	netdev->hard_header_parse = lapd_hard_header_parse;
+	netdev->header_cache_update = NULL;
+#else
+	netdev->header_ops = &lapd_header_ops;
+#endif
+
+	netdev->set_mac_address = lapd_mac_addr;
 
 	netdev->type = ARPHRD_LAPD;
-	netdev->hard_header_len = 0;
 	netdev->addr_len = 1;
 	netdev->tx_queue_len = 10;
 
@@ -1374,7 +1397,9 @@ static int vnd_netdevice_register(
 	memset(netdevice->netdev->dev_addr, 0,
 		sizeof(netdevice->netdev->dev_addr));
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	SET_MODULE_OWNER(netdevice->netdev);
+#endif
 
 	netdevice->netdev->irq = 0;
 	netdevice->netdev->base_addr = 0;

@@ -39,12 +39,12 @@ static int hfc_switch_connect(
 //	struct hfc_card *card = hfcswitch->card;
 
 printk(KERN_CRIT "%s/%s connected %s/%s to %s/%s\n",
-	ks_node->kobj.parent->name,
-	ks_node->kobj.name,
-	from->kobj.parent->name,
-	from->kobj.name,
-	to->kobj.parent->name,
-	to->kobj.name);
+	kobject_name(ks_node->kobj.parent),
+	kobject_name(&ks_node->kobj),
+	kobject_name(from->kobj.parent),
+	kobject_name(&from->kobj),
+	kobject_name(to->kobj.parent),
+	kobject_name(&to->kobj));
 
 /*	hfc_card_lock(card);
 
