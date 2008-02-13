@@ -29,8 +29,6 @@ EXTRA_DIST =					\
 	modules/include/linux/kstreamer/*.h	\
 	modules/include/linux/visdn/*.h		\
 	docs/*					\
-	vgsm_firmware/*.img			\
-	vgsm_firmware/README			\
 	vgsm2_firmware/*.fw			\
 	vgsm2_firmware/README
 
