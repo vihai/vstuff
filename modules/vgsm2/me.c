@@ -244,6 +244,12 @@ static void vgsm_me_rx_chan_stimulus(
 
 	inpos = vgsm_inl(card, VGSM_R_ME_FIFO_RX_IN(me->id));
 
+        /* Workaround for pre-2.8.3 firmware */
+	if (sample_size > 1) {
+		inpos &= ~1;
+		me_rx->fifo_out &= ~1;
+	}
+
 	while(me_rx->fifo_out != inpos && sf->len < sf->size) {
 
 		if (sf->size - sf->len < sample_size)
