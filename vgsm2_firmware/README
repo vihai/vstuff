@@ -17,6 +17,11 @@ below.
 
 Changelog:
 
+------ 2.8.3 ------
+
+- Fixed rx-fifo counter setting when switching from slin to x-law. Software
+  workaround should make this fix not needed.
+
 ------ 2.8.2 ------
 
 - Allow controlling the SIM's VCC through the DTR line. Some SIM does not get
