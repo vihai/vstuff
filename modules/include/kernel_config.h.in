@@ -42,10 +42,6 @@
 #define with_value 0
 #define with_valueyes 1
 
-#if with_value@with_kernel_have_sk_prot@
-#define HAVE_SK_PROT
-#endif
-
 #undef with_value
 #undef with_valueyes
 
