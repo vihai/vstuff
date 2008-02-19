@@ -77,7 +77,7 @@ release: ChangeLog distdir
 	-gpg --sign -ab $(distdir).tar.bz2
 	scp $(distdir).tar.gz $(distdir).tar.gz.asc \
 	    $(distdir).tar.bz2 $(distdir).tar.bz2.asc \
-	    root@aj.uli.it:/www/www.visdn.org/htdocs/download/
+	    vihai@stfu.orlandi.com:/srv/www/www.visdn.org/htdocs/download/
 
 doxy:
 	doxygen doxygen.conf
