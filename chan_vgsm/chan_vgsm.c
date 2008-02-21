@@ -124,6 +124,7 @@
 #include "rwlock_compat.h"
 #else
 #include <asterisk.h>
+#include <asterisk/abstract_jb.h>
 #endif
 
 #include <res_kstreamer.h>
@@ -871,6 +872,11 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
 		goto err_vgsm_chan_alloc;
 	}
 
+	vgsm_chan->me = vgsm_me_get(me);
+	vgsm_chan->mc = vgsm_me_config_get(me->current_config);
+
+	vgsm_chan->outbound = FALSE;
+
 	vgsm_chan->ast_chan = vgsm_ast_chan_alloc(vgsm_chan,
 						AST_STATE_RESERVED,
 						me, 1, AST_FORMAT_SLINEAR);
@@ -878,10 +884,10 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
 	if (!vgsm_chan->ast_chan)
 		goto err_vgsm_ast_chan_alloc;
 
-	vgsm_chan->outbound = FALSE;
-
-	vgsm_chan->me = vgsm_me_get(me);
-	vgsm_chan->mc = vgsm_me_config_get(me->current_config);
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#else
+	ast_jb_configure(vgsm_chan->ast_chan, &vgsm_chan->mc->jbconf);
+#endif
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
@@ -997,18 +1003,14 @@ static int vgsm_call(
 	}
 
 	me->stats.outbound++;
-
 	me->vgsm_chan = vgsm_chan_get(vgsm_chan);
-	vgsm_chan->me = vgsm_me_get(me);
-	vgsm_chan->mc = vgsm_me_config_get(me->current_config);
+	me->call_present = FALSE;
 
 	ast_dsp_digitmode(vgsm_chan->dsp,
 		DSP_DIGITMODE_DTMF |
 		(vgsm_chan->mc->dtmf_quelch ? 0 : DSP_DIGITMODE_NOQUELCH) |
 		(vgsm_chan->mc->dtmf_mutemax ? DSP_DIGITMODE_MUTEMAX : 0) |
 		(vgsm_chan->mc->dtmf_relax ? DSP_DIGITMODE_RELAXDTMF : 0));
-
-	me->call_present = FALSE;
 
 	char newname[40];
 	snprintf(newname, sizeof(newname), "VGSM/%s/%d", me->name, 1);
@@ -1845,9 +1847,17 @@ static struct ast_channel *vgsm_request(
 	snprintf(vgsm_chan->called_number, sizeof(vgsm_chan->called_number),
 		"%s", number);
 
+	assert(!vgsm_chan->me);
+
 	vgsm_chan->me = vgsm_me_get(me);
+	vgsm_chan->mc = vgsm_me_config_get(me->current_config);
 	vgsm_chan->hg_first_me = hg_first_me;
 	vgsm_chan->huntgroup = huntgroup;
+
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#else
+	ast_jb_configure(ast_chan, &vgsm_chan->mc->jbconf);
+#endif
 
 	vgsm_me_put(me);
 

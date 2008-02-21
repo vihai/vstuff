@@ -14,6 +14,7 @@
 #define _ME_H
 
 #include <asterisk/channel.h>
+#include <asterisk/version.h>
 
 #include <list.h>
 
@@ -230,6 +231,11 @@ struct vgsm_me_config
 	int jitbuf_hardlow;
 	int jitbuf_high;
 	int jitbuf_hardhigh;
+
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#else
+	struct ast_jb_conf jbconf;
+#endif
 };
 
 struct vgsm_me

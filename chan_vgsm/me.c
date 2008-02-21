@@ -106,6 +106,20 @@ void vgsm_me_config_default(struct vgsm_me_config *mc)
 	mc->rx_calibrate = 16384;
 	mc->tx_calibrate = 21402;
 
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#else
+	static struct ast_jb_conf default_jbconf =
+	{
+		.flags = 0,
+		.max_size = -1,
+		.resync_threshold = -1,
+		.impl = "",
+	};
+
+	/* Copy the default jb config over global_jbconf */
+	memcpy(&mc->jbconf, &default_jbconf, sizeof(mc->jbconf));
+#endif
+
 	mc->jitbuf_average = 5;
 	mc->jitbuf_low = 10;
 	mc->jitbuf_hardlow = 0;
@@ -872,6 +886,10 @@ sim_device_filename:
 		mc->jitbuf_high = atoi(var->value);
 	} else if (!strcasecmp(var->name, "jitbuf_hardhigh")) {
 		mc->jitbuf_hardhigh = atoi(var->value);
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#else
+	} else if (!ast_jb_read_conf(&mc->jbconf, var->name, var->value)) {
+#endif
 	} else {
 		return -1;
 	}
@@ -922,6 +940,11 @@ static void vgsm_me_config_copy(
 
 	dst->rx_calibrate = src->rx_calibrate;
 	dst->tx_calibrate = src->tx_calibrate;
+
+#if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
+#else
+	memcpy(&dst->jbconf, &src->jbconf, sizeof(dst->jbconf));
+#endif
 
 	dst->jitbuf_average = src->jitbuf_average;
 	dst->jitbuf_low = src->jitbuf_low;
