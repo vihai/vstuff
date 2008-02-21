@@ -1619,7 +1619,8 @@ static int vgsm_write(
 		pressure) / (mc->jitbuf_average + 1);
 
 	longtime_t now = longtime_now();
-	if (now - vgsm_chan->last_tx > frame->samples * 125 * 2) {
+	if (now - vgsm_chan->last_tx > frame->samples * 125 *
+							mc->jitbuf_maxhole) {
 
 		int diff = (mc->jitbuf_high + mc->jitbuf_low) / 2;
 		int diff_octs = diff * sample_size;
@@ -1699,7 +1700,7 @@ static int vgsm_write(
 
 		vgsm_debug_jitbuf(vgsm_chan->me,
 			"TX %d over high-mark: dropped %d samples\n",
-			mc->jitbuf_high - vgsm_chan->pressure_average,
+			vgsm_chan->pressure_average - mc->jitbuf_high,
 			drop);
 
 		len = max(0, len - drop * sample_size);
