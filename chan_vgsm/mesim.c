@@ -46,13 +46,17 @@
 static void vgsm_mesim_timers_updated(struct vgsm_timerset *set);
 static void vgsm_mesim_timer(void *data);
 
-int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_me *me)
+int vgsm_mesim_create(
+	struct vgsm_mesim *mesim,
+	struct vgsm_me *me,
+	const char *name)
 {
 //	int err;
 
 	mesim->fd = -1;
 	mesim->state = VGSM_MESIM_CLOSED;
 	mesim->me = me;
+	mesim->name = name;
 
 	mesim->is_reset = TRUE;
 
@@ -183,18 +187,128 @@ void vgsm_mesim_close(struct vgsm_mesim *mesim)
 		ast_cond_wait(&mesim->state_cond, &mesim->state_lock);
 	}
 	ast_mutex_unlock(&mesim->state_lock);
+
+	close(mesim->fd);
+	mesim->fd = -1;
 }
 
 static void *vgsm_mesim_thread_main(void *data);
 static void *vgsm_mesim_modem_thread_main(void *data);
 
-int vgsm_mesim_open(struct vgsm_mesim *mesim, int fd)
+int vgsm_mesim_open(struct vgsm_mesim *mesim, const char *devname)
 {
 	int err;
 
-//	assert(mesim->state == VGSM_MESIM_CLOSED);
+	assert(mesim->state == VGSM_MESIM_CLOSED);
 
-	mesim->fd = fd;
+	mesim->fd = open(devname, O_RDWR | O_NOCTTY | O_NDELAY);
+	if (mesim->fd < 0) {
+		char tmpstr[64];
+		snprintf(tmpstr, sizeof(tmpstr),
+			"Error opening device: open(%s): %s",
+				devname,
+				strerror(errno));
+
+		err = -errno;
+		goto err_open;
+	}
+
+	int flags;
+	flags = fcntl(mesim->fd, F_GETFL, 0);
+
+	flags &= ~O_NONBLOCK;
+
+	if (fcntl(mesim->fd, F_SETFL, flags) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set MESIM fd to non-blocking: %s\n",
+			strerror(errno));
+		err = -errno;
+		goto err_fcntl;
+	}
+
+	struct termios newtio;
+	memset(&newtio, 0, sizeof(newtio));
+
+	newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD |
+			 PARENB | HUPCL | CSTOPB;
+	newtio.c_iflag = IGNBRK | IGNPAR;
+	newtio.c_oflag = 0;
+	newtio.c_lflag = 0;
+	
+	newtio.c_cc[VINTR]	= 0;
+	newtio.c_cc[VQUIT]	= 0;
+	newtio.c_cc[VERASE]	= 0;
+	newtio.c_cc[VKILL]	= 0;
+	newtio.c_cc[VEOF]	= 4;
+	newtio.c_cc[VTIME]	= 0;
+	newtio.c_cc[VMIN]	= 1;
+	newtio.c_cc[VSWTC]	= 0;
+	newtio.c_cc[VSTART]	= 0;
+	newtio.c_cc[VSTOP]	= 0;
+	newtio.c_cc[VSUSP]	= 0;
+	newtio.c_cc[VEOL]	= 0;
+	newtio.c_cc[VREPRINT]	= 0;
+	newtio.c_cc[VDISCARD]	= 0;
+	newtio.c_cc[VWERASE]	= 0;
+	newtio.c_cc[VLNEXT]	= 0;
+	newtio.c_cc[VEOL2]	= 0;
+	
+	if (tcflush(mesim->fd, TCIOFLUSH) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: tcflush(TCIOFLUSH):  %s\n",
+			mesim->name,
+			strerror(errno));
+
+		err = -errno;
+		goto err_tcflush;
+	}
+
+	if (tcsetattr(mesim->fd, TCSANOW, &newtio) < 0) {
+		char tmpstr[64];
+		snprintf(tmpstr, sizeof(tmpstr),
+			"Error setting tty's attributes: "
+			"tcsetattr(%s): %s",
+				devname,
+				strerror(errno));
+
+		err = -errno;
+		goto err_tcsetattr;
+	}
+
+	if (tcflush(mesim->fd, TCIOFLUSH) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: tcflush(TCIOFLUSH):  %s\n",
+			mesim->name,
+			strerror(errno));
+
+		err = -errno;
+		goto err_tcflush;
+	}
+
+	struct serial_struct ss;
+	if (ioctl(mesim->fd, TIOCGSERIAL, &ss) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: ioctl(TIOCGSERIAL):  %s\n",
+			mesim->name,
+			strerror(errno));
+
+		err = -errno;
+		goto err_ioctl_gserial;
+	}
+
+	ss.custom_divisor = ss.baud_base / 8643;
+	ss.flags &= ~ASYNC_SPD_MASK;
+	ss.flags |= ASYNC_SPD_CUST;
+
+	if (ioctl(mesim->fd, TIOCSSERIAL, &ss) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: ioctl(TIOCSSERIAL):  %s\n",
+			mesim->name,
+			strerror(errno));
+
+		err = -errno;
+		goto err_ioctl_sserial;
+	}
 
 	int filedes[2];
 	if (pipe(filedes) < 0) {
@@ -243,6 +357,14 @@ err_pthread_create_comm:
 	close(mesim->cmd_pipe_read);
 	close(mesim->cmd_pipe_write);
 err_pipe:
+err_ioctl_sserial:
+err_ioctl_gserial:
+err_tcflush:
+err_tcsetattr:
+err_fcntl:
+	close(mesim->fd);
+	mesim->fd = -1;
+err_open:
 
 	return err;
 }

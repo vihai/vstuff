@@ -4048,6 +4048,12 @@ static int vgsm_me_open(
 				me->name);
 		}
 
+		if (ioctl(me->me_fd, VGSM_IOC_GET_ID, &me->id) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: cannot read ID\n",
+				me->name);
+		}
+
 		if (ioctl(me->me_fd, VGSM_IOC_CARD_GET_ID,
 					&me->card.id) < 0) {
 			ast_log(LOG_ERROR,
@@ -4055,129 +4061,16 @@ static int vgsm_me_open(
 				me->name);
 		}
 
-		vgsm_mesim_create(&me->mesim, me);
+		vgsm_mesim_create(&me->mesim, me, me->name);
 
-		me->mesim.name = me->name;
+		err = vgsm_mesim_open(&me->mesim, mc->mesim_device_filename);
+		if (err < 0) {
+			vgsm_me_failed_text(me,
+				"Error opening ME-SIM device: %s",
+				strerror(errno));
 
-		me->mesim_fd = open(mc->mesim_device_filename,
-						O_RDWR | O_NOCTTY | O_NDELAY);
-		if (me->mesim_fd < 0) {
-			char tmpstr[64];
-			snprintf(tmpstr, sizeof(tmpstr),
-				"Error opening device: open(%s): %s",
-					mc->mesim_device_filename,
-					strerror(errno));
-
-			vgsm_me_set_status(me,
-				VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
-				tmpstr);
-
-			err = -errno;
 			goto err_mesim_open;
 		}
-
-		int flags;
-		flags = fcntl(me->mesim_fd, F_GETFL, 0);
-
-		flags &= ~O_NONBLOCK;
-
-		if (fcntl(me->mesim_fd, F_SETFL, flags) < 0) {
-			ast_log(LOG_ERROR,
-				"Cannot set MESIM fd to non-blocking: %s\n",
-				strerror(errno));
-			err = -errno;
-			goto err_mesim_fcntl;
-		}
-
-		struct termios newtio;
-		memset(&newtio, 0, sizeof(newtio));
-
-		newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD |
-				 PARENB | HUPCL | CSTOPB;
-		newtio.c_iflag = IGNBRK | IGNPAR;
-		newtio.c_oflag = 0;
-		newtio.c_lflag = 0;
-		
-		newtio.c_cc[VINTR]	= 0;
-		newtio.c_cc[VQUIT]	= 0;
-		newtio.c_cc[VERASE]	= 0;
-		newtio.c_cc[VKILL]	= 0;
-		newtio.c_cc[VEOF]	= 4;
-		newtio.c_cc[VTIME]	= 0;
-		newtio.c_cc[VMIN]	= 1;
-		newtio.c_cc[VSWTC]	= 0;
-		newtio.c_cc[VSTART]	= 0;
-		newtio.c_cc[VSTOP]	= 0;
-		newtio.c_cc[VSUSP]	= 0;
-		newtio.c_cc[VEOL]	= 0;
-		newtio.c_cc[VREPRINT]	= 0;
-		newtio.c_cc[VDISCARD]	= 0;
-		newtio.c_cc[VWERASE]	= 0;
-		newtio.c_cc[VLNEXT]	= 0;
-		newtio.c_cc[VEOL2]	= 0;
-		
-		if (tcflush(me->mesim_fd, TCIOFLUSH) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: tcflush(TCIOFLUSH):  %s\n",
-				me->name,
-				strerror(errno));
-
-			err = -errno;
-			goto err_mesim_tcsetattr;
-		}
-
-		if (tcsetattr(me->mesim_fd, TCSANOW, &newtio) < 0) {
-			char tmpstr[64];
-			snprintf(tmpstr, sizeof(tmpstr),
-				"Error setting tty's attributes: "
-				"tcsetattr(%s): %s",
-					mc->mesim_device_filename,
-					strerror(errno));
-
-			vgsm_me_set_status(me,
-				VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
-				tmpstr);
-
-			err = -errno;
-			goto err_mesim_tcsetattr;
-		}
-
-		if (tcflush(me->mesim_fd, TCIOFLUSH) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: tcflush(TCIOFLUSH):  %s\n",
-				me->name,
-				strerror(errno));
-
-			err = -errno;
-			goto err_mesim_tcsetattr;
-		}
-
-		struct serial_struct ss;
-		if (ioctl(me->mesim_fd, TIOCGSERIAL, &ss) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(TIOCGSERIAL):  %s\n",
-				me->name,
-				strerror(errno));
-
-			err = -errno;
-			goto err_mesim_tcsetattr;
-		}
-
-		ss.custom_divisor = ss.baud_base / 8736;
-		ss.flags &= ~ASYNC_SPD_MASK;
-		ss.flags |= ASYNC_SPD_CUST;
-
-		if (ioctl(me->mesim_fd, TIOCSSERIAL, &ss) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(TIOCSSERIAL):  %s\n",
-				me->name,
-				strerror(errno));
-
-			err = -errno;
-			goto err_mesim_tcsetattr;
-		}
-
-		vgsm_mesim_open(&me->mesim, me->mesim_fd);
 
 		struct vgsm_mesim_set_mode sm = {
 			.driver_type = mc->sim_driver_type,
@@ -4247,11 +4140,7 @@ static int vgsm_me_open(
 	vgsm_comm_close(&me->comm);
 err_comm_open:
 err_ioctl_power_get:
-err_mesim_tcsetattr:
-err_mesim_fcntl:
 	vgsm_mesim_close(&me->mesim);
-	close(me->mesim_fd);
-	me->mesim_fd = -1;
 err_mesim_open:
 err_tcsetattr:
 err_me_flush:
@@ -4435,6 +4324,8 @@ static void vgsm_me_timer(void *data)
 	case VGSM_ME_STATUS_FAILED:
 
 		if (me->failure_attempts < 3) {
+			vgsm_mesim_close(&me->mesim);
+
 			vgsm_comm_close(&me->comm);
 
 			if (tcflush(me->me_fd, TCIOFLUSH) < 0) {
@@ -4595,11 +4486,8 @@ void vgsm_me_shutdown_all(void)
 		close(me->me_fd);
 		me->me_fd = -1;
 
-		if (me->interface_version == 2) {
+		if (me->interface_version == 2)
 			vgsm_mesim_close(&me->mesim);
-			close(me->mesim_fd);
-			me->mesim_fd = -1;
-		}
 
 		ast_mutex_unlock(&me->lock);
 	}

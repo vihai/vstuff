@@ -1,7 +1,7 @@
 /*
  * VoiSmart vGSM-II board driver
  *
- * Copyright (C) 2006-2007 Daniele Orlandi
+ * Copyright (C) 2006-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -34,6 +34,7 @@
 #define VGSM_IOC_GET_SIM_ROUTE		_IOR(0xd1, 19, unsigned int)
 #define VGSM_IOC_SIM_GET_CARD_ID	_IOR(0xd1, 20, unsigned int)
 #define VGSM_IOC_CARD_GET_ID		_IOR(0xd1, 21, unsigned int)
+#define VGSM_IOC_GET_ID			_IOR(0xd1, 22, unsigned int)
 
 #define VGSM_SIM_ROUTE_EXTERNAL -1
 #define VGSM_SIM_ROUTE_DEFAULT -2

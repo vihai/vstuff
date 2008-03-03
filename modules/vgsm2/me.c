@@ -858,6 +858,9 @@ static int vgsm_me_ioctl(
 	case VGSM_IOC_GET_INTERFACE_VERSION:
 		return put_user(2, (int __user *)arg);
 
+	case VGSM_IOC_GET_ID:
+		return put_user(me->id, (int __user *)arg);
+
 	case VGSM_IOC_GET_NODEID:
 		return put_user(me->ks_node.id, (int __user *)arg);
 

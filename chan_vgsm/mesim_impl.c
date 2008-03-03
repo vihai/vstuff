@@ -68,6 +68,8 @@ struct vgsm_mesim_driver *vgsm_mesim_impl_create(
 	mesim_impl->state = VGSM_MESIM_IMPL_STATE_NULL;
 	ast_mutex_init(&mesim_impl->state_lock);
 
+	mesim_impl->parser_state = VGSM_MESIM_IMPL_PARSER_STATE_IDLE;
+
 	vgsm_timer_init(&mesim_impl->timer, timerset, "mesim_impl",
 			vgsm_mesim_impl_timer, mesim_impl);
 
@@ -96,10 +98,8 @@ static const char *vgsm_mesim_impl_state_to_text(
 		return "NULL";
 	case VGSM_MESIM_IMPL_STATE_TRYING:
 		return "TRYING";
-	case VGSM_MESIM_IMPL_STATE_CONNECTED:
-		return "CONNECTED";
-	case VGSM_MESIM_IMPL_STATE_ACTIVE:
-		return "ACTIVE";
+	case VGSM_MESIM_IMPL_STATE_READY:
+		return "READY";
 	}
 
 	return "*UNKNOWN*";
@@ -138,6 +138,16 @@ static int vgsm_mesim_impl_write_reset_removed(
 }
 
 static int vgsm_mesim_impl_write(
+	struct vgsm_mesim_impl *mesim_impl,
+	void *data, int size)
+{
+	vgsm_mesim_debug(mesim_impl->mesim,
+		"IMPL TX (%2d): %s\n", size, (char *)data);
+
+	return write(mesim_impl->sock_fd, data, size);
+}
+
+static int vgsm_mesim_impl_write_message(
 	struct vgsm_mesim_impl *mesim_impl,
 	void *data, int size)
 {
@@ -201,7 +211,7 @@ static void vgsm_mesim_impl_reset_asserted(struct vgsm_mesim_driver *driver)
 	struct vgsm_mesim_impl *mesim_impl =
 			container_of(driver, struct vgsm_mesim_impl, driver);
 
-	if (mesim_impl->state == VGSM_MESIM_IMPL_STATE_ACTIVE) {
+	if (mesim_impl->state == VGSM_MESIM_IMPL_STATE_READY) {
 		if (vgsm_mesim_impl_write_reset_asserted(mesim_impl) < 0) {
 			ast_log(LOG_WARNING,
 				"Error writing '-' to socket:"
@@ -323,14 +333,24 @@ static void vgsm_mesim_impl_timer(void *data)
 					VGSM_MESIM_IMPL_STATE_TRYING);
 			vgsm_timer_start_delta(&mesim_impl->timer, 5 * SEC);
 		} else {
+			vgsm_mesim_change_state(mesim,
+				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
+			vgsm_mesim_set_removed(mesim);
+
 			vgsm_mesim_impl_change_state(mesim_impl,
-					VGSM_MESIM_IMPL_STATE_CONNECTED);
+				VGSM_MESIM_IMPL_STATE_READY);
+
+			if (vgsm_mesim_impl_write_reset_asserted(mesim_impl)
+									< 0) {
+				ast_log(LOG_WARNING,
+					"Error writing '-' to socket: %s\n",
+					strerror(errno));
+			}
 		}
 
 	break;
 
-	case VGSM_MESIM_IMPL_STATE_CONNECTED:
-	case VGSM_MESIM_IMPL_STATE_ACTIVE:
+	case VGSM_MESIM_IMPL_STATE_READY:
 	break;
 	}
 }
@@ -341,7 +361,94 @@ static int vgsm_mesim_impl_send(struct vgsm_mesim_driver *driver,
 	struct vgsm_mesim_impl *mesim_impl =
 			container_of(driver, struct vgsm_mesim_impl, driver);
 
-	return vgsm_mesim_impl_write(mesim_impl, buf, len);
+	return vgsm_mesim_impl_write_message(mesim_impl, buf, len);
+}
+
+static int vgsm_mesim_impl_receive_ready(
+	struct vgsm_mesim_impl *mesim_impl,
+	__u8 *buf,
+	int len)
+{
+	struct vgsm_mesim *mesim = mesim_impl->mesim;
+
+	vgsm_mesim_debug(mesim,
+			"IMPL RX (%2d): %.*s\n", len, len, buf);
+
+	__u8 *bufo = alloca(len / 2);
+	int bufo_len = 0;
+	int i;
+	for(i=0; i<len; i++) {
+
+		switch(mesim_impl->parser_state) {
+		case VGSM_MESIM_IMPL_PARSER_STATE_IDLE:
+
+			if (isxdigit(buf[i])) {
+				mesim_impl->hexval =
+					char_to_hexdigit(buf[i]) << 4;
+
+				mesim_impl->parser_state =
+				VGSM_MESIM_IMPL_PARSER_STATE_READING_HEX_OCTET;
+			} else if (buf[i] == '+') {
+				vgsm_mesim_change_state(mesim,
+					VGSM_MESIM_HOLDER_CHANGING, 3 * SEC);
+
+			} else if (buf[i] == '-') {
+
+				vgsm_mesim_change_state(mesim,
+					VGSM_MESIM_HOLDER_REMOVED, -1);
+				vgsm_mesim_set_removed(mesim);
+
+			} else if (buf[i] == '.') {
+				vgsm_mesim_impl_write(mesim_impl, ".", 1);
+			} else if (buf[i] == 'i') {
+
+				char ibuf[256];
+				snprintf(ibuf, sizeof(ibuf),
+					"<info boardSN=\"%d\""
+					" boardPCISlot=\"%d\""
+					" numModules=\"%d\""
+					" typeModules=\"MC55\""
+					" thisModule=\"%d\""
+					" thisModuleStatus=\"%s\""
+					" />",
+					mesim->me->card.serial,
+					mesim->me->card.id,
+					-1,
+					mesim->me->id,
+					mesim->is_reset ? "off" : "on");
+
+				vgsm_mesim_impl_write(mesim_impl, ibuf,
+							strlen(ibuf));
+			}
+		break;
+
+		case VGSM_MESIM_IMPL_PARSER_STATE_READING_HEX_OCTET:
+
+			if (!isxdigit(buf[i])) {
+				ast_log(LOG_ERROR,
+					"Unextpected character '%c'"
+					" while waiting for hex"
+					" digit\n", buf[i]);
+
+				mesim_impl->parser_state =
+				    VGSM_MESIM_IMPL_PARSER_STATE_IDLE;
+			}
+
+			mesim_impl->parser_state =
+				VGSM_MESIM_IMPL_PARSER_STATE_IDLE;
+
+			mesim_impl->hexval |= char_to_hexdigit(buf[i]);
+
+			*(bufo + bufo_len) = mesim_impl->hexval;
+			bufo_len++;
+		break;
+		}
+	}
+
+	if (bufo_len)
+		vgsm_mesim_write(mesim, bufo, bufo_len);
+
+	return 0;
 }
 
 static int vgsm_mesim_impl_receive(struct vgsm_mesim_driver *driver)
@@ -352,12 +459,8 @@ static int vgsm_mesim_impl_receive(struct vgsm_mesim_driver *driver)
 
 	__u8 buf[128];
 	int nread;
-	int max_read = sizeof(buf);
 
-	if(mesim_impl->state == VGSM_MESIM_IMPL_STATE_CONNECTED)
-		max_read = 1;
-
-	nread = read(mesim_impl->sock_fd, buf, max_read);
+	nread = read(mesim_impl->sock_fd, buf, sizeof(buf));
 	if (nread <= 0) {
 		if (nread < 0) {
 			ast_log(LOG_WARNING, "Error reading from socket: %s\n",
@@ -384,39 +487,8 @@ static int vgsm_mesim_impl_receive(struct vgsm_mesim_driver *driver)
 	}
 	break;
 
-	case VGSM_MESIM_IMPL_STATE_CONNECTED: {
-		if (buf[0] == '.') {
-			vgsm_mesim_change_state(mesim,
-				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
-			vgsm_mesim_set_removed(mesim);
-
-			vgsm_mesim_impl_change_state(mesim_impl,
-				VGSM_MESIM_IMPL_STATE_ACTIVE);
-
-			if (vgsm_mesim_impl_write_reset_asserted(mesim_impl)
-									< 0) {
-				ast_log(LOG_WARNING,
-					"Error writing '-' to socket: %s\n",
-					strerror(errno));
-			}
-		}
-	}
-	break;
-
-	case VGSM_MESIM_IMPL_STATE_ACTIVE: {
-
-		vgsm_mesim_debug(mesim,
-				"IMPL RX (%2d): %.*s\n", nread, nread, buf);
-
-		__u8 *bufo = alloca(nread / 2);
-		int i;
-		for(i=0; i<nread/2; i++) {
-			bufo[i] = char_to_hexdigit(buf[i*2]) << 4 |
-				char_to_hexdigit(buf[i*2 + 1]);
-		}
-
-		vgsm_mesim_write(mesim, bufo, nread / 2);
-	}
+	case VGSM_MESIM_IMPL_STATE_READY:
+		return vgsm_mesim_impl_receive_ready(mesim_impl, buf, nread);
 	break;
 	}
 
@@ -430,10 +502,7 @@ static int vgsm_mesim_impl_get_polls(
 	struct vgsm_mesim_impl *mesim_impl =
 			container_of(driver, struct vgsm_mesim_impl, driver);
 
-	if (mesim_impl->state ==
-			VGSM_MESIM_IMPL_STATE_CONNECTED ||
-	    mesim_impl->state ==
-			VGSM_MESIM_IMPL_STATE_ACTIVE) {
+	if (mesim_impl->state == VGSM_MESIM_IMPL_STATE_READY) {
 		polls[0].fd = mesim_impl->sock_fd;
 		polls[0].events = POLLHUP | POLLERR | POLLIN;
 		return 1;

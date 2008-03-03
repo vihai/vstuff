@@ -149,7 +149,10 @@ struct vgsm_mesim
 const char *vgsm_mesim_state_to_text(
 	enum vgsm_mesim_state state);
 
-int vgsm_mesim_create(struct vgsm_mesim *mesim, struct vgsm_me *me);
+int vgsm_mesim_create(
+	struct vgsm_mesim *mesim,
+	struct vgsm_me *me,
+	const char *name);
 void vgsm_mesim_destroy(struct vgsm_mesim *mesim);
 
 struct vgsm_mesim *vgsm_mesim_get(
@@ -158,7 +161,7 @@ void _vgsm_mesim_put(struct vgsm_mesim *mesim);
 #define vgsm_mesim_put(sim) \
 	do { _vgsm_mesim_put(sim); (sim) = NULL; } while(0)
 
-int vgsm_mesim_open(struct vgsm_mesim *mesim, int fd);
+int vgsm_mesim_open(struct vgsm_mesim *mesim, const char *devname);
 void vgsm_mesim_close(struct vgsm_mesim *mesim);
 
 void vgsm_mesim_get_ready_for_poweron(struct vgsm_mesim *mesim);

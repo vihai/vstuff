@@ -252,6 +252,7 @@ struct vgsm_me
 	BOOL config_present;
 
 	char name[64];
+	int id;
 
 	enum vgsm_me_status status;
 	BOOL in_service;
@@ -276,7 +277,6 @@ struct vgsm_me
 	struct vgsm_comm comm;
 	enum vgsm_flow_control flow_control;
 
-	int mesim_fd;
 	struct vgsm_mesim mesim;
 
 	int interface_version;

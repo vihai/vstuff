@@ -1,7 +1,7 @@
 /*
  * vGSM channel driver for Asterisk
  *
- * Copyright (C) 2007 Daniele Orlandi
+ * Copyright (C) 2007-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -26,8 +26,13 @@ enum vgsm_mesim_impl_state
 {
 	VGSM_MESIM_IMPL_STATE_NULL,
 	VGSM_MESIM_IMPL_STATE_TRYING,
-	VGSM_MESIM_IMPL_STATE_CONNECTED,
-	VGSM_MESIM_IMPL_STATE_ACTIVE,
+	VGSM_MESIM_IMPL_STATE_READY,
+};
+
+enum vgsm_mesim_impl_parser_state
+{
+	VGSM_MESIM_IMPL_PARSER_STATE_IDLE,
+	VGSM_MESIM_IMPL_PARSER_STATE_READING_HEX_OCTET,
 };
 
 struct vgsm_mesim;
@@ -43,6 +48,8 @@ struct vgsm_mesim_impl
 
 	ast_mutex_t state_lock;
 	enum vgsm_mesim_impl_state state;
+	enum vgsm_mesim_impl_parser_state parser_state;
+	__u8 hexval;
 
 	struct vgsm_timer timer;
 };
