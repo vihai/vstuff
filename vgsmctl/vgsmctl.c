@@ -45,10 +45,9 @@ void print_usage(const char *fmt, ...)
 	va_start(ap, fmt);
 
 	fprintf(stderr,
-		"%s: [options] <command> [parameters]\n"
+		"%s: [options] <device> <command> [parameters]\n"
 		"\n"
 		"Options:"
-		"    -d --device: Device\n"
 		"    -v --verbose: Increase verbosity level\n"
 		"\n"
 		"Commands:\n\n",
@@ -91,7 +90,6 @@ int main(int argc, char *argv[])
 
 	struct option options[] = {
 		{ "verbose", no_argument, 0, 0 },
-		{ "device", required_argument, 0, 0 },
 		{ }
 	};
 
@@ -109,9 +107,6 @@ int main(int argc, char *argv[])
 		if (c == 'v' || (c == 0 &&
 		    !strcmp(options[optidx].name, "verbose"))) {
 			verbosity++;
-		} else if (c == 'd' || (c == 0 &&
-		    !strcmp(options[optidx].name, "device"))) {
-			device = optarg;
 		} else {
 			if (c) {
 				print_usage("Unknow option '%c'\n",
@@ -123,21 +118,22 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (argc <= optind) {
-		print_usage("Missing required command\n");
-	}
+	if (argc <= optind)
+		print_usage("Missing device\n");
 
-	if (!device) {
-		print_usage("Missing module option\n");
-	}
+	device = argv[optind];
 
-	command = argv[optind];
+	if (argc <= optind + 1)
+		print_usage("Missing command\n");
+
+	command = argv[optind + 1];
 
 	struct module *module;
 	list_for_each_entry(module, &modules, node) {
 		if (!strcasecmp(command, module->cmd) &&
 		    module->do_it) {
-			return module->do_it(device, argc, argv, optind);
+			return module->do_it(device, argc - 1, argv + 1,
+								optind);
 		}
 	}
 
