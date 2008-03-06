@@ -169,6 +169,9 @@ static void vgsm_mesim_impl_deactivate(struct vgsm_mesim_driver *driver)
 			container_of(driver, struct vgsm_mesim_impl, driver);
 
 	if (mesim_impl->sock_fd != -1) {
+		vgsm_mesim_debug(mesim_impl->mesim,
+			"Disconnecting from Implementa's SIM client socket\n");
+
 		shutdown(mesim_impl->sock_fd, SHUT_RDWR);
 		close(mesim_impl->sock_fd);
 		mesim_impl->sock_fd = -1;

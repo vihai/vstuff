@@ -476,12 +476,16 @@ static void vgsm_mesim_set_mode(
 
 	assert(msg->len == sizeof(*sm));
 
-	if (mesim->driver_type == VGSM_MESIM_DRIVER_LOCAL) {
-		vgsm_mesim_local_destroy(mesim->driver);
-	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_CLIENT) {
-		vgsm_mesim_clnt_destroy(mesim->driver);
-	} else if (mesim->driver_type == VGSM_MESIM_DRIVER_IMPLEMENTA) {
-		vgsm_mesim_impl_destroy(mesim->driver);
+	if (mesim->driver) {
+		if (mesim->driver_type == VGSM_MESIM_DRIVER_LOCAL) {
+			vgsm_mesim_local_destroy(mesim->driver);
+		} else if (mesim->driver_type == VGSM_MESIM_DRIVER_CLIENT) {
+			vgsm_mesim_clnt_destroy(mesim->driver);
+		} else if (mesim->driver_type == VGSM_MESIM_DRIVER_IMPLEMENTA) {
+			vgsm_mesim_impl_destroy(mesim->driver);
+		}
+
+		mesim->driver = NULL;
 	}
 
 	mesim->driver_type = sm->driver_type;
@@ -931,6 +935,8 @@ static void *vgsm_mesim_thread_main(void *data)
 	}
 
 	mesim->modem_thread_has_to_exit = TRUE;
+
+	vgsm_mesim_deactivate(mesim);
 
 	int err;
 	err = -pthread_kill(mesim->modem_thread, SIGTERM);
