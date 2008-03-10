@@ -1,0 +1,160 @@
+Summary		: Linux voice stuff
+Name            : vstuff
+Version         : @PACKAGE_VERSION@
+Release         : 1
+group           : Applications/Internet
+License		: GPLv2
+URL		: http://www.visdn.org/
+Vendor		: Voismart <info@voismart.it>
+Packager	: Matteo Brancaleoni <mbrancaleoni@voismart.it>
+Distribution	: CentOS telephony toolbox
+
+Requires:       udev
+Requires:       /usr/sbin/useradd
+
+Provides: vstuff
+Obsoletes: visdn
+
+BuildRequires: zlib-devel
+
+Source0: %{name}-%{version}.tar.gz
+
+Source10: %{name}-init
+Source11: 99-vgsm.rules
+
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
+
+%description
+Versatile-ISDN (vISDN for short) is an attempt at writing an ISDN 
+implementation for Linux.
+
+vISDN is officially certified from TiLAB (and conforms to TBR)
+
+Author: Daniele Orlandi <daniele@orlandi.com>
+
+%package -n vstuff-asterisk
+Summary: vstuff asterisk plugins
+Release: %{release}
+Group: Applications/Internet
+BuildRequires:  asterisk-devel
+Requires: 	asterisk
+Obsoletes:	visdn-asterisk
+%description -n vstuff-asterisk
+
+Plugins for vISDN support in Asterisk
+
+%package -n vstuff-ppp-plugin
+Summary: vstuff ppp plugin
+Release: %{release}
+Group: Applications/Internet
+BuildRequires:  ppp
+Requires:       ppp
+Obsoletes:	visdn-ppp-plugin
+%description -n vstuff-ppp-plugin
+
+Plugin for vISDN support in pppd
+
+%package -n vstuff-devel
+Summary: vstuff developement packages
+Release: %{release}
+Group: Applications/Internet
+BuildRequires:  ppp
+Requires:       ppp
+Obsoletes:	visdn-devel
+%description -n vstuff-devel
+
+Developement files for software based on vISDN's libq931
+
+%prep
+%setup -q    -n vstuff-%{version}
+
+%build
+%configure --enable-pppd-plugin --disable-kernel-modules
+%{__make}
+
+%install
+%{__make} install DESTDIR=%{buildroot}
+
+#remove useless trails
+rm -f %{buildroot}/usr/lib/pppd/*/*.a %{buildroot}/usr/lib/pppd/*/*.la
+rm -f %{buildroot}/%{_libdir}/asterisk/modules/*.a %{buildroot}/%{_libdir}/asterisk/modules/*.la
+
+#udev
+install -D -m 644 samples/etc_udev_rules.d/30-kstreamer.rules %{buildroot}/%{_sysconfdir}/udev/rules.d/99-kstreamer.rules
+
+install -D -m 644 %{SOURCE11} %{buildroot}/%{_sysconfdir}/udev/rules.d
+
+# sorry, our isdn mgmnt group is 'apache'
+sed -i -e 's/pbx/apache/g' %{buildroot}/%{_sysconfdir}/udev/rules.d/99-kstreamer.rules
+echo "SUBSYSTEM==\"kstreamer\", GROUP=\"apache\", MODE=\"0660\"" >> %{buildroot}/%{_sysconfdir}/udev/rules.d/99-kstreamer.rules
+
+# comment away modprobes
+sed -i -e 's/^modprobe/#modprobe/g' %{buildroot}/%{_sbindir}/visdn_configurator
+
+# installs SuSE-style init scripts
+install -D -m 0755 %{SOURCE10} %{buildroot}%{_initrddir}/%{name}
+
+# for now, ignore isdn stuff
+#rm -f %{buildroot}/lib/modules/%{kversion}/extra/visdn-hfc-4s.ko
+
+%clean
+rm -rf %{buildroot}
+
+%pre
+
+%post
+
+%preun
+if [ $1 -eq 0 ]; then
+    /sbin/service %{name} stop >/dev/null 2>&1
+    /sbin/chkconfig %{name} --del
+fi
+
+%postun
+
+
+%files
+%defattr(-,root,root,-)
+%config(noreplace)%{_sysconfdir}/udev/rules.d/*
+%doc ChangeLog
+%doc AUTHORS COPYING INSTALL NEWS README TODO 
+%doc samples 
+%{_libdir}/*.so
+%{_libdir}/*.so.*
+%{_sbindir}
+%{_initrddir}/%{name}
+
+%files -n vstuff-asterisk
+%defattr(-,root,root,-)
+%{_libdir}/asterisk/modules/*.so
+
+%files -n vstuff-ppp-plugin
+%defattr(-,root,root,-)
+/usr/lib/pppd/*/*.so
+
+%files -n vstuff-devel
+%defattr(-,root,root,-)
+%{_libdir}/*.a
+%{_libdir}/*.la
+%{_includedir}/
+
+%changelog
+* Fri Feb 15 2008 Matteo Brancaleoni <http://www.voismart.it>
+- Stripped away kernel modules to kmod-vstuff
+- cleaned spec file
+- Update to vstuff 1.1.0a8
+
+* Mon Nov 19 2007 Matteo Brancaleoni <http://www.voismart.it>
+- Update to vstuff 1.0.0
+
+* Fri May 25 2007 Matteo Brancaleoni <http://www.voismart.it>
+- Update to vstuff 0.20.6
+- Obsoletes visdn
+
+* Fri Nov 10 2006 Matteo Brancaleoni <mbrancaleoni@voismart.it
+- Initial release for voismart PBX, adapted from Lele's SuSe script
+
+* Thu Jan 13 2006 Lele Forzani <lele@windmill.it>
+- Initial release
+
+

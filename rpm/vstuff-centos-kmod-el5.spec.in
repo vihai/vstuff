@@ -1,0 +1,123 @@
+# remove this once kmodtool is mainstream
+Source10: kmodtool-vstuff
+%define   kmodtool bash %{SOURCE10}
+# end stuff to be ...
+
+# if you want to build for another kernel version just --define it
+# on the rpmbuild command line (won't work for mock at the moment)
+#
+#  rpmbuild --define "kversion 2.6.9-42.EL" vstuff-kmod.spec
+#
+# I recommend building with mock.
+#
+# NOTE: The binary firmware for some Zaptel cards is included in the
+# src RPM but not the binaries.
+
+%{!?kversion: %define kversion %(uname -r)}
+
+%define kmod_name vstuff
+%define kverrel %(%{kmodtool} verrel %{?kversion} 2>/dev/null)
+
+%define upvar ""
+%ifarch i686
+%define paevar PAE
+%endif
+%ifarch ppc
+%define smpvar smp
+%endif
+%{!?kvariants: %define kvariants %{?upvar} %{?smpvar} %{?paevar} %{?xenvar} %{?kdumpvar}}
+
+%if %(rpm -q centos-release | grep -cv 'not installed$')
+        %define fedoraversion %(rpm -q --queryformat "%{VERSION}" centos-release)
+%else
+        %define fedoraversion 0
+%endif
+
+Name:           %{kmod_name}-kmod
+Version:        @PACKAGE_VERSION@
+Release:        1%{?dist}.%(echo %{kverrel} | tr - _ )
+Summary:        Vstuff kernel modules
+Group:		System Environment/Kernel
+License:	GPL
+URL:            http://www.visdn.org
+Source0:        http://www.visdn.org/download/vstuff-%{version}.tar.gz
+
+BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+BuildRequires:  zlib-devel
+BuildArch:	i686 
+ExclusiveArch:	i686 x86_64 ppc
+
+%description
+This package provides vstuff kernel modules.
+
+%{expand:%(%{kmodtool} rpmtemplate %{kmod_name} %{kverrel} %{kvariants} 2>/dev/null)}
+
+%prep
+%setup -q -T -c -a 0 -n %{name}-%{version}
+
+pushd %{kmod_name}-%{version}
+
+popd
+
+for kvariant in %{kvariants}
+do
+    cp -a %{kmod_name}-%{version} _kmod_build_${kvariant}
+done
+
+
+%build
+
+for kvariant in %{kvariants}
+do
+    ksrc=%{_usrsrc}/kernels/%{kverrel}${kvariant:+-$kvariant}-%{_target_cpu}
+    msrc=%{_builddir}/%{buildsubdir}/_kmod_build_${kvariant}
+    mdst=/lib/modules/%{kverrel}${kvariant}/extra/%{kmod_name}
+
+    pushd _kmod_build_${kvariant}
+
+    %{configure} --with-kernel-build=${ksrc}
+#    cd modules
+#	echo "" > Kbuild
+#	for I in kstreamer visdn hfc-4s softswitch netdev lapd userport milliwatt vgsm vgsm2 vdsp ppp ; do \
+#                echo "obj-m += $I/" >> Kbuild ; \
+#        done
+#    #make %{?_smp_mflags} -C ${msrc} prereq
+    make -C ${ksrc} SUBDIRS=${msrc}/modules
+
+    popd
+done
+
+%install
+rm -rf %{buildroot}
+
+for kvariant in %{kvariants}
+do
+    ksrc=%{_usrsrc}/kernels/%{kverrel}${kvariant:+-$kvariant}-%{_target_cpu}
+    msrc=%{_builddir}/%{buildsubdir}/_kmod_build_${kvariant}
+    mdst=/lib/modules/%{kverrel}${kvariant}/extra/%{kmod_name}
+
+    pushd _kmod_build_${kvariant}
+
+    #cd modules
+    #make -C ${ksrc} SUBDIRS=${msrc} INSTALL_MOD_PATH=%{buildroot} INSTALL_MOD_DIR=extra/%{kmod_name} 
+    make -C ${ksrc} SUBDIRS=${msrc}/modules DESTDIR=%{buildroot} INSTALL_MOD_DIR=extra/%{kmod_name} INSTALL_MOD_PATH=%{buildroot} modules_install
+ 
+    %if %{fedoraversion} == 0 
+        %{__mkdir_p} %{buildroot}/lib/modules/%{kverrel}${kvariant}/extra/%{kmod_name} 2>/dev/null
+        %{__mv} %{buildroot}/lib/modules/%{kverrel}${kvariant}/extra/*.ko %{buildroot}/lib/modules/%{kverrel}${kvariant}/extra/%{kmod_name}
+    %endif
+
+    popd
+done
+
+# for now, ignore isdn stuff
+rm -fR %{buildroot}/lib/modules/%{kverrel}${kvariant}/extra/%{kmod_name}/hfc-4s
+rm -fR %{buildroot}/lib/modules/%{kverrel}${kvariant}/extra/%{kmod_name}/vdsp
+
+%clean
+rm -rf %{buildroot}
+
+%changelog
+* Fri Feb 15 2008 Matteo Brancaleoni <mbrancaleoni at voismart.it>
+- Initial kmod rpm 
+

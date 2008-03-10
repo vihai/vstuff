@@ -19,7 +19,9 @@
 ./doxygen.conf
 ./libtool
 ./stamp-h1
-./vstuff.spec
+./rpm/vstuff-centos.spec
+./rpm/vstuff-centos-kmod.spec
+./rpm/vstuff-suse.spec
 ./config/compile
 ./config/config.guess
 ./config/config.sub

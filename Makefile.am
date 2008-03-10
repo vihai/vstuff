@@ -17,7 +17,9 @@ EXTRA_DIST =					\
 	$(sysconf_DATA)				\
 	$(astconf_DATA)				\
 	$(noinst_DATA)				\
-	vstuff.spec				\
+	rpm/vstuff-centos.spec			\
+	rpm/vstuff-centos-kmod-el5.spec		\
+	rpm/vstuff-suse.spec			\
 	visdn-init				\
 	visdn-sleep.diff			\
 	visdn-sysconfig				\
@@ -41,7 +43,7 @@ endif
 SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
-SUBDIRS += kstool
+##SUBDIRS += kstool
 SUBDIRS += vgsmctl
 SUBDIRS += visdn_netdev_ctl
 SUBDIRS += scripts samples unsupported

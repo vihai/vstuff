@@ -489,7 +489,10 @@ AC_CONFIG_FILES([Makefile
 		scripts/Makefile
 		scripts/visdn_configurator
 		doxygen.conf
-		vstuff.spec])
+		rpm/vstuff-centos-kmod-el5.spec
+		rpm/vstuff-centos.spec
+		rpm/vstuff-suse.spec
+		])
 
 #		modules/hfc-e1/Makefile
 
