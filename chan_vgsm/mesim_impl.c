@@ -337,7 +337,7 @@ static void vgsm_mesim_impl_timer(void *data)
 			vgsm_timer_start_delta(&mesim_impl->timer, 5 * SEC);
 		} else {
 			vgsm_mesim_change_state(mesim,
-				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
+				VGSM_MESIM_HOLDER_REMOVED, -1);
 			vgsm_mesim_set_removed(mesim);
 
 			vgsm_mesim_impl_change_state(mesim_impl,
