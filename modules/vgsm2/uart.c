@@ -282,9 +282,8 @@ static u8 check_modem_status(struct vgsm_uart *up)
 void vgsm_uart_interrupt(struct vgsm_uart *up)
 {
 	u8 iir, lsr;
-	unsigned long flags;
 
-	spin_lock_irqsave(&up->port.lock, flags);
+	spin_lock(&up->port.lock);
 
 	iir = uart_in(up, UART_IIR);
 	if (iir & UART_IIR_NO_INT) {
@@ -302,7 +301,7 @@ void vgsm_uart_interrupt(struct vgsm_uart *up)
 	if (lsr & UART_LSR_THRE)
 		transmit_chars(up);
 
-	spin_unlock_irqrestore(&up->port.lock, flags);
+	spin_unlock(&up->port.lock);
 }
 
 static unsigned int vgsm_uart_tx_empty(struct uart_port *port)
