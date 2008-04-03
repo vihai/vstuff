@@ -578,6 +578,34 @@ static int ks_netlink_rcv_skb(
 	return 0;
 }
 
+static void ks_netlink_process_backlog(void)
+{
+	int processed;
+	int err;
+
+	do {
+		struct sk_buff *skb;
+		struct sk_buff *tail;
+
+		tail = skb_peek_tail(&ks_backlog);
+		processed = FALSE;
+
+		while ((skb = skb_dequeue(&ks_backlog))) {
+			err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
+			if (err == -EAGAIN)
+				skb_queue_tail(&ks_backlog, skb);
+			else {
+				kfree_skb(skb);
+				processed = TRUE;
+			}
+
+			if (skb == tail)
+				break;
+		}
+
+	} while(processed);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
@@ -600,24 +628,7 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 			kfree_skb(skb);
 	}
 
-redo_backlog:
-	tail = skb_peek_tail(&ks_backlog);
-	processed = FALSE;
-	while ((skb = skb_dequeue(&ks_backlog))) {
-		err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
-		if (err == -EAGAIN)
-			skb_queue_tail(&ks_backlog, skb);
-		else {
-			kfree_skb(skb);
-			processed = TRUE;
-		}
-
-		if (skb == tail)
-			break;
-	}
-
-	if (processed)
-		goto redo_backlog;
+	ks_netlink_process_backlog();
 }
 #endif
 
@@ -648,36 +659,16 @@ static void ks_netlink_rcv(struct sock *sk, int len)
 	queue_work(ks_netlink_rcv_wq, &ks_netlink_rcv_work);
 }
 #else
+
 static void ks_netlink_rcv(struct sk_buff *skb)
 {
-	struct sk_buff *tail;
 	int err;
-	int processed;
 
 	err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
 	if (err == -EAGAIN)
-		skb_queue_tail(&ks_backlog, skb);
-	else
-		kfree_skb(skb);
+		skb_queue_tail(&ks_backlog, skb_clone(skb, GFP_KERNEL));
 
-redo_backlog:
-	tail = skb_peek_tail(&ks_backlog);
-	processed = FALSE;
-	while ((skb = skb_dequeue(&ks_backlog))) {
-		err = ks_netlink_rcv_skb(&ks_netlink_state, skb);
-		if (err == -EAGAIN)
-			skb_queue_tail(&ks_backlog, skb);
-		else {
-			kfree_skb(skb);
-			processed = TRUE;
-		}
-
-		if (skb == tail)
-			break;
-	}
-
-	if (processed)
-		goto redo_backlog;
+	ks_netlink_process_backlog();
 }
 #endif
 
