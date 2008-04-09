@@ -3195,7 +3195,7 @@ cpin_retry:
 				"Input PIN manually");
 			res = -1;
 		} else if (strlen(mc->pin)) {
-			int err = vgsm_req_make_wait_result(comm, 40 * SEC,
+			int err = vgsm_req_make_wait_result(comm, 180 * SEC,
 					"AT+CPIN=\"%s\"", mc->pin);
 
 			if (err != VGSM_RESP_OK) {
@@ -3739,7 +3739,7 @@ static int vgsm_me_update_static_info(
 	vgsm_req_put(req);
 
 	/*--------*/
-	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CXXCID");
+	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CXXCID");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
@@ -3762,7 +3762,7 @@ static int vgsm_me_update_static_info(
 
 	/*--------*/
 retry_csca:
-	req = vgsm_req_make_wait(comm, 5 * SEC, "AT+CSCA?");
+	req = vgsm_req_make_wait(comm, 20 * SEC, "AT+CSCA?");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		if (err == CME_ERROR(14)) { // SIM busy
@@ -6480,7 +6480,7 @@ static int vgsm_me_cli_pin_input_func(int fd, int argc, char *argv[])
 		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 
-		int res = vgsm_req_make_wait_result(comm, 40 * SEC,
+		int res = vgsm_req_make_wait_result(comm, 180 * SEC,
 				"AT+CPIN=\"%s\"", pin);
 		if (res != VGSM_RESP_OK) {
 			ast_cli(fd, "Error: %s (%d)\n",
@@ -6636,7 +6636,7 @@ static int vgsm_me_cli_puk_input_func(int fd, int argc, char *argv[])
 		goto err_invalid_state;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PUK")) {
 
-		int err = vgsm_req_make_wait_result(comm, 40 * SEC,
+		int err = vgsm_req_make_wait_result(comm, 180 * SEC,
 				"AT+CPIN=\"%s\",\"%s\"", puk, newpin);
 		if (err != VGSM_RESP_OK) {
 			ast_cli(fd, "Error: %s (%d)\n",
