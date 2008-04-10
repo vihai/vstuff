@@ -644,7 +644,7 @@ err_missing_amu_decompander:
 	return -1;
 }
 
-static int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
+int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 {
 	int err;
 
@@ -923,43 +923,21 @@ static void vgsm_atd_complete(struct vgsm_req *req, void *data)
 {
 	struct vgsm_me *me = data;
 
-	ast_mutex_lock(&me->lock);
-	me->call_present = TRUE;
-	struct vgsm_chan *vgsm_chan = vgsm_chan_get(me->vgsm_chan);
-	ast_mutex_unlock(&me->lock);
-
 	if (req->err != VGSM_RESP_OK) {
+		ast_mutex_lock(&me->lock);
+		struct vgsm_chan *vgsm_chan = vgsm_chan_get(me->vgsm_chan);
+		ast_mutex_unlock(&me->lock);
+
 		if (vgsm_chan)
 			ast_softhangup(vgsm_chan->ast_chan, AST_SOFTHANGUP_DEV);
 
 		vgsm_me_debug_call(me, "Unable to dial: ATD failed\n");
-	} else {
-		if (vgsm_chan) {
-			ast_mutex_lock(&vgsm_chan->ast_chan->lock);
-			/* If there hasn't been an hangup in between */
 
-			if (vgsm_connect_channel(vgsm_chan) < 0) {
-				ast_softhangup(vgsm_chan->ast_chan,
-						AST_SOFTHANGUP_DEV);
-			} else {
-				ast_queue_control(vgsm_chan->ast_chan,
-					AST_CONTROL_PROCEEDING);
-			}
-
-			ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
-		} else {
-			_vgsm_req_put(vgsm_req_make_callback(&me->comm,
-					vgsm_me_chup_complete,
-					vgsm_me_get(me),
-					5 * SEC, "AT+CHUP"));
-		}
+		vgsm_chan_put(vgsm_chan);
 	}
-
-	vgsm_chan_put(vgsm_chan);
 
 	vgsm_me_put(me);
 }
-
 static int vgsm_call(
 	struct ast_channel *ast_chan,
 	char *orig_dest,
@@ -1023,6 +1001,8 @@ static int vgsm_call(
 	vgsm_me_debug_call(me, "Calling %s on %s\n",
 			vgsm_chan->called_number,
 			ast_chan->name);
+
+	me->call_present = TRUE;
 
 	struct vgsm_req *req;
 	// 'timeout' instead of 20s ?

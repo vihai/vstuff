@@ -157,6 +157,7 @@ struct vgsm_call
 {
 	enum vgsm_call_direction direction;
 	enum vgsm_call_state state;
+	enum vgsm_call_state prev_state;
 	enum vgsm_call_bearer bearer;
 	int multiparty;
 	int channel_assigned;

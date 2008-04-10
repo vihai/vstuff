@@ -2216,6 +2216,11 @@ static void vgsm_handle_slcc_update(
 	struct vgsm_chan *vgsm_chan = vgsm_chan_get(me->vgsm_chan);
 	ast_mutex_unlock(&me->lock);
 
+	vgsm_me_debug_call(me,
+		"Call changed state from %s to %s\n",
+		vgsm_call_state_to_text(call->prev_state),
+		vgsm_call_state_to_text(call->state));
+
 	switch(call->state) {
 	case VGSM_CALL_STATE_UNUSED:
 		if (vgsm_chan) {
@@ -2246,10 +2251,10 @@ static void vgsm_handle_slcc_update(
 
 		struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 		ast_mutex_lock(&ast_chan->lock);
-		if (ast_chan->_state != AST_STATE_UP) {
+		if (ast_chan->_state != AST_STATE_UP)
 			ast_setstate(ast_chan, AST_STATE_UP);
-			ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
-		}
+
+		ast_queue_control(ast_chan, AST_CONTROL_ANSWER);
 		ast_mutex_unlock(&ast_chan->lock);
 	}
 	break;
@@ -2259,7 +2264,31 @@ static void vgsm_handle_slcc_update(
 	break;
 
 	case VGSM_CALL_STATE_DIALING:
-		/* Do nutting */
+		if (!vgsm_chan) {
+			ast_log(LOG_ERROR, "Call is dialing but there is no"
+				" current call\n");
+			_vgsm_req_put(vgsm_req_make_callback(&me->comm,
+					vgsm_me_chup_complete,
+					vgsm_me_get(me),
+					5 * SEC, "AT+CHUP"));
+
+			vgsm_me_counter_inc(me,
+				FALSE,
+				VGSM_CAUSE_LOCATION_LOCAL,
+				41);
+
+			break;
+		}
+
+		ast_mutex_lock(&vgsm_chan->ast_chan->lock);
+		if (vgsm_connect_channel(vgsm_chan) < 0) {
+			ast_softhangup(vgsm_chan->ast_chan,
+					AST_SOFTHANGUP_DEV);
+		} else {
+			ast_queue_control(vgsm_chan->ast_chan,
+				AST_CONTROL_PROCEEDING);
+		}
+		ast_mutex_unlock(&vgsm_chan->ast_chan->lock);
 	break;
 
 	case VGSM_CALL_STATE_ALERTING: {
@@ -2283,10 +2312,11 @@ static void vgsm_handle_slcc_update(
 
 		struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 		ast_mutex_lock(&ast_chan->lock);
-		if (ast_chan->_state != AST_STATE_RINGING) {
+
+		if (ast_chan->_state != AST_STATE_RINGING)
 			ast_setstate(ast_chan, AST_STATE_RINGING);
-			ast_queue_control(ast_chan, AST_CONTROL_RINGING);
-		}
+
+		ast_queue_control(ast_chan, AST_CONTROL_RINGING);
 		ast_mutex_unlock(&ast_chan->lock);
 	}
 	break;
@@ -2532,10 +2562,6 @@ retry_workaround:;
 			continue;
 		}
 
-		if (me->calls[idx].state != VGSM_CALL_STATE_UNUSED) {
-			/* This is a new call */
-		}
-
 		me->calls[idx].updated = TRUE;
 		me->calls[idx].direction = call.direction;
 		me->calls[idx].state = call.state;
@@ -2548,6 +2574,7 @@ retry_workaround:;
 
 	for (i=0; i<ARRAY_SIZE(me->calls); i++) {
 		if (!me->calls[i].updated) {
+			me->calls[i].prev_state = me->calls[i].state;
 			me->calls[i].state = VGSM_CALL_STATE_UNUSED;
 			/* Call removed */
 		}
@@ -2556,7 +2583,9 @@ retry_workaround:;
 	ast_mutex_unlock(&me->lock);
 
 	/* There is a race condition here! me->calls[0] may change! FIXME */
-	vgsm_handle_slcc_update(me, &me->calls[0]);
+
+	if (me->calls[0].prev_state != me->calls[0].state)
+		vgsm_handle_slcc_update(me, &me->calls[0]);
 }
 
 static void handle_unsolicited_ciev_roam(

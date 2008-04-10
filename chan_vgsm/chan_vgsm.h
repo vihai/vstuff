@@ -114,4 +114,6 @@ static inline struct vgsm_chan *to_vgsm_chan(struct ast_channel *ast_chan)
 	return ast_chan->tech_pvt;
 }
 
+int vgsm_connect_channel(struct vgsm_chan *vgsm_chan);
+
 #endif
