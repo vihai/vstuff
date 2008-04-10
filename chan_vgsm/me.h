@@ -234,6 +234,8 @@ struct vgsm_me_config
 	int jitbuf_high;
 	int jitbuf_hardhigh;
 
+	BOOL suppress_proceeding;
+
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 #else
 	struct ast_jb_conf jbconf;

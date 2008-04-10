@@ -126,6 +126,8 @@ void vgsm_me_config_default(struct vgsm_me_config *mc)
 	mc->jitbuf_hardlow = 0;
 	mc->jitbuf_high = 50;
 	mc->jitbuf_hardhigh = 1024;
+
+	mc->suppress_proceeding = FALSE;
 }
 
 static const char *vgsm_me_status_to_text(enum vgsm_me_status status)
@@ -889,6 +891,8 @@ sim_device_filename:
 		mc->jitbuf_high = atoi(var->value);
 	} else if (!strcasecmp(var->name, "jitbuf_hardhigh")) {
 		mc->jitbuf_hardhigh = atoi(var->value);
+	} else if (!strcasecmp(var->name, "suppress_proceeding")) {
+		mc->suppress_proceeding = ast_true(var->value);
 #if ASTERISK_VERSION_NUM < 010400 || (ASTERISK_VERSION_NUM >= 10200 && ASTERISK_VERSION_NUM < 10400)
 #else
 	} else if (!ast_jb_read_conf(&mc->jbconf, var->name, var->value)) {
@@ -955,6 +959,8 @@ static void vgsm_me_config_copy(
 	dst->jitbuf_hardlow = src->jitbuf_hardlow;
 	dst->jitbuf_high = src->jitbuf_high;
 	dst->jitbuf_hardhigh = src->jitbuf_hardhigh;
+
+	dst->suppress_proceeding = src->suppress_proceeding;
 }
 
 static void *vgsm_me_monitor_thread_main(void *data);
@@ -2284,7 +2290,7 @@ static void vgsm_handle_slcc_update(
 		if (vgsm_connect_channel(vgsm_chan) < 0) {
 			ast_softhangup(vgsm_chan->ast_chan,
 					AST_SOFTHANGUP_DEV);
-		} else {
+		} else if (!vgsm_chan->mc->suppress_proceeding) {
 			ast_queue_control(vgsm_chan->ast_chan,
 				AST_CONTROL_PROCEEDING);
 		}
