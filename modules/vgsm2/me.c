@@ -458,7 +458,7 @@ static int vgsm_me_tx_chan_start(struct ks_chan *ks_chan)
 	vgsm_card_lock(card);
 	vgsm_me_update_fifo_setup(me);
 
-	if (me_tx->compander_enabled) {
+/*	if (me_tx->compander_enabled) {
 		if (me_tx->compander_mu_mode)
 			memset(card->fifo_mem + me_tx->fifo_base,
 				0xff, me_tx->fifo_size);
@@ -468,6 +468,7 @@ static int vgsm_me_tx_chan_start(struct ks_chan *ks_chan)
 	} else
 		memset(card->fifo_mem + me_tx->fifo_base,
 			0x0, me_tx->fifo_size);
+*/
 
 	me_tx->fifo_in = vgsm_inl(card, VGSM_R_ME_FIFO_TX_OUT(me->id));
 
