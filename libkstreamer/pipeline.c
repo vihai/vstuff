@@ -557,8 +557,6 @@ int ks_pipeline_create(struct ks_pipeline *pipeline, struct ks_conn *conn)
 	ks_req_wait(req);
 	if (req->err < 0) {
 		err = req->err;
-		ks_req_put(req);
-
 		goto err_request_failed;
 	}
 
