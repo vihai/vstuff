@@ -1891,6 +1891,7 @@ static void handle_unsolicited_clip(
 		goto err_call_not_ring;
 	}
 
+
 	ast_setstate(vgsm_chan->ast_chan, AST_STATE_RING);
 	vgsm_chan->ast_chan->rings = 1;
 
@@ -2257,6 +2258,7 @@ static void vgsm_handle_slcc_update(
 
 		struct ast_channel *ast_chan = vgsm_chan->ast_chan;
 		ast_mutex_lock(&ast_chan->lock);
+
 		if (ast_chan->_state != AST_STATE_UP)
 			ast_setstate(ast_chan, AST_STATE_UP);
 
@@ -2570,6 +2572,7 @@ retry_workaround:;
 
 		me->calls[idx].updated = TRUE;
 		me->calls[idx].direction = call.direction;
+		me->calls[idx].prev_state = me->calls[idx].state;
 		me->calls[idx].state = call.state;
 		me->calls[idx].bearer = call.bearer;
 		me->calls[idx].multiparty = call.multiparty;
