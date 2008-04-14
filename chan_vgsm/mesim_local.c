@@ -73,6 +73,8 @@ static const char *vgsm_mesim_local_state_to_text(
 		return "READING_ATR";
 	case VGSM_MESIM_LOCAL_STATE_READY:
 		return "READY";
+	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
+		return "DIRECTLY_ROUTED";
 	case VGSM_MESIM_LOCAL_STATE_FAILED:
 		return "FAILED";
 	}
@@ -223,6 +225,7 @@ static void vgsm_mesim_local_timer(void *data)
 	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
 	case VGSM_MESIM_LOCAL_STATE_RESET:
 	case VGSM_MESIM_LOCAL_STATE_READY:
+	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 	case VGSM_MESIM_LOCAL_STATE_FAILED:
 		assert(0);
 	break;
@@ -282,24 +285,27 @@ static void vgsm_mesim_local_deactivate(struct vgsm_mesim_driver *driver)
 	struct vgsm_mesim_local *mesim_local =
 			container_of(driver, struct vgsm_mesim_local, driver);
 
+	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT) {
+	} else {
+		mesim_local->modem_thread_has_to_exit = TRUE;
+
+		int err;
+		err = -pthread_kill(mesim_local->modem_thread, SIGTERM);
+		if (err) {
+			ast_log(LOG_WARNING, "Cannot kill modem thread: %s\n",
+				strerror(-err));
+		}
+
+		err = -pthread_join(mesim_local->modem_thread, NULL);
+		if (err) {
+			ast_log(LOG_WARNING, "Cannot join modem thread: %s\n",
+				strerror(-err));
+		}
+	}
+
 	if (mesim_local->fd != -1) {
 		close(mesim_local->fd);
 		mesim_local->fd = -1;
-	}
-
-	mesim_local->modem_thread_has_to_exit = TRUE;
-
-	int err;
-	err = -pthread_kill(mesim_local->modem_thread, SIGTERM);
-	if (err) {
-		ast_log(LOG_WARNING, "Cannot kill modem thread: %s\n",
-			strerror(-err));
-	}
-
-	err = -pthread_join(mesim_local->modem_thread, NULL);
-	if (err) {
-		ast_log(LOG_WARNING, "Cannot join modem thread: %s\n",
-			strerror(-err));
 	}
 }
 
@@ -475,7 +481,7 @@ static void vgsm_mesim_local_activate(struct vgsm_mesim_driver *driver)
 		vgsm_mesim_change_state(mesim, VGSM_MESIM_DIRECTLY_ROUTED, -1);
 
 		vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_READY, -1);
+					VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED, -1);
 	} else {
 		vgsm_mesim_local_set_lines(mesim_local, FALSE, TRUE);
 		usleep(10000);
@@ -547,6 +553,7 @@ static void vgsm_mesim_local_reset_asserted(struct vgsm_mesim_driver *driver)
 
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
+	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 		assert(0);
 	break;
 
@@ -574,6 +581,7 @@ static void vgsm_mesim_local_reset_removed(struct vgsm_mesim_driver *driver)
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
 	case VGSM_MESIM_LOCAL_STATE_READY:
+	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 		assert(0);
 	break;
 
@@ -613,6 +621,7 @@ static void vgsm_mesim_local_holder_inserted(struct vgsm_mesim_driver *driver)
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
 	case VGSM_MESIM_LOCAL_STATE_READY:
+	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
 	case VGSM_MESIM_LOCAL_STATE_RESET:
 	case VGSM_MESIM_LOCAL_STATE_FAILED:
@@ -638,6 +647,7 @@ static void vgsm_mesim_local_holder_removed(struct vgsm_mesim_driver *driver)
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
 	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
+	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 		assert(0);
 	break;
 
