@@ -343,6 +343,8 @@ static void ks_pipeline_update_from_nlmsg(
 	struct ks_attr *attr;
 	int attrs_len = KS_PAYLOAD(nlh);
 
+	int chans_cnt = 0;
+
 	for (attr = KS_ATTRS(nlh);
 	     KS_ATTR_OK(attr, attrs_len);
 	     attr = KS_ATTR_NEXT(attr, attrs_len)) {
@@ -365,8 +367,48 @@ static void ks_pipeline_update_from_nlmsg(
 					KS_ATTR_PAYLOAD(attr));
 		break;
 
-		case KS_PIPELINEATTR_CHAN_ID:
-			// Not supported
+		case KS_PIPELINEATTR_CHAN_ID: {
+			struct ks_chan *chan;
+			chan = _ks_chan_get_by_id(conn,
+					*(__u32 *)KS_ATTR_DATA(attr));
+			if (!chan) {
+				report_conn(conn, LOG_ERR,
+					"Channel 0x%08x not found!\n",
+					*(__u32 *)KS_ATTR_DATA(attr));
+				break;
+			}
+
+			if (chans_cnt >= pipeline->chans_cnt) {
+				report_conn(conn, LOG_ERR,
+					"Pipeline 0x%08x not consistent"
+					" with the one sent (too many channels)\n",
+					pipeline->id);
+				break;
+			}
+
+			if (pipeline->chans[chans_cnt] != chan) {
+				report_conn(conn, LOG_ERR,
+					"Pipeline 0x%08x not consistent"
+					" with the one sent (chans list)\n",
+					pipeline->id);
+				break;
+			}
+
+			if (chan->pipeline) {
+				report_conn(conn, LOG_ERR,
+					"Pipeline 0x%08x not consistent"
+					" with the one sent (chan 0x%08x busy)\n",
+					pipeline->id,
+					chan->id);
+				break;
+			}
+
+			chans_cnt++;
+
+			chan->pipeline = pipeline;
+
+			ks_chan_put(chan);
+		}
 		break;
 
 		default:
