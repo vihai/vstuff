@@ -271,4 +271,6 @@ void vgsm_comm_send_message(
 	enum vgsm_comm_message_type mt,
 	void *data, int len);
 
+void vgsm_comm_cli_show_state(int fd, struct vgsm_comm *comm);
+
 #endif

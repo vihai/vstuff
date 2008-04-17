@@ -5443,6 +5443,8 @@ static int vgsm_me_show_serial(int fd, struct vgsm_me *me)
 	mc = vgsm_me_config_get(me->current_config);
 	ast_mutex_unlock(&me->lock);
 
+	vgsm_comm_cli_show_state(fd, &me->comm);
+
 	struct serial_icounter_struct icount;
 	if (ioctl(me->me_fd, TIOCGICOUNT, &icount) < 0) {
 		ast_cli(fd, "ioctl(TIOCGICOUNT)\n");

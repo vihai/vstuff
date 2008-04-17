@@ -30,6 +30,7 @@
 #include <asterisk/lock.h>
 #include <asterisk/logger.h>
 #include <asterisk/options.h>
+#include <asterisk/cli.h>
 
 #include <linux/vgsm.h> // REMOVE ME FIXME XXX
 
@@ -181,6 +182,13 @@ const char *vgsm_comm_message_type_to_text(
 	return "*UNKNOWN*";
 }
 
+void vgsm_comm_cli_show_state(int fd, struct vgsm_comm *comm)
+{
+	ast_cli(fd,
+		"  Comm state:  %s\n",
+		vgsm_comm_state_to_text(comm->state));
+}
+
 void vgsm_comm_send_message(
 	struct vgsm_comm *comm,
 	enum vgsm_comm_message_type mt,
@@ -261,7 +269,7 @@ void vgsm_comm_close(struct vgsm_comm *comm)
 	}
 	ast_mutex_unlock(&comm->state_lock);
 
-	free(comm->name);
+	free((char *)comm->name);
 	comm->name = "***";
 }
 
