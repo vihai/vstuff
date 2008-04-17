@@ -260,19 +260,23 @@ void vgsm_comm_close(struct vgsm_comm *comm)
 		ast_cond_wait(&comm->state_cond, &comm->state_lock);
 	}
 	ast_mutex_unlock(&comm->state_lock);
+
+	free(comm->name);
+	comm->name = "***";
 }
 
 static void *vgsm_comm_thread_main(void *data);
 static void *vgsm_comm_urc_thread_main(void *data);
 static void *vgsm_comm_completion_thread_main(void *data);
 
-int vgsm_comm_open(struct vgsm_comm *comm, int fd)
+int vgsm_comm_open(struct vgsm_comm *comm, int fd, const char *name)
 {
 	int err;
 
 	assert(comm->state == VGSM_COMM_CLOSED);
 
 	comm->fd = fd;
+	comm->name = strdup(name);
 
 	int filedes[2];
 	if (pipe(filedes) < 0) {

@@ -3948,8 +3948,6 @@ static int vgsm_me_open(
 	mc = vgsm_me_config_get(me->current_config);
 	ast_mutex_unlock(&me->lock);
 
-	me->comm.name = me->name;
-
 	me->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (me->me_fd < 0) {
 		char tmpstr[64];
@@ -4137,7 +4135,7 @@ static int vgsm_me_open(
 		goto err_ioctl_power_get;
 	}
 
-	err = vgsm_comm_open(&me->comm, me->me_fd);
+	err = vgsm_comm_open(&me->comm, me->me_fd, me->name);
 	if (err < 0) {
 		vgsm_me_failed_text(me,
 			"Error opening communication port: %s",

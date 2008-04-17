@@ -263,7 +263,7 @@ void _vgsm_req_put(struct vgsm_req *req);
 
 int vgsm_req_status(struct vgsm_req *req);
 
-int vgsm_comm_open(struct vgsm_comm *comm, int fd);
+int vgsm_comm_open(struct vgsm_comm *comm, int fd, const char *name);
 void vgsm_comm_close(struct vgsm_comm *comm);
 
 void vgsm_comm_send_message(
