@@ -6515,12 +6515,67 @@ static int vgsm_me_cli_pin_input_func(int fd, int argc, char *argv[])
 	if (!strcmp(first_line->text, "+CPIN: READY")) {
 		ast_cli(fd, "SIM is ready and not waiting for PIN\n");
 		err = RESULT_FAILURE;
+
+		if (me->status == VGSM_ME_STATUS_WAITING_PIN) {
+			vgsm_me_set_status(me,
+				VGSM_ME_STATUS_WAITING_INITIALIZATION,
+				0, " ");
+		}
+
 		goto err_not_waiting_pin;
 	} else if (!strcmp(first_line->text, "+CPIN: SIM PIN")) {
 
 		int res = vgsm_req_make_wait_result(comm, 180 * SEC,
 				"AT+CPIN=\"%s\"", pin);
-		if (res != VGSM_RESP_OK) {
+
+		if (res == CME_ERROR(100)) {
+
+			ast_cli(fd, "Waiting up to 2 minutes for"
+					" initialization...\n");
+
+			int start_time = time(NULL);
+
+			while(TRUE) {
+				sleep(1);
+
+				if (time(NULL) - start_time > 120) {
+					ast_cli(fd,
+						"Error: PIN input timeout\n");
+					err = RESULT_FAILURE;
+					goto err_send_pin;
+				}
+
+				struct vgsm_req *req2;
+				req2 = vgsm_req_make_wait(comm, 20 * SEC,
+								 "AT+CPIN?");
+				if (req2->err == CME_ERROR(256)) {
+					continue;
+				} else if (req2->err != VGSM_RESP_OK) {
+					ast_cli(fd, "Error: %s (%d)\n",
+						vgsm_me_error_to_text(res),
+						res);
+					err = RESULT_FAILURE;
+					goto err_send_pin;
+				}
+
+				const struct vgsm_req_line *first_line;
+				first_line = vgsm_req_first_line(req2);
+
+				if (strcmp(first_line->text, "+CPIN: READY")) {
+					vgsm_req_put(req2);
+
+					ast_cli(fd,
+						"Error: PIN not ready:"
+						" %s\n",
+						first_line->text);
+					err = RESULT_FAILURE;
+					goto err_send_pin;
+				} else {
+					vgsm_req_put(req2);
+					break;
+				}
+			}
+		} else if (res != VGSM_RESP_OK) {
 			ast_cli(fd, "Error: %s (%d)\n",
 				vgsm_me_error_to_text(res), res);
 			err = RESULT_FAILURE;
