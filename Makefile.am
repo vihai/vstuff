@@ -43,7 +43,7 @@ endif
 SUBDIRS += libskb
 SUBDIRS += libkstreamer
 SUBDIRS += libq931
-##SUBDIRS += kstool
+SUBDIRS += kstool
 SUBDIRS += vgsmctl
 SUBDIRS += visdn_netdev_ctl
 SUBDIRS += scripts samples unsupported

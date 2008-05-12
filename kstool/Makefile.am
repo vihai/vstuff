@@ -40,7 +40,7 @@ kstool_LDADD = \
         $(top_srcdir)/libskb/libskb.la			\
         $(top_srcdir)/libkstreamer/libkstreamer.la
 
-kstool_CPPFLAGS=\
+kstool_CPPFLAGS = \
 	-I$(top_srcdir)/include/		\
 	-I$(top_srcdir)/modules/include/	\
 	-I$(top_srcdir)/libskb/			\
