@@ -1016,10 +1016,25 @@ int vgsm_card_probe(struct vgsm_card *card)
 				goto err_me_create;
 			}
 
+			{
+			u32 me_status = vgsm_inl(card,
+					VGSM_R_ME_STATUS(card->mes[i]->id));
+
 			vgsm_msg_card(card, KERN_INFO,
 				"ME %d is installed and powered %s\n", i,
-				vgsm_me_power_get(card->mes[i]) ?
+				me_status & VGSM_R_ME_STATUS_V_VDD ?
 							"ON" : "OFF");
+
+			if (me_status & VGSM_R_ME_STATUS_V_VDD) {
+				vgsm_msg_card(card, KERN_NOTICE,
+					"ME %d is being shut down\n", i);
+
+				vgsm_outl(card, VGSM_R_ME_SETUP(
+							card->mes[i]->id),
+						VGSM_R_ME_SETUP_V_EMERG_OFF);
+			}
+			}
+
 		} else {
 			vgsm_msg_card(card, KERN_INFO,
 				"ME %d is not installed\n", i);
