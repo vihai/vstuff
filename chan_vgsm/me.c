@@ -865,9 +865,9 @@ sim_device_filename:
 	} else if (!strcasecmp(var->name, "gsm_hr_enabled")) {
 		mc->gsm_hr_enabled = ast_true(var->value);
 	} else if (!strcasecmp(var->name, "gsm_preferred")) {
-		if (strcasecmp(var->value, "hr"))
+		if (!strcasecmp(var->value, "hr"))
 			mc->gsm_preferred = VGSM_CODEC_GSM_HR;
-		else if (strcasecmp(var->value, "fr"))
+		else if (!strcasecmp(var->value, "fr"))
 			mc->gsm_preferred = VGSM_CODEC_GSM_FR;
 		else {
 			ast_log(LOG_ERROR,
