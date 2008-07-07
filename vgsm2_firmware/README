@@ -17,6 +17,10 @@ below.
 
 Changelog:
 
+------ 2.8.5 ------
+
+- Increased TX FIFO size to 2048 bytes
+
 ------ 2.8.3 ------
 
 - Fixed rx-fifo counter setting when switching from slin to x-law. Software
