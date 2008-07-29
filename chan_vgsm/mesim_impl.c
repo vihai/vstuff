@@ -400,6 +400,9 @@ static int vgsm_mesim_impl_receive_ready(
 
 			} else if (buf[i] == '-') {
 
+				vgsm_mesim_impl_write_reset_asserted(
+							mesim_impl);
+
 				vgsm_mesim_change_state(mesim,
 					VGSM_MESIM_HOLDER_REMOVED, -1);
 				vgsm_mesim_set_removed(mesim);
