@@ -44,6 +44,8 @@
 #include "mesim_local.h"
 #include "atr.h"
 
+#define FAILED_RESTART_TIME (30 * SEC)
+
 static const char *vgsm_mesim_local_type_to_text(
 	enum vgsm_mesim_local_type type)
 {
@@ -65,6 +67,8 @@ static const char *vgsm_mesim_local_state_to_text(
 	switch(state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
 		return "NULL";
+	case VGSM_MESIM_LOCAL_STATE_OPENING:
+		return "OPENING";
 	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
 		return "HOLDER_REMOVED";
 	case VGSM_MESIM_LOCAL_STATE_RESET:
@@ -212,6 +216,298 @@ static void *vgsm_mesim_local_modem_thread_main(void *data)
 	return NULL;
 }
 
+static void vgsm_mesim_local_open(struct vgsm_mesim_local *mesim_local)
+{
+	struct vgsm_mesim *mesim = mesim_local->mesim;
+
+	assert(mesim_local->fd == -1);
+
+	vgsm_mesim_change_state(mesim_local->mesim,
+				VGSM_MESIM_HOLDER_REMOVED, -1);
+
+	mesim_local->fd = open(mesim_local->device_filename,
+						O_RDWR | O_NOCTTY | O_NDELAY);
+	if (mesim_local->fd < 0) {
+		ast_log(LOG_ERROR,
+			"%s: open(%s) failed: %s\n",
+			mesim->name,
+			mesim_local->device_filename,
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+		return;
+	}
+
+	int flags;
+	flags = fcntl(mesim_local->fd, F_GETFL, 0);
+
+	flags &= ~O_NONBLOCK;
+
+	if (fcntl(mesim_local->fd, F_SETFL, flags) < 0) {
+		ast_log(LOG_ERROR,
+			"Cannot set Local SIM fd to non-blocking: %s\n",
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+		return;
+	}
+
+	if (ioctl(mesim_local->fd, VGSM_IOC_SIM_GET_CARD_ID,
+					&mesim_local->card_id) < 0) {
+		if (errno != EINVAL) {
+			ast_log(LOG_ERROR,
+				"%s: ioctl(IOC_SIM_GET_ID)"
+				" failed: %s\n",
+				mesim->name,
+				strerror(errno));
+
+			vgsm_mesim_local_change_state(mesim_local,
+						VGSM_MESIM_LOCAL_STATE_FAILED,
+						FAILED_RESTART_TIME);
+
+			return;
+		}
+
+		mesim_local->type = VGSM_MESIM_LOCAL_TYPE_USB;
+
+		vgsm_mesim_debug(mesim, "Guessing USB SIM reader\n");
+	} else {
+		if (ioctl(mesim_local->fd, VGSM_IOC_SIM_GET_ID,
+						&mesim_local->sim_id) < 0) {
+			ast_log(LOG_ERROR,
+				"%s: ioctl(IOC_SIM_GET_ID)"
+				" failed: %s\n",
+				mesim->name,
+				strerror(errno));
+
+			vgsm_mesim_local_change_state(mesim_local,
+						VGSM_MESIM_LOCAL_STATE_FAILED,
+						FAILED_RESTART_TIME);
+
+			return;
+		}
+
+		if (mesim_local->card_id == mesim->me->card.id) {
+			vgsm_mesim_debug(mesim,
+				"SIM reader is vGSM-II on the same card,"
+				" connecting directly\n");
+
+			mesim_local->type = VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT;
+		} else {
+			vgsm_mesim_debug(mesim,
+				"SIM reader is vGSM-II on a different card\n");
+
+			mesim_local->type = VGSM_MESIM_LOCAL_TYPE_VGSM;
+		}
+	}
+
+	struct termios newtio;
+	memset(&newtio, 0, sizeof(newtio));
+
+	newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD |
+			 PARENB | HUPCL | CSTOPB;
+	newtio.c_iflag = IGNBRK | IGNPAR;
+	newtio.c_oflag = 0;
+	newtio.c_lflag = 0;
+	
+//	newtio.c_ospeed = 8636;
+//	newtio.c_ispeed = 8636;
+
+	newtio.c_cc[VINTR]	= 0;
+	newtio.c_cc[VQUIT]	= 0;
+	newtio.c_cc[VERASE]	= 0;
+	newtio.c_cc[VKILL]	= 0;
+	newtio.c_cc[VEOF]	= 4;
+	newtio.c_cc[VTIME]	= 0;
+	newtio.c_cc[VMIN]	= 1;
+	newtio.c_cc[VSWTC]	= 0;
+	newtio.c_cc[VSTART]	= 0;
+	newtio.c_cc[VSTOP]	= 0;
+	newtio.c_cc[VSUSP]	= 0;
+	newtio.c_cc[VEOL]	= 0;
+	newtio.c_cc[VREPRINT]	= 0;
+	newtio.c_cc[VDISCARD]	= 0;
+	newtio.c_cc[VWERASE]	= 0;
+	newtio.c_cc[VLNEXT]	= 0;
+	newtio.c_cc[VEOL2]	= 0;
+	
+	if (tcflush(mesim_local->fd, TCIOFLUSH) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: tcflush(TCIOFLUSH):  %s\n",
+			mesim->name,
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+
+		return;
+	}
+
+	if (tcsetattr(mesim_local->fd, TCSANOW, &newtio) < 0) {
+		ast_log(LOG_ERROR,
+			"Error setting tty's attributes: "
+			"tcsetattr(%s): %s",
+			mesim_local->device_filename,
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+
+		return;
+	}
+
+	if (tcflush(mesim_local->fd, TCIOFLUSH) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: tcflush(TCIOFLUSH):  %s\n",
+			mesim->name,
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+
+		return;
+	}
+
+	struct serial_struct ss;
+	if (ioctl(mesim_local->fd, TIOCGSERIAL, &ss) < 0) {
+		ast_log(LOG_ERROR,
+			"Error getting serial parameters: %s\n",
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+
+		return;
+	}
+
+	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_USB)
+		ss.custom_divisor = ss.baud_base / 9909;
+	else
+		ss.custom_divisor = ss.baud_base / 9600;
+
+	ss.flags &= ~ASYNC_SPD_MASK;
+	ss.flags |= ASYNC_SPD_CUST;
+
+	if (ioctl(mesim_local->fd, TIOCSSERIAL, &ss) < 0) {
+		ast_log(LOG_ERROR,
+			"Error setting serial parameters: %s\n",
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+
+		return;
+	}
+
+	int sim_id;
+	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT)
+		sim_id = mesim_local->sim_id;
+	else
+		sim_id = VGSM_SIM_ROUTE_EXTERNAL;
+
+	if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE, sim_id) < 0) {
+		ast_log(LOG_ERROR,
+			"%s: ioctl(IOC_SET_SIM_ROUTE, %d) failed: %s\n",
+			mesim->name,
+			sim_id,
+			strerror(errno));
+
+		vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
+
+		return;
+	}
+
+	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT) {
+		vgsm_mesim_set_removed(mesim);
+		vgsm_mesim_change_state(mesim, VGSM_MESIM_DIRECTLY_ROUTED, -1);
+
+		vgsm_mesim_local_change_state(mesim_local,
+				VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED, -1);
+	} else {
+		vgsm_mesim_local_set_lines(mesim_local, FALSE, TRUE);
+		usleep(10000);
+		vgsm_mesim_local_set_lines(mesim_local, TRUE, TRUE);
+
+		int status;
+		if (ioctl(mesim_local->fd, TIOCMGET, &status) < 0) {
+			ast_log(LOG_ERROR, "ioctl(TIOCMGET): %s\n",
+						strerror(errno));
+
+			vgsm_mesim_local_change_state(mesim_local,
+						VGSM_MESIM_LOCAL_STATE_FAILED,
+						FAILED_RESTART_TIME);
+
+			return;
+		}
+
+		pthread_attr_t attr;
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+		int err;
+		mesim_local->modem_thread_has_to_exit = FALSE;
+		err = ast_pthread_create(&mesim_local->modem_thread, &attr,
+					vgsm_mesim_local_modem_thread_main,
+					mesim_local);
+		if (err < 0) {
+			ast_log(LOG_WARNING,
+				"Cannot create SIM Local modem thread: %s\n",
+				strerror(errno));
+
+			vgsm_mesim_local_change_state(mesim_local,
+						VGSM_MESIM_LOCAL_STATE_FAILED,
+						FAILED_RESTART_TIME);
+
+		}
+
+		if (vgsm_mesim_local_is_inserted(mesim_local, status)) {
+			vgsm_mesim_local_change_state(mesim_local,
+					VGSM_MESIM_LOCAL_STATE_RESET, -1);
+
+			vgsm_mesim_change_state(mesim,
+				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
+			vgsm_mesim_set_removed(mesim);
+		} else {
+			vgsm_mesim_local_change_state(mesim_local,
+				VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED, -1);
+			vgsm_mesim_set_removed(mesim);
+			vgsm_mesim_change_state(mesim,
+					VGSM_MESIM_HOLDER_REMOVED, -1);
+		}
+
+		return;
+
+		pthread_attr_destroy(&attr);
+	}
+}
+
+static void vgsm_mesim_local_set_mode(
+	struct vgsm_mesim_driver *driver,
+	struct vgsm_mesim_message *msg)
+{
+	struct vgsm_mesim_local *mesim_local =
+			container_of(driver, struct vgsm_mesim_local, driver);
+
+	struct vgsm_mesim_set_mode *sm = (void *)msg->data;
+
+	assert(msg->len == sizeof(*sm));
+
+	strncpy(mesim_local->device_filename,
+		sm->device_filename,
+		sizeof(mesim_local->device_filename));
+}
+
 static void vgsm_mesim_local_timer(void *data)
 {
 	struct vgsm_mesim_local *mesim_local = data;
@@ -226,15 +522,20 @@ static void vgsm_mesim_local_timer(void *data)
 	case VGSM_MESIM_LOCAL_STATE_RESET:
 	case VGSM_MESIM_LOCAL_STATE_READY:
 	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
-	case VGSM_MESIM_LOCAL_STATE_FAILED:
 		assert(0);
+	break;
+
+	case VGSM_MESIM_LOCAL_STATE_OPENING:
+	case VGSM_MESIM_LOCAL_STATE_FAILED:
+		vgsm_mesim_local_open(mesim_local);
 	break;
 
 	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
 		vgsm_mesim_local_set_lines(mesim_local, TRUE, TRUE);
 
 		vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_FAILED, -1);
+					VGSM_MESIM_LOCAL_STATE_FAILED,
+					FAILED_RESTART_TIME);
 	break;
 	}
 }
@@ -313,237 +614,10 @@ static void vgsm_mesim_local_activate(struct vgsm_mesim_driver *driver)
 {
 	struct vgsm_mesim_local *mesim_local =
 			container_of(driver, struct vgsm_mesim_local, driver);
-	struct vgsm_mesim *mesim = mesim_local->mesim;
 
-	assert(mesim_local->fd == -1);
-
-	mesim_local->fd = open(mesim_local->device_filename,
-						O_RDWR | O_NOCTTY | O_NDELAY);
-	if (mesim_local->fd < 0) {
-		ast_log(LOG_ERROR,
-			"%s: open(%s) failed: %s\n",
-			mesim->name,
-			mesim_local->device_filename,
-			strerror(errno));
-		return;
-	}
-
-	int flags;
-	flags = fcntl(mesim_local->fd, F_GETFL, 0);
-
-	flags &= ~O_NONBLOCK;
-
-	if (fcntl(mesim_local->fd, F_SETFL, flags) < 0) {
-		ast_log(LOG_ERROR,
-			"Cannot set Local SIM fd to non-blocking: %s\n",
-			strerror(errno));
-		return;
-	}
-
-	if (ioctl(mesim_local->fd, VGSM_IOC_SIM_GET_CARD_ID,
-					&mesim_local->card_id) < 0) {
-		if (errno != EINVAL) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_GET_ID)"
-				" failed: %s\n",
-				mesim->name,
-				strerror(errno));
-			return;
-		}
-
-		mesim_local->type = VGSM_MESIM_LOCAL_TYPE_USB;
-
-		vgsm_mesim_debug(mesim, "Guessing USB SIM reader\n");
-	} else {
-		if (ioctl(mesim_local->fd, VGSM_IOC_SIM_GET_ID,
-						&mesim_local->sim_id) < 0) {
-			ast_log(LOG_ERROR,
-				"%s: ioctl(IOC_SIM_GET_ID)"
-				" failed: %s\n",
-				mesim->name,
-				strerror(errno));
-			return;
-		}
-
-		if (mesim_local->card_id == mesim->me->card.id) {
-			vgsm_mesim_debug(mesim,
-				"SIM reader is vGSM-II on the same card,"
-				" connecting directly\n");
-
-			mesim_local->type = VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT;
-		} else {
-			vgsm_mesim_debug(mesim,
-				"SIM reader is vGSM-II on a different card\n");
-
-			mesim_local->type = VGSM_MESIM_LOCAL_TYPE_VGSM;
-		}
-	}
-
-	struct termios newtio;
-	memset(&newtio, 0, sizeof(newtio));
-
-	newtio.c_cflag = B38400 | CS8 | CLOCAL | CREAD |
-			 PARENB | HUPCL | CSTOPB;
-	newtio.c_iflag = IGNBRK | IGNPAR;
-	newtio.c_oflag = 0;
-	newtio.c_lflag = 0;
-	
-//	newtio.c_ospeed = 8636;
-//	newtio.c_ispeed = 8636;
-
-	newtio.c_cc[VINTR]	= 0;
-	newtio.c_cc[VQUIT]	= 0;
-	newtio.c_cc[VERASE]	= 0;
-	newtio.c_cc[VKILL]	= 0;
-	newtio.c_cc[VEOF]	= 4;
-	newtio.c_cc[VTIME]	= 0;
-	newtio.c_cc[VMIN]	= 1;
-	newtio.c_cc[VSWTC]	= 0;
-	newtio.c_cc[VSTART]	= 0;
-	newtio.c_cc[VSTOP]	= 0;
-	newtio.c_cc[VSUSP]	= 0;
-	newtio.c_cc[VEOL]	= 0;
-	newtio.c_cc[VREPRINT]	= 0;
-	newtio.c_cc[VDISCARD]	= 0;
-	newtio.c_cc[VWERASE]	= 0;
-	newtio.c_cc[VLNEXT]	= 0;
-	newtio.c_cc[VEOL2]	= 0;
-	
-	if (tcflush(mesim_local->fd, TCIOFLUSH) < 0) {
-		ast_log(LOG_ERROR,
-			"%s: tcflush(TCIOFLUSH):  %s\n",
-			mesim->name,
-			strerror(errno));
-
-		return;
-	}
-
-	if (tcsetattr(mesim_local->fd, TCSANOW, &newtio) < 0) {
-		ast_log(LOG_ERROR,
-			"Error setting tty's attributes: "
-			"tcsetattr(%s): %s",
-			mesim_local->device_filename,
-			strerror(errno));
-		return;
-	}
-
-	if (tcflush(mesim_local->fd, TCIOFLUSH) < 0) {
-		ast_log(LOG_ERROR,
-			"%s: tcflush(TCIOFLUSH):  %s\n",
-			mesim->name,
-			strerror(errno));
-
-		return;
-	}
-
-	struct serial_struct ss;
-	if (ioctl(mesim_local->fd, TIOCGSERIAL, &ss) < 0) {
-		ast_log(LOG_ERROR,
-			"Error getting serial parameters: %s\n",
-			strerror(errno));
-
-		return;
-	}
-
-	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_USB)
-		ss.custom_divisor = ss.baud_base / 9909;
-	else
-		ss.custom_divisor = ss.baud_base / 9600;
-
-	ss.flags &= ~ASYNC_SPD_MASK;
-	ss.flags |= ASYNC_SPD_CUST;
-
-	if (ioctl(mesim_local->fd, TIOCSSERIAL, &ss) < 0) {
-		ast_log(LOG_ERROR,
-			"Error setting serial parameters: %s\n",
-			strerror(errno));
-
-		return;
-	}
-
-	int sim_id;
-	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT)
-		sim_id = mesim_local->sim_id;
-	else
-		sim_id = VGSM_SIM_ROUTE_EXTERNAL;
-
-	if (ioctl(mesim->fd, VGSM_IOC_SET_SIM_ROUTE, sim_id) < 0) {
-		ast_log(LOG_ERROR,
-			"%s: ioctl(IOC_SET_SIM_ROUTE, %d) failed: %s\n",
-			mesim->name,
-			sim_id,
-			strerror(errno));
-		return;
-	}
-
-	if (mesim_local->type == VGSM_MESIM_LOCAL_TYPE_VGSM_DIRECT) {
-		vgsm_mesim_set_removed(mesim);
-		vgsm_mesim_change_state(mesim, VGSM_MESIM_DIRECTLY_ROUTED, -1);
-
-		vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED, -1);
-	} else {
-		vgsm_mesim_local_set_lines(mesim_local, FALSE, TRUE);
-		usleep(10000);
-		vgsm_mesim_local_set_lines(mesim_local, TRUE, TRUE);
-
-		int status;
-		if (ioctl(mesim_local->fd, TIOCMGET, &status) < 0) {
-			ast_log(LOG_ERROR, "ioctl(TIOCMGET): %s\n",
-						strerror(errno));
-			return;
-		}
-
-		if (vgsm_mesim_local_is_inserted(mesim_local, status)) {
-			vgsm_mesim_local_change_state(mesim_local,
-					VGSM_MESIM_LOCAL_STATE_RESET, -1);
-
-			vgsm_mesim_change_state(mesim,
-				VGSM_MESIM_HOLDER_CHANGING, 6 * SEC);
-			vgsm_mesim_set_removed(mesim);
-		} else {
-			vgsm_mesim_local_change_state(mesim_local,
-				VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED, -1);
-			vgsm_mesim_set_removed(mesim);
-			vgsm_mesim_change_state(mesim,
-					VGSM_MESIM_HOLDER_REMOVED, -1);
-		}
-
-		pthread_attr_t attr;
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-		int err;
-		mesim_local->modem_thread_has_to_exit = FALSE;
-		err = ast_pthread_create(&mesim_local->modem_thread, &attr,
-					vgsm_mesim_local_modem_thread_main,
-					mesim_local);
-		if (err < 0) {
-			ast_log(LOG_WARNING,
-				"Cannot create SIM Local modem thread: %s\n",
-				strerror(errno));
-		}
-
-		return;
-
-		pthread_attr_destroy(&attr);
-	}
-}
-
-static void vgsm_mesim_local_set_mode(
-	struct vgsm_mesim_driver *driver,
-	struct vgsm_mesim_message *msg)
-{
-	struct vgsm_mesim_local *mesim_local =
-			container_of(driver, struct vgsm_mesim_local, driver);
-
-	struct vgsm_mesim_set_mode *sm = (void *)msg->data;
-
-	assert(msg->len == sizeof(*sm));
-
-	strncpy(mesim_local->device_filename,
-		sm->device_filename,
-		sizeof(mesim_local->device_filename));
+	vgsm_mesim_local_change_state(mesim_local,
+				VGSM_MESIM_LOCAL_STATE_OPENING,
+				1 * SEC);
 }
 
 static void vgsm_mesim_local_reset_asserted(struct vgsm_mesim_driver *driver)
@@ -554,6 +628,7 @@ static void vgsm_mesim_local_reset_asserted(struct vgsm_mesim_driver *driver)
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
 	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
+	case VGSM_MESIM_LOCAL_STATE_OPENING:
 		assert(0);
 	break;
 
@@ -580,6 +655,7 @@ static void vgsm_mesim_local_reset_removed(struct vgsm_mesim_driver *driver)
 
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
+	case VGSM_MESIM_LOCAL_STATE_OPENING:
 	case VGSM_MESIM_LOCAL_STATE_READY:
 	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 		assert(0);
@@ -620,6 +696,7 @@ static void vgsm_mesim_local_holder_inserted(struct vgsm_mesim_driver *driver)
 
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
+	case VGSM_MESIM_LOCAL_STATE_OPENING:
 	case VGSM_MESIM_LOCAL_STATE_READY:
 	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 	case VGSM_MESIM_LOCAL_STATE_READING_ATR:
@@ -646,6 +723,7 @@ static void vgsm_mesim_local_holder_removed(struct vgsm_mesim_driver *driver)
 
 	switch(mesim_local->state) {
 	case VGSM_MESIM_LOCAL_STATE_NULL:
+	case VGSM_MESIM_LOCAL_STATE_OPENING:
 	case VGSM_MESIM_LOCAL_STATE_HOLDER_REMOVED:
 	case VGSM_MESIM_LOCAL_STATE_DIRECTLY_ROUTED:
 		assert(0);
