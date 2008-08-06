@@ -1004,14 +1004,22 @@ static int vgsm_call(
 
 	me->call_present = TRUE;
 
+	char options[5] = "";
+	if (vgsm_chan->called_number[0] != '*') {
+		if ((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
+					AST_PRES_ALLOWED)
+			strcpy(options, "i");
+		else
+			strcpy(options, "I");
+	}
+
 	struct vgsm_req *req;
 	// 'timeout' instead of 20s ?
 	req = vgsm_req_make_callback(&me->comm,
 			vgsm_atd_complete,
 			vgsm_me_get(me),
-			180 * SEC, "ATD%c%s;",
-			((ast_chan->cid.cid_pres & AST_PRES_RESTRICTION) ==
-				AST_PRES_ALLOWED) ? 'i' : 'I',
+			180 * SEC, "ATD%s%s;",
+			options,
 			vgsm_chan->called_number);
 	if (!req) {
 		ast_log(LOG_ERROR, "%s: Unable to dial: ATD failed\n",
