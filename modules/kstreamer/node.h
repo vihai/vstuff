@@ -1,7 +1,7 @@
 /*
  * Kstreamer kernel infrastructure core
  *
- * Copyright (C) 2004-2007 Daniele Orlandi
+ * Copyright (C) 2004-2008 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -26,8 +26,6 @@ enum ks_node_attribute_type
 #include "netlink.h"
 
 extern struct kset ks_nodes_kset;
-//extern struct list_head ks_nodes_list;
-//extern rwlock_t ks_nodes_list_lock;
 
 struct ks_chan;
 struct ks_pipeline;
@@ -87,6 +85,9 @@ struct ks_node
 	struct ks_node_ops *ops;
 
 	void *driver_data;
+
+	char workaround_name[32];
+	struct kobject *workaround_parent;
 };
 
 struct ks_node_attribute {

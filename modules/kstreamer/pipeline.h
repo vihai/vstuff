@@ -54,6 +54,8 @@ struct ks_pipeline
 	struct file *file;
 
 	int mtu;
+
+	struct kobject *workaround_parent;
 };
 
 struct ks_pipeline_attribute {

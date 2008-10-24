@@ -39,7 +39,7 @@ int debug_level = 0;
 #endif
 #endif
 
-decl_subsys(kstreamer, NULL, NULL);
+struct kset kstreamer_subsys;
 
 static void ks_system_device_release(struct device *cd)
 {
@@ -65,13 +65,21 @@ void ks_kobj_waitref(struct kobject *kobj)
 	}
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static void ks_system_class_release(struct class_device *cd)
+#else
+static void ks_system_class_dev_release(struct device *cd)
+#endif
 {
 }
 
 struct class ks_system_class = {
 	.name = "kstreamer",
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	.release = ks_system_class_release,
+#else
+	.dev_release = ks_system_class_dev_release,
+#endif
 };
 EXPORT_SYMBOL(ks_system_class);
 
@@ -85,9 +93,9 @@ static int __init ks_init_module(void)
 	if (err < 0)
 		goto err_class_register;
 
-	err = subsystem_register(&kstreamer_subsys);
+	err = kset_register(&kstreamer_subsys);
 	if (err < 0)
-		goto err_subsystem_register;
+		goto err_kset_register;
 
 	ks_system_device.bus = NULL;
 	ks_system_device.parent = NULL;
@@ -136,8 +144,8 @@ err_chan_modinit:
 err_node_modinit:
 	device_unregister(&ks_system_device);
 err_system_device_register:
-	subsystem_unregister(&kstreamer_subsys);
-err_subsystem_register:
+	kset_unregister(&kstreamer_subsys);
+err_kset_register:
 	class_unregister(&ks_system_class);
 err_class_register:
 
@@ -156,7 +164,7 @@ static void __exit ks_module_exit(void)
 
 	device_unregister(&ks_system_device);
 
-	subsystem_unregister(&kstreamer_subsys);
+	kset_unregister(&kstreamer_subsys);
 
 	class_unregister(&ks_system_class);
 

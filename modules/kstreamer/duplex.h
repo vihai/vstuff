@@ -45,6 +45,9 @@ struct ks_duplex
 
 	struct ks_duplex_ops *ops;
 	struct ks_port *port;
+
+        char workaround_name[32];
+        struct kobject *workaround_parent;
 };
 
 struct ks_duplex_attribute {

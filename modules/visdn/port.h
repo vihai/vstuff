@@ -13,12 +13,9 @@
 #ifndef _VISDN_PORT_H
 #define _VISDN_PORT_H
 
-#define VISDN_PORT_NAME_SIZE 32
-
 #ifdef __KERNEL__
 
 #include <linux/kobject.h>
-//#include <asm/semaphore.h>
 #include <linux/list.h>
 
 extern struct kobj_type visdn_port_ktype;
@@ -26,9 +23,9 @@ extern struct kobj_type visdn_port_ktype;
 extern struct rw_semaphore visdn_ports_subsys_rwsem;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-extern struct subsystem visdn_ports_subsys;
+extern struct subsystem visdn_ports_kset;
 #else
-extern struct kset visdn_ports_subsys;
+extern struct kset visdn_ports_kset;
 #endif
 
 #define to_visdn_port(class) container_of(class, struct visdn_port, kobj)
@@ -61,6 +58,9 @@ struct visdn_port
 	void *driver_data;
 
 	int enabled;
+
+	char workaround_name[32];
+	struct kobject *workaround_parent;
 };
 
 struct visdn_port_attribute {

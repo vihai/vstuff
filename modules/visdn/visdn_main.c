@@ -36,6 +36,8 @@ int debug_level = 0;
 dev_t visdn_first_dev;
 EXPORT_SYMBOL(visdn_first_dev);
 
+struct kset visdn_kset;
+
 struct sk_buff *visdn_alloc_skb(unsigned int length)
 {
 	struct sk_buff *skb;
@@ -148,17 +150,15 @@ const char *visdn_event_to_text(enum visdn_event event)
 }
 EXPORT_SYMBOL(visdn_event_to_text);
 
-decl_subsys(visdn, NULL, NULL);
-
 static int __init visdn_init_module(void)
 {
 	int err;
 
 	visdn_msg(KERN_INFO, "loading\n");
 
-	err = subsystem_register(&visdn_subsys);
+	err = kset_register(&visdn_kset);
 	if (err < 0)
-		goto err_subsystem_register;
+		goto err_kset_register;
 
 	err = alloc_chrdev_region(&visdn_first_dev, 0, 2, visdn_MODULE_NAME);
 	if (err < 0)
@@ -195,8 +195,8 @@ err_class_register:
 err_system_device_register:
 	unregister_chrdev_region(visdn_first_dev, 2);
 err_alloc_chrdev_region:
-	subsystem_unregister(&visdn_subsys);
-err_subsystem_register:
+	kset_unregister(&visdn_kset);
+err_kset_register:
 
 	return err;
 }
@@ -213,7 +213,7 @@ static void __exit visdn_module_exit(void)
 
 	unregister_chrdev_region(visdn_first_dev, 2);
 
-	subsystem_unregister(&visdn_subsys);
+	kset_unregister(&visdn_kset);
 
 	visdn_msg(KERN_INFO, "unloaded\n");
 }

@@ -378,8 +378,15 @@ static int vnd_chan_d_tx_connect(struct ks_chan *ks_chan)
 		goto err_create_connected_node_chan;
 
 	cur = &remote_node->kobj;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	while(cur && cur->kset->ktype != &visdn_port_ktype)
 		cur = cur->parent;
+#else
+	while(cur && cur->kset->kobj.ktype != &visdn_port_ktype)
+		cur = cur->parent;
+#warning "This code has to be checked"
+#endif
 
 	if (!cur) {
 		vnd_msg_nd(netdevice, KERN_ERR, "no port found\n");

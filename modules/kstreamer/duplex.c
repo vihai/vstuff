@@ -24,72 +24,12 @@
 #include "kstreamer_priv.h"
 #include "duplex.h"
 
+struct kset ks_duplexes_kset;
+
 static struct attribute *ks_duplex_default_attrs[] =
 {
 	NULL,
 };
-
-struct ks_duplex *ks_duplex_create(
-	struct ks_duplex *duplex,
-	struct ks_duplex_ops *ops,
-	const char *name,
-	struct kobject *parent)
-{
-	BUG_ON(!ops);
-	BUG_ON(!ops->owner);
-	BUG_ON(!name);
-	BUG_ON(!parent);
-
-	if (!duplex) {
-		duplex = kmalloc(sizeof(*duplex), GFP_KERNEL);
-		if (!duplex)
-			return NULL;
-	}
-
-	memset(duplex, 0, sizeof(*duplex));
-
-	kobject_init(&duplex->kobj);
-	kobject_set_name(&duplex->kobj, "%s", name);
-	kobj_set_kset_s(duplex, ks_duplexes_subsys);
-	duplex->kobj.parent = parent;
-
-	duplex->ops = ops;
-
-	return duplex;
-}
-EXPORT_SYMBOL(ks_duplex_create);
-
-int ks_duplex_register(struct ks_duplex *duplex)
-{
-	int err;
-
-	BUG_ON(!duplex);
-
-	err = kobject_add(&duplex->kobj);
-	if (err < 0)
-		goto err_kobject_add;
-
-	return 0;
-
-	kobject_del(&duplex->kobj);
-err_kobject_add:
-
-	return err;
-}
-EXPORT_SYMBOL(ks_duplex_register);
-
-void ks_duplex_unregister(struct ks_duplex *duplex)
-{
-	kobject_del(&duplex->kobj);
-}
-EXPORT_SYMBOL(ks_duplex_unregister);
-
-void ks_duplex_destroy(struct ks_duplex *duplex)
-{
-	ks_kobj_waitref(&duplex->kobj);
-	ks_duplex_put(duplex);
-}
-EXPORT_SYMBOL(ks_duplex_destroy);
 
 #define to_ks_duplex_attr(_attr) \
 	container_of(_attr, struct ks_duplex_attribute, attr)
@@ -155,8 +95,84 @@ static struct kobj_type ks_duplex_ktype = {
 	.default_attrs	= ks_duplex_default_attrs,
 };
 
+struct ks_duplex *ks_duplex_create(
+	struct ks_duplex *duplex,
+	struct ks_duplex_ops *ops,
+	const char *name,
+	struct kobject *parent)
+{
+	BUG_ON(!ops);
+	BUG_ON(!ops->owner);
+	BUG_ON(!name);
+	BUG_ON(!parent);
+
+	if (!duplex) {
+		duplex = kmalloc(sizeof(*duplex), GFP_KERNEL);
+		if (!duplex)
+			return NULL;
+	}
+
+	memset(duplex, 0, sizeof(*duplex));
+
+	duplex->kobj.kset = &ks_duplexes_kset;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+	duplex->kobj.parent = parent;
+	kobject_init(&duplex->kobj);
+	kobject_set_name(&duplex->kobj, "%s", name);
+#else
+	kobject_init(&duplex->kobj, &ks_duplex_ktype);
+	strncpy(duplex->workaround_name, name, sizeof(duplex->workaround_name));
+	duplex->workaround_parent = parent;
+#endif
+
+	duplex->ops = ops;
+
+	return duplex;
+}
+EXPORT_SYMBOL(ks_duplex_create);
+
+int ks_duplex_register(struct ks_duplex *duplex)
+{
+	int err;
+
+	BUG_ON(!duplex);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+	err = kobject_add(&duplex->kobj);
+	if (err < 0)
+		goto err_kobject_add;
+#else
+	err = kobject_add(&duplex->kobj, duplex->workaround_parent, duplex->workaround_name);
+	if (err < 0)
+		goto err_kobject_add;
+#endif
+
+	kobject_set_name(&ks_duplexes_kset.kobj, "duplexes");
+
+	return 0;
+
+	kobject_del(&duplex->kobj);
+err_kobject_add:
+
+	return err;
+}
+EXPORT_SYMBOL(ks_duplex_register);
+
+void ks_duplex_unregister(struct ks_duplex *duplex)
+{
+	kobject_del(&duplex->kobj);
+}
+EXPORT_SYMBOL(ks_duplex_unregister);
+
+void ks_duplex_destroy(struct ks_duplex *duplex)
+{
+	ks_kobj_waitref(&duplex->kobj);
+	ks_duplex_put(duplex);
+}
+EXPORT_SYMBOL(ks_duplex_destroy);
+
 DECLARE_RWSEM(ks_duplexes_subsys_rwsem);
-decl_subsys_name(ks_duplexes, duplexes, &ks_duplex_ktype, NULL);
 
 int ks_duplex_create_file(
 	struct ks_duplex *duplex,
@@ -188,25 +204,27 @@ int ks_duplex_modinit(void)
 {
 	int err;
 
+	kset_init(&ks_duplexes_kset);
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_duplexes_subsys.kset.kobj.parent = &kstreamer_subsys.kset.kobj;
 #else
 	ks_duplexes_subsys.kobj.parent = &kstreamer_subsys.kobj;
 #endif
 
-	err = subsystem_register(&ks_duplexes_subsys);
+	err = kset_register(&ks_duplexes_subsys);
 	if (err < 0)
-		goto err_subsystem_register;
+		goto err_kset_register;
 
 	return 0;
 
-	subsystem_unregister(&ks_duplexes_subsys);
-err_subsystem_register:
+	kset_unregister(&ks_duplexes_subsys);
+err_kset_register:
 
 	return err;
 }
 
 void ks_duplex_modexit(void)
 {
-	subsystem_unregister(&ks_duplexes_subsys);
+	kset_unregister(&ks_duplexes_subsys);
 }

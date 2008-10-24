@@ -516,6 +516,117 @@ retry:
 	return 0;
 }
 
+/*---------------------------------------------------------------------------*/
+
+static ssize_t ks_pipeline_show_mtu(
+	struct ks_pipeline *pipeline,
+	struct ks_pipeline_attribute *attr,
+	char *buf)
+{
+	int len;
+
+	// FIXME LOCKING
+	len = snprintf(buf, PAGE_SIZE, "%d\n", pipeline->mtu);
+
+	return len;
+}
+
+static KS_PIPELINE_ATTR(mtu, S_IRUGO,
+		ks_pipeline_show_mtu,
+		NULL);
+
+/*---------------------------------------------------------------------------*/
+
+static ssize_t ks_pipeline_show_status(
+	struct ks_pipeline *pipeline,
+	struct ks_pipeline_attribute *attr,
+	char *buf)
+{
+	int len;
+
+	// FIXME LOCKING
+	len = snprintf(buf, PAGE_SIZE, "%d\n", pipeline->status);
+
+	return len;
+}
+
+static KS_PIPELINE_ATTR(status, S_IRUGO,
+		ks_pipeline_show_status,
+		NULL);
+
+
+/*---------------------------------------------------------------------------*/
+
+static struct attribute *ks_pipeline_default_attrs[] =
+{
+	&ks_pipeline_attr_mtu.attr,
+	&ks_pipeline_attr_status.attr,
+	NULL,
+};
+
+#define to_ks_pipeline_attr(_attr) \
+	container_of(_attr, struct ks_pipeline_attribute, attr)
+
+static ssize_t ks_pipeline_attr_show(
+	struct kobject *kobj,
+	struct attribute *attr,
+	char *buf)
+{
+	struct ks_pipeline_attribute *ks_pipeline_attr =
+					to_ks_pipeline_attr(attr);
+	struct ks_pipeline *ks_pipeline = to_ks_pipeline(kobj);
+	ssize_t err;
+
+	if (ks_pipeline_attr->show)
+		err = ks_pipeline_attr->show(ks_pipeline,
+					ks_pipeline_attr, buf);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static ssize_t ks_pipeline_attr_store(
+	struct kobject *kobj,
+	struct attribute *attr,
+	const char *buf,
+	size_t count)
+{
+	struct ks_pipeline_attribute *ks_pipeline_attr =
+					to_ks_pipeline_attr(attr);
+	struct ks_pipeline *ks_pipeline = to_ks_pipeline(kobj);
+	ssize_t err;
+
+	if (ks_pipeline_attr->store)
+		err = ks_pipeline_attr->store(
+				ks_pipeline, ks_pipeline_attr,
+				buf, count);
+	else
+		err = -EIO;
+
+	return err;
+}
+
+static struct sysfs_ops ks_pipeline_sysfs_ops = {
+	.show   = ks_pipeline_attr_show,
+	.store  = ks_pipeline_attr_store,
+};
+
+static void ks_pipeline_release(struct kobject *kobj)
+{
+	struct ks_pipeline *pipeline = to_ks_pipeline(kobj);
+
+	ks_debug(3, "ks_pipeline_release()\n");
+
+	kfree(pipeline);
+}
+
+static struct kobj_type ks_pipeline_ktype = {
+	.release	= ks_pipeline_release,
+	.sysfs_ops	= &ks_pipeline_sysfs_ops,
+	.default_attrs	= ks_pipeline_default_attrs,
+};
+
 struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 {
 	BUG_ON(pipeline); /* Static alloction not supported */
@@ -528,7 +639,12 @@ struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 
 	memset(pipeline, 0, sizeof(*pipeline));
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&pipeline->kobj);
+#else
+	kobject_init(&pipeline->kobj, &ks_pipeline_ktype);
+#endif
+
 	pipeline->kobj.kset = kset_get(&ks_pipelines_kset);
 
 	INIT_LIST_HEAD(&pipeline->entries);
@@ -549,11 +665,15 @@ static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 	list_add_tail(&ks_pipeline_get(pipeline)->node, &ks_pipelines_list);
 	write_unlock(&ks_pipelines_list_lock);
 
-	kobject_set_name(&pipeline->kobj, "%06d", pipeline->id);
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	err = kobject_add(&pipeline->kobj);
 	if (err < 0)
 		goto err_kobject_add;
+#else
+	err = kobject_add(&pipeline->kobj, pipeline->workaround_parent, "%06d", pipeline->id);
+	if (err < 0)
+		goto err_kobject_add;
+#endif
 
 	ks_pipeline_mcast_send(pipeline, &ks_netlink_state,
 					KS_NETLINK_PIPELINE_NEW);
@@ -1153,126 +1273,18 @@ struct ks_node *ks_pipeline_last_node(struct ks_pipeline *pipeline)
 }
 EXPORT_SYMBOL(ks_pipeline_last_node);
 
-/*---------------------------------------------------------------------------*/
-
-static ssize_t ks_pipeline_show_mtu(
-	struct ks_pipeline *pipeline,
-	struct ks_pipeline_attribute *attr,
-	char *buf)
-{
-	int len;
-
-	// FIXME LOCKING
-	len = snprintf(buf, PAGE_SIZE, "%d\n", pipeline->mtu);
-
-	return len;
-}
-
-static KS_PIPELINE_ATTR(mtu, S_IRUGO,
-		ks_pipeline_show_mtu,
-		NULL);
-
-/*---------------------------------------------------------------------------*/
-
-static ssize_t ks_pipeline_show_status(
-	struct ks_pipeline *pipeline,
-	struct ks_pipeline_attribute *attr,
-	char *buf)
-{
-	int len;
-
-	// FIXME LOCKING
-	len = snprintf(buf, PAGE_SIZE, "%d\n", pipeline->status);
-
-	return len;
-}
-
-static KS_PIPELINE_ATTR(status, S_IRUGO,
-		ks_pipeline_show_status,
-		NULL);
-
-/*---------------------------------------------------------------------------*/
-
-static struct attribute *ks_pipeline_default_attrs[] =
-{
-	&ks_pipeline_attr_mtu.attr,
-	&ks_pipeline_attr_status.attr,
-	NULL,
-};
-
-#define to_ks_pipeline_attr(_attr) \
-	container_of(_attr, struct ks_pipeline_attribute, attr)
-
-static ssize_t ks_pipeline_attr_show(
-	struct kobject *kobj,
-	struct attribute *attr,
-	char *buf)
-{
-	struct ks_pipeline_attribute *ks_pipeline_attr =
-					to_ks_pipeline_attr(attr);
-	struct ks_pipeline *ks_pipeline = to_ks_pipeline(kobj);
-	ssize_t err;
-
-	if (ks_pipeline_attr->show)
-		err = ks_pipeline_attr->show(ks_pipeline,
-					ks_pipeline_attr, buf);
-	else
-		err = -EIO;
-
-	return err;
-}
-
-static ssize_t ks_pipeline_attr_store(
-	struct kobject *kobj,
-	struct attribute *attr,
-	const char *buf,
-	size_t count)
-{
-	struct ks_pipeline_attribute *ks_pipeline_attr =
-					to_ks_pipeline_attr(attr);
-	struct ks_pipeline *ks_pipeline = to_ks_pipeline(kobj);
-	ssize_t err;
-
-	if (ks_pipeline_attr->store)
-		err = ks_pipeline_attr->store(
-				ks_pipeline, ks_pipeline_attr,
-				buf, count);
-	else
-		err = -EIO;
-
-	return err;
-}
-
-static struct sysfs_ops ks_pipeline_sysfs_ops = {
-	.show   = ks_pipeline_attr_show,
-	.store  = ks_pipeline_attr_store,
-};
-
-static void ks_pipeline_release(struct kobject *kobj)
-{
-	struct ks_pipeline *pipeline = to_ks_pipeline(kobj);
-
-	ks_debug(3, "ks_pipeline_release()\n");
-
-	kfree(pipeline);
-}
-
-static struct kobj_type ks_pipeline_ktype = {
-	.release	= ks_pipeline_release,
-	.sysfs_ops	= &ks_pipeline_sysfs_ops,
-	.default_attrs	= ks_pipeline_default_attrs,
-};
-
 int ks_pipeline_modinit()
 {
 	int err;
+
+	kset_init(&ks_pipelines_kset);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_pipelines_kset.subsys = &kstreamer_subsys;
 #else
 	ks_pipelines_kset.kobj.parent = &kstreamer_subsys.kobj;
 #endif
-	ks_pipelines_kset.ktype = &ks_pipeline_ktype;
+
 	kobject_set_name(&ks_pipelines_kset.kobj, "pipelines");
 
 	err = kset_register(&ks_pipelines_kset);

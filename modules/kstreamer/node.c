@@ -154,10 +154,16 @@ struct ks_node *ks_node_create(
 	memset(node, 0, sizeof(*node));
 
 	node->kobj.kset = &ks_nodes_kset;
-	node->kobj.parent = parent;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+	node->kobj.parent = parent;
 	kobject_init(&node->kobj);
 	kobject_set_name(&node->kobj, "%s", name);
+#else
+	kobject_init(&node->kobj, &ks_node_ktype);
+	strncpy(node->workaround_name, name, sizeof(node->workaround_name));
+	node->workaround_parent = parent;
+#endif
 
 	node->ops = ops;
 
@@ -285,9 +291,15 @@ int ks_node_register_no_topology_lock(struct ks_node *node)
 	list_add_tail(&ks_node_get(node)->node, &ks_nodes_list);
 	write_unlock(&ks_nodes_list_lock);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	err = kobject_add(&node->kobj);
 	if (err < 0)
 		goto err_kobject_add;
+#else
+	err = kobject_add(&node->kobj, node->workaround_parent, node->workaround_name);
+	if (err < 0)
+		goto err_kobject_add;
+#endif
 
 	ks_node_mcast_send(node, &ks_netlink_state, KS_NETLINK_NODE_NEW);
 
@@ -372,12 +384,14 @@ int ks_node_modinit(void)
 {
 	int err;
 
+	kset_init(&ks_nodes_kset);
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
 	ks_nodes_kset.subsys = &kstreamer_subsys;
 #else
 	ks_nodes_kset.kobj.parent = &kstreamer_subsys.kobj;
 #endif
-	ks_nodes_kset.ktype = &ks_node_ktype;
+
 	kobject_set_name(&ks_nodes_kset.kobj, "nodes");
 
 	err = kset_register(&ks_nodes_kset);

@@ -308,11 +308,14 @@ struct vgsm_sim *vgsm_sim_create(
 
 	memset(sim, 0, sizeof(*sim));
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&sim->kobj);
-	kobject_set_name(&sim->kobj, "sim%d", id);
-
 	sim->kobj.ktype = &vgsm_sim_ktype;
 	sim->kobj.parent = &card->pci_dev->dev.kobj;
+	kobject_set_name(&sim->kobj, "sim%d", id);
+#else
+	kobject_init(&sim->kobj, &vgsm_sim_ktype);
+#endif
 
 	sim->card = card;
 	sim->id = id;
@@ -344,9 +347,15 @@ int vgsm_sim_register(struct vgsm_sim *sim)
 	if (err < 0)
 		goto err_register_uart;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	err = kobject_add(&sim->kobj);
 	if (err < 0)
 		goto err_kobject_add;
+#else
+	err = kobject_add(&sim->kobj, &sim->card->pci_dev->dev.kobj, "sim%d", sim->id);
+	if (err < 0)
+		goto err_kobject_add;
+#endif
 
 	return 0;
 
