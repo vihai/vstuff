@@ -39,7 +39,12 @@ int debug_level = 0;
 
 static dev_t vppp_first_dev;
 static struct cdev vppp_cdev;
-static struct class_device vppp_control_class_dev;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+static struct class_device vppp_control_device;
+#else
+static struct device vppp_control_device;
+#endif
 
 static u8 ppphdr[] = { 0xff, 0x03 };
 
@@ -565,7 +570,11 @@ struct file_operations vppp_fops =
 };
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
+#else
+static ssize_t show_dev(struct device *dev, char *buf)
+#endif
 {
 	return print_dev_t(buf, vppp_first_dev);
 }
@@ -589,30 +598,51 @@ static int __init vppp_init_module(void)
 	if (err < 0)
 		goto err_cdev_add;
 
-	vppp_control_class_dev.class = &ks_system_class;
-	vppp_control_class_dev.class_data = NULL;
-	vppp_control_class_dev.dev = &ks_system_device;
-#ifdef HAVE_CLASS_DEV_DEVT
-	vppp_control_class_dev.devt = vppp_first_dev;
-#endif
-	snprintf(vppp_control_class_dev.class_id,
-		sizeof(vppp_control_class_dev.class_id),
-		"ppp");
+	vppp_control_device.class = &ks_system_class;
 
-	err = class_device_register(&vppp_control_class_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	vppp_control_device.class_data = NULL;
+	vppp_control_device.dev = &ks_system_device;
+
+	snprintf(vppp_control_device.class_id,
+		sizeof(vppp_control_device.class_id),
+		"ppp");
+#endif
+
+#ifdef HAVE_CLASS_DEV_DEVT
+	vppp_control_device.devt = vppp_first_dev;
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	err = class_device_register(&vppp_control_device);
 	if (err < 0)
-		goto err_class_device_register;
+		goto err_device_register;
+#else
+	err = device_register(&vppp_control_device);
+	if (err < 0)
+		goto err_device_register;
+#endif
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_create_file(
-		&vppp_control_class_dev,
+		&vppp_control_device,
 		&class_device_attr_dev);
+#else
+	device_create_file(
+		&vppp_control_device,
+		&device_attr_dev);
+#endif
 #endif
 
 	return 0;
 
-	class_device_unregister(&vppp_control_class_dev);
-err_class_device_register:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&vppp_control_device);
+#else
+	device_unregister(&vppp_control_device);
+#endif
+err_device_register:
 	cdev_del(&vppp_cdev);
 err_cdev_add:
 	unregister_chrdev_region(vppp_first_dev, 1);
@@ -627,12 +657,23 @@ static void __exit vppp_module_exit(void)
 {
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&vppp_control_class_dev,
+		&vppp_control_device,
 		&class_device_attr_dev);
+#else
+	device_remove_file(
+		&vppp_control_device,
+		&device_attr_dev);
+#endif
 #endif
 
-	class_device_unregister(&vppp_control_class_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&vppp_control_device);
+#else
+	device_unregister(&vppp_control_device);
+#endif
+
 	cdev_del(&vppp_cdev);
 	unregister_chrdev_region(vppp_first_dev, 1);
 

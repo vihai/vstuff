@@ -41,13 +41,21 @@ spinlock_t vgsm_cards_list_lock = SPIN_LOCK_UNLOCKED;
 
 static dev_t vgsm_card_first_dev;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static void vgsm_card_class_release(struct class_device *cd)
+#else
+static void vgsm_card_class_dev_release(struct device *cd)
+#endif
 {
 }
 
 static struct class vgsm_card_class = {
 	.name = "vgsm_card",
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	.release = vgsm_card_class_release,
+#else
+	.dev_release = vgsm_card_class_dev_release,
+#endif
 };
 
 static int vgsm_card_cdev_open(
@@ -418,6 +426,7 @@ struct file_operations vgsm_card_fops =
 };
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
 	struct vgsm_card *card =
@@ -425,6 +434,16 @@ static ssize_t show_dev(struct class_device *class_dev, char *buf)
 
 	return print_dev_t(buf, vgsm_card_first_dev + card->id);
 }
+#else
+static ssize_t show_dev(struct device *class_dev, char *buf)
+{
+	struct vgsm_card *card =
+		container_of(class_dev, struct vgsm_card, device);
+
+	return print_dev_t(buf, vgsm_card_first_dev + card->id);
+}
+#endif
+
 static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 #endif
 
@@ -1055,25 +1074,42 @@ int vgsm_card_probe(struct vgsm_card *card)
 	if (err < 0)
 		goto err_cdev_add;
 
-	snprintf(card->class_device.class_id,
-		sizeof(card->class_device.class_id),
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	card->device.class = &vgsm_card_class;
+	card->device.dev = NULL;
+	snprintf(card->device.class_id,
+		sizeof(card->device.class_id),
 		"vgsm2_card%d", card->id);
-	card->class_device.class = &vgsm_card_class;
-	card->class_device.dev = NULL;
-#ifdef HAVE_CLASS_DEV_DEVT
-	card->class_device.devt = vgsm_card_first_dev + card->id;
 #endif
 
-	err = class_device_register(&card->class_device);
+#ifdef HAVE_CLASS_DEV_DEVT
+	card->device.devt = vgsm_card_first_dev + card->id;
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	err = class_device_register(&card->device);
 	if (err < 0)
-		goto err_class_device_register;
+		goto err_device_register;
+#else
+	err = device_register(&card->device);
+	if (err < 0)
+		goto err_device_register;
+#endif
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	err = class_device_create_file(
-		&card->class_device,
+		&card->device,
 		&class_device_attr_dev);
 	if (err < 0)
-		goto err_class_device_create_file;
+		goto err_device_create_file;
+#else
+	err = device_create_file(
+		&card->device,
+		&device_attr_dev);
+	if (err < 0)
+		goto err_device_create_file;
+#endif
 #endif
 
 	return 0;
@@ -1081,13 +1117,24 @@ int vgsm_card_probe(struct vgsm_card *card)
 	cdev_del(&card->cdev);
 err_cdev_add:
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&card->class_device,
+		&card->device,
 		&class_device_attr_dev);
-err_class_device_create_file:
+#else
+	device_remove_file(
+		&card->device,
+		&device_attr_dev);
 #endif
-	class_device_unregister(&card->class_device);
-err_class_device_register:
+err_device_create_file:
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&card->device);
+#else
+	device_unregister(&card->device);
+#endif
+err_device_register:
 err_me_create:
 	for(i=card->mes_number-1; i>=0; i--) {
 		if (card->mes[i])
@@ -1121,12 +1168,22 @@ void vgsm_card_remove(struct vgsm_card *card)
 	cdev_del(&card->cdev);
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&card->class_device,
+		&card->device,
 		&class_device_attr_dev);
+#else
+	device_remove_file(
+		&card->device,
+		&device_attr_dev);
+#endif
 #endif
 
-	class_device_unregister(&card->class_device);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&card->device);
+#else
+	device_unregister(&card->device);
+#endif
 
 	vgsm_msg_card(card, KERN_INFO,
 		"shutting down card at %p.\n", card->regs_mem);

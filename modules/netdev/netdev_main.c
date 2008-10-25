@@ -44,7 +44,12 @@ int debug_level = 0;
 
 static dev_t vnd_first_dev;
 static struct cdev vnd_cdev;
-static struct class_device vnd_control_class_dev;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+static struct class_device vnd_control_device;
+#else
+static struct device vnd_control_device;
+#endif
 
 static struct list_head vnd_netdevices_list =
 					LIST_HEAD_INIT(vnd_netdevices_list);
@@ -1699,32 +1704,52 @@ static int __init vnd_init_module(void)
 	if (err < 0)
 		goto err_cdev_add;
 
-	vnd_control_class_dev.class = &visdn_system_class;
-	vnd_control_class_dev.class_data = NULL;
-//	vnd_control_class_dev.dev = vnd_port.device;
-#ifdef HAVE_CLASS_DEV_DEVT
-	vnd_control_class_dev.devt = vnd_first_dev;
-#endif
-	snprintf(vnd_control_class_dev.class_id,
-		sizeof(vnd_control_class_dev.class_id),
-		"netdev-control");
+	vnd_control_device.class = &visdn_system_class;
 
-	err = class_device_register(&vnd_control_class_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+	vnd_control_device.class_data = NULL;
+
+	snprintf(vnd_control_device.class_id,
+		sizeof(vnd_control_device.class_id),
+		"netdev-control");
+#endif
+
+#ifdef HAVE_CLASS_DEV_DEVT
+	vnd_control_device.devt = vnd_first_dev;
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	err = class_device_register(&vnd_control_device);
 	if (err < 0)
-		goto err_control_class_device_register;
+		goto err_control_device_register;
+#else
+	err = device_register(&vnd_control_device);
+	if (err < 0)
+		goto err_control_device_register;
+#endif
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_create_file(
-		&vnd_control_class_dev,
+		&vnd_control_device,
 		&class_device_attr_dev);
+#else
+	device_create_file(
+		&vnd_control_device,
+		&device_attr_dev);
+#endif
 #endif
 
 	visdn_register_notifier(&vnd_notifier);
 
 	return 0;
 
-	class_device_del(&vnd_control_class_dev);
-err_control_class_device_register:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_del(&vnd_control_device);
+#else
+	device_del(&vnd_control_device);
+#endif
+err_control_device_register:
 	cdev_del(&vnd_cdev);
 err_cdev_add:
 	unregister_chrdev_region(vnd_first_dev, 1);
@@ -1742,13 +1767,23 @@ static void __exit vnd_module_exit(void)
 	visdn_unregister_notifier(&vnd_notifier);
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&vnd_control_class_dev,
+		&vnd_control_device,
 		&class_device_attr_dev);
+#else
+	device_remove_file(
+		&vnd_control_device,
+		&device_attr_dev);
+#endif
 #endif
 
 	/* Ensure no one can open/ioctl cdevs before removing netdevices */
-	class_device_del(&vnd_control_class_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_del(&vnd_control_device);
+#else
+	device_del(&vnd_control_device);
+#endif
 	cdev_del(&vnd_cdev);
 	unregister_chrdev_region(vnd_first_dev, 1);
 

@@ -42,8 +42,14 @@ int debug_level = 0;
 static dev_t ksup_first_dev;
 
 static struct cdev ksup_cdev;
-static struct class_device ksup_stream_class_dev;
-static struct class_device ksup_frame_class_dev;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+static struct class_device ksup_stream_device;
+static struct class_device ksup_frame_device;
+#else
+static struct device ksup_stream_device;
+static struct device ksup_frame_device;
+#endif
 
 struct list_head ksup_chans_list = LIST_HEAD_INIT(ksup_chans_list);
 static rwlock_t ksup_chans_list_lock = RW_LOCK_UNLOCKED;
@@ -765,7 +771,11 @@ static struct file_operations ksup_fops =
 };
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
+#else
+static ssize_t show_dev(struct device *class_dev, char *buf)
+#endif
 {
 	if (!strcmp(class_dev->class_id, "userport_stream"))
 		return print_dev_t(buf, ksup_first_dev);
@@ -793,66 +803,126 @@ static int __init ksup_init_module(void)
 		goto err_cdev_add;
 
 	/* Stream */
-	snprintf(ksup_stream_class_dev.class_id,
-		sizeof(ksup_stream_class_dev.class_id),
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	ksup_stream_device.class = &ks_system_class;
+	ksup_stream_device.dev = NULL;
+
+	snprintf(ksup_stream_device.class_id,
+		sizeof(ksup_stream_device.class_id),
 		"userport_stream");
-	ksup_stream_class_dev.class = &ks_system_class;
-	ksup_stream_class_dev.dev = NULL;
-#ifdef HAVE_CLASS_DEV_DEVT
-	ksup_stream_class_dev.devt = ksup_first_dev;
 #endif
 
-	err = class_device_register(&ksup_stream_class_dev);
+#ifdef HAVE_CLASS_DEV_DEVT
+	ksup_stream_device.devt = ksup_first_dev;
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	err = class_device_register(&ksup_stream_device);
 	if (err < 0)
-		goto err_stream_class_device_register;
+		goto err_stream_device_register;
+#else
+	err = device_register(&ksup_stream_device);
+	if (err < 0)
+		goto err_stream_device_register;
+#endif
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	err = class_device_create_file(
-		&ksup_stream_class_dev,
+		&ksup_stream_device,
 		&class_device_attr_dev);
 	if (err < 0)
-		goto err_stream_class_device_create_file;
+		goto err_stream_device_create_file;
+#else
+	err = device_create_file(
+		&ksup_stream_device,
+		&device_attr_dev);
+	if (err < 0)
+		goto err_stream_device_create_file;
+#endif
 #endif
 
 	/* Frame */
-	snprintf(ksup_frame_class_dev.class_id,
-		sizeof(ksup_frame_class_dev.class_id),
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	ksup_frame_device.class = &ks_system_class;
+	ksup_frame_device.dev = NULL;
+
+	snprintf(ksup_frame_device.class_id,
+		sizeof(ksup_frame_device.class_id),
 		"userport_frame");
-	ksup_frame_class_dev.class = &ks_system_class;
-	ksup_frame_class_dev.dev = NULL;
-#ifdef HAVE_CLASS_DEV_DEVT
-	ksup_frame_class_dev.devt = ksup_first_dev + 1;
 #endif
 
-	err = class_device_register(&ksup_frame_class_dev);
+#ifdef HAVE_CLASS_DEV_DEVT
+	ksup_frame_device.devt = ksup_first_dev + 1;
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	err = class_device_register(&ksup_frame_device);
 	if (err < 0)
-		goto err_frame_class_device_register;
+		goto err_frame_device_register;
+#else
+	err = device_register(&ksup_frame_device);
+	if (err < 0)
+		goto err_frame_device_register;
+#endif
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	err = class_device_create_file(
-		&ksup_frame_class_dev,
+		&ksup_frame_device,
 		&class_device_attr_dev);
 	if (err < 0)
-		goto err_frame_class_device_create_file;
+		goto err_frame_device_create_file;
+#else
+	err = device_create_file(
+		&ksup_frame_device,
+		&device_attr_dev);
+	if (err < 0)
+		goto err_frame_device_create_file;
+#endif
 #endif
 
 	return 0;
 
-	class_device_unregister(&ksup_frame_class_dev);
-err_frame_class_device_register:
-#ifndef HAVE_CLASS_DEV_DEVT
-	class_device_remove_file(
-		&ksup_frame_class_dev,
-		&class_device_attr_dev);
-err_frame_class_device_create_file:
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&ksup_frame_device);
+#else
+	device_unregister(&ksup_frame_device);
 #endif
-	class_device_unregister(&ksup_stream_class_dev);
-err_stream_class_device_register:
+err_frame_device_register:
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&ksup_stream_class_dev,
+		&ksup_frame_device,
 		&class_device_attr_dev);
-err_stream_class_device_create_file:
+err_frame_device_create_file:
+#else
+	device_remove_file(
+		&ksup_frame_device,
+		&device_attr_dev);
+err_frame_device_create_file:
+#endif
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&ksup_stream_device);
+#else
+	device_unregister(&ksup_stream_device);
+#endif
+err_stream_device_register:
+#ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_remove_file(
+		&ksup_stream_device,
+		&device_attr_dev);
+err_stream_device_create_file:
+#else
+	device_remove_file(
+		&ksup_stream_device,
+		&device_attr_dev);
+err_stream_device_create_file:
+#endif
 #endif
 	cdev_del(&ksup_cdev);
 err_cdev_add:
@@ -867,20 +937,40 @@ module_init(ksup_init_module);
 static void __exit ksup_module_exit(void)
 {
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&ksup_frame_class_dev,
+		&ksup_frame_device,
 		&class_device_attr_dev);
+#else
+	device_remove_file(
+		&ksup_frame_device,
+		&device_attr_dev);
+#endif
 #endif
 
-	class_device_unregister(&ksup_frame_class_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&ksup_frame_device);
+#else
+	device_unregister(&ksup_frame_device);
+#endif
 
 #ifndef HAVE_CLASS_DEV_DEVT
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
-		&ksup_stream_class_dev,
+		&ksup_stream_device,
 		&class_device_attr_dev);
+#else
+	device_remove_file(
+		&ksup_stream_device,
+		&device_attr_dev);
+#endif
 #endif
 
-	class_device_unregister(&ksup_stream_class_dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	class_device_unregister(&ksup_stream_device);
+#else
+	device_unregister(&ksup_stream_device);
+#endif
 
 	cdev_del(&ksup_cdev);
 	unregister_chrdev_region(ksup_first_dev, 3);

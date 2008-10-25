@@ -54,13 +54,21 @@ struct sk_buff *visdn_alloc_skb(unsigned int length)
 }
 EXPORT_SYMBOL(visdn_alloc_skb);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 static void visdn_release(struct class_device *cd)
+#else
+static void visdn_dev_release(struct device *cd)
+#endif
 {
 }
 
 struct class visdn_system_class = {
 	.name = "visdn",
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	.release = visdn_release,
+#else
+	.dev_release = visdn_dev_release,
+#endif
 };
 EXPORT_SYMBOL(visdn_system_class);
 

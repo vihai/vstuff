@@ -66,7 +66,11 @@ struct vgsm_card
 	struct pci_dev *pci_dev;
 
 	struct cdev cdev;
-	struct class_device class_device;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	struct class_device device;
+#else
+	struct device device;
+#endif
 
 	int id;
 
