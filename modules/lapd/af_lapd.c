@@ -2021,9 +2021,6 @@ static void __exit lapd_exit(void)
 
 	lapd_proc_exit();
 
-	BUG_TRAP(hlist_empty(&lapd_ntme_hash));
-	BUG_TRAP(hlist_empty(&lapd_utme_hash));
-
 	unregister_netdevice_notifier(&lapd_notifier);
 	dev_remove_pack(&lapd_packet_type);
 

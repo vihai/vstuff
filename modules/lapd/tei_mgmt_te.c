@@ -105,9 +105,6 @@ void lapd_utme_mdl_assign_indication(
 	 */
 	spin_lock_bh(&tme->lock);
 
-	BUG_TRAP(tme->T202 > 0);
-	BUG_TRAP(tme->N202 > 0);
-
 	tme->retrans_cnt = 0;
 	lapd_utme_reset_timer(tme, &tme->T202_timer,
 		jiffies + tme->T202);

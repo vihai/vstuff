@@ -148,7 +148,11 @@ uart_insert_char(struct uart_port *port, unsigned int status,
 
 static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *ext_lsr)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
 	struct tty_struct *tty = up->port.info->tty;
+#else
+	struct tty_struct *tty = up->port.info->port.tty;
+#endif
 	u8 ch, lsr = *ext_lsr;
 	int max_count = 256;
 	char flag;
