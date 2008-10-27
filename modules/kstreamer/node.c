@@ -384,15 +384,15 @@ int ks_node_modinit(void)
 {
 	int err;
 
-	kset_init(&ks_nodes_kset);
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_nodes_kset.subsys = &kstreamer_subsys;
+	ks_nodes_kset.subsys = &kstreamer_kset;
 #else
-	ks_nodes_kset.kobj.parent = &kstreamer_subsys.kobj;
+	ks_nodes_kset.kobj.parent = &kstreamer_kset.kobj;
 #endif
 
-	kobject_set_name(&ks_nodes_kset.kobj, "nodes");
+	err = kobject_set_name(&ks_nodes_kset.kobj, "nodes");
+	if (err < 0)
+	        goto err_kobject_set_name;
 
 	err = kset_register(&ks_nodes_kset);
 	if (err < 0)
@@ -400,6 +400,7 @@ int ks_node_modinit(void)
 
 	return 0;
 
+err_kobject_set_name:
 	kset_unregister(&ks_nodes_kset);
 err_kset_register:
 

@@ -601,15 +601,15 @@ int ks_chan_modinit(void)
 {
 	int err;
 
-	kset_init(&ks_chans_kset);
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_chans_kset.subsys = &kstreamer_subsys;
+	ks_chans_kset.subsys = &kstreamer_kset;
 #else
-	ks_chans_kset.kobj.parent = &kstreamer_subsys.kobj;
+	ks_chans_kset.kobj.parent = &kstreamer_kset.kobj;
 #endif
 
-	kobject_set_name(&ks_chans_kset.kobj, "chans");
+	err = kobject_set_name(&ks_chans_kset.kobj, "chans");
+	if (err < 0)
+	        goto err_kobject_set_name;
 
 	err = kset_register(&ks_chans_kset);
 	if (err < 0)
@@ -617,6 +617,7 @@ int ks_chan_modinit(void)
 
 	return 0;
 
+err_kobject_set_name:
 	kset_unregister(&ks_chans_kset);
 err_kset_register:
 

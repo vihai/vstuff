@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
+#include <limits.h>
 #include <linux/types.h>
 
 #define Q931_PRIVATE

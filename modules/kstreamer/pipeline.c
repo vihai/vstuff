@@ -1277,15 +1277,15 @@ int ks_pipeline_modinit()
 {
 	int err;
 
-	kset_init(&ks_pipelines_kset);
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_pipelines_kset.subsys = &kstreamer_subsys;
+	ks_pipelines_kset.subsys = &kstreamer_kset;
 #else
-	ks_pipelines_kset.kobj.parent = &kstreamer_subsys.kobj;
+	ks_pipelines_kset.kobj.parent = &kstreamer_kset.kobj;
 #endif
 
-	kobject_set_name(&ks_pipelines_kset.kobj, "pipelines");
+	err = kobject_set_name(&ks_pipelines_kset.kobj, "pipelines");
+	if (err < 0)
+	        goto err_kobject_set_name;
 
 	err = kset_register(&ks_pipelines_kset);
 	if (err < 0)
@@ -1293,6 +1293,7 @@ int ks_pipeline_modinit()
 
 	return 0;
 
+err_kobject_set_name:
 	kset_unregister(&ks_pipelines_kset);
 err_kset_register:
 

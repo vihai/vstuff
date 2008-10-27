@@ -1708,9 +1708,12 @@ static int __init vnd_init_module(void)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	vnd_control_device.class_data = NULL;
-
 	snprintf(vnd_control_device.class_id,
 		sizeof(vnd_control_device.class_id),
+		"netdev-control");
+#else
+	snprintf(vnd_control_device.bus_id,
+		sizeof(vnd_control_device.bus_id),
 		"netdev-control");
 #endif
 

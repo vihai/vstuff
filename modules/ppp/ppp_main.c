@@ -603,9 +603,12 @@ static int __init vppp_init_module(void)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	vppp_control_device.class_data = NULL;
 	vppp_control_device.dev = &ks_system_device;
-
 	snprintf(vppp_control_device.class_id,
 		sizeof(vppp_control_device.class_id),
+		"ppp");
+#else
+	snprintf(vppp_control_device.bus_id,
+		sizeof(vppp_control_device.bus_id),
 		"ppp");
 #endif
 

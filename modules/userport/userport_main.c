@@ -804,12 +804,16 @@ static int __init ksup_init_module(void)
 
 	/* Stream */
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	ksup_stream_device.class = &ks_system_class;
-	ksup_stream_device.dev = NULL;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	ksup_stream_device.dev = NULL;
 	snprintf(ksup_stream_device.class_id,
 		sizeof(ksup_stream_device.class_id),
+		"userport_stream");
+#else
+	snprintf(ksup_stream_device.bus_id,
+		sizeof(ksup_stream_device.bus_id),
 		"userport_stream");
 #endif
 
@@ -844,12 +848,17 @@ static int __init ksup_init_module(void)
 #endif
 
 	/* Frame */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
-	ksup_frame_device.class = &ks_system_class;
-	ksup_frame_device.dev = NULL;
 
+	ksup_frame_device.class = &ks_system_class;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+	ksup_frame_device.dev = NULL;
 	snprintf(ksup_frame_device.class_id,
 		sizeof(ksup_frame_device.class_id),
+		"userport_frame");
+#else
+	snprintf(ksup_frame_device.bus_id,
+		sizeof(ksup_frame_device.bus_id),
 		"userport_frame");
 #endif
 
@@ -882,6 +891,8 @@ static int __init ksup_init_module(void)
 		goto err_frame_device_create_file;
 #endif
 #endif
+
+	ksup_msg(KERN_INFO, ksup_MODULE_DESCR " loaded successfully\n");
 
 	return 0;
 

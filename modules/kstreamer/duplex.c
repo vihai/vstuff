@@ -172,7 +172,7 @@ void ks_duplex_destroy(struct ks_duplex *duplex)
 }
 EXPORT_SYMBOL(ks_duplex_destroy);
 
-DECLARE_RWSEM(ks_duplexes_subsys_rwsem);
+DECLARE_RWSEM(ks_duplexes_kset_rwsem);
 
 int ks_duplex_create_file(
 	struct ks_duplex *duplex,
@@ -204,21 +204,24 @@ int ks_duplex_modinit(void)
 {
 	int err;
 
-	kset_init(&ks_duplexes_kset);
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_duplexes_subsys.kset.kobj.parent = &kstreamer_subsys.kset.kobj;
+	ks_duplexes_kset.kset.kobj.parent = &kstreamer_kset.kset.kobj;
 #else
-	ks_duplexes_subsys.kobj.parent = &kstreamer_subsys.kobj;
+	ks_duplexes_kset.kobj.parent = &kstreamer_kset.kobj;
 #endif
 
-	err = kset_register(&ks_duplexes_subsys);
+	err = kobject_set_name(&ks_duplexes_kset.kobj, "duplexes");
+	if (err < 0)
+	        goto err_kobject_set_name;
+
+	err = kset_register(&ks_duplexes_kset);
 	if (err < 0)
 		goto err_kset_register;
 
 	return 0;
 
-	kset_unregister(&ks_duplexes_subsys);
+err_kobject_set_name:
+	kset_unregister(&ks_duplexes_kset);
 err_kset_register:
 
 	return err;
@@ -226,5 +229,5 @@ err_kset_register:
 
 void ks_duplex_modexit(void)
 {
-	kset_unregister(&ks_duplexes_subsys);
+	kset_unregister(&ks_duplexes_kset);
 }

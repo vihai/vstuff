@@ -1074,11 +1074,16 @@ int vgsm_card_probe(struct vgsm_card *card)
 	if (err < 0)
 		goto err_cdev_add;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	card->device.class = &vgsm_card_class;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	card->device.dev = NULL;
 	snprintf(card->device.class_id,
 		sizeof(card->device.class_id),
+		"vgsm2_card%d", card->id);
+#else
+	snprintf(card->device.bus_id,
+		sizeof(card->device.bus_id),
 		"vgsm2_card%d", card->id);
 #endif
 

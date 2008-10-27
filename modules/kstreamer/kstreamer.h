@@ -21,9 +21,9 @@
 extern struct class ks_system_class;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-extern struct subsystem kstreamer_subsys;
+extern struct subsystem kstreamer_kset;
 #else
-extern struct kset kstreamer_subsys;
+extern struct kset kstreamer_kset;
 #endif
 
 extern struct device ks_system_device;

@@ -21,6 +21,7 @@
 #include <linux/types.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <limits.h>
 
 #include <linux/lapd.h>
 
