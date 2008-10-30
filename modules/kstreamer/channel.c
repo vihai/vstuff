@@ -196,17 +196,14 @@ struct ks_chan *ks_chan_create(
 
 	memset(chan, 0, sizeof(*chan));
 
-	chan->kobj.kset = &ks_chans_kset;
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
-	chan->kobj.parent = parent;
 	kobject_init(&chan->kobj);
-	kobject_set_name(&chan->kobj, "%s", name);
 #else
 	kobject_init(&chan->kobj, &ks_chan_ktype);
-	strncpy(chan->workaround_name, name, sizeof(chan->workaround_name));
-	chan->workaround_parent = parent;
 #endif
+
+	chan->kobj.kset = &ks_chans_kset;
+	kobject_set_name(&chan->kobj, "%s", name);
 
 	chan->duplex = duplex;
 	chan->ops = ops;
@@ -474,7 +471,7 @@ int ks_chan_register_no_topology_lock(struct ks_chan *chan)
 	if (err < 0)
 		goto err_kobject_add;
 #else
-	err = kobject_add(&chan->kobj, chan->workaround_parent, chan->workaround_name);
+	err = kobject_add(&chan->kobj, NULL, "%s", kobject_name(&chan->kobj));
 	if (err < 0)
 		goto err_kobject_add;
 #endif

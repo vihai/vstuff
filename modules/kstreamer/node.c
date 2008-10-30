@@ -153,17 +153,14 @@ struct ks_node *ks_node_create(
 
 	memset(node, 0, sizeof(*node));
 
-	node->kobj.kset = &ks_nodes_kset;
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
-	node->kobj.parent = parent;
 	kobject_init(&node->kobj);
-	kobject_set_name(&node->kobj, "%s", name);
 #else
 	kobject_init(&node->kobj, &ks_node_ktype);
-	strncpy(node->workaround_name, name, sizeof(node->workaround_name));
-	node->workaround_parent = parent;
 #endif
+
+	node->kobj.kset = &ks_nodes_kset;
+	kobject_set_name(&node->kobj, "%s", name);
 
 	node->ops = ops;
 
@@ -296,7 +293,13 @@ int ks_node_register_no_topology_lock(struct ks_node *node)
 	if (err < 0)
 		goto err_kobject_add;
 #else
-	err = kobject_add(&node->kobj, node->workaround_parent, node->workaround_name);
+
+	/* Why am I be supposed to name the object and assign a parent only at
+	 * registration?
+	 * An object has a name even if it is not registered!
+	 */
+
+	err = kobject_add(&node->kobj, NULL, "%s", kobject_name(&node->kobj));
 	if (err < 0)
 		goto err_kobject_add;
 #endif

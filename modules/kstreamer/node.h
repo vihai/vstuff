@@ -85,9 +85,6 @@ struct ks_node
 	struct ks_node_ops *ops;
 
 	void *driver_data;
-
-	char workaround_name[32];
-	struct kobject *workaround_parent;
 };
 
 struct ks_node_attribute {

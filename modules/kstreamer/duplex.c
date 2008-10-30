@@ -114,17 +114,14 @@ struct ks_duplex *ks_duplex_create(
 
 	memset(duplex, 0, sizeof(*duplex));
 
-	duplex->kobj.kset = &ks_duplexes_kset;
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
-	duplex->kobj.parent = parent;
 	kobject_init(&duplex->kobj);
-	kobject_set_name(&duplex->kobj, "%s", name);
 #else
 	kobject_init(&duplex->kobj, &ks_duplex_ktype);
-	strncpy(duplex->workaround_name, name, sizeof(duplex->workaround_name));
-	duplex->workaround_parent = parent;
 #endif
+
+	duplex->kobj.kset = &ks_duplexes_kset;
+	kobject_set_name(&duplex->kobj, "%s", name);
 
 	duplex->ops = ops;
 
@@ -143,7 +140,8 @@ int ks_duplex_register(struct ks_duplex *duplex)
 	if (err < 0)
 		goto err_kobject_add;
 #else
-	err = kobject_add(&duplex->kobj, duplex->workaround_parent, duplex->workaround_name);
+	err = kobject_add(&duplex->kobj, NULL, "%s",
+				kobject_name(&duplex->kobj));
 	if (err < 0)
 		goto err_kobject_add;
 #endif

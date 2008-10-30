@@ -82,9 +82,6 @@ struct ks_chan
 	struct list_head pipeline_entry;
 
 	void *driver_data;
-
-	char workaround_name[32];
-	struct kobject *workaround_parent;
 };
 
 #define to_ks_chan(obj) container_of(obj, struct ks_chan, kobj)

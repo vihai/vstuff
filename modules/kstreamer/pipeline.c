@@ -670,7 +670,7 @@ static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 	if (err < 0)
 		goto err_kobject_add;
 #else
-	err = kobject_add(&pipeline->kobj, pipeline->workaround_parent, "%06d", pipeline->id);
+	err = kobject_add(&pipeline->kobj, NULL, "%06d", pipeline->id);
 	if (err < 0)
 		goto err_kobject_add;
 #endif
