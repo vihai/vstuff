@@ -120,6 +120,7 @@ struct ks_duplex *ks_duplex_create(
 	kobject_init(&duplex->kobj, &ks_duplex_ktype);
 #endif
 
+	duplex->kobj.parent = parent;
 	duplex->kobj.kset = &ks_duplexes_kset;
 	kobject_set_name(&duplex->kobj, "%s", name);
 
@@ -140,7 +141,7 @@ int ks_duplex_register(struct ks_duplex *duplex)
 	if (err < 0)
 		goto err_kobject_add;
 #else
-	err = kobject_add(&duplex->kobj, NULL, "%s",
+	err = kobject_add(&duplex->kobj, duplex->kobj.parent, "%s",
 				kobject_name(&duplex->kobj));
 	if (err < 0)
 		goto err_kobject_add;

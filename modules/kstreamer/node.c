@@ -159,6 +159,7 @@ struct ks_node *ks_node_create(
 	kobject_init(&node->kobj, &ks_node_ktype);
 #endif
 
+	node->kobj.parent = parent;
 	node->kobj.kset = &ks_nodes_kset;
 	kobject_set_name(&node->kobj, "%s", name);
 
@@ -299,7 +300,8 @@ int ks_node_register_no_topology_lock(struct ks_node *node)
 	 * An object has a name even if it is not registered!
 	 */
 
-	err = kobject_add(&node->kobj, NULL, "%s", kobject_name(&node->kobj));
+	err = kobject_add(&node->kobj, node->kobj.parent, "%s",
+					kobject_name(&node->kobj));
 	if (err < 0)
 		goto err_kobject_add;
 #endif

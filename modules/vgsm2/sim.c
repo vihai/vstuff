@@ -311,11 +311,12 @@ struct vgsm_sim *vgsm_sim_create(
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&sim->kobj);
 	sim->kobj.ktype = &vgsm_sim_ktype;
-	sim->kobj.parent = &card->pci_dev->dev.kobj;
-	kobject_set_name(&sim->kobj, "sim%d", id);
 #else
 	kobject_init(&sim->kobj, &vgsm_sim_ktype);
 #endif
+
+	sim->kobj.parent = &card->pci_dev->dev.kobj;
+	kobject_set_name(&sim->kobj, "sim%d", id);
 
 	sim->card = card;
 	sim->id = id;

@@ -202,6 +202,7 @@ struct ks_chan *ks_chan_create(
 	kobject_init(&chan->kobj, &ks_chan_ktype);
 #endif
 
+	chan->kobj.parent = parent;
 	chan->kobj.kset = &ks_chans_kset;
 	kobject_set_name(&chan->kobj, "%s", name);
 
@@ -471,7 +472,8 @@ int ks_chan_register_no_topology_lock(struct ks_chan *chan)
 	if (err < 0)
 		goto err_kobject_add;
 #else
-	err = kobject_add(&chan->kobj, NULL, "%s", kobject_name(&chan->kobj));
+	err = kobject_add(&chan->kobj, chan->kobj.parent, "%s",
+					kobject_name(&chan->kobj));
 	if (err < 0)
 		goto err_kobject_add;
 #endif
