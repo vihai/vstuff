@@ -1247,6 +1247,7 @@ int vgsm_card_register(struct vgsm_card *card)
 {
 	int err;
 	int i;
+	int failed;
 
 	spin_lock(&vgsm_cards_list_lock);
 	list_add_tail(&card->cards_list_node, &vgsm_cards_list);
@@ -1257,6 +1258,7 @@ int vgsm_card_register(struct vgsm_card *card)
 		if (err < 0) {
 			vgsm_msg_card(card, KERN_ERR,
 				"SIM registration failed: %d\n", err);
+			failed = i;
 			goto err_register_sim;
 		}
 	}
@@ -1267,6 +1269,7 @@ int vgsm_card_register(struct vgsm_card *card)
 			if (err < 0) {
 				vgsm_msg_card(card, KERN_ERR,
 					"ME registration failed: %d\n", err);
+				failed = i;
 				goto err_me_register;
 			}
 		}
@@ -1283,14 +1286,16 @@ int vgsm_card_register(struct vgsm_card *card)
 
 	vgsm_card_sysfs_delete_files(card);
 err_card_sysfs_create_files:
-err_register_sim:
-	for(--i; i>=0; i--)
-		vgsm_sim_unregister(&card->sims[i]);
+	failed = card->mes_number;
 err_me_register:
-	for(--i; i>=0; i--) {
+	for(i=failed; i>=0; i--) {
 		if (card->mes[i])
 			vgsm_me_unregister(card->mes[i]);
 	}
+	failed = card->sims_number;
+err_register_sim:
+	for(i=failed; i>=0; i--)
+		vgsm_sim_unregister(&card->sims[i]);
 
 	return err;
 }
