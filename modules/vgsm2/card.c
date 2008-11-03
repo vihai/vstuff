@@ -1288,13 +1288,13 @@ int vgsm_card_register(struct vgsm_card *card)
 err_card_sysfs_create_files:
 	failed = card->mes_number;
 err_me_register:
-	for(i=failed; i>=0; i--) {
+	for(i=failed-1; i>=0; i--) {
 		if (card->mes[i])
 			vgsm_me_unregister(card->mes[i]);
 	}
 	failed = card->sims_number;
 err_register_sim:
-	for(i=failed; i>=0; i--)
+	for(i=failed-1; i>=0; i--)
 		vgsm_sim_unregister(&card->sims[i]);
 
 	return err;
