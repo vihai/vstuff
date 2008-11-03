@@ -293,6 +293,16 @@ int ks_node_register_no_topology_lock(struct ks_node *node)
 	err = kobject_add(&node->kobj);
 	if (err < 0)
 		goto err_kobject_add;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
+
+	{
+	/* In kernels < 2.6.27 the name is kfreed before being assigned again */
+	char koname[64];
+	strncpy(koname, kobject_name(&node->kobj), sizeof(koname));
+	err = kobject_add(&node->kobj, node->kobj.parent, "%s", koname);
+	}
+	if (err < 0)
+		goto err_kobject_add;
 #else
 
 	/* Why am I be supposed to name the object and assign a parent only at

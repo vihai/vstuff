@@ -140,6 +140,15 @@ int ks_duplex_register(struct ks_duplex *duplex)
 	err = kobject_add(&duplex->kobj);
 	if (err < 0)
 		goto err_kobject_add;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
+	{
+	/* In kernels < 2.6.27 the name is kfreed before being assigned again */
+	char koname[64];
+	strncpy(koname, kobject_name(&duplex->kobj), sizeof(koname));
+	err = kobject_add(&duplex->kobj, duplex->kobj.parent, "%s", koname);
+	}
+	if (err < 0)
+		goto err_kobject_add;
 #else
 	err = kobject_add(&duplex->kobj, duplex->kobj.parent, "%s",
 				kobject_name(&duplex->kobj));
