@@ -53,6 +53,7 @@
 ./libskb/Makefile
 ./libskb/Makefile.in
 ./modules/Modules.symvers
+./modules/Module.markers
 ./modules/.tmp_versions
 ./modules/Kbuild
 ./modules/Makefile
