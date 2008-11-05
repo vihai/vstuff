@@ -1706,7 +1706,7 @@ static int __init vnd_init_module(void)
 
 	vnd_control_device.class = &visdn_system_class;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	vnd_control_device.class_data = NULL;
 	snprintf(vnd_control_device.class_id,
 		sizeof(vnd_control_device.class_id),
