@@ -24,12 +24,7 @@ extern struct device visdn_system_device;
 extern struct class visdn_system_class;
 
 extern struct rw_semaphore visdn_kset_rwsem;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-extern struct subsystem visdn_kset;
-#else
 extern struct kset visdn_kset;
-#endif
 
 extern struct sk_buff *visdn_alloc_skb(unsigned int length);
 

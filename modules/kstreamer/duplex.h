@@ -22,12 +22,7 @@
 #include <linux/sysfs.h>
 
 extern struct rw_semaphore ks_duplexes_subsys_rwsem;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-extern struct subsystem ks_duplexes_subsys;
-#else
 extern struct kset ks_duplexes_subsys;
-#endif
 
 struct ks_duplex;
 struct ks_duplex_ops
