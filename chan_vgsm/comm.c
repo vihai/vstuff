@@ -1239,7 +1239,9 @@ static int vgsm_comm_receive_message(
 
 		memcpy(msg, &msgh, sizeof(*msg));
 
-		read(comm->cmd_pipe_read, &msg->data, msg->len);
+		int res = read(comm->cmd_pipe_read, &msg->data, msg->len);
+		if (res < 0)
+			;
 	} else
 		msg = &msgh;
 

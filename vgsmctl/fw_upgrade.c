@@ -294,7 +294,9 @@ static int do_fw_upgrade(
 		while(TRUE) {
 			printf("Are you sure? (Y/n): ");
 			char answer[8];
-			fgets(answer, sizeof(answer), stdin);
+			char *res = fgets(answer, sizeof(answer), stdin);
+			if (!res)
+				return 1;
 
 			if (answer[0] != 'Y' && answer[0] != 'y')
 				return 1;

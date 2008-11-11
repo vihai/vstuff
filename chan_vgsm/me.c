@@ -1267,14 +1267,13 @@ struct vgsm_me *vgsm_me_get_by_name(const char *name)
 	return me;
 }
 
-void vgsm_me_set_status(
+void vgsm_me_set_status_va(
 	struct vgsm_me *me,
 	enum vgsm_me_status status,
 	longtime_t timeout,
-	const char *fmt, ...)
+	const char *fmt,
+	va_list ap)
 {
-	va_list ap;
-
 	ast_mutex_lock(&me->lock);
 
 	if (me->status_reason) {
@@ -1283,9 +1282,9 @@ void vgsm_me_set_status(
 	}
 
 	if (fmt) {
-		va_start(ap, fmt);
-		vasprintf(&me->status_reason, fmt, ap);
-		va_end(ap);
+		int res = vasprintf(&me->status_reason, fmt, ap);
+		if (res < 0)
+			me->status_reason = NULL;
 	}
 
 	if (timeout >= 0)
@@ -1330,20 +1329,29 @@ void vgsm_me_set_status(
 	ast_mutex_unlock(&me->lock);
 }
 
+void vgsm_me_set_status(
+	struct vgsm_me *me,
+	enum vgsm_me_status status,
+	longtime_t timeout,
+	const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vgsm_me_set_status_va(me, status, timeout, fmt, ap);
+	va_end(ap);
+}
+
 void vgsm_me_failed_text(struct vgsm_me *me,
 	const char *fmt,
 	...)
 {
 	va_list ap;
-	char tmpstr[512];
 
 	va_start(ap, fmt);
-	vsnprintf(tmpstr, sizeof(tmpstr), fmt, ap);
-	va_end(ap);
-
-	vgsm_me_set_status(me,
+	vgsm_me_set_status_va(me,
 		VGSM_ME_STATUS_FAILED, FAILED_RETRY_TIME,
-		tmpstr);
+		fmt, ap);
+	va_end(ap);
 }
 
 void vgsm_me_failed(struct vgsm_me *me, int err)
@@ -3952,15 +3960,11 @@ static int vgsm_me_open(
 
 	me->me_fd = open(mc->device_filename, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (me->me_fd < 0) {
-		char tmpstr[64];
-		snprintf(tmpstr, sizeof(tmpstr),
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
 			"Error opening device: open(%s): %s",
 				mc->device_filename,
 				strerror(errno));
-
-		vgsm_me_set_status(me,
-			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
-			tmpstr);
 
 		err = -errno;
 		goto err_me_open;
@@ -3985,14 +3989,9 @@ static int vgsm_me_open(
 	}
 
 	if (tcflush(me->me_fd, TCIOFLUSH) < 0) {
-		char tmpstr[64];
-		snprintf(tmpstr, sizeof(tmpstr),
-			"Error flushing device: %s",
-				strerror(errno));
-
 		vgsm_me_set_status(me,
 			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
-			tmpstr);
+			"Error flushing device: %s", strerror(errno));
 
 		err = -errno;
 		goto err_me_flush;
@@ -4049,15 +4048,11 @@ static int vgsm_me_open(
 	newtio.c_cc[VEOL2]	= 0;
 	
 	if (tcsetattr(me->me_fd, TCSANOW, &newtio) < 0) {
-		char tmpstr[64];
-		snprintf(tmpstr, sizeof(tmpstr),
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
 			"Error setting tty's attributes: tcsetattr(%s): %s",
 				mc->device_filename,
 				strerror(errno));
-
-		vgsm_me_set_status(me,
-			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
-			tmpstr);
 
 		err = -errno;
 		goto err_tcsetattr;
@@ -7136,7 +7131,7 @@ static int vgsm_me_cli_rawcommand_func(int fd, int argc, char *argv[])
 	}
 
 	struct vgsm_req *req;
-	req = vgsm_req_make_wait(&me->comm, 5 * SEC, command);
+	req = vgsm_req_make_wait(&me->comm, 5 * SEC, "%s", command);
 	if (vgsm_req_status(req) != VGSM_RESP_OK) {
 		ast_cli(fd, "Error: %s (%d)\n",
 			vgsm_me_error_to_text(vgsm_req_status(req)),

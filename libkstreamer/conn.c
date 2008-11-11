@@ -926,7 +926,9 @@ static int ks_conn_receive_message(struct ks_conn *conn)
 
 		memcpy(msg, &msgh, sizeof(*msg));
 
-		read(conn->cmd_read, &msg->data, msg->len);
+		int res = read(conn->cmd_read, &msg->data, msg->len);
+		if (res < 0)
+			;
 	} else
 		msg = &msgh;
 

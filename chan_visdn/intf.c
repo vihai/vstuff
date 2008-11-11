@@ -471,8 +471,11 @@ static void visdn_intf_set_status(
 			free(intf->status_reason);
 
 		va_start(ap, fmt);
-		vasprintf(&intf->status_reason, fmt, ap);
+		int res = vasprintf(&intf->status_reason, fmt, ap);
 		va_end(ap);
+
+		if (res < 0)
+			intf->status_reason = NULL;
 	}
 
 	if (visdn.q931_thread != AST_PTHREADT_NULL)
@@ -599,7 +602,8 @@ int visdn_intf_initialize(struct visdn_intf *intf)
 		"/sys/class/net/%s/visdn_connected_port/",
 		intf->name);
 
-	if (realpath(path, intf->remote_port) < 0) {
+	char *res = realpath(path, intf->remote_port);
+	if (!res) {
 		visdn_intf_set_status(intf,
 			VISDN_INTF_STATUS_FAILED,
 			FAILED_RETRY_TIME,

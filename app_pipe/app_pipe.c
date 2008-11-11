@@ -208,7 +208,9 @@ static int handler_exec(struct ast_channel *chan, void *data)
 			break;
 		}
 
-		write(wfd, f->data, f->datalen);
+		int res = write(wfd, f->data, f->datalen);
+		if (res < 0)
+			;
 
 		char buf[1024];
 		int nread = read(efd, buf, sizeof(buf));

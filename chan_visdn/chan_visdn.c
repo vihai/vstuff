@@ -2650,7 +2650,8 @@ static void visdn_ccb_q931_receive(void)
 				struct q931_ccb_message, node);
 
 		char buf[1];
-		read(visdn.ccb_q931_queue_pipe_read, buf, 1);
+		int res = read(visdn.ccb_q931_queue_pipe_read, buf, 1);
+		if (res < 0);
 
 		list_del_init(&msg->node);
 		ast_mutex_unlock(&visdn.ccb_q931_queue_lock);
@@ -4795,7 +4796,8 @@ static void visdn_q931_ccb_receive(void)
 				struct q931_ccb_message, node);
 
 		char buf[1];
-		read(visdn.q931_ccb_queue_pipe_read, buf, 1);
+		int res = read(visdn.q931_ccb_queue_pipe_read, buf, 1);
+		if (res < 0);
 
 		list_del_init(&msg->node);
 		ast_mutex_unlock(&visdn.q931_ccb_queue_lock);
