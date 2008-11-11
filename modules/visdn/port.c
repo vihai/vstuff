@@ -293,8 +293,19 @@ int visdn_port_register(struct visdn_port *port)
 	err = kobject_add(&port->kobj);
 	if (err < 0)
 		goto err_kobject_add;
+
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
+	{
+	/* In kernels < 2.6.27 the name is kfreed before being assigned again */
+	char koname[64];
+	strncpy(koname, kobject_name(&port->kobj), sizeof(koname));
+	err = kobject_add(&port->kobj, port->kobj.parent, "%s", koname);
+	}
+	if (err < 0)
+		goto err_kobject_add;
 #else
-	err = kobject_add(&port->kobj, port->workaround_parent, port->workaround_name);
+	err = kobject_add(&port->kobj, port->kobj.parent, "%s",
+					kobject_name(&port->kobj));
 	if (err < 0)
 		goto err_kobject_add;
 #endif
