@@ -641,6 +641,7 @@ struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&pipeline->kobj);
+	pipeline->kobj.ktype = &ks_pipeline_ktype;
 #else
 	kobject_init(&pipeline->kobj, &ks_pipeline_ktype);
 #endif
@@ -1277,11 +1278,7 @@ int ks_pipeline_modinit()
 {
 	int err;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_pipelines_kset.subsys = &kstreamer_kset;
-#else
 	ks_pipelines_kset.kobj.parent = &kstreamer_kset.kobj;
-#endif
 
 	err = kobject_set_name(&ks_pipelines_kset.kobj, "pipelines");
 	if (err < 0)

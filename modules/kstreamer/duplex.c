@@ -116,6 +116,7 @@ struct ks_duplex *ks_duplex_create(
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&duplex->kobj);
+	duplex->kobj.ktype = &ks_duplex_ktype;
 #else
 	kobject_init(&duplex->kobj, &ks_duplex_ktype);
 #endif
@@ -212,11 +213,7 @@ int ks_duplex_modinit(void)
 {
 	int err;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_duplexes_kset.kset.kobj.parent = &kstreamer_kset.kset.kobj;
-#else
 	ks_duplexes_kset.kobj.parent = &kstreamer_kset.kobj;
-#endif
 
 	err = kobject_set_name(&ks_duplexes_kset.kobj, "duplexes");
 	if (err < 0)

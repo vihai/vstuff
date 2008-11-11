@@ -155,6 +155,7 @@ struct ks_node *ks_node_create(
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&node->kobj);
+	node->kobj.ktype = &ks_node_ktype;
 #else
 	kobject_init(&node->kobj, &ks_node_ktype);
 #endif
@@ -399,11 +400,7 @@ int ks_node_modinit(void)
 {
 	int err;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_nodes_kset.subsys = &kstreamer_kset;
-#else
 	ks_nodes_kset.kobj.parent = &kstreamer_kset.kobj;
-#endif
 
 	err = kobject_set_name(&ks_nodes_kset.kobj, "nodes");
 	if (err < 0)

@@ -198,6 +198,7 @@ struct ks_chan *ks_chan_create(
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&chan->kobj);
+	chan->kobj.ktype = &ks_chan_ktype;
 #else
 	kobject_init(&chan->kobj, &ks_chan_ktype);
 #endif
@@ -610,11 +611,7 @@ int ks_chan_modinit(void)
 {
 	int err;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	ks_chans_kset.subsys = &kstreamer_kset;
-#else
 	ks_chans_kset.kobj.parent = &kstreamer_kset.kobj;
-#endif
 
 	err = kobject_set_name(&ks_chans_kset.kobj, "chans");
 	if (err < 0)

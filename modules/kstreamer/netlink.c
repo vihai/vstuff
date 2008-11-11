@@ -615,9 +615,7 @@ static void ks_netlink_rcv_work_func(struct work_struct *work)
 #endif
 {
 	struct sk_buff *skb;
-	struct sk_buff *tail;
 	int err;
-	int processed;
 
 	while ((skb = skb_dequeue(&ksnl->sk_receive_queue))) {
 

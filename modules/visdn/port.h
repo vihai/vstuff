@@ -53,9 +53,6 @@ struct visdn_port
 	void *driver_data;
 
 	int enabled;
-
-	char workaround_name[32];
-	struct kobject *workaround_parent;
 };
 
 struct visdn_port_attribute {

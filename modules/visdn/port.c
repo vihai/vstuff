@@ -258,14 +258,13 @@ struct visdn_port *visdn_port_create(
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
 	kobject_init(&port->kobj);
-	kobject_set_name(&port->kobj, "%s", name);
-	kobj_set_kset_s(port, visdn_ports_kset);
-	port->kobj.parent = parent;
 #else
 	kobject_init(&port->kobj, &visdn_port_ktype);
-	strncpy(port->workaround_name, name, sizeof(port->workaround_name));
-	port->workaround_parent = parent;
 #endif
+
+	kobject_set_name(&port->kobj, "%s", name);
+	port->kobj.kset = &visdn_ports_kset;
+	port->kobj.parent = parent;
 
 	port->type = "";
 
@@ -302,17 +301,11 @@ int visdn_port_register(struct visdn_port *port)
 
 	sprintf(idtext, "%08x", port->id);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	err = sysfs_create_link(
-		&visdn_ports_kset.kset.kobj,
-		&port->kobj,
-		idtext);
-#else
 	err = sysfs_create_link(
 		&visdn_ports_kset.kobj,
 		&port->kobj,
 		idtext);
-#endif
+
 	if (err < 0)
 		goto err_create_kset_link;
 
@@ -320,11 +313,7 @@ int visdn_port_register(struct visdn_port *port)
 
 	return 0;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	sysfs_remove_link(&visdn_ports_kset.kset.kobj, idtext);
-#else
 	sysfs_remove_link(&visdn_ports_kset.kobj, idtext);
-#endif
 err_create_kset_link:
 	kobject_del(&port->kobj);
 err_kobject_add:
@@ -344,11 +333,7 @@ void visdn_port_unregister(struct visdn_port *port)
 	visdn_call_notifiers(VISDN_EVENT_PORT_UNREGISTERED, port);
 
 	sprintf(idtext, "%08x", port->id);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	sysfs_remove_link(&visdn_ports_kset.kset.kobj, idtext);
-#else
 	sysfs_remove_link(&visdn_ports_kset.kobj, idtext);
-#endif
 
 	kobject_del(&port->kobj);
 
@@ -477,11 +462,7 @@ int visdn_port_modinit(void)
 {
 	int err;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	visdn_ports_kset.kset.kobj.parent = &visdn_kset.kset.kobj;
-#else
 	visdn_ports_kset.kobj.parent = &visdn_kset.kobj;
-#endif
 
 	err = kset_register(&visdn_ports_kset);
 	if (err < 0)
