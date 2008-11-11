@@ -2452,7 +2452,7 @@ retry_workaround:;
 			continue;
 		} else if (idx >= ARRAY_SIZE(me->calls)) {
 			ast_log(LOG_ERROR, "SLCC describes call index %d but"
-				" a maximum of %u calls is handled\n",
+				" a maximum of %u calls are handled\n",
 				idx, (unsigned int)ARRAY_SIZE(me->calls));
 			continue;
 		}
@@ -2593,8 +2593,10 @@ retry_workaround:;
 
 	/* There is a race condition here! me->calls[0] may change! FIXME */
 
-	if (me->calls[0].prev_state != me->calls[0].state)
-		vgsm_handle_slcc_update(me, &me->calls[0]);
+	for (i=0; i<ARRAY_SIZE(me->calls); i++) {
+		if (me->calls[i].prev_state != me->calls[i].state)
+			 vgsm_handle_slcc_update(me, &me->calls[i]);
+	 }
 }
 
 static void handle_unsolicited_ciev_roam(
