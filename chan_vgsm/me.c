@@ -3186,6 +3186,7 @@ static int vgsm_me_pin_check_and_input(
 	const struct vgsm_req_line *first_line;
 	int err;
 	int res = 0;
+	int retries = 60;
 
 	/* Be careful to not consume all the available attempts */
 retry_spic:
@@ -3199,6 +3200,13 @@ retry_spic:
 		goto err_spic;
 	} else if (err == CME_ERROR(262)) {
 		vgsm_req_put(req);
+
+		retries--;
+		if (!retries) {
+			vgsm_me_failed(me, err);
+			goto err_spic;
+		}
+
 		sleep(1);
 		goto retry_spic;
 	} else if (err != VGSM_RESP_OK) {
