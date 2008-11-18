@@ -387,10 +387,8 @@ int ks_pipeline_cmd_new(
 	int err;
 
 	pipeline = ks_pipeline_create_from_nlmsg(nlh, &err);
-	if (!pipeline) {
-		// FIXME
-		return err;
-	}
+	if (!pipeline)
+		goto err_pipeline_create;
 
 	if (debug_level > 1)
 		ks_pipeline_dump(pipeline);
@@ -408,6 +406,11 @@ int ks_pipeline_cmd_new(
 
 	ks_pipeline_unregister_no_topology_lock(pipeline);
 err_pipeline_register:
+	if (pipeline->status != KS_PIPELINE_STATUS_NULL)
+		ks_pipeline_change_status(pipeline, KS_PIPELINE_STATUS_NULL);
+
+	ks_pipeline_put(pipeline);
+err_pipeline_create:
 
 	return err;
 }
