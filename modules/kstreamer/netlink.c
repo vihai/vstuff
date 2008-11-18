@@ -231,22 +231,35 @@ int ks_cmd_done(
 	return 0;
 }
 
+static int ks_do_lock(
+	struct ks_netlink_state *state,
+	struct ks_command *cmd,
+	struct nlmsghdr *nlh)
+{
+	if (!state->lock_owner) {
+		BUG_ON(state->lock_depth);
+
+		state->lock_owner = nlh->nlmsg_pid;
+		state->lock_depth++;
+
+		ks_netlink_mcast_flush(state);
+
+		state->lock_timer.expires = jiffies +
+					KS_TOPOLOGY_LOCK_TIMER * HZ;
+		add_timer(&state->lock_timer);
+	} else
+		state->lock_depth++;
+}
+
 int ks_cmd_topology_lock(
 	struct ks_netlink_state *state,
 	struct ks_command *cmd,
 	struct nlmsghdr *nlh)
 {
-	if (state->lock_owner) {
-		WARN_ON(state->lock_owner);
-		return -EBUSY;
-	}
+	BUG_ON(state->lock_owner && state->lock_owner != nlh->nlmsg_pid);
+	BUG_ON(!nlh->nlmsg_pid);
 
-	state->lock_owner = nlh->nlmsg_pid;
-
-	ks_netlink_mcast_flush(state);
-
-	state->lock_timer.expires = jiffies + KS_TOPOLOGY_LOCK_TIMER * HZ;
-	add_timer(&state->lock_timer);
+	ks_do_lock(state, cmd, nlh);
 
 	ks_netlink_send_ack(state, nlh, 0);
 
@@ -258,13 +271,13 @@ int ks_cmd_topology_trylock(
 	struct ks_command *cmd,
 	struct nlmsghdr *nlh)
 {
-	if (state->lock_owner)
+	BUG_ON(!nlh->nlmsg_pid);
+
+	if (state->lock_owner &&
+	    state->lock_owner != nlh->nlmsg_pid)
 		return -EBUSY;
 
-	ks_netlink_mcast_flush(state);
-
-	state->lock_timer.expires = jiffies + KS_TOPOLOGY_LOCK_TIMER * HZ;
-	add_timer(&state->lock_timer);
+	ks_do_lock(state, cmd, nlh);
 
 	ks_netlink_send_ack(state, nlh, 0);
 
@@ -276,21 +289,29 @@ int ks_cmd_topology_unlock(
 	struct ks_command *cmd,
 	struct nlmsghdr *nlh)
 {
-	if (!state->lock_owner)
+	if (!state->lock_owner) {
+		WARN_ON(1)
 		return -ENOENT;
+	}
 
-	if (state->lock_owner != nlh->nlmsg_pid)
+	if (state->lock_owner != nlh->nlmsg_pid) {
+		WARN_ON(1)
 		return -EINVAL;
+	}
 
-	state->lock_owner = 0;
+	state->lock_depth--;
 
-	del_timer(&state->lock_timer);
+	if (!state->lock_depth) {
+		state->lock_owner = 0;
+		del_timer(&state->lock_timer);
 
-	ks_netlink_send_ack(state, nlh, 0);
+		ks_netlink_send_ack(state, nlh, 0);
 
-	ks_netlink_mcast_flush(state);
+		ks_netlink_mcast_flush(state);
 
-	wake_up(&state->lock_sleep);
+		wake_up(&state->lock_sleep);
+	} else
+		ks_netlink_send_ack(state, nlh, 0);
 
 	return 0;
 }
@@ -645,7 +666,9 @@ void ks_lock_timeout(unsigned long data)
 		"Topology lock held for more that %d seconds,"
 		" forcibly breaking lock\n", KS_TOPOLOGY_LOCK_TIMER);
 
+	ks_netlink_state.lock_depth = 0;
 	ks_netlink_state.lock_owner = 0;
+
 	wake_up(&ks_netlink_state.lock_sleep);
 }
 

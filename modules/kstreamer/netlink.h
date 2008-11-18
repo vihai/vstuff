@@ -137,6 +137,7 @@ struct ks_netlink_state
 	struct rw_semaphore topology_lock;
 	wait_queue_head_t lock_sleep;
 	int lock_owner;
+	int lock_depth;
 	struct timer_list lock_timer;
 
 	int mcast_seqnum;
