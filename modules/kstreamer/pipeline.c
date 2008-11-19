@@ -670,6 +670,8 @@ static int ks_pipeline_register_no_topology_lock(struct ks_pipeline *pipeline)
 	write_unlock(&ks_pipelines_list_lock);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+	kobject_set_name(&pipeline->kobj, "%06d", pipeline->id);
+
 	err = kobject_add(&pipeline->kobj);
 	if (err < 0)
 		goto err_kobject_add;
