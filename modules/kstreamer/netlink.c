@@ -231,7 +231,7 @@ int ks_cmd_done(
 	return 0;
 }
 
-static int ks_do_lock(
+static void ks_do_lock(
 	struct ks_netlink_state *state,
 	struct ks_command *cmd,
 	struct nlmsghdr *nlh)
@@ -290,12 +290,12 @@ int ks_cmd_topology_unlock(
 	struct nlmsghdr *nlh)
 {
 	if (!state->lock_owner) {
-		WARN_ON(1)
+		WARN_ON(1);
 		return -ENOENT;
 	}
 
 	if (state->lock_owner != nlh->nlmsg_pid) {
-		WARN_ON(1)
+		WARN_ON(1);
 		return -EINVAL;
 	}
 
