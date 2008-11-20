@@ -25,6 +25,7 @@
 #include "netlink.h"
 
 struct kset ks_nodes_kset;
+EXPORT_SYMBOL(ks_nodes_kset);
 
 static struct list_head ks_nodes_list = LIST_HEAD_INIT(ks_nodes_list);
 static rwlock_t ks_nodes_list_lock = RW_LOCK_UNLOCKED;
@@ -161,7 +162,7 @@ struct ks_node *ks_node_create(
 #endif
 
 	node->kobj.parent = parent;
-	node->kobj.kset = &ks_nodes_kset;
+	node->kobj.kset = kset_get(&ks_nodes_kset);
 	kobject_set_name(&node->kobj, "%s", name);
 
 	node->ops = ops;

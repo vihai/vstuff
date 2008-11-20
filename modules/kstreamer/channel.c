@@ -204,7 +204,7 @@ struct ks_chan *ks_chan_create(
 #endif
 
 	chan->kobj.parent = parent;
-	chan->kobj.kset = &ks_chans_kset;
+	chan->kobj.kset = kset_get(&ks_chans_kset);
 	kobject_set_name(&chan->kobj, "%s", name);
 
 	chan->duplex = duplex;

@@ -319,7 +319,8 @@ static struct ksup_chan *ksup_chan_create(
 	init_waitqueue_head(&chan->read_wait_queue);
 
 	ks_node_create(&chan->ks_node, &ksup_chan_node_ops, "",
-			&ks_system_device.kobj);
+			framed ? &ksup_frame_device.kobj :
+				&ksup_stream_device.kobj);
 
 	return chan;
 
@@ -477,7 +478,7 @@ static int ksup_cdev_release(
 	ksup_chan_unregister(chan);
 
 	if (chan->ks_chan_tx) {
-	ks_chan_put(chan->ks_chan_tx);
+		ks_chan_put(chan->ks_chan_tx);
 		chan->ks_chan_tx = NULL;
 	}
 

@@ -122,7 +122,7 @@ struct ks_duplex *ks_duplex_create(
 #endif
 
 	duplex->kobj.parent = parent;
-	duplex->kobj.kset = &ks_duplexes_kset;
+	duplex->kobj.kset = kset_get(&ks_duplexes_kset);
 	kobject_set_name(&duplex->kobj, "%s", name);
 
 	duplex->ops = ops;
