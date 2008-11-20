@@ -430,7 +430,7 @@ struct file_operations vgsm_card_fops =
 static ssize_t show_dev(struct class_device *class_dev, char *buf)
 {
 	struct vgsm_card *card =
-		container_of(class_dev, struct vgsm_card, class_device);
+		container_of(class_dev, struct vgsm_card, device);
 
 	return print_dev_t(buf, vgsm_card_first_dev + card->id);
 }
