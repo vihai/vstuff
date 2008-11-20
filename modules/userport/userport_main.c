@@ -927,7 +927,7 @@ err_stream_device_register:
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	class_device_remove_file(
 		&ksup_stream_device,
-		&device_attr_dev);
+		&class_device_attr_dev);
 err_stream_device_create_file:
 #else
 	device_remove_file(
