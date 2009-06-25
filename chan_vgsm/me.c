@@ -5450,16 +5450,19 @@ static int vgsm_me_show_serial(int fd, struct vgsm_me *me)
 
 	vgsm_comm_cli_show_state(fd, &me->comm);
 
+	int err;
 	struct serial_icounter_struct icount;
 	if (ioctl(me->me_fd, TIOCGICOUNT, &icount) < 0) {
 		ast_cli(fd, "ioctl(TIOCGICOUNT)\n");
-		return RESULT_FAILURE;
+		err = RESULT_FAILURE;
+		goto err_ioctl_cgicount;
 	}
 
 	int status;
 	if (ioctl(me->me_fd, TIOCMGET, &status) < 0) {
 		ast_cli(fd, "ioctl(TIOCMGET)\n");
-		return RESULT_FAILURE;
+		err = RESULT_FAILURE;
+		goto err_ioctl_cmget;
 	}
 
 	ast_cli(fd,
@@ -5492,6 +5495,11 @@ static int vgsm_me_show_serial(int fd, struct vgsm_me *me)
 		icount.buf_overrun);
 
 	return RESULT_SUCCESS;
+
+err_ioctl_cgicount:
+err_ioctl_cmget:
+
+	return err;
 }
 
 static int vgsm_me_show_summary(int fd, struct vgsm_me *me)
