@@ -844,7 +844,7 @@ cusd_workaround:;
 					ECHO_TIMEOUT);
 
 	if (urc->urc_class->detect_end) {
-		comm->current_urc = urc;
+		comm->current_urc = vgsm_req_get(urc);
 
 		if (comm->state == VGSM_COMM_AWAITING_ECHO)
 			vgsm_comm_change_state(comm,
@@ -858,10 +858,13 @@ cusd_workaround:;
 		vgsm_timer_start_delta(&comm->timer, URC_TIMEOUT);
 	} else {
 		ast_mutex_lock(&comm->urc_queue_lock);
-		list_add_tail(&urc->node, &comm->urc_queue);
+		list_add_tail(&vgsm_req_get(urc)->node, &comm->urc_queue);
 		ast_mutex_unlock(&comm->urc_queue_lock);
 		ast_cond_broadcast(&comm->urc_queue_cond);
 	}
+
+        vgsm_req_put(urc);
+        urc = NULL;
 
 	return end - comm->buf + 2;
 }

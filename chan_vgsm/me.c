@@ -1471,7 +1471,6 @@ static int vgsm_retrieve_ceer(
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
-		vgsm_req_put(req);
 		goto err_cerr;
 	}
 
@@ -1787,7 +1786,6 @@ static int vgsm_update_cops(
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
-		vgsm_req_put(req);
 		goto err_cops;
 	}
 
@@ -1819,6 +1817,7 @@ parsing_complete:
 	return 0;
 
 err_cops:
+	vgsm_req_put(req);
 
 	return -1;
 }
@@ -2414,7 +2413,7 @@ static void handle_unsolicited_ciev_call(
 
 retry_workaround:;
 	struct vgsm_req *req;
-	req = vgsm_req_make_wait(comm, 10 * SEC, "AT^SLCC");
+	req = vgsm_req_make_wait(comm, 3 * SEC, "AT^SLCC");
 	err = vgsm_req_status(req);
 	if (err != VGSM_RESP_OK) {
 		vgsm_me_failed(me, err);
@@ -2438,7 +2437,7 @@ retry_workaround:;
 
 		if (strncmp(line->text, "^SLCC: ", 7)) {
 			ast_mutex_unlock(&me->lock);
-			ast_log(LOG_ERROR,
+			ast_log(LOG_NOTICE,
 				"Unexpected response %s to AT^SLCC\n",
 				line->text);
 			goto retry_workaround;
@@ -6562,12 +6561,14 @@ static int vgsm_me_cli_pin_input_func(int fd, int argc, char *argv[])
 				req2 = vgsm_req_make_wait(comm, 20 * SEC,
 								 "AT+CPIN?");
 				if (req2->err == CME_ERROR(256)) {
+					vgsm_req_put(req2);
 					continue;
 				} else if (req2->err != VGSM_RESP_OK) {
 					ast_cli(fd, "Error: %s (%d)\n",
 						vgsm_me_error_to_text(res),
 						res);
 					err = RESULT_FAILURE;
+					vgsm_req_put(req2);
 					goto err_send_pin;
 				}
 
@@ -6625,8 +6626,8 @@ static int vgsm_me_cli_pin_input_func(int fd, int argc, char *argv[])
 err_unknown_response:
 err_send_pin:
 err_not_waiting_pin:
-	vgsm_req_put(req);
 err_req_make:
+	vgsm_req_put(req);
 	vgsm_me_put(me);
 err_me_not_found:
 err_pin_invalid:
