@@ -730,13 +730,13 @@ static int vgsm_me_config_from_var(
 			sizeof(mc->mesim_device_filename));
 	} else if (!strcasecmp(var->name, "flow_control")) {
 		if (!strcasecmp(var->value, "auto"))
-			mc->operator_selection = VGSM_FLOW_AUTO;
+			mc->flow_control = VGSM_FLOW_AUTO;
 		else if (!strcasecmp(var->value, "none"))
-			mc->operator_selection = VGSM_FLOW_NONE;
+			mc->flow_control = VGSM_FLOW_NONE;
 		else if (!strcasecmp(var->value, "software"))
-			mc->operator_selection = VGSM_FLOW_SW;
+			mc->flow_control = VGSM_FLOW_SW;
 		else if (!strcasecmp(var->value, "hardware"))
-			mc->operator_selection = VGSM_FLOW_HW;
+			mc->flow_control = VGSM_FLOW_HW;
 		else {
 			ast_log(LOG_ERROR,
 				"Flow control selection '%s' unknown\n",
