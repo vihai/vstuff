@@ -6576,13 +6576,12 @@ static int vgsm_me_cli_pin_input_func(int fd, int argc, char *argv[])
 				first_line = vgsm_req_first_line(req2);
 
 				if (strcmp(first_line->text, "+CPIN: READY")) {
-					vgsm_req_put(req2);
-
 					ast_cli(fd,
 						"Error: PIN not ready:"
 						" %s\n",
 						first_line->text);
 					err = RESULT_FAILURE;
+					vgsm_req_put(req2);
 					goto err_send_pin;
 				} else {
 					vgsm_req_put(req2);
