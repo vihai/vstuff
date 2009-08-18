@@ -543,7 +543,7 @@ int vgsm_sms_deliver_spool(struct vgsm_sms_deliver *sms)
 
 	setlocale(LC_CTYPE, loc);
 
-	fclose(f);
+	pclose(f);
 
 	return 0;
 }

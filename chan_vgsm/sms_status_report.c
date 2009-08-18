@@ -596,7 +596,7 @@ int vgsm_sms_status_report_spool(struct vgsm_sms_status_report *sms)
 
 	setlocale(LC_CTYPE, loc);
 
-	fclose(f);
+	pclose(f);
 
 	return 0;
 }
