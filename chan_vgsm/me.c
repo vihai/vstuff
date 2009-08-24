@@ -3658,6 +3658,47 @@ err_no_req:
 	return -1;
 }
 
+static int vgsm_me_flow_configuration(
+	struct vgsm_me *me,
+	struct vgsm_me_config *mc)
+{
+	struct vgsm_comm *comm = &me->comm;
+	int err;
+
+	struct termios tio;
+	memset(&tio, 0, sizeof(tio));
+
+	if (tcgetattr(me->me_fd, &tio) < 0) {
+		err = -errno;
+		goto err_tcgetattr;
+	}
+
+	if (me->flow_control == VGSM_FLOW_NONE) {
+		tio.c_cflag |= CLOCAL;
+		tio.c_iflag = 0;
+	} else if (me->flow_control == VGSM_FLOW_SW) {
+		tio.c_cflag |= CLOCAL;
+		tio.c_iflag = IXON | IXOFF;
+	} else if (me->flow_control == VGSM_FLOW_HW) {
+		tio.c_cflag |= CRTSCTS;
+		tio.c_iflag = 0;
+	}
+
+	if (tcsetattr(me->me_fd, TCSANOW, &tio) < 0) {
+		err = -errno;
+		goto err_tcsetattr;
+	}
+
+	return 0;
+
+err_tcsetattr:
+err_tcgetattr:
+
+	vgsm_me_failed(me, err);
+
+	return -1;
+}
+
 static int vgsm_me_update_static_info(
 	struct vgsm_me *me,
 	struct vgsm_me_config *mc)
@@ -3995,6 +4036,14 @@ static int vgsm_me_open(
 		me->interface_version = 1;
 	}
 
+	if (mc->flow_control == VGSM_FLOW_AUTO) {
+		if (me->interface_version == 1)
+			me->flow_control = VGSM_FLOW_SW;
+		else
+			me->flow_control = VGSM_FLOW_HW;
+	} else
+		me->flow_control = mc->flow_control;
+
 	if (tcflush(me->me_fd, TCIOFLUSH) < 0) {
 		vgsm_me_set_status(me,
 			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
@@ -4004,57 +4053,51 @@ static int vgsm_me_open(
 		goto err_me_flush;
 	}
 
-	struct termios newtio;
-	memset(&newtio, 0, sizeof(newtio));
+	struct termios tio;
+	memset(&tio, 0, sizeof(tio));
 
-	newtio.c_cflag = CS8 | CREAD | HUPCL;
+	if (tcgetattr(me->me_fd, &tio) < 0) {
+		vgsm_me_set_status(me,
+			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
+			"Error setting tty's attributes: tcgetattr(%s): %s",
+				mc->device_filename,
+				strerror(errno));
 
-        if (me->interface_version == 1)
-		newtio.c_cflag |= B38400;
-	else
-		newtio.c_cflag |= B230400;
-
-	if (mc->flow_control == VGSM_FLOW_AUTO) {
-		if (me->interface_version == 1)
-			me->flow_control = VGSM_FLOW_SW;
-		else
-			me->flow_control = VGSM_FLOW_HW;
-	} else
-		me->flow_control = mc->flow_control;
-
-	if (me->flow_control == VGSM_FLOW_NONE) {
-		newtio.c_cflag |= CLOCAL;
-		newtio.c_iflag = 0;
-	} else if (me->flow_control == VGSM_FLOW_SW) {
-		newtio.c_cflag |= CLOCAL;
-		newtio.c_iflag = IXON | IXOFF;
-	} else if (me->flow_control == VGSM_FLOW_HW) {
-		newtio.c_cflag |= CRTSCTS;
-		newtio.c_iflag = 0;
+		err = -errno;
+		goto err_tcgetattr;
 	}
 
-	newtio.c_oflag = 0;
-	newtio.c_lflag = 0;
+	tio.c_cflag = CS8 | CREAD | HUPCL;
+
+        if (me->interface_version == 1)
+		tio.c_cflag |= B38400;
+	else
+		tio.c_cflag |= B230400;
+
+	tio.c_cflag |= CLOCAL;
+	tio.c_iflag = 0;
+	tio.c_oflag = 0;
+	tio.c_lflag = 0;
 	
-	newtio.c_cc[VINTR]	= 0;
-	newtio.c_cc[VQUIT]	= 0;
-	newtio.c_cc[VERASE]	= 0;
-	newtio.c_cc[VKILL]	= 0;
-	newtio.c_cc[VEOF]	= 4;
-	newtio.c_cc[VTIME]	= 0;
-	newtio.c_cc[VMIN]	= 1;
-	newtio.c_cc[VSWTC]	= 0;
-	newtio.c_cc[VSTART]	= 0;
-	newtio.c_cc[VSTOP]	= 0;
-	newtio.c_cc[VSUSP]	= 0;
-	newtio.c_cc[VEOL]	= 0;
-	newtio.c_cc[VREPRINT]	= 0;
-	newtio.c_cc[VDISCARD]	= 0;
-	newtio.c_cc[VWERASE]	= 0;
-	newtio.c_cc[VLNEXT]	= 0;
-	newtio.c_cc[VEOL2]	= 0;
+	tio.c_cc[VINTR]	= 0;
+	tio.c_cc[VQUIT]	= 0;
+	tio.c_cc[VERASE]	= 0;
+	tio.c_cc[VKILL]	= 0;
+	tio.c_cc[VEOF]	= 4;
+	tio.c_cc[VTIME]	= 0;
+	tio.c_cc[VMIN]	= 1;
+	tio.c_cc[VSWTC]	= 0;
+	tio.c_cc[VSTART]	= 0;
+	tio.c_cc[VSTOP]	= 0;
+	tio.c_cc[VSUSP]	= 0;
+	tio.c_cc[VEOL]	= 0;
+	tio.c_cc[VREPRINT]	= 0;
+	tio.c_cc[VDISCARD]	= 0;
+	tio.c_cc[VWERASE]	= 0;
+	tio.c_cc[VLNEXT]	= 0;
+	tio.c_cc[VEOL2]	= 0;
 	
-	if (tcsetattr(me->me_fd, TCSANOW, &newtio) < 0) {
+	if (tcsetattr(me->me_fd, TCSANOW, &tio) < 0) {
 		vgsm_me_set_status(me,
 			VGSM_ME_STATUS_CLOSED, FAILED_RETRY_TIME,
 			"Error setting tty's attributes: tcsetattr(%s): %s",
@@ -4183,6 +4226,7 @@ err_ioctl_power_get:
 	vgsm_mesim_close(&me->mesim);
 err_mesim_open:
 err_tcsetattr:
+err_tcgetattr:
 err_me_flush:
 err_me_fcntl:
 	close(me->me_fd);
@@ -4261,6 +4305,9 @@ static void vgsm_me_initialize(
 		goto initialization_failed;
 
 	if (vgsm_me_postponed_configuration(me, mc) < 0)
+		goto initialization_failed;
+
+	if (vgsm_me_flow_configuration(me, mc) < 0)
 		goto initialization_failed;
 
 	me->failure_attempts = 0;
