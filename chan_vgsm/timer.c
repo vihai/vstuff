@@ -1,6 +1,7 @@
 /*
+ * Userland Kstreamer interface
  *
- * Copyright (C) 2004-2008 Daniele Orlandi
+ * Copyright (C) 2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,10 +14,8 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-#include <asterisk/lock.h>
-
 #include "timer.h"
-#include "util.h"
+#include "longtime.h"
 
 void vgsm_timerset_init(
 	struct vgsm_timerset *set,
@@ -31,19 +30,30 @@ void vgsm_timerset_init(
 	set->timers_updated = timers_updated;
 }
 
-void vgsm_timer_init(
+struct vgsm_timer *vgsm_timer_create(
 	struct vgsm_timer *timer,
 	struct vgsm_timerset *set,
 	const char *name,
-	void (*func)(void *data),
-	void *data)
+	void (*func)(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data))
 {
+	if (!timer) {
+		timer = malloc(sizeof(struct vgsm_timer));
+		if (!timer)
+			return NULL;
+	}
+
+	memset(timer, 0, sizeof(*timer));
+
+	timer->refcnt = 1;
+
 	timer->set = set;
 	timer->name = name;
 	timer->expires = 0LL;
 	timer->func = func;
-	timer->data = data;
+	timer->data = NULL;
 	timer->pending = FALSE;
+
+	return timer;
 }
 
 static void _vgsm_timer_add(
@@ -89,46 +99,59 @@ void vgsm_timer_add(
 	ast_mutex_unlock(&timer->set->timers_lock);
 }
 
-void vgsm_timer_start(
+BOOL vgsm_timer_start(
 	struct vgsm_timer *timer,
-	longtime_t expires)
+	longtime_t expires,
+	void *start_data)
 {
 	struct vgsm_timerset *set = timer->set;
 
 	ast_mutex_lock(&set->timers_lock);
+	BOOL was_scheduled = timer->pending;
+
 	if (timer->pending) {
 		if (timer->expires == expires) {
 			ast_mutex_unlock(&set->timers_lock);
-			return;
+			return FALSE;
 		}
+
+		timer->func(timer, VGSM_TIMER_STOPPED, NULL);
 
 		list_del(&timer->node);
 		timer->pending = FALSE;
 	}
 
+	timer->func(timer, VGSM_TIMER_STARTED, start_data);
 	_vgsm_timer_add(timer, expires);
 
 	ast_mutex_unlock(&set->timers_lock);
 
 	if (set->timers_updated)
 		set->timers_updated(set);
+
+	return was_scheduled;
 }
 
-void vgsm_timer_stop(struct vgsm_timer *timer)
+BOOL vgsm_timer_stop(struct vgsm_timer *timer)
 {
 	ast_mutex_lock(&timer->set->timers_lock);
+
+	BOOL was_scheduled = timer->pending;
 	if (timer->pending) {
 		list_del(&timer->node);
 		timer->pending = FALSE;
 	}
 	ast_mutex_unlock(&timer->set->timers_lock);
+
+	return was_scheduled;
 }
 
-void vgsm_timer_start_delta(
+BOOL vgsm_timer_start_delta(
 	struct vgsm_timer *timer,
-	longtime_t delta)
+	longtime_t delta,
+	void *start_data)
 {
-	vgsm_timer_start(timer, longtime_now() + delta);
+	return vgsm_timer_start(timer, longtime_now() + delta, start_data);
 }
 
 void vgsm_timerset_run(struct vgsm_timerset *set)
@@ -149,7 +172,7 @@ restart:;
 			 */
 
 			ast_mutex_unlock(&set->timers_lock);
-			timer->func(timer->data);
+			timer->func(timer, VGSM_TIMER_FIRED, NULL);
 
 			goto restart;
 		} else
@@ -172,3 +195,25 @@ longtime_t vgsm_timerset_next(struct vgsm_timerset *set)
 
 	return ret;
 }
+
+struct vgsm_timer *vgsm_timer_get(struct vgsm_timer *timer)
+{
+	assert(timer->refcnt > 0);
+
+	if (timer)
+		timer->refcnt++;
+
+	return timer;
+}
+
+void vgsm_timer_put(struct vgsm_timer *timer)
+{
+	assert(timer->refcnt > 0);
+
+	timer->refcnt--;
+
+	if (!timer->refcnt) {
+		free(timer);
+	}
+}
+

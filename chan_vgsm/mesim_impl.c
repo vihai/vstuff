@@ -44,7 +44,7 @@
 #include "mesim.h"
 #include "mesim_impl.h"
 
-static void vgsm_mesim_impl_timer(void *data);
+static void vgsm_mesim_impl_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data);
 
 static struct vgsm_mesim_driver vgsm_mesim_driver_impl;
 
@@ -70,8 +70,8 @@ struct vgsm_mesim_driver *vgsm_mesim_impl_create(
 
 	mesim_impl->parser_state = VGSM_MESIM_IMPL_PARSER_STATE_IDLE;
 
-	vgsm_timer_init(&mesim_impl->timer, timerset, "mesim_impl",
-			vgsm_mesim_impl_timer, mesim_impl);
+	vgsm_timer_create(&mesim_impl->timer, timerset, "mesim_impl",
+			vgsm_mesim_impl_timer);
 
 	return &mesim_impl->driver;
 }
@@ -190,7 +190,7 @@ static void vgsm_mesim_impl_activate(struct vgsm_mesim_driver *driver)
 				VGSM_MESIM_HOLDER_REMOVED, -1);
 
 	vgsm_mesim_impl_change_state(mesim_impl, VGSM_MESIM_IMPL_STATE_TRYING);
-	vgsm_timer_start_delta(&mesim_impl->timer, 1 * SEC);
+	vgsm_timer_start_delta(&mesim_impl->timer, 1 * SEC, mesim_impl);
 }
 
 static void vgsm_mesim_impl_set_mode(
@@ -248,9 +248,31 @@ static void vgsm_mesim_impl_reset_removed(struct vgsm_mesim_driver *driver)
 	}
 }
 
-static void vgsm_mesim_impl_timer(void *data)
+static void vgsm_mesim_impl_timer_fired(struct vgsm_mesim_impl *mesim_impl);
+static void vgsm_mesim_impl_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data)
 {
-	struct vgsm_mesim_impl *mesim_impl = data;
+	struct vgsm_mesim_impl *mesim_impl = timer->data;
+
+	switch(action) {
+	case VGSM_TIMER_STOPPED:
+//		vgsm_me_put(me);
+		timer->data = NULL;
+	break;
+
+	case VGSM_TIMER_STARTED:
+		timer->data = start_data;
+//		vgsm_me_get((struct vgsm_me *)start_data);
+	break;
+
+	case VGSM_TIMER_FIRED:
+		timer->data = NULL;
+		vgsm_mesim_impl_timer_fired(mesim_impl);
+//		vgsm_me_put(me);
+	}
+}
+
+static void vgsm_mesim_impl_timer_fired(struct vgsm_mesim_impl *mesim_impl)
+{
 	struct vgsm_mesim *mesim = mesim_impl->mesim;
 
 	vgsm_mesim_debug(mesim, "Implementa timer fired in state %s\n",
@@ -334,7 +356,7 @@ static void vgsm_mesim_impl_timer(void *data)
 
 			vgsm_mesim_impl_change_state(mesim_impl,
 					VGSM_MESIM_IMPL_STATE_TRYING);
-			vgsm_timer_start_delta(&mesim_impl->timer, 5 * SEC);
+			vgsm_timer_start_delta(&mesim_impl->timer, 5 * SEC, mesim_impl);
 		} else {
 			vgsm_mesim_change_state(mesim,
 				VGSM_MESIM_READY, -1);
@@ -482,7 +504,7 @@ static int vgsm_mesim_impl_receive(struct vgsm_mesim_driver *driver)
 		vgsm_mesim_set_removed(mesim);
 		vgsm_mesim_impl_change_state(mesim_impl,
 				VGSM_MESIM_IMPL_STATE_TRYING);
-		vgsm_timer_start_delta(&mesim_impl->timer, 1 * SEC);
+		vgsm_timer_start_delta(&mesim_impl->timer, 1 * SEC, mesim_impl);
 
 		return -errno;
 	}

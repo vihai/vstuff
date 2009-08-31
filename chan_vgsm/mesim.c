@@ -44,7 +44,7 @@
 #include "mesim_impl.h"
 
 static void vgsm_mesim_timers_updated(struct vgsm_timerset *set);
-static void vgsm_mesim_timer(void *data);
+static void vgsm_mesim_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data);
 
 int vgsm_mesim_create(
 	struct vgsm_mesim *mesim,
@@ -64,8 +64,8 @@ int vgsm_mesim_create(
 	ast_cond_init(&mesim->state_cond, NULL);
 
 	vgsm_timerset_init(&mesim->timerset, vgsm_mesim_timers_updated);
-	vgsm_timer_init(&mesim->timer, &mesim->timerset, "mesim",
-			vgsm_mesim_timer, mesim);
+	vgsm_timer_create(&mesim->timer, &mesim->timerset, "mesim",
+			vgsm_mesim_timer);
 
 	return 0;
 }
@@ -386,7 +386,7 @@ void vgsm_mesim_change_state(
 	ast_cond_broadcast(&mesim->state_cond);
 
 	if (timeout >= 0)
-		vgsm_timer_start_delta(&mesim->timer, timeout);
+		vgsm_timer_start_delta(&mesim->timer, timeout, mesim);
 	else
 		vgsm_timer_stop(&mesim->timer);
 }
@@ -823,10 +823,31 @@ static BOOL vgsm_mesim_receive_message(struct vgsm_mesim *mesim)
 	return FALSE;
 }
 
-static void vgsm_mesim_timer(void *data)
+static void vgsm_mesim_timer_fired(struct vgsm_mesim *mesim);
+static void vgsm_mesim_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data)
 {
-	struct vgsm_mesim *mesim = data;
+	struct vgsm_mesim *mesim = timer->data;
 
+	switch(action) {
+	case VGSM_TIMER_STOPPED:
+		vgsm_mesim_put(mesim);
+		timer->data = NULL;
+	break;
+
+	case VGSM_TIMER_STARTED:
+		timer->data = start_data;
+		vgsm_mesim_get((struct vgsm_mesim *)start_data);
+	break;
+
+	case VGSM_TIMER_FIRED:
+		timer->data = NULL;
+		vgsm_mesim_timer_fired(mesim);
+		vgsm_mesim_put(mesim);
+	}
+}
+
+static void vgsm_mesim_timer_fired(struct vgsm_mesim *mesim)
+{
 	vgsm_mesim_debug(mesim, "Timer fired in state %s\n",
 			vgsm_mesim_state_to_text(mesim->state));
 

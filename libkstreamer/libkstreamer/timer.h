@@ -17,6 +17,7 @@
 
 #include <list.h>
 #include <longtime.h>
+#include <libkstreamer/util.h>
 
 struct ks_timerset
 {
@@ -35,9 +36,19 @@ void ks_timerset_init(
 longtime_t ks_timerset_next(struct ks_timerset *set);
 void ks_timerset_run(struct ks_timerset *set);
 
+enum ks_timer_action
+{
+	KS_TIMER_STARTED,
+	KS_TIMER_STOPPED,
+//	KS_TIMER_RESTARTED,
+	KS_TIMER_FIRED,
+};
+
 struct ks_timer
 {
 	struct list_head node;
+
+	int refcnt;
 
 	struct ks_timerset *set;
 
@@ -48,29 +59,33 @@ struct ks_timer
 	longtime_t expires;
 
 	void *data;
-	void (*func)(void *data);
+	void (*func)(struct ks_timer *timer, enum ks_timer_action action, void *start_data);
 };
 
-void ks_timer_init(
+struct ks_timer *ks_timer_create(
 	struct ks_timer *timer,
 	struct ks_timerset *set,
 	const char *name,
-	void (*func)(void *data),
-	void *data);
+	void (*func)(struct ks_timer *timer, enum ks_timer_action action, void *start_data));
 
-void ks_timer_start(
+KSBOOL ks_timer_start(
 	struct ks_timer *timer,
-	longtime_t expires);
+	longtime_t expires,
+	void *start_data);
 
-void ks_timer_start_delta(
+KSBOOL ks_timer_start_delta(
 	struct ks_timer *timer,
-	longtime_t delta);
+	longtime_t delta,
+	void *start_data);
 
-void ks_timer_stop(struct ks_timer *timer);
+KSBOOL ks_timer_stop(struct ks_timer *timer);
 
 static inline int ks_timer_pending(struct ks_timer *timer)
 {
 	return timer->pending;
 }
+
+struct ks_timer *ks_timer_get(struct ks_timer *req);
+void ks_timer_put(struct ks_timer *req);
 
 #endif

@@ -1,7 +1,7 @@
 /*
- * vGSM channel driver for Asterisk
+ * Userland Kstreamer interface
  *
- * Copyright (C) 2006-2008 Daniele Orlandi
+ * Copyright (C) 2007 Daniele Orlandi
  *
  * Authors: Daniele "Vihai" Orlandi <daniele@orlandi.com>
  *
@@ -13,9 +13,11 @@
 #ifndef _VGSM_TIMER_H
 #define _VGSM_TIMER_H
 
-#include <list.h>
+#include <asterisk/lock.h>
 
-#include "longtime.h"
+#include <list.h>
+#include <longtime.h>
+#include <util.h>
 
 struct vgsm_timerset
 {
@@ -34,9 +36,19 @@ void vgsm_timerset_init(
 longtime_t vgsm_timerset_next(struct vgsm_timerset *set);
 void vgsm_timerset_run(struct vgsm_timerset *set);
 
+enum vgsm_timer_action
+{
+	VGSM_TIMER_STARTED,
+	VGSM_TIMER_STOPPED,
+//	VGSM_TIMER_RESTARTED,
+	VGSM_TIMER_FIRED,
+};
+
 struct vgsm_timer
 {
 	struct list_head node;
+
+	int refcnt;
 
 	struct vgsm_timerset *set;
 
@@ -47,29 +59,33 @@ struct vgsm_timer
 	longtime_t expires;
 
 	void *data;
-	void (*func)(void *data);
+	void (*func)(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data);
 };
 
-void vgsm_timer_init(
+struct vgsm_timer *vgsm_timer_create(
 	struct vgsm_timer *timer,
 	struct vgsm_timerset *set,
 	const char *name,
-	void (*func)(void *data),
-	void *data);
+	void (*func)(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data));
 
-void vgsm_timer_start(
+BOOL vgsm_timer_start(
 	struct vgsm_timer *timer,
-	longtime_t expires);
+	longtime_t expires,
+	void *start_data);
 
-void vgsm_timer_start_delta(
+BOOL vgsm_timer_start_delta(
 	struct vgsm_timer *timer,
-	longtime_t delta);
+	longtime_t delta,
+	void *start_data);
 
-void vgsm_timer_stop(struct vgsm_timer *timer);
+BOOL vgsm_timer_stop(struct vgsm_timer *timer);
 
 static inline int vgsm_timer_pending(struct vgsm_timer *timer)
 {
 	return timer->pending;
 }
+
+struct vgsm_timer *vgsm_timer_get(struct vgsm_timer *req);
+void vgsm_timer_put(struct vgsm_timer *req);
 
 #endif

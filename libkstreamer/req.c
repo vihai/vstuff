@@ -28,14 +28,30 @@ struct ks_req ks_nomem_request =
 	.err = -ENOMEM,
 };
 
-void ks_req_timer(void *data)
+void ks_req_timer(struct ks_timer *timer, enum ks_timer_action action, void *start_data)
 {
-	struct ks_req *req = data;
+	struct ks_req *req = timer->data;
 
-	report_conn(req->conn, LOG_ERR,
-		"Timeout waiting for request processing!\n");
+	switch(action) {
+	case KS_TIMER_STOPPED:
+		ks_req_put(req);
+		timer->data = NULL;
+	break;
 
-	ks_req_complete(req, -ETIMEDOUT);
+	case KS_TIMER_STARTED:
+		timer->data = start_data;
+		ks_req_get((struct ks_req *)start_data);
+	break;
+
+	case KS_TIMER_FIRED:
+		report_conn(req->conn, LOG_ERR,
+			"Timeout waiting for request processing!\n");
+
+		ks_req_complete(req, -ETIMEDOUT);
+		ks_req_put(req);
+		timer->data = NULL;
+	break;
+	}
 }
 
 struct ks_req *ks_req_alloc(struct ks_conn *conn)
@@ -53,8 +69,7 @@ struct ks_req *ks_req_alloc(struct ks_conn *conn)
 	req->id = 0;
 	req->multi_seq = 1;
 
-	ks_timer_init(&req->timer, &conn->timerset, "ks_req",
-		ks_req_timer, req);
+	ks_timer_create(&req->timer, &conn->timerset, "ks_req", ks_req_timer);
 
 	pthread_mutex_init(&req->completed_lock, NULL);
 	pthread_cond_init(&req->completed_cond, NULL);

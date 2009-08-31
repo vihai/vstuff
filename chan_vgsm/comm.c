@@ -44,7 +44,7 @@
 #define READING_URC_TIMEOUT (3 * SEC)
 
 static void vgsm_comm_timers_updated(struct vgsm_timerset *set);
-static void vgsm_comm_timer(void *data);
+static void vgsm_comm_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data);
 
 int vgsm_comm_init(
 	struct vgsm_comm *comm,
@@ -72,8 +72,8 @@ int vgsm_comm_init(
 	ast_cond_init(&comm->completion_queue_cond, NULL);
 
 	vgsm_timerset_init(&comm->timerset, vgsm_comm_timers_updated);
-	vgsm_timer_init(&comm->timer, &comm->timerset, "comm",
-			vgsm_comm_timer, comm);
+	vgsm_timer_create(&comm->timer, &comm->timerset, "comm",
+			vgsm_comm_timer);
 
 	return 0;
 }
@@ -244,7 +244,7 @@ static void vgsm_comm_change_state(
 			", timeout = %lldms",
 			timeout / 1000);
 
-		vgsm_timer_start_delta(&comm->timer, timeout);
+		vgsm_timer_start_delta(&comm->timer, timeout, comm);
 	}
 
 	vgsm_comm_debug_characters(comm,
@@ -855,7 +855,7 @@ cusd_workaround:;
 				VGSM_COMM_READING_URC,
 				READING_URC_TIMEOUT);
 
-		vgsm_timer_start_delta(&comm->timer, URC_TIMEOUT);
+		vgsm_timer_start_delta(&comm->timer, URC_TIMEOUT, comm);
 	} else {
 		ast_mutex_lock(&comm->urc_queue_lock);
 		list_add_tail(&vgsm_req_get(urc)->node, &comm->urc_queue);
@@ -895,7 +895,7 @@ static int vgsm_comm_match_urc_cont(struct vgsm_comm *comm)
 	list_add_tail(&req_line->node, &comm->current_urc->lines);
 
 	if (comm->state == VGSM_COMM_AWAITING_ECHO_READING_URC)
-		vgsm_timer_start_delta(&comm->timer, ECHO_TIMEOUT);
+		vgsm_timer_start_delta(&comm->timer, ECHO_TIMEOUT, comm);
 
 	assert(comm->current_urc->urc_class->detect_end);
 
@@ -1115,10 +1115,33 @@ static void vgsm_flush_requests(struct vgsm_comm *comm)
 	}
 }
 
-static void vgsm_comm_timer(void *data)
+static void vgsm_comm_timer_fired(struct vgsm_comm *comm);
+static void vgsm_comm_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data)
 {
-	struct vgsm_comm *comm = data;
+	struct vgsm_comm *comm = timer->data;
 
+	switch(action) {
+	case VGSM_TIMER_STOPPED:
+		// No need to take references as the timerset is
+		// handled by the same thread handling comm
+		//vgsm_comm_put(comm);
+		timer->data = NULL;
+	break;
+
+	case VGSM_TIMER_STARTED:
+		timer->data = start_data;
+		//vgsm_comm_get((struct vgsm_comm *)start_data);
+	break;
+
+	case VGSM_TIMER_FIRED:
+		timer->data = NULL;
+		vgsm_comm_timer_fired(comm);
+		//vgsm_comm_put(comm);
+	}
+}
+
+static void vgsm_comm_timer_fired(struct vgsm_comm *comm)
+{
 	switch(comm->state) {
 	case VGSM_COMM_RECOVERING:
 		if (comm->current_req) {

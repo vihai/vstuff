@@ -101,7 +101,7 @@ static void vgsm_mesim_local_change_state(
 //	ast_mutex_unlock(&mesim_local->state_lock);
 //
 	if (timeout >= 0)
-		vgsm_timer_start_delta(&mesim_local->timer, timeout);
+		vgsm_timer_start_delta(&mesim_local->timer, timeout, mesim_local);
 	else
 		vgsm_timer_stop(&mesim_local->timer);
 }
@@ -508,9 +508,31 @@ static void vgsm_mesim_local_set_mode(
 		sizeof(mesim_local->device_filename));
 }
 
-static void vgsm_mesim_local_timer(void *data)
+static void vgsm_mesim_local_timer_fired(struct vgsm_mesim_local *mesim_local);
+static void vgsm_mesim_local_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data)
 {
-	struct vgsm_mesim_local *mesim_local = data;
+	struct vgsm_mesim_local *mesim_local = timer->data;
+
+	switch(action) {
+	case VGSM_TIMER_STOPPED:
+//		vgsm_me_put(me);
+		timer->data = NULL;
+	break;
+
+	case VGSM_TIMER_STARTED:
+		timer->data = start_data;
+//		vgsm_me_get((struct vgsm_me *)start_data);
+	break;
+
+	case VGSM_TIMER_FIRED:
+		timer->data = NULL;
+		vgsm_mesim_local_timer_fired(mesim_local);
+//		vgsm_me_put(me);
+	}
+}
+
+static void vgsm_mesim_local_timer_fired(struct vgsm_mesim_local *mesim_local)
+{
 	struct vgsm_mesim *mesim = mesim_local->mesim;
 
 	vgsm_mesim_debug(mesim, "Local SIM timer fired in state %s\n",
@@ -561,8 +583,8 @@ struct vgsm_mesim_driver *vgsm_mesim_local_create(
 
 	mesim_local->state = VGSM_MESIM_LOCAL_STATE_NULL;
 
-	vgsm_timer_init(&mesim_local->timer, timerset, "mesim_local",
-			vgsm_mesim_local_timer, mesim_local);
+	vgsm_timer_create(&mesim_local->timer, timerset, "mesim_local",
+			vgsm_mesim_local_timer);
 
 	return &mesim_local->driver;
 }

@@ -266,11 +266,25 @@ static void ks_conn_timers_updated(struct ks_timerset *set)
 	ks_conn_send_message(conn, KS_CONN_MSG_REFRESH, NULL, 0);
 }
 
-static void ks_conn_timer(void *data)
+static void ks_conn_timer(struct ks_timer *timer, enum ks_timer_action action, void *start_data)
 {
-	struct ks_conn *conn = data;
+	struct ks_conn *conn = timer->data;
 
-	ks_conn_debug_netlink(conn, "Conn timer fired\n");
+	switch(action) {
+	case KS_TIMER_STOPPED:
+		timer->data = NULL;
+		ks_conn_debug_netlink(conn, "Conn timer stopped\n");
+	break;
+
+	case KS_TIMER_STARTED:
+		timer->data = start_data;
+	break;
+
+	case KS_TIMER_FIRED:
+		ks_conn_debug_netlink(conn, "Conn timer fired\n");
+		timer->data = NULL;
+	break;
+	}
 }
 
 struct ks_conn *ks_conn_create(void)
@@ -301,8 +315,8 @@ struct ks_conn *ks_conn_create(void)
 	pthread_rwlock_init(&conn->topology_lock, NULL);
 
 	ks_timerset_init(&conn->timerset, ks_conn_timers_updated);
-	ks_timer_init(&conn->timer, &conn->timerset, "ks_conn",
-		ks_conn_timer, conn);
+	ks_timer_create(&conn->timer, &conn->timerset, "ks_conn",
+		ks_conn_timer);
 
 	conn->report_func = ks_report_default;
 
@@ -633,7 +647,7 @@ found:
 
 	if (nlh->nlmsg_flags & NLM_F_MULTI) {
 		list_add_tail(&req->node, &conn->requests_multi);
-		ks_timer_start_delta(&req->timer, 5 * SEC);
+		ks_timer_start_delta(&req->timer, 5 * SEC, req);
 		pthread_mutex_unlock(&conn->requests_lock);
 
 		return;
@@ -870,7 +884,7 @@ retry:
 		list_del(&req->node);
 		list_add_tail(&req->node, &conn->requests_waiting_ack);
 
-		ks_timer_start_delta(&req->timer, 5 * SEC);
+		ks_timer_start_delta(&req->timer, 5 * SEC, req);
 	}
 	pthread_mutex_unlock(&conn->requests_lock);
 

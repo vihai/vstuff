@@ -1163,7 +1163,7 @@ static void vgsm_me_timers_updated(struct vgsm_timerset *set)
 {
 }
 
-static void vgsm_me_timer(void *data);
+static void vgsm_me_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data);
 
 struct vgsm_me *vgsm_me_alloc(void)
 {
@@ -1191,8 +1191,8 @@ struct vgsm_me *vgsm_me_alloc(void)
 
 	vgsm_timerset_init(&me->timerset, vgsm_me_timers_updated);
 
-	vgsm_timer_init(&me->timer, &me->timerset, "me",
-			vgsm_me_timer, me);
+	vgsm_timer_create(&me->timer, &me->timerset, "me",
+			vgsm_me_timer);
 
 	return me;
 
@@ -1288,7 +1288,7 @@ void vgsm_me_set_status_va(
 	}
 
 	if (timeout >= 0)
-		vgsm_timer_start_delta(&me->timer, timeout);
+		vgsm_timer_start_delta(&me->timer, timeout, me);
 	else
 		vgsm_timer_stop(&me->timer);
 
@@ -4342,10 +4342,31 @@ initialization_failed:
 		vgsm_me_failed_text(me, "");
 }
 
-static void vgsm_me_timer(void *data)
+static void vgsm_me_timer_fired(struct vgsm_me *me);
+static void vgsm_me_timer(struct vgsm_timer *timer, enum vgsm_timer_action action, void *start_data)
 {
-	struct vgsm_me *me = data;
+	struct vgsm_me *me = timer->data;
 
+	switch(action) {
+	case VGSM_TIMER_STOPPED:
+		vgsm_me_put(me);
+		timer->data = NULL;
+	break;
+
+	case VGSM_TIMER_STARTED:
+		timer->data = start_data;
+		vgsm_me_get((struct vgsm_me *)start_data);
+	break;
+
+	case VGSM_TIMER_FIRED:
+		timer->data = NULL;
+		vgsm_me_timer_fired(me);
+		vgsm_me_put(me);
+	}
+}
+
+static void vgsm_me_timer_fired(struct vgsm_me *me)
+{
 	switch(me->status) {
 	case VGSM_ME_STATUS_CLOSED:
 		vgsm_me_open(me);
