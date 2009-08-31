@@ -153,7 +153,7 @@ struct vgsm_req_line
 {
 	struct list_head node;
 
-	char text[0];
+	char text[];
 };
 
 struct vgsm_comm
