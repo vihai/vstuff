@@ -234,6 +234,7 @@ struct vgsm_sms_status_report *vgsm_sms_status_report_init_from_pdu(
 	/* Service Center Timestamp */
 
 	struct tm tm;
+	memset(&tm, 0, sizeof(tm));
 	tm.tm_year = vgsm_nibbles_to_decimal(*(pdu + pos++)) + 100;
 	tm.tm_mon = vgsm_nibbles_to_decimal(*(pdu + pos++)) - 1;
 	tm.tm_mday = vgsm_nibbles_to_decimal(*(pdu + pos++));
@@ -259,6 +260,7 @@ struct vgsm_sms_status_report *vgsm_sms_status_report_init_from_pdu(
 
 	/* Discharge Time */
 
+	memset(&tm, 0, sizeof(tm));
 	tm.tm_year = vgsm_nibbles_to_decimal(*(pdu + pos++)) + 100;
 	tm.tm_mon = vgsm_nibbles_to_decimal(*(pdu + pos++)) - 1;
 	tm.tm_mday = vgsm_nibbles_to_decimal(*(pdu + pos++));

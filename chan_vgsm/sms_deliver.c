@@ -186,6 +186,7 @@ struct vgsm_sms_deliver *vgsm_sms_deliver_init_from_pdu(
 	/* Timestamp */
 
 	struct tm tm;
+	memset(&tm, 0, sizeof(tm));
 	tm.tm_year = vgsm_nibbles_to_decimal(*(pdu + pos++)) + 100;
 	tm.tm_mon = vgsm_nibbles_to_decimal(*(pdu + pos++)) - 1;
 	tm.tm_mday = vgsm_nibbles_to_decimal(*(pdu + pos++));
@@ -621,7 +622,7 @@ int vgsm_sms_deliver_manager(struct vgsm_sms_deliver *sms)
 {
 	struct vgsm_me *me = sms->me;
 
-	char text[2000];
+	char text[2000] = "";
 
 	char *loc = setlocale(LC_CTYPE, "C");
 	if (!loc) {
