@@ -140,6 +140,8 @@ BOOL vgsm_timer_stop(struct vgsm_timer *timer)
 	if (timer->pending) {
 		list_del(&timer->node);
 		timer->pending = FALSE;
+
+		timer->func(timer, VGSM_TIMER_STOPPED, NULL);
 	}
 	ast_mutex_unlock(&timer->set->timers_lock);
 

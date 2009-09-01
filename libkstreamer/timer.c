@@ -143,6 +143,8 @@ KSBOOL ks_timer_stop(struct ks_timer *timer)
 	if (timer->pending) {
 		list_del(&timer->node);
 		timer->pending = FALSE;
+
+		timer->func(timer, KS_TIMER_STOPPED, NULL);
 	}
 	pthread_mutex_unlock(&timer->set->timers_lock);
 
