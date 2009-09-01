@@ -39,8 +39,9 @@ void ks_req_timer(struct ks_timer *timer, enum ks_timer_action action, void *sta
 	break;
 
 	case KS_TIMER_STARTED:
-		timer->data = start_data;
-		ks_req_get((struct ks_req *)start_data);
+		req = start_data;
+		timer->data = req;
+		ks_req_get(req);
 	break;
 
 	case KS_TIMER_FIRED:
