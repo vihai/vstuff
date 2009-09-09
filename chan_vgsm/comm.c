@@ -299,7 +299,11 @@ int vgsm_comm_open(struct vgsm_comm *comm, int fd, const char *name)
 	comm->cmd_pipe_write = filedes[1];
 
 	pthread_attr_t attr;
-	pthread_attr_init(&attr);
+
+	err = pthread_attr_init(&attr);
+	if (err < 0)
+		goto err_attr_init;
+
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 	err = ast_pthread_create(&comm->comm_thread, &attr,
@@ -332,6 +336,8 @@ err_pthread_create_comm:
 	close(comm->cmd_pipe_read);
 	close(comm->cmd_pipe_write);
 err_pipe:
+	pthread_attr_destroy(&attr);
+err_attr_init:
 
 	return err;
 }
@@ -1477,6 +1483,8 @@ static void *vgsm_comm_thread_main(void *data)
 	close(comm->cmd_pipe_write);
 
 	vgsm_comm_change_state(comm, VGSM_COMM_CLOSED, -1);
+
+	vgsm_comm_debug_messages(comm, "comm thread exiting\n");
 
 	return NULL;
 }
