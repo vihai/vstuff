@@ -238,6 +238,8 @@ static void transmit_chars(struct vgsm_uart *up)
 		return;
 	}
 
+//printk(KERN_DEBUG "SPEC = %08x\n", uart_in(up, 0x8));
+
 	count = 16;
 	do {
 		uart_out(up, UART_TX, xmit->buf[xmit->tail]);

@@ -714,8 +714,12 @@ void _vgsm_me_config_put(struct vgsm_me_config *me_config)
 	int refcnt = --me_config->refcnt;
 	ast_mutex_unlock(&vgsm.usecnt_lock);
 
-	if (!refcnt)
+	if (!refcnt) {
+		if (me_config->me)
+			vgsm_me_put(me_config->me);
+
 		free(me_config);
+	}
 }
 
 static int vgsm_me_config_from_var(
@@ -1055,6 +1059,8 @@ static int vgsm_me_reconfigure(
 	mc->me = vgsm_me_get(me);
 
 	me->config_present = TRUE;
+
+	assert(!me->new_config);
 	me->new_config = vgsm_me_config_get(mc);
 
 	vgsm_me_config_put(mc);
@@ -1121,6 +1127,8 @@ int vgsm_me_reload(struct ast_config *cfg)
 
 		vgsm_me_reconfigure(me, cfg, cat,
 						cat + strlen(VGSM_ME_PREFIX));
+
+		vgsm_me_put(me);
 	}
 
 	/* TODO: Removed mes not present anymore in config file */
@@ -1202,11 +1210,14 @@ err_malloc:
 	return NULL;
 }
 
-struct vgsm_me *vgsm_me_get(struct vgsm_me *me)
+struct vgsm_me *_vgsm_me_get(struct vgsm_me *me, const char *file, int line, const char *func)
 {
 	assert(me);
 	assert(me->refcnt > 0);
 	assert(me->refcnt < 100000);
+
+/*	ast_log(LOG_NOTICE, "Me %s GET %d => %d, %s:%d:%s\n",
+		 me->name, me->refcnt, me->refcnt+1, file, line, func);*/
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	me->refcnt++;
@@ -1215,11 +1226,14 @@ struct vgsm_me *vgsm_me_get(struct vgsm_me *me)
 	return me;
 }
 
-void _vgsm_me_put(struct vgsm_me *me)
+void _vgsm_me_put(struct vgsm_me *me, const char *file, int line, const char *func)
 {
 	assert(me);
 	assert(me->refcnt > 0);
 	assert(me->refcnt < 100000);
+
+/*	ast_log(LOG_NOTICE, "Me %s PUT %d => %d, %s:%d:%s\n",
+		 me->name, me->refcnt, me->refcnt-1, file, line, func);*/
 
 	ast_mutex_lock(&vgsm.usecnt_lock);
 	int refcnt = --me->refcnt;
@@ -4354,8 +4368,8 @@ static void vgsm_me_timer(struct vgsm_timer *timer, enum vgsm_timer_action actio
 	break;
 
 	case VGSM_TIMER_STARTED:
-		timer->data = start_data;
-		vgsm_me_get((struct vgsm_me *)start_data);
+		me = vgsm_me_get(start_data);
+		timer->data = me;
 	break;
 
 	case VGSM_TIMER_FIRED:
@@ -4516,6 +4530,8 @@ static void *vgsm_me_monitor_thread_main(void *data)
 		else
 			sleep(3600);
 	}
+
+	vgsm_me_debug_state(me, "monitor thread exiting\n");
 
 	return NULL;
 }
@@ -5561,10 +5577,13 @@ static int vgsm_me_show_serial(int fd, struct vgsm_me *me)
 		icount.frame, icount.overrun, icount.parity, icount.brk,
 		icount.buf_overrun);
 
+	vgsm_me_config_put(mc);
+
 	return RESULT_SUCCESS;
 
 err_ioctl_cgicount:
 err_ioctl_cmget:
+	vgsm_me_config_put(mc);
 
 	return err;
 }
@@ -5854,6 +5873,8 @@ static int vgsm_me_cli_power_func(int fd, int argc, char *argv[])
 		}
 
 		err = func(fd, me);
+
+		vgsm_me_put(me);
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
@@ -5976,6 +5997,8 @@ static int vgsm_me_cli_reset_func(int fd, int argc, char *argv[])
 		ast_mutex_lock(&me->lock);
 		err = vgsm_me_cli_reset_do(fd, me);
 		ast_mutex_unlock(&me->lock);
+
+		vgsm_me_put(me);
 	} else {
 		err = RESULT_SUCCESS;
 
@@ -6104,6 +6127,8 @@ static int vgsm_me_cli_service_func(int fd, int argc, char *argv[])
 		ast_mutex_lock(&me->lock);
 		err = func(fd, me);
 		ast_mutex_unlock(&me->lock);
+
+		vgsm_me_put(me);
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
@@ -6228,6 +6253,8 @@ static int vgsm_me_cli_identify_func(int fd, int argc, char *argv[])
 		ast_mutex_lock(&me->lock);
 		err = vgsm_me_cli_identify_do(fd, me, value);
 		ast_mutex_unlock(&me->lock);
+
+		vgsm_me_put(me);
 	} else {
 		ast_rwlock_rdlock(&vgsm.mes_list_lock);
 		struct vgsm_me *me;
@@ -6341,6 +6368,8 @@ static int vgsm_me_cli_operator_func(int fd, int argc, char *argv[])
 			comm, 180 * SEC, "AT+COPS=%d,2,%05u",
 			mode, lai);
 	}
+
+	vgsm_me_put(me);
 
 	if (err != VGSM_RESP_OK) {
 		ast_cli(fd, "Error: %s (%d)\n",
@@ -7036,6 +7065,8 @@ static int vgsm_me_cli_sms_send_func(int fd, int argc, char *argv[])
 	me->sending_sms = FALSE;
 	ast_mutex_unlock(&me->lock);
 
+	vgsm_me_put(me);
+
 	return RESULT_SUCCESS;
 
 err_req_make:
@@ -7230,10 +7261,12 @@ static int vgsm_me_cli_rawcommand_func(int fd, int argc, char *argv[])
 		ast_cli(fd, "%s\n", line->text);
 
 	vgsm_req_put(req);
+	vgsm_me_put(me);
 
 	return RESULT_SUCCESS;
 
 err_req_make:
+	vgsm_me_put(me);
 err_me_not_found:
 err_missing_command:
 err_missing_me:

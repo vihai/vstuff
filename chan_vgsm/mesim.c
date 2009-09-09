@@ -977,6 +977,8 @@ static void *vgsm_mesim_thread_main(void *data)
 
 	vgsm_mesim_change_state(mesim, VGSM_MESIM_CLOSED, -1);
 
+	vgsm_mesim_debug(mesim, "mesim thread exiting\n");
+
 	return NULL;
 }
 

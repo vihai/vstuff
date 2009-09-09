@@ -285,7 +285,6 @@ struct vgsm_me
 	int interface_version;
 
 	pthread_t monitor_thread;
-//	pthread_t mesim_monitor_thread;
 
 	struct {
 		__u8 ver_maj;
@@ -365,12 +364,13 @@ void _vgsm_me_config_put(struct vgsm_me_config *me_config);
 	} while(0)
 
 void vgsm_me_config_default(struct vgsm_me_config *mc);
-
 struct vgsm_me *vgsm_me_alloc(void);
-struct vgsm_me *vgsm_me_get(struct vgsm_me *me);
-void _vgsm_me_put(struct vgsm_me *me);
+
+struct vgsm_me *_vgsm_me_get(struct vgsm_me *me, const char *file, int line, const char *func);
+#define vgsm_me_get(me) _vgsm_me_get((me), __FILE__, __LINE__, __PRETTY_FUNCTION__)
+void _vgsm_me_put(struct vgsm_me *me, const char *file, int line, const char *func);
 #define vgsm_me_put(me) \
-	do { _vgsm_me_put(me); (me) = NULL; } while(0)
+	do { _vgsm_me_put((me), __FILE__, __LINE__, __PRETTY_FUNCTION__); (me) = NULL; } while(0)
 
 struct vgsm_me *_vgsm_me_get_by_name(const char *name);
 struct vgsm_me *vgsm_me_get_by_name(const char *name);
