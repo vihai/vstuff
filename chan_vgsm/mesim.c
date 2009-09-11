@@ -84,7 +84,9 @@ struct vgsm_mesim *vgsm_mesim_get(
 
 void _vgsm_mesim_put(struct vgsm_mesim *mesim)
 {
-	vgsm_me_put(mesim->me);
+	/* NOTE! Use the underscored variant _vgsm_me_put,
+	  otherwise mesim->me is set to NULL */
+	_vgsm_me_put(mesim->me, __FILE__, __LINE__, __PRETTY_FUNCTION__);
 }
 
 const char *vgsm_mesim_message_type_to_text(
