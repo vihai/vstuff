@@ -541,7 +541,8 @@ static struct ast_cli_entry vgsm_reload =
 static int vgsm_pipeline_set_amu_compander(
 	struct ks_pipeline *pipeline,
 	BOOL enabled,
-	BOOL mu_mode)
+	BOOL mu_mode,
+	BOOL debug)
 {
 	/* TODO: Do this only once */
 	struct ks_feature *amu_compander_attr;
@@ -582,6 +583,11 @@ static int vgsm_pipeline_set_amu_compander(
 	amu_compander->enabled = enabled;
 	amu_compander->mu_mode = mu_mode;
 
+	if (debug)
+		ast_verbose("Compander set to %s/%s\n",
+				enabled ? "enabled" : "disabled",
+				mu_mode ? "u-law" : "a-law");
+
 	return 0;
 
 err_missing_amu_compander_in_pipeline:
@@ -593,7 +599,8 @@ err_missing_amu_compander:
 static int vgsm_pipeline_set_amu_decompander(
 	struct ks_pipeline *pipeline,
 	BOOL enabled,
-	BOOL mu_mode)
+	BOOL mu_mode,
+	BOOL debug)
 {
 	/* TODO: Do this only once */
 	struct ks_feature *amu_decompander_attr;
@@ -635,6 +642,11 @@ static int vgsm_pipeline_set_amu_decompander(
 
 	amu_decompander->enabled = enabled;
 	amu_decompander->mu_mode = mu_mode;
+
+	if (debug)
+		ast_verbose("Decompander set to %s/%s\n",
+				enabled ? "enabled" : "disabled",
+				mu_mode ? "u-law" : "a-law");
 
 	return 0;
 
@@ -738,7 +750,8 @@ int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 				vgsm_chan->ast_chan->rawreadformat !=
 							AST_FORMAT_SLINEAR,
 				vgsm_chan->ast_chan->rawreadformat ==
-							AST_FORMAT_ULAW);
+							AST_FORMAT_ULAW,
+				vgsm_chan->me->debug_frames);
 		if (err < 0) {
 			ast_log(LOG_ERROR,
 				"Cannot enable RX amu_compander\n");
@@ -792,7 +805,8 @@ int vgsm_connect_channel(struct vgsm_chan *vgsm_chan)
 				vgsm_chan->ast_chan->rawwriteformat !=
 							AST_FORMAT_SLINEAR,
 				vgsm_chan->ast_chan->rawwriteformat ==
-							AST_FORMAT_ULAW);
+							AST_FORMAT_ULAW,
+				vgsm_chan->me->debug_frames);
 		if (err < 0) {
 			ast_log(LOG_ERROR,
 				"Cannot enable TX amu_decompander\n");
@@ -1417,7 +1431,8 @@ static struct ast_frame *vgsm_read(struct ast_channel *ast_chan)
 		int err;
 		err = vgsm_pipeline_set_amu_compander(vgsm_chan->pipeline_rx,
 				ast_chan->rawreadformat != AST_FORMAT_SLINEAR,
-				ast_chan->rawreadformat == AST_FORMAT_ULAW);
+				ast_chan->rawreadformat == AST_FORMAT_ULAW,
+				vgsm_chan->me->debug_frames);
 		if (err < 0)
 			ast_log(LOG_ERROR,
 				"Cannot set amu_decompander\n");
@@ -1540,7 +1555,8 @@ static int vgsm_write(
 				vgsm_chan->ast_chan->rawwriteformat !=
 							AST_FORMAT_SLINEAR,
 				vgsm_chan->ast_chan->rawwriteformat ==
-							AST_FORMAT_ULAW);
+							AST_FORMAT_ULAW,
+				vgsm_chan->me->debug_frames);
 		if (err < 0)
 			ast_log(LOG_ERROR,
 				"Cannot set amu_decompander\n");
