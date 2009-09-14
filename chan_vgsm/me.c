@@ -2983,6 +2983,15 @@ static void handle_unsolicited_shutdown(
 
 	vgsm_me_debug_state(me, "ME powered off (^SHUTDOWN received)\n");
 
+	/* As a workaround to the race condition between VDD and FPGA in
+	 * disabiling the application interface we send an EMERG_OFF
+	 * that will force the disabling in the meantime
+	 */
+	if (ioctl(me->me_fd, VGSM_IOC_POWER_EMERG_OFF, 0) < 0)
+		vgsm_me_failed_text(me,
+			"Error turning off me: ioctl(POWER_EMERG_OFF): %s",
+			strerror(errno));
+
 	vgsm_me_set_status(me, VGSM_ME_STATUS_OFF, -1, NULL);
 }
 
