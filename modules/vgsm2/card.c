@@ -459,6 +459,7 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 	vgsm_outl(card, VGSM_R_SERVICE, VGSM_R_SERVICE_V_RESET);
 	msleep(10); // FIXME!!!
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
 #ifdef __LITTLE_ENDIAN
 	vgsm_outl(card, VGSM_R_SERVICE, 0);
 #elif __BIG_ENDIAN
@@ -466,6 +467,16 @@ static int vgsm_initialize_hw(struct vgsm_card *card)
 		VGSM_R_SERVICE_V_BIG_ENDIAN);
 #else
 #error Unsupported endianness
+#endif
+#else
+#if defined(__LITTLE_ENDIAN)
+	vgsm_outl(card, VGSM_R_SERVICE, 0);
+#elif defined(__BIG_ENDIAN)
+	vgsm_outl(card, VGSM_R_SERVICE,
+		VGSM_R_SERVICE_V_BIG_ENDIAN);
+#else
+#error Unsupported endianness
+#endif
 #endif
 
 	/* Set LEDs */
@@ -875,7 +886,8 @@ int vgsm_card_probe(struct vgsm_card *card)
 	int err;
 	int i;
 	u32 r_info;
-
+	char car[15];
+	
 	/* From here on vgsm_msg_card may be used */
 
 	err = pci_enable_device(card->pci_dev);
@@ -1081,11 +1093,15 @@ int vgsm_card_probe(struct vgsm_card *card)
 	snprintf(card->device.class_id,
 		sizeof(card->device.class_id),
 		"vgsm2_card%d", card->id);
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30) 
 	snprintf(card->device.bus_id,
 		sizeof(card->device.bus_id),
 		"vgsm2_card%d", card->id);
+#else
+	snprintf(car,sizeof(car),"vgsm2_card%d",card->id);
+	dev_set_name(&card->device,car);
 #endif
+
 
 #ifdef HAVE_CLASS_DEV_DEVT
 	card->device.devt = vgsm_card_first_dev + card->id;

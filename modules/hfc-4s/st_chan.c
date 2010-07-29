@@ -18,34 +18,38 @@
 #include "st_port.h"
 #include "st_port_inline.h"
 
-#ifdef DEBUG_CODE
-#define hfc_debug_st_chan(chan, dbglevel, format, arg...)		\
-	if (debug_level >= dbglevel)					\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
-			"%s-%s:"					\
-			"st%d:"						\
-			"chan[%s] "					\
-			format,						\
-			(chan)->port->card->pci_dev->dev.bus->name,	\
-			(chan)->port->card->pci_dev->dev.bus_id,	\
-			(chan)->port->id,				\
-			kobject_name(&(chan)->ks_node.kobj),		\
-			## arg)
-#else
-#define hfc_debug_st_chan(chan, dbglevel, format, arg...) do {} while (0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((chan)->port->card->pci_dev->dev)) 	(chan)->port->card->pci_dev->dev.bus_id
 #endif
 
-#define hfc_msg_st_chan(chan, level, format, arg...)			\
-	printk(level hfc_DRIVER_PREFIX					\
-		"%s-%s:"						\
-		"st%d:"							\
-		"chan[%s] "						\
-		format,							\
-		(chan)->port->card->pci_dev->dev.bus->name,		\
-		(chan)->port->card->pci_dev->dev.bus_id,		\
-		(chan)->port->id,					\
-		(chan)->ks_node.kobj.name,				\
-		## arg)
+	#ifdef DEBUG_CODE
+	#define hfc_debug_st_chan(chan, dbglevel, format, arg...)		\
+		if (debug_level >= dbglevel)					\
+			printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
+				"%s-%s:"					\
+				"st%d:"						\
+				"chan[%s] "					\
+				format,						\
+				(chan)->port->card->pci_dev->dev.bus->name,	\
+				dev_name(&((chan)->port->card->pci_dev->dev)),	\
+				(chan)->port->id,				\
+				kobject_name(&(chan)->ks_node.kobj),		\
+				## arg)
+	#else
+	#define hfc_debug_st_chan(chan, dbglevel, format, arg...) do {} while (0)
+	#endif
+
+	#define hfc_msg_st_chan(chan, level, format, arg...)			\
+		printk(level hfc_DRIVER_PREFIX					\
+			"%s-%s:"						\
+			"st%d:"							\
+			"chan[%s] "						\
+			format,							\
+			(chan)->port->card->pci_dev->dev.bus->name,		\
+			dev_name(&((chan)->port->card->pci_dev->dev)),		\
+			(chan)->port->id,					\
+			(chan)->ks_node.kobj.name,				\
+			## arg)
 
 //----------------------------------------------------------------------------
 

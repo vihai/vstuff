@@ -17,6 +17,10 @@
 #include "fifo_inline.h"
 #include "card.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((fifo)->card->pci_dev->dev)) (fifo)->card->pci_dev->dev.bus_id
+#endif
+
 #ifdef DEBUG_CODE
 #define hfc_debug_fifo(fifo, dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)					\
@@ -25,7 +29,7 @@
 			"fifo[%d,%s]:"					\
 			format,						\
 			(fifo)->card->pci_dev->dev.bus->name,\
-			(fifo)->card->pci_dev->dev.bus_id,	\
+			dev_name(&((fifo)->card->pci_dev->dev)),		\
 			(fifo)->hw_index,				\
 			(fifo)->direction == RX ? "RX" : "TX",		\
 			## arg)
@@ -39,10 +43,11 @@
 		"fifo[%d,%s]:"					\
 		format,						\
 		(fifo)->card->pci_dev->dev.bus->name,\
-		(fifo)->card->pci_dev->dev.bus_id,	\
+		dev_name(&((fifo)->card->pci_dev->dev)),		\
 		(fifo)->hw_index,				\
 		(fifo)->direction == RX ? "RX" : "TX",		\
 		## arg)
+
 
 void hfc_fifo_drop(struct hfc_fifo *fifo, int size)
 {

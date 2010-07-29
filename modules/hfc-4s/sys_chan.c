@@ -29,33 +29,37 @@
 #include "fifo_inline.h"
 #include "st_port_inline.h"
 
-#ifdef DEBUG_CODE
-#define hfc_debug_sys_chan(chan, dbglevel, format, arg...)		\
-	if (debug_level >= dbglevel)					\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
-			"%s-%s:"					\
-			"sys:"						\
-			"chan[%s] "					\
-			format,						\
-			(chan)->port->card->pci_dev->dev.bus->name,	\
-			(chan)->port->card->pci_dev->dev.bus_id,	\
-			kobject_name(&(chan)->ks_duplex.kobj),		\
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((chan)->port->card->pci_dev->dev)) (chan)->port->card->pci_dev->dev.bus_id
+#endif 
+
+	#ifdef DEBUG_CODE
+	#define hfc_debug_sys_chan(chan, dbglevel, format, arg...)		\
+		if (debug_level >= dbglevel)					\
+			printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
+				"%s-%s:"					\
+				"sys:"						\
+				"chan[%s] "					\
+				format,						\
+				(chan)->port->card->pci_dev->dev.bus->name,	\
+				dev_name(&((chan)->port->card->pci_dev->dev)),	\
+				kobject_name(&(chan)->ks_duplex.kobj),		\
+				## arg)
+
+	#else
+	#define hfc_debug_sys_chan(chan, dbglevel, format, arg...) do {} while (0)
+	#endif
+
+	#define hfc_msg_sys_chan(chan, level, format, arg...)			\
+		printk(level hfc_DRIVER_PREFIX					\
+			"%s-%s:"						\
+			"sys:"							\
+			"chan[%s] "						\
+			format,							\
+			(chan)->port->card->pci_dev->dev.bus->name,		\
+			dev_name(&((chan)->port->card->pci_dev->dev)),		\
+			kobject_name(&(chan)->ks_duplex.kobj),			\
 			## arg)
-
-#else
-#define hfc_debug_sys_chan(chan, dbglevel, format, arg...) do {} while (0)
-#endif
-
-#define hfc_msg_sys_chan(chan, level, format, arg...)			\
-	printk(level hfc_DRIVER_PREFIX					\
-		"%s-%s:"						\
-		"sys:"							\
-		"chan[%s] "						\
-		format,							\
-		(chan)->port->card->pci_dev->dev.bus->name,		\
-		(chan)->port->card->pci_dev->dev.bus_id,		\
-		kobject_name(&(chan)->ks_duplex.kobj),			\
-		## arg)
 
 #if 0
 /*---------------------------------------------------------------------------*/
@@ -72,9 +76,9 @@ static ssize_t hfc_show_rx_fifo_size(
 
 }
 
-static VISDN_CHAN_ATTR(rx_fifo_size, S_IRUGO,
-		hfc_show_rx_fifo_size,
-		NULL);
+ static VISDN_CHAN_ATTR(rx_fifo_size, S_IRUGO, 
+		hfc_show_rx_fifo_size, 
+		NULL); 
 
 /*---------------------------------------------------------------------------*/
 

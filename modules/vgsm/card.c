@@ -290,9 +290,13 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 							&me->status)) {
 
 				u8 buf[7];
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 				int bytes_to_send =
 					__kfifo_get(me->tx.fifo, buf, 7);
-
+#else
+				int bytes_to_send =
+					kfifo_out(me->tx.fifo, buf, 7);
+#endif	
 				wake_up(&me->tx.wait_queue);
 
 				vgsm_me_send_string(me, buf,

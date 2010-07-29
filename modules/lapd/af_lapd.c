@@ -808,7 +808,7 @@ err_invalid_socket_type:
 }
 
 
-static int lapd_setsockopt(struct socket *sock, int level, int optname,
+int lapd_setsockopt(struct socket *sock, int level, int optname,
 	char __user *optval_u, int optlen)
 {
 	struct sock *sk = sock->sk;
@@ -839,7 +839,11 @@ static int lapd_setsockopt(struct socket *sock, int level, int optname,
 			goto err_invalid_optlen;
 		}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 		if (copy_from_user(devname, optval_u, optlen)) {
+#else
+		if (copy_from_user(devname, optval_u, sizeof(devname))) {
+#endif
 			err = -EFAULT;
 			goto err_copy_from_user;
 		}
@@ -1812,6 +1816,7 @@ err_multiframe_wait_for_release:
 	return err;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops) = {
 	.family		= PF_LAPD,
 	.owner		= THIS_MODULE,
@@ -1832,9 +1837,36 @@ static struct proto_ops SOCKOPS_WRAPPED(lapd_dgram_ops) = {
 	.mmap		= sock_no_mmap,
 	.sendpage	= sock_no_sendpage,
 };
+#else
+static struct proto_ops lapd_dgram_ops = {
+	.family		= PF_LAPD,
+	.owner		= THIS_MODULE,
+	.release	= lapd_release,
+	.bind		= lapd_bind,
+	.connect	= lapd_connect,
+	.socketpair	= sock_no_socketpair,
+	.accept		= lapd_accept,
+	.getname	= sock_no_getname,
+	.poll		= lapd_poll,
+	.ioctl		= lapd_ioctl,
+	.listen		= lapd_listen,
+	.shutdown	= lapd_shutdown,
+	.setsockopt	= lapd_setsockopt, 
+	.getsockopt	= lapd_getsockopt, 
+	.sendmsg	= lapd_sendmsg,
+	.recvmsg	= lapd_recvmsg,
+	.mmap		= sock_no_mmap,
+	.sendpage	= sock_no_sendpage,
+};
+#endif
+
 
 #include <linux/smp_lock.h>
-SOCKOPS_WRAP(lapd_dgram, PF_LAPD);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+ SOCKOPS_WRAP(lapd_dgram, PF_LAPD);
+#endif
+
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static int lapd_create(struct socket *sock, int protocol)

@@ -105,6 +105,10 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 		{ 0x0000, 0xffff } },
 };
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((port)->card->pci_dev->dev)) (port)->card->pci_dev->dev.bus_id
+#endif
+
 #ifdef DEBUG_CODE
 #define hfc_debug_sys_port(port, dbglevel, format, arg...)	\
 	if (debug_level >= dbglevel)				\
@@ -113,8 +117,7 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 			"sys:"					\
 			format,					\
 			(port)->card->pci_dev->dev.bus->name,	\
-			(port)->card->pci_dev->dev.bus_id,	\
-			## arg)
+			dev_name(&((port)->card->pci_dev->dev)), ## arg)
 #else
 #define hfc_debug_sys_port(port, dbglevel, format, arg...) do {} while (0)
 #endif
@@ -125,9 +128,8 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 		"sys:"					\
 		format,					\
 		(port)->card->pci_dev->dev.bus->name,	\
-		(port)->card->pci_dev->dev.bus_id,	\
+		dev_name(&((port)->card->pci_dev->dev)),\
 		## arg)
-
 
 /*---------------------------------------------------------------------------*/
 

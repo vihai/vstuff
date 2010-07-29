@@ -25,8 +25,9 @@
 
 struct lapd_device *lapd_dev_get_by_name(const char *name)
 {
-	struct net_device *dev;
 
+	struct net_device *dev;
+	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	dev = dev_get_by_name(name);
 #else
@@ -50,8 +51,15 @@ struct lapd_device *lapd_dev_get_by_name(const char *name)
 
 static void lapd_device_up(struct net_device *dev)
 {
+	
+#if LINUX_VERSION_CODE <  KERNEL_VERSION(2,6,31)
+
+#else
+	const struct net_device_ops *dev_ops = dev->netdev_ops;
+#endif
 	struct lapd_device *lapd_device;
 	lapd_device = kmalloc(sizeof(*lapd_device), GFP_ATOMIC);
+
 	if (!lapd_device)
 		return;
 
@@ -59,8 +67,14 @@ static void lapd_device_up(struct net_device *dev)
 
 	lapd_device->l1_state = LAPD_L1_STATE_UNAVAILABLE;
 
+	
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
 	if (dev->do_ioctl)
-		dev->do_ioctl(dev, NULL, LAPD_DEV_IOC_ACTIVATE);
+		 dev->do_ioctl(dev, NULL, LAPD_DEV_IOC_ACTIVATE);
+#else
+		if (dev_ops->ndo_do_ioctl)
+		dev_ops->ndo_do_ioctl(dev, NULL, LAPD_DEV_IOC_ACTIVATE);
+#endif
 
 	spin_lock_init(&lapd_device->out_queue_lock);
 	skb_queue_head_init(&lapd_device->out_queue);

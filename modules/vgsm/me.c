@@ -32,22 +32,25 @@
 #include "regs.h"
 #include "me.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((me)->card->pci_dev->dev)) (me)->card->pci_dev->dev.bus_id
+#endif
+
 #ifdef DEBUG_CODE
-#define vgsm_debug_me(me, dbglevel, format, arg...)		\
+#define vgsm_debug_me(me, dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)					\
 		printk(KERN_DEBUG vgsm_DRIVER_PREFIX			\
 			"%s-%s:"					\
 			"me[%s] "					\
 			format,						\
 			(me)->card->pci_dev->dev.bus->name,		\
-			(me)->card->pci_dev->dev.bus_id,		\
-			kobject_name(&(me)->ks_node.kobj),	\
+			dev_name(&((me)->card->pci_dev->dev)),		\
+			kobject_name(&(me)->ks_node.kobj),		\
 			## arg)
 
 #else
 #define vgsm_debug_me(me, dbglevel, format, arg...) do {} while (0)
 #endif
-
 #define vgsm_msg_me(me, level, format, arg...)			\
 	printk(level vgsm_DRIVER_PREFIX					\
 		"%s-%s:"						\
@@ -518,6 +521,12 @@ static struct vgsm_me_tx *vgsm_me_tx_create(
 	struct vgsm_me_tx *me_tx,
 	struct vgsm_me *me)
 {
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
+
+#else
+	int alloc_ret;
+#endif
 	BUG_ON(!me_tx); /* Dyanmic allocation not implemented */
 	BUG_ON(!me);
 
@@ -541,11 +550,20 @@ static struct vgsm_me_tx *vgsm_me_tx_create(
 
 	me_tx->ks_chan.from_ops = &vgsm_me_tx_node_ops;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 	me_tx->fifo = kfifo_alloc(
 				vgsm_SERIAL_BUFF, GFP_KERNEL,
 				&me_tx->fifo_lock);
 	if (IS_ERR(me_tx->fifo))
 		goto err_kfifo_tx;
+#else
+	me_tx->fifo=kmalloc(sizeof(struct kfifo),GFP_KERNEL);
+	if(IS_ERR(me_tx->fifo))
+		goto err_kfifo_tx;
+	alloc_ret=kfifo_alloc(me_tx->fifo,vgsm_SERIAL_BUFF,GFP_KERNEL);
+	if (alloc_ret == -ENOMEM)
+		goto err_kfifo_tx;
+#endif
 
 	return me_tx;
 

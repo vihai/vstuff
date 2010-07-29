@@ -430,14 +430,6 @@ int vppp_cdev_open(
 		goto err_chan_tx_register;
 
 
-
-
-
-
-
-
-
-
 /*	pipeline = visdn_pipeline_get_by_endpoint(ks_chan);
 	if (!pipeline)
 		return -ENOTCONN;*/
@@ -600,18 +592,20 @@ static int __init vppp_init_module(void)
 
 	vppp_control_device.class = &ks_system_class;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if   LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	vppp_control_device.class_data = NULL;
 	vppp_control_device.dev = &ks_system_device;
 	snprintf(vppp_control_device.class_id,
 		sizeof(vppp_control_device.class_id),
 		"ppp");
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30) 
 	snprintf(vppp_control_device.bus_id,
 		sizeof(vppp_control_device.bus_id),
 		"ppp");
+#else
+	dev_set_name(&vppp_control_device,"ppp");
 #endif
-
+	
 #ifdef HAVE_CLASS_DEV_DEVT
 	vppp_control_device.devt = vppp_first_dev;
 #endif

@@ -774,7 +774,12 @@ static struct ks_duplex_ops vnd_duplex_e_ops = {
 
 static int vnd_netdev_open(struct net_device *netdev)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
 	struct ks_pipeline *pipeline_rx;
 	struct ks_pipeline *pipeline_tx;
 	int err;
@@ -827,7 +832,12 @@ err_no_pipeline_rx:
 
 static int vnd_netdev_stop(struct net_device *netdev)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
 
 	vnd_debug(3, "vnd_netdev_stop()\n");
 
@@ -853,7 +863,12 @@ static int vnd_netdev_hard_start_xmit(
 	struct sk_buff *skb,
 	struct net_device *netdev)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
 	struct lapd_prim_hdr *prim_hdr;
 	int res;
 
@@ -873,33 +888,62 @@ static int vnd_netdev_hard_start_xmit(
 		res = kss_chan_push_frame(&netdevice->ks_chan_d_tx, skb);
 		switch(res) {
 		case KSS_TX_OK:
-			return NETDEV_TX_OK;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+				return NETDEV_TX_OK;
+#else
+				return 0;			
+#endif		
 		case KSS_TX_FULL:
 			netif_stop_queue(netdevice->netdev);
 			skb_push(skb, sizeof(struct lapd_prim_hdr));
-			return NETDEV_TX_BUSY;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+			 return NETDEV_TX_BUSY;
+#else
+			 return 1;	
+#endif
 		case KSS_TX_BUSY:
 			skb_push(skb, sizeof(struct lapd_prim_hdr));
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 			return NETDEV_TX_BUSY;
+#else
+			return 1;		
+#endif
 		case KSS_TX_LOCKED:
 			skb_push(skb, sizeof(struct lapd_prim_hdr));
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 			return NETDEV_TX_LOCKED;
+#else
+			return 	-1;	
+#endif
 		default:
 			kfree_skb(skb);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 			return NETDEV_TX_OK;
+#else			
+			return 0;
+#endif
 		}
 	break;
 
 	case LAPD_PH_ACTIVATE_REQUEST:
 		visdn_port_activate(netdevice->remote_port);
 		kfree_skb(skb);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 		return NETDEV_TX_OK;
+#else	
+		return 0;
+#endif
 	break;
 
 	case LAPD_MPH_DEACTIVATE_REQUEST:
 		visdn_port_deactivate(netdevice->remote_port);
 		kfree_skb(skb);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 		return NETDEV_TX_OK;
+#else
+		return 0;
+#endif
 	break;
 
 	default:
@@ -907,14 +951,24 @@ static int vnd_netdev_hard_start_xmit(
 				prim_hdr->primitive_type);
 		WARN_ON(1);
 		kfree_skb(skb);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 		return NETDEV_TX_OK;
+#else
+		return 0;
+#endif
 	}
 }
 
 static struct net_device_stats *vnd_netdev_get_stats(
 	struct net_device *netdev)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
+
 
 	return &netdevice->stats;
 }
@@ -922,7 +976,13 @@ static struct net_device_stats *vnd_netdev_get_stats(
 static void vnd_netdev_set_multicast_list(
 	struct net_device *netdev)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
+
 
 	vnd_netdevice_get(netdevice);
 	if (!schedule_delayed_work(&netdevice->promiscuity_change_work, 0))
@@ -969,7 +1029,12 @@ static int vnd_netdev_do_ioctl(
 	struct net_device *netdev,
 	struct ifreq *ifr, int cmd)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
+
 
 	if (!netdevice->remote_port) {
 		WARN_ON(1);
@@ -993,7 +1058,11 @@ static int vnd_netdev_change_mtu(
 	struct net_device *netdev,
 	int new_mtu)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
+#else 
+	struct vnd_netdevice *netdevice = netdev_priv(netdev);
+#endif
 
 	// LOCKING*********** FIXME
 	if (netdevice->ks_chan_d_tx.pipeline &&
@@ -1025,6 +1094,9 @@ static int lapd_mac_addr(struct net_device *dev, void *addr)
 	return 0;
 }
 
+
+
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
 #else
@@ -1054,8 +1126,18 @@ const struct header_ops lapd_header_ops ____cacheline_aligned = {
 
 static void setup_lapd(struct net_device *netdev)
 {
-	netdev->change_mtu = NULL;
 
+# if LINUX_VERSION_CODE <  KERNEL_VERSION(2,6,31)
+	 netdev->change_mtu = NULL;
+#else
+static struct net_device_ops dev_ops = {
+	      .ndo_change_mtu =NULL,
+	      .ndo_set_mac_address = lapd_mac_addr,
+};
+	netdev->netdev_ops=&dev_ops;
+#endif
+
+	
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 	netdev->rebuild_header = NULL;
 	netdev->hard_header = NULL;
@@ -1067,7 +1149,10 @@ static void setup_lapd(struct net_device *netdev)
 	netdev->header_ops = &lapd_header_ops;
 #endif
 
-	netdev->set_mac_address = lapd_mac_addr;
+# if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
+	netdev->set_mac_address = lapd_mac_addr; 
+#else
+#endif
 
 	netdev->type = ARPHRD_LAPD;
 	netdev->addr_len = 1;
@@ -1314,7 +1399,19 @@ static int vnd_netdevice_register(
 	void (*setup_func)(struct net_device *) = NULL;
 	unsigned long flags;
 	int err;
+# if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
 
+#else
+static struct net_device_ops dev_ops = {
+	      .ndo_open = vnd_netdev_open,
+	      .ndo_stop = vnd_netdev_stop,
+	      .ndo_start_xmit = vnd_netdev_hard_start_xmit,
+	      .ndo_get_stats = vnd_netdev_get_stats,
+	      .ndo_set_multicast_list = vnd_netdev_set_multicast_list,
+	      .ndo_do_ioctl = vnd_netdev_do_ioctl,
+	      .ndo_change_mtu = vnd_netdev_change_mtu,
+};
+#endif
 	switch(create->protocol) {
 	case ARPHRD_LAPD:
 		setup_func = setup_lapd;
@@ -1395,8 +1492,14 @@ static int vnd_netdevice_register(
 		goto err_alloc_netdev;
 	}
 	}
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	netdevice->netdev->priv = netdevice;
+#else 
+	netdevice->netdev->ml_priv = netdevice;
+#endif
+
+
+# if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,31)
 	netdevice->netdev->open = vnd_netdev_open;
 	netdevice->netdev->stop = vnd_netdev_stop;
 	netdevice->netdev->hard_start_xmit = vnd_netdev_hard_start_xmit;
@@ -1404,8 +1507,10 @@ static int vnd_netdevice_register(
 	netdevice->netdev->set_multicast_list = vnd_netdev_set_multicast_list;
 	netdevice->netdev->do_ioctl = vnd_netdev_do_ioctl;
 	netdevice->netdev->change_mtu = vnd_netdev_change_mtu;
+#else
+	netdevice->netdev->netdev_ops=&dev_ops;
+#endif
 	netdevice->netdev->features = 0;
-
 	memset(netdevice->netdev->dev_addr, 0,
 		sizeof(netdevice->netdev->dev_addr));
 
@@ -1690,7 +1795,7 @@ static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 static int __init vnd_init_module(void)
 {
 	int err;
-
+	
 	vnd_msg(KERN_INFO, vnd_MODULE_DESCR " loading\n");
 
 	err = alloc_chrdev_region(&vnd_first_dev, 0, 1, vnd_MODULE_NAME);
@@ -1706,16 +1811,20 @@ static int __init vnd_init_module(void)
 
 	vnd_control_device.class = &visdn_system_class;
 
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	vnd_control_device.class_data = NULL;
 	snprintf(vnd_control_device.class_id,
 		sizeof(vnd_control_device.class_id),
 		"netdev-control");
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)  
 	snprintf(vnd_control_device.bus_id,
 		sizeof(vnd_control_device.bus_id),
 		"netdev-control");
+#else 
+	dev_set_name(&vnd_control_device,"netdev-control");
 #endif
+
 
 #ifdef HAVE_CLASS_DEV_DEVT
 	vnd_control_device.devt = vnd_first_dev;
