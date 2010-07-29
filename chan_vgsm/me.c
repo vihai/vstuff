@@ -82,6 +82,7 @@ void vgsm_me_config_default(struct vgsm_me_config *mc)
 	strcpy(mc->context, "vgsm");
 	strcpy(mc->pin, "");
 	strcpy(mc->mohinterpret,DEFAULT_MOHINTERPRET);
+	strcpy(mc->language,DEFAULT_LANGUAGE);
 	mc->rx_gain = 255;
 	mc->tx_gain = 255;
 	mc->set_clock = TRUE;
@@ -753,6 +754,8 @@ static int vgsm_me_config_from_var(
 	
 	} else if (!strcasecmp(var->name, "mohinterpret")) {
 		strncpy(mc->mohinterpret, var->value, sizeof(mc->mohinterpret));	
+	} else if (!strcasecmp(var->name, "language")) {
+		strncpy(mc->language, var->value, sizeof(mc->language));
 	} else if (!strcasecmp(var->name, "context")) {
 		strncpy(mc->context, var->value, sizeof(mc->context));	
 	} else if (!strcasecmp(var->name, "pin")) {
@@ -921,6 +924,8 @@ static void vgsm_me_config_copy(
 	
 	strncpy(dst->mohinterpret, src->mohinterpret,
 		sizeof(dst->mohinterpret));
+	strncpy(dst->language, src->language,
+		sizeof(dst->language));
 	strncpy(dst->device_filename, src->device_filename,
 		sizeof(dst->device_filename));
 	strncpy(dst->mesim_device_filename, src->mesim_device_filename,

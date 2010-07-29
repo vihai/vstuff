@@ -915,7 +915,7 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
 	strncpy(ast_chan->context, vgsm_chan->mc->context,
 					sizeof(ast_chan->context));
 	ast_chan->priority = 1;
-
+	strncpy(ast_chan->language, vgsm_chan->mc->language, sizeof(ast_chan->language));
 	return vgsm_chan;
 
 	vgsm_chan_put(vgsm_chan->ast_chan->tech_pvt);

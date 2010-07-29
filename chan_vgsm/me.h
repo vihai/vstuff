@@ -30,6 +30,9 @@
 
 #define DEFAULT_MOHINTERPRET    "default"
 
+#define DEFAULT_LANGUAGE	"en"
+
+
 
 
 #ifdef DEBUG_CODE
@@ -197,7 +200,8 @@ struct vgsm_me_config
 
 	char device_filename[PATH_MAX];
 	char mesim_device_filename[PATH_MAX];
-	char mohinterpret[MAX_MUSICCLASS];   /*!< Music on Hold class */
+	char language[MAX_LANGUAGE];	      /*!< Default language for this user */
+	char mohinterpret[MAX_MUSICCLASS];    /*!< Music on Hold class */
 	
 
 	enum vgsm_flow_control flow_control;
