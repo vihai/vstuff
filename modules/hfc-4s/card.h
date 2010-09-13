@@ -54,7 +54,6 @@
 		dev_name(&((card)->pci_dev->dev)), 	\
 		## arg)
 
-
 struct hfc_card_config
 {
 	u8 double_clock;

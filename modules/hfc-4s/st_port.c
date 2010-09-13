@@ -48,7 +48,6 @@
 			(port)->id,					\
 			## arg)
 
-
 static void hfc_port_do_activate_request(struct hfc_st_port *port)
 {
 	struct hfc_card *card = port->card;

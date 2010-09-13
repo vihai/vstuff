@@ -293,6 +293,7 @@ static void vgsm_card_tx_tasklet(unsigned long data)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 				int bytes_to_send =
 					__kfifo_get(me->tx.fifo, buf, 7);
+
 #else
 				int bytes_to_send =
 					kfifo_out(me->tx.fifo, buf, 7);

@@ -777,7 +777,6 @@ static int vnd_netdev_open(struct net_device *netdev)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
 #else 
-	
 	struct vnd_netdevice *netdevice = netdev_priv(netdev);
 #endif
 	struct ks_pipeline *pipeline_rx;
@@ -835,7 +834,6 @@ static int vnd_netdev_stop(struct net_device *netdev)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	struct vnd_netdevice *netdevice = netdev->priv;
 #else 
-	
 	struct vnd_netdevice *netdevice = netdev_priv(netdev);
 #endif
 
@@ -903,7 +901,6 @@ static int vnd_netdev_hard_start_xmit(
 #endif
 		case KSS_TX_BUSY:
 			skb_push(skb, sizeof(struct lapd_prim_hdr));
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 			return NETDEV_TX_BUSY;
 #else
@@ -972,7 +969,6 @@ static struct net_device_stats *vnd_netdev_get_stats(
 
 	return &netdevice->stats;
 }
-
 static void vnd_netdev_set_multicast_list(
 	struct net_device *netdev)
 {
@@ -982,7 +978,6 @@ static void vnd_netdev_set_multicast_list(
 	
 	struct vnd_netdevice *netdevice = netdev_priv(netdev);
 #endif
-
 
 	vnd_netdevice_get(netdevice);
 	if (!schedule_delayed_work(&netdevice->promiscuity_change_work, 0))
@@ -1034,7 +1029,6 @@ static int vnd_netdev_do_ioctl(
 #else 
 	struct vnd_netdevice *netdevice = netdev_priv(netdev);
 #endif
-
 
 	if (!netdevice->remote_port) {
 		WARN_ON(1);
@@ -1093,9 +1087,6 @@ static int lapd_mac_addr(struct net_device *dev, void *addr)
 {
 	return 0;
 }
-
-
-
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static int lapd_hard_header_parse(struct sk_buff *skb, unsigned char *haddr)
@@ -1492,6 +1483,7 @@ static struct net_device_ops dev_ops = {
 		goto err_alloc_netdev;
 	}
 	}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
 	netdevice->netdev->priv = netdevice;
 #else 
@@ -1511,6 +1503,7 @@ static struct net_device_ops dev_ops = {
 	netdevice->netdev->netdev_ops=&dev_ops;
 #endif
 	netdevice->netdev->features = 0;
+
 	memset(netdevice->netdev->dev_addr, 0,
 		sizeof(netdevice->netdev->dev_addr));
 
@@ -1795,7 +1788,8 @@ static CLASS_DEVICE_ATTR(dev, S_IRUGO, show_dev, NULL);
 static int __init vnd_init_module(void)
 {
 	int err;
-	
+
+
 	vnd_msg(KERN_INFO, vnd_MODULE_DESCR " loading\n");
 
 	err = alloc_chrdev_region(&vnd_first_dev, 0, 1, vnd_MODULE_NAME);

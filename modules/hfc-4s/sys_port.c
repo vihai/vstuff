@@ -131,6 +131,7 @@ static struct hfc_fifo_config hfc_fifo_config[] = {
 		dev_name(&((port)->card->pci_dev->dev)),\
 		## arg)
 
+
 /*---------------------------------------------------------------------------*/
 
 static int sanprintf(char *buf, int bufsize, const char *fmt, ...)

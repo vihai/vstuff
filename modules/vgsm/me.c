@@ -35,7 +35,6 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
 #define dev_name(&((me)->card->pci_dev->dev)) (me)->card->pci_dev->dev.bus_id
 #endif
-
 #ifdef DEBUG_CODE
 #define vgsm_debug_me(me, dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)					\
@@ -51,6 +50,7 @@
 #else
 #define vgsm_debug_me(me, dbglevel, format, arg...) do {} while (0)
 #endif
+
 #define vgsm_msg_me(me, level, format, arg...)			\
 	printk(level vgsm_DRIVER_PREFIX					\
 		"%s-%s:"						\
@@ -521,7 +521,6 @@ static struct vgsm_me_tx *vgsm_me_tx_create(
 	struct vgsm_me_tx *me_tx,
 	struct vgsm_me *me)
 {
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 
 #else

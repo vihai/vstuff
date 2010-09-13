@@ -155,6 +155,7 @@ static int vgsm_tty_write(
 		copied_bytes = __kfifo_put(me->tx.fifo,
 					(unsigned char *)buf, count);
 	}
+
 #elif   LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33) 
 	copied_bytes = __kfifo_put(me->tx.fifo,
 				(unsigned char *)buf, count);

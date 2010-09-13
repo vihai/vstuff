@@ -271,6 +271,7 @@ static int ksup_chan_rx_chan_push_raw(
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 	if (__kfifo_put(chan->read_fifo, sf->data, sf->len))
 		wake_up(&chan->read_wait_queue);
+
 #else
 	if (kfifo_in(chan->read_fifo, sf->data, sf->len))
 		wake_up(&chan->read_wait_queue);
@@ -299,9 +300,7 @@ struct kss_chan_from_ops ksup_chan_rx_chan_node_ops =
 static struct ksup_chan *ksup_chan_create(
 	struct ksup_chan *chan,
 	int framed)
-
 {
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 
 #else
@@ -322,11 +321,11 @@ static struct ksup_chan *ksup_chan_create(
 	chan->framed = framed;
 
 	spin_lock_init(&chan->read_fifo_lock);
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 	chan->read_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->read_fifo_lock);
 	if (!chan->read_fifo)
 		goto err_fifo_rx_alloc;
+
 #else
  	chan->read_fifo = kmalloc(sizeof(struct kfifo),GFP_KERNEL);
 	if (IS_ERR(chan->read_fifo))
@@ -885,7 +884,6 @@ static int __init ksup_init_module(void)
 		"userport_frame");
 #else
 	dev_set_name(&ksup_frame_device,"userport_frame");
-
 #endif
 
 #ifdef HAVE_CLASS_DEV_DEVT

@@ -430,6 +430,14 @@ int vppp_cdev_open(
 		goto err_chan_tx_register;
 
 
+
+
+
+
+
+
+
+
 /*	pipeline = visdn_pipeline_get_by_endpoint(ks_chan);
 	if (!pipeline)
 		return -ENOTCONN;*/
@@ -605,6 +613,7 @@ static int __init vppp_init_module(void)
 #else
 	dev_set_name(&vppp_control_device,"ppp");
 #endif
+
 	
 #ifdef HAVE_CLASS_DEV_DEVT
 	vppp_control_device.devt = vppp_first_dev;

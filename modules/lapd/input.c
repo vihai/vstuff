@@ -338,7 +338,6 @@ static int lapd_dispatch_mph_primitive(struct sk_buff *skb)
 #else
 			  	__sk_add_backlog(&lapd_sock->sk, skb);
 #endif
-
 				queued = TRUE;
 			}
 

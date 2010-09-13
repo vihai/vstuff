@@ -834,20 +834,19 @@ int lapd_setsockopt(struct socket *sock, int level, int optname,
 	switch (optname) {
 	case SO_BINDTODEVICE: {
 		char devname[IFNAMSIZ];
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 		if (optlen > IFNAMSIZ) {
+#else
+		if ((optlen<0)|(optlen > IFNAMSIZ)) {
+#endif
 			err = -EINVAL;
 			goto err_invalid_optlen;
 		}
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
-		if (copy_from_user(devname, optval_u, optlen)) {
-#else
-		if (copy_from_user(devname, optval_u, sizeof(devname))) {
-#endif
+		if  (copy_from_user(devname, optval_u, optlen)) {
 			err = -EFAULT;
 			goto err_copy_from_user;
 		}
-
 		/* Is this really needed? */
 		devname[sizeof(devname)-1] = '\0';
 
@@ -1860,13 +1859,11 @@ static struct proto_ops lapd_dgram_ops = {
 };
 #endif
 
-
 #include <linux/smp_lock.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
  SOCKOPS_WRAP(lapd_dgram, PF_LAPD);
 #endif
-
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static int lapd_create(struct socket *sock, int protocol)

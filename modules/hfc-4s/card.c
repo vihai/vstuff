@@ -1016,6 +1016,7 @@ err_switch_register:
 		card->pci_dev->dev.bus->name,
 		dev_name(&(card->pci_dev->dev)),
 		err);
+
 	return err;
 }
 
@@ -1180,6 +1181,7 @@ err_pci_enable_device:
 		card->pci_dev->dev.bus->name,
 		dev_name(&(card->pci_dev->dev)),
 		err);
+
 	return err;
 }
 

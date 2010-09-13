@@ -21,7 +21,6 @@
 #include <linux/interrupt.h>
 #include <linux/version.h>
 
-
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,9)
 #include <compat/kfifo.h>
 #else
@@ -34,7 +33,6 @@
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
 #define dev_name(&((card)->pci_dev->dev)) (card)->pci_dev->dev.bus_id
 #endif
-
 #define vgsm_msg_card(card, level, format, arg...)	\
 	printk(level vgsm_DRIVER_PREFIX			\
 		"%s-%s "				\
@@ -42,6 +40,7 @@
 		(card)->pci_dev->dev.bus->name,		\
 		dev_name(&((card)->pci_dev->dev)),		\
 		## arg)
+
 
 #define vgsm_PCI_MEM_SIZE		0xFF
 

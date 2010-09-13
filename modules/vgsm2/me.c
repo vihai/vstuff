@@ -65,6 +65,7 @@
 		dev_name(&(me)->card->pci_dev->dev),			\
 		kobject_name(&(me)->ks_node.kobj),			\
 		## arg)
+
 /*---------------------------------------------------------------------------*/
 
 static ssize_t vgsm_me_identify_show(
