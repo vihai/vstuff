@@ -27,6 +27,11 @@
 #include "led.h"
 #include "regs.h"
 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((card)->pci_dev->dev)) (card)->pci_dev->dev.bus_id
+#endif 
+
 #ifdef DEBUG_CODE
 #define hfc_debug_card(card, dbglevel, format, arg...)	\
 	if (debug_level >= dbglevel)			\
@@ -34,7 +39,7 @@
 			"%s-%s "			\
 			format,				\
 			(card)->pci_dev->dev.bus->name,	\
-			(card)->pci_dev->dev.bus_id,	\
+			dev_name(&((card)->pci_dev->dev)), \
 			## arg)
 #else
 #define hfc_debug_card(card, dbglevel, format, arg...)	\
@@ -46,7 +51,7 @@
 		"%s-%s "				\
 		format,					\
 		(card)->pci_dev->dev.bus->name,		\
-		(card)->pci_dev->dev.bus_id,		\
+		dev_name(&((card)->pci_dev->dev)), 	\
 		## arg)
 
 struct hfc_card_config

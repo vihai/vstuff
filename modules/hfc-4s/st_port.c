@@ -20,30 +20,33 @@
 #include "card.h"
 #include "fifo_inline.h"
 
-#ifdef DEBUG_CODE
-#define hfc_debug_st_port(port, dbglevel, format, arg...)	\
-	if (debug_level >= dbglevel)				\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX		\
-			"%s-%s:"				\
-			"st%d:"					\
-			format,					\
-			(port)->card->pci_dev->dev.bus->name,	\
-			(port)->card->pci_dev->dev.bus_id,	\
-			(port)->id,				\
-			## arg)
-#else
-#define hfc_debug_st_port(port, dbglevel, format, arg...) do {} while (0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((port)->card->pci_dev->dev)) (port)->card->pci_dev->dev.bus_id
 #endif
 
-#define hfc_msg_st_port(port, level, format, arg...)		\
-	printk(level hfc_DRIVER_PREFIX				\
-		"%s-%s:"					\
-		"st%d:"						\
-		format,						\
-		(port)->card->pci_dev->dev.bus->name,		\
-		(port)->card->pci_dev->dev.bus_id,		\
-		(port)->id,					\
-		## arg)
+	#ifdef DEBUG_CODE
+	#define hfc_debug_st_port(port, dbglevel, format, arg...)	 \
+		if (debug_level >= dbglevel)				 \
+			printk(KERN_DEBUG hfc_DRIVER_PREFIX		 \
+				"%s-%s:"				 \
+				"st%d:"					 \
+				format,					 \
+				(port)->card->pci_dev->dev.bus->name,	 \
+				dev_name(&((port)->card->pci_dev->dev)),(port)->id, \
+				## arg)
+	#else
+	#define hfc_debug_st_port(port, dbglevel, format, arg...) do {} while (0)
+	#endif
+
+	#define hfc_msg_st_port(port, level, format, arg...)		\
+		printk(level hfc_DRIVER_PREFIX				\
+			"%s-%s:"					\
+			"st%d:"						\
+			format,						\
+			(port)->card->pci_dev->dev.bus->name,		\
+			dev_name(&((port)->card->pci_dev->dev)),	\
+			(port)->id,					\
+			## arg)
 
 static void hfc_port_do_activate_request(struct hfc_st_port *port)
 {

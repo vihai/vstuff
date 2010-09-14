@@ -174,12 +174,20 @@ static int __init visdn_init_module(void)
 
 	visdn_system_device.bus = NULL;
 	visdn_system_device.parent = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 	visdn_system_device.driver_data = NULL;
+#else
+	dev_set_drvdata(&visdn_system_device,NULL);
+#endif
 	visdn_system_device.release = visdn_system_device_release;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
 	snprintf(visdn_system_device.bus_id,
 		sizeof(visdn_system_device.bus_id),
 		"visdn-system");
+#else
+	dev_set_name(&visdn_system_device,"visdn-system");
+#endif
 
 	err = device_register(&visdn_system_device);
 	if (err < 0)

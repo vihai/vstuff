@@ -915,7 +915,7 @@ struct vgsm_chan *vgsm_alloc_inbound_call(struct vgsm_me *me)
 	strncpy(ast_chan->context, vgsm_chan->mc->context,
 					sizeof(ast_chan->context));
 	ast_chan->priority = 1;
-
+	strncpy(ast_chan->language, vgsm_chan->mc->language, sizeof(ast_chan->language));
 	return vgsm_chan;
 
 	vgsm_chan_put(vgsm_chan->ast_chan->tech_pvt);
@@ -1133,8 +1133,10 @@ static int vgsm_indicate(
 #endif
 {
 	struct vgsm_chan *vgsm_chan = to_vgsm_chan(ast_chan);
+		
 	//struct vgsm_me *me = vgsm_chan->me;
-
+	struct vgsm_me_config *mc = vgsm_chan->mc;
+	
 	if (!vgsm_chan) {
 		ast_log(LOG_ERROR, "NO VGSM_CHAN!!\n");
 		return 1;
@@ -1160,7 +1162,16 @@ static int vgsm_indicate(
 
 		return 0;
 	break;
+	
+		
+	case AST_CONTROL_HOLD:
+		ast_moh_start(ast_chan, data, mc->mohinterpret);
+		break;
 
+	case AST_CONTROL_UNHOLD:
+		ast_moh_stop(ast_chan);
+		break;
+	
 	case AST_CONTROL_ANSWER:
 		ast_playtones_stop(ast_chan);
 
@@ -1885,7 +1896,7 @@ err_invalid_format:
 err_invalid_destination:
 err_unsupported_format:
 
-	return NULL;
+	return NULL; 
 }
 
 static const struct ast_channel_tech vgsm_tech = {
@@ -2541,6 +2552,7 @@ int unload_module(void)
 static int vgsm_unload_module(void)
 #endif
 {
+
 	vgsm_hg_unload();
 	vgsm_me_unload();
 

@@ -21,14 +21,17 @@
 #include "me.h"
 #include "sim.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((card)->pci_dev->dev)) (card)->pci_dev->dev.bus_id
+#endif
 #ifdef DEBUG_CODE
 #define vgsm_debug_card(card, dbglevel, format, arg...)			\
 	if (debug_level >= dbglevel)					\
 		printk(KERN_DEBUG vgsm_DRIVER_PREFIX			\
 			"%s-%s: "					\
 			format,						\
-			(card)->pci_dev->dev.bus->name,		\
-			(card)->pci_dev->dev.bus_id,		\
+			(card)->pci_dev->dev.bus->name,			\
+			dev_name(&((card)->pci_dev->dev)),		\
 			## arg)
 
 #else
@@ -40,7 +43,7 @@
 		"%s:%s: "				\
 		format,					\
 		(card)->pci_dev->dev.bus->name,		\
-		(card)->pci_dev->dev.bus_id,		\
+		dev_name(&((card)->pci_dev->dev)),      \
 		## arg)
 
 

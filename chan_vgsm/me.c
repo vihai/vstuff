@@ -74,13 +74,15 @@
 #define WAITING_INITIALIZATION_DELAY (2 * SEC)
 #define WAITING_INITIALIZATION_SIM_INSERTED_DELAY (5 * SEC)
 
+
 void vgsm_me_config_default(struct vgsm_me_config *mc)
 {
 	mc->flow_control = VGSM_FLOW_AUTO;
 
 	strcpy(mc->context, "vgsm");
 	strcpy(mc->pin, "");
-
+	strcpy(mc->mohinterpret,DEFAULT_MOHINTERPRET);
+	strcpy(mc->language,DEFAULT_LANGUAGE);
 	mc->rx_gain = 255;
 	mc->tx_gain = 255;
 	mc->set_clock = TRUE;
@@ -726,6 +728,7 @@ static int vgsm_me_config_from_var(
 	struct vgsm_me_config *mc,
 	struct ast_variable *var)
 {
+        
 	if (!strcasecmp(var->name, "device")) {
 		strncpy(mc->device_filename, var->value,
 			sizeof(mc->device_filename));
@@ -748,8 +751,13 @@ static int vgsm_me_config_from_var(
 
 			return -1;
 		}
+	
+	} else if (!strcasecmp(var->name, "mohinterpret")) {
+		strncpy(mc->mohinterpret, var->value, sizeof(mc->mohinterpret));	
+	} else if (!strcasecmp(var->name, "language")) {
+		strncpy(mc->language, var->value, sizeof(mc->language));
 	} else if (!strcasecmp(var->name, "context")) {
-		strncpy(mc->context, var->value, sizeof(mc->context));
+		strncpy(mc->context, var->value, sizeof(mc->context));	
 	} else if (!strcasecmp(var->name, "pin")) {
 		strncpy(mc->pin, var->value, sizeof(mc->pin));
 	} else if (!strcasecmp(var->name, "rx_gain")) {
@@ -901,6 +909,7 @@ sim_device_filename:
 #else
 	} else if (!ast_jb_read_conf(&mc->jbconf, var->name, var->value)) {
 #endif
+	
 	} else {
 		return -1;
 	}
@@ -912,6 +921,11 @@ static void vgsm_me_config_copy(
 	struct vgsm_me_config *dst,
 	const struct vgsm_me_config *src)
 {
+	
+	strncpy(dst->mohinterpret, src->mohinterpret,
+		sizeof(dst->mohinterpret));
+	strncpy(dst->language, src->language,
+		sizeof(dst->language));
 	strncpy(dst->device_filename, src->device_filename,
 		sizeof(dst->device_filename));
 	strncpy(dst->mesim_device_filename, src->mesim_device_filename,

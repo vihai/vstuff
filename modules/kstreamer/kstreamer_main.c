@@ -103,12 +103,20 @@ static int __init ks_init_module(void)
 
 	ks_system_device.bus = NULL;
 	ks_system_device.parent = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 	ks_system_device.driver_data = NULL;
+#else 
+	dev_set_drvdata(&ks_system_device,NULL);
+#endif
 	ks_system_device.release = ks_system_device_release;
 
-	snprintf(ks_system_device.bus_id,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+		snprintf(ks_system_device.bus_id,
 		sizeof(ks_system_device.bus_id),
 		"ks-system");
+#else
+	dev_set_name(&ks_system_device,"ks-system");
+#endif
 
 	err = device_register(&ks_system_device);
 	if (err < 0)

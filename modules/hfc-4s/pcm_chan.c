@@ -17,34 +17,38 @@
 #include "pcm_port.h"
 #include "pcm_chan.h"
 
-#ifdef DEBUG_CODE
-#define hfc_debug_pcm_chan(chan, dbglevel, format, arg...)		\
-	if (debug_level >= dbglevel)					\
-		printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
-			"%s-%s:"					\
-			"pcm:"						\
-			"chan[%s] "					\
-			format,						\
-			(chan)->port->card->pci_dev->dev.bus->name,	\
-			(chan)->port->card->pci_dev->dev.bus_id,	\
-			kobject_name(&(chan)->ks_node.kobj),		\
-			## arg)
-
-#else
-#define hfc_debug_pcm_chan(chan, dbglevel, format, arg...) do {} while (0)
-#define hfc_debug_schan(schan, dbglevel, format, arg...) do {} while (0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&((chan)->port->card->pci_dev->dev)) (chan)->port->card->pci_dev->dev.bus_id
 #endif
 
-#define hfc_msg_pcm_chan(chan, level, format, arg...)			\
-	printk(level hfc_DRIVER_PREFIX					\
-		"%s-%s:"						\
-		"pcm:"							\
-		"chan[%s] "						\
-		format,							\
-		(chan)->port->card->pci_dev->dev.bus->name,		\
-		(chan)->port->card->pci_dev->dev.bus_id,		\
-		kobject_name(&(chan)->visdn_chan.kobj),			\
-		## arg)
+	#ifdef DEBUG_CODE
+	#define hfc_debug_pcm_chan(chan, dbglevel, format, arg...)		\
+		if (debug_level >= dbglevel)					\
+			printk(KERN_DEBUG hfc_DRIVER_PREFIX			\
+				"%s-%s:"					\
+				"pcm:"						\
+				"chan[%s] "					\
+				format,						\
+				(chan)->port->card->pci_dev->dev.bus->name,	\
+				dev_name(&((chan)->port->card->pci_dev->dev)), \
+				kobject_name(&(chan)->ks_node.kobj),		\
+				## arg)
+
+	#else
+	#define hfc_debug_pcm_chan(chan, dbglevel, format, arg...) do {} while (0)
+	#define hfc_debug_schan(schan, dbglevel, format, arg...) do {} while (0)
+	#endif
+
+	#define hfc_msg_pcm_chan(chan, level, format, arg...)			\
+		printk(level hfc_DRIVER_PREFIX					\
+			"%s-%s:"						\
+			"pcm:"							\
+			"chan[%s] "						\
+			format,							\
+			(chan)->port->card->pci_dev->dev.bus->name,		\
+			dev_name(&((chan)->port->card->pci_dev->dev)),		\
+			kobject_name(&(chan)->visdn_chan.kobj),			\
+			## arg)
 
 static void hfc_pcm_chan_rx_chan_release(struct ks_chan *ks_chan)
 {

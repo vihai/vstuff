@@ -28,6 +28,13 @@
 #define VGSM_ME_PREFIX "me:"
 #define VGSM_ME_GLOBAL "me:*"
 
+#define DEFAULT_MOHINTERPRET    "default"
+
+#define DEFAULT_LANGUAGE	"en"
+
+
+
+
 #ifdef DEBUG_CODE
 #define vgsm_me_debug_state(me, format, arg...)	\
 	if ((me)->debug_state)			\
@@ -111,6 +118,8 @@ struct vgsm_net_cell
 	__u16 rx_lev;
 };
 
+
+
 struct vgsm_counter
 {
 	struct list_head node;
@@ -191,6 +200,9 @@ struct vgsm_me_config
 
 	char device_filename[PATH_MAX];
 	char mesim_device_filename[PATH_MAX];
+	char language[MAX_LANGUAGE];	      /*!< Default language for this user */
+	char mohinterpret[MAX_MUSICCLASS];    /*!< Music on Hold class */
+	
 
 	enum vgsm_flow_control flow_control;
 
@@ -249,7 +261,10 @@ struct vgsm_me
 	int refcnt;
 
 	ast_mutex_t lock;
-
+	
+	AST_DECLARE_STRING_FIELDS(
+		AST_STRING_FIELD(mohinterpret); /*!< MOH class to use when put on hold */
+        );
 	struct vgsm_me_config *current_config;
 	struct vgsm_me_config *new_config;
 	BOOL config_present;

@@ -1008,9 +1008,12 @@ err_sys_port_register:
 	hfc_switch_unregister(&card->hfcswitch);
 err_switch_register:
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&(card->pci_dev->dev)) card->pci_dev->dev.bus_id
+#endif 
 	hfc_msg(KERN_ERR, "HFC card at %s-%s registration failure: %d\n",
 		card->pci_dev->dev.bus->name,
-		card->pci_dev->dev.bus_id,
+		dev_name(&(card->pci_dev->dev)),
 		err);
 
 	return err;
@@ -1170,9 +1173,12 @@ err_pci_request_regions:
 err_pci_enable_device:
 	pci_set_drvdata(card->pci_dev, NULL);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#define dev_name(&(card->pci_dev->dev)) card->pci_dev->dev.bus_id
+#endif
 	hfc_msg(KERN_ERR, "HFC card at %s-%s initialization failure: %d\n",
 		card->pci_dev->dev.bus->name,
-		card->pci_dev->dev.bus_id,
+		dev_name(&(card->pci_dev->dev)),
 		err);
 
 	return err;

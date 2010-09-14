@@ -268,9 +268,14 @@ static int ksup_chan_rx_chan_push_raw(
 {
 	struct ksup_chan *chan = ks_chan->driver_data;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 	if (__kfifo_put(chan->read_fifo, sf->data, sf->len))
 		wake_up(&chan->read_wait_queue);
 
+#else
+	if (kfifo_in(chan->read_fifo, sf->data, sf->len))
+		wake_up(&chan->read_wait_queue);
+#endif
 	return 0;
 }
 
@@ -296,6 +301,11 @@ static struct ksup_chan *ksup_chan_create(
 	struct ksup_chan *chan,
 	int framed)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
+
+#else
+	int alloc_ret;
+#endif
 	BUG_ON(chan);
 
 	if (!chan) {
@@ -311,10 +321,19 @@ static struct ksup_chan *ksup_chan_create(
 	chan->framed = framed;
 
 	spin_lock_init(&chan->read_fifo_lock);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 	chan->read_fifo = kfifo_alloc(1024, GFP_KERNEL, &chan->read_fifo_lock);
 	if (!chan->read_fifo)
 		goto err_fifo_rx_alloc;
 
+#else
+ 	chan->read_fifo = kmalloc(sizeof(struct kfifo),GFP_KERNEL);
+	if (IS_ERR(chan->read_fifo))
+		goto err_fifo_rx_alloc;	
+	alloc_ret =kfifo_alloc(chan->read_fifo,1024,GFP_KERNEL);
+	if (alloc_ret == -ENOMEM) 
+	     goto err_fifo_rx_alloc;
+#endif
         skb_queue_head_init(&chan->read_queue);
 	init_waitqueue_head(&chan->read_wait_queue);
 
@@ -807,15 +826,17 @@ static int __init ksup_init_module(void)
 
 	ksup_stream_device.class = &ks_system_class;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if   LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	ksup_stream_device.dev = NULL;
 	snprintf(ksup_stream_device.class_id,
 		sizeof(ksup_stream_device.class_id),
 		"userport_stream");
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30) 
 	snprintf(ksup_stream_device.bus_id,
 		sizeof(ksup_stream_device.bus_id),
 		"userport_stream");
+#else
+	dev_set_name(&ksup_stream_device,"userport_stream");
 #endif
 
 #ifdef HAVE_CLASS_DEV_DEVT
@@ -852,15 +873,17 @@ static int __init ksup_init_module(void)
 
 	ksup_frame_device.class = &ks_system_class;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
+#if   LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26)
 	ksup_frame_device.dev = NULL;
 	snprintf(ksup_frame_device.class_id,
 		sizeof(ksup_frame_device.class_id),
 		"userport_frame");
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30) 
 	snprintf(ksup_frame_device.bus_id,
 		sizeof(ksup_frame_device.bus_id),
 		"userport_frame");
+#else
+	dev_set_name(&ksup_frame_device,"userport_frame");
 #endif
 
 #ifdef HAVE_CLASS_DEV_DEVT

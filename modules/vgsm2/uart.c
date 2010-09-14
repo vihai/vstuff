@@ -150,8 +150,10 @@ static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *ext_lsr)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
 	struct tty_struct *tty = up->port.info->tty;
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 	struct tty_struct *tty = up->port.info->port.tty;
+#else 
+	struct tty_struct *tty = up->port.state->port.tty;
 #endif
 	u8 ch, lsr = *ext_lsr;
 	int max_count = 256;
@@ -218,7 +220,11 @@ static void vgsm_uart_receive_chars(struct vgsm_uart *up, u8 *ext_lsr)
 
 static void transmit_chars(struct vgsm_uart *up)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 	struct circ_buf *xmit = &up->port.info->xmit;
+#else
+	struct circ_buf *xmit = &up->port.state->xmit;
+#endif
 	int count;
 
 	if (up->port.x_char) {
@@ -279,7 +285,11 @@ static u8 check_modem_status(struct vgsm_uart *up)
 			uart_handle_cts_change(&up->port,
 					msr & UART_MSR_CTS);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 		wake_up_interruptible(&up->port.info->delta_msr_wait);
+#else	
+		wake_up_interruptible(&up->port.state->port.delta_msr_wait);
+#endif
 	}
 
 	return msr;
