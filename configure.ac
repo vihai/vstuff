@@ -133,10 +133,10 @@ if [[ "$enable_kernel_modules" = "yes" -o \
 				(missing .config)])
 	fi
 
-	if [[ ! -f "$kblddir/include/linux/autoconf.h" ]]; then
+	if [[ ! -f "$kblddir/include/linux/kernel.h" ]]; then
 		AC_MSG_RESULT([failed!])
 		AC_MSG_ERROR([Kernel build environment is missing \
-				include/linux/autoconf.h])
+				include/linux/kernel.h])
 	fi
 fi
 

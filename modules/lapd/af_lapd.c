@@ -14,7 +14,6 @@
 #define SOCK_DEBUGGING
 #endif
 
-#include <linux/autoconf.h>
 #include <linux/module.h>
 #include <linux/termios.h>
 #include <linux/tcp.h>
