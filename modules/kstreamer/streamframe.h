@@ -15,6 +15,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/slab.h>
 #include <asm/atomic.h>
 
 struct ks_streamframe

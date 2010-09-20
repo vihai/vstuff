@@ -24,7 +24,7 @@ extern struct device visdn_system_device;
 extern struct class visdn_system_class;
 
 extern struct rw_semaphore visdn_kset_rwsem;
-extern struct kset visdn_kset;
+extern struct kset *visdn_kset;
 
 extern struct sk_buff *visdn_alloc_skb(unsigned int length);
 

@@ -31,7 +31,7 @@ enum ks_chan_attribute_type
 
 #include "netlink.h"
 
-extern struct kset ks_chans_kset;
+extern struct kset *ks_chans_kset;
 
 struct ks_chan;
 

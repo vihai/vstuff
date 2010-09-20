@@ -29,7 +29,7 @@
 #include "netlink.h"
 #include "feature.h"
 
-struct kset ks_chans_kset;
+struct kset *ks_chans_kset;
 
 static struct list_head ks_chans_list = LIST_HEAD_INIT(ks_chans_list);
 static rwlock_t ks_chans_list_lock = RW_LOCK_UNLOCKED;
@@ -204,7 +204,7 @@ struct ks_chan *ks_chan_create(
 #endif
 
 	chan->kobj.parent = parent;
-	chan->kobj.kset = kset_get(&ks_chans_kset);
+	chan->kobj.kset = kset_get(ks_chans_kset);
 	kobject_set_name(&chan->kobj, "%s", name);
 
 	chan->duplex = duplex;
@@ -611,20 +611,15 @@ int ks_chan_modinit(void)
 {
 	int err;
 
-	ks_chans_kset.kobj.parent = &kstreamer_kset.kobj;
-
-	err = kobject_set_name(&ks_chans_kset.kobj, "chans");
-	if (err < 0)
-	        goto err_kobject_set_name;
-
-	err = kset_register(&ks_chans_kset);
-	if (err < 0)
+	ks_chans_kset = kset_create_and_add("chans", NULL, &kstreamer_kobj);
+	if (!ks_chans_kset) {
+		err = -ENOMEM;
 		goto err_kset_register;
+	}
 
 	return 0;
 
-err_kobject_set_name:
-	kset_unregister(&ks_chans_kset);
+	kset_unregister(ks_chans_kset);
 err_kset_register:
 
 	return err;
@@ -632,5 +627,5 @@ err_kset_register:
 
 void ks_chan_modexit(void)
 {
-	kset_unregister(&ks_chans_kset);
+	kset_unregister(ks_chans_kset);
 }

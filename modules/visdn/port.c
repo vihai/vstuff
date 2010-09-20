@@ -263,7 +263,7 @@ struct visdn_port *visdn_port_create(
 #endif
 
 	kobject_set_name(&port->kobj, "%s", name);
-	port->kobj.kset = &visdn_ports_kset;
+	port->kobj.kset = visdn_ports_kset;
 	port->kobj.parent = parent;
 
 	port->type = "";
@@ -313,7 +313,7 @@ int visdn_port_register(struct visdn_port *port)
 	sprintf(idtext, "%08x", port->id);
 
 	err = sysfs_create_link(
-		&visdn_ports_kset.kobj,
+		&visdn_ports_kset->kobj,
 		&port->kobj,
 		idtext);
 
@@ -324,7 +324,7 @@ int visdn_port_register(struct visdn_port *port)
 
 	return 0;
 
-	sysfs_remove_link(&visdn_ports_kset.kobj, idtext);
+	sysfs_remove_link(&visdn_ports_kset->kobj, idtext);
 err_create_kset_link:
 	kobject_del(&port->kobj);
 err_kobject_add:
@@ -344,7 +344,7 @@ void visdn_port_unregister(struct visdn_port *port)
 	visdn_call_notifiers(VISDN_EVENT_PORT_UNREGISTERED, port);
 
 	sprintf(idtext, "%08x", port->id);
-	sysfs_remove_link(&visdn_ports_kset.kobj, idtext);
+	sysfs_remove_link(&visdn_ports_kset->kobj, idtext);
 
 	kobject_del(&port->kobj);
 
@@ -467,21 +467,21 @@ struct kobj_type visdn_port_ktype =
 };
 EXPORT_SYMBOL(visdn_port_ktype);
 
-struct kset visdn_ports_kset;
+struct kset *visdn_ports_kset;
 
 int visdn_port_modinit(void)
 {
 	int err;
 
-	visdn_ports_kset.kobj.parent = &visdn_kset.kobj;
-
-	err = kset_register(&visdn_ports_kset);
-	if (err < 0)
+	visdn_ports_kset = kset_create_and_add("ports", NULL, &visdn_kset->kobj);
+	if (!visdn_ports_kset) {
+		err = -ENOMEM;
 		goto err_kset_register;
+	}
 
 	return 0;
 
-	kset_unregister(&visdn_ports_kset);
+	kset_unregister(visdn_ports_kset);
 err_kset_register:
 
 	return err;
@@ -489,5 +489,5 @@ err_kset_register:
 
 void visdn_port_modexit(void)
 {
-	kset_unregister(&visdn_ports_kset);
+	kset_unregister(visdn_ports_kset);
 }

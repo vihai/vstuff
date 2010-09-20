@@ -23,7 +23,7 @@
 
 rwlock_t ks_connection_lock = RW_LOCK_UNLOCKED;
 
-struct kset ks_pipelines_kset;
+struct kset *ks_pipelines_kset;
 
 static struct list_head ks_pipelines_list = LIST_HEAD_INIT(ks_pipelines_list);
 static rwlock_t ks_pipelines_list_lock = RW_LOCK_UNLOCKED;
@@ -649,7 +649,7 @@ struct ks_pipeline *ks_pipeline_create(struct ks_pipeline *pipeline)
 	kobject_init(&pipeline->kobj, &ks_pipeline_ktype);
 #endif
 
-	pipeline->kobj.kset = kset_get(&ks_pipelines_kset);
+	pipeline->kobj.kset = kset_get(ks_pipelines_kset);
 
 	INIT_LIST_HEAD(&pipeline->entries);
 
@@ -1283,20 +1283,15 @@ int ks_pipeline_modinit()
 {
 	int err;
 
-	ks_pipelines_kset.kobj.parent = &kstreamer_kset.kobj;
-
-	err = kobject_set_name(&ks_pipelines_kset.kobj, "pipelines");
-	if (err < 0)
-	        goto err_kobject_set_name;
-
-	err = kset_register(&ks_pipelines_kset);
-	if (err < 0)
+	ks_pipelines_kset = kset_create_and_add("pipelines", NULL, &kstreamer_kobj);
+	if (!ks_pipelines_kset) {
+		err = -ENOMEM;
 		goto err_kset_register;
+	}
 
 	return 0;
 
-err_kobject_set_name:
-	kset_unregister(&ks_pipelines_kset);
+	kset_unregister(ks_pipelines_kset);
 err_kset_register:
 
 	return err;
@@ -1304,5 +1299,5 @@ err_kset_register:
 
 void ks_pipeline_modexit()
 {
-	kset_unregister(&ks_pipelines_kset);
+	kset_unregister(ks_pipelines_kset);
 }

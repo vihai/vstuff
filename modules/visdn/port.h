@@ -21,7 +21,7 @@
 extern struct kobj_type visdn_port_ktype;
 
 extern struct rw_semaphore visdn_ports_subsys_rwsem;
-extern struct kset visdn_ports_kset;
+extern struct kset *visdn_ports_kset;
 
 #define to_visdn_port(class) container_of(class, struct visdn_port, kobj)
 

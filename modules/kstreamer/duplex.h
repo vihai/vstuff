@@ -22,7 +22,7 @@
 #include <linux/sysfs.h>
 
 extern struct rw_semaphore ks_duplexes_subsys_rwsem;
-extern struct kset ks_duplexes_subsys;
+extern struct kset *ks_duplexes_subsys;
 
 struct ks_duplex;
 struct ks_duplex_ops

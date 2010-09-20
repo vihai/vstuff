@@ -24,7 +24,7 @@
 #include "duplex.h"
 #include "netlink.h"
 
-struct kset ks_nodes_kset;
+struct kset *ks_nodes_kset;
 EXPORT_SYMBOL(ks_nodes_kset);
 
 static struct list_head ks_nodes_list = LIST_HEAD_INIT(ks_nodes_list);
@@ -162,7 +162,7 @@ struct ks_node *ks_node_create(
 #endif
 
 	node->kobj.parent = parent;
-	node->kobj.kset = kset_get(&ks_nodes_kset);
+	node->kobj.kset = kset_get(ks_nodes_kset);
 	kobject_set_name(&node->kobj, "%s", name);
 
 	node->ops = ops;
@@ -401,20 +401,15 @@ int ks_node_modinit(void)
 {
 	int err;
 
-	ks_nodes_kset.kobj.parent = &kstreamer_kset.kobj;
-
-	err = kobject_set_name(&ks_nodes_kset.kobj, "nodes");
-	if (err < 0)
-	        goto err_kobject_set_name;
-
-	err = kset_register(&ks_nodes_kset);
-	if (err < 0)
+	ks_nodes_kset = kset_create_and_add("nodes", NULL, &kstreamer_kobj);
+	if (!ks_nodes_kset) {
+		err = -ENOMEM;
 		goto err_kset_register;
+	}
 
 	return 0;
 
-err_kobject_set_name:
-	kset_unregister(&ks_nodes_kset);
+	kset_unregister(ks_nodes_kset);
 err_kset_register:
 
 	return err;
@@ -422,5 +417,5 @@ err_kset_register:
 
 void ks_node_modexit(void)
 {
-	kset_unregister(&ks_nodes_kset);
+	kset_unregister(ks_nodes_kset);
 }

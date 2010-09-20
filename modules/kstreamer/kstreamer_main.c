@@ -39,7 +39,56 @@ int debug_level = 0;
 #endif
 #endif
 
-struct kset kstreamer_kset;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25)
+static struct kset *kset_create(const char *name,
+				const struct kset_uevent_ops *uevent_ops,
+				struct kobject *parent_kobj)
+{
+	struct kset *kset;
+	int retval;
+
+	kset = kzalloc(sizeof(*kset), GFP_KERNEL);
+	if (!kset)
+		return NULL;
+	retval = kobject_set_name(&kset->kobj, name);
+	if (retval) {
+		kfree(kset);
+		return NULL;
+	}
+	kset->uevent_ops = uevent_ops;
+	kset->kobj.parent = parent_kobj;
+
+	/*
+	 * The kobject of this kset will have a type of kset_ktype and belong to
+	 * no kset itself.  That way we can properly free it when it is
+	 * finished being used.
+	 */
+	kset->kobj.ktype = &kset_ktype;
+	kset->kobj.kset = NULL;
+
+	return kset;
+}
+
+struct kset *kset_create_and_add(const char *name,
+				 const struct kset_uevent_ops *uevent_ops,
+				 struct kobject *parent_kobj)
+{
+	struct kset *kset;
+	int error;
+
+	kset = kset_create(name, uevent_ops, parent_kobj);
+	if (!kset)
+		return NULL;
+	error = kset_register(kset);
+	if (error) {
+		kfree(kset);
+		return NULL;
+	}
+	return kset;
+}
+#endif
+
+struct kobject kstreamer_kobj;
 
 static void ks_system_device_release(struct device *cd)
 {
@@ -83,6 +132,15 @@ struct class ks_system_class = {
 };
 EXPORT_SYMBOL(ks_system_class);
 
+static const struct sysfs_ops kstreamer_kobj_class_ops = {
+        .show   = NULL,
+        .store  = NULL,
+};
+
+static struct kobj_type kstreamer_kobj_ktype = {
+        .sysfs_ops      = &kstreamer_kobj_class_ops,
+};
+
 static int __init ks_init_module(void)
 {
 	int err;
@@ -93,13 +151,15 @@ static int __init ks_init_module(void)
 	if (err < 0)
 		goto err_class_register;
 
-	err = kobject_set_name(&kstreamer_kset.kobj, "kstreamer");
-	if (err < 0)
-	        goto err_kobject_set_name;
+        kobject_init(&kstreamer_kobj, &kstreamer_kobj_ktype);
 
-	err = kset_register(&kstreamer_kset);
+//	kstreamer_kobj.parent = &system_kset->kobj;
+//	kstreamer_kobj.ktype = &ktype_sysdev_class;
+//	kstreamer_kobj.kset = system_kset;
+
+	err = kobject_add(&kstreamer_kobj, NULL, "kstreamer");
 	if (err < 0)
-		goto err_kset_register;
+		goto err_kobject_add;
 
 	ks_system_device.bus = NULL;
 	ks_system_device.parent = NULL;
@@ -156,9 +216,8 @@ err_chan_modinit:
 err_node_modinit:
 	device_unregister(&ks_system_device);
 err_system_device_register:
-	kset_unregister(&kstreamer_kset);
-err_kset_register:
-err_kobject_set_name:
+	kobject_del(&kstreamer_kobj);
+err_kobject_add:
 	class_unregister(&ks_system_class);
 err_class_register:
 
@@ -177,7 +236,7 @@ static void __exit ks_module_exit(void)
 
 	device_unregister(&ks_system_device);
 
-	kset_unregister(&kstreamer_kset);
+	kobject_del(&kstreamer_kobj);
 
 	class_unregister(&ks_system_class);
 

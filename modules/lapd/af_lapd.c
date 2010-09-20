@@ -720,7 +720,7 @@ unsigned int lapd_poll(struct file *file,
 	unsigned int mask;
 	struct sock *sk = sock->sk;
 
-	poll_wait(file, sk->sk_sleep, wait);
+	poll_wait(file, sk_sleep(sk), wait);
 
 	if (sk->sk_state == LAPD_SK_STATE_LISTEN) {
 		struct lapd_sock *lapd_sock = to_lapd_sock(sk);
@@ -806,9 +806,13 @@ err_invalid_socket_type:
 	return err;
 }
 
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 int lapd_setsockopt(struct socket *sock, int level, int optname,
 	char __user *optval_u, int optlen)
+#else
+int lapd_setsockopt(struct socket *sock, int level, int optname,
+	char __user *optval_u, unsigned int optlen)
+#endif
 {
 	struct sock *sk = sock->sk;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
@@ -1010,17 +1014,23 @@ err_invalid_optlen:
 	return err;
 }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,31)
 static int lapd_getsockopt(
 	struct socket *sock, int level, int optname,
 	char __user *optval_u, int __user *optlen_u)
+#else
+static int lapd_getsockopt(
+	struct socket *sock, int level, int optname,
+	char __user *optval_u, int __user *optlen_u)
+#endif
 {
 	int err = 0;
 	struct sock *sk = sock->sk;
 	struct lapd_sock *lapd_sock = to_lapd_sock(sk);
-	int optlen;
 	int val = 0;
 	void *optval = (void *)&val;
 	int length;
+	int optlen;
 
 	if (level != SOL_LAPD)
 		return -ENOPROTOOPT;
@@ -1300,7 +1310,6 @@ struct lapd_sock *lapd_new_sock(
 	new_sk->sk_rcvbuf = parent_sk->sk_rcvbuf;
 	new_sk->sk_sndbuf = parent_sk->sk_sndbuf;
 	new_sk->sk_state = LAPD_SK_STATE_NORMAL_DLC;
-	new_sk->sk_sleep = parent_sk->sk_sleep;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,12)
 	new_sk->sk_zapped = parent_sk->sk_zapped;
@@ -1397,7 +1406,7 @@ int lapd_multiframe_wait_for_establishment(
 		return -EWOULDBLOCK;
 
 	for (;;) {
-		prepare_to_wait_exclusive(lapd_sock->sk.sk_sleep, &wait,
+		prepare_to_wait_exclusive(sk_sleep(&lapd_sock->sk), &wait,
 			TASK_INTERRUPTIBLE);
 
 		lapd_release_sock(lapd_sock);
@@ -1434,7 +1443,7 @@ int lapd_multiframe_wait_for_establishment(
 		}
 	}
 
-	finish_wait(lapd_sock->sk.sk_sleep, &wait);
+	finish_wait(sk_sleep(&lapd_sock->sk), &wait);
 
 	return err;
 }
@@ -1614,7 +1623,7 @@ static int lapd_wait_for_new_dlc(struct lapd_sock *lapd_sock)
 	int timeout = 10 * HZ;
 
 	for (;;) {
-		prepare_to_wait_exclusive(lapd_sock->sk.sk_sleep, &wait,
+		prepare_to_wait_exclusive(sk_sleep(&lapd_sock->sk), &wait,
 					  TASK_INTERRUPTIBLE);
 		lapd_release_sock(lapd_sock);
 
@@ -1635,7 +1644,7 @@ static int lapd_wait_for_new_dlc(struct lapd_sock *lapd_sock)
 			break;
 		}
 	}
-	finish_wait(lapd_sock->sk.sk_sleep, &wait);
+	finish_wait(sk_sleep(&lapd_sock->sk), &wait);
 
 	return err;
 }
@@ -1749,7 +1758,7 @@ int lapd_multiframe_wait_for_release(
 		if (nonblock)
 			return -EWOULDBLOCK;
 
-		prepare_to_wait_exclusive(lapd_sock->sk.sk_sleep, &wait,
+		prepare_to_wait_exclusive(sk_sleep(&lapd_sock->sk), &wait,
 			TASK_INTERRUPTIBLE);
 
 		lapd_release_sock(lapd_sock);
@@ -1780,7 +1789,7 @@ int lapd_multiframe_wait_for_release(
 		}
 	}
 
-	finish_wait(lapd_sock->sk.sk_sleep, &wait);
+	finish_wait(sk_sleep(&lapd_sock->sk), &wait);
 
 	return err;
 }
@@ -1866,8 +1875,10 @@ static struct proto_ops lapd_dgram_ops = {
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 static int lapd_create(struct socket *sock, int protocol)
-#else
+#elif LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,32)
 static int lapd_create(struct net *net, struct socket *sock, int protocol)
+#else
+static int lapd_create(struct net *net, struct socket *sock, int protocol, int kern)
 #endif
 {
 	struct sock *sk;

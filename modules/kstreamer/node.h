@@ -25,7 +25,7 @@ enum ks_node_attribute_type
 
 #include "netlink.h"
 
-extern struct kset ks_nodes_kset;
+extern struct kset *ks_nodes_kset;
 
 struct ks_chan;
 struct ks_pipeline;
